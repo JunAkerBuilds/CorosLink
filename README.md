@@ -137,40 +137,29 @@ flowchart LR
 
 ## Install
 
-### Download pre-built installers
+### Download
 
-**Option A — GitHub Releases (recommended for users)**
+Get the latest installer from **[GitHub Releases](https://github.com/JunAkerBuilds/CorosLink/releases)**:
 
-1. Push your code and create a release tag:
-   ```sh
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
-2. The [Release installers](.github/workflows/release.yml) workflow builds both platforms and publishes a GitHub Release with:
-   - **macOS** — `COROS Desktop-0.1.0-arm64.dmg`
-   - **Windows** — `COROS Desktop Setup 0.1.0.exe`
+| Platform | File |
+| -------- | ---- |
+| macOS (Apple Silicon) | `COROS Desktop-*-arm64.dmg` |
+| Windows | `COROS Desktop Setup *.exe` |
 
-You can also trigger the same workflow manually from **Actions → Release installers → Run workflow**.
+macOS builds are unsigned — right-click the app → **Open** the first time. Windows may show a SmartScreen prompt for unsigned installers.
 
-**Option B — CI artifacts (before tagging a release)**
-
-After a push to `main`, download installers from the [Build desktop installers](.github/workflows/build.yml) workflow artifacts:
-
-| Platform | Artifact name | Format |
-| -------- | ------------- | ------ |
-| macOS | `coros-desktop-macos` | `.dmg` |
-| Windows | `coros-desktop-windows` | `.exe` (NSIS) |
-
-**Option C — Build locally**
+### Build from source
 
 ```sh
+git clone https://github.com/JunAkerBuilds/CorosLink.git
+cd CorosLink
 npm install
 npm run rebuild
 npm run dist:mac    # macOS DMG (run on macOS)
 npm run dist:win    # Windows NSIS installer (run on Windows)
 ```
 
-Installers are written to `release/`. macOS builds are unsigned by default — users may need to right-click → Open the first time. Windows builds are unsigned NSIS installers.
+Installers are written to `release/`.
 
 ### Requirements
 
@@ -267,7 +256,16 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm run dist -- --dir
 
 Because `better-sqlite3` is native, build Windows installers on Windows or in CI where Electron native dependencies can be rebuilt for the Windows target.
 
-The included GitHub Actions workflow builds and uploads the macOS DMG on `macos-latest` and the Windows NSIS installer on `windows-latest`.
+**Publishing a release (maintainers):**
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+That triggers the [Release installers](.github/workflows/release.yml) workflow, which builds both platforms and publishes a GitHub Release. You can also run it manually from **Actions → Release installers**.
+
+Pushes to `main` run [Build desktop installers](.github/workflows/build.yml) and upload CI artifacts for testing before tagging.
 
 </details>
 

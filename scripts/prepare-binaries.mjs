@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url);
 const gunzipAsync = promisify(gunzip);
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const userAgent = "coros-desktop-app";
+const PINNED_YT_DLP_VERSION = "2026.06.09";
 
 const options = parseArgs(process.argv.slice(2));
 const targetPlatform = options.platform ?? process.platform;
@@ -67,9 +68,28 @@ function resolveYtDlpAsset(platform, arch) {
 }
 
 async function downloadYtDlp(destination, assetName) {
+  const version = await resolveYtDlpVersion();
+  const url = `https://github.com/yt-dlp/yt-dlp/releases/download/${version}/${assetName}`;
+
+  await downloadFile(url, destination);
+  await fs.promises.chmod(destination, 0o755);
+  console.log(`Downloaded yt-dlp ${version} (${assetName})`);
+}
+
+async function resolveYtDlpVersion() {
+  const requested = process.env.YT_DLP_VERSION?.trim();
+
+  if (!requested || requested === PINNED_YT_DLP_VERSION) {
+    return PINNED_YT_DLP_VERSION;
+  }
+
+  if (requested !== "latest") {
+    return requested;
+  }
+
   const releaseResponse = await fetch(
     "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest",
-    { headers: { "User-Agent": userAgent } }
+    { headers: githubApiHeaders() }
   );
 
   if (!releaseResponse.ok) {
@@ -79,15 +99,22 @@ async function downloadYtDlp(destination, assetName) {
   }
 
   const release = await releaseResponse.json();
-  const asset = release.assets.find((candidate) => candidate.name === assetName);
+  return release.tag_name;
+}
 
-  if (!asset) {
-    throw new Error(`yt-dlp release ${release.tag_name} does not contain ${assetName}`);
+function githubApiHeaders() {
+  const headers = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": userAgent,
+    "X-GitHub-Api-Version": "2022-11-28"
+  };
+
+  const token = process.env.GITHUB_TOKEN?.trim();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
 
-  await downloadFile(asset.browser_download_url, destination);
-  await fs.promises.chmod(destination, 0o755);
-  console.log(`Downloaded yt-dlp ${release.tag_name} (${assetName})`);
+  return headers;
 }
 
 async function copyFfmpeg(destination, platform, arch) {

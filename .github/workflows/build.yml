@@ -29,6 +29,7 @@ jobs:
       - name: Build DMG
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          GITHUB_TOKEN: ${{ github.token }}
         run: npm run dist:mac
 
       - name: Upload DMG
@@ -59,6 +60,8 @@ jobs:
         run: npm run rebuild
 
       - name: Build NSIS installer
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: npm run dist:win
 
       - name: Upload Windows installer

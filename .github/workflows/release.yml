@@ -32,6 +32,7 @@ jobs:
       - name: Build DMG
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          GITHUB_TOKEN: ${{ github.token }}
         run: npm run dist:mac
 
       - name: Upload macOS artifact
@@ -62,6 +63,8 @@ jobs:
         run: npm run rebuild
 
       - name: Build NSIS installer
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: npm run dist:win
 
       - name: Upload Windows artifact
@@ -91,6 +94,8 @@ jobs:
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           draft: false
           generate_release_notes: true

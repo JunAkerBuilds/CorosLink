@@ -6,7 +6,15 @@ Run the binary preparation script before running `npm run dist`:
 npm run binaries:prepare
 ```
 
-It downloads the current platform's standalone `yt-dlp` release asset and copies the `ffmpeg-static` binary into this folder.
+It downloads the pinned yt-dlp release asset and copies the `ffmpeg-static` binary into this folder.
+
+To use a different yt-dlp version:
+
+```sh
+YT_DLP_VERSION=2026.06.09 npm run binaries:prepare
+```
+
+Set `YT_DLP_VERSION=latest` to query GitHub for the newest release (requires `GITHUB_TOKEN` in CI).
 
 Recommended layout:
 

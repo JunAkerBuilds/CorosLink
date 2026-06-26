@@ -18,13 +18,14 @@
     "start": "npm run build && electron .",
     "icons:generate": "node scripts/generate-icons.mjs",
     "rebuild": "electron-builder install-app-deps",
-    "dist": "npm run binaries:prepare && npm run build && electron-builder",
-    "dist:mac": "npm run binaries:prepare && npm run build && electron-builder --mac dmg",
-    "dist:win": "npm run binaries:prepare:win && npm run build && electron-builder --win nsis --x64"
+    "dist": "npm run binaries:prepare && npm run build && electron-builder --publish never",
+    "dist:mac": "npm run binaries:prepare && npm run build && electron-builder --mac dmg --publish never",
+    "dist:win": "npm run binaries:prepare:win && npm run build && electron-builder --win nsis --x64 --publish never"
   },
   "build": {
     "appId": "app.coros.desktop",
     "productName": "COROS Desktop",
+    "publish": null,
     "icon": "build/icon.png",
     "afterPack": "scripts/after-pack.cjs",
     "directories": {
