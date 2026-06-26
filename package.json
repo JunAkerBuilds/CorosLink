@@ -1,6 +1,6 @@
 {
   "name": "coroslink",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "private": true,
   "description": "Unofficial COROS Pace Pro companion — media, watch sync, and training analytics.",
   "author": "CorosLink Contributors",
@@ -21,6 +21,8 @@
     "dist": "npm run binaries:prepare && npm run build && electron-builder --publish never",
     "dist:mac": "npm run binaries:prepare && npm run build && electron-builder --mac dmg --publish never",
     "dist:win": "npm run binaries:prepare:win && npm run build && electron-builder --win nsis --x64 --publish never",
+    "release:prepare": "node scripts/prepare-release.mjs",
+    "release:check-version": "node scripts/sync-release-version.mjs --check",
     "website:dev": "npm run dev --prefix website",
     "website:build": "cross-env GITHUB_PAGES=true npm run build --prefix website"
   },

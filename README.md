@@ -274,12 +274,18 @@ Because `better-sqlite3` is native, build Windows installers on Windows or in CI
 
 **Publishing a release (maintainers):**
 
+1. Prepare the version in `package.json` and `package-lock.json` so they match the tag you are about to create:
+
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+npm run release:prepare -- v0.1.3
+git commit -am "chore: release v0.1.3"
+git tag v0.1.3
+git push origin main v0.1.3
 ```
 
-That triggers the [Release installers](.github/workflows/release.yml) workflow, which builds both platforms and publishes a GitHub Release. You can also run it manually from **Actions → Release installers**.
+2. That triggers the [Release installers](.github/workflows/release.yml) workflow. CI syncs the tag into `package.json` before building, then verifies the versions match, so installer names like `CorosLink-0.1.3-arm64.dmg` always follow the git tag.
+
+You can also run the workflow manually from **Actions → Release installers** (it uses the current `package.json` version when no tag is pushed).
 
 Pushes to `main` run [Build desktop installers](.github/workflows/build.yml) and upload CI artifacts for testing before tagging.
 
