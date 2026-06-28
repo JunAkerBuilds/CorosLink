@@ -70,7 +70,7 @@ const groups = parsePersonalRecordGroups(fixture.recordDetailList);
 assert.equal(groups[0]?.label, "All");
 const records = groups[0]?.records ?? [];
 
-assert.equal(records.length, 4);
+assert.equal(records.length, 5);
 
 const longestRun = records.find((record) => record.type === 101);
 assert.equal(longestRun?.distance, 7550);
@@ -80,13 +80,19 @@ assert.equal(fiveK?.duration, 1782);
 assert.equal(fiveK?.avgPace, 356.4);
 assert.equal(records.filter((record) => record.label === "5K" || record.label === "5 km").length, 1);
 
-const bestPace = records.find((record) => record.type === 102);
-assert.equal(bestPace?.duration, undefined);
-assert.equal(bestPace?.avgPace, 357);
+assert.equal(records.some((record) => record.type === 102), false);
 
 const elevation = records.find((record) => record.type === 103);
 assert.equal(elevation?.distance, 84);
 assert.equal(elevation?.avgPace, 368);
+
+const halfMarathon = records.find((record) => record.type === 12);
+assert.equal(halfMarathon?.label, "Half Marathon");
+assert.equal(halfMarathon?.duration, undefined);
+
+const marathon = records.find((record) => record.type === 13);
+assert.equal(marathon?.label, "Marathon");
+assert.equal(marathon?.duration, undefined);
 
 assert.equal(records.some((record) => record.type === 11), false);
 
@@ -287,6 +293,27 @@ const elevGainAlias = parsePersonalRecordGroups([
 assert.equal(elevGainAlias?.type, 103);
 assert.equal(elevGainAlias?.distance, 84);
 
+const corosType102Elevation = parsePersonalRecordGroups([
+  {
+    type: 4,
+    recordList: [
+      {
+        type: 102,
+        record: 84,
+        avgPace: 368,
+        happenDay: 20260628,
+        labelIdStr: "478529681556013058",
+        site: "12km Long Run"
+      }
+    ]
+  }
+])[0]?.records[0];
+
+assert.equal(corosType102Elevation?.type, 103);
+assert.equal(corosType102Elevation?.distance, 84);
+assert.equal(corosType102Elevation?.avgPace, 368);
+assert.equal(corosType102Elevation?.activityId, "478529681556013058");
+
 const coros5kActivity = parsePersonalRecordGroups([
   {
     type: 4,
@@ -323,6 +350,56 @@ const coros5kWithBestField = parsePersonalRecordGroups([
 ])[0]?.records[0];
 
 assert.equal(coros5kWithBestField?.duration, 1849);
+
+const coros5kBestOverRecord = parsePersonalRecordGroups([
+  {
+    type: 4,
+    recordList: [
+      {
+        type: 10,
+        record: 184500,
+        best: 184900,
+        avgPace: 370,
+        happenDay: 20260627,
+        labelIdStr: "478506322034196580"
+      }
+    ]
+  }
+])[0]?.records[0];
+
+assert.equal(coros5kBestOverRecord?.duration, 1849);
+assert.equal(coros5kBestOverRecord?.avgPace, 369.8);
+
+const corosLiveFiveKBoard = parsePersonalRecordGroups([
+  {
+    type: 4,
+    recordList: [
+      {
+        type: 10,
+        record: 1782,
+        duration: 1782,
+        distance: 4828.03,
+        avgPace: 369,
+        happenDay: 20260627,
+        labelIdStr: "478506322034196580",
+        name: "Rolling 400s"
+      },
+      {
+        type: 5,
+        record: 1849,
+        duration: 1849,
+        distance: 5000,
+        avgPace: 370,
+        happenDay: 20260627,
+        labelIdStr: "478506322034196580",
+        name: "Rolling 400s"
+      }
+    ]
+  }
+])[0]?.records.find((record) => record.label === "5K");
+
+assert.equal(corosLiveFiveKBoard?.duration, 1849);
+assert.equal(corosLiveFiveKBoard?.apiType, 5);
 
 const corosFourWeeksBoard = parsePersonalRecordGroups([
   {
@@ -386,6 +463,28 @@ assert.equal(
 assert.equal(
   corosFourWeeksBoard.find((record) => record.type === 101)?.distance,
   12010
+);
+
+const emptyGroup = parsePersonalRecordGroups([
+  {
+    type: 4,
+    recordList: []
+  }
+])[0];
+
+assert.equal(emptyGroup?.records.length, 3);
+assert.deepEqual(
+  emptyGroup?.records.map((record) => record.type).sort((left, right) => left - right),
+  [12, 13, 103]
+);
+assert.equal(
+  emptyGroup?.records.every(
+    (record) =>
+      record.duration === undefined &&
+      record.distance === undefined &&
+      record.avgPace === undefined
+  ),
+  true
 );
 
 console.log("personal record parsing tests passed");

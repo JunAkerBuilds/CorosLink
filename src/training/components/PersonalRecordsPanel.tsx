@@ -1,4 +1,4 @@
-import { Footprints, Gauge, Mountain, Route, Trophy } from "lucide-react";
+import { Footprints, Mountain, Route, Trophy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type {
   TrainingHubDashboard,
@@ -8,6 +8,7 @@ import {
   formatPersonalRecordHero,
   formatPersonalRecordMeta,
   formatRecordDateShort,
+  isPersonalRecordPopulated,
   isPersonalRecordVisible
 } from "../formatters";
 
@@ -16,10 +17,6 @@ interface PersonalRecordsPanelProps {
 }
 
 function recordIcon(type: number) {
-  if (type === 102) {
-    return Gauge;
-  }
-
   if (type === 101) {
     return Route;
   }
@@ -105,9 +102,14 @@ function RecordCard({ record }: { record: TrainingHubPersonalRecord }) {
   const Icon = recordIcon(record.type);
   const hero = formatPersonalRecordHero(record);
   const meta = formatPersonalRecordMeta(record);
+  const populated = isPersonalRecordPopulated(record);
 
   return (
-    <article className="training-record-card">
+    <article
+      className={
+        populated ? "training-record-card" : "training-record-card is-empty"
+      }
+    >
       <div className="training-record-card-top">
         <span className="training-record-card-icon" aria-hidden="true">
           <Icon size={16} strokeWidth={2.2} />

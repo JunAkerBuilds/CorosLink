@@ -873,6 +873,7 @@ function parseZoneDistributionEntries(
 }
 
 const RECORD_TYPE_LABELS: Record<number, string> = {
+  5: "5K",
   6: "3K",
   7: "1K",
   8: "1 Mile",
@@ -886,23 +887,26 @@ const RECORD_TYPE_LABELS: Record<number, string> = {
   103: "Most Elevation Gain"
 };
 
-const DISTANCE_PR_RECORD_TYPES = new Set([6, 7, 8, 9, 10, 11, 12, 13]);
+const DISTANCE_PR_RECORD_TYPES = new Set([5, 6, 7, 8, 9, 10, 11, 12, 13]);
+
+const PERSONAL_RECORD_SLOT_TYPES = [103, 12, 13] as const;
+
+const RECORD_TYPE_EXCLUDED = new Set([8, 9, 102]);
 
 const RECORD_DISPLAY_ORDER: Record<number, number> = {
   101: 0,
   103: 1,
   7: 2,
-  8: 3,
-  6: 4,
-  10: 5,
-  11: 6,
-  12: 7,
-  13: 8,
-  9: 9,
-  102: 10
+  6: 3,
+  5: 4,
+  10: 4,
+  11: 5,
+  12: 6,
+  13: 7
 };
 
 const DISTANCE_PR_DISTANCE_METERS: Record<number, number> = {
+  5: 5000,
   6: 3000,
   7: 1000,
   8: 1609,
@@ -1148,6 +1152,56 @@ function resolveElevationGainMeters(raw: Record<string, unknown>): number | unde
   return Math.max(...candidates);
 }
 
+function isCorosFiveKPersonalRecord(
+  raw: Record<string, unknown>,
+  resolvedType: number
+): boolean {
+  if (resolvedType !== 5 && resolvedType !== 10) {
+    return true;
+  }
+
+  const rawType = toOptionalNumber(raw.type) ?? 0;
+
+  if (rawType === 5) {
+    return true;
+  }
+
+  const rawRecord = toOptionalNumber(raw.record);
+
+  if (rawRecord !== undefined && rawRecord >= 10_000) {
+    return true;
+  }
+
+  const distance = pickDistanceScalar(raw);
+
+  if (distance === undefined) {
+    return true;
+  }
+
+  return Math.abs(distance - 5000) <= 100;
+}
+
+function distancePersonalRecordQuality(
+  record: TrainingHubPersonalRecord
+): number {
+  if (record.type !== 5 && record.type !== 10) {
+    return 0;
+  }
+
+  if (record.apiType === 5) {
+    return 3;
+  }
+
+  if (
+    record.distance !== undefined &&
+    Math.abs(record.distance - 5000) <= 100
+  ) {
+    return 2;
+  }
+
+  return 1;
+}
+
 function inferDistanceRecordType(
   name: string,
   distanceMeters?: number
@@ -1159,8 +1213,8 @@ function inferDistanceRecordType(
     "1km": 7,
     "3k": 6,
     "3km": 6,
-    "5k": 10,
-    "5km": 10,
+    "5k": 5,
+    "5km": 5,
     "10k": 11,
     "10km": 11,
     "1mile": 8,
@@ -1181,7 +1235,7 @@ function inferDistanceRecordType(
   const distanceAliases: Record<number, number> = {
     1000: 7,
     3000: 6,
-    5000: 10,
+    5000: 5,
     10000: 11,
     1609: 8,
     3218: 9,
@@ -1190,6 +1244,28 @@ function inferDistanceRecordType(
   };
 
   return distanceAliases[roundedDistance];
+}
+
+function isCorosBestPaceRecord(raw: Record<string, unknown>): boolean {
+  const record = pickRecordScalar(raw);
+  const avgPace = toOptionalNumber(raw.avgPace);
+
+  if (record === undefined || avgPace === undefined) {
+    return false;
+  }
+
+  const normalizedRecord = normalizePersonalRecordPaceValue(record);
+  const normalizedAvgPace = normalizePersonalRecordPaceValue(avgPace);
+
+  if (
+    normalizedRecord === undefined ||
+    normalizedAvgPace === undefined ||
+    !isPlausiblePaceSecondsPerKm(normalizedRecord)
+  ) {
+    return false;
+  }
+
+  return Math.abs(normalizedRecord - normalizedAvgPace) <= 2;
 }
 
 function resolvePersonalRecordType(
@@ -1217,6 +1293,13 @@ function resolvePersonalRecordType(
 
   if (type === 100) {
     return RECORD_TYPE_LONGEST_RUN;
+  }
+
+  // COROS uses type 102 for both best pace and most elevation gain.
+  if (type === RECORD_TYPE_BEST_PACE) {
+    return isCorosBestPaceRecord(raw)
+      ? RECORD_TYPE_BEST_PACE
+      : RECORD_TYPE_ELEVATION_GAIN;
   }
 
   if (RECORD_TYPE_LABELS[type]) {
@@ -1248,6 +1331,7 @@ function normalizePersonalRecordLabelKey(label: string): string {
 
 function canonicalPersonalRecordKey(record: TrainingHubPersonalRecord): string {
   const aliases: Record<number, string> = {
+    5: "5km",
     6: "3km",
     7: "1km",
     8: "1mile",
@@ -1312,6 +1396,13 @@ function isBetterPersonalRecord(
   }
 
   if (DISTANCE_PR_RECORD_TYPES.has(candidate.type)) {
+    const candidateQuality = distancePersonalRecordQuality(candidate);
+    const currentQuality = distancePersonalRecordQuality(current);
+
+    if (candidateQuality !== currentQuality) {
+      return candidateQuality > currentQuality;
+    }
+
     const candidateNative = isNativePersonalRecordType(candidate.apiType, candidate.type);
     const currentNative = isNativePersonalRecordType(current.apiType, current.type);
 
@@ -1343,12 +1434,40 @@ function isBetterPersonalRecord(
   return false;
 }
 
+function createPersonalRecordPlaceholder(
+  type: number
+): TrainingHubPersonalRecord {
+  return {
+    type,
+    label: RECORD_TYPE_LABELS[type] ?? `Record ${type}`,
+    duration: undefined,
+    distance: undefined,
+    avgPace: undefined,
+    happenDay: undefined
+  };
+}
+
+function ensurePersonalRecordSlots(
+  records: TrainingHubPersonalRecord[]
+): TrainingHubPersonalRecord[] {
+  const presentTypes = new Set(records.map((record) => record.type));
+  const placeholders = PERSONAL_RECORD_SLOT_TYPES.filter(
+    (type) => !presentTypes.has(type)
+  ).map((type) => createPersonalRecordPlaceholder(type));
+
+  return [...records, ...placeholders];
+}
+
 function finalizePersonalRecords(
   records: TrainingHubPersonalRecord[]
 ): TrainingHubPersonalRecord[] {
   const deduped = new Map<string, TrainingHubPersonalRecord>();
 
   for (const record of records) {
+    if (RECORD_TYPE_EXCLUDED.has(record.type)) {
+      continue;
+    }
+
     const key = canonicalPersonalRecordKey(record);
     const existing = deduped.get(key);
 
@@ -1357,7 +1476,7 @@ function finalizePersonalRecords(
     }
   }
 
-  return [...deduped.values()].sort((left, right) => {
+  const sorted = [...deduped.values()].sort((left, right) => {
     const leftOrder = RECORD_DISPLAY_ORDER[left.type] ?? 99;
     const rightOrder = RECORD_DISPLAY_ORDER[right.type] ?? 99;
 
@@ -1367,6 +1486,8 @@ function finalizePersonalRecords(
 
     return left.label.localeCompare(right.label);
   });
+
+  return ensurePersonalRecordSlots(sorted);
 }
 
 function isPersonalRecordEntryPopulated(
@@ -1378,6 +1499,15 @@ function isPersonalRecordEntryPopulated(
 
   if (record.type === RECORD_TYPE_LONGEST_RUN || record.type === RECORD_TYPE_ELEVATION_GAIN) {
     return record.distance !== undefined && record.distance > 0;
+  }
+
+  if (
+    (record.type === 5 || record.type === 10) &&
+    record.distance !== undefined &&
+    record.distance > 0 &&
+    Math.abs(record.distance - 5000) > 100
+  ) {
+    return false;
   }
 
   return record.duration !== undefined && record.duration > 0;
@@ -1406,7 +1536,14 @@ export function parsePersonalRecordGroups(raw: unknown): TrainingHubPersonalReco
             .map((record) =>
               parsePersonalRecord(record as Record<string, unknown>, type)
             )
-            .filter(isPersonalRecordEntryPopulated)
+            .filter(
+              (record, index) =>
+                isPersonalRecordEntryPopulated(record) &&
+                isCorosFiveKPersonalRecord(
+                  recordList[index] as Record<string, unknown>,
+                  record.type
+                )
+            )
         )
       };
     })
@@ -1601,16 +1738,34 @@ function pickRecordScalar(raw: Record<string, unknown>): number | undefined {
   return undefined;
 }
 
+function pickNormalizedPersonalRecordDuration(
+  raw: Record<string, unknown>,
+  key: string
+): number | undefined {
+  return normalizePersonalRecordDuration(toOptionalNumber(raw[key]));
+}
+
 function resolveDistancePersonalRecordDuration(
   type: number,
   raw: Record<string, unknown>
 ): number | undefined {
+  const explicitDuration = pickNormalizedPersonalRecordDuration(raw, "duration");
+
+  if (explicitDuration !== undefined) {
+    return explicitDuration;
+  }
+
+  const validatedDuration = pickNormalizedPersonalRecordDuration(raw, "best");
+
+  if (validatedDuration !== undefined) {
+    return validatedDuration;
+  }
+
   const candidates = [
-    normalizePersonalRecordDuration(toOptionalNumber(raw.record)),
-    normalizePersonalRecordDuration(toOptionalNumber(raw.time)),
-    normalizePersonalRecordDuration(toOptionalNumber(raw.recordValue)),
-    normalizePersonalRecordDuration(toOptionalNumber(raw.duration)),
-    normalizePersonalRecordDuration(toOptionalNumber(raw.best))
+    pickNormalizedPersonalRecordDuration(raw, "record"),
+    pickNormalizedPersonalRecordDuration(raw, "time"),
+    pickNormalizedPersonalRecordDuration(raw, "recordValue"),
+    pickNormalizedPersonalRecordDuration(raw, "duration")
   ].filter((value): value is number => value !== undefined && value > 0);
 
   if (candidates.length === 0) {

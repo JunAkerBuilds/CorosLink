@@ -305,11 +305,15 @@ export function formatUpcomingWorkoutRowStats(
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-const RECORD_TYPE_BEST_PACE = 102;
 const RECORD_TYPE_LONGEST_RUN = 101;
 const RECORD_TYPE_ELEVATION_GAIN = 103;
 
+const PERSONAL_RECORD_SLOT_TYPES = new Set([103, 12, 13]);
+
+const PERSONAL_RECORD_EXCLUDED_TYPES = new Set([8, 9, 102]);
+
 const DISTANCE_PR_DISTANCE_METERS: Record<number, number> = {
+  5: 5000,
   6: 3000,
   7: 1000,
   8: 1609,
@@ -363,14 +367,27 @@ export function formatRecordDateShort(happenDay?: string): string {
   }).format(new Date(year, month, day));
 }
 
+export function isPersonalRecordPopulated(record: {
+  type: number;
+  duration?: number;
+  distance?: number;
+  avgPace?: number;
+}): boolean {
+  if (record.type === RECORD_TYPE_LONGEST_RUN || record.type === RECORD_TYPE_ELEVATION_GAIN) {
+    return record.distance !== undefined && record.distance > 0;
+  }
+
+  return record.duration !== undefined && record.duration > 0;
+}
+
 export function formatPersonalRecordHero(record: {
   type: number;
   duration?: number;
   distance?: number;
   avgPace?: number;
 }): string {
-  if (record.type === RECORD_TYPE_BEST_PACE) {
-    return formatPaceSecondsPerKm(record.avgPace);
+  if (PERSONAL_RECORD_SLOT_TYPES.has(record.type) && !isPersonalRecordPopulated(record)) {
+    return "Not recorded";
   }
 
   if (record.type === RECORD_TYPE_LONGEST_RUN) {
@@ -402,7 +419,7 @@ export function formatPersonalRecordMeta(record: {
   distance?: number;
   avgPace?: number;
 }): string | null {
-  if (record.type === RECORD_TYPE_BEST_PACE) {
+  if (!isPersonalRecordPopulated(record)) {
     return null;
   }
 
@@ -419,13 +436,13 @@ export function isPersonalRecordVisible(record: {
   avgPace?: number;
   happenDay?: string;
 }): boolean {
-  if (record.type === RECORD_TYPE_BEST_PACE) {
-    return record.avgPace !== undefined && record.avgPace > 0;
+  if (PERSONAL_RECORD_EXCLUDED_TYPES.has(record.type)) {
+    return false;
   }
 
-  if (record.type === RECORD_TYPE_LONGEST_RUN || record.type === RECORD_TYPE_ELEVATION_GAIN) {
-    return record.distance !== undefined && record.distance > 0;
+  if (PERSONAL_RECORD_SLOT_TYPES.has(record.type)) {
+    return true;
   }
 
-  return record.duration !== undefined && record.duration > 0;
+  return isPersonalRecordPopulated(record);
 }
