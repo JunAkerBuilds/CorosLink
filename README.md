@@ -179,7 +179,7 @@ Packaged builds check **[GitHub Releases](https://github.com/JunAkerBuilds/Coros
 
 > **macOS note:** Auto-update works best with signed builds. Unsigned installs may still need a manual download from GitHub Releases until code signing is set up.
 
-> **First release with in-app updates:** Users on v0.1.6 or earlier must install manually once. After that, updates arrive in-app.
+> **First release with in-app updates:** Users on v0.1.7 or earlier must install manually once. After that, updates arrive in-app.
 
 ### Build from source
 
@@ -325,10 +325,10 @@ After building, confirm `release/latest-mac.yml` (or `latest.yml` / `latest-linu
 
 **Test auto-update end-to-end (maintainers):**
 
-1. Tag and ship a baseline release that includes the updater (e.g. v0.1.7).
+1. Tag and ship a baseline release that includes the updater (e.g. v0.1.8).
 2. Install that build from GitHub Releases on a test machine.
 3. Confirm the header shows a clickable version badge (not dev-only text).
-4. Tag and ship a newer release (e.g. v0.1.8).
+4. Tag and ship a newer release (e.g. v0.1.9).
 5. In the older app, wait ~5 seconds or click the version badge.
 6. Expect: checking → update available → downloading → **Restart to update**.
 7. Click restart; the app should relaunch on the new version.
