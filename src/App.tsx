@@ -52,13 +52,16 @@ import type {
   TrainingHubUpcomingWorkout,
   WatchStatus,
   WatchTrack,
+  AppUpdateSnapshot,
 } from "../electron/types";
 import { buildTrainingHubSnapshot } from "./training/parsers";
 import { fetchTrainingDashboard, fetchUpcomingWorkouts } from "./training/api";
+import { TRAINING_HEATMAP_DAYS } from "./training/chartConfig";
 import { recentTrainingHubDateList } from "./training/formatters";
 import { TrainingHubView } from "./training/TrainingHubView";
 import type { TrainingHubSnapshot } from "./training/types";
 import type { CorosLinkApi } from "./coroslink-api";
+import { AppUpdateControls } from "./components/AppUpdateControls";
 import {
   LibrarySyncLayout,
   LocalLibraryPanel,
@@ -134,6 +137,8 @@ export default function App() {
     useState<TrainingHubUpcomingWorkout[]>([]);
   const [trainingHubActivityDetail, setTrainingHubActivityDetail] =
     useState<TrainingHubActivityDetail | null>(null);
+  const [selectedTrainingHubActivity, setSelectedTrainingHubActivity] =
+    useState<TrainingHubActivity | null>(null);
   const [trainingHubFileUrl, setTrainingHubFileUrl] = useState<string | null>(
     null,
   );
@@ -145,6 +150,22 @@ export default function App() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastOutput, setLastOutput] = useState<string[]>([]);
+  const [appUpdateSnapshot, setAppUpdateSnapshot] = useState<AppUpdateSnapshot>(
+    {
+      supported: false,
+      currentVersion: "0.0.0",
+      status: "idle",
+    },
+  );
+
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
+
+    void api.getAppUpdateStatus().then(setAppUpdateSnapshot);
+    return api.onAppUpdateStatus(setAppUpdateSnapshot);
+  }, [api]);
 
   useEffect(() => {
     autoTransferRef.current = autoTransfer;
@@ -205,6 +226,7 @@ export default function App() {
     setTrainingHubSportTypes([]);
     setTrainingHubUpcomingWorkouts([]);
     setTrainingHubActivityDetail(null);
+    setSelectedTrainingHubActivity(null);
     setTrainingHubFileUrl(null);
   }, []);
 
@@ -213,7 +235,7 @@ export default function App() {
       return;
     }
 
-    const dateList = recentTrainingHubDateList(7);
+    const dateList = recentTrainingHubDateList(TRAINING_HEATMAP_DAYS);
     const [
       activitiesResult,
       analyticsResult,
@@ -291,6 +313,58 @@ export default function App() {
       clearTrainingHubData();
     }
   }, [api, clearTrainingHubData, loadTrainingHubData]);
+
+  const handleTrainingHubActivityDetail = useCallback(
+    async (activity: TrainingHubActivity) => {
+      if (!api) {
+        return;
+      }
+
+      setBusy(`training-detail:${activity.activityId}`);
+      setError(null);
+      setMessage(null);
+      setSelectedTrainingHubActivity(activity);
+
+      try {
+        setTrainingHubActivityDetail(
+          await api.getTrainingHubActivityDetail(
+            activity.activityId,
+            activity.sportType,
+            activity,
+          ),
+        );
+        setTrainingHubFileUrl(null);
+      } catch (caught) {
+        setError(toErrorMessage(caught));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [api],
+  );
+
+  useEffect(() => {
+    if (!api || trainingHubActivities.length === 0) {
+      return;
+    }
+
+    const selectedId = selectedTrainingHubActivity?.activityId;
+    if (
+      selectedId &&
+      trainingHubActivities.some(
+        (activity) => activity.activityId === selectedId,
+      )
+    ) {
+      return;
+    }
+
+    void handleTrainingHubActivityDetail(trainingHubActivities[0]);
+  }, [
+    api,
+    trainingHubActivities,
+    selectedTrainingHubActivity?.activityId,
+    handleTrainingHubActivityDetail,
+  ]);
 
   useEffect(() => {
     if (!api) {
@@ -431,6 +505,33 @@ export default function App() {
     } finally {
       setBusy(null);
     }
+  }
+
+  async function handleCheckForUpdates() {
+    if (!api) {
+      return;
+    }
+
+    setBusy("update-check");
+    setError(null);
+    try {
+      const snapshot = await api.checkForAppUpdates();
+      setAppUpdateSnapshot(snapshot);
+
+      if (snapshot.status === "not-available") {
+        setMessage("You're on the latest version.");
+      } else if (snapshot.status === "error") {
+        setError(snapshot.error ?? "Could not check for updates.");
+      }
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function handleInstallUpdate() {
+    void api?.quitAndInstallUpdate();
   }
 
   async function loadSpotifyPlaylist(playlistId: string) {
@@ -603,32 +704,6 @@ export default function App() {
     try {
       await refreshTrainingHub();
       setMessage("COROS Training Hub data refreshed.");
-    } catch (caught) {
-      setError(toErrorMessage(caught));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function handleTrainingHubActivityDetail(
-    activity: TrainingHubActivity,
-  ) {
-    if (!api) {
-      return;
-    }
-
-    setBusy(`training-detail:${activity.activityId}`);
-    setError(null);
-    setMessage(null);
-
-    try {
-      setTrainingHubActivityDetail(
-        await api.getTrainingHubActivityDetail(
-          activity.activityId,
-          activity.sportType,
-        ),
-      );
-      setTrainingHubFileUrl(null);
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -1063,6 +1138,12 @@ export default function App() {
         </div>
 
         <div className="app-header-end">
+          <AppUpdateControls
+            snapshot={appUpdateSnapshot}
+            busy={busy === "update-check"}
+            onCheck={() => void handleCheckForUpdates()}
+            onInstall={handleInstallUpdate}
+          />
           <div
             className={`watch-status-chip${watchStatus?.connected ? " connected" : ""}`}
             title={watchStatus?.rootPath ?? "No watch volume found"}
@@ -1196,6 +1277,7 @@ export default function App() {
                 snapshot={trainingHubSnapshot}
                 sportTypes={trainingHubSportTypes}
                 activityDetail={trainingHubActivityDetail}
+                selectedActivity={selectedTrainingHubActivity}
                 fileUrl={trainingHubFileUrl}
                 busy={busy}
                 onEmailChange={setTrainingHubEmail}

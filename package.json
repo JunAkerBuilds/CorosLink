@@ -22,11 +22,12 @@
     "icons:generate": "node scripts/generate-icons.mjs",
     "rebuild": "electron-builder install-app-deps",
     "dist": "npm run binaries:prepare && npm run build && electron-builder --publish never",
-    "dist:mac": "npm run binaries:prepare && npm run build && electron-builder --mac dmg --publish never",
+    "dist:mac": "npm run binaries:prepare && npm run build && electron-builder --mac --publish never",
     "dist:win": "npm run binaries:prepare:win && npm run build && electron-builder --win nsis --x64 --publish never",
     "dist:linux": "npm run binaries:prepare:linux && npm run build && electron-builder --linux AppImage --x64 --publish never",
     "release:prepare": "node scripts/prepare-release.mjs",
     "release:check-version": "node scripts/sync-release-version.mjs --check",
+    "release:verify-artifacts": "node scripts/verify-release-artifacts.mjs",
     "website:dev": "npm run dev --prefix website",
     "website:build": "npm run build --prefix website"
   },
@@ -88,6 +89,7 @@
   "dependencies": {
     "better-sqlite3": "^12.11.1",
     "electron-updater": "^6.8.9",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.21.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -96,6 +98,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
+    "@types/leaflet": "^1.9.21",
     "@types/node": "^26.0.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

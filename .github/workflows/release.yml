@@ -42,6 +42,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: npm run dist:mac
 
+      - name: Verify macOS update artifacts
+        run: node scripts/verify-release-artifacts.mjs macos
+
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
@@ -85,6 +88,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: npm run dist:linux
 
+      - name: Verify Linux update artifacts
+        run: node scripts/verify-release-artifacts.mjs linux
+
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
@@ -125,6 +131,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: npm run dist:win
+
+      - name: Verify Windows update artifacts
+        run: node scripts/verify-release-artifacts.mjs windows
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4

@@ -4,7 +4,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { addDownloads } from "./database";
-import { parseYtDlpProgressLine, summarizePlaylistWarnings, extractYtDlpErrors } from "./downloadProgress";
+import {
+  parseYtDlpProgressLine,
+  extractYtDlpErrors,
+  extractAlreadyDownloadedPaths,
+  partitionDownloadedMp3Files,
+  buildPlaylistCompletionWarning,
+  parsePlaylistTrackMarker,
+  isYtDlpErrorLine
+} from "./downloadProgress";
 import type {
   BinaryCheck,
   BinaryName,
@@ -142,6 +150,9 @@ async function runAudioDownload(
   const before = new Set(listMp3Files(outputDirectory));
   const beforeArtifacts = new Set(listMediaArtifacts(outputDirectory));
   const printedPaths: string[] = [];
+  const skipLines: string[] = [];
+  const capturedErrorLines: string[] = [];
+  let playlistTrackTotal: number | undefined;
 
   const args = [
     options.allowPlaylist ? "--yes-playlist" : "--no-playlist",
@@ -180,6 +191,19 @@ async function runAudioDownload(
       printedPaths.push(resolvedPath);
     }
 
+    if (line.toLowerCase().includes("has already been downloaded")) {
+      skipLines.push(line);
+    }
+
+    if (isYtDlpErrorLine(line)) {
+      capturedErrorLines.push(line);
+    }
+
+    const trackMarker = parsePlaylistTrackMarker(line);
+    if (trackMarker) {
+      playlistTrackTotal = trackMarker.trackTotal;
+    }
+
     if (!options.onProgress) {
       return;
     }
@@ -200,15 +224,38 @@ async function runAudioDownload(
   if (options.runtime?.isCancelled?.()) {
     throw new DownloadCancelledError();
   }
-  const newFiles = collectNewMp3Files(before, printedPaths, outputDirectory, listMp3Files(outputDirectory));
+
+  const after = listMp3Files(outputDirectory);
+  const { newFiles, existingFiles: existingFromPrinted } = partitionDownloadedMp3Files(
+    before,
+    printedPaths,
+    after
+  );
+  const existingFromSkips = extractAlreadyDownloadedPaths(skipLines, outputDirectory);
+  const existingFiles = [
+    ...new Set([...existingFromPrinted, ...existingFromSkips])
+  ];
 
   if (newFiles.length === 0) {
+    if (existingFiles.length > 0) {
+      return {
+        tracks: addDownloads(existingFiles, sourceUrl),
+        output,
+        warnings: [
+          existingFiles.length === 1
+            ? "This track was already downloaded."
+            : `All ${existingFiles.length} track(s) were already downloaded.`
+        ]
+      };
+    }
+
     const afterArtifacts = listMediaArtifacts(outputDirectory);
     const newArtifacts = afterArtifacts.filter(
       (filePath) => !beforeArtifacts.has(filePath)
     );
     throw buildNoMp3Error({
       output,
+      skipLines,
       ytDlp,
       ffmpeg,
       newArtifacts,
@@ -216,15 +263,14 @@ async function runAudioDownload(
     });
   }
 
-  const ytDlpErrors = extractYtDlpErrors(output);
-  const warnings =
-    ytDlpErrors.length > 0
-      ? summarizePlaylistWarnings(ytDlpErrors, newFiles.length)
-      : exitCode !== 0 && options.allowPlaylist
-        ? [
-            `Downloaded ${newFiles.length} track(s), but yt-dlp exited with code ${exitCode}.`
-          ]
-        : undefined;
+  const deliveredCount = newFiles.length + existingFiles.length;
+  const warnings = buildPlaylistCompletionWarning({
+    allowPlaylist: options.allowPlaylist,
+    deliveredCount,
+    playlistTrackTotal,
+    exitCode,
+    capturedErrorLines
+  });
 
   if (exitCode !== 0 && exitCode !== null) {
     if (options.allowPlaylist) {
@@ -267,12 +313,17 @@ async function assertBinariesAvailable(): Promise<void> {
 
 function buildNoMp3Error(options: {
   output: string[];
+  skipLines?: string[];
   ytDlp: ResolvedBinary;
   ffmpeg: ResolvedBinary;
   newArtifacts: string[];
   exitCode?: number | null;
 }): Error {
-  const tail = options.output
+  const diagnosticLines = [
+    ...options.output,
+    ...(options.skipLines ?? [])
+  ];
+  const tail = diagnosticLines
     .filter(
       (line) =>
         !line.endsWith(".mp3") &&
@@ -281,6 +332,14 @@ function buildNoMp3Error(options: {
     )
     .slice(-15);
   const outputText = tail.join("\n");
+  const fullOutputText = diagnosticLines
+    .filter(
+      (line) =>
+        !line.endsWith(".mp3") &&
+        !line.startsWith("after_move:") &&
+        !line.startsWith("before_dl:")
+    )
+    .join("\n");
   const lines = [
     options.exitCode
       ? `yt-dlp exited with code ${options.exitCode}, but no MP3 files were created.`
@@ -289,7 +348,8 @@ function buildNoMp3Error(options: {
     `ffmpeg: ${options.ffmpeg.source} (${options.ffmpeg.command})`
   ];
 
-  const knownIssue = detectKnownDownloadIssue(outputText);
+  const knownIssue =
+    detectKnownDownloadIssue(fullOutputText) ?? detectKnownDownloadIssue(outputText);
   if (knownIssue) {
     lines.push(knownIssue);
   }
@@ -505,25 +565,6 @@ function resolveBinary(name: BinaryName): ResolvedBinary {
     command: executable,
     source: "path"
   };
-}
-
-function collectNewMp3Files(
-  before: Set<string>,
-  printedPaths: string[],
-  outputDirectory: string,
-  after: string[]
-): string[] {
-  const diffFiles = after.filter((filePath) => !before.has(filePath));
-  const printedMp3s = [...new Set(printedPaths)].filter(
-    (filePath) => filePath.toLowerCase().endsWith(".mp3") && fs.existsSync(filePath)
-  );
-
-  return [
-    ...new Set([
-      ...printedMp3s.filter((filePath) => !before.has(filePath)),
-      ...diffFiles
-    ])
-  ];
 }
 
 function buildProcessError(

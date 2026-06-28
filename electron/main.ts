@@ -39,6 +39,7 @@ import {
 import type {
   DownloadJob,
   SpotifyConfig,
+  TrainingHubActivity,
   TrainingHubActivityFileType,
   WatchConnectionSmokeOptionId
 } from "./types";
@@ -60,6 +61,12 @@ import {
   getYouTubeHistory,
   saveYouTubeVisit
 } from "./youtubeService";
+import {
+  checkForAppUpdates,
+  getAppUpdateSnapshot,
+  initializeAppUpdater,
+  quitAndInstallUpdate
+} from "./updaterService";
 
 let mainWindow: BrowserWindow | undefined;
 
@@ -123,6 +130,8 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
   }
+
+  initializeAppUpdater(mainWindow);
 }
 
 app.whenReady().then(() => {
@@ -288,8 +297,12 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "trainingHub:getActivityDetail",
-    (_event, activityId: string, sportType: number) =>
-      getTrainingHubActivityDetail(activityId, sportType)
+    (
+      _event,
+      activityId: string,
+      sportType: number,
+      listActivity?: TrainingHubActivity
+    ) => getTrainingHubActivityDetail(activityId, sportType, listActivity)
   );
 
   ipcMain.handle(
@@ -319,4 +332,12 @@ function registerIpcHandlers(): void {
   ipcMain.handle("trainingHub:getUpcomingWorkouts", (_event, days?: number) =>
     getUpcomingWorkouts(days)
   );
+
+  ipcMain.handle("app:getUpdateStatus", () => getAppUpdateSnapshot());
+
+  ipcMain.handle("app:checkForUpdates", () => checkForAppUpdates());
+
+  ipcMain.handle("app:quitAndInstallUpdate", () => {
+    quitAndInstallUpdate();
+  });
 }

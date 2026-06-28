@@ -19,6 +19,7 @@ import { FitnessTrendPanel } from "./components/FitnessTrendPanel";
 import { PersonalRecordsPanel } from "./components/PersonalRecordsPanel";
 import { RacePredictorCards } from "./components/RacePredictorCards";
 import { RecoveryRing } from "./components/RecoveryRing";
+import { TrainingHeatmapPanel } from "./components/TrainingHeatmapPanel";
 import { TrainingActivityTable } from "./components/TrainingActivityTable";
 import { TrainingTrendCharts } from "./components/TrainingTrendChart";
 import { TrainingZoneDistributionCharts } from "./components/TrainingZoneDistributionCharts";
@@ -35,6 +36,7 @@ export function TrainingHubView({
   snapshot,
   sportTypes,
   activityDetail,
+  selectedActivity,
   fileUrl,
   busy,
   onEmailChange,
@@ -234,6 +236,9 @@ export function TrainingHubView({
             </div>
           </section>
 
+          <div className="training-heatmap-wrap">
+            <TrainingHeatmapPanel snapshot={snapshot} />
+          </div>
           <TrainingTrendCharts points={snapshot?.trendPoints ?? []} />
           <TrainingZoneDistributionCharts
             lthrZones={snapshot?.dashboard?.lthrZones ?? []}
@@ -254,24 +259,37 @@ export function TrainingHubView({
             <PersonalRecordsPanel dashboard={snapshot?.dashboard ?? null} />
           </div>
 
-          <section className="panel training-activities-panel">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Recent Activities</p>
-                <h2>{activityCountLabel}</h2>
+          <section className="panel training-activities-split-panel">
+            <div className="training-activities-split">
+              <div className="training-activities-list">
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">Recent Activities</p>
+                    <h2>{activityCountLabel}</h2>
+                  </div>
+                  <Activity size={22} aria-hidden="true" />
+                </div>
+                <TrainingActivityTable
+                  activities={activities}
+                  sportTypes={sportTypes}
+                  selectedActivityId={selectedActivity?.activityId ?? null}
+                  busy={busy}
+                  onLoadDetail={onLoadDetail}
+                  onGetFileUrl={onGetFileUrl}
+                />
               </div>
-              <Activity size={22} aria-hidden="true" />
+              <div className="training-activities-detail">
+                <ActivityDetailPanel
+                  detail={activityDetail}
+                  listActivity={selectedActivity}
+                  sportTypes={sportTypes}
+                  fileUrl={fileUrl}
+                  busy={busy}
+                  embedded
+                />
+              </div>
             </div>
-            <TrainingActivityTable
-              activities={activities}
-              sportTypes={sportTypes}
-              busy={busy}
-              onLoadDetail={onLoadDetail}
-              onGetFileUrl={onGetFileUrl}
-            />
           </section>
-
-          <ActivityDetailPanel detail={activityDetail} fileUrl={fileUrl} />
         </>
       ) : null}
     </div>

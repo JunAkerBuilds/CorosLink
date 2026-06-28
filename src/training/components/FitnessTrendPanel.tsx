@@ -1,35 +1,14 @@
 import { useEffect, useState } from "react";
-import type { TrainingHubDailyMetric } from "../../../electron/types";
 import {
   formatHappenDayLabel,
   formatOptionalNumber,
   recentTrainingHubDateList
 } from "../formatters";
+import { mergeTrainingDayLists } from "../parsers";
 import type { TrainingHubSnapshot } from "../types";
 
 interface FitnessTrendPanelProps {
   snapshot: TrainingHubSnapshot | null;
-}
-
-function mergeDayList(snapshot: TrainingHubSnapshot | null): TrainingHubDailyMetric[] {
-  const combined = new Map<string, TrainingHubDailyMetric>();
-
-  for (const day of snapshot?.analytics?.dayList ?? []) {
-    if (day.happenDay) {
-      combined.set(day.happenDay, { ...day });
-    }
-  }
-
-  for (const day of snapshot?.dailyMetrics?.dayList ?? []) {
-    if (!day.happenDay) {
-      continue;
-    }
-    combined.set(day.happenDay, { ...combined.get(day.happenDay), ...day });
-  }
-
-  return [...combined.values()].sort((left, right) =>
-    left.happenDay.localeCompare(right.happenDay)
-  );
 }
 
 function formatCompactHappenDay(value: string): string {
@@ -48,7 +27,10 @@ function formatCompactHappenDay(value: string): string {
 
 export function FitnessTrendPanel({ snapshot }: FitnessTrendPanelProps) {
   const [isReady, setIsReady] = useState(false);
-  const days = mergeDayList(snapshot);
+  const days = mergeTrainingDayLists(
+    snapshot?.dailyMetrics ?? null,
+    snapshot?.analytics ?? null
+  );
   const dayMap = new Map(days.map((day) => [day.happenDay, day]));
   const dateKeys = recentTrainingHubDateList(7).reverse();
   const hasFitnessScore = dateKeys.some((key) =>

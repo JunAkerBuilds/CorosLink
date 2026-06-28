@@ -12,6 +12,24 @@ export function formatTrainingTimestamp(value?: number): string {
   }).format(new Date(timestamp));
 }
 
+export function formatTrainingTableWhen(value?: number): string {
+  if (!value) {
+    return "—";
+  }
+
+  const timestamp = value < 10_000_000_000 ? value * 1000 : value;
+  const date = new Date(timestamp);
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "numeric",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "2-digit" }),
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(date);
+}
+
 export function formatDurationSeconds(value?: number): string {
   if (!Number.isFinite(value) || !value) {
     return "0:00";
@@ -102,25 +120,44 @@ export function recentTrainingHubDateList(days: number): string[] {
   });
 }
 
+export function getLocalHappenDayKey(referenceDate = new Date()): string {
+  const year = referenceDate.getFullYear();
+  const month = String(referenceDate.getMonth() + 1).padStart(2, "0");
+  const day = String(referenceDate.getDate()).padStart(2, "0");
+  return `${year}${month}${day}`;
+}
+
+export function isUpcomingWorkoutScheduled(happenDay: string): boolean {
+  return /^\d{8}$/.test(happenDay) && happenDay >= getLocalHappenDayKey();
+}
+
+export function filterUpcomingWorkoutsFromToday<
+  T extends { happenDay: string }
+>(workouts: T[]): T[] {
+  return workouts.filter((workout) => isUpcomingWorkoutScheduled(workout.happenDay));
+}
+
 export function formatUpcomingWorkoutDate(happenDay: string): string {
   if (!/^\d{8}$/.test(happenDay)) {
     return happenDay;
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const todayKey = getLocalHappenDayKey();
+
+  if (happenDay === todayKey) {
+    return "Today";
+  }
 
   const year = Number(happenDay.slice(0, 4));
   const month = Number(happenDay.slice(4, 6)) - 1;
   const day = Number(happenDay.slice(6, 8));
   const date = new Date(year, month, day);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  date.setHours(0, 0, 0, 0);
   const diffDays = Math.round(
     (date.getTime() - today.getTime()) / (24 * 60 * 60 * 1000)
   );
-
-  if (diffDays === 0) {
-    return "Today";
-  }
 
   if (diffDays > 0 && diffDays <= 6) {
     return new Intl.DateTimeFormat(undefined, {
@@ -134,10 +171,261 @@ export function formatUpcomingWorkoutDate(happenDay: string): string {
   }).format(date);
 }
 
+export function isUpcomingWorkoutToday(happenDay: string): boolean {
+  if (!/^\d{8}$/.test(happenDay)) {
+    return false;
+  }
+
+  return happenDay === getLocalHappenDayKey();
+}
+
 export function formatUpcomingWorkoutLoad(value?: number): string {
   if (value === undefined || !Number.isFinite(value)) {
     return "--";
   }
 
   return `${Math.round(value)}TL`;
+}
+
+export function parseUpcomingWorkoutDistanceKm(
+  volume?: string
+): number | null {
+  if (!volume) {
+    return null;
+  }
+
+  const kmMatch = volume.match(/^([\d.]+)\s*km$/i);
+
+  if (kmMatch) {
+    const km = Number(kmMatch[1]);
+    return Number.isFinite(km) ? km : null;
+  }
+
+  return null;
+}
+
+export function formatUpcomingWorkoutVolumeDisplay(volume?: string): string {
+  return volume ?? "--";
+}
+
+export function inferUpcomingWorkoutCategory(name: string): string {
+  const normalized = name.trim().toLowerCase();
+
+  if (!normalized) {
+    return "Run";
+  }
+
+  if (/(race|marathon|half|10k|5k|parkrun)/.test(normalized)) {
+    return "Race";
+  }
+
+  if (/(long run|long\b)/.test(normalized)) {
+    return "Long";
+  }
+
+  if (/(easy|recovery|filler|rest|aerobic)/.test(normalized)) {
+    return "Easy";
+  }
+
+  if (/(interval|repeat|400|800|track|fartlek|tempo|speed|taper|vo2|threshold)/.test(
+    normalized
+  )) {
+    if (/(interval|repeat|400|800|track|fartlek|vo2)/.test(normalized)) {
+      return "Intervals";
+    }
+
+    return "Speed";
+  }
+
+  return "Run";
+}
+
+export function formatUpcomingWorkoutStats(
+  workouts: Array<{ volume?: string; trainingLoad?: number }>
+): string {
+  const count = workouts.length;
+  const workoutLabel = `${count} workout${count === 1 ? "" : "s"}`;
+
+  const totalKm = workouts.reduce((sum, workout) => {
+    const km = parseUpcomingWorkoutDistanceKm(workout.volume);
+    return km === null ? sum : sum + km;
+  }, 0);
+
+  const totalLoad = workouts.reduce((sum, workout) => {
+    if (workout.trainingLoad === undefined || !Number.isFinite(workout.trainingLoad)) {
+      return sum;
+    }
+
+    return sum + workout.trainingLoad;
+  }, 0);
+
+  const parts = [workoutLabel];
+
+  if (totalKm > 0) {
+    const roundedKm =
+      Math.abs(totalKm - Math.round(totalKm)) < 0.05
+        ? Math.round(totalKm)
+        : Number(totalKm.toFixed(1));
+    parts.push(`${roundedKm} km`);
+  }
+
+  if (totalLoad > 0) {
+    parts.push(`${Math.round(totalLoad)} TL`);
+  }
+
+  return parts.join(" · ");
+}
+
+export function formatUpcomingWorkoutDetailLine(
+  category: string,
+  volume?: string,
+  trainingLoad?: number
+): string {
+  const volumeLabel = formatUpcomingWorkoutVolumeDisplay(volume);
+  const loadLabel = formatUpcomingWorkoutLoad(trainingLoad);
+  return `${category} · ${volumeLabel} · ${loadLabel}`;
+}
+
+export function formatUpcomingWorkoutRowStats(
+  volume?: string,
+  trainingLoad?: number
+): string | null {
+  const volumeLabel = formatUpcomingWorkoutVolumeDisplay(volume);
+  const loadLabel = formatUpcomingWorkoutLoad(trainingLoad);
+  const parts: string[] = [];
+
+  if (volumeLabel !== "--") {
+    parts.push(volumeLabel);
+  }
+
+  if (loadLabel !== "--") {
+    parts.push(loadLabel);
+  }
+
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+const RECORD_TYPE_BEST_PACE = 102;
+const RECORD_TYPE_LONGEST_RUN = 101;
+const RECORD_TYPE_ELEVATION_GAIN = 103;
+
+const DISTANCE_PR_DISTANCE_METERS: Record<number, number> = {
+  6: 3000,
+  7: 1000,
+  8: 1609,
+  9: 3218,
+  10: 5000,
+  11: 10000,
+  12: 21097,
+  13: 42195
+};
+
+function derivePersonalRecordPaceFromDuration(
+  type: number,
+  duration?: number
+): number | undefined {
+  const knownDistance = DISTANCE_PR_DISTANCE_METERS[type];
+
+  if (
+    duration === undefined ||
+    !Number.isFinite(duration) ||
+    duration <= 0 ||
+    knownDistance === undefined
+  ) {
+    return undefined;
+  }
+
+  return duration / (knownDistance / 1000);
+}
+
+function formatRecordDistanceHero(distanceMeters: number): string {
+  const km = distanceMeters / 1000;
+  const rounded =
+    Math.abs(km * 100 - Math.round(km * 100)) < 0.05
+      ? km.toFixed(2)
+      : km.toFixed(2);
+  return `${rounded}km`;
+}
+
+export function formatRecordDateShort(happenDay?: string): string {
+  if (!happenDay || !/^\d{8}$/.test(happenDay)) {
+    return happenDay ?? "—";
+  }
+
+  const year = Number(happenDay.slice(0, 4));
+  const month = Number(happenDay.slice(4, 6)) - 1;
+  const day = Number(happenDay.slice(6, 8));
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }).format(new Date(year, month, day));
+}
+
+export function formatPersonalRecordHero(record: {
+  type: number;
+  duration?: number;
+  distance?: number;
+  avgPace?: number;
+}): string {
+  if (record.type === RECORD_TYPE_BEST_PACE) {
+    return formatPaceSecondsPerKm(record.avgPace);
+  }
+
+  if (record.type === RECORD_TYPE_LONGEST_RUN) {
+    if (record.distance !== undefined && record.distance > 0) {
+      return formatRecordDistanceHero(record.distance);
+    }
+
+    return "—";
+  }
+
+  if (record.type === RECORD_TYPE_ELEVATION_GAIN) {
+    if (record.distance !== undefined && record.distance > 0) {
+      return `${Math.round(record.distance)}m`;
+    }
+
+    return "—";
+  }
+
+  if (record.duration !== undefined && record.duration > 0) {
+    return formatDurationSeconds(record.duration);
+  }
+
+  return "—";
+}
+
+export function formatPersonalRecordMeta(record: {
+  type: number;
+  duration?: number;
+  distance?: number;
+  avgPace?: number;
+}): string | null {
+  if (record.type === RECORD_TYPE_BEST_PACE) {
+    return null;
+  }
+
+  const paceSeconds =
+    record.avgPace ?? derivePersonalRecordPaceFromDuration(record.type, record.duration);
+  const pace = formatPaceSecondsPerKm(paceSeconds);
+  return pace === "-" ? null : pace;
+}
+
+export function isPersonalRecordVisible(record: {
+  type: number;
+  duration?: number;
+  distance?: number;
+  avgPace?: number;
+  happenDay?: string;
+}): boolean {
+  if (record.type === RECORD_TYPE_BEST_PACE) {
+    return record.avgPace !== undefined && record.avgPace > 0;
+  }
+
+  if (record.type === RECORD_TYPE_LONGEST_RUN || record.type === RECORD_TYPE_ELEVATION_GAIN) {
+    return record.distance !== undefined && record.distance > 0;
+  }
+
+  return record.duration !== undefined && record.duration > 0;
 }

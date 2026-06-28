@@ -21,6 +21,7 @@ import type {
   TrainingHubStatus,
   TrainingHubUpcomingWorkout,
   TransferResult,
+  AppUpdateSnapshot,
   WatchConnectionSmokeOptionId,
   WatchStatus,
   YouTubeHistoryEntry
@@ -90,7 +91,8 @@ export interface CorosLinkApi {
   ) => Promise<TrainingHubActivity[]>;
   getTrainingHubActivityDetail: (
     activityId: string,
-    sportType: number
+    sportType: number,
+    listActivity?: TrainingHubActivity
   ) => Promise<TrainingHubActivityDetail>;
   getTrainingHubActivityFileUrl: (
     activityId: string,
@@ -103,6 +105,12 @@ export interface CorosLinkApi {
   getDailyMetrics: (dateList: string[]) => Promise<TrainingHubDailyMetrics>;
   getSportTypeMap: () => Promise<TrainingHubSportType[]>;
   getUpcomingWorkouts: (days?: number) => Promise<TrainingHubUpcomingWorkout[]>;
+  getAppUpdateStatus: () => Promise<AppUpdateSnapshot>;
+  checkForAppUpdates: () => Promise<AppUpdateSnapshot>;
+  quitAndInstallUpdate: () => Promise<void>;
+  onAppUpdateStatus: (
+    callback: (snapshot: AppUpdateSnapshot) => void
+  ) => () => void;
 }
 
 declare global {

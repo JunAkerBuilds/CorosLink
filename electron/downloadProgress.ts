@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { DownloadProgressUpdate } from "./types";
 
 const TRACK_PRINT_PREFIX = "before_dl:__TRACK__|";
@@ -140,6 +142,112 @@ export function extractYtDlpErrors(lines: string[]): string[] {
   return errors;
 }
 
+const ALREADY_DOWNLOADED_PATTERN =
+  /\[download\]\s+(.+?)\s+has already been downloaded/i;
+
+export function parseAlreadyDownloadedPath(
+  line: string,
+  outputDirectory: string
+): string | null {
+  const trimmed = line.trim();
+  const match = ALREADY_DOWNLOADED_PATTERN.exec(trimmed);
+  if (!match) {
+    return null;
+  }
+
+  const rawPath = match[1].trim();
+  if (!rawPath || rawPath.startsWith("[")) {
+    return null;
+  }
+
+  const candidate = path.isAbsolute(rawPath)
+    ? path.resolve(rawPath)
+    : path.resolve(outputDirectory, rawPath);
+
+  return resolveMp3InOutputDirectory(candidate, outputDirectory);
+}
+
+export function extractAlreadyDownloadedPaths(
+  lines: string[],
+  outputDirectory: string
+): string[] {
+  const resolved = lines
+    .map((line) => parseAlreadyDownloadedPath(line, outputDirectory))
+    .filter((filePath): filePath is string => Boolean(filePath));
+
+  return [...new Set(resolved)];
+}
+
+export function partitionDownloadedMp3Files(
+  before: Set<string>,
+  printedPaths: string[],
+  after: string[]
+): { newFiles: string[]; existingFiles: string[] } {
+  const printedMp3s = [...new Set(printedPaths)].filter((filePath) =>
+    filePath.toLowerCase().endsWith(".mp3")
+  );
+  const diffFiles = after.filter((filePath) => !before.has(filePath));
+
+  const newFiles = [
+    ...new Set([
+      ...printedMp3s.filter((filePath) => !before.has(filePath)),
+      ...diffFiles
+    ])
+  ];
+  const existingFiles = [
+    ...new Set(printedMp3s.filter((filePath) => before.has(filePath)))
+  ];
+
+  return { newFiles, existingFiles };
+}
+
+function resolveMp3InOutputDirectory(
+  candidate: string,
+  outputDirectory: string
+): string | null {
+  const resolvedOutputDirectory = path.resolve(outputDirectory);
+
+  if (!candidate.toLowerCase().endsWith(".mp3")) {
+    return null;
+  }
+
+  const inOutputDirectory =
+    candidate === resolvedOutputDirectory ||
+    candidate.startsWith(resolvedOutputDirectory + path.sep);
+
+  if (!inOutputDirectory || !fs.existsSync(candidate)) {
+    return null;
+  }
+
+  return candidate;
+}
+
+export function parsePlaylistTrackMarker(
+  line: string
+): { trackTotal: number } | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith(TRACK_PRINT_PREFIX)) {
+    return null;
+  }
+
+  const parts = trimmed.slice(TRACK_PRINT_PREFIX.length).split("|");
+  if (parts.length < 2) {
+    return null;
+  }
+
+  const trackTotal = Number.parseInt(parts[1], 10);
+  if (!Number.isFinite(trackTotal) || trackTotal <= 0) {
+    return null;
+  }
+
+  return { trackTotal };
+}
+
+export function isYtDlpErrorLine(line: string): boolean {
+  const trimmed = line.trim();
+  return Boolean(trimmed) && /^ERROR:/i.test(trimmed);
+}
+
 export function summarizePlaylistWarnings(
   errors: string[],
   downloadedCount: number
@@ -155,4 +263,42 @@ export function summarizePlaylistWarnings(
   return [
     `Downloaded ${downloadedCount} track(s). ${errors.length} video(s) were skipped: ${preview}${suffix}`
   ];
+}
+
+export function buildPlaylistCompletionWarning(options: {
+  allowPlaylist: boolean;
+  deliveredCount: number;
+  playlistTrackTotal?: number;
+  exitCode?: number | null;
+  capturedErrorLines: string[];
+}): string[] | undefined {
+  const errors = extractYtDlpErrors(options.capturedErrorLines);
+  if (errors.length > 0) {
+    return summarizePlaylistWarnings(errors, options.deliveredCount);
+  }
+
+  if (!options.allowPlaylist) {
+    return undefined;
+  }
+
+  const { deliveredCount, playlistTrackTotal } = options;
+
+  if (
+    playlistTrackTotal &&
+    playlistTrackTotal > 0 &&
+    deliveredCount < playlistTrackTotal
+  ) {
+    const missing = playlistTrackTotal - deliveredCount;
+    return [
+      `Downloaded ${deliveredCount} of ${playlistTrackTotal} track(s). ${missing} item(s) were unavailable or skipped.`
+    ];
+  }
+
+  if (options.exitCode !== 0 && options.exitCode !== null) {
+    return [
+      `Downloaded ${deliveredCount} track(s). Some playlist items may have been unavailable or skipped.`
+    ];
+  }
+
+  return undefined;
 }

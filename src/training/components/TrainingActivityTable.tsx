@@ -1,4 +1,5 @@
-import { FileDown, Loader2, Search } from "lucide-react";
+import { FileDown, Loader2 } from "lucide-react";
+import type { KeyboardEvent } from "react";
 import type {
   TrainingHubActivity,
   TrainingHubActivityFileType,
@@ -7,14 +8,13 @@ import type {
 import {
   formatDistanceMeters,
   formatDurationSeconds,
-  formatElevationMeters,
-  formatOptionalNumber,
-  formatTrainingTimestamp
+  formatTrainingTableWhen
 } from "../formatters";
 
 interface TrainingActivityTableProps {
   activities: TrainingHubActivity[];
   sportTypes: TrainingHubSportType[];
+  selectedActivityId: string | null;
   busy: string | null;
   onLoadDetail: (activity: TrainingHubActivity) => void;
   onGetFileUrl: (
@@ -39,9 +39,21 @@ function sportChipClass(sportType: number): string {
   return `sport-chip sport-chip-${palette}`;
 }
 
+function handleRowKeyDown(
+  event: KeyboardEvent<HTMLTableRowElement>,
+  activity: TrainingHubActivity,
+  onLoadDetail: (activity: TrainingHubActivity) => void
+) {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    onLoadDetail(activity);
+  }
+}
+
 export function TrainingActivityTable({
   activities,
   sportTypes,
+  selectedActivityId,
   busy,
   onLoadDetail,
   onGetFileUrl
@@ -64,14 +76,10 @@ export function TrainingActivityTable({
         <thead>
           <tr>
             <th>Activity</th>
-            <th>Started</th>
-            <th>Duration</th>
-            <th>Distance</th>
-            <th>Load</th>
-            <th>Avg HR</th>
-            <th>Calories</th>
-            <th>Elev.</th>
-            <th aria-label="Actions" />
+            <th>When</th>
+            <th>Time</th>
+            <th>Dist</th>
+            <th aria-label="Export" />
           </tr>
         </thead>
         <tbody>
@@ -79,50 +87,54 @@ export function TrainingActivityTable({
             const sportName = resolveSportName(activity, sportTypeMap);
             const activityName =
               activity.name || sportName || `Activity ${index + 1}`;
+            const isSelected = selectedActivityId === activity.activityId;
+            const isLoadingDetail =
+              busy === `training-detail:${activity.activityId}`;
 
             return (
               <tr
-                className="training-table-row"
+                className={`training-table-row${
+                  isSelected ? " is-selected" : ""
+                }${isLoadingDetail ? " is-loading" : ""}`}
                 key={activity.activityId || `${activity.sportType}-${index}`}
+                role="button"
+                tabIndex={0}
+                aria-selected={isSelected}
+                aria-label={`View details for ${activityName}`}
+                onClick={() => onLoadDetail(activity)}
+                onKeyDown={(event) =>
+                  handleRowKeyDown(event, activity, onLoadDetail)
+                }
               >
-                <td>
+                <td className="training-activity-cell">
                   <div className="training-activity-name">
-                    <strong>{activityName}</strong>
+                    <strong title={activityName}>{activityName}</strong>
                     <span className={sportChipClass(activity.sportType)}>
                       {sportName}
                     </span>
                   </div>
                 </td>
-                <td>{formatTrainingTimestamp(activity.startTime)}</td>
-                <td>{formatDurationSeconds(activity.duration)}</td>
-                <td>{formatDistanceMeters(activity.distance)}</td>
-                <td>{formatOptionalNumber(activity.trainingLoad)}</td>
-                <td>{formatOptionalNumber(activity.avgHr)}</td>
-                <td>{formatOptionalNumber(activity.calories)}</td>
-                <td>{formatElevationMeters(activity.elevationGain)}</td>
-                <td>
+                <td className="training-activity-when">
+                  {formatTrainingTableWhen(activity.startTime)}
+                </td>
+                <td className="training-activity-metric">
+                  {formatDurationSeconds(activity.duration)}
+                </td>
+                <td className="training-activity-metric">
+                  {formatDistanceMeters(activity.distance)}
+                </td>
+                <td className="training-activity-export">
                   <div className="row-actions">
-                    <button
-                      className="icon-button training-action-button"
-                      type="button"
-                      aria-label={`Load details for ${activityName}`}
-                      title="Load activity detail"
-                      disabled={busy === `training-detail:${activity.activityId}`}
-                      onClick={() => onLoadDetail(activity)}
-                    >
-                      {busy === `training-detail:${activity.activityId}` ? (
-                        <Loader2 className="spin" size={17} aria-hidden="true" />
-                      ) : (
-                        <Search size={17} aria-hidden="true" />
-                      )}
-                    </button>
                     <button
                       className="icon-button training-action-button"
                       type="button"
                       aria-label={`Get FIT file URL for ${activityName}`}
                       title="Get FIT file URL"
                       disabled={busy === `training-file:${activity.activityId}:4`}
-                      onClick={() => onGetFileUrl(activity, 4)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onGetFileUrl(activity, 4);
+                      }}
                     >
                       {busy === `training-file:${activity.activityId}:4` ? (
                         <Loader2 className="spin" size={17} aria-hidden="true" />

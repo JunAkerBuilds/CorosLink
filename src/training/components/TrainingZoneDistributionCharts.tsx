@@ -1,6 +1,6 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Footprints, Heart } from "lucide-react";
 import {
   Cell,
   Pie,
@@ -25,9 +25,14 @@ interface TrainingZoneDistributionChartsProps {
 
 interface ZoneDistributionPanelProps {
   title: string;
+  subtitle: string;
   emptyMessage: string;
+  variant: "heart" | "distance";
+  heroKicker: string;
+  metricColumnLabel: string;
   data: ZoneDistributionDatum[];
   metricControl: ReactNode;
+  getCaption: (datum: ZoneDistributionDatum) => string;
 }
 
 interface ZoneDistributionDatum {
@@ -84,12 +89,12 @@ const DISTANCE_ZONE_COLORS = [
 ];
 
 const DISTANCE_BUCKETS: DistanceBucket[] = [
-  { label: "[0-5km)", minMeters: 0, maxMeters: 5000 },
-  { label: "[5-10km)", minMeters: 5000, maxMeters: 10_000 },
-  { label: "[10-15km)", minMeters: 10_000, maxMeters: 15_000 },
-  { label: "[15-20km)", minMeters: 15_000, maxMeters: 20_000 },
-  { label: "[20-25km)", minMeters: 20_000, maxMeters: 25_000 },
-  { label: ">=25km", minMeters: 25_000 }
+  { label: "0–10 km", minMeters: 0, maxMeters: 10_000 },
+  { label: "10–20 km", minMeters: 10_000, maxMeters: 20_000 },
+  { label: "20–30 km", minMeters: 20_000, maxMeters: 30_000 },
+  { label: "30–40 km", minMeters: 30_000, maxMeters: 40_000 },
+  { label: "40–50 km", minMeters: 40_000, maxMeters: 50_000 },
+  { label: "50+ km", minMeters: 50_000 }
 ];
 
 const DISTANCE_METRIC_LABELS: Record<DistanceMetric, string> = {
@@ -136,6 +141,61 @@ function usePrefersReducedMotion() {
 
 function formatPercent(value: number): string {
   return `${Math.round(value * 10) / 10}%`;
+}
+
+function formatDisplayLabel(label: string): string {
+  const bracketMatch = label.match(/^\[(\d+)-(\d+)km\)$/i);
+  if (bracketMatch) {
+    return `${bracketMatch[1]}–${bracketMatch[2]} km`;
+  }
+
+  const plusMatch = label.match(/^>=(\d+)km$/i);
+  if (plusMatch) {
+    return `${plusMatch[1]}+ km`;
+  }
+
+  return label.replace(/km/gi, " km").replace(/\s+/g, " ").trim();
+}
+
+function heartRateZoneCaption(zoneIndex: number): string {
+  switch (zoneIndex) {
+    case 1:
+      return "Recovery & warm-up";
+    case 2:
+      return "Aerobic base building";
+    case 3:
+      return "Steady aerobic effort";
+    case 4:
+      return "Lactate threshold work";
+    case 5:
+      return "High aerobic / anaerobic load";
+    case 6:
+      return "Max effort intervals";
+    default:
+      return "Training intensity zone";
+  }
+}
+
+function distanceZoneCaption(label: string): string {
+  const normalized = formatDisplayLabel(label).toLowerCase();
+
+  if (normalized.startsWith("0")) {
+    return "Easy & recovery runs";
+  }
+
+  if (normalized.includes("10–20") || normalized.includes("10-20")) {
+    return "Moderate distance sessions";
+  }
+
+  if (normalized.includes("20–30") || normalized.includes("20-30")) {
+    return "Long run territory";
+  }
+
+  if (normalized.includes("30") || normalized.includes("40") || normalized.includes("50")) {
+    return "Ultra & marathon prep";
+  }
+
+  return "Distance distribution bucket";
 }
 
 function finiteNumber(value: number | undefined): number {
@@ -385,7 +445,11 @@ function formatActivityMetricValue(
   }
 
   if (metric === "time") {
-    return formatDurationSeconds(value);
+    if (value >= 3600) {
+      return formatDurationSeconds(value);
+    }
+
+    return `${Math.round(value / 60)} min`;
   }
 
   return String(Math.round(value));
@@ -400,10 +464,15 @@ function formatDistanceMetricValue(
   }
 
   if (metric === "time") {
-    return formatDurationSeconds(value);
+    if (value >= 3600) {
+      return formatDurationSeconds(value);
+    }
+
+    return `${Math.round(value / 60)} min`;
   }
 
-  return String(Math.round(value));
+  const count = Math.round(value);
+  return count === 1 ? "1 run" : `${count} runs`;
 }
 
 function buildDistanceData(
@@ -468,76 +537,129 @@ function ZoneDistributionTooltip({
 
 function ZoneDistributionPanel({
   title,
+  subtitle,
   emptyMessage,
+  variant,
+  heroKicker,
+  metricColumnLabel,
   data,
-  metricControl
+  metricControl,
+  getCaption
 }: ZoneDistributionPanelProps) {
   const reducedMotion = usePrefersReducedMotion();
   const chartData = data.filter((datum) => datum.percent > 0);
+  const topZone = useMemo(() => {
+    if (data.length === 0) {
+      return null;
+    }
+
+    return [...data].sort((left, right) => right.percent - left.percent)[0];
+  }, [data]);
 
   return (
-    <section className="panel training-zone-panel">
+    <section
+      className={`panel training-zone-panel training-zone-panel-${variant}`}
+    >
       <div className="training-zone-header">
-        <div>
+        <div className="training-zone-heading">
+          <p className="eyebrow">{title}</p>
           <h2>
-            {title} <span>(4 Weeks)</span>
+            {subtitle} <span>(4 Weeks)</span>
           </h2>
         </div>
-        <span className="training-zone-info" aria-hidden="true">
-          i
-        </span>
+        <div className="training-zone-header-actions">{metricControl}</div>
       </div>
-      {metricControl}
       {data.length > 0 ? (
         <div className="training-zone-body">
-          <div className="training-zone-donut" aria-hidden="true">
-            {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Tooltip
-                    content={(props) => <ZoneDistributionTooltip {...props} />}
-                  />
-                  <Pie
-                    data={chartData}
-                    dataKey="percent"
-                    nameKey="label"
-                    innerRadius="42%"
-                    outerRadius="82%"
-                    paddingAngle={0}
-                    stroke="transparent"
-                    isAnimationActive={!reducedMotion}
-                    animationDuration={850}
-                  >
-                    {chartData.map((datum) => (
-                      <Cell key={datum.label} fill={datum.color} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="training-zone-empty-ring" />
-            )}
+          <div className="training-zone-donut-wrap">
+            <div className="training-zone-donut" aria-hidden="true">
+              {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Tooltip
+                      content={(props) => <ZoneDistributionTooltip {...props} />}
+                    />
+                    <Pie
+                      data={chartData}
+                      dataKey="percent"
+                      nameKey="label"
+                      innerRadius="58%"
+                      outerRadius="88%"
+                      paddingAngle={2}
+                      stroke="transparent"
+                      isAnimationActive={!reducedMotion}
+                      animationDuration={900}
+                    >
+                      {chartData.map((datum) => (
+                        <Cell key={datum.label} fill={datum.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="training-zone-empty-ring" />
+              )}
+            </div>
+            <span className="training-zone-donut-icon">
+              {variant === "heart" ? (
+                <Heart size={22} strokeWidth={2.2} aria-hidden="true" />
+              ) : (
+                <Footprints size={22} strokeWidth={2.2} aria-hidden="true" />
+              )}
+            </span>
           </div>
 
-          <div className="training-zone-list">
-            {data.map((datum) => (
-              <div className="training-zone-row" key={datum.label}>
-                <span className="training-zone-percent">
-                  {formatPercent(datum.percent)}
-                </span>
-                <span className="training-zone-name">{datum.label}</span>
-                <span className="training-zone-track" aria-hidden="true">
-                  <span
-                    className="training-zone-fill"
-                    style={{
-                      width: `${datum.percent}%`,
-                      backgroundColor: datum.color
-                    }}
-                  />
-                </span>
-                <strong className="training-zone-detail">{datum.detail}</strong>
-              </div>
-            ))}
+          {topZone ? (
+            <div className="training-zone-hero">
+              <p className="training-zone-hero-kicker">{heroKicker}</p>
+              <h3>{formatDisplayLabel(topZone.label)}</h3>
+              <p className="training-zone-hero-percent">
+                {formatPercent(topZone.percent)}
+              </p>
+              <p className="training-zone-hero-detail">{topZone.detail}</p>
+              <p className="training-zone-hero-caption">
+                {getCaption(topZone)}
+              </p>
+            </div>
+          ) : null}
+
+          <div className="training-zone-table">
+            <div className="training-zone-table-head">
+              <span>{variant === "heart" ? "Zone" : "Distance"}</span>
+              <span aria-hidden="true" />
+              <span>%</span>
+              <span>{metricColumnLabel}</span>
+            </div>
+            <div className="training-zone-list">
+              {data.map((datum, index) => (
+                <div
+                  className="training-zone-row"
+                  key={datum.label}
+                  style={
+                    reducedMotion
+                      ? undefined
+                      : { animationDelay: `${index * 55}ms` }
+                  }
+                >
+                  <span className="training-zone-name">
+                    {formatDisplayLabel(datum.label)}
+                  </span>
+                  <span className="training-zone-track" aria-hidden="true">
+                    <span
+                      className="training-zone-fill"
+                      style={{
+                        width: `${Math.max(datum.percent, datum.percent > 0 ? 4 : 0)}%`,
+                        backgroundColor: datum.color
+                      }}
+                    />
+                  </span>
+                  <span className="training-zone-percent">
+                    {formatPercent(datum.percent)}
+                  </span>
+                  <strong className="training-zone-detail">{datum.detail}</strong>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       ) : (
@@ -716,14 +838,19 @@ export function TrainingZoneDistributionCharts({
   return (
     <div className="training-chart-grid training-zone-grid">
       <ZoneDistributionPanel
-        title="Threshold Heart Rate Zones Distribution"
+        title="Threshold Heart Rate"
+        subtitle="Training Load"
         emptyMessage="No threshold heart rate zone distribution data loaded."
+        variant="heart"
+        heroKicker="Primary zone"
+        metricColumnLabel={HEART_RATE_METRIC_LABELS[heartRateMetric]}
         data={buildHeartRateData(
           lthrZones,
           activities,
           heartRateMetric,
           analytics
         )}
+        getCaption={(datum) => heartRateZoneCaption(datum.zoneIndex)}
         metricControl={
           <MetricDropdown
             label="Heart rate distribution metric"
@@ -734,9 +861,18 @@ export function TrainingZoneDistributionCharts({
         }
       />
       <ZoneDistributionPanel
-        title="Distance Zone Distribution"
+        title="Distance Zones"
+        subtitle="Distribution"
         emptyMessage="No distance zone distribution data loaded."
+        variant="distance"
+        heroKicker="Most runs"
+        metricColumnLabel={
+          distanceMetric === "frequency"
+            ? "Runs"
+            : DISTANCE_METRIC_LABELS[distanceMetric]
+        }
         data={buildDistanceData(activities, distanceMetric, analytics)}
+        getCaption={(datum) => distanceZoneCaption(datum.label)}
         metricControl={
           <MetricDropdown
             label="Distance distribution metric"

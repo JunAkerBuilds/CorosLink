@@ -40,6 +40,35 @@ export interface TrainingHubSnapshot {
   dailyMetrics: TrainingHubDailyMetrics | null;
 }
 
+export type HeatmapIntensityLevel = 0 | 1 | 2 | 3 | 4;
+
+export interface HeatmapCell {
+  happenDay: string;
+  trainingLoad?: number;
+  distance?: number;
+  duration?: number;
+  level: HeatmapIntensityLevel;
+  label: string;
+}
+
+export interface HeatmapSummary {
+  activeDays: number;
+  currentStreak: number;
+  longestStreak: number;
+  totalLoad: number;
+}
+
+export interface HeatmapMonthLabel {
+  column: number;
+  label: string;
+}
+
+export interface HeatmapGrid {
+  cells: (HeatmapCell | null)[];
+  weeks: number;
+  monthLabels: HeatmapMonthLabel[];
+}
+
 export interface TrainingHubViewProps {
   status: TrainingHubStatus | null;
   email: string;
@@ -49,6 +78,7 @@ export interface TrainingHubViewProps {
   snapshot: TrainingHubSnapshot | null;
   sportTypes: TrainingHubSportType[];
   activityDetail: TrainingHubActivityDetail | null;
+  selectedActivity: TrainingHubActivity | null;
   fileUrl: string | null;
   busy: string | null;
   onEmailChange: (value: string) => void;

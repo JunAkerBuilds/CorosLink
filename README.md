@@ -179,6 +179,8 @@ Packaged builds check **[GitHub Releases](https://github.com/JunAkerBuilds/Coros
 
 > **macOS note:** Auto-update works best with signed builds. Unsigned installs may still need a manual download from GitHub Releases until code signing is set up.
 
+> **First release with in-app updates:** Users on v0.1.6 or earlier must install manually once. After that, updates arrive in-app.
+
 ### Build from source
 
 ```sh
@@ -306,11 +308,32 @@ git tag v0.1.5
 git push origin main v0.1.5
 ```
 
-2. That triggers the [Release installers](.github/workflows/release.yml) workflow. CI syncs the tag into `package.json` before building, then verifies the versions match, so installer names like `CorosLink-0.1.5-arm64.dmg` always follow the git tag. The workflow also uploads `latest-mac.yml`, `latest-linux.yml`, and `latest.yml` plus blockmaps so packaged apps can auto-update via `electron-updater`.
+2. That triggers the [Release installers](.github/workflows/release.yml) workflow. CI syncs the tag into `package.json` before building, then verifies the versions match, so installer names like `CorosLink-0.1.5-arm64.dmg` always follow the git tag. The workflow also uploads `latest-mac.yml`, `latest-linux.yml`, and `latest.yml` plus blockmaps so packaged apps can auto-update via `electron-updater`. Each platform build runs `scripts/verify-release-artifacts.mjs` and fails if update metadata is missing.
 
 You can also run the workflow manually from **Actions → Release installers** (it uses the current `package.json` version when no tag is pushed).
 
 Pushes to `main` run [Build desktop installers](.github/workflows/build.yml) and upload CI artifacts for testing before tagging.
+
+**Verify release artifacts locally:**
+
+```sh
+npm run dist:mac    # or dist:win / dist:linux on the matching OS
+npm run release:verify-artifacts -- macos
+```
+
+After building, confirm `release/latest-mac.yml` (or `latest.yml` / `latest-linux.yml`) exists and that the packaged app contains `app-update.yml` with the GitHub publish config.
+
+**Test auto-update end-to-end (maintainers):**
+
+1. Tag and ship a baseline release that includes the updater (e.g. v0.1.7).
+2. Install that build from GitHub Releases on a test machine.
+3. Confirm the header shows a clickable version badge (not dev-only text).
+4. Tag and ship a newer release (e.g. v0.1.8).
+5. In the older app, wait ~5 seconds or click the version badge.
+6. Expect: checking → update available → downloading → **Restart to update**.
+7. Click restart; the app should relaunch on the new version.
+
+**Windows** should complete this flow unsigned. **macOS unsigned** may download updates but fail to install on restart until code signing is configured — use manual download as fallback on Mac until then.
 
 </details>
 

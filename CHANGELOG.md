@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Linux x64 **AppImage** builds in CI and GitHub Releases
 - Website download button for Linux
+- In-app auto-updates via `electron-updater` (GitHub Releases)
+- `scripts/verify-release-artifacts.mjs` to fail CI when update metadata is missing
+
+### Fixed
+
+- macOS CI now builds **DMG + ZIP** so `latest-mac.yml` is generated for auto-update
 
 ## [0.1.6] - 2026-06-27
 

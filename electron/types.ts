@@ -215,7 +215,7 @@ export interface TrainingHubStatus {
   baseUrl?: string;
 }
 
-export type TrainingHubActivityFileType = 4 | 5 | 6;
+export type TrainingHubActivityFileType = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface TrainingHubActivity {
   activityId: string;
@@ -290,6 +290,7 @@ export interface TrainingHubRaceScore {
   distance?: number;
   distanceLabel?: string;
   predictSeconds?: number;
+  avgPace?: number;
   score?: number;
   raw?: Record<string, unknown>;
 }
@@ -317,6 +318,17 @@ export interface TrainingHubActivityLap {
   elevationGain?: number;
 }
 
+export interface TrainingHubTrackPoint {
+  lat?: number;
+  lon?: number;
+  elevation?: number;
+  distance?: number;
+}
+
+export interface TrainingHubActivityTrack {
+  points: TrainingHubTrackPoint[];
+}
+
 export interface TrainingHubActivityDetail {
   activityId?: string;
   name?: string;
@@ -330,6 +342,7 @@ export interface TrainingHubActivityDetail {
   elevationGain?: number;
   trainingLoad?: number;
   laps: TrainingHubActivityLap[];
+  track?: TrainingHubActivityTrack;
   raw: Record<string, unknown>;
 }
 
@@ -363,6 +376,8 @@ export interface TrainingHubPersonalRecord {
   avgPace?: number;
   happenDay?: string;
   activityId?: string;
+  /** Raw COROS record `type` before alias resolution (used when deduping). */
+  apiType?: number;
 }
 
 export interface TrainingHubPersonalRecordGroup {
@@ -399,4 +414,23 @@ export interface TrainingHubDashboard {
   sleepHrv?: TrainingHubSleepHrvSummary;
   sportDataCount?: number;
   raw?: Record<string, unknown>;
+}
+
+export type AppUpdateStatus =
+  | "idle"
+  | "checking"
+  | "available"
+  | "not-available"
+  | "downloading"
+  | "downloaded"
+  | "error";
+
+export interface AppUpdateSnapshot {
+  supported: boolean;
+  currentVersion: string;
+  status: AppUpdateStatus;
+  availableVersion?: string;
+  downloadPercent?: number;
+  releaseNotes?: string;
+  error?: string;
 }

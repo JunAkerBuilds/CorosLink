@@ -1,3 +1,4 @@
+import { BarChart3 } from "lucide-react";
 import type {
   TrainingHubDashboard,
   TrainingHubRacePredictor
@@ -57,12 +58,13 @@ export function FitnessScoresPanel({
   if (!dashboard && !predictor) {
     return (
       <section className="panel training-scores-panel">
-        <div className="section-heading compact">
-          <div>
+        <header className="training-scores-header">
+          <div className="training-scores-heading">
             <p className="eyebrow">Fitness Scores</p>
             <h2>Not loaded</h2>
           </div>
-        </div>
+          <BarChart3 size={22} aria-hidden="true" />
+        </header>
         <p className="training-empty-chart">Fitness scores could not be loaded.</p>
       </section>
     );
@@ -87,12 +89,13 @@ export function FitnessScoresPanel({
 
   return (
     <section className="panel training-scores-panel">
-      <div className="section-heading compact">
-        <div>
+      <header className="training-scores-header">
+        <div className="training-scores-heading">
           <p className="eyebrow">Fitness Scores</p>
           <h2>{scores.length > 0 ? "EvoLab breakdown" : "Threshold profile"}</h2>
         </div>
-      </div>
+        <BarChart3 size={22} aria-hidden="true" />
+      </header>
 
       {scores.length > 0 ? (
         <div className="score-bar-list">

@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
+  buildPlaylistCompletionWarning,
   computeOverallProgress,
+  extractAlreadyDownloadedPaths,
   extractYtDlpErrors,
-  parseYtDlpProgressLine
+  parseAlreadyDownloadedPath,
+  parsePlaylistTrackMarker,
+  parseYtDlpProgressLine,
+  partitionDownloadedMp3Files
 } from "../dist-electron/downloadProgress.js";
 
 const samples = [
@@ -95,3 +103,124 @@ assert.deepEqual(extractYtDlpErrors(noisyOutput), [
 ]);
 
 console.log("yt-dlp error extraction tests passed");
+
+const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), "coroslink-download-test-"));
+const absoluteMp3 = path.join(downloadDir, "Song [abc123].mp3");
+const relativeMp3Name = "Another Song [def456].mp3";
+const relativeMp3 = path.join(downloadDir, relativeMp3Name);
+fs.writeFileSync(absoluteMp3, "fake");
+fs.writeFileSync(relativeMp3, "fake");
+
+assert.equal(
+  parseAlreadyDownloadedPath(
+    `[download] ${absoluteMp3} has already been downloaded`,
+    downloadDir
+  ),
+  absoluteMp3
+);
+
+assert.equal(
+  parseAlreadyDownloadedPath(
+    `[download] ${relativeMp3Name} has already been downloaded`,
+    downloadDir
+  ),
+  relativeMp3
+);
+
+assert.equal(
+  parseAlreadyDownloadedPath("[download] 42.3% of 5.00MiB", downloadDir),
+  null
+);
+
+assert.deepEqual(
+  extractAlreadyDownloadedPaths(
+    [
+      `[download] ${absoluteMp3} has already been downloaded`,
+      `[download] ${relativeMp3Name} has already been downloaded`,
+      `[download] ${absoluteMp3} has already been downloaded`
+    ],
+    downloadDir
+  ),
+  [absoluteMp3, relativeMp3]
+);
+
+const before = new Set([absoluteMp3, "/tmp/existing.mp3"]);
+const printedPaths = [absoluteMp3, relativeMp3, "/tmp/new.mp3"];
+const after = [absoluteMp3, relativeMp3, "/tmp/new.mp3", "/tmp/also-new.mp3"];
+
+assert.deepEqual(partitionDownloadedMp3Files(before, printedPaths, after), {
+  newFiles: [relativeMp3, "/tmp/new.mp3", "/tmp/also-new.mp3"],
+  existingFiles: [absoluteMp3]
+});
+
+fs.rmSync(downloadDir, { recursive: true, force: true });
+
+console.log("already-downloaded path tests passed");
+
+assert.deepEqual(
+  parsePlaylistTrackMarker("before_dl:__TRACK__|99|99|Breathe"),
+  { trackTotal: 99 }
+);
+assert.equal(parsePlaylistTrackMarker("[download] 42.3%"), null);
+
+assert.deepEqual(
+  buildPlaylistCompletionWarning({
+    allowPlaylist: true,
+    deliveredCount: 97,
+    capturedErrorLines: [
+      "ERROR: [youtube] abc: Video unavailable. This video is not available",
+      "ERROR: [youtube] def: Video unavailable. This video is not available"
+    ]
+  }),
+  [
+    "Downloaded 97 track(s). 2 video(s) were skipped: [youtube] abc: Video unavailable. This video is not available; [youtube] def: Video unavailable. This video is not available"
+  ]
+);
+
+assert.deepEqual(
+  buildPlaylistCompletionWarning({
+    allowPlaylist: true,
+    deliveredCount: 97,
+    playlistTrackTotal: 99,
+    exitCode: 1,
+    capturedErrorLines: []
+  }),
+  [
+    "Downloaded 97 of 99 track(s). 2 item(s) were unavailable or skipped."
+  ]
+);
+
+assert.deepEqual(
+  buildPlaylistCompletionWarning({
+    allowPlaylist: true,
+    deliveredCount: 97,
+    exitCode: 1,
+    capturedErrorLines: []
+  }),
+  [
+    "Downloaded 97 track(s). Some playlist items may have been unavailable or skipped."
+  ]
+);
+
+assert.equal(
+  buildPlaylistCompletionWarning({
+    allowPlaylist: true,
+    deliveredCount: 99,
+    playlistTrackTotal: 99,
+    exitCode: 0,
+    capturedErrorLines: []
+  }),
+  undefined
+);
+
+assert.equal(
+  buildPlaylistCompletionWarning({
+    allowPlaylist: false,
+    deliveredCount: 1,
+    exitCode: 1,
+    capturedErrorLines: []
+  }),
+  undefined
+);
+
+console.log("playlist completion warning tests passed");

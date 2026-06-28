@@ -26,16 +26,24 @@ jobs:
       - name: Rebuild native modules
         run: npm run rebuild
 
-      - name: Build DMG
+      - name: Build macOS installers
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: npm run dist:mac
 
-      - name: Upload DMG
+      - name: Verify macOS update artifacts
+        run: node scripts/verify-release-artifacts.mjs macos
+
+      - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: coroslink-macos
           path: |
             release/*.dmg
             release/*.dmg.blockmap
+            release/*.zip
+            release/*.zip.blockmap
+            release/latest-mac.yml
 
   linux:
     name: Linux AppImage
@@ -57,15 +65,21 @@ jobs:
         run: npm run rebuild
 
       - name: Build AppImage
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: npm run dist:linux
 
-      - name: Upload AppImage
+      - name: Verify Linux update artifacts
+        run: node scripts/verify-release-artifacts.mjs linux
+
+      - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
           name: coroslink-linux
           path: |
             release/*.AppImage
             release/*.AppImage.blockmap
+            release/latest-linux.yml
 
   windows:
     name: Windows installer
@@ -91,10 +105,14 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: npm run dist:win
 
-      - name: Upload Windows installer
+      - name: Verify Windows update artifacts
+        run: node scripts/verify-release-artifacts.mjs windows
+
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: coroslink-windows
           path: |
             release/*.exe
             release/*.exe.blockmap
+            release/latest.yml

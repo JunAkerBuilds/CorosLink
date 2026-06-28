@@ -22,6 +22,7 @@ import type {
   TrainingHubStatus,
   TrainingHubUpcomingWorkout,
   TransferResult,
+  AppUpdateSnapshot,
   WatchConnectionSmokeOptionId,
   WatchStatus,
   YouTubeHistoryEntry
@@ -135,9 +136,15 @@ const api = {
     ipcRenderer.invoke("trainingHub:listActivities", page, size),
   getTrainingHubActivityDetail: (
     activityId: string,
-    sportType: number
+    sportType: number,
+    listActivity?: TrainingHubActivity
   ): Promise<TrainingHubActivityDetail> =>
-    ipcRenderer.invoke("trainingHub:getActivityDetail", activityId, sportType),
+    ipcRenderer.invoke(
+      "trainingHub:getActivityDetail",
+      activityId,
+      sportType,
+      listActivity
+    ),
   getTrainingHubActivityFileUrl: (
     activityId: string,
     sportType: number,
@@ -162,7 +169,25 @@ const api = {
   getUpcomingWorkouts: (
     days?: number
   ): Promise<TrainingHubUpcomingWorkout[]> =>
-    ipcRenderer.invoke("trainingHub:getUpcomingWorkouts", days)
+    ipcRenderer.invoke("trainingHub:getUpcomingWorkouts", days),
+  getAppUpdateStatus: (): Promise<AppUpdateSnapshot> =>
+    ipcRenderer.invoke("app:getUpdateStatus"),
+  checkForAppUpdates: (): Promise<AppUpdateSnapshot> =>
+    ipcRenderer.invoke("app:checkForUpdates"),
+  quitAndInstallUpdate: (): Promise<void> =>
+    ipcRenderer.invoke("app:quitAndInstallUpdate"),
+  onAppUpdateStatus: (
+    callback: (snapshot: AppUpdateSnapshot) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      snapshot: AppUpdateSnapshot
+    ) => {
+      callback(snapshot);
+    };
+    ipcRenderer.on("app:updateStatus", listener);
+    return () => ipcRenderer.removeListener("app:updateStatus", listener);
+  }
 };
 
 contextBridge.exposeInMainWorld("corosLink", api);

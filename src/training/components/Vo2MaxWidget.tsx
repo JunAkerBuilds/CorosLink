@@ -1,7 +1,7 @@
 import { type CSSProperties, useEffect, useState } from "react";
 import { Activity } from "lucide-react";
-import type { TrainingHubDailyMetric } from "../../../electron/types";
 import { formatHappenDayLabel, formatSignedDelta } from "../formatters";
+import { mergeTrainingDayLists } from "../parsers";
 import type { TrainingHubSnapshot } from "../types";
 
 interface Vo2MaxWidgetProps {
@@ -31,28 +31,6 @@ const VO2_BANDS: Vo2Band[] = [
   { min: 35, max: 45, color: "#3ee88e" },
   { min: 45, max: 60, color: "#4aa3ff" }
 ];
-
-function mergeDayList(snapshot: TrainingHubSnapshot | null): TrainingHubDailyMetric[] {
-  const combined = new Map<string, TrainingHubDailyMetric>();
-
-  for (const day of snapshot?.analytics?.dayList ?? []) {
-    if (day.happenDay) {
-      combined.set(day.happenDay, { ...day });
-    }
-  }
-
-  for (const day of snapshot?.dailyMetrics?.dayList ?? []) {
-    if (!day.happenDay) {
-      continue;
-    }
-
-    combined.set(day.happenDay, { ...combined.get(day.happenDay), ...day });
-  }
-
-  return [...combined.values()].sort((left, right) =>
-    left.happenDay.localeCompare(right.happenDay)
-  );
-}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -115,7 +93,10 @@ function isFocusedBand(value: number | undefined, band: Vo2Band): boolean {
 }
 
 function latestVo2Readings(snapshot: TrainingHubSnapshot | null): Vo2Reading[] {
-  return mergeDayList(snapshot)
+  return mergeTrainingDayLists(
+    snapshot?.dailyMetrics ?? null,
+    snapshot?.analytics ?? null
+  )
     .map((day) => ({
       happenDay: day.happenDay,
       value: day.vo2max
