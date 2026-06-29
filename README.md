@@ -119,7 +119,7 @@ Log in with your COROS account to view training data, fitness scores, and race p
 - **FIT file export** via signed download URL
 
 <p align="center">
-  <img src="docs/screenshots/training-hub-2.png" alt="Training Hub" width="900" />
+  <img src="docs/screenshots/training-hub-2.jpeg" alt="Training Hub" width="900" />
 </p>
 
 ---
