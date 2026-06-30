@@ -10,6 +10,7 @@ import type {
   CorosMapPackage,
   DownloadAudioResult,
   DownloadJob,
+  DownloadQueueItem,
   GenerateRouteRequest,
   GeneratedRoute,
   LocalTrack,
@@ -39,7 +40,17 @@ import type {
   AppUpdateSnapshot,
   WatchConnectionSmokeOptionId,
   WatchStatus,
-  YouTubeHistoryEntry
+  YouTubeDataConfig,
+  YouTubeDataPlaylist,
+  YouTubeDataPlaylistItem,
+  YouTubeDataStatus,
+  YouTubeHistoryEntry,
+  YouTubeMusicConfig,
+  YouTubeMusicLibrary,
+  YouTubeMusicStatus,
+  YouTubeMusicSyncResult,
+  AppleMusicPlaylist,
+  AppleMusicStatus
 } from "./types";
 
 const api = {
@@ -80,7 +91,7 @@ const api = {
   ): Promise<DownloadAudioResult> =>
     ipcRenderer.invoke("youtube:downloadMultiple", items),
   enqueueYouTubeDownloads: (
-    items: Array<{ url: string; title?: string }>
+    items: DownloadQueueItem[]
   ): Promise<DownloadJob[]> =>
     ipcRenderer.invoke("youtube:enqueueDownload", items),
   listYouTubeJobs: (): Promise<DownloadJob[]> =>
@@ -102,6 +113,54 @@ const api = {
   },
   resetYouTubeBrowserSession: (): Promise<void> =>
     ipcRenderer.invoke("youtube:resetSession"),
+  getYouTubeDataConfig: (): Promise<YouTubeDataConfig> =>
+    ipcRenderer.invoke("youtubeData:getConfig"),
+  saveYouTubeDataConfig: (
+    config: YouTubeDataConfig
+  ): Promise<YouTubeDataStatus> =>
+    ipcRenderer.invoke("youtubeData:saveConfig", config),
+  getYouTubeDataStatus: (): Promise<YouTubeDataStatus> =>
+    ipcRenderer.invoke("youtubeData:getStatus"),
+  loginYouTubeData: (): Promise<YouTubeDataStatus> =>
+    ipcRenderer.invoke("youtubeData:login"),
+  logoutYouTubeData: (): Promise<YouTubeDataStatus> =>
+    ipcRenderer.invoke("youtubeData:logout"),
+  listYouTubeDataPlaylists: (): Promise<YouTubeDataPlaylist[]> =>
+    ipcRenderer.invoke("youtubeData:listPlaylists"),
+  listYouTubeDataPlaylistItems: (
+    playlistId: string
+  ): Promise<YouTubeDataPlaylistItem[]> =>
+    ipcRenderer.invoke("youtubeData:listPlaylistItems", playlistId),
+  getYouTubeMusicConfig: (): Promise<YouTubeMusicConfig> =>
+    ipcRenderer.invoke("youtubeMusic:getConfig"),
+  saveYouTubeMusicConfig: (
+    config: YouTubeMusicConfig
+  ): Promise<YouTubeMusicStatus> =>
+    ipcRenderer.invoke("youtubeMusic:saveConfig", config),
+  getYouTubeMusicStatus: (): Promise<YouTubeMusicStatus> =>
+    ipcRenderer.invoke("youtubeMusic:getStatus"),
+  saveYouTubeMusicAuth: (
+    headersRaw: string
+  ): Promise<YouTubeMusicStatus> =>
+    ipcRenderer.invoke("youtubeMusic:saveAuth", headersRaw),
+  loginYouTubeMusic: (): Promise<YouTubeMusicStatus> =>
+    ipcRenderer.invoke("youtubeMusic:login"),
+  logoutYouTubeMusic: (): Promise<YouTubeMusicStatus> =>
+    ipcRenderer.invoke("youtubeMusic:logout"),
+  listYouTubeMusicLibrary: (): Promise<YouTubeMusicLibrary> =>
+    ipcRenderer.invoke("youtubeMusic:listLibrary"),
+  syncYouTubeMusicLibrary: (): Promise<YouTubeMusicSyncResult> =>
+    ipcRenderer.invoke("youtubeMusic:syncLibrary"),
+  getAppleMusicStatus: (): Promise<AppleMusicStatus> =>
+    ipcRenderer.invoke("appleMusic:getStatus"),
+  saveAppleMusicAuth: (headersRaw: string): Promise<AppleMusicStatus> =>
+    ipcRenderer.invoke("appleMusic:saveAuth", headersRaw),
+  logoutAppleMusic: (): Promise<AppleMusicStatus> =>
+    ipcRenderer.invoke("appleMusic:logout"),
+  listAppleMusicPlaylists: (): Promise<AppleMusicPlaylist[]> =>
+    ipcRenderer.invoke("appleMusic:listPlaylists"),
+  fetchAppleMusicPlaylist: (playlist: string): Promise<AppleMusicPlaylist> =>
+    ipcRenderer.invoke("appleMusic:fetchPlaylist", playlist),
   getSpotifyConfig: (): Promise<SpotifyConfig> =>
     ipcRenderer.invoke("spotify:getConfig"),
   saveSpotifyConfig: (config: SpotifyConfig): Promise<SpotifyStatus> =>

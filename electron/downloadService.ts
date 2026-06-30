@@ -109,7 +109,9 @@ export async function downloadAudioWithProgress(
 export async function downloadAudioSearch(
   searchQuery: string,
   fileBaseName: string,
-  sourceUrl: string
+  sourceUrl: string,
+  onProgress?: (update: DownloadProgressUpdate) => void,
+  runtime?: DownloadRuntimeOptions
 ): Promise<DownloadAudioResult> {
   const trimmedQuery = searchQuery.trim();
   if (!trimmedQuery) {
@@ -124,7 +126,9 @@ export async function downloadAudioSearch(
   const outputTemplate = path.join(outputDirectory, `${safeBaseName}.%(ext)s`);
 
   return runAudioDownload(`ytsearch1:${trimmedQuery}`, outputTemplate, sourceUrl, {
-    allowPlaylist: false
+    allowPlaylist: false,
+    onProgress,
+    runtime
   });
 }
 

@@ -9,6 +9,7 @@ import {
   HardDrive,
   Home,
   LayoutGrid,
+  Library,
   Link,
   ListMusic,
   LogIn,
@@ -16,6 +17,7 @@ import {
   Loader2,
   Map as MapIcon,
   Music,
+  Music2,
   RefreshCw,
   Search,
   Settings,
@@ -35,6 +37,7 @@ import {
 } from "react";
 import type {
   DownloadJob,
+  DownloadQueueItem,
   LocalTrack,
   SpotifyConfig,
   SpotifyPlaylist,
@@ -54,6 +57,16 @@ import type {
   WatchStatus,
   WatchTrack,
   AppUpdateSnapshot,
+  YouTubeDataConfig,
+  YouTubeDataPlaylist,
+  YouTubeDataPlaylistItem,
+  YouTubeDataStatus,
+  YouTubeMusicPlaylist,
+  YouTubeMusicSong,
+  YouTubeMusicStatus,
+  AppleMusicPlaylist,
+  AppleMusicStatus,
+  AppleMusicTrack,
 } from "../electron/types";
 import { buildTrainingHubSnapshot } from "./training/parsers";
 import { fetchTrainingDashboard, fetchUpcomingWorkouts } from "./training/api";
@@ -78,10 +91,21 @@ import { getWatchPresentation } from "./watchModels";
 import appLogo from "../build/icon.png";
 
 type View = "overview" | "media" | "training" | "maps";
-type MediaTab = "library" | "youtube" | "spotify";
+type MediaTab =
+  | "library"
+  | "youtube"
+  | "youtube-data"
+  | "youtube-music"
+  | "spotify"
+  | "apple-music";
 
 const YOUTUBE_HOME_URL = "https://www.youtube.com/";
 const YOUTUBE_DOWNLOAD_CONSOLE_PREFIX = "__COROSLINK_YOUTUBE_DOWNLOAD__";
+const APPLE_MUSIC_SELECTED_PLAYLIST_STORAGE_KEY =
+  "coroslink.appleMusic.selectedPlaylistId";
+
+let appleMusicSelectedPlaylistIdMemory = "";
+let appleMusicDetailCacheMemory: Record<string, AppleMusicPlaylist> = {};
 
 interface YouTubeDownloadItem {
   url: string;
@@ -119,6 +143,31 @@ export default function App() {
   const [youtubeCurrentUrl, setYoutubeCurrentUrl] = useState(YOUTUBE_HOME_URL);
   const [youtubeTitle, setYoutubeTitle] = useState("YouTube");
   const [youtubeJobs, setYoutubeJobs] = useState<DownloadJob[]>([]);
+  const [youtubeDataConfig, setYoutubeDataConfig] = useState<YouTubeDataConfig>(
+    {
+      clientId: "",
+      clientSecret: "",
+      redirectUri: "",
+    },
+  );
+  const [youtubeDataStatus, setYoutubeDataStatus] =
+    useState<YouTubeDataStatus | null>(null);
+  const [youtubeDataPlaylists, setYoutubeDataPlaylists] = useState<
+    YouTubeDataPlaylist[]
+  >([]);
+  const [selectedYouTubeDataPlaylistId, setSelectedYouTubeDataPlaylistId] =
+    useState("");
+  const [youtubeDataItems, setYoutubeDataItems] = useState<
+    YouTubeDataPlaylistItem[]
+  >([]);
+  const [youtubeMusicStatus, setYoutubeMusicStatus] =
+    useState<YouTubeMusicStatus | null>(null);
+  const [youtubeMusicPlaylists, setYoutubeMusicPlaylists] = useState<
+    YouTubeMusicPlaylist[]
+  >([]);
+  const [selectedYouTubeMusicPlaylistId, setSelectedYouTubeMusicPlaylistId] =
+    useState("");
+  const [youtubeMusicHeadersRaw, setYoutubeMusicHeadersRaw] = useState("");
   const completedJobIdsRef = useRef<Set<string>>(new Set());
   const [trainingHubStatus, setTrainingHubStatus] =
     useState<TrainingHubStatus | null>(null);
@@ -219,6 +268,47 @@ export default function App() {
       setSpotifyTracks([]);
       setSpotifySyncTracks([]);
     }
+  }, [api]);
+
+  const refreshYouTubeData = useCallback(async () => {
+    if (!api) {
+      return;
+    }
+
+    const [config, status] = await Promise.all([
+      api.getYouTubeDataConfig(),
+      api.getYouTubeDataStatus(),
+    ]);
+    setYoutubeDataConfig(config);
+    setYoutubeDataStatus(status);
+
+    if (status.authenticated) {
+      const playlists = await api.listYouTubeDataPlaylists();
+      setYoutubeDataPlaylists(playlists);
+      setSelectedYouTubeDataPlaylistId(
+        (current) => current || playlists[0]?.id || "",
+      );
+    } else {
+      setYoutubeDataPlaylists([]);
+      setSelectedYouTubeDataPlaylistId("");
+      setYoutubeDataItems([]);
+    }
+  }, [api]);
+
+  const refreshYouTubeMusic = useCallback(async () => {
+    if (!api) {
+      return;
+    }
+
+    const [status, library] = await Promise.all([
+      api.getYouTubeMusicStatus(),
+      api.listYouTubeMusicLibrary(),
+    ]);
+    setYoutubeMusicStatus(status);
+    setYoutubeMusicPlaylists(library.playlists);
+    setSelectedYouTubeMusicPlaylistId(
+      (current) => current || library.playlists[0]?.id || "",
+    );
   }, [api]);
 
   const clearTrainingHubData = useCallback(() => {
@@ -378,6 +468,12 @@ export default function App() {
     void refreshSpotify().catch((caught) => {
       setError(toErrorMessage(caught));
     });
+    void refreshYouTubeData().catch((caught) => {
+      setError(toErrorMessage(caught));
+    });
+    void refreshYouTubeMusic().catch((caught) => {
+      setError(toErrorMessage(caught));
+    });
     void refreshTrainingHub().catch((caught) => {
       setError(toErrorMessage(caught));
     });
@@ -387,7 +483,14 @@ export default function App() {
     }, 5000);
 
     return () => window.clearInterval(interval);
-  }, [api, refreshAll, refreshSpotify, refreshTrainingHub]);
+  }, [
+    api,
+    refreshAll,
+    refreshSpotify,
+    refreshTrainingHub,
+    refreshYouTubeData,
+    refreshYouTubeMusic,
+  ]);
 
   useEffect(() => {
     if (!api) {
@@ -436,11 +539,7 @@ export default function App() {
       if (hasNewlyCompleted) {
         void refreshAll();
 
-        if (
-          autoTransferRef.current &&
-          watchConnectedRef.current &&
-          api
-        ) {
+        if (autoTransferRef.current && watchConnectedRef.current && api) {
           void (async () => {
             let transferred = 0;
             for (const job of newlyCompleted) {
@@ -451,9 +550,7 @@ export default function App() {
             }
 
             if (transferred > 0) {
-              setMessage(
-                `${transferred} track(s) downloaded and transferred.`,
-              );
+              setMessage(`${transferred} track(s) downloaded and transferred.`);
               await refreshAll();
             }
           })();
@@ -470,16 +567,26 @@ export default function App() {
     void loadSpotifyPlaylist(selectedSpotifyPlaylistId);
   }, [api, selectedSpotifyPlaylistId, spotifyStatus?.authenticated]);
 
+  useEffect(() => {
+    if (
+      !api ||
+      !selectedYouTubeDataPlaylistId ||
+      !youtubeDataStatus?.authenticated
+    ) {
+      return;
+    }
+
+    void loadYouTubeDataPlaylist(selectedYouTubeDataPlaylistId);
+  }, [api, selectedYouTubeDataPlaylistId, youtubeDataStatus?.authenticated]);
+
   const storage = useMemo(() => {
     if (!watchStatus?.connected) {
       return null;
     }
 
     const trackBytes =
-      watchStatus.tracks.reduce(
-        (total, track) => total + track.sizeBytes,
-        0,
-      ) ?? 0;
+      watchStatus.tracks.reduce((total, track) => total + track.sizeBytes, 0) ??
+      0;
     const presentation = getWatchPresentation(watchStatus);
     const totalBytes =
       watchStatus.totalBytes ?? presentation.fallbackBytes ?? 0;
@@ -502,7 +609,13 @@ export default function App() {
     setBusy("refresh");
     setError(null);
     try {
-      await Promise.all([refreshAll(), refreshSpotify(), refreshTrainingHub()]);
+      await Promise.all([
+        refreshAll(),
+        refreshSpotify(),
+        refreshTrainingHub(),
+        refreshYouTubeData(),
+        refreshYouTubeMusic(),
+      ]);
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -539,7 +652,7 @@ export default function App() {
       .then((result) => {
         if (result?.installMethod === "manual") {
           setMessage(
-            "Opened the GitHub download page. Install the new build over CorosLink in Applications."
+            "Opened the GitHub download page. Install the new build over CorosLink in Applications.",
           );
         }
       })
@@ -572,6 +685,24 @@ export default function App() {
     }
   }
 
+  async function loadYouTubeDataPlaylist(playlistId: string) {
+    if (!api) {
+      return;
+    }
+
+    setBusy(`youtube-data-load:${playlistId}`);
+    setError(null);
+
+    try {
+      setYoutubeDataItems(await api.listYouTubeDataPlaylistItems(playlistId));
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+      setYoutubeDataItems([]);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function handleSpotifyConfigSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!api) {
@@ -586,6 +717,53 @@ export default function App() {
       const status = await api.saveSpotifyConfig(spotifyConfig);
       setSpotifyStatus(status);
       setMessage("Spotify settings saved.");
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleYouTubeDataConfigSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+    if (!api) {
+      return;
+    }
+
+    setBusy("youtube-data-config");
+    setError(null);
+    setMessage(null);
+
+    try {
+      const status = await api.saveYouTubeDataConfig(youtubeDataConfig);
+      setYoutubeDataStatus(status);
+      setMessage("YouTube Playlists settings saved.");
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleYouTubeMusicAuthSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+    if (!api) {
+      return;
+    }
+
+    setBusy("youtube-music-auth");
+    setError(null);
+    setMessage(null);
+
+    try {
+      const status = await api.saveYouTubeMusicAuth(youtubeMusicHeadersRaw);
+      setYoutubeMusicStatus(status);
+      setYoutubeMusicHeadersRaw("");
+      setMessage("YouTube Music headers saved.");
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -614,6 +792,27 @@ export default function App() {
     }
   }
 
+  async function handleYouTubeDataLogin() {
+    if (!api) {
+      return;
+    }
+
+    setBusy("youtube-data-login");
+    setError(null);
+    setMessage(null);
+
+    try {
+      const status = await api.loginYouTubeData();
+      setYoutubeDataStatus(status);
+      setMessage("YouTube Playlists connected.");
+      await refreshYouTubeData();
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function handleSpotifyLogout() {
     if (!api) {
       return;
@@ -630,6 +829,49 @@ export default function App() {
       setSpotifySyncTracks([]);
       setSelectedSpotifyPlaylistId("");
       setMessage("Spotify account disconnected.");
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleYouTubeDataLogout() {
+    if (!api) {
+      return;
+    }
+
+    setBusy("youtube-data-logout");
+    setError(null);
+    setMessage(null);
+
+    try {
+      setYoutubeDataStatus(await api.logoutYouTubeData());
+      setYoutubeDataPlaylists([]);
+      setYoutubeDataItems([]);
+      setSelectedYouTubeDataPlaylistId("");
+      setMessage("YouTube Playlists disconnected.");
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleYouTubeMusicLogout() {
+    if (!api) {
+      return;
+    }
+
+    setBusy("youtube-music-logout");
+    setError(null);
+    setMessage(null);
+
+    try {
+      setYoutubeMusicStatus(await api.logoutYouTubeMusic());
+      setYoutubeMusicPlaylists([]);
+      setSelectedYouTubeMusicPlaylistId("");
+      setMessage("YouTube Music disconnected.");
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -661,6 +903,111 @@ export default function App() {
     } finally {
       setBusy(null);
     }
+  }
+
+  async function handleQueueYouTubeDataItem(item: YouTubeDataPlaylistItem) {
+    await handleYouTubeDownload({
+      url: item.videoUrl,
+      title: item.title,
+    });
+  }
+
+  async function handleQueueYouTubeDataPlaylist(playlistId: string) {
+    await handleYouTubeDownload({
+      url: `https://www.youtube.com/playlist?list=${encodeURIComponent(
+        playlistId,
+      )}`,
+    });
+  }
+
+  function handleOpenYouTubeDataItem(item: YouTubeDataPlaylistItem) {
+    setYoutubeUrl(item.videoUrl);
+    setYoutubeInput(item.videoUrl);
+    openMediaTab("youtube");
+  }
+
+  async function handleSyncYouTubeMusicLibrary() {
+    if (!api) {
+      return;
+    }
+
+    setBusy("youtube-music-sync");
+    setError(null);
+    setMessage(null);
+
+    try {
+      const result = await api.syncYouTubeMusicLibrary();
+      setYoutubeMusicStatus(result.status);
+      setYoutubeMusicPlaylists(result.playlists);
+      setSelectedYouTubeMusicPlaylistId(
+        (current) => current || result.playlists[0]?.id || "",
+      );
+      setMessage(
+        `Synced ${result.songs.length} song(s) and ${result.playlists.length} playlist(s) from YouTube Music.`,
+      );
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleQueueYouTubeMusicSong(song: YouTubeMusicSong) {
+    if (!song.videoUrl) {
+      setError("This YouTube Music song did not include a video URL.");
+      return;
+    }
+
+    await handleYouTubeDownload({
+      url: song.videoUrl,
+      title: [song.artistName, song.songTitle].filter(Boolean).join(" - "),
+    });
+  }
+
+  async function handleRetryYouTubeMusicSong(
+    song: YouTubeMusicSong,
+    jobId: string,
+  ) {
+    if (!api) {
+      return;
+    }
+
+    try {
+      setYoutubeJobs(await api.clearYouTubeJob(jobId));
+    } catch {
+      // The job may already be gone; re-queue regardless.
+    }
+
+    await handleQueueYouTubeMusicSong(song);
+  }
+
+  async function handleQueueYouTubeMusicPlaylist(
+    playlist: YouTubeMusicPlaylist,
+  ) {
+    const queue = playlist.songs
+      .filter((song) => song.videoUrl)
+      .map((song) => ({
+        url: song.videoUrl as string,
+        title: [song.artistName, song.songTitle].filter(Boolean).join(" - "),
+      }));
+
+    if (queue.length === 0) {
+      setError("This YouTube Music playlist did not include video URLs.");
+      return;
+    }
+
+    await handleYouTubeDownload(queue);
+  }
+
+  function handleOpenYouTubeMusicSong(song: YouTubeMusicSong) {
+    if (!song.videoUrl) {
+      setError("This YouTube Music song did not include a video URL.");
+      return;
+    }
+
+    setYoutubeUrl(song.videoUrl);
+    setYoutubeInput(song.videoUrl);
+    openMediaTab("youtube");
   }
 
   async function handleTrainingHubLogin(event: FormEvent<HTMLFormElement>) {
@@ -1270,7 +1617,42 @@ export default function App() {
                     onClearJob={handleClearYouTubeJob}
                     onClearCompletedJobs={handleClearCompletedYouTubeJobs}
                   />
-                ) : (
+                ) : activeMediaTab === "youtube-data" ? (
+                  <YouTubeDataView
+                    config={youtubeDataConfig}
+                    status={youtubeDataStatus}
+                    playlists={youtubeDataPlaylists}
+                    selectedPlaylistId={selectedYouTubeDataPlaylistId}
+                    items={youtubeDataItems}
+                    busy={busy}
+                    onConfigChange={setYoutubeDataConfig}
+                    onConfigSubmit={handleYouTubeDataConfigSubmit}
+                    onLogin={handleYouTubeDataLogin}
+                    onLogout={handleYouTubeDataLogout}
+                    onSelectPlaylist={setSelectedYouTubeDataPlaylistId}
+                    onQueuePlaylist={handleQueueYouTubeDataPlaylist}
+                    onQueueItem={handleQueueYouTubeDataItem}
+                    onOpenItem={handleOpenYouTubeDataItem}
+                  />
+                ) : activeMediaTab === "youtube-music" ? (
+                  <YouTubeMusicView
+                    status={youtubeMusicStatus}
+                    playlists={youtubeMusicPlaylists}
+                    selectedPlaylistId={selectedYouTubeMusicPlaylistId}
+                    headersRaw={youtubeMusicHeadersRaw}
+                    busy={busy}
+                    jobs={youtubeJobs}
+                    onHeadersChange={setYoutubeMusicHeadersRaw}
+                    onAuthSubmit={handleYouTubeMusicAuthSubmit}
+                    onLogout={handleYouTubeMusicLogout}
+                    onSync={handleSyncYouTubeMusicLibrary}
+                    onSelectPlaylist={setSelectedYouTubeMusicPlaylistId}
+                    onQueuePlaylist={handleQueueYouTubeMusicPlaylist}
+                    onQueueSong={handleQueueYouTubeMusicSong}
+                    onRetrySong={handleRetryYouTubeMusicSong}
+                    onOpenSong={handleOpenYouTubeMusicSong}
+                  />
+                ) : activeMediaTab === "spotify" ? (
                   <SpotifySyncView
                     config={spotifyConfig}
                     status={spotifyStatus}
@@ -1289,6 +1671,8 @@ export default function App() {
                     onAutoTransferChange={setSpotifyAutoTransfer}
                     onSync={handleSpotifySync}
                   />
+                ) : (
+                  <AppleMusicView />
                 )}
               </MediaView>
             ) : activeView === "maps" ? (
@@ -1343,13 +1727,28 @@ function MediaView({ activeTab, onTabChange, children }: MediaViewProps) {
     },
     {
       id: "youtube",
-      label: "YouTube",
+      label: "YouTube Browser",
       icon: <Link size={16} aria-hidden="true" />,
+    },
+    {
+      id: "youtube-data",
+      label: "YouTube Playlists",
+      icon: <Library size={16} aria-hidden="true" />,
+    },
+    {
+      id: "youtube-music",
+      label: "YouTube Music",
+      icon: <Music2 size={16} aria-hidden="true" />,
     },
     {
       id: "spotify",
       label: "Spotify",
       icon: <ListMusic size={16} aria-hidden="true" />,
+    },
+    {
+      id: "apple-music",
+      label: "Apple Music",
+      icon: <AppleBrandIcon size={16} />,
     },
   ];
 
@@ -1598,7 +1997,9 @@ function MediaOverviewTab({
   );
   const watchPresentation = getWatchPresentation(watchStatus);
   const statusEyebrow =
-    watchPresentation.state === "disconnected" ? "Watch" : watchPresentation.displayName;
+    watchPresentation.state === "disconnected"
+      ? "Watch"
+      : watchPresentation.displayName;
   const statusTitle =
     watchPresentation.state === "disconnected"
       ? "Not connected"
@@ -2689,6 +3090,761 @@ interface SpotifySyncViewProps {
   onSync: () => void;
 }
 
+interface YouTubeDataViewProps {
+  config: YouTubeDataConfig;
+  status: YouTubeDataStatus | null;
+  playlists: YouTubeDataPlaylist[];
+  selectedPlaylistId: string;
+  items: YouTubeDataPlaylistItem[];
+  busy: string | null;
+  onConfigChange: (config: YouTubeDataConfig) => void;
+  onConfigSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onLogin: () => void;
+  onLogout: () => void;
+  onSelectPlaylist: (playlistId: string) => void;
+  onQueuePlaylist: (playlistId: string) => void;
+  onQueueItem: (item: YouTubeDataPlaylistItem) => void;
+  onOpenItem: (item: YouTubeDataPlaylistItem) => void;
+}
+
+function YouTubeDataView({
+  config,
+  status,
+  playlists,
+  selectedPlaylistId,
+  items,
+  busy,
+  onConfigChange,
+  onConfigSubmit,
+  onLogin,
+  onLogout,
+  onSelectPlaylist,
+  onQueuePlaylist,
+  onQueueItem,
+  onOpenItem,
+}: YouTubeDataViewProps) {
+  const selectedPlaylist = playlists.find(
+    (playlist) => playlist.id === selectedPlaylistId,
+  );
+  const loadingItems = busy?.startsWith("youtube-data-load") ?? false;
+
+  return (
+    <div className="stack stack-fill">
+      <section className="panel spotify-account-panel">
+        {status?.authenticated ? (
+          <div className="spotify-account-card youtube-data-account-card">
+            <div
+              className="spotify-account-mark youtube-data-account-mark"
+              aria-hidden="true"
+            >
+              <Library size={22} />
+            </div>
+            <div className="spotify-account-copy">
+              <p className="eyebrow">YouTube Playlists</p>
+              <h2>{status.displayName ?? "Connected"}</h2>
+              <span>
+                {playlists.length} playlist{playlists.length === 1 ? "" : "s"}{" "}
+                available
+              </span>
+            </div>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={busy === "youtube-data-logout"}
+              onClick={onLogout}
+            >
+              {busy === "youtube-data-logout" ? (
+                <Loader2 className="spin" size={17} aria-hidden="true" />
+              ) : (
+                <LogOut size={17} aria-hidden="true" />
+              )}
+              Disconnect
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Google OAuth</p>
+                <h2>Connect YouTube Playlists</h2>
+              </div>
+              <span className="badge">Not connected</span>
+            </div>
+
+            <form className="settings-grid" onSubmit={onConfigSubmit}>
+              <label className="field">
+                <span>Client ID</span>
+                <input
+                  value={config.clientId}
+                  onChange={(event) =>
+                    onConfigChange({ ...config, clientId: event.target.value })
+                  }
+                  placeholder="Google OAuth client ID"
+                  disabled={busy === "youtube-data-config"}
+                />
+              </label>
+              <label className="field">
+                <span>Client Secret</span>
+                <input
+                  value={config.clientSecret}
+                  onChange={(event) =>
+                    onConfigChange({
+                      ...config,
+                      clientSecret: event.target.value,
+                    })
+                  }
+                  placeholder="Google OAuth client secret"
+                  type="password"
+                  disabled={busy === "youtube-data-config"}
+                />
+              </label>
+              <label className="field">
+                <span>Redirect URI</span>
+                <input value={config.redirectUri} readOnly />
+              </label>
+
+              <div className="settings-actions">
+                <button
+                  className="secondary-button"
+                  type="submit"
+                  disabled={busy === "youtube-data-config"}
+                >
+                  <Settings size={17} aria-hidden="true" />
+                  Save
+                </button>
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={
+                    !status?.configured || busy === "youtube-data-login"
+                  }
+                  onClick={onLogin}
+                >
+                  {busy === "youtube-data-login" ? (
+                    <Loader2 className="spin" size={17} aria-hidden="true" />
+                  ) : (
+                    <LogIn size={17} aria-hidden="true" />
+                  )}
+                  Log in
+                </button>
+              </div>
+            </form>
+          </>
+        )}
+      </section>
+
+      <section className="spotify-layout youtube-data-layout">
+        <aside className="panel playlist-panel">
+          <div className="section-heading compact">
+            <div>
+              <p className="eyebrow">Playlists</p>
+              <h2>{playlists.length}</h2>
+            </div>
+          </div>
+          <div className="playlist-list">
+            {playlists.length === 0 ? (
+              <EmptyState title="No playlists loaded" />
+            ) : (
+              playlists.map((playlist) => (
+                <button
+                  key={playlist.id}
+                  className={
+                    playlist.id === selectedPlaylistId
+                      ? "playlist-button active"
+                      : "playlist-button"
+                  }
+                  type="button"
+                  onClick={() => onSelectPlaylist(playlist.id)}
+                >
+                  <strong>{playlist.title}</strong>
+                  <span>
+                    {playlist.totalItems} video
+                    {playlist.totalItems === 1 ? "" : "s"}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </aside>
+
+        <section className="panel panel-flex">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">
+                {selectedPlaylist?.channelTitle ?? "Playlist"}
+              </p>
+              <h2>{selectedPlaylist?.title ?? "Select a playlist"}</h2>
+            </div>
+            <div className="topbar-actions">
+              <button
+                className="primary-button"
+                type="button"
+                disabled={!selectedPlaylist || busy?.startsWith("youtube-data")}
+                onClick={() =>
+                  selectedPlaylist && onQueuePlaylist(selectedPlaylist.id)
+                }
+              >
+                <Download size={17} aria-hidden="true" />
+                Queue playlist
+              </button>
+            </div>
+          </div>
+
+          <YouTubeDataItemTable
+            items={items}
+            loading={loadingItems}
+            onQueueItem={onQueueItem}
+            onOpenItem={onOpenItem}
+          />
+        </section>
+      </section>
+    </div>
+  );
+}
+
+interface YouTubeDataItemTableProps {
+  items: YouTubeDataPlaylistItem[];
+  loading: boolean;
+  onQueueItem: (item: YouTubeDataPlaylistItem) => void;
+  onOpenItem: (item: YouTubeDataPlaylistItem) => void;
+}
+
+function YouTubeDataItemTable({
+  items,
+  loading,
+  onQueueItem,
+  onOpenItem,
+}: YouTubeDataItemTableProps) {
+  if (loading) {
+    return (
+      <div className="empty-state">
+        <Loader2 className="spin" size={24} aria-hidden="true" />
+        <strong>Loading playlist</strong>
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return <EmptyState title="No videos selected" />;
+  }
+
+  return (
+    <div className="table-shell youtube-data-table-shell">
+      <table>
+        <thead>
+          <tr>
+            <th>Video</th>
+            <th>Channel</th>
+            <th>Added</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr key={item.id}>
+              <td>
+                <div className="youtube-data-video-cell">
+                  {item.thumbnailUrl ? (
+                    <img src={item.thumbnailUrl} alt="" />
+                  ) : (
+                    <span className="youtube-data-thumbnail-placeholder">
+                      <Music size={18} aria-hidden="true" />
+                    </span>
+                  )}
+                  <strong>{item.title}</strong>
+                </div>
+              </td>
+              <td>{item.channelTitle ?? "YouTube"}</td>
+              <td>
+                {item.publishedAt ? formatDate(item.publishedAt) : "Unknown"}
+              </td>
+              <td>
+                <div className="table-actions">
+                  <button
+                    className="icon-button"
+                    type="button"
+                    title="Queue"
+                    aria-label={`Queue ${item.title}`}
+                    onClick={() => onQueueItem(item)}
+                  >
+                    <Download size={16} aria-hidden="true" />
+                  </button>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    title="Open in YouTube"
+                    aria-label={`Open ${item.title} in YouTube`}
+                    onClick={() => onOpenItem(item)}
+                  >
+                    <ArrowRight size={16} aria-hidden="true" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+interface YouTubeMusicViewProps {
+  status: YouTubeMusicStatus | null;
+  playlists: YouTubeMusicPlaylist[];
+  selectedPlaylistId: string;
+  headersRaw: string;
+  busy: string | null;
+  jobs: DownloadJob[];
+  onHeadersChange: (value: string) => void;
+  onAuthSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onLogout: () => void;
+  onSync: () => void;
+  onSelectPlaylist: (playlistId: string) => void;
+  onQueuePlaylist: (playlist: YouTubeMusicPlaylist) => void;
+  onQueueSong: (song: YouTubeMusicSong) => void;
+  onRetrySong: (song: YouTubeMusicSong, jobId: string) => void;
+  onOpenSong: (song: YouTubeMusicSong) => void;
+}
+
+function YouTubeMusicView({
+  status,
+  playlists,
+  selectedPlaylistId,
+  headersRaw,
+  busy,
+  jobs,
+  onHeadersChange,
+  onAuthSubmit,
+  onLogout,
+  onSync,
+  onSelectPlaylist,
+  onQueuePlaylist,
+  onQueueSong,
+  onRetrySong,
+  onOpenSong,
+}: YouTubeMusicViewProps) {
+  const selectedPlaylist =
+    playlists.find((playlist) => playlist.id === selectedPlaylistId) ??
+    playlists[0];
+  const jobsByVideoId = useMemo(() => {
+    const map = new Map<string, DownloadJob>();
+    for (const job of jobs) {
+      if (job.entryType === "playlist") {
+        continue;
+      }
+      const videoId = extractYouTubeVideoId(job.url);
+      if (videoId) {
+        map.set(videoId, job);
+      }
+    }
+    return map;
+  }, [jobs]);
+  const busyWithMusic = busy?.startsWith("youtube-music") ?? false;
+  const dependencyReady = Boolean(
+    status?.pythonAvailable && status.ytmusicapiAvailable,
+  );
+  const syncReady = Boolean(status?.authenticated && dependencyReady);
+
+  return (
+    <div className="stack stack-fill">
+      <section className="panel spotify-account-panel">
+        {status?.authenticated ? (
+          <div className="spotify-account-card youtube-music-account-card">
+            <div
+              className="spotify-account-mark youtube-music-account-mark"
+              aria-hidden="true"
+            >
+              <Music2 size={22} />
+            </div>
+            <div className="spotify-account-copy">
+              <p className="eyebrow">YouTube Music</p>
+              <h2>Connected</h2>
+              <span>
+                {status.songCount} song{status.songCount === 1 ? "" : "s"} ·{" "}
+                {status.playlistCount} playlist
+                {status.playlistCount === 1 ? "" : "s"}
+                {status.syncedAt
+                  ? ` · Synced ${formatDate(status.syncedAt)}`
+                  : ""}
+              </span>
+            </div>
+            <div className="topbar-actions">
+              <button
+                className="primary-button"
+                type="button"
+                disabled={!syncReady || busyWithMusic}
+                onClick={onSync}
+              >
+                {busy === "youtube-music-sync" ? (
+                  <Loader2 className="spin" size={17} aria-hidden="true" />
+                ) : (
+                  <RefreshCw size={17} aria-hidden="true" />
+                )}
+                Sync
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={busy === "youtube-music-logout"}
+                onClick={onLogout}
+              >
+                {busy === "youtube-music-logout" ? (
+                  <Loader2 className="spin" size={17} aria-hidden="true" />
+                ) : (
+                  <LogOut size={17} aria-hidden="true" />
+                )}
+                Disconnect
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="youtube-music-connect">
+            <div className="youtube-music-connect-header">
+              <div className="youtube-music-connect-mark" aria-hidden="true">
+                <Music2 size={26} />
+              </div>
+              <div className="youtube-music-connect-intro">
+                <p className="eyebrow">YouTube Music</p>
+                <h2>Connect your library</h2>
+                <span>
+                  Pull in your playlists and liked songs, then download any
+                  track straight to your watch.
+                </span>
+              </div>
+              <span className={dependencyReady ? "badge ready" : "badge danger"}>
+                {dependencyReady ? "Ready" : "Missing"}
+              </span>
+            </div>
+
+            <ol className="youtube-music-steps">
+              <li>
+                Open{" "}
+                <a
+                  href="https://music.youtube.com/library"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  music.youtube.com/library
+                </a>{" "}
+                while signed in, then open DevTools (F12) and switch to the{" "}
+                <strong>Network</strong> tab.
+              </li>
+              <li>
+                Filter for <code>/browse</code>, right-click a{" "}
+                <strong>POST</strong> request, and choose{" "}
+                <strong>Copy → Copy as cURL</strong> (or copy the raw request
+                headers).
+              </li>
+              <li>
+                Paste it below and connect — a cURL command or a raw header
+                block both work (must include <code>cookie</code> and{" "}
+                <code>x-goog-authuser</code>).
+              </li>
+            </ol>
+
+            <figure className="youtube-music-connect-helper">
+              <img
+                src="./assets/helper-image/youtube-helper.png"
+                alt="YouTube Music DevTools guide: filter Network tab for browse, then right-click a POST request and choose Copy as cURL"
+                loading="lazy"
+              />
+              <figcaption>
+                Filter for <code>browse</code>, then copy any POST request as
+                cURL.
+              </figcaption>
+            </figure>
+
+            <form
+              className="youtube-music-connect-form"
+              onSubmit={onAuthSubmit}
+            >
+              <label className="field youtube-music-headers-field">
+                <textarea
+                  value={headersRaw}
+                  onChange={(event) => onHeadersChange(event.target.value)}
+                  placeholder={
+                    "Paste a 'Copy as cURL' command from music.youtube.com\n— or the raw request headers.\n\nMust include cookie and x-goog-authuser"
+                  }
+                  disabled={!dependencyReady || busy === "youtube-music-auth"}
+                />
+              </label>
+              <div className="youtube-music-connect-footer">
+                <span className="youtube-music-connect-note">
+                  {status?.dependencyError ??
+                    "Headers are stored locally and only used to read your library. They expire when you sign out of YouTube Music in your browser — re-paste them if syncing stops working."}
+                  {!status?.ytmusicapiAvailable ? (
+                    <code>python3 -m pip install ytmusicapi</code>
+                  ) : null}
+                </span>
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={
+                    !dependencyReady ||
+                    !headersRaw.trim() ||
+                    busy === "youtube-music-auth"
+                  }
+                >
+                  {busy === "youtube-music-auth" ? (
+                    <Loader2 className="spin" size={17} aria-hidden="true" />
+                  ) : (
+                    <LogIn size={17} aria-hidden="true" />
+                  )}
+                  Connect with headers
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </section>
+
+      {status?.authenticated && playlists.length === 0 ? (
+        <section className="panel youtube-music-empty">
+          <div className="empty-state">
+            <ListMusic size={26} aria-hidden="true" />
+            <strong>Nothing synced yet</strong>
+            <span>
+              Sync to pull your YouTube Music playlists and liked songs, then
+              queue any track to your watch.
+            </span>
+            <button
+              className="primary-button"
+              type="button"
+              disabled={!syncReady || busyWithMusic}
+              onClick={onSync}
+            >
+              {busy === "youtube-music-sync" ? (
+                <Loader2 className="spin" size={17} aria-hidden="true" />
+              ) : (
+                <RefreshCw size={17} aria-hidden="true" />
+              )}
+              Sync now
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {status?.authenticated && playlists.length > 0 ? (
+      <section className="spotify-layout youtube-music-layout">
+        <aside className="panel playlist-panel">
+          <div className="section-heading compact">
+            <div>
+              <p className="eyebrow">Playlists</p>
+              <h2>{playlists.length}</h2>
+            </div>
+          </div>
+          <div className="playlist-list">
+            {playlists.map((playlist) => (
+              <button
+                key={playlist.id}
+                className={
+                  playlist.id === selectedPlaylist?.id
+                    ? "playlist-button active"
+                    : "playlist-button"
+                }
+                type="button"
+                onClick={() => onSelectPlaylist(playlist.id)}
+              >
+                <strong>{playlist.title}</strong>
+                <span>
+                  {playlist.songCount} song
+                  {playlist.songCount === 1 ? "" : "s"}
+                </span>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <section className="panel panel-flex">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Playlist</p>
+              <h2>{selectedPlaylist?.title ?? "Select a playlist"}</h2>
+            </div>
+            <div className="topbar-actions">
+              <button
+                className="primary-button"
+                type="button"
+                disabled={!selectedPlaylist}
+                onClick={() =>
+                  selectedPlaylist && onQueuePlaylist(selectedPlaylist)
+                }
+              >
+                <Download size={17} aria-hidden="true" />
+                Queue playlist
+              </button>
+            </div>
+          </div>
+
+          <YouTubeMusicSongTable
+            songs={selectedPlaylist?.songs ?? []}
+            jobsByVideoId={jobsByVideoId}
+            onQueueSong={onQueueSong}
+            onRetrySong={onRetrySong}
+            onOpenSong={onOpenSong}
+          />
+        </section>
+      </section>
+      ) : null}
+    </div>
+  );
+}
+
+interface YouTubeMusicSongTableProps {
+  songs: YouTubeMusicSong[];
+  jobsByVideoId: Map<string, DownloadJob>;
+  onQueueSong: (song: YouTubeMusicSong) => void;
+  onRetrySong: (song: YouTubeMusicSong, jobId: string) => void;
+  onOpenSong: (song: YouTubeMusicSong) => void;
+}
+
+function YouTubeMusicSongTable({
+  songs,
+  jobsByVideoId,
+  onQueueSong,
+  onRetrySong,
+  onOpenSong,
+}: YouTubeMusicSongTableProps) {
+  if (songs.length === 0) {
+    return <EmptyState title="No songs synced" />;
+  }
+
+  return (
+    <div className="table-shell youtube-music-table-shell">
+      <table>
+        <thead>
+          <tr>
+            <th>Song</th>
+            <th>Album</th>
+            <th>Download</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {songs.map((song) => {
+            const job = song.videoId
+              ? jobsByVideoId.get(song.videoId)
+              : undefined;
+            const downloadStatus = youtubeMusicDownloadStatus(job);
+            const inProgress =
+              job?.status === "queued" || job?.status === "downloading";
+            const failed = job?.status === "failed";
+            const completed = job?.status === "completed";
+            return (
+              <tr key={song.id}>
+                <td>
+                  <strong>{song.songTitle}</strong>
+                  <span>{song.artistName ?? "Unknown Artist"}</span>
+                </td>
+                <td>{song.albumTitle ?? "Unknown Album"}</td>
+                <td>
+                  <span className={downloadStatus.className}>
+                    {downloadStatus.label}
+                  </span>
+                  {failed && job?.error ? (
+                    <span className="youtube-music-status-error">
+                      {job.error}
+                    </span>
+                  ) : null}
+                </td>
+                <td>
+                  <div className="table-actions">
+                    {failed && job ? (
+                      <button
+                        className="icon-button"
+                        type="button"
+                        title="Retry download"
+                        aria-label={`Retry ${song.songTitle}`}
+                        disabled={!song.videoUrl}
+                        onClick={() => onRetrySong(song, job.id)}
+                      >
+                        <RefreshCw size={16} aria-hidden="true" />
+                      </button>
+                    ) : inProgress ? (
+                      <button
+                        className="icon-button"
+                        type="button"
+                        title="Downloading"
+                        disabled
+                      >
+                        <Loader2
+                          className="spin"
+                          size={16}
+                          aria-hidden="true"
+                        />
+                      </button>
+                    ) : completed ? (
+                      <button
+                        className="icon-button"
+                        type="button"
+                        title="Downloaded"
+                        disabled
+                      >
+                        <CheckCircle2 size={16} aria-hidden="true" />
+                      </button>
+                    ) : (
+                      <button
+                        className="icon-button"
+                        type="button"
+                        title="Queue"
+                        aria-label={`Queue ${song.songTitle}`}
+                        disabled={!song.videoUrl}
+                        onClick={() => onQueueSong(song)}
+                      >
+                        <Download size={16} aria-hidden="true" />
+                      </button>
+                    )}
+                    <button
+                      className="icon-button"
+                      type="button"
+                      title="Open in YouTube"
+                      aria-label={`Open ${song.songTitle} in YouTube`}
+                      disabled={!song.videoUrl}
+                      onClick={() => onOpenSong(song)}
+                    >
+                      <ArrowRight size={16} aria-hidden="true" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function youtubeMusicDownloadStatus(job?: DownloadJob): {
+  label: string;
+  className: string;
+} {
+  switch (job?.status) {
+    case "queued":
+      return { label: "Queued", className: "badge" };
+    case "downloading":
+      return {
+        label: `${Math.round(job.progress)}%`,
+        className: "badge warning",
+      };
+    case "completed":
+      return { label: "Downloaded", className: "badge ready" };
+    case "failed":
+      return { label: "Failed", className: "badge danger" };
+    case "cancelled":
+      return { label: "Cancelled", className: "badge" };
+    default:
+      return { label: "Not queued", className: "badge" };
+  }
+}
+
+function extractYouTubeVideoId(url: string): string | undefined {
+  const match = url.match(
+    /(?:[?&]v=|youtu\.be\/|\/shorts\/|\/embed\/)([A-Za-z0-9_-]{11})/,
+  );
+  return match?.[1];
+}
+
 function SpotifySyncView({
   config,
   status,
@@ -3160,6 +4316,742 @@ function EmptyState({ title }: { title: string }) {
   );
 }
 
+function AppleMusicView() {
+  const api = window.corosLink;
+  const [status, setStatus] = useState<AppleMusicStatus | null>(null);
+  const [headersRaw, setHeadersRaw] = useState("");
+  const [playlists, setPlaylists] = useState<AppleMusicPlaylist[]>([]);
+  const [selectedId, setSelectedId] = useState(
+    () => appleMusicSelectedPlaylistIdMemory || readAppleMusicSelectedPlaylistId(),
+  );
+  const [detailCache, setDetailCache] = useState<
+    Record<string, AppleMusicPlaylist>
+  >(() => appleMusicDetailCacheMemory);
+  const [busy, setBusy] = useState<
+    "auth" | "logout" | "list" | "tracks" | null
+  >(null);
+  const [loadingPlaylistId, setLoadingPlaylistId] = useState<string | null>(
+    null,
+  );
+  const [jobs, setJobs] = useState<DownloadJob[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const loadPlaylistDetail = useCallback(
+    async (id: string) => {
+      if (!api || !id) {
+        return;
+      }
+
+      setLoadingPlaylistId(id);
+      setError(null);
+      try {
+        const detail = await api.fetchAppleMusicPlaylist(id);
+        appleMusicDetailCacheMemory = {
+          ...appleMusicDetailCacheMemory,
+          [id]: detail,
+        };
+        setDetailCache((previous) => {
+          return { ...previous, [id]: detail };
+        });
+      } catch (caught) {
+        setError(toErrorMessage(caught));
+      } finally {
+        setLoadingPlaylistId((current) => (current === id ? null : current));
+      }
+    },
+    [api],
+  );
+
+  const refreshPlaylists = useCallback(async () => {
+    if (!api) {
+      return;
+    }
+    setBusy("list");
+    setError(null);
+    try {
+      const nextPlaylists = await api.listAppleMusicPlaylists();
+      setPlaylists(nextPlaylists);
+      setSelectedId((current) => {
+        const remembered =
+          current || appleMusicSelectedPlaylistIdMemory || readAppleMusicSelectedPlaylistId();
+        const nextId = nextPlaylists.some((playlist) => playlist.id === remembered)
+          ? remembered
+          : nextPlaylists[0]?.id || "";
+        rememberAppleMusicSelectedPlaylistId(nextId);
+        return nextId;
+      });
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
+    void api
+      .getAppleMusicStatus()
+      .then(setStatus)
+      .catch((caught: unknown) => setError(toErrorMessage(caught)));
+  }, [api]);
+
+  useEffect(() => {
+    if (status?.authenticated && status.hasUserToken) {
+      void refreshPlaylists();
+    }
+  }, [status?.authenticated, status?.hasUserToken, refreshPlaylists]);
+
+  useEffect(() => {
+    rememberAppleMusicSelectedPlaylistId(selectedId);
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (!selectedId || !status?.authenticated || !status.hasUserToken) {
+      return;
+    }
+
+    if (!detailCache[selectedId] && loadingPlaylistId !== selectedId) {
+      void loadPlaylistDetail(selectedId);
+    }
+  }, [
+    detailCache,
+    loadPlaylistDetail,
+    loadingPlaylistId,
+    selectedId,
+    status?.authenticated,
+    status?.hasUserToken,
+  ]);
+
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
+    void api.listYouTubeJobs().then(setJobs).catch(() => {});
+    return api.onYouTubeJobsUpdate(setJobs);
+  }, [api]);
+
+  const jobByUrl = useMemo(() => {
+    const map = new Map<string, DownloadJob>();
+    for (const job of jobs) {
+      if (job.entryType !== "playlist") {
+        map.set(job.url, job);
+      }
+    }
+    return map;
+  }, [jobs]);
+
+  if (!api) {
+    return null;
+  }
+
+  const selectedSummary = selectedId
+    ? playlists.find((playlist) => playlist.id === selectedId)
+    : undefined;
+  const selectedDetail = selectedId ? detailCache[selectedId] : undefined;
+  const selectedPlaylist = selectedDetail ?? selectedSummary;
+  const selectedPlaylistLoading =
+    Boolean(selectedId && loadingPlaylistId === selectedId) && !selectedDetail;
+
+  async function enqueueTargets(targets: DownloadQueueItem[]) {
+    if (!api || targets.length === 0) {
+      return;
+    }
+    setError(null);
+    try {
+      const created = await api.enqueueYouTubeDownloads(targets);
+      setNotice(
+        created.length === 0
+          ? "Those tracks are already queued."
+          : `Queued ${created.length} download${created.length === 1 ? "" : "s"}. They run in the background.`,
+      );
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    }
+  }
+
+  async function handleQueueTrack(track: AppleMusicTrack) {
+    await enqueueTargets([appleMusicDownloadTarget(track)]);
+  }
+
+  async function handleQueueAllTracks(detail: AppleMusicPlaylist) {
+    await enqueueTargets(detail.tracks.map(appleMusicDownloadTarget));
+  }
+
+  async function handleRetryTrack(track: AppleMusicTrack, jobId: string) {
+    if (!api) {
+      return;
+    }
+    try {
+      setJobs(await api.clearYouTubeJob(jobId));
+    } catch {
+      // The job may already be gone; re-queue regardless.
+    }
+    await handleQueueTrack(track);
+  }
+
+  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!api || !headersRaw.trim()) {
+      return;
+    }
+    setBusy("auth");
+    setError(null);
+    try {
+      const next = await api.saveAppleMusicAuth(headersRaw);
+      setStatus(next);
+      setHeadersRaw("");
+      setNotice("Apple Music headers saved.");
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleLogout() {
+    if (!api) {
+      return;
+    }
+    setBusy("logout");
+    setError(null);
+    try {
+      setStatus(await api.logoutAppleMusic());
+      setPlaylists([]);
+      setSelectedId("");
+      setDetailCache({});
+      appleMusicDetailCacheMemory = {};
+      setNotice("Apple Music disconnected.");
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleSelectPlaylist(id: string) {
+    setSelectedId(id);
+    if (!api) {
+      return;
+    }
+    void loadPlaylistDetail(id);
+  }
+
+  return (
+    <div className="stack stack-fill">
+      <section className="panel spotify-account-panel">
+        {status?.authenticated ? (
+          <div className="spotify-account-card apple-music-account-card">
+            <div
+              className="spotify-account-mark apple-music-account-mark"
+              aria-hidden="true"
+            >
+              <AppleBrandIcon size={24} />
+            </div>
+            <div className="spotify-account-copy">
+              <p className="eyebrow">Apple Music</p>
+              <h2>Connected</h2>
+              <span>
+                {status.hasUserToken
+                  ? "Catalog + library access"
+                  : "Catalog access only"}
+                {status.authUpdatedAt
+                  ? ` · Saved ${formatDate(status.authUpdatedAt)}`
+                  : ""}
+              </span>
+            </div>
+            <div className="topbar-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={busy === "logout"}
+                onClick={handleLogout}
+              >
+                {busy === "logout" ? (
+                  <Loader2 className="spin" size={17} aria-hidden="true" />
+                ) : (
+                  <LogOut size={17} aria-hidden="true" />
+                )}
+                Disconnect
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="youtube-music-connect">
+            <div className="youtube-music-connect-header">
+              <div className="youtube-music-connect-mark" aria-hidden="true">
+                <AppleBrandIcon size={28} />
+              </div>
+              <div className="youtube-music-connect-intro">
+                <p className="eyebrow">Apple Music</p>
+                <h2>Connect your account</h2>
+                <span>
+                  Paste the request headers from music.apple.com to read
+                  playlist metadata. No Apple Developer account needed.
+                </span>
+              </div>
+            </div>
+
+            <ol className="youtube-music-steps">
+              <li>
+                Open{" "}
+                <a
+                  href="https://music.apple.com"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  music.apple.com
+                </a>{" "}
+                while signed in, then open DevTools (F12) and switch to the{" "}
+                <strong>Network</strong> tab.
+              </li>
+              <li>
+                Filter for <code>amp-api</code>, right-click any request, and
+                choose <strong>Copy → Copy as cURL</strong> (or copy the raw
+                request headers).
+              </li>
+              <li>
+                Paste it below and connect — it must include the{" "}
+                <code>authorization</code> bearer token (and{" "}
+                <code>media-user-token</code> for personal playlists).
+              </li>
+            </ol>
+
+            <figure className="youtube-music-connect-helper">
+              <img
+                src="./assets/helper-image/apple-helper.png"
+                alt="Apple Music DevTools guide: filter Network tab for amp-api, then right-click a request and choose Copy as cURL"
+                loading="lazy"
+              />
+              <figcaption>
+                Filter for <code>amp-api</code>, then copy any request as cURL.
+              </figcaption>
+            </figure>
+
+            <form
+              className="youtube-music-connect-form"
+              onSubmit={handleAuthSubmit}
+            >
+              <label className="field youtube-music-headers-field">
+                <textarea
+                  value={headersRaw}
+                  onChange={(event) => setHeadersRaw(event.target.value)}
+                  placeholder={
+                    "Paste a 'Copy as cURL' command from music.apple.com\n— or the raw request headers.\n\nMust include the authorization bearer token"
+                  }
+                  disabled={busy === "auth"}
+                />
+              </label>
+              <div className="youtube-music-connect-footer">
+                <span className="youtube-music-connect-note">
+                  Headers are stored locally and only used to read playlist
+                  metadata. The Apple Music token expires often — re-paste it if
+                  fetching stops working.
+                </span>
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={!headersRaw.trim() || busy === "auth"}
+                >
+                  {busy === "auth" ? (
+                    <Loader2 className="spin" size={17} aria-hidden="true" />
+                  ) : (
+                    <LogIn size={17} aria-hidden="true" />
+                  )}
+                  Connect with headers
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </section>
+
+      <Feedback message={notice} error={error} />
+
+      {status?.authenticated && !status.hasUserToken ? (
+        <section className="panel youtube-music-empty">
+          <div className="empty-state">
+            <ListMusic size={26} aria-hidden="true" />
+            <strong>Library access needed</strong>
+            <span>
+              Re-copy your headers while signed in to music.apple.com so they
+              include the <code>media-user-token</code>, then reconnect.
+            </span>
+          </div>
+        </section>
+      ) : null}
+
+      {status?.authenticated && status.hasUserToken ? (
+        playlists.length === 0 ? (
+          <section className="panel youtube-music-empty">
+            <div className="empty-state">
+              <ListMusic size={26} aria-hidden="true" />
+              <strong>
+                {busy === "list" ? "Loading playlists…" : "No playlists found"}
+              </strong>
+              <span>
+                Your Apple Music library playlists load automatically. Refresh
+                to try again.
+              </span>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={busy === "list"}
+                onClick={() => void refreshPlaylists()}
+              >
+                {busy === "list" ? (
+                  <Loader2 className="spin" size={17} aria-hidden="true" />
+                ) : (
+                  <RefreshCw size={17} aria-hidden="true" />
+                )}
+                Refresh
+              </button>
+            </div>
+          </section>
+        ) : (
+          <section className="spotify-layout apple-music-layout">
+            <aside className="panel playlist-panel apple-music-playlist-panel">
+              <div className="section-heading compact">
+                <div>
+                  <p className="eyebrow">Playlists</p>
+                  <h2>{playlists.length}</h2>
+                </div>
+                <button
+                  className="secondary-button icon-button"
+                  type="button"
+                  disabled={busy === "list"}
+                  onClick={() => void refreshPlaylists()}
+                  aria-label="Refresh playlists"
+                >
+                  {busy === "list" ? (
+                    <Loader2 className="spin" size={16} aria-hidden="true" />
+                  ) : (
+                    <RefreshCw size={16} aria-hidden="true" />
+                  )}
+                </button>
+              </div>
+              <div className="playlist-list">
+                {playlists.map((entry) => (
+                  <button
+                    key={entry.id}
+                    className={
+                      entry.id === selectedId
+                        ? "playlist-button apple-music-playlist-button active"
+                        : "playlist-button apple-music-playlist-button"
+                    }
+                    type="button"
+                    onClick={() => void handleSelectPlaylist(entry.id)}
+                  >
+                    <AppleMusicArtwork
+                      className="apple-music-playlist-thumb"
+                      artworkUrl={entry.artworkUrl}
+                    />
+                    <span className="apple-music-playlist-copy">
+                      <strong>{entry.name}</strong>
+                      <span>
+                        {entry.trackCount} track
+                        {entry.trackCount === 1 ? "" : "s"}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </aside>
+
+            <section className="panel panel-flex apple-music-detail-panel">
+              {selectedPlaylist ? (
+                <AppleMusicPlaylistDetail
+                  playlist={selectedPlaylist}
+                  loadingTracks={selectedPlaylistLoading}
+                  jobByUrl={jobByUrl}
+                  onQueueAll={() => void handleQueueAllTracks(selectedPlaylist)}
+                  onQueueTrack={(track) => void handleQueueTrack(track)}
+                  onRetryTrack={(track, jobId) =>
+                    void handleRetryTrack(track, jobId)
+                  }
+                />
+              ) : (
+                <EmptyState title="Select a playlist to load its tracks" />
+              )}
+            </section>
+          </section>
+        )
+      ) : null}
+    </div>
+  );
+}
+
+interface AppleMusicPlaylistDetailProps {
+  playlist: AppleMusicPlaylist;
+  loadingTracks: boolean;
+  jobByUrl: Map<string, DownloadJob>;
+  onQueueAll: () => void;
+  onQueueTrack: (track: AppleMusicTrack) => void;
+  onRetryTrack: (track: AppleMusicTrack, jobId: string) => void;
+}
+
+function AppleMusicPlaylistDetail({
+  playlist,
+  loadingTracks,
+  jobByUrl,
+  onQueueAll,
+  onQueueTrack,
+  onRetryTrack,
+}: AppleMusicPlaylistDetailProps) {
+  return (
+    <>
+      <div className="apple-music-playlist-header">
+        {playlist.artworkUrl ? (
+          <img
+            className="apple-music-playlist-backdrop"
+            src={playlist.artworkUrl}
+            alt=""
+            aria-hidden="true"
+          />
+        ) : null}
+        <AppleMusicArtwork
+          className="apple-music-playlist-art"
+          artworkUrl={playlist.artworkUrl}
+        />
+        <div className="apple-music-playlist-meta">
+          <p className="eyebrow">Apple Music Playlist</p>
+          <h3>{playlist.name}</h3>
+          <span>
+            {playlist.trackCount} track{playlist.trackCount === 1 ? "" : "s"}
+            {playlist.curatorName ? ` · ${playlist.curatorName}` : ""}
+            {playlist.lastModifiedAt
+              ? ` · Updated ${formatDate(playlist.lastModifiedAt)}`
+              : ""}
+          </span>
+          {playlist.description ? <p>{playlist.description}</p> : null}
+          {playlist.url ? (
+            <a href={playlist.url} target="_blank" rel="noreferrer">
+              Open in Apple Music
+            </a>
+          ) : null}
+        </div>
+        {playlist.tracks.length > 0 ? (
+          <button
+            className="primary-button apple-music-download-all"
+            type="button"
+            onClick={onQueueAll}
+          >
+            <Download size={17} aria-hidden="true" />
+            Download all
+          </button>
+        ) : null}
+      </div>
+
+      {loadingTracks ? (
+        <div className="apple-music-track-loading">
+          <Loader2 className="spin" size={24} aria-hidden="true" />
+          <strong>Loading tracks</strong>
+        </div>
+      ) : playlist.tracks.length === 0 ? (
+        <EmptyState title="No tracks in this playlist" />
+      ) : (
+        <div className="table-shell">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Title</th>
+                <th>Album</th>
+                <th>Duration</th>
+                <th>Download</th>
+              </tr>
+            </thead>
+            <tbody>
+              {playlist.tracks.map((track, index) => {
+                const target = appleMusicDownloadTarget(track);
+                const job =
+                  jobByUrl.get(target.sourceUrl) ??
+                  jobByUrl.get(appleMusicLegacySearchUrl(target.query));
+                const downloadStatus = youtubeMusicDownloadStatus(job);
+                const inProgress =
+                  job?.status === "queued" || job?.status === "downloading";
+                const failed = job?.status === "failed";
+                const completed = job?.status === "completed";
+                return (
+                  <tr key={track.id}>
+                    <td>{track.trackNumber ?? index + 1}</td>
+                    <td>
+                      <div className="apple-music-track-cell">
+                        <AppleMusicArtwork
+                          className="apple-music-track-art"
+                          artworkUrl={track.artworkUrl}
+                        />
+                        <span className="apple-music-track-copy">
+                          <strong>{track.title}</strong>
+                          <span>{track.artistName ?? "Unknown Artist"}</span>
+                        </span>
+                      </div>
+                    </td>
+                    <td>{track.albumName ?? "—"}</td>
+                    <td>{formatTrackDuration(track.durationMs)}</td>
+                    <td>
+                      <div className="table-actions">
+                        <span className={downloadStatus.className}>
+                          {downloadStatus.label}
+                        </span>
+                        {failed && job ? (
+                          <button
+                            className="icon-button"
+                            type="button"
+                            title="Retry download"
+                            aria-label={`Retry ${track.title}`}
+                            onClick={() => onRetryTrack(track, job.id)}
+                          >
+                            <RefreshCw size={16} aria-hidden="true" />
+                          </button>
+                        ) : inProgress ? (
+                          <button
+                            className="icon-button"
+                            type="button"
+                            title="Downloading"
+                            disabled
+                          >
+                            <Loader2
+                              className="spin"
+                              size={16}
+                              aria-hidden="true"
+                            />
+                          </button>
+                        ) : completed ? (
+                          <button
+                            className="icon-button"
+                            type="button"
+                            title="Downloaded"
+                            disabled
+                          >
+                            <CheckCircle2 size={16} aria-hidden="true" />
+                          </button>
+                        ) : (
+                          <button
+                            className="icon-button"
+                            type="button"
+                            title="Download"
+                            aria-label={`Download ${track.title}`}
+                            onClick={() => onQueueTrack(track)}
+                          >
+                            <Download size={16} aria-hidden="true" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
+function AppleMusicArtwork({
+  artworkUrl,
+  className,
+}: {
+  artworkUrl?: string;
+  className: string;
+}) {
+  return artworkUrl ? (
+    <img className={className} src={artworkUrl} alt="" />
+  ) : (
+    <span className={`${className} apple-music-art-fallback`} aria-hidden="true">
+      <AppleBrandIcon size={24} />
+    </span>
+  );
+}
+
+function AppleBrandIcon({
+  size = 24,
+  className,
+}: {
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <svg
+      className={className}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35-4.88-5.03-4.16-12.69 1.38-12.97 1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01z" />
+      <path d="M12.03 7.25C11.88 5.02 13.69 3.18 15.77 3c.29 2.58-2.34 4.5-3.74 4.25z" />
+    </svg>
+  );
+}
+
+function readAppleMusicSelectedPlaylistId(): string {
+  try {
+    return (
+      window.localStorage.getItem(APPLE_MUSIC_SELECTED_PLAYLIST_STORAGE_KEY) ??
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
+
+function rememberAppleMusicSelectedPlaylistId(playlistId: string): void {
+  appleMusicSelectedPlaylistIdMemory = playlistId;
+
+  try {
+    if (playlistId) {
+      window.localStorage.setItem(
+        APPLE_MUSIC_SELECTED_PLAYLIST_STORAGE_KEY,
+        playlistId,
+      );
+    } else {
+      window.localStorage.removeItem(APPLE_MUSIC_SELECTED_PLAYLIST_STORAGE_KEY);
+    }
+  } catch {
+    // Local storage may be unavailable; in-memory selection still works.
+  }
+}
+
+// Apple Music streams are DRM-protected, so "download" resolves each track to a
+// YouTube search and reuses the existing download queue (the same approach the
+// Spotify integration takes). Jobs use the Apple track URL/id as their stable
+// source identity so they can be matched back to tracks after the search runs.
+function appleMusicDownloadTarget(
+  track: AppleMusicTrack,
+): Extract<DownloadQueueItem, { source: "search" }> {
+  const artist = track.artistName ?? "";
+  const query = `${artist} ${track.title} official audio`.trim();
+  const title = [artist, track.title].filter(Boolean).join(" - ") || track.title;
+  return {
+    source: "search",
+    query,
+    title,
+    sourceUrl: track.catalogUrl?.trim() || `apple-music:${track.id}`,
+    fileBaseName: title,
+  };
+}
+
+function appleMusicLegacySearchUrl(query: string): string {
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+}
+
+function formatTrackDuration(durationMs?: number): string {
+  if (!durationMs || durationMs <= 0) {
+    return "—";
+  }
+  const totalSeconds = Math.round(durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
 function StatusDot({ connected }: { connected: boolean }) {
   return <span className={connected ? "status-dot connected" : "status-dot"} />;
 }
@@ -3532,11 +5424,7 @@ function formatJobStatus(job: DownloadJob): string {
   }
 
   if (job.status === "downloading") {
-    if (
-      job.entryType === "playlist" &&
-      job.trackIndex &&
-      job.trackTotal
-    ) {
+    if (job.entryType === "playlist" && job.trackIndex && job.trackTotal) {
       return `Track ${job.trackIndex}/${job.trackTotal} · ${Math.round(job.progress)}%`;
     }
 

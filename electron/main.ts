@@ -70,12 +70,15 @@ import { startRouteShare, stopRouteShare } from "./routeShareServer";
 import type {
   CorosMapPackage,
   DownloadJob,
+  DownloadQueueItem,
   GenerateRouteRequest,
   RouteBuilderConfig,
   SpotifyConfig,
   TrainingHubActivity,
   TrainingHubActivityFileType,
-  WatchConnectionSmokeOptionId
+  WatchConnectionSmokeOptionId,
+  YouTubeDataConfig,
+  YouTubeMusicConfig
 } from "./types";
 import {
   deleteWatchTrack,
@@ -95,6 +98,32 @@ import {
   getYouTubeHistory,
   saveYouTubeVisit
 } from "./youtubeService";
+import {
+  getYouTubeDataConfig,
+  getYouTubeDataStatus,
+  listYouTubeDataPlaylistItems,
+  listYouTubeDataPlaylists,
+  loginYouTubeData,
+  logoutYouTubeData,
+  saveYouTubeDataConfig
+} from "./youtubeDataService";
+import {
+  logoutYouTubeMusic,
+  getYouTubeMusicConfig,
+  getYouTubeMusicStatus,
+  loginYouTubeMusic,
+  listYouTubeMusicLibrary,
+  saveYouTubeMusicConfig,
+  saveYouTubeMusicAuth,
+  syncYouTubeMusicLibrary
+} from "./youtubeMusicService";
+import {
+  fetchAppleMusicPlaylist,
+  getAppleMusicStatus,
+  listAppleMusicPlaylists,
+  logoutAppleMusic,
+  saveAppleMusicAuth
+} from "./appleMusicService";
 import {
   checkForAppUpdates,
   getAppUpdateSnapshot,
@@ -290,7 +319,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "youtube:enqueueDownload",
-    (_event, items: Array<{ url: string; title?: string }>): DownloadJob[] =>
+    (_event, items: DownloadQueueItem[]): DownloadJob[] =>
       enqueueDownloads(items)
   );
 
@@ -309,6 +338,63 @@ function registerIpcHandlers(): void {
   );
 
   ipcMain.handle("youtube:resetSession", () => resetYouTubeBrowserSession());
+
+  ipcMain.handle("youtubeData:getConfig", () => getYouTubeDataConfig());
+
+  ipcMain.handle(
+    "youtubeData:saveConfig",
+    (_event, config: YouTubeDataConfig) => saveYouTubeDataConfig(config)
+  );
+
+  ipcMain.handle("youtubeData:getStatus", () => getYouTubeDataStatus());
+
+  ipcMain.handle("youtubeData:login", () => loginYouTubeData());
+
+  ipcMain.handle("youtubeData:logout", () => logoutYouTubeData());
+
+  ipcMain.handle("youtubeData:listPlaylists", () =>
+    listYouTubeDataPlaylists()
+  );
+
+  ipcMain.handle(
+    "youtubeData:listPlaylistItems",
+    (_event, playlistId: string) => listYouTubeDataPlaylistItems(playlistId)
+  );
+
+  ipcMain.handle("youtubeMusic:getConfig", () => getYouTubeMusicConfig());
+
+  ipcMain.handle(
+    "youtubeMusic:saveConfig",
+    (_event, config: YouTubeMusicConfig) => saveYouTubeMusicConfig(config)
+  );
+
+  ipcMain.handle("youtubeMusic:getStatus", () => getYouTubeMusicStatus());
+
+  ipcMain.handle("youtubeMusic:saveAuth", (_event, headersRaw: string) =>
+    saveYouTubeMusicAuth(headersRaw)
+  );
+
+  ipcMain.handle("youtubeMusic:login", () => loginYouTubeMusic());
+
+  ipcMain.handle("youtubeMusic:logout", () => logoutYouTubeMusic());
+
+  ipcMain.handle("youtubeMusic:listLibrary", () => listYouTubeMusicLibrary());
+
+  ipcMain.handle("youtubeMusic:syncLibrary", () => syncYouTubeMusicLibrary());
+
+  ipcMain.handle("appleMusic:getStatus", () => getAppleMusicStatus());
+
+  ipcMain.handle("appleMusic:saveAuth", (_event, headersRaw: string) =>
+    saveAppleMusicAuth(headersRaw)
+  );
+
+  ipcMain.handle("appleMusic:logout", () => logoutAppleMusic());
+
+  ipcMain.handle("appleMusic:listPlaylists", () => listAppleMusicPlaylists());
+
+  ipcMain.handle("appleMusic:fetchPlaylist", (_event, playlist: string) =>
+    fetchAppleMusicPlaylist(playlist)
+  );
 
   ipcMain.handle("spotify:getConfig", () => getSpotifyConfig());
 

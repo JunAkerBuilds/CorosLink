@@ -9,6 +9,7 @@ import type {
   CorosMapPackage,
   DownloadAudioResult,
   DownloadJob,
+  DownloadQueueItem,
   GenerateRouteRequest,
   GeneratedRoute,
   LocalTrack,
@@ -38,7 +39,17 @@ import type {
   AppUpdateSnapshot,
   WatchConnectionSmokeOptionId,
   WatchStatus,
-  YouTubeHistoryEntry
+  YouTubeDataConfig,
+  YouTubeDataPlaylist,
+  YouTubeDataPlaylistItem,
+  YouTubeDataStatus,
+  YouTubeHistoryEntry,
+  YouTubeMusicConfig,
+  YouTubeMusicLibrary,
+  YouTubeMusicStatus,
+  YouTubeMusicSyncResult,
+  AppleMusicPlaylist,
+  AppleMusicStatus
 } from "../electron/types";
 
 export interface CorosLinkApi {
@@ -66,7 +77,7 @@ export interface CorosLinkApi {
     items: Array<{ url: string; title?: string }>
   ) => Promise<DownloadAudioResult>;
   enqueueYouTubeDownloads: (
-    items: Array<{ url: string; title?: string }>
+    items: DownloadQueueItem[]
   ) => Promise<DownloadJob[]>;
   listYouTubeJobs: () => Promise<DownloadJob[]>;
   clearYouTubeJob: (id: string) => Promise<DownloadJob[]>;
@@ -76,6 +87,32 @@ export interface CorosLinkApi {
     callback: (jobs: DownloadJob[]) => void
   ) => () => void;
   resetYouTubeBrowserSession: () => Promise<void>;
+  getYouTubeDataConfig: () => Promise<YouTubeDataConfig>;
+  saveYouTubeDataConfig: (
+    config: YouTubeDataConfig
+  ) => Promise<YouTubeDataStatus>;
+  getYouTubeDataStatus: () => Promise<YouTubeDataStatus>;
+  loginYouTubeData: () => Promise<YouTubeDataStatus>;
+  logoutYouTubeData: () => Promise<YouTubeDataStatus>;
+  listYouTubeDataPlaylists: () => Promise<YouTubeDataPlaylist[]>;
+  listYouTubeDataPlaylistItems: (
+    playlistId: string
+  ) => Promise<YouTubeDataPlaylistItem[]>;
+  getYouTubeMusicConfig: () => Promise<YouTubeMusicConfig>;
+  saveYouTubeMusicConfig: (
+    config: YouTubeMusicConfig
+  ) => Promise<YouTubeMusicStatus>;
+  getYouTubeMusicStatus: () => Promise<YouTubeMusicStatus>;
+  saveYouTubeMusicAuth: (headersRaw: string) => Promise<YouTubeMusicStatus>;
+  loginYouTubeMusic: () => Promise<YouTubeMusicStatus>;
+  logoutYouTubeMusic: () => Promise<YouTubeMusicStatus>;
+  listYouTubeMusicLibrary: () => Promise<YouTubeMusicLibrary>;
+  syncYouTubeMusicLibrary: () => Promise<YouTubeMusicSyncResult>;
+  getAppleMusicStatus: () => Promise<AppleMusicStatus>;
+  saveAppleMusicAuth: (headersRaw: string) => Promise<AppleMusicStatus>;
+  logoutAppleMusic: () => Promise<AppleMusicStatus>;
+  listAppleMusicPlaylists: () => Promise<AppleMusicPlaylist[]>;
+  fetchAppleMusicPlaylist: (playlist: string) => Promise<AppleMusicPlaylist>;
   getSpotifyConfig: () => Promise<SpotifyConfig>;
   saveSpotifyConfig: (config: SpotifyConfig) => Promise<SpotifyStatus>;
   getSpotifyStatus: () => Promise<SpotifyStatus>;

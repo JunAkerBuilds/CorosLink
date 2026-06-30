@@ -116,7 +116,9 @@ export interface DownloadJob {
   tracks: LocalTrack[];
   createdAt: string;
   updatedAt: string;
-  entryType?: "video" | "playlist";
+  entryType?: "video" | "playlist" | "search";
+  query?: string;
+  fileBaseName?: string;
   phase?: DownloadActivityPhase;
   trackIndex?: number;
   trackTotal?: number;
@@ -126,6 +128,19 @@ export interface DownloadJob {
   completedTrackCount?: number;
   warning?: string;
 }
+
+export type DownloadQueueItem =
+  | {
+      url: string;
+      title?: string;
+    }
+  | {
+      source: "search";
+      query: string;
+      title: string;
+      sourceUrl: string;
+      fileBaseName?: string;
+    };
 
 export type YouTubeHistoryEntryType =
   | "video"
@@ -140,6 +155,136 @@ export interface YouTubeHistoryEntry {
   visits: number;
   lastVisitedAt: string;
   downloadedAt?: string;
+}
+
+export interface YouTubeDataConfig {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+}
+
+export interface YouTubeDataStatus {
+  configured: boolean;
+  authenticated: boolean;
+  redirectUri: string;
+  displayName?: string;
+  channelId?: string;
+  tokenExpiresAt?: string;
+}
+
+export interface YouTubeDataPlaylist {
+  id: string;
+  title: string;
+  description?: string;
+  channelId?: string;
+  channelTitle?: string;
+  publishedAt?: string;
+  thumbnailUrl?: string;
+  totalItems: number;
+}
+
+export interface YouTubeDataPlaylistItem {
+  id: string;
+  playlistId: string;
+  videoId: string;
+  title: string;
+  channelTitle?: string;
+  publishedAt?: string;
+  thumbnailUrl?: string;
+  videoUrl: string;
+}
+
+export interface YouTubeMusicStatus {
+  configured: boolean;
+  pythonAvailable: boolean;
+  ytmusicapiAvailable: boolean;
+  authenticated: boolean;
+  authMethod?: "headers" | "oauth";
+  authUpdatedAt?: string;
+  syncedAt?: string;
+  songCount: number;
+  albumCount: number;
+  playlistCount: number;
+  dependencyError?: string;
+}
+
+export interface YouTubeMusicConfig {
+  clientId: string;
+  clientSecret: string;
+}
+
+export interface YouTubeMusicSong {
+  id: string;
+  videoId?: string;
+  songTitle: string;
+  albumTitle?: string;
+  artistName?: string;
+  videoUrl?: string;
+  thumbnailUrl?: string;
+}
+
+export interface YouTubeMusicAlbum {
+  id: string;
+  browseId?: string;
+  playlistId?: string;
+  albumTitle: string;
+  artistName?: string;
+  year?: string;
+  thumbnailUrl?: string;
+  songCount: number;
+  songs: YouTubeMusicSong[];
+}
+
+export interface YouTubeMusicPlaylist {
+  id: string;
+  playlistId?: string;
+  title: string;
+  description?: string;
+  thumbnailUrl?: string;
+  songCount: number;
+  songs: YouTubeMusicSong[];
+}
+
+export interface YouTubeMusicLibrary {
+  albums: YouTubeMusicAlbum[];
+  songs: YouTubeMusicSong[];
+  playlists: YouTubeMusicPlaylist[];
+  syncedAt?: string;
+}
+
+export interface YouTubeMusicSyncResult extends YouTubeMusicLibrary {
+  status: YouTubeMusicStatus;
+}
+
+export interface AppleMusicStatus {
+  authenticated: boolean;
+  hasUserToken: boolean;
+  authUpdatedAt?: string;
+}
+
+export interface AppleMusicTrack {
+  id: string;
+  title: string;
+  artistName?: string;
+  albumName?: string;
+  durationMs?: number;
+  trackNumber?: number;
+  isrc?: string;
+  artworkUrl?: string;
+  catalogUrl?: string;
+}
+
+export interface AppleMusicPlaylist {
+  id: string;
+  kind: "catalog" | "library";
+  name: string;
+  description?: string;
+  curatorName?: string;
+  lastModifiedAt?: string;
+  artworkUrl?: string;
+  url?: string;
+  trackCount: number;
+  tracks: AppleMusicTrack[];
 }
 
 export interface TransferResult {

@@ -3,14 +3,19 @@ import { markYouTubeDownloaded } from "./database";
 import { computeOverallProgress } from "./downloadProgress";
 import {
   cancelDownloadProcess,
+  downloadAudioSearch,
   downloadAudioWithProgress,
   DownloadCancelledError
 } from "./downloadService";
-import type { DownloadJob, DownloadProgressUpdate } from "./types";
+import type {
+  DownloadAudioResult,
+  DownloadJob,
+  DownloadProgressUpdate,
+  DownloadQueueItem
+} from "./types";
 import {
   classifyYouTubeUrl,
-  normalizeYouTubeDownloadUrl,
-  type YouTubeDownloadItem
+  normalizeYouTubeDownloadUrl
 } from "./youtubeService";
 
 const MAX_CONCURRENT = 3;
@@ -43,7 +48,7 @@ export function listJobs(): DownloadJob[] {
   return snapshot();
 }
 
-export function enqueueDownloads(items: YouTubeDownloadItem[]): DownloadJob[] {
+export function enqueueDownloads(items: DownloadQueueItem[]): DownloadJob[] {
   const activeUrls = new Set(
     Array.from(jobs.values())
       .filter(
@@ -56,36 +61,12 @@ export function enqueueDownloads(items: YouTubeDownloadItem[]): DownloadJob[] {
   const now = new Date().toISOString();
 
   for (const item of items) {
-    const rawUrl = item.url?.trim();
-    if (!rawUrl) {
+    const job = createQueuedJob(item, now);
+    if (!job || activeUrls.has(job.url)) {
       continue;
     }
 
-    let normalizedUrl: string;
-    try {
-      normalizedUrl = normalizeYouTubeDownloadUrl(rawUrl);
-    } catch {
-      continue;
-    }
-
-    if (activeUrls.has(normalizedUrl)) {
-      continue;
-    }
-    activeUrls.add(normalizedUrl);
-
-    const entryType = classifyYouTubeUrl(normalizedUrl);
-    const job: DownloadJob = {
-      id: randomUUID(),
-      url: normalizedUrl,
-      title: cleanTitle(item.title) || normalizedUrl,
-      status: "queued",
-      progress: 0,
-      tracks: [],
-      entryType: entryType === "playlist" ? "playlist" : "video",
-      createdAt: now,
-      updatedAt: now
-    };
-
+    activeUrls.add(job.url);
     jobs.set(job.id, job);
     created.push(job);
   }
@@ -96,6 +77,69 @@ export function enqueueDownloads(items: YouTubeDownloadItem[]): DownloadJob[] {
   }
 
   return created;
+}
+
+function createQueuedJob(
+  item: DownloadQueueItem,
+  now: string
+): DownloadJob | null {
+  if (isSearchQueueItem(item)) {
+    const query = cleanTitle(item.query);
+    const sourceUrl = item.sourceUrl.trim();
+    if (!query || !sourceUrl) {
+      return null;
+    }
+
+    const title = cleanTitle(item.title) || query;
+    return {
+      id: randomUUID(),
+      url: sourceUrl,
+      title,
+      status: "queued",
+      progress: 0,
+      tracks: [],
+      entryType: "search",
+      query,
+      fileBaseName: cleanTitle(item.fileBaseName) || title,
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+
+  const rawUrl = item.url?.trim();
+  if (!rawUrl) {
+    return null;
+  }
+
+  let normalizedUrl: string;
+  try {
+    normalizedUrl = normalizeYouTubeDownloadUrl(rawUrl);
+  } catch {
+    return null;
+  }
+
+  const entryType = classifyYouTubeUrl(normalizedUrl);
+  if (entryType !== "video" && entryType !== "playlist") {
+    return null;
+  }
+
+  return {
+    id: randomUUID(),
+    url: normalizedUrl,
+    title: cleanTitle(item.title) || normalizedUrl,
+    status: "queued",
+    progress: 0,
+    tracks: [],
+    entryType,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function isSearchQueueItem(
+  item: DownloadQueueItem
+): item is Extract<DownloadQueueItem, { source: "search" }> {
+  return "source" in item && item.source === "search";
 }
 
 export function clearJob(id: string): DownloadJob[] {
@@ -167,32 +211,15 @@ async function runJob(job: DownloadJob): Promise<void> {
   job.status = "downloading";
   job.progress = 0;
   job.phase = "starting";
-  job.activity = "Starting yt-dlp…";
+  job.activity =
+    job.entryType === "search" ? "Searching YouTube…" : "Starting yt-dlp…";
   job.trackProgress = 0;
   job.completedTrackCount = 0;
   touch(job);
   emit();
 
   try {
-    const entryType = classifyYouTubeUrl(job.url);
-    if (entryType !== "video" && entryType !== "playlist") {
-      throw new Error("Only YouTube videos or playlists can be downloaded.");
-    }
-
-    job.entryType = entryType === "playlist" ? "playlist" : "video";
-
-    const result = await downloadAudioWithProgress(
-      job.url,
-      (update) => {
-        mergeProgressUpdate(job, update);
-        touch(job);
-        emit();
-      },
-      {
-        jobId: job.id,
-        isCancelled: () => jobs.get(job.id)?.status === "cancelled"
-      }
-    );
+    const result = await runJobDownload(job);
 
     if (jobs.get(job.id)?.status === "cancelled") {
       throw new DownloadCancelledError();
@@ -213,11 +240,13 @@ async function runJob(job: DownloadJob): Promise<void> {
     }
     touch(job);
 
-    markYouTubeDownloaded({
-      url: job.url,
-      title: job.title,
-      entryType
-    });
+    if (job.entryType === "video" || job.entryType === "playlist") {
+      markYouTubeDownloaded({
+        url: job.url,
+        title: job.title,
+        entryType: job.entryType
+      });
+    }
   } catch (error) {
     if (error instanceof DownloadCancelledError) {
       job.status = "cancelled";
@@ -234,6 +263,42 @@ async function runJob(job: DownloadJob): Promise<void> {
     emit();
     pump();
   }
+}
+
+function runJobDownload(job: DownloadJob): Promise<DownloadAudioResult> {
+  const onProgress = (update: DownloadProgressUpdate) => {
+    mergeProgressUpdate(job, update);
+    touch(job);
+    emit();
+  };
+  const runtime = {
+    jobId: job.id,
+    isCancelled: () => jobs.get(job.id)?.status === "cancelled"
+  };
+
+  if (job.entryType === "search") {
+    const query = cleanTitle(job.query);
+    if (!query) {
+      throw new Error("Search query is required.");
+    }
+
+    return downloadAudioSearch(
+      query,
+      cleanTitle(job.fileBaseName) || cleanTitle(job.title) || "download",
+      job.url,
+      onProgress,
+      runtime
+    );
+  }
+
+  const entryType = classifyYouTubeUrl(job.url);
+  if (entryType !== "video" && entryType !== "playlist") {
+    throw new Error("Only YouTube videos or playlists can be downloaded.");
+  }
+
+  job.entryType = entryType;
+
+  return downloadAudioWithProgress(job.url, onProgress, runtime);
 }
 
 function cleanTitle(title?: string): string {

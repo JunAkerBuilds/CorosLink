@@ -1886,7 +1886,8 @@ td span {
   font-weight: 700;
 }
 
-.field input {
+.field input,
+.field textarea {
   width: 100%;
   min-height: 44px;
   border: 1px solid var(--glass-border);
@@ -1898,7 +1899,14 @@ td span {
   padding: 0 12px;
 }
 
-.field input:focus {
+.field textarea {
+  min-height: 136px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.field input:focus,
+.field textarea:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
@@ -3942,6 +3950,18 @@ td span {
   color: var(--success-text);
 }
 
+.youtube-data-account-mark {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+}
+
+.youtube-music-account-mark {
+  border-color: rgba(216, 155, 34, 0.35);
+  background: rgba(216, 155, 34, 0.13);
+  color: var(--warning-text);
+}
+
 .spotify-account-copy {
   display: grid;
   flex: 1;
@@ -3980,6 +4000,8 @@ td span {
 .playlist-list {
   display: grid;
   flex: 1;
+  align-content: start;
+  grid-auto-rows: max-content;
   gap: 8px;
   min-height: 0;
   overflow: auto;
@@ -4020,6 +4042,431 @@ td span {
 .playlist-button span {
   color: var(--text-muted);
   font-size: 12px;
+}
+
+
+.youtube-music-connect {
+  display: grid;
+  gap: 18px;
+}
+
+.youtube-music-connect-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.youtube-music-connect-mark {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-primary);
+}
+
+.youtube-music-connect-intro {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.youtube-music-connect-intro span {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.youtube-music-connect-form {
+  display: grid;
+  gap: 12px;
+}
+
+.youtube-music-connect-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.youtube-music-connect-note {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.youtube-music-connect-note code {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--warning-text);
+}
+
+.youtube-music-connect-footer .primary-button {
+  flex-shrink: 0;
+}
+
+.youtube-music-empty .empty-state {
+  padding: 48px 24px;
+  gap: 6px;
+}
+
+.youtube-music-empty .empty-state span {
+  max-width: 380px;
+  margin: 0 auto;
+}
+
+.youtube-music-empty .empty-state .primary-button {
+  margin-top: 14px;
+}
+
+.youtube-music-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.youtube-music-steps code {
+  color: var(--warning-text);
+}
+
+.youtube-music-connect-helper {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.youtube-music-connect-helper img {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+}
+
+.youtube-music-connect-helper figcaption {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.youtube-music-connect-helper figcaption code {
+  color: var(--warning-text);
+}
+
+.youtube-music-headers-field {
+  align-self: stretch;
+}
+
+.apple-music-account-mark {
+  border-color: rgba(250, 87, 122, 0.35);
+  background: rgba(250, 87, 122, 0.12);
+  color: #fb6f92;
+}
+
+.apple-music-layout {
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+}
+
+.apple-music-playlist-panel {
+  padding: 14px;
+}
+
+.apple-music-playlist-panel .playlist-list {
+  gap: 10px;
+}
+
+.apple-music-playlist-button {
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+}
+
+.apple-music-playlist-button:hover:not(:disabled),
+.apple-music-playlist-button.active {
+  border-color: rgba(250, 87, 122, 0.5);
+  background:
+    linear-gradient(135deg, rgba(250, 87, 122, 0.14), transparent 58%),
+    var(--glass-bg-hover);
+}
+
+.apple-music-playlist-thumb {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.22);
+}
+
+.apple-music-playlist-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.apple-music-playlist-copy strong,
+.apple-music-playlist-copy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apple-music-art-fallback {
+  background:
+    linear-gradient(135deg, rgba(250, 87, 122, 0.3), rgba(255, 255, 255, 0.08)),
+    rgba(255, 255, 255, 0.06);
+  color: #ff8fab;
+}
+
+.apple-music-playlist-art svg {
+  width: 54px;
+  height: 54px;
+}
+
+.apple-music-playlist-thumb svg {
+  width: 22px;
+  height: 22px;
+}
+
+.apple-music-track-art svg {
+  width: 18px;
+  height: 18px;
+}
+
+.apple-music-detail-panel {
+  gap: 16px;
+  padding: 16px;
+}
+
+.panel-flex > .apple-music-playlist-header {
+  flex-shrink: 0;
+}
+
+.apple-music-playlist-header {
+  position: relative;
+  display: flex;
+  min-height: 164px;
+  gap: 18px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgba(250, 87, 122, 0.14), rgba(255, 255, 255, 0.04)),
+    rgba(255, 255, 255, 0.035);
+  padding: 18px 20px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.2);
+}
+
+.apple-music-playlist-header::after {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    linear-gradient(90deg, rgba(8, 10, 12, 0.26), rgba(8, 10, 12, 0.78)),
+    linear-gradient(180deg, transparent, rgba(8, 10, 12, 0.45));
+  content: "";
+  pointer-events: none;
+}
+
+.apple-music-playlist-backdrop {
+  position: absolute;
+  inset: -42px;
+  width: calc(100% + 84px);
+  height: calc(100% + 84px);
+  opacity: 0.32;
+  object-fit: cover;
+  filter: blur(30px) saturate(1.25);
+  transform: scale(1.04);
+}
+
+.apple-music-playlist-art {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(24vw, 134px);
+  height: min(24vw, 134px);
+  max-width: 134px;
+  max-height: 134px;
+  min-width: 108px;
+  min-height: 108px;
+  place-items: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  object-fit: cover;
+  box-shadow: 0 24px 46px rgba(0, 0, 0, 0.34);
+}
+
+.apple-music-playlist-meta {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: 1 1 260px;
+  gap: 7px;
+  min-width: 0;
+}
+
+.apple-music-playlist-meta h3 {
+  margin: 0;
+  font-size: clamp(26px, 4vw, 42px);
+  font-weight: 850;
+  line-height: 1.02;
+  overflow-wrap: anywhere;
+}
+
+.apple-music-playlist-meta > span {
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 13px;
+}
+
+.apple-music-playlist-meta p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
+.apple-music-playlist-meta a {
+  width: fit-content;
+  color: #ff9ab3;
+}
+
+.apple-music-download-all {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  align-self: flex-end;
+  border-color: rgba(255, 255, 255, 0.18);
+  background:
+    linear-gradient(135deg, rgba(250, 87, 122, 0.42), rgba(173, 70, 255, 0.2)),
+    rgba(255, 255, 255, 0.08);
+  color: #fff;
+  margin-left: auto;
+}
+
+.apple-music-detail-panel .table-shell {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.apple-music-detail-panel .table-shell thead th {
+  background: rgba(14, 12, 14, 0.94);
+}
+
+.apple-music-track-loading {
+  display: grid;
+  flex: 1;
+  min-height: 220px;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  color: var(--text-secondary);
+}
+
+.apple-music-track-loading strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.apple-music-track-cell {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.apple-music-track-art {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.apple-music-track-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.apple-music-track-copy strong,
+.apple-music-track-copy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.youtube-music-status-error {
+  display: block;
+  margin-top: 4px;
+  color: var(--error-text);
+  font-size: 11px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.youtube-data-video-cell {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.youtube-data-video-cell img,
+.youtube-data-thumbnail-placeholder {
+  width: 76px;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.youtube-data-thumbnail-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.youtube-data-video-cell strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .compact-check {
@@ -8317,6 +8764,37 @@ td span {
 
   .stack.stack-fill > .spotify-layout {
     grid-template-rows: minmax(180px, 0.45fr) minmax(0, 1fr);
+  }
+
+  .apple-music-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .apple-music-playlist-panel {
+    max-height: min(330px, 42vh);
+  }
+
+  .apple-music-playlist-header {
+    align-items: flex-start;
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .apple-music-playlist-art {
+    width: 96px;
+    height: 96px;
+    min-width: 96px;
+    min-height: 96px;
+  }
+
+  .apple-music-playlist-meta h3 {
+    font-size: clamp(24px, 7vw, 34px);
+  }
+
+  .apple-music-download-all {
+    width: 100%;
+    justify-content: center;
+    margin-left: 0;
   }
 
   .spotify-account-card {
