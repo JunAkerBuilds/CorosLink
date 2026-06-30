@@ -1,13 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const releaseDir = path.join(repoRoot, "release");
+const defaultReleaseDir = path.join(repoRoot, "release");
 const packageJson = JSON.parse(
   fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")
 );
-const expectedVersion = packageJson.version;
+const defaultExpectedVersion = packageJson.version;
 
 const PLATFORM_CHECKS = {
   macos: {
@@ -41,7 +41,7 @@ function parseArgs(argv) {
   return platform;
 }
 
-function listReleaseFiles() {
+function listReleaseFiles(releaseDir) {
   if (!fs.existsSync(releaseDir)) {
     throw new Error(`Release directory not found: ${releaseDir}`);
   }
@@ -56,18 +56,99 @@ function matchesAny(name, patterns) {
   return patterns.some((pattern) => pattern.test(name));
 }
 
-function readMetadataVersion(metadataPath) {
+function cleanYamlScalar(value) {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+    (trimmed.startsWith('"') && trimmed.endsWith('"'))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function readYamlField(contents, field) {
+  const match = contents.match(new RegExp(`^${field}:\\s*(.+)$`, "m"));
+  return match ? cleanYamlScalar(match[1]) : undefined;
+}
+
+function readFirstFileUrl(contents) {
+  const filesIndex = contents.search(/^files:\s*$/m);
+  if (filesIndex === -1) {
+    return undefined;
+  }
+
+  const filesBlock = contents.slice(filesIndex);
+  const inlineMatch = filesBlock.match(/^\s*-\s+url:\s*(.+)$/m);
+  if (inlineMatch) {
+    return cleanYamlScalar(inlineMatch[1]);
+  }
+
+  const nestedMatch = filesBlock.match(/^\s*url:\s*(.+)$/m);
+  return nestedMatch ? cleanYamlScalar(nestedMatch[1]) : undefined;
+}
+
+function verifyWindowsMetadataReferences(metadataFile, contents, files, errors) {
+  const metadataPath = readYamlField(contents, "path");
+  const firstFileUrl = readFirstFileUrl(contents);
+
+  if (!metadataPath) {
+    errors.push(`${metadataFile} missing path`);
+  }
+
+  if (!firstFileUrl) {
+    errors.push(`${metadataFile} missing files[0].url`);
+  }
+
+  if (metadataPath && firstFileUrl && metadataPath !== firstFileUrl) {
+    errors.push(
+      `${metadataFile} path ${metadataPath} does not match files[0].url ${firstFileUrl}`
+    );
+  }
+
+  const referencedInstaller = metadataPath ?? firstFileUrl;
+  if (!referencedInstaller) {
+    return;
+  }
+
+  if (!/\.exe$/i.test(referencedInstaller)) {
+    errors.push(`${metadataFile} references non-exe installer ${referencedInstaller}`);
+  }
+
+  if (!files.includes(referencedInstaller)) {
+    errors.push(`${metadataFile} references missing installer ${referencedInstaller}`);
+  }
+
+  const blockmap = `${referencedInstaller}.blockmap`;
+  if (!files.includes(blockmap)) {
+    errors.push(`${metadataFile} references missing blockmap ${blockmap}`);
+  }
+}
+
+function readMetadata(metadataPath) {
   const contents = fs.readFileSync(metadataPath, "utf8");
-  const match = contents.match(/^version:\s*(.+)$/m);
+  const match = readYamlField(contents, "version");
   if (!match) {
     throw new Error(`Could not read version from ${path.basename(metadataPath)}`);
   }
-  return match[1].trim();
+  return {
+    contents,
+    version: match
+  };
 }
 
-function verifyPlatform(platform) {
+export function verifyPlatform(platform, options = {}) {
   const check = PLATFORM_CHECKS[platform];
-  const files = listReleaseFiles();
+  if (!check) {
+    throw new Error(
+      `Unknown platform ${platform}. Expected one of: ${Object.keys(PLATFORM_CHECKS).join(", ")}`
+    );
+  }
+
+  const releaseDir = options.releaseDir ?? defaultReleaseDir;
+  const expectedVersion = options.expectedVersion ?? defaultExpectedVersion;
+  const logger = options.logger ?? console.log;
+  const files = listReleaseFiles(releaseDir);
   const errors = [];
 
   for (const pattern of check.requiredPatterns) {
@@ -86,10 +167,20 @@ function verifyPlatform(platform) {
   if (!fs.existsSync(metadataPath)) {
     errors.push(`missing ${check.metadataFile}`);
   } else {
-    const metadataVersion = readMetadataVersion(metadataPath);
+    const metadata = readMetadata(metadataPath);
+    const metadataVersion = metadata.version;
     if (metadataVersion !== expectedVersion) {
       errors.push(
         `${check.metadataFile} version ${metadataVersion} does not match package.json ${expectedVersion}`
+      );
+    }
+
+    if (platform === "windows") {
+      verifyWindowsMetadataReferences(
+        check.metadataFile,
+        metadata.contents,
+        files,
+        errors
       );
     }
   }
@@ -100,15 +191,17 @@ function verifyPlatform(platform) {
     );
   }
 
-  console.log(
+  logger(
     `${check.label} release artifacts verified for v${expectedVersion}.`
   );
-  console.log(`Found: ${files.join(", ")}`);
+  logger(`Found: ${files.join(", ")}`);
 }
 
-try {
-  verifyPlatform(parseArgs(process.argv.slice(2)));
-} catch (error) {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    verifyPlatform(parseArgs(process.argv.slice(2)));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
 }

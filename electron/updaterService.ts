@@ -50,10 +50,37 @@ function getManualInstallUrl(version: string): string {
   }
 
   if (process.platform === "win32") {
-    return `https://github.com/JunAkerBuilds/CorosLink/releases/download/v${version}/CorosLink.Setup.${version}.exe`;
+    return `https://github.com/JunAkerBuilds/CorosLink/releases/download/v${version}/CorosLink-Setup-${version}.exe`;
   }
 
   return `https://github.com/JunAkerBuilds/CorosLink/releases/download/v${version}/CorosLink-${version}.AppImage`;
+}
+
+function getReleasePageUrl(version?: string): string {
+  if (!version) {
+    return "https://github.com/JunAkerBuilds/CorosLink/releases/latest";
+  }
+
+  return `https://github.com/JunAkerBuilds/CorosLink/releases/tag/v${version}`;
+}
+
+function formatUpdaterError(error: unknown): string {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "Could not check for updates.";
+
+  if (message.includes("404")) {
+    const version = snapshot.availableVersion;
+    const target = version
+      ? `CorosLink ${version}`
+      : "the latest CorosLink release";
+    return `Update download failed. Download ${target} from GitHub: ${getReleasePageUrl(version)}`;
+  }
+
+  return message;
 }
 
 function resolveInstallDetails(
@@ -137,7 +164,7 @@ function registerAutoUpdaterListeners(): void {
   autoUpdater.on("error", (error) => {
     setSnapshot({
       status: "error",
-      error: error.message
+      error: formatUpdaterError(error)
     });
   });
 }
@@ -176,9 +203,7 @@ export async function checkForAppUpdates(): Promise<AppUpdateSnapshot> {
   try {
     await autoUpdater.checkForUpdates();
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Could not check for updates.";
-    setSnapshot({ status: "error", error: message });
+    setSnapshot({ status: "error", error: formatUpdaterError(error) });
   }
 
   return getAppUpdateSnapshot();

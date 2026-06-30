@@ -29,6 +29,7 @@
     "release:prepare": "node scripts/prepare-release.mjs",
     "release:check-version": "node scripts/sync-release-version.mjs --check",
     "release:verify-artifacts": "node scripts/verify-release-artifacts.mjs",
+    "test:release-artifacts": "node scripts/test-verify-release-artifacts.mjs",
     "website:dev": "npm run dev --prefix website",
     "website:build": "npm run build --prefix website"
   },
@@ -77,7 +78,8 @@
     },
     "win": {
       "target": "nsis",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "linux": {
       "target": [
