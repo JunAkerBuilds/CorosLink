@@ -133,14 +133,20 @@ class CorosMapInstallCancelledError extends Error {
 
 export const COROS_MAP_INSTALL_CANCELLED_MESSAGE = "Transfer cancelled.";
 
-interface UnzipperEntry extends NodeJS.ReadableStream {
+interface UnzipperFile {
   path: string;
   type: "Directory" | "File" | string;
-  autodrain: () => NodeJS.ReadableStream;
+  stream: () => NodeJS.ReadableStream;
+}
+
+interface UnzipperDirectory {
+  files: UnzipperFile[];
 }
 
 interface UnzipperModule {
-  Parse: () => NodeJS.ReadWriteStream;
+  Open: {
+    file: (zipPath: string) => Promise<UnzipperDirectory>;
+  };
 }
 
 interface OrsGeocodeResponse {
@@ -1488,59 +1494,36 @@ async function extractZipSafely(
   destinationRoot: string
 ): Promise<void> {
   const unzipper = require("unzipper") as UnzipperModule;
-  const pendingWrites: Array<Promise<void>> = [];
-  const parser = unzipper.Parse();
+  // Enumerate entries via the central directory (Open.file) rather than the
+  // streaming Parse() reader. The streaming parser assumes every entry states
+  // its compressed size in the local header, so archives that use data
+  // descriptors (general-purpose bit 3) or Zip64 make it overrun an entry and
+  // fail with "invalid signature: 0x...". COROS map zips are produced that way.
+  const directory = await unzipper.Open.file(zipPath);
 
-  await new Promise<void>((resolve, reject) => {
-    parser.on("entry", (entry: UnzipperEntry) => {
-      const destinationPath = path.resolve(destinationRoot, entry.path);
+  for (const entry of directory.files) {
+    const destinationPath = path.resolve(destinationRoot, entry.path);
+    assertPathInside(destinationRoot, destinationPath);
 
-      try {
-        assertPathInside(destinationRoot, destinationPath);
-      } catch (caught) {
-        entry.autodrain();
-        reject(caught);
-        return;
-      }
+    if (entry.type === "Directory") {
+      await fs.promises.mkdir(destinationPath, { recursive: true });
+      continue;
+    }
 
-      if (entry.type === "Directory") {
-        pendingWrites.push(
-          fs.promises
-            .mkdir(destinationPath, { recursive: true })
-            .then(() => undefined)
-        );
-        entry.autodrain();
-        return;
-      }
+    if (entry.type !== "File") {
+      continue;
+    }
 
-      if (entry.type !== "File") {
-        entry.autodrain();
-        return;
-      }
-
-      const write = fs.promises
-        .mkdir(path.dirname(destinationPath), { recursive: true })
-        .then(
-          () =>
-            new Promise<void>((writeResolve, writeReject) => {
-              const output = fs.createWriteStream(destinationPath, {
-                flags: "w"
-              });
-              entry.on("error", writeReject);
-              output.on("error", writeReject);
-              output.on("finish", writeResolve);
-              entry.pipe(output);
-            })
-        );
-      pendingWrites.push(write);
+    await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
+    await new Promise<void>((resolve, reject) => {
+      const output = fs.createWriteStream(destinationPath, { flags: "w" });
+      const input = entry.stream();
+      input.on("error", reject);
+      output.on("error", reject);
+      output.on("finish", resolve);
+      input.pipe(output);
     });
-
-    parser.on("close", () => {
-      Promise.all(pendingWrites).then(() => resolve(), reject);
-    });
-    parser.on("error", reject);
-    fs.createReadStream(zipPath).on("error", reject).pipe(parser);
-  });
+  }
 }
 
 async function removePathInsideCache(

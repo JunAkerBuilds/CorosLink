@@ -400,8 +400,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "trainingHub:login",
-    (_event, email: string, password: string) =>
-      loginTrainingHub(email, password)
+    (_event, email: string, password: string, remember?: boolean) =>
+      loginTrainingHub(email, password, remember)
   );
 
   ipcMain.handle("trainingHub:logout", () => logoutTrainingHub());

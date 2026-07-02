@@ -70,6 +70,14 @@ type MapsTab = "coros" | "routes";
 type RoutePinMode = "start" | "destination" | null;
 type RouteMapLayer = "street" | "dark" | "topo" | "satellite";
 
+interface MapPackageGroup {
+  key: string;
+  title: string;
+  parent: string;
+  topo?: CorosMapPackage;
+  landscape?: CorosMapPackage;
+}
+
 interface RoutePinnedPoint {
   lat: number;
   lon: number;
@@ -365,20 +373,6 @@ function CorosMapsTab({
     }
   }
 
-  async function handleOpenDownload(pkg: CorosMapPackage) {
-    setBusy(`open:${pkg.id}`);
-    onError(null);
-    onMessage(null);
-    try {
-      await api.openCorosMapDownload(pkg.downloadUrl);
-      onMessage("Opened the official COROS map download.");
-    } catch (caught) {
-      onError(toErrorMessage(caught));
-    } finally {
-      setBusy(null);
-    }
-  }
-
   async function handleDownloadPackage(pkg: CorosMapPackage) {
     setBusy(`download:${pkg.id}`);
     onError(null);
@@ -564,33 +558,49 @@ function CorosMapsTab({
     [regionOptions]
   );
 
-  const packages = useMemo(() => {
+  const packageGroups = useMemo(() => {
     const terms = normalizeSearch(query);
-    return (manifest?.packages ?? []).filter((pkg) => {
-      if (!showLandscape && pkg.type === "landscape") {
-        return false;
-      }
+    const groups = new Map<string, MapPackageGroup>();
 
-      if (!showTopo && pkg.type === "topo") {
-        return false;
-      }
-
+    for (const pkg of manifest?.packages ?? []) {
       if (
         regionFilter !== "all" &&
         pkg.region !== regionFilter &&
         pkg.parent !== regionFilter
       ) {
-        return false;
+        continue;
       }
 
-      if (!terms) {
-        return true;
+      if (
+        terms &&
+        !normalizeSearch(`${pkg.title} ${pkg.region} ${pkg.type}`).includes(
+          terms
+        )
+      ) {
+        continue;
       }
 
-      return normalizeSearch(`${pkg.title} ${pkg.region} ${pkg.type}`).includes(
-        terms
-      );
-    });
+      let group = groups.get(pkg.region);
+      if (!group) {
+        group = {
+          key: pkg.region,
+          title: pkg.title,
+          parent: pkg.parent
+        };
+        groups.set(pkg.region, group);
+      }
+
+      if (pkg.type === "topo") {
+        group.topo = pkg;
+      } else if (pkg.type === "landscape") {
+        group.landscape = pkg;
+      }
+    }
+
+    return [...groups.values()].filter(
+      (group) =>
+        (showTopo && group.topo) || (showLandscape && group.landscape)
+    );
   }, [manifest, query, regionFilter, showLandscape, showTopo]);
 
   const cachedByPackageId = useMemo(() => {
@@ -849,29 +859,53 @@ function CorosMapsTab({
               icon={<Loader2 className="spin" size={20} aria-hidden="true" />}
               title="Loading packages"
             />
-          ) : packages.length === 0 ? (
+          ) : packageGroups.length === 0 ? (
             <MapsEmpty
               icon={<Search size={20} aria-hidden="true" />}
               title="No matching packages"
             />
           ) : (
-            packages.map((pkg) => (
-              <MapPackageRow
-                key={pkg.id}
-                pkg={pkg}
-                freeBytes={freeBytes}
-                busy={busy}
-                watchConnected={Boolean(watchStatus?.connected)}
-                job={latestJobByPackageId.get(pkg.id)}
-                cached={cachedByPackageId.get(pkg.id)}
-                onDownload={handleDownloadPackage}
-                onCancel={handleCancelDownload}
-                onClearJob={handleClearDownloadJob}
-                onInstallCached={handleInstallCached}
-                onDeleteCached={handleDeleteCached}
-                onOpenDownload={handleOpenDownload}
-              />
-            ))
+            <div className="table-shell maps-table-shell">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Region</th>
+                    {showTopo ? (
+                      <>
+                        <th>Topo size</th>
+                        <th>Topo</th>
+                      </>
+                    ) : null}
+                    {showLandscape ? (
+                      <>
+                        <th>Landscape size</th>
+                        <th>Landscape</th>
+                      </>
+                    ) : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {packageGroups.map((group) => (
+                    <MapRegionRow
+                      key={group.key}
+                      group={group}
+                      showTopo={showTopo}
+                      showLandscape={showLandscape}
+                      freeBytes={freeBytes}
+                      busy={busy}
+                      watchConnected={Boolean(watchStatus?.connected)}
+                      jobsByPackageId={latestJobByPackageId}
+                      cachedByPackageId={cachedByPackageId}
+                      onDownload={handleDownloadPackage}
+                      onCancel={handleCancelDownload}
+                      onClearJob={handleClearDownloadJob}
+                      onInstallCached={handleInstallCached}
+                      onDeleteCached={handleDeleteCached}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
@@ -1032,33 +1066,107 @@ function MapInstallProgressPanel({
   );
 }
 
-function MapPackageRow({
-  pkg,
+function MapRegionRow({
+  group,
+  showTopo,
+  showLandscape,
   freeBytes,
   busy,
   watchConnected,
-  job,
-  cached,
+  jobsByPackageId,
+  cachedByPackageId,
   onDownload,
   onCancel,
   onClearJob,
   onInstallCached,
-  onDeleteCached,
-  onOpenDownload
+  onDeleteCached
 }: {
-  pkg: CorosMapPackage;
+  group: MapPackageGroup;
+  showTopo: boolean;
+  showLandscape: boolean;
   freeBytes?: number;
   busy: string | null;
   watchConnected: boolean;
-  job?: CorosMapDownloadJob;
-  cached?: CachedCorosMapPackage;
+  jobsByPackageId: Map<string, CorosMapDownloadJob>;
+  cachedByPackageId: Map<string, CachedCorosMapPackage>;
   onDownload: (pkg: CorosMapPackage) => void;
   onCancel: (job: CorosMapDownloadJob) => void;
   onClearJob: (job: CorosMapDownloadJob) => void;
   onInstallCached: (packageId: string) => void;
   onDeleteCached: (packageId: string) => void;
-  onOpenDownload: (pkg: CorosMapPackage) => void;
 }) {
+  const regionLabel =
+    group.parent === "global"
+      ? "Full region"
+      : titleFromRegionId(group.parent);
+
+  const cellProps = {
+    freeBytes,
+    busy,
+    watchConnected,
+    jobsByPackageId,
+    cachedByPackageId,
+    onDownload,
+    onCancel,
+    onClearJob,
+    onInstallCached,
+    onDeleteCached
+  };
+
+  return (
+    <tr>
+      <td className="map-region-cell">
+        <strong>{group.title}</strong>
+        <span>{regionLabel}</span>
+      </td>
+      {showTopo ? <MapPackageCell pkg={group.topo} {...cellProps} /> : null}
+      {showLandscape ? (
+        <MapPackageCell pkg={group.landscape} {...cellProps} />
+      ) : null}
+    </tr>
+  );
+}
+
+function MapPackageCell({
+  pkg,
+  freeBytes,
+  busy,
+  watchConnected,
+  jobsByPackageId,
+  cachedByPackageId,
+  onDownload,
+  onCancel,
+  onClearJob,
+  onInstallCached,
+  onDeleteCached
+}: {
+  pkg?: CorosMapPackage;
+  freeBytes?: number;
+  busy: string | null;
+  watchConnected: boolean;
+  jobsByPackageId: Map<string, CorosMapDownloadJob>;
+  cachedByPackageId: Map<string, CachedCorosMapPackage>;
+  onDownload: (pkg: CorosMapPackage) => void;
+  onCancel: (job: CorosMapDownloadJob) => void;
+  onClearJob: (job: CorosMapDownloadJob) => void;
+  onInstallCached: (packageId: string) => void;
+  onDeleteCached: (packageId: string) => void;
+}) {
+  if (!pkg) {
+    return (
+      <>
+        <td className="map-size-cell is-empty">
+          <span className="map-type-none">—</span>
+        </td>
+        <td className="map-type-cell is-empty">
+          <span className="map-type-none">—</span>
+        </td>
+      </>
+    );
+  }
+
+  const job = jobsByPackageId.get(pkg.id);
+  const cached = cachedByPackageId.get(pkg.id);
   const tooLarge = freeBytes !== undefined && pkg.sizeBytes > freeBytes;
   const isActiveDownload =
     job?.status === "queued" || job?.status === "downloading";
@@ -1066,138 +1174,138 @@ function MapPackageRow({
     job?.status === "failed" || job?.status === "cancelled";
   const installDisabled =
     !watchConnected || tooLarge || busy === `install-cache:${pkg.id}`;
+  const downloadPercent = Math.round(
+    Math.max(0, Math.min(job?.progress ?? 0, 1)) * 100
+  );
+  const downloadProgressLabel = `${formatProgress(job)} · ${formatBytes(
+    job?.receivedBytes ?? 0
+  )} of ${formatBytes(job?.sizeBytes || pkg.sizeBytes)}`;
 
   return (
-    <div className={tooLarge ? "map-package-row is-too-large" : "map-package-row"}>
-      <div className="map-package-icon">
-        {pkg.type === "topo" ? (
-          <Mountain size={18} aria-hidden="true" />
-        ) : (
-          <MapIcon size={18} aria-hidden="true" />
-        )}
-      </div>
-      <div className="map-package-main">
-        <strong>{pkg.title}</strong>
-        <span>
-          {pkg.type === "topo" ? "Topo" : "Landscape"} ·{" "}
-          {pkg.parent === "global" ? "Full region" : titleFromRegionId(pkg.parent)}
-        </span>
+    <>
+      <td className="map-size-cell">
+        <div className="map-type-meta">
+          <span
+            className={tooLarge ? "map-type-size is-danger" : "map-type-size"}
+          >
+            {formatBytes(pkg.sizeBytes)}
+          </span>
+          {tooLarge ? <span className="badge warning">Low space</span> : null}
+          {cached ? <span className="badge success">Cached</span> : null}
+        </div>
+      </td>
+
+      <td className="map-type-cell">
         {isActiveDownload ? (
-          <div className="map-download-progress">
-            <div className="map-download-progress-track">
-              <span
-                style={{
-                  width: `${Math.max(2, Math.round((job?.progress ?? 0) * 100))}%`
-                }}
-              />
-            </div>
-            <small>
-              {formatProgress(job)} · {formatBytes(job?.receivedBytes ?? 0)} of{" "}
-              {formatBytes(job?.sizeBytes || pkg.sizeBytes)}
-            </small>
+          <div
+            className="map-download-progress-circle"
+            aria-label={downloadProgressLabel}
+            title={downloadProgressLabel}
+          >
+            <span
+              className="map-download-progress-ring"
+              style={{
+                background: `conic-gradient(var(--accent) ${Math.max(
+                  2,
+                  downloadPercent
+                )}%, rgba(255, 255, 255, 0.1) 0)`
+              }}
+            >
+              <strong>{downloadPercent}%</strong>
+            </span>
           </div>
         ) : failedOrCancelled ? (
           <small className="map-download-error">
-            {job.status === "failed" ? job.error || "Download failed." : "Download cancelled."}
+            {job.status === "failed"
+              ? job.error || "Download failed."
+              : "Download cancelled."}
           </small>
         ) : null}
-      </div>
-      <span className={tooLarge ? "badge danger" : "badge"}>
-        {formatBytes(pkg.sizeBytes)}
-      </span>
-      {tooLarge ? <span className="badge warning">Low space</span> : null}
-      {cached ? <span className="badge success">Cached</span> : null}
-      <div className="map-package-actions">
-        {cached ? (
-          <>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => onInstallCached(pkg.id)}
-              disabled={installDisabled}
-            >
-              {busy === `install-cache:${pkg.id}` ? (
-                <Loader2 className="spin" size={17} aria-hidden="true" />
-              ) : (
-                <Upload size={17} aria-hidden="true" />
-              )}
-              Install
-            </button>
-            <button
-              type="button"
-              className="icon-button"
-              title="Delete cached package"
-              onClick={() => onDeleteCached(pkg.id)}
-              disabled={busy === `delete-cache:${pkg.id}`}
-            >
-              {busy === `delete-cache:${pkg.id}` ? (
-                <Loader2 className="spin" size={16} aria-hidden="true" />
-              ) : (
-                <Trash2 size={16} aria-hidden="true" />
-              )}
-            </button>
-          </>
-        ) : isActiveDownload && job ? (
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => onCancel(job)}
-            disabled={busy === `cancel:${job.id}`}
-          >
-            {busy === `cancel:${job.id}` ? (
-              <Loader2 className="spin" size={17} aria-hidden="true" />
-            ) : (
-              <X size={17} aria-hidden="true" />
-            )}
-            Cancel
-          </button>
-        ) : (
-          <>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => onDownload(pkg)}
-              disabled={busy === `download:${pkg.id}`}
-            >
-              {busy === `download:${pkg.id}` ? (
-                <Loader2 className="spin" size={17} aria-hidden="true" />
-              ) : (
-                <Download size={17} aria-hidden="true" />
-              )}
-              Download
-            </button>
-            <button
-              type="button"
-              className="icon-button"
-              title="Open official COROS download in browser"
-              onClick={() => onOpenDownload(pkg)}
-              disabled={busy === `open:${pkg.id}`}
-            >
-              {busy === `open:${pkg.id}` ? (
-                <Loader2 className="spin" size={16} aria-hidden="true" />
-              ) : (
-                <ExternalLink size={16} aria-hidden="true" />
-              )}
-            </button>
-            {failedOrCancelled && job ? (
+
+        <div className="table-actions">
+          {cached ? (
+            <>
               <button
                 type="button"
                 className="icon-button"
-                title="Clear download status"
-                onClick={() => onClearJob(job)}
-                disabled={busy === `clear:${job.id}`}
+                title="Install on watch"
+                aria-label="Install on watch"
+                onClick={() => onInstallCached(pkg.id)}
+                disabled={installDisabled}
               >
-                {busy === `clear:${job.id}` ? (
+                {busy === `install-cache:${pkg.id}` ? (
                   <Loader2 className="spin" size={16} aria-hidden="true" />
                 ) : (
-                  <X size={16} aria-hidden="true" />
+                  <Upload size={16} aria-hidden="true" />
                 )}
               </button>
-            ) : null}
-          </>
-        )}
-      </div>
-    </div>
+              <button
+                type="button"
+                className="icon-button"
+                title="Delete cached package"
+                aria-label="Delete cached package"
+                onClick={() => onDeleteCached(pkg.id)}
+                disabled={busy === `delete-cache:${pkg.id}`}
+              >
+                {busy === `delete-cache:${pkg.id}` ? (
+                  <Loader2 className="spin" size={16} aria-hidden="true" />
+                ) : (
+                  <Trash2 size={16} aria-hidden="true" />
+                )}
+              </button>
+            </>
+          ) : isActiveDownload && job ? (
+            <button
+              type="button"
+              className="icon-button"
+              title="Cancel download"
+              aria-label="Cancel download"
+              onClick={() => onCancel(job)}
+              disabled={busy === `cancel:${job.id}`}
+            >
+              {busy === `cancel:${job.id}` ? (
+                <Loader2 className="spin" size={16} aria-hidden="true" />
+              ) : (
+                <X size={16} aria-hidden="true" />
+              )}
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="icon-button"
+                title="Download package"
+                aria-label="Download package"
+                onClick={() => onDownload(pkg)}
+                disabled={busy === `download:${pkg.id}`}
+              >
+                {busy === `download:${pkg.id}` ? (
+                  <Loader2 className="spin" size={16} aria-hidden="true" />
+                ) : (
+                  <Download size={16} aria-hidden="true" />
+                )}
+              </button>
+              {failedOrCancelled && job ? (
+                <button
+                  type="button"
+                  className="icon-button"
+                  title="Clear download status"
+                  aria-label="Clear download status"
+                  onClick={() => onClearJob(job)}
+                  disabled={busy === `clear:${job.id}`}
+                >
+                  {busy === `clear:${job.id}` ? (
+                    <Loader2 className="spin" size={16} aria-hidden="true" />
+                  ) : (
+                    <X size={16} aria-hidden="true" />
+                  )}
+                </button>
+              ) : null}
+            </>
+          )}
+        </div>
+      </td>
+    </>
   );
 }
 
