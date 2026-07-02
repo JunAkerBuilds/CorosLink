@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- GitHub Pages website build and deployment (site is hosted on Vercel; removed `.nojekyll` and disabled the Pages site on the repository)
+
+### Fixed
+
+- macOS DMG installer window restores the drag-to-Applications layout on recent macOS releases by shipping a custom PNG background instead of the default electron-builder TIFF
+
 ## [0.1.12] - 2026-07-02
 
 ### Added
