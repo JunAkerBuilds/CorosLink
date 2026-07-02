@@ -21,6 +21,7 @@
     "test:greetings": "node --experimental-strip-types scripts/test-greetings.mjs",
     "start": "npm run build && electron .",
     "icons:generate": "node scripts/generate-icons.mjs",
+    "dmg:background": "python3 scripts/generate-dmg-background.py",
     "rebuild": "electron-builder install-app-deps",
     "dist": "npm run binaries:prepare && npm run build && electron-builder --publish never",
     "dist:mac": "npm run binaries:prepare && npm run build && electron-builder --mac --publish never",
@@ -63,6 +64,27 @@
     "asarUnpack": [
       "node_modules/better-sqlite3/**/*"
     ],
+    "dmg": {
+      "background": "dmg-background.png",
+      "iconSize": 100,
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 130,
+          "y": 220,
+          "type": "file"
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
     "mac": {
       "target": [
         "dmg",
@@ -113,7 +135,7 @@
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
     "electron": "^42.5.0",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "^26.15.6",
     "ffmpeg-static": "^5.3.0",
     "typescript": "^6.0.3",
     "vite": "^8.1.0",

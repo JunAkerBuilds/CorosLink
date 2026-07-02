@@ -1,25 +1,35 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { Inter } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
-import "../src/styles/global.css";
+import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 const SITE_URL = "https://coroslink.vercel.app";
 const DESCRIPTION =
-  "CorosLink is an unofficial COROS Pace Pro companion for music sync, USB watch transfer, and training analytics on macOS, Windows, and Linux.";
+  "CorosLink is an unofficial COROS watch companion for desktop — sync music from Spotify, YouTube & Apple Music over USB, install offline maps, build GPX routes, and review your training analytics on macOS, Windows, and Linux.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "CorosLink - Pace Pro companion",
+    default: "CorosLink — Your COROS watch companion for desktop",
     template: "%s | CorosLink",
   },
   description: DESCRIPTION,
   applicationName: "CorosLink",
   keywords: [
     "CorosLink",
-    "COROS Pace Pro",
-    "Pace Pro music sync",
+    "COROS watch companion",
+    "COROS music sync",
+    "COROS offline maps",
+    "COROS route builder",
     "COROS training analytics",
+    "Pace Pro",
     "desktop companion app",
   ],
   authors: [{ name: "CorosLink Contributors" }],
@@ -27,7 +37,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: SITE_URL,
-    title: "CorosLink - Pace Pro companion",
+    title: "CorosLink — Your COROS watch companion for desktop",
     description: DESCRIPTION,
     siteName: "CorosLink",
     images: [
@@ -41,7 +51,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "CorosLink - Pace Pro companion",
+    title: "CorosLink — Your COROS watch companion for desktop",
     description: DESCRIPTION,
     images: ["/og-image.png"],
   },
@@ -55,12 +65,12 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   colorScheme: "dark",
-  themeColor: "#050806",
+  themeColor: "#05080b",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={inter.variable}>
       <body>
         {children}
         <Analytics />

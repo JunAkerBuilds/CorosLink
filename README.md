@@ -231,6 +231,8 @@ Get the latest installer from **[GitHub Releases](https://github.com/JunAkerBuil
 | Windows               | `CorosLink Setup *.exe`       |
 | Linux (x64)           | `CorosLink-*-x86_64.AppImage` |
 
+Open the DMG, then drag **CorosLink** into **Applications** when the installer window appears. If Finder only shows a plain folder, drag `CorosLink.app` into Applications manually.
+
 #### macOS: “app is damaged” or won’t open
 
 The app is **not** corrupted. macOS blocks unsigned apps downloaded from the internet. Fix it after installing:
