@@ -237,6 +237,49 @@ async function runNomadSmoke() {
   }
 }
 
+async function runStaleFixtureCleanupSmoke() {
+  const staleRoot = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), "coroslink-watch-smoke-stale-")
+  );
+  const freshRoot = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), "coroslink-watch-smoke-fresh-")
+  );
+
+  try {
+    await fs.promises.writeFile(path.join(staleRoot, "leftover.map"), "map");
+    const agedTime = new Date(Date.now() - 60 * 60 * 1000);
+    await fs.promises.utimes(staleRoot, agedTime, agedTime);
+
+    const { cleanupStaleSmokeFixtures } = await loadWatchService();
+    await cleanupStaleSmokeFixtures();
+
+    assert.equal(fs.existsSync(staleRoot), false, "stale fixture swept");
+    assert.equal(fs.existsSync(freshRoot), true, "fresh fixture kept");
+  } finally {
+    await fs.promises.rm(staleRoot, { recursive: true, force: true });
+    await fs.promises.rm(freshRoot, { recursive: true, force: true });
+  }
+}
+
+async function runSyncClearSmoke() {
+  const { clearActiveSmokeFixtureSync, setWatchConnectionSmokeOption } =
+    await loadWatchService();
+
+  try {
+    const status = await setWatchConnectionSmokeOption("pace-pro");
+    assert.equal(status.connected, true);
+    assert.ok(status.rootPath, "fixture root path set");
+
+    const tempRoot = path.dirname(status.rootPath);
+    assert.equal(fs.existsSync(tempRoot), true, "fixture exists before clear");
+
+    clearActiveSmokeFixtureSync();
+    assert.equal(fs.existsSync(tempRoot), false, "fixture removed by sync clear");
+  } finally {
+    delete process.env.COROS_WATCH_PATH;
+  }
+}
+
 await runPaceProSmoke();
 await runPace4Smoke();
 await runPace3Smoke();
@@ -246,5 +289,7 @@ await runPace3NameVariantSmoke("PACE-3", "pace-3-hyphen");
 await runPace3NameVariantSmoke("PACE3", "pace-3-compact");
 await runAmbiguousCorosPaceSmoke();
 await runInstallerVolumeIgnoredSmoke();
+await runStaleFixtureCleanupSmoke();
+await runSyncClearSmoke();
 
 console.log("Watch service smoke checks passed.");

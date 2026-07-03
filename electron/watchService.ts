@@ -489,6 +489,61 @@ async function clearActiveSmokeFixture(): Promise<void> {
   }
 }
 
+export function clearActiveSmokeFixtureSync(): void {
+  const tempRoot = activeSmokeTempRoot;
+  activeSmokeTempRoot = undefined;
+  activeSmokeWatchRoot = undefined;
+  activeSmokeTotalBytes = undefined;
+
+  if (tempRoot) {
+    try {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    } catch {
+      // Cleanup must never block quit.
+    }
+  }
+}
+
+const SMOKE_FIXTURE_PREFIXES = ["coroslink-watch-smoke-", "coros-watch-smoke-"];
+const STALE_SMOKE_FIXTURE_MIN_AGE_MS = 15 * 60 * 1000;
+
+export async function cleanupStaleSmokeFixtures(): Promise<void> {
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.promises.readdir(os.tmpdir(), { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  const now = Date.now();
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    if (!SMOKE_FIXTURE_PREFIXES.some((prefix) => entry.name.startsWith(prefix))) {
+      continue;
+    }
+
+    const fixturePath = path.join(os.tmpdir(), entry.name);
+    if (fixturePath === activeSmokeTempRoot) {
+      continue;
+    }
+
+    try {
+      const stats = await fs.promises.stat(fixturePath);
+      // A recent mtime may belong to another running instance's fixture.
+      if (now - stats.mtimeMs < STALE_SMOKE_FIXTURE_MIN_AGE_MS) {
+        continue;
+      }
+
+      await fs.promises.rm(fixturePath, { recursive: true, force: true });
+    } catch {
+      // Cleanup must never block startup.
+    }
+  }
+}
+
 function restoreOriginalWatchPathOverride(): void {
   if (ORIGINAL_COROS_WATCH_PATH) {
     process.env.COROS_WATCH_PATH = ORIGINAL_COROS_WATCH_PATH;
