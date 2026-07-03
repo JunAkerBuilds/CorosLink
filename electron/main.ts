@@ -81,6 +81,8 @@ import type {
   YouTubeMusicConfig
 } from "./types";
 import {
+  cleanupStaleSmokeFixtures,
+  clearActiveSmokeFixtureSync,
   deleteWatchTrack,
   getWatchConnectionSmokeOption,
   getWatchStatus,
@@ -266,6 +268,7 @@ app.whenReady().then(() => {
     }
   });
   initializeDatabase(app.getPath("userData"));
+  void cleanupStaleSmokeFixtures();
   registerIpcHandlers();
   setJobListener((jobs) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -300,6 +303,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   stopRouteShare();
+  clearActiveSmokeFixtureSync();
 });
 
 function registerIpcHandlers(): void {
