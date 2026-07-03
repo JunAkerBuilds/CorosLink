@@ -93,6 +93,11 @@ import {
   resetYouTubeBrowserSession
 } from "./youtubeBrowserService";
 import {
+  configureYouTubeMusicBrowserSession,
+  registerYouTubeMusicBrowserHandlers,
+  resetYouTubeMusicBrowserSession
+} from "./youtubeMusicBrowserService";
+import {
   downloadFromYouTubeBrowser,
   downloadMultipleFromYouTubeBrowser,
   getYouTubeHistory,
@@ -219,6 +224,32 @@ app.whenReady().then(() => {
   configureAppPermissions();
   configureYouTubeBrowserSession();
   registerYouTubeBrowserHandlers();
+  configureYouTubeMusicBrowserSession();
+  // Saving runs the ytmusicapi Python bridge, so guard against overlapping runs
+  // if several youtubei requests slip through before the first save finishes.
+  let youtubeMusicCaptureInFlight = false;
+  registerYouTubeMusicBrowserHandlers((headerBlock) => {
+    if (youtubeMusicCaptureInFlight) {
+      return;
+    }
+    youtubeMusicCaptureInFlight = true;
+    void saveYouTubeMusicAuth(headerBlock)
+      .then((status) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("youtubeMusic:authCaptured", { status });
+        }
+      })
+      .catch((error) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("youtubeMusic:authCaptured", {
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
+      })
+      .finally(() => {
+        youtubeMusicCaptureInFlight = false;
+      });
+  });
   initializeDatabase(app.getPath("userData"));
   registerIpcHandlers();
   setJobListener((jobs) => {
@@ -359,6 +390,10 @@ function registerIpcHandlers(): void {
   );
 
   ipcMain.handle("youtubeMusic:login", () => loginYouTubeMusic());
+
+  ipcMain.handle("youtubeMusic:resetBrowserSession", () =>
+    resetYouTubeMusicBrowserSession()
+  );
 
   ipcMain.handle("youtubeMusic:logout", () => logoutYouTubeMusic());
 

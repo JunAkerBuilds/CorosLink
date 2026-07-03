@@ -446,6 +446,25 @@ export default function App() {
     refreshYouTubeMusic,
   ]);
 
+  // The main process lifts credentials out of the embedded music.youtube.com
+  // session and notifies us once ytmusicapi has stored them (or if that failed).
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
+    return api.onYouTubeMusicAuthCaptured((result) => {
+      if (!result.status) {
+        setError(result.error);
+        return;
+      }
+      setYoutubeMusicStatus(result.status);
+      setMessage("YouTube Music connected.");
+      void refreshYouTubeMusic().catch((caught) =>
+        setError(toErrorMessage(caught)),
+      );
+    });
+  }, [api, refreshYouTubeMusic]);
+
   useEffect(() => {
     if (!api) {
       return;
@@ -744,7 +763,13 @@ export default function App() {
     setMessage(null);
 
     try {
-      setYoutubeMusicStatus(await api.logoutYouTubeMusic());
+      // Clear the stored credentials *and* the persisted browser session so the
+      // webview doesn't stay signed in and silently reconnect.
+      const [status] = await Promise.all([
+        api.logoutYouTubeMusic(),
+        api.resetYouTubeMusicBrowserSession(),
+      ]);
+      setYoutubeMusicStatus(status);
       setYoutubeMusicPlaylists([]);
       setSelectedYouTubeMusicPlaylistId("");
       setMessage("YouTube Music disconnected.");
@@ -2993,6 +3018,123 @@ interface YouTubeMusicViewProps {
   onOpenSong: (song: YouTubeMusicSong) => void;
 }
 
+const YOUTUBE_MUSIC_URL = "https://music.youtube.com/";
+
+// Hosts music.youtube.com inside its own persistent Electron session. The main
+// process watches this session's youtubei traffic and hands the captured
+// headers to ytmusicapi as soon as the user signs in (see
+// youtubeMusicBrowserService.ts), so this component just renders the page and
+// offers basic navigation.
+function YouTubeMusicLoginBrowser() {
+  const webviewRef = useRef<WebviewElement | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [webviewKey, setWebviewKey] = useState(0);
+  const [currentUrl, setCurrentUrl] = useState(YOUTUBE_MUSIC_URL);
+  const [resetting, setResetting] = useState(false);
+
+  useEffect(() => {
+    const webview = webviewRef.current;
+    if (!webview) {
+      return;
+    }
+
+    const handleDomReady = () => setLoading(false);
+    const handleStartLoading = () => setLoading(true);
+    const handleStopLoading = () => {
+      setLoading(false);
+      setCurrentUrl(webview.getURL() || YOUTUBE_MUSIC_URL);
+    };
+    const handleNavigate = () =>
+      setCurrentUrl(webview.getURL() || YOUTUBE_MUSIC_URL);
+
+    webview.addEventListener("dom-ready", handleDomReady);
+    webview.addEventListener("did-start-loading", handleStartLoading);
+    webview.addEventListener("did-stop-loading", handleStopLoading);
+    webview.addEventListener("did-navigate", handleNavigate);
+    webview.addEventListener("did-navigate-in-page", handleNavigate);
+
+    return () => {
+      webview.removeEventListener("dom-ready", handleDomReady);
+      webview.removeEventListener("did-start-loading", handleStartLoading);
+      webview.removeEventListener("did-stop-loading", handleStopLoading);
+      webview.removeEventListener("did-navigate", handleNavigate);
+      webview.removeEventListener("did-navigate-in-page", handleNavigate);
+    };
+  }, [webviewKey]);
+
+  async function handleReset() {
+    setResetting(true);
+    setLoading(true);
+    try {
+      await window.corosLink?.resetYouTubeMusicBrowserSession();
+    } finally {
+      setResetting(false);
+      // Remount the webview so it reloads from the freshly cleared session.
+      setCurrentUrl(YOUTUBE_MUSIC_URL);
+      setWebviewKey((value) => value + 1);
+    }
+  }
+
+  return (
+    <div className="music-login">
+      <div className="music-login-toolbar">
+        <div className="browser-nav">
+          <button
+            className="icon-button"
+            type="button"
+            title="Reload"
+            onClick={() => webviewRef.current?.reload()}
+          >
+            <RefreshCw size={16} aria-hidden="true" />
+          </button>
+          <button
+            className="icon-button"
+            type="button"
+            title="YouTube Music home"
+            onClick={() => void webviewRef.current?.loadURL(YOUTUBE_MUSIC_URL)}
+          >
+            <Home size={16} aria-hidden="true" />
+          </button>
+        </div>
+        <span className="music-login-url" title={currentUrl}>
+          {currentUrl}
+        </span>
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={resetting}
+          onClick={() => void handleReset()}
+        >
+          {resetting ? (
+            <Loader2 className="spin" size={15} aria-hidden="true" />
+          ) : (
+            <LogOut size={15} aria-hidden="true" />
+          )}
+          Reset session
+        </button>
+      </div>
+      <div className="webview-frame music-login-frame">
+        <webview
+          key={webviewKey}
+          ref={(element) => {
+            webviewRef.current = element as WebviewElement | null;
+            element?.setAttribute("allowpopups", "");
+          }}
+          className="youtube-webview"
+          src={YOUTUBE_MUSIC_URL}
+          partition="persist:coroslink-ytmusic"
+          webpreferences="contextIsolation=yes,nodeIntegration=no,sandbox=no"
+        />
+        {loading ? (
+          <div className="browser-loading">
+            <Loader2 className="spin" size={24} aria-hidden="true" />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function YouTubeMusicView({
   status,
   playlists,
@@ -3010,6 +3152,9 @@ function YouTubeMusicView({
   onRetrySong,
   onOpenSong,
 }: YouTubeMusicViewProps) {
+  // Default to the in-app browser sign-in; the manual header paste stays as a
+  // fallback for anyone whose login the embedded browser can't complete.
+  const [authMode, setAuthMode] = useState<"browser" | "manual">("browser");
   const selectedPlaylist =
     playlists.find((playlist) => playlist.id === selectedPlaylistId) ??
     playlists[0];
@@ -3090,6 +3235,50 @@ function YouTubeMusicView({
               </button>
             </div>
           </div>
+        ) : authMode === "browser" ? (
+          <div className="youtube-music-connect youtube-music-connect--youtube music-signin">
+            <div className="youtube-music-connect-header">
+              <div className="youtube-music-connect-mark" aria-hidden="true">
+                <YouTubeMusicBrandIcon size={28} />
+              </div>
+              <div className="youtube-music-connect-intro">
+                <p className="eyebrow">YouTube Music</p>
+                <h2>Sign in to connect</h2>
+                <span>
+                  Sign in below and CorosLink captures the access it needs
+                  automatically — no DevTools required. Then pull in your
+                  playlists and liked songs.
+                </span>
+              </div>
+              <span className={dependencyReady ? "badge ready" : "badge danger"}>
+                {dependencyReady ? "Ready" : "Missing"}
+              </span>
+            </div>
+
+            {dependencyReady ? null : (
+              <p className="youtube-music-connect-note">
+                {status?.dependencyError ??
+                  "The bundled Python runtime or ytmusicapi is missing, so sign-in can't be saved. Reinstall CorosLink or run npm run binaries:prepare."}
+              </p>
+            )}
+
+            <YouTubeMusicLoginBrowser />
+
+            <div className="music-signin-footer">
+              <span className="youtube-music-connect-note">
+                Sign-in happens in a private, in-app YouTube Music session. Your
+                credentials stay on this device and are only used to read your
+                library.
+              </span>
+              <button
+                className="text-button"
+                type="button"
+                onClick={() => setAuthMode("manual")}
+              >
+                Paste headers manually instead
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="youtube-music-connect youtube-music-connect--youtube">
             <div className="youtube-music-connect-header">
@@ -3108,6 +3297,15 @@ function YouTubeMusicView({
                 {dependencyReady ? "Ready" : "Missing"}
               </span>
             </div>
+
+            <button
+              className="text-button music-signin-back"
+              type="button"
+              onClick={() => setAuthMode("browser")}
+            >
+              <ArrowLeft size={15} aria-hidden="true" />
+              Back to in-app sign in
+            </button>
 
             <ol className="youtube-music-steps">
               <li>

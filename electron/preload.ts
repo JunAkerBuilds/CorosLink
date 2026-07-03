@@ -42,6 +42,7 @@ import type {
   WatchConnectionSmokeOptionId,
   WatchStatus,
   YouTubeHistoryEntry,
+  YouTubeMusicAuthCapture,
   YouTubeMusicConfig,
   YouTubeMusicLibrary,
   YouTubeMusicStatus,
@@ -126,6 +127,21 @@ const api = {
     ipcRenderer.invoke("youtubeMusic:login"),
   logoutYouTubeMusic: (): Promise<YouTubeMusicStatus> =>
     ipcRenderer.invoke("youtubeMusic:logout"),
+  resetYouTubeMusicBrowserSession: (): Promise<void> =>
+    ipcRenderer.invoke("youtubeMusic:resetBrowserSession"),
+  onYouTubeMusicAuthCaptured: (
+    callback: (result: YouTubeMusicAuthCapture) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      result: YouTubeMusicAuthCapture
+    ) => {
+      callback(result);
+    };
+    ipcRenderer.on("youtubeMusic:authCaptured", listener);
+    return () =>
+      ipcRenderer.removeListener("youtubeMusic:authCaptured", listener);
+  },
   listYouTubeMusicLibrary: (): Promise<YouTubeMusicLibrary> =>
     ipcRenderer.invoke("youtubeMusic:listLibrary"),
   syncYouTubeMusicLibrary: (): Promise<YouTubeMusicSyncResult> =>
