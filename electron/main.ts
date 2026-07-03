@@ -35,7 +35,8 @@ import {
   getUpcomingWorkouts,
   listTrainingHubActivities,
   loginTrainingHub,
-  logoutTrainingHub
+  logoutTrainingHub,
+  uploadTrainingPlan
 } from "./trainingHubService";
 import {
   cancelCorosMapDownload,
@@ -136,10 +137,19 @@ import {
 } from "./updaterService";
 import {
   cancelChat,
+  clearChatHistory,
+  detectLocalChatServers,
   getChatAuthStatus,
+  getChatHistory,
+  getChatSettings,
   loginChat,
   logoutChat,
-  streamChat
+  saveChatHistory,
+  saveChatSettings,
+  streamChat,
+  testLocalChatConnection,
+  uploadTrainingPlanDraft,
+  confirmWorkoutDelete
 } from "./chatService";
 import {
   connectCorosMcp,
@@ -148,7 +158,14 @@ import {
   getCorosMcpStatus,
   listCorosMcpTools
 } from "./corosMcpService";
-import type { ChatMessage } from "./types";
+import type {
+  ChatMessage,
+  ChatProvider,
+  ChatSettings,
+  CorosTrainingPlanDraftInput,
+  LocalChatConfig,
+  PersistedChatEntry
+} from "./types";
 
 let mainWindow: BrowserWindow | undefined;
 
@@ -163,6 +180,68 @@ function sanitizeExportFileName(name?: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 120);
+}
+
+function pickLatestTrainingHubActivity(
+  activities: TrainingHubActivity[]
+): TrainingHubActivity | undefined {
+  const validActivities = activities.filter(
+    (activity) =>
+      activity.activityId.trim().length > 0 &&
+      Number.isFinite(activity.sportType)
+  );
+  if (validActivities.length === 0) {
+    return undefined;
+  }
+
+  return validActivities.reduce((latest, activity) => {
+    const latestStart = latest.startTime ?? Number.NEGATIVE_INFINITY;
+    const activityStart = activity.startTime ?? Number.NEGATIVE_INFINITY;
+    return activityStart > latestStart ? activity : latest;
+  });
+}
+
+async function exportTrainingHubActivityFileToDisk(
+  activity: TrainingHubActivity,
+  fileType: TrainingHubActivityFileType,
+  suggestedName?: string
+): Promise<TrainingHubExportResult> {
+  const { format, content } = await fetchTrainingHubActivityFile(
+    activity.activityId,
+    activity.sportType,
+    fileType
+  );
+
+  const baseName =
+    sanitizeExportFileName(suggestedName ?? activity.name) ||
+    `activity-${activity.activityId}`;
+  const defaultPath = `${baseName}.${format.extension}`;
+
+  const saveOptions = {
+    defaultPath,
+    filters: [
+      { name: `${format.label} file`, extensions: [format.extension] }
+    ]
+  };
+  const result =
+    mainWindow && !mainWindow.isDestroyed()
+      ? await dialog.showSaveDialog(mainWindow, saveOptions)
+      : await dialog.showSaveDialog(saveOptions);
+
+  const metadata = {
+    activityId: activity.activityId,
+    activityName: activity.name,
+    activityStartTime: activity.startTime,
+    fileType,
+    formatLabel: format.label
+  };
+
+  if (result.canceled || !result.filePath) {
+    return { saved: false, ...metadata };
+  }
+
+  await fs.promises.writeFile(result.filePath, content);
+  return { saved: true, filePath: result.filePath, ...metadata };
 }
 
 function getAppIconPath(): string | undefined {
@@ -436,6 +515,20 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("chat:getAuthStatus", () => getChatAuthStatus());
 
+  ipcMain.handle("chat:getSettings", () => getChatSettings());
+
+  ipcMain.handle("chat:saveSettings", (_event, settings: ChatSettings) =>
+    saveChatSettings(settings)
+  );
+
+  ipcMain.handle("chat:testLocalConnection", (_event, config?: LocalChatConfig) =>
+    testLocalChatConnection(config)
+  );
+
+  ipcMain.handle("chat:detectLocalServers", (_event, apiKey?: string) =>
+    detectLocalChatServers(apiKey)
+  );
+
   ipcMain.handle("chat:login", () => loginChat(mainWindow));
 
   ipcMain.handle("chat:logout", () => logoutChat());
@@ -451,6 +544,21 @@ function registerIpcHandlers(): void {
     cancelChat(requestId)
   );
 
+  ipcMain.handle("chat:getHistory", (_event, provider: ChatProvider) =>
+    getChatHistory(provider)
+  );
+
+  ipcMain.handle(
+    "chat:saveHistory",
+    (_event, provider: ChatProvider, entries: PersistedChatEntry[]) => {
+      saveChatHistory(provider, entries);
+    }
+  );
+
+  ipcMain.handle("chat:clearHistory", (_event, provider: ChatProvider) => {
+    clearChatHistory(provider);
+  });
+
   ipcMain.handle("chatMcp:getStatus", () => getCorosMcpStatus());
 
   ipcMain.handle("chatMcp:connect", () => connectCorosMcp(mainWindow));
@@ -458,6 +566,19 @@ function registerIpcHandlers(): void {
   ipcMain.handle("chatMcp:disconnect", () => disconnectCorosMcp());
 
   ipcMain.handle("chatMcp:listTools", () => listCorosMcpTools());
+
+  ipcMain.handle("chat:uploadPlanDraft", (_event, draftId: string) =>
+    uploadTrainingPlanDraft(draftId)
+  );
+
+  ipcMain.handle("chat:confirmWorkoutDelete", (_event, requestId: string) =>
+    confirmWorkoutDelete(requestId)
+  );
+
+  ipcMain.handle(
+    "trainingHub:uploadTrainingPlan",
+    (_event, draft: CorosTrainingPlanDraftInput) => uploadTrainingPlan(draft)
+  );
 
   ipcMain.handle("appleMusic:getStatus", () => getAppleMusicStatus());
 
@@ -542,33 +663,27 @@ function registerIpcHandlers(): void {
       fileType: TrainingHubActivityFileType,
       suggestedName?: string
     ): Promise<TrainingHubExportResult> => {
-      const { format, content } = await fetchTrainingHubActivityFile(
-        activityId,
-        sportType,
-        fileType
+      return exportTrainingHubActivityFileToDisk(
+        { activityId, sportType },
+        fileType,
+        suggestedName
       );
+    }
+  );
 
-      const baseName =
-        sanitizeExportFileName(suggestedName) || `activity-${activityId}`;
-      const defaultPath = `${baseName}.${format.extension}`;
-
-      const saveOptions = {
-        defaultPath,
-        filters: [
-          { name: `${format.label} file`, extensions: [format.extension] }
-        ]
-      };
-      const result =
-        mainWindow && !mainWindow.isDestroyed()
-          ? await dialog.showSaveDialog(mainWindow, saveOptions)
-          : await dialog.showSaveDialog(saveOptions);
-
-      if (result.canceled || !result.filePath) {
-        return { saved: false };
+  ipcMain.handle(
+    "trainingHub:exportLatestActivityFile",
+    async (
+      _event,
+      fileType: TrainingHubActivityFileType = 4
+    ): Promise<TrainingHubExportResult> => {
+      const latest = pickLatestTrainingHubActivity(
+        await listTrainingHubActivities(1, 50)
+      );
+      if (!latest) {
+        throw new Error("No COROS activities were found to export.");
       }
-
-      await fs.promises.writeFile(result.filePath, content);
-      return { saved: true, filePath: result.filePath };
+      return exportTrainingHubActivityFileToDisk(latest, fileType, latest.name);
     }
   );
 

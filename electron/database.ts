@@ -223,6 +223,12 @@ export function initializeDatabase(userDataPath: string): Database.Database {
       extracted_path TEXT,
       downloaded_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS chat_transcripts (
+      provider TEXT PRIMARY KEY CHECK(provider IN ('chatgpt', 'local')),
+      messages_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   ensureColumn(db, "generated_routes", "activity_type", "TEXT");
@@ -399,6 +405,44 @@ export function deleteSettings(keys: string[]): void {
   });
 
   transaction(keys);
+}
+
+interface ChatTranscriptRow {
+  provider: string;
+  messages_json: string;
+  updated_at: string;
+}
+
+export function getChatTranscriptRow(
+  provider: string
+): ChatTranscriptRow | undefined {
+  return requireDatabase()
+    .prepare(
+      "SELECT provider, messages_json, updated_at FROM chat_transcripts WHERE provider = ?"
+    )
+    .get(provider) as ChatTranscriptRow | undefined;
+}
+
+export function saveChatTranscriptRow(
+  provider: string,
+  messagesJson: string,
+  updatedAt: string
+): void {
+  requireDatabase()
+    .prepare(
+      `INSERT INTO chat_transcripts (provider, messages_json, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(provider) DO UPDATE SET
+         messages_json = excluded.messages_json,
+         updated_at = excluded.updated_at`
+    )
+    .run(provider, messagesJson, updatedAt);
+}
+
+export function deleteChatTranscriptRow(provider: string): void {
+  requireDatabase()
+    .prepare("DELETE FROM chat_transcripts WHERE provider = ?")
+    .run(provider);
 }
 
 function toSpotifySyncTrack(row: SpotifySyncTrackRow): SpotifySyncTrack {

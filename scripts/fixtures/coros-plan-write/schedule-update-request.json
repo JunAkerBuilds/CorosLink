@@ -1,0 +1,26 @@
+{
+  "entities": [
+    {
+      "happenDay": "20260707",
+      "idInPlan": 101,
+      "sortNoInSchedule": 1
+    }
+  ],
+  "programs": [
+    {
+      "id": "0",
+      "idInPlan": 101,
+      "name": "7km Easy Run",
+      "sportType": 1,
+      "exerciseNum": 1,
+      "distance": 700000,
+      "targetType": 5,
+      "targetValue": 700000,
+      "simple": true,
+      "access": 1,
+      "exercises": []
+    }
+  ],
+  "versionObjects": [{ "id": 101, "status": 1 }],
+  "pbVersion": 2
+}

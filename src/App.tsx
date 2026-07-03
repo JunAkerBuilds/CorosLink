@@ -119,6 +119,7 @@ interface YouTubeDownloadItem {
 export default function App() {
   const api: CorosLinkApi | undefined = window.corosLink;
   const [activeView, setActiveView] = useState<View>("overview");
+  const [coachBusy, setCoachBusy] = useState(false);
   const [activeMediaTab, setActiveMediaTab] = useState<MediaTab>("library");
   const [watchStatus, setWatchStatus] = useState<WatchStatus | null>(null);
   const [downloads, setDownloads] = useState<LocalTrack[]>([]);
@@ -1384,6 +1385,12 @@ export default function App() {
             >
               <MessageCircle size={16} aria-hidden="true" />
               Coach
+              {coachBusy ? (
+                <span
+                  className="primary-tab-activity"
+                  aria-label="Coach is responding"
+                />
+              ) : null}
               <span className="primary-tab-beta">Beta</span>
             </button>
           </nav>
@@ -1436,7 +1443,7 @@ export default function App() {
         className={[
           "content",
           isOverviewDashboard && "content-overview",
-          activeView === "media" && "content-fill",
+          (activeView === "media" || activeView === "coach") && "content-fill",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -1468,7 +1475,8 @@ export default function App() {
                 onOpenSpotify={() => openMediaTab("spotify")}
                 onRefresh={handleRefresh}
               />
-            ) : activeView === "media" ? (
+            ) : null}
+            {activeView === "media" ? (
               <MediaView
                 activeTab={activeMediaTab}
                 onTabChange={setActiveMediaTab}
@@ -1544,7 +1552,8 @@ export default function App() {
                   <AppleMusicView onMessage={setMessage} onError={setError} />
                 )}
               </MediaView>
-            ) : activeView === "maps" ? (
+            ) : null}
+            {activeView === "maps" ? (
               <MapsView
                 api={api}
                 watchStatus={watchStatus}
@@ -1552,9 +1561,8 @@ export default function App() {
                 onMessage={setMessage}
                 onError={setError}
               />
-            ) : activeView === "coach" ? (
-              <ChatView api={api} onError={setError} />
-            ) : (
+            ) : null}
+            {activeView === "training" ? (
               <TrainingHubView
                 status={trainingHubStatus}
                 email={trainingHubEmail}
@@ -1576,7 +1584,23 @@ export default function App() {
                 onLoadDetail={handleTrainingHubActivityDetail}
                 onExportFile={handleTrainingHubExport}
               />
-            )}
+            ) : null}
+            <div
+              className={[
+                "content-coach-panel",
+                activeView !== "coach" && "view-panel-hidden",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              aria-hidden={activeView !== "coach"}
+            >
+              <ChatView
+                api={api}
+                onError={setError}
+                onPlanUploaded={() => void loadTrainingHubData()}
+                onActivityChange={setCoachBusy}
+              />
+            </div>
           </>
         )}
       </main>

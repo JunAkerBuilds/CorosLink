@@ -583,6 +583,12 @@ export interface TrainingHubExportResult {
   saved: boolean;
   /** Absolute path the file was written to, when saved. */
   filePath?: string;
+  /** Activity metadata for convenience messages after a save dialog closes. */
+  activityId?: string;
+  activityName?: string;
+  activityStartTime?: number;
+  fileType?: TrainingHubActivityFileType;
+  formatLabel?: string;
 }
 
 export interface TrainingHubActivity {
@@ -810,13 +816,73 @@ export interface AppUpdateSnapshot {
   autoDownload: boolean;
 }
 
-// ----- Training Coach chatbot (Sign in with ChatGPT) -----
+// ----- Training Coach chatbot -----
 
 export type ChatRole = "user" | "assistant";
 
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+}
+
+/** Optional assistant attribution metadata stored with a message. */
+export interface PersistedChatSource {
+  snapshotIncluded: boolean;
+  mcpEnabled: boolean;
+  mcpUsed: boolean;
+  mcpTools: string[];
+  mcpError?: string;
+}
+
+export interface PersistedChatMessageEntry {
+  kind: "message";
+  role: ChatRole;
+  content: string;
+  source?: PersistedChatSource;
+}
+
+export type ChatProvider = "chatgpt" | "local";
+
+export interface LocalChatConfig {
+  /** OpenAI-compatible API base URL, normalized to end in /v1. */
+  baseUrl: string;
+  /** Model id as listed by the local server, e.g. llama3.2 or qwen3:8b. */
+  model: string;
+  /** True when an encrypted API key is stored; token material is never returned. */
+  hasApiKey: boolean;
+  /** Optional token used only when saving/testing settings; never returned by get. */
+  apiKey?: string;
+  /** Set true when saving to remove any stored local API key. */
+  clearApiKey?: boolean;
+  /** Attach COROS MCP tools when the local endpoint accepts OpenAI-style tools. */
+  toolsEnabled: boolean;
+}
+
+export interface ChatSettings {
+  provider: ChatProvider;
+  local: LocalChatConfig;
+}
+
+export interface LocalChatConnectionTest {
+  ok: boolean;
+  message: string;
+  normalizedBaseUrl?: string;
+  models?: string[];
+}
+
+export type LocalChatServerKind = "ollama" | "lmstudio";
+
+export interface LocalChatServerCandidate {
+  kind: LocalChatServerKind;
+  label: string;
+  baseUrl: string;
+  ok: boolean;
+  models: string[];
+  message?: string;
+}
+
+export interface LocalChatDiscovery {
+  servers: LocalChatServerCandidate[];
 }
 
 /** Sign-in state surfaced to the renderer; never includes token material. */
@@ -908,4 +974,99 @@ export type ChatStreamInfo =
       /** Raw event type, e.g. "response.mcp_call.completed". */
       status: string;
       message?: string;
+    }
+  | {
+      requestId: string;
+      kind: "planDraft";
+      draft: PlanDraftPreview;
+    }
+  | {
+      requestId: string;
+      kind: "workoutDelete";
+      preview: WorkoutDeletePreview;
     };
+
+// ----- Training plan upload (AI coach) -----
+
+export interface PlanDraftPreviewEntry {
+  key: string;
+  name: string;
+  scheduleDate?: string;
+  volume?: string;
+  saveToLibrary: boolean;
+  workoutType: string;
+}
+
+export interface PlanDraftPreview {
+  draftId: string;
+  name: string;
+  summary: string;
+  entries: PlanDraftPreviewEntry[];
+  conflicts: string[];
+  warnings: string[];
+}
+
+export interface PlanWorkoutEntryInput {
+  key: string;
+  name: string;
+  steps?: unknown[];
+  distance_km?: number;
+  schedule_date?: string;
+  sort_no?: number;
+  save_to_library?: boolean;
+}
+
+export interface CorosTrainingPlanDraftInput {
+  name: string;
+  workouts: PlanWorkoutEntryInput[];
+}
+
+export interface UploadPlanResultEntry {
+  key: string;
+  name: string;
+  date?: string;
+  programId?: string;
+  scheduled: boolean;
+  savedToLibrary: boolean;
+}
+
+export interface UploadPlanResult {
+  planName: string;
+  workoutsCreated: number;
+  workoutsScheduled: number;
+  entries: UploadPlanResultEntry[];
+}
+
+export interface TrainingHubScheduledWorkoutEntry {
+  planId: string;
+  idInPlan: string;
+  planProgramId: string;
+  happenDay: string;
+  name: string;
+  programId?: string;
+  sortNo?: number;
+}
+
+export interface DeleteWorkoutResult {
+  removedFromSchedule: boolean;
+  removedFromLibrary: boolean;
+  workoutName?: string;
+  scheduleDate?: string;
+  programId?: string;
+  message: string;
+}
+
+export interface WorkoutDeletePreview {
+  requestId: string;
+  target: "scheduled" | "library" | "both";
+  workoutName?: string;
+  scheduleDate?: string;
+  programId?: string;
+  summary: string;
+}
+
+/** Persisted coach timeline entry (messages plus inline action cards). */
+export type PersistedChatEntry =
+  | PersistedChatMessageEntry
+  | { kind: "planDraft"; draft: PlanDraftPreview }
+  | { kind: "workoutDelete"; preview: WorkoutDeletePreview };

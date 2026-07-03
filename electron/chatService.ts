@@ -14,13 +14,50 @@ import {
   ensureCorosMcpConnected,
   getCorosMcpTools
 } from "./corosMcpService";
+import {
+  getChatWorkoutTools,
+  handleChatWorkoutTool,
+  isChatWorkoutTool,
+  uploadPlanDraftById,
+  confirmWorkoutDeleteById,
+  type ChatWorkoutToolName
+} from "./chatWorkoutTools";
+import { parseFunctionCallArguments } from "./chatToolArguments";
+import {
+  detectLocalChatServersRequest,
+  streamLocalChatCompletion,
+  testLocalChatConnectionRequest,
+  type LocalChatRuntimeConfig
+} from "./localChatProvider";
+import {
+  CHAT_SETTINGS_KEYS,
+  readChatSettingsFromStore,
+  saveChatSettingsToStore,
+  type ChatApiKeyStore,
+  type ChatSettingsStore
+} from "./chatSettingsStore";
+import {
+  clearChatTranscript,
+  loadChatTranscript,
+  saveChatTranscript
+} from "./chatHistoryStore";
 import type {
   ChatAuthStatus,
+  ChatSettings,
+  ChatProvider,
+  CorosMcpTool,
+  LocalChatDiscovery,
+  LocalChatConfig,
+  LocalChatConnectionTest,
   ChatMessage,
+  PersistedChatEntry,
   StoredChatToken,
   TrainingHubActivity,
   TrainingHubDashboard,
-  TrainingHubUpcomingWorkout
+  TrainingHubUpcomingWorkout,
+  UploadPlanResult,
+  PlanDraftPreview,
+  DeleteWorkoutResult
 } from "./types";
 
 // =========================================================================
@@ -53,7 +90,7 @@ const CHAT_MODEL_CANDIDATES = [
 
 // Max agent rounds: each round is one model response; if it calls COROS tools
 // we execute them and loop, until it answers with no further tool calls.
-const MAX_TOOL_ROUNDS = 6;
+const MAX_TOOL_ROUNDS = 10;
 const RESPONSES_ORIGINATOR = "codex_cli_rs";
 const RESPONSES_USER_AGENT = "codex_cli_rs";
 
@@ -61,7 +98,14 @@ const COACH_INSTRUCTIONS =
   "You are a friendly, knowledgeable running and endurance-training coach built " +
   "into CorosLink. You have access to the athlete's recent COROS training data " +
   "below. Give concise, practical, encouraging advice grounded in that data. If " +
-  "the data does not cover the question, say so rather than inventing numbers.";
+  "the data does not cover the question, say so rather than inventing numbers.\n\n" +
+  "When building training plans: review recent activities, recovery, and upcoming " +
+  "workouts first. Prefer sensible periodization (easy/hard/rest balance). Use " +
+  "draft_training_plan to validate and preview before upload. Never call " +
+  "upload_training_plan until the athlete confirms via the Upload to COROS button.\n\n" +
+  "To delete workouts: use list_scheduled_workouts to find calendar entries, then " +
+  "delete_workout to stage a confirmation card. The athlete must click Delete from COROS — " +
+  "never claim a workout was removed until they confirm via the button.";
 
 // Settings keys (encrypted blob + a plaintext timestamp).
 const SETTINGS = {
@@ -72,6 +116,112 @@ const SETTINGS = {
 
 // requestId -> AbortController for in-flight streams.
 const activeStreams = new Map<string, AbortController>();
+
+// ----- Provider settings -----
+
+export function getChatSettings(): ChatSettings {
+  return readChatSettingsFromStore(chatSettingsStore, localApiKeyStore);
+}
+
+export function saveChatSettings(settings: ChatSettings): ChatSettings {
+  return saveChatSettingsToStore(
+    chatSettingsStore,
+    localApiKeyStore,
+    settings
+  );
+}
+
+export function getChatHistory(provider: ChatProvider): PersistedChatEntry[] {
+  return loadChatTranscript(provider);
+}
+
+export function saveChatHistory(
+  provider: ChatProvider,
+  entries: PersistedChatEntry[]
+): void {
+  saveChatTranscript(provider, entries);
+}
+
+export function clearChatHistory(provider: ChatProvider): void {
+  clearChatTranscript(provider);
+}
+
+export async function testLocalChatConnection(
+  config?: LocalChatConfig
+): Promise<LocalChatConnectionTest> {
+  const saved = getLocalConfig();
+  const runtime = getLocalRuntimeConfig({
+    ...saved,
+    ...config,
+    baseUrl: config?.baseUrl ?? saved.baseUrl,
+    model: config?.model ?? saved.model,
+    toolsEnabled: config?.toolsEnabled ?? saved.toolsEnabled,
+    hasApiKey: saved.hasApiKey,
+    apiKey:
+      typeof config?.apiKey === "string" && config.apiKey.trim()
+        ? config.apiKey.trim()
+        : readStoredLocalApiKey()
+  });
+  return testLocalChatConnectionRequest(runtime);
+}
+
+export async function detectLocalChatServers(
+  apiKey?: string
+): Promise<LocalChatDiscovery> {
+  return detectLocalChatServersRequest(
+    typeof apiKey === "string" && apiKey.trim()
+      ? apiKey.trim()
+      : readStoredLocalApiKey()
+  );
+}
+
+function getLocalConfig(): LocalChatConfig {
+  return getChatSettings().local;
+}
+
+function getLocalRuntimeConfig(config = getLocalConfig()): LocalChatRuntimeConfig {
+  return {
+    baseUrl: config.baseUrl,
+    model: config.model,
+    apiKey:
+      typeof config.apiKey === "string" && config.apiKey.trim()
+        ? config.apiKey.trim()
+        : readStoredLocalApiKey(),
+    toolsEnabled: config.toolsEnabled
+  };
+}
+
+function storeLocalApiKey(apiKey: string): void {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error("Secure local API key storage is not available on this system.");
+  }
+  const encrypted = safeStorage.encryptString(apiKey).toString("base64");
+  setSetting(CHAT_SETTINGS_KEYS.localApiKey, encrypted);
+}
+
+function readStoredLocalApiKey(): string | undefined {
+  const encoded = getSetting(CHAT_SETTINGS_KEYS.localApiKey);
+  if (!encoded || !safeStorage.isEncryptionAvailable()) {
+    return undefined;
+  }
+  try {
+    return safeStorage.decryptString(Buffer.from(encoded, "base64"));
+  } catch {
+    return undefined;
+  }
+}
+
+const chatSettingsStore: ChatSettingsStore = {
+  get: getSetting,
+  set: setSetting,
+  delete: deleteSettings
+};
+
+const localApiKeyStore: ChatApiKeyStore = {
+  hasApiKey: () => Boolean(getSetting(CHAT_SETTINGS_KEYS.localApiKey)),
+  saveApiKey: storeLocalApiKey,
+  clearApiKey: () => deleteSettings([CHAT_SETTINGS_KEYS.localApiKey])
+};
 
 // ----- Auth status -----
 
@@ -366,29 +516,91 @@ export async function streamChat(
 
   let fullText = "";
   try {
+    const settings = getChatSettings();
+    if (settings.provider === "local") {
+      const { text: instructions, hasData } = await buildTrainingContext();
+      const runtimeConfig = getLocalRuntimeConfig(settings.local);
+
+      if (runtimeConfig.toolsEnabled) {
+        await ensureCorosMcpConnected();
+      }
+      const chatTools = runtimeConfig.toolsEnabled ? getAllChatTools() : getChatWorkoutTools();
+      const effectiveInstructions = withLiveCorosToolInstructions(
+        instructions,
+        chatTools
+      );
+
+      send("chat:streamStart", { requestId });
+      send("chat:streamInfo", {
+        requestId,
+        kind: "context",
+        snapshotIncluded: hasData,
+        mcpEnabled: chatTools.length > 0
+      });
+
+      const result = await streamLocalChatCompletion({
+        config: runtimeConfig,
+        instructions: effectiveInstructions,
+        fallbackInstructions: instructions,
+        messages,
+        tools: chatTools,
+        maxToolRounds: MAX_TOOL_ROUNDS,
+        signal: controller.signal,
+        onToken: (delta) => {
+          fullText += delta;
+          send("chat:streamToken", { requestId, delta });
+        },
+        onToolsDisabled: () => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "context",
+            snapshotIncluded: hasData,
+            mcpEnabled: false
+          });
+        },
+        onToolCallStart: (call) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "mcp",
+            tool: call.name,
+            status: "call"
+          });
+        },
+        onToolCallError: (call, message) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "mcp",
+            tool: call.name,
+            status: "failed",
+            message
+          });
+        },
+        onToolCall: async (call) => {
+          const tool = findChatTool(call.name);
+          const args = parseFunctionCallArguments(call, tool);
+          console.log("[chat] tool call:", call.name);
+          return executeChatTool(call.name, args, send, requestId);
+        }
+      });
+      fullText = result.fullText;
+      send("chat:streamDone", { requestId, fullText });
+      return;
+    }
+
     const token = await getValidToken();
     const { text: instructions, hasData } = await buildTrainingContext();
 
     // Reconnect a previously-authorized COROS MCP session, then expose its tools
     // to the model as function tools so it can pull data on demand.
     await ensureCorosMcpConnected();
-    const tools = buildMcpFunctionTools();
+    const tools = buildChatFunctionTools();
 
     // When live tools are available, steer the model to use them rather than
     // leaning on the brief snapshot in `instructions`.
-    const effectiveInstructions =
-      tools.length > 0
-        ? `${instructions}\n\n## Live COROS data (tools)\n` +
-          `You have live tools to fetch the athlete's current COROS data: ` +
-          `${getCorosMcpTools()
-            .map((tool) => tool.name)
-            .join(", ")}. ` +
-          "The snapshot above is only a brief overview. For any question about " +
-          "specific activities, splits, heart rate, recovery, sleep, HRV, stress, " +
-          "or trends, CALL THE APPROPRIATE TOOL to get real numbers rather than " +
-          "relying on the snapshot or guessing. Prefer tools whenever they can " +
-          "answer more precisely."
-        : instructions;
+    const effectiveInstructions = withLiveCorosToolInstructions(
+      instructions,
+      getAllChatTools()
+    );
 
     send("chat:streamStart", { requestId });
     send("chat:streamInfo", {
@@ -488,10 +700,9 @@ export async function streamChat(
         });
         let output: string;
         try {
-          const args = call.arguments
-            ? (JSON.parse(call.arguments) as Record<string, unknown>)
-            : {};
-          output = await callCorosMcpTool(call.name, args);
+          const sourceTool = findChatTool(call.name);
+          const args = parseFunctionCallArguments(call, sourceTool);
+          output = await executeChatTool(call.name, args, send, requestId);
         } catch (toolError) {
           output =
             "Error: " +
@@ -536,6 +747,53 @@ export async function streamChat(
 export function cancelChat(requestId: string): void {
   activeStreams.get(requestId)?.abort();
   activeStreams.delete(requestId);
+}
+
+export async function uploadTrainingPlanDraft(
+  draftId: string
+): Promise<UploadPlanResult> {
+  return uploadPlanDraftById(draftId);
+}
+
+export async function confirmWorkoutDelete(
+  requestId: string
+): Promise<DeleteWorkoutResult> {
+  return confirmWorkoutDeleteById(requestId);
+}
+
+function getAllChatTools(): CorosMcpTool[] {
+  return [...getCorosMcpTools(), ...getChatWorkoutTools()];
+}
+
+async function executeChatTool(
+  name: string,
+  args: Record<string, unknown>,
+  send: (channel: string, payload: unknown) => void,
+  requestId: string
+): Promise<string> {
+  if (isChatWorkoutTool(name)) {
+    return handleChatWorkoutTool(name as ChatWorkoutToolName, args, {
+      onPlanDraft: (preview: PlanDraftPreview) => {
+        send("chat:streamInfo", {
+          requestId,
+          kind: "planDraft",
+          draft: preview
+        });
+      },
+      onWorkoutDelete: (preview) => {
+        send("chat:streamInfo", {
+          requestId,
+          kind: "workoutDelete",
+          preview
+        });
+      }
+    });
+  }
+  return callCorosMcpTool(name, args);
+}
+
+function findChatTool(name: string): CorosMcpTool | undefined {
+  return getAllChatTools().find((tool) => tool.name === name);
 }
 
 // ----- Provider request/response shape (isolated) -----
@@ -640,15 +898,50 @@ function toInputMessageItem(message: ChatMessage): Record<string, unknown> {
   };
 }
 
-/** Exposes the connected COROS MCP tools to the model as function tools. */
-function buildMcpFunctionTools(): Record<string, unknown>[] {
-  return getCorosMcpTools().map((tool) => ({
+/** Exposes COROS MCP + local workout tools to the model as function tools. */
+function buildChatFunctionTools(): Record<string, unknown>[] {
+  return getAllChatTools().map((tool) => ({
     type: "function",
     name: tool.name,
     description: tool.description ?? "",
     parameters: tool.inputSchema ?? { type: "object", properties: {} },
     strict: false
   }));
+}
+
+function withLiveCorosToolInstructions(
+  instructions: string,
+  tools: CorosMcpTool[]
+): string {
+  if (tools.length === 0) {
+    return instructions;
+  }
+  const mcpTools = tools.filter((tool) => !isChatWorkoutTool(tool.name));
+  const planTools = tools.filter((tool) => isChatWorkoutTool(tool.name));
+  const sections = [instructions, "", "## Live COROS data (tools)"];
+  if (mcpTools.length > 0) {
+    sections.push(
+      `You have live tools to fetch the athlete's current COROS data: ` +
+        `${mcpTools.map((tool) => tool.name).join(", ")}. ` +
+        "The snapshot above is only a brief overview. For any question about " +
+        "specific activities, splits, heart rate, recovery, sleep, HRV, stress, " +
+        "or trends, CALL THE APPROPRIATE TOOL to get real numbers rather than " +
+        "relying on the snapshot or guessing."
+    );
+  }
+  if (planTools.length > 0) {
+    sections.push(
+      "",
+      "## Training plan tools",
+      `Plan authoring tools: ${planTools.map((tool) => tool.name).join(", ")}. ` +
+        "Use draft_training_plan to build multi-day schedules with structured runs " +
+        "(distance_km for easy runs, steps for intervals). Include schedule_date " +
+        "(YYYYMMDD) for calendar placement. The athlete must confirm before upload. " +
+        "Use list_scheduled_workouts + delete_workout to stage deletions. " +
+        "The athlete confirms via the Delete from COROS button in chat."
+    );
+  }
+  return sections.join("\n");
 }
 
 interface FunctionCall {

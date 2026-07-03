@@ -34,8 +34,21 @@ import type {
   TrainingHubThresholdZone,
   TrainingHubUpcomingWorkout,
   TrainingHubZoneDistributionEntry,
-  TrainingHubZoneDistributions
+  TrainingHubZoneDistributions,
+  UploadPlanResult,
+  UploadPlanResultEntry,
+  CorosTrainingPlanDraftInput,
+  PlanWorkoutEntryInput,
+  DeleteWorkoutResult,
+  TrainingHubScheduledWorkoutEntry
 } from "./types";
+import {
+  buildWorkoutPayloadFromEntry,
+  resetProgramForCreate,
+  validatePlanDraft,
+  type CorosTrainingPlanDraft,
+  type PlanWorkoutEntry
+} from "./corosWorkoutBuilder";
 import { TRAINING_HUB_EXPORT_FORMATS } from "./types";
 
 interface LoginResult {
@@ -726,6 +739,476 @@ export async function uploadRouteToCorosAccount(
   throw new Error(
     "Uploading routes to your COROS account is not available yet. Export the GPX and import it in the COROS phone app for now."
   );
+}
+
+export async function createWorkoutProgram(
+  program: Record<string, unknown>
+): Promise<{ programId: string; program: Record<string, unknown> }> {
+  const payload = resetProgramForCreate(program);
+  const name = String(payload.name ?? "").trim();
+  const rawId = await trainingHubPost<string | number>(
+    "/training/program/add",
+    payload,
+    { allowEmptyData: true }
+  );
+
+  let programId =
+    rawId !== undefined && rawId !== null && String(rawId).trim()
+      ? String(rawId)
+      : undefined;
+
+  if (!programId && name) {
+    const found = await findLibraryWorkoutByName(name);
+    if (found?.id !== undefined && found.id !== null) {
+      programId = String(found.id);
+    }
+  }
+
+  if (!programId) {
+    throw new Error(
+      "Workout may have been created but COROS did not return a program ID."
+    );
+  }
+
+  const fullProgram =
+    (await findLibraryWorkoutById(programId)) ??
+    ({ ...payload, id: programId } as Record<string, unknown>);
+
+  return { programId, program: fullProgram };
+}
+
+export async function scheduleWorkoutOnDate(
+  program: Record<string, unknown>,
+  happenDay: string,
+  sortNo = 1
+): Promise<void> {
+  if (!/^\d{8}$/.test(happenDay)) {
+    throw new Error("happenDay must be YYYYMMDD.");
+  }
+
+  const scheduleRaw = await trainingHubGet<Record<string, unknown>>(
+    "/training/schedule/query",
+    {
+      startDate: happenDay,
+      endDate: happenDay,
+      supportRestExercise: 1
+    }
+  );
+
+  const maxIdInPlan = toOptionalNumber(scheduleRaw.maxIdInPlan) ?? 0;
+  const idInPlan = maxIdInPlan + 1;
+
+  const programPayload = structuredClone(program);
+  programPayload.idInPlan = idInPlan;
+
+  await trainingHubPostVoid("/training/schedule/update", {
+    entities: [
+      {
+        happenDay,
+        idInPlan,
+        sortNoInSchedule: sortNo
+      }
+    ],
+    programs: [programPayload],
+    versionObjects: [{ id: idInPlan, status: 1 }],
+    pbVersion: 2
+  });
+}
+
+export async function listScheduledWorkoutEntries(
+  startDay: string,
+  endDay: string
+): Promise<TrainingHubScheduledWorkoutEntry[]> {
+  const raw = await trainingHubGet<Record<string, unknown>>(
+    "/training/schedule/query",
+    {
+      startDate: startDay,
+      endDate: endDay,
+      supportRestExercise: 1
+    }
+  );
+  return parseScheduledWorkoutEntries(raw);
+}
+
+export async function removeScheduledWorkout(entry: {
+  planId: string;
+  idInPlan: string;
+  planProgramId?: string;
+}): Promise<void> {
+  const idInPlan = entry.idInPlan;
+  await trainingHubPostVoid("/training/schedule/update", {
+    versionObjects: [
+      {
+        id: idInPlan,
+        planProgramId: entry.planProgramId ?? idInPlan,
+        planId: entry.planId,
+        status: 3
+      }
+    ],
+    pbVersion: 2
+  });
+}
+
+export async function deleteWorkoutProgram(programId: string): Promise<void> {
+  const id = String(programId ?? "").trim();
+  if (!id) {
+    throw new Error("A program ID is required to delete a library workout.");
+  }
+  await trainingHubPostVoid("/training/program/delete", [id]);
+}
+
+export async function listWorkoutPrograms(): Promise<Record<string, unknown>[]> {
+  return listLibraryWorkoutPrograms();
+}
+
+export async function deleteWorkout(options: {
+  target: "scheduled" | "library" | "both";
+  schedule_date?: string;
+  workout_name?: string;
+  program_id?: string;
+  plan_id?: string;
+  id_in_plan?: string;
+  plan_program_id?: string;
+}): Promise<DeleteWorkoutResult> {
+  const target = options.target;
+  const scheduleDate = options.schedule_date
+    ? String(options.schedule_date).replace(/-/g, "")
+    : undefined;
+  const workoutName = options.workout_name?.trim();
+  const programId = options.program_id?.trim();
+
+  let removedFromSchedule = false;
+  let removedFromLibrary = false;
+  let resolvedProgramId = programId;
+  let resolvedName = workoutName;
+
+  if (target === "scheduled" || target === "both") {
+    let scheduleEntry: TrainingHubScheduledWorkoutEntry | undefined;
+
+    if (options.plan_id && options.id_in_plan) {
+      const entries = scheduleDate
+        ? await listScheduledWorkoutEntries(scheduleDate, scheduleDate)
+        : await listScheduledWorkoutEntries(
+            formatScheduleDay(new Date()),
+            formatScheduleDay(
+              new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+            )
+          );
+      scheduleEntry = entries.find(
+        (entry) =>
+          entry.planId === String(options.plan_id) &&
+          entry.idInPlan === String(options.id_in_plan)
+      );
+    } else if (scheduleDate && workoutName) {
+      const entries = await listScheduledWorkoutEntries(
+        scheduleDate,
+        scheduleDate
+      );
+      const matches = entries.filter((entry) => entry.name === workoutName);
+      if (matches.length > 1) {
+        throw new Error(
+          `Multiple scheduled workouts named "${workoutName}" on ${scheduleDate}. ` +
+            "Use plan_id and id_in_plan to disambiguate."
+        );
+      }
+      scheduleEntry = matches[0];
+    } else {
+      throw new Error(
+        "Scheduled delete requires schedule_date + workout_name, or plan_id + id_in_plan."
+      );
+    }
+
+    if (!scheduleEntry) {
+      throw new Error("Scheduled workout not found on COROS calendar.");
+    }
+
+    await removeScheduledWorkout({
+      planId: scheduleEntry.planId,
+      idInPlan: scheduleEntry.idInPlan,
+      planProgramId: scheduleEntry.planProgramId
+    });
+    removedFromSchedule = true;
+    resolvedName = resolvedName ?? scheduleEntry.name;
+    resolvedProgramId = resolvedProgramId ?? scheduleEntry.programId;
+  }
+
+  if (target === "library" || target === "both") {
+    let libraryId = resolvedProgramId;
+    if (!libraryId && workoutName) {
+      const found = await findLibraryWorkoutByName(workoutName);
+      libraryId =
+        found?.id !== undefined && found.id !== null
+          ? String(found.id)
+          : undefined;
+      resolvedName = resolvedName ?? (found?.name as string | undefined);
+    }
+
+    if (!libraryId) {
+      if (target === "library") {
+        throw new Error("Library workout not found.");
+      }
+    } else {
+      await deleteWorkoutProgram(libraryId);
+      removedFromLibrary = true;
+      resolvedProgramId = libraryId;
+    }
+  }
+
+  const parts: string[] = [];
+  if (removedFromSchedule) {
+    parts.push("removed from calendar");
+  }
+  if (removedFromLibrary) {
+    parts.push("removed from library");
+  }
+  if (parts.length === 0) {
+    throw new Error("Nothing was deleted.");
+  }
+
+  return {
+    removedFromSchedule,
+    removedFromLibrary,
+    workoutName: resolvedName,
+    scheduleDate,
+    programId: resolvedProgramId,
+    message: `Workout ${parts.join(" and ")}.`
+  };
+}
+
+export function parseScheduledWorkoutEntries(
+  raw: Record<string, unknown>
+): TrainingHubScheduledWorkoutEntry[] {
+  const entities = extractArray(raw, ["entities"]) ?? [];
+  const programs = extractArray(raw, ["programs"]) ?? [];
+  const programsByIdInPlan = new Map<string, Record<string, unknown>>();
+  const programsById = new Map<string, Record<string, unknown>>();
+
+  for (const item of programs) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+
+    const program = item as Record<string, unknown>;
+    const idInPlan = program.idInPlan;
+
+    if (idInPlan !== undefined && idInPlan !== null) {
+      programsByIdInPlan.set(String(idInPlan), program);
+    }
+
+    if (program.id !== undefined && program.id !== null) {
+      programsById.set(String(program.id), program);
+    }
+  }
+
+  const entries: TrainingHubScheduledWorkoutEntry[] = [];
+
+  entities.forEach((item, index) => {
+    if (!item || typeof item !== "object") {
+      return;
+    }
+
+    const entity = item as Record<string, unknown>;
+    const status = toOptionalNumber(entity.status);
+
+    if (status === 3) {
+      return;
+    }
+
+    const happenDay = String(entity.happenDay ?? "");
+    if (!/^\d{8}$/.test(happenDay)) {
+      return;
+    }
+
+    const idInPlan = String(entity.idInPlan ?? "");
+    const planProgramId = String(entity.planProgramId ?? "");
+    const planId = String(entity.planId ?? "");
+    const program = resolveScheduledProgram(
+      entity,
+      index,
+      programsByIdInPlan,
+      programsById,
+      programs
+    );
+
+    entries.push({
+      planId,
+      idInPlan,
+      planProgramId,
+      happenDay,
+      name: resolveUpcomingWorkoutName(program, entity),
+      programId:
+        program?.id !== undefined && program.id !== null
+          ? String(program.id)
+          : planProgramId || undefined,
+      sortNo: toOptionalNumber(entity.sortNoInSchedule ?? entity.sortNo)
+    });
+  });
+
+  return entries.sort((left, right) => {
+    if (left.happenDay !== right.happenDay) {
+      return left.happenDay.localeCompare(right.happenDay);
+    }
+    return (left.sortNo ?? 0) - (right.sortNo ?? 0);
+  });
+}
+
+function toPlanWorkoutEntry(entry: PlanWorkoutEntryInput): PlanWorkoutEntry {
+  return {
+    key: entry.key,
+    name: entry.name,
+    steps: entry.steps as PlanWorkoutEntry["steps"],
+    distance_km: entry.distance_km,
+    schedule_date: entry.schedule_date,
+    sort_no: entry.sort_no,
+    save_to_library: entry.save_to_library
+  };
+}
+
+export async function uploadTrainingPlan(
+  draftInput: CorosTrainingPlanDraftInput
+): Promise<UploadPlanResult> {
+  const draft: CorosTrainingPlanDraft = {
+    name: draftInput.name,
+    workouts: draftInput.workouts.map(toPlanWorkoutEntry)
+  };
+
+  const validation = validatePlanDraft(draft);
+  if (!validation.ok) {
+    throw new Error(validation.errors.join(" "));
+  }
+
+  const existingByDate = await loadExistingScheduleDates(draft);
+  const entries: UploadPlanResultEntry[] = [];
+  let workoutsCreated = 0;
+  let workoutsScheduled = 0;
+
+  for (const entry of draft.workouts) {
+    const payload = buildWorkoutPayloadFromEntry(entry);
+    const saveToLibrary = entry.save_to_library !== false;
+    let program = structuredClone(payload) as Record<string, unknown>;
+    let programId: string | undefined;
+
+    if (saveToLibrary) {
+      const created = await createWorkoutProgram(program);
+      programId = created.programId;
+      program = created.program;
+      workoutsCreated += 1;
+    }
+
+    if (entry.schedule_date) {
+      if (existingByDate.get(entry.schedule_date)?.length) {
+        // Still schedule — user confirmed via UI; conflict was shown in preview.
+      }
+      const sortNo = entry.sort_no ?? 1;
+      await scheduleWorkoutOnDate(program, entry.schedule_date, sortNo);
+      workoutsScheduled += 1;
+      entries.push({
+        key: entry.key,
+        name: entry.name,
+        date: entry.schedule_date,
+        programId,
+        scheduled: true,
+        savedToLibrary: saveToLibrary
+      });
+    } else {
+      entries.push({
+        key: entry.key,
+        name: entry.name,
+        programId,
+        scheduled: false,
+        savedToLibrary: saveToLibrary
+      });
+    }
+  }
+
+  return {
+    planName: draft.name,
+    workoutsCreated,
+    workoutsScheduled,
+    entries
+  };
+}
+
+async function loadExistingScheduleDates(
+  draft: CorosTrainingPlanDraft
+): Promise<Map<string, string[]>> {
+  const dates = [
+    ...new Set(
+      draft.workouts
+        .map((entry) => entry.schedule_date)
+        .filter((day): day is string => Boolean(day))
+    )
+  ].sort();
+
+  if (dates.length === 0) {
+    return new Map();
+  }
+
+  const startDay = dates[0]!;
+  const endDay = dates[dates.length - 1]!;
+  const raw = await trainingHubGet<Record<string, unknown>>(
+    "/training/schedule/query",
+    {
+      startDate: startDay,
+      endDate: endDay,
+      supportRestExercise: 1
+    }
+  );
+
+  const workouts = parseUpcomingWorkouts(raw, startDay);
+  const byDate = new Map<string, string[]>();
+
+  for (const workout of workouts) {
+    const list = byDate.get(workout.happenDay) ?? [];
+    list.push(workout.name);
+    byDate.set(workout.happenDay, list);
+  }
+
+  return byDate;
+}
+
+async function trainingHubPost<T>(
+  path: string,
+  body: unknown,
+  options?: { allowEmptyData?: boolean }
+): Promise<T | undefined> {
+  return trainingHubFetch<T>(path, {
+    method: "POST",
+    body: JSON.stringify(body),
+    allowEmptyData: options?.allowEmptyData
+  });
+}
+
+async function trainingHubPostVoid(path: string, body: unknown): Promise<void> {
+  await trainingHubPost(path, body, { allowEmptyData: true });
+}
+
+async function listLibraryWorkoutPrograms(): Promise<Record<string, unknown>[]> {
+  const data = await trainingHubPost<unknown>("/training/program/query", {});
+  return Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
+}
+
+async function findLibraryWorkoutById(
+  programId: string
+): Promise<Record<string, unknown> | undefined> {
+  const programs = await listLibraryWorkoutPrograms();
+  return programs.find((program) => String(program.id ?? "") === programId);
+}
+
+async function findLibraryWorkoutByName(
+  name: string
+): Promise<Record<string, unknown> | undefined> {
+  const programs = await listLibraryWorkoutPrograms();
+  const matches = programs.filter((program) => program.name === name);
+  if (matches.length === 0) {
+    return undefined;
+  }
+
+  return matches.sort((left, right) => {
+    const leftTs = toOptionalNumber(left.createTimestamp) ?? 0;
+    const rightTs = toOptionalNumber(right.createTimestamp) ?? 0;
+    return rightTs - leftTs;
+  })[0];
 }
 
 function upcomingScheduleDateRange(days: number): {
@@ -3245,18 +3728,21 @@ async function trainingHubGet<T>(
   return trainingHubRequest<T>(path, { method: "GET", params });
 }
 
+interface TrainingHubRequestOptions extends RequestInit {
+  params?: Record<string, string | number>;
+  allowEmptyData?: boolean;
+}
+
 async function trainingHubFetch<T>(
   path: string,
-  options: RequestInit = {}
+  options: TrainingHubRequestOptions = {}
 ): Promise<T> {
   return trainingHubRequest<T>(path, options);
 }
 
 async function trainingHubRequest<T>(
   path: string,
-  options: RequestInit & {
-    params?: Record<string, string | number>;
-  } = {}
+  options: TrainingHubRequestOptions = {}
 ): Promise<T> {
   const auth = getStoredAuth();
   if (!auth) {
@@ -3303,9 +3789,7 @@ async function trainingHubRequest<T>(
 
 async function recoverExpiredTrainingHubSession<T>(
   path: string,
-  options: RequestInit & {
-    params?: Record<string, string | number>;
-  }
+  options: TrainingHubRequestOptions
 ): Promise<T> {
   const refreshed = await reauthenticateFromStoredCredentials();
   if (!refreshed) {
@@ -3319,11 +3803,9 @@ async function recoverExpiredTrainingHubSession<T>(
 async function executeTrainingHubRequest<T>(
   auth: TrainingHubAuthState,
   path: string,
-  options: RequestInit & {
-    params?: Record<string, string | number>;
-  } = {}
+  options: TrainingHubRequestOptions = {}
 ): Promise<T> {
-  const { params, ...requestOptions } = options;
+  const { params, allowEmptyData, ...requestOptions } = options;
   const url = new URL(`${auth.baseUrl}${path}`);
 
   if (params) {
@@ -3333,7 +3815,7 @@ async function executeTrainingHubRequest<T>(
   }
 
   const headers: Record<string, string> = {
-    ...buildTrainingHubHeaders(auth.accessToken),
+    ...buildTrainingHubHeaders(auth.accessToken, auth.userId),
     ...(requestOptions.headers as Record<string, string> | undefined)
   };
 
@@ -3344,7 +3826,7 @@ async function executeTrainingHubRequest<T>(
   return fetchJson<T>(url.toString(), {
     ...requestOptions,
     headers
-  });
+  }, { allowEmptyData, contextPath: path });
 }
 
 async function resolveTrainingHubBaseUrl(
@@ -3437,18 +3919,10 @@ function isInvalidTokenMessage(message: string): boolean {
   );
 }
 
-async function fetchJson<T>(
-  url: string,
-  options: RequestInit
-): Promise<T> {
-  const response = await fetch(url, options);
-  if (!response.ok) {
-    throw new Error(
-      `COROS API request failed: ${response.status} ${response.statusText}`
-    );
-  }
-
-  const payload = (await response.json()) as TrainingHubApiResponse<T>;
+export function parseTrainingHubApiResponse<T>(
+  payload: TrainingHubApiResponse<T>,
+  options?: { allowEmptyData?: boolean; contextPath?: string }
+): T | undefined {
   const result = String(payload.result ?? payload.apiCode ?? "");
 
   if (AUTH_ERROR_CODES.has(result)) {
@@ -3465,11 +3939,32 @@ async function fetchJson<T>(
     throw new Error(message);
   }
 
-  if (payload.data === undefined) {
-    throw new Error("COROS API response did not include data.");
+  if (payload.data === undefined || payload.data === null) {
+    if (options?.allowEmptyData) {
+      return undefined;
+    }
+    const context = options?.contextPath ?? "API request";
+    throw new Error(`COROS ${context} succeeded but returned no data.`);
   }
 
   return payload.data;
+}
+
+async function fetchJson<T>(
+  url: string,
+  options: RequestInit,
+  fetchOptions?: { allowEmptyData?: boolean; contextPath?: string }
+): Promise<T> {
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    throw new Error(
+      `COROS API request failed: ${response.status} ${response.statusText}`
+    );
+  }
+
+  const payload = (await response.json()) as TrainingHubApiResponse<T>;
+  const data = parseTrainingHubApiResponse<T>(payload, fetchOptions);
+  return data as T;
 }
 
 function getStoredAuth(): TrainingHubAuthState | null {
@@ -3490,11 +3985,18 @@ function getStoredAuth(): TrainingHubAuthState | null {
   };
 }
 
-function buildTrainingHubHeaders(accessToken: string): Record<string, string> {
-  return {
+function buildTrainingHubHeaders(
+  accessToken: string,
+  userId?: string
+): Record<string, string> {
+  const headers: Record<string, string> = {
     accesstoken: accessToken,
     Accept: "application/json, text/plain, */*"
   };
+  if (userId) {
+    headers.yfheader = JSON.stringify({ userId });
+  }
+  return headers;
 }
 
 function clearTrainingHubAuth(): void {

@@ -50,13 +50,22 @@ import type {
   AppleMusicStatus,
   ChatAuthStatus,
   ChatMessage,
+  ChatProvider,
+  ChatSettings,
+  PersistedChatEntry,
   ChatStreamStart,
   ChatStreamToken,
   ChatStreamDone,
   ChatStreamError,
   ChatStreamInfo,
+  LocalChatConfig,
+  LocalChatConnectionTest,
+  LocalChatDiscovery,
   CorosMcpStatus,
-  CorosMcpTool
+  CorosMcpTool,
+  CorosTrainingPlanDraftInput,
+  UploadPlanResult,
+  DeleteWorkoutResult
 } from "../electron/types";
 
 export interface CorosLinkApi {
@@ -156,6 +165,9 @@ export interface CorosLinkApi {
     fileType: TrainingHubActivityFileType,
     suggestedName?: string
   ) => Promise<TrainingHubExportResult>;
+  exportLatestTrainingHubActivityFile: (
+    fileType?: TrainingHubActivityFileType
+  ) => Promise<TrainingHubExportResult>;
   getTrainingAnalytics: () => Promise<TrainingHubAnalytics>;
   getRacePredictor: () => Promise<TrainingHubRacePredictor>;
   getTrainingDashboard: () => Promise<TrainingHubDashboard>;
@@ -163,6 +175,9 @@ export interface CorosLinkApi {
   getSportTypeMap: () => Promise<TrainingHubSportType[]>;
   getActivityPaceBaselines: () => Promise<ActivityPaceBaselines>;
   getUpcomingWorkouts: (days?: number) => Promise<TrainingHubUpcomingWorkout[]>;
+  uploadTrainingPlan: (
+    draft: CorosTrainingPlanDraftInput
+  ) => Promise<UploadPlanResult>;
   getCorosMapManifest: () => Promise<CorosMapManifest>;
   openCorosMapDownload: (downloadUrl: string) => Promise<void>;
   downloadCorosMapPackage: (
@@ -217,10 +232,22 @@ export interface CorosLinkApi {
     callback: (snapshot: AppUpdateSnapshot) => void
   ) => () => void;
   getChatAuthStatus: () => Promise<ChatAuthStatus>;
+  getChatSettings: () => Promise<ChatSettings>;
+  saveChatSettings: (settings: ChatSettings) => Promise<ChatSettings>;
+  testLocalChatConnection: (
+    config?: LocalChatConfig
+  ) => Promise<LocalChatConnectionTest>;
+  detectLocalChatServers: (apiKey?: string) => Promise<LocalChatDiscovery>;
   loginChat: () => Promise<ChatAuthStatus>;
   logoutChat: () => Promise<ChatAuthStatus>;
   sendChat: (requestId: string, messages: ChatMessage[]) => Promise<void>;
   cancelChat: (requestId: string) => Promise<void>;
+  getChatHistory: (provider: ChatProvider) => Promise<PersistedChatEntry[]>;
+  saveChatHistory: (
+    provider: ChatProvider,
+    entries: PersistedChatEntry[]
+  ) => Promise<void>;
+  clearChatHistory: (provider: ChatProvider) => Promise<void>;
   onChatStreamStart: (callback: (payload: ChatStreamStart) => void) => () => void;
   onChatStreamToken: (callback: (payload: ChatStreamToken) => void) => () => void;
   onChatStreamDone: (callback: (payload: ChatStreamDone) => void) => () => void;
@@ -230,6 +257,8 @@ export interface CorosLinkApi {
   connectCorosMcp: () => Promise<CorosMcpStatus>;
   disconnectCorosMcp: () => Promise<CorosMcpStatus>;
   listCorosMcpTools: () => Promise<CorosMcpTool[]>;
+  uploadTrainingPlanDraft: (draftId: string) => Promise<UploadPlanResult>;
+  confirmWorkoutDelete: (requestId: string) => Promise<DeleteWorkoutResult>;
 }
 
 declare global {

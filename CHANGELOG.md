@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-07-03
+
+### Added
+
+- **Training coach chatbot** — ask training questions in a new Coach tab with streaming answers grounded in your COROS data (recent activities, dashboard metrics, upcoming workouts)
+- **ChatGPT sign-in** — connect with your OpenAI account for cloud coaching; supports tool use against COROS Training Hub data via MCP
+- **Local LLM support** — run coaching offline with Ollama or LM Studio (auto-detect, connection test, optional tool use)
+- **Workout plan tools** — the coach can draft multi-day training plans, preview them in chat, upload to COROS, list scheduled workouts, and delete workouts with confirmation cards
+- **Chat history** — per-provider conversation persistence across app restarts
+- **In-app Apple Music sign-in** — automatic amp-api header capture replaces manual DevTools paste
+- **In-app YouTube Music sign-in** — automatic header capture for playlist and liked-song sync
+- **Resources menu** — quick links to docs, community, and support from the header
+- Improved **Training Hub activity exports** — FIT download from the activity table and latest-activity export from chat
+
+### Changed
+
+- Redesigned marketing website with Tailwind v4 and refactored components
+
 ### Removed
 
 - GitHub Pages website build and deployment (site is hosted on Vercel; removed `.nojekyll` and disabled the Pages site on the repository)
@@ -147,6 +165,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - GitHub Actions release workflow and installer build documentation
 
+[0.1.13]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.9...v0.1.10

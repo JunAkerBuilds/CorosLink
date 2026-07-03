@@ -51,13 +51,22 @@ import type {
   AppleMusicStatus,
   ChatAuthStatus,
   ChatMessage,
+  ChatProvider,
+  ChatSettings,
+  PersistedChatEntry,
   ChatStreamStart,
   ChatStreamToken,
   ChatStreamDone,
   ChatStreamError,
   ChatStreamInfo,
+  LocalChatConfig,
+  LocalChatConnectionTest,
+  LocalChatDiscovery,
   CorosMcpStatus,
-  CorosMcpTool
+  CorosMcpTool,
+  CorosTrainingPlanDraftInput,
+  UploadPlanResult,
+  DeleteWorkoutResult
 } from "./types";
 
 const api = {
@@ -251,6 +260,10 @@ const api = {
       fileType,
       suggestedName
     ),
+  exportLatestTrainingHubActivityFile: (
+    fileType: TrainingHubActivityFileType = 4
+  ): Promise<TrainingHubExportResult> =>
+    ipcRenderer.invoke("trainingHub:exportLatestActivityFile", fileType),
   getTrainingAnalytics: (): Promise<TrainingHubAnalytics> =>
     ipcRenderer.invoke("trainingHub:getTrainingAnalytics"),
   getRacePredictor: (): Promise<TrainingHubRacePredictor> =>
@@ -267,6 +280,10 @@ const api = {
     days?: number
   ): Promise<TrainingHubUpcomingWorkout[]> =>
     ipcRenderer.invoke("trainingHub:getUpcomingWorkouts", days),
+  uploadTrainingPlan: (
+    draft: CorosTrainingPlanDraftInput
+  ): Promise<UploadPlanResult> =>
+    ipcRenderer.invoke("trainingHub:uploadTrainingPlan", draft),
   getCorosMapManifest: (): Promise<CorosMapManifest> =>
     ipcRenderer.invoke("maps:getCorosManifest"),
   openCorosMapDownload: (downloadUrl: string): Promise<void> =>
@@ -382,6 +399,16 @@ const api = {
   },
   getChatAuthStatus: (): Promise<ChatAuthStatus> =>
     ipcRenderer.invoke("chat:getAuthStatus"),
+  getChatSettings: (): Promise<ChatSettings> =>
+    ipcRenderer.invoke("chat:getSettings"),
+  saveChatSettings: (settings: ChatSettings): Promise<ChatSettings> =>
+    ipcRenderer.invoke("chat:saveSettings", settings),
+  testLocalChatConnection: (
+    config?: LocalChatConfig
+  ): Promise<LocalChatConnectionTest> =>
+    ipcRenderer.invoke("chat:testLocalConnection", config),
+  detectLocalChatServers: (apiKey?: string): Promise<LocalChatDiscovery> =>
+    ipcRenderer.invoke("chat:detectLocalServers", apiKey),
   loginChat: (): Promise<ChatAuthStatus> => ipcRenderer.invoke("chat:login"),
   logoutChat: (): Promise<ChatAuthStatus> => ipcRenderer.invoke("chat:logout"),
   // Fire-and-forget: assistant text arrives via the onChat* subscriptions.
@@ -389,6 +416,14 @@ const api = {
     ipcRenderer.invoke("chat:send", requestId, messages),
   cancelChat: (requestId: string): Promise<void> =>
     ipcRenderer.invoke("chat:cancel", requestId),
+  getChatHistory: (provider: ChatProvider): Promise<PersistedChatEntry[]> =>
+    ipcRenderer.invoke("chat:getHistory", provider),
+  saveChatHistory: (
+    provider: ChatProvider,
+    entries: PersistedChatEntry[]
+  ): Promise<void> => ipcRenderer.invoke("chat:saveHistory", provider, entries),
+  clearChatHistory: (provider: ChatProvider): Promise<void> =>
+    ipcRenderer.invoke("chat:clearHistory", provider),
   onChatStreamStart: (
     callback: (payload: ChatStreamStart) => void
   ): (() => void) => {
@@ -436,7 +471,11 @@ const api = {
   disconnectCorosMcp: (): Promise<CorosMcpStatus> =>
     ipcRenderer.invoke("chatMcp:disconnect"),
   listCorosMcpTools: (): Promise<CorosMcpTool[]> =>
-    ipcRenderer.invoke("chatMcp:listTools")
+    ipcRenderer.invoke("chatMcp:listTools"),
+  uploadTrainingPlanDraft: (draftId: string): Promise<UploadPlanResult> =>
+    ipcRenderer.invoke("chat:uploadPlanDraft", draftId),
+  confirmWorkoutDelete: (requestId: string): Promise<DeleteWorkoutResult> =>
+    ipcRenderer.invoke("chat:confirmWorkoutDelete", requestId)
 };
 
 contextBridge.exposeInMainWorld("corosLink", api);
