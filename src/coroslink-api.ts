@@ -41,6 +41,7 @@ import type {
   WatchConnectionSmokeOptionId,
   WatchStatus,
   YouTubeHistoryEntry,
+  YouTubeMusicAuthCapture,
   YouTubeMusicConfig,
   YouTubeMusicLibrary,
   YouTubeMusicStatus,
@@ -92,6 +93,10 @@ export interface CorosLinkApi {
   saveYouTubeMusicAuth: (headersRaw: string) => Promise<YouTubeMusicStatus>;
   loginYouTubeMusic: () => Promise<YouTubeMusicStatus>;
   logoutYouTubeMusic: () => Promise<YouTubeMusicStatus>;
+  resetYouTubeMusicBrowserSession: () => Promise<void>;
+  onYouTubeMusicAuthCaptured: (
+    callback: (result: YouTubeMusicAuthCapture) => void
+  ) => () => void;
   listYouTubeMusicLibrary: () => Promise<YouTubeMusicLibrary>;
   syncYouTubeMusicLibrary: () => Promise<YouTubeMusicSyncResult>;
   getAppleMusicStatus: () => Promise<AppleMusicStatus>;

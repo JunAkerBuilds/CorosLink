@@ -215,6 +215,15 @@ export interface YouTubeMusicLibrary {
   syncedAt?: string;
 }
 
+/**
+ * Result pushed to the renderer when the embedded YouTube Music sign-in captures
+ * credentials: the refreshed status on success, or a message if the ytmusicapi
+ * setup failed (e.g. Python/ytmusicapi missing).
+ */
+export type YouTubeMusicAuthCapture =
+  | { status: YouTubeMusicStatus; error?: undefined }
+  | { status?: undefined; error: string };
+
 export interface YouTubeMusicSyncResult extends YouTubeMusicLibrary {
   status: YouTubeMusicStatus;
 }
