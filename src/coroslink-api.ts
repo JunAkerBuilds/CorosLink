@@ -47,7 +47,16 @@ import type {
   YouTubeMusicStatus,
   YouTubeMusicSyncResult,
   AppleMusicPlaylist,
-  AppleMusicStatus
+  AppleMusicStatus,
+  ChatAuthStatus,
+  ChatMessage,
+  ChatStreamStart,
+  ChatStreamToken,
+  ChatStreamDone,
+  ChatStreamError,
+  ChatStreamInfo,
+  CorosMcpStatus,
+  CorosMcpTool
 } from "../electron/types";
 
 export interface CorosLinkApi {
@@ -207,6 +216,20 @@ export interface CorosLinkApi {
   onAppUpdateStatus: (
     callback: (snapshot: AppUpdateSnapshot) => void
   ) => () => void;
+  getChatAuthStatus: () => Promise<ChatAuthStatus>;
+  loginChat: () => Promise<ChatAuthStatus>;
+  logoutChat: () => Promise<ChatAuthStatus>;
+  sendChat: (requestId: string, messages: ChatMessage[]) => Promise<void>;
+  cancelChat: (requestId: string) => Promise<void>;
+  onChatStreamStart: (callback: (payload: ChatStreamStart) => void) => () => void;
+  onChatStreamToken: (callback: (payload: ChatStreamToken) => void) => () => void;
+  onChatStreamDone: (callback: (payload: ChatStreamDone) => void) => () => void;
+  onChatStreamError: (callback: (payload: ChatStreamError) => void) => () => void;
+  onChatStreamInfo: (callback: (payload: ChatStreamInfo) => void) => () => void;
+  getCorosMcpStatus: () => Promise<CorosMcpStatus>;
+  connectCorosMcp: () => Promise<CorosMcpStatus>;
+  disconnectCorosMcp: () => Promise<CorosMcpStatus>;
+  listCorosMcpTools: () => Promise<CorosMcpTool[]>;
 }
 
 declare global {

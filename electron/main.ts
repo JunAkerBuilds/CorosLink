@@ -134,6 +134,21 @@ import {
   quitAndInstallUpdate,
   setUpdaterPreferences
 } from "./updaterService";
+import {
+  cancelChat,
+  getChatAuthStatus,
+  loginChat,
+  logoutChat,
+  streamChat
+} from "./chatService";
+import {
+  connectCorosMcp,
+  disconnectCorosMcp,
+  ensureCorosMcpConnected,
+  getCorosMcpStatus,
+  listCorosMcpTools
+} from "./corosMcpService";
+import type { ChatMessage } from "./types";
 
 let mainWindow: BrowserWindow | undefined;
 
@@ -285,6 +300,9 @@ app.whenReady().then(() => {
   createWindow();
   applyAppIcon();
 
+  // Silently restore a previous COROS MCP session (no browser popup).
+  void ensureCorosMcpConnected();
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -415,6 +433,31 @@ function registerIpcHandlers(): void {
   ipcMain.handle("youtubeMusic:listLibrary", () => listYouTubeMusicLibrary());
 
   ipcMain.handle("youtubeMusic:syncLibrary", () => syncYouTubeMusicLibrary());
+
+  ipcMain.handle("chat:getAuthStatus", () => getChatAuthStatus());
+
+  ipcMain.handle("chat:login", () => loginChat(mainWindow));
+
+  ipcMain.handle("chat:logout", () => logoutChat());
+
+  // Kicks off streaming; assistant text is pushed via chat:stream* events.
+  ipcMain.handle(
+    "chat:send",
+    (_event, requestId: string, messages: ChatMessage[]) =>
+      streamChat(mainWindow, requestId, messages)
+  );
+
+  ipcMain.handle("chat:cancel", (_event, requestId: string) =>
+    cancelChat(requestId)
+  );
+
+  ipcMain.handle("chatMcp:getStatus", () => getCorosMcpStatus());
+
+  ipcMain.handle("chatMcp:connect", () => connectCorosMcp(mainWindow));
+
+  ipcMain.handle("chatMcp:disconnect", () => disconnectCorosMcp());
+
+  ipcMain.handle("chatMcp:listTools", () => listCorosMcpTools());
 
   ipcMain.handle("appleMusic:getStatus", () => getAppleMusicStatus());
 

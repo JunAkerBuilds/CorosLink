@@ -48,7 +48,16 @@ import type {
   YouTubeMusicStatus,
   YouTubeMusicSyncResult,
   AppleMusicPlaylist,
-  AppleMusicStatus
+  AppleMusicStatus,
+  ChatAuthStatus,
+  ChatMessage,
+  ChatStreamStart,
+  ChatStreamToken,
+  ChatStreamDone,
+  ChatStreamError,
+  ChatStreamInfo,
+  CorosMcpStatus,
+  CorosMcpTool
 } from "./types";
 
 const api = {
@@ -370,7 +379,64 @@ const api = {
     };
     ipcRenderer.on("app:updateStatus", listener);
     return () => ipcRenderer.removeListener("app:updateStatus", listener);
-  }
+  },
+  getChatAuthStatus: (): Promise<ChatAuthStatus> =>
+    ipcRenderer.invoke("chat:getAuthStatus"),
+  loginChat: (): Promise<ChatAuthStatus> => ipcRenderer.invoke("chat:login"),
+  logoutChat: (): Promise<ChatAuthStatus> => ipcRenderer.invoke("chat:logout"),
+  // Fire-and-forget: assistant text arrives via the onChat* subscriptions.
+  sendChat: (requestId: string, messages: ChatMessage[]): Promise<void> =>
+    ipcRenderer.invoke("chat:send", requestId, messages),
+  cancelChat: (requestId: string): Promise<void> =>
+    ipcRenderer.invoke("chat:cancel", requestId),
+  onChatStreamStart: (
+    callback: (payload: ChatStreamStart) => void
+  ): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: ChatStreamStart) =>
+      callback(payload);
+    ipcRenderer.on("chat:streamStart", listener);
+    return () => ipcRenderer.removeListener("chat:streamStart", listener);
+  },
+  onChatStreamToken: (
+    callback: (payload: ChatStreamToken) => void
+  ): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: ChatStreamToken) =>
+      callback(payload);
+    ipcRenderer.on("chat:streamToken", listener);
+    return () => ipcRenderer.removeListener("chat:streamToken", listener);
+  },
+  onChatStreamDone: (
+    callback: (payload: ChatStreamDone) => void
+  ): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: ChatStreamDone) =>
+      callback(payload);
+    ipcRenderer.on("chat:streamDone", listener);
+    return () => ipcRenderer.removeListener("chat:streamDone", listener);
+  },
+  onChatStreamError: (
+    callback: (payload: ChatStreamError) => void
+  ): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: ChatStreamError) =>
+      callback(payload);
+    ipcRenderer.on("chat:streamError", listener);
+    return () => ipcRenderer.removeListener("chat:streamError", listener);
+  },
+  onChatStreamInfo: (
+    callback: (payload: ChatStreamInfo) => void
+  ): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: ChatStreamInfo) =>
+      callback(payload);
+    ipcRenderer.on("chat:streamInfo", listener);
+    return () => ipcRenderer.removeListener("chat:streamInfo", listener);
+  },
+  getCorosMcpStatus: (): Promise<CorosMcpStatus> =>
+    ipcRenderer.invoke("chatMcp:getStatus"),
+  connectCorosMcp: (): Promise<CorosMcpStatus> =>
+    ipcRenderer.invoke("chatMcp:connect"),
+  disconnectCorosMcp: (): Promise<CorosMcpStatus> =>
+    ipcRenderer.invoke("chatMcp:disconnect"),
+  listCorosMcpTools: (): Promise<CorosMcpTool[]> =>
+    ipcRenderer.invoke("chatMcp:listTools")
 };
 
 contextBridge.exposeInMainWorld("corosLink", api);

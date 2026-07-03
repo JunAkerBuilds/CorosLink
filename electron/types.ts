@@ -809,3 +809,103 @@ export interface AppUpdateSnapshot {
   /** When false, available updates are not downloaded until the user asks. */
   autoDownload: boolean;
 }
+
+// ----- Training Coach chatbot (Sign in with ChatGPT) -----
+
+export type ChatRole = "user" | "assistant";
+
+export interface ChatMessage {
+  role: ChatRole;
+  content: string;
+}
+
+/** Sign-in state surfaced to the renderer; never includes token material. */
+export interface ChatAuthStatus {
+  signedIn: boolean;
+  /** From the id_token, for display in the header when signed in. */
+  email?: string;
+  /** Access-token expiry (unix seconds), for debugging/telemetry only. */
+  expiresAt?: number;
+}
+
+/**
+ * OAuth token blob persisted encrypted via safeStorage. Mirrors the Codex
+ * "Sign in with ChatGPT" token set. Kept in the main process only.
+ */
+export interface StoredChatToken {
+  access_token: string;
+  refresh_token: string;
+  id_token?: string;
+  /** ChatGPT account id from the id_token's OpenAI auth claim. */
+  account_id?: string;
+  email?: string;
+  /** Unix seconds: now + expires_in at the time of issue/refresh. */
+  expires_at: number;
+  token_type: string;
+}
+
+// ----- COROS MCP (Model Context Protocol) connection -----
+
+export interface CorosMcpTool {
+  name: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;
+}
+
+export interface CorosMcpStatus {
+  /** A live MCP client session is open. */
+  connected: boolean;
+  /** OAuth tokens are stored (can reconnect without a browser). */
+  authorized: boolean;
+  /** Tools discovered from the server. */
+  tools: CorosMcpTool[];
+}
+
+// Streaming chat is push-based: `chat:send` kicks off the request and the
+// assistant text arrives via these main->renderer events, correlated by
+// requestId. Renderers must not await `chat:send` for content.
+export interface ChatStreamStart {
+  requestId: string;
+}
+
+export interface ChatStreamToken {
+  requestId: string;
+  delta: string;
+}
+
+export interface ChatStreamDone {
+  requestId: string;
+  fullText: string;
+  finishReason?: string;
+}
+
+export interface ChatStreamError {
+  requestId: string;
+  message: string;
+  /** True when the failure is an expired/invalid session (drop to login gate). */
+  authError?: boolean;
+}
+
+/**
+ * Diagnostic signal about where the answer's data is coming from: the static
+ * training snapshot injected into `instructions`, and/or live COROS MCP tool
+ * calls the model makes mid-stream.
+ */
+export type ChatStreamInfo =
+  | {
+      requestId: string;
+      kind: "context";
+      /** True when real COROS activity/metrics were injected as a snapshot. */
+      snapshotIncluded: boolean;
+      /** True when the COROS MCP tool was attached to the request. */
+      mcpEnabled: boolean;
+    }
+  | {
+      requestId: string;
+      kind: "mcp";
+      /** The MCP tool name, when known. */
+      tool?: string;
+      /** Raw event type, e.g. "response.mcp_call.completed". */
+      status: string;
+      message?: string;
+    };

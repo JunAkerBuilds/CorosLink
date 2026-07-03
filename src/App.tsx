@@ -18,6 +18,7 @@ import {
   LogOut,
   Loader2,
   Map as MapIcon,
+  MessageCircle,
   Music,
   RefreshCw,
   Search,
@@ -76,6 +77,7 @@ import { AppUpdateControls } from "./components/AppUpdateControls";
 import { ResourcesMenu } from "./components/ResourcesMenu";
 import { WatchConnectionSmokeControls } from "./components/WatchConnectionSmokeControls";
 import { MapsView } from "./maps/MapsView";
+import { ChatView } from "./chat/ChatView";
 import {
   LibrarySyncLayout,
   LocalLibraryPanel,
@@ -93,7 +95,7 @@ import {
 } from "./watchModels";
 import appLogo from "../build/icon.png";
 
-type View = "overview" | "media" | "training" | "maps";
+type View = "overview" | "media" | "training" | "maps" | "coach";
 type MediaTab =
   | "library"
   | "youtube"
@@ -1373,6 +1375,17 @@ export default function App() {
               <Activity size={16} aria-hidden="true" />
               Training Hub
             </button>
+            <button
+              type="button"
+              className={
+                activeView === "coach" ? "primary-tab active" : "primary-tab"
+              }
+              onClick={() => setActiveView("coach")}
+            >
+              <MessageCircle size={16} aria-hidden="true" />
+              Coach
+              <span className="primary-tab-beta">Beta</span>
+            </button>
           </nav>
         </div>
 
@@ -1539,6 +1552,8 @@ export default function App() {
                 onMessage={setMessage}
                 onError={setError}
               />
+            ) : activeView === "coach" ? (
+              <ChatView api={api} onError={setError} />
             ) : (
               <TrainingHubView
                 status={trainingHubStatus}
