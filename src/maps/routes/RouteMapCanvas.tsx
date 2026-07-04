@@ -38,7 +38,12 @@ interface RouteMapCanvasProps {
 
 const START_COLOR = "#4da3ff";
 const END_COLOR = "#d89b22";
-const ROUTE_COLOR = "#2fbe91";
+// Vivid line + white casing so the route pops on any base map rather than
+// blending into the teal accent. On the dark map the green already stands out,
+// so we keep it there and use red everywhere else.
+const ROUTE_COLOR = "#ff3b3b";
+const ROUTE_COLOR_DARK = "#2fbe91";
+const ROUTE_CASING = "#ffffff";
 
 export function RouteMapCanvas({
   mode,
@@ -179,10 +184,18 @@ export function RouteMapCanvas({
     const boundsPoints: Array<[number, number]> = [];
 
     if (linePoints.length >= 2) {
+      // White casing underneath keeps the line readable on light and dark tiles.
       L.polyline(linePoints, {
-        color: ROUTE_COLOR,
-        weight: 5,
-        opacity: 0.95,
+        color: ROUTE_CASING,
+        weight: 8,
+        opacity: 0.85,
+        lineCap: "round",
+        lineJoin: "round"
+      }).addTo(layer);
+      L.polyline(linePoints, {
+        color: baseLayer === "dark" ? ROUTE_COLOR_DARK : ROUTE_COLOR,
+        weight: 4.5,
+        opacity: 1,
         lineCap: "round",
         lineJoin: "round"
       }).addTo(layer);
@@ -239,7 +252,8 @@ export function RouteMapCanvas({
     startPin,
     destinationPin,
     currentLocation,
-    fitRequestId
+    fitRequestId,
+    baseLayer
   ]);
 
   // Draggable draw waypoints (Draw mode only).
