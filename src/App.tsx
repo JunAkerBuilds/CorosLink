@@ -5189,30 +5189,36 @@ function AppleMusicView({
                 <span className="count-pill">{playlists.length}</span>
               </div>
               <div className="playlist-list">
-                {playlists.map((entry) => (
-                  <button
-                    key={entry.id}
-                    className={
-                      entry.id === selectedId
-                        ? "playlist-button apple-music-playlist-button active"
-                        : "playlist-button apple-music-playlist-button"
-                    }
-                    type="button"
-                    onClick={() => void handleSelectPlaylist(entry.id)}
-                  >
-                    <AppleMusicArtwork
-                      className="apple-music-playlist-thumb"
-                      artworkUrl={entry.artworkUrl}
-                    />
-                    <span className="apple-music-playlist-copy">
-                      <strong>{entry.name}</strong>
-                      <span>
-                        {entry.trackCount} track
-                        {entry.trackCount === 1 ? "" : "s"}
+                {playlists.map((entry) => {
+                  // Once a playlist has been opened, its cached detail has the
+                  // exact count (tracks.length); prefer it over the list value.
+                  const trackCount =
+                    detailCache[entry.id]?.trackCount ?? entry.trackCount;
+                  return (
+                    <button
+                      key={entry.id}
+                      className={
+                        entry.id === selectedId
+                          ? "playlist-button apple-music-playlist-button active"
+                          : "playlist-button apple-music-playlist-button"
+                      }
+                      type="button"
+                      onClick={() => void handleSelectPlaylist(entry.id)}
+                    >
+                      <AppleMusicArtwork
+                        className="apple-music-playlist-thumb"
+                        artworkUrl={entry.artworkUrl}
+                      />
+                      <span className="apple-music-playlist-copy">
+                        <strong>{entry.name}</strong>
+                        <span>
+                          {trackCount} track
+                          {trackCount === 1 ? "" : "s"}
+                        </span>
                       </span>
-                    </span>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             </aside>
 
