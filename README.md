@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="build/icon.png" alt="CorosLink" width="128" />
+  <img src="build/icon.png" alt="CorosLink" width="100" />
 </p>
 
 <h1 align="center">CorosLink</h1>
@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://www.buymeacoffee.com/addridoa">
-    <img src="docs/assets/buy-me-a-coffee.png" alt="Buy me a coffee" width="235" />
+    <img src="docs/assets/buy-me-a-coffee.png" alt="Buy me a coffee" width="150" />
   </a>
 </p>
 
@@ -31,7 +31,7 @@
 </p>
 
 <p align="center">
-  <img src="public/assets/pace-pro-hero.webp" alt="COROS watch" width="420" />
+  <img src="public/assets/pace-pro-hero.webp" alt="COROS watch" width="220" />
 </p>
 
 ---
