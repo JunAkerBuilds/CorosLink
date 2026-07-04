@@ -75,6 +75,7 @@ export interface PlanDraftPreviewEntry {
   volume?: string;
   saveToLibrary: boolean;
   workoutType: string;
+  stepsSummary?: string;
 }
 
 export interface PlanDraftPreview {
@@ -84,6 +85,11 @@ export interface PlanDraftPreview {
   entries: PlanDraftPreviewEntry[];
   conflicts: string[];
   warnings: string[];
+  uploadedAt?: number;
+  uploadResult?: {
+    workoutsScheduled: number;
+    workoutsCreated: number;
+  };
 }
 
 export interface PlanValidationResult {
@@ -516,6 +522,39 @@ function inferWorkoutType(entry: PlanWorkoutEntry): string {
   return "structured";
 }
 
+export function formatEntryStepsSummary(entry: PlanWorkoutEntry): string | undefined {
+  if (!entry.steps || entry.steps.length === 0) {
+    return undefined;
+  }
+
+  const parts: string[] = [];
+  for (const step of entry.steps) {
+    if ("repeat" in step) {
+      const subParts = step.steps.map((sub) => formatRunStepSummary(sub)).filter(Boolean);
+      parts.push(`${step.repeat}x (${subParts.join(", ")})`);
+      continue;
+    }
+    const summary = formatRunStepSummary(step);
+    if (summary) {
+      parts.push(summary);
+    }
+  }
+
+  return parts.length > 0 ? parts.join(" → ") : undefined;
+}
+
+function formatRunStepSummary(step: RunWorkoutStep): string | undefined {
+  const kind = step.kind ?? "training";
+  const target =
+    step.target_distance_meters !== undefined
+      ? `${(step.target_distance_meters / 1000).toFixed(1)} km`
+      : step.target_duration_seconds !== undefined
+        ? `${Math.round(step.target_duration_seconds / 60)} min`
+        : undefined;
+  const pace = step.pace ? `@ ${step.pace}` : undefined;
+  return [kind, target, pace].filter(Boolean).join(" ");
+}
+
 export function validatePlanDraft(
   draft: CorosTrainingPlanDraft,
   options?: { todayDay?: string; existingSchedule?: Map<string, string[]> }
@@ -607,7 +646,8 @@ export function buildPlanPreview(
       : undefined,
     volume: formatEntryVolume(entry),
     saveToLibrary: entry.save_to_library !== false,
-    workoutType: inferWorkoutType(entry)
+    workoutType: inferWorkoutType(entry),
+    stepsSummary: formatEntryStepsSummary(entry)
   }));
 
   const scheduled = draft.workouts.filter((entry) => entry.schedule_date);

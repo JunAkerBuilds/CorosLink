@@ -4,6 +4,7 @@ import type {
   TrainingHubDailyMetrics,
   TrainingHubDashboard
 } from "../../electron/types";
+import { buildTrendPoints, mergeTrainingDayLists } from "../../electron/trainingTrendUtils";
 import { formatHappenDayLabel, recentTrainingHubDateList } from "./formatters";
 import { TRAINING_HEATMAP_DAYS } from "./chartConfig";
 import type {
@@ -13,37 +14,10 @@ import type {
   HeatmapMonthLabel,
   HeatmapSummary,
   TrainingHubSnapshot,
-  TrainingSummaryMetrics,
-  TrainingTrendPoint
+  TrainingSummaryMetrics
 } from "./types";
 
-export function mergeTrainingDayLists(
-  dailyMetrics: TrainingHubDailyMetrics | null,
-  analytics: TrainingHubAnalytics | null
-): TrainingHubDailyMetric[] {
-  const combined = new Map<string, TrainingHubDailyMetric>();
-
-  for (const day of analytics?.dayList ?? []) {
-    if (day.happenDay) {
-      combined.set(day.happenDay, { ...day });
-    }
-  }
-
-  for (const day of dailyMetrics?.dayList ?? []) {
-    if (!day.happenDay) {
-      continue;
-    }
-
-    combined.set(day.happenDay, {
-      ...combined.get(day.happenDay),
-      ...day
-    });
-  }
-
-  return [...combined.values()].sort((left, right) =>
-    left.happenDay.localeCompare(right.happenDay)
-  );
-}
+export { mergeTrainingDayLists } from "../../electron/trainingTrendUtils";
 
 function happenDayToDate(happenDay: string): Date | null {
   if (!/^\d{8}$/.test(happenDay)) {
@@ -198,17 +172,6 @@ export function buildHeatmapGrid(cells: HeatmapCell[]): HeatmapGrid {
     weeks,
     monthLabels
   };
-}
-
-function buildTrendPoints(dayList: TrainingHubDailyMetric[]): TrainingTrendPoint[] {
-  return dayList.slice(-7).map((day) => ({
-    date: day.happenDay,
-    label: formatHappenDayLabel(day.happenDay),
-    trainingLoad: day.trainingLoad,
-    avgSleepHrv: day.avgSleepHrv,
-    sleepHrvBase: day.sleepHrvBase,
-    rhr: day.rhr
-  }));
 }
 
 function buildSummary(

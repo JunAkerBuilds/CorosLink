@@ -33,6 +33,8 @@ import type {
   TrainingHubStatus,
   TrainingHubThresholdZone,
   TrainingHubUpcomingWorkout,
+  TrainingHubScheduledExercise,
+  TrainingHubActivitySeriesPoint,
   TrainingHubZoneDistributionEntry,
   TrainingHubZoneDistributions,
   UploadPlanResult,
@@ -1040,7 +1042,10 @@ export function parseScheduledWorkoutEntries(
         program?.id !== undefined && program.id !== null
           ? String(program.id)
           : planProgramId || undefined,
-      sortNo: toOptionalNumber(entity.sortNoInSchedule ?? entity.sortNo)
+      sortNo: toOptionalNumber(entity.sortNoInSchedule ?? entity.sortNo),
+      volume: formatUpcomingWorkoutVolume(program, entity),
+      trainingLoad: resolveUpcomingWorkoutLoad(program, entity),
+      exercises: parseScheduledExercises(program)
     });
   });
 
@@ -1294,7 +1299,8 @@ export function parseUpcomingWorkouts(
       volume: formatUpcomingWorkoutVolume(program, entity),
       trainingLoad: resolveUpcomingWorkoutLoad(program, entity),
       sportType: toOptionalNumber(program?.sportType),
-      sortNo: toOptionalNumber(entity.sortNoInSchedule ?? entity.sortNo)
+      sortNo: toOptionalNumber(entity.sortNoInSchedule ?? entity.sortNo),
+      exercises: parseScheduledExercises(program)
     });
   });
 
@@ -3407,6 +3413,363 @@ function parseActivityTrack(raw: Record<string, unknown>): TrainingHubActivityTr
   return { points: decimateTrackPoints(points) };
 }
 
+function parseNumericSeries(value: unknown): number[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) {
+    return undefined;
+  }
+
+  const numbers: number[] = [];
+  for (const item of value) {
+    const parsed = toOptionalNumber(item);
+    if (parsed !== undefined) {
+      numbers.push(parsed);
+    }
+  }
+
+  return numbers.length > 0 ? numbers : undefined;
+}
+
+function pickNumericSeries(
+  source: Record<string, unknown>,
+  keys: string[]
+): number[] | undefined {
+  for (const key of keys) {
+    const series = parseNumericSeries(source[key]);
+    if (series) {
+      return series;
+    }
+  }
+  return undefined;
+}
+
+function mergeSeriesArrays(
+  distance?: number[],
+  hr?: number[],
+  pace?: number[],
+  power?: number[]
+): TrainingHubActivitySeriesPoint[] {
+  const length = Math.max(
+    distance?.length ?? 0,
+    hr?.length ?? 0,
+    pace?.length ?? 0,
+    power?.length ?? 0
+  );
+
+  if (length === 0) {
+    return [];
+  }
+
+  const points: TrainingHubActivitySeriesPoint[] = [];
+  for (let index = 0; index < length; index += 1) {
+    const point: TrainingHubActivitySeriesPoint = {};
+    if (distance && distance[index] !== undefined) {
+      point.distance = normalizeActivityDistanceMeters(distance[index]);
+    }
+    if (hr && hr[index] !== undefined) {
+      point.hr = Math.round(hr[index]!);
+    }
+    if (pace && pace[index] !== undefined) {
+      const normalized = normalizeActivityDuration(pace[index]!) ?? pace[index]!;
+      if (isPlausiblePaceSecondsPerKm(normalized)) {
+        point.pace = normalized;
+      }
+    }
+    if (power && power[index] !== undefined) {
+      point.power = Math.round(power[index]!);
+    }
+    if (
+      point.distance !== undefined ||
+      point.hr !== undefined ||
+      point.pace !== undefined ||
+      point.power !== undefined
+    ) {
+      points.push(point);
+    }
+  }
+
+  return points;
+}
+
+function collectSeriesCandidates(raw: Record<string, unknown>): TrainingHubActivitySeriesPoint[][] {
+  const candidates: TrainingHubActivitySeriesPoint[][] = [];
+  const rootDistance = pickNumericSeries(raw, ["distanceList", "distance"]);
+  const rootHr = pickNumericSeries(raw, [
+    "heartRateList",
+    "hrList",
+    "heartRates",
+    "avgHrList"
+  ]);
+  const rootPace = pickNumericSeries(raw, ["paceList", "speedList", "avgPaceList"]);
+  const rootPower = pickNumericSeries(raw, ["powerList", "wattsList", "avgPowerList"]);
+
+  const rootSeries = mergeSeriesArrays(rootDistance, rootHr, rootPace, rootPower);
+  if (rootSeries.length > 0) {
+    candidates.push(rootSeries);
+  }
+
+  const graphList = raw.graphList;
+  const graphItems = Array.isArray(graphList)
+    ? graphList
+    : graphList && typeof graphList === "object"
+      ? [graphList]
+      : [];
+
+  for (const item of graphItems) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const series = item as Record<string, unknown>;
+    const distance =
+      pickNumericSeries(series, ["distanceList", "distance"]) ??
+      (Array.isArray(series.frequencyList)
+        ? series.frequencyList
+            .map((point) =>
+              point && typeof point === "object"
+                ? normalizeActivityDistanceMeters(
+                    toOptionalNumber((point as Record<string, unknown>).distance)
+                  )
+                : undefined
+            )
+            .filter((value): value is number => value !== undefined)
+        : undefined);
+    const hr = pickNumericSeries(series, [
+      "heartRateList",
+      "hrList",
+      "heartRates",
+      "heartRate",
+      "avgHrList"
+    ]);
+    const pace = pickNumericSeries(series, ["paceList", "speedList", "avgPaceList"]);
+    const power = pickNumericSeries(series, ["powerList", "wattsList", "avgPowerList"]);
+    const merged = mergeSeriesArrays(distance, hr, pace, power);
+    if (merged.length > 0) {
+      candidates.push(merged);
+    }
+  }
+
+  if (Array.isArray(raw.frequencyList)) {
+    const distance = raw.frequencyList
+      .map((point) =>
+        point && typeof point === "object"
+          ? normalizeActivityDistanceMeters(
+              toOptionalNumber((point as Record<string, unknown>).distance)
+            )
+          : undefined
+      )
+      .filter((value): value is number => value !== undefined);
+    const hr = raw.frequencyList
+      .map((point) =>
+        point && typeof point === "object"
+          ? toOptionalNumber((point as Record<string, unknown>).heartRate) ??
+            toOptionalNumber((point as Record<string, unknown>).hr) ??
+            toOptionalNumber((point as Record<string, unknown>).avgHr)
+          : undefined
+      )
+      .filter((value): value is number => value !== undefined);
+    const pace = raw.frequencyList
+      .map((point) =>
+        point && typeof point === "object"
+          ? toOptionalNumber((point as Record<string, unknown>).pace) ??
+            toOptionalNumber((point as Record<string, unknown>).speed)
+          : undefined
+      )
+      .filter((value): value is number => value !== undefined);
+    const merged = mergeSeriesArrays(distance, hr, pace, undefined);
+    if (merged.length > 0) {
+      candidates.push(merged);
+    }
+  }
+
+  return candidates;
+}
+
+export function parseActivitySeries(
+  raw: Record<string, unknown>
+): TrainingHubActivitySeriesPoint[] {
+  const candidates = collectSeriesCandidates(raw);
+  if (candidates.length === 0) {
+    return [];
+  }
+
+  return candidates.sort((left, right) => right.length - left.length)[0] ?? [];
+}
+
+export function downsampleActivitySeries(
+  points: TrainingHubActivitySeriesPoint[],
+  maxPoints = 60
+): TrainingHubActivitySeriesPoint[] {
+  if (points.length <= maxPoints) {
+    return points;
+  }
+
+  const bucketSize = points.length / maxPoints;
+  const sampled: TrainingHubActivitySeriesPoint[] = [];
+
+  for (let index = 0; index < maxPoints; index += 1) {
+    const start = Math.floor(index * bucketSize);
+    const end = Math.min(points.length, Math.floor((index + 1) * bucketSize));
+    const bucket = points.slice(start, end);
+    if (bucket.length === 0) {
+      continue;
+    }
+
+    const point: TrainingHubActivitySeriesPoint = {};
+    const distances = bucket
+      .map((item) => item.distance)
+      .filter((value): value is number => value !== undefined);
+    const hrs = bucket.map((item) => item.hr).filter((value): value is number => value !== undefined);
+    const paces = bucket
+      .map((item) => item.pace)
+      .filter((value): value is number => value !== undefined);
+    const powers = bucket
+      .map((item) => item.power)
+      .filter((value): value is number => value !== undefined);
+
+    if (distances.length > 0) {
+      point.distance = distances[distances.length - 1];
+    }
+    if (hrs.length > 0) {
+      point.hr = Math.round(hrs.reduce((sum, value) => sum + value, 0) / hrs.length);
+    }
+    if (paces.length > 0) {
+      point.pace = Math.round(paces.reduce((sum, value) => sum + value, 0) / paces.length);
+    }
+    if (powers.length > 0) {
+      point.power = Math.round(powers.reduce((sum, value) => sum + value, 0) / powers.length);
+    }
+
+    if (
+      point.distance !== undefined ||
+      point.hr !== undefined ||
+      point.pace !== undefined ||
+      point.power !== undefined
+    ) {
+      sampled.push(point);
+    }
+  }
+
+  return sampled;
+}
+
+function formatPaceSeconds(paceSecondsPerKm: number): string {
+  const total = Math.max(0, Math.round(paceSecondsPerKm));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}/km`;
+}
+
+export function formatActivitySeriesForChat(
+  points: TrainingHubActivitySeriesPoint[]
+): string {
+  if (points.length === 0) {
+    return "Time series: no HR/pace/power samples available.";
+  }
+
+  const header = "Distance | HR | Pace | Power";
+  const rows = points.map((point) =>
+    [
+      point.distance !== undefined ? `${(point.distance / 1000).toFixed(2)} km` : "—",
+      point.hr !== undefined ? `${point.hr}` : "—",
+      point.pace !== undefined ? formatPaceSeconds(point.pace) : "—",
+      point.power !== undefined ? `${point.power} W` : "—"
+    ].join(" | ")
+  );
+
+  return ["Time series (downsampled):", header, ...rows].join("\n");
+}
+
+export function parseScheduledExercises(
+  program: Record<string, unknown> | undefined
+): TrainingHubScheduledExercise[] {
+  if (!program) {
+    return [];
+  }
+
+  const exercises = Array.isArray(program.exercises) ? program.exercises : [];
+  const parsed: TrainingHubScheduledExercise[] = [];
+
+  for (const item of exercises) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+
+    const exercise = item as Record<string, unknown>;
+    const name =
+      pickString(exercise, ["name", "exerciseName", "title"]) ?? "Exercise";
+    const targetType = toOptionalNumber(exercise.targetType);
+    const sets = toOptionalNumber(exercise.sets) ?? 1;
+    const reps =
+      toOptionalNumber(exercise.reps) ??
+      (targetType === 1 ? toOptionalNumber(exercise.targetValue) : undefined);
+    const weight =
+      toOptionalNumber(exercise.weight) ??
+      toOptionalNumber(exercise.weightValue) ??
+      (targetType === 6 ? toOptionalNumber(exercise.targetValue) : undefined);
+    const targetLabel = formatScheduledExerciseTarget(exercise, targetType);
+
+    parsed.push({
+      name,
+      sets,
+      reps,
+      weight,
+      targetType,
+      targetLabel
+    });
+  }
+
+  return parsed;
+}
+
+function formatScheduledExerciseTarget(
+  exercise: Record<string, unknown>,
+  targetType?: number
+): string | undefined {
+  const targetValue = toOptionalNumber(exercise.targetValue);
+  if (targetType === 5 && targetValue) {
+    return `${(corosWorkoutDistanceToMeters(targetValue) / 1000).toFixed(2)} km`;
+  }
+  if (targetType === 2 && targetValue) {
+    const seconds = normalizeActivityDuration(targetValue) ?? targetValue;
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    return `${minutes}:${String(secs).padStart(2, "0")}`;
+  }
+  if (targetType === 1 && targetValue) {
+    return `${Math.round(targetValue)} reps`;
+  }
+  if (targetType === 6 && targetValue) {
+    return `${Math.round(targetValue)} kg`;
+  }
+  const intensity = pickString(exercise, ["intensityText", "intensity"]);
+  return intensity;
+}
+
+export function formatScheduledExercisesForChat(
+  exercises: TrainingHubScheduledExercise[]
+): string | undefined {
+  if (exercises.length === 0) {
+    return undefined;
+  }
+
+  return exercises
+    .map((exercise) => {
+      const parts = [exercise.name];
+      if (exercise.sets && exercise.sets > 1) {
+        parts.push(`${exercise.sets} sets`);
+      }
+      if (exercise.reps) {
+        parts.push(`${Math.round(exercise.reps)} reps`);
+      }
+      if (exercise.weight) {
+        parts.push(`${Math.round(exercise.weight)} kg`);
+      } else if (exercise.targetLabel) {
+        parts.push(exercise.targetLabel);
+      }
+      return parts.join(" · ");
+    })
+    .join("; ");
+}
+
 function isImplausibleMetricRatio(
   detailValue?: number,
   listValue?: number
@@ -3513,6 +3876,7 @@ export function parseActivityDetail(raw: Record<string, unknown>): TrainingHubAc
       toOptionalNumber(summary.trainingLoad),
     laps,
     track,
+    series: parseActivitySeries(raw),
     raw
   };
 }

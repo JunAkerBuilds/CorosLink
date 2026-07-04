@@ -4,6 +4,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { deleteSettings, getSetting, setSetting } from "./database";
 import {
+  formatScheduledExercisesForChat,
   getTrainingHubStatus,
   listTrainingHubActivities,
   getTrainingDashboard,
@@ -22,6 +23,18 @@ import {
   confirmWorkoutDeleteById,
   type ChatWorkoutToolName
 } from "./chatWorkoutTools";
+import {
+  getChatActivityTools,
+  handleChatActivityTool,
+  isChatActivityTool,
+  type ChatActivityToolName
+} from "./chatActivityTools";
+import {
+  getChatAnalyticsTools,
+  handleChatAnalyticsTool,
+  isChatAnalyticsTool,
+  type ChatAnalyticsToolName
+} from "./chatAnalyticsTools";
 import { parseFunctionCallArguments } from "./chatToolArguments";
 import {
   detectLocalChatServersRequest,
@@ -37,9 +50,11 @@ import {
   type ChatSettingsStore
 } from "./chatSettingsStore";
 import {
-  clearChatTranscript,
-  loadChatTranscript,
-  saveChatTranscript
+  createChatSession,
+  deleteChatSession,
+  getChatSession,
+  listChatSessions,
+  saveChatSession
 } from "./chatHistoryStore";
 import type {
   ChatAuthStatus,
@@ -131,19 +146,27 @@ export function saveChatSettings(settings: ChatSettings): ChatSettings {
   );
 }
 
-export function getChatHistory(provider: ChatProvider): PersistedChatEntry[] {
-  return loadChatTranscript(provider);
+export function listChatSessionsForProvider(provider: ChatProvider) {
+  return listChatSessions(provider);
 }
 
-export function saveChatHistory(
-  provider: ChatProvider,
+export function getChatSessionEntries(id: string) {
+  return getChatSession(id);
+}
+
+export function createChatSessionForProvider(provider: ChatProvider) {
+  return createChatSession(provider);
+}
+
+export function saveChatSessionEntries(
+  id: string,
   entries: PersistedChatEntry[]
-): void {
-  saveChatTranscript(provider, entries);
+) {
+  return saveChatSession(id, entries);
 }
 
-export function clearChatHistory(provider: ChatProvider): void {
-  clearChatTranscript(provider);
+export function deleteChatSessionById(id: string): void {
+  deleteChatSession(id);
 }
 
 export async function testLocalChatConnection(
@@ -762,7 +785,12 @@ export async function confirmWorkoutDelete(
 }
 
 function getAllChatTools(): CorosMcpTool[] {
-  return [...getCorosMcpTools(), ...getChatWorkoutTools()];
+  return [
+    ...getCorosMcpTools(),
+    ...getChatActivityTools(),
+    ...getChatAnalyticsTools(),
+    ...getChatWorkoutTools()
+  ];
 }
 
 async function executeChatTool(
@@ -789,7 +817,76 @@ async function executeChatTool(
       }
     });
   }
-  return callCorosMcpTool(name, args);
+  if (isChatActivityTool(name)) {
+    try {
+      return await handleChatActivityTool(name as ChatActivityToolName, args, {
+        requestId,
+        onActivityVisual: (preview) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "activityVisual",
+            preview
+          });
+        }
+      });
+    } catch (caught) {
+      const message =
+        caught instanceof Error ? caught.message : String(caught);
+      send("chat:streamInfo", {
+        requestId,
+        kind: "mcp",
+        tool: name,
+        status: "failed",
+        message
+      });
+      throw caught;
+    }
+  }
+  if (isChatAnalyticsTool(name)) {
+    try {
+      return await handleChatAnalyticsTool(name as ChatAnalyticsToolName, args, {
+        requestId,
+        onFitnessTrend: (preview) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "fitnessTrend",
+            preview
+          });
+        },
+        onHrZoneSummary: (preview) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "hrZoneSummary",
+            preview
+          });
+        }
+      });
+    } catch (caught) {
+      const message =
+        caught instanceof Error ? caught.message : String(caught);
+      send("chat:streamInfo", {
+        requestId,
+        kind: "mcp",
+        tool: name,
+        status: "failed",
+        message
+      });
+      throw caught;
+    }
+  }
+  try {
+    return await callCorosMcpTool(name, args);
+  } catch (caught) {
+    const message = caught instanceof Error ? caught.message : String(caught);
+    send("chat:streamInfo", {
+      requestId,
+      kind: "mcp",
+      tool: name,
+      status: "failed",
+      message
+    });
+    throw caught;
+  }
 }
 
 function findChatTool(name: string): CorosMcpTool | undefined {
@@ -916,17 +1013,39 @@ function withLiveCorosToolInstructions(
   if (tools.length === 0) {
     return instructions;
   }
-  const mcpTools = tools.filter((tool) => !isChatWorkoutTool(tool.name));
+  const activityTools = tools.filter((tool) => isChatActivityTool(tool.name));
+  const analyticsTools = tools.filter((tool) => isChatAnalyticsTool(tool.name));
+  const mcpTools = tools.filter(
+    (tool) =>
+      !isChatWorkoutTool(tool.name) &&
+      !isChatActivityTool(tool.name) &&
+      !isChatAnalyticsTool(tool.name)
+  );
   const planTools = tools.filter((tool) => isChatWorkoutTool(tool.name));
   const sections = [instructions, "", "## Live COROS data (tools)"];
+  if (activityTools.length > 0) {
+    sections.push(
+      `Local Training Hub tools (preferred for laps/splits): ${activityTools
+        .map((tool) => tool.name)
+        .join(", ")}. ` +
+        "Use list_recent_activities to find activity_id and sport_type, then " +
+        "get_activity_detail for lap tables. Set include_series=true for HR/pace/power trends. " +
+        "Inline activity charts (HR, pace, power, elevation, laps) appear automatically when data is available."
+    );
+  }
+  if (analyticsTools.length > 0) {
+    sections.push(
+      `Training analytics tools: ${analyticsTools.map((tool) => tool.name).join(", ")}. ` +
+        "Use get_fitness_trends for 7-day load, resting HR, and HRV recovery trends. " +
+        "Use get_hr_zone_summary for threshold heart rate zone distribution. " +
+        "Inline charts are shown automatically when these tools return data."
+    );
+  }
   if (mcpTools.length > 0) {
     sections.push(
-      `You have live tools to fetch the athlete's current COROS data: ` +
-        `${mcpTools.map((tool) => tool.name).join(", ")}. ` +
-        "The snapshot above is only a brief overview. For any question about " +
-        "specific activities, splits, heart rate, recovery, sleep, HRV, stress, " +
-        "or trends, CALL THE APPROPRIATE TOOL to get real numbers rather than " +
-        "relying on the snapshot or guessing."
+      `COROS MCP tools: ${mcpTools.map((tool) => tool.name).join(", ")}. ` +
+        "Use these for sleep, HRV, recovery, and other MCP-only metrics. " +
+        "For lap splits and interval breakdowns, prefer get_activity_detail."
     );
   }
   if (planTools.length > 0) {
@@ -1048,6 +1167,8 @@ function formatActivities(activities: TrainingHubActivity[]): string {
   return activities
     .map((activity) => {
       const parts = [
+        `id=${activity.activityId}`,
+        `sport_type=${activity.sportType}`,
         activity.startTime ? isoDate(activity.startTime) : "",
         activity.sportName ?? "",
         activity.name ?? "",
@@ -1087,11 +1208,15 @@ function formatDashboard(dashboard: TrainingHubDashboard): string {
 function formatUpcoming(workouts: TrainingHubUpcomingWorkout[]): string {
   return workouts
     .map((workout) => {
+      const exerciseDetail = workout.exercises?.length
+        ? formatScheduledExercisesForChat(workout.exercises)
+        : undefined;
       const parts = [
         workout.happenDay,
         workout.name,
         workout.volume ?? "",
-        workout.trainingLoad ? `load ${workout.trainingLoad}` : ""
+        workout.trainingLoad ? `load ${workout.trainingLoad}` : "",
+        exerciseDetail ? `exercises: ${exerciseDetail}` : ""
       ].filter(Boolean);
       return `- ${parts.join(" · ")}`;
     })

@@ -8,11 +8,19 @@ import {
 } from "./corosWorkoutBuilder";
 import {
   deleteWorkout,
+  formatScheduledExercisesForChat,
   getTrainingHubStatus,
   getUpcomingWorkouts,
   listScheduledWorkoutEntries,
   uploadTrainingPlan
 } from "./trainingHubService";
+import {
+  getChatPlanDraft,
+  listChatPlanDrafts,
+  markChatPlanDraftUploaded,
+  pruneChatPlanDrafts,
+  saveChatPlanDraft
+} from "./database";
 import type {
   CorosMcpTool,
   CorosTrainingPlanDraftInput,
@@ -51,6 +59,67 @@ interface DeleteWorkoutParams {
 
 const draftStore = new Map<string, StoredPlanDraft>();
 const deleteRequestStore = new Map<string, StoredDeleteRequest>();
+
+function persistPlanDraft(stored: StoredPlanDraft): void {
+  draftStore.set(stored.draftId, stored);
+  saveChatPlanDraft({
+    draftId: stored.draftId,
+    planJson: JSON.stringify(stored.plan),
+    previewJson: JSON.stringify(stored.preview),
+    createdAt: stored.createdAt,
+    uploadedAt: stored.uploadedAt
+  });
+}
+
+function loadStoredPlanDraft(draftId: string): StoredPlanDraft | undefined {
+  const cached = draftStore.get(draftId);
+  if (cached) {
+    return cached;
+  }
+
+  const row = getChatPlanDraft(draftId);
+  if (!row) {
+    return undefined;
+  }
+
+  try {
+    const plan = JSON.parse(row.planJson) as CorosTrainingPlanDraft;
+    const preview = JSON.parse(row.previewJson) as PlanDraftPreview;
+    const stored: StoredPlanDraft = {
+      draftId: row.draftId,
+      plan,
+      preview: {
+        ...preview,
+        uploadedAt: row.uploadedAt ?? preview.uploadedAt
+      },
+      createdAt: row.createdAt,
+      uploadedAt: row.uploadedAt
+    };
+    draftStore.set(draftId, stored);
+    return stored;
+  } catch {
+    return undefined;
+  }
+}
+
+export function hydratePlanDraftStoreFromDatabase(): void {
+  for (const row of listChatPlanDrafts()) {
+    if (draftStore.has(row.draftId)) {
+      continue;
+    }
+    try {
+      draftStore.set(row.draftId, {
+        draftId: row.draftId,
+        plan: JSON.parse(row.planJson) as CorosTrainingPlanDraft,
+        preview: JSON.parse(row.previewJson) as PlanDraftPreview,
+        createdAt: row.createdAt,
+        uploadedAt: row.uploadedAt
+      });
+    } catch {
+      // Skip corrupted rows.
+    }
+  }
+}
 
 export const CHAT_WORKOUT_TOOL_NAMES = [
   "draft_training_plan",
@@ -304,6 +373,7 @@ async function handleDraftTrainingPlan(
     preview,
     createdAt: Date.now()
   });
+  persistPlanDraft(draftStore.get(draftId)!);
 
   onPlanDraft?.(preview);
 
@@ -333,11 +403,12 @@ async function handleUploadTrainingPlan(
     return JSON.stringify({ ok: false, error: "draft_id is required." });
   }
 
-  const stored = draftStore.get(draftId);
+  const stored = loadStoredPlanDraft(draftId);
   if (!stored) {
     return JSON.stringify({
       ok: false,
-      error: "Draft not found. Call draft_training_plan first."
+      error:
+        "Draft not found or expired. Ask the athlete to ask you to regenerate this training plan."
     });
   }
 
@@ -373,6 +444,13 @@ async function handleUploadTrainingPlan(
 
   const result = await uploadTrainingPlan(input);
   stored.uploadedAt = Date.now();
+  stored.preview.uploadedAt = stored.uploadedAt;
+  stored.preview.uploadResult = {
+    workoutsScheduled: result.workoutsScheduled,
+    workoutsCreated: result.workoutsCreated
+  };
+  persistPlanDraft(stored);
+  markChatPlanDraftUploaded(draftId, stored.uploadedAt);
 
   return JSON.stringify({
     ok: true,
@@ -415,6 +493,11 @@ async function handleListScheduledWorkouts(
     workouts: entries.map((entry) => ({
       schedule_date: entry.happenDay,
       name: entry.name,
+      volume: entry.volume,
+      training_load: entry.trainingLoad,
+      exercises: entry.exercises?.length
+        ? formatScheduledExercisesForChat(entry.exercises)
+        : undefined,
       plan_id: entry.planId,
       id_in_plan: entry.idInPlan,
       plan_program_id: entry.planProgramId,
@@ -643,9 +726,11 @@ export async function confirmWorkoutDeleteById(
 export async function uploadPlanDraftById(
   draftId: string
 ): Promise<UploadPlanResult> {
-  const stored = draftStore.get(draftId);
+  const stored = loadStoredPlanDraft(draftId);
   if (!stored) {
-    throw new Error("Training plan draft not found or expired.");
+    throw new Error(
+      "Training plan draft not found or expired. Ask the coach to regenerate this plan."
+    );
   }
   if (stored.uploadedAt) {
     throw new Error("This training plan was already uploaded.");
@@ -666,6 +751,13 @@ export async function uploadPlanDraftById(
 
   const result = await uploadTrainingPlan(input);
   stored.uploadedAt = Date.now();
+  stored.preview.uploadedAt = stored.uploadedAt;
+  stored.preview.uploadResult = {
+    workoutsScheduled: result.workoutsScheduled,
+    workoutsCreated: result.workoutsCreated
+  };
+  persistPlanDraft(stored);
+  markChatPlanDraftUploaded(draftId, stored.uploadedAt);
   return result;
 }
 
@@ -682,10 +774,11 @@ function summarizeUploadResult(result: UploadPlanResult): Record<string, unknown
 export function prunePlanDraftStore(): void {
   const cutoff = Date.now() - 24 * 60 * 60 * 1000;
   for (const [id, draft] of draftStore) {
-    if (draft.createdAt < cutoff) {
+    if (draft.createdAt < cutoff && !draft.uploadedAt) {
       draftStore.delete(id);
     }
   }
+  pruneChatPlanDrafts(cutoff);
 }
 
 /** Remove delete requests older than 24 hours */

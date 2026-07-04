@@ -52,6 +52,7 @@ import type {
   ChatAuthStatus,
   ChatMessage,
   ChatProvider,
+  ChatSessionSummary,
   ChatSettings,
   PersistedChatEntry,
   ChatStreamStart,
@@ -416,14 +417,19 @@ const api = {
     ipcRenderer.invoke("chat:send", requestId, messages),
   cancelChat: (requestId: string): Promise<void> =>
     ipcRenderer.invoke("chat:cancel", requestId),
-  getChatHistory: (provider: ChatProvider): Promise<PersistedChatEntry[]> =>
-    ipcRenderer.invoke("chat:getHistory", provider),
-  saveChatHistory: (
-    provider: ChatProvider,
+  listChatSessions: (provider: ChatProvider): Promise<ChatSessionSummary[]> =>
+    ipcRenderer.invoke("chat:listSessions", provider),
+  getChatSession: (sessionId: string): Promise<PersistedChatEntry[]> =>
+    ipcRenderer.invoke("chat:getSession", sessionId),
+  createChatSession: (provider: ChatProvider): Promise<ChatSessionSummary> =>
+    ipcRenderer.invoke("chat:createSession", provider),
+  saveChatSession: (
+    sessionId: string,
     entries: PersistedChatEntry[]
-  ): Promise<void> => ipcRenderer.invoke("chat:saveHistory", provider, entries),
-  clearChatHistory: (provider: ChatProvider): Promise<void> =>
-    ipcRenderer.invoke("chat:clearHistory", provider),
+  ): Promise<ChatSessionSummary | null> =>
+    ipcRenderer.invoke("chat:saveSession", sessionId, entries),
+  deleteChatSession: (sessionId: string): Promise<void> =>
+    ipcRenderer.invoke("chat:deleteSession", sessionId),
   onChatStreamStart: (
     callback: (payload: ChatStreamStart) => void
   ): (() => void) => {

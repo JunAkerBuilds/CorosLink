@@ -9,7 +9,8 @@ export const CHAT_SETTINGS_KEYS = {
   localBaseUrl: "chat.local.baseUrl",
   localModel: "chat.local.model",
   localApiKey: "chat.local.apiKey",
-  localToolsEnabled: "chat.local.toolsEnabled"
+  localToolsEnabled: "chat.local.toolsEnabled",
+  sidebarOpen: "chat.sidebar.open"
 } as const;
 
 export interface ChatSettingsStore {
@@ -36,7 +37,8 @@ export function readChatSettingsFromStore(
       model: store.get(CHAT_SETTINGS_KEYS.localModel) ?? "",
       hasApiKey: apiKeyStore.hasApiKey(),
       toolsEnabled: store.get(CHAT_SETTINGS_KEYS.localToolsEnabled) !== "false"
-    }
+    },
+    sidebarOpen: store.get(CHAT_SETTINGS_KEYS.sidebarOpen) !== "false"
   };
 }
 
@@ -55,6 +57,12 @@ export function saveChatSettingsToStore(
     CHAT_SETTINGS_KEYS.localToolsEnabled,
     settings.local.toolsEnabled ? "true" : "false"
   );
+  if (typeof settings.sidebarOpen === "boolean") {
+    store.set(
+      CHAT_SETTINGS_KEYS.sidebarOpen,
+      settings.sidebarOpen ? "true" : "false"
+    );
+  }
 
   if (settings.local.clearApiKey) {
     apiKeyStore.clearApiKey();

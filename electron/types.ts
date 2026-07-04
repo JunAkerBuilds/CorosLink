@@ -703,6 +703,13 @@ export interface TrainingHubActivityTrack {
   points: TrainingHubTrackPoint[];
 }
 
+export interface TrainingHubActivitySeriesPoint {
+  distance?: number;
+  hr?: number;
+  pace?: number;
+  power?: number;
+}
+
 export interface TrainingHubActivityDetail {
   activityId?: string;
   name?: string;
@@ -717,7 +724,17 @@ export interface TrainingHubActivityDetail {
   trainingLoad?: number;
   laps: TrainingHubActivityLap[];
   track?: TrainingHubActivityTrack;
+  series?: TrainingHubActivitySeriesPoint[];
   raw: Record<string, unknown>;
+}
+
+export interface TrainingHubScheduledExercise {
+  name: string;
+  sets?: number;
+  reps?: number;
+  weight?: number;
+  targetType?: number;
+  targetLabel?: string;
 }
 
 export interface TrainingHubSportType {
@@ -732,6 +749,7 @@ export interface TrainingHubUpcomingWorkout {
   trainingLoad?: number;
   sportType?: number;
   sortNo?: number;
+  exercises?: TrainingHubScheduledExercise[];
 }
 
 export interface TrainingHubThresholdZone {
@@ -861,6 +879,17 @@ export interface LocalChatConfig {
 export interface ChatSettings {
   provider: ChatProvider;
   local: LocalChatConfig;
+  sidebarOpen?: boolean;
+}
+
+export interface ChatSessionSummary {
+  id: string;
+  provider: ChatProvider;
+  title: string;
+  preview: string;
+  updatedAt: string;
+  createdAt: string;
+  messageCount: number;
 }
 
 export interface LocalChatConnectionTest {
@@ -984,9 +1013,104 @@ export type ChatStreamInfo =
       requestId: string;
       kind: "workoutDelete";
       preview: WorkoutDeletePreview;
+    }
+  | {
+      requestId: string;
+      kind: "activityVisual";
+      preview: ActivityVisualPreview;
+    }
+  | {
+      requestId: string;
+      kind: "fitnessTrend";
+      preview: FitnessTrendPreview;
+    }
+  | {
+      requestId: string;
+      kind: "hrZoneSummary";
+      preview: HrZonePreview;
     };
 
 // ----- Training plan upload (AI coach) -----
+
+export interface TrainingTrendPoint {
+  date: string;
+  label: string;
+  trainingLoad?: number;
+  avgSleepHrv?: number;
+  sleepHrvBase?: number;
+  rhr?: number;
+}
+
+export interface ActivityVisualLapPoint {
+  index: number;
+  avgHr?: number;
+  maxHr?: number;
+  distance?: number;
+  duration?: number;
+  pace?: number;
+}
+
+export interface ActivityVisualHrSection {
+  chartKind: "series" | "laps";
+  series?: TrainingHubActivitySeriesPoint[];
+  laps?: ActivityVisualLapPoint[];
+}
+
+export interface ActivityVisualPreview {
+  previewId: string;
+  activityId: string;
+  name?: string;
+  startTime?: string;
+  avgHr?: number;
+  maxHr?: number;
+  sections: {
+    hr?: ActivityVisualHrSection;
+    pace?: { series: TrainingHubActivitySeriesPoint[] };
+    power?: { series: TrainingHubActivitySeriesPoint[] };
+    elevation?: { points: TrainingHubTrackPoint[] };
+    laps?: ActivityVisualLapPoint[];
+  };
+}
+
+/** @deprecated Legacy persisted shape — migrated to ActivityVisualPreview */
+export interface ActivityHrTrendLapPoint {
+  index: number;
+  avgHr?: number;
+  maxHr?: number;
+  distance?: number;
+}
+
+/** @deprecated Legacy persisted shape — migrated to ActivityVisualPreview */
+export interface ActivityHrTrendPreview {
+  previewId: string;
+  activityId: string;
+  name?: string;
+  startTime?: string;
+  avgHr?: number;
+  maxHr?: number;
+  chartKind: "series" | "laps";
+  series?: TrainingHubActivitySeriesPoint[];
+  laps?: ActivityHrTrendLapPoint[];
+}
+
+export interface FitnessTrendPreview {
+  previewId: string;
+  trendPoints: TrainingTrendPoint[];
+}
+
+export interface HrZoneEntry {
+  index: number;
+  label: string;
+  percent: number;
+  value: number;
+}
+
+export interface HrZonePreview {
+  previewId: string;
+  metric: "time" | "distance" | "trainingLoad";
+  zones: HrZoneEntry[];
+  lthrZones: TrainingHubThresholdZone[];
+}
 
 export interface PlanDraftPreviewEntry {
   key: string;
@@ -995,6 +1119,7 @@ export interface PlanDraftPreviewEntry {
   volume?: string;
   saveToLibrary: boolean;
   workoutType: string;
+  stepsSummary?: string;
 }
 
 export interface PlanDraftPreview {
@@ -1004,6 +1129,11 @@ export interface PlanDraftPreview {
   entries: PlanDraftPreviewEntry[];
   conflicts: string[];
   warnings: string[];
+  uploadedAt?: number;
+  uploadResult?: {
+    workoutsScheduled: number;
+    workoutsCreated: number;
+  };
 }
 
 export interface PlanWorkoutEntryInput {
@@ -1045,6 +1175,9 @@ export interface TrainingHubScheduledWorkoutEntry {
   name: string;
   programId?: string;
   sortNo?: number;
+  volume?: string;
+  trainingLoad?: number;
+  exercises?: TrainingHubScheduledExercise[];
 }
 
 export interface DeleteWorkoutResult {
@@ -1069,4 +1202,8 @@ export interface WorkoutDeletePreview {
 export type PersistedChatEntry =
   | PersistedChatMessageEntry
   | { kind: "planDraft"; draft: PlanDraftPreview }
-  | { kind: "workoutDelete"; preview: WorkoutDeletePreview };
+  | { kind: "workoutDelete"; preview: WorkoutDeletePreview }
+  | { kind: "activityVisual"; preview: ActivityVisualPreview }
+  | { kind: "activityHrTrend"; preview: ActivityHrTrendPreview }
+  | { kind: "fitnessTrend"; preview: FitnessTrendPreview }
+  | { kind: "hrZoneSummary"; preview: HrZonePreview };

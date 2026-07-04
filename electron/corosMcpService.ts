@@ -298,9 +298,21 @@ export async function callCorosMcpTool(
   name: string,
   args: Record<string, unknown>
 ): Promise<string> {
-  if (!client) throw new Error("COROS MCP is not connected.");
-  const result = await client.callTool({ name, arguments: args });
-  // Flatten the MCP content blocks into text for the model.
+  if (!client) {
+    throw new Error(
+      "COROS MCP is not connected. Connect it in Coach settings, or use local tools " +
+        "like get_activity_detail for lap and activity analysis."
+    );
+  }
+
+  let result;
+  try {
+    result = await client.callTool({ name, arguments: args });
+  } catch (caught) {
+    const detail = caught instanceof Error ? caught.message : String(caught);
+    throw new Error(formatCorosMcpToolFailure(name, detail));
+  }
+
   const content = Array.isArray(result.content) ? result.content : [];
   const text = content
     .map((block) => {
@@ -310,10 +322,41 @@ export async function callCorosMcpTool(
       return JSON.stringify(block);
     })
     .join("\n");
+
   if (result.isError) {
-    return `Tool error: ${text || "unknown error"}`;
+    throw new Error(formatCorosMcpToolFailure(name, text || "unknown error"));
   }
+
+  if (/service exceptions?/i.test(text)) {
+    throw new Error(formatCorosMcpToolFailure(name, text));
+  }
+
   return text;
+}
+
+function formatCorosMcpToolFailure(toolName: string, detail: string): string {
+  const trimmed = detail.trim();
+  if (/service exceptions?/i.test(trimmed)) {
+    if (/recovery|health|fitness|training.?load|daily/i.test(toolName)) {
+      return (
+        `COROS MCP ${toolName} is temporarily unavailable (COROS server error). ` +
+        "Try again later, or use local get_activity_detail / the training snapshot for activity questions."
+      );
+    }
+    return (
+      `COROS MCP ${toolName} failed with a COROS server error. Try again later. ` +
+      "For lap splits and workout breakdowns, use local get_activity_detail instead."
+    );
+  }
+
+  if (/lap|split|interval|activity|workout/i.test(toolName)) {
+    return (
+      `COROS MCP ${toolName} failed: ${trimmed}. ` +
+      "For lap and split analysis, prefer local get_activity_detail."
+    );
+  }
+
+  return `COROS MCP ${toolName} failed: ${trimmed}`;
 }
 
 async function refreshTools(): Promise<void> {

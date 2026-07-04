@@ -1,17 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  Bot,
   Database,
   FileDown,
   FileText,
-  KeyRound,
   Loader2,
   LogOut,
   MessageCircle,
-  Plus,
-  RefreshCw,
-  Save,
+  PanelLeft,
+  PanelLeftClose,
   Send,
+  Settings2,
   Sparkles,
   Square,
   Trash2,
@@ -23,12 +21,11 @@ import remarkGfm from "remark-gfm";
 import type { CorosLinkApi } from "../coroslink-api";
 import type {
   ChatAuthStatus,
-  ChatMessage,
   ChatProvider,
+  ChatSessionSummary,
   ChatSettings,
   LocalChatConnectionTest,
   LocalChatDiscovery,
-  PersistedChatEntry,
   CorosMcpStatus,
   PlanDraftPreview,
   TrainingHubExportResult,
@@ -36,6 +33,24 @@ import type {
   WorkoutDeletePreview,
   DeleteWorkoutResult
 } from "../../electron/types";
+import { ActivityVisualCard } from "./ActivityVisualCard";
+import { FitnessTrendCard } from "./FitnessTrendCard";
+import { HrZoneCard } from "./HrZoneCard";
+import { ChatSettingsModal } from "./ChatSettingsModal";
+import { ChatSidebar } from "./ChatSidebar";
+import { ProviderSwitch } from "./ProviderSwitch";
+import {
+  fromPersistedEntries,
+  toPersistedEntries,
+  toWireMessages,
+  upsertActivityVisualEntry,
+  upsertFitnessTrendEntry,
+  upsertHrZoneEntry,
+  upsertPlanDraftEntry,
+  upsertWorkoutDeleteEntry,
+  type ChatEntry,
+  type SourceInfo
+} from "./chatTypes";
 
 const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   provider: "chatgpt",
@@ -44,8 +59,11 @@ const DEFAULT_CHAT_SETTINGS: ChatSettings = {
     model: "",
     hasApiKey: false,
     toolsEnabled: true
-  }
+  },
+  sidebarOpen: true
 };
+
+const SIDEBAR_OVERLAY_MAX_WIDTH = 900;
 
 function AssistantMarkdown({
   content,
@@ -81,111 +99,6 @@ interface ChatViewProps {
   onActivityChange?: (active: boolean) => void;
 }
 
-/** Where an assistant answer's data came from, for the source indicator. */
-interface SourceInfo {
-  snapshotIncluded: boolean;
-  mcpEnabled: boolean;
-  mcpUsed: boolean;
-  mcpTools: string[];
-  mcpError?: string;
-}
-
-interface ChatMessageEntry {
-  kind: "message";
-  role: ChatMessage["role"];
-  content: string;
-  source?: SourceInfo;
-}
-
-interface ChatPlanDraftEntry {
-  kind: "planDraft";
-  draft: PlanDraftPreview;
-}
-
-interface ChatWorkoutDeleteEntry {
-  kind: "workoutDelete";
-  preview: WorkoutDeletePreview;
-}
-
-type ChatEntry = ChatMessageEntry | ChatPlanDraftEntry | ChatWorkoutDeleteEntry;
-
-function upsertPlanDraftEntry(
-  entries: ChatEntry[],
-  draft: PlanDraftPreview
-): ChatEntry[] {
-  const index = entries.findIndex(
-    (entry) =>
-      entry.kind === "planDraft" && entry.draft.draftId === draft.draftId
-  );
-  if (index >= 0) {
-    const next = [...entries];
-    next[index] = { kind: "planDraft", draft };
-    return next;
-  }
-  return [...entries, { kind: "planDraft", draft }];
-}
-
-function upsertWorkoutDeleteEntry(
-  entries: ChatEntry[],
-  preview: WorkoutDeletePreview
-): ChatEntry[] {
-  const index = entries.findIndex(
-    (entry) =>
-      entry.kind === "workoutDelete" &&
-      entry.preview.requestId === preview.requestId
-  );
-  if (index >= 0) {
-    const next = [...entries];
-    next[index] = { kind: "workoutDelete", preview };
-    return next;
-  }
-  return [...entries, { kind: "workoutDelete", preview }];
-}
-
-function toWireMessages(entries: ChatEntry[]): ChatMessage[] {
-  return entries
-    .filter((entry): entry is ChatMessageEntry => entry.kind === "message")
-    .map(({ role, content }) => ({ role, content }));
-}
-
-function toPersistedEntries(entries: ChatEntry[]): PersistedChatEntry[] {
-  return entries.map((entry) => {
-    if (entry.kind === "planDraft") {
-      return { kind: "planDraft", draft: entry.draft };
-    }
-    if (entry.kind === "workoutDelete") {
-      return { kind: "workoutDelete", preview: entry.preview };
-    }
-    return entry.source
-      ? {
-          kind: "message",
-          role: entry.role,
-          content: entry.content,
-          source: entry.source
-        }
-      : { kind: "message", role: entry.role, content: entry.content };
-  });
-}
-
-function fromPersistedEntries(entries: PersistedChatEntry[]): ChatEntry[] {
-  return entries.map((entry) => {
-    if (entry.kind === "planDraft") {
-      return { kind: "planDraft", draft: entry.draft };
-    }
-    if (entry.kind === "workoutDelete") {
-      return { kind: "workoutDelete", preview: entry.preview };
-    }
-    return entry.source
-      ? {
-          kind: "message",
-          role: entry.role,
-          content: entry.content,
-          source: entry.source
-        }
-      : { kind: "message", role: entry.role, content: entry.content };
-  });
-}
-
 function PlanPreviewCard({
   draft,
   uploading,
@@ -197,6 +110,18 @@ function PlanPreviewCard({
   uploaded?: UploadPlanResult;
   onUpload: () => void;
 }) {
+  const uploadedResult =
+    uploaded ??
+    (draft.uploadResult
+      ? {
+          planName: draft.name,
+          workoutsCreated: draft.uploadResult.workoutsCreated,
+          workoutsScheduled: draft.uploadResult.workoutsScheduled,
+          entries: []
+        }
+      : undefined);
+  const isUploaded = Boolean(uploadedResult || draft.uploadedAt);
+
   return (
     <div className="chat-plan-card">
       <div className="chat-plan-card-header">
@@ -211,6 +136,7 @@ function PlanPreviewCard({
               <th>Workout</th>
               <th>Volume</th>
               <th>Type</th>
+              <th>Steps</th>
             </tr>
           </thead>
           <tbody>
@@ -220,6 +146,7 @@ function PlanPreviewCard({
                 <td>{entry.name}</td>
                 <td>{entry.volume ?? "—"}</td>
                 <td>{entry.workoutType}</td>
+                <td>{entry.stepsSummary ?? "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -239,10 +166,17 @@ function PlanPreviewCard({
           ))}
         </ul>
       ) : null}
-      {uploaded ? (
+      {uploadedResult || isUploaded ? (
         <p className="chat-plan-success">
-          Uploaded — {uploaded.workoutsScheduled} scheduled,{" "}
-          {uploaded.workoutsCreated} saved to library.
+          Uploaded —{" "}
+          {uploadedResult?.workoutsScheduled ??
+            draft.uploadResult?.workoutsScheduled ??
+            0}{" "}
+          scheduled,{" "}
+          {uploadedResult?.workoutsCreated ??
+            draft.uploadResult?.workoutsCreated ??
+            0}{" "}
+          saved to library.
         </p>
       ) : (
         <div className="chat-plan-actions">
@@ -358,35 +292,6 @@ function SourceBadge({ source }: { source: SourceInfo }) {
   );
 }
 
-function ProviderSwitch({
-  provider,
-  disabled,
-  onChange
-}: {
-  provider: ChatProvider;
-  disabled?: boolean;
-  onChange: (provider: ChatProvider) => void;
-}) {
-  return (
-    <div className="chat-provider-switch" aria-label="Coach provider">
-      {[
-        { value: "chatgpt" as const, label: "ChatGPT" },
-        { value: "local" as const, label: "Local model" }
-      ].map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          className={provider === option.value ? "active" : ""}
-          onClick={() => onChange(option.value)}
-          disabled={disabled || provider === option.value}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function isLatestActivityFileRequest(text: string): boolean {
   const normalized = text.toLowerCase();
   return (
@@ -427,6 +332,11 @@ export function ChatView({
     useState<LocalChatConnectionTest | null>(null);
   const [localDiscovery, setLocalDiscovery] =
     useState<LocalChatDiscovery | null>(null);
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sidebarOverlay, setSidebarOverlay] = useState(false);
   const [timeline, setTimeline] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -450,6 +360,7 @@ export function ChatView({
   // Ref so the push-event handlers filter on the current request without
   // being recreated (and re-subscribed) on every keystroke.
   const activeRequestIdRef = useRef<string | null>(null);
+  const activeSessionIdRef = useRef<string | null>(null);
   // Accumulates source info across the current stream's info events.
   const sourceRef = useRef<SourceInfo | null>(null);
   const autoDetectLocalRef = useRef(false);
@@ -462,14 +373,31 @@ export function ChatView({
   };
 
   const persistHistory = (
-    provider: ChatProvider,
+    sessionId: string | null,
     entries: ChatEntry[],
     immediate = false
   ) => {
-    if (!api) return;
+    if (!api || !sessionId) return;
     const run = () => {
       void api
-        .saveChatHistory(provider, toPersistedEntries(entries))
+        .saveChatSession(sessionId, toPersistedEntries(entries))
+        .then((summary) => {
+          if (!summary) return;
+          setSessions((current) => {
+            const index = current.findIndex((session) => session.id === summary.id);
+            if (index < 0) {
+              return [summary, ...current];
+            }
+            const next = [...current];
+            next[index] = summary;
+            next.sort(
+              (left, right) =>
+                new Date(right.updatedAt).getTime() -
+                new Date(left.updatedAt).getTime()
+            );
+            return next;
+          });
+        })
         .catch(() => undefined);
     };
     if (persistTimeoutRef.current) {
@@ -483,17 +411,44 @@ export function ChatView({
     persistTimeoutRef.current = setTimeout(run, 300);
   };
 
-  const loadHistory = async (provider: ChatProvider) => {
+  const loadSession = async (sessionId: string) => {
     if (!api) return;
     try {
-      const entries = await api.getChatHistory(provider);
+      const entries = await api.getChatSession(sessionId);
       setTimeline(fromPersistedEntries(entries));
       resetEphemeralChatState();
+      setActiveSessionId(sessionId);
     } catch {
       setTimeline([]);
       resetEphemeralChatState();
     }
   };
+
+  const refreshSessions = async (provider: ChatProvider) => {
+    if (!api) return [];
+    const listed = await api.listChatSessions(provider);
+    setSessions(listed);
+    return listed;
+  };
+
+  const ensureActiveSession = async (provider: ChatProvider) => {
+    if (!api) return null;
+    const listed = await refreshSessions(provider);
+    if (listed.length > 0) {
+      await loadSession(listed[0].id);
+      return listed[0].id;
+    }
+    const created = await api.createChatSession(provider);
+    setSessions([created]);
+    setActiveSessionId(created.id);
+    setTimeline([]);
+    resetEphemeralChatState();
+    return created.id;
+  };
+
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
 
   // Load sign-in/provider state on mount.
   useEffect(() => {
@@ -515,7 +470,8 @@ export function ChatView({
             ? settingsResult.value
             : DEFAULT_CHAT_SETTINGS;
         setChatSettings(settings);
-        await loadHistory(settings.provider);
+        setSidebarOpen(settings.sidebarOpen !== false);
+        await ensureActiveSession(settings.provider);
       })
       .finally(() => {
         if (!cancelled) setCheckingAuth(false);
@@ -530,9 +486,18 @@ export function ChatView({
   }, [api]);
 
   useEffect(() => {
-    if (!api || checkingAuth || streaming) return;
-    persistHistory(chatSettings.provider, timeline);
-  }, [api, checkingAuth, streaming, timeline, chatSettings.provider]);
+    if (!api || checkingAuth || streaming || !activeSessionId) return;
+    persistHistory(activeSessionId, timeline);
+  }, [api, checkingAuth, streaming, timeline, activeSessionId]);
+
+  useEffect(() => {
+    const updateOverlay = () => {
+      setSidebarOverlay(window.innerWidth <= SIDEBAR_OVERLAY_MAX_WIDTH);
+    };
+    updateOverlay();
+    window.addEventListener("resize", updateOverlay);
+    return () => window.removeEventListener("resize", updateOverlay);
+  }, []);
 
   useEffect(() => {
     onActivityChange?.(streaming || exportingLatestActivity);
@@ -570,11 +535,17 @@ export function ChatView({
       sourceRef.current = null;
       if (finalText) {
         setTimeline((prev) => {
-          const next: ChatEntry[] = [
-            ...prev,
-            { kind: "message", role: "assistant", content: finalText, source }
-          ];
-          persistHistory(chatSettings.provider, next, true);
+          const next: ChatEntry[] = [...prev];
+          if (source?.mcpError) {
+            next.push({ kind: "toolNotice", message: source.mcpError });
+          }
+          next.push({
+            kind: "message",
+            role: "assistant",
+            content: finalText,
+            source
+          });
+          persistHistory(activeSessionIdRef.current, next, true);
           return next;
         });
       }
@@ -605,6 +576,12 @@ export function ChatView({
           setTimeline((prev) =>
             upsertWorkoutDeleteEntry(prev, payload.preview)
           );
+        } else if (payload.kind === "activityVisual") {
+          setTimeline((prev) => upsertActivityVisualEntry(prev, payload.preview));
+        } else if (payload.kind === "fitnessTrend") {
+          setTimeline((prev) => upsertFitnessTrendEntry(prev, payload.preview));
+        } else if (payload.kind === "hrZoneSummary") {
+          setTimeline((prev) => upsertHrZoneEntry(prev, payload.preview));
         } else if (payload.kind === "mcp") {
           const base: SourceInfo = sourceRef.current ?? {
             snapshotIncluded: false,
@@ -661,7 +638,7 @@ export function ChatView({
       const status = await api.loginChat();
       setAuthStatus(status);
       if (chatSettings.provider === "chatgpt") {
-        await loadHistory("chatgpt");
+        await ensureActiveSession("chatgpt");
       }
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "ChatGPT sign-in failed.");
@@ -686,11 +663,67 @@ export function ChatView({
     if (!api || streaming || exportingLatestActivity) return;
     onError(null);
     try {
-      await api.clearChatHistory(chatSettings.provider);
+      const created = await api.createChatSession(chatSettings.provider);
+      setSessions((current) => [created, ...current]);
+      setActiveSessionId(created.id);
       setTimeline([]);
       resetEphemeralChatState();
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "Could not start a new chat.");
+    }
+  };
+
+  const handleSelectSession = async (sessionId: string) => {
+    if (!api || streaming || exportingLatestActivity || sessionId === activeSessionId) {
+      return;
+    }
+    onError(null);
+    await loadSession(sessionId);
+    if (sidebarOverlay) {
+      setSidebarOpen(false);
+    }
+  };
+
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!api || streaming || exportingLatestActivity) return;
+    onError(null);
+    try {
+      await api.deleteChatSession(sessionId);
+      const listed = await refreshSessions(chatSettings.provider);
+      if (sessionId === activeSessionId) {
+        if (listed.length > 0) {
+          await loadSession(listed[0].id);
+        } else {
+          const created = await api.createChatSession(chatSettings.provider);
+          setSessions([created]);
+          setActiveSessionId(created.id);
+          setTimeline([]);
+          resetEphemeralChatState();
+        }
+      }
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : "Could not delete chat.");
+    }
+  };
+
+  const handleToggleSidebar = async () => {
+    const nextOpen = !sidebarOpen;
+    setSidebarOpen(nextOpen);
+    if (!api) return;
+    try {
+      const saved = await api.saveChatSettings({
+        ...chatSettings,
+        sidebarOpen: nextOpen
+      });
+      setChatSettings(saved);
+    } catch {
+      // keep local toggle even if persistence fails
+    }
+  };
+
+  const handleCloseSidebar = () => {
+    if (sidebarOverlay) {
+      setSidebarOpen(false);
     }
   };
 
@@ -703,7 +736,7 @@ export function ChatView({
     try {
       const saved = await api.saveChatSettings(nextSettings);
       setChatSettings(saved);
-      await loadHistory(provider);
+      await ensureActiveSession(provider);
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "Provider change failed.");
     }
@@ -953,7 +986,7 @@ export function ChatView({
     sourceRef.current = null;
     setCurrentSource(null);
     setTimeline(nextEntries);
-    persistHistory(chatSettings.provider, nextEntries, true);
+    persistHistory(activeSessionIdRef.current, nextEntries, true);
     setInput("");
     setStreaming(true);
     setStreamingText("");
@@ -981,6 +1014,25 @@ export function ChatView({
     try {
       const result = await api.uploadTrainingPlanDraft(draftId);
       setUploadedPlans((prev) => ({ ...prev, [draftId]: result }));
+      setTimeline((prev) => {
+        const next = prev.map((entry) =>
+          entry.kind === "planDraft" && entry.draft.draftId === draftId
+            ? {
+                kind: "planDraft" as const,
+                draft: {
+                  ...entry.draft,
+                  uploadedAt: Date.now(),
+                  uploadResult: {
+                    workoutsScheduled: result.workoutsScheduled,
+                    workoutsCreated: result.workoutsCreated
+                  }
+                }
+              }
+            : entry
+        );
+        persistHistory(activeSessionIdRef.current, next, true);
+        return next;
+      });
       onPlanUploaded?.();
     } catch (caught) {
       onError(
@@ -1020,7 +1072,7 @@ export function ChatView({
       { kind: "message", role: "user", content: trimmed }
     ];
     setTimeline(nextEntries);
-    persistHistory(chatSettings.provider, nextEntries, true);
+    persistHistory(activeSessionIdRef.current, nextEntries, true);
     setInput("");
     setExportingLatestActivity(true);
     onError(null);
@@ -1036,7 +1088,7 @@ export function ChatView({
             content: formatLatestActivityExportMessage(result)
           }
         ];
-        persistHistory(chatSettings.provider, next, true);
+        persistHistory(activeSessionIdRef.current, next, true);
         return next;
       });
     } catch (caught) {
@@ -1054,7 +1106,7 @@ export function ChatView({
             content: `I couldn't download the latest activity FIT file: ${message}`
           }
         ];
-        persistHistory(chatSettings.provider, next, true);
+        persistHistory(activeSessionIdRef.current, next, true);
         return next;
       });
     } finally {
@@ -1072,15 +1124,56 @@ export function ChatView({
   const isLocalProvider = chatSettings.provider === "local";
   const localModelConfigured = chatSettings.local.model.trim().length > 0;
   const isBusy = streaming || exportingLatestActivity;
-  const availableLocalServers =
-    localDiscovery?.servers.filter(
-      (server) => server.ok && server.models.length > 0
-    ) ?? [];
-  const selectedLocalServer =
-    availableLocalServers.find(
-      (server) => server.baseUrl === chatSettings.local.baseUrl
-    ) ?? availableLocalServers[0];
-  const discoveredLocalModels = selectedLocalServer?.models ?? [];
+  const showLoginGate = !isLocalProvider && !authStatus?.signedIn;
+
+  const providerSwitch = (
+    <ProviderSwitch
+      provider={chatSettings.provider}
+      disabled={savingSettings || isBusy}
+      onChange={(provider) => void handleProviderChange(provider)}
+    />
+  );
+
+  const sidebarProps = {
+    open: sidebarOpen,
+    overlay: sidebarOverlay,
+    sessions,
+    activeSessionId,
+    busy: isBusy,
+    onClose: handleCloseSidebar,
+    onNewChat: () => void handleNewChat(),
+    onSelectSession: (sessionId: string) => void handleSelectSession(sessionId),
+    onDeleteSession: (sessionId: string) => void handleDeleteSession(sessionId)
+  };
+
+  const settingsModalProps = {
+    open: settingsOpen,
+    chatSettings,
+    authStatus,
+    localApiKey,
+    localConnection,
+    localDiscovery,
+    savingSettings,
+    testingLocal,
+    detectingLocal,
+    signingIn,
+    mcpStatus,
+    mcpBusy,
+    showTools,
+    busy: isBusy,
+    onClose: () => setSettingsOpen(false),
+    onSignIn: () => void handleSignIn(),
+    onSignOut: () => void handleSignOut(),
+    onLocalApiKeyChange: setLocalApiKey,
+    onUpdateLocalDraft: updateLocalDraft,
+    onDetectLocalServers: () => void handleDetectLocalServers(),
+    onTestLocalConnection: () => void handleTestLocalConnection(),
+    onSaveLocalSettings: () => void handleSaveLocalSettings(),
+    onClearLocalApiKey: () => void handleClearLocalApiKey(),
+    onConnectMcp: () => void handleConnectMcp(),
+    onDisconnectMcp: () => void handleDisconnectMcp(),
+    onToggleTools: () => setShowTools((value) => !value)
+  };
 
   if (checkingAuth) {
     return (
@@ -1090,91 +1183,126 @@ export function ChatView({
     );
   }
 
-  if (!isLocalProvider && !authStatus?.signedIn) {
+  if (showLoginGate) {
     return (
-      <div className="chat-view chat-view-centered">
-        <div className="panel chat-login-panel">
-          <MessageCircle size={32} aria-hidden="true" />
-          <h2>Your training coach</h2>
-          <ProviderSwitch
-            provider={chatSettings.provider}
-            disabled={savingSettings || isBusy}
-            onChange={(provider) => void handleProviderChange(provider)}
-          />
-          <p>
-            Sign in with your ChatGPT account to chat with a coach that knows your
-            COROS activities, recovery, and upcoming workouts.
-          </p>
-          <button
-            type="button"
-            className="primary-button"
-            onClick={() => void handleSignIn()}
-            disabled={signingIn || !api}
-          >
-            {signingIn ? (
-              <Loader2 className="chat-spinner" size={16} aria-hidden="true" />
-            ) : null}
-            Sign in with ChatGPT
-          </button>
-          <p className="chat-login-note">
-            Uses your existing ChatGPT subscription. Connect COROS Training Hub for
-            personalised advice.
-          </p>
+      <div
+        className={[
+          "chat-view",
+          "chat-view-login",
+          sidebarOpen && !sidebarOverlay ? "chat-view-sidebar-open" : ""
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <div className="chat-header">
+          <div className="chat-header-title">
+            <button
+              type="button"
+              className="chat-sidebar-toggle"
+              onClick={() => void handleToggleSidebar()}
+              aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            >
+              {sidebarOpen ? (
+                <PanelLeftClose size={18} aria-hidden="true" />
+              ) : (
+                <PanelLeft size={18} aria-hidden="true" />
+              )}
+            </button>
+            <MessageCircle size={18} aria-hidden="true" />
+            <span>Training Coach</span>
+          </div>
+          <div className="chat-header-end">
+            <button
+              type="button"
+              className="chat-settings-button"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Open settings"
+            >
+              <Settings2 size={16} aria-hidden="true" />
+              Settings
+            </button>
+          </div>
         </div>
+        <div className="chat-layout">
+          <ChatSidebar {...sidebarProps} />
+          <div className="chat-main chat-main-login">
+            <div className="panel chat-login-panel">
+              <MessageCircle size={32} aria-hidden="true" />
+              <h2>Your training coach</h2>
+              <p>
+                Sign in with your ChatGPT account to chat with a coach that knows your
+                COROS activities, recovery, and upcoming workouts.
+              </p>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => void handleSignIn()}
+                disabled={signingIn || !api}
+              >
+                {signingIn ? (
+                  <Loader2 className="chat-spinner" size={16} aria-hidden="true" />
+                ) : null}
+                Sign in with ChatGPT
+              </button>
+              <p className="chat-login-note">
+                Or switch to Local model below to chat without signing in.
+              </p>
+            </div>
+            <div className="chat-composer-toolbar chat-composer-toolbar-login">
+              {providerSwitch}
+            </div>
+          </div>
+        </div>
+        <ChatSettingsModal {...settingsModalProps} />
       </div>
     );
   }
 
   return (
-    <div className="chat-view">
+    <div
+      className={[
+        "chat-view",
+        sidebarOpen && !sidebarOverlay ? "chat-view-sidebar-open" : ""
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <div className="chat-header">
         <div className="chat-header-title">
+          <button
+            type="button"
+            className="chat-sidebar-toggle"
+            onClick={() => void handleToggleSidebar()}
+            aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+          >
+            {sidebarOpen ? (
+              <PanelLeftClose size={18} aria-hidden="true" />
+            ) : (
+              <PanelLeft size={18} aria-hidden="true" />
+            )}
+          </button>
           <MessageCircle size={18} aria-hidden="true" />
           <span>Training Coach</span>
         </div>
         <div className="chat-header-end">
-          <ProviderSwitch
-            provider={chatSettings.provider}
-            disabled={savingSettings || isBusy}
-            onChange={(provider) => void handleProviderChange(provider)}
-          />
           <button
             type="button"
-            className="chat-new-chat"
-            onClick={() => void handleNewChat()}
-            disabled={isBusy || timeline.length === 0}
-            title="Start a new conversation"
+            className="chat-settings-button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Open settings"
           >
-            <Plus size={14} aria-hidden="true" />
-            New chat
+            <Settings2 size={16} aria-hidden="true" />
+            Settings
           </button>
-          {isLocalProvider ? (
-            <div
-              className={[
-                "chat-local-status",
-                localConnection?.ok
-                  ? "is-ready"
-                  : localConnection && !localConnection.ok
-                    ? "is-error"
-                    : ""
-              ]
-                .filter(Boolean)
-                .join(" ")}
-            >
-              <Bot size={13} aria-hidden="true" />
-              {localConnection?.ok
-                ? "Local ready"
-                : localConnection
-                  ? "Local issue"
-                  : "Local model"}
-            </div>
-          ) : null}
           <div className="chat-mcp">
             {mcpStatus?.connected ? (
               <button
                 type="button"
                 className="chat-mcp-pill connected"
-                onClick={() => setShowTools((value) => !value)}
+                onClick={() => {
+                  setSettingsOpen(true);
+                  setShowTools(true);
+                }}
                 title="COROS data connected via MCP"
               >
                 <Database size={13} aria-hidden="true" />
@@ -1184,7 +1312,10 @@ export function ChatView({
               <button
                 type="button"
                 className="chat-mcp-pill"
-                onClick={() => void handleConnectMcp()}
+                onClick={() => {
+                  setSettingsOpen(true);
+                  void handleConnectMcp();
+                }}
                 disabled={mcpBusy}
               >
                 {mcpBusy ? (
@@ -1199,24 +1330,6 @@ export function ChatView({
                     : "Connect COROS"}
               </button>
             )}
-            {showTools && mcpStatus?.connected ? (
-              <div className="chat-mcp-panel">
-                <div className="chat-mcp-panel-head">
-                  <span>{mcpStatus.tools.length} COROS tools</span>
-                  <button type="button" onClick={() => void handleDisconnectMcp()}>
-                    Disconnect
-                  </button>
-                </div>
-                <ul>
-                  {mcpStatus.tools.map((tool) => (
-                    <li key={tool.name}>
-                      <code>{tool.name}</code>
-                      {tool.description ? <span>{tool.description}</span> : null}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
           </div>
           {!isLocalProvider && authStatus?.email ? (
             <span className="chat-account">{authStatus.email}</span>
@@ -1234,160 +1347,10 @@ export function ChatView({
         </div>
       </div>
 
-      {isLocalProvider ? (
-        <div className="chat-local-settings">
-          <label className="chat-local-field">
-            <span>Server</span>
-            {availableLocalServers.length > 0 ? (
-              <select
-                value={selectedLocalServer?.baseUrl ?? chatSettings.local.baseUrl}
-                onChange={(event) => {
-                  const server = availableLocalServers.find(
-                    (entry) => entry.baseUrl === event.target.value
-                  );
-                  if (!server) return;
-                  updateLocalDraft({
-                    baseUrl: server.baseUrl,
-                    model: server.models.includes(chatSettings.local.model)
-                      ? chatSettings.local.model
-                      : server.models[0] ?? ""
-                  });
-                }}
-              >
-                {availableLocalServers.map((server) => (
-                  <option key={server.baseUrl} value={server.baseUrl}>
-                    {server.label} · {server.models.length} model
-                    {server.models.length === 1 ? "" : "s"}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                value={chatSettings.local.baseUrl}
-                onChange={(event) =>
-                  updateLocalDraft({ baseUrl: event.target.value })
-                }
-                placeholder="http://localhost:11434/v1"
-                spellCheck={false}
-              />
-            )}
-          </label>
-          <label className="chat-local-field">
-            <span>Model</span>
-            {discoveredLocalModels.length > 0 ? (
-              <select
-                value={
-                  discoveredLocalModels.includes(chatSettings.local.model)
-                    ? chatSettings.local.model
-                    : discoveredLocalModels[0]
-                }
-                onChange={(event) => updateLocalDraft({ model: event.target.value })}
-              >
-                {discoveredLocalModels.map((model) => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                value={chatSettings.local.model}
-                onChange={(event) => updateLocalDraft({ model: event.target.value })}
-                placeholder="Detect models or enter a model id"
-                spellCheck={false}
-              />
-            )}
-          </label>
-          <label className="chat-local-field chat-local-field-key">
-            <span>API key</span>
-            <div className="chat-local-key-row">
-              <KeyRound size={14} aria-hidden="true" />
-              <input
-                value={localApiKey}
-                onChange={(event) => setLocalApiKey(event.target.value)}
-                placeholder={
-                  chatSettings.local.hasApiKey ? "Saved key" : "Optional"
-                }
-                type="password"
-                spellCheck={false}
-              />
-              {chatSettings.local.hasApiKey ? (
-                <button
-                  type="button"
-                  onClick={() => void handleClearLocalApiKey()}
-                  disabled={savingSettings}
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
-          </label>
-          <label className="chat-local-tools">
-            <input
-              type="checkbox"
-              checked={chatSettings.local.toolsEnabled}
-              onChange={(event) =>
-                updateLocalDraft({ toolsEnabled: event.target.checked })
-              }
-            />
-            <span>Use COROS tools when supported</span>
-          </label>
-          <div className="chat-local-actions">
-            <button
-              type="button"
-              className="chat-local-action"
-              onClick={() => void handleDetectLocalServers()}
-              disabled={detectingLocal || !api}
-            >
-              {detectingLocal ? (
-                <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
-              ) : (
-                <RefreshCw size={14} aria-hidden="true" />
-              )}
-              Detect
-            </button>
-            <button
-              type="button"
-              className="chat-local-action"
-              onClick={() => void handleTestLocalConnection()}
-              disabled={testingLocal || !api}
-            >
-              {testingLocal ? (
-                <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
-              ) : (
-                <Bot size={14} aria-hidden="true" />
-              )}
-              Test
-            </button>
-            <button
-              type="button"
-              className="chat-local-action primary"
-              onClick={() => void handleSaveLocalSettings()}
-              disabled={savingSettings || !api}
-            >
-              {savingSettings ? (
-                <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
-              ) : (
-                <Save size={14} aria-hidden="true" />
-              )}
-              Save
-            </button>
-          </div>
-          {localConnection ? (
-            <p
-              className={
-                localConnection.ok
-                  ? "chat-local-result is-ready"
-                  : "chat-local-result is-error"
-              }
-            >
-              {localConnection.message}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-      <div className="chat-transcript" ref={scrollRef}>
+      <div className="chat-layout">
+        <ChatSidebar {...sidebarProps} />
+        <div className="chat-main">
+          <div className="chat-transcript" ref={scrollRef}>
         <div className="chat-thread">
           {timeline.length === 0 && !streaming ? (
             <div className="chat-empty">
@@ -1398,7 +1361,8 @@ export function ChatView({
               <div className="chat-suggestions">
                 {[
                   "How was my last run?",
-                  "What should I train tomorrow?",
+                  "Break down my latest run by lap",
+                  "Schedule an easy 8K for Saturday",
                   "Am I recovered enough for a hard session?",
                   "Download my latest FIT file"
                 ].map((suggestion) => (
@@ -1416,6 +1380,22 @@ export function ChatView({
           ) : null}
 
           {timeline.map((entry, index) => {
+            if (entry.kind === "toolNotice") {
+              return (
+                <div
+                  key={`tool-notice-${index}`}
+                  className="chat-row chat-row-assistant"
+                >
+                  <div className="chat-avatar chat-avatar-assistant">
+                    <Sparkles size={16} aria-hidden="true" />
+                  </div>
+                  <div className="chat-bubble chat-bubble-tool-notice">
+                    {entry.message}
+                  </div>
+                </div>
+              );
+            }
+
             if (entry.kind === "planDraft") {
               return (
                 <div
@@ -1457,6 +1437,54 @@ export function ChatView({
                         void handleConfirmWorkoutDelete(entry.preview.requestId)
                       }
                     />
+                  </div>
+                </div>
+              );
+            }
+
+            if (entry.kind === "activityVisual") {
+              return (
+                <div
+                  key={entry.preview.previewId}
+                  className="chat-row chat-row-assistant"
+                >
+                  <div className="chat-avatar chat-avatar-assistant">
+                    <Sparkles size={16} aria-hidden="true" />
+                  </div>
+                  <div className="chat-bubble chat-bubble-plan">
+                    <ActivityVisualCard preview={entry.preview} />
+                  </div>
+                </div>
+              );
+            }
+
+            if (entry.kind === "fitnessTrend") {
+              return (
+                <div
+                  key={entry.preview.previewId}
+                  className="chat-row chat-row-assistant"
+                >
+                  <div className="chat-avatar chat-avatar-assistant">
+                    <Sparkles size={16} aria-hidden="true" />
+                  </div>
+                  <div className="chat-bubble chat-bubble-plan">
+                    <FitnessTrendCard preview={entry.preview} />
+                  </div>
+                </div>
+              );
+            }
+
+            if (entry.kind === "hrZoneSummary") {
+              return (
+                <div
+                  key={entry.preview.previewId}
+                  className="chat-row chat-row-assistant"
+                >
+                  <div className="chat-avatar chat-avatar-assistant">
+                    <Sparkles size={16} aria-hidden="true" />
+                  </div>
+                  <div className="chat-bubble chat-bubble-plan">
+                    <HrZoneCard preview={entry.preview} />
                   </div>
                 </div>
               );
@@ -1521,54 +1549,58 @@ export function ChatView({
         </div>
       </div>
 
-      <div className="chat-composer">
-        <div className="chat-composer-inner">
-          <textarea
-            className="chat-input"
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={handleInputKeyDown}
-            placeholder="Ask your coach…"
-            rows={1}
-            disabled={exportingLatestActivity}
-          />
-          {streaming ? (
-            <button
-              type="button"
-              className="chat-send chat-stop"
-              onClick={handleStop}
-              title="Stop"
-            >
-              <Square size={15} aria-hidden="true" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="chat-send"
-              onClick={() => void handleSend()}
-              disabled={
-                !input.trim() ||
-                exportingLatestActivity ||
-                (isLocalProvider &&
-                  !localModelConfigured &&
-                  !isLatestActivityFileRequest(input.trim()))
-              }
-              title={
-                isLocalProvider &&
-                !localModelConfigured &&
-                !isLatestActivityFileRequest(input.trim())
-                  ? "Enter a local model first"
-                  : "Send"
-              }
-            >
-              <Send size={15} aria-hidden="true" />
-            </button>
-          )}
+          <div className="chat-composer">
+            <div className="chat-composer-toolbar">{providerSwitch}</div>
+            <div className="chat-composer-inner">
+              <textarea
+                className="chat-input"
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={handleInputKeyDown}
+                placeholder="Ask your coach…"
+                rows={1}
+                disabled={exportingLatestActivity}
+              />
+              {streaming ? (
+                <button
+                  type="button"
+                  className="chat-send chat-stop"
+                  onClick={handleStop}
+                  title="Stop"
+                >
+                  <Square size={15} aria-hidden="true" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="chat-send"
+                  onClick={() => void handleSend()}
+                  disabled={
+                    !input.trim() ||
+                    exportingLatestActivity ||
+                    (isLocalProvider &&
+                      !localModelConfigured &&
+                      !isLatestActivityFileRequest(input.trim()))
+                  }
+                  title={
+                    isLocalProvider &&
+                    !localModelConfigured &&
+                    !isLatestActivityFileRequest(input.trim())
+                      ? "Enter a local model first"
+                      : "Send"
+                  }
+                >
+                  <Send size={15} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            <p className="chat-disclaimer">
+              Coach can make mistakes. Verify important training decisions.
+            </p>
+          </div>
         </div>
-        <p className="chat-disclaimer">
-          Coach can make mistakes. Verify important training decisions.
-        </p>
       </div>
+      <ChatSettingsModal {...settingsModalProps} />
     </div>
   );
 }

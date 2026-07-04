@@ -137,20 +137,27 @@ import {
 } from "./updaterService";
 import {
   cancelChat,
-  clearChatHistory,
+  createChatSessionForProvider,
+  deleteChatSessionById,
   detectLocalChatServers,
   getChatAuthStatus,
-  getChatHistory,
+  getChatSessionEntries,
   getChatSettings,
+  listChatSessionsForProvider,
   loginChat,
   logoutChat,
-  saveChatHistory,
+  saveChatSessionEntries,
   saveChatSettings,
   streamChat,
   testLocalChatConnection,
   uploadTrainingPlanDraft,
   confirmWorkoutDelete
 } from "./chatService";
+import {
+  hydratePlanDraftStoreFromDatabase,
+  pruneDeleteRequestStore,
+  prunePlanDraftStore
+} from "./chatWorkoutTools";
 import {
   connectCorosMcp,
   disconnectCorosMcp,
@@ -360,6 +367,9 @@ app.whenReady().then(() => {
     }
   });
   initializeDatabase(app.getPath("userData"));
+  hydratePlanDraftStoreFromDatabase();
+  prunePlanDraftStore();
+  pruneDeleteRequestStore();
   registerIpcHandlers();
   setJobListener((jobs) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -544,19 +554,26 @@ function registerIpcHandlers(): void {
     cancelChat(requestId)
   );
 
-  ipcMain.handle("chat:getHistory", (_event, provider: ChatProvider) =>
-    getChatHistory(provider)
+  ipcMain.handle("chat:listSessions", (_event, provider: ChatProvider) =>
+    listChatSessionsForProvider(provider)
+  );
+
+  ipcMain.handle("chat:getSession", (_event, sessionId: string) =>
+    getChatSessionEntries(sessionId)
+  );
+
+  ipcMain.handle("chat:createSession", (_event, provider: ChatProvider) =>
+    createChatSessionForProvider(provider)
   );
 
   ipcMain.handle(
-    "chat:saveHistory",
-    (_event, provider: ChatProvider, entries: PersistedChatEntry[]) => {
-      saveChatHistory(provider, entries);
-    }
+    "chat:saveSession",
+    (_event, sessionId: string, entries: PersistedChatEntry[]) =>
+      saveChatSessionEntries(sessionId, entries)
   );
 
-  ipcMain.handle("chat:clearHistory", (_event, provider: ChatProvider) => {
-    clearChatHistory(provider);
+  ipcMain.handle("chat:deleteSession", (_event, sessionId: string) => {
+    deleteChatSessionById(sessionId);
   });
 
   ipcMain.handle("chatMcp:getStatus", () => getCorosMcpStatus());

@@ -51,6 +51,7 @@ import type {
   ChatAuthStatus,
   ChatMessage,
   ChatProvider,
+  ChatSessionSummary,
   ChatSettings,
   PersistedChatEntry,
   ChatStreamStart,
@@ -242,12 +243,14 @@ export interface CorosLinkApi {
   logoutChat: () => Promise<ChatAuthStatus>;
   sendChat: (requestId: string, messages: ChatMessage[]) => Promise<void>;
   cancelChat: (requestId: string) => Promise<void>;
-  getChatHistory: (provider: ChatProvider) => Promise<PersistedChatEntry[]>;
-  saveChatHistory: (
-    provider: ChatProvider,
+  listChatSessions: (provider: ChatProvider) => Promise<ChatSessionSummary[]>;
+  getChatSession: (sessionId: string) => Promise<PersistedChatEntry[]>;
+  createChatSession: (provider: ChatProvider) => Promise<ChatSessionSummary>;
+  saveChatSession: (
+    sessionId: string,
     entries: PersistedChatEntry[]
-  ) => Promise<void>;
-  clearChatHistory: (provider: ChatProvider) => Promise<void>;
+  ) => Promise<ChatSessionSummary | null>;
+  deleteChatSession: (sessionId: string) => Promise<void>;
   onChatStreamStart: (callback: (payload: ChatStreamStart) => void) => () => void;
   onChatStreamToken: (callback: (payload: ChatStreamToken) => void) => () => void;
   onChatStreamDone: (callback: (payload: ChatStreamDone) => void) => () => void;

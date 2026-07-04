@@ -224,16 +224,120 @@ export function initializeDatabase(userDataPath: string): Database.Database {
       downloaded_at TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS chat_transcripts (
-      provider TEXT PRIMARY KEY CHECK(provider IN ('chatgpt', 'local')),
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id TEXT PRIMARY KEY,
+      provider TEXT NOT NULL CHECK(provider IN ('chatgpt', 'local')),
+      title TEXT NOT NULL,
       messages_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE INDEX IF NOT EXISTS idx_chat_sessions_provider_updated
+      ON chat_sessions(provider, updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS chat_plan_drafts (
+      draft_id TEXT PRIMARY KEY,
+      plan_json TEXT NOT NULL,
+      preview_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      uploaded_at INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_chat_plan_drafts_created
+      ON chat_plan_drafts(created_at DESC);
   `);
 
   ensureColumn(db, "generated_routes", "activity_type", "TEXT");
+  migrateChatTranscriptsToSessions(db);
 
   return db;
+}
+
+function tableExists(database: Database.Database, table: string): boolean {
+  const row = database
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
+    )
+    .get(table) as { name: string } | undefined;
+  return Boolean(row);
+}
+
+function deriveSessionTitle(messagesJson: string): string {
+  try {
+    const parsed = JSON.parse(messagesJson) as unknown;
+    if (!Array.isArray(parsed)) {
+      return "New chat";
+    }
+    for (const entry of parsed) {
+      if (
+        typeof entry === "object" &&
+        entry !== null &&
+        (entry as { role?: string }).role === "user" &&
+        typeof (entry as { content?: string }).content === "string"
+      ) {
+        const content = (entry as { content: string }).content.trim();
+        if (content) {
+          return content.length > 48 ? `${content.slice(0, 48)}…` : content;
+        }
+      }
+      if (
+        typeof entry === "object" &&
+        entry !== null &&
+        (entry as { kind?: string }).kind === "message" &&
+        (entry as { role?: string }).role === "user" &&
+        typeof (entry as { content?: string }).content === "string"
+      ) {
+        const content = (entry as { content: string }).content.trim();
+        if (content) {
+          return content.length > 48 ? `${content.slice(0, 48)}…` : content;
+        }
+      }
+    }
+  } catch {
+    // fall through
+  }
+  return "New chat";
+}
+
+function migrateChatTranscriptsToSessions(database: Database.Database): void {
+  if (!tableExists(database, "chat_transcripts")) {
+    return;
+  }
+
+  const rows = database
+    .prepare(
+      "SELECT provider, messages_json, updated_at FROM chat_transcripts"
+    )
+    .all() as Array<{
+    provider: string;
+    messages_json: string;
+    updated_at: string;
+  }>;
+
+  if (rows.length > 0) {
+    const insert = database.prepare(
+      `INSERT INTO chat_sessions (id, provider, title, messages_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    );
+    const transaction = database.transaction(
+      (legacyRows: typeof rows) => {
+        for (const row of legacyRows) {
+          insert.run(
+            crypto.randomUUID(),
+            row.provider,
+            deriveSessionTitle(row.messages_json),
+            row.messages_json,
+            row.updated_at,
+            row.updated_at
+          );
+        }
+      }
+    );
+    transaction(rows);
+  }
+
+  database.exec("DROP TABLE chat_transcripts");
 }
 
 function ensureColumn(
@@ -407,42 +511,71 @@ export function deleteSettings(keys: string[]): void {
   transaction(keys);
 }
 
-interface ChatTranscriptRow {
+export interface ChatSessionRow {
+  id: string;
   provider: string;
+  title: string;
   messages_json: string;
+  created_at: string;
   updated_at: string;
 }
 
-export function getChatTranscriptRow(
-  provider: string
-): ChatTranscriptRow | undefined {
+export function listChatSessionRows(provider: string): ChatSessionRow[] {
   return requireDatabase()
     .prepare(
-      "SELECT provider, messages_json, updated_at FROM chat_transcripts WHERE provider = ?"
+      `SELECT id, provider, title, messages_json, created_at, updated_at
+       FROM chat_sessions
+       WHERE provider = ?
+       ORDER BY updated_at DESC`
     )
-    .get(provider) as ChatTranscriptRow | undefined;
+    .all(provider) as ChatSessionRow[];
 }
 
-export function saveChatTranscriptRow(
+export function getChatSessionRow(id: string): ChatSessionRow | undefined {
+  return requireDatabase()
+    .prepare(
+      `SELECT id, provider, title, messages_json, created_at, updated_at
+       FROM chat_sessions
+       WHERE id = ?`
+    )
+    .get(id) as ChatSessionRow | undefined;
+}
+
+export function insertChatSessionRow(
+  id: string,
   provider: string,
+  title: string,
+  messagesJson: string,
+  createdAt: string,
+  updatedAt: string
+): void {
+  requireDatabase()
+    .prepare(
+      `INSERT INTO chat_sessions (id, provider, title, messages_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(id, provider, title, messagesJson, createdAt, updatedAt);
+}
+
+export function updateChatSessionRow(
+  id: string,
+  title: string,
   messagesJson: string,
   updatedAt: string
 ): void {
   requireDatabase()
     .prepare(
-      `INSERT INTO chat_transcripts (provider, messages_json, updated_at)
-       VALUES (?, ?, ?)
-       ON CONFLICT(provider) DO UPDATE SET
-         messages_json = excluded.messages_json,
-         updated_at = excluded.updated_at`
+      `UPDATE chat_sessions
+       SET title = ?, messages_json = ?, updated_at = ?
+       WHERE id = ?`
     )
-    .run(provider, messagesJson, updatedAt);
+    .run(title, messagesJson, updatedAt, id);
 }
 
-export function deleteChatTranscriptRow(provider: string): void {
+export function deleteChatSessionRow(id: string): void {
   requireDatabase()
-    .prepare("DELETE FROM chat_transcripts WHERE provider = ?")
-    .run(provider);
+    .prepare("DELETE FROM chat_sessions WHERE id = ?")
+    .run(id);
 }
 
 function toSpotifySyncTrack(row: SpotifySyncTrackRow): SpotifySyncTrack {
@@ -943,4 +1076,108 @@ export function deleteCachedCorosMapRecord(packageId: string): void {
   requireDatabase()
     .prepare("DELETE FROM cached_coros_maps WHERE package_id = ?")
     .run(packageId);
+}
+
+interface ChatPlanDraftRow {
+  draft_id: string;
+  plan_json: string;
+  preview_json: string;
+  created_at: number;
+  uploaded_at: number | null;
+}
+
+export interface StoredChatPlanDraftRecord {
+  draftId: string;
+  planJson: string;
+  previewJson: string;
+  createdAt: number;
+  uploadedAt?: number;
+}
+
+export function saveChatPlanDraft(record: StoredChatPlanDraftRecord): void {
+  requireDatabase()
+    .prepare(
+      `INSERT INTO chat_plan_drafts (draft_id, plan_json, preview_json, created_at, uploaded_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(draft_id) DO UPDATE SET
+         plan_json = excluded.plan_json,
+         preview_json = excluded.preview_json,
+         created_at = excluded.created_at,
+         uploaded_at = excluded.uploaded_at`
+    )
+    .run(
+      record.draftId,
+      record.planJson,
+      record.previewJson,
+      record.createdAt,
+      record.uploadedAt ?? null
+    );
+}
+
+export function getChatPlanDraft(
+  draftId: string
+): StoredChatPlanDraftRecord | undefined {
+  const row = requireDatabase()
+    .prepare(
+      `SELECT draft_id, plan_json, preview_json, created_at, uploaded_at
+       FROM chat_plan_drafts
+       WHERE draft_id = ?`
+    )
+    .get(draftId) as ChatPlanDraftRow | undefined;
+
+  if (!row) {
+    return undefined;
+  }
+
+  return {
+    draftId: row.draft_id,
+    planJson: row.plan_json,
+    previewJson: row.preview_json,
+    createdAt: row.created_at,
+    uploadedAt: row.uploaded_at ?? undefined
+  };
+}
+
+export function listChatPlanDrafts(): StoredChatPlanDraftRecord[] {
+  const rows = requireDatabase()
+    .prepare(
+      `SELECT draft_id, plan_json, preview_json, created_at, uploaded_at
+       FROM chat_plan_drafts
+       ORDER BY created_at DESC`
+    )
+    .all() as ChatPlanDraftRow[];
+
+  return rows.map((row) => ({
+    draftId: row.draft_id,
+    planJson: row.plan_json,
+    previewJson: row.preview_json,
+    createdAt: row.created_at,
+    uploadedAt: row.uploaded_at ?? undefined
+  }));
+}
+
+export function markChatPlanDraftUploaded(
+  draftId: string,
+  uploadedAt: number
+): void {
+  requireDatabase()
+    .prepare(
+      `UPDATE chat_plan_drafts
+       SET uploaded_at = ?
+       WHERE draft_id = ?`
+    )
+    .run(uploadedAt, draftId);
+}
+
+export function pruneChatPlanDrafts(cutoffMs: number): number {
+  const result = requireDatabase()
+    .prepare("DELETE FROM chat_plan_drafts WHERE created_at < ? AND uploaded_at IS NULL")
+    .run(cutoffMs);
+  return result.changes;
+}
+
+export function deleteChatPlanDraft(draftId: string): void {
+  requireDatabase()
+    .prepare("DELETE FROM chat_plan_drafts WHERE draft_id = ?")
+    .run(draftId);
 }
