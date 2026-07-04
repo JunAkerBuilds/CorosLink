@@ -11915,37 +11915,99 @@ td span {
 }
 
 .chat-provider-switch {
-  display: inline-flex;
-  align-items: center;
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
   padding: 3px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-pill);
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.chat-provider-switch-indicator {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-glow);
+  box-shadow: 0 0 18px var(--accent-glow);
+  transition:
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+  pointer-events: none;
+}
+
+.chat-provider-switch[data-provider="local"] .chat-provider-switch-indicator {
+  background: rgba(31, 182, 166, 0.16);
+  border-color: rgba(31, 182, 166, 0.42);
+  box-shadow: 0 0 18px rgba(31, 182, 166, 0.28);
 }
 
 .chat-provider-switch button {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: 0;
   border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-muted);
-  padding: 5px 10px;
+  padding: 6px 12px;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+  white-space: nowrap;
+  transition:
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.chat-provider-switch button svg {
+  flex-shrink: 0;
+  opacity: 0.72;
+  transition: opacity 0.15s ease, color 0.15s ease;
 }
 
 .chat-provider-switch button:hover:not(:disabled) {
-  color: var(--text-primary);
+  color: var(--text-secondary);
+}
+
+.chat-provider-switch button:hover:not(:disabled) svg {
+  opacity: 0.95;
 }
 
 .chat-provider-switch button.active {
-  background: var(--accent-soft);
   color: var(--accent-strong);
 }
 
+.chat-provider-switch[data-provider="local"] button.active {
+  color: #5eead4;
+}
+
+.chat-provider-switch button.active svg {
+  opacity: 1;
+}
+
+.chat-provider-switch-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  flex-shrink: 0;
+}
+
 .chat-provider-switch button:disabled:not(.active) {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: default;
 }
 
