@@ -149,6 +149,7 @@ export async function listAppleMusicPlaylists(): Promise<AppleMusicPlaylist[]> {
         lastModifiedAt: attributes.lastModifiedDate,
         artworkUrl: buildArtworkUrl(attributes.artwork),
         url: attributes.url,
+        // The library playlists collection omits trackCount; filled in below.
         trackCount: attributes.trackCount ?? 0,
         tracks: []
       });
@@ -157,8 +158,47 @@ export async function listAppleMusicPlaylists(): Promise<AppleMusicPlaylist[]> {
     path = page.next;
   }
 
+  // The collection endpoint can't include the `tracks` relationship, so fetch
+  // each playlist's total separately (a tiny limit=1 call that returns
+  // `meta.total`). Best-effort + bounded concurrency so it never blocks or
+  // breaks the listing.
+  await fillLibraryPlaylistTrackCounts(playlists, credentials);
+
   return playlists.sort((left, right) =>
     left.name.localeCompare(right.name, undefined, { sensitivity: "base" })
+  );
+}
+
+/** Populates `trackCount` for each playlist via its tracks relationship total. */
+async function fillLibraryPlaylistTrackCounts(
+  playlists: AppleMusicPlaylist[],
+  credentials: AppleMusicCredentials
+): Promise<void> {
+  const CONCURRENCY = 8;
+  let cursor = 0;
+
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const index = cursor++;
+      if (index >= playlists.length) return;
+      const playlist = playlists[index];
+      if (playlist.trackCount > 0) continue;
+      try {
+        const response = await ampApiGet<AmpResponse<AmpTrack>>(
+          `/v1/me/library/playlists/${encodeURIComponent(playlist.id)}/tracks?limit=1`,
+          {},
+          credentials
+        );
+        playlist.trackCount = response.meta?.total ?? playlist.trackCount;
+      } catch {
+        // Best-effort: leave the count at 0 if this playlist can't be read
+        // (e.g. an empty playlist returns 404 for its tracks relationship).
+      }
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, playlists.length) }, worker)
   );
 }
 
@@ -617,6 +657,7 @@ function tokenizeShellCommand(input: string): string[] {
 interface AmpResponse<T> {
   data?: T[];
   next?: string;
+  meta?: { total?: number };
 }
 
 interface AmpPlaylist {
@@ -634,6 +675,9 @@ interface AmpPlaylist {
     tracks?: {
       data?: AmpTrack[];
       next?: string;
+      // Library playlist relationships include the full track total even when
+      // only the first page of `data` is returned.
+      meta?: { total?: number };
     };
   };
 }
