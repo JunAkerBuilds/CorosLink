@@ -12,12 +12,10 @@ import {
 } from "recharts";
 import type { TooltipContentProps } from "recharts";
 import {
-  trainingChartActiveDot,
-  trainingChartColors,
-  trainingChartFillStops,
   trainingChartMargin,
   trainingChartTooltipStyle
 } from "../chartConfig";
+import { useChartColors } from "../useChartColors";
 import type { TrainingTrendPoint } from "../types";
 
 interface TrainingTrendChartsProps {
@@ -58,11 +56,12 @@ function TrendChartTooltip({ active, payload, label }: TooltipContentProps) {
 }
 
 export function ChartAreaGradient({ id }: { id: string }) {
+  const { fillStops } = useChartColors();
   return (
     <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stopColor={trainingChartFillStops.top} stopOpacity={0.5} />
-      <stop offset="55%" stopColor={trainingChartFillStops.mid} stopOpacity={0.16} />
-      <stop offset="100%" stopColor={trainingChartFillStops.bottom} stopOpacity={0} />
+      <stop offset="0%" stopColor={fillStops.top} stopOpacity={0.5} />
+      <stop offset="55%" stopColor={fillStops.mid} stopOpacity={0.16} />
+      <stop offset="100%" stopColor={fillStops.bottom} stopOpacity={0} />
     </linearGradient>
   );
 }
@@ -83,22 +82,23 @@ function HrvChartLegend() {
 }
 
 function TrendChartAxes() {
+  const { colors } = useChartColors();
   return (
     <>
       <CartesianGrid
-        stroke={trainingChartColors.grid}
+        stroke={colors.grid}
         vertical={false}
         strokeDasharray="3 6"
       />
       <XAxis
         dataKey="label"
-        tick={{ fill: trainingChartColors.text, fontSize: 11, fontWeight: 500 }}
+        tick={{ fill: colors.text, fontSize: 11, fontWeight: 500 }}
         axisLine={false}
         tickLine={false}
         dy={8}
       />
       <YAxis
-        tick={{ fill: trainingChartColors.text, fontSize: 11, fontWeight: 500 }}
+        tick={{ fill: colors.text, fontSize: 11, fontWeight: 500 }}
         axisLine={false}
         tickLine={false}
         width={36}
@@ -106,21 +106,21 @@ function TrendChartAxes() {
       <Tooltip
         content={(props) => <TrendChartTooltip {...props} />}
         contentStyle={trainingChartTooltipStyle}
-        cursor={{ stroke: trainingChartColors.cursor, strokeWidth: 1 }}
+        cursor={{ stroke: colors.cursor, strokeWidth: 1 }}
       />
     </>
   );
 }
 
-const trendDot = {
-  r: 3,
-  fill: trainingChartColors.accentGlow,
-  stroke: trainingChartColors.dotStroke,
-  strokeWidth: 2
-};
-
 export function TrainingTrendCharts({ points }: TrainingTrendChartsProps) {
   const reducedMotion = usePrefersReducedMotion();
+  const { colors, activeDot } = useChartColors();
+  const trendDot = {
+    r: 3,
+    fill: colors.accentGlow,
+    stroke: colors.dotStroke,
+    strokeWidth: 2
+  };
   const loadPoints = points.filter((point) => point.trainingLoad !== undefined);
   const hrvPoints = points.filter(
     (point) => point.avgSleepHrv !== undefined || point.sleepHrvBase !== undefined
@@ -147,11 +147,11 @@ export function TrainingTrendCharts({ points }: TrainingTrendChartsProps) {
                   type="monotone"
                   dataKey="trainingLoad"
                   name="Load"
-                  stroke={trainingChartColors.accentBright}
+                  stroke={colors.accentBright}
                   fill="url(#trainingLoadFill)"
                   strokeWidth={2.5}
                   dot={trendDot}
-                  activeDot={trainingChartActiveDot}
+                  activeDot={activeDot}
                   isAnimationActive={!reducedMotion}
                   animationDuration={900}
                 />
@@ -183,11 +183,11 @@ export function TrainingTrendCharts({ points }: TrainingTrendChartsProps) {
                   type="monotone"
                   dataKey="avgSleepHrv"
                   name="HRV"
-                  stroke={trainingChartColors.accentBright}
+                  stroke={colors.accentBright}
                   fill="url(#hrvFill)"
                   strokeWidth={2.5}
                   dot={trendDot}
-                  activeDot={trainingChartActiveDot}
+                  activeDot={activeDot}
                   connectNulls
                   isAnimationActive={!reducedMotion}
                   animationDuration={850}
@@ -196,7 +196,7 @@ export function TrainingTrendCharts({ points }: TrainingTrendChartsProps) {
                   type="monotone"
                   dataKey="sleepHrvBase"
                   name="Baseline"
-                  stroke={trainingChartColors.gold}
+                  stroke={colors.gold}
                   strokeWidth={2}
                   strokeDasharray="5 4"
                   dot={false}

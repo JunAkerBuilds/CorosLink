@@ -8,11 +8,10 @@ import {
 } from "recharts";
 import type { TooltipContentProps } from "recharts";
 import {
-  trainingChartActiveDot,
-  trainingChartColors,
   trainingChartMargin,
   trainingChartTooltipStyle
 } from "../../training/chartConfig";
+import { useChartColors } from "../../training/useChartColors";
 import { ChartAreaGradient } from "../../training/components/TrainingTrendChart";
 
 export interface ChartDatum {
@@ -57,6 +56,8 @@ export function ChatMiniAreaChart({
   formatValue,
   yAxisFormatter = (value) => `${value}`
 }: ChatMiniAreaChartProps) {
+  const { colors, activeDot } = useChartColors();
+
   if (data.length < 2) {
     return null;
   }
@@ -70,13 +71,13 @@ export function ChatMiniAreaChart({
           </defs>
           <XAxis
             dataKey="label"
-            tick={{ fill: trainingChartColors.text, fontSize: 11 }}
+            tick={{ fill: colors.text, fontSize: 11 }}
             axisLine={false}
             tickLine={false}
             minTickGap={24}
           />
           <YAxis
-            tick={{ fill: trainingChartColors.text, fontSize: 11 }}
+            tick={{ fill: colors.text, fontSize: 11 }}
             axisLine={false}
             tickLine={false}
             width={36}
@@ -87,18 +88,18 @@ export function ChatMiniAreaChart({
             content={(props) => (
               <MiniAreaTooltip {...props} formatValue={formatValue} />
             )}
-            cursor={{ stroke: trainingChartColors.cursor }}
+            cursor={{ stroke: colors.cursor }}
             contentStyle={trainingChartTooltipStyle}
           />
           <Area
             type="monotone"
             dataKey="value"
             name={name}
-            stroke={trainingChartColors.accentBright}
+            stroke={colors.accentBright}
             fill={`url(#${gradientId})`}
             strokeWidth={2}
             dot={false}
-            activeDot={trainingChartActiveDot}
+            activeDot={activeDot}
             isAnimationActive={false}
           />
         </AreaChart>

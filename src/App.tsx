@@ -75,6 +75,7 @@ import type { TrainingHubSnapshot } from "./training/types";
 import type { CorosLinkApi } from "./coroslink-api";
 import { AppUpdateControls } from "./components/AppUpdateControls";
 import { ResourcesMenu } from "./components/ResourcesMenu";
+import { ThemeToggle } from "./theme/ThemeToggle";
 import { WatchConnectionSmokeControls } from "./components/WatchConnectionSmokeControls";
 import { MapsView } from "./maps/MapsView";
 import { ChatView } from "./chat/ChatView";
@@ -1397,6 +1398,7 @@ export default function App() {
         </div>
 
         <div className="app-header-end">
+          <ThemeToggle />
           <ResourcesMenu />
           <AppUpdateControls
             snapshot={appUpdateSnapshot}

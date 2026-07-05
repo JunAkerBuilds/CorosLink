@@ -11,11 +11,10 @@ import {
 import type { TooltipContentProps } from "recharts";
 import type { FitnessTrendPreview } from "../../electron/types";
 import {
-  trainingChartActiveDot,
-  trainingChartColors,
   trainingChartMargin,
   trainingChartTooltipStyle
 } from "../training/chartConfig";
+import { useChartColors } from "../training/useChartColors";
 import { ChartAreaGradient } from "../training/components/TrainingTrendChart";
 
 interface FitnessTrendCardProps {
@@ -40,6 +39,7 @@ function TrendTooltip({ active, payload, label }: TooltipContentProps) {
 }
 
 export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
+  const { colors, activeDot } = useChartColors();
   const loadPoints = preview.trendPoints.filter(
     (point) => point.trainingLoad !== undefined
   );
@@ -68,12 +68,12 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
                 </defs>
                 <XAxis
                   dataKey="label"
-                  tick={{ fill: trainingChartColors.text, fontSize: 11 }}
+                  tick={{ fill: colors.text, fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
-                  tick={{ fill: trainingChartColors.text, fontSize: 11 }}
+                  tick={{ fill: colors.text, fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   width={36}
@@ -86,11 +86,11 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
                   type="monotone"
                   dataKey="trainingLoad"
                   name="Load"
-                  stroke={trainingChartColors.accentBright}
+                  stroke={colors.accentBright}
                   fill={`url(#chatLoadFill-${preview.previewId})`}
                   strokeWidth={2}
                   dot={false}
-                  activeDot={trainingChartActiveDot}
+                  activeDot={activeDot}
                   isAnimationActive={false}
                 />
               </AreaChart>
@@ -110,12 +110,12 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
                 </defs>
                 <XAxis
                   dataKey="label"
-                  tick={{ fill: trainingChartColors.text, fontSize: 11 }}
+                  tick={{ fill: colors.text, fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
-                  tick={{ fill: trainingChartColors.text, fontSize: 11 }}
+                  tick={{ fill: colors.text, fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   width={36}
@@ -128,11 +128,11 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
                   type="monotone"
                   dataKey="avgSleepHrv"
                   name="HRV"
-                  stroke={trainingChartColors.accentBright}
+                  stroke={colors.accentBright}
                   fill={`url(#chatHrvFill-${preview.previewId})`}
                   strokeWidth={2}
                   dot={false}
-                  activeDot={trainingChartActiveDot}
+                  activeDot={activeDot}
                   connectNulls
                   isAnimationActive={false}
                 />
@@ -140,7 +140,7 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
                   type="monotone"
                   dataKey="sleepHrvBase"
                   name="Baseline"
-                  stroke={trainingChartColors.gold}
+                  stroke={colors.gold}
                   strokeWidth={2}
                   strokeDasharray="5 4"
                   dot={false}
@@ -164,12 +164,12 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
                 </defs>
                 <XAxis
                   dataKey="label"
-                  tick={{ fill: trainingChartColors.text, fontSize: 11 }}
+                  tick={{ fill: colors.text, fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
-                  tick={{ fill: trainingChartColors.text, fontSize: 11 }}
+                  tick={{ fill: colors.text, fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   width={36}
@@ -182,11 +182,11 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
                   type="monotone"
                   dataKey="rhr"
                   name="RHR"
-                  stroke={trainingChartColors.accentBright}
+                  stroke={colors.accentBright}
                   fill={`url(#chatRhrFill-${preview.previewId})`}
                   strokeWidth={2}
                   dot={false}
-                  activeDot={trainingChartActiveDot}
+                  activeDot={activeDot}
                   connectNulls
                   isAnimationActive={false}
                 />

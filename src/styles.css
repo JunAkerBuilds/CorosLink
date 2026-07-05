@@ -63,6 +63,64 @@
   text-rendering: optimizeLegibility;
 }
 
+/*
+ * Paper light theme — a subtle warm "paper" palette. Redefines the core tokens
+ * so everything that reads var(--…) reskins automatically. Hardcoded hex/rgba
+ * values that bypass these tokens are handled in the paper-override section at
+ * the end of this file.
+ */
+:root[data-theme="paper"] {
+  color-scheme: light;
+
+  --bg-base: #f6f3ec; /* warm paper */
+  --bg-ambient-green: rgba(47, 190, 145, 0.06);
+  --bg-ambient-teal: rgba(31, 182, 166, 0.05);
+  --bg-ambient-gold: rgba(216, 155, 34, 0.05);
+  --bg-ambient-white: rgba(255, 255, 255, 0.5); /* light wash, not dark */
+
+  /* Glass surfaces become near-white cards on paper */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-bg-hover: rgba(255, 255, 255, 0.85);
+  --glass-bg-elevated: #ffffff;
+  --glass-border: rgba(38, 34, 28, 0.1);
+  --glass-blur: 24px;
+  --glass-blur-shell: 40px;
+  --glass-shadow: 0 14px 34px rgba(60, 50, 35, 0.12);
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+
+  --text-primary: #2b2a28; /* soft ink */
+  --text-secondary: #57544e;
+  --text-muted: #8a857c;
+
+  --surface: #ffffff;
+
+  --accent: #12946e; /* teal, darkened for contrast on white */
+  --accent-strong: #0f7f5f;
+  --accent-2: #128a7f;
+  --accent-hover: #0c6f52;
+  --accent-glow: rgba(18, 148, 110, 0.22);
+  --accent-soft: rgba(18, 148, 110, 0.12);
+  --accent-gradient: linear-gradient(135deg, #17a67d 0%, #128a7f 100%);
+  --accent-gold: #b9791a;
+
+  --success-bg: rgba(47, 190, 145, 0.16);
+  --success-border: rgba(18, 148, 110, 0.3);
+  --success-text: #147a52;
+  --success-dot: #16a34a;
+
+  --warning-bg: rgba(216, 155, 34, 0.16);
+  --warning-border: rgba(216, 155, 34, 0.35);
+  --warning-text: #9a6b12;
+
+  --error-bg: rgba(194, 65, 12, 0.12);
+  --error-border: rgba(192, 57, 43, 0.3);
+  --error-text: #c0392b;
+  --error-dot: #dc2626;
+
+  color: var(--text-primary);
+  background: var(--bg-base);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -14335,4 +14393,134 @@ td span {
   .route-statsbar-metrics {
     gap: 16px;
   }
+}
+
+/* ==========================================================================
+ * PAPER THEME OVERRIDES
+ * Hardcoded hex/rgba values that bypass the token system and would otherwise
+ * look wrong on the light paper background. The dominant fix: white-alpha fills
+ * that read as "subtle" on dark become dark-alpha on paper, and dark overlays
+ * become light. Grouped by feature. Tune values against the running app.
+ * ========================================================================== */
+
+/* --- Shell / header ------------------------------------------------------- */
+:root[data-theme="paper"] .app-header {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+:root[data-theme="paper"] .primary-tabs,
+:root[data-theme="paper"] .app-version-chip,
+:root[data-theme="paper"] .update-chip {
+  background: rgba(38, 34, 28, 0.04);
+}
+
+:root[data-theme="paper"] .primary-tab:hover {
+  background: rgba(38, 34, 28, 0.05);
+}
+
+:root[data-theme="paper"] .primary-tab.active {
+  border-color: rgba(38, 34, 28, 0.12);
+  background: rgba(38, 34, 28, 0.08);
+}
+
+:root[data-theme="paper"] .primary-tab-beta {
+  color: #8a5f10;
+}
+
+:root[data-theme="paper"] .primary-tab.active .primary-tab-beta {
+  color: #7a520c;
+}
+
+/* --- Chat provider switch ------------------------------------------------- */
+:root[data-theme="paper"] .chat-provider-switch {
+  background: rgba(38, 34, 28, 0.05);
+  box-shadow: inset 0 1px 0 rgba(38, 34, 28, 0.03);
+}
+
+:root[data-theme="paper"] .chat-provider-switch-indicator {
+  box-shadow: none;
+}
+
+:root[data-theme="paper"] .chat-provider-switch[data-provider="local"] .chat-provider-switch-indicator {
+  background: rgba(18, 138, 127, 0.16);
+  border-color: rgba(18, 138, 127, 0.4);
+  box-shadow: none;
+}
+
+:root[data-theme="paper"] .chat-provider-switch[data-provider="local"] button.active {
+  color: #0c7f74;
+}
+
+/* --- Route Studio panels + Leaflet controls ------------------------------- */
+:root[data-theme="paper"] .route-canvas .leaflet-container {
+  background: var(--bg-base);
+}
+
+:root[data-theme="paper"] .route-studio .leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+:root[data-theme="paper"] .route-panel,
+:root[data-theme="paper"] .route-mode-tabs,
+:root[data-theme="paper"] .route-saved-toggle,
+:root[data-theme="paper"] .route-statsbar,
+:root[data-theme="paper"] .route-basemap-menu,
+:root[data-theme="paper"] .route-basemap-toggle,
+:root[data-theme="paper"] .route-drawer {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: var(--glass-border);
+  box-shadow: 0 18px 50px rgba(60, 50, 35, 0.16);
+}
+
+/* Subtle white-alpha panel controls that vanish on white → dark-alpha */
+:root[data-theme="paper"] .route-sport-picker button,
+:root[data-theme="paper"] .route-mode-switch,
+:root[data-theme="paper"] .route-toggle,
+:root[data-theme="paper"] .route-chip-group button,
+:root[data-theme="paper"] .route-search-input,
+:root[data-theme="paper"] .route-overlay-item,
+:root[data-theme="paper"] .route-drawer-list li,
+:root[data-theme="paper"] .route-advanced-key {
+  background: rgba(38, 34, 28, 0.04);
+  border-color: var(--glass-border);
+}
+
+:root[data-theme="paper"] .route-search-results {
+  background: rgba(255, 255, 255, 0.98);
+}
+
+/* --- Route preview map (Route Studio detail) ------------------------------ */
+:root[data-theme="paper"] .route-preview-map {
+  background: rgba(38, 34, 28, 0.06);
+}
+
+:root[data-theme="paper"] .route-preview-map .leaflet-control-attribution,
+:root[data-theme="paper"] .route-preview-map .leaflet-control-zoom a {
+  background: rgba(255, 255, 255, 0.86);
+}
+
+:root[data-theme="paper"] .route-preview-map .leaflet-control-zoom,
+:root[data-theme="paper"] .route-preview-map .leaflet-control-zoom a {
+  border-color: var(--glass-border);
+}
+
+/* --- Activity route map (per-activity replay) ----------------------------- */
+:root[data-theme="paper"] .activity-route-map-canvas {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.06);
+}
+
+:root[data-theme="paper"] .activity-route-map-canvas .leaflet-control-attribution,
+:root[data-theme="paper"] .activity-route-map-canvas .leaflet-control-zoom a {
+  background: rgba(255, 255, 255, 0.86);
+  border-color: var(--glass-border);
+}
+
+:root[data-theme="paper"] .activity-route-map-canvas .leaflet-control-zoom a:hover {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+:root[data-theme="paper"] .activity-route-map-canvas .leaflet-control-attribution a,
+:root[data-theme="paper"] .activity-route-footer a {
+  color: var(--accent);
 }

@@ -3,6 +3,7 @@ import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useRef } from "react";
 import { MapPin } from "lucide-react";
 import type { TrainingHubActivityTrack } from "../../../electron/types";
+import { useTheme } from "../../theme/ThemeProvider";
 
 interface ActivityRouteMapProps {
   track?: TrainingHubActivityTrack;
@@ -14,6 +15,7 @@ interface RouteGeometry {
 }
 
 const ROUTE_COLOR = "#74c08f";
+const ROUTE_COLOR_PAPER = "#0f7f5f";
 const START_COLOR = "#4da3ff";
 const END_COLOR = "#d89b22";
 const ROUTE_ANIMATION_MS = 2200;
@@ -108,6 +110,7 @@ function buildRouteGeometry(
 export function ActivityRouteMap({ track }: ActivityRouteMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
+  const { theme } = useTheme();
   const route = useMemo(
     () => (track?.points ? buildRouteGeometry(track.points) : null),
     [track]
@@ -119,13 +122,20 @@ export function ActivityRouteMap({ track }: ActivityRouteMapProps) {
       return;
     }
 
+    const isPaper = theme === "paper";
+    const tileUrl = isPaper
+      ? "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+      : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+    const routeColor = isPaper ? ROUTE_COLOR_PAPER : ROUTE_COLOR;
+    const ghostOpacity = isPaper ? 0.28 : 0.18;
+
     const map = L.map(container, {
       zoomControl: true,
       attributionControl: true,
       scrollWheelZoom: false
     });
 
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    L.tileLayer(tileUrl, {
       maxZoom: 19,
       subdomains: "abcd",
       attribution:
@@ -133,15 +143,15 @@ export function ActivityRouteMap({ track }: ActivityRouteMapProps) {
     }).addTo(map);
 
     L.polyline(route.latLngs, {
-      color: ROUTE_COLOR,
+      color: routeColor,
       weight: 4,
-      opacity: 0.18,
+      opacity: ghostOpacity,
       lineCap: "round",
       lineJoin: "round"
     }).addTo(map);
 
     const routeLine = L.polyline([route.latLngs[0]!], {
-      color: ROUTE_COLOR,
+      color: routeColor,
       weight: 4,
       opacity: 0.95,
       lineCap: "round",
@@ -206,7 +216,7 @@ export function ActivityRouteMap({ track }: ActivityRouteMapProps) {
       map.remove();
       mapRef.current = null;
     };
-  }, [route]);
+  }, [route, theme]);
 
   if (!route) {
     return (

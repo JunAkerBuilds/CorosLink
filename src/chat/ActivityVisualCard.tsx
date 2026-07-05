@@ -16,10 +16,10 @@ import {
   formatPaceSecondsPerKm
 } from "../training/formatters";
 import {
-  trainingChartColors,
   trainingChartMargin,
   trainingChartTooltipStyle
 } from "../training/chartConfig";
+import { useChartColors } from "../training/useChartColors";
 import {
   buildDistanceSeriesData,
   buildElevationSeriesData,
@@ -59,6 +59,7 @@ function buildHrBarData(preview: ActivityVisualPreview) {
 }
 
 export function ActivityVisualCard({ preview }: ActivityVisualCardProps) {
+  const { colors } = useChartColors();
   const hrSeriesData = useMemo(
     () =>
       preview.sections.hr?.chartKind === "series" && preview.sections.hr.series
@@ -132,13 +133,13 @@ export function ActivityVisualCard({ preview }: ActivityVisualCardProps) {
                 <BarChart data={hrBarData} margin={trainingChartMargin}>
                   <XAxis
                     dataKey="label"
-                    tick={{ fill: trainingChartColors.text, fontSize: 11 }}
+                    tick={{ fill: colors.text, fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                     minTickGap={16}
                   />
                   <YAxis
-                    tick={{ fill: trainingChartColors.text, fontSize: 11 }}
+                    tick={{ fill: colors.text, fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                     width={36}
@@ -146,13 +147,13 @@ export function ActivityVisualCard({ preview }: ActivityVisualCardProps) {
                   />
                   <Tooltip
                     content={(props) => <HrTooltip {...props} />}
-                    cursor={{ fill: trainingChartColors.cursor }}
+                    cursor={{ fill: colors.cursor }}
                     contentStyle={trainingChartTooltipStyle}
                   />
                   <Bar
                     dataKey="hr"
                     name="Avg HR"
-                    fill={trainingChartColors.accentBright}
+                    fill={colors.accentBright}
                     radius={[4, 4, 0, 0]}
                     isAnimationActive={false}
                   />
