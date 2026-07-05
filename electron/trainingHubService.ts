@@ -377,6 +377,21 @@ export function logoutTrainingHub(): TrainingHubStatus {
   return getTrainingHubStatus();
 }
 
+/**
+ * Re-establish a COROS session from the stored (encrypted) credentials without
+ * asking the user to re-enter their password. Used by the "Reconnect" action
+ * when the access token has expired but remembered credentials are available.
+ */
+export async function reconnectTrainingHub(): Promise<TrainingHubStatus> {
+  const session = await reauthenticateFromStoredCredentials();
+  if (!session) {
+    throw new Error(
+      "Couldn't reconnect with saved credentials. Please log in again."
+    );
+  }
+  return getTrainingHubStatus();
+}
+
 export async function listTrainingHubActivities(
   page = 1,
   size = 50
@@ -4161,7 +4176,15 @@ async function recoverExpiredTrainingHubSession<T>(
     throw new Error("COROS session expired. Log in again.");
   }
 
-  return executeTrainingHubRequest<T>(refreshed, path, options);
+  try {
+    return await executeTrainingHubRequest<T>(refreshed, path, options);
+  } catch (error) {
+    if (getTrainingHubRetryReason(error) === "token") {
+      clearTrainingHubAuth();
+      throw new Error("COROS session expired. Log in again.");
+    }
+    throw error;
+  }
 }
 
 async function executeTrainingHubRequest<T>(
@@ -4374,6 +4397,11 @@ function clearTrainingHubAuth(): void {
 
 function storeCredentials(account: string, pwdHash: string): boolean {
   if (!safeStorage.isEncryptionAvailable()) {
+    console.warn(
+      "[trainingHub] Cannot remember COROS credentials: OS secure storage " +
+        "(safeStorage) is unavailable. The access token will still be saved, " +
+        "but the session cannot be refreshed automatically once it expires."
+    );
     return false;
   }
 
@@ -4385,7 +4413,12 @@ function storeCredentials(account: string, pwdHash: string): boolean {
     const encrypted = safeStorage.encryptString(blob).toString("base64");
     setSetting(SETTINGS.credentials, encrypted);
     return true;
-  } catch {
+  } catch (error) {
+    console.warn(
+      "[trainingHub] Failed to encrypt and store COROS credentials; " +
+        "automatic session refresh will not be available.",
+      error
+    );
     return false;
   }
 }
@@ -4414,9 +4447,31 @@ function clearStoredCredentials(): void {
   deleteSettings([SETTINGS.credentials]);
 }
 
-async function reauthenticateFromStoredCredentials(): Promise<TrainingHubAuthState | null> {
+// A single in-flight re-authentication shared by all concurrent callers.
+// When a token expires, every parallel request would otherwise trigger its own
+// full COROS login; because COROS invalidates the previous token each time a new
+// one is minted, those concurrent logins cannibalise each other and the retried
+// requests end up using an already-stale token. De-duplicating re-auth here means
+// all callers await the same login and reuse the same fresh token.
+let pendingReauth: Promise<TrainingHubAuthState | null> | null = null;
+
+function reauthenticateFromStoredCredentials(): Promise<TrainingHubAuthState | null> {
+  if (!pendingReauth) {
+    pendingReauth = performReauthentication().finally(() => {
+      pendingReauth = null;
+    });
+  }
+  return pendingReauth;
+}
+
+async function performReauthentication(): Promise<TrainingHubAuthState | null> {
   const credentials = getStoredCredentials();
   if (!credentials) {
+    console.warn(
+      "[trainingHub] COROS access token expired but no stored credentials " +
+        "are available to refresh it (was 'Remember me' enabled and is secure " +
+        "storage available?). The user must log in again."
+    );
     return null;
   }
 
@@ -4427,7 +4482,12 @@ async function reauthenticateFromStoredCredentials(): Promise<TrainingHubAuthSta
     );
     persistTrainingHubSession(session);
     return session;
-  } catch {
+  } catch (error) {
+    console.warn(
+      "[trainingHub] Automatic re-login with stored COROS credentials failed; " +
+        "the user must log in again.",
+      error
+    );
     return null;
   }
 }

@@ -895,6 +895,27 @@ export default function App() {
     }
   }
 
+  async function handleTrainingHubReconnect() {
+    if (!api) {
+      return;
+    }
+
+    setBusy("training-reconnect");
+    setError(null);
+    setMessage(null);
+
+    try {
+      const status = await api.reconnectTrainingHub();
+      setTrainingHubStatus(status);
+      setMessage("COROS Training Hub reconnected.");
+      await loadTrainingHubData();
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function handleTrainingHubLogout() {
     if (!api) {
       return;
@@ -1579,6 +1600,7 @@ export default function App() {
                 onPasswordChange={setTrainingHubPassword}
                 onRememberChange={setTrainingHubRemember}
                 onLogin={handleTrainingHubLogin}
+                onReconnect={handleTrainingHubReconnect}
                 onLogout={handleTrainingHubLogout}
                 onRefresh={handleTrainingHubRefresh}
                 onLoadDetail={handleTrainingHubActivityDetail}

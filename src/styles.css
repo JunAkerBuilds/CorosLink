@@ -4537,6 +4537,38 @@ td span {
   line-height: 1.45;
 }
 
+.training-login-reconnect {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(120, 170, 255, 0.35);
+  background: rgba(80, 130, 240, 0.14);
+}
+
+.training-login-reconnect-text {
+  display: grid;
+  gap: 2px;
+}
+
+.training-login-reconnect-text strong {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.training-login-reconnect-text small {
+  color: rgba(245, 245, 247, 0.66);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.training-login-reconnect .primary-button {
+  flex-shrink: 0;
+}
+
 .training-login-fields {
   display: grid;
   gap: 17px;

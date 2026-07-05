@@ -85,6 +85,7 @@ export interface TrainingHubViewProps {
   onPasswordChange: (value: string) => void;
   onRememberChange: (value: boolean) => void;
   onLogin: (event: FormEvent<HTMLFormElement>) => void;
+  onReconnect: () => void;
   onLogout: () => void;
   onRefresh: () => void;
   onLoadDetail: (activity: TrainingHubActivity) => void;

@@ -154,6 +154,7 @@ export interface CorosLinkApi {
     remember: boolean
   ) => Promise<TrainingHubStatus>;
   logoutTrainingHub: () => Promise<TrainingHubStatus>;
+  reconnectTrainingHub: () => Promise<TrainingHubStatus>;
   listTrainingHubActivities: (
     page: number,
     size: number

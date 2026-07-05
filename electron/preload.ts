@@ -235,6 +235,8 @@ const api = {
     ipcRenderer.invoke("trainingHub:login", email, password, remember),
   logoutTrainingHub: (): Promise<TrainingHubStatus> =>
     ipcRenderer.invoke("trainingHub:logout"),
+  reconnectTrainingHub: (): Promise<TrainingHubStatus> =>
+    ipcRenderer.invoke("trainingHub:reconnect"),
   listTrainingHubActivities: (
     page: number,
     size: number

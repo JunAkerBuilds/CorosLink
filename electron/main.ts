@@ -36,6 +36,7 @@ import {
   listTrainingHubActivities,
   loginTrainingHub,
   logoutTrainingHub,
+  reconnectTrainingHub,
   uploadTrainingPlan
 } from "./trainingHubService";
 import {
@@ -659,6 +660,8 @@ function registerIpcHandlers(): void {
   );
 
   ipcMain.handle("trainingHub:logout", () => logoutTrainingHub());
+
+  ipcMain.handle("trainingHub:reconnect", () => reconnectTrainingHub());
 
   ipcMain.handle(
     "trainingHub:listActivities",
