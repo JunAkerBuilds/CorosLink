@@ -73,6 +73,7 @@ import type {
 } from "../electron/types";
 
 export interface CorosLinkApi {
+  platform: string;
   getWatchStatus: () => Promise<WatchStatus>;
   getWatchConnectionSmokeOption: () => Promise<WatchConnectionSmokeOptionId>;
   setWatchConnectionSmokeOption: (
@@ -154,6 +155,7 @@ export interface CorosLinkApi {
     remember: boolean
   ) => Promise<TrainingHubStatus>;
   logoutTrainingHub: () => Promise<TrainingHubStatus>;
+  reconnectTrainingHub: () => Promise<TrainingHubStatus>;
   listTrainingHubActivities: (
     page: number,
     size: number

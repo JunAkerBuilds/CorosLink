@@ -30,6 +30,13 @@ const nameCases = [
   ["COROS NOMAD", "nomad"],
   ["NOMAD", "nomad"],
   ["COROS-NOMAD", "nomad"],
+  ["COROS VERTIX 2", "vertix-2"],
+  ["VERTIX 2", "vertix-2"],
+  ["COROS-VERTIX-2", "vertix-2"],
+  ["VERTIX 2S", "vertix-2s"],
+  ["COROS VERTIX 2S", "vertix-2s"],
+  ["COROS APEX 2 PRO", "apex-2-pro"],
+  ["APEX 2 PRO", "apex-2-pro"],
   ["COROS PACE", undefined],
   ["PACE", undefined],
   ["PACE 30", undefined],
@@ -49,6 +56,6 @@ assert.equal(normalizeVolumeName("coros nomad"), "NOMAD");
 
 assert.equal(resolveWatchModel("COROS PACE", FOUR_GB), undefined);
 assert.equal(resolveWatchModel("UNKNOWN", FOUR_GB), undefined);
-assert.equal(resolveWatchModel("UNKNOWN", THIRTY_TWO_GB), "pace-pro");
+assert.equal(resolveWatchModel("UNKNOWN", THIRTY_TWO_GB), undefined);
 
 console.log("Watch model resolution tests passed.");

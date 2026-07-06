@@ -15,6 +15,10 @@
   --glass-blur-shell: 40px;
   --glass-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
   --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-card: var(--glass-shadow);
+  --shadow-elevated: 0 22px 48px rgba(0, 0, 0, 0.42);
+  --shadow-inset: var(--glass-inset);
 
   --text-primary: #f5f5f7;
   --text-secondary: #a1a1a6;
@@ -87,6 +91,10 @@
   --glass-blur-shell: 40px;
   --glass-shadow: 0 14px 34px rgba(60, 50, 35, 0.12);
   --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --shadow-soft: 0 4px 14px rgba(60, 50, 35, 0.1), 0 1px 2px rgba(60, 50, 35, 0.06);
+  --shadow-card: 0 1px 2px rgba(60, 50, 35, 0.04), 0 14px 34px rgba(60, 50, 35, 0.09);
+  --shadow-elevated: 0 22px 50px rgba(60, 50, 35, 0.16);
+  --shadow-inset: inset 0 1px 0 rgba(38, 34, 28, 0.06);
 
   --text-primary: #2b2a28; /* soft ink */
   --text-secondary: #57544e;
@@ -177,11 +185,25 @@ input::placeholder {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  border-bottom: 1px solid var(--glass-border);
-  background: rgba(0, 0, 0, 0.72);
-  -webkit-backdrop-filter: blur(var(--glass-blur-shell));
-  backdrop-filter: blur(var(--glass-blur-shell));
+  border-bottom: none;
+  background: none;
   padding: 12px 28px;
+  /* The header doubles as the window title bar; make the empty areas draggable. */
+  -webkit-app-region: drag;
+}
+
+/* Keep room clear for the macOS traffic lights that overlay the header. */
+:root[data-platform="darwin"] .app-header {
+  padding: 16px 28px 12px 108px;
+}
+
+/* Interactive controls must stay clickable, so opt them out of the drag region. */
+.app-header button,
+.app-header a,
+.app-header input,
+.app-header .primary-tabs,
+.app-header .watch-status-chip {
+  -webkit-app-region: no-drag;
 }
 
 .app-header-start {
@@ -199,6 +221,7 @@ input::placeholder {
 }
 
 .primary-tabs {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -206,9 +229,36 @@ input::placeholder {
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.04);
   padding: 4px;
+  isolation: isolate;
+}
+
+.primary-tabs-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: calc(var(--radius-lg) - 4px);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: var(--glass-inset);
+  pointer-events: none;
+  will-change: transform, width, height;
+  transition:
+    transform 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.18s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primary-tabs-indicator {
+    transition: none;
+  }
 }
 
 .primary-tab {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -221,21 +271,20 @@ input::placeholder {
   font-size: 14px;
   font-weight: 500;
   transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease;
+    color 0.18s ease,
+    background 0.15s ease;
 }
 
-.primary-tab:hover {
+.primary-tab:hover:not(.active) {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
 }
 
 .primary-tab.active {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.12);
+  border-color: transparent;
+  background: transparent;
   color: var(--text-primary);
-  box-shadow: var(--glass-inset);
+  box-shadow: none;
 }
 
 .primary-tab-activity {
@@ -678,12 +727,21 @@ input::placeholder {
   display: none !important;
 }
 
+.content-fill:has(> .content-coach-panel:not(.view-panel-hidden)) {
+  padding: 0;
+}
+
+.content-fill:has(> .content-coach-panel:not(.view-panel-hidden)) .chat-header {
+  padding: 16px 16px 16px;
+}
+
 .content-coach-panel {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
   min-width: 0;
+  height: 100%;
 }
 
 .content-fill > .media-tabs-shell,
@@ -1557,8 +1615,8 @@ input::placeholder {
 
 .library-panel--local .library-panel-header em,
 .library-panel--watch.is-connected .library-panel-header em {
-  border-color: rgba(110, 231, 168, 0.28);
-  background: rgba(45, 154, 116, 0.14);
+  border-color: var(--success-border);
+  background: var(--success-bg);
   color: var(--success-text);
 }
 
@@ -1567,8 +1625,8 @@ input::placeholder {
 }
 
 .library-panel--watch.is-disconnected .library-panel-header em {
-  border-color: rgba(110, 231, 168, 0.28);
-  background: rgba(45, 154, 116, 0.14);
+  border-color: var(--success-border);
+  background: var(--success-bg);
   color: var(--success-text);
 }
 
@@ -1639,10 +1697,10 @@ input::placeholder {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid rgba(110, 231, 168, 0.24);
+  border: 1px solid var(--success-border);
   border-radius: var(--radius-pill);
-  background: rgba(45, 154, 116, 0.16);
-  color: #d9f6e8;
+  background: var(--success-bg);
+  color: var(--success-text);
   padding: 5px 9px;
   font-size: 12px;
   font-weight: 800;
@@ -1740,12 +1798,13 @@ input::placeholder {
 }
 
 .library-filter-option.active {
-  background: rgba(45, 154, 116, 0.18);
-  color: #d9f6e8;
+  background: var(--success-bg);
+  color: var(--success-text);
 }
 
 .library-filter-option.active small {
-  color: rgba(217, 246, 232, 0.72);
+  color: var(--success-text);
+  opacity: 0.72;
 }
 
 .library-selection-bar {
@@ -1973,9 +2032,9 @@ input::placeholder {
 }
 
 .library-connector-pill.ready {
-  border-color: rgba(45, 154, 116, 0.28);
-  background: rgba(45, 154, 116, 0.14);
-  color: #d9f6e8;
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
 }
 
 .library-empty-state {
@@ -2286,12 +2345,12 @@ tbody tr.is-selected:hover {
   pointer-events: auto;
   border: 1px solid var(--success-border);
   border-radius: var(--radius-md);
-  background: rgba(16, 22, 19, 0.88);
+  background: var(--glass-bg-elevated);
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
   color: var(--text-primary);
   padding: 12px 12px 12px 14px;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-elevated);
   animation: toast-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -2336,7 +2395,7 @@ tbody tr.is-selected:hover {
 }
 
 .toast-close:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--glass-bg-hover);
   color: var(--text-primary);
 }
 
@@ -4220,8 +4279,24 @@ td span {
   opacity: 0.95;
 }
 
+.training-command-center.is-connected::before {
+  content: none;
+}
+
+.training-command-center.is-connected.is-compact {
+  display: block;
+  padding: 14px 18px;
+  border: 1px solid var(--glass-border);
+  background:
+    linear-gradient(135deg, rgba(47, 190, 145, 0.1), rgba(255, 255, 255, 0.04) 42%),
+    rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  box-shadow: var(--glass-inset);
+}
+
 .training-command-center.is-connected {
-  border-color: rgba(110, 231, 168, 0.18);
+  border-color: var(--glass-border);
 }
 
 .training-command-center.is-compact {
@@ -4255,6 +4330,28 @@ td span {
   font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+.training-command-center.is-connected .badge.ready {
+  border-color: rgba(47, 190, 145, 0.24);
+  background: rgba(47, 190, 145, 0.12);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.training-command-center.is-connected .training-details-button,
+.training-command-center.is-connected .training-connection-button {
+  border-color: var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.training-command-center.is-connected .training-details-button:hover,
+.training-command-center.is-connected .training-connection-button:hover:not(:disabled) {
+  border-color: rgba(45, 154, 116, 0.32);
+  background: rgba(45, 154, 116, 0.1);
 }
 
 .training-connection-actions {
@@ -4593,6 +4690,38 @@ td span {
   color: rgba(245, 245, 247, 0.63);
   font-size: 13px;
   line-height: 1.45;
+}
+
+.training-login-reconnect {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(120, 170, 255, 0.35);
+  background: rgba(80, 130, 240, 0.14);
+}
+
+.training-login-reconnect-text {
+  display: grid;
+  gap: 2px;
+}
+
+.training-login-reconnect-text strong {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.training-login-reconnect-text small {
+  color: rgba(245, 245, 247, 0.66);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.training-login-reconnect .primary-button {
+  flex-shrink: 0;
 }
 
 .training-login-fields {
@@ -10215,7 +10344,7 @@ td span {
   padding: 24px;
   text-align: center;
   background: rgba(11, 15, 14, 0.92);
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .browser-load-error strong {
@@ -10799,6 +10928,10 @@ td span {
     align-items: stretch;
     gap: 12px;
     padding: 12px 16px;
+  }
+
+  :root[data-platform="darwin"] .app-header {
+    padding: 16px 16px 12px 108px;
   }
 
   .app-header-start {
@@ -11503,20 +11636,38 @@ td span {
 
 .chat-layout {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   gap: 0;
 }
 
-.chat-view-sidebar-open .chat-layout {
-  grid-template-columns: 280px minmax(0, 1fr);
+.chat-sidebar-shell {
+  flex-shrink: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  width: 0;
+  min-height: 0;
+  overflow: hidden;
+  transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.chat-sidebar-shell.is-open {
+  width: 280px;
+}
+
+.chat-sidebar-shell.is-overlay-mode {
+  position: static;
+  width: 0;
+  overflow: visible;
 }
 
 .chat-main {
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-width: 0;
   min-height: 0;
 }
@@ -11532,8 +11683,18 @@ td span {
   inset: 0;
   z-index: 30;
   border: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(4, 7, 10, 0.38);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+  backdrop-filter: blur(6px) saturate(120%);
   cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+
+.chat-sidebar-overlay.is-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .chat-settings-backdrop {
@@ -11638,25 +11799,53 @@ td span {
 .chat-sidebar {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  height: 100%;
   min-height: 0;
+  width: 280px;
+  min-width: 280px;
+  overflow: hidden;
   border-right: 1px solid var(--glass-border);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 28%),
-    var(--surface);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0%, transparent 38%),
+    rgba(20, 23, 29, 0.76);
+  -webkit-backdrop-filter: blur(var(--glass-blur-shell)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur-shell)) saturate(150%);
+  box-shadow:
+    inset -1px 0 0 rgba(255, 255, 255, 0.05),
+    4px 0 28px rgba(0, 0, 0, 0.18);
 }
 
-.chat-sidebar:not(.is-open) {
-  display: none;
+.chat-sidebar:not(.is-overlay):not(.is-open) {
+  pointer-events: none;
 }
 
 .chat-sidebar.is-overlay {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
   bottom: 0;
   z-index: 40;
   width: min(300px, 88vw);
-  box-shadow: 12px 0 40px rgba(0, 0, 0, 0.35);
+  min-width: 0;
+  border-right: 1px solid var(--glass-border);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  box-shadow:
+    var(--glass-inset),
+    var(--shadow-elevated),
+    8px 0 40px rgba(0, 0, 0, 0.28);
+  transform: translateX(-105%);
+  transition:
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.28s ease;
+}
+
+.chat-sidebar.is-overlay:not(.is-open) {
+  pointer-events: none;
+}
+
+.chat-sidebar.is-overlay.is-open {
+  transform: translateX(0);
 }
 
 .chat-sidebar-tabs {
@@ -11710,18 +11899,52 @@ td span {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  overflow-y: auto;
 }
 
 .chat-history-toolbar {
   display: grid;
   gap: 10px;
-  padding: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 14px 12px 12px;
+  border-bottom: 1px solid var(--glass-border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(20, 23, 29, 0.62);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .chat-new-chat-sidebar {
   width: 100%;
   justify-content: center;
+  min-height: 40px;
+  border: 1px solid var(--glass-border);
+  background:
+    linear-gradient(135deg, var(--accent-soft) 0%, var(--glass-bg) 100%);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: var(--text-primary);
+  font-weight: 700;
+  box-shadow: var(--glass-inset);
+  transition:
+    color 0.22s ease,
+    border-color 0.22s ease,
+    background 0.22s ease,
+    box-shadow 0.22s ease,
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.chat-new-chat-sidebar:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--accent-glow);
+  background:
+    linear-gradient(135deg, var(--accent-soft) 0%, var(--glass-bg-hover) 100%);
+  box-shadow:
+    var(--glass-inset),
+    0 8px 22px var(--accent-glow);
+  transform: translateY(-1px);
 }
 
 .chat-history-search {
@@ -11729,10 +11952,25 @@ td span {
   align-items: center;
   gap: 8px;
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.18);
-  padding: 0 10px;
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(12px) saturate(130%);
+  backdrop-filter: blur(12px) saturate(130%);
+  padding: 0 12px;
   color: var(--text-muted);
+  box-shadow: var(--glass-inset);
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.chat-history-search:focus-within {
+  border-color: var(--accent-glow);
+  background: var(--glass-bg-hover);
+  box-shadow:
+    var(--glass-inset),
+    0 0 0 3px var(--accent-soft);
 }
 
 .chat-history-search input {
@@ -11752,28 +11990,28 @@ td span {
 .chat-session-list {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  padding: 8px 8px 16px;
+  padding: 10px 10px 16px;
 }
 
 .chat-history-empty {
-  margin: 18px 8px 0;
+  margin: 18px 10px 0;
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.5;
 }
 
 .chat-session-group + .chat-session-group {
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .chat-session-group-label {
-  margin: 0 8px 6px;
+  margin: 0 10px 6px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  opacity: 0.72;
 }
 
 .chat-session-group-list {
@@ -11788,26 +12026,33 @@ td span {
   align-items: start;
   width: 100%;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: inherit;
   padding: 10px 10px 10px 12px;
   text-align: left;
   cursor: pointer;
   transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
+    background 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.22s ease,
+    box-shadow 0.22s ease,
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .chat-session-row:hover:not(:disabled) {
   background: var(--glass-bg-hover);
-  border-color: rgba(255, 255, 255, 0.05);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-inset);
+  transform: translateY(-1px);
 }
 
 .chat-session-row.is-active {
   background: var(--glass-bg-elevated);
-  border-color: var(--glass-border);
-  box-shadow: inset 3px 0 0 var(--accent-strong);
+  border-color: var(--accent-glow);
+  box-shadow:
+    var(--glass-inset),
+    0 0 0 1px var(--accent-soft),
+    0 8px 20px rgba(0, 0, 0, 0.14);
 }
 
 .chat-session-row.is-disabled {
@@ -11855,15 +12100,18 @@ td span {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   opacity: 0;
   transition:
-    opacity 0.15s ease,
-    color 0.15s ease,
-    background 0.15s ease;
+    opacity 0.18s ease,
+    color 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .chat-session-row:hover .chat-session-row-delete,
@@ -11873,7 +12121,9 @@ td span {
 
 .chat-session-row-delete:hover {
   color: var(--error-text);
+  border-color: var(--error-border);
   background: var(--error-bg);
+  box-shadow: var(--glass-inset);
 }
 
 .chat-sidebar-busy {
@@ -12282,8 +12532,8 @@ td span {
 }
 
 @media (max-width: 900px) {
-  .chat-view-sidebar-open .chat-layout {
-    grid-template-columns: minmax(0, 1fr);
+  .chat-sidebar-shell.is-overlay-mode {
+    width: 0;
   }
 }
 
@@ -12516,8 +12766,17 @@ td span {
   .chat-suggestion:hover,
   .chat-send:hover:not(:disabled),
   .chat-send:active:not(:disabled),
-  .chat-login-panel .primary-button:hover:not(:disabled) {
+  .chat-login-panel .primary-button:hover:not(:disabled),
+  .chat-new-chat-sidebar:hover:not(:disabled),
+  .chat-session-row:hover:not(:disabled) {
     transform: none;
+  }
+
+  .chat-layout,
+  .chat-sidebar-shell,
+  .chat-sidebar.is-overlay,
+  .chat-sidebar-overlay {
+    transition: none;
   }
 }
 
@@ -14404,23 +14663,30 @@ td span {
  * ========================================================================== */
 
 /* --- Shell / header ------------------------------------------------------- */
-:root[data-theme="paper"] .app-header {
-  background: rgba(255, 255, 255, 0.72);
+:root[data-theme="paper"] .primary-tabs {
+  background: rgba(38, 34, 28, 0.04);
+  border-color: var(--glass-border);
 }
 
-:root[data-theme="paper"] .primary-tabs,
+:root[data-theme="paper"] .primary-tabs-indicator {
+  border-color: rgba(38, 34, 28, 0.12);
+  background: rgba(38, 34, 28, 0.08);
+  box-shadow: var(--shadow-inset);
+}
+
 :root[data-theme="paper"] .app-version-chip,
 :root[data-theme="paper"] .update-chip {
   background: rgba(38, 34, 28, 0.04);
 }
 
-:root[data-theme="paper"] .primary-tab:hover {
+:root[data-theme="paper"] .primary-tab:hover:not(.active) {
   background: rgba(38, 34, 28, 0.05);
 }
 
 :root[data-theme="paper"] .primary-tab.active {
-  border-color: rgba(38, 34, 28, 0.12);
-  background: rgba(38, 34, 28, 0.08);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 :root[data-theme="paper"] .primary-tab-beta {
@@ -14431,14 +14697,136 @@ td span {
   color: #7a520c;
 }
 
-/* --- Chat provider switch ------------------------------------------------- */
+/* --- Chat (Coach) --------------------------------------------------------- */
+:root[data-theme="paper"] .chat-view {
+  --surface: var(--glass-bg-elevated);
+  --accent: #6b6560;
+  --accent-strong: #3d3a36;
+  --accent-2: #8a837a;
+  --accent-hover: #5c5752;
+  --accent-glow: rgba(38, 34, 28, 0.12);
+  --accent-soft: rgba(38, 34, 28, 0.07);
+  --accent-gradient: linear-gradient(135deg, #8a837a 0%, #5c5752 100%);
+  --chat-signal: #0c7f74;
+  --chat-signal-strong: #0a6b62;
+  --chat-signal-soft: rgba(18, 138, 127, 0.12);
+  --chat-signal-border: rgba(18, 138, 127, 0.35);
+  --chat-signal-glow: rgba(18, 138, 127, 0.2);
+  background:
+    radial-gradient(
+      1100px 520px at 50% -8%,
+      rgba(38, 34, 28, 0.03),
+      transparent 62%
+    ),
+    linear-gradient(180deg, rgba(38, 34, 28, 0.015), transparent 30%);
+}
+
+:root[data-theme="paper"] .chat-sidebar-overlay {
+  background: rgba(38, 34, 28, 0.22);
+  -webkit-backdrop-filter: blur(8px) saturate(110%);
+  backdrop-filter: blur(8px) saturate(110%);
+}
+
+:root[data-theme="paper"] .chat-settings-backdrop {
+  background: rgba(38, 34, 28, 0.35);
+}
+
+:root[data-theme="paper"] .chat-sidebar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(255, 255, 255, 0.82) 100%);
+  -webkit-backdrop-filter: blur(var(--glass-blur-shell)) saturate(120%);
+  backdrop-filter: blur(var(--glass-blur-shell)) saturate(120%);
+  border-color: var(--glass-border);
+  box-shadow:
+    inset -1px 0 0 rgba(255, 255, 255, 0.9),
+    4px 0 24px rgba(60, 50, 35, 0.08);
+}
+
+:root[data-theme="paper"] .chat-sidebar.is-overlay {
+  box-shadow:
+    var(--glass-inset),
+    0 22px 50px rgba(60, 50, 35, 0.14),
+    8px 0 36px rgba(60, 50, 35, 0.1);
+}
+
+:root[data-theme="paper"] .chat-history-toolbar {
+  background: rgba(255, 255, 255, 0.78);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  backdrop-filter: blur(20px) saturate(120%);
+  border-bottom-color: rgba(38, 34, 28, 0.08);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+:root[data-theme="paper"] .chat-new-chat-sidebar {
+  background:
+    linear-gradient(135deg, rgba(18, 148, 110, 0.12) 0%, rgba(255, 255, 255, 0.72) 100%);
+}
+
+:root[data-theme="paper"] .chat-new-chat-sidebar:hover:not(:disabled) {
+  box-shadow:
+    var(--glass-inset),
+    0 8px 22px rgba(18, 148, 110, 0.16);
+}
+
+:root[data-theme="paper"] .chat-history-search {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: var(--glass-border);
+}
+
+:root[data-theme="paper"] .chat-history-search:focus-within {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    var(--glass-inset),
+    0 0 0 3px rgba(18, 148, 110, 0.12);
+}
+
+:root[data-theme="paper"] .chat-session-row:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(38, 34, 28, 0.1);
+  box-shadow: var(--shadow-inset);
+}
+
+:root[data-theme="paper"] .chat-session-row.is-active {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(18, 148, 110, 0.28);
+  box-shadow:
+    var(--shadow-inset),
+    0 0 0 1px rgba(18, 148, 110, 0.1),
+    0 8px 20px rgba(60, 50, 35, 0.08);
+}
+
+:root[data-theme="paper"] .chat-settings-modal {
+  background: var(--glass-bg-elevated);
+  border-color: rgba(38, 34, 28, 0.12);
+  box-shadow: 0 24px 60px rgba(60, 50, 35, 0.16);
+}
+
+:root[data-theme="paper"] .chat-settings-section {
+  background: rgba(38, 34, 28, 0.04);
+  border-color: var(--glass-border);
+}
+
+:root[data-theme="paper"] .chat-composer-inner {
+  box-shadow: 0 8px 28px rgba(60, 50, 35, 0.12), var(--glass-inset);
+}
+
+:root[data-theme="paper"] .chat-composer-inner:focus-within {
+  box-shadow: 0 0 0 3px var(--accent-soft),
+    0 10px 32px rgba(60, 50, 35, 0.14);
+}
+
 :root[data-theme="paper"] .chat-provider-switch {
   background: rgba(38, 34, 28, 0.05);
   box-shadow: inset 0 1px 0 rgba(38, 34, 28, 0.03);
 }
 
 :root[data-theme="paper"] .chat-provider-switch-indicator {
+  border-color: rgba(38, 34, 28, 0.12);
   box-shadow: none;
+}
+
+:root[data-theme="paper"] .chat-provider-switch button.active {
+  color: #3d3a36;
 }
 
 :root[data-theme="paper"] .chat-provider-switch[data-provider="local"] .chat-provider-switch-indicator {
@@ -14523,4 +14911,990 @@ td span {
 :root[data-theme="paper"] .activity-route-map-canvas .leaflet-control-attribution a,
 :root[data-theme="paper"] .activity-route-footer a {
   color: var(--accent);
+}
+
+/* --- Media tab -------------------------------------------------------------- */
+:root[data-theme="paper"] .media-tabs-shell {
+  background: rgba(38, 34, 28, 0.04);
+  border-color: var(--glass-border);
+}
+
+:root[data-theme="paper"] .media-tab:hover:not(.active) {
+  background: rgba(38, 34, 28, 0.05);
+}
+
+:root[data-theme="paper"] .media-tab.active {
+  border-color: rgba(38, 34, 28, 0.12);
+  background: var(--glass-bg-elevated);
+  box-shadow: var(--shadow-inset);
+}
+
+/* --- Media Library -------------------------------------------------------- */
+:root[data-theme="paper"] .library-sync-panel {
+  border-color: rgba(38, 34, 28, 0.1);
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 0%, rgba(18, 148, 110, 0.08), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 85% 100%, rgba(86, 118, 190, 0.05), transparent 50%),
+    var(--glass-bg-elevated);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme="paper"] .library-panel,
+:root[data-theme="paper"] .library-panel--local,
+:root[data-theme="paper"] .library-panel--watch {
+  border-color: rgba(38, 34, 28, 0.1);
+  background: var(--glass-bg-elevated);
+  box-shadow: var(--shadow-soft);
+}
+
+:root[data-theme="paper"] .library-panel-header em {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.04);
+}
+
+:root[data-theme="paper"] .library-search-field,
+:root[data-theme="paper"] .library-filter-group {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.04);
+}
+
+:root[data-theme="paper"] .library-search-field:focus-within {
+  border-color: rgba(18, 148, 110, 0.45);
+  box-shadow: 0 0 0 3px rgba(18, 148, 110, 0.12);
+}
+
+:root[data-theme="paper"] .library-search-clear:hover {
+  background: rgba(38, 34, 28, 0.06);
+}
+
+:root[data-theme="paper"] .library-selection-clear {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.04);
+}
+
+:root[data-theme="paper"] .library-selection-clear:hover {
+  border-color: rgba(38, 34, 28, 0.14);
+  background: rgba(38, 34, 28, 0.08);
+}
+
+:root[data-theme="paper"] .library-track-row {
+  border-color: rgba(38, 34, 28, 0.08);
+  background: rgba(38, 34, 28, 0.03);
+}
+
+:root[data-theme="paper"] .library-track-row.is-selected {
+  border-color: rgba(18, 148, 110, 0.28);
+  background: var(--success-bg);
+}
+
+:root[data-theme="paper"] .library-connector-pill {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.05);
+}
+
+:root[data-theme="paper"] .library-connector-line {
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(18, 148, 110, 0.22),
+    rgba(38, 34, 28, 0.1),
+    rgba(86, 118, 190, 0.16),
+    transparent
+  );
+}
+
+:root[data-theme="paper"] .watch-connect-note {
+  color: var(--text-secondary);
+}
+
+:root[data-theme="paper"] .watch-line {
+  stroke: rgba(38, 34, 28, 0.35);
+}
+
+:root[data-theme="paper"] .watch-line--faint {
+  stroke: rgba(38, 34, 28, 0.16);
+}
+
+:root[data-theme="paper"] .watch-ring {
+  stroke: rgba(38, 34, 28, 0.22);
+}
+
+:root[data-theme="paper"] .watch-dot--muted {
+  fill: rgba(38, 34, 28, 0.28);
+}
+
+:root[data-theme="paper"] .output-panel pre {
+  background: rgba(38, 34, 28, 0.04);
+  scrollbar-color: rgba(38, 34, 28, 0.15) transparent;
+}
+
+:root[data-theme="paper"] .output-panel pre::-webkit-scrollbar-thumb {
+  background: rgba(38, 34, 28, 0.15);
+}
+
+/* --- Media streaming (Spotify / YT Music / Apple Music) --------------------- */
+:root[data-theme="paper"] .playlist-list {
+  scrollbar-color: rgba(38, 34, 28, 0.15) transparent;
+}
+
+:root[data-theme="paper"] .playlist-button.active {
+  background: var(--accent-soft);
+}
+
+:root[data-theme="paper"] .youtube-music-steps li {
+  background: rgba(38, 34, 28, 0.03);
+}
+
+:root[data-theme="paper"] .youtube-music-steps li:hover {
+  border-color: rgba(38, 34, 28, 0.12);
+  background: rgba(38, 34, 28, 0.05);
+}
+
+:root[data-theme="paper"] .youtube-music-steps code {
+  border-color: rgba(38, 34, 28, 0.1);
+  background: rgba(38, 34, 28, 0.06);
+}
+
+:root[data-theme="paper"] .service-open-link {
+  background: rgba(38, 34, 28, 0.04);
+}
+
+:root[data-theme="paper"] .spotify-playlist-header,
+:root[data-theme="paper"] .youtube-music-playlist-header,
+:root[data-theme="paper"] .apple-music-playlist-header {
+  border-color: rgba(38, 34, 28, 0.1);
+  background:
+    linear-gradient(135deg, rgba(38, 34, 28, 0.04), rgba(255, 255, 255, 0.6)),
+    var(--glass-bg-elevated);
+  box-shadow: var(--shadow-soft);
+}
+
+:root[data-theme="paper"] .spotify-playlist-header::after,
+:root[data-theme="paper"] .youtube-music-playlist-header::after,
+:root[data-theme="paper"] .apple-music-playlist-header::after {
+  background:
+    linear-gradient(90deg, rgba(246, 243, 236, 0.15), rgba(246, 243, 236, 0.72)),
+    linear-gradient(180deg, transparent, rgba(246, 243, 236, 0.55));
+}
+
+:root[data-theme="paper"] .spotify-playlist-meta > span,
+:root[data-theme="paper"] .youtube-music-playlist-meta > span,
+:root[data-theme="paper"] .apple-music-playlist-meta > span {
+  color: var(--text-secondary);
+}
+
+:root[data-theme="paper"] .spotify-download-all,
+:root[data-theme="paper"] .youtube-music-queue-all,
+:root[data-theme="paper"] .apple-music-download-all {
+  color: var(--text-primary);
+}
+
+:root[data-theme="paper"] .spotify-playlist-thumb,
+:root[data-theme="paper"] .youtube-music-playlist-thumb,
+:root[data-theme="paper"] .apple-music-playlist-thumb {
+  border-color: rgba(38, 34, 28, 0.1);
+  box-shadow: var(--shadow-soft);
+}
+
+:root[data-theme="paper"] .spotify-playlist-art,
+:root[data-theme="paper"] .youtube-music-playlist-art,
+:root[data-theme="paper"] .apple-music-playlist-art {
+  border-color: rgba(38, 34, 28, 0.12);
+  box-shadow: var(--shadow-soft);
+}
+
+:root[data-theme="paper"] .spotify-art-fallback,
+:root[data-theme="paper"] .youtube-music-art-fallback {
+  background:
+    linear-gradient(135deg, rgba(18, 148, 110, 0.12), rgba(38, 34, 28, 0.04)),
+    rgba(38, 34, 28, 0.03);
+  color: var(--accent);
+}
+
+:root[data-theme="paper"] .apple-music-art-fallback {
+  background:
+    linear-gradient(135deg, rgba(250, 87, 122, 0.16), rgba(38, 34, 28, 0.04)),
+    rgba(38, 34, 28, 0.03);
+  color: #c44a6a;
+}
+
+:root[data-theme="paper"] .spotify-detail-panel .table-shell,
+:root[data-theme="paper"] .youtube-music-detail-panel .table-shell,
+:root[data-theme="paper"] .apple-music-detail-panel .table-shell {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.025);
+}
+
+/* --- YouTube Browser overlays ----------------------------------------------- */
+:root[data-theme="paper"] .browser-loading {
+  background: rgba(246, 243, 236, 0.72);
+}
+
+:root[data-theme="paper"] .browser-load-error {
+  background: rgba(246, 243, 236, 0.92);
+  color: var(--text-primary);
+}
+
+:root[data-theme="paper"] .youtube-jobs-list {
+  scrollbar-color: rgba(38, 34, 28, 0.15) transparent;
+}
+
+:root[data-theme="paper"] .youtube-jobs-list::-webkit-scrollbar-thumb {
+  background: rgba(38, 34, 28, 0.15);
+}
+
+/* --- Cards / panels -------------------------------------------------------
+ * Panels use a 72%-white glass fill plus a white-on-white sheen that reads as
+ * near-invisible over the cream page. Make them opaque white cards with a
+ * crisper border + warm lift so they separate from the background. */
+:root[data-theme="paper"] .panel:not(.is-disconnected) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.4)),
+    var(--glass-bg-elevated);
+  border-color: rgba(38, 34, 28, 0.12);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme="paper"] .training-command-center.is-connected.is-compact {
+  background:
+    linear-gradient(135deg, rgba(47, 190, 145, 0.1), rgba(255, 255, 255, 0.62) 46%),
+    rgba(255, 255, 255, 0.48);
+  border-color: rgba(38, 34, 28, 0.1);
+  box-shadow: var(--glass-inset), var(--shadow-soft);
+  -webkit-backdrop-filter: blur(20px) saturate(165%);
+  backdrop-filter: blur(20px) saturate(165%);
+}
+
+:root[data-theme="paper"] .training-command-center.is-connected .badge.ready {
+  border-color: rgba(18, 148, 110, 0.22);
+  background: rgba(18, 148, 110, 0.1);
+}
+
+:root[data-theme="paper"] .training-command-center.is-connected .training-details-button,
+:root[data-theme="paper"] .training-command-center.is-connected .training-connection-button {
+  border-color: rgba(38, 34, 28, 0.1);
+  background: rgba(255, 255, 255, 0.42);
+}
+
+:root[data-theme="paper"] .training-command-center.is-connected .training-details-button:hover,
+:root[data-theme="paper"] .training-command-center.is-connected .training-connection-button:hover:not(:disabled) {
+  border-color: rgba(18, 148, 110, 0.28);
+  background: rgba(18, 148, 110, 0.08);
+}
+
+:root[data-theme="paper"] .training-command-center.is-connected .training-status-dot.is-connected {
+  box-shadow: 0 0 0 4px rgba(18, 148, 110, 0.12);
+}
+
+/* Training Intelligence + heatmap wrappers set their own near-transparent
+ * fills (rgba white 0.015–0.02) that vanish on paper. Rebuild them as tinted
+ * white cards so the whole section reads as one surface. */
+:root[data-theme="paper"] .training-intelligence {
+  background: var(--glass-bg-elevated);
+  border-color: rgba(38, 34, 28, 0.12);
+  box-shadow: var(--shadow-card);
+}
+
+/* Inner matte cards (recovery ring, weekly-activity chart) use white-alpha
+ * fills that disappear on the white intelligence card. Recess them with a warm
+ * tint + faint border so they read as nested panels. */
+:root[data-theme="paper"] .training-intelligence .training-ring-panel,
+:root[data-theme="paper"] .training-intelligence .training-fitness-panel {
+  background: rgba(38, 34, 28, 0.025);
+  border-color: rgba(38, 34, 28, 0.08);
+  box-shadow: var(--shadow-inset);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* VO2 widget — match flat recessed siblings; panel:not(.is-disconnected) would
+ * otherwise apply --shadow-card and make this card look raised. The arrive
+ * animation also keyframes a heavy outer shadow that wins over static rules. */
+:root[data-theme="paper"] .training-intelligence .vo2-widget-panel,
+:root[data-theme="paper"] .training-performance-grid > .vo2-widget-panel {
+  background: rgba(38, 34, 28, 0.025);
+  border-color: rgba(38, 34, 28, 0.08);
+  box-shadow: var(--shadow-inset);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+:root[data-theme="paper"] .training-intelligence .vo2-widget-panel.is-ready,
+:root[data-theme="paper"] .training-performance-grid > .vo2-widget-panel.is-ready {
+  animation: none;
+  box-shadow: var(--shadow-inset);
+}
+
+:root[data-theme="paper"] .vo2-widget-panel::before,
+:root[data-theme="paper"] .vo2-widget-panel::after,
+:root[data-theme="paper"] .vo2-widget-panel.is-ready::before,
+:root[data-theme="paper"] .vo2-widget-panel.is-ready::after {
+  opacity: 0;
+  content: none;
+}
+
+/* Gauge internals lean on white-alpha strokes and black drop-shadows that
+ * either vanish or look muddy on paper — swap to a warm-ink track, softened
+ * lifts, and a light pin ring that reads against the card. */
+:root[data-theme="paper"] .vo2-gauge-track {
+  stroke: rgba(38, 34, 28, 0.1);
+}
+
+:root[data-theme="paper"] .vo2-gauge-needle {
+  filter: drop-shadow(0 1px 2px rgba(60, 50, 35, 0.18));
+}
+
+:root[data-theme="paper"] .vo2-gauge-pin {
+  stroke: var(--glass-bg-elevated);
+}
+
+:root[data-theme="paper"] .vo2-gauge-value.has-value strong,
+:root[data-theme="paper"] .vo2-widget-panel.is-ready .vo2-gauge-value.has-value strong {
+  text-shadow: none;
+  animation: none;
+}
+
+:root[data-theme="paper"] .vo2-widget-icon {
+  box-shadow: none;
+}
+
+:root[data-theme="paper"] .vo2-widget-panel.is-ready .vo2-widget-icon {
+  box-shadow: none;
+}
+
+:root[data-theme="paper"] .vo2-widget-panel.is-ready .vo2-gauge::before {
+  opacity: 0;
+}
+
+:root[data-theme="paper"] .vo2-widget-panel.is-ready .vo2-gauge-band,
+:root[data-theme="paper"] .vo2-widget-panel.is-ready .vo2-gauge-band.is-focused {
+  animation: none;
+  filter: none;
+  opacity: 1;
+  stroke-dashoffset: 0;
+}
+
+:root[data-theme="paper"] .vo2-widget-panel.is-ready .vo2-gauge-pin {
+  filter: none;
+}
+
+:root[data-theme="paper"] .vo2-widget-footer {
+  border-top-color: var(--glass-border);
+}
+
+:root[data-theme="paper"] .training-stat-card.is-widget:hover {
+  box-shadow: var(--glass-inset), var(--shadow-soft);
+}
+
+:root[data-theme="paper"] .training-stat-card,
+:root[data-theme="paper"] .training-stat-card:hover {
+  border-color: rgba(38, 34, 28, 0.1);
+  background:
+    linear-gradient(145deg, rgba(38, 34, 28, 0.04), rgba(38, 34, 28, 0.015)),
+    rgba(38, 34, 28, 0.025);
+}
+
+:root[data-theme="paper"] .training-stat-card:hover {
+  box-shadow: var(--shadow-soft);
+}
+
+:root[data-theme="paper"] .training-stat-card.is-widget .training-stat-card__detail {
+  background: rgba(38, 34, 28, 0.06);
+}
+
+/* --- Training Hub: tables --------------------------------------------------
+ * Dark sticky headers and white-alpha row/scrollbar treatments invert to
+ * light on paper so rows and the sticky header stay legible. */
+
+/* The activity table shell paints a black-alpha overlay (rgba(0,0,0,0.16))
+ * that reads as a flat grey wash over the white panel — make it a clean white
+ * surface with a warm-ink border. */
+:root[data-theme="paper"] .training-activity-table-shell {
+  background: var(--glass-bg-elevated);
+  border-color: var(--glass-border);
+}
+
+:root[data-theme="paper"] .training-activities-detail {
+  border-left-color: var(--glass-border);
+}
+
+:root[data-theme="paper"] .table-shell {
+  scrollbar-color: rgba(38, 34, 28, 0.22) transparent;
+}
+
+:root[data-theme="paper"] .table-shell::-webkit-scrollbar-thumb {
+  background: rgba(38, 34, 28, 0.22);
+}
+
+:root[data-theme="paper"] .table-shell thead th {
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--text-muted);
+}
+
+:root[data-theme="paper"] tbody tr:hover {
+  background: rgba(38, 34, 28, 0.05);
+}
+
+:root[data-theme="paper"] .training-table-row:hover:not(.is-selected) {
+  background: rgba(38, 34, 28, 0.05);
+}
+
+/* Selected row: a clean accent tint instead of the muddy grey-green. */
+:root[data-theme="paper"] .training-table-row.is-selected {
+  background: var(--accent-soft);
+}
+
+:root[data-theme="paper"] .training-table-row.is-selected td {
+  border-top-color: rgba(18, 148, 110, 0.28);
+  border-bottom-color: rgba(18, 148, 110, 0.28);
+}
+
+/* Sport chips use pale pastel text tuned for dark rows; darken each so the
+ * label reads on the light pastel fill. */
+:root[data-theme="paper"] .sport-chip-0 {
+  color: #0f7f5f;
+}
+
+:root[data-theme="paper"] .sport-chip-1 {
+  color: #4338ca;
+}
+
+:root[data-theme="paper"] .sport-chip-2 {
+  color: #9a6b12;
+}
+
+:root[data-theme="paper"] .sport-chip-3 {
+  color: #be185d;
+}
+
+:root[data-theme="paper"] .sport-chip-4 {
+  color: #0f766e;
+}
+
+/* --- Recovery ring -------------------------------------------------------- */
+:root[data-theme="paper"] .storage-ring-track {
+  stroke: rgba(38, 34, 28, 0.08);
+  stroke-width: 10;
+}
+
+:root[data-theme="paper"] .training-recovery-ring-progress {
+  stroke-width: 10;
+  stroke-linecap: round;
+}
+
+:root[data-theme="paper"] .training-recovery-ring.is-ready .training-recovery-ring-ambient {
+  opacity: 0;
+}
+
+/* Brighter, fresher ring tones on paper — success-text reads too dark/heavy. */
+:root[data-theme="paper"] .training-ring-panel.tone-high {
+  --ring-color: #2fbe91;
+  --ring-glow: rgba(47, 190, 145, 0.32);
+  border-color: rgba(47, 190, 145, 0.26);
+}
+
+:root[data-theme="paper"] .training-ring-panel.tone-mid {
+  --ring-color: #f0b429;
+  --ring-glow: rgba(240, 180, 41, 0.28);
+  border-color: rgba(240, 180, 41, 0.28);
+}
+
+:root[data-theme="paper"] .training-ring-panel.tone-low {
+  --ring-color: #f87171;
+  --ring-glow: rgba(248, 113, 113, 0.28);
+  border-color: rgba(248, 113, 113, 0.26);
+}
+
+:root[data-theme="paper"] .training-ring-panel.tone-neutral {
+  --ring-color: #a8a29e;
+  --ring-glow: rgba(168, 162, 158, 0.2);
+}
+
+:root[data-theme="paper"] .training-recovery-ring .storage-ring-track {
+  stroke: color-mix(in srgb, var(--ring-color) 18%, rgba(38, 34, 28, 0.05));
+}
+
+/* --- Training Hub: export dropdown ----------------------------------------- */
+:root[data-theme="paper"] .training-export-dropdown {
+  border-color: var(--glass-border);
+  background: var(--glass-bg-elevated);
+  box-shadow: var(--shadow-elevated);
+}
+
+:root[data-theme="paper"] .training-export-option:hover,
+:root[data-theme="paper"] .training-export-option:focus-visible {
+  background: rgba(38, 34, 28, 0.06);
+}
+
+/* --- Training Hub: graph menus (fitness metrics + zone select) ------------- */
+:root[data-theme="paper"] .metric-multiselect-trigger,
+:root[data-theme="paper"] .training-zone-select-trigger,
+:root[data-theme="paper"] .training-range-pill {
+  background: rgba(38, 34, 28, 0.05);
+  border-color: var(--glass-border);
+}
+
+:root[data-theme="paper"] .metric-multiselect-trigger:hover,
+:root[data-theme="paper"] .metric-multiselect-trigger[aria-expanded="true"],
+:root[data-theme="paper"] .training-zone-select-trigger:hover,
+:root[data-theme="paper"] .training-zone-select-trigger[aria-expanded="true"] {
+  background: rgba(38, 34, 28, 0.09);
+  border-color: rgba(38, 34, 28, 0.2);
+}
+
+:root[data-theme="paper"] .training-zone-select-icon {
+  color: var(--text-secondary);
+}
+
+:root[data-theme="paper"] .metric-multiselect-menu,
+:root[data-theme="paper"] .training-zone-select-menu {
+  border-color: var(--glass-border);
+  background: var(--glass-bg-elevated);
+  box-shadow: var(--shadow-elevated), var(--glass-inset);
+}
+
+:root[data-theme="paper"] .metric-multiselect-option:hover,
+:root[data-theme="paper"] .metric-multiselect-option.is-selected,
+:root[data-theme="paper"] .training-zone-select-option.is-active,
+:root[data-theme="paper"] .training-zone-select-option:hover,
+:root[data-theme="paper"] .training-zone-select-option:focus-visible {
+  background: rgba(38, 34, 28, 0.07);
+}
+
+:root[data-theme="paper"] .metric-multiselect-check {
+  border-color: rgba(38, 34, 28, 0.28);
+}
+
+:root[data-theme="paper"] .training-zone-select-option.is-selected {
+  color: var(--accent-strong);
+}
+
+:root[data-theme="paper"] .training-zone-select-option svg {
+  color: var(--accent);
+}
+
+/* --- Training Hub: load heatmap boxes -------------------------------------
+ * Empty and level-0 cells (plus the legend/summary chips) are white-alpha and
+ * vanish on paper; drop them to a warm dark-alpha "empty" tone. The green
+ * levels already read on white and are left intact. */
+:root[data-theme="paper"] .training-heatmap-panel {
+  background:
+    radial-gradient(130% 90% at 50% 110%, rgba(45, 154, 116, 0.1), transparent 58%),
+    radial-gradient(80% 60% at 0% 0%, rgba(45, 154, 116, 0.05), transparent 50%),
+    var(--glass-bg-elevated);
+}
+
+:root[data-theme="paper"] .training-heatmap-cell[data-level="0"],
+:root[data-theme="paper"] .training-heatmap-legend-cell[data-level="0"] {
+  background: rgba(38, 34, 28, 0.08);
+}
+
+:root[data-theme="paper"] .training-heatmap-cell.is-empty {
+  background: transparent;
+}
+
+:root[data-theme="paper"] .training-heatmap-cell:not(.is-empty):hover,
+:root[data-theme="paper"] .training-heatmap-cell:not(.is-empty):focus-visible {
+  box-shadow:
+    0 0 0 2px rgba(38, 34, 28, 0.18),
+    0 6px 18px rgba(45, 154, 116, 0.3);
+}
+
+:root[data-theme="paper"] .training-heatmap-tooltip {
+  border-color: var(--glass-border);
+  background: var(--glass-bg-elevated);
+  box-shadow: var(--shadow-soft);
+}
+
+:root[data-theme="paper"] .training-heatmap-summary > span:not([aria-hidden="true"]) {
+  background: rgba(38, 34, 28, 0.05);
+  border-color: var(--glass-border);
+}
+
+/* --- Training Hub: connected command bar ----------------------------------- */
+:root[data-theme="paper"] .training-sync-dot {
+  box-shadow: 0 0 0 5px rgba(18, 148, 110, 0.12);
+}
+
+/* --- Training Hub: charts -------------------------------------------------- */
+:root[data-theme="paper"] .training-chart-panel {
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme="paper"] .training-empty-state {
+  border-color: rgba(38, 34, 28, 0.14);
+  background: rgba(38, 34, 28, 0.025);
+}
+
+:root[data-theme="paper"] .training-chart-legend-dot.is-accent {
+  box-shadow: 0 0 6px rgba(18, 148, 110, 0.35);
+}
+
+/* --- Training Hub: tooltips ------------------------------------------------ */
+:root[data-theme="paper"] .training-fitness-tooltip,
+:root[data-theme="paper"] .training-zone-tooltip {
+  border-color: var(--glass-border);
+  background: var(--glass-bg-elevated);
+  box-shadow: var(--shadow-soft);
+  color: var(--text-secondary);
+}
+
+/* --- Training Hub: zone distribution --------------------------------------- */
+:root[data-theme="paper"] .training-zone-panel {
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme="paper"] .training-zone-info {
+  background: rgba(38, 34, 28, 0.08);
+  color: var(--text-secondary);
+}
+
+:root[data-theme="paper"] .training-zone-metric-pill {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.05);
+}
+
+:root[data-theme="paper"] .training-zone-track {
+  background: rgba(38, 34, 28, 0.08);
+}
+
+/* --- Training Hub: scores & race ------------------------------------------- */
+:root[data-theme="paper"] .training-scores-panel,
+:root[data-theme="paper"] .training-race-panel {
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme="paper"] .score-bar-track {
+  border-color: rgba(38, 34, 28, 0.08);
+  background: rgba(38, 34, 28, 0.07);
+}
+
+:root[data-theme="paper"] .race-card {
+  border-color: rgba(38, 34, 28, 0.1);
+  background:
+    radial-gradient(120% 120% at 0% 100%, rgba(45, 154, 116, 0.1), transparent 62%),
+    rgba(38, 34, 28, 0.025);
+  box-shadow: var(--shadow-inset);
+}
+
+:root[data-theme="paper"] .race-card:hover {
+  border-color: rgba(18, 148, 110, 0.32);
+  background:
+    radial-gradient(120% 120% at 0% 100%, rgba(45, 154, 116, 0.14), transparent 62%),
+    rgba(18, 148, 110, 0.06);
+  box-shadow: var(--shadow-soft);
+}
+
+:root[data-theme="paper"] .race-card-badge {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.05);
+}
+
+/* --- Training Hub: upcoming workouts --------------------------------------- */
+:root[data-theme="paper"] .training-upcoming-panel {
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme="paper"] .training-upcoming-today {
+  border-color: rgba(18, 148, 110, 0.35);
+  background:
+    linear-gradient(135deg, rgba(18, 148, 110, 0.12), rgba(18, 148, 110, 0.04)),
+    rgba(255, 255, 255, 0.6);
+  box-shadow: var(--shadow-inset), var(--shadow-soft);
+}
+
+:root[data-theme="paper"] .training-upcoming-today-empty {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.025);
+  box-shadow: var(--shadow-inset);
+}
+
+:root[data-theme="paper"] .training-upcoming-today-empty .training-upcoming-today-icon {
+  background: rgba(38, 34, 28, 0.08);
+}
+
+:root[data-theme="paper"] .training-upcoming-today-empty .training-upcoming-today-pill {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.05);
+}
+
+:root[data-theme="paper"] .training-upcoming-today-pill {
+  border-color: rgba(18, 148, 110, 0.3);
+  background: rgba(18, 148, 110, 0.12);
+  color: var(--success-text);
+}
+
+:root[data-theme="paper"] .training-upcoming-today-tag,
+:root[data-theme="paper"] .training-upcoming-tag {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.05);
+}
+
+:root[data-theme="paper"] .training-upcoming-rail::before {
+  background: rgba(38, 34, 28, 0.12);
+}
+
+:root[data-theme="paper"] .training-upcoming-dot {
+  box-shadow: 0 0 8px rgba(18, 148, 110, 0.25);
+}
+
+/* --- Training Hub: personal records ---------------------------------------- */
+:root[data-theme="paper"] .training-records-panel {
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme="paper"] .training-records-tab {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.05);
+}
+
+:root[data-theme="paper"] .training-records-tab:hover {
+  border-color: rgba(38, 34, 28, 0.16);
+}
+
+:root[data-theme="paper"] .training-records-tab.active {
+  border-color: rgba(18, 148, 110, 0.35);
+  background: rgba(18, 148, 110, 0.12);
+  color: var(--accent-strong);
+}
+
+:root[data-theme="paper"] .training-records-banner {
+  border-color: rgba(185, 121, 26, 0.22);
+  background:
+    radial-gradient(90% 120% at 50% 118%, rgba(185, 121, 26, 0.14), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(246, 243, 236, 0.8));
+}
+
+:root[data-theme="paper"] .training-records-banner::before {
+  opacity: 0.45;
+  mix-blend-mode: multiply;
+}
+
+:root[data-theme="paper"] .training-records-embers::before,
+:root[data-theme="paper"] .training-records-embers::after {
+  mix-blend-mode: multiply;
+  opacity: 0.55;
+}
+
+:root[data-theme="paper"] .training-record-card {
+  border-color: rgba(38, 34, 28, 0.1);
+  background:
+    radial-gradient(120% 120% at 0% 100%, rgba(45, 154, 116, 0.08), transparent 62%),
+    rgba(38, 34, 28, 0.025);
+  box-shadow: var(--shadow-inset);
+}
+
+/* --- Training Hub: activity detail ----------------------------------------- */
+:root[data-theme="paper"] .activity-detail-stat {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.05);
+}
+
+:root[data-theme="paper"] .activity-detail-sport {
+  color: var(--success-text);
+}
+
+:root[data-theme="paper"] .activity-detail-visual-panel {
+  border-color: var(--glass-border);
+  background:
+    linear-gradient(145deg, rgba(38, 34, 28, 0.04), rgba(38, 34, 28, 0.015)),
+    rgba(38, 34, 28, 0.025);
+  box-shadow: var(--shadow-inset);
+}
+
+/* --- Training Hub: sign-in hero -------------------------------------------- */
+:root[data-theme="paper"] .training-command-center.is-disconnected {
+  border-color: rgba(38, 34, 28, 0.12);
+  background:
+    linear-gradient(
+      90deg,
+      rgba(246, 243, 236, 0.92),
+      rgba(246, 243, 236, 0.55) 48%,
+      rgba(255, 255, 255, 0.78)
+    ),
+    var(--training-signin-bg),
+    var(--bg-base);
+  background-position: center;
+  background-size: cover;
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme="paper"] .training-command-copy {
+  background: linear-gradient(90deg, rgba(246, 243, 236, 0.35), transparent 72%);
+}
+
+:root[data-theme="paper"] .training-command-copy h2 {
+  color: var(--text-primary);
+  text-shadow: none;
+}
+
+:root[data-theme="paper"] .training-command-copy h2 em {
+  color: var(--accent);
+}
+
+:root[data-theme="paper"] .training-command-kicker {
+  color: var(--success-text);
+}
+
+:root[data-theme="paper"] .training-signin-lead {
+  color: var(--text-secondary);
+}
+
+:root[data-theme="paper"] .training-signin-feature strong {
+  color: var(--text-primary);
+}
+
+:root[data-theme="paper"] .training-signin-feature p {
+  color: var(--text-secondary);
+}
+
+:root[data-theme="paper"] .training-signin-feature-icon {
+  border-color: rgba(38, 34, 28, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.4)),
+    rgba(38, 34, 28, 0.025);
+  color: var(--accent);
+  box-shadow: var(--shadow-inset), var(--shadow-soft);
+}
+
+:root[data-theme="paper"] .training-login-panel {
+  border-color: rgba(38, 34, 28, 0.12);
+  background: var(--glass-bg-elevated);
+  box-shadow: var(--shadow-elevated);
+}
+
+:root[data-theme="paper"] .training-login-panel-header strong {
+  color: var(--text-primary);
+}
+
+:root[data-theme="paper"] .training-login-panel-header p {
+  color: var(--text-secondary);
+}
+
+:root[data-theme="paper"] .training-login-reconnect {
+  border-color: rgba(18, 148, 110, 0.28);
+  background: var(--accent-soft);
+}
+
+:root[data-theme="paper"] .training-login-reconnect-text strong {
+  color: var(--text-primary);
+}
+
+:root[data-theme="paper"] .training-login-reconnect-text small {
+  color: var(--text-secondary);
+}
+
+:root[data-theme="paper"] .training-login-field {
+  color: var(--text-primary);
+}
+
+:root[data-theme="paper"] .training-login-input {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.03);
+}
+
+:root[data-theme="paper"] .training-login-input:focus-within {
+  border-color: rgba(18, 148, 110, 0.45);
+  background: var(--glass-bg-elevated);
+  box-shadow:
+    0 0 0 3px rgba(18, 148, 110, 0.12),
+    var(--shadow-soft);
+}
+
+:root[data-theme="paper"] .training-login-input svg {
+  color: var(--text-muted);
+}
+
+:root[data-theme="paper"] .training-login-input input {
+  color: var(--text-primary);
+}
+
+:root[data-theme="paper"] .training-login-visibility {
+  color: var(--text-muted);
+}
+
+:root[data-theme="paper"] .training-login-visibility:hover:not(:disabled),
+:root[data-theme="paper"] .training-login-visibility:focus-visible {
+  background: rgba(38, 34, 28, 0.06);
+  color: var(--text-primary);
+}
+
+:root[data-theme="paper"] .training-login-actions .primary-button {
+  box-shadow: var(--shadow-soft);
+}
+
+:root[data-theme="paper"] .training-login-remember {
+  color: var(--text-secondary);
+}
+
+:root[data-theme="paper"] .training-login-remember input {
+  border-color: rgba(18, 148, 110, 0.45);
+  background: rgba(18, 148, 110, 0.08);
+}
+
+:root[data-theme="paper"] .training-login-remember input:checked {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(18, 148, 110, 0.14);
+}
+
+/* ==========================================================================
+ * THEME TRANSITION
+ * An elegant circular reveal of the incoming theme, expanding from the toggle
+ * button via the View Transitions API. Coordinates + end radius are supplied
+ * as custom properties by runThemeTransition(); the incoming snapshot is
+ * clipped from a point to a full-viewport circle over the outgoing one.
+ * ========================================================================== */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 2;
+  animation: theme-reveal 0.62s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes theme-reveal {
+  from {
+    clip-path: circle(0 at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 0));
+  }
+  to {
+    clip-path: circle(
+      var(--theme-reveal-r, 150vmax) at var(--theme-reveal-x, 50%)
+        var(--theme-reveal-y, 0)
+    );
+  }
+}
+
+/* Sun/moon glyph does a soft rotate-and-scale in as it swaps. */
+.theme-toggle-icon {
+  display: inline-flex;
+  animation: theme-icon-swap 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes theme-icon-swap {
+  from {
+    opacity: 0;
+    transform: rotate(-140deg) scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+
+  .theme-toggle-icon {
+    animation: none;
+  }
 }

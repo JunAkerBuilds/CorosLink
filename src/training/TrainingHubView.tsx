@@ -49,12 +49,16 @@ export function TrainingHubView({
   onPasswordChange,
   onRememberChange,
   onLogin,
+  onReconnect,
   onLogout,
   onRefresh,
   onLoadDetail,
   onExportFile
 }: TrainingHubViewProps) {
   const connected = Boolean(status?.authenticated);
+  const canReconnect =
+    !connected && Boolean(status?.rememberCredentials) && Boolean(status?.email);
+  const reconnecting = busy === "training-reconnect";
   const [showConnectionDetails, setShowConnectionDetails] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const signInBackgroundStyle = connected
@@ -225,6 +229,31 @@ export function TrainingHubView({
                 <strong>Welcome back</strong>
                 <p>Sign in to access your COROS Training Hub data</p>
               </div>
+
+              {canReconnect ? (
+                <div className="training-login-reconnect">
+                  <div className="training-login-reconnect-text">
+                    <strong>Signed in as {status?.email}</strong>
+                    <small>
+                      Your session expired. Reconnect using your saved
+                      credentials — no password needed.
+                    </small>
+                  </div>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={onReconnect}
+                    disabled={reconnecting}
+                  >
+                    {reconnecting ? (
+                      <Loader2 className="spin" size={17} aria-hidden="true" />
+                    ) : (
+                      <RefreshCw size={17} aria-hidden="true" />
+                    )}
+                    Reconnect
+                  </button>
+                </div>
+              ) : null}
 
               <div className="training-login-fields">
                 <label className="field training-login-field">

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Vertix 2, Vertix 2S, and Apex 2 Pro no longer misidentified as Pace Pro when connected over USB
+
+### Added
+
+- Hero artwork for Vertix 2 and Vertix 2S on the dashboard when connected
+
 ## [0.1.13] - 2026-07-03
 
 ### Added

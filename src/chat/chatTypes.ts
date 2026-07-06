@@ -63,6 +63,16 @@ export type ChatEntry =
   | ChatHrZoneEntry
   | ChatToolNoticeEntry;
 
+export function isChatVisualEntry(
+  entry: ChatEntry
+): entry is ChatActivityVisualEntry | ChatFitnessTrendEntry | ChatHrZoneEntry {
+  return (
+    entry.kind === "activityVisual" ||
+    entry.kind === "fitnessTrend" ||
+    entry.kind === "hrZoneSummary"
+  );
+}
+
 export function upsertPlanDraftEntry(
   entries: ChatEntry[],
   draft: PlanDraftPreview

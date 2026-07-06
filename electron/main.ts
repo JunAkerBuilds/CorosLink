@@ -36,6 +36,7 @@ import {
   listTrainingHubActivities,
   loginTrainingHub,
   logoutTrainingHub,
+  reconnectTrainingHub,
   uploadTrainingPlan
 } from "./trainingHubService";
 import {
@@ -308,6 +309,14 @@ function createWindow(): void {
     title: "CorosLink",
     ...(iconPath ? { icon: iconPath } : {}),
     backgroundColor: "#0b0f0e",
+    // Let the app's own header act as the title bar so the macOS traffic
+    // lights sit directly on it instead of a separate OS chrome strip.
+    ...(process.platform === "darwin"
+      ? {
+          titleBarStyle: "hiddenInset" as const,
+          trafficLightPosition: { x: 18, y: 18 }
+        }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -659,6 +668,8 @@ function registerIpcHandlers(): void {
   );
 
   ipcMain.handle("trainingHub:logout", () => logoutTrainingHub());
+
+  ipcMain.handle("trainingHub:reconnect", () => reconnectTrainingHub());
 
   ipcMain.handle(
     "trainingHub:listActivities",

@@ -35,7 +35,8 @@ export function ChatSettingsModal({
   onClearLocalApiKey,
   onConnectMcp,
   onDisconnectMcp,
-  onToggleTools
+  onToggleTools,
+  onUpdateChatSettings
 }: {
   open: boolean;
   chatSettings: ChatSettings;
@@ -63,6 +64,7 @@ export function ChatSettingsModal({
   onConnectMcp: () => void;
   onDisconnectMcp: () => void;
   onToggleTools: () => void;
+  onUpdateChatSettings: (patch: Partial<ChatSettings>) => void;
 }) {
   useEffect(() => {
     if (!open) {
@@ -135,6 +137,7 @@ export function ChatSettingsModal({
             onConnectMcp={onConnectMcp}
             onDisconnectMcp={onDisconnectMcp}
             onToggleTools={onToggleTools}
+            onUpdateChatSettings={onUpdateChatSettings}
           />
         </div>
       </section>

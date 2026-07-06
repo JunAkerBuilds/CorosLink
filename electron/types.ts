@@ -35,7 +35,14 @@ export interface WatchTrack {
   modifiedAt: string;
 }
 
-export type WatchModelId = "pace-pro" | "pace-4" | "pace-3" | "nomad";
+export type WatchModelId =
+  | "pace-pro"
+  | "pace-4"
+  | "pace-3"
+  | "nomad"
+  | "vertix-2"
+  | "vertix-2s"
+  | "apex-2-pro";
 
 export type WatchConnectionSmokeOptionId =
   | "auto"
@@ -44,6 +51,8 @@ export type WatchConnectionSmokeOptionId =
   | "pace-4"
   | "pace-3"
   | "nomad"
+  | "vertix-2"
+  | "vertix-2s"
   | "unknown-pace"
   | "installer";
 
@@ -930,6 +939,8 @@ export interface ChatSettings {
   provider: ChatProvider;
   local: LocalChatConfig;
   sidebarOpen?: boolean;
+  /** When false, hide activity/fitness/HR chart cards in the transcript. Default true. */
+  visualizationsEnabled?: boolean;
 }
 
 export interface ChatSessionSummary {

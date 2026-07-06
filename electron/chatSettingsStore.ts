@@ -10,7 +10,8 @@ export const CHAT_SETTINGS_KEYS = {
   localModel: "chat.local.model",
   localApiKey: "chat.local.apiKey",
   localToolsEnabled: "chat.local.toolsEnabled",
-  sidebarOpen: "chat.sidebar.open"
+  sidebarOpen: "chat.sidebar.open",
+  visualizationsEnabled: "chat.visualizations.enabled"
 } as const;
 
 export interface ChatSettingsStore {
@@ -38,7 +39,9 @@ export function readChatSettingsFromStore(
       hasApiKey: apiKeyStore.hasApiKey(),
       toolsEnabled: store.get(CHAT_SETTINGS_KEYS.localToolsEnabled) !== "false"
     },
-    sidebarOpen: store.get(CHAT_SETTINGS_KEYS.sidebarOpen) !== "false"
+    sidebarOpen: store.get(CHAT_SETTINGS_KEYS.sidebarOpen) !== "false",
+    visualizationsEnabled:
+      store.get(CHAT_SETTINGS_KEYS.visualizationsEnabled) !== "false"
   };
 }
 
@@ -61,6 +64,12 @@ export function saveChatSettingsToStore(
     store.set(
       CHAT_SETTINGS_KEYS.sidebarOpen,
       settings.sidebarOpen ? "true" : "false"
+    );
+  }
+  if (typeof settings.visualizationsEnabled === "boolean") {
+    store.set(
+      CHAT_SETTINGS_KEYS.visualizationsEnabled,
+      settings.visualizationsEnabled ? "true" : "false"
     );
   }
 

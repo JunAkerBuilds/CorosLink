@@ -40,34 +40,51 @@ export function ChatSidebar({
 
   return (
     <>
-      {overlay && open ? (
+      {overlay ? (
         <button
           type="button"
-          className="chat-sidebar-overlay"
+          className={[
+            "chat-sidebar-overlay",
+            open ? "is-visible" : ""
+          ]
+            .filter(Boolean)
+            .join(" ")}
           aria-label="Close sidebar"
+          aria-hidden={!open}
+          tabIndex={open ? 0 : -1}
           onClick={onClose}
         />
       ) : null}
 
-      <aside
+      <div
         className={[
-          "chat-sidebar",
-          open ? "is-open" : "",
-          overlay ? "is-overlay" : ""
+          "chat-sidebar-shell",
+          open && !overlay ? "is-open" : "",
+          overlay ? "is-overlay-mode" : ""
         ]
           .filter(Boolean)
           .join(" ")}
-        aria-hidden={!open && overlay}
       >
-        <ChatHistoryPanel
-          sessions={sessions}
-          activeSessionId={activeSessionId}
-          busy={busy}
-          onNewChat={onNewChat}
-          onSelectSession={onSelectSession}
-          onDeleteSession={onDeleteSession}
-        />
-      </aside>
+        <aside
+          className={[
+            "chat-sidebar",
+            open ? "is-open" : "",
+            overlay ? "is-overlay" : ""
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          aria-hidden={!open}
+        >
+          <ChatHistoryPanel
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            busy={busy}
+            onNewChat={onNewChat}
+            onSelectSession={onSelectSession}
+            onDeleteSession={onDeleteSession}
+          />
+        </aside>
+      </div>
     </>
   );
 }

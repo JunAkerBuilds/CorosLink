@@ -48,6 +48,7 @@ import {
   upsertHrZoneEntry,
   upsertPlanDraftEntry,
   upsertWorkoutDeleteEntry,
+  isChatVisualEntry,
   type ChatEntry,
   type SourceInfo
 } from "./chatTypes";
@@ -60,7 +61,8 @@ const DEFAULT_CHAT_SETTINGS: ChatSettings = {
     hasApiKey: false,
     toolsEnabled: true
   },
-  sidebarOpen: true
+  sidebarOpen: true,
+  visualizationsEnabled: true
 };
 
 const SIDEBAR_OVERLAY_MAX_WIDTH = 900;
@@ -577,11 +579,17 @@ export function ChatView({
             upsertWorkoutDeleteEntry(prev, payload.preview)
           );
         } else if (payload.kind === "activityVisual") {
-          setTimeline((prev) => upsertActivityVisualEntry(prev, payload.preview));
+          if (chatSettings.visualizationsEnabled !== false) {
+            setTimeline((prev) => upsertActivityVisualEntry(prev, payload.preview));
+          }
         } else if (payload.kind === "fitnessTrend") {
-          setTimeline((prev) => upsertFitnessTrendEntry(prev, payload.preview));
+          if (chatSettings.visualizationsEnabled !== false) {
+            setTimeline((prev) => upsertFitnessTrendEntry(prev, payload.preview));
+          }
         } else if (payload.kind === "hrZoneSummary") {
-          setTimeline((prev) => upsertHrZoneEntry(prev, payload.preview));
+          if (chatSettings.visualizationsEnabled !== false) {
+            setTimeline((prev) => upsertHrZoneEntry(prev, payload.preview));
+          }
         } else if (payload.kind === "mcp") {
           const base: SourceInfo = sourceRef.current ?? {
             snapshotIncluded: false,
@@ -623,7 +631,7 @@ export function ChatView({
     return () => {
       for (const unsubscribe of unsubscribers) unsubscribe();
     };
-  }, [api, chatSettings.provider, onError]);
+  }, [api, chatSettings.provider, chatSettings.visualizationsEnabled, onError]);
 
   // Keep the transcript scrolled to the newest content.
   useEffect(() => {
@@ -751,6 +759,18 @@ export function ChatView({
       }
     }));
     setLocalConnection(null);
+  };
+
+  const handleUpdateChatSettings = async (patch: Partial<ChatSettings>) => {
+    const nextSettings = { ...chatSettings, ...patch };
+    setChatSettings(nextSettings);
+    if (!api) return;
+    try {
+      const saved = await api.saveChatSettings(nextSettings);
+      setChatSettings(saved);
+    } catch {
+      // keep local state even if persistence fails
+    }
   };
 
   const handleSaveLocalSettings = async () => {
@@ -1172,7 +1192,9 @@ export function ChatView({
     onClearLocalApiKey: () => void handleClearLocalApiKey(),
     onConnectMcp: () => void handleConnectMcp(),
     onDisconnectMcp: () => void handleDisconnectMcp(),
-    onToggleTools: () => setShowTools((value) => !value)
+    onToggleTools: () => setShowTools((value) => !value),
+    onUpdateChatSettings: (patch: Partial<ChatSettings>) =>
+      void handleUpdateChatSettings(patch)
   };
 
   if (checkingAuth) {
@@ -1380,6 +1402,13 @@ export function ChatView({
           ) : null}
 
           {timeline.map((entry, index) => {
+            if (
+              chatSettings.visualizationsEnabled === false &&
+              isChatVisualEntry(entry)
+            ) {
+              return null;
+            }
+
             if (entry.kind === "toolNotice") {
               return (
                 <div

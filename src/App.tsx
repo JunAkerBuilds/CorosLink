@@ -1,5 +1,4 @@
 import {
-  Activity,
   AlertCircle,
   ArrowLeft,
   ArrowRight,
@@ -11,14 +10,11 @@ import {
   FolderOpen,
   HardDrive,
   Home,
-  LayoutGrid,
   Link,
   ListMusic,
   LogIn,
   LogOut,
   Loader2,
-  Map as MapIcon,
-  MessageCircle,
   Music,
   RefreshCw,
   Search,
@@ -74,6 +70,7 @@ import { TrainingHubView } from "./training/TrainingHubView";
 import type { TrainingHubSnapshot } from "./training/types";
 import type { CorosLinkApi } from "./coroslink-api";
 import { AppUpdateControls } from "./components/AppUpdateControls";
+import { PrimaryTabs } from "./components/PrimaryTabs";
 import { ResourcesMenu } from "./components/ResourcesMenu";
 import { ThemeToggle } from "./theme/ThemeToggle";
 import { WatchConnectionSmokeControls } from "./components/WatchConnectionSmokeControls";
@@ -202,6 +199,12 @@ export default function App() {
 
     void api.getAppUpdateStatus().then(setAppUpdateSnapshot);
     return api.onAppUpdateStatus(setAppUpdateSnapshot);
+  }, [api]);
+
+  // Tag the document with the host OS so the header can clear the macOS
+  // traffic lights that overlay it.
+  useEffect(() => {
+    document.documentElement.dataset.platform = api?.platform ?? "";
   }, [api]);
 
   useEffect(() => {
@@ -896,6 +899,27 @@ export default function App() {
     }
   }
 
+  async function handleTrainingHubReconnect() {
+    if (!api) {
+      return;
+    }
+
+    setBusy("training-reconnect");
+    setError(null);
+    setMessage(null);
+
+    try {
+      const status = await api.reconnectTrainingHub();
+      setTrainingHubStatus(status);
+      setMessage("COROS Training Hub reconnected.");
+      await loadTrainingHubData();
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function handleTrainingHubLogout() {
     if (!api) {
       return;
@@ -1335,66 +1359,11 @@ export default function App() {
             </div>
           </div>
 
-          <nav className="primary-tabs" aria-label="Primary">
-            <button
-              type="button"
-              className={
-                activeView === "overview" ? "primary-tab active" : "primary-tab"
-              }
-              onClick={() => setActiveView("overview")}
-            >
-              <LayoutGrid size={16} aria-hidden="true" />
-              Overview
-            </button>
-            <button
-              type="button"
-              className={
-                activeView === "media" ? "primary-tab active" : "primary-tab"
-              }
-              onClick={() => setActiveView("media")}
-            >
-              <Music size={16} aria-hidden="true" />
-              Media
-            </button>
-            <button
-              type="button"
-              className={
-                activeView === "maps" ? "primary-tab active" : "primary-tab"
-              }
-              onClick={() => setActiveView("maps")}
-            >
-              <MapIcon size={16} aria-hidden="true" />
-              Maps
-              <span className="primary-tab-beta">Beta</span>
-            </button>
-            <button
-              type="button"
-              className={
-                activeView === "training" ? "primary-tab active" : "primary-tab"
-              }
-              onClick={() => setActiveView("training")}
-            >
-              <Activity size={16} aria-hidden="true" />
-              Training Hub
-            </button>
-            <button
-              type="button"
-              className={
-                activeView === "coach" ? "primary-tab active" : "primary-tab"
-              }
-              onClick={() => setActiveView("coach")}
-            >
-              <MessageCircle size={16} aria-hidden="true" />
-              Coach
-              {coachBusy ? (
-                <span
-                  className="primary-tab-activity"
-                  aria-label="Coach is responding"
-                />
-              ) : null}
-              <span className="primary-tab-beta">Beta</span>
-            </button>
-          </nav>
+          <PrimaryTabs
+            activeView={activeView}
+            onChange={setActiveView}
+            coachBusy={coachBusy}
+          />
         </div>
 
         <div className="app-header-end">
@@ -1581,6 +1550,7 @@ export default function App() {
                 onPasswordChange={setTrainingHubPassword}
                 onRememberChange={setTrainingHubRemember}
                 onLogin={handleTrainingHubLogin}
+                onReconnect={handleTrainingHubReconnect}
                 onLogout={handleTrainingHubLogout}
                 onRefresh={handleTrainingHubRefresh}
                 onLoadDetail={handleTrainingHubActivityDetail}

@@ -3,6 +3,8 @@ import nomadHero from "../public/assets/nomad-hero.webp";
 import pace3Hero from "../public/assets/pace-3-hero.webp";
 import pace4Hero from "../public/assets/pace-4-hero.webp";
 import paceProHero from "../public/assets/pace-pro-hero.webp";
+import vertix2Hero from "../public/assets/vertix-2-hero.webp";
+import vertix2sHero from "../public/assets/vertix-2s-hero.webp";
 
 export const PACE_PRO_BYTES = 32 * 1024 * 1024 * 1024;
 export const PACE_4_BYTES = 4 * 1024 * 1024 * 1024;
@@ -125,6 +127,52 @@ const MODEL_PRESENTATION: Record<
       { icon: "weight", label: "Rugged Trail Build" },
       { icon: "battery", label: "Multi-Day GPS Battery" },
     ],
+  },
+  "vertix-2": {
+    state: "connected-known",
+    model: "vertix-2",
+    displayName: "COROS Vertix 2",
+    productName: "Vertix 2",
+    tagline: "Built for Adventure",
+    companion: "Your Vertix 2 companion",
+    connectHint: "",
+    heroImage: vertix2Hero,
+    heroAlt: "COROS Vertix 2",
+    capacityLabel: "32 GB Vertix 2 capacity fallback",
+    fallbackBytes: PACE_PRO_BYTES,
+    features: [
+      { icon: "display", label: "1.4\" Sapphire Touchscreen" },
+      { icon: "weight", label: "Titanium Bezel Build" },
+      { icon: "battery", label: "140 Hours Full GPS" },
+    ],
+  },
+  "vertix-2s": {
+    state: "connected-known",
+    model: "vertix-2s",
+    displayName: "COROS Vertix 2S",
+    productName: "Vertix 2S",
+    tagline: "Built for the Extreme",
+    companion: "Your Vertix 2S companion",
+    connectHint: "",
+    heroImage: vertix2sHero,
+    heroAlt: "COROS Vertix 2S",
+    capacityLabel: "32 GB Vertix 2S capacity fallback",
+    fallbackBytes: PACE_PRO_BYTES,
+    features: [
+      { icon: "display", label: "1.4\" Sapphire Touchscreen" },
+      { icon: "weight", label: "Titanium Bezel Build" },
+      { icon: "battery", label: "118 Hours Full GPS" },
+    ],
+  },
+  "apex-2-pro": {
+    state: "connected-known",
+    model: "apex-2-pro",
+    displayName: "COROS Apex 2 Pro",
+    productName: "Apex 2 Pro",
+    companion: "Your Apex 2 Pro companion",
+    connectHint: "",
+    capacityLabel: "32 GB Apex 2 Pro capacity fallback",
+    fallbackBytes: PACE_PRO_BYTES,
   },
 };
 

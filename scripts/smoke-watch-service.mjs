@@ -237,10 +237,70 @@ async function runNomadSmoke() {
   }
 }
 
+async function runVertix2Smoke() {
+  const tempRoot = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), "coros-watch-smoke-vertix-2-")
+  );
+  const watchRoot = path.join(tempRoot, "COROS VERTIX 2");
+  const musicPath = path.join(watchRoot, "Music");
+
+  try {
+    await fs.promises.mkdir(musicPath, { recursive: true });
+    await fs.promises.writeFile(path.join(musicPath, "Summit Mix.mp3"), "mp3");
+
+    process.env.COROS_WATCH_PATH = watchRoot;
+
+    const { getWatchStatus } = await loadWatchService();
+    const status = await getWatchStatus();
+
+    assert.equal(status.connected, true);
+    assert.equal(status.name, "COROS VERTIX 2");
+    assert.equal(status.model, "vertix-2");
+    assert.equal(status.rootPath, watchRoot);
+    assert.equal(status.musicPath, musicPath);
+    assert.equal(status.tracks.length, 1);
+    assert.equal(status.tracks[0].name, "Summit Mix.mp3");
+  } finally {
+    delete process.env.COROS_WATCH_PATH;
+    await fs.promises.rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
+async function runVertix2sSmoke() {
+  const tempRoot = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), "coros-watch-smoke-vertix-2s-")
+  );
+  const watchRoot = path.join(tempRoot, "COROS VERTIX 2S");
+  const musicPath = path.join(watchRoot, "Music");
+
+  try {
+    await fs.promises.mkdir(musicPath, { recursive: true });
+    await fs.promises.writeFile(path.join(musicPath, "Ridge Mix.mp3"), "mp3");
+
+    process.env.COROS_WATCH_PATH = watchRoot;
+
+    const { getWatchStatus } = await loadWatchService();
+    const status = await getWatchStatus();
+
+    assert.equal(status.connected, true);
+    assert.equal(status.name, "COROS VERTIX 2S");
+    assert.equal(status.model, "vertix-2s");
+    assert.equal(status.rootPath, watchRoot);
+    assert.equal(status.musicPath, musicPath);
+    assert.equal(status.tracks.length, 1);
+    assert.equal(status.tracks[0].name, "Ridge Mix.mp3");
+  } finally {
+    delete process.env.COROS_WATCH_PATH;
+    await fs.promises.rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
 await runPaceProSmoke();
 await runPace4Smoke();
 await runPace3Smoke();
 await runNomadSmoke();
+await runVertix2Smoke();
+await runVertix2sSmoke();
 await runPace3NameVariantSmoke("PACE 3", "pace-3-space");
 await runPace3NameVariantSmoke("PACE-3", "pace-3-hyphen");
 await runPace3NameVariantSmoke("PACE3", "pace-3-compact");

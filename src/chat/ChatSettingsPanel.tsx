@@ -39,7 +39,8 @@ export function ChatSettingsPanel({
   onClearLocalApiKey,
   onConnectMcp,
   onDisconnectMcp,
-  onToggleTools
+  onToggleTools,
+  onUpdateChatSettings
 }: {
   chatSettings: ChatSettings;
   authStatus: ChatAuthStatus | null;
@@ -65,6 +66,7 @@ export function ChatSettingsPanel({
   onConnectMcp: () => void;
   onDisconnectMcp: () => void;
   onToggleTools: () => void;
+  onUpdateChatSettings: (patch: Partial<ChatSettings>) => void;
 }) {
   const availableLocalServers =
     localDiscovery?.servers.filter(
@@ -78,6 +80,26 @@ export function ChatSettingsPanel({
 
   return (
     <div className="chat-settings-panel">
+      <section className="chat-settings-section">
+        <h3>Display</h3>
+        <label className="chat-local-tools">
+          <input
+            type="checkbox"
+            checked={chatSettings.visualizationsEnabled !== false}
+            onChange={(event) =>
+              onUpdateChatSettings({
+                visualizationsEnabled: event.target.checked
+              })
+            }
+          />
+          <span>Show charts and activity visuals in chat</span>
+        </label>
+        <p className="chat-settings-copy">
+          When off, heart rate trends, zone summaries, and activity charts are
+          hidden. The coach still responds with text.
+        </p>
+      </section>
+
       <section className="chat-settings-section">
         <h3>ChatGPT account</h3>
         {authStatus?.signedIn ? (
