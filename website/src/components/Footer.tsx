@@ -1,5 +1,8 @@
 import Image from "next/image";
-import { Github, Coffee, Heart } from "lucide-react";
+import { Heart } from "lucide-react";
+import { BuyMeCoffee } from "./BuyMeCoffee";
+import { GitHubLink } from "./GitHubLink";
+import { GitHubStarCount } from "./GitHubStarCount";
 
 const LINK_GROUPS = [
   {
@@ -44,25 +47,10 @@ export function Footer() {
               Music, maps, routes, and training — all in one place.
             </p>
             <div className="mt-5 flex items-center gap-3">
-              <a
-                href="https://github.com/JunAkerBuilds/CorosLink"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="GitHub"
-                className="glass-soft flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:text-accent-strong sm:h-9 sm:w-9"
-              >
-                <Github size={16} />
-              </a>
-              <a
-                href="https://www.buymeacoffee.com/addridoa"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Buy me a coffee"
-                className="glass-soft flex h-10 w-10 items-center justify-center rounded-full text-gold transition-colors hover:text-text sm:h-9 sm:w-9"
-              >
-                <Coffee size={16} />
-              </a>
+              <GitHubLink variant="footer" />
+              <BuyMeCoffee variant="footer" />
             </div>
+            <GitHubStarCount />
           </div>
 
           {LINK_GROUPS.map((group) => (

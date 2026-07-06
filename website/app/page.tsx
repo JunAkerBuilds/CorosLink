@@ -3,6 +3,7 @@ import { Hero } from "../src/components/Hero";
 import { Features } from "../src/components/Features";
 import { Highlights } from "../src/components/Highlights";
 import { Download } from "../src/components/Download";
+import { BuyMeCoffee } from "../src/components/BuyMeCoffee";
 import { Footer } from "../src/components/Footer";
 import { SmoothScroll } from "../src/components/SmoothScroll";
 
@@ -29,6 +30,10 @@ export default function Home() {
         <Features />
         <Highlights />
         <Download />
+
+        <section className="px-6 pb-8 pt-4 lg:px-12 md:pb-12">
+          <BuyMeCoffee variant="banner" />
+        </section>
       </main>
       <Footer />
     </>

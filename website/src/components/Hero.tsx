@@ -2,8 +2,10 @@
 
 import Image from "next/image";
 import { motion } from "motion/react";
-import { Download, Github, Coffee } from "lucide-react";
+import { Download } from "lucide-react";
 import { usePrefersReducedMotion } from "../hooks/usePrefersReducedMotion";
+import { BuyMeCoffee } from "./BuyMeCoffee";
+import { GitHubLink } from "./GitHubLink";
 import { SourceStrip } from "./SourceStrip";
 
 const WATCHES = [
@@ -78,24 +80,8 @@ export function Hero() {
             <Download size={17} />
             Download for free
           </a>
-          <a
-            href="https://github.com/JunAkerBuilds/CorosLink"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="glass-soft inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-colors hover:text-accent-strong"
-          >
-            <Github size={17} />
-            View on GitHub
-          </a>
-          <a
-            href="https://www.buymeacoffee.com/addridoa"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-medium text-gold transition-colors hover:text-text"
-          >
-            <Coffee size={17} />
-            Buy me a coffee
-          </a>
+          <GitHubLink variant="hero" />
+          <BuyMeCoffee variant="hero" />
         </motion.div>
 
         {/* Watch lineup */}

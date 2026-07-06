@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Github } from "lucide-react";
+import { GitHubLink } from "./GitHubLink";
 
 const LINKS = [
   { href: "#overview", label: "Overview" },
@@ -54,15 +54,7 @@ export function Nav() {
           ))}
         </div>
 
-        <a
-          href="https://github.com/JunAkerBuilds/CorosLink"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="glass-soft flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition-colors hover:text-accent-strong"
-        >
-          <Github size={16} />
-          <span className="hidden sm:inline">GitHub</span>
-        </a>
+        <GitHubLink variant="nav" />
       </nav>
     </header>
   );
