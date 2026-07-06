@@ -41,6 +41,9 @@ export function ChatHistoryPanel({
   return (
     <div className="chat-history-panel">
       <div className="chat-history-toolbar">
+        <div className="chat-history-header">
+          <p className="eyebrow">Conversations</p>
+        </div>
         <button
           type="button"
           className="chat-new-chat chat-new-chat-sidebar"

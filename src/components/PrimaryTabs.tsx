@@ -1,36 +1,17 @@
 import {
-  Activity,
-  LayoutGrid,
-  Map as MapIcon,
-  MessageCircle,
-  Music,
-  type LucideIcon,
-} from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  PRIMARY_NAV_ITEMS,
+  type PrimaryView,
+} from "../navigation/primaryNav";
+import { SelectDropdown } from "./SelectDropdown";
 
-export type PrimaryView = "overview" | "media" | "training" | "maps" | "coach";
-
-interface PrimaryTabConfig {
-  id: PrimaryView;
-  label: string;
-  icon: LucideIcon;
-  beta?: boolean;
-  showActivity?: boolean;
-}
-
-const PRIMARY_TABS: PrimaryTabConfig[] = [
-  { id: "overview", label: "Overview", icon: LayoutGrid },
-  { id: "media", label: "Media", icon: Music },
-  { id: "maps", label: "Maps", icon: MapIcon, beta: true },
-  { id: "training", label: "Training Hub", icon: Activity },
-  {
-    id: "coach",
-    label: "Coach",
-    icon: MessageCircle,
-    beta: true,
-    showActivity: true,
-  },
-];
+export type { PrimaryView } from "../navigation/primaryNav";
 
 interface PrimaryTabsProps {
   activeView: PrimaryView;
@@ -38,11 +19,34 @@ interface PrimaryTabsProps {
   coachBusy?: boolean;
 }
 
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.matchMedia(query).matches;
+  });
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const handleChange = () => setMatches(media.matches);
+
+    handleChange();
+    media.addEventListener("change", handleChange);
+
+    return () => media.removeEventListener("change", handleChange);
+  }, [query]);
+
+  return matches;
+}
+
 export function PrimaryTabs({
   activeView,
   onChange,
   coachBusy = false,
 }: PrimaryTabsProps) {
+  const compactNav = useMediaQuery("(max-width: 720px)");
   const navRef = useRef<HTMLElement>(null);
   const tabRefs = useRef(new Map<PrimaryView, HTMLButtonElement>());
   const [indicator, setIndicator] = useState({
@@ -96,6 +100,21 @@ export function PrimaryTabs({
     };
   }, [updateIndicator]);
 
+  if (compactNav) {
+    return (
+      <SelectDropdown
+        value={activeView}
+        options={PRIMARY_NAV_ITEMS.map((tab) => ({
+          value: tab.id,
+          label: tab.beta ? `${tab.label} (Beta)` : tab.label,
+        }))}
+        onChange={onChange}
+        label="Section"
+        className="app-select--nav primary-tabs-select"
+      />
+    );
+  }
+
   return (
     <nav className="primary-tabs" aria-label="Primary" ref={navRef}>
       <span
@@ -108,7 +127,7 @@ export function PrimaryTabs({
           opacity: indicator.ready ? 1 : 0,
         }}
       />
-      {PRIMARY_TABS.map((tab) => {
+      {PRIMARY_NAV_ITEMS.map((tab) => {
         const Icon = tab.icon;
         const isActive = activeView === tab.id;
 
@@ -126,9 +145,10 @@ export function PrimaryTabs({
               }
             }}
             onClick={() => onChange(tab.id)}
+            title={tab.beta ? `${tab.label} (Beta)` : tab.label}
           >
             <Icon size={16} aria-hidden="true" />
-            {tab.label}
+            <span className="primary-tab-label">{tab.label}</span>
             {tab.showActivity && coachBusy ? (
               <span
                 className="primary-tab-activity"

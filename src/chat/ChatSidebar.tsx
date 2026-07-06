@@ -75,14 +75,16 @@ export function ChatSidebar({
             .join(" ")}
           aria-hidden={!open}
         >
-          <ChatHistoryPanel
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-            busy={busy}
-            onNewChat={onNewChat}
-            onSelectSession={onSelectSession}
-            onDeleteSession={onDeleteSession}
-          />
+          <div className="chat-sidebar-inner">
+            <ChatHistoryPanel
+              sessions={sessions}
+              activeSessionId={activeSessionId}
+              busy={busy}
+              onNewChat={onNewChat}
+              onSelectSession={onSelectSession}
+              onDeleteSession={onDeleteSession}
+            />
+          </div>
         </aside>
       </div>
     </>
