@@ -939,7 +939,7 @@ export interface ChatSettings {
   provider: ChatProvider;
   local: LocalChatConfig;
   sidebarOpen?: boolean;
-  /** When false, hide activity/fitness/HR chart cards in the transcript. Default true. */
+  /** When true, show activity/fitness/HR chart cards in the transcript. Default false. */
   visualizationsEnabled?: boolean;
 }
 

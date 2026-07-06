@@ -182,6 +182,40 @@ import type {
 
 let mainWindow: BrowserWindow | undefined;
 
+/** Matches --bg-base in styles.css; updated when the renderer theme changes. */
+const DEFAULT_WINDOW_BACKGROUND = "#05080b";
+let currentWindowBackground = DEFAULT_WINDOW_BACKGROUND;
+
+const TRAFFIC_LIGHT_WINDOWED = { x: 18, y: 18 };
+const TRAFFIC_LIGHT_FULLSCREEN = { x: 16, y: 12 };
+
+function applyWindowBackground(color: string): void {
+  if (!/^#[0-9a-fA-F]{6}$/.test(color)) {
+    return;
+  }
+
+  currentWindowBackground = color;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setBackgroundColor(color);
+  }
+}
+
+function syncTrafficLightPosition(fullscreen: boolean): void {
+  if (process.platform !== "darwin" || !mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.setWindowButtonPosition(
+    fullscreen ? TRAFFIC_LIGHT_FULLSCREEN : TRAFFIC_LIGHT_WINDOWED
+  );
+}
+
+function notifyWindowFullscreen(fullscreen: boolean): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("window:fullscreenChanged", fullscreen);
+  }
+}
+
 // Turns an activity name into a filesystem-safe base name for export downloads.
 function sanitizeExportFileName(name?: string): string {
   if (!name) {
@@ -308,7 +342,7 @@ function createWindow(): void {
     minHeight: 640,
     title: "CorosLink",
     ...(iconPath ? { icon: iconPath } : {}),
-    backgroundColor: "#0b0f0e",
+    backgroundColor: DEFAULT_WINDOW_BACKGROUND,
     // Let the app's own header act as the title bar so the macOS traffic
     // lights sit directly on it instead of a separate OS chrome strip.
     ...(process.platform === "darwin"
@@ -329,6 +363,19 @@ function createWindow(): void {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
+  });
+
+  // macOS fullscreen exposes the window background in the title-bar inset;
+  // re-apply after transitions so it stays in sync with the active theme.
+  mainWindow.on("enter-full-screen", () => {
+    applyWindowBackground(currentWindowBackground);
+    syncTrafficLightPosition(true);
+    notifyWindowFullscreen(true);
+  });
+  mainWindow.on("leave-full-screen", () => {
+    applyWindowBackground(currentWindowBackground);
+    syncTrafficLightPosition(false);
+    notifyWindowFullscreen(false);
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -424,6 +471,12 @@ app.on("before-quit", () => {
 });
 
 function registerIpcHandlers(): void {
+  ipcMain.handle("window:setBackground", (_event, color: string) => {
+    applyWindowBackground(color);
+  });
+
+  ipcMain.handle("window:isFullscreen", () => mainWindow?.isFullScreen() ?? false);
+
   ipcMain.handle("watch:getStatus", () => getWatchStatus());
 
   ipcMain.handle("watch:getConnectionSmokeOption", () =>

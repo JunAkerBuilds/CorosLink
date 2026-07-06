@@ -41,7 +41,7 @@ export function readChatSettingsFromStore(
     },
     sidebarOpen: store.get(CHAT_SETTINGS_KEYS.sidebarOpen) !== "false",
     visualizationsEnabled:
-      store.get(CHAT_SETTINGS_KEYS.visualizationsEnabled) !== "false"
+      store.get(CHAT_SETTINGS_KEYS.visualizationsEnabled) === "true"
   };
 }
 

@@ -270,6 +270,9 @@ export interface CorosLinkApi {
   listCorosMcpTools: () => Promise<CorosMcpTool[]>;
   uploadTrainingPlanDraft: (draftId: string) => Promise<UploadPlanResult>;
   confirmWorkoutDelete: (requestId: string) => Promise<DeleteWorkoutResult>;
+  setWindowBackground: (color: string) => Promise<void>;
+  isWindowFullscreen: () => Promise<boolean>;
+  onWindowFullscreenChange: (callback: (fullscreen: boolean) => void) => () => void;
 }
 
 declare global {

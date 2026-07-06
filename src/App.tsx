@@ -208,6 +208,23 @@ export default function App() {
   }, [api]);
 
   useEffect(() => {
+    if (!api?.onWindowFullscreenChange) {
+      return;
+    }
+
+    const syncFullscreen = (fullscreen: boolean) => {
+      if (fullscreen) {
+        document.documentElement.dataset.windowFullscreen = "true";
+      } else {
+        delete document.documentElement.dataset.windowFullscreen;
+      }
+    };
+
+    void api.isWindowFullscreen?.().then(syncFullscreen);
+    return api.onWindowFullscreenChange(syncFullscreen);
+  }, [api]);
+
+  useEffect(() => {
     autoTransferRef.current = autoTransfer;
   }, [autoTransfer]);
 

@@ -85,7 +85,7 @@ export function ChatSettingsPanel({
         <label className="chat-local-tools">
           <input
             type="checkbox"
-            checked={chatSettings.visualizationsEnabled !== false}
+            checked={chatSettings.visualizationsEnabled === true}
             onChange={(event) =>
               onUpdateChatSettings({
                 visualizationsEnabled: event.target.checked

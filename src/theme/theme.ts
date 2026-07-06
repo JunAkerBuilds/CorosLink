@@ -2,6 +2,12 @@ export type Theme = "dark" | "paper";
 
 export const THEME_STORAGE_KEY = "coros-theme";
 
+/** Window chrome background — must match --bg-base in styles.css. */
+export const THEME_WINDOW_BACKGROUND: Record<Theme, string> = {
+  dark: "#05080b",
+  paper: "#f6f3ec",
+};
+
 const DEFAULT_THEME: Theme = "dark";
 
 function isTheme(value: unknown): value is Theme {
@@ -41,6 +47,8 @@ export function applyTheme(theme: Theme): void {
   } else {
     root.dataset.theme = theme;
   }
+
+  window.corosLink?.setWindowBackground?.(THEME_WINDOW_BACKGROUND[theme]);
 }
 
 /** Where the theme change should visually originate (the toggle button). */

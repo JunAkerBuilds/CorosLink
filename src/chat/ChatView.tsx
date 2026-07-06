@@ -62,7 +62,7 @@ const DEFAULT_CHAT_SETTINGS: ChatSettings = {
     toolsEnabled: true
   },
   sidebarOpen: true,
-  visualizationsEnabled: true
+  visualizationsEnabled: false
 };
 
 const SIDEBAR_OVERLAY_MAX_WIDTH = 900;
@@ -579,15 +579,15 @@ export function ChatView({
             upsertWorkoutDeleteEntry(prev, payload.preview)
           );
         } else if (payload.kind === "activityVisual") {
-          if (chatSettings.visualizationsEnabled !== false) {
+          if (chatSettings.visualizationsEnabled) {
             setTimeline((prev) => upsertActivityVisualEntry(prev, payload.preview));
           }
         } else if (payload.kind === "fitnessTrend") {
-          if (chatSettings.visualizationsEnabled !== false) {
+          if (chatSettings.visualizationsEnabled) {
             setTimeline((prev) => upsertFitnessTrendEntry(prev, payload.preview));
           }
         } else if (payload.kind === "hrZoneSummary") {
-          if (chatSettings.visualizationsEnabled !== false) {
+          if (chatSettings.visualizationsEnabled) {
             setTimeline((prev) => upsertHrZoneEntry(prev, payload.preview));
           }
         } else if (payload.kind === "mcp") {
@@ -1402,10 +1402,7 @@ export function ChatView({
           ) : null}
 
           {timeline.map((entry, index) => {
-            if (
-              chatSettings.visualizationsEnabled === false &&
-              isChatVisualEntry(entry)
-            ) {
+            if (!chatSettings.visualizationsEnabled && isChatVisualEntry(entry)) {
               return null;
             }
 
