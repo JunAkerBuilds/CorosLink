@@ -23,8 +23,13 @@ interface AppUpdateControlsProps {
 
 function UpdatePreferencesMenu({
   snapshot,
+  busy,
+  downloading,
+  onCheck,
+  onDownload,
+  onInstall,
   onPreferencesChange,
-}: Pick<AppUpdateControlsProps, "snapshot" | "onPreferencesChange">) {
+}: AppUpdateControlsProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -55,7 +60,7 @@ function UpdatePreferencesMenu({
   return (
     <div className="update-settings" ref={containerRef}>
       <button
-        className="update-settings-trigger"
+        className="update-settings-trigger update-settings-trigger--labeled"
         type="button"
         aria-label="Update settings"
         aria-expanded={open}
@@ -63,11 +68,74 @@ function UpdatePreferencesMenu({
         onClick={() => setOpen((value) => !value)}
       >
         <Settings2 size={14} aria-hidden="true" />
+        <span className="update-settings-trigger-label">Updates</span>
       </button>
 
       {open ? (
         <div className="update-settings-popover" role="menu">
           <p className="update-settings-heading">Updates</p>
+
+          {snapshot.supported ? (
+            <div className="update-settings-actions">
+              {snapshot.status === "downloaded" && snapshot.availableVersion ? (
+                <button
+                  className="update-settings-action"
+                  type="button"
+                  onClick={() => {
+                    onInstall();
+                    setOpen(false);
+                  }}
+                >
+                  <Sparkles size={14} aria-hidden="true" />
+                  {snapshot.installMethod === "manual"
+                    ? `Download ${snapshot.availableVersion}`
+                    : "Restart to update"}
+                </button>
+              ) : snapshot.status === "available" && !snapshot.autoDownload ? (
+                <button
+                  className="update-settings-action"
+                  type="button"
+                  disabled={downloading}
+                  onClick={() => {
+                    onDownload();
+                    setOpen(false);
+                  }}
+                >
+                  {downloading ? (
+                    <Loader2 className="spin" size={14} aria-hidden="true" />
+                  ) : (
+                    <Download size={14} aria-hidden="true" />
+                  )}
+                  {downloading
+                    ? "Starting…"
+                    : `Download ${snapshot.availableVersion}`}
+                </button>
+              ) : (
+                <button
+                  className="update-settings-action"
+                  type="button"
+                  disabled={busy || snapshot.status === "checking"}
+                  onClick={() => {
+                    onCheck();
+                    setOpen(false);
+                  }}
+                >
+                  {busy || snapshot.status === "checking" ? (
+                    <Loader2 className="spin" size={14} aria-hidden="true" />
+                  ) : (
+                    <RefreshCw size={14} aria-hidden="true" />
+                  )}
+                  Check for updates
+                </button>
+              )}
+            </div>
+          ) : (
+            <p className="update-settings-note">
+              Auto-updates run in installed builds. Preferences below apply
+              when you install CorosLink.
+            </p>
+          )}
+
           <label className="update-settings-option">
             <input
               type="checkbox"
@@ -117,20 +185,28 @@ export function AppUpdateControls({
   onInstall,
   onPreferencesChange,
 }: AppUpdateControlsProps) {
-  if (!snapshot.supported) {
-    return (
-      <span className="app-version-chip" title="Development build">
-        v{snapshot.currentVersion}
-      </span>
-    );
-  }
-
   const settings = (
     <UpdatePreferencesMenu
       snapshot={snapshot}
+      busy={busy}
+      downloading={downloading}
+      onCheck={onCheck}
+      onDownload={onDownload}
+      onInstall={onInstall}
       onPreferencesChange={onPreferencesChange}
     />
   );
+
+  if (!snapshot.supported) {
+    return (
+      <div className="app-update-controls">
+        <span className="app-version-chip" title="Development build">
+          v{snapshot.currentVersion}
+        </span>
+        {settings}
+      </div>
+    );
+  }
 
   if (snapshot.status === "downloaded" && snapshot.availableVersion) {
     const manual = snapshot.installMethod === "manual";

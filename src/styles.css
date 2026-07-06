@@ -972,6 +972,18 @@ input::placeholder {
     color 0.15s ease;
 }
 
+.update-settings-trigger--labeled {
+  width: auto;
+  gap: 6px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.update-settings-trigger-label {
+  line-height: 1;
+}
+
 .update-settings-trigger:hover,
 .update-settings-trigger[aria-expanded="true"] {
   background: var(--glass-bg-hover);
@@ -999,6 +1011,46 @@ input::placeholder {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.update-settings-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.update-settings-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid rgba(52, 211, 153, 0.34);
+  border-radius: var(--radius-sm);
+  background: rgba(52, 211, 153, 0.12);
+  color: #86efac;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.update-settings-action:hover:not(:disabled) {
+  background: rgba(52, 211, 153, 0.18);
+}
+
+.update-settings-action:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.update-settings-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
   color: var(--text-secondary);
 }
 
