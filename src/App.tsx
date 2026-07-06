@@ -70,7 +70,10 @@ import { TrainingHubView } from "./training/TrainingHubView";
 import type { TrainingHubSnapshot } from "./training/types";
 import type { CorosLinkApi } from "./coroslink-api";
 import { AppUpdateControls } from "./components/AppUpdateControls";
-import { PrimaryTabs } from "./components/PrimaryTabs";
+import {
+  AppSidebar,
+  createInitialSidebarExpanded,
+} from "./components/AppSidebar";
 import { ResourcesMenu } from "./components/ResourcesMenu";
 import { ThemeToggle } from "./theme/ThemeToggle";
 import { WatchConnectionSmokeControls } from "./components/WatchConnectionSmokeControls";
@@ -117,6 +120,16 @@ interface YouTubeDownloadItem {
 export default function App() {
   const api: CorosLinkApi | undefined = window.corosLink;
   const [activeView, setActiveView] = useState<View>("overview");
+  const [sidebarExpanded, setSidebarExpanded] = useState(
+    createInitialSidebarExpanded,
+  );
+  const [sidebarOverlayOpen, setSidebarOverlayOpen] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.matchMedia("(max-width: 720px)").matches;
+  });
   const [coachBusy, setCoachBusy] = useState(false);
   const [activeMediaTab, setActiveMediaTab] = useState<MediaTab>("library");
   const [watchStatus, setWatchStatus] = useState<WatchStatus | null>(null);
@@ -1365,24 +1378,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="app-header">
-        <div className="app-header-start">
-          <div className="brand">
-            <div className="brand-mark">
-              <img src={appLogo} alt="" aria-hidden="true" />
-            </div>
-            <div>
-              <strong>CorosLink</strong>
-            </div>
-          </div>
-
-          <PrimaryTabs
-            activeView={activeView}
-            onChange={setActiveView}
-            coachBusy={coachBusy}
-          />
-        </div>
-
+      <header className="app-header app-header--slim">
         <div className="app-header-end">
           <ThemeToggle />
           <ResourcesMenu />
@@ -1427,15 +1423,27 @@ export default function App() {
         </div>
       </header>
 
-      <main
-        className={[
-          "content",
-          isOverviewDashboard && "content-overview",
-          (activeView === "media" || activeView === "coach") && "content-fill",
-        ]
-          .filter(Boolean)
-          .join(" ")}
-      >
+      <div className="app-body">
+        <AppSidebar
+          activeView={activeView}
+          onChange={setActiveView}
+          coachBusy={coachBusy}
+          appLogo={appLogo}
+          expanded={sidebarExpanded}
+          onExpandedChange={setSidebarExpanded}
+          overlayOpen={sidebarOverlayOpen}
+          onOverlayOpenChange={setSidebarOverlayOpen}
+        />
+
+        <main
+          className={[
+            "content",
+            isOverviewDashboard && "content-overview",
+            (activeView === "media" || activeView === "coach") && "content-fill",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
         {!api ? (
           <BridgeMissing />
         ) : (
@@ -1593,6 +1601,7 @@ export default function App() {
           </>
         )}
       </main>
+      </div>
 
       <Toaster toasts={toasts} onDismiss={dismissToast} />
     </div>

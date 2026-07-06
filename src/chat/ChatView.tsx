@@ -6,8 +6,6 @@ import {
   Loader2,
   LogOut,
   MessageCircle,
-  PanelLeft,
-  PanelLeftClose,
   Send,
   Settings2,
   Sparkles,
@@ -64,8 +62,6 @@ const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   sidebarOpen: true,
   visualizationsEnabled: false
 };
-
-const SIDEBAR_OVERLAY_MAX_WIDTH = 900;
 
 function AssistantMarkdown({
   content,
@@ -336,9 +332,7 @@ export function ChatView({
     useState<LocalChatDiscovery | null>(null);
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [sidebarOverlay, setSidebarOverlay] = useState(false);
   const [timeline, setTimeline] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -472,7 +466,6 @@ export function ChatView({
             ? settingsResult.value
             : DEFAULT_CHAT_SETTINGS;
         setChatSettings(settings);
-        setSidebarOpen(settings.sidebarOpen !== false);
         await ensureActiveSession(settings.provider);
       })
       .finally(() => {
@@ -491,15 +484,6 @@ export function ChatView({
     if (!api || checkingAuth || streaming || !activeSessionId) return;
     persistHistory(activeSessionId, timeline);
   }, [api, checkingAuth, streaming, timeline, activeSessionId]);
-
-  useEffect(() => {
-    const updateOverlay = () => {
-      setSidebarOverlay(window.innerWidth <= SIDEBAR_OVERLAY_MAX_WIDTH);
-    };
-    updateOverlay();
-    window.addEventListener("resize", updateOverlay);
-    return () => window.removeEventListener("resize", updateOverlay);
-  }, []);
 
   useEffect(() => {
     onActivityChange?.(streaming || exportingLatestActivity);
@@ -687,9 +671,6 @@ export function ChatView({
     }
     onError(null);
     await loadSession(sessionId);
-    if (sidebarOverlay) {
-      setSidebarOpen(false);
-    }
   };
 
   const handleDeleteSession = async (sessionId: string) => {
@@ -711,27 +692,6 @@ export function ChatView({
       }
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "Could not delete chat.");
-    }
-  };
-
-  const handleToggleSidebar = async () => {
-    const nextOpen = !sidebarOpen;
-    setSidebarOpen(nextOpen);
-    if (!api) return;
-    try {
-      const saved = await api.saveChatSettings({
-        ...chatSettings,
-        sidebarOpen: nextOpen
-      });
-      setChatSettings(saved);
-    } catch {
-      // keep local toggle even if persistence fails
-    }
-  };
-
-  const handleCloseSidebar = () => {
-    if (sidebarOverlay) {
-      setSidebarOpen(false);
     }
   };
 
@@ -1155,12 +1115,12 @@ export function ChatView({
   );
 
   const sidebarProps = {
-    open: sidebarOpen,
-    overlay: sidebarOverlay,
+    open: true,
+    overlay: false,
     sessions,
     activeSessionId,
     busy: isBusy,
-    onClose: handleCloseSidebar,
+    onClose: () => {},
     onNewChat: () => void handleNewChat(),
     onSelectSession: (sessionId: string) => void handleSelectSession(sessionId),
     onDeleteSession: (sessionId: string) => void handleDeleteSession(sessionId)
@@ -1208,29 +1168,12 @@ export function ChatView({
   if (showLoginGate) {
     return (
       <div
-        className={[
-          "chat-view",
-          "chat-view-login",
-          sidebarOpen && !sidebarOverlay ? "chat-view-sidebar-open" : ""
-        ]
+        className={["chat-view", "chat-view-login"]
           .filter(Boolean)
           .join(" ")}
       >
         <div className="chat-header">
           <div className="chat-header-title">
-            <button
-              type="button"
-              className="chat-sidebar-toggle"
-              onClick={() => void handleToggleSidebar()}
-              aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
-            >
-              {sidebarOpen ? (
-                <PanelLeftClose size={18} aria-hidden="true" />
-              ) : (
-                <PanelLeft size={18} aria-hidden="true" />
-              )}
-            </button>
-            <MessageCircle size={18} aria-hidden="true" />
             <span>Training Coach</span>
           </div>
           <div className="chat-header-end">
@@ -1281,29 +1224,9 @@ export function ChatView({
   }
 
   return (
-    <div
-      className={[
-        "chat-view",
-        sidebarOpen && !sidebarOverlay ? "chat-view-sidebar-open" : ""
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
+    <div className="chat-view">
       <div className="chat-header">
         <div className="chat-header-title">
-          <button
-            type="button"
-            className="chat-sidebar-toggle"
-            onClick={() => void handleToggleSidebar()}
-            aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
-          >
-            {sidebarOpen ? (
-              <PanelLeftClose size={18} aria-hidden="true" />
-            ) : (
-              <PanelLeft size={18} aria-hidden="true" />
-            )}
-          </button>
-          <MessageCircle size={18} aria-hidden="true" />
           <span>Training Coach</span>
         </div>
         <div className="chat-header-end">
