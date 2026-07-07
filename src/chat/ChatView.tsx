@@ -35,6 +35,7 @@ import { ActivityVisualCard } from "./ActivityVisualCard";
 import { FitnessTrendCard } from "./FitnessTrendCard";
 import { HrZoneCard } from "./HrZoneCard";
 import { ChatSettingsModal } from "./ChatSettingsModal";
+import { CorosMcpToolsPanel } from "./CorosMcpToolsPanel";
 import { ChatSidebar } from "./ChatSidebar";
 import { ProviderSwitch } from "./ProviderSwitch";
 import {
@@ -366,6 +367,7 @@ export function ChatView({
   const sourceRef = useRef<SourceInfo | null>(null);
   const autoDetectLocalRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const mcpRef = useRef<HTMLDivElement>(null);
   const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -377,7 +379,8 @@ export function ChatView({
     onPendingPromptConsumed?.();
     // Focus after the coach panel becomes visible.
     requestAnimationFrame(() => inputRef.current?.focus());
-  }, [pendingPrompt, onPendingPromptConsumed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPrompt]);
 
   const resetEphemeralChatState = () => {
     setUploadedPlans({});
@@ -524,6 +527,31 @@ export function ChatView({
       clearTimeout(timer);
     };
   }, [api]);
+
+  useEffect(() => {
+    if (!showTools || settingsOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!mcpRef.current?.contains(event.target as Node)) {
+        setShowTools(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowTools(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showTools, settingsOpen]);
 
   // Subscribe once to the streaming push channels.
   useEffect(() => {
@@ -1255,20 +1283,27 @@ export function ChatView({
             <Settings2 size={16} aria-hidden="true" />
             Settings
           </button>
-          <div className="chat-mcp">
+          <div className="chat-mcp" ref={mcpRef}>
             {mcpStatus?.connected ? (
-              <button
-                type="button"
-                className="chat-mcp-pill connected"
-                onClick={() => {
-                  setSettingsOpen(true);
-                  setShowTools(true);
-                }}
-                title="COROS data connected via MCP"
-              >
-                <Database size={13} aria-hidden="true" />
-                COROS · {mcpStatus.tools.length} tools
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="chat-mcp-pill connected"
+                  onClick={() => setShowTools((open) => !open)}
+                  title="COROS data connected via MCP"
+                  aria-expanded={showTools}
+                  aria-haspopup="dialog"
+                >
+                  <Database size={13} aria-hidden="true" />
+                  COROS · {mcpStatus.tools.length} tools
+                </button>
+                {showTools ? (
+                  <CorosMcpToolsPanel
+                    tools={mcpStatus.tools}
+                    onDisconnect={() => void handleDisconnectMcp()}
+                  />
+                ) : null}
+              </>
             ) : (
               <button
                 type="button"

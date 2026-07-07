@@ -19,13 +19,14 @@ import type { CorosMcpStatus, CorosMcpTool } from "./types";
 // COROS official MCP server. Discovery (auth server metadata, DCR, PKCE) is
 // handled by the MCP SDK against these URLs; we only implement token storage
 // and the interactive redirect via a loopback server.
-const MCP_RESOURCE_URL = "https://mcpus.coros.com/mcp";
+const MCP_RESOURCE_URL = "https://mcp.coros.com/mcp";
 const MCP_SCOPE = "openid mcp.tools offline_access";
 const LOOPBACK_PORT = 1456;
 const LOOPBACK_REDIRECT_URI = `http://localhost:${LOOPBACK_PORT}/coros-mcp/callback`;
 
 const SETTINGS = {
   clientInfo: "corosMcp.clientInfo",
+  resourceUrl: "corosMcp.resourceUrl",
   tokens: "corosMcp.tokens"
 } as const;
 
@@ -128,6 +129,10 @@ class CorosOAuthProvider implements OAuthClientProvider {
     return this.codePromise;
   }
 
+  authorizationStarted(): boolean {
+    return this.codePromise !== null;
+  }
+
   cleanup(): void {
     try {
       this.loopback?.close();
@@ -202,9 +207,35 @@ function writeTokens(tokens: OAuthTokens): void {
   setSetting(SETTINGS.tokens, encrypted);
 }
 
+function resetCachedMcpClient(): void {
+  const staleClient = client;
+  client = null;
+  cachedTools = [];
+  if (staleClient) {
+    void staleClient.close().catch(() => {
+      // best-effort
+    });
+  }
+}
+
+function clearStoredMcpAuth(): void {
+  resetCachedMcpClient();
+  deleteSettings([SETTINGS.tokens, SETTINGS.clientInfo]);
+  setSetting(SETTINGS.resourceUrl, MCP_RESOURCE_URL);
+}
+
+function ensureCurrentMcpResource(): void {
+  if (getSetting(SETTINGS.resourceUrl) === MCP_RESOURCE_URL) {
+    return;
+  }
+
+  clearStoredMcpAuth();
+}
+
 // ----- Public API -----
 
 export function getCorosMcpStatus(): CorosMcpStatus {
+  ensureCurrentMcpResource();
   return {
     connected: client !== null,
     authorized: Boolean(getSetting(SETTINGS.tokens)),
@@ -217,54 +248,79 @@ export async function connectCorosMcp(
   mainWindow?: BrowserWindow | null,
   interactive = true
 ): Promise<CorosMcpStatus> {
+  ensureCurrentMcpResource();
+
   if (client) {
     return getCorosMcpStatus();
   }
 
-  const authProvider = new CorosOAuthProvider(mainWindow, interactive);
-  const transport = new StreamableHTTPClientTransport(new URL(MCP_RESOURCE_URL), {
-    authProvider
-  });
-  const mcpClient = new Client(
-    { name: "CorosLink", version: app.getVersion() },
-    { capabilities: {} }
-  );
+  let clearedStaleAuth = false;
 
-  try {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const authProvider = new CorosOAuthProvider(mainWindow, interactive);
+    const transport = new StreamableHTTPClientTransport(new URL(MCP_RESOURCE_URL), {
+      authProvider
+    });
+    const mcpClient = new Client(
+      { name: "CorosLink", version: app.getVersion() },
+      { capabilities: {} }
+    );
+
     try {
-      await mcpClient.connect(transport);
-    } catch (error) {
-      if (error instanceof UnauthorizedError && interactive) {
-        const code = await authProvider.waitForCode();
-        await transport.finishAuth(code);
-        // The original transport is already started; reconnect with a fresh one,
-        // which picks up the now-saved tokens via the auth provider.
-        const retryTransport = new StreamableHTTPClientTransport(
-          new URL(MCP_RESOURCE_URL),
-          { authProvider }
-        );
-        await mcpClient.connect(retryTransport);
-      } else {
-        throw error;
+      try {
+        await mcpClient.connect(transport);
+      } catch (error) {
+        if (
+          error instanceof UnauthorizedError &&
+          interactive &&
+          authProvider.authorizationStarted()
+        ) {
+          const code = await authProvider.waitForCode();
+          await transport.finishAuth(code);
+          // The original transport is already started; reconnect with a fresh one,
+          // which picks up the now-saved tokens via the auth provider.
+          const retryTransport = new StreamableHTTPClientTransport(
+            new URL(MCP_RESOURCE_URL),
+            { authProvider }
+          );
+          await mcpClient.connect(retryTransport);
+        } else if (error instanceof UnauthorizedError) {
+          clearStoredMcpAuth();
+          if (interactive && !clearedStaleAuth) {
+            clearedStaleAuth = true;
+            continue;
+          }
+
+          throw error;
+        } else {
+          throw error;
+        }
       }
+    } finally {
+      authProvider.cleanup();
     }
-  } finally {
-    authProvider.cleanup();
+
+    client = mcpClient;
+    setSetting(SETTINGS.resourceUrl, MCP_RESOURCE_URL);
+    await refreshTools();
+    return getCorosMcpStatus();
   }
 
-  client = mcpClient;
-  await refreshTools();
-  return getCorosMcpStatus();
+  throw new Error("COROS MCP authorization expired. Connect COROS again.");
 }
 
 /** Reconnects silently using stored tokens (no browser), if authorized. */
 export async function ensureCorosMcpConnected(): Promise<boolean> {
+  ensureCurrentMcpResource();
   if (client) return true;
   if (!getSetting(SETTINGS.tokens)) return false;
   try {
     await connectCorosMcp(null, false);
     return client !== null;
-  } catch {
+  } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      clearStoredMcpAuth();
+    }
     return false;
   }
 }
@@ -280,6 +336,7 @@ export async function disconnectCorosMcp(): Promise<CorosMcpStatus> {
   client = null;
   cachedTools = [];
   deleteSettings([SETTINGS.tokens, SETTINGS.clientInfo]);
+  setSetting(SETTINGS.resourceUrl, MCP_RESOURCE_URL);
   return getCorosMcpStatus();
 }
 
@@ -323,15 +380,22 @@ export async function callCorosMcpTool(
     })
     .join("\n");
 
+  const structured =
+    result.structuredContent && typeof result.structuredContent === "object"
+      ? JSON.stringify(result.structuredContent)
+      : "";
+
+  const combined = [text.trim(), structured.trim()].filter(Boolean).join("\n");
+
   if (result.isError) {
-    throw new Error(formatCorosMcpToolFailure(name, text || "unknown error"));
+    throw new Error(formatCorosMcpToolFailure(name, combined || text || "unknown error"));
   }
 
-  if (/service exceptions?/i.test(text)) {
-    throw new Error(formatCorosMcpToolFailure(name, text));
+  if (/service exceptions?/i.test(combined || text)) {
+    throw new Error(formatCorosMcpToolFailure(name, combined || text));
   }
 
-  return text;
+  return combined || text;
 }
 
 function formatCorosMcpToolFailure(toolName: string, detail: string): string {

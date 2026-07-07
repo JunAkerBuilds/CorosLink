@@ -24,6 +24,8 @@
     "test:chat-history-store": "npm run build:electron && node scripts/test-chat-history-store.mjs",
     "test:chat-activity-tools": "npm run build:electron && node scripts/test-chat-activity-tools.mjs",
     "test:chat-analytics-tools": "npm run build:electron && node scripts/test-chat-analytics-tools.mjs",
+    "test:sleep-data-parser": "npm run build:electron && node scripts/test-sleep-data-parser.mjs",
+    "test:training-formatters": "npm run build:electron && node --experimental-strip-types scripts/test-training-formatters.mjs",
     "test:chat-workout-tools": "npm run build:electron && node scripts/test-chat-workout-tools.mjs",
     "test:coros-workout-builder": "npm run build:electron && node scripts/test-coros-workout-builder.mjs",
     "test:training-hub-write": "npm run build:electron && node scripts/test-training-hub-write.mjs",

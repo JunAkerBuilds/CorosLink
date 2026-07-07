@@ -25,6 +25,7 @@ import { FitnessTrendPanel } from "./components/FitnessTrendPanel";
 import { PersonalRecordsPanel } from "./components/PersonalRecordsPanel";
 import { RacePredictorCards } from "./components/RacePredictorCards";
 import { RecoveryRing } from "./components/RecoveryRing";
+import { SleepSummaryPanel } from "./components/SleepSummaryPanel";
 import { TrainingHeatmapPanel } from "./components/TrainingHeatmapPanel";
 import { TrainingActivityTable } from "./components/TrainingActivityTable";
 import { TrainingTrendCharts } from "./components/TrainingTrendChart";
@@ -47,6 +48,7 @@ export function TrainingHubView({
   activityDetail,
   selectedActivity,
   busy,
+  sleepConnecting,
   onEmailChange,
   onPasswordChange,
   onRememberChange,
@@ -372,6 +374,11 @@ export function TrainingHubView({
               <div className="training-intelligence-main">
                 <div className="training-performance-grid">
                   <FitnessTrendPanel snapshot={snapshot} activities={activities} />
+                  <SleepSummaryPanel
+                    sleep={snapshot?.sleep}
+                    connecting={sleepConnecting}
+                    refreshing={busy === "training-refresh"}
+                  />
                   <Vo2MaxWidget snapshot={snapshot} />
                 </div>
               </div>

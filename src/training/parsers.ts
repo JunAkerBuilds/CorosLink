@@ -2,9 +2,14 @@ import type {
   TrainingHubAnalytics,
   TrainingHubDailyMetric,
   TrainingHubDailyMetrics,
-  TrainingHubDashboard
+  TrainingHubDashboard,
+  TrainingHubSleepSummary
 } from "../../electron/types";
-import { buildTrendPoints, mergeTrainingDayLists } from "../../electron/trainingTrendUtils";
+import {
+  buildTrendPoints,
+  mergeSleepIntoTrendPoints,
+  mergeTrainingDayLists
+} from "../../electron/trainingTrendUtils";
 import { formatHappenDayLabel, recentTrainingHubDateList } from "./formatters";
 import { TRAINING_HEATMAP_DAYS } from "./chartConfig";
 import type {
@@ -214,17 +219,20 @@ function buildSummary(
 export function buildTrainingHubSnapshot(
   analytics: TrainingHubAnalytics | null,
   dashboard: TrainingHubDashboard | null,
-  dailyMetrics: TrainingHubDailyMetrics | null
+  dailyMetrics: TrainingHubDailyMetrics | null,
+  sleep?: TrainingHubSleepSummary | null
 ): TrainingHubSnapshot {
   const dayList = mergeTrainingDayLists(dailyMetrics, analytics);
+  const trendPoints = mergeSleepIntoTrendPoints(buildTrendPoints(dayList), sleep);
 
   return {
     summary: buildSummary(dayList, dashboard),
-    trendPoints: buildTrendPoints(dayList),
+    trendPoints,
     racePredictor: dashboard?.racePredictor ?? null,
     dashboard,
     analytics,
-    dailyMetrics
+    dailyMetrics,
+    sleep: sleep ?? null
   };
 }
 

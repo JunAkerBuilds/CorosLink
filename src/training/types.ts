@@ -8,6 +8,7 @@ import type {
   TrainingHubDailyMetrics,
   TrainingHubDashboard,
   TrainingHubRacePredictor,
+  TrainingHubSleepSummary,
   TrainingHubSportType,
   TrainingHubStatus,
   TrainingHubUpcomingWorkout
@@ -21,6 +22,8 @@ export interface TrainingTrendPoint {
   avgSleepHrv?: number;
   sleepHrvBase?: number;
   rhr?: number;
+  sleepMinutes?: number;
+  sleepScore?: number;
 }
 
 export interface TrainingSummaryMetrics {
@@ -39,6 +42,7 @@ export interface TrainingHubSnapshot {
   dashboard: TrainingHubDashboard | null;
   analytics: TrainingHubAnalytics | null;
   dailyMetrics: TrainingHubDailyMetrics | null;
+  sleep?: TrainingHubSleepSummary | null;
 }
 
 export type HeatmapIntensityLevel = 0 | 1 | 2 | 3 | 4;
@@ -83,6 +87,7 @@ export interface TrainingHubViewProps {
   activityDetail: TrainingHubActivityDetail | null;
   selectedActivity: TrainingHubActivity | null;
   busy: string | null;
+  sleepConnecting?: boolean;
   onEmailChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
   onRememberChange: (value: boolean) => void;

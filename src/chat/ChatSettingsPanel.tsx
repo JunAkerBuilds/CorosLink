@@ -14,6 +14,7 @@ import type {
   LocalChatConnectionTest,
   LocalChatDiscovery
 } from "../../electron/types";
+import { CorosMcpToolsPanel } from "./CorosMcpToolsPanel";
 
 export function ChatSettingsPanel({
   chatSettings,
@@ -311,22 +312,11 @@ export function ChatSettingsPanel({
                 COROS · {mcpStatus.tools.length} tools
               </button>
               {showTools ? (
-                <div className="chat-mcp-panel chat-mcp-panel-settings">
-                  <div className="chat-mcp-panel-head">
-                    <span>{mcpStatus.tools.length} COROS tools</span>
-                    <button type="button" onClick={onDisconnectMcp}>
-                      Disconnect
-                    </button>
-                  </div>
-                  <ul>
-                    {mcpStatus.tools.map((tool) => (
-                      <li key={tool.name}>
-                        <code>{tool.name}</code>
-                        {tool.description ? <span>{tool.description}</span> : null}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <CorosMcpToolsPanel
+                  tools={mcpStatus.tools}
+                  onDisconnect={onDisconnectMcp}
+                  className="chat-mcp-panel-settings"
+                />
               ) : null}
             </>
           ) : (

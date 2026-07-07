@@ -2,6 +2,7 @@ import type {
   TrainingHubAnalytics,
   TrainingHubDailyMetric,
   TrainingHubDailyMetrics,
+  TrainingHubSleepSummary,
   TrainingTrendPoint
 } from "./types";
 
@@ -52,6 +53,39 @@ export function buildTrendPoints(dayList: TrainingHubDailyMetric[]): TrainingTre
     sleepHrvBase: day.sleepHrvBase,
     rhr: day.rhr
   }));
+}
+
+export function mergeSleepIntoTrendPoints(
+  trendPoints: TrainingTrendPoint[],
+  sleep?: TrainingHubSleepSummary | null
+): TrainingTrendPoint[] {
+  if (!sleep?.records.length) {
+    return trendPoints;
+  }
+
+  const sleepByDay = new Map(
+    sleep.records
+      .filter(
+        (record) =>
+          record.kind !== "nap" &&
+          record.completeness !== "partial" &&
+          record.totalMinutes !== undefined
+      )
+      .map((record) => [record.happenDay, record])
+  );
+
+  return trendPoints.map((point) => {
+    const record = sleepByDay.get(point.date);
+    if (!record) {
+      return point;
+    }
+
+    return {
+      ...point,
+      sleepMinutes: record.totalMinutes,
+      sleepScore: record.score
+    };
+  });
 }
 
 export function recentTrainingHubDateList(days: number): string[] {

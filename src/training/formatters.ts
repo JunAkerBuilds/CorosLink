@@ -205,6 +205,14 @@ export function formatHappenDayLabel(value: string): string {
   }).format(new Date(year, month, day));
 }
 
+export function formatSleepNightLabel(record: {
+  happenDay: string;
+  sleepStart?: string;
+  sleepEnd?: string;
+}): string {
+  return formatHappenDayLabel(record.happenDay);
+}
+
 export function formatSignedDelta(value?: number, suffix = ""): string {
   if (value === undefined || !Number.isFinite(value)) {
     return "-";

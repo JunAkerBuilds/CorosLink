@@ -125,6 +125,7 @@ export function TrainingTrendCharts({ points }: TrainingTrendChartsProps) {
   const hrvPoints = points.filter(
     (point) => point.avgSleepHrv !== undefined || point.sleepHrvBase !== undefined
   );
+  const sleepPoints = points.filter((point) => point.sleepMinutes !== undefined);
 
   return (
     <div className="training-chart-grid">
@@ -210,6 +211,41 @@ export function TrainingTrendCharts({ points }: TrainingTrendChartsProps) {
           </div>
         ) : (
           <p className="training-empty-chart">No HRV data this week.</p>
+        )}
+      </section>
+
+      <section className="panel training-chart-panel">
+        <div className="section-heading compact">
+          <div>
+            <p className="eyebrow">Sleep Duration</p>
+            <h2>Last 7 days</h2>
+          </div>
+        </div>
+        {sleepPoints.length > 0 ? (
+          <div className="training-chart-shell">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={sleepPoints} margin={trainingChartMargin}>
+                <defs>
+                  <ChartAreaGradient id="sleepDurationFill" />
+                </defs>
+                <TrendChartAxes />
+                <Area
+                  type="monotone"
+                  dataKey="sleepMinutes"
+                  name="Sleep"
+                  stroke={colors.accentBright}
+                  fill="url(#sleepDurationFill)"
+                  strokeWidth={2.5}
+                  dot={trendDot}
+                  activeDot={activeDot}
+                  isAnimationActive={!reducedMotion}
+                  animationDuration={900}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p className="training-empty-chart">No sleep duration data this week.</p>
         )}
       </section>
     </div>

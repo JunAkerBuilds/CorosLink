@@ -185,6 +185,7 @@ import {
   getCorosMcpStatus,
   listCorosMcpTools
 } from "./corosMcpService";
+import { getTrainingSleepData } from "./sleepDataService";
 import type {
   ChatMessage,
   ChatProvider,
@@ -887,6 +888,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("trainingHub:getUpcomingWorkouts", (_event, days?: number) =>
     getUpcomingWorkouts(days)
+  );
+
+  ipcMain.handle("trainingHub:getSleepData", (_event, days?: number) =>
+    getTrainingSleepData(mainWindow, days ?? 7)
   );
 
   ipcMain.handle("maps:getCorosManifest", () => getCorosMapManifest());

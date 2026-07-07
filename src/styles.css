@@ -7210,7 +7210,7 @@ td span {
 
 .training-performance-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(230px, 0.58fr);
+  grid-template-columns: minmax(0, 1.05fr) minmax(220px, 0.72fr) minmax(210px, 0.55fr);
   align-items: stretch;
   gap: 14px;
   height: 100%;
@@ -7219,6 +7219,7 @@ td span {
 }
 
 .training-performance-grid > .training-fitness-panel,
+.training-performance-grid > .sleep-panel,
 .training-performance-grid > .vo2-widget-panel {
   height: 100%;
 }
@@ -7670,6 +7671,243 @@ td span {
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── Sleep summary panel ───────────────────────────────────────────── */
+.sleep-panel {
+  --sleep-tone: rgba(120, 146, 255, 0.72);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  align-content: start;
+  gap: 14px;
+  min-height: clamp(300px, 34vh, 430px);
+  padding: clamp(18px, 1.8vw, 24px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02) 52%),
+    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--sleep-tone) 16%, transparent), transparent 58%),
+    rgba(255, 255, 255, 0.034);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+.sleep-panel.tone-low {
+  --sleep-tone: rgba(255, 79, 95, 0.78);
+}
+
+.sleep-panel.tone-mid {
+  --sleep-tone: rgba(255, 178, 63, 0.78);
+}
+
+.sleep-panel.tone-good {
+  --sleep-tone: rgba(62, 232, 142, 0.78);
+}
+
+.sleep-panel.tone-high {
+  --sleep-tone: rgba(74, 163, 255, 0.82);
+}
+
+.sleep-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sleep-panel-header h2 {
+  margin: 4px 0 0;
+  color: var(--text-primary);
+  font-size: clamp(1.05rem, 1.4vw, 1.2rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.sleep-panel-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sleep-tone) 18%, rgba(255, 255, 255, 0.04));
+  color: color-mix(in srgb, var(--sleep-tone) 88%, white);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.sleep-panel-message {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.sleep-panel-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.sleep-panel-score strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: clamp(2rem, 3vw, 2.6rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.sleep-panel-score span {
+  display: block;
+  margin-top: 6px;
+  color: color-mix(in srgb, var(--sleep-tone) 72%, var(--text-secondary));
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sleep-panel-duration span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sleep-panel-duration strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.sleep-stage-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.sleep-stage-bar {
+  display: flex;
+  overflow: hidden;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.sleep-stage-segment {
+  min-width: 4px;
+  height: 100%;
+}
+
+.sleep-stage-segment.is-deep {
+  background: #4a63ff;
+}
+
+.sleep-stage-segment.is-light {
+  background: #6f89ff;
+}
+
+.sleep-stage-segment.is-rem {
+  background: #9b7bff;
+}
+
+.sleep-stage-segment.is-awake {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.sleep-stage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.sleep-stage-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sleep-stage-legend-item strong {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sleep-stage-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.sleep-stage-legend-dot.is-deep {
+  background: #4a63ff;
+}
+
+.sleep-stage-legend-dot.is-light {
+  background: #6f89ff;
+}
+
+.sleep-stage-legend-dot.is-rem {
+  background: #9b7bff;
+}
+
+.sleep-stage-legend-dot.is-awake {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.sleep-panel-empty-stages {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.sleep-panel-partial {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--sleep-tone) 36%, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: color-mix(in srgb, var(--sleep-tone) 12%, rgba(255, 255, 255, 0.04));
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.sleep-panel-metrics,
+.sleep-panel-footer {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding-top: 12px;
+}
+
+.sleep-panel-metrics span,
+.sleep-panel-footer span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sleep-panel-metrics strong,
+.sleep-panel-footer strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 @keyframes vo2-band-reveal {

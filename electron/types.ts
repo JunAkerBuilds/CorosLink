@@ -876,6 +876,37 @@ export interface TrainingHubSleepHrvSummary {
   recentReadings: TrainingHubSleepHrvReading[];
 }
 
+export interface TrainingHubSleepRecord {
+  happenDay: string;
+  kind?: "main" | "nap";
+  completeness?: "complete" | "partial";
+  partialReason?: string;
+  totalMinutes?: number;
+  score?: number;
+  deepMinutes?: number;
+  lightMinutes?: number;
+  remMinutes?: number;
+  awakeMinutes?: number;
+  deepPercent?: number;
+  lightPercent?: number;
+  remPercent?: number;
+  awakePercent?: number;
+  awakeCountOverFiveMinutes?: number;
+  windowMinutes?: number;
+  napMinutes?: number;
+  napStart?: string;
+  napEnd?: string;
+  avgHr?: number;
+  sleepStart?: string;
+  sleepEnd?: string;
+}
+
+export interface TrainingHubSleepSummary {
+  latest?: TrainingHubSleepRecord;
+  records: TrainingHubSleepRecord[];
+  mcpConnected: boolean;
+}
+
 export interface TrainingHubDashboard {
   racePredictor: TrainingHubRacePredictor;
   rhr?: number;
@@ -1125,6 +1156,8 @@ export interface TrainingTrendPoint {
   avgSleepHrv?: number;
   sleepHrvBase?: number;
   rhr?: number;
+  sleepMinutes?: number;
+  sleepScore?: number;
 }
 
 export interface ActivityVisualLapPoint {

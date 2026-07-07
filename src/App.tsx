@@ -48,6 +48,7 @@ import type {
   TrainingHubAnalytics,
   TrainingHubDailyMetrics,
   TrainingHubDashboard,
+  TrainingHubSleepSummary,
   TrainingHubSportType,
   TrainingHubStatus,
   TrainingHubUpcomingWorkout,
@@ -168,6 +169,7 @@ export default function App() {
     useState("");
   const [youtubeMusicHeadersRaw, setYoutubeMusicHeadersRaw] = useState("");
   const completedJobIdsRef = useRef<Set<string>>(new Set());
+  const mcpAutoConnectAttemptedRef = useRef(false);
   const [trainingHubStatus, setTrainingHubStatus] =
     useState<TrainingHubStatus | null>(null);
   const [trainingHubEmail, setTrainingHubEmail] = useState("");
@@ -191,6 +193,9 @@ export default function App() {
     useState<TrainingHubActivityDetail | null>(null);
   const [selectedTrainingHubActivity, setSelectedTrainingHubActivity] =
     useState<TrainingHubActivity | null>(null);
+  const [trainingHubSleepData, setTrainingHubSleepData] =
+    useState<TrainingHubSleepSummary | null>(null);
+  const [sleepConnecting, setSleepConnecting] = useState(false);
   const [url, setUrl] = useState("");
   const [autoTransfer, setAutoTransfer] = useState(true);
   const autoTransferRef = useRef(autoTransfer);
@@ -316,6 +321,7 @@ export default function App() {
     setTrainingHubUpcomingWorkouts([]);
     setTrainingHubActivityDetail(null);
     setSelectedTrainingHubActivity(null);
+    setTrainingHubSleepData(null);
   }, []);
 
   const loadTrainingHubData = useCallback(async () => {
@@ -331,6 +337,7 @@ export default function App() {
       dailyResult,
       sportTypesResult,
       upcomingResult,
+      sleepResult,
     ] = await Promise.allSettled([
       api.listTrainingHubActivities(1, 50),
       api.getTrainingAnalytics(),
@@ -338,6 +345,7 @@ export default function App() {
       api.getDailyMetrics(dateList),
       api.getSportTypeMap(),
       fetchUpcomingWorkouts(api, 14),
+      api.getTrainingSleepData(14),
     ]);
 
     if (activitiesResult.status === "fulfilled") {
@@ -360,6 +368,9 @@ export default function App() {
     );
     setTrainingHubUpcomingWorkouts(
       upcomingResult.status === "fulfilled" ? upcomingResult.value : [],
+    );
+    setTrainingHubSleepData(
+      sleepResult.status === "fulfilled" ? sleepResult.value : null,
     );
 
     const failures = [
@@ -387,6 +398,28 @@ export default function App() {
     }
   }, [api]);
 
+  const ensureTrainingHubMcp = useCallback(async () => {
+    if (!api || mcpAutoConnectAttemptedRef.current) {
+      return;
+    }
+
+    const mcpStatus = await api.getCorosMcpStatus();
+    if (mcpStatus.connected && mcpStatus.authorized) {
+      return;
+    }
+
+    mcpAutoConnectAttemptedRef.current = true;
+    setSleepConnecting(true);
+
+    try {
+      await api.connectCorosMcp();
+    } catch {
+      // Sleep panel degrades gracefully when MCP is unavailable.
+    } finally {
+      setSleepConnecting(false);
+    }
+  }, [api]);
+
   const refreshTrainingHub = useCallback(async () => {
     if (!api) {
       return;
@@ -401,11 +434,17 @@ export default function App() {
     setTrainingHubRemember(status.rememberCredentials ?? true);
 
     if (status.authenticated) {
+      await ensureTrainingHubMcp();
       await loadTrainingHubData();
     } else {
       clearTrainingHubData();
     }
-  }, [api, clearTrainingHubData, loadTrainingHubData]);
+  }, [
+    api,
+    clearTrainingHubData,
+    ensureTrainingHubMcp,
+    loadTrainingHubData,
+  ]);
 
   const handleTrainingHubActivityDetail = useCallback(
     async (activity: TrainingHubActivity) => {
@@ -1367,8 +1406,14 @@ export default function App() {
       trainingHubAnalytics,
       trainingHubDashboard,
       trainingHubDailyMetrics,
+      trainingHubSleepData,
     );
-  }, [trainingHubAnalytics, trainingHubDashboard, trainingHubDailyMetrics]);
+  }, [
+    trainingHubAnalytics,
+    trainingHubDashboard,
+    trainingHubDailyMetrics,
+    trainingHubSleepData,
+  ]);
 
   function openMediaTab(tab: MediaTab) {
     setActiveView("media");
@@ -1576,6 +1621,7 @@ export default function App() {
                 activityDetail={trainingHubActivityDetail}
                 selectedActivity={selectedTrainingHubActivity}
                 busy={busy}
+                sleepConnecting={sleepConnecting}
                 onEmailChange={setTrainingHubEmail}
                 onPasswordChange={setTrainingHubPassword}
                 onRememberChange={setTrainingHubRemember}
