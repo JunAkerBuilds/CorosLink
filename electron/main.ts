@@ -40,6 +40,12 @@ import {
   getTrainingHubStatus,
   getUpcomingWorkouts,
   listTrainingHubActivities,
+  listScheduledWorkoutEntries,
+  listLibraryWorkouts,
+  scheduleLibraryWorkout,
+  createAndScheduleWorkout,
+  rescheduleScheduledWorkout,
+  removeScheduledWorkout,
   loginTrainingHub,
   logoutTrainingHub,
   reconnectTrainingHub,
@@ -185,7 +191,8 @@ import type {
   ChatSettings,
   CorosTrainingPlanDraftInput,
   LocalChatConfig,
-  PersistedChatEntry
+  PersistedChatEntry,
+  PlanWorkoutEntryInput
 } from "./types";
 
 let mainWindow: BrowserWindow | undefined;
@@ -739,8 +746,56 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "trainingHub:listActivities",
-    (_event, page: number, size: number) =>
-      listTrainingHubActivities(page, size)
+    (_event, page: number, size: number, startDay?: string, endDay?: string) =>
+      listTrainingHubActivities(page, size, startDay, endDay)
+  );
+
+  ipcMain.handle(
+    "trainingHub:listScheduledWorkouts",
+    (_event, startDay: string, endDay: string) =>
+      listScheduledWorkoutEntries(startDay, endDay)
+  );
+
+  ipcMain.handle("trainingHub:listLibraryWorkouts", () =>
+    listLibraryWorkouts()
+  );
+
+  ipcMain.handle(
+    "trainingHub:scheduleLibraryWorkout",
+    (_event, programId: string, happenDay: string) =>
+      scheduleLibraryWorkout(programId, happenDay)
+  );
+
+  ipcMain.handle(
+    "trainingHub:createAndScheduleWorkout",
+    (
+      _event,
+      entry: PlanWorkoutEntryInput,
+      happenDay: string,
+      saveToLibrary?: boolean
+    ) => createAndScheduleWorkout(entry, happenDay, saveToLibrary)
+  );
+
+  ipcMain.handle(
+    "trainingHub:rescheduleWorkout",
+    (
+      _event,
+      entry: {
+        planId: string;
+        idInPlan: string;
+        planProgramId?: string;
+        happenDay: string;
+      },
+      newHappenDay: string
+    ) => rescheduleScheduledWorkout(entry, newHappenDay)
+  );
+
+  ipcMain.handle(
+    "trainingHub:removeScheduledWorkout",
+    (
+      _event,
+      entry: { planId: string; idInPlan: string; planProgramId?: string }
+    ) => removeScheduledWorkout(entry)
   );
 
   ipcMain.handle(

@@ -41,6 +41,9 @@ import type {
   TrainingHubSportType,
   TrainingHubStatus,
   TrainingHubUpcomingWorkout,
+  TrainingHubScheduledWorkoutEntry,
+  TrainingHubLibraryWorkout,
+  PlanWorkoutEntryInput,
   TransferResult,
   AppUpdateSnapshot,
   WatchConnectionSmokeOptionId,
@@ -160,8 +163,38 @@ export interface CorosLinkApi {
   reconnectTrainingHub: () => Promise<TrainingHubStatus>;
   listTrainingHubActivities: (
     page: number,
-    size: number
+    size: number,
+    startDay?: string,
+    endDay?: string
   ) => Promise<TrainingHubActivity[]>;
+  listScheduledWorkouts: (
+    startDay: string,
+    endDay: string
+  ) => Promise<TrainingHubScheduledWorkoutEntry[]>;
+  listLibraryWorkouts: () => Promise<TrainingHubLibraryWorkout[]>;
+  scheduleLibraryWorkout: (
+    programId: string,
+    happenDay: string
+  ) => Promise<void>;
+  createAndScheduleWorkout: (
+    entry: PlanWorkoutEntryInput,
+    happenDay: string,
+    saveToLibrary?: boolean
+  ) => Promise<{ programId?: string }>;
+  rescheduleWorkout: (
+    entry: {
+      planId: string;
+      idInPlan: string;
+      planProgramId?: string;
+      happenDay: string;
+    },
+    newHappenDay: string
+  ) => Promise<void>;
+  removeScheduledWorkout: (entry: {
+    planId: string;
+    idInPlan: string;
+    planProgramId?: string;
+  }) => Promise<void>;
   getTrainingHubActivityDetail: (
     activityId: string,
     sportType: number,

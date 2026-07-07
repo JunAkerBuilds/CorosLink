@@ -42,7 +42,8 @@ import type {
   CorosTrainingPlanDraftInput,
   PlanWorkoutEntryInput,
   DeleteWorkoutResult,
-  TrainingHubScheduledWorkoutEntry
+  TrainingHubScheduledWorkoutEntry,
+  TrainingHubLibraryWorkout
 } from "./types";
 import {
   buildWorkoutPayloadFromEntry,
@@ -394,14 +395,23 @@ export async function reconnectTrainingHub(): Promise<TrainingHubStatus> {
 
 export async function listTrainingHubActivities(
   page = 1,
-  size = 50
+  size = 50,
+  startDay?: string,
+  endDay?: string
 ): Promise<TrainingHubActivity[]> {
+  const params: Record<string, string | number> = {
+    size,
+    pageNumber: page
+  };
+  // Verified live: /activity/query filters on startDay/endDay (YYYYMMDD);
+  // startDate/endDate are ignored by this endpoint.
+  if (startDay && endDay) {
+    params.startDay = startDay;
+    params.endDay = endDay;
+  }
   const data = await trainingHubGet<TrainingHubActivityListData>(
     "/activity/query",
-    {
-      size,
-      pageNumber: page
-    }
+    params
   );
 
   const activities = (data.dataList ?? []).map(mapTrainingHubActivity);
@@ -878,6 +888,101 @@ export async function listWorkoutPrograms(): Promise<Record<string, unknown>[]> 
   return listLibraryWorkoutPrograms();
 }
 
+export async function listLibraryWorkouts(): Promise<TrainingHubLibraryWorkout[]> {
+  const programs = await listLibraryWorkoutPrograms();
+  return programs
+    .filter((program) => program.id !== undefined && program.id !== null)
+    .map((program) => ({
+      id: String(program.id),
+      name: pickString(program, ["name"]) ?? "Workout",
+      sportType: toOptionalNumber(program.sportType),
+      volume: formatUpcomingWorkoutVolume(program, {}),
+      trainingLoad: resolveUpcomingWorkoutLoad(program, {}),
+      createTimestamp: toOptionalNumber(program.createTimestamp)
+    }))
+    .sort((left, right) => (right.createTimestamp ?? 0) - (left.createTimestamp ?? 0));
+}
+
+export async function scheduleLibraryWorkout(
+  programId: string,
+  happenDay: string
+): Promise<void> {
+  const program = await findLibraryWorkoutById(String(programId));
+  if (!program) {
+    throw new Error("Library workout not found.");
+  }
+  await scheduleWorkoutOnDate(program, happenDay);
+}
+
+export async function createAndScheduleWorkout(
+  entryInput: PlanWorkoutEntryInput,
+  happenDay: string,
+  saveToLibrary = false
+): Promise<{ programId?: string }> {
+  const entry = toPlanWorkoutEntry(entryInput);
+  const payload = buildWorkoutPayloadFromEntry(entry);
+  let program = structuredClone(payload) as Record<string, unknown>;
+  let programId: string | undefined;
+
+  if (saveToLibrary) {
+    const created = await createWorkoutProgram(program);
+    programId = created.programId;
+    program = created.program;
+  }
+
+  await scheduleWorkoutOnDate(program, happenDay, entryInput.sort_no ?? 1);
+  return { programId };
+}
+
+/**
+ * Move a scheduled workout to another day. COROS's /training/schedule/update
+ * has no move semantics (versionObjects status 2 is rejected with 17004), so
+ * this re-adds the workout on the new day first and only then deletes the old
+ * entry — a failure part-way can duplicate the workout but never lose it.
+ */
+export async function rescheduleScheduledWorkout(
+  entry: {
+    planId: string;
+    idInPlan: string;
+    planProgramId?: string;
+    happenDay: string;
+  },
+  newHappenDay: string
+): Promise<void> {
+  if (!/^\d{8}$/.test(newHappenDay)) {
+    throw new Error("newHappenDay must be YYYYMMDD.");
+  }
+  if (newHappenDay === entry.happenDay) {
+    return;
+  }
+  if (newHappenDay < formatScheduleDay(new Date())) {
+    throw new Error("COROS does not allow scheduling workouts before today.");
+  }
+
+  const dayEntries = await listScheduledWorkoutEntries(
+    entry.happenDay,
+    entry.happenDay
+  );
+  const match = dayEntries.find(
+    (candidate) =>
+      candidate.planId === String(entry.planId) &&
+      candidate.idInPlan === String(entry.idInPlan)
+  );
+  if (!match) {
+    throw new Error("Scheduled workout not found on its original day.");
+  }
+  if (!match.rawProgram) {
+    throw new Error("Scheduled workout has no program data to reschedule.");
+  }
+
+  await scheduleWorkoutOnDate(match.rawProgram, newHappenDay, match.sortNo ?? 1);
+  await removeScheduledWorkout({
+    planId: match.planId,
+    idInPlan: match.idInPlan,
+    planProgramId: match.planProgramId
+  });
+}
+
 export async function deleteWorkout(options: {
   target: "scheduled" | "library" | "both";
   schedule_date?: string;
@@ -997,25 +1102,7 @@ export function parseScheduledWorkoutEntries(
 ): TrainingHubScheduledWorkoutEntry[] {
   const entities = extractArray(raw, ["entities"]) ?? [];
   const programs = extractArray(raw, ["programs"]) ?? [];
-  const programsByIdInPlan = new Map<string, Record<string, unknown>>();
-  const programsById = new Map<string, Record<string, unknown>>();
-
-  for (const item of programs) {
-    if (!item || typeof item !== "object") {
-      continue;
-    }
-
-    const program = item as Record<string, unknown>;
-    const idInPlan = program.idInPlan;
-
-    if (idInPlan !== undefined && idInPlan !== null) {
-      programsByIdInPlan.set(String(idInPlan), program);
-    }
-
-    if (program.id !== undefined && program.id !== null) {
-      programsById.set(String(program.id), program);
-    }
-  }
+  const { programsByIdInPlan, programsById } = buildScheduledProgramMaps(programs);
 
   const entries: TrainingHubScheduledWorkoutEntry[] = [];
 
@@ -1057,10 +1144,12 @@ export function parseScheduledWorkoutEntries(
         program?.id !== undefined && program.id !== null
           ? String(program.id)
           : planProgramId || undefined,
+      sportType: toOptionalNumber(program?.sportType ?? entity.sportType),
       sortNo: toOptionalNumber(entity.sortNoInSchedule ?? entity.sortNo),
       volume: formatUpcomingWorkoutVolume(program, entity),
       trainingLoad: resolveUpcomingWorkoutLoad(program, entity),
-      exercises: parseScheduledExercises(program)
+      exercises: parseScheduledExercises(program),
+      rawProgram: program
     });
   });
 
@@ -1258,25 +1347,7 @@ export function parseUpcomingWorkouts(
 ): TrainingHubUpcomingWorkout[] {
   const entities = extractArray(raw, ["entities"]) ?? [];
   const programs = extractArray(raw, ["programs"]) ?? [];
-  const programsByIdInPlan = new Map<string, Record<string, unknown>>();
-  const programsById = new Map<string, Record<string, unknown>>();
-
-  for (const item of programs) {
-    if (!item || typeof item !== "object") {
-      continue;
-    }
-
-    const program = item as Record<string, unknown>;
-    const idInPlan = program.idInPlan;
-
-    if (idInPlan !== undefined && idInPlan !== null) {
-      programsByIdInPlan.set(String(idInPlan), program);
-    }
-
-    if (program.id !== undefined && program.id !== null) {
-      programsById.set(String(program.id), program);
-    }
-  }
+  const { programsByIdInPlan, programsById } = buildScheduledProgramMaps(programs);
 
   const workouts: TrainingHubUpcomingWorkout[] = [];
 
@@ -1328,6 +1399,44 @@ export function parseUpcomingWorkouts(
   });
 }
 
+/**
+ * Index schedule/query programs for entity lookup. `idInPlan` values repeat
+ * across plans (the response can merge a training plan with the user's ad-hoc
+ * schedule plan), so programs are additionally keyed by `planId|idInPlan`.
+ */
+function buildScheduledProgramMaps(programs: Record<string, unknown>[]): {
+  programsByIdInPlan: Map<string, Record<string, unknown>>;
+  programsById: Map<string, Record<string, unknown>>;
+} {
+  const programsByIdInPlan = new Map<string, Record<string, unknown>>();
+  const programsById = new Map<string, Record<string, unknown>>();
+
+  for (const item of programs) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+
+    const program = item as Record<string, unknown>;
+    const idInPlan = program.idInPlan;
+
+    if (idInPlan !== undefined && idInPlan !== null) {
+      const planId = program.planId;
+      if (planId !== undefined && planId !== null) {
+        programsByIdInPlan.set(`${planId}|${idInPlan}`, program);
+      }
+      if (!programsByIdInPlan.has(String(idInPlan))) {
+        programsByIdInPlan.set(String(idInPlan), program);
+      }
+    }
+
+    if (program.id !== undefined && program.id !== null) {
+      programsById.set(String(program.id), program);
+    }
+  }
+
+  return { programsByIdInPlan, programsById };
+}
+
 function resolveScheduledProgram(
   entity: Record<string, unknown>,
   index: number,
@@ -1335,10 +1444,17 @@ function resolveScheduledProgram(
   programsById: Map<string, Record<string, unknown>>,
   programs: Record<string, unknown>[]
 ): Record<string, unknown> | undefined {
+  const planId = String(entity.planId ?? "");
   const planProgramId = String(entity.planProgramId ?? "");
   const idInPlan = String(entity.idInPlan ?? "");
 
   return (
+    (planId && planProgramId
+      ? programsByIdInPlan.get(`${planId}|${planProgramId}`)
+      : undefined) ??
+    (planId && idInPlan
+      ? programsByIdInPlan.get(`${planId}|${idInPlan}`)
+      : undefined) ??
     (planProgramId ? programsByIdInPlan.get(planProgramId) : undefined) ??
     (idInPlan ? programsByIdInPlan.get(idInPlan) : undefined) ??
     (planProgramId ? programsById.get(planProgramId) : undefined) ??
