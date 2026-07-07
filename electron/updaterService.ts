@@ -1,4 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { promises as fs } from "node:fs";
+import { homedir } from "node:os";
+import path from "node:path";
 import { app, BrowserWindow, shell } from "electron";
 import { autoUpdater } from "electron-updater";
 import { getSetting, setSetting } from "./database";
@@ -9,6 +12,7 @@ const AUTO_DOWNLOAD_KEY = "updater.autoDownload";
 
 let mainWindow: BrowserWindow | undefined;
 let listenersRegistered = false;
+let staleUpdateCleanupStarted = false;
 let snapshot: AppUpdateSnapshot = {
   supported: false,
   currentVersion: app.getVersion(),
@@ -114,6 +118,98 @@ function resolveInstallDetails(
   };
 }
 
+function getUpdaterBaseCacheDir(): string {
+  if (process.platform === "win32") {
+    return process.env.LOCALAPPDATA ?? path.join(homedir(), "AppData", "Local");
+  }
+
+  if (process.platform === "darwin") {
+    return path.join(homedir(), "Library", "Caches");
+  }
+
+  return process.env.XDG_CACHE_HOME ?? path.join(homedir(), ".cache");
+}
+
+async function getUpdaterCacheDirName(): Promise<string> {
+  try {
+    const config = await fs.readFile(
+      path.join(process.resourcesPath, "app-update.yml"),
+      "utf8"
+    );
+    const match = config.match(/^updaterCacheDirName:\s*(\S+)\s*$/m);
+    if (match) {
+      return match[1];
+    }
+  } catch {
+    // fall through to electron-updater's default
+  }
+
+  return app.getName();
+}
+
+function parseVersion(value: string): [number, number, number] | undefined {
+  const match = value.match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!match) {
+    return undefined;
+  }
+
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function isVersionNewerThanCurrent(version: [number, number, number]): boolean {
+  const current = parseVersion(app.getVersion());
+  if (!current) {
+    return false;
+  }
+
+  for (let i = 0; i < 3; i++) {
+    if (version[i] !== current[i]) {
+      return version[i] > current[i];
+    }
+  }
+
+  return false;
+}
+
+/**
+ * electron-updater leaves the downloaded installer in the cache dir's
+ * "pending" folder after the update is installed, and only clears it when
+ * the next release starts downloading. On Windows that duplicates the
+ * ~100MB installer already kept at the cache root as "installer.exe" for
+ * differential downloads (which must be preserved). See issue #33.
+ */
+async function cleanupInstalledUpdateCache(): Promise<void> {
+  try {
+    const pendingDir = path.join(
+      getUpdaterBaseCacheDir(),
+      await getUpdaterCacheDirName(),
+      "pending"
+    );
+
+    try {
+      const raw = await fs.readFile(
+        path.join(pendingDir, "update-info.json"),
+        "utf8"
+      );
+      const fileName = (JSON.parse(raw) as { fileName?: unknown }).fileName;
+      if (typeof fileName === "string") {
+        const pendingVersion = parseVersion(fileName);
+        if (pendingVersion && isVersionNewerThanCurrent(pendingVersion)) {
+          // Downloaded but not installed yet — keep it.
+          return;
+        }
+      }
+    } catch {
+      // No readable update-info.json: anything left here is an orphaned
+      // partial download, safe to remove.
+    }
+
+    await fs.rm(pendingDir, { recursive: true, force: true });
+  } catch {
+    // Cleanup is best-effort; never block updater startup.
+  }
+}
+
 function publishSnapshot(): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("app:updateStatus", snapshot);
@@ -211,6 +307,11 @@ export function initializeAppUpdater(window: BrowserWindow): void {
   registerAutoUpdaterListeners();
   autoUpdater.autoDownload = autoDownload;
   publishSnapshot();
+
+  if (!staleUpdateCleanupStarted) {
+    staleUpdateCleanupStarted = true;
+    void cleanupInstalledUpdateCache();
+  }
 
   if (autoCheck) {
     setTimeout(() => {
