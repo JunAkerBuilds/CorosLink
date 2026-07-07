@@ -95,6 +95,9 @@ interface ChatViewProps {
   onPlanUploaded?: () => void;
   /** Fires when a coach request is in progress (streaming or exporting). */
   onActivityChange?: (active: boolean) => void;
+  /** Text preloaded into the composer (e.g. "Ask Coach" from the calendar). */
+  pendingPrompt?: string | null;
+  onPendingPromptConsumed?: () => void;
 }
 
 function PlanPreviewCard({
@@ -315,7 +318,9 @@ export function ChatView({
   api,
   onError,
   onPlanUploaded,
-  onActivityChange
+  onActivityChange,
+  pendingPrompt,
+  onPendingPromptConsumed
 }: ChatViewProps) {
   const [authStatus, setAuthStatus] = useState<ChatAuthStatus | null>(null);
   const [chatSettings, setChatSettings] =
@@ -362,6 +367,17 @@ export function ChatView({
   const autoDetectLocalRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!pendingPrompt) {
+      return;
+    }
+    setInput(pendingPrompt);
+    onPendingPromptConsumed?.();
+    // Focus after the coach panel becomes visible.
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [pendingPrompt, onPendingPromptConsumed]);
 
   const resetEphemeralChatState = () => {
     setUploadedPlans({});
@@ -1502,6 +1518,7 @@ export function ChatView({
             <div className="chat-composer-toolbar">{providerSwitch}</div>
             <div className="chat-composer-inner">
               <textarea
+                ref={inputRef}
                 className="chat-input"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}

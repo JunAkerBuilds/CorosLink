@@ -42,6 +42,9 @@ import type {
   TrainingHubSportType,
   TrainingHubStatus,
   TrainingHubUpcomingWorkout,
+  TrainingHubScheduledWorkoutEntry,
+  TrainingHubLibraryWorkout,
+  PlanWorkoutEntryInput,
   TransferResult,
   AppUpdateSnapshot,
   WatchConnectionSmokeOptionId,
@@ -243,9 +246,50 @@ const api = {
     ipcRenderer.invoke("trainingHub:reconnect"),
   listTrainingHubActivities: (
     page: number,
-    size: number
+    size: number,
+    startDay?: string,
+    endDay?: string
   ): Promise<TrainingHubActivity[]> =>
-    ipcRenderer.invoke("trainingHub:listActivities", page, size),
+    ipcRenderer.invoke("trainingHub:listActivities", page, size, startDay, endDay),
+  listScheduledWorkouts: (
+    startDay: string,
+    endDay: string
+  ): Promise<TrainingHubScheduledWorkoutEntry[]> =>
+    ipcRenderer.invoke("trainingHub:listScheduledWorkouts", startDay, endDay),
+  listLibraryWorkouts: (): Promise<TrainingHubLibraryWorkout[]> =>
+    ipcRenderer.invoke("trainingHub:listLibraryWorkouts"),
+  scheduleLibraryWorkout: (
+    programId: string,
+    happenDay: string
+  ): Promise<void> =>
+    ipcRenderer.invoke("trainingHub:scheduleLibraryWorkout", programId, happenDay),
+  createAndScheduleWorkout: (
+    entry: PlanWorkoutEntryInput,
+    happenDay: string,
+    saveToLibrary?: boolean
+  ): Promise<{ programId?: string }> =>
+    ipcRenderer.invoke(
+      "trainingHub:createAndScheduleWorkout",
+      entry,
+      happenDay,
+      saveToLibrary
+    ),
+  rescheduleWorkout: (
+    entry: {
+      planId: string;
+      idInPlan: string;
+      planProgramId?: string;
+      happenDay: string;
+    },
+    newHappenDay: string
+  ): Promise<void> =>
+    ipcRenderer.invoke("trainingHub:rescheduleWorkout", entry, newHappenDay),
+  removeScheduledWorkout: (entry: {
+    planId: string;
+    idInPlan: string;
+    planProgramId?: string;
+  }): Promise<void> =>
+    ipcRenderer.invoke("trainingHub:removeScheduledWorkout", entry),
   getTrainingHubActivityDetail: (
     activityId: string,
     sportType: number,

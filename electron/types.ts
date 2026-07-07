@@ -1260,10 +1260,22 @@ export interface TrainingHubScheduledWorkoutEntry {
   happenDay: string;
   name: string;
   programId?: string;
+  sportType?: number;
   sortNo?: number;
   volume?: string;
   trainingLoad?: number;
   exercises?: TrainingHubScheduledExercise[];
+  /** Raw program payload from schedule/query — required to re-add the workout when rescheduling. */
+  rawProgram?: Record<string, unknown>;
+}
+
+export interface TrainingHubLibraryWorkout {
+  id: string;
+  name: string;
+  sportType?: number;
+  volume?: string;
+  trainingLoad?: number;
+  createTimestamp?: number;
 }
 
 export interface DeleteWorkoutResult {

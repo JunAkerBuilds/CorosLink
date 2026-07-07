@@ -1,5 +1,6 @@
 import {
   Activity,
+  CalendarDays,
   LayoutGrid,
   Map as MapIcon,
   MessageCircle,
@@ -7,7 +8,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type PrimaryView = "overview" | "media" | "training" | "maps" | "coach";
+export type PrimaryView =
+  | "overview"
+  | "media"
+  | "training"
+  | "calendar"
+  | "maps"
+  | "coach";
 
 export interface PrimaryNavItem {
   id: PrimaryView;
@@ -22,6 +29,7 @@ export const PRIMARY_NAV_ITEMS: PrimaryNavItem[] = [
   { id: "media", label: "Media", icon: Music },
   { id: "maps", label: "Maps", icon: MapIcon, beta: true },
   { id: "training", label: "Training Hub", icon: Activity },
+  { id: "calendar", label: "Calendar", icon: CalendarDays },
   {
     id: "coach",
     label: "Coach",

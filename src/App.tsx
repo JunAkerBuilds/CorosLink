@@ -78,6 +78,7 @@ import { ResourcesMenu } from "./components/ResourcesMenu";
 import { ThemeToggle } from "./theme/ThemeToggle";
 import { WatchConnectionSmokeControls } from "./components/WatchConnectionSmokeControls";
 import { MapsView } from "./maps/MapsView";
+import { CalendarView } from "./calendar/CalendarView";
 import { ChatView } from "./chat/ChatView";
 import {
   LibrarySyncLayout,
@@ -97,7 +98,7 @@ import {
 } from "./watchModels";
 import appLogo from "../build/icon.png";
 
-type View = "overview" | "media" | "training" | "maps" | "coach";
+type View = "overview" | "media" | "training" | "calendar" | "maps" | "coach";
 type MediaTab =
   | "library"
   | "youtube"
@@ -132,6 +133,8 @@ export default function App() {
     return window.matchMedia("(max-width: 720px)").matches;
   });
   const [coachBusy, setCoachBusy] = useState(false);
+  const [coachPrefill, setCoachPrefill] = useState<string | null>(null);
+  const [calendarRefreshToken, setCalendarRefreshToken] = useState(0);
   const [activeMediaTab, setActiveMediaTab] = useState<MediaTab>("library");
   const [watchStatus, setWatchStatus] = useState<WatchStatus | null>(null);
   const [downloads, setDownloads] = useState<LocalTrack[]>([]);
@@ -1584,6 +1587,21 @@ export default function App() {
                 onExportFile={handleTrainingHubExport}
               />
             ) : null}
+            {activeView === "calendar" ? (
+              <CalendarView
+                api={api}
+                status={trainingHubStatus}
+                sportTypes={trainingHubSportTypes}
+                refreshToken={calendarRefreshToken}
+                onMessage={setMessage}
+                onError={setError}
+                onOpenTraining={() => setActiveView("training")}
+                onOpenCoach={(prompt) => {
+                  setCoachPrefill(prompt);
+                  setActiveView("coach");
+                }}
+              />
+            ) : null}
             <div
               className={[
                 "content-coach-panel",
@@ -1596,8 +1614,13 @@ export default function App() {
               <ChatView
                 api={api}
                 onError={setError}
-                onPlanUploaded={() => void loadTrainingHubData()}
+                onPlanUploaded={() => {
+                  void loadTrainingHubData();
+                  setCalendarRefreshToken((token) => token + 1);
+                }}
                 onActivityChange={setCoachBusy}
+                pendingPrompt={coachPrefill}
+                onPendingPromptConsumed={() => setCoachPrefill(null)}
               />
             </div>
           </>
