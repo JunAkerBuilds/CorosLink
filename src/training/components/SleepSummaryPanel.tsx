@@ -169,14 +169,17 @@ function SleepStageBar({ record }: { record: TrainingHubSleepRecord }) {
       <div
         className="sleep-stage-bar"
         aria-label="Sleep stage breakdown"
-        role="img"
+        role="list"
       >
         {segments.map((segment) => (
           <span
             key={segment.key}
             className={`sleep-stage-segment ${segment.className}`}
             style={{ flexGrow: segment.value }}
-            title={`${segment.label}: ${segment.detail}`}
+            aria-label={`${segment.label}: ${segment.detail}`}
+            data-stage-label={`${segment.label}: ${segment.detail}`}
+            role="listitem"
+            tabIndex={0}
           />
         ))}
       </div>

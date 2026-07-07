@@ -1,5 +1,6 @@
 import type {
   TrainingHubAnalytics,
+  TrainingHubDailyHealthSummary,
   TrainingHubDailyMetric,
   TrainingHubDailyMetrics,
   TrainingHubDashboard,
@@ -181,11 +182,13 @@ export function buildHeatmapGrid(cells: HeatmapCell[]): HeatmapGrid {
 
 function buildSummary(
   dayList: TrainingHubDailyMetric[],
-  dashboard: TrainingHubDashboard | null
+  dashboard: TrainingHubDashboard | null,
+  dailyHealth?: TrainingHubDailyHealthSummary | null
 ): TrainingSummaryMetrics {
   const racePredictor = dashboard?.racePredictor ?? null;
   const recent = dayList.slice(-7);
   const latest = recent[recent.length - 1];
+  const latestHealth = dailyHealth?.latest;
   const priorRhrValues = recent
     .slice(0, -1)
     .map((day) => day.rhr)
@@ -212,7 +215,9 @@ function buildSummary(
     rhrDelta:
       latestRhr !== undefined && priorRhrAverage !== undefined
         ? latestRhr - priorRhrAverage
-        : undefined
+        : undefined,
+    steps: latestHealth?.steps,
+    calories: latestHealth?.calories
   };
 }
 
@@ -220,19 +225,21 @@ export function buildTrainingHubSnapshot(
   analytics: TrainingHubAnalytics | null,
   dashboard: TrainingHubDashboard | null,
   dailyMetrics: TrainingHubDailyMetrics | null,
-  sleep?: TrainingHubSleepSummary | null
+  sleep?: TrainingHubSleepSummary | null,
+  dailyHealth?: TrainingHubDailyHealthSummary | null
 ): TrainingHubSnapshot {
   const dayList = mergeTrainingDayLists(dailyMetrics, analytics);
   const trendPoints = mergeSleepIntoTrendPoints(buildTrendPoints(dayList), sleep);
 
   return {
-    summary: buildSummary(dayList, dashboard),
+    summary: buildSummary(dayList, dashboard, dailyHealth),
     trendPoints,
     racePredictor: dashboard?.racePredictor ?? null,
     dashboard,
     analytics,
     dailyMetrics,
-    sleep: sleep ?? null
+    sleep: sleep ?? null,
+    dailyHealth: dailyHealth ?? null
   };
 }
 

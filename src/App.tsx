@@ -46,6 +46,7 @@ import type {
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
   TrainingHubAnalytics,
+  TrainingHubDailyHealthSummary,
   TrainingHubDailyMetrics,
   TrainingHubDashboard,
   TrainingHubSleepSummary,
@@ -195,6 +196,8 @@ export default function App() {
     useState<TrainingHubActivity | null>(null);
   const [trainingHubSleepData, setTrainingHubSleepData] =
     useState<TrainingHubSleepSummary | null>(null);
+  const [trainingHubDailyHealthData, setTrainingHubDailyHealthData] =
+    useState<TrainingHubDailyHealthSummary | null>(null);
   const [sleepConnecting, setSleepConnecting] = useState(false);
   const [url, setUrl] = useState("");
   const [autoTransfer, setAutoTransfer] = useState(true);
@@ -322,6 +325,7 @@ export default function App() {
     setTrainingHubActivityDetail(null);
     setSelectedTrainingHubActivity(null);
     setTrainingHubSleepData(null);
+    setTrainingHubDailyHealthData(null);
   }, []);
 
   const loadTrainingHubData = useCallback(async () => {
@@ -338,6 +342,7 @@ export default function App() {
       sportTypesResult,
       upcomingResult,
       sleepResult,
+      dailyHealthResult,
     ] = await Promise.allSettled([
       api.listTrainingHubActivities(1, 50),
       api.getTrainingAnalytics(),
@@ -346,6 +351,7 @@ export default function App() {
       api.getSportTypeMap(),
       fetchUpcomingWorkouts(api, 14),
       api.getTrainingSleepData(14),
+      api.getTrainingDailyHealthData(1),
     ]);
 
     if (activitiesResult.status === "fulfilled") {
@@ -371,6 +377,9 @@ export default function App() {
     );
     setTrainingHubSleepData(
       sleepResult.status === "fulfilled" ? sleepResult.value : null,
+    );
+    setTrainingHubDailyHealthData(
+      dailyHealthResult.status === "fulfilled" ? dailyHealthResult.value : null,
     );
 
     const failures = [
@@ -1407,12 +1416,14 @@ export default function App() {
       trainingHubDashboard,
       trainingHubDailyMetrics,
       trainingHubSleepData,
+      trainingHubDailyHealthData,
     );
   }, [
     trainingHubAnalytics,
     trainingHubDashboard,
     trainingHubDailyMetrics,
     trainingHubSleepData,
+    trainingHubDailyHealthData,
   ]);
 
   function openMediaTab(tab: MediaTab) {

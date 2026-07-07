@@ -36,6 +36,7 @@ import type {
   TrainingHubActivityFileType,
   TrainingHubExportResult,
   TrainingHubAnalytics,
+  TrainingHubDailyHealthSummary,
   TrainingHubDailyMetrics,
   TrainingHubDashboard,
   TrainingHubSleepSummary,
@@ -361,6 +362,10 @@ const api = {
     ipcRenderer.invoke("trainingHub:getUpcomingWorkouts", days),
   getTrainingSleepData: (days?: number): Promise<TrainingHubSleepSummary> =>
     ipcRenderer.invoke("trainingHub:getSleepData", days),
+  getTrainingDailyHealthData: (
+    days?: number
+  ): Promise<TrainingHubDailyHealthSummary> =>
+    ipcRenderer.invoke("trainingHub:getDailyHealthData", days),
   uploadTrainingPlan: (
     draft: CorosTrainingPlanDraftInput
   ): Promise<UploadPlanResult> =>

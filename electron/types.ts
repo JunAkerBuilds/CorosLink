@@ -907,6 +907,18 @@ export interface TrainingHubSleepSummary {
   mcpConnected: boolean;
 }
 
+export interface TrainingHubDailyHealthRecord {
+  happenDay: string;
+  steps?: number;
+  calories?: number;
+}
+
+export interface TrainingHubDailyHealthSummary {
+  latest?: TrainingHubDailyHealthRecord;
+  records: TrainingHubDailyHealthRecord[];
+  mcpConnected: boolean;
+}
+
 export interface TrainingHubDashboard {
   racePredictor: TrainingHubRacePredictor;
   rhr?: number;

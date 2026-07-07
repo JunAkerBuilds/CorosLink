@@ -35,6 +35,7 @@ import type {
   TrainingHubActivityFileType,
   TrainingHubExportResult,
   TrainingHubAnalytics,
+  TrainingHubDailyHealthSummary,
   TrainingHubDailyMetrics,
   TrainingHubDashboard,
   TrainingHubSleepSummary,
@@ -228,6 +229,9 @@ export interface CorosLinkApi {
   getActivityPaceBaselines: () => Promise<ActivityPaceBaselines>;
   getUpcomingWorkouts: (days?: number) => Promise<TrainingHubUpcomingWorkout[]>;
   getTrainingSleepData: (days?: number) => Promise<TrainingHubSleepSummary>;
+  getTrainingDailyHealthData: (
+    days?: number
+  ) => Promise<TrainingHubDailyHealthSummary>;
   uploadTrainingPlan: (
     draft: CorosTrainingPlanDraftInput
   ) => Promise<UploadPlanResult>;

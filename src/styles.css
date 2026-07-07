@@ -7073,6 +7073,34 @@ td span {
   --stat-icon-color: #f9a8d4;
 }
 
+.training-stat-card.tone-steps {
+  --stat-accent: #38bdf8;
+  --stat-border: rgba(56, 189, 248, 0.18);
+  --stat-border-hover: rgba(56, 189, 248, 0.32);
+  --stat-surface: linear-gradient(
+    155deg,
+    rgba(56, 189, 248, 0.1),
+    rgba(255, 255, 255, 0.02) 58%
+  );
+  --stat-icon-bg: rgba(56, 189, 248, 0.16);
+  --stat-icon-border: transparent;
+  --stat-icon-color: #7dd3fc;
+}
+
+.training-stat-card.tone-calories {
+  --stat-accent: #a78bfa;
+  --stat-border: rgba(167, 139, 250, 0.18);
+  --stat-border-hover: rgba(167, 139, 250, 0.32);
+  --stat-surface: linear-gradient(
+    155deg,
+    rgba(167, 139, 250, 0.1),
+    rgba(255, 255, 255, 0.02) 58%
+  );
+  --stat-icon-bg: rgba(167, 139, 250, 0.16);
+  --stat-icon-border: transparent;
+  --stat-icon-color: #c4b5fd;
+}
+
 .training-stat-card.tone-recovery-high {
   --stat-accent: #34d399;
   --stat-border: rgba(52, 211, 153, 0.2);
@@ -7192,7 +7220,10 @@ td span {
 
 .training-intelligence-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.28fr);
+  grid-template-columns: minmax(330px, 0.82fr) minmax(360px, 1.08fr) minmax(260px, 0.68fr);
+  grid-template-areas:
+    "recovery fitness fitness"
+    "recovery sleep vo2";
   align-items: stretch;
   gap: 18px;
 }
@@ -7222,6 +7253,22 @@ td span {
 .training-performance-grid > .sleep-panel,
 .training-performance-grid > .vo2-widget-panel {
   height: 100%;
+}
+
+.training-intelligence-grid > .training-ring-panel {
+  grid-area: recovery;
+}
+
+.training-intelligence-grid > .training-fitness-panel {
+  grid-area: fitness;
+}
+
+.training-intelligence-grid > .sleep-panel {
+  grid-area: sleep;
+}
+
+.training-intelligence-grid > .vo2-widget-panel {
+  grid-area: vo2;
 }
 
 .training-summary-tiles.is-stack {
@@ -7791,33 +7838,172 @@ td span {
 }
 
 .sleep-stage-bar {
+  position: relative;
   display: flex;
-  overflow: hidden;
   height: 12px;
+  isolation: isolate;
+  overflow: visible;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
+.sleep-stage-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
 .sleep-stage-segment {
+  position: relative;
+  z-index: 1;
   min-width: 4px;
   height: 100%;
+  background: var(--sleep-stage-color);
+  cursor: default;
+  outline: none;
+  transform-origin: center;
+  transition:
+    border-radius 160ms ease,
+    box-shadow 160ms ease,
+    filter 160ms ease,
+    transform 160ms ease;
+}
+
+.sleep-stage-segment::after {
+  content: attr(data-stage-label);
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  z-index: 8;
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(25, 28, 34, 0.96), rgba(12, 14, 18, 0.94)),
+    rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.36),
+    0 0 18px color-mix(in srgb, var(--sleep-stage-color) 28%, transparent);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-stretch: normal;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  opacity: 0;
+  padding: 7px 9px;
+  pointer-events: none;
+  text-align: center;
+  transform: translate(-50%, 4px) scale(0.98, 0.58);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+  white-space: nowrap;
+}
+
+.sleep-stage-segment::before {
+  content: "";
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 50%;
+  z-index: 8;
+  width: 8px;
+  height: 8px;
+  border-right: 1px solid rgba(255, 255, 255, 0.16);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(12, 14, 18, 0.94);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px) rotate(45deg);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.sleep-stage-segment:first-child {
+  border-radius: 999px 0 0 999px;
+}
+
+.sleep-stage-segment:last-child {
+  border-radius: 0 999px 999px 0;
+}
+
+.sleep-stage-segment:only-child {
+  border-radius: 999px;
+}
+
+.sleep-stage-segment:hover,
+.sleep-stage-segment:focus-visible {
+  z-index: 4;
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--sleep-stage-color) 82%, white 18%),
+    0 0 16px color-mix(in srgb, var(--sleep-stage-color) 58%, transparent),
+    0 8px 18px rgba(0, 0, 0, 0.32);
+  filter: saturate(1.18) brightness(1.12);
+  transform: translateY(-3px) scaleY(1.72);
+}
+
+.sleep-stage-segment:hover::after,
+.sleep-stage-segment:focus-visible::after,
+.sleep-stage-segment:hover::before,
+.sleep-stage-segment:focus-visible::before {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1, 0.58);
+}
+
+.sleep-stage-segment:hover::before,
+.sleep-stage-segment:focus-visible::before {
+  transform: translate(-50%, 0) rotate(45deg) scaleY(0.58);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sleep-stage-segment {
+    transition: none;
+  }
+
+  .sleep-stage-segment:hover,
+  .sleep-stage-segment:focus-visible {
+    transform: none;
+  }
+
+  .sleep-stage-segment::after,
+  .sleep-stage-segment::before {
+    transition: none;
+  }
+
+  .sleep-stage-segment:hover::after,
+  .sleep-stage-segment:focus-visible::after {
+    transform: translate(-50%, 0) scale(1);
+  }
+
+  .sleep-stage-segment:hover::before,
+  .sleep-stage-segment:focus-visible::before {
+    transform: translate(-50%, 0) rotate(45deg);
+  }
 }
 
 .sleep-stage-segment.is-deep {
-  background: #4a63ff;
+  --sleep-stage-color: #4a63ff;
 }
 
 .sleep-stage-segment.is-light {
-  background: #6f89ff;
+  --sleep-stage-color: #6f89ff;
 }
 
 .sleep-stage-segment.is-rem {
-  background: #9b7bff;
+  --sleep-stage-color: #9b7bff;
 }
 
 .sleep-stage-segment.is-awake {
-  background: rgba(255, 255, 255, 0.28);
+  --sleep-stage-color: rgba(255, 255, 255, 0.36);
 }
 
 .sleep-stage-legend {
@@ -7883,10 +8069,10 @@ td span {
 .sleep-panel-metrics,
 .sleep-panel-footer {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
-  padding-top: 12px;
+  padding-top: 14px;
 }
 
 .sleep-panel-metrics span,
@@ -8731,7 +8917,8 @@ td span {
 .training-ring-panel {
   position: relative;
   display: grid;
-  align-content: space-between;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
   gap: 18px;
   min-height: clamp(300px, 34vh, 430px);
   overflow: visible;
@@ -8789,7 +8976,9 @@ td span {
 .training-ring-content {
   display: grid;
   justify-items: center;
-  gap: 18px;
+  align-content: start;
+  gap: clamp(16px, 2.2vh, 24px);
+  height: 100%;
   overflow: visible;
 }
 
@@ -11971,6 +12160,14 @@ td span {
   .training-activities-split,
   .activity-detail-visuals {
     grid-template-columns: 1fr;
+  }
+
+  .training-intelligence-grid {
+    grid-template-areas:
+      "recovery"
+      "fitness"
+      "sleep"
+      "vo2";
   }
 
   .training-activities-detail {

@@ -4,6 +4,7 @@ import type {
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
   TrainingHubAnalytics,
+  TrainingHubDailyHealthSummary,
   TrainingHubDailyMetric,
   TrainingHubDailyMetrics,
   TrainingHubDashboard,
@@ -33,6 +34,8 @@ export interface TrainingSummaryMetrics {
   weekLoadTotal?: number;
   latestRhr?: number;
   rhrDelta?: number;
+  steps?: number;
+  calories?: number;
 }
 
 export interface TrainingHubSnapshot {
@@ -43,6 +46,7 @@ export interface TrainingHubSnapshot {
   analytics: TrainingHubAnalytics | null;
   dailyMetrics: TrainingHubDailyMetrics | null;
   sleep?: TrainingHubSleepSummary | null;
+  dailyHealth?: TrainingHubDailyHealthSummary | null;
 }
 
 export type HeatmapIntensityLevel = 0 | 1 | 2 | 3 | 4;

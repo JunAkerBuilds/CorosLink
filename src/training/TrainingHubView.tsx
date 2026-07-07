@@ -371,17 +371,13 @@ export function TrainingHubView({
             </div>
             <div className="training-intelligence-grid">
               <RecoveryRing summary={summary} />
-              <div className="training-intelligence-main">
-                <div className="training-performance-grid">
-                  <FitnessTrendPanel snapshot={snapshot} activities={activities} />
-                  <SleepSummaryPanel
-                    sleep={snapshot?.sleep}
-                    connecting={sleepConnecting}
-                    refreshing={busy === "training-refresh"}
-                  />
-                  <Vo2MaxWidget snapshot={snapshot} />
-                </div>
-              </div>
+              <FitnessTrendPanel snapshot={snapshot} activities={activities} />
+              <SleepSummaryPanel
+                sleep={snapshot?.sleep}
+                connecting={sleepConnecting}
+                refreshing={busy === "training-refresh"}
+              />
+              <Vo2MaxWidget snapshot={snapshot} />
             </div>
           </section>
 

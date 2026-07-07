@@ -108,7 +108,7 @@ export function RecoveryRing({ summary }: RecoveryRingProps) {
         <TrainingSummaryTiles
           summary={summary}
           layout="stack"
-          metrics={["load", "heart"]}
+          metrics={["load", "heart", "steps", "calories"]}
           className="training-ring-metrics"
         />
       </div>

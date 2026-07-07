@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Flame, Heart } from "lucide-react";
+import { Flame, Footprints, Heart, Zap } from "lucide-react";
 import {
   formatOptionalNumber,
   formatSignedDelta
@@ -13,7 +13,7 @@ interface TrainingSummaryTilesProps {
   className?: string;
 }
 
-type TrainingSummaryMetric = "load" | "heart";
+type TrainingSummaryMetric = "load" | "heart" | "steps" | "calories";
 
 interface StatCardProps {
   icon: ReactNode;
@@ -21,7 +21,7 @@ interface StatCardProps {
   value: string;
   detail: string;
   variant?: "bar" | "widget";
-  tone?: "load" | "heart";
+  tone?: "load" | "heart" | "steps" | "calories";
 }
 
 function StatCard({
@@ -61,6 +61,14 @@ function StatCard({
       <strong className="training-stat-card__value">{value}</strong>
     </section>
   );
+}
+
+function formatWholeNumber(value?: number): string {
+  if (value === undefined || !Number.isFinite(value)) {
+    return "–";
+  }
+
+  return Math.round(value).toLocaleString();
 }
 
 export function TrainingSummaryTiles({
@@ -118,6 +126,28 @@ export function TrainingSummaryTiles({
           }
           variant={variant}
           tone="heart"
+        />
+      ) : null}
+
+      {metrics.includes("steps") ? (
+        <StatCard
+          icon={<Footprints size={iconSize} />}
+          label="Steps"
+          value={formatWholeNumber(summary.steps)}
+          detail={variant === "widget" ? "today" : "daily step count"}
+          variant={variant}
+          tone="steps"
+        />
+      ) : null}
+
+      {metrics.includes("calories") ? (
+        <StatCard
+          icon={<Zap size={iconSize} />}
+          label="Calories"
+          value={formatWholeNumber(summary.calories)}
+          detail={variant === "widget" ? "kcal" : "total calories"}
+          variant={variant}
+          tone="calories"
         />
       ) : null}
     </div>
