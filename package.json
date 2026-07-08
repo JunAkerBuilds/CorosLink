@@ -32,6 +32,7 @@
     "test:training-hub-write": "npm run build:electron && node scripts/test-training-hub-write.mjs",
     "test:activity-backup": "npm run build:electron && node scripts/test-activity-backup.mjs",
     "test:aws-sigv4": "npm run build:electron && node scripts/test-aws-sigv4.mjs",
+    "test:zip-store": "npm run build:electron && node scripts/test-zip-store.mjs",
     "start": "npm run build && electron .",
     "icons:generate": "node scripts/generate-icons.mjs",
     "dmg:background": "python3 scripts/generate-dmg-background.py",
