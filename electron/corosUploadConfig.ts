@@ -33,7 +33,9 @@ export function stsRequestUrl(region: CorosRegion): string {
 }
 
 export function decodeStsCredentials(rawCredentials: string): StsCredentials {
-  const base64 = rawCredentials.replace(SALT, "");
+  const base64 = rawCredentials.startsWith(SALT)
+    ? rawCredentials.slice(SALT.length)
+    : rawCredentials;
   const json = Buffer.from(base64, "base64").toString("utf8");
   return JSON.parse(json) as StsCredentials;
 }

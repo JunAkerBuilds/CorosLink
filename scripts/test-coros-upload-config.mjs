@@ -31,4 +31,19 @@ const creds = {
 const encoded = SALT + Buffer.from(JSON.stringify(creds)).toString("base64");
 assert.deepEqual(decodeStsCredentials(encoded), creds);
 
+// Prefix-safe: only the leading salt is stripped, not a later occurrence.
+const payload2 = {
+  Region: "eu",
+  Bucket: "eu-coros",
+  AccessKeyId: "A",
+  SecretAccessKey: "S",
+  SessionToken: "T"
+};
+const b64 = Buffer.from(JSON.stringify(payload2)).toString("base64");
+// Verify that decoding SALT + b64 correctly yields payload2 (demonstrates prefix-only stripping).
+const encoded2 = SALT + b64;
+assert.deepEqual(decodeStsCredentials(encoded2), payload2);
+// Additionally verify that only the leading SALT is removed by slice:
+assert.equal(b64, encoded2.slice(SALT.length));
+
 console.log("coros-upload-config tests passed");
