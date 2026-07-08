@@ -10319,6 +10319,54 @@ td span {
   font-weight: 600;
 }
 
+.training-intervals-connected {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.training-intervals-panel .training-backup-card {
+  grid-template-columns: 1fr;
+}
+
+.training-intervals-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.training-intervals-days {
+  max-width: 140px;
+}
+
+.training-intervals-days input {
+  min-height: 38px;
+}
+
+.training-intervals-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.training-intervals-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.training-intervals-row-error {
+  max-width: 220px;
+  text-align: right;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: normal;
+}
+
 @keyframes training-backup-indeterminate {
   0% {
     transform: translateX(-120%);

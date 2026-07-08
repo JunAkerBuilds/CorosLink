@@ -22,6 +22,7 @@ import { ActivityBackupPanel } from "./components/ActivityBackupPanel";
 import { ActivityDetailPanel } from "./components/ActivityDetailPanel";
 import { FitnessScoresPanel } from "./components/FitnessScoresPanel";
 import { FitnessTrendPanel } from "./components/FitnessTrendPanel";
+import { IntervalsImportPanel } from "./components/IntervalsImportPanel";
 import { PersonalRecordsPanel } from "./components/PersonalRecordsPanel";
 import { RacePredictorCards } from "./components/RacePredictorCards";
 import { RecoveryRing } from "./components/RecoveryRing";
@@ -436,6 +437,7 @@ export function TrainingHubView({
           </section>
 
           <ActivityBackupPanel api={api} />
+          <IntervalsImportPanel api={api} />
         </>
       ) : null}
     </div>
