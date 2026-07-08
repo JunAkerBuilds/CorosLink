@@ -6,8 +6,16 @@ import type { IntervalsActivity, IntervalsStatus } from "./types";
 const BASE_URL = "https://intervals.icu/api/v1";
 const SETTINGS = {
   apiKey: "intervals.apiKey",
-  athleteId: "intervals.athleteId"
+  athleteId: "intervals.athleteId",
+  importedAt: "intervals.importedAt"
 };
+
+// After we import an activity, COROS takes time to process it before it
+// shows up in the COROS activity list. Until then, listMissing's fuzzy
+// match against COROS activities won't find it and would report it as
+// "Missing" again, letting the user re-import (duplicate). We remember
+// what we've imported for this long and force onCoros=true for it.
+export const RECENT_IMPORT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
 function storeSecret(key: string, value: string): void {
   const payload = safeStorage.isEncryptionAvailable()
@@ -138,4 +146,42 @@ export async function downloadIntervalsFit(
   const buf = Buffer.from(await resp.arrayBuffer());
   fs.writeFileSync(destPath, buf);
   return destPath;
+}
+
+function readImportedMap(): Record<string, number> {
+  const raw = getSetting(SETTINGS.importedAt);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, number>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Pure recency filter, extracted so it can be unit tested without touching
+ * the (Electron-only, better-sqlite3-backed) settings store.
+ */
+export function filterRecentIds(
+  map: Record<string, number>,
+  now: number,
+  withinMs: number
+): string[] {
+  return Object.entries(map)
+    .filter(([, importedAt]) => now - importedAt <= withinMs)
+    .map(([intervalsId]) => intervalsId);
+}
+
+export function recordIntervalsImport(intervalsId: string): void {
+  const map = readImportedMap();
+  map[intervalsId] = Date.now();
+  setSetting(SETTINGS.importedAt, JSON.stringify(map));
+}
+
+export function getRecentlyImportedIds(withinMs: number): Set<string> {
+  const map = readImportedMap();
+  return new Set(filterRecentIds(map, Date.now(), withinMs));
 }

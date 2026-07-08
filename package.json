@@ -36,6 +36,7 @@
     "test:zip-store": "npm run build:electron && node scripts/test-zip-store.mjs",
     "test:coros-upload-config": "npm run build:electron && node scripts/test-coros-upload-config.mjs",
     "test:intervals-service": "npm run build:electron && node scripts/test-intervals-service.mjs",
+    "test:intervals-imported-store": "npm run build:electron && node scripts/test-intervals-imported-store.mjs",
     "start": "npm run build && electron .",
     "icons:generate": "node scripts/generate-icons.mjs",
     "dmg:background": "python3 scripts/generate-dmg-background.py",

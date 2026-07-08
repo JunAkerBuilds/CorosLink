@@ -58,7 +58,10 @@ import {
   connectIntervals,
   disconnectIntervals,
   listIntervalsActivities,
-  downloadIntervalsFit
+  downloadIntervalsFit,
+  recordIntervalsImport,
+  getRecentlyImportedIds,
+  RECENT_IMPORT_WINDOW_MS
 } from "./intervalsService";
 import { isAlreadyOnCoros } from "./intervalsMatch";
 import {
@@ -965,16 +968,18 @@ function registerIpcHandlers(): void {
         movingSec: a.duration ?? 0,
         distanceM: a.distance ?? 0
       }));
+      const recentlyImported = getRecentlyImportedIds(RECENT_IMPORT_WINDOW_MS);
       return intervals.map((a) => ({
         ...a,
-        onCoros: isAlreadyOnCoros(
-          {
-            startEpochMs: a.startEpochMs,
-            movingSec: a.movingSec,
-            distanceM: a.distanceM
-          },
-          coros
-        )
+        onCoros:
+          isAlreadyOnCoros(
+            {
+              startEpochMs: a.startEpochMs,
+              movingSec: a.movingSec,
+              distanceM: a.distanceM
+            },
+            coros
+          ) || recentlyImported.has(a.intervalsId)
       }));
     }
   );
@@ -993,7 +998,9 @@ function registerIpcHandlers(): void {
       );
       try {
         await downloadIntervalsFit(intervalsId, tmp);
-        return await uploadActivityFitToCoros(tmp);
+        const result = await uploadActivityFitToCoros(tmp);
+        recordIntervalsImport(intervalsId);
+        return result;
       } finally {
         try {
           fs.rmSync(tmp);
