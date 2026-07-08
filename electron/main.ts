@@ -1016,8 +1016,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "coros:addManualActivity",
     async (_event, input: ManualActivityInput): Promise<{ importId: string }> => {
-      if (!(input.durationSec > 0)) {
-        throw new Error("Duration must be greater than 0.");
+      if (!Number.isFinite(input.durationSec) || !(input.durationSec > 0)) {
+        throw new Error("Duration must be a finite number greater than 0.");
       }
       if (Number.isNaN(Date.parse(input.startTimeIso))) {
         throw new Error("Invalid start time.");
