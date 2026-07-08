@@ -2943,8 +2943,10 @@ function YouTubeBrowserView({
     webview.addEventListener("page-title-updated", handleTitleUpdated);
     webview.addEventListener("console-message", handleConsoleMessage);
 
+    // Fallback drain for downloads whose console-message relay was missed;
+    // the console path above delivers instantly, so a slow cadence is fine.
     const drainDownloads = window.setInterval(() => {
-      if (!domReadyRef.current) {
+      if (!domReadyRef.current || document.hidden) {
         return;
       }
 
@@ -2958,7 +2960,7 @@ function YouTubeBrowserView({
           }
         })
         .catch(() => undefined);
-    }, 700);
+    }, 2500);
 
     return () => {
       domReadyRef.current = false;
@@ -5956,7 +5958,7 @@ function injectYouTubeDownloadButton(webview: WebviewElement): Promise<void> {
     document.querySelectorAll(rowSelector).forEach(ensureRowButton);
   };
   const upsert = () => {
-    if (scheduled) {
+    if (scheduled || document.hidden) {
       return;
     }
     scheduled = true;
