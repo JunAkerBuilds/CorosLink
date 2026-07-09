@@ -89,8 +89,8 @@ export function ActivityBackupPanel({ api }: { api: CorosLinkApi }) {
   );
 
   return (
-    <section className="panel training-backup-panel">
-      <header className="training-backup-header">
+    <section className="data-tool-card training-backup-panel">
+      <header className="data-tool-header">
         <div className="training-backup-heading">
           <p className="eyebrow">Local backup</p>
           <h2>Back up all activities</h2>

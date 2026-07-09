@@ -195,18 +195,16 @@ export function DayCell({
         <span className="calendar-day-number">
           {day.isToday ? `Today ${String(dayNumber(day.dateKey)).padStart(2, "0")}` : dayNumber(day.dateKey)}
         </span>
-        {!day.isPast ? (
-          <button
-            type="button"
-            className="calendar-day-add"
-            onClick={() => onAdd(day.dateKey)}
-            disabled={busy}
-            title="Add workout"
-            aria-label={`Add workout on ${day.dateKey}`}
-          >
-            <Plus size={14} aria-hidden="true" />
-          </button>
-        ) : null}
+        <button
+          type="button"
+          className="calendar-day-add"
+          onClick={() => onAdd(day.dateKey)}
+          disabled={busy}
+          title={day.isPast ? "Log activity" : "Add workout"}
+          aria-label={`${day.isPast ? "Log activity" : "Add workout"} on ${day.dateKey}`}
+        >
+          <Plus size={14} aria-hidden="true" />
+        </button>
       </div>
 
       <div className="calendar-day-items">

@@ -10019,7 +10019,8 @@ td span {
   backdrop-filter: none;
 }
 
-.training-backup-header {
+.training-backup-header,
+.data-tool-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -10053,7 +10054,7 @@ td span {
 
 .training-backup-card {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(240px, 0.8fr);
+  grid-template-columns: minmax(0, 1fr) clamp(280px, 32%, 380px);
   gap: 16px;
   align-items: start;
   padding: 16px;
@@ -10319,52 +10320,377 @@ td span {
   font-weight: 600;
 }
 
-.training-intervals-connected {
+.data-view {
   display: grid;
-  grid-template-columns: 1fr;
+  gap: 18px;
+  min-height: 0;
+}
+
+.data-view-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.data-view-header h2 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1;
+}
+
+.data-view-header p:not(.eyebrow) {
+  max-width: 680px;
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.data-view-header-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  flex-shrink: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--success-text);
+}
+
+.data-connect-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
   gap: 14px;
+  max-width: 760px;
 }
 
-.training-intervals-panel .training-backup-card {
-  grid-template-columns: 1fr;
+.data-connect-panel > svg {
+  color: var(--warning-text);
 }
 
-.training-intervals-toolbar {
+.data-connect-panel h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.data-connect-panel p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.data-tools-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.data-tool-card {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02) 52%),
+    radial-gradient(120% 80% at 100% 0%, var(--bg-ambient-green), transparent 58%),
+    rgba(255, 255, 255, 0.034);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+.data-tool-card.training-backup-panel {
+  border-radius: var(--radius-lg);
+}
+
+.data-intervals-connect-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.data-intervals-connect-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.data-intervals-connect-copy strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.data-intervals-connect-copy span {
+  max-width: 520px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.data-intervals-fields {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(160px, 0.65fr);
+  gap: 12px;
+}
+
+.data-intervals-connect-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.data-intervals-connected {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.data-intervals-topbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.training-intervals-days {
-  max-width: 140px;
-}
-
-.training-intervals-days input {
-  min-height: 38px;
-}
-
-.training-intervals-toolbar-actions {
+.data-intervals-identity {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.training-intervals-status {
+.data-intervals-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.data-intervals-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.data-intervals-range {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.data-intervals-range button {
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.data-intervals-range button:hover:not(:disabled):not(.active) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+}
+
+.data-intervals-range button.active {
+  background: var(--accent-soft);
+  color: var(--success-text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.data-intervals-range button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.data-intervals-summary {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.data-intervals-table {
+  max-height: min(56vh, 520px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.data-intervals-table table {
+  min-width: 0;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.data-intervals-table th,
+.data-intervals-table td {
+  padding: 10px 12px;
+}
+
+.data-intervals-table th {
+  font-size: 11px;
+  letter-spacing: 0.03em;
+}
+
+.data-intervals-table td {
+  font-size: 13px;
+}
+
+.data-intervals-table th:nth-child(1) {
+  width: 30%;
+}
+
+.data-intervals-table th:nth-child(2) {
+  width: 17%;
+}
+
+.data-intervals-table th:nth-child(3) {
+  width: 16%;
+}
+
+.data-intervals-table th:nth-child(4) {
+  width: 13%;
+}
+
+.data-intervals-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-intervals-when {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.data-intervals-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-intervals-type svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.data-intervals-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.data-intervals-status-col {
+  text-align: right;
+}
+
+.data-intervals-status {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
 }
 
-.training-intervals-row-error {
-  max-width: 220px;
-  text-align: right;
+.data-intervals-synced {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.data-intervals-synced svg {
+  color: var(--success-text);
+  opacity: 0.75;
+}
+
+tr.data-intervals-row-missing {
+  background: color-mix(in srgb, var(--warning-bg) 45%, transparent);
+}
+
+.data-intervals-row-error {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  max-width: 260px;
+  color: var(--error-text);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: right;
   white-space: normal;
+}
+
+@media (max-width: 720px) {
+  .data-view-header,
+  .data-connect-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .data-view-header {
+    display: grid;
+  }
+
+  .data-view-header-icon {
+    display: none;
+  }
+
+  .data-connect-panel {
+    justify-items: start;
+  }
+
+  .data-intervals-fields,
+  .training-backup-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .training-backup-action-bar {
+    padding: 0;
+    border-left: none;
+  }
+
+  .data-intervals-toolbar,
+  .data-intervals-toolbar-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .data-intervals-range {
+    justify-content: center;
+  }
+
+  .data-intervals-range button {
+    flex: 1;
+  }
 }
 
 @keyframes training-backup-indeterminate {
@@ -17413,6 +17739,35 @@ td span {
   box-shadow: var(--shadow-card);
 }
 
+:root[data-theme="paper"] .data-tool-card,
+:root[data-theme="paper"] .data-connect-panel {
+  border-color: var(--glass-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.4)),
+    rgba(38, 34, 28, 0.025);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme="paper"] .data-intervals-connect-card,
+:root[data-theme="paper"] .data-intervals-connected {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.04);
+}
+
+:root[data-theme="paper"] .data-intervals-range {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.05);
+}
+
+:root[data-theme="paper"] .data-intervals-range button:hover:not(:disabled):not(.active) {
+  background: rgba(38, 34, 28, 0.07);
+}
+
+:root[data-theme="paper"] .data-intervals-table {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.03);
+}
+
 :root[data-theme="paper"] .training-backup-card {
   border-color: var(--glass-border);
   background: rgba(38, 34, 28, 0.04);
@@ -18425,6 +18780,171 @@ td span {
   color: var(--text-secondary);
 }
 
+.calendar-activity-sport-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.calendar-sport-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.calendar-sport-card,
+.calendar-sport-result {
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.calendar-sport-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  row-gap: 1px;
+  align-items: center;
+  min-height: 62px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  text-align: left;
+}
+
+.calendar-sport-card svg {
+  grid-row: 1 / span 2;
+  color: var(--text-muted);
+}
+
+.calendar-sport-card span,
+.calendar-sport-result span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-sport-card small,
+.calendar-sport-result small {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.1;
+}
+
+.calendar-sport-card:hover:not(.is-active):not(:disabled),
+.calendar-sport-result:hover:not(.is-active):not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.calendar-sport-card:focus-visible,
+.calendar-sport-result:focus-visible,
+.calendar-modal-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.calendar-sport-card:active:not(:disabled),
+.calendar-sport-result:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.calendar-sport-card.is-active,
+.calendar-sport-result.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.calendar-sport-card.is-active svg,
+.calendar-sport-card.is-active span,
+.calendar-sport-result.is-active svg,
+.calendar-sport-result.is-active span {
+  color: var(--accent-strong);
+}
+
+.calendar-sport-card.is-active small,
+.calendar-sport-result.is-active small {
+  color: var(--accent-strong);
+  opacity: 0.78;
+}
+
+.calendar-sport-card:disabled,
+.calendar-sport-result:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.calendar-sport-search {
+  flex: none;
+}
+
+.calendar-sport-search-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  padding: 0 10px;
+  color: var(--text-muted);
+}
+
+.calendar-sport-search-control:focus-within {
+  border-color: var(--accent);
+}
+
+.calendar-sport-search-control input {
+  min-width: 0;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 9px 0;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.calendar-sport-search-control input:focus {
+  outline: none;
+}
+
+.calendar-sport-results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.calendar-sport-result {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+
+.calendar-activity-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  opacity: 0.85;
+}
+
 .calendar-modal-footer {
   display: flex;
   justify-content: flex-end;
@@ -18491,6 +19011,39 @@ td span {
 
 .calendar-builder-add {
   align-self: flex-start;
+}
+
+@media (max-width: 680px) {
+  .calendar-modal-backdrop {
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .calendar-modal {
+    max-height: calc(100dvh - 24px);
+  }
+
+  .calendar-modal-tabs {
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .calendar-modal-tab {
+    white-space: nowrap;
+  }
+
+  .calendar-field-row {
+    flex-direction: column;
+  }
+
+  .calendar-sport-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .calendar-sport-results {
+    grid-template-columns: minmax(0, 1fr);
+    max-height: 164px;
+  }
 }
 
 @media (max-width: 1100px) {

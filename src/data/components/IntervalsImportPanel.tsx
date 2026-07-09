@@ -1,11 +1,17 @@
 import {
+  Activity as ActivityIcon,
+  Bike,
   CheckCircle2,
   Download,
+  Dumbbell,
+  Footprints,
   KeyRound,
   Link2,
   Loader2,
+  Mountain,
   RefreshCw,
   Unlink,
+  Waves,
   XCircle
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -17,13 +23,52 @@ import type { CorosLinkApi } from "../../coroslink-api";
 import {
   formatDistanceMeters,
   formatTrainingTimestamp
-} from "../formatters";
+} from "../../training/formatters";
 
 const DEFAULT_DAYS_BACK = 30;
+
+const RANGE_OPTIONS = [
+  { days: 7, label: "7 days" },
+  { days: 30, label: "30 days" },
+  { days: 90, label: "90 days" },
+  { days: 365, label: "1 year" }
+] as const;
 
 interface RowState {
   busy: boolean;
   error: string | null;
+}
+
+function activityTypeIcon(type: string) {
+  const normalized = type.toLowerCase();
+  if (
+    normalized.includes("ride") ||
+    normalized.includes("bike") ||
+    normalized.includes("cycl")
+  ) {
+    return Bike;
+  }
+  if (
+    normalized.includes("swim") ||
+    normalized.includes("row") ||
+    normalized.includes("paddle")
+  ) {
+    return Waves;
+  }
+  if (normalized.includes("hike") || normalized.includes("climb")) {
+    return Mountain;
+  }
+  if (normalized.includes("run") || normalized.includes("walk")) {
+    return Footprints;
+  }
+  if (
+    normalized.includes("weight") ||
+    normalized.includes("strength") ||
+    normalized.includes("workout")
+  ) {
+    return Dumbbell;
+  }
+  return ActivityIcon;
 }
 
 export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
@@ -36,6 +81,7 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
   const [connectError, setConnectError] = useState<string | null>(null);
 
   const [daysBack, setDaysBack] = useState(DEFAULT_DAYS_BACK);
+  const [refreshNonce, setRefreshNonce] = useState(0);
   const [rows, setRows] = useState<IntervalsActivityWithStatus[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
@@ -63,6 +109,41 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
       cancelled = true;
     };
   }, [api]);
+
+  useEffect(() => {
+    if (!status.connected) {
+      return;
+    }
+
+    let cancelled = false;
+    setRefreshing(true);
+    setRefreshError(null);
+    api
+      .listMissingIntervalsActivities(daysBack)
+      .then((next) => {
+        if (!cancelled) {
+          setRows(next);
+          setRowState({});
+        }
+      })
+      .catch((caught) => {
+        if (!cancelled) {
+          setRefreshError(
+            caught instanceof Error
+              ? caught.message
+              : "Failed to load intervals.icu activities."
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setRefreshing(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, status.connected, daysBack, refreshNonce]);
 
   async function handleConnect() {
     setConnectError(null);
@@ -94,24 +175,6 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
       );
     } finally {
       setDisconnecting(false);
-    }
-  }
-
-  async function handleRefresh() {
-    setRefreshError(null);
-    setRefreshing(true);
-    try {
-      const next = await api.listMissingIntervalsActivities(daysBack);
-      setRows(next);
-      setRowState({});
-    } catch (caught) {
-      setRefreshError(
-        caught instanceof Error
-          ? caught.message
-          : "Failed to load intervals.icu activities."
-      );
-    } finally {
-      setRefreshing(false);
     }
   }
 
@@ -161,8 +224,8 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
   const anyRowBusy = Object.values(rowState).some((state) => state.busy);
 
   return (
-    <section className="panel training-intervals-panel">
-      <header className="training-backup-header">
+    <section className="data-tool-card data-intervals-card">
+      <header className="data-tool-header">
         <div className="training-backup-heading">
           <p className="eyebrow">Import</p>
           <h2>Import from intervals.icu</h2>
@@ -183,13 +246,21 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
         </div>
       ) : !status.connected ? (
         <form
-          className="training-backup-card"
+          className="data-intervals-connect-card"
           onSubmit={(event) => {
             event.preventDefault();
             void handleConnect();
           }}
         >
-          <div className="training-login-fields">
+          <div className="data-intervals-connect-copy">
+            <strong>Connect your intervals.icu account</strong>
+            <span>
+              Use an API key and athlete ID to compare intervals.icu activities
+              against COROS.
+            </span>
+          </div>
+
+          <div className="data-intervals-fields">
             <label className="field training-login-field">
               <span>intervals.icu API key</span>
               <div className="training-login-input">
@@ -219,7 +290,7 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
             </label>
           </div>
 
-          <div className="settings-actions">
+          <div className="data-intervals-connect-actions">
             <button
               className="primary-button"
               type="submit"
@@ -239,30 +310,59 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
           ) : null}
         </form>
       ) : (
-        <div className="training-backup-card training-intervals-connected">
-          <div className="training-intervals-toolbar">
-            <label className="field training-intervals-days">
-              <span>Days back</span>
-              <input
-                type="number"
-                min={1}
-                max={365}
-                value={daysBack}
-                disabled={refreshing}
-                onChange={(event) =>
-                  setDaysBack(
-                    Math.max(1, Math.min(365, Number(event.target.value) || DEFAULT_DAYS_BACK))
-                  )
-                }
-              />
-            </label>
+        <div className="data-intervals-connected">
+          <div className="data-intervals-topbar">
+            <div className="data-intervals-identity">
+              <span className="badge ready">
+                <CheckCircle2 size={14} aria-hidden="true" />
+                Connected
+              </span>
+              {status.athleteId ? (
+                <span className="badge">Athlete {status.athleteId}</span>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="secondary-button danger-button compact-button"
+              disabled={disconnecting}
+              onClick={() => void handleDisconnect()}
+            >
+              {disconnecting ? (
+                <Loader2 size={14} className="spin" aria-hidden="true" />
+              ) : (
+                <Unlink size={14} aria-hidden="true" />
+              )}
+              Disconnect
+            </button>
+          </div>
 
-            <div className="training-intervals-toolbar-actions">
+          <div className="data-intervals-toolbar">
+            <div
+              className="data-intervals-range"
+              role="radiogroup"
+              aria-label="How far back to look"
+            >
+              {RANGE_OPTIONS.map((option) => (
+                <button
+                  key={option.days}
+                  type="button"
+                  role="radio"
+                  aria-checked={daysBack === option.days}
+                  className={daysBack === option.days ? "active" : undefined}
+                  disabled={refreshing || importingAll || anyRowBusy}
+                  onClick={() => setDaysBack(option.days)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="data-intervals-toolbar-actions">
               <button
                 type="button"
                 className="secondary-button compact-button"
                 disabled={refreshing}
-                onClick={() => void handleRefresh()}
+                onClick={() => setRefreshNonce((nonce) => nonce + 1)}
               >
                 {refreshing ? (
                   <Loader2 size={16} className="spin" aria-hidden="true" />
@@ -285,19 +385,6 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
                 Import all missing
                 {missingCount > 0 ? ` (${missingCount})` : ""}
               </button>
-              <button
-                type="button"
-                className="secondary-button danger-button compact-button"
-                disabled={disconnecting}
-                onClick={() => void handleDisconnect()}
-              >
-                {disconnecting ? (
-                  <Loader2 size={16} className="spin" aria-hidden="true" />
-                ) : (
-                  <Unlink size={16} aria-hidden="true" />
-                )}
-                Disconnect
-              </button>
             </div>
           </div>
 
@@ -307,52 +394,78 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
 
           {rows.length === 0 ? (
             <div className="training-empty-state">
-              <p>
-                No intervals.icu activities loaded yet. Choose a range and hit
-                Refresh.
-              </p>
+              {refreshing ? (
+                <p>
+                  <Loader2 size={16} className="spin" aria-hidden="true" />{" "}
+                  Loading intervals.icu activities…
+                </p>
+              ) : (
+                <p>
+                  No intervals.icu activities found in the last {daysBack} days.
+                </p>
+              )}
             </div>
           ) : (
-            <div className="table-shell training-activity-table-shell">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Distance</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => {
-                    const state = rowState[row.intervalsId];
-                    const busy = Boolean(state?.busy);
+            <>
+              <p className="data-intervals-summary">
+                {refreshing
+                  ? "Refreshing…"
+                  : missingCount > 0
+                    ? `${rows.length} activities loaded · ${missingCount} missing from COROS`
+                    : `${rows.length} activities loaded · everything is on COROS`}
+              </p>
+              <div className="table-shell data-intervals-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Activity</th>
+                      <th>Date</th>
+                      <th>Type</th>
+                      <th className="data-intervals-num">Distance</th>
+                      <th className="data-intervals-status-col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => {
+                      const state = rowState[row.intervalsId];
+                      const busy = Boolean(state?.busy);
+                      const TypeIcon = activityTypeIcon(row.type);
 
-                    return (
-                      <tr key={row.intervalsId} className="training-table-row">
-                        <td className="training-activity-cell">
-                          <div className="training-activity-name">
-                            <strong title={row.name}>{row.name}</strong>
-                          </div>
-                        </td>
-                        <td className="training-activity-when">
-                          {formatTrainingTimestamp(row.startEpochMs)}
-                        </td>
-                        <td className="training-activity-metric">{row.type}</td>
-                        <td className="training-activity-metric">
-                          {formatDistanceMeters(row.distanceM)}
-                        </td>
-                        <td className="training-activity-export">
-                          <div className="row-actions training-intervals-status">
-                            {row.onCoros ? (
-                              <span className="badge ready">
-                                <CheckCircle2 size={14} aria-hidden="true" />
-                                On COROS
-                              </span>
-                            ) : (
-                              <>
-                                <span className="badge warning">Missing</span>
+                      return (
+                        <tr
+                          key={row.intervalsId}
+                          className={
+                            row.onCoros ? undefined : "data-intervals-row-missing"
+                          }
+                        >
+                          <td>
+                            <strong
+                              className="data-intervals-name"
+                              title={row.name}
+                            >
+                              {row.name}
+                            </strong>
+                          </td>
+                          <td className="data-intervals-when">
+                            {formatTrainingTimestamp(row.startEpochMs)}
+                          </td>
+                          <td>
+                            <span className="data-intervals-type">
+                              <TypeIcon size={14} aria-hidden="true" />
+                              {row.type}
+                            </span>
+                          </td>
+                          <td className="data-intervals-num">
+                            {formatDistanceMeters(row.distanceM)}
+                          </td>
+                          <td className="data-intervals-status-col">
+                            <div className="data-intervals-status">
+                              {row.onCoros ? (
+                                <span className="data-intervals-synced">
+                                  <CheckCircle2 size={14} aria-hidden="true" />
+                                  On COROS
+                                </span>
+                              ) : (
                                 <button
                                   type="button"
                                   className="secondary-button compact-button"
@@ -372,25 +485,25 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
                                   )}
                                   Import
                                 </button>
-                              </>
-                            )}
-                            {state?.error ? (
-                              <span
-                                className="training-backup-error training-intervals-row-error"
-                                title={state.error}
-                              >
-                                <XCircle size={14} aria-hidden="true" />
-                                {state.error}
-                              </span>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                              )}
+                              {state?.error ? (
+                                <span
+                                  className="data-intervals-row-error"
+                                  title={state.error}
+                                >
+                                  <XCircle size={12} aria-hidden="true" />
+                                  {state.error}
+                                </span>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       )}

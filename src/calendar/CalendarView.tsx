@@ -354,6 +354,7 @@ export function CalendarView({
         <AddWorkoutModal
           api={api}
           dateKey={addTarget}
+          sportTypes={sportTypes}
           onClose={() => setAddTarget(null)}
           onScheduled={(message) => {
             onMessage(message);
