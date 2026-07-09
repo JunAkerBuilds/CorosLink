@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { enrichActivitiesWithSportNames } from "./corosSportTypes";
 import { musicFileNamesMatch } from "./musicFileNames";
 import Database from "better-sqlite3";
 import type {
@@ -966,7 +967,7 @@ export function listStoredTrainingActivities(limit = 500): TrainingHubActivity[]
     )
     .all(limit) as TrainingActivityRow[];
 
-  return rows.map(toTrainingActivity);
+  return enrichActivitiesWithSportNames(rows.map(toTrainingActivity));
 }
 
 function toCachedCorosMap(row: CachedCorosMapRow): CachedCorosMapPackage {

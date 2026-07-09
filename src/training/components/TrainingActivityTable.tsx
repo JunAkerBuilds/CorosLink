@@ -13,6 +13,7 @@ import {
   formatDurationSeconds,
   formatTrainingTableWhen
 } from "../formatters";
+import { resolveSportName } from "../sportTypes";
 
 interface TrainingActivityTableProps {
   activities: TrainingHubActivity[];
@@ -24,17 +25,6 @@ interface TrainingActivityTableProps {
     activity: TrainingHubActivity,
     fileType: TrainingHubActivityFileType
   ) => void;
-}
-
-function resolveSportName(
-  activity: TrainingHubActivity,
-  sportTypeMap: Map<number, string>
-): string {
-  return (
-    activity.sportName ??
-    sportTypeMap.get(activity.sportType) ??
-    `Sport ${activity.sportType}`
-  );
 }
 
 function sportChipClass(sportType: number): string {

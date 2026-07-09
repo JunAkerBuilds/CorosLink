@@ -12,6 +12,7 @@ import {
   formatOptionalNumber,
   formatTrainingTimestamp
 } from "../formatters";
+import { resolveSportName } from "../sportTypes";
 import { ActivityElevationChart } from "./ActivityElevationChart";
 import { ActivityRouteMap } from "./ActivityRouteMap";
 
@@ -30,22 +31,6 @@ function DetailStat({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   );
-}
-
-function resolveSportName(
-  activity: TrainingHubActivity | TrainingHubActivityDetail,
-  sportTypes: TrainingHubSportType[]
-): string | undefined {
-  if ("sportName" in activity && activity.sportName) {
-    return activity.sportName;
-  }
-
-  const sportType = activity.sportType;
-  if (sportType === undefined) {
-    return undefined;
-  }
-
-  return sportTypes.find((item) => item.sportType === sportType)?.sportName;
 }
 
 function hasPopulatedLaps(detail: TrainingHubActivityDetail): boolean {

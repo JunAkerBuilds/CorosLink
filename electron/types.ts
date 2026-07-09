@@ -798,6 +798,7 @@ export interface TrainingHubActivityDetail {
   activityId?: string;
   name?: string;
   sportType?: number;
+  sportName?: string;
   startTime?: number;
   duration?: number;
   distance?: number;
