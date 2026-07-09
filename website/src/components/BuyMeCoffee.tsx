@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { motion } from "motion/react";
 import { Coffee, Sparkles } from "lucide-react";
 import { usePrefersReducedMotion } from "../hooks/usePrefersReducedMotion";
@@ -44,21 +43,6 @@ export function BuyMeCoffee({ variant }: { variant: BuyMeCoffeeVariant }) {
         <div className="pointer-events-none absolute -bottom-12 -left-8 h-36 w-36 rounded-full bg-[#ff8c42]/15 blur-3xl" />
 
         <div className="relative flex flex-col items-center gap-5 text-center sm:flex-row sm:items-center sm:text-left">
-          <div className="relative shrink-0">
-            <div className="coffee-steam pointer-events-none absolute -top-3 left-1/2 flex -translate-x-1/2 gap-1.5">
-              <span />
-              <span />
-              <span />
-            </div>
-            <Image
-              src="/assets/buy-me-a-coffee.png"
-              alt=""
-              width={120}
-              height={120}
-              className="h-20 w-20 drop-shadow-[0_12px_24px_rgba(216,155,34,0.35)] sm:h-24 sm:w-24"
-            />
-          </div>
-
           <div className="min-w-0 flex-1">
             <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-[#ffd27a]">
               <Sparkles size={13} />

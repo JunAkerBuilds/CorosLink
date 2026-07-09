@@ -32,7 +32,7 @@ const ITEMS: Item[] = [
   {
     Icon: MonitorSmartphone,
     title: "Cross-platform",
-    body: "Native builds for macOS (Apple Silicon), Windows, and Linux.",
+    body: "Native builds for macOS (Apple Silicon & Intel), Windows, and Linux.",
   },
   {
     Icon: Usb,
