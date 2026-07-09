@@ -515,6 +515,26 @@ export default function App() {
     handleTrainingHubActivityDetail,
   ]);
 
+  // Decorative animations and polling stay hot even when nobody is looking;
+  // flag the backgrounded state so CSS can pause them and refreshes can skip.
+  useEffect(() => {
+    const update = () => {
+      document.body.classList.toggle(
+        "is-backgrounded",
+        document.hidden || !document.hasFocus(),
+      );
+    };
+    update();
+    document.addEventListener("visibilitychange", update);
+    window.addEventListener("focus", update);
+    window.addEventListener("blur", update);
+    return () => {
+      document.removeEventListener("visibilitychange", update);
+      window.removeEventListener("focus", update);
+      window.removeEventListener("blur", update);
+    };
+  }, []);
+
   useEffect(() => {
     if (!api) {
       return;
@@ -532,8 +552,11 @@ export default function App() {
     });
 
     const interval = window.setInterval(() => {
+      if (document.hidden) {
+        return;
+      }
       void refreshAll();
-    }, 5000);
+    }, 15000);
 
     return () => window.clearInterval(interval);
   }, [
@@ -2930,8 +2953,10 @@ function YouTubeBrowserView({
     webview.addEventListener("page-title-updated", handleTitleUpdated);
     webview.addEventListener("console-message", handleConsoleMessage);
 
+    // Fallback drain for downloads whose console-message relay was missed;
+    // the console path above delivers instantly, so a slow cadence is fine.
     const drainDownloads = window.setInterval(() => {
-      if (!domReadyRef.current) {
+      if (!domReadyRef.current || document.hidden) {
         return;
       }
 
@@ -2945,7 +2970,7 @@ function YouTubeBrowserView({
           }
         })
         .catch(() => undefined);
-    }, 700);
+    }, 2500);
 
     return () => {
       domReadyRef.current = false;
@@ -5943,7 +5968,7 @@ function injectYouTubeDownloadButton(webview: WebviewElement): Promise<void> {
     document.querySelectorAll(rowSelector).forEach(ensureRowButton);
   };
   const upsert = () => {
-    if (scheduled) {
+    if (scheduled || document.hidden) {
       return;
     }
     scheduled = true;

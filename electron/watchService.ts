@@ -103,20 +103,50 @@ interface StorageStats {
   usedBytes?: number;
 }
 
+// The renderer polls watch status on an interval; walking the watch's Music
+// and map folders on every poll keeps the disk and main process busy. Reuse
+// the last result while the mounted volume set is unchanged and the entry is
+// fresh. Anything that writes to the watch must call
+// invalidateWatchStatusCache() so the next poll rescans.
+const WATCH_STATUS_CACHE_TTL_MS = 60_000;
+let cachedWatchStatus:
+  | { status: WatchStatus; volumeKey: string; expiresAt: number }
+  | undefined;
+
+export function invalidateWatchStatusCache(): void {
+  cachedWatchStatus = undefined;
+}
+
 export async function getWatchStatus(): Promise<WatchStatus> {
   try {
-    const candidates = await findDriveCandidates();
+    const volumes = await listVolumes();
+    const volumeKey = volumes.map((volume) => volume.rootPath).join("\n");
+    if (
+      cachedWatchStatus &&
+      cachedWatchStatus.volumeKey === volumeKey &&
+      Date.now() < cachedWatchStatus.expiresAt
+    ) {
+      return cachedWatchStatus.status;
+    }
+
+    const candidates = await findDriveCandidates(volumes);
     const selected = candidates.find(
       (candidate) => candidate.musicPath || candidate.mapPath
     );
 
     if (!selected) {
-      return {
+      const status: WatchStatus = {
         connected: false,
         checkedAt: new Date().toISOString(),
         tracks: [],
         candidates
       };
+      cachedWatchStatus = {
+        status,
+        volumeKey,
+        expiresAt: Date.now() + WATCH_STATUS_CACHE_TTL_MS
+      };
+      return status;
     }
 
     const musicPath = selected.musicPath;
@@ -124,7 +154,7 @@ export async function getWatchStatus(): Promise<WatchStatus> {
     const tracks = musicPath ? listWatchTracks(musicPath) : [];
     const model = resolveWatchModel(selected.name, selected.totalBytes);
 
-    return {
+    const status: WatchStatus = {
       connected: true,
       checkedAt: new Date().toISOString(),
       name: selected.name,
@@ -140,6 +170,12 @@ export async function getWatchStatus(): Promise<WatchStatus> {
       tracks,
       candidates
     };
+    cachedWatchStatus = {
+      status,
+      volumeKey,
+      expiresAt: Date.now() + WATCH_STATUS_CACHE_TTL_MS
+    };
+    return status;
   } catch (error) {
     return {
       connected: false,
@@ -158,6 +194,7 @@ export function getWatchConnectionSmokeOption(): WatchConnectionSmokeOptionId {
 export async function setWatchConnectionSmokeOption(
   optionId: WatchConnectionSmokeOptionId
 ): Promise<WatchStatus> {
+  invalidateWatchStatusCache();
   if (optionId === "auto") {
     activeWatchConnectionSmokeOptionId = "auto";
     await clearActiveSmokeFixture();
@@ -226,6 +263,7 @@ export async function deleteWatchTrack(relativePath: string): Promise<void> {
   }
 
   fs.rmSync(targetPath, { force: true });
+  invalidateWatchStatusCache();
 }
 
 export async function transferFileToWatch(filePath: string): Promise<WatchTrack> {
@@ -251,6 +289,7 @@ export async function transferFileToWatch(filePath: string): Promise<WatchTrack>
     sanitizeFileName(path.basename(filePath))
   );
   fs.copyFileSync(filePath, destination);
+  invalidateWatchStatusCache();
 
   const stats = fs.statSync(destination);
   return {
@@ -262,8 +301,9 @@ export async function transferFileToWatch(filePath: string): Promise<WatchTrack>
   };
 }
 
-async function findDriveCandidates(): Promise<DriveCandidate[]> {
-  const volumes = await listVolumes();
+async function findDriveCandidates(
+  volumes: RawVolume[]
+): Promise<DriveCandidate[]> {
   const candidates: DriveCandidate[] = [];
 
   for (const volume of volumes) {

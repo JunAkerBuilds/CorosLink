@@ -5226,6 +5226,7 @@ td span {
 }
 
 .training-status-dot {
+  position: relative;
   width: 9px;
   height: 9px;
   border-radius: 50%;
@@ -5235,7 +5236,18 @@ td span {
 
 .training-status-dot.is-connected {
   background: var(--success-dot);
-  box-shadow: 0 0 0 5px rgba(52, 211, 153, 0.14);
+  box-shadow: none;
+}
+
+/* Halo lives on a pseudo-element animated with transform/opacity only, so the
+   pulse stays on the compositor instead of repainting box-shadow each frame. */
+.training-status-dot.is-connected::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: rgba(52, 211, 153, 0.14);
+  z-index: -1;
   animation: training-status-pulse 2.8s ease-in-out infinite;
 }
 
@@ -8809,9 +8821,22 @@ td span {
 }
 
 .training-heatmap-grid.is-ready .training-heatmap-cell.is-peak {
-  animation:
-    heatmap-cell-pop 0.6s cubic-bezier(0.34, 1.45, 0.64, 1) both,
-    heatmap-peak-glow 2.8s ease-in-out 1.1s infinite;
+  animation: heatmap-cell-pop 0.6s cubic-bezier(0.34, 1.45, 0.64, 1) both;
+}
+
+/* Peak glow pulses via opacity on a pseudo-element with a static box-shadow,
+   keeping the animation on the compositor instead of repainting each frame. */
+.training-heatmap-grid.is-ready .training-heatmap-cell.is-peak::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    0 0 22px rgba(45, 154, 116, 0.55),
+    0 0 36px rgba(45, 154, 116, 0.2);
+  opacity: 0;
+  pointer-events: none;
+  animation: heatmap-peak-glow 2.8s ease-in-out 1.1s infinite;
 }
 
 .training-heatmap-cell.is-empty {
@@ -8998,13 +9023,11 @@ td span {
 @keyframes heatmap-peak-glow {
   0%,
   100% {
-    box-shadow: 0 0 14px rgba(45, 154, 116, 0.35);
+    opacity: 0;
   }
 
   50% {
-    box-shadow:
-      0 0 22px rgba(45, 154, 116, 0.55),
-      0 0 36px rgba(45, 154, 116, 0.2);
+    opacity: 1;
   }
 }
 
@@ -10691,6 +10714,7 @@ td span {
   mix-blend-mode: screen;
   pointer-events: none;
   z-index: 0;
+  will-change: transform, opacity;
   animation: banner-glow 9s ease-in-out infinite;
 }
 
@@ -11581,11 +11605,13 @@ td span {
 @keyframes training-status-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 5px rgba(52, 211, 153, 0.14);
+    transform: scale(1);
+    opacity: 1;
   }
 
   50% {
-    box-shadow: 0 0 0 8px rgba(52, 211, 153, 0.06);
+    transform: scale(1.32);
+    opacity: 0.42;
   }
 }
 
@@ -18638,4 +18664,19 @@ td span {
     flex-direction: column;
     align-items: stretch;
   }
+}
+
+/* When the window is hidden or unfocused, freeze all CSS animations so the
+   renderer and GPU process stop repainting decorative effects nobody can see.
+   The class is toggled on <body> from App.tsx (visibilitychange/focus/blur). */
+body.is-backgrounded *,
+body.is-backgrounded *::before,
+body.is-backgrounded *::after {
+  animation-play-state: paused !important;
+}
+
+/* Keep activity indicators alive so in-progress work still reads as running. */
+body.is-backgrounded .spin,
+body.is-backgrounded .training-backup-progress-track.is-indeterminate span {
+  animation-play-state: running !important;
 }

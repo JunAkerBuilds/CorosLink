@@ -49,7 +49,7 @@ import {
   reverseGeocodeNominatim,
   searchNominatim
 } from "./routing/nominatim";
-import { getWatchStatus } from "./watchService";
+import { getWatchStatus, invalidateWatchStatusCache } from "./watchService";
 
 const COROS_MAP_HOST = "https://map-oss-us.coros.com";
 const COROS_MAP_MANIFEST_URL = `${COROS_MAP_HOST}/regionMap/v5/regions_v5.json`;
@@ -646,6 +646,7 @@ export async function installCachedCorosMaps(
       updatedAt: new Date().toISOString()
     });
 
+    invalidateWatchStatusCache();
     return {
       sourcePath: preparedPackages[0]!.selection.sourcePath,
       mapPath: preparedPackages[0]!.selection.mapPath,
@@ -964,6 +965,7 @@ export async function installCorosMapFolder(
       });
     }
 
+    invalidateWatchStatusCache();
     return {
       ...selection,
       installedPath,
