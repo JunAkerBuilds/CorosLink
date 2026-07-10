@@ -32,6 +32,7 @@
     "test:daily-health-data-parser": "npm run build:electron && node scripts/test-daily-health-data-parser.mjs",
     "test:training-formatters": "npm run build:electron && node --experimental-strip-types scripts/test-training-formatters.mjs",
     "test:exercise-names": "node --experimental-strip-types scripts/test-exercise-names.mjs",
+    "test:strength-detail": "node --experimental-strip-types scripts/test-strength-detail.mjs",
     "test:chat-workout-tools": "npm run build:electron && node scripts/test-chat-workout-tools.mjs",
     "test:coros-workout-builder": "npm run build:electron && node scripts/test-coros-workout-builder.mjs",
     "test:training-hub-write": "npm run build:electron && node scripts/test-training-hub-write.mjs",
