@@ -15,6 +15,7 @@ import {
 import { resolveSportName } from "../sportTypes";
 import { ActivityElevationChart } from "./ActivityElevationChart";
 import { ActivityRouteMap } from "./ActivityRouteMap";
+import { StrengthDetailPanel } from "./StrengthDetailPanel";
 
 interface ActivityDetailPanelProps {
   detail: TrainingHubActivityDetail | null;
@@ -125,78 +126,84 @@ export function ActivityDetailPanel({
         </div>
       </div>
 
-      <div className="activity-detail-grid">
-        <DetailStat
-          label="Duration"
-          value={formatDurationSeconds(detail.duration)}
-        />
-        <DetailStat
-          label="Distance"
-          value={formatDistanceMeters(detail.distance)}
-        />
-        <DetailStat label="Avg HR" value={formatOptionalNumber(detail.avgHr)} />
-        <DetailStat label="Max HR" value={formatOptionalNumber(detail.maxHr)} />
-        <DetailStat
-          label="Calories"
-          value={formatOptionalNumber(detail.calories)}
-        />
-        <DetailStat
-          label="Elevation"
-          value={formatElevationMeters(detail.elevationGain)}
-        />
-        <DetailStat
-          label="Training Load"
-          value={formatOptionalNumber(detail.trainingLoad)}
-        />
-      </div>
-
-      <div className="activity-detail-visuals">
-        <section className="activity-detail-visual-panel">
-          <div className="activity-detail-visual-heading">
-            <h3>Route</h3>
+      {detail.strength ? (
+        <StrengthDetailPanel strength={detail.strength} />
+      ) : (
+        <>
+          <div className="activity-detail-grid">
+            <DetailStat
+              label="Duration"
+              value={formatDurationSeconds(detail.duration)}
+            />
+            <DetailStat
+              label="Distance"
+              value={formatDistanceMeters(detail.distance)}
+            />
+            <DetailStat label="Avg HR" value={formatOptionalNumber(detail.avgHr)} />
+            <DetailStat label="Max HR" value={formatOptionalNumber(detail.maxHr)} />
+            <DetailStat
+              label="Calories"
+              value={formatOptionalNumber(detail.calories)}
+            />
+            <DetailStat
+              label="Elevation"
+              value={formatElevationMeters(detail.elevationGain)}
+            />
+            <DetailStat
+              label="Training Load"
+              value={formatOptionalNumber(detail.trainingLoad)}
+            />
           </div>
-          <ActivityRouteMap track={detail.track} />
-        </section>
 
-        <section className="activity-detail-visual-panel">
-          <div className="activity-detail-visual-heading">
-            <h3>Elevation</h3>
-          </div>
-          <ActivityElevationChart track={detail.track} />
-        </section>
-      </div>
+          <div className="activity-detail-visuals">
+            <section className="activity-detail-visual-panel">
+              <div className="activity-detail-visual-heading">
+                <h3>Route</h3>
+              </div>
+              <ActivityRouteMap track={detail.track} />
+            </section>
 
-      {showLaps ? (
-        <div className="training-laps-section">
-          <h3>Laps</h3>
-          <div className="table-shell">
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Duration</th>
-                  <th>Distance</th>
-                  <th>Avg HR</th>
-                  <th>Max HR</th>
-                  <th>Elev.</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.laps.map((lap) => (
-                  <tr key={lap.index}>
-                    <td>{lap.index}</td>
-                    <td>{formatDurationSeconds(lap.duration)}</td>
-                    <td>{formatDistanceMeters(lap.distance)}</td>
-                    <td>{formatOptionalNumber(lap.avgHr)}</td>
-                    <td>{formatOptionalNumber(lap.maxHr)}</td>
-                    <td>{formatElevationMeters(lap.elevationGain)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <section className="activity-detail-visual-panel">
+              <div className="activity-detail-visual-heading">
+                <h3>Elevation</h3>
+              </div>
+              <ActivityElevationChart track={detail.track} />
+            </section>
           </div>
-        </div>
-      ) : null}
+
+          {showLaps ? (
+            <div className="training-laps-section">
+              <h3>Laps</h3>
+              <div className="table-shell">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Duration</th>
+                      <th>Distance</th>
+                      <th>Avg HR</th>
+                      <th>Max HR</th>
+                      <th>Elev.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detail.laps.map((lap) => (
+                      <tr key={lap.index}>
+                        <td>{lap.index}</td>
+                        <td>{formatDurationSeconds(lap.duration)}</td>
+                        <td>{formatDistanceMeters(lap.distance)}</td>
+                        <td>{formatOptionalNumber(lap.avgHr)}</td>
+                        <td>{formatOptionalNumber(lap.maxHr)}</td>
+                        <td>{formatElevationMeters(lap.elevationGain)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+        </>
+      )}
 
       <div className="training-raw-toggle">
         <button
