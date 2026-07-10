@@ -38,7 +38,7 @@
 
 ## Overview
 
-CorosLink brings music management, watch maps, route planning, and training analytics together for your **COROS watch**. Connect over USB to sync MP3s and map packages, download music from YouTube, Spotify, YouTube Music, or Apple Music playlists, build GPX routes on your desktop, and explore your training data in a rich dashboard — all from your Mac, PC, or Linux machine.
+CorosLink brings music management, watch maps, route planning, and training analytics together for your **COROS watch**. Connect over USB to sync MP3s and map packages, download music from YouTube, Spotify, YouTube Music, or Apple Music playlists, download public Apple Podcasts episodes, build GPX routes on your desktop, and explore your training data in a rich dashboard — all from your Mac, PC, or Linux machine.
 
 ---
 
@@ -129,6 +129,15 @@ Browse your Apple Music library playlists and queue tracks for download.
 - **Library playlists** load automatically when `media-user-token` is included
 - **Tracks resolve via YouTube search** — Apple Music streams are DRM-protected, so downloads use the same YouTube matching flow as Spotify sync
 
+#### Apple Podcasts
+
+Find a show from the public Apple Podcasts catalogue or paste its Apple Podcasts link, then download individual public RSS episodes directly as MP3s.
+
+- **No sign-in required** — public show metadata and RSS feeds load directly
+- **Latest public episodes** — browse up to 50 downloadable RSS enclosures in the publisher's feed order
+- **Direct audio downloads** — episode audio goes through the existing queue and converts to MP3 for your watch
+- **Subscriber-only and feedless episodes are excluded** — CorosLink only downloads publicly available RSS audio
+
 ---
 
 ### Maps — Watch maps and routes (BETA)
@@ -198,6 +207,7 @@ flowchart LR
   Spotify --> ytDlp
   YouTubeMusic[YouTube Music] --> ytDlp
   AppleMusic[Apple Music] --> ytDlp
+  ApplePodcasts[Apple Podcasts RSS] --> ytDlp
   YouTubePlaylists[YouTube Playlists] --> ytDlp
   ytDlp --> SQLite[(Local SQLite)]
   SQLite --> USBMusic[USB Music folder]
@@ -293,6 +303,7 @@ Installers are written to `release/`.
 - **Spotify tokens** — stored locally in SQLite after OAuth; never sent anywhere except Spotify
 - **Google OAuth tokens** — stored locally in SQLite after OAuth; used only for YouTube Data API playlist reads
 - **YouTube Music / Apple Music headers** — stored locally and used only to read your library metadata; never sent to CorosLink servers
+- **Apple Podcasts** — public catalogue searches and RSS feeds are requested directly to discover publicly downloadable episodes; no account credentials are collected
 - **Map cache** — downloaded map packages are stored in a local folder you choose; copied to the watch over USB only
 - **OpenRouteService** — route requests are sent to OpenRouteService when you generate a route (your API key is stored locally)
 - **Training Hub** — your COROS email and password are used to authenticate with COROS servers. Activity data is fetched on demand and not synced to any third-party service

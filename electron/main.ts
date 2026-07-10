@@ -163,6 +163,10 @@ import {
   resetAppleMusicBrowserSession
 } from "./appleMusicBrowserService";
 import {
+  loadApplePodcast,
+  searchApplePodcasts
+} from "./applePodcastsService";
+import {
   checkForAppUpdates,
   downloadAppUpdate,
   getAppUpdateSnapshot,
@@ -731,6 +735,14 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("appleMusic:fetchPlaylist", (_event, playlist: string) =>
     fetchAppleMusicPlaylist(playlist)
+  );
+
+  ipcMain.handle("applePodcasts:search", (_event, query: string) =>
+    searchApplePodcasts(query)
+  );
+
+  ipcMain.handle("applePodcasts:load", (_event, showIdOrUrl: string) =>
+    loadApplePodcast(showIdOrUrl)
   );
 
   ipcMain.handle("spotify:getConfig", () => getSpotifyConfig());

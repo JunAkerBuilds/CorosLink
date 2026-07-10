@@ -6637,6 +6637,777 @@ td span {
   white-space: nowrap;
 }
 
+/* Apple Podcasts — public RSS discovery and direct episode downloads. */
+.apple-podcast-view > .apple-podcast-detail-panel {
+  flex: 1;
+  min-height: 0;
+}
+
+.apple-podcast-search-panel {
+  display: grid;
+  gap: 12px;
+  border-color: rgba(145, 82, 255, 0.32);
+  background:
+    linear-gradient(135deg, rgba(145, 82, 255, 0.15), rgba(233, 78, 172, 0.08)),
+    var(--glass-bg);
+}
+
+.apple-podcast-search-panel .section-heading {
+  margin-bottom: 0;
+}
+
+.apple-podcast-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(187, 134, 252, 0.42);
+  border-radius: 12px;
+  background: rgba(145, 82, 255, 0.14);
+  color: #c6a2ff;
+}
+
+.apple-podcast-search-form {
+  display: flex;
+  gap: 10px;
+}
+
+.apple-podcast-search-form input {
+  min-width: 0;
+  flex: 1;
+  min-height: 44px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  background: rgba(0, 0, 0, 0.12);
+  color: var(--text-primary);
+  padding: 0 13px;
+}
+
+.apple-podcast-search-form input:focus {
+  border-color: #b28aff;
+  box-shadow: 0 0 0 3px rgba(178, 138, 255, 0.16);
+}
+
+.apple-podcast-search-button {
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #8550e6, #bd5ac9);
+  box-shadow: 0 4px 16px rgba(145, 82, 255, 0.28);
+}
+
+.apple-podcast-search-note {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.apple-podcast-results-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.apple-podcast-results-panel .section-heading {
+  margin-bottom: 0;
+}
+
+.apple-podcast-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.apple-podcast-result {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-primary);
+  padding: 8px;
+  text-align: left;
+}
+
+.apple-podcast-result:hover:not(:disabled) {
+  border-color: rgba(178, 138, 255, 0.58);
+  background: rgba(145, 82, 255, 0.12);
+}
+
+.apple-podcast-result-art,
+.apple-podcast-episode-art {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  object-fit: cover;
+}
+
+.apple-podcast-result-art {
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+}
+
+.apple-podcast-result-copy,
+.apple-podcast-episode-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.apple-podcast-result-copy strong,
+.apple-podcast-result-copy span,
+.apple-podcast-result-copy small,
+.apple-podcast-episode-copy strong,
+.apple-podcast-episode-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apple-podcast-result-copy span,
+.apple-podcast-result-copy small,
+.apple-podcast-episode-copy span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.apple-podcast-result-copy small {
+  color: #c6a2ff;
+}
+
+.apple-podcast-detail-panel {
+  gap: 16px;
+  padding: 16px;
+}
+
+.panel-flex > .apple-podcast-header {
+  flex-shrink: 0;
+}
+
+.apple-podcast-header {
+  position: relative;
+  display: flex;
+  min-height: 164px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(178, 138, 255, 0.3);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgba(145, 82, 255, 0.22), rgba(233, 78, 172, 0.1)),
+    rgba(255, 255, 255, 0.035);
+  padding: 18px 20px;
+}
+
+.apple-podcast-header::after {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(90deg, rgba(8, 10, 12, 0.24), rgba(8, 10, 12, 0.78));
+  content: "";
+  pointer-events: none;
+}
+
+.apple-podcast-backdrop {
+  position: absolute;
+  inset: -42px;
+  width: calc(100% + 84px);
+  height: calc(100% + 84px);
+  opacity: 0.28;
+  object-fit: cover;
+  filter: blur(30px) saturate(1.3);
+}
+
+.apple-podcast-show-art {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(24vw, 134px);
+  height: min(24vw, 134px);
+  max-width: 134px;
+  max-height: 134px;
+  min-width: 108px;
+  min-height: 108px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  object-fit: cover;
+  box-shadow: 0 24px 46px rgba(0, 0, 0, 0.34);
+}
+
+.apple-podcast-show-meta {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: 1 1 260px;
+  gap: 7px;
+  min-width: 0;
+}
+
+.apple-podcast-show-meta h3 {
+  margin: 0;
+  font-size: clamp(26px, 4vw, 42px);
+  line-height: 1.02;
+  overflow-wrap: anywhere;
+}
+
+.apple-podcast-show-meta > span {
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 13px;
+}
+
+.apple-podcast-show-meta p {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 4px 0 0;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.apple-podcast-open-link {
+  border-color: rgba(178, 138, 255, 0.48);
+  background: rgba(145, 82, 255, 0.16);
+  color: #d6c0ff;
+}
+
+.apple-podcast-open-link:hover {
+  border-color: rgba(207, 168, 255, 0.72);
+  background: rgba(145, 82, 255, 0.26);
+}
+
+.apple-podcast-detail-panel .table-shell {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.apple-podcast-episode-cell {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.apple-podcast-episode-art {
+  width: 46px;
+  height: 46px;
+  border-radius: 7px;
+}
+
+.apple-podcast-art-fallback {
+  background: linear-gradient(135deg, rgba(145, 82, 255, 0.34), rgba(233, 78, 172, 0.2));
+  color: #e5d7ff;
+}
+
+.apple-podcast-loading,
+.apple-podcast-empty {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  color: var(--text-secondary);
+}
+
+.apple-podcast-loading strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+/* Master-detail workspace: search context remains stable while show details change. */
+.apple-podcast-view {
+  min-height: 0;
+}
+
+.stack.stack-fill > .apple-podcast-workspace {
+  flex: 1;
+  min-height: 0;
+}
+
+.apple-podcast-workspace {
+  display: grid;
+  grid-template-columns: minmax(276px, 330px) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 0;
+}
+
+.apple-podcast-browser-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-color: rgba(178, 138, 255, 0.24);
+  background:
+    linear-gradient(180deg, rgba(145, 82, 255, 0.1), transparent 168px),
+    var(--glass-bg);
+  padding: 16px;
+}
+
+.apple-podcast-browser-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.apple-podcast-browser-heading .eyebrow {
+  margin-bottom: 2px;
+}
+
+.apple-podcast-browser-heading h2 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.apple-podcast-browser-heading .apple-podcast-mark {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 11px;
+}
+
+.apple-podcast-search-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.apple-podcast-search-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.apple-podcast-search-form input {
+  width: 100%;
+  min-height: 40px;
+  border-color: rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  background: rgba(4, 6, 9, 0.3);
+  font-size: 13px;
+}
+
+.apple-podcast-search-form input::placeholder {
+  color: var(--text-muted);
+}
+
+.apple-podcast-search-button {
+  min-height: 40px;
+  border-radius: 9px;
+  background: #8859d5;
+  box-shadow: none;
+  padding: 0 13px;
+}
+
+.apple-podcast-search-button:hover:not(:disabled) {
+  background: #9b68e6;
+  box-shadow: 0 8px 20px rgba(135, 89, 213, 0.2);
+}
+
+.apple-podcast-result-nav {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 14px;
+}
+
+.apple-podcast-result-nav-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.apple-podcast-results {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.apple-podcast-result {
+  position: relative;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  min-height: 64px;
+  flex: 0 0 auto;
+  gap: 10px;
+  overflow: hidden;
+  border-color: transparent;
+  border-radius: 9px;
+  background: transparent;
+  padding: 7px 8px;
+}
+
+.apple-podcast-result::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 2px;
+  border-radius: 999px;
+  background: #b991ff;
+  content: "";
+  opacity: 0;
+  transform: scaleY(0.4);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.apple-podcast-result:hover:not(:disabled) {
+  border-color: rgba(178, 138, 255, 0.18);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.apple-podcast-result.active {
+  border-color: rgba(178, 138, 255, 0.34);
+  background: linear-gradient(90deg, rgba(145, 82, 255, 0.18), rgba(145, 82, 255, 0.04));
+}
+
+.apple-podcast-result.active::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+.apple-podcast-result:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.apple-podcast-result-art {
+  width: 42px;
+  height: 42px;
+  border-radius: 7px;
+}
+
+.apple-podcast-result-copy {
+  gap: 2px;
+}
+
+.apple-podcast-result-copy strong {
+  font-size: 13px;
+}
+
+.apple-podcast-result-copy span,
+.apple-podcast-result-copy small {
+  font-size: 11px;
+}
+
+.apple-podcast-result-copy small {
+  color: #bd9cf6;
+}
+
+.apple-podcast-browser-empty {
+  display: grid;
+  flex: 1;
+  place-content: center;
+  justify-items: start;
+  gap: 8px;
+  min-height: 180px;
+  color: var(--text-secondary);
+  padding: 12px 4px;
+}
+
+.apple-podcast-browser-empty > svg {
+  color: #bd9cf6;
+}
+
+.apple-podcast-browser-empty strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.apple-podcast-browser-empty span {
+  max-width: 24ch;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.apple-podcast-search-note {
+  flex-shrink: 0;
+  margin: 14px 4px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 12px;
+  font-size: 11px;
+}
+
+.apple-podcast-detail-panel {
+  min-width: 0;
+  border-color: rgba(178, 138, 255, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018)),
+    var(--glass-bg);
+  padding: 14px;
+}
+
+.apple-podcast-detail-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: 14px;
+}
+
+.apple-podcast-detail-content > .table-shell {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.apple-podcast-header {
+  min-height: 146px;
+  gap: 16px;
+  border-color: rgba(178, 138, 255, 0.26);
+  padding: 16px 18px;
+}
+
+.apple-podcast-show-art {
+  width: 112px;
+  height: 112px;
+  min-width: 112px;
+  min-height: 112px;
+  border-radius: 9px;
+}
+
+.apple-podcast-show-meta {
+  gap: 5px;
+}
+
+.apple-podcast-show-meta h3 {
+  font-size: clamp(25px, 3.2vw, 38px);
+}
+
+.apple-podcast-show-meta p {
+  max-width: 80ch;
+}
+
+.apple-podcast-open-link {
+  margin-top: 3px;
+}
+
+.apple-podcast-detail-panel .table-shell {
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+.apple-podcast-detail-empty {
+  display: grid;
+  flex: 1;
+  place-content: center;
+  justify-items: center;
+  gap: 15px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.apple-podcast-detail-empty-mark {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border: 1px solid rgba(178, 138, 255, 0.24);
+  border-radius: 17px;
+  background: rgba(145, 82, 255, 0.1);
+  color: #c5a5fb;
+}
+
+.apple-podcast-detail-empty h2 {
+  margin: 0 0 6px;
+  color: var(--text-primary);
+  font-size: 20px;
+}
+
+.apple-podcast-detail-empty p {
+  max-width: 38ch;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.apple-podcast-detail-skeleton {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: 14px;
+}
+
+.apple-podcast-skeleton-header {
+  display: flex;
+  min-height: 146px;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+}
+
+.apple-podcast-skeleton-art,
+.apple-podcast-skeleton-copy i,
+.apple-podcast-skeleton-list i {
+  display: block;
+  overflow: hidden;
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.045));
+  background-size: 220% 100%;
+}
+
+.apple-podcast-skeleton-art {
+  width: 112px;
+  height: 112px;
+  flex-shrink: 0;
+}
+
+.apple-podcast-skeleton-copy {
+  display: grid;
+  width: min(420px, 60%);
+  gap: 11px;
+}
+
+.apple-podcast-skeleton-copy i {
+  width: 100%;
+  height: 15px;
+}
+
+.apple-podcast-skeleton-copy i:nth-child(1) {
+  width: 52%;
+}
+
+.apple-podcast-skeleton-copy i:nth-child(2) {
+  width: 82%;
+  height: 30px;
+}
+
+.apple-podcast-skeleton-copy i:nth-child(3) {
+  width: 65%;
+}
+
+.apple-podcast-skeleton-list {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-md);
+  padding: 1px;
+}
+
+.apple-podcast-skeleton-list i {
+  height: 67px;
+  border-radius: 5px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .apple-podcast-detail-content {
+    animation: apple-podcast-detail-enter 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .apple-podcast-skeleton-art,
+  .apple-podcast-skeleton-copy i,
+  .apple-podcast-skeleton-list i {
+    animation: apple-podcast-skeleton-shimmer 1.35s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apple-podcast-result,
+  .apple-podcast-result::before {
+    transition: none;
+  }
+}
+
+@keyframes apple-podcast-detail-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes apple-podcast-skeleton-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .apple-podcast-workspace {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .apple-podcast-browser-panel {
+    min-height: 250px;
+    max-height: min(380px, 46vh);
+  }
+
+  .apple-podcast-detail-panel {
+    min-height: min(620px, 78vh);
+  }
+
+  .apple-podcast-result-nav {
+    margin-top: 16px;
+  }
+
+  .apple-podcast-search-form {
+    grid-template-columns: 1fr;
+  }
+
+  .apple-podcast-search-button {
+    width: 100%;
+  }
+
+  .apple-podcast-header {
+    align-items: flex-start;
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .apple-podcast-show-art,
+  .apple-podcast-skeleton-art {
+    width: 88px;
+    height: 88px;
+    min-width: 88px;
+    min-height: 88px;
+  }
+
+  .apple-podcast-show-meta h3 {
+    font-size: clamp(24px, 7vw, 34px);
+  }
+
+  .apple-podcast-skeleton-header {
+    min-height: 120px;
+  }
+}
+
 /* Spotify — rich library layout mirroring Apple Music with brand-green accents */
 .spotify-brand-mark {
   border-color: rgba(30, 215, 96, 0.4);
@@ -13401,6 +14172,31 @@ tr.data-intervals-row-missing {
 
   .stack.stack-fill > .spotify-layout {
     grid-template-rows: minmax(180px, 0.45fr) minmax(0, 1fr);
+  }
+
+  .apple-podcast-search-form {
+    flex-direction: column;
+  }
+
+  .apple-podcast-search-button {
+    width: 100%;
+  }
+
+  .apple-podcast-header {
+    align-items: flex-start;
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .apple-podcast-show-art {
+    width: 96px;
+    height: 96px;
+    min-width: 96px;
+    min-height: 96px;
+  }
+
+  .apple-podcast-show-meta h3 {
+    font-size: clamp(24px, 7vw, 34px);
   }
 
   .apple-music-layout {

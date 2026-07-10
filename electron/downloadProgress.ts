@@ -96,7 +96,7 @@ export function parseYtDlpProgressLine(line: string): DownloadProgressUpdate | n
 }
 
 export function computeOverallProgress(options: {
-  entryType?: "video" | "playlist" | "search";
+  entryType?: "video" | "playlist" | "search" | "audio";
   trackIndex?: number;
   trackTotal?: number;
   trackProgress?: number;

@@ -136,7 +136,7 @@ export interface DownloadJob {
   tracks: LocalTrack[];
   createdAt: string;
   updatedAt: string;
-  entryType?: "video" | "playlist" | "search";
+  entryType?: "video" | "playlist" | "search" | "audio";
   query?: string;
   fileBaseName?: string;
   phase?: DownloadActivityPhase;
@@ -159,6 +159,13 @@ export type DownloadQueueItem =
       query: string;
       title: string;
       sourceUrl: string;
+      fileBaseName?: string;
+    }
+  | {
+      /** A directly downloadable public audio asset, such as a podcast RSS enclosure. */
+      source: "audio";
+      audioUrl: string;
+      title: string;
       fileBaseName?: string;
     };
 
@@ -277,6 +284,44 @@ export interface AppleMusicPlaylist {
   url?: string;
   trackCount: number;
   tracks: AppleMusicTrack[];
+}
+
+/** A show returned by Apple's public podcast catalogue. */
+export interface ApplePodcastShow {
+  /** Apple Podcasts collection id, serialized so it is safe across IPC. */
+  id: string;
+  /** Two-letter storefront used to resolve this show. */
+  storefront: string;
+  title: string;
+  authorName?: string;
+  description?: string;
+  artworkUrl?: string;
+  genre?: string;
+  episodeCount?: number;
+  /** Canonical Apple Podcasts show URL, when Apple supplies one. */
+  applePodcastsUrl?: string;
+  /** Public RSS feed URL. Absent for feedless or restricted shows. */
+  feedUrl?: string;
+}
+
+/** A publicly downloadable audio enclosure from a podcast RSS feed. */
+export interface ApplePodcastEpisode {
+  /** Stable RSS GUID when present, otherwise the enclosure URL. */
+  id: string;
+  title: string;
+  description?: string;
+  publishedAt?: string;
+  durationSeconds?: number;
+  episodeNumber?: number;
+  seasonNumber?: number;
+  artworkUrl?: string;
+  audioUrl: string;
+  mimeType?: string;
+  sizeBytes?: number;
+}
+
+export interface ApplePodcastShowDetail extends ApplePodcastShow {
+  episodes: ApplePodcastEpisode[];
 }
 
 export interface TransferResult {

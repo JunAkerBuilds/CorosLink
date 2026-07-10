@@ -60,6 +60,8 @@ import type {
   YouTubeMusicSyncResult,
   AppleMusicPlaylist,
   AppleMusicStatus,
+  ApplePodcastShow,
+  ApplePodcastShowDetail,
   ChatAuthStatus,
   ChatMessage,
   ChatProvider,
@@ -206,6 +208,10 @@ const api = {
     ipcRenderer.invoke("appleMusic:listPlaylists"),
   fetchAppleMusicPlaylist: (playlist: string): Promise<AppleMusicPlaylist> =>
     ipcRenderer.invoke("appleMusic:fetchPlaylist", playlist),
+  searchApplePodcasts: (query: string): Promise<ApplePodcastShow[]> =>
+    ipcRenderer.invoke("applePodcasts:search", query),
+  loadApplePodcast: (showIdOrUrl: string): Promise<ApplePodcastShowDetail> =>
+    ipcRenderer.invoke("applePodcasts:load", showIdOrUrl),
   getSpotifyConfig: (): Promise<SpotifyConfig> =>
     ipcRenderer.invoke("spotify:getConfig"),
   saveSpotifyConfig: (config: SpotifyConfig): Promise<SpotifyStatus> =>

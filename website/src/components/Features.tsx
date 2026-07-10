@@ -49,7 +49,7 @@ const PILLARS: Pillar[] = [
     title: "Your playlist to watch, in one clean flow.",
     body: "Choose a Spotify playlist, let CorosLink turn it into a local MP3 library, then move it to the Pace Pro over USB. YouTube search is there when you need a specific track.",
     bullets: [
-      "Spotify, YouTube, YouTube Music & Apple Music",
+      "Spotify, YouTube, YouTube Music, Apple Music & Apple Podcasts",
       "Unified local library with drag-to-queue",
       "Direct, cable-fast transfer to the watch",
     ],

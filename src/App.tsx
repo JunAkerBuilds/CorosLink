@@ -17,6 +17,7 @@ import {
   LogOut,
   Loader2,
   Music,
+  Podcast,
   RefreshCw,
   Search,
   Settings,
@@ -63,6 +64,9 @@ import type {
   AppleMusicPlaylist,
   AppleMusicStatus,
   AppleMusicTrack,
+  ApplePodcastEpisode,
+  ApplePodcastShow,
+  ApplePodcastShowDetail,
 } from "../electron/types";
 import { TRAINING_HUB_EXPORT_FORMATS } from "../electron/types";
 import { buildTrainingHubSnapshot } from "./training/parsers";
@@ -116,7 +120,8 @@ type MediaTab =
   | "youtube"
   | "youtube-music"
   | "spotify"
-  | "apple-music";
+  | "apple-music"
+  | "apple-podcasts";
 
 const YOUTUBE_HOME_URL = "https://www.youtube.com/";
 const YOUTUBE_DOWNLOAD_CONSOLE_PREFIX = "__COROSLINK_YOUTUBE_DOWNLOAD__";
@@ -1651,8 +1656,14 @@ export default function App() {
                     onMessage={setMessage}
                     onError={setError}
                   />
-                ) : (
+                ) : activeMediaTab === "apple-music" ? (
                   <AppleMusicView
+                    downloads={downloads}
+                    onMessage={setMessage}
+                    onError={setError}
+                  />
+                ) : (
+                  <ApplePodcastsView
                     downloads={downloads}
                     onMessage={setMessage}
                     onError={setError}
@@ -1789,6 +1800,11 @@ function MediaView({ activeTab, onTabChange, children }: MediaViewProps) {
       id: "apple-music",
       label: "Apple Music",
       icon: <AppleBrandIcon size={16} />,
+    },
+    {
+      id: "apple-podcasts",
+      label: "Apple Podcasts",
+      icon: <Podcast size={16} aria-hidden="true" />,
     },
   ];
 
@@ -4884,6 +4900,439 @@ function EmptyState({ title }: { title: string }) {
   );
 }
 
+function ApplePodcastsView({
+  downloads,
+  onMessage,
+  onError,
+}: {
+  downloads: LocalTrack[];
+  onMessage: (message: string) => void;
+  onError: (message: string) => void;
+}) {
+  const api = window.corosLink;
+  const [input, setInput] = useState("");
+  const [results, setResults] = useState<ApplePodcastShow[]>([]);
+  const [show, setShow] = useState<ApplePodcastShowDetail | null>(null);
+  const [selectedShowId, setSelectedShowId] = useState("");
+  const [busy, setBusy] = useState<"search" | "load" | null>(null);
+  const [jobs, setJobs] = useState<DownloadJob[]>([]);
+
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
+
+    void api.listYouTubeJobs().then(setJobs).catch(() => {});
+    return api.onYouTubeJobsUpdate(setJobs);
+  }, [api]);
+
+  const jobByUrl = useMemo(() => {
+    const map = new Map<string, DownloadJob>();
+    for (const job of jobs) {
+      map.set(job.url, job);
+    }
+    return map;
+  }, [jobs]);
+
+  const downloadedSourceUrls = useMemo(
+    () => new Set(downloads.map((download) => download.url)),
+    [downloads],
+  );
+
+  if (!api) {
+    return null;
+  }
+
+  async function loadShow(showIdOrUrl: string, resultId = "") {
+    if (!api) {
+      return;
+    }
+
+    setBusy("load");
+    setShow(null);
+    setSelectedShowId(resultId);
+    try {
+      const detail = await api.loadApplePodcast(showIdOrUrl);
+      setShow(detail);
+      setSelectedShowId(detail.id);
+      onMessage(
+        `Loaded ${detail.episodes.length} public episode${detail.episodes.length === 1 ? "" : "s"}.`,
+      );
+    } catch (caught) {
+      onError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!api) {
+      return;
+    }
+
+    const value = input.trim();
+    if (!value) {
+      return;
+    }
+
+    if (looksLikeApplePodcastInput(value)) {
+      setResults([]);
+      await loadShow(value);
+      return;
+    }
+
+    setBusy("search");
+    try {
+      const nextResults = await api.searchApplePodcasts(value);
+      setResults(nextResults);
+      if (nextResults.length === 0) {
+        onMessage("No Apple Podcasts shows matched that search.");
+      }
+    } catch (caught) {
+      onError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleQueueEpisode(episode: ApplePodcastEpisode) {
+    if (!api || !show) {
+      return;
+    }
+
+    try {
+      const created = await api.enqueueYouTubeDownloads([
+        applePodcastDownloadTarget(show, episode),
+      ]);
+      onMessage(
+        created.length === 0
+          ? "That episode is already downloaded or queued."
+          : "Episode queued for download.",
+      );
+    } catch (caught) {
+      onError(toErrorMessage(caught));
+    }
+  }
+
+  async function handleRetryEpisode(
+    episode: ApplePodcastEpisode,
+    jobId: string,
+  ) {
+    if (!api) {
+      return;
+    }
+
+    try {
+      setJobs(await api.clearYouTubeJob(jobId));
+    } catch {
+      // The failed in-memory job may already be gone; queue a fresh one either way.
+    }
+    await handleQueueEpisode(episode);
+  }
+
+  return (
+    <div className="stack stack-fill apple-podcast-view">
+      <div className="apple-podcast-workspace">
+        <aside className="panel apple-podcast-browser-panel" aria-label="Podcast search">
+          <div className="apple-podcast-browser-heading">
+            <span className="apple-podcast-mark" aria-hidden="true">
+              <Podcast size={20} />
+            </span>
+            <div>
+              <p className="eyebrow">Apple Podcasts</p>
+              <h2>Find a show</h2>
+            </div>
+          </div>
+
+          <form className="apple-podcast-search-form" onSubmit={handleSubmit}>
+            <label className="apple-podcast-search-field">
+              <span>Search or paste a show link</span>
+              <input
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Search Apple Podcasts"
+                aria-label="Search Apple Podcasts or paste a show link"
+                disabled={busy !== null}
+              />
+            </label>
+            <button
+              className="primary-button apple-podcast-search-button"
+              type="submit"
+              disabled={!input.trim() || busy !== null}
+            >
+              {busy === "search" ? (
+                <Loader2 className="spin" size={17} aria-hidden="true" />
+              ) : (
+                <Search size={17} aria-hidden="true" />
+              )}
+              {looksLikeApplePodcastInput(input) ? "Open" : "Search"}
+            </button>
+          </form>
+
+          {results.length > 0 ? (
+            <div className="apple-podcast-result-nav">
+              <div className="apple-podcast-result-nav-heading">
+                <span>Shows</span>
+                <span className="count-pill">{results.length}</span>
+              </div>
+              <div className="apple-podcast-results">
+                {results.map((result) => {
+                  const selected = result.id === selectedShowId;
+                  return (
+                    <button
+                      key={result.id}
+                      className={
+                        selected
+                          ? "apple-podcast-result active"
+                          : "apple-podcast-result"
+                      }
+                      type="button"
+                      aria-pressed={selected}
+                      disabled={busy !== null}
+                      onClick={() =>
+                        void loadShow(
+                          result.applePodcastsUrl ?? result.id,
+                          result.id,
+                        )
+                      }
+                    >
+                      <ApplePodcastArtwork
+                        className="apple-podcast-result-art"
+                        artworkUrl={result.artworkUrl}
+                      />
+                      <span className="apple-podcast-result-copy">
+                        <strong>{result.title}</strong>
+                        <span>{result.authorName ?? "Apple Podcasts"}</span>
+                        <small>{result.genre ?? "Public podcast"}</small>
+                      </span>
+                      <ArrowRight size={16} aria-hidden="true" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="apple-podcast-browser-empty">
+              <Podcast size={20} aria-hidden="true" />
+              <strong>Browse public shows</strong>
+              <span>Search by name or paste a link from Apple Podcasts.</span>
+            </div>
+          )}
+
+          <p className="apple-podcast-search-note">
+            Only public RSS episodes can be downloaded.
+          </p>
+        </aside>
+
+        <section
+          className="panel panel-flex apple-podcast-detail-panel"
+          aria-busy={busy === "load"}
+        >
+          {busy === "load" ? (
+            <ApplePodcastDetailSkeleton />
+          ) : show ? (
+            <div className="apple-podcast-detail-content" key={show.id}>
+              <div className="apple-podcast-header">
+                {show.artworkUrl ? (
+                  <img
+                    className="apple-podcast-backdrop"
+                    src={show.artworkUrl}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <ApplePodcastArtwork
+                  className="apple-podcast-show-art"
+                  artworkUrl={show.artworkUrl}
+                />
+                <div className="apple-podcast-show-meta">
+                  <p className="eyebrow">Selected show</p>
+                  <h3>{show.title}</h3>
+                  <span>
+                    {show.authorName ?? "Podcast"} · {show.episodes.length} latest
+                    public episode{show.episodes.length === 1 ? "" : "s"}
+                  </span>
+                  {show.description ? <p>{show.description}</p> : null}
+                  {show.applePodcastsUrl ? (
+                    <a
+                      className="service-open-link apple-podcast-open-link"
+                      href={show.applePodcastsUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Podcast size={15} aria-hidden="true" />
+                      Open in Apple Podcasts
+                      <ExternalLink size={13} aria-hidden="true" />
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="table-shell">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Episode</th>
+                      <th>Published</th>
+                      <th>Duration</th>
+                      <th>Download</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {show.episodes.map((episode) => {
+                      const job = jobByUrl.get(episode.audioUrl);
+                      const downloaded = downloadedSourceUrls.has(episode.audioUrl);
+                      const status = downloaded
+                        ? { label: "Downloaded", className: "badge ready" }
+                        : youtubeMusicDownloadStatus(job);
+                      const inProgress =
+                        !downloaded &&
+                        (job?.status === "queued" || job?.status === "downloading");
+                      const failed = !downloaded && job?.status === "failed";
+                      const completed = downloaded || job?.status === "completed";
+                      return (
+                        <tr key={episode.id}>
+                          <td>
+                            <div className="apple-podcast-episode-cell">
+                              <ApplePodcastArtwork
+                                className="apple-podcast-episode-art"
+                                artworkUrl={episode.artworkUrl ?? show.artworkUrl}
+                              />
+                              <span className="apple-podcast-episode-copy">
+                                <strong>{episode.title}</strong>
+                                <span>
+                                  {episode.seasonNumber
+                                    ? `Season ${episode.seasonNumber}`
+                                    : "Podcast episode"}
+                                  {episode.episodeNumber
+                                    ? ` · Episode ${episode.episodeNumber}`
+                                    : ""}
+                                </span>
+                              </span>
+                            </div>
+                          </td>
+                          <td>{episode.publishedAt ? formatDate(episode.publishedAt) : "—"}</td>
+                          <td>
+                            {formatTrackDuration(
+                              episode.durationSeconds
+                                ? episode.durationSeconds * 1000
+                                : undefined,
+                            )}
+                          </td>
+                          <td>
+                            <div className="table-actions">
+                              <span className={status.className}>{status.label}</span>
+                              {failed && job ? (
+                                <button
+                                  className="icon-button"
+                                  type="button"
+                                  title="Retry download"
+                                  aria-label={`Retry ${episode.title}`}
+                                  onClick={() =>
+                                    void handleRetryEpisode(episode, job.id)
+                                  }
+                                >
+                                  <RefreshCw size={16} aria-hidden="true" />
+                                </button>
+                              ) : inProgress ? (
+                                <button
+                                  className="icon-button"
+                                  type="button"
+                                  title="Downloading"
+                                  disabled
+                                >
+                                  <Loader2 className="spin" size={16} aria-hidden="true" />
+                                </button>
+                              ) : completed ? (
+                                <button
+                                  className="icon-button"
+                                  type="button"
+                                  title="Downloaded"
+                                  disabled
+                                >
+                                  <CheckCircle2 size={16} aria-hidden="true" />
+                                </button>
+                              ) : (
+                                <button
+                                  className="icon-button"
+                                  type="button"
+                                  title="Download"
+                                  aria-label={`Download ${episode.title}`}
+                                  onClick={() => void handleQueueEpisode(episode)}
+                                >
+                                  <Download size={16} aria-hidden="true" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="apple-podcast-detail-empty">
+              <span className="apple-podcast-detail-empty-mark" aria-hidden="true">
+                <Podcast size={28} />
+              </span>
+              <div>
+                <h2>Select a podcast</h2>
+                <p>Search for a show on the left, then browse its public episodes here.</p>
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function ApplePodcastDetailSkeleton() {
+  return (
+    <div className="apple-podcast-detail-skeleton" aria-label="Loading podcast">
+      <div className="apple-podcast-skeleton-header">
+        <span className="apple-podcast-skeleton-art" />
+        <span className="apple-podcast-skeleton-copy">
+          <i />
+          <i />
+          <i />
+        </span>
+      </div>
+      <div className="apple-podcast-skeleton-list">
+        <i />
+        <i />
+        <i />
+        <i />
+        <i />
+      </div>
+    </div>
+  );
+}
+
+function ApplePodcastArtwork({
+  artworkUrl,
+  className,
+}: {
+  artworkUrl?: string;
+  className: string;
+}) {
+  return artworkUrl ? (
+    <img className={className} src={artworkUrl} alt="" />
+  ) : (
+    <span className={`${className} apple-podcast-art-fallback`} aria-hidden="true">
+      <Podcast size={22} />
+    </span>
+  );
+}
+
+function looksLikeApplePodcastInput(value: string): boolean {
+  const input = value.trim();
+  return /^\d+$/.test(input) || /^https?:\/\/(?:www\.)?podcasts\.apple\.com\//i.test(input);
+}
+
 const APPLE_MUSIC_LOGIN_URL = "https://music.apple.com/login";
 const APPLE_MUSIC_HOME_URL = "https://music.apple.com/";
 
@@ -5854,6 +6303,19 @@ function appleMusicDownloadTarget(
 
 function appleMusicLegacySearchUrl(query: string): string {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+}
+
+function applePodcastDownloadTarget(
+  show: ApplePodcastShowDetail,
+  episode: ApplePodcastEpisode,
+): Extract<DownloadQueueItem, { source: "audio" }> {
+  const title = `${show.title} - ${episode.title}`.trim();
+  return {
+    source: "audio",
+    audioUrl: episode.audioUrl,
+    title,
+    fileBaseName: title,
+  };
 }
 
 // Spotify streams are DRM-protected too, so downloads resolve each track to a

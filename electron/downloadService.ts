@@ -106,6 +106,42 @@ export async function downloadAudioWithProgress(
   });
 }
 
+/**
+ * Downloads a direct, public audio URL (for example a podcast RSS enclosure)
+ * and converts it to an MP3 with a predictable library filename.
+ */
+export async function downloadExternalAudio(
+  url: string,
+  fileBaseName: string,
+  onProgress?: (update: DownloadProgressUpdate) => void,
+  runtime?: DownloadRuntimeOptions
+): Promise<DownloadAudioResult> {
+  const trimmedUrl = url.trim();
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmedUrl);
+  } catch {
+    throw new Error("Enter a valid public audio URL.");
+  }
+
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error("Only HTTP(S) audio URLs can be downloaded.");
+  }
+
+  const outputDirectory = getDownloadDirectory();
+  const safeBaseName = nextAvailableBaseName(
+    outputDirectory,
+    sanitizeFileBaseName(fileBaseName)
+  );
+  const outputTemplate = path.join(outputDirectory, `${safeBaseName}.%(ext)s`);
+
+  return runAudioDownload(trimmedUrl, outputTemplate, trimmedUrl, {
+    allowPlaylist: false,
+    onProgress,
+    runtime
+  });
+}
+
 export async function downloadAudioSearch(
   searchQuery: string,
   fileBaseName: string,

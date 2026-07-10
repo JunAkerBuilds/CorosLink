@@ -59,6 +59,8 @@ import type {
   YouTubeMusicSyncResult,
   AppleMusicPlaylist,
   AppleMusicStatus,
+  ApplePodcastShow,
+  ApplePodcastShowDetail,
   ChatAuthStatus,
   ChatMessage,
   ChatProvider,
@@ -142,6 +144,10 @@ export interface CorosLinkApi {
   ) => () => void;
   listAppleMusicPlaylists: () => Promise<AppleMusicPlaylist[]>;
   fetchAppleMusicPlaylist: (playlist: string) => Promise<AppleMusicPlaylist>;
+  searchApplePodcasts: (query: string) => Promise<ApplePodcastShow[]>;
+  loadApplePodcast: (
+    showIdOrUrl: string
+  ) => Promise<ApplePodcastShowDetail>;
   getSpotifyConfig: () => Promise<SpotifyConfig>;
   saveSpotifyConfig: (config: SpotifyConfig) => Promise<SpotifyStatus>;
   getSpotifyStatus: () => Promise<SpotifyStatus>;

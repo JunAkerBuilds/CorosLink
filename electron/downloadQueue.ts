@@ -8,6 +8,7 @@ import {
   cancelDownloadProcess,
   downloadAudioSearch,
   downloadAudioWithProgress,
+  downloadExternalAudio,
   DownloadCancelledError
 } from "./downloadService";
 import type {
@@ -89,7 +90,7 @@ export function enqueueDownloads(items: DownloadQueueItem[]): DownloadJob[] {
   return created;
 }
 
-function createQueuedJob(
+export function createQueuedJob(
   item: DownloadQueueItem,
   now: string
 ): DownloadJob | null {
@@ -110,6 +111,27 @@ function createQueuedJob(
       tracks: [],
       entryType: "search",
       query,
+      fileBaseName: cleanTitle(item.fileBaseName) || title,
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+
+  if (isAudioQueueItem(item)) {
+    const audioUrl = item.audioUrl.trim();
+    if (!isHttpUrl(audioUrl)) {
+      return null;
+    }
+
+    const title = cleanTitle(item.title) || "Podcast episode";
+    return {
+      id: randomUUID(),
+      url: audioUrl,
+      title,
+      status: "queued",
+      progress: 0,
+      tracks: [],
+      entryType: "audio",
       fileBaseName: cleanTitle(item.fileBaseName) || title,
       createdAt: now,
       updatedAt: now
@@ -150,6 +172,21 @@ function isSearchQueueItem(
   item: DownloadQueueItem
 ): item is Extract<DownloadQueueItem, { source: "search" }> {
   return "source" in item && item.source === "search";
+}
+
+function isAudioQueueItem(
+  item: DownloadQueueItem
+): item is Extract<DownloadQueueItem, { source: "audio" }> {
+  return "source" in item && item.source === "audio";
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 export function clearJob(id: string): DownloadJob[] {
@@ -222,7 +259,11 @@ async function runJob(job: DownloadJob): Promise<void> {
   job.progress = 0;
   job.phase = "starting";
   job.activity =
-    job.entryType === "search" ? "Searching YouTube…" : "Starting yt-dlp…";
+    job.entryType === "search"
+      ? "Searching YouTube…"
+      : job.entryType === "audio"
+        ? "Downloading audio…"
+        : "Starting yt-dlp…";
   job.trackProgress = 0;
   job.completedTrackCount = 0;
   touch(job);
@@ -244,9 +285,11 @@ async function runJob(job: DownloadJob): Promise<void> {
 
     // Prefer the real title from the downloaded file (yt-dlp names it
     // "<title> [<id>]"), since the in-page title can be missing or generic.
-    const trackTitle = cleanTrackTitle(result.tracks[0]?.title);
-    if (trackTitle) {
-      job.title = trackTitle;
+    if (job.entryType !== "audio") {
+      const trackTitle = cleanTrackTitle(result.tracks[0]?.title);
+      if (trackTitle) {
+        job.title = trackTitle;
+      }
     }
     touch(job);
 
@@ -296,6 +339,15 @@ function runJobDownload(job: DownloadJob): Promise<DownloadAudioResult> {
       query,
       cleanTitle(job.fileBaseName) || cleanTitle(job.title) || "download",
       job.url,
+      onProgress,
+      runtime
+    );
+  }
+
+  if (job.entryType === "audio") {
+    return downloadExternalAudio(
+      job.url,
+      cleanTitle(job.fileBaseName) || cleanTitle(job.title) || "podcast episode",
       onProgress,
       runtime
     );

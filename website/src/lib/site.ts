@@ -1,7 +1,7 @@
 export const SITE_NAME = "CorosLink";
 export const SITE_URL = "https://coros-link.vercel.app";
 export const SITE_DESCRIPTION =
-  "CorosLink is an unofficial, open-source COROS watch companion for desktop. Sync music from Spotify, YouTube, YouTube Music, and Apple Music over USB, install offline maps, build GPX routes, and review training analytics on macOS, Windows, and Linux.";
+  "CorosLink is an unofficial, open-source COROS watch companion for desktop. Sync music from Spotify, YouTube, YouTube Music, and Apple Music, download public Apple Podcasts episodes, install offline maps, build GPX routes, and review training analytics on macOS, Windows, and Linux.";
 
 export const SITE_KEYWORDS = [
   "CorosLink",
@@ -11,6 +11,7 @@ export const SITE_KEYWORDS = [
   "COROS Spotify sync",
   "COROS YouTube Music sync",
   "COROS Apple Music sync",
+  "COROS Apple Podcasts download",
   "COROS offline maps",
   "COROS map installer",
   "COROS GPX route builder",
@@ -26,7 +27,7 @@ export const SITE_KEYWORDS = [
 
 export const APP_FEATURES = [
   "USB music transfer for COROS watches",
-  "Spotify, YouTube, YouTube Music, and Apple Music playlist workflows",
+  "Spotify, YouTube, YouTube Music, Apple Music, and Apple Podcasts workflows",
   "Offline COROS map package download and install",
   "Desktop GPX route builder with elevation stats",
   "Training dashboard with recovery, load, race predictor, and activity detail",
@@ -41,9 +42,9 @@ export const FAQS = [
       "CorosLink is an unofficial desktop companion app for COROS watch owners. It brings watch music, offline maps, GPX route planning, and COROS training analytics into one local-first app.",
   },
   {
-    question: "Can CorosLink sync Spotify, YouTube, or Apple Music to a COROS watch?",
+    question: "Can CorosLink sync Spotify, YouTube, Apple Music, or Apple Podcasts to a COROS watch?",
     answer:
-      "Yes. CorosLink helps build a local MP3 library from Spotify, YouTube, YouTube Music, and Apple Music workflows, then transfers compatible files to your COROS watch over USB.",
+      "Yes. CorosLink helps build a local MP3 library from Spotify, YouTube, YouTube Music, Apple Music, and public Apple Podcasts episodes, then transfers compatible files to your COROS watch over USB.",
   },
   {
     question: "Does CorosLink install offline maps on COROS watches?",
