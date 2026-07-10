@@ -3,6 +3,7 @@ import { Settings2, X } from "lucide-react";
 import type {
   ChatAuthStatus,
   ChatSettings,
+  ClaudeCodeStatus,
   CorosMcpStatus,
   LocalChatConnectionTest,
   LocalChatDiscovery
@@ -13,6 +14,7 @@ export function ChatSettingsModal({
   open,
   chatSettings,
   authStatus,
+  claudeStatus,
   localApiKey,
   localConnection,
   localDiscovery,
@@ -20,6 +22,9 @@ export function ChatSettingsModal({
   testingLocal,
   detectingLocal,
   signingIn,
+  checkingClaude,
+  connectingClaude,
+  testingClaude,
   mcpStatus,
   mcpBusy,
   showTools,
@@ -27,6 +32,11 @@ export function ChatSettingsModal({
   onClose,
   onSignIn,
   onSignOut,
+  onRefreshClaude,
+  onConnectClaude,
+  onTestClaude,
+  onOpenClaudeSetupGuide,
+  onUpdateClaudeCode,
   onLocalApiKeyChange,
   onUpdateLocalDraft,
   onDetectLocalServers,
@@ -41,6 +51,7 @@ export function ChatSettingsModal({
   open: boolean;
   chatSettings: ChatSettings;
   authStatus: ChatAuthStatus | null;
+  claudeStatus: ClaudeCodeStatus | null;
   localApiKey: string;
   localConnection: LocalChatConnectionTest | null;
   localDiscovery: LocalChatDiscovery | null;
@@ -48,6 +59,9 @@ export function ChatSettingsModal({
   testingLocal: boolean;
   detectingLocal: boolean;
   signingIn: boolean;
+  checkingClaude: boolean;
+  connectingClaude: boolean;
+  testingClaude: boolean;
   mcpStatus: CorosMcpStatus | null;
   mcpBusy: boolean;
   showTools: boolean;
@@ -55,6 +69,13 @@ export function ChatSettingsModal({
   onClose: () => void;
   onSignIn: () => void;
   onSignOut: () => void;
+  onRefreshClaude: () => void;
+  onConnectClaude: () => void;
+  onTestClaude: () => void;
+  onOpenClaudeSetupGuide: () => void;
+  onUpdateClaudeCode: (
+    patch: Partial<ChatSettings["claudeCode"]>
+  ) => void;
   onLocalApiKeyChange: (value: string) => void;
   onUpdateLocalDraft: (patch: Partial<ChatSettings["local"]>) => void;
   onDetectLocalServers: () => void;
@@ -115,6 +136,7 @@ export function ChatSettingsModal({
           <ChatSettingsPanel
             chatSettings={chatSettings}
             authStatus={authStatus}
+            claudeStatus={claudeStatus}
             localApiKey={localApiKey}
             localConnection={localConnection}
             localDiscovery={localDiscovery}
@@ -122,12 +144,20 @@ export function ChatSettingsModal({
             testingLocal={testingLocal}
             detectingLocal={detectingLocal}
             signingIn={signingIn}
+            checkingClaude={checkingClaude}
+            connectingClaude={connectingClaude}
+            testingClaude={testingClaude}
             mcpStatus={mcpStatus}
             mcpBusy={mcpBusy}
             showTools={showTools}
             busy={busy}
             onSignIn={onSignIn}
             onSignOut={onSignOut}
+            onRefreshClaude={onRefreshClaude}
+            onConnectClaude={onConnectClaude}
+            onTestClaude={onTestClaude}
+            onOpenClaudeSetupGuide={onOpenClaudeSetupGuide}
+            onUpdateClaudeCode={onUpdateClaudeCode}
             onLocalApiKeyChange={onLocalApiKeyChange}
             onUpdateLocalDraft={onUpdateLocalDraft}
             onDetectLocalServers={onDetectLocalServers}

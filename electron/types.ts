@@ -1069,7 +1069,49 @@ export interface PersistedChatMessageEntry {
   source?: PersistedChatSource;
 }
 
-export type ChatProvider = "chatgpt" | "local";
+export type ChatProvider = "chatgpt" | "claude-code" | "local";
+
+export type ClaudeCodeConnectionState =
+  | "not-installed"
+  | "sign-in-required"
+  | "connecting"
+  | "connected"
+  | "connection-failed"
+  | "usage-limit-reached";
+
+export interface ClaudeCodePermissions {
+  recentActivities: boolean;
+  trainingMetrics: boolean;
+  upcomingWorkouts: boolean;
+  sleepData: boolean;
+  fullActivityFiles: boolean;
+}
+
+export interface ClaudeCodeConfig {
+  /** Optional user-selected path. CorosLink never reads Claude credential files. */
+  executablePath?: string;
+  lastConnectionStatus?: ClaudeCodeConnectionState;
+  lastCheckedAt?: string;
+  permissions: ClaudeCodePermissions;
+}
+
+export interface ClaudeCodeStatus {
+  state: ClaudeCodeConnectionState;
+  installed: boolean;
+  authenticated: boolean;
+  executablePath?: string;
+  version?: string;
+  authMethod?: string;
+  subscriptionType?: string;
+  checkedAt: string;
+  message: string;
+}
+
+export interface ClaudeCodeConnectionTest {
+  ok: boolean;
+  status: ClaudeCodeStatus;
+  message: string;
+}
 
 export interface LocalChatConfig {
   /** OpenAI-compatible API base URL, normalized to end in /v1. */
@@ -1088,6 +1130,7 @@ export interface LocalChatConfig {
 
 export interface ChatSettings {
   provider: ChatProvider;
+  claudeCode: ClaudeCodeConfig;
   local: LocalChatConfig;
   sidebarOpen?: boolean;
   /** When true, show activity/fitness/HR chart cards in the transcript. Default false. */

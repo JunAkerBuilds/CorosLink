@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Database,
+  ExternalLink,
   FileDown,
   FileText,
   Loader2,
   LogOut,
   MessageCircle,
+  RefreshCw,
   Send,
   Settings2,
   Sparkles,
   Square,
+  Terminal,
   Trash2,
   Upload,
   User
@@ -22,6 +25,7 @@ import type {
   ChatProvider,
   ChatSessionSummary,
   ChatSettings,
+  ClaudeCodeStatus,
   LocalChatConnectionTest,
   LocalChatDiscovery,
   CorosMcpStatus,
@@ -54,6 +58,15 @@ import {
 
 const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   provider: "chatgpt",
+  claudeCode: {
+    permissions: {
+      recentActivities: true,
+      trainingMetrics: true,
+      upcomingWorkouts: true,
+      sleepData: false,
+      fullActivityFiles: false
+    }
+  },
   local: {
     baseUrl: "http://localhost:11434/v1",
     model: "",
@@ -336,6 +349,10 @@ export function ChatView({
     useState<LocalChatConnectionTest | null>(null);
   const [localDiscovery, setLocalDiscovery] =
     useState<LocalChatDiscovery | null>(null);
+  const [claudeStatus, setClaudeStatus] = useState<ClaudeCodeStatus | null>(null);
+  const [checkingClaude, setCheckingClaude] = useState(false);
+  const [connectingClaude, setConnectingClaude] = useState(false);
+  const [testingClaude, setTestingClaude] = useState(false);
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -366,6 +383,7 @@ export function ChatView({
   // Accumulates source info across the current stream's info events.
   const sourceRef = useRef<SourceInfo | null>(null);
   const autoDetectLocalRef = useRef(false);
+  const claudePollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const mcpRef = useRef<HTMLDivElement>(null);
   const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -472,8 +490,12 @@ export function ChatView({
       setCheckingAuth(false);
       return;
     }
-    void Promise.allSettled([api.getChatAuthStatus(), api.getChatSettings()])
-      .then(async ([authResult, settingsResult]) => {
+    void Promise.allSettled([
+      api.getChatAuthStatus(),
+      api.getChatSettings(),
+      api.getClaudeCodeStatus()
+    ])
+      .then(async ([authResult, settingsResult, claudeResult]) => {
         if (cancelled) return;
         setAuthStatus(
           authResult.status === "fulfilled"
@@ -485,6 +507,9 @@ export function ChatView({
             ? settingsResult.value
             : DEFAULT_CHAT_SETTINGS;
         setChatSettings(settings);
+        if (claudeResult.status === "fulfilled") {
+          setClaudeStatus(claudeResult.value);
+        }
         await ensureActiveSession(settings.provider);
       })
       .finally(() => {
@@ -495,6 +520,10 @@ export function ChatView({
       if (persistTimeoutRef.current) {
         clearTimeout(persistTimeoutRef.current);
         persistTimeoutRef.current = null;
+      }
+      if (claudePollTimerRef.current) {
+        clearTimeout(claudePollTimerRef.current);
+        claudePollTimerRef.current = null;
       }
     };
   }, [api]);
@@ -654,6 +683,12 @@ export function ChatView({
         if (payload.authError) {
           setAuthStatus({ signedIn: false });
         }
+        if (chatSettings.provider === "claude-code") {
+          void api
+            .getClaudeCodeStatus()
+            .then(setClaudeStatus)
+            .catch(() => undefined);
+        }
       })
     ];
     return () => {
@@ -693,6 +728,109 @@ export function ChatView({
     }
     const status = await api.logoutChat();
     setAuthStatus(status);
+  };
+
+  const refreshClaudeCodeStatus = async () => {
+    if (!api || checkingClaude) return null;
+    setCheckingClaude(true);
+    onError(null);
+    try {
+      const status = await api.getClaudeCodeStatus();
+      setClaudeStatus(status);
+      return status;
+    } catch (caught) {
+      onError(
+        caught instanceof Error
+          ? caught.message
+          : "Claude Code detection failed."
+      );
+      return null;
+    } finally {
+      setCheckingClaude(false);
+    }
+  };
+
+  const pollClaudeCodeStatus = (attempt = 0) => {
+    if (!api || attempt >= 40) return;
+    if (claudePollTimerRef.current) {
+      clearTimeout(claudePollTimerRef.current);
+    }
+    claudePollTimerRef.current = setTimeout(() => {
+      void api
+        .getClaudeCodeStatus()
+        .then((status) => {
+          setClaudeStatus(status);
+          if (status.state === "connecting" || status.state === "sign-in-required") {
+            pollClaudeCodeStatus(attempt + 1);
+          }
+        })
+        .catch(() => pollClaudeCodeStatus(attempt + 1));
+    }, 1500);
+  };
+
+  const handleConnectClaudeCode = async () => {
+    if (!api || connectingClaude) return;
+    setConnectingClaude(true);
+    onError(null);
+    try {
+      const status = await api.connectClaudeCode();
+      setClaudeStatus(status);
+      if (status.state === "connecting" || status.state === "sign-in-required") {
+        pollClaudeCodeStatus();
+      }
+    } catch (caught) {
+      onError(
+        caught instanceof Error ? caught.message : "Claude sign-in failed."
+      );
+    } finally {
+      setConnectingClaude(false);
+    }
+  };
+
+  const handleTestClaudeCode = async () => {
+    if (!api || testingClaude) return;
+    setTestingClaude(true);
+    onError(null);
+    try {
+      const result = await api.testClaudeCodeConnection();
+      setClaudeStatus(result.status);
+      if (!result.ok) onError(result.message);
+    } catch (caught) {
+      onError(
+        caught instanceof Error
+          ? caught.message
+          : "Claude connection test failed."
+      );
+    } finally {
+      setTestingClaude(false);
+    }
+  };
+
+  const handleUpdateClaudeCode = async (
+    patch: Partial<ChatSettings["claudeCode"]>
+  ) => {
+    const nextClaudeCode = {
+      ...chatSettings.claudeCode,
+      ...patch,
+      permissions: {
+        ...chatSettings.claudeCode.permissions,
+        ...(patch.permissions ?? {})
+      }
+    };
+    const nextSettings = { ...chatSettings, claudeCode: nextClaudeCode };
+    setChatSettings(nextSettings);
+    setClaudeStatus(null);
+    if (!api) return;
+    try {
+      const saved = await api.saveChatSettings(nextSettings);
+      setChatSettings(saved);
+    } catch (caught) {
+      onError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not save Claude settings."
+      );
+    }
   };
 
   const handleNewChat = async () => {
@@ -749,6 +887,10 @@ export function ChatView({
       const saved = await api.saveChatSettings(nextSettings);
       setChatSettings(saved);
       await ensureActiveSession(provider);
+      if (provider === "claude-code") {
+        const status = await api.getClaudeCodeStatus();
+        setClaudeStatus(status);
+      }
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "Provider change failed.");
     }
@@ -1146,9 +1288,13 @@ export function ChatView({
   };
 
   const isLocalProvider = chatSettings.provider === "local";
+  const isClaudeProvider = chatSettings.provider === "claude-code";
+  const isChatGptProvider = chatSettings.provider === "chatgpt";
   const localModelConfigured = chatSettings.local.model.trim().length > 0;
   const isBusy = streaming || exportingLatestActivity;
-  const showLoginGate = !isLocalProvider && !authStatus?.signedIn;
+  const showLoginGate = isChatGptProvider && !authStatus?.signedIn;
+  const showClaudeGate =
+    isClaudeProvider && claudeStatus?.state !== "connected";
 
   const providerSwitch = (
     <ProviderSwitch
@@ -1174,6 +1320,7 @@ export function ChatView({
     open: settingsOpen,
     chatSettings,
     authStatus,
+    claudeStatus,
     localApiKey,
     localConnection,
     localDiscovery,
@@ -1181,6 +1328,9 @@ export function ChatView({
     testingLocal,
     detectingLocal,
     signingIn,
+    checkingClaude,
+    connectingClaude,
+    testingClaude,
     mcpStatus,
     mcpBusy,
     showTools,
@@ -1188,6 +1338,12 @@ export function ChatView({
     onClose: () => setSettingsOpen(false),
     onSignIn: () => void handleSignIn(),
     onSignOut: () => void handleSignOut(),
+    onRefreshClaude: () => void refreshClaudeCodeStatus(),
+    onConnectClaude: () => void handleConnectClaudeCode(),
+    onTestClaude: () => void handleTestClaudeCode(),
+    onOpenClaudeSetupGuide: () => void api?.openClaudeCodeSetupGuide(),
+    onUpdateClaudeCode: (patch: Partial<ChatSettings["claudeCode"]>) =>
+      void handleUpdateClaudeCode(patch),
     onLocalApiKeyChange: setLocalApiKey,
     onUpdateLocalDraft: updateLocalDraft,
     onDetectLocalServers: () => void handleDetectLocalServers(),
@@ -1205,6 +1361,100 @@ export function ChatView({
     return (
       <div className="chat-view chat-view-centered">
         <Loader2 className="chat-spinner" size={22} aria-hidden="true" />
+      </div>
+    );
+  }
+
+  if (showClaudeGate) {
+    const notInstalled = claudeStatus?.state === "not-installed";
+    return (
+      <div className="chat-view chat-view-login">
+        <div className="chat-header">
+          <div className="chat-header-title">
+            <span>Training Coach</span>
+          </div>
+          <div className="chat-header-end">
+            <button
+              type="button"
+              className="chat-settings-button"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings2 size={16} aria-hidden="true" />
+              Settings
+            </button>
+          </div>
+        </div>
+        <div className="chat-layout">
+          <ChatSidebar {...sidebarProps} />
+          <div className="chat-main chat-main-login">
+            <div className="panel chat-login-panel chat-claude-login-panel">
+              <Terminal size={32} aria-hidden="true" />
+              <div className="chat-login-title-row">
+                <h2>Claude Code</h2>
+                <span className="chat-beta-badge">Beta</span>
+              </div>
+              <p>
+                Use the Claude Code CLI installed on this computer with your
+                existing Claude subscription. CorosLink does not read or store
+                your Claude credentials.
+              </p>
+              <div className="chat-login-actions">
+                {notInstalled ? (
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => void api?.openClaudeCodeSetupGuide()}
+                  >
+                    <ExternalLink size={16} aria-hidden="true" />
+                    Install Claude Code
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => void handleConnectClaudeCode()}
+                    disabled={connectingClaude || !api}
+                  >
+                    {connectingClaude ? (
+                      <Loader2
+                        className="chat-spinner"
+                        size={16}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <Terminal size={16} aria-hidden="true" />
+                    )}
+                    Sign in with Claude
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => void refreshClaudeCodeStatus()}
+                  disabled={checkingClaude || !api}
+                >
+                  {checkingClaude ? (
+                    <Loader2
+                      className="chat-spinner"
+                      size={16}
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <RefreshCw size={16} aria-hidden="true" />
+                  )}
+                  Check again
+                </button>
+              </div>
+              <p className="chat-login-note">
+                {claudeStatus?.message ?? "Checking for Claude Code…"}
+              </p>
+            </div>
+            <div className="chat-composer-toolbar chat-composer-toolbar-login">
+              {providerSwitch}
+            </div>
+          </div>
+        </div>
+        <ChatSettingsModal {...settingsModalProps} />
       </div>
     );
   }
@@ -1327,10 +1577,10 @@ export function ChatView({
               </button>
             )}
           </div>
-          {!isLocalProvider && authStatus?.email ? (
+          {isChatGptProvider && authStatus?.email ? (
             <span className="chat-account">{authStatus.email}</span>
           ) : null}
-          {!isLocalProvider ? (
+          {isChatGptProvider ? (
             <button
               type="button"
               className="chat-signout"

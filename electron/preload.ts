@@ -67,6 +67,8 @@ import type {
   ChatProvider,
   ChatSessionSummary,
   ChatSettings,
+  ClaudeCodeConnectionTest,
+  ClaudeCodeStatus,
   PersistedChatEntry,
   ChatStreamStart,
   ChatStreamToken,
@@ -539,6 +541,14 @@ const api = {
     ipcRenderer.invoke("chat:testLocalConnection", config),
   detectLocalChatServers: (apiKey?: string): Promise<LocalChatDiscovery> =>
     ipcRenderer.invoke("chat:detectLocalServers", apiKey),
+  getClaudeCodeStatus: (): Promise<ClaudeCodeStatus> =>
+    ipcRenderer.invoke("chat:getClaudeCodeStatus"),
+  connectClaudeCode: (): Promise<ClaudeCodeStatus> =>
+    ipcRenderer.invoke("chat:connectClaudeCode"),
+  testClaudeCodeConnection: (): Promise<ClaudeCodeConnectionTest> =>
+    ipcRenderer.invoke("chat:testClaudeCodeConnection"),
+  openClaudeCodeSetupGuide: (): Promise<void> =>
+    ipcRenderer.invoke("chat:openClaudeCodeSetupGuide"),
   loginChat: (): Promise<ChatAuthStatus> => ipcRenderer.invoke("chat:login"),
   logoutChat: (): Promise<ChatAuthStatus> => ipcRenderer.invoke("chat:logout"),
   // Fire-and-forget: assistant text arrives via the onChat* subscriptions.

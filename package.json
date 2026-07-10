@@ -25,6 +25,7 @@
     "test:greetings": "node --experimental-strip-types scripts/test-greetings.mjs",
     "test:intervals-match": "npm run build:electron && node scripts/test-intervals-match.mjs",
     "test:chat-service": "npm run build:electron && node scripts/test-chat-service.mjs",
+    "test:claude-code": "npm run build:electron && node scripts/test-claude-code-provider.mjs",
     "test:chat-history-store": "npm run build:electron && node scripts/test-chat-history-store.mjs",
     "test:chat-activity-tools": "npm run build:electron && node scripts/test-chat-activity-tools.mjs",
     "test:chat-analytics-tools": "npm run build:electron && node scripts/test-chat-analytics-tools.mjs",
@@ -142,9 +143,12 @@
     }
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.206",
+    "@anthropic-ai/sdk": "^0.111.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/qrcode": "^1.5.6",
     "better-sqlite3": "^12.11.1",
+    "d3-geo": "^3.1.1",
     "electron-updater": "^6.8.9",
     "fast-xml-parser": "^5.9.3",
     "leaflet": "^1.9.4",
@@ -157,15 +161,21 @@
     "recharts": "^3.9.0",
     "remark-gfm": "^4.0.1",
     "spotify-web-api-node": "^5.0.2",
-    "unzipper": "^0.12.5"
+    "topojson-client": "^3.1.0",
+    "unzipper": "^0.12.5",
+    "world-atlas": "^2.0.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
+    "@types/d3-geo": "^3.1.0",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^26.0.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@types/spotify-web-api-node": "^5.0.11",
+    "@types/topojson-client": "^3.1.5",
+    "@types/topojson-specification": "^1.0.5",
     "@vitejs/plugin-react": "^6.0.3",
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",

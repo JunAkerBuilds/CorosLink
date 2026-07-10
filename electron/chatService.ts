@@ -43,6 +43,13 @@ import {
   type LocalChatRuntimeConfig
 } from "./localChatProvider";
 import {
+  ClaudeCodeProviderError,
+  getClaudeCodeStatus as inspectClaudeCodeStatus,
+  launchClaudeCodeLogin,
+  streamClaudeCodeCompletion,
+  testClaudeCodeConnection as runClaudeCodeConnectionTest
+} from "./claudeCodeProvider";
+import {
   CHAT_SETTINGS_KEYS,
   readChatSettingsFromStore,
   saveChatSettingsToStore,
@@ -60,6 +67,9 @@ import type {
   ChatAuthStatus,
   ChatSettings,
   ChatProvider,
+  ClaudeCodeConnectionTest,
+  ClaudeCodePermissions,
+  ClaudeCodeStatus,
   CorosMcpTool,
   LocalChatDiscovery,
   LocalChatConfig,
@@ -144,6 +154,47 @@ export function saveChatSettings(settings: ChatSettings): ChatSettings {
     localApiKeyStore,
     settings
   );
+}
+
+export async function getClaudeCodeConnectionStatus(): Promise<ClaudeCodeStatus> {
+  const settings = getChatSettings();
+  const status = await inspectClaudeCodeStatus(
+    settings.claudeCode.executablePath
+  );
+  recordClaudeCodeStatus(status);
+  return status;
+}
+
+export async function connectClaudeCode(): Promise<ClaudeCodeStatus> {
+  const settings = getChatSettings();
+  const status = await launchClaudeCodeLogin(
+    settings.claudeCode.executablePath
+  );
+  recordClaudeCodeStatus(status);
+  return status;
+}
+
+export async function testClaudeCodeConnection(): Promise<ClaudeCodeConnectionTest> {
+  const settings = getChatSettings();
+  const result = await runClaudeCodeConnectionTest(
+    settings.claudeCode.executablePath
+  );
+  recordClaudeCodeStatus(result.status);
+  return result;
+}
+
+function recordClaudeCodeStatus(status: ClaudeCodeStatus): void {
+  const current = getChatSettings();
+  saveChatSettings({
+    ...current,
+    claudeCode: {
+      ...current.claudeCode,
+      executablePath:
+        current.claudeCode.executablePath || status.executablePath,
+      lastConnectionStatus: status.state,
+      lastCheckedAt: status.checkedAt
+    }
+  });
 }
 
 export function listChatSessionsForProvider(provider: ChatProvider) {
@@ -540,6 +591,87 @@ export async function streamChat(
   let fullText = "";
   try {
     const settings = getChatSettings();
+    if (settings.provider === "claude-code") {
+      const status = await inspectClaudeCodeStatus(
+        settings.claudeCode.executablePath
+      );
+      recordClaudeCodeStatus(status);
+      if (!status.authenticated || !status.executablePath) {
+        throw new ClaudeCodeProviderError(
+          status.message,
+          status.installed ? "auth" : "not-installed"
+        );
+      }
+
+      await ensureCorosMcpConnected();
+      const chatTools = getClaudeCodeTools(settings.claudeCode.permissions);
+      const { text: instructions, hasData } = await buildTrainingContext(
+        settings.claudeCode.permissions
+      );
+      const effectiveInstructions = withLiveCorosToolInstructions(
+        instructions,
+        chatTools
+      );
+
+      send("chat:streamStart", { requestId });
+      send("chat:streamInfo", {
+        requestId,
+        kind: "context",
+        snapshotIncluded: hasData,
+        mcpEnabled: chatTools.length > 0
+      });
+
+      const result = await streamClaudeCodeCompletion({
+        executablePath: status.executablePath,
+        instructions: effectiveInstructions,
+        messages,
+        tools: chatTools,
+        signal: controller.signal,
+        onToken: (delta) => {
+          fullText += delta;
+          send("chat:streamToken", { requestId, delta });
+        },
+        onToolCallStart: (toolName) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "mcp",
+            tool: toolName,
+            status: "call"
+          });
+        },
+        onToolCallError: (toolName, message) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "mcp",
+            tool: toolName,
+            status: "failed",
+            message
+          });
+        },
+        onToolCall: async (toolName, args) => {
+          if (!chatTools.some((tool) => tool.name === toolName)) {
+            throw new Error(`Claude attempted an unapproved tool: ${toolName}`);
+          }
+          return executeChatTool(
+            toolName,
+            args,
+            send,
+            requestId,
+            settings.claudeCode.permissions
+          );
+        }
+      });
+      fullText = result.fullText;
+      recordClaudeCodeStatus({
+        ...status,
+        state: "connected",
+        checkedAt: new Date().toISOString(),
+        message: "Claude Code is connected and ready for Coach conversations."
+      });
+      send("chat:streamDone", { requestId, fullText });
+      return;
+    }
+
     if (settings.provider === "local") {
       const { text: instructions, hasData } = await buildTrainingContext();
       const runtimeConfig = getLocalRuntimeConfig(settings.local);
@@ -752,6 +884,26 @@ export async function streamChat(
     if (controller.signal.aborted) {
       send("chat:streamDone", { requestId, fullText, finishReason: "cancelled" });
     } else {
+      if (getChatSettings().provider === "claude-code") {
+        const current = getChatSettings().claudeCode;
+        const failure =
+          error instanceof ClaudeCodeProviderError ? error.kind : "connection";
+        recordClaudeCodeStatus({
+          state:
+            failure === "usage-limit"
+              ? "usage-limit-reached"
+              : failure === "auth"
+                ? "sign-in-required"
+                : failure === "not-installed"
+                  ? "not-installed"
+                  : "connection-failed",
+          installed: failure !== "not-installed",
+          authenticated: failure !== "auth" && failure !== "not-installed",
+          executablePath: current.executablePath,
+          checkedAt: new Date().toISOString(),
+          message: error instanceof Error ? error.message : "Claude request failed."
+        });
+      }
       const authError = Boolean(
         (error as Error & { authError?: boolean }).authError
       );
@@ -793,11 +945,65 @@ function getAllChatTools(): CorosMcpTool[] {
   ];
 }
 
+const CLAUDE_REMOTE_READ_TOOLS: Record<
+  keyof ClaudeCodePermissions,
+  readonly string[]
+> = {
+  recentActivities: [
+    "get_recent_activities",
+    "get_activity_details",
+    "get_activity_detail"
+  ],
+  trainingMetrics: [
+    "get_training_metrics",
+    "get_fitness_metrics",
+    "get_recovery_metrics",
+    "get_training_load"
+  ],
+  upcomingWorkouts: ["get_upcoming_workouts", "get_training_calendar"],
+  sleepData: ["get_sleep_summary", "get_sleep_data"],
+  fullActivityFiles: []
+};
+
+export function getClaudeCodeTools(
+  permissions: ClaudeCodePermissions
+): CorosMcpTool[] {
+  const remoteAllowedNames = new Set<string>();
+  for (const [permission, names] of Object.entries(CLAUDE_REMOTE_READ_TOOLS)) {
+    if (permissions[permission as keyof ClaudeCodePermissions]) {
+      for (const name of names) remoteAllowedNames.add(name);
+    }
+  }
+
+  const remoteTools = getCorosMcpTools().filter((tool) =>
+    remoteAllowedNames.has(tool.name)
+  );
+  const activityTools = permissions.recentActivities
+    ? getChatActivityTools()
+    : [];
+  const analyticsTools = permissions.trainingMetrics
+    ? getChatAnalyticsTools()
+    : [];
+  const workoutTools = getChatWorkoutTools().filter((tool) => {
+    if (
+      tool.name === "upload_training_plan" ||
+      tool.name === "list_scheduled_workouts" ||
+      tool.name === "delete_workout"
+    ) {
+      return permissions.upcomingWorkouts;
+    }
+    return tool.name === "draft_training_plan";
+  });
+
+  return [...remoteTools, ...activityTools, ...analyticsTools, ...workoutTools];
+}
+
 async function executeChatTool(
   name: string,
   args: Record<string, unknown>,
   send: (channel: string, payload: unknown) => void,
-  requestId: string
+  requestId: string,
+  claudePermissions?: ClaudeCodePermissions
 ): Promise<string> {
   if (isChatWorkoutTool(name)) {
     return handleChatWorkoutTool(name as ChatWorkoutToolName, args, {
@@ -814,7 +1020,8 @@ async function executeChatTool(
           kind: "workoutDelete",
           preview
         });
-      }
+      },
+      allowUpcomingWorkouts: claudePermissions?.upcomingWorkouts !== false
     });
   }
   if (isChatActivityTool(name)) {
@@ -1112,7 +1319,9 @@ function extractSseData(frame: string): string | null {
 
 // ----- Training-data context assembly -----
 
-async function buildTrainingContext(): Promise<{ text: string; hasData: boolean }> {
+async function buildTrainingContext(
+  permissions?: ClaudeCodePermissions
+): Promise<{ text: string; hasData: boolean }> {
   let status: Awaited<ReturnType<typeof getTrainingHubStatus>>;
   try {
     status = getTrainingHubStatus();
@@ -1129,10 +1338,19 @@ async function buildTrainingContext(): Promise<{ text: string; hasData: boolean 
     };
   }
 
+  const includeActivities = permissions?.recentActivities !== false;
+  const includeMetrics = permissions?.trainingMetrics !== false;
+  const includeUpcoming = permissions?.upcomingWorkouts !== false;
   const [activities, dashboard, upcoming] = await Promise.allSettled([
-    listTrainingHubActivities(1, 10),
-    getTrainingDashboard(),
-    getUpcomingWorkouts(14)
+    includeActivities
+      ? listTrainingHubActivities(1, 10)
+      : Promise.resolve([] as TrainingHubActivity[]),
+    includeMetrics
+      ? getTrainingDashboard()
+      : Promise.resolve(null as TrainingHubDashboard | null),
+    includeUpcoming
+      ? getUpcomingWorkouts(14)
+      : Promise.resolve([] as TrainingHubUpcomingWorkout[])
   ]);
 
   const sections: string[] = [COACH_INSTRUCTIONS, ""];
@@ -1144,7 +1362,7 @@ async function buildTrainingContext(): Promise<{ text: string; hasData: boolean 
     sections.push("");
     hasData = true;
   }
-  if (dashboard.status === "fulfilled") {
+  if (dashboard.status === "fulfilled" && dashboard.value) {
     const fitness = formatDashboard(dashboard.value);
     if (fitness) {
       sections.push("## Fitness & recovery");
@@ -1158,6 +1376,13 @@ async function buildTrainingContext(): Promise<{ text: string; hasData: boolean 
     sections.push(formatUpcoming(upcoming.value.slice(0, 8)));
     sections.push("");
     hasData = true;
+  }
+
+  if (permissions && !hasData) {
+    sections.push(
+      "The athlete's current Claude privacy settings did not include a training " +
+        "snapshot for this request. Do not infer private COROS values."
+    );
   }
 
   return { text: sections.join("\n").trim(), hasData };
