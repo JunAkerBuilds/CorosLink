@@ -15,6 +15,18 @@ function restLabel(seconds: number): string {
   return seconds > 0 ? formatDurationSeconds(seconds) : "—";
 }
 
+// Resolve a display name, falling back to a generic "Exercise N" label when the
+// key is still an unresolved COROS code (rare: an exercise absent from both the
+// catalogue dictionary and the body-region table).
+function displayExerciseName(
+  nameKey: string,
+  rawName: string | undefined,
+  index: number
+): string {
+  const resolved = resolveExerciseName(nameKey, rawName);
+  return /^[TS]\d/.test(resolved) ? `Exercise ${index + 1}` : resolved;
+}
+
 export function StrengthDetailPanel({ strength }: { strength: StrengthDetail }) {
   const { summary, exercises } = strength;
   return (
@@ -50,7 +62,7 @@ export function StrengthDetailPanel({ strength }: { strength: StrengthDetail }) 
           >
             <h3 className="strength-exercise-head">
               <span className="strength-exercise-name">
-                {index + 1}. {resolveExerciseName(exercise.nameKey, exercise.rawName)}
+                {index + 1}. {displayExerciseName(exercise.nameKey, exercise.rawName, index)}
               </span>
               <span className="strength-exercise-meta">
                 {exercise.sets} sets · {exercise.totalReps} reps
