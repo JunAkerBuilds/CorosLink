@@ -431,11 +431,12 @@ export function formatUpcomingWorkoutRowStats(
 const RECORD_TYPE_LONGEST_RUN = 101;
 const RECORD_TYPE_ELEVATION_GAIN = 103;
 
-const PERSONAL_RECORD_SLOT_TYPES = new Set([103, 12, 13]);
+const PERSONAL_RECORD_SLOT_TYPES = new Set([103, 2, 13]);
 
 const PERSONAL_RECORD_VISIBLE_DISTANCE_TYPES = new Set([4, 5, 6, 7]);
 
 const DISTANCE_PR_DISTANCE_METERS: Record<number, number> = {
+  2: 21097.5,
   3: 15000,
   4: 10000,
   5: 5000,
@@ -445,7 +446,7 @@ const DISTANCE_PR_DISTANCE_METERS: Record<number, number> = {
   9: 3218,
   10: 4828.032,
   11: 8046.72,
-  12: 21097,
+  12: 16093.44,
   13: 42195
 };
 

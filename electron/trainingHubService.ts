@@ -1939,6 +1939,7 @@ function parseZoneDistributionEntries(
 }
 
 const RECORD_TYPE_LABELS: Record<number, string> = {
+  2: "Half Marathon",
   3: "15K",
   4: "10K",
   5: "5K",
@@ -1948,34 +1949,32 @@ const RECORD_TYPE_LABELS: Record<number, string> = {
   9: "2 Mile",
   10: "3 Mile",
   11: "5 Mile",
-  12: "Half Marathon",
+  12: "10 Mile",
   13: "Marathon",
   101: "Longest Run",
   102: "Best Pace",
   103: "Most Elevation Gain"
 };
 
-const DISTANCE_PR_RECORD_TYPES = new Set([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+const DISTANCE_PR_RECORD_TYPES = new Set([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
 
-const PERSONAL_RECORD_SLOT_TYPES = [103, 12, 13] as const;
+const PERSONAL_RECORD_SLOT_TYPES = [103, 2, 13] as const;
 
-const RECORD_TYPE_EXCLUDED = new Set([8, 9, 102]);
+const RECORD_TYPE_EXCLUDED = new Set([8, 9, 10, 11, 12, 102]);
 
 const RECORD_DISPLAY_ORDER: Record<number, number> = {
   101: 0,
   103: 1,
   7: 2,
   6: 3,
-  10: 4,
-  5: 5,
-  11: 6,
-  4: 7,
-  3: 8,
-  12: 9,
-  13: 10
+  5: 4,
+  4: 5,
+  2: 6,
+  13: 7
 };
 
 const DISTANCE_PR_DISTANCE_METERS: Record<number, number> = {
+  2: 21097.5,
   3: 15000,
   4: 10000,
   5: 5000,
@@ -1985,7 +1984,7 @@ const DISTANCE_PR_DISTANCE_METERS: Record<number, number> = {
   9: 3218,
   10: 4828.032,
   11: 8046.72,
-  12: 21097,
+  12: 16093.44,
   13: 42195
 };
 
@@ -2006,17 +2005,17 @@ const RACE_PREDICTOR_TYPE_DISTANCE_METERS: Record<number, number> = {
 const RACE_PREDICTOR_DISPLAY_ORDER = [5, 4, 2, 1];
 
 const RECORD_GROUP_LABELS: Record<number, string> = {
-  1: "All",
+  1: "4 weeks",
   2: "Half year",
   3: "12 weeks",
-  4: "4 weeks"
+  4: "All"
 };
 
 const RECORD_GROUP_DISPLAY_ORDER: Record<number, number> = {
-  4: 0,
+  1: 0,
   3: 1,
   2: 2,
-  1: 3
+  4: 3
 };
 
 function parseTrainingDashboard(
@@ -2094,6 +2093,18 @@ function normalizePersonalRecordDuration(value?: number): number | undefined {
   }
 
   return value >= 10_000 ? value / 100 : value;
+}
+
+function normalizeExplicitPersonalRecordDuration(
+  value?: number
+): number | undefined {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) {
+    return undefined;
+  }
+
+  // Current dashboard payloads expose `duration` directly in seconds. Other
+  // fields such as legacy `record` values can still be centiseconds.
+  return value;
 }
 
 function normalizePersonalRecordPace(
@@ -2297,7 +2308,9 @@ function inferDistanceRecordType(
     "3mi": 10,
     "5mile": 11,
     "5mi": 11,
-    halfmarathon: 12,
+    halfmarathon: 2,
+    "10mile": 12,
+    "10mi": 12,
     marathon: 13
   };
 
@@ -2320,7 +2333,8 @@ function inferDistanceRecordType(
     3218: 9,
     4828: 10,
     8047: 11,
-    21097: 12,
+    21097: 2,
+    16093: 12,
     42195: 13
   };
 
@@ -2426,6 +2440,7 @@ function normalizePersonalRecordLabelKey(label: string): string {
 
 function canonicalPersonalRecordKey(record: TrainingHubPersonalRecord): string {
   const aliases: Record<number, string> = {
+    2: "halfmarathon",
     3: "15km",
     4: "10km",
     5: "5km",
@@ -2435,7 +2450,7 @@ function canonicalPersonalRecordKey(record: TrainingHubPersonalRecord): string {
     9: "2mile",
     10: "3mile",
     11: "5mile",
-    12: "halfmarathon",
+    12: "10mile",
     13: "marathon",
     101: "longestrun",
     102: "bestpace",
@@ -2732,7 +2747,9 @@ function parsePersonalRecord(
 
   if (type === RECORD_TYPE_ELEVATION_GAIN) {
     const elevationMeters = resolveElevationGainMeters(raw);
-    const duration = normalizePersonalRecordDuration(toOptionalNumber(raw.duration));
+    const duration = normalizeExplicitPersonalRecordDuration(
+      toOptionalNumber(raw.duration)
+    );
 
     return {
       type,
@@ -2847,7 +2864,10 @@ function pickNormalizedPersonalRecordDuration(
   raw: Record<string, unknown>,
   key: string
 ): number | undefined {
-  return normalizePersonalRecordDuration(toOptionalNumber(raw[key]));
+  const value = toOptionalNumber(raw[key]);
+  return key === "duration"
+    ? normalizeExplicitPersonalRecordDuration(value)
+    : normalizePersonalRecordDuration(value);
 }
 
 function resolveDistancePersonalRecordDuration(
@@ -2900,7 +2920,7 @@ function resolveLongestRunDuration(
   raw: Record<string, unknown>,
   distanceMeters?: number
 ): number | undefined {
-  const explicitDuration = normalizePersonalRecordDuration(
+  const explicitDuration = normalizeExplicitPersonalRecordDuration(
     toOptionalNumber(raw.duration)
   );
 

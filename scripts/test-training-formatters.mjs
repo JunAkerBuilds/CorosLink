@@ -71,9 +71,12 @@ assert.equal(isPersonalRecordVisible({ type: 7, duration: 245 }), true);
 assert.equal(isPersonalRecordVisible({ type: 6, duration: 769 }), true);
 assert.equal(isPersonalRecordVisible({ type: 5, duration: 1309 }), true);
 assert.equal(isPersonalRecordVisible({ type: 4, duration: 5127 }), true);
+assert.equal(isPersonalRecordVisible({ type: 2, duration: 8268 }), true);
+assert.equal(isPersonalRecordVisible({ type: 2 }), true);
 assert.equal(isPersonalRecordVisible({ type: 3, duration: 9759 }), false);
 assert.equal(isPersonalRecordVisible({ type: 10, duration: 1268 }), false);
 assert.equal(isPersonalRecordVisible({ type: 11, duration: 3995 }), false);
+assert.equal(isPersonalRecordVisible({ type: 12, duration: 5967 }), false);
 assert.equal(isPersonalRecordVisible({ type: 8, duration: 408 }), false);
 
 console.log("training formatter tests passed");

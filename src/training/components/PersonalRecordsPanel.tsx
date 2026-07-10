@@ -153,7 +153,7 @@ function LaurelBadge() {
 
 export function PersonalRecordsPanel({ dashboard }: PersonalRecordsPanelProps) {
   const groups = dashboard?.personalRecords ?? [];
-  const [activeGroupType, setActiveGroupType] = useState<number>(4);
+  const [activeGroupType, setActiveGroupType] = useState<number>(1);
 
   useEffect(() => {
     if (groups.length === 0) {
@@ -161,7 +161,7 @@ export function PersonalRecordsPanel({ dashboard }: PersonalRecordsPanelProps) {
     }
 
     if (!groups.some((group) => group.type === activeGroupType)) {
-      setActiveGroupType(groups.find((group) => group.type === 4)?.type ?? groups[0]!.type);
+      setActiveGroupType(groups.find((group) => group.type === 1)?.type ?? groups[0]!.type);
     }
   }, [activeGroupType, groups]);
 

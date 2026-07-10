@@ -67,7 +67,7 @@ const fixture = {
 };
 
 const groups = parsePersonalRecordGroups(fixture.recordDetailList);
-assert.equal(groups[0]?.label, "All");
+assert.equal(groups[0]?.label, "4 weeks");
 const records = groups[0]?.records ?? [];
 
 assert.equal(records.length, 5);
@@ -86,7 +86,7 @@ const elevation = records.find((record) => record.type === 103);
 assert.equal(elevation?.distance, 84);
 assert.equal(elevation?.avgPace, 368);
 
-const halfMarathon = records.find((record) => record.type === 12);
+const halfMarathon = records.find((record) => record.type === 2);
 assert.equal(halfMarathon?.label, "Half Marathon");
 assert.equal(halfMarathon?.duration, undefined);
 
@@ -148,11 +148,11 @@ assert.equal(periodGroups[0]?.label, "4 weeks");
 assert.equal(periodGroups[1]?.label, "12 weeks");
 assert.equal(periodGroups[2]?.label, "Half year");
 assert.equal(periodGroups[3]?.label, "All");
-assert.equal(periodGroups[0]?.records[0]?.duration, 1849);
+assert.equal(periodGroups[0]?.records[0]?.duration, 1782);
 assert.equal(periodGroups[1]?.records[0]?.duration, 1847);
 assert.equal(periodGroups[2]?.records[0]?.duration, 1845);
-assert.equal(periodGroups[3]?.records[0]?.duration, 1782);
-assert.equal(periodGroups[0]?.records[0]?.avgPace, 369.8);
+assert.equal(periodGroups[3]?.records[0]?.duration, 1849);
+assert.equal(periodGroups[3]?.records[0]?.avgPace, 369.8);
 
 const tenKFixture = parsePersonalRecordGroups([
   {
@@ -503,14 +503,122 @@ const currentCorosDistanceBoard = parsePersonalRecordGroups([
 
 assert.deepEqual(
   currentCorosDistanceBoard
-    .filter((record) => [3, 4, 10, 11].includes(record.type))
+    .filter((record) => [3, 4].includes(record.type))
     .map((record) => [record.label, record.duration]),
   [
-    ["3 Mile", 1268],
-    ["5 Mile", 3995],
     ["10K", 5127],
     ["15K", 9759]
   ]
+);
+assert.equal(
+  currentCorosDistanceBoard.some((record) => record.type === 10 || record.type === 11),
+  false
+);
+
+const reportedCorosPeriodGroups = parsePersonalRecordGroups([
+  {
+    type: 1,
+    recordList: [
+      {
+        type: 2,
+        distance: 21097.5,
+        duration: 10073,
+        avgPace: 477,
+        happenDay: 20260621
+      },
+      {
+        type: 4,
+        distance: 10000,
+        duration: 3193,
+        avgPace: 319,
+        happenDay: 20260710
+      },
+      {
+        type: 12,
+        distance: 16093,
+        duration: 6702,
+        avgPace: 416,
+        happenDay: 20260614
+      }
+    ]
+  },
+  {
+    type: 2,
+    recordList: [
+      {
+        type: 2,
+        distance: 21097.5,
+        duration: 8268,
+        avgPace: 392,
+        happenDay: 20260426
+      }
+    ]
+  },
+  {
+    type: 3,
+    recordList: [
+      {
+        type: 2,
+        distance: 21097.5,
+        duration: 8268,
+        avgPace: 392,
+        happenDay: 20260426
+      }
+    ]
+  },
+  {
+    type: 4,
+    recordList: [
+      {
+        type: 2,
+        distance: 21097.5,
+        duration: 8268,
+        avgPace: 392,
+        happenDay: 20260426
+      },
+      {
+        type: 4,
+        distance: 10000,
+        duration: 3180,
+        avgPace: 318,
+        happenDay: 20260417
+      },
+      {
+        type: 12,
+        distance: 16093,
+        duration: 5967,
+        avgPace: 371,
+        happenDay: 20260208
+      }
+    ]
+  }
+]);
+
+assert.deepEqual(
+  reportedCorosPeriodGroups.map((group) => group.label),
+  ["4 weeks", "12 weeks", "Half year", "All"]
+);
+assert.equal(
+  reportedCorosPeriodGroups[0]?.records.find((record) => record.type === 2)?.duration,
+  10073
+);
+assert.equal(
+  reportedCorosPeriodGroups[0]?.records.find((record) => record.type === 4)?.duration,
+  3193
+);
+assert.equal(
+  reportedCorosPeriodGroups[3]?.records.find((record) => record.type === 2)?.duration,
+  8268
+);
+assert.equal(
+  reportedCorosPeriodGroups[3]?.records.find((record) => record.type === 4)?.duration,
+  3180
+);
+assert.equal(
+  reportedCorosPeriodGroups.every(
+    (group) => !group.records.some((record) => record.type === 12)
+  ),
+  true
 );
 
 const emptyGroup = parsePersonalRecordGroups([
@@ -523,7 +631,7 @@ const emptyGroup = parsePersonalRecordGroups([
 assert.equal(emptyGroup?.records.length, 3);
 assert.deepEqual(
   emptyGroup?.records.map((record) => record.type).sort((left, right) => left - right),
-  [12, 13, 103]
+  [2, 13, 103]
 );
 assert.equal(
   emptyGroup?.records.every(
