@@ -19,7 +19,10 @@ import type { CorosMcpStatus, CorosMcpTool } from "./types";
 // COROS official MCP server. Discovery (auth server metadata, DCR, PKCE) is
 // handled by the MCP SDK against these URLs; we only implement token storage
 // and the interactive redirect via a loopback server.
-const MCP_RESOURCE_URL = "https://mcp.coros.com/mcp";
+// COROS advertises this exact protected resource in its OAuth metadata. The
+// `mcp.coros.com` alias responds, but OAuth tokens issued for this resource are
+// correctly bound to the canonical `mcpus.coros.com` origin.
+const MCP_RESOURCE_URL = "https://mcpus.coros.com/mcp";
 const MCP_SCOPE = "openid mcp.tools offline_access";
 const LOOPBACK_PORT = 1456;
 const LOOPBACK_REDIRECT_URI = `http://localhost:${LOOPBACK_PORT}/coros-mcp/callback`;

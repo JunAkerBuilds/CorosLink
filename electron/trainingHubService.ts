@@ -1939,13 +1939,15 @@ function parseZoneDistributionEntries(
 }
 
 const RECORD_TYPE_LABELS: Record<number, string> = {
+  3: "15K",
+  4: "10K",
   5: "5K",
   6: "3K",
   7: "1K",
   8: "1 Mile",
   9: "2 Mile",
-  10: "5K",
-  11: "10K",
+  10: "3 Mile",
+  11: "5 Mile",
   12: "Half Marathon",
   13: "Marathon",
   101: "Longest Run",
@@ -1953,7 +1955,7 @@ const RECORD_TYPE_LABELS: Record<number, string> = {
   103: "Most Elevation Gain"
 };
 
-const DISTANCE_PR_RECORD_TYPES = new Set([5, 6, 7, 8, 9, 10, 11, 12, 13]);
+const DISTANCE_PR_RECORD_TYPES = new Set([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
 
 const PERSONAL_RECORD_SLOT_TYPES = [103, 12, 13] as const;
 
@@ -1964,21 +1966,25 @@ const RECORD_DISPLAY_ORDER: Record<number, number> = {
   103: 1,
   7: 2,
   6: 3,
-  5: 4,
   10: 4,
-  11: 5,
-  12: 6,
-  13: 7
+  5: 5,
+  11: 6,
+  4: 7,
+  3: 8,
+  12: 9,
+  13: 10
 };
 
 const DISTANCE_PR_DISTANCE_METERS: Record<number, number> = {
+  3: 15000,
+  4: 10000,
   5: 5000,
   6: 3000,
   7: 1000,
   8: 1609,
   9: 3218,
-  10: 5000,
-  11: 10000,
+  10: 4828.032,
+  11: 8046.72,
   12: 21097,
   13: 42195
 };
@@ -2222,7 +2228,7 @@ function isCorosFiveKPersonalRecord(
   raw: Record<string, unknown>,
   resolvedType: number
 ): boolean {
-  if (resolvedType !== 5 && resolvedType !== 10) {
+  if (resolvedType !== 5) {
     return true;
   }
 
@@ -2250,7 +2256,7 @@ function isCorosFiveKPersonalRecord(
 function distancePersonalRecordQuality(
   record: TrainingHubPersonalRecord
 ): number {
-  if (record.type !== 5 && record.type !== 10) {
+  if (record.type !== 5) {
     return 0;
   }
 
@@ -2275,16 +2281,22 @@ function inferDistanceRecordType(
   const normalizedName = name.trim().toLowerCase().replace(/\s+/g, "");
 
   const nameAliases: Record<string, number> = {
+    "15k": 3,
+    "15km": 3,
+    "10k": 4,
+    "10km": 4,
     "1k": 7,
     "1km": 7,
     "3k": 6,
     "3km": 6,
     "5k": 5,
     "5km": 5,
-    "10k": 11,
-    "10km": 11,
     "1mile": 8,
     "2mile": 9,
+    "3mile": 10,
+    "3mi": 10,
+    "5mile": 11,
+    "5mi": 11,
     halfmarathon: 12,
     marathon: 13
   };
@@ -2299,12 +2311,15 @@ function inferDistanceRecordType(
 
   const roundedDistance = Math.round(distanceMeters);
   const distanceAliases: Record<number, number> = {
+    15000: 3,
+    10000: 4,
     1000: 7,
     3000: 6,
     5000: 5,
-    10000: 11,
     1609: 8,
     3218: 9,
+    4828: 10,
+    8047: 11,
     21097: 12,
     42195: 13
   };
@@ -2339,6 +2354,8 @@ function resolvePersonalRecordType(
   type: number
 ): number {
   const name = pickString(raw, ["name", "site"])?.toLowerCase() ?? "";
+  const rawDistance = pickDistanceScalar(raw);
+  const rawRecord = pickRecordScalar(raw);
 
   if (name.includes("longest run") || name.includes("longest ride")) {
     return RECORD_TYPE_LONGEST_RUN;
@@ -2368,11 +2385,23 @@ function resolvePersonalRecordType(
       : RECORD_TYPE_ELEVATION_GAIN;
   }
 
+  // Earlier Training Hub payloads encoded metric 5K/10K records as types 10/11
+  // without a distance and in centiseconds. Current payloads include the distance,
+  // where those types correctly mean 3 and 5 miles respectively.
+  if (rawDistance === undefined && rawRecord !== undefined && rawRecord >= 10_000) {
+    if (type === 10) {
+      return 5;
+    }
+
+    if (type === 11) {
+      return 4;
+    }
+  }
+
   if (RECORD_TYPE_LABELS[type]) {
     return type;
   }
 
-  const rawDistance = pickDistanceScalar(raw);
   const inferredType = inferDistanceRecordType(name, rawDistance);
 
   if (inferredType !== undefined) {
@@ -2397,13 +2426,15 @@ function normalizePersonalRecordLabelKey(label: string): string {
 
 function canonicalPersonalRecordKey(record: TrainingHubPersonalRecord): string {
   const aliases: Record<number, string> = {
+    3: "15km",
+    4: "10km",
     5: "5km",
     6: "3km",
     7: "1km",
     8: "1mile",
     9: "2mile",
-    10: "5km",
-    11: "10km",
+    10: "3mile",
+    11: "5mile",
     12: "halfmarathon",
     13: "marathon",
     101: "longestrun",
@@ -2428,6 +2459,14 @@ function isNativePersonalRecordType(
   apiType: number | undefined,
   resolvedType: number
 ): boolean {
+  // Older Training Hub payloads used 10/11 for metric 5K/10K records.
+  if (
+    (apiType === 10 && resolvedType === 5) ||
+    (apiType === 11 && resolvedType === 4)
+  ) {
+    return true;
+  }
+
   return apiType === resolvedType && RECORD_TYPE_LABELS[resolvedType] !== undefined;
 }
 
@@ -2568,7 +2607,7 @@ function isPersonalRecordEntryPopulated(
   }
 
   if (
-    (record.type === 5 || record.type === 10) &&
+    record.type === 5 &&
     record.distance !== undefined &&
     record.distance > 0 &&
     Math.abs(record.distance - 5000) > 100

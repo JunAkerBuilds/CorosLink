@@ -29,7 +29,14 @@ jobs:
       - name: Build macOS installers
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: npm run dist:mac
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm run binaries:prepare:mac
+          npm run build
+          npx electron-builder --mac --arm64 --x64 --publish never \
+            -c.mac.identity=- \
+            -c.mac.notarize=false \
+            -c.mac.hardenedRuntime=false
 
       - name: Verify macOS update artifacts
         run: node scripts/verify-release-artifacts.mjs macos

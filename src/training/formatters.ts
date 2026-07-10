@@ -433,16 +433,18 @@ const RECORD_TYPE_ELEVATION_GAIN = 103;
 
 const PERSONAL_RECORD_SLOT_TYPES = new Set([103, 12, 13]);
 
-const PERSONAL_RECORD_EXCLUDED_TYPES = new Set([8, 9, 102]);
+const PERSONAL_RECORD_VISIBLE_DISTANCE_TYPES = new Set([4, 5, 6, 7]);
 
 const DISTANCE_PR_DISTANCE_METERS: Record<number, number> = {
+  3: 15000,
+  4: 10000,
   5: 5000,
   6: 3000,
   7: 1000,
   8: 1609,
   9: 3218,
-  10: 5000,
-  11: 10000,
+  10: 4828.032,
+  11: 8046.72,
   12: 21097,
   13: 42195
 };
@@ -559,13 +561,19 @@ export function isPersonalRecordVisible(record: {
   avgPace?: number;
   happenDay?: string;
 }): boolean {
-  if (PERSONAL_RECORD_EXCLUDED_TYPES.has(record.type)) {
-    return false;
-  }
-
   if (PERSONAL_RECORD_SLOT_TYPES.has(record.type)) {
     return true;
   }
 
-  return isPersonalRecordPopulated(record);
+  if (
+    record.type === RECORD_TYPE_LONGEST_RUN ||
+    record.type === RECORD_TYPE_ELEVATION_GAIN
+  ) {
+    return isPersonalRecordPopulated(record);
+  }
+
+  return (
+    PERSONAL_RECORD_VISIBLE_DISTANCE_TYPES.has(record.type) &&
+    isPersonalRecordPopulated(record)
+  );
 }

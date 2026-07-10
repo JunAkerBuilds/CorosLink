@@ -465,6 +465,54 @@ assert.equal(
   12010
 );
 
+const currentCorosDistanceBoard = parsePersonalRecordGroups([
+  {
+    type: 4,
+    recordList: [
+      {
+        type: 3,
+        distance: 15000,
+        duration: 9759,
+        avgPace: 651,
+        happenDay: 20260705
+      },
+      {
+        type: 4,
+        distance: 10000,
+        duration: 5127,
+        avgPace: 513,
+        happenDay: 20260628
+      },
+      {
+        type: 10,
+        distance: 4828.03,
+        duration: 1268,
+        avgPace: 263,
+        happenDay: 20260701
+      },
+      {
+        type: 11,
+        distance: 8046.7,
+        duration: 3995,
+        avgPace: 496,
+        happenDay: 20260705
+      }
+    ]
+  }
+])[0]?.records ?? [];
+
+assert.deepEqual(
+  currentCorosDistanceBoard
+    .filter((record) => [3, 4, 10, 11].includes(record.type))
+    .map((record) => [record.label, record.duration]),
+  [
+    ["3 Mile", 1268],
+    ["5 Mile", 3995],
+    ["10K", 5127],
+    ["15K", 9759]
+  ]
+);
+
 const emptyGroup = parsePersonalRecordGroups([
   {
     type: 4,

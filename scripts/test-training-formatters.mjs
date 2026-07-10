@@ -9,7 +9,11 @@ const formattersUrl = pathToFileURL(
 const distUrl = (file) =>
   pathToFileURL(path.join(repoRoot, "dist-electron", file)).href;
 
-const { formatHappenDayLabel, formatSleepNightLabel } = await import(
+const {
+  formatHappenDayLabel,
+  formatSleepNightLabel,
+  isPersonalRecordVisible
+} = await import(
   `${formattersUrl.href}?cacheBust=${Date.now()}`
 );
 const { buildTrendPoints, mergeSleepIntoTrendPoints } = await import(
@@ -62,5 +66,14 @@ assert.equal(
   trendPoints.find((point) => point.date === "20260708")?.sleepMinutes,
   undefined
 );
+
+assert.equal(isPersonalRecordVisible({ type: 7, duration: 245 }), true);
+assert.equal(isPersonalRecordVisible({ type: 6, duration: 769 }), true);
+assert.equal(isPersonalRecordVisible({ type: 5, duration: 1309 }), true);
+assert.equal(isPersonalRecordVisible({ type: 4, duration: 5127 }), true);
+assert.equal(isPersonalRecordVisible({ type: 3, duration: 9759 }), false);
+assert.equal(isPersonalRecordVisible({ type: 10, duration: 1268 }), false);
+assert.equal(isPersonalRecordVisible({ type: 11, duration: 3995 }), false);
+assert.equal(isPersonalRecordVisible({ type: 8, duration: 408 }), false);
 
 console.log("training formatter tests passed");
