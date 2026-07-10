@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-07-10
+
+### Added
+
+- **Push activities to COROS** — import from intervals.icu and add manual activities from Training Hub ([#36](https://github.com/JunAkerBuilds/CorosLink/pull/36))
+- **Settings view** — app version, runtime info, update controls, and quick links to docs, issues, and support
+- **Data page** — dedicated page for data/import tools (moved out of Training Hub)
+- **Apex and Pace 2** watch model support on the dashboard
+- **Personal records** — 15K, 10K, 3 Mile, and 5 Mile distance types
+- **COROS sport type resolution** — richer activity type labels from COROS data
+- **Spotify OAuth setup** — redesigned connection UI with step-by-step guide
+- **Route Studio** — use device geolocation as the route start point
+- **Download deduplication** — skip items already present in the media library
+- **macOS code signing and notarization** — signed, notarized DMG builds in CI (enables reliable in-app auto-update on macOS)
+
+### Changed
+
+- Website SEO and download page improvements
+- Training Hub layout polish after moving data tools to the Data page
+
+### Fixed
+
+- High idle CPU usage from repaint-heavy animations and background polling
+- YouTube webview polling while the tab is hidden
+- COROS MCP OAuth token binding URL (`mcp.coros.com` → `mcpus.coros.com`)
+- Personal record display — only show supported distance types; legacy payload compatibility
+- COROS activity upload reliability — STS credential handling, duration matching, TCX extensions, duplicate re-import prevention
+
 ## [0.1.15] - 2026-07-07
 
 ### Added
@@ -210,6 +238,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - GitHub Actions release workflow and installer build documentation
 
+[0.1.16]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.12...v0.1.13
