@@ -18847,17 +18847,13 @@ tr.data-intervals-row-missing {
 .calendar-cat-race { border-left-color: #ef5da8; }
 .calendar-cat-run { border-left-color: var(--accent); }
 
-/* Per-sport colored liseré on the RIGHT edge of completed-activity chips.
-   Semi-transparent so it stays subtle alongside the left category border. */
-.calendar-chip-activity,
-.calendar-chip-paired {
-  border-right: 3px solid transparent;
-}
-.calendar-sport-strength { border-right-color: color-mix(in srgb, var(--sport-strength) 60%, transparent); }
-.calendar-sport-trail { border-right-color: color-mix(in srgb, var(--sport-trail) 60%, transparent); }
-.calendar-sport-run { border-right-color: color-mix(in srgb, var(--sport-run) 60%, transparent); }
-.calendar-sport-bike { border-right-color: color-mix(in srgb, var(--sport-bike) 60%, transparent); }
-.calendar-sport-other { border-right-color: color-mix(in srgb, var(--sport-other) 60%, transparent); }
+/* Per-sport color on the LEFT border of completed-activity chips — replaces
+   the default green accent so each activity reads by its sport at a glance. */
+.calendar-chip-activity.calendar-sport-strength { border-left-color: var(--sport-strength); }
+.calendar-chip-activity.calendar-sport-trail { border-left-color: var(--sport-trail); }
+.calendar-chip-activity.calendar-sport-run { border-left-color: var(--sport-run); }
+.calendar-chip-activity.calendar-sport-bike { border-left-color: var(--sport-bike); }
+.calendar-chip-activity.calendar-sport-other { border-left-color: var(--sport-other); }
 
 /* Settings → Activity colors card. */
 .settings-sport-hint {

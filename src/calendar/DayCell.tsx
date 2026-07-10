@@ -86,7 +86,7 @@ function PairChip({
     return (
       <button
         type="button"
-        className={`calendar-chip calendar-chip-paired ${categoryClass(scheduled.name)} ${sportChipClass(activity.sportName ?? activity.name)}`}
+        className={`calendar-chip calendar-chip-paired ${categoryClass(scheduled.name)}`}
         onClick={() => onSelectActivity(activity)}
         title={`${scheduled.name} — planned vs actual`}
       >

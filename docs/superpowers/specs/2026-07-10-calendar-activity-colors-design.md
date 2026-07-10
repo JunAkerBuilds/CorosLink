@@ -17,7 +17,7 @@ In the Calendar view (week/month), completed activities render as gray chips wit
   | `run` | Course, Run, jog, marathon, 5k/10k, tempo, track (non-trail) | green `#2fbe91` |
   | `bike` | Vélo, Cyclisme, Ride, VirtualRide, bike, cycl, spin | yellow `#e6b800` |
   | `other` | everything else | pastel turquoise `#7fd8cf` |
-- **Visual:** keep the existing left gray border unchanged; ADD a right-side colored liseré, ~60% opacity, in the sport color.
+- **Visual (revised after live review):** color the **left** border of the activity chip with the sport color, replacing the default green accent. (An earlier iteration added a semi-transparent right-side liseré; the user preferred moving the color to the existing left border instead and dropping the right stripe.) Applies to **unplanned** activity chips (the ones that showed the accent); planned/actual pair chips keep their existing workout-type left-border color.
 - **Where editable:** a new "Activity colors" card in the existing Settings view (`src/settings/SettingsView.tsx`), with five `<input type="color">` swatches (label + a live preview chip) and a **Reset to defaults** button.
 - **Persistence:** `localStorage` (`coroslink.sportColors`), applied as CSS custom properties on `document.documentElement` (same approach as the theme). One color set, valid in both light and dark themes.
 - **Feature scope:** the Calendar view only — the completed-activity chips (unplanned activities and the actual activity inside planned/actual pairs). The existing planned-workout categories (`calendar-cat-*` on the LEFT border, based on workout *type* — Race/Long/Easy/Intervals) are unrelated and left untouched.
