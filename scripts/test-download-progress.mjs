@@ -149,8 +149,13 @@ const printedPaths = [absoluteMp3, relativeMp3, "/tmp/new.mp3"];
 const after = [absoluteMp3, relativeMp3, "/tmp/new.mp3", "/tmp/also-new.mp3"];
 
 assert.deepEqual(partitionDownloadedMp3Files(before, printedPaths, after), {
-  newFiles: [relativeMp3, "/tmp/new.mp3", "/tmp/also-new.mp3"],
+  newFiles: [relativeMp3, "/tmp/new.mp3"],
   existingFiles: [absoluteMp3]
+});
+
+assert.deepEqual(partitionDownloadedMp3Files(before, [], after), {
+  newFiles: [relativeMp3, "/tmp/new.mp3", "/tmp/also-new.mp3"],
+  existingFiles: []
 });
 
 fs.rmSync(downloadDir, { recursive: true, force: true });

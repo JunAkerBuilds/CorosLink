@@ -187,13 +187,14 @@ export function partitionDownloadedMp3Files(
     filePath.toLowerCase().endsWith(".mp3")
   );
   const diffFiles = after.filter((filePath) => !before.has(filePath));
+  const printedNewFiles = printedMp3s.filter(
+    (filePath) => !before.has(filePath)
+  );
 
-  const newFiles = [
-    ...new Set([
-      ...printedMp3s.filter((filePath) => !before.has(filePath)),
-      ...diffFiles
-    ])
-  ];
+  // yt-dlp prints an after_move path for every file it owns. Prefer those
+  // paths whenever available: a directory diff also sees files created by
+  // other concurrent queue workers and would attach them to the wrong job.
+  const newFiles = printedNewFiles.length > 0 ? printedNewFiles : diffFiles;
   const existingFiles = [
     ...new Set(printedMp3s.filter((filePath) => before.has(filePath)))
   ];

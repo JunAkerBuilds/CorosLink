@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { markYouTubeDownloaded } from "./database";
+import {
+  hasAvailableDownloadForUrl,
+  markYouTubeDownloaded
+} from "./database";
 import { computeOverallProgress } from "./downloadProgress";
 import {
   cancelDownloadProcess,
@@ -62,7 +65,14 @@ export function enqueueDownloads(items: DownloadQueueItem[]): DownloadJob[] {
 
   for (const item of items) {
     const job = createQueuedJob(item, now);
-    if (!job || activeUrls.has(job.url)) {
+    if (
+      !job ||
+      activeUrls.has(job.url) ||
+      hasAvailableDownloadForUrl(
+        job.url,
+        job.entryType === "search" ? job.fileBaseName : undefined
+      )
+    ) {
       continue;
     }
 

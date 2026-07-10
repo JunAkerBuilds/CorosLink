@@ -1129,7 +1129,7 @@ export default function App() {
     try {
       const jobs = await api.enqueueYouTubeDownloads([{ url: trimmedUrl }]);
       if (jobs.length === 0) {
-        setMessage("That download is already queued.");
+        setMessage("That download is already downloaded or queued.");
         return;
       }
 
@@ -1183,7 +1183,7 @@ export default function App() {
     try {
       const jobs = await api.enqueueYouTubeDownloads(queue);
       if (jobs.length === 0) {
-        setMessage("Those downloads are already queued.");
+        setMessage("Those downloads are already downloaded or queued.");
         return;
       }
       setMessage(
@@ -1622,6 +1622,7 @@ export default function App() {
                     headersRaw={youtubeMusicHeadersRaw}
                     busy={busy}
                     jobs={youtubeJobs}
+                    downloads={downloads}
                     onHeadersChange={setYoutubeMusicHeadersRaw}
                     onAuthSubmit={handleYouTubeMusicAuthSubmit}
                     onLogout={handleYouTubeMusicLogout}
@@ -1640,6 +1641,7 @@ export default function App() {
                     selectedPlaylistId={selectedSpotifyPlaylistId}
                     tracks={spotifyTracks}
                     busy={busy}
+                    downloads={downloads}
                     onConfigChange={setSpotifyConfig}
                     onConfigSubmit={handleSpotifyConfigSubmit}
                     onLogin={handleSpotifyLogin}
@@ -1650,7 +1652,11 @@ export default function App() {
                     onError={setError}
                   />
                 ) : (
-                  <AppleMusicView onMessage={setMessage} onError={setError} />
+                  <AppleMusicView
+                    downloads={downloads}
+                    onMessage={setMessage}
+                    onError={setError}
+                  />
                 )}
               </MediaView>
             ) : null}
@@ -3157,6 +3163,7 @@ interface SpotifySyncViewProps {
   selectedPlaylistId: string;
   tracks: SpotifyPlaylistTrack[];
   busy: string | null;
+  downloads: LocalTrack[];
   onConfigChange: (config: SpotifyConfig) => void;
   onConfigSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onLogin: () => void;
@@ -3174,6 +3181,7 @@ interface YouTubeMusicViewProps {
   headersRaw: string;
   busy: string | null;
   jobs: DownloadJob[];
+  downloads: LocalTrack[];
   onHeadersChange: (value: string) => void;
   onAuthSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onLogout: () => void;
@@ -3309,6 +3317,7 @@ function YouTubeMusicView({
   headersRaw,
   busy,
   jobs,
+  downloads,
   onHeadersChange,
   onAuthSubmit,
   onLogout,
@@ -3338,6 +3347,30 @@ function YouTubeMusicView({
     }
     return map;
   }, [jobs]);
+  const downloadedVideoIds = useMemo(
+    () => {
+      const videoIds = new Set<string>();
+      for (const download of downloads) {
+        for (const value of [
+          download.url,
+          download.title,
+          download.filePath,
+        ]) {
+          const videoId = extractYouTubeVideoId(value);
+          if (videoId) {
+            videoIds.add(videoId);
+          }
+        }
+      }
+      return videoIds;
+    },
+    [downloads],
+  );
+  const downloadedTitleKeys = useMemo(
+    () =>
+      new Set(downloads.map((download) => downloadTitleKey(download.title))),
+    [downloads],
+  );
   const busyWithMusic = busy?.startsWith("youtube-music") ?? false;
   const dependencyReady = Boolean(
     status?.pythonAvailable && status.ytmusicapiAvailable,
@@ -3622,6 +3655,8 @@ function YouTubeMusicView({
               <YouTubeMusicPlaylistDetail
                 playlist={selectedPlaylist}
                 jobsByVideoId={jobsByVideoId}
+                downloadedVideoIds={downloadedVideoIds}
+                downloadedTitleKeys={downloadedTitleKeys}
                 onQueuePlaylist={onQueuePlaylist}
                 onQueueSong={onQueueSong}
                 onRetrySong={onRetrySong}
@@ -3640,6 +3675,8 @@ function YouTubeMusicView({
 interface YouTubeMusicPlaylistDetailProps {
   playlist: YouTubeMusicPlaylist;
   jobsByVideoId: Map<string, DownloadJob>;
+  downloadedVideoIds: Set<string>;
+  downloadedTitleKeys: Set<string>;
   onQueuePlaylist: (playlist: YouTubeMusicPlaylist) => void;
   onQueueSong: (song: YouTubeMusicSong) => void;
   onRetrySong: (song: YouTubeMusicSong, jobId: string) => void;
@@ -3649,6 +3686,8 @@ interface YouTubeMusicPlaylistDetailProps {
 function YouTubeMusicPlaylistDetail({
   playlist,
   jobsByVideoId,
+  downloadedVideoIds,
+  downloadedTitleKeys,
   onQueuePlaylist,
   onQueueSong,
   onRetrySong,
@@ -3704,6 +3743,8 @@ function YouTubeMusicPlaylistDetail({
       <YouTubeMusicSongTable
         songs={playlist.songs}
         jobsByVideoId={jobsByVideoId}
+        downloadedVideoIds={downloadedVideoIds}
+        downloadedTitleKeys={downloadedTitleKeys}
         onQueueSong={onQueueSong}
         onRetrySong={onRetrySong}
         onOpenSong={onOpenSong}
@@ -3756,6 +3797,8 @@ function YouTubeMusicArtwork({
 interface YouTubeMusicSongTableProps {
   songs: YouTubeMusicSong[];
   jobsByVideoId: Map<string, DownloadJob>;
+  downloadedVideoIds: Set<string>;
+  downloadedTitleKeys: Set<string>;
   onQueueSong: (song: YouTubeMusicSong) => void;
   onRetrySong: (song: YouTubeMusicSong, jobId: string) => void;
   onOpenSong: (song: YouTubeMusicSong) => void;
@@ -3764,6 +3807,8 @@ interface YouTubeMusicSongTableProps {
 function YouTubeMusicSongTable({
   songs,
   jobsByVideoId,
+  downloadedVideoIds,
+  downloadedTitleKeys,
   onQueueSong,
   onRetrySong,
   onOpenSong,
@@ -3789,11 +3834,24 @@ function YouTubeMusicSongTable({
             const job = song.videoId
               ? jobsByVideoId.get(song.videoId)
               : undefined;
-            const downloadStatus = youtubeMusicDownloadStatus(job);
+            const downloaded = Boolean(
+              (song.videoId && downloadedVideoIds.has(song.videoId)) ||
+                downloadedTitleKeys.has(
+                  downloadTitleKey(
+                    [song.artistName, song.songTitle]
+                      .filter(Boolean)
+                      .join(" - "),
+                  ),
+                ),
+            );
+            const downloadStatus = downloaded
+              ? { label: "Downloaded", className: "badge ready" }
+              : youtubeMusicDownloadStatus(job);
             const inProgress =
-              job?.status === "queued" || job?.status === "downloading";
-            const failed = job?.status === "failed";
-            const completed = job?.status === "completed";
+              !downloaded &&
+              (job?.status === "queued" || job?.status === "downloading");
+            const failed = !downloaded && job?.status === "failed";
+            const completed = downloaded || job?.status === "completed";
             return (
               <tr key={song.id}>
                 <td>{index + 1}</td>
@@ -3912,10 +3970,15 @@ function youtubeMusicDownloadStatus(job?: DownloadJob): {
 }
 
 function extractYouTubeVideoId(url: string): string | undefined {
-  const match = url.match(
+  const urlMatch = url.match(
     /(?:[?&]v=|youtu\.be\/|\/shorts\/|\/embed\/)([A-Za-z0-9_-]{11})/,
   );
-  return match?.[1];
+  if (urlMatch?.[1]) {
+    return urlMatch[1];
+  }
+
+  const filenameMatch = url.match(/\[([A-Za-z0-9_-]{11})\](?:\.[^.]+)?$/);
+  return filenameMatch?.[1];
 }
 
 function SpotifySyncView({
@@ -3925,6 +3988,7 @@ function SpotifySyncView({
   selectedPlaylistId,
   tracks,
   busy,
+  downloads,
   onConfigChange,
   onConfigSubmit,
   onLogin,
@@ -3961,6 +4025,20 @@ function SpotifySyncView({
     }
     return map;
   }, [jobs]);
+  const downloadedSpotifyTrackIds = useMemo(
+    () =>
+      new Set(
+        downloads
+          .map((download) => spotifyTrackIdFromSourceUrl(download.url))
+          .filter((trackId): trackId is string => Boolean(trackId)),
+      ),
+    [downloads],
+  );
+  const downloadedTitleKeys = useMemo(
+    () =>
+      new Set(downloads.map((download) => downloadTitleKey(download.title))),
+    [downloads],
+  );
 
   async function enqueueTargets(targets: DownloadQueueItem[]) {
     if (!api || targets.length === 0) {
@@ -3970,7 +4048,7 @@ function SpotifySyncView({
       const created = await api.enqueueYouTubeDownloads(targets);
       onMessage(
         created.length === 0
-          ? "Those tracks are already queued."
+          ? "Those tracks are already downloaded or queued."
           : `Queued ${created.length} download${created.length === 1 ? "" : "s"}. They run in the background.`,
       );
     } catch (caught) {
@@ -4268,6 +4346,8 @@ function SpotifySyncView({
                 playlist={selectedPlaylist}
                 tracks={tracks}
                 jobByUrl={jobByUrl}
+                downloadedSpotifyTrackIds={downloadedSpotifyTrackIds}
+                downloadedTitleKeys={downloadedTitleKeys}
                 loading={busy?.startsWith("spotify-load") ?? false}
                 onQueueAll={() => void handleQueueAllTracks(tracks)}
                 onQueueTrack={(track) => void handleQueueTrack(track)}
@@ -4289,6 +4369,8 @@ interface SpotifyPlaylistDetailProps {
   playlist: SpotifyPlaylist;
   tracks: SpotifyPlaylistTrack[];
   jobByUrl: Map<string, DownloadJob>;
+  downloadedSpotifyTrackIds: Set<string>;
+  downloadedTitleKeys: Set<string>;
   loading: boolean;
   onQueueAll: () => void;
   onQueueTrack: (track: SpotifyPlaylistTrack) => void;
@@ -4299,6 +4381,8 @@ function SpotifyPlaylistDetail({
   playlist,
   tracks,
   jobByUrl,
+  downloadedSpotifyTrackIds,
+  downloadedTitleKeys,
   loading,
   onQueueAll,
   onQueueTrack,
@@ -4375,11 +4459,18 @@ function SpotifyPlaylistDetail({
               {tracks.map((track, index) => {
                 const target = spotifyDownloadTarget(track);
                 const job = jobByUrl.get(target.sourceUrl);
-                const downloadStatus = youtubeMusicDownloadStatus(job);
+                const downloaded = downloadedSpotifyTrackIds.has(
+                  track.spotifyTrackId,
+                ) ||
+                  downloadedTitleKeys.has(downloadTitleKey(target.fileBaseName));
+                const downloadStatus = downloaded
+                  ? { label: "Downloaded", className: "badge ready" }
+                  : youtubeMusicDownloadStatus(job);
                 const inProgress =
-                  job?.status === "queued" || job?.status === "downloading";
-                const failed = job?.status === "failed";
-                const completed = job?.status === "completed";
+                  !downloaded &&
+                  (job?.status === "queued" || job?.status === "downloading");
+                const failed = !downloaded && job?.status === "failed";
+                const completed = downloaded || job?.status === "completed";
                 return (
                   <tr key={track.spotifyTrackId}>
                     <td>{index + 1}</td>
@@ -4911,9 +5002,11 @@ function AppleMusicLoginBrowser() {
 }
 
 function AppleMusicView({
+  downloads,
   onMessage,
   onError,
 }: {
+  downloads: LocalTrack[];
   onMessage: (message: string) => void;
   onError: (message: string) => void;
 }) {
@@ -5078,6 +5171,19 @@ function AppleMusicView({
     return map;
   }, [jobs]);
 
+  // Completed jobs are intentionally kept only for the current app session.
+  // The local library is the durable record, so matching its source URLs keeps
+  // Apple Music's per-track state correct after a restart.
+  const downloadedSourceUrls = useMemo(
+    () => new Set(downloads.map((download) => download.url)),
+    [downloads],
+  );
+  const downloadedTitleKeys = useMemo(
+    () =>
+      new Set(downloads.map((download) => downloadTitleKey(download.title))),
+    [downloads],
+  );
+
   if (!api) {
     return null;
   }
@@ -5104,7 +5210,7 @@ function AppleMusicView({
       const created = await api.enqueueYouTubeDownloads(targets);
       setNotice(
         created.length === 0
-          ? "Those tracks are already queued."
+          ? "Those tracks are already downloaded or queued."
           : `Queued ${created.length} download${created.length === 1 ? "" : "s"}. They run in the background.`,
       );
     } catch (caught) {
@@ -5455,6 +5561,8 @@ function AppleMusicView({
                   playlist={selectedPlaylist}
                   loadingTracks={selectedPlaylistLoading}
                   jobByUrl={jobByUrl}
+                  downloadedSourceUrls={downloadedSourceUrls}
+                  downloadedTitleKeys={downloadedTitleKeys}
                   onQueueAll={() => void handleQueueAllTracks(selectedPlaylist)}
                   onQueueTrack={(track) => void handleQueueTrack(track)}
                   onRetryTrack={(track, jobId) =>
@@ -5476,6 +5584,8 @@ interface AppleMusicPlaylistDetailProps {
   playlist: AppleMusicPlaylist;
   loadingTracks: boolean;
   jobByUrl: Map<string, DownloadJob>;
+  downloadedSourceUrls: Set<string>;
+  downloadedTitleKeys: Set<string>;
   onQueueAll: () => void;
   onQueueTrack: (track: AppleMusicTrack) => void;
   onRetryTrack: (track: AppleMusicTrack, jobId: string) => void;
@@ -5485,6 +5595,8 @@ function AppleMusicPlaylistDetail({
   playlist,
   loadingTracks,
   jobByUrl,
+  downloadedSourceUrls,
+  downloadedTitleKeys,
   onQueueAll,
   onQueueTrack,
   onRetryTrack,
@@ -5565,11 +5677,17 @@ function AppleMusicPlaylistDetail({
                 const job =
                   jobByUrl.get(target.sourceUrl) ??
                   jobByUrl.get(appleMusicLegacySearchUrl(target.query));
-                const downloadStatus = youtubeMusicDownloadStatus(job);
+                const downloaded =
+                  downloadedSourceUrls.has(target.sourceUrl) ||
+                  downloadedTitleKeys.has(downloadTitleKey(target.fileBaseName));
+                const downloadStatus = downloaded
+                  ? { label: "Downloaded", className: "badge ready" }
+                  : youtubeMusicDownloadStatus(job);
                 const inProgress =
-                  job?.status === "queued" || job?.status === "downloading";
-                const failed = job?.status === "failed";
-                const completed = job?.status === "completed";
+                  !downloaded &&
+                  (job?.status === "queued" || job?.status === "downloading");
+                const failed = !downloaded && job?.status === "failed";
+                const completed = downloaded || job?.status === "completed";
                 return (
                   <tr key={track.id}>
                     <td>{track.trackNumber ?? index + 1}</td>
@@ -5757,6 +5875,26 @@ function spotifyDownloadTarget(
     sourceUrl: `spotify:${track.spotifyTrackId}`,
     fileBaseName: title,
   };
+}
+
+function spotifyTrackIdFromSourceUrl(sourceUrl: string): string | undefined {
+  if (!sourceUrl.startsWith("spotify:")) {
+    return undefined;
+  }
+
+  const separator = sourceUrl.lastIndexOf(":");
+  const trackId = sourceUrl.slice(separator + 1);
+  return trackId || undefined;
+}
+
+function downloadTitleKey(title?: string): string {
+  return (title ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s*\(\d+\)\s*$/, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .toLocaleLowerCase();
 }
 
 function formatTrackDuration(durationMs?: number): string {

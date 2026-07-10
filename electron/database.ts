@@ -388,6 +388,100 @@ export function listDownloads(): LocalTrack[] {
   return rows.map(toLocalTrack);
 }
 
+/**
+ * Returns whether a downloaded file is still available for a source URL or
+ * intended filename.
+ *
+ * Download queue jobs are deliberately in-memory so interrupted jobs are not
+ * resumed after an app restart. The downloaded media itself is persisted in
+ * this table, however, so use it as the durable duplicate guard for completed
+ * search-based downloads such as Apple Music tracks.
+ */
+export function hasAvailableDownloadForUrl(
+  url: string,
+  expectedTitle?: string
+): boolean {
+  const database = requireDatabase();
+  const spotifyTrackId = spotifyTrackIdFromSourceUrl(url);
+  const youtubeVideoId = youtubeVideoIdFromValue(url);
+  const expectedTitleKey = downloadTitleKey(expectedTitle);
+  const sourceRows = spotifyTrackId
+    ? (database
+        .prepare(
+          "SELECT url, title, file_path FROM downloads WHERE url = ? OR url LIKE 'spotify:%'"
+        )
+        .all(url) as Array<{ url: string; title: string; file_path: string }>)
+    : (database
+        .prepare("SELECT url, title, file_path FROM downloads WHERE url = ?")
+        .all(url) as Array<{ url: string; title: string; file_path: string }>);
+
+  if (
+    sourceRows.some(
+      (row) =>
+        fs.existsSync(row.file_path) &&
+        (row.url === url ||
+          (spotifyTrackId !== undefined &&
+            spotifyTrackIdFromSourceUrl(row.url) === spotifyTrackId)),
+    )
+  ) {
+    return true;
+  }
+
+  if (!expectedTitleKey) {
+    if (!youtubeVideoId) {
+      return false;
+    }
+  }
+
+  const titleRows = database
+    .prepare("SELECT title, file_path FROM downloads")
+    .all() as Array<{ title: string; file_path: string }>;
+
+  return titleRows.some(
+    (row) =>
+      fs.existsSync(row.file_path) &&
+      ((youtubeVideoId !== undefined &&
+        (youtubeVideoIdFromValue(row.title) === youtubeVideoId ||
+          youtubeVideoIdFromValue(row.file_path) === youtubeVideoId)) ||
+        (expectedTitleKey !== undefined &&
+          downloadTitleKey(row.title) === expectedTitleKey)),
+  );
+}
+
+function downloadTitleKey(title?: string): string | undefined {
+  const normalized = (title ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s*\(\d+\)\s*$/, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .toLocaleLowerCase();
+
+  return normalized || undefined;
+}
+
+function spotifyTrackIdFromSourceUrl(sourceUrl: string): string | undefined {
+  if (!sourceUrl.startsWith("spotify:")) {
+    return undefined;
+  }
+
+  const separator = sourceUrl.lastIndexOf(":");
+  const trackId = sourceUrl.slice(separator + 1);
+  return trackId || undefined;
+}
+
+function youtubeVideoIdFromValue(value: string): string | undefined {
+  const urlMatch = value.match(
+    /(?:[?&]v=|youtu\.be\/|\/shorts\/|\/embed\/)([A-Za-z0-9_-]{11})/
+  );
+  if (urlMatch?.[1]) {
+    return urlMatch[1];
+  }
+
+  const filenameMatch = value.match(/\[([A-Za-z0-9_-]{11})\](?:\.[^.]+)?$/);
+  return filenameMatch?.[1];
+}
+
 export function getDownloadById(id: string): LocalTrack | undefined {
   const row = requireDatabase()
     .prepare(
