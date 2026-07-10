@@ -134,7 +134,7 @@ Browse your Apple Music library playlists and queue tracks for download.
 Find a show from the public Apple Podcasts catalogue or paste its Apple Podcasts link, then download individual public RSS episodes directly as MP3s.
 
 - **No sign-in required** — public show metadata and RSS feeds load directly
-- **Latest public episodes** — browse up to 50 downloadable RSS enclosures in the publisher's feed order
+- **Progressive episode browsing** — load the latest 50 downloadable RSS enclosures first, then append older episodes as needed
 - **Direct audio downloads** — episode audio goes through the existing queue and converts to MP3 for your watch
 - **Subscriber-only and feedless episodes are excluded** — CorosLink only downloads publicly available RSS audio
 

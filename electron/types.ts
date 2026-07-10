@@ -322,6 +322,10 @@ export interface ApplePodcastEpisode {
 
 export interface ApplePodcastShowDetail extends ApplePodcastShow {
   episodes: ApplePodcastEpisode[];
+  /** Total valid public RSS episodes currently available from this feed. */
+  totalEpisodeCount: number;
+  /** Whether another page of older episodes can be loaded in this session. */
+  hasMoreEpisodes: boolean;
 }
 
 export interface TransferResult {

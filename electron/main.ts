@@ -741,8 +741,8 @@ function registerIpcHandlers(): void {
     searchApplePodcasts(query)
   );
 
-  ipcMain.handle("applePodcasts:load", (_event, showIdOrUrl: string) =>
-    loadApplePodcast(showIdOrUrl)
+  ipcMain.handle("applePodcasts:load", (_event, showIdOrUrl: string, offset?: number) =>
+    loadApplePodcast(showIdOrUrl, offset)
   );
 
   ipcMain.handle("spotify:getConfig", () => getSpotifyConfig());

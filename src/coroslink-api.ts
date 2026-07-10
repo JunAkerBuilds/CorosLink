@@ -146,7 +146,8 @@ export interface CorosLinkApi {
   fetchAppleMusicPlaylist: (playlist: string) => Promise<AppleMusicPlaylist>;
   searchApplePodcasts: (query: string) => Promise<ApplePodcastShow[]>;
   loadApplePodcast: (
-    showIdOrUrl: string
+    showIdOrUrl: string,
+    offset?: number
   ) => Promise<ApplePodcastShowDetail>;
   getSpotifyConfig: () => Promise<SpotifyConfig>;
   saveSpotifyConfig: (config: SpotifyConfig) => Promise<SpotifyStatus>;

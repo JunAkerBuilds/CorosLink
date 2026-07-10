@@ -7210,6 +7210,36 @@ td span {
   border-color: rgba(255, 255, 255, 0.07);
 }
 
+.apple-podcast-load-more {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(20, 18, 24, 0.94);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  color: var(--text-secondary);
+  padding: 11px 13px;
+  font-size: 12px;
+}
+
+.apple-podcast-load-more .secondary-button {
+  min-height: 36px;
+  flex-shrink: 0;
+  border-color: rgba(178, 138, 255, 0.36);
+  color: #d7c3ff;
+  padding: 0 12px;
+}
+
+.apple-podcast-all-loaded {
+  color: #b7d7c2;
+  font-weight: 650;
+}
+
 .apple-podcast-detail-empty {
   display: grid;
   flex: 1;
@@ -7405,6 +7435,15 @@ td span {
 
   .apple-podcast-skeleton-header {
     min-height: 120px;
+  }
+
+  .apple-podcast-load-more {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .apple-podcast-load-more .secondary-button {
+    width: 100%;
   }
 }
 

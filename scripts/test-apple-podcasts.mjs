@@ -14,7 +14,7 @@ const progressUrl = pathToFileURL(
 );
 
 const {
-  APPLE_PODCAST_EPISODE_LIMIT,
+  APPLE_PODCAST_PAGE_SIZE,
   getApplePodcastStorefront,
   loadApplePodcast,
   parseApplePodcastRss,
@@ -94,13 +94,15 @@ assert.equal(detail.title, "Trail Stories RSS");
 assert.equal(detail.authorName, "Trail Team");
 assert.equal(detail.description, "Public trail episodes.");
 assert.equal(detail.artworkUrl, "https://cdn.example.test/show.jpg");
-assert.equal(detail.episodes.length, APPLE_PODCAST_EPISODE_LIMIT);
+assert.equal(detail.episodes.length, APPLE_PODCAST_PAGE_SIZE + 1);
+assert.equal(detail.totalEpisodeCount, APPLE_PODCAST_PAGE_SIZE + 1);
+assert.equal(detail.hasMoreEpisodes, false);
 assert.equal(detail.episodes[0].id, "episode-1");
 assert.equal(detail.episodes[0].durationSeconds, 3723);
 assert.equal(detail.episodes[0].description, "A great run.");
 assert.equal(detail.episodes[0].seasonNumber, 2);
 assert.equal(detail.episodes[0].episodeNumber, 7);
-assert.equal(detail.episodes.at(-1)?.id, "episode-50");
+assert.equal(detail.episodes.at(-1)?.id, "episode-51");
 assert.throws(
   () => parseApplePodcastRss("<rss><channel><item></channel></rss>", show),
   /valid XML/,
@@ -162,7 +164,25 @@ try {
   const loaded = await loadApplePodcast(
     "https://podcasts.apple.com/ca/podcast/trail-stories/id12345",
   );
-  assert.equal(loaded.episodes.length, APPLE_PODCAST_EPISODE_LIMIT);
+  assert.equal(loaded.episodes.length, APPLE_PODCAST_PAGE_SIZE);
+  assert.equal(loaded.totalEpisodeCount, APPLE_PODCAST_PAGE_SIZE + 1);
+  assert.equal(loaded.hasMoreEpisodes, true);
+
+  const olderEpisodes = await loadApplePodcast(
+    "https://podcasts.apple.com/ca/podcast/trail-stories/id12345",
+    APPLE_PODCAST_PAGE_SIZE,
+  );
+  assert.equal(olderEpisodes.episodes.length, 1);
+  assert.equal(olderEpisodes.episodes[0].id, "episode-51");
+  assert.equal(olderEpisodes.hasMoreEpisodes, false);
+  assert.equal(
+    requestedUrls.filter((url) => url.hostname === "feeds.example.test").length,
+    1,
+  );
+  assert.equal(
+    requestedUrls.filter((url) => url.pathname === "/lookup").length,
+    1,
+  );
   assert.equal(
     requestedUrls.find((url) => url.pathname === "/lookup")?.searchParams.get("country"),
     "CA",

@@ -4915,6 +4915,7 @@ function ApplePodcastsView({
   const [show, setShow] = useState<ApplePodcastShowDetail | null>(null);
   const [selectedShowId, setSelectedShowId] = useState("");
   const [busy, setBusy] = useState<"search" | "load" | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [jobs, setJobs] = useState<DownloadJob[]>([]);
 
   useEffect(() => {
@@ -4951,12 +4952,13 @@ function ApplePodcastsView({
     setBusy("load");
     setShow(null);
     setSelectedShowId(resultId);
+    setLoadingMore(false);
     try {
       const detail = await api.loadApplePodcast(showIdOrUrl);
       setShow(detail);
       setSelectedShowId(detail.id);
       onMessage(
-        `Loaded ${detail.episodes.length} public episode${detail.episodes.length === 1 ? "" : "s"}.`,
+        `Loaded ${detail.episodes.length} of ${detail.totalEpisodeCount} public episode${detail.totalEpisodeCount === 1 ? "" : "s"}.`,
       );
     } catch (caught) {
       onError(toErrorMessage(caught));
@@ -5029,6 +5031,36 @@ function ApplePodcastsView({
       // The failed in-memory job may already be gone; queue a fresh one either way.
     }
     await handleQueueEpisode(episode);
+  }
+
+  async function handleLoadMoreEpisodes() {
+    if (!api || !show || !show.hasMoreEpisodes || loadingMore) {
+      return;
+    }
+
+    const currentShow = show;
+    const offset = currentShow.episodes.length;
+    setLoadingMore(true);
+    try {
+      const nextPage = await api.loadApplePodcast(
+        currentShow.applePodcastsUrl ?? currentShow.id,
+        offset,
+      );
+      setShow((current) => {
+        if (!current || current.id !== nextPage.id) {
+          return current;
+        }
+
+        return {
+          ...nextPage,
+          episodes: [...current.episodes, ...nextPage.episodes],
+        };
+      });
+    } catch (caught) {
+      onError(toErrorMessage(caught));
+    } finally {
+      setLoadingMore(false);
+    }
   }
 
   return (
@@ -5150,8 +5182,8 @@ function ApplePodcastsView({
                   <p className="eyebrow">Selected show</p>
                   <h3>{show.title}</h3>
                   <span>
-                    {show.authorName ?? "Podcast"} · {show.episodes.length} latest
-                    public episode{show.episodes.length === 1 ? "" : "s"}
+                    {show.authorName ?? "Podcast"} · {show.totalEpisodeCount} public
+                    episode{show.totalEpisodeCount === 1 ? "" : "s"}
                   </span>
                   {show.description ? <p>{show.description}</p> : null}
                   {show.applePodcastsUrl ? (
@@ -5271,6 +5303,29 @@ function ApplePodcastsView({
                     })}
                   </tbody>
                 </table>
+                <div className="apple-podcast-load-more">
+                  <span>
+                    Showing {show.episodes.length} of {show.totalEpisodeCount}
+                    {" "}public episodes
+                  </span>
+                  {show.hasMoreEpisodes ? (
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      disabled={loadingMore}
+                      onClick={() => void handleLoadMoreEpisodes()}
+                    >
+                      {loadingMore ? (
+                        <Loader2 className="spin" size={16} aria-hidden="true" />
+                      ) : (
+                        <ArrowRight size={16} aria-hidden="true" />
+                      )}
+                      Load 50 more
+                    </button>
+                  ) : (
+                    <span className="apple-podcast-all-loaded">All episodes loaded</span>
+                  )}
+                </div>
               </div>
             </div>
           ) : (

@@ -210,8 +210,11 @@ const api = {
     ipcRenderer.invoke("appleMusic:fetchPlaylist", playlist),
   searchApplePodcasts: (query: string): Promise<ApplePodcastShow[]> =>
     ipcRenderer.invoke("applePodcasts:search", query),
-  loadApplePodcast: (showIdOrUrl: string): Promise<ApplePodcastShowDetail> =>
-    ipcRenderer.invoke("applePodcasts:load", showIdOrUrl),
+  loadApplePodcast: (
+    showIdOrUrl: string,
+    offset = 0
+  ): Promise<ApplePodcastShowDetail> =>
+    ipcRenderer.invoke("applePodcasts:load", showIdOrUrl, offset),
   getSpotifyConfig: (): Promise<SpotifyConfig> =>
     ipcRenderer.invoke("spotify:getConfig"),
   saveSpotifyConfig: (config: SpotifyConfig): Promise<SpotifyStatus> =>

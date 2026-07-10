@@ -7,8 +7,10 @@ import type {
 
 const ITUNES_API_BASE_URL = "https://itunes.apple.com";
 const SEARCH_LIMIT = 25;
-export const APPLE_PODCAST_EPISODE_LIMIT = 50;
+export const APPLE_PODCAST_PAGE_SIZE = 50;
 const REQUEST_TIMEOUT_MS = 15_000;
+const FEED_CACHE_TTL_MS = 10 * 60_000;
+const FEED_CACHE_MAX_ENTRIES = 12;
 
 type JsonObject = Record<string, unknown>;
 
@@ -36,6 +38,13 @@ interface ApplePodcastInput {
   collectionId: string;
   storefront: string;
 }
+
+interface ApplePodcastFeedCacheEntry {
+  detail: ApplePodcastShowDetail;
+  cachedAt: number;
+}
+
+const feedCache = new Map<string, ApplePodcastFeedCacheEntry>();
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -73,13 +82,25 @@ export async function searchApplePodcasts(
 }
 
 /**
- * Resolves an Apple Podcasts collection id or show URL, then loads the first
- * 50 downloadable RSS episodes in the publisher's feed order.
+ * Resolves an Apple Podcasts collection id or show URL, then returns a page of
+ * downloadable RSS episodes in the publisher's feed order. Parsed feeds stay
+ * in a short-lived main-process cache so loading more never repeats the fetch.
  */
 export async function loadApplePodcast(
-  showIdOrApplePodcastsUrl: string
+  showIdOrApplePodcastsUrl: string,
+  offset = 0
 ): Promise<ApplePodcastShowDetail> {
   const input = resolveApplePodcastInput(showIdOrApplePodcastsUrl);
+  const cacheKey = `${input.storefront}:${input.collectionId}`;
+  const cached = getCachedFeed(cacheKey);
+  const detail = cached ?? await fetchApplePodcastFeed(input, cacheKey);
+  return pageApplePodcastDetail(detail, offset);
+}
+
+async function fetchApplePodcastFeed(
+  input: ApplePodcastInput,
+  cacheKey: string
+): Promise<ApplePodcastShowDetail> {
   const show = await lookupApplePodcast(input);
 
   if (!show.feedUrl) {
@@ -92,7 +113,9 @@ export async function loadApplePodcast(
     Accept: "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1"
   });
   const feedXml = await feedResponse.text();
-  return parseApplePodcastRss(feedXml, show);
+  const detail = parseApplePodcastRss(feedXml, show);
+  cacheFeed(cacheKey, detail);
+  return detail;
 }
 
 /** Resolves the locale into an iTunes storefront, defaulting to the US. */
@@ -175,10 +198,6 @@ export function parseApplePodcastRss(
   const episodeAudioUrls = new Set<string>();
   const episodes: ApplePodcastEpisode[] = [];
   for (const rawItem of asArray(channel.item)) {
-    if (episodes.length >= APPLE_PODCAST_EPISODE_LIMIT) {
-      break;
-    }
-
     const item = asRecord(rawItem);
     if (!item) {
       continue;
@@ -232,8 +251,54 @@ export function parseApplePodcastRss(
         readText(channel["itunes:summary"]) ?? readText(channel.description)
       ) ?? show.description,
     artworkUrl: readArtworkUrl(channel) ?? show.artworkUrl,
-    episodes
+    episodes,
+    totalEpisodeCount: episodes.length,
+    hasMoreEpisodes: false
   };
+}
+
+function pageApplePodcastDetail(
+  detail: ApplePodcastShowDetail,
+  rawOffset: number
+): ApplePodcastShowDetail {
+  const offset = Number.isInteger(rawOffset) && rawOffset > 0 ? rawOffset : 0;
+  const totalEpisodeCount = detail.episodes.length;
+  const end = Math.min(offset + APPLE_PODCAST_PAGE_SIZE, totalEpisodeCount);
+
+  return {
+    ...detail,
+    episodes: detail.episodes.slice(offset, end),
+    totalEpisodeCount,
+    hasMoreEpisodes: end < totalEpisodeCount
+  };
+}
+
+function getCachedFeed(cacheKey: string): ApplePodcastShowDetail | undefined {
+  const cached = feedCache.get(cacheKey);
+  if (!cached) {
+    return undefined;
+  }
+
+  if (Date.now() - cached.cachedAt > FEED_CACHE_TTL_MS) {
+    feedCache.delete(cacheKey);
+    return undefined;
+  }
+
+  // Refresh insertion order so recently browsed shows survive cache eviction.
+  feedCache.delete(cacheKey);
+  feedCache.set(cacheKey, cached);
+  return cached.detail;
+}
+
+function cacheFeed(cacheKey: string, detail: ApplePodcastShowDetail): void {
+  feedCache.set(cacheKey, { detail, cachedAt: Date.now() });
+  while (feedCache.size > FEED_CACHE_MAX_ENTRIES) {
+    const oldest = feedCache.keys().next().value;
+    if (!oldest) {
+      return;
+    }
+    feedCache.delete(oldest);
+  }
 }
 
 export function parseDurationSeconds(value: string | undefined): number | undefined {
