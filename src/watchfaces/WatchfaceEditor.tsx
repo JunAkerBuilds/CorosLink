@@ -44,7 +44,11 @@ import {
   deriveDesignDetails,
   toStudioOptions
 } from "./watchfaceCompose";
-import { makeDefaultDesign, renderDesignBackground } from "./watchfaceBackground";
+import {
+  makeDefaultDesign,
+  MAX_DESIGN_SPRITES,
+  renderDesignBackground
+} from "./watchfaceBackground";
 import {
   BACKGROUND_SPACE,
   backgroundElementAtPoint,
@@ -103,13 +107,14 @@ export function WatchfaceEditor({
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const assetCacheRef = useRef(new Map<string, CorosWatchfaceTemplateAsset>());
   const dragRef = useRef<{
-    kind: "layout" | "bgElement";
+    kind: "layout" | "bgElement" | "sprite";
     targetId: string;
     startX: number;
     startY: number;
     baseX: number;
     baseY: number;
   } | null>(null);
+  const [loadingSprite, setLoadingSprite] = useState(false);
 
   const [details, setDetails] = useState<CorosWatchfaceTemplateDetails | null>(null);
   const [design, setDesign] = useState<CorosWatchfaceDesignState>(
@@ -351,6 +356,21 @@ export function WatchfaceEditor({
       return;
     }
     setSelectedId(liveHit.id);
+    if (liveHit.kind === "customSprite" && liveHit.spriteId) {
+      const sprite = (design.designSprites ?? []).find((s) => s.id === liveHit.spriteId);
+      if (sprite) {
+        dragRef.current = {
+          kind: "sprite",
+          targetId: sprite.id,
+          startX: point.x,
+          startY: point.y,
+          baseX: sprite.x,
+          baseY: sprite.y
+        };
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }
+      return;
+    }
     if (liveHit.capabilities.position && liveHit.layoutGroupId) {
       const offset = design.layoutOffsets?.[liveHit.layoutGroupId] ?? { dx: 0, dy: 0 };
       dragRef.current = {
@@ -380,6 +400,14 @@ export function WatchfaceEditor({
       updateElement(drag.targetId, {
         x: clampBg(drag.baseX + point.x * toBg - drag.startX),
         y: clampBg(drag.baseY + point.y * toBg - drag.startY)
+      });
+      return;
+    }
+    if (drag.kind === "sprite") {
+      const clampRes = (v: number) => Math.max(0, Math.min(previewWidth, Math.round(v)));
+      updateSprite(drag.targetId, {
+        x: clampRes(drag.baseX + point.x - drag.startX),
+        y: clampRes(drag.baseY + point.y - drag.startY)
       });
       return;
     }
@@ -457,6 +485,56 @@ export function WatchfaceEditor({
       designSprites: (prev.designSprites ?? []).filter((s) => s.id !== spriteId)
     }));
     setSelectedId("background");
+  }
+
+  function updateSprite(
+    spriteId: string,
+    patch: Partial<{ x: number; y: number; scale: number; rotation: number }>
+  ) {
+    setDesign((prev) => ({
+      ...prev,
+      designSprites: (prev.designSprites ?? []).map((sprite) =>
+        sprite.id === spriteId ? { ...sprite, ...patch } : sprite
+      )
+    }));
+  }
+
+  async function chooseSprite() {
+    if ((design.designSprites ?? []).length >= MAX_DESIGN_SPRITES) {
+      onError(`A design can contain up to ${MAX_DESIGN_SPRITES} imported images.`);
+      return;
+    }
+    setLoadingSprite(true);
+    try {
+      const selected = await api.chooseCorosWatchfaceArtwork();
+      if (!selected) {
+        return;
+      }
+      const maxSize = previewWidth * 0.28;
+      const fitScale = Math.min(1, maxSize / Math.max(selected.width, selected.height));
+      const sprite = {
+        id: window.crypto.randomUUID(),
+        dataUrl: selected.dataUrl,
+        sourceWidth: selected.width,
+        sourceHeight: selected.height,
+        width: Math.max(1, Math.round(selected.width * fitScale)),
+        height: Math.max(1, Math.round(selected.height * fitScale)),
+        x: Math.round(previewWidth / 2),
+        y: Math.round((previewResolution?.height ?? previewWidth) / 2),
+        scale: 1,
+        rotation: 0
+      };
+      setDesign((prev) => ({
+        ...prev,
+        designSprites: [...(prev.designSprites ?? []), sprite]
+      }));
+      setSelectedId(`sprite:${sprite.id}`);
+      onNotice("Image added. Drag it on the face to position it.");
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : "Could not add the image.");
+    } finally {
+      setLoadingSprite(false);
+    }
   }
 
   async function createArchive() {
@@ -680,6 +758,9 @@ export function WatchfaceEditor({
               <button type="button" onClick={() => addElement("line")} aria-label="Add line"><Minus size={15} /></button>
               <button type="button" onClick={() => addElement("text")} aria-label="Add text"><Type size={15} /></button>
             </div>
+            <button className="secondary-button" type="button" disabled={loadingSprite} onClick={() => void chooseSprite()}>
+              {loadingSprite ? <Loader2 className="spin" size={15} /> : <ImagePlus size={15} />} Add image
+            </button>
           </div>
         </div>
       );
@@ -737,11 +818,37 @@ export function WatchfaceEditor({
     }
 
     if (layer.kind === "customSprite" && layer.spriteId) {
+      const sprite = (design.designSprites ?? []).find((s) => s.id === layer.spriteId);
+      if (!sprite) {
+        return null;
+      }
       return (
         <div className="watchface-inspector-group">
-          <p className="watchface-studio-summary">Drag the sprite on the face to move it.</p>
+          <label className="field watchface-zoom-control">
+            Size <span>{(sprite.scale * 100).toFixed(0)}%</span>
+            <input
+              type="range"
+              min="0.2"
+              max="3"
+              step="0.02"
+              value={sprite.scale}
+              onChange={(e) => updateSprite(sprite.id, { scale: Number(e.target.value) })}
+            />
+          </label>
+          <label className="field watchface-zoom-control">
+            Rotation <span>{sprite.rotation}°</span>
+            <input
+              type="range"
+              min="0"
+              max="360"
+              step="5"
+              value={sprite.rotation}
+              onChange={(e) => updateSprite(sprite.id, { rotation: Number(e.target.value) })}
+            />
+          </label>
+          <p className="watchface-studio-summary">Drag the image on the face to move it.</p>
           <button className="secondary-button" type="button" onClick={() => removeSprite(layer.spriteId!)}>
-            <Trash2 size={15} /> Remove sprite
+            <Trash2 size={15} /> Remove image
           </button>
         </div>
       );

@@ -208,6 +208,15 @@ export function deriveEditorLayers(
   }
 
   for (const sprite of design.designSprites ?? []) {
+    // Sprites are drawn centered on (x, y); match the guided creator's
+    // rotation-aware bounding box so the selection outline hugs the image.
+    const width = sprite.width * sprite.scale;
+    const height = sprite.height * sprite.scale;
+    const radians = (sprite.rotation * Math.PI) / 180;
+    const rotatedWidth =
+      Math.abs(width * Math.cos(radians)) + Math.abs(height * Math.sin(radians));
+    const rotatedHeight =
+      Math.abs(width * Math.sin(radians)) + Math.abs(height * Math.cos(radians));
     layers.push({
       id: `sprite:${sprite.id}`,
       kind: "customSprite",
@@ -219,10 +228,10 @@ export function deriveEditorLayers(
       bounds: {
         id: `sprite:${sprite.id}`,
         label: "Imported sprite",
-        x0: sprite.x,
-        y0: sprite.y,
-        x1: sprite.x + sprite.width,
-        y1: sprite.y + sprite.height
+        x0: sprite.x - rotatedWidth / 2,
+        y0: sprite.y - rotatedHeight / 2,
+        x1: sprite.x + rotatedWidth / 2,
+        y1: sprite.y + rotatedHeight / 2
       },
       capabilities: { position: true, color: false, scale: true, font: false }
     });
