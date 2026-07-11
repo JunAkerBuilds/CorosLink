@@ -84,10 +84,37 @@ import type {
   DeleteWorkoutResult,
   ManualActivityInput
 } from "../electron/types";
+import type {
+  CorosWatchfaceArchive,
+  CorosWatchfaceArtwork,
+  CorosWatchfaceCreatorInput,
+  CorosWatchfacePublishInput,
+  CorosWatchfaceShareLink,
+  CorosWatchfaceStatus,
+  CorosWatchfaceTheme,
+  CorosWatchfaceThemeListInput
+} from "../electron/types";
 
 export interface CorosLinkApi {
   platform: string;
   getWatchStatus: () => Promise<WatchStatus>;
+  getCorosWatchfaceStatus: () => Promise<CorosWatchfaceStatus>;
+  loginCorosWatchfaces: (
+    email: string,
+    password: string
+  ) => Promise<CorosWatchfaceStatus>;
+  logoutCorosWatchfaces: () => Promise<CorosWatchfaceStatus>;
+  listCorosWatchfaceThemes: (
+    input: CorosWatchfaceThemeListInput
+  ) => Promise<CorosWatchfaceTheme[]>;
+  chooseCorosWatchfaceArchive: () => Promise<CorosWatchfaceArchive | null>;
+  chooseCorosWatchfaceArtwork: () => Promise<CorosWatchfaceArtwork | null>;
+  createCorosWatchfaceArchive: (
+    input: CorosWatchfaceCreatorInput
+  ) => Promise<CorosWatchfaceArchive>;
+  publishCorosWatchface: (
+    input: CorosWatchfacePublishInput
+  ) => Promise<CorosWatchfaceShareLink>;
   getWatchConnectionSmokeOption: () => Promise<WatchConnectionSmokeOptionId>;
   setWatchConnectionSmokeOption: (
     optionId: WatchConnectionSmokeOptionId

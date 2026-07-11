@@ -92,6 +92,7 @@ import {
   saveStartupView,
 } from "./navigation/startupView";
 import { MapsView } from "./maps/MapsView";
+import { WatchfacesView } from "./watchfaces/WatchfacesView";
 import { SettingsView } from "./settings/SettingsView";
 import { CalendarView } from "./calendar/CalendarView";
 import { DataView } from "./data/DataView";
@@ -1680,6 +1681,7 @@ export default function App() {
                 onError={setError}
               />
             ) : null}
+            {activeView === "watchfaces" ? <WatchfacesView api={api} /> : null}
             {activeView === "training" ? (
               <TrainingHubView
                 api={api}

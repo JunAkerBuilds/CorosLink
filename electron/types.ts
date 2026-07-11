@@ -85,6 +85,69 @@ export interface WatchStatus {
   error?: string;
 }
 
+/** A separate COROS mobile-app session used only for custom-watchface sharing. */
+export interface CorosWatchfaceStatus {
+  authenticated: boolean;
+  secureStorageAvailable: boolean;
+}
+
+/** Parameters required by COROS's official theme-catalog request. */
+export interface CorosWatchfaceThemeListInput {
+  firmwareType: string;
+  language?: string;
+  /** Optional watch serial number; COROS uses it to tailor some catalogs. */
+  serialNumber?: string;
+  maxWatchFaceVersion?: number;
+}
+
+/** A read-only entry returned by the official COROS watchface theme catalog. */
+export interface CorosWatchfaceTheme {
+  id?: string;
+  name: string;
+  previewImageUrl?: string;
+  firmwareType?: string;
+  backgroundImageId?: number;
+  watchFaceVersion?: number;
+  category?: string;
+}
+
+/** A validated archive held by the main process after the user selected it. */
+export interface CorosWatchfaceArchive {
+  archiveId: string;
+  fileName: string;
+  sizeBytes: number;
+  sourceTemplateId: number;
+  diyVersion: number;
+}
+
+export interface CorosWatchfacePublishInput {
+  archiveId: string;
+  name: string;
+  firmwareType: string;
+  backgroundImageId: number;
+  language?: string;
+}
+
+/** A browser-rendered 800×800 face background, kept within a selected template. */
+export interface CorosWatchfaceCreatorInput {
+  sourceArchiveId: string;
+  backgroundDataUrl: string;
+}
+
+export interface CorosWatchfaceArtwork {
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
+/** The official COROS hand-off link and an offline QR image for opening it. */
+export interface CorosWatchfaceShareLink {
+  url: string;
+  qrDataUrl: string;
+  expiresAt: string;
+  previewImageUrl?: string;
+}
+
 export interface LocalTrack {
   id: string;
   url: string;

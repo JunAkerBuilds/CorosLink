@@ -85,12 +85,46 @@ import type {
   DeleteWorkoutResult,
   ManualActivityInput
 } from "./types";
+import type {
+  CorosWatchfaceArchive,
+  CorosWatchfaceArtwork,
+  CorosWatchfaceCreatorInput,
+  CorosWatchfacePublishInput,
+  CorosWatchfaceShareLink,
+  CorosWatchfaceStatus,
+  CorosWatchfaceTheme,
+  CorosWatchfaceThemeListInput
+} from "./types";
 
 const api = {
   // Host OS, so the renderer can reserve space for the macOS traffic lights.
   platform: process.platform,
   getWatchStatus: (): Promise<WatchStatus> =>
     ipcRenderer.invoke("watch:getStatus"),
+  getCorosWatchfaceStatus: (): Promise<CorosWatchfaceStatus> =>
+    ipcRenderer.invoke("watchfaces:getStatus"),
+  loginCorosWatchfaces: (
+    email: string,
+    password: string
+  ): Promise<CorosWatchfaceStatus> =>
+    ipcRenderer.invoke("watchfaces:login", email, password),
+  logoutCorosWatchfaces: (): Promise<CorosWatchfaceStatus> =>
+    ipcRenderer.invoke("watchfaces:logout"),
+  listCorosWatchfaceThemes: (
+    input: CorosWatchfaceThemeListInput
+  ): Promise<CorosWatchfaceTheme[]> => ipcRenderer.invoke("watchfaces:listThemes", input),
+  chooseCorosWatchfaceArchive: (): Promise<CorosWatchfaceArchive | null> =>
+    ipcRenderer.invoke("watchfaces:chooseArchive"),
+  chooseCorosWatchfaceArtwork: (): Promise<CorosWatchfaceArtwork | null> =>
+    ipcRenderer.invoke("watchfaces:chooseArtwork"),
+  createCorosWatchfaceArchive: (
+    input: CorosWatchfaceCreatorInput
+  ): Promise<CorosWatchfaceArchive> =>
+    ipcRenderer.invoke("watchfaces:createArchive", input),
+  publishCorosWatchface: (
+    input: CorosWatchfacePublishInput
+  ): Promise<CorosWatchfaceShareLink> =>
+    ipcRenderer.invoke("watchfaces:publish", input),
   getWatchConnectionSmokeOption: (): Promise<WatchConnectionSmokeOptionId> =>
     ipcRenderer.invoke("watch:getConnectionSmokeOption"),
   setWatchConnectionSmokeOption: (

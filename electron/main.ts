@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
+import type { OpenDialogOptions } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -54,6 +55,16 @@ import {
   uploadActivityFitToCoros,
   uploadTrainingPlan
 } from "./trainingHubService";
+import {
+  createCorosWatchfaceArchive,
+  getCorosWatchfaceStatus,
+  listCorosWatchfaceThemes,
+  loadCorosWatchfaceArtwork,
+  loginCorosWatchfaces,
+  logoutCorosWatchfaces,
+  publishCorosWatchface,
+  selectCorosWatchfaceArchive
+} from "./corosWatchfaceService";
 import {
   getIntervalsStatus,
   connectIntervals,
@@ -115,6 +126,11 @@ import type {
   YouTubeMusicConfig,
   IntervalsActivityWithStatus,
   ManualActivityInput
+} from "./types";
+import type {
+  CorosWatchfaceCreatorInput,
+  CorosWatchfacePublishInput,
+  CorosWatchfaceThemeListInput
 } from "./types";
 import {
   deleteWatchTrack,
@@ -533,6 +549,74 @@ function registerIpcHandlers(): void {
   ipcMain.handle("window:isFullscreen", () => mainWindow?.isFullScreen() ?? false);
 
   ipcMain.handle("watch:getStatus", () => getWatchStatus());
+
+  ipcMain.handle("watchfaces:getStatus", () => getCorosWatchfaceStatus());
+
+  ipcMain.handle(
+    "watchfaces:login",
+    (_event, email: string, password: string) =>
+      loginCorosWatchfaces(email, password)
+  );
+
+  ipcMain.handle("watchfaces:logout", () => logoutCorosWatchfaces());
+
+  ipcMain.handle(
+    "watchfaces:listThemes",
+    (_event, input: CorosWatchfaceThemeListInput) => listCorosWatchfaceThemes(input)
+  );
+
+  ipcMain.handle("watchfaces:chooseArchive", async () => {
+    const options: OpenDialogOptions = {
+      title: "Choose a COROS custom watchface archive",
+      properties: ["openFile"],
+      filters: [
+        {
+          name: "Watchface archive",
+          extensions: ["zip", "dat"]
+        }
+      ]
+    };
+    const result =
+      mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showOpenDialog(mainWindow, options)
+        : await dialog.showOpenDialog(options);
+    const archivePath = result.filePaths[0];
+    return result.canceled || !archivePath
+      ? null
+      : selectCorosWatchfaceArchive(archivePath);
+  });
+
+  ipcMain.handle("watchfaces:chooseArtwork", async () => {
+    const options: OpenDialogOptions = {
+      title: "Choose watchface artwork",
+      properties: ["openFile"],
+      filters: [
+        {
+          name: "Images",
+          extensions: ["png", "jpg", "jpeg", "webp"]
+        }
+      ]
+    };
+    const result =
+      mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showOpenDialog(mainWindow, options)
+        : await dialog.showOpenDialog(options);
+    const artworkPath = result.filePaths[0];
+    return result.canceled || !artworkPath
+      ? null
+      : loadCorosWatchfaceArtwork(artworkPath);
+  });
+
+  ipcMain.handle(
+    "watchfaces:createArchive",
+    (_event, input: CorosWatchfaceCreatorInput) =>
+      createCorosWatchfaceArchive(input)
+  );
+
+  ipcMain.handle(
+    "watchfaces:publish",
+    (_event, input: CorosWatchfacePublishInput) => publishCorosWatchface(input)
+  );
 
   ipcMain.handle("watch:getConnectionSmokeOption", () =>
     getWatchConnectionSmokeOption()

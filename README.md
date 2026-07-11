@@ -177,6 +177,31 @@ Direct cloud upload to your COROS account is not wired yet; GPX export via the p
 
 ---
 
+### Watch Faces — official iPhone hand-off (EXPERIMENTAL)
+
+Publish an existing, valid COROS custom-watchface template archive from desktop,
+then claim it through COROS's official share page on iPhone.
+
+- **Template creator** — compose a background with colors, a label, and optional
+  artwork; CorosLink builds a fresh archive while retaining the template's
+  live time, date, battery, and complication controls
+- **Official-theme browser** — view the COROS theme catalog available to a
+  selected model, firmware capability, and locale before creating a face
+- **Archive validation** — checks the ZIP/.dat package has `info.json`, a source
+  template ID, DIY version, and a custom-face preview before upload
+- **Separate mobile session** — signs in to the mobile COROS API; only the
+  resulting session is kept in encrypted OS storage, never the password
+- **Precision-safe publish flow** — preserves COROS's large template IDs exactly
+  while creating the custom template and its time-limited share URL
+- **QR hand-off** — scan the generated official COROS URL on the paired iPhone,
+  save the face in COROS, then send it to the watch from the COROS app
+
+This is not direct Bluetooth sideloading and does not bypass the iPhone COROS
+app. The endpoints are undocumented and may change; only upload archives you
+are entitled to use.
+
+---
+
 ### Training Hub — COROS analytics dashboard
 
 Log in with your COROS account to view training data, fitness scores, and race predictions — right on your desktop.
