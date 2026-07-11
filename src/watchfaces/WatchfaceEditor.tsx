@@ -519,6 +519,16 @@ export function WatchfaceEditor({
     }));
   }
 
+  function setLayerColor(layerId: string, color: string) {
+    setDesign((prev) => ({
+      ...prev,
+      layerColors: {
+        ...prev.layerColors,
+        [layerId]: color
+      }
+    }));
+  }
+
   function updateStaticSeparator(
     separatorId: WatchfaceStaticSeparatorId,
     patch: Partial<
@@ -568,7 +578,7 @@ export function WatchfaceEditor({
 
   function setDateStyle(
     partId: WatchfaceDatePartId,
-    patch: { scale?: number; fontFamily?: string }
+    patch: { scale?: number; fontFamily?: string; color?: string }
   ) {
     setDesign((prev) => {
       const current = prev.dateStyles?.[partId] ?? { scale: 1 };
@@ -610,6 +620,7 @@ export function WatchfaceEditor({
       scale: number;
       rotation: number;
       visible: boolean;
+      tintColor: string | null;
     }>
   ) {
     setDesign((prev) => ({
@@ -644,7 +655,8 @@ export function WatchfaceEditor({
         y: Math.round((previewResolution?.height ?? previewWidth) / 2),
         scale: 1,
         rotation: 0,
-        visible: true
+        visible: true,
+        tintColor: null
       };
       setDesign((prev) => ({
         ...prev,
@@ -930,7 +942,7 @@ export function WatchfaceEditor({
             </span>
           </label>
           <label className="field watchface-zoom-control">
-            Scale <span>{(style?.scale ?? 1).toFixed(2)}×</span>
+            Size <span>{(style?.scale ?? 1).toFixed(2)}×</span>
             <input type="range" min="0.5" max="1.6" step="0.02" value={style?.scale ?? 1} onChange={(e) => setTimeStyle(layer.timePartId!, { scale: Number(e.target.value) })} />
           </label>
           {renderPositionReadout(layer)}
@@ -964,7 +976,7 @@ export function WatchfaceEditor({
             </span>
           </label>
           <label className="field watchface-zoom-control">
-            Scale <span>{(style?.scale ?? 1).toFixed(2)}×</span>
+            Size <span>{(style?.scale ?? 1).toFixed(2)}×</span>
             <input type="range" min="0.5" max="1.6" step="0.02" value={style?.scale ?? 1} onChange={(e) => setMetricStyle(layer.metricId!, { scale: Number(e.target.value) })} />
           </label>
           {renderPositionReadout(layer)}
@@ -992,6 +1004,17 @@ export function WatchfaceEditor({
               <option value="">Keep template font</option>
               {DIGIT_FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
+          </label>
+          <label className="field">
+            Color
+            <span className="watchface-color-control">
+              <input
+                type="color"
+                value={style?.color ?? design.digitColor}
+                onChange={(e) => setDateStyle(partId, { color: e.target.value })}
+              />
+              <code>{style?.color ?? design.digitColor}</code>
+            </span>
           </label>
           <label className="field watchface-zoom-control">
             Scale <span>{scale.toFixed(2)}×</span>
@@ -1039,6 +1062,33 @@ export function WatchfaceEditor({
               onChange={(e) => updateSprite(sprite.id, { rotation: Number(e.target.value) })}
             />
           </label>
+          <label className="watchface-studio-toggle">
+            <input
+              type="checkbox"
+              checked={Boolean(sprite.tintColor)}
+              onChange={(e) =>
+                updateSprite(sprite.id, {
+                  tintColor: e.target.checked ? design.accentColor : null
+                })
+              }
+            />
+            Tint this sprite
+          </label>
+          {sprite.tintColor ? (
+            <label className="field">
+              Tint color
+              <span className="watchface-color-control">
+                <input
+                  type="color"
+                  value={sprite.tintColor}
+                  onChange={(e) =>
+                    updateSprite(sprite.id, { tintColor: e.target.value })
+                  }
+                />
+                <code>{sprite.tintColor}</code>
+              </span>
+            </label>
+          ) : null}
           <p className="watchface-studio-summary">Drag the image on the face to move it.</p>
           <button className="secondary-button" type="button" onClick={() => removeSprite(layer.spriteId!)}>
             <Trash2 size={15} /> Remove image
@@ -1050,6 +1100,31 @@ export function WatchfaceEditor({
     return (
       <div className="watchface-inspector-group">
         {renderLayerVisibilityToggle(layer)}
+        {layer.capabilities.color && layer.layoutGroupId ? (
+          <label className="field">
+            Color
+            <span className="watchface-color-control">
+              <input
+                type="color"
+                value={
+                  design.layerColors?.[layer.layoutGroupId] ??
+                  (layer.kind === "separators"
+                    ? design.accentColor
+                    : design.digitColor)
+                }
+                onChange={(e) =>
+                  setLayerColor(layer.layoutGroupId!, e.target.value)
+                }
+              />
+              <code>
+                {design.layerColors?.[layer.layoutGroupId] ??
+                  (layer.kind === "separators"
+                    ? design.accentColor
+                    : design.digitColor)}
+              </code>
+            </span>
+          </label>
+        ) : null}
         {renderPositionReadout(layer)}
         <p className="watchface-studio-summary">
           This element is drawn live by the watch. Drag it on the face to reposition it.

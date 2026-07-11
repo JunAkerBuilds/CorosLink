@@ -12,6 +12,8 @@ import {
   buildDateSpriteReplacements,
   buildDateStyleOverrides,
   buildLayerVisibilityOverrides,
+  buildLayerColorOverrides,
+  buildLayerColorSpriteReplacements,
   buildLayoutOverrides,
   buildMetricOverrides,
   buildMetricSpriteReplacements,
@@ -72,7 +74,8 @@ export function toStudioOptions(
     previewComplication: design.previewComplication as WatchfaceStudioOptions["previewComplication"],
     metricStyles: metricStylesOf(design),
     timeStyles: timeStylesOf(design),
-    dateStyles: dateStylesOf(design)
+    dateStyles: dateStylesOf(design),
+    layerColors: design.layerColors ?? {}
   };
 }
 
@@ -90,6 +93,7 @@ export function deriveDesignDetails(
     buildMetricStyleOverrides(metricDetails, metricStylesOf(design)),
     buildTimeStyleOverrides(metricDetails, timeStylesOf(design)),
     buildDateStyleOverrides(metricDetails, dateStylesOf(design)),
+    buildLayerColorOverrides(metricDetails, design.layerColors ?? {}),
     buildStaticSeparatorOverrides(details, design.staticSeparators)
   );
   const styledMetricDetails = applyConfigOverridesToDetails(
@@ -138,6 +142,7 @@ export async function composeWatchfaceReplacements(
   const metricStyleActive = hasEntries(metricStyles);
   const timeStyleActive = hasEntries(timeStyles);
   const dateStyleActive = hasEntries(dateStyles);
+  const layerColorActive = hasEntries(design.layerColors);
   const ampmStyle = design.ampmIndicator;
   const ampmActive = Boolean(getAmPmCapability(details) && ampmStyle?.enabled);
 
@@ -169,6 +174,13 @@ export async function composeWatchfaceReplacements(
           loadAssets
         )
       : [],
+    layerColorActive
+      ? await buildLayerColorSpriteReplacements(
+          details,
+          design.layerColors ?? {},
+          loadAssets
+        )
+      : [],
     ampmActive ? await buildAmPmSpriteReplacements(details, ampmStyle!, loadAssets) : []
   );
 
@@ -177,6 +189,7 @@ export async function composeWatchfaceReplacements(
     metricStyleActive ? buildMetricStyleOverrides(metricDetails, metricStyles, true) : [],
     timeStyleActive ? buildTimeStyleOverrides(details, timeStyles, true) : [],
     dateStyleActive ? buildDateStyleOverrides(details, dateStyles, true) : [],
+    buildLayerColorOverrides(details, design.layerColors ?? {}),
     buildStaticSeparatorOverrides(details, design.staticSeparators),
     ampmActive ? buildAmPmOverrides(details, ampmStyle!) : [],
     layoutIsActive(design)

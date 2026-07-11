@@ -1,6 +1,7 @@
 import type { CorosWatchfaceDesignState } from "../../electron/types";
 import {
   loadStudioImage,
+  resizeAndTintSprite,
   type WatchfaceAmPmStyle,
   type WatchfaceStaticSeparators
 } from "./watchfaceStudio";
@@ -46,6 +47,7 @@ export function makeDefaultDesign(): CorosWatchfaceDesignState {
     ampmIndicator: { ...DEFAULT_AMPM_STYLE },
     layoutOffsets: {},
     layerVisibility: {},
+    layerColors: {},
     designSprites: []
   };
 }
@@ -109,7 +111,15 @@ export async function renderDesignBackground(
     if (sprite.visible === false) {
       continue;
     }
-    const spriteImage = await loadStudioImage(sprite.dataUrl).catch(() => undefined);
+    const spriteDataUrl = sprite.tintColor
+      ? await resizeAndTintSprite(
+          sprite.dataUrl,
+          sprite.sourceWidth,
+          sprite.sourceHeight,
+          sprite.tintColor
+        ).catch(() => sprite.dataUrl)
+      : sprite.dataUrl;
+    const spriteImage = await loadStudioImage(spriteDataUrl).catch(() => undefined);
     if (!spriteImage) {
       continue;
     }

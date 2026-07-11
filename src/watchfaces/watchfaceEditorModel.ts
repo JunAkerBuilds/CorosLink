@@ -6,6 +6,7 @@ import {
   applyConfigOverridesToDetails,
   applyLayoutToDetails,
   buildDateStyleOverrides,
+  buildMetricOverrides,
   buildMetricStyleOverrides,
   buildTimeStyleOverrides,
   computeLayoutGroupBounds,
@@ -97,14 +98,16 @@ const LAYER_ORDER: string[] = [
   "heartRate",
   "steps",
   "calories",
-  "elevation"
+  "elevation",
+  "temperature"
 ];
 
 const METRIC_IDS = new Set<WatchfaceMetricId>([
   "heartRate",
   "steps",
   "calories",
-  "elevation"
+  "elevation",
+  "temperature"
 ]);
 
 const TIME_GROUP_PARTS: Record<string, WatchfaceTimePartId> = {
@@ -126,9 +129,9 @@ function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
     return { position: true, color: true, scale: true, font: false };
   }
   if (groupId === "weekday" || groupId === "dateMonth" || groupId === "dateDay") {
-    return { position: true, color: false, scale: true, font: false };
+    return { position: true, color: true, scale: true, font: false };
   }
-  return { position: true, color: false, scale: false, font: false };
+  return { position: true, color: true, scale: false, font: false };
 }
 
 function kindForGroup(groupId: string): EditorLayerKind {
@@ -162,15 +165,25 @@ export function deriveEditorLayers(
   details: CorosWatchfaceTemplateDetails,
   design: CorosWatchfaceDesignState
 ): EditorLayer[] {
-  const styledDetails = applyConfigOverridesToDetails(
+  const metricDetails = applyConfigOverridesToDetails(
     details,
+    buildMetricOverrides(details, design.metricChanges ?? {})
+  );
+  const styledDetails = applyConfigOverridesToDetails(
+    metricDetails,
     mergeConfigOverrides(
       buildMetricStyleOverrides(
-        details,
+        metricDetails,
         (design.metricStyles ?? {}) as WatchfaceMetricStyles
       ),
-      buildTimeStyleOverrides(details, (design.timeStyles ?? {}) as WatchfaceTimeStyles),
-      buildDateStyleOverrides(details, (design.dateStyles ?? {}) as WatchfaceDateStyles)
+      buildTimeStyleOverrides(
+        metricDetails,
+        (design.timeStyles ?? {}) as WatchfaceTimeStyles
+      ),
+      buildDateStyleOverrides(
+        metricDetails,
+        (design.dateStyles ?? {}) as WatchfaceDateStyles
+      )
     )
   );
   const offsetDetails = applyLayoutToDetails(

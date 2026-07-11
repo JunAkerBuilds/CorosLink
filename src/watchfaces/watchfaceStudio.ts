@@ -27,6 +27,8 @@ export interface WatchfaceStudioOptions {
   timeStyles?: WatchfaceTimeStyles;
   /** Independent weekday/month/day bitmap scaling. */
   dateStyles?: WatchfaceDateStyles;
+  /** Colors for firmware layers without a specialized style object. */
+  layerColors?: Record<string, string>;
   /** Live AM/PM indicator sprite styling, when the template supports it. */
   ampmStyle?: WatchfaceAmPmStyle;
 }
@@ -550,7 +552,8 @@ export type WatchfaceMetricId =
   | "heartRate"
   | "steps"
   | "calories"
-  | "elevation";
+  | "elevation"
+  | "temperature";
 
 export interface WatchfaceMetricSpriteStyle {
   color: string;
@@ -577,6 +580,7 @@ export interface WatchfaceDateSpriteStyle {
   scale: number;
   /** Optional per-layer font; falls back to the design font. */
   fontFamily?: string;
+  color?: string;
 }
 
 export type WatchfaceDateStyles = Partial<
@@ -651,13 +655,18 @@ export type WatchfaceComplicationId =
   | "steps"
   | "calories"
   | "floors"
-  | "elevation";
+  | "elevation"
+  | "temperature";
 
 interface WatchfaceFixedMetricDefinition {
   id: WatchfaceMetricId;
   label: string;
   rectKey: string;
   fontKey: string;
+  /** Some templates omit this otherwise valid key when the metric is inactive. */
+  allowMissingFontKey?: boolean;
+  fontColorKey?: string;
+  negativeSignKey?: string;
   controlPrefix: string;
   sampleValue: string;
   maxDigits: number;
@@ -712,6 +721,19 @@ export const WATCHFACE_FIXED_METRICS: WatchfaceFixedMetricDefinition[] = [
     sampleValue: "1284",
     maxDigits: 5,
     center: { x: 0.73, y: 0.86 }
+  },
+  {
+    id: "temperature",
+    label: "Temperature",
+    rectKey: "temperature_rect",
+    fontKey: "temperature_font",
+    allowMissingFontKey: true,
+    fontColorKey: "temperature_font_color",
+    negativeSignKey: "temperature_negative_sign_icon",
+    controlPrefix: "temperature",
+    sampleValue: "18",
+    maxDigits: 3,
+    center: { x: 0.5, y: 0.7 }
   }
 ];
 
@@ -719,7 +741,8 @@ const METRIC_STUDIO_FOLDERS: Record<WatchfaceMetricId, string> = {
   heartRate: "cl_hr",
   steps: "cl_steps",
   calories: "cl_kcal",
-  elevation: "cl_elev"
+  elevation: "cl_elev",
+  temperature: "cl_temp"
 };
 
 function timeStudioFolder(
@@ -734,7 +757,8 @@ export const WATCHFACE_COMPLICATIONS: WatchfaceComplicationDefinition[] = [
   { id: "steps", label: "Steps", controlPrefix: "step", sampleValue: "8420" },
   { id: "calories", label: "Calories", controlPrefix: "kcal", sampleValue: "534" },
   { id: "floors", label: "Floors", controlPrefix: "floor", sampleValue: "12" },
-  { id: "elevation", label: "Elevation", controlPrefix: "elevation", sampleValue: "1284" }
+  { id: "elevation", label: "Elevation", controlPrefix: "elevation", sampleValue: "1284" },
+  { id: "temperature", label: "Temperature", controlPrefix: "temperature", sampleValue: "18" }
 ];
 
 export type WatchfaceMetricChanges = Partial<Record<WatchfaceMetricId, boolean>>;
@@ -755,7 +779,8 @@ export function getFixedMetricCapabilities(
   }
   return WATCHFACE_FIXED_METRICS.flatMap((metric) =>
     Object.prototype.hasOwnProperty.call(resolution.config, metric.rectKey) &&
-    Object.prototype.hasOwnProperty.call(resolution.config, metric.fontKey)
+    (metric.allowMissingFontKey ||
+      Object.prototype.hasOwnProperty.call(resolution.config, metric.fontKey))
       ? [{
           id: metric.id,
           label: metric.label,
@@ -804,6 +829,29 @@ function metricFontFolder(
   return folder ? { folder: folder.folder, files: folder.files } : null;
 }
 
+function temperatureNegativeSignValue(
+  resolution: CorosWatchfaceResolutionDetails
+): string | undefined {
+  for (const key of [
+    "control_temperature_negative_sign_icon",
+    "control_negative_sign_icon",
+    "negative_sign_icon"
+  ]) {
+    const value = resolution.config[key];
+    if (value) {
+      return value;
+    }
+  }
+  const icon = resolution.icons.find((entry) => /negative/i.test(entry.path));
+  return icon?.path
+    .slice(`${resolution.directory}/`.length)
+    .replace(/\//g, "\\");
+}
+
+function configHexColor(color: string): string {
+  return `0x${color.replace(/^#/, "").toUpperCase()}`;
+}
+
 /** Activates or removes fixed live metrics in every template resolution. */
 export function buildMetricOverrides(
   details: CorosWatchfaceTemplateDetails,
@@ -817,14 +865,20 @@ export function buildMetricOverrides(
       if (
         enabled === undefined ||
         !Object.prototype.hasOwnProperty.call(resolution.config, metric.rectKey) ||
-        !Object.prototype.hasOwnProperty.call(resolution.config, metric.fontKey)
+        (!metric.allowMissingFontKey &&
+          !Object.prototype.hasOwnProperty.call(resolution.config, metric.fontKey))
       ) {
         continue;
       }
       if (!enabled) {
         values[metric.rectKey] = "";
-        if (Object.prototype.hasOwnProperty.call(resolution.config, metric.fontKey)) {
+        if (
+          Object.prototype.hasOwnProperty.call(resolution.config, metric.fontKey)
+        ) {
           values[metric.fontKey] = "";
+        }
+        if (metric.negativeSignKey) {
+          values[metric.negativeSignKey] = "";
         }
         continue;
       }
@@ -843,6 +897,12 @@ export function buildMetricOverrides(
       const y1 = Math.min(resolution.height, y0 + rectHeight);
       values[metric.rectKey] = `{${x0},${y0},${x1},${y1},hcenter|vcenter}`;
       values[metric.fontKey] = font.folder;
+      if (metric.negativeSignKey) {
+        const negativeSign = temperatureNegativeSignValue(resolution);
+        if (negativeSign) {
+          values[metric.negativeSignKey] = negativeSign;
+        }
+      }
     }
     if (Object.keys(values).length > 0) {
       overrides.push({ path: `${resolution.directory}/config.txt`, values });
@@ -896,6 +956,9 @@ export function buildMetricStyleOverrides(
       values[metric.rectKey] = rect;
       if (useStudioFolders) {
         values[metric.fontKey] = METRIC_STUDIO_FOLDERS[metric.id];
+      }
+      if (metric.fontColorKey) {
+        values[metric.fontColorKey] = configHexColor(style.color);
       }
     }
     if (Object.keys(values).length > 0) {
@@ -1109,6 +1172,10 @@ export function buildDateStyleOverrides(
         continue;
       }
       values[part.rectKey] = rect;
+      if (style.color) {
+        values[part.fontKey.replace(/_font$/, "_font_color")] =
+          configHexColor(style.color);
+      }
       if (useStudioFolders) {
         values[part.fontKey] = part.studioFolder;
       }
@@ -1135,6 +1202,7 @@ export async function buildDateSpriteReplacements(
     height: number;
     kind: "digits" | "week";
     fontFamily: string;
+    color?: string;
   }[] = [];
   for (const resolution of details.resolutions) {
     for (const part of WATCHFACE_DATE_PARTS) {
@@ -1156,7 +1224,8 @@ export async function buildDateSpriteReplacements(
           width: Math.max(1, Math.round(file.width * normalizedScale)),
           height: Math.max(1, Math.round(file.height * normalizedScale)),
           kind: part.kind,
-          fontFamily: partFontFamily
+          fontFamily: partFontFamily,
+          color: style.color
         });
       });
     }
@@ -1181,15 +1250,16 @@ export async function buildDateSpriteReplacements(
           job.width,
           job.height,
           job.fontFamily,
-          options.digitColor
+          job.color ?? options.digitColor
         )
       : await resizeAndTintSprite(
           asset!.dataUrl,
           job.width,
           job.height,
-          job.kind === "week" && options.tintLabels
-            ? options.digitColor
-            : undefined
+          job.color ??
+            (job.kind === "week" && options.tintLabels
+              ? options.digitColor
+              : undefined)
         );
     replacements.push({ path: job.path, dataUrl, create: true });
   }
@@ -1316,6 +1386,11 @@ export const WATCHFACE_LAYOUT_GROUPS: WatchfaceLayoutGroup[] = [
     id: "elevation",
     label: "Elevation",
     patterns: [/^elevation_rect$/]
+  },
+  {
+    id: "temperature",
+    label: "Temperature",
+    patterns: [/^temperature_rect$/]
   }
 ];
 
@@ -1419,6 +1494,91 @@ export function buildLayerVisibilityOverrides(
     }
   }
   return overrides;
+}
+
+/** Applies color fields supported directly by COROS firmware config entries. */
+export function buildLayerColorOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  colors: Record<string, string>
+): CorosWatchfaceConfigOverride[] {
+  const colorKeys: Record<string, RegExp[]> = {
+    hours: [/^time_hour_(high|low)_font_color$/],
+    minutes: [/^time_minute_(high|low)_font_color$/],
+    seconds: [/^time_second_(high|low)_font_color$/],
+    weekday: [/^[a-z_]+_date_week_font_color$/],
+    dateMonth: [/^[a-z_]+_date_month_font_color$/],
+    dateDay: [/^[a-z_]+_date_day_font_color$/],
+    battery: [/^battery_level_font_color$/],
+    complication: [/^control_[a-z_]+_font_color$/]
+  };
+  const overrides: CorosWatchfaceConfigOverride[] = [];
+  for (const resolution of details.resolutions) {
+    const values: Record<string, string> = {};
+    for (const [layerId, patterns] of Object.entries(colorKeys)) {
+      const color = colors[layerId];
+      if (!color) {
+        continue;
+      }
+      for (const key of Object.keys(resolution.config)) {
+        if (patterns.some((pattern) => pattern.test(key))) {
+          values[key] = configHexColor(color);
+        }
+      }
+    }
+    if (Object.keys(values).length > 0) {
+      overrides.push({ path: `${resolution.directory}/config.txt`, values });
+    }
+  }
+  return overrides;
+}
+
+/** Tints icon-backed layers whose firmware config has no direct color field. */
+export async function buildLayerColorSpriteReplacements(
+  details: CorosWatchfaceTemplateDetails,
+  colors: Record<string, string>,
+  loadAssets: WatchfaceAssetLoader
+): Promise<CorosWatchfaceAssetReplacement[]> {
+  const jobs = new Map<string, { file: CorosWatchfaceSpriteFile; color: string }>();
+  for (const resolution of details.resolutions) {
+    const addIcon = (value: string | undefined, color: string | undefined) => {
+      if (!value || !color) {
+        return;
+      }
+      const path = `${resolution.directory}/${value.replace(/\\/g, "/")}`;
+      const file = resolution.icons.find((entry) => entry.path === path);
+      if (file) {
+        jobs.set(file.path, { file, color });
+      }
+    };
+    addIcon(resolution.config["colon_icon"], colors.separators);
+    addIcon(resolution.config["arc_cut_icon"], colors.separators);
+    if (colors.complication) {
+      for (const [key, value] of Object.entries(resolution.config)) {
+        if (/^control_[a-z_]+_icon$/.test(key)) {
+          addIcon(value, colors.complication);
+        }
+      }
+    }
+  }
+  const assets = await loadAssets([...jobs.keys()]);
+  const assetsByPath = new Map(assets.map((asset) => [asset.path, asset]));
+  const replacements: CorosWatchfaceAssetReplacement[] = [];
+  for (const [path, job] of jobs) {
+    const asset = assetsByPath.get(path);
+    if (!asset) {
+      continue;
+    }
+    replacements.push({
+      path,
+      dataUrl: await tintSprite(
+        asset.dataUrl,
+        job.file.width,
+        job.file.height,
+        job.color
+      )
+    });
+  }
+  return replacements;
 }
 
 export interface WatchfaceLayoutGroupBounds {
@@ -1654,13 +1814,15 @@ export async function drawStudioPreview(
   const now = new Date();
   const hour = String(now.getHours()).padStart(2, "0");
   const minute = String(now.getMinutes()).padStart(2, "0");
+  const second = String(now.getSeconds()).padStart(2, "0");
 
   const wantedSprites = new Map<string, { color: string | null }>();
   const digitPlan: {
     pos: { x: number; y: number } | null;
     source: PreviewDigitSource | null;
     digit: number;
-    partId: WatchfaceTimePartId;
+    partId?: WatchfaceTimePartId;
+    componentId: string;
   }[] = [];
   const timeKeys: [string, string, string, WatchfaceTimePartId][] = [
     ["time_hour_high_pos", "time_hour_high_font", hour[0]!, "hours"],
@@ -1674,7 +1836,19 @@ export async function drawStudioPreview(
       pos: parseConfigPos(config[posKey]),
       source,
       digit: Number(digitText),
-      partId
+      partId,
+      componentId: partId
+    });
+  }
+  for (const [posKey, fontKey, digitText] of [
+    ["time_second_high_pos", "time_second_high_font", second[0]!],
+    ["time_second_low_pos", "time_second_low_font", second[1]!]
+  ] as const) {
+    digitPlan.push({
+      pos: parseConfigPos(config[posKey]),
+      source: findSpriteFolder(resolution, config[fontKey]),
+      digit: Number(digitText),
+      componentId: "seconds"
     });
   }
   const colonValue = config["colon_icon"]?.replace(/\\/g, "/");
@@ -1684,7 +1858,8 @@ export async function drawStudioPreview(
     : null;
   if (colonFile) {
     wantedSprites.set(colonFile.path, {
-      color: options.tintIcons ? options.accentColor : null
+      color: options.layerColors?.separators ??
+        (options.tintIcons ? options.accentColor : null)
     });
   }
   const arcCutValue = config["arc_cut_icon"]?.replace(/\\/g, "/");
@@ -1697,7 +1872,8 @@ export async function drawStudioPreview(
   const arcCutPos = parseConfigPos(config["arc_cut_icon_pos"]);
   if (arcCutFile) {
     wantedSprites.set(arcCutFile.path, {
-      color: options.tintIcons ? options.accentColor : null
+      color: options.layerColors?.separators ??
+        (options.tintIcons ? options.accentColor : null)
     });
   }
 
@@ -1719,7 +1895,10 @@ export async function drawStudioPreview(
   );
   const weekRect = parseConfigRect(config["english_date_week_rect"]);
   const weekFile = weekSource?.files[now.getDay()] ?? weekSource?.files[0];
-  const weekColor = options.tintLabels ? options.digitColor : null;
+  const weekColor =
+    options.dateStyles?.weekday?.color ??
+    options.layerColors?.weekday ??
+    (options.tintLabels ? options.digitColor : null);
   if (weekFile) {
     wantedSprites.set(weekFile.path, { color: weekColor });
   }
@@ -1770,7 +1949,8 @@ export async function drawStudioPreview(
     : null;
   if (complicationIcon) {
     wantedSprites.set(complicationIcon.path, {
-      color: options.tintIcons ? options.accentColor : null
+      color: options.layerColors?.complication ??
+        (options.tintIcons ? options.accentColor : null)
     });
   }
 
@@ -1780,12 +1960,27 @@ export async function drawStudioPreview(
     value: string;
     metricId?: WatchfaceMetricId;
     datePartId?: WatchfaceDatePartId;
+    componentId?: string;
   }[] = [];
   if (complication && complicationRect && complicationSource) {
     numberPlans.push({
       rect: complicationRect,
       source: complicationSource,
-      value: complication.sampleValue
+      value: complication.sampleValue,
+      componentId: "complication"
+    });
+  }
+  const batteryRect = parseConfigRect(config["battery_level_rect"]);
+  const batterySource = findSpriteFolder(
+    resolution,
+    config["battery_level_font"]
+  );
+  if (batteryRect && batterySource) {
+    numberPlans.push({
+      rect: batteryRect,
+      source: batterySource,
+      value: "82",
+      componentId: "battery"
     });
   }
   const dateFields: [string, string, string, WatchfaceDatePartId][] = [
@@ -1811,7 +2006,7 @@ export async function drawStudioPreview(
   }
   for (const metric of WATCHFACE_FIXED_METRICS) {
     const rect = parseConfigRect(config[metric.rectKey]);
-    const source = findSpriteFolder(resolution, config[metric.fontKey]);
+    const source = metricFontFolder(resolution, metric);
     if (rect && source) {
       numberPlans.push({
         rect,
@@ -1827,7 +2022,9 @@ export async function drawStudioPreview(
   for (const planned of digitPlan) {
     const file = planned.source?.files[planned.digit];
     const fontFamily =
-      options.timeStyles?.[planned.partId]?.fontFamily ?? options.fontFamily;
+      (planned.partId
+        ? options.timeStyles?.[planned.partId]?.fontFamily
+        : undefined) ?? options.fontFamily;
     if (file && !fontFamily) {
       wantedSprites.set(file.path, { color: null });
     }
@@ -1901,16 +2098,20 @@ export async function drawStudioPreview(
     if (!file || !planned.pos) {
       continue;
     }
-    const timeStyle = options.timeStyles?.[planned.partId];
+    const timeStyle = planned.partId
+      ? options.timeStyles?.[planned.partId]
+      : undefined;
+    const componentColor = options.layerColors?.[planned.componentId];
     const timeFontFamily = timeStyle?.fontFamily ?? options.fontFamily;
+    const timeColor = timeStyle?.color ?? componentColor ?? options.digitColor;
     const timeScale = timeStyle
       ? Math.max(0.5, Math.min(2, timeStyle.scale))
       : 1;
     const width = Math.max(1, Math.round(file.width * timeScale));
     const height = Math.max(1, Math.round(file.height * timeScale));
     let image = digitSprites.get(file.path) ?? loaded.get(file.path);
-    if (timeStyle) {
-      const cacheKey = `${file.path}|${timeFontFamily}|${timeStyle.color}|${timeScale}`;
+    if (timeStyle || componentColor) {
+      const cacheKey = `${file.path}|${timeFontFamily}|${timeColor}|${timeScale}`;
       image = styledTimeGlyphs.get(cacheKey);
       if (!image) {
         const dataUrl = timeFontFamily
@@ -1919,13 +2120,13 @@ export async function drawStudioPreview(
               width,
               height,
               timeFontFamily,
-              timeStyle.color
+              timeColor
             )
           : await resizeAndTintSprite(
               loadedAssets.get(file.path)?.dataUrl ?? "",
               width,
               height,
-              timeStyle.color
+              timeColor
             );
         image = await loadStudioImage(dataUrl);
         styledTimeGlyphs.set(cacheKey, image);
@@ -2011,7 +2212,7 @@ export async function drawStudioPreview(
           weekWidth,
           weekHeight,
           weekFontFamily,
-          options.digitColor
+          weekColor ?? options.digitColor
         )
       );
     }
@@ -2049,6 +2250,9 @@ export async function drawStudioPreview(
     const dateStyle = plan.datePartId
       ? options.dateStyles?.[plan.datePartId]
       : undefined;
+    const componentColor = plan.componentId
+      ? options.layerColors?.[plan.componentId]
+      : undefined;
     const glyphFontFamily =
       metricStyle?.fontFamily ?? dateStyle?.fontFamily ?? options.fontFamily;
     const glyphs: {
@@ -2060,7 +2264,7 @@ export async function drawStudioPreview(
       if (!file) {
         continue;
       }
-      if (!metricStyle && !dateStyle) {
+      if (!metricStyle && !dateStyle && !componentColor) {
         const image = digitSprites.get(file.path) ?? loaded.get(file.path);
         if (image) {
           glyphs.push({ file, image });
@@ -2076,7 +2280,11 @@ export async function drawStudioPreview(
         width: Math.max(1, Math.round(file.width * glyphScale)),
         height: Math.max(1, Math.round(file.height * glyphScale))
       };
-      const glyphColor = metricStyle?.color ?? options.digitColor;
+      const glyphColor =
+        metricStyle?.color ??
+        dateStyle?.color ??
+        componentColor ??
+        options.digitColor;
       const cacheKey = `${file.path}|${glyphFontFamily}|${glyphColor}|${glyphScale}`;
       let image = styledMetricGlyphs.get(cacheKey);
       if (!image) {
@@ -2090,7 +2298,7 @@ export async function drawStudioPreview(
               glyphColor
             )
           );
-        } else if (metricStyle) {
+        } else if (metricStyle || dateStyle?.color || componentColor) {
           image = await loadStudioImage(
             await resizeAndTintSprite(
               loadedAssets.get(file.path)?.dataUrl ?? "",

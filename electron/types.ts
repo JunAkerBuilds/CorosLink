@@ -290,6 +290,8 @@ export interface CorosWatchfaceDesignSprite {
   rotation: number;
   /** Absent means visible for projects saved before layer toggles. */
   visible?: boolean;
+  /** Optional monochrome tint while preserving the imported image alpha. */
+  tintColor?: string | null;
 }
 
 /** A two-stop linear gradient fill, angle in degrees clockwise from +x. */
@@ -368,7 +370,10 @@ export interface CorosWatchfaceDesignState {
   metricStyles: Record<string, { color: string; scale: number; fontFamily?: string }>;
   timeStyles: Record<string, { color: string; scale: number; fontFamily?: string }>;
   /** Weekday/month/day scaling; absent in projects saved before resizing. */
-  dateStyles?: Record<string, { scale: number; fontFamily?: string }>;
+  dateStyles?: Record<
+    string,
+    { scale: number; fontFamily?: string; color?: string }
+  >;
   staticSeparators: Record<
     "colon" | "dateSlash",
     {
@@ -391,6 +396,8 @@ export interface CorosWatchfaceDesignState {
   layoutOffsets: Record<string, { dx: number; dy: number }>;
   /** Visibility overrides for firmware-backed editor layers. */
   layerVisibility?: Record<string, boolean>;
+  /** Per-layer colors for firmware components without specialized styles. */
+  layerColors?: Record<string, string>;
   designSprites: CorosWatchfaceDesignSprite[];
   /**
    * Freeform vector shapes baked into the background PNG (800px space).

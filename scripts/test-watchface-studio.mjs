@@ -3,6 +3,7 @@ import {
   applyConfigOverridesToDetails,
   buildDateStyleOverrides,
   buildLayerVisibilityOverrides,
+  buildLayerColorOverrides,
   buildLayoutOverrides,
   buildMetricOverrides,
   buildMetricStyleOverrides,
@@ -49,6 +50,9 @@ function resolution(width, digitWidth, digitHeight) {
       kcal_font: "",
       elevation_rect: "",
       elevation_font: "",
+      temperature_rect: "",
+      temperature_font_color: "",
+      temperature_negative_sign_icon: "",
       colon_icon: "icon\\colon.png",
       arc_cut_icon_pos: `{${Math.round(width * 0.3)},${Math.round(width * 0.2)}}`,
       arc_cut_icon: "icon\\cut.png",
@@ -60,12 +64,18 @@ function resolution(width, digitWidth, digitHeight) {
       time_minute_high_font: "13x19",
       time_minute_low_pos: `{${Math.round(width * 0.425)},${Math.round(width * 0.125)}}`,
       time_minute_low_font: "13x19",
+      time_second_high_font_color: "",
+      time_second_low_font_color: "",
       english_date_week_rect: `{${Math.round(width * 0.1)},${Math.round(width * 0.4)},${Math.round(width * 0.3)},${Math.round(width * 0.48)},hcenter|vcenter}`,
       english_date_week_font: "english_week",
+      english_date_week_font_color: "",
       english_date_month_rect: `{${Math.round(width * 0.4)},${Math.round(width * 0.4)},${Math.round(width * 0.48)},${Math.round(width * 0.48)},hcenter|vcenter}`,
       english_date_month_font: "13x19",
+      english_date_month_font_color: "",
       english_date_day_rect: `{${Math.round(width * 0.5)},${Math.round(width * 0.4)},${Math.round(width * 0.58)},${Math.round(width * 0.48)},hcenter|vcenter}`,
       english_date_day_font: "13x19",
+      english_date_day_font_color: "",
+      battery_level_font_color: "",
       rect_control1_pos: `{${Math.round(width * 0.125)},${Math.round(width * 0.25)}}`,
       control_hr_rect: `{${Math.round(width * 0.2)},0,${Math.round(width * 0.36)},${digitHeight},hcenter|vcenter}`,
       control_hr_font: "13x19",
@@ -108,7 +118,8 @@ assert.deepEqual(
     { id: "heartRate", label: "Heart rate", active: false },
     { id: "steps", label: "Steps", active: false },
     { id: "calories", label: "Calories", active: false },
-    { id: "elevation", label: "Elevation", active: false }
+    { id: "elevation", label: "Elevation", active: false },
+    { id: "temperature", label: "Temperature", active: false }
   ]
 );
 assert.deepEqual(
@@ -119,6 +130,7 @@ assert.deepEqual(
 const metricOverrides = buildMetricOverrides(details, {
   heartRate: true,
   steps: true,
+  temperature: true,
   calories: false
 });
 assert.equal(metricOverrides.length, 2);
@@ -130,6 +142,11 @@ assert.equal(
 );
 assert.equal(full.values.heartreate_level_font, "13x19");
 assert.equal(full.values.step_rect, "{474,576,694,640,hcenter|vcenter}");
+assert.equal(
+  full.values.temperature_rect,
+  "{334,528,466,592,hcenter|vcenter}"
+);
+assert.equal(full.values.temperature_font, "13x19");
 assert.equal(full.values.kcal_rect, "");
 assert.equal(full.values.kcal_font, "");
 assert.deepEqual(
@@ -187,7 +204,10 @@ assert.equal(
 );
 const metricStyleOverrides = buildMetricStyleOverrides(
   withMetrics,
-  { heartRate: { color: "#ff3366", scale: 1.5 } },
+  {
+    heartRate: { color: "#ff3366", scale: 1.5 },
+    temperature: { color: "#33aa55", scale: 1.25 }
+  },
   true
 );
 const fullMetricStyle = metricStyleOverrides.find((entry) =>
@@ -198,6 +218,12 @@ assert.equal(
   "{101,560,299,656,hcenter|vcenter}"
 );
 assert.equal(fullMetricStyle?.values.heartreate_level_font, "cl_hr");
+assert.equal(
+  fullMetricStyle?.values.temperature_rect,
+  "{318,520,483,600,hcenter|vcenter}"
+);
+assert.equal(fullMetricStyle?.values.temperature_font_color, "0x33AA55");
+assert.equal(fullMetricStyle?.values.temperature_font, "cl_temp");
 const timeStyleOverrides = buildTimeStyleOverrides(
   withMetrics,
   { hours: { color: "#33ddff", scale: 1.5 } },
@@ -237,6 +263,18 @@ assert.equal(
   "{408,328,456,376,hcenter|vcenter}"
 );
 assert.equal(fullDateStyle?.values.english_date_day_font, "cl_date_day");
+const layerColorOverrides = buildLayerColorOverrides(withMetrics, {
+  seconds: "#22cc88",
+  weekday: "#aa44ee",
+  battery: "#ffaa00"
+});
+const fullLayerColors = layerColorOverrides.find((entry) =>
+  entry.path.includes("800x800")
+);
+assert.equal(fullLayerColors?.values.time_second_high_font_color, "0x22CC88");
+assert.equal(fullLayerColors?.values.time_second_low_font_color, "0x22CC88");
+assert.equal(fullLayerColors?.values.english_date_week_font_color, "0xAA44EE");
+assert.equal(fullLayerColors?.values.battery_level_font_color, "0xFFAA00");
 const fullBounds = computeLayoutGroupBounds(withMetrics.resolutions[1]);
 assert.deepEqual(fullBounds.find((entry) => entry.id === "separators"), {
   id: "separators",

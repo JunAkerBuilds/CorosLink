@@ -18,6 +18,7 @@ import {
   Palette,
   Save,
   Sparkles,
+  Thermometer,
   Trash2,
   Type,
   WandSparkles
@@ -106,7 +107,8 @@ const METRIC_ICONS = {
   heartRate: HeartPulse,
   steps: Footprints,
   calories: Flame,
-  elevation: Mountain
+  elevation: Mountain,
+  temperature: Thermometer
 } satisfies Record<WatchfaceMetricId, typeof HeartPulse>;
 
 const DEFAULT_STATIC_SEPARATORS: WatchfaceStaticSeparators = {
@@ -752,6 +754,20 @@ export function WatchfaceCreator({
         if (!spriteImage) {
           continue;
         }
+        let drawable: CanvasImageSource = spriteImage;
+        if (sprite.tintColor) {
+          const tinted = document.createElement("canvas");
+          tinted.width = spriteImage.naturalWidth;
+          tinted.height = spriteImage.naturalHeight;
+          const tintedContext = tinted.getContext("2d");
+          if (tintedContext) {
+            tintedContext.drawImage(spriteImage, 0, 0);
+            tintedContext.globalCompositeOperation = "source-in";
+            tintedContext.fillStyle = sprite.tintColor;
+            tintedContext.fillRect(0, 0, tinted.width, tinted.height);
+            drawable = tinted;
+          }
+        }
         const width = sprite.width * sprite.scale * separatorScale;
         const height = sprite.height * sprite.scale * separatorScale;
         context.save();
@@ -760,7 +776,7 @@ export function WatchfaceCreator({
           sprite.y * separatorScale
         );
         context.rotate((sprite.rotation * Math.PI) / 180);
-        context.drawImage(spriteImage, -width / 2, -height / 2, width, height);
+        context.drawImage(drawable, -width / 2, -height / 2, width, height);
         context.restore();
       }
 
