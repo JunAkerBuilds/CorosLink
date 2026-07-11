@@ -83,7 +83,10 @@ const DEFAULT_SESSION_TITLE = "New chat";
 const SESSION_TITLE_MAX = 48;
 
 function normalizeProvider(value: unknown): ChatProvider {
-  return value === "local" ? "local" : "chatgpt";
+  if (value === "local" || value === "claude-code") {
+    return value;
+  }
+  return "chatgpt";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

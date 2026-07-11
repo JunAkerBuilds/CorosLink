@@ -227,7 +227,7 @@ export function initializeDatabase(userDataPath: string): Database.Database {
 
     CREATE TABLE IF NOT EXISTS chat_sessions (
       id TEXT PRIMARY KEY,
-      provider TEXT NOT NULL CHECK(provider IN ('chatgpt', 'local')),
+      provider TEXT NOT NULL CHECK(provider IN ('chatgpt', 'claude-code', 'local')),
       title TEXT NOT NULL,
       messages_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -250,6 +250,7 @@ export function initializeDatabase(userDataPath: string): Database.Database {
   `);
 
   ensureColumn(db, "generated_routes", "activity_type", "TEXT");
+  migrateChatSessionProviderConstraint(db);
   migrateChatTranscriptsToSessions(db);
 
   return db;
@@ -299,6 +300,61 @@ function deriveSessionTitle(messagesJson: string): string {
     // fall through
   }
   return "New chat";
+}
+
+const CHAT_SESSION_PROVIDERS = ["chatgpt", "claude-code", "local"];
+
+function migrateChatSessionProviderConstraint(
+  database: Database.Database
+): void {
+  const row = database
+    .prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'chat_sessions'"
+    )
+    .get() as { sql: string } | undefined;
+  if (
+    !row ||
+    CHAT_SESSION_PROVIDERS.every((provider) =>
+      row.sql.includes(`'${provider}'`)
+    )
+  ) {
+    return;
+  }
+
+  // SQLite cannot alter CHECK constraints in place, so rebuild the table.
+  database.transaction(() => {
+    database.exec(`
+      ALTER TABLE chat_sessions RENAME TO chat_sessions_legacy;
+
+      CREATE TABLE chat_sessions (
+        id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL CHECK(provider IN ('chatgpt', 'claude-code', 'local')),
+        title TEXT NOT NULL,
+        messages_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      INSERT INTO chat_sessions (id, provider, title, messages_json, created_at, updated_at)
+        SELECT
+          id,
+          CASE
+            WHEN provider IN ('chatgpt', 'claude-code', 'local') THEN provider
+            WHEN provider = 'claude' THEN 'claude-code'
+            ELSE 'chatgpt'
+          END,
+          title,
+          messages_json,
+          created_at,
+          updated_at
+        FROM chat_sessions_legacy;
+
+      DROP TABLE chat_sessions_legacy;
+
+      CREATE INDEX IF NOT EXISTS idx_chat_sessions_provider_updated
+        ON chat_sessions(provider, updated_at DESC);
+    `);
+  })();
 }
 
 function migrateChatTranscriptsToSessions(database: Database.Database): void {

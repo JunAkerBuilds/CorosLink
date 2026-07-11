@@ -1,8 +1,9 @@
-import { Bot, Sparkles } from "lucide-react";
+import { Bot, Sparkles, Terminal } from "lucide-react";
 import type { ChatProvider } from "../../electron/types";
 
 const OPTIONS = [
   { value: "chatgpt" as const, label: "ChatGPT", icon: Sparkles },
+  { value: "claude-code" as const, label: "Claude", icon: Terminal },
   { value: "local" as const, label: "Local model", icon: Bot }
 ];
 

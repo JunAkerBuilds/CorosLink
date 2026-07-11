@@ -179,6 +179,8 @@ import {
   createChatSessionForProvider,
   deleteChatSessionById,
   detectLocalChatServers,
+  connectClaudeCode,
+  getClaudeCodeConnectionStatus,
   getChatAuthStatus,
   getChatSessionEntries,
   getChatSettings,
@@ -188,6 +190,7 @@ import {
   saveChatSessionEntries,
   saveChatSettings,
   streamChat,
+  testClaudeCodeConnection,
   testLocalChatConnection,
   uploadTrainingPlanDraft,
   confirmWorkoutDelete
@@ -659,6 +662,20 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("chat:detectLocalServers", (_event, apiKey?: string) =>
     detectLocalChatServers(apiKey)
+  );
+
+  ipcMain.handle("chat:getClaudeCodeStatus", () =>
+    getClaudeCodeConnectionStatus()
+  );
+
+  ipcMain.handle("chat:connectClaudeCode", () => connectClaudeCode());
+
+  ipcMain.handle("chat:testClaudeCodeConnection", () =>
+    testClaudeCodeConnection()
+  );
+
+  ipcMain.handle("chat:openClaudeCodeSetupGuide", () =>
+    shell.openExternal("https://code.claude.com/docs/en/quickstart")
   );
 
   ipcMain.handle("chat:login", () => loginChat(mainWindow));

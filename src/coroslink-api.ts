@@ -66,6 +66,8 @@ import type {
   ChatProvider,
   ChatSessionSummary,
   ChatSettings,
+  ClaudeCodeConnectionTest,
+  ClaudeCodeStatus,
   PersistedChatEntry,
   ChatStreamStart,
   ChatStreamToken,
@@ -325,6 +327,10 @@ export interface CorosLinkApi {
     config?: LocalChatConfig
   ) => Promise<LocalChatConnectionTest>;
   detectLocalChatServers: (apiKey?: string) => Promise<LocalChatDiscovery>;
+  getClaudeCodeStatus: () => Promise<ClaudeCodeStatus>;
+  connectClaudeCode: () => Promise<ClaudeCodeStatus>;
+  testClaudeCodeConnection: () => Promise<ClaudeCodeConnectionTest>;
+  openClaudeCodeSetupGuide: () => Promise<void>;
   loginChat: () => Promise<ChatAuthStatus>;
   logoutChat: () => Promise<ChatAuthStatus>;
   sendChat: (requestId: string, messages: ChatMessage[]) => Promise<void>;

@@ -279,10 +279,15 @@ export async function handleChatWorkoutTool(
   options?: {
     onPlanDraft?: (preview: PlanDraftPreview) => void;
     onWorkoutDelete?: (preview: WorkoutDeletePreview) => void;
+    allowUpcomingWorkouts?: boolean;
   }
 ): Promise<string> {
   if (name === "draft_training_plan") {
-    return handleDraftTrainingPlan(args, options?.onPlanDraft);
+    return handleDraftTrainingPlan(
+      args,
+      options?.onPlanDraft,
+      options?.allowUpcomingWorkouts !== false
+    );
   }
   if (name === "upload_training_plan") {
     return handleUploadTrainingPlan(args);
@@ -350,7 +355,8 @@ async function detectScheduleConflicts(
 
 async function handleDraftTrainingPlan(
   args: Record<string, unknown>,
-  onPlanDraft?: (preview: PlanDraftPreview) => void
+  onPlanDraft?: (preview: PlanDraftPreview) => void,
+  allowUpcomingWorkouts = true
 ): Promise<string> {
   const draft = toPlanDraft(args);
   const validation = validatePlanDraft(draft, {
@@ -360,7 +366,9 @@ async function handleDraftTrainingPlan(
     return JSON.stringify({ ok: false, errors: validation.errors });
   }
 
-  const conflicts = await detectScheduleConflicts(draft);
+  const conflicts = allowUpcomingWorkouts
+    ? await detectScheduleConflicts(draft)
+    : [];
   const draftId = crypto.randomUUID();
   const preview = buildPlanPreview(draftId, draft, {
     scheduleConflicts: conflicts

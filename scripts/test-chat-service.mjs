@@ -345,7 +345,19 @@ const fakeApiKeyStore = {
 };
 
 const saved = saveChatSettingsToStore(fakeStore, fakeApiKeyStore, {
-  provider: "local",
+  provider: "claude-code",
+  claudeCode: {
+    executablePath: "/opt/claude/bin/claude",
+    lastConnectionStatus: "connected",
+    lastCheckedAt: "2026-07-10T12:00:00.000Z",
+    permissions: {
+      recentActivities: true,
+      trainingMetrics: false,
+      upcomingWorkouts: true,
+      sleepData: true,
+      fullActivityFiles: false
+    }
+  },
   local: {
     baseUrl: "localhost:11434",
     model: "llama3.2",
@@ -354,7 +366,16 @@ const saved = saveChatSettingsToStore(fakeStore, fakeApiKeyStore, {
     toolsEnabled: false
   }
 });
-assert.equal(saved.provider, "local");
+assert.equal(saved.provider, "claude-code");
+assert.equal(saved.claudeCode.executablePath, "/opt/claude/bin/claude");
+assert.equal(saved.claudeCode.lastConnectionStatus, "connected");
+assert.deepEqual(saved.claudeCode.permissions, {
+  recentActivities: true,
+  trainingMetrics: false,
+  upcomingWorkouts: true,
+  sleepData: true,
+  fullActivityFiles: false
+});
 assert.equal(saved.local.baseUrl, "http://localhost:11434/v1");
 assert.equal(saved.local.model, "llama3.2");
 assert.equal(saved.local.toolsEnabled, false);

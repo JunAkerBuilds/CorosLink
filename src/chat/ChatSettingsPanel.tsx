@@ -1,24 +1,39 @@
 import {
   Bot,
+  CircleCheck,
   Database,
+  ExternalLink,
   KeyRound,
   Loader2,
   LogOut,
   RefreshCw,
-  Save
+  Save,
+  Terminal
 } from "lucide-react";
 import type {
   ChatAuthStatus,
   ChatSettings,
+  ClaudeCodeStatus,
   CorosMcpStatus,
   LocalChatConnectionTest,
   LocalChatDiscovery
 } from "../../electron/types";
 import { CorosMcpToolsPanel } from "./CorosMcpToolsPanel";
 
+function claudeStatusLabel(status: ClaudeCodeStatus | null): string {
+  if (!status) return "Not checked";
+  if (status.state === "not-installed") return "Not installed";
+  if (status.state === "sign-in-required") return "Installed, sign-in required";
+  if (status.state === "connecting") return "Connecting";
+  if (status.state === "connected") return "Connected";
+  if (status.state === "usage-limit-reached") return "Usage limit reached";
+  return "Connection failed";
+}
+
 export function ChatSettingsPanel({
   chatSettings,
   authStatus,
+  claudeStatus,
   localApiKey,
   localConnection,
   localDiscovery,
@@ -26,12 +41,20 @@ export function ChatSettingsPanel({
   testingLocal,
   detectingLocal,
   signingIn,
+  checkingClaude,
+  connectingClaude,
+  testingClaude,
   mcpStatus,
   mcpBusy,
   showTools,
   busy,
   onSignIn,
   onSignOut,
+  onRefreshClaude,
+  onConnectClaude,
+  onTestClaude,
+  onOpenClaudeSetupGuide,
+  onUpdateClaudeCode,
   onLocalApiKeyChange,
   onUpdateLocalDraft,
   onDetectLocalServers,
@@ -45,6 +68,7 @@ export function ChatSettingsPanel({
 }: {
   chatSettings: ChatSettings;
   authStatus: ChatAuthStatus | null;
+  claudeStatus: ClaudeCodeStatus | null;
   localApiKey: string;
   localConnection: LocalChatConnectionTest | null;
   localDiscovery: LocalChatDiscovery | null;
@@ -52,12 +76,22 @@ export function ChatSettingsPanel({
   testingLocal: boolean;
   detectingLocal: boolean;
   signingIn: boolean;
+  checkingClaude: boolean;
+  connectingClaude: boolean;
+  testingClaude: boolean;
   mcpStatus: CorosMcpStatus | null;
   mcpBusy: boolean;
   showTools: boolean;
   busy?: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
+  onRefreshClaude: () => void;
+  onConnectClaude: () => void;
+  onTestClaude: () => void;
+  onOpenClaudeSetupGuide: () => void;
+  onUpdateClaudeCode: (
+    patch: Partial<ChatSettings["claudeCode"]>
+  ) => void;
   onLocalApiKeyChange: (value: string) => void;
   onUpdateLocalDraft: (patch: Partial<ChatSettings["local"]>) => void;
   onDetectLocalServers: () => void;
@@ -138,6 +172,164 @@ export function ChatSettingsPanel({
             </button>
           </div>
         )}
+      </section>
+
+      <section className="chat-settings-section chat-claude-section">
+        <div className="chat-settings-section-title">
+          <h3>Claude subscription</h3>
+          <span className="chat-beta-badge">Beta</span>
+        </div>
+        <p className="chat-settings-copy">
+          Uses Claude Code installed and signed in on this computer. CorosLink
+          never reads or stores your Claude password or subscription credentials.
+        </p>
+
+        <label className="chat-local-field">
+          <span>Claude executable</span>
+          <div className="chat-claude-path-row">
+            <Terminal size={15} aria-hidden="true" />
+            <input
+              value={chatSettings.claudeCode.executablePath ?? ""}
+              onChange={(event) =>
+                onUpdateClaudeCode({ executablePath: event.target.value })
+              }
+              placeholder="Auto-detect Claude Code"
+              spellCheck={false}
+            />
+          </div>
+        </label>
+
+        <label className="chat-local-field">
+          <span>Model</span>
+          <select
+            value={chatSettings.claudeCode.model ?? ""}
+            onChange={(event) =>
+              onUpdateClaudeCode({ model: event.target.value })
+            }
+          >
+            <option value="">Account default</option>
+            <option value="opus">Opus (most capable)</option>
+            <option value="sonnet">Sonnet (balanced)</option>
+            <option value="haiku">Haiku (fastest)</option>
+          </select>
+        </label>
+
+        <div className="chat-claude-status" data-state={claudeStatus?.state}>
+          {checkingClaude || connectingClaude ? (
+            <Loader2 className="chat-spinner" size={15} aria-hidden="true" />
+          ) : claudeStatus?.state === "connected" ? (
+            <CircleCheck size={15} aria-hidden="true" />
+          ) : (
+            <Terminal size={15} aria-hidden="true" />
+          )}
+          <div>
+            <strong>{claudeStatusLabel(claudeStatus)}</strong>
+            <span>
+              {claudeStatus?.message ??
+                "Check this computer for an installed Claude Code runtime."}
+            </span>
+          </div>
+        </div>
+
+        <div className="chat-local-actions chat-claude-actions">
+          <button
+            type="button"
+            className="chat-local-action"
+            onClick={onRefreshClaude}
+            disabled={checkingClaude || connectingClaude || testingClaude || busy}
+          >
+            {checkingClaude ? (
+              <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
+            ) : (
+              <RefreshCw size={14} aria-hidden="true" />
+            )}
+            Check
+          </button>
+          {claudeStatus?.state === "not-installed" ? (
+            <button
+              type="button"
+              className="chat-local-action"
+              onClick={onOpenClaudeSetupGuide}
+            >
+              <ExternalLink size={14} aria-hidden="true" />
+              Install Claude Code
+            </button>
+          ) : null}
+          {claudeStatus?.installed && claudeStatus.state !== "connected" ? (
+            <button
+              type="button"
+              className="chat-local-action primary"
+              onClick={onConnectClaude}
+              disabled={connectingClaude || busy}
+            >
+              {connectingClaude ? (
+                <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
+              ) : (
+                <Terminal size={14} aria-hidden="true" />
+              )}
+              Sign in with Claude
+            </button>
+          ) : null}
+          {claudeStatus?.state === "connected" ? (
+            <button
+              type="button"
+              className="chat-local-action primary"
+              onClick={onTestClaude}
+              disabled={testingClaude || busy}
+            >
+              {testingClaude ? (
+                <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
+              ) : (
+                <Bot size={14} aria-hidden="true" />
+              )}
+              Test connection
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="chat-local-action"
+            onClick={onOpenClaudeSetupGuide}
+          >
+            <ExternalLink size={14} aria-hidden="true" />
+            Setup guide
+          </button>
+        </div>
+
+        <div className="chat-claude-permissions">
+          <strong>Claude can access</strong>
+          {(
+            [
+              ["recentActivities", "Recent activities"],
+              ["trainingMetrics", "Training metrics"],
+              ["upcomingWorkouts", "Upcoming workouts"],
+              ["sleepData", "Sleep data"]
+            ] as const
+          ).map(([permission, label]) => (
+            <label key={permission} className="chat-local-tools">
+              <input
+                type="checkbox"
+                checked={chatSettings.claudeCode.permissions[permission]}
+                onChange={(event) =>
+                  onUpdateClaudeCode({
+                    permissions: {
+                      ...chatSettings.claudeCode.permissions,
+                      [permission]: event.target.checked
+                    }
+                  })
+                }
+              />
+              <span>{label}</span>
+            </label>
+          ))}
+          <label className="chat-local-tools is-disabled">
+            <input type="checkbox" checked={false} disabled />
+            <span>Full activity files (not available in beta)</span>
+          </label>
+        </div>
+        <p className="chat-settings-copy">
+          Only selected categories are included in Coach context or exposed as
+          tools. Drafts stay local until you click an upload or delete button.
+        </p>
       </section>
 
       <section className="chat-settings-section">

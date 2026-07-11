@@ -148,4 +148,13 @@ saveChatSession(
 assert.equal(listChatSessions("local", db).length, 1);
 assert.equal(listChatSessions("chatgpt", db).length, 2);
 
+const claude = createChatSession("claude-code", db);
+saveChatSession(
+  claude.id,
+  [{ kind: "message", role: "assistant", content: "Claude CLI response." }],
+  db
+);
+assert.equal(listChatSessions("claude-code", db).length, 1);
+assert.equal(listChatSessions("local", db).length, 1);
+
 console.log("chat history store tests passed");

@@ -6,6 +6,15 @@ import {
 
 export const CHAT_SETTINGS_KEYS = {
   provider: "chat.provider",
+  claudeExecutablePath: "chat.claudeCode.executablePath",
+  claudeModel: "chat.claudeCode.model",
+  claudeLastConnectionStatus: "chat.claudeCode.lastConnectionStatus",
+  claudeLastCheckedAt: "chat.claudeCode.lastCheckedAt",
+  claudeRecentActivities: "chat.claudeCode.permissions.recentActivities",
+  claudeTrainingMetrics: "chat.claudeCode.permissions.trainingMetrics",
+  claudeUpcomingWorkouts: "chat.claudeCode.permissions.upcomingWorkouts",
+  claudeSleepData: "chat.claudeCode.permissions.sleepData",
+  claudeFullActivityFiles: "chat.claudeCode.permissions.fullActivityFiles",
   localBaseUrl: "chat.local.baseUrl",
   localModel: "chat.local.model",
   localApiKey: "chat.local.apiKey",
@@ -32,6 +41,28 @@ export function readChatSettingsFromStore(
 ): ChatSettings {
   return {
     provider: normalizeProvider(store.get(CHAT_SETTINGS_KEYS.provider)),
+    claudeCode: {
+      executablePath:
+        store.get(CHAT_SETTINGS_KEYS.claudeExecutablePath) || undefined,
+      model: store.get(CHAT_SETTINGS_KEYS.claudeModel) || undefined,
+      lastConnectionStatus: normalizeClaudeConnectionStatus(
+        store.get(CHAT_SETTINGS_KEYS.claudeLastConnectionStatus)
+      ),
+      lastCheckedAt:
+        store.get(CHAT_SETTINGS_KEYS.claudeLastCheckedAt) || undefined,
+      permissions: {
+        recentActivities:
+          store.get(CHAT_SETTINGS_KEYS.claudeRecentActivities) !== "false",
+        trainingMetrics:
+          store.get(CHAT_SETTINGS_KEYS.claudeTrainingMetrics) !== "false",
+        upcomingWorkouts:
+          store.get(CHAT_SETTINGS_KEYS.claudeUpcomingWorkouts) !== "false",
+        sleepData:
+          store.get(CHAT_SETTINGS_KEYS.claudeSleepData) === "true",
+        fullActivityFiles:
+          store.get(CHAT_SETTINGS_KEYS.claudeFullActivityFiles) === "true"
+      }
+    },
     local: {
       baseUrl:
         store.get(CHAT_SETTINGS_KEYS.localBaseUrl) ?? DEFAULT_LOCAL_CHAT_BASE_URL,
@@ -51,6 +82,51 @@ export function saveChatSettingsToStore(
   settings: ChatSettings
 ): ChatSettings {
   store.set(CHAT_SETTINGS_KEYS.provider, normalizeProvider(settings.provider));
+  const executablePath = settings.claudeCode?.executablePath?.trim();
+  if (executablePath) {
+    store.set(CHAT_SETTINGS_KEYS.claudeExecutablePath, executablePath);
+  } else {
+    store.delete([CHAT_SETTINGS_KEYS.claudeExecutablePath]);
+  }
+  const claudeModel = settings.claudeCode?.model?.trim();
+  if (claudeModel) {
+    store.set(CHAT_SETTINGS_KEYS.claudeModel, claudeModel);
+  } else {
+    store.delete([CHAT_SETTINGS_KEYS.claudeModel]);
+  }
+  if (settings.claudeCode?.lastConnectionStatus) {
+    store.set(
+      CHAT_SETTINGS_KEYS.claudeLastConnectionStatus,
+      settings.claudeCode.lastConnectionStatus
+    );
+  }
+  if (settings.claudeCode?.lastCheckedAt) {
+    store.set(
+      CHAT_SETTINGS_KEYS.claudeLastCheckedAt,
+      settings.claudeCode.lastCheckedAt
+    );
+  }
+  const claudePermissions = settings.claudeCode?.permissions;
+  store.set(
+    CHAT_SETTINGS_KEYS.claudeRecentActivities,
+    claudePermissions?.recentActivities === false ? "false" : "true"
+  );
+  store.set(
+    CHAT_SETTINGS_KEYS.claudeTrainingMetrics,
+    claudePermissions?.trainingMetrics === false ? "false" : "true"
+  );
+  store.set(
+    CHAT_SETTINGS_KEYS.claudeUpcomingWorkouts,
+    claudePermissions?.upcomingWorkouts === false ? "false" : "true"
+  );
+  store.set(
+    CHAT_SETTINGS_KEYS.claudeSleepData,
+    claudePermissions?.sleepData === true ? "true" : "false"
+  );
+  store.set(
+    CHAT_SETTINGS_KEYS.claudeFullActivityFiles,
+    claudePermissions?.fullActivityFiles === true ? "true" : "false"
+  );
   store.set(
     CHAT_SETTINGS_KEYS.localBaseUrl,
     normalizeLocalChatBaseUrl(settings.local.baseUrl)
@@ -86,5 +162,21 @@ export function saveChatSettingsToStore(
 }
 
 function normalizeProvider(value: unknown): ChatProvider {
-  return value === "local" ? "local" : "chatgpt";
+  if (value === "local" || value === "claude-code") {
+    return value;
+  }
+  return "chatgpt";
+}
+
+function normalizeClaudeConnectionStatus(
+  value: unknown
+): ChatSettings["claudeCode"]["lastConnectionStatus"] {
+  return value === "not-installed" ||
+    value === "sign-in-required" ||
+    value === "connecting" ||
+    value === "connected" ||
+    value === "connection-failed" ||
+    value === "usage-limit-reached"
+    ? value
+    : undefined;
 }
