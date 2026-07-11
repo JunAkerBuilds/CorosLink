@@ -21689,3 +21689,188 @@ body.is-backgrounded .spin,
 body.is-backgrounded .training-backup-progress-track.is-indeterminate span {
   animation-play-state: running !important;
 }
+
+/* ── Watchface editor (3-pane, Figma-style) ─────────────────────────── */
+.watchface-mode-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+}
+.watchface-mode-switch button {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.watchface-mode-switch button.is-active {
+  background: var(--accent);
+  color: #04140f;
+}
+
+.watchface-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.watchface-editor-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.watchface-editor-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 220px;
+}
+.watchface-editor-name {
+  flex: 1;
+  min-width: 160px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 6px 8px;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 700;
+}
+.watchface-editor-name:hover,
+.watchface-editor-name:focus {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  outline: none;
+}
+.watchface-editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.watchface-editor-grid {
+  display: grid;
+  grid-template-columns: 190px 1fr 250px;
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .watchface-editor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.watchface-editor-layers,
+.watchface-editor-inspector {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.14);
+  padding: 12px;
+  min-height: 280px;
+}
+.watchface-editor-pane-title {
+  margin: 0 0 10px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.watchface-editor-layers ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.watchface-editor-layers li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.watchface-layer-row {
+  flex: 1;
+  text-align: left;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 7px 9px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.watchface-layer-row:hover {
+  background: var(--glass-bg);
+}
+.watchface-layer-row.is-selected {
+  background: rgba(81, 224, 181, 0.16);
+  color: var(--text-primary);
+}
+.watchface-layer-name.is-hidden {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.watchface-layer-visibility {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 4px;
+  cursor: pointer;
+}
+.watchface-layer-visibility:hover {
+  color: var(--text-primary);
+}
+
+.watchface-editor-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.watchface-editor-device {
+  width: min(100%, 400px);
+}
+.watchface-editor-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.watchface-inspector-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.watchface-inspector-position {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.watchface-nudge-pad {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.watchface-nudge-pad button {
+  min-width: 30px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  padding: 5px 8px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.watchface-nudge-reset {
+  min-width: auto !important;
+  font-size: 12px;
+}

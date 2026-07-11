@@ -34,6 +34,7 @@ const REGION_OPTIONS: { value: CorosWatchfaceRegion; label: string }[] = [
 ];
 import type { CorosLinkApi } from "../coroslink-api";
 import { WatchfaceCreator } from "./WatchfaceCreator";
+import { WatchfaceEditor } from "./WatchfaceEditor";
 import { BatteryHistoryPanel } from "./BatteryHistoryPanel";
 
 interface WatchfacesViewProps {
@@ -49,6 +50,7 @@ export function WatchfacesView({ api }: WatchfacesViewProps) {
   const [region, setRegion] = useState<CorosWatchfaceRegion>("us");
   const [regionTouched, setRegionTouched] = useState(false);
   const [archive, setArchive] = useState<CorosWatchfaceArchive | null>(null);
+  const [editorMode, setEditorMode] = useState(false);
   const [starterArchive, setStarterArchive] =
     useState<CorosWatchfaceArchive | null>(null);
   const [projects, setProjects] = useState<CorosWatchfaceProjectSummary[]>([]);
@@ -224,6 +226,19 @@ export function WatchfacesView({ api }: WatchfacesViewProps) {
     } finally {
       setBusy(null);
     }
+  }
+
+  function handleProjectSaved(saved: CorosWatchfaceProject) {
+    const summary: CorosWatchfaceProjectSummary = {
+      projectId: saved.projectId,
+      name: saved.name,
+      updatedAt: saved.updatedAt,
+      sourceTemplateId: saved.sourceTemplateId
+    };
+    setProjects((current) => [
+      summary,
+      ...current.filter((project) => project.projectId !== summary.projectId)
+    ]);
   }
 
   async function handleLoadProject(projectId: string) {
@@ -587,6 +602,29 @@ export function WatchfacesView({ api }: WatchfacesViewProps) {
           </section>
 
           {starterArchive ? (
+            <div className="watchface-mode-switch" role="tablist" aria-label="Design surface">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!editorMode}
+                className={!editorMode ? "is-active" : ""}
+                onClick={() => setEditorMode(false)}
+              >
+                Guided creator
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={editorMode}
+                className={editorMode ? "is-active" : ""}
+                onClick={() => setEditorMode(true)}
+              >
+                Editor (beta)
+              </button>
+            </div>
+          ) : null}
+
+          {starterArchive && !editorMode ? (
             <WatchfaceCreator
               api={api}
               starterArchive={starterArchive}
@@ -597,20 +635,25 @@ export function WatchfacesView({ api }: WatchfacesViewProps) {
                 setName("My custom face");
                 setShareLink(null);
               }}
-              onProjectSaved={(saved) => {
-                const summary: CorosWatchfaceProjectSummary = {
-                  projectId: saved.projectId,
-                  name: saved.name,
-                  updatedAt: saved.updatedAt,
-                  sourceTemplateId: saved.sourceTemplateId
-                };
-                setProjects((current) => [
-                  summary,
-                  ...current.filter(
-                    (project) => project.projectId !== summary.projectId
-                  )
-                ]);
+              onProjectSaved={handleProjectSaved}
+              onError={setError}
+              onNotice={setNotice}
+            />
+          ) : null}
+
+          {starterArchive && editorMode ? (
+            <WatchfaceEditor
+              api={api}
+              starterArchive={starterArchive}
+              initialDesign={loadedProject?.design}
+              initialProjectId={loadedProject?.projectId}
+              initialProjectName={loadedProject?.name}
+              onArchiveCreated={(created) => {
+                setArchive(created);
+                setName("My custom face");
+                setShareLink(null);
               }}
+              onProjectSaved={handleProjectSaved}
               onError={setError}
               onNotice={setNotice}
             />
