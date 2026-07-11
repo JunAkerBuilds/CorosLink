@@ -14,6 +14,9 @@ const {
   buildMobileLoginRegion,
   encryptMobileLoginField,
   extractDecimalProperty,
+  findHttpsUrlInJson,
+  normalizeCorosBatteryReport,
+  normalizeCorosPairedDevices,
   normalizeCorosWatchfaceThemes,
   selectCorosWatchfaceArchive
 } = await import(`${distUrl("corosWatchfaceService.js")}?cacheBust=${Date.now()}`);
@@ -61,33 +64,44 @@ assert.match(
 
 assert.deepEqual(
   normalizeCorosWatchfaceThemes({
+    watchFaceTemplateList: [
+      {
+        watchFaceTemplateId: "custom-only",
+        watchFaceTemplateName: "Must not appear in the official browser"
+      }
+    ],
     watchFaceThemeList: [
       {
-        watchFaceTemplateId: 250601,
-        watchFaceTemplateName: "Digital dusk",
-        previewImageUrl: "https://s3.coros.com/watchface/digital-dusk.png",
-        firmwareType: "COROS W332",
-        backgroundImageId: 13,
-        watchFaceVersion: 5
-      },
-      {
-        watchFaceTemplateId: 250601,
-        watchFaceTemplateName: "Duplicate should be suppressed"
-      },
-      {
-        id: "blocked-preview",
-        name: "Unsafe preview is omitted",
-        imageUrl: "http://example.test/preview.png"
+        id: 1,
+        watchFaceList: [
+          {
+            id: 478762815845416960,
+            watchFaceName: "Digital dusk",
+            imageUrl: "https://s3.coros.com/watchface/digital-dusk.png",
+            watchFaceUrl: "https://api.coros.com/coros/watchface/resource/478762815845416960",
+            firmwareType: "COROS W332",
+            watchFaceVersion: 5
+          },
+          {
+            id: 478762815845416960,
+            watchFaceName: "Duplicate should be suppressed"
+          },
+          {
+            id: "blocked-preview",
+            watchFaceName: "Unsafe preview is omitted",
+            imageUrl: "http://example.test/preview.png"
+          }
+        ]
       }
     ]
   }),
   [
     {
-      id: "250601",
+      id: "478762815845416960",
       name: "Digital dusk",
       previewImageUrl: "https://s3.coros.com/watchface/digital-dusk.png",
+      packageUrl: "https://api.coros.com/coros/watchface/resource/478762815845416960",
       firmwareType: "COROS W332",
-      backgroundImageId: 13,
       watchFaceVersion: 5
     },
     {
@@ -96,6 +110,132 @@ assert.deepEqual(
     }
   ],
   "theme-list normalizer should accept the mobile shape and reject non-HTTPS previews"
+);
+
+assert.deepEqual(
+  normalizeCorosWatchfaceThemes([
+    {
+      id: 477764002410233956,
+      diyVersion: 1,
+      previewImageUrl: "https://s3.coros.com/watchface_template/preview.png",
+      watchFaceTemplateId: 250601,
+      watchFaceTemplateName: "BOLD",
+      watchFaceTemplateType: 1,
+      watchFaceTemplateUrl: "https://s3.coros.com/watchface_template/source.zip",
+      watchFaceVersion: 0
+    }
+  ]),
+  [
+    {
+      id: "250601",
+      name: "BOLD",
+      previewImageUrl: "https://s3.coros.com/watchface_template/preview.png",
+      packageUrl: "https://s3.coros.com/watchface_template/source.zip",
+      watchFaceVersion: 0,
+      diyVersion: 1,
+      templateType: 1
+    }
+  ],
+  "template catalog entries should expose their editable source ZIP"
+);
+
+assert.equal(
+  findHttpsUrlInJson(
+    '{"data":{"previewImageUrl":"https://s3.coros.com/p.png","fileUrl":"https://s3.coros.com/faces/dusk.dat"}}'
+  ),
+  "https://s3.coros.com/faces/dusk.dat",
+  "JSON envelopes should yield the first non-image HTTPS URL"
+);
+assert.equal(
+  findHttpsUrlInJson("not json at all"),
+  undefined,
+  "non-JSON payloads must not yield a URL"
+);
+assert.equal(
+  findHttpsUrlInJson('{"url":"http://insecure.example/x.dat"}'),
+  undefined,
+  "plain-HTTP URLs inside envelopes must be ignored"
+);
+
+assert.deepEqual(
+  normalizeCorosBatteryReport({
+    alarmStatus: 0,
+    timestamp: 1700000000,
+    days: [
+      {
+        happenDay: 20260710,
+        pctAtQueryTime: 7,
+        totalPct: 8.5,
+        groups: [
+          { typeName: "General Use", typePct: 2.2 },
+          {
+            typeName: "Daily Features",
+            typePct: 1.6,
+            details: [
+              { itemName: "Screen / Display", pct: 1.3 },
+              { itemName: "Notifications", pct: 0.3 }
+            ]
+          },
+          { itemName: "Ignored without a name", pct: "not-a-number" }
+        ]
+      }
+    ]
+  }),
+  {
+    alarmStatus: 0,
+    updatedAt: "2023-11-14T22:13:20.000Z",
+    days: [
+      {
+        date: "2026-07-10",
+        percentAtQueryTime: 7,
+        totalPercent: 8.5,
+        groups: [
+          { name: "General Use", percent: 2.2, details: [] },
+          {
+            name: "Daily Features",
+            percent: 1.6,
+            details: [
+              { name: "Screen / Display", percent: 1.3 },
+              { name: "Notifications", percent: 0.3 }
+            ]
+          },
+          { name: "Ignored without a name", details: [] }
+        ]
+      }
+    ]
+  },
+  "battery report normalizer should preserve daily totals and usage groups"
+);
+
+assert.deepEqual(
+  normalizeCorosPairedDevices({
+    deviceParamList: [
+      {
+        deviceId: "device-one",
+        firmwareType: "COROS W332",
+        uuid: "watch-uuid-one",
+        mac: "ab12"
+      },
+      {
+        deviceId: "device-one",
+        firmwareType: "Duplicate",
+        uuid: "duplicate"
+      },
+      {
+        deviceId: "incomplete",
+        firmwareType: "COROS W332"
+      }
+    ]
+  }),
+  [
+    {
+      deviceId: "device-one",
+      firmwareType: "COROS W332",
+      uuid: "watch-uuid-one",
+      mac: "ab12"
+    }
+  ],
+  "paired-device normalizer should return complete, unique profile devices"
 );
 
 const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "coros-watchface-test-"));

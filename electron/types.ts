@@ -91,24 +91,66 @@ export interface CorosWatchfaceStatus {
   secureStorageAvailable: boolean;
 }
 
-/** Parameters required by COROS's official theme-catalog request. */
+/** Parameters required by COROS's official editable-template catalog request. */
 export interface CorosWatchfaceThemeListInput {
   firmwareType: string;
   language?: string;
-  /** Optional watch serial number; COROS uses it to tailor some catalogs. */
-  serialNumber?: string;
   maxWatchFaceVersion?: number;
 }
 
-/** A read-only entry returned by the official COROS watchface theme catalog. */
+/** An entry returned by the official COROS editable-template catalog. */
 export interface CorosWatchfaceTheme {
   id?: string;
   name: string;
   previewImageUrl?: string;
+  /** The theme's downloadable package resource, when the catalog exposes one. */
+  packageUrl?: string;
   firmwareType?: string;
   backgroundImageId?: number;
   watchFaceVersion?: number;
+  diyVersion?: number;
+  templateType?: number;
   category?: string;
+}
+
+/** Device identifiers supplied by the user for the COROS battery-history API. */
+export interface CorosBatteryQueryInput {
+  deviceId: string;
+  firmwareType: string;
+  uuid: string;
+}
+
+/** A paired watch returned by the signed-in COROS account profile. */
+export interface CorosPairedDevice {
+  deviceId: string;
+  firmwareType: string;
+  uuid: string;
+  mac?: string;
+}
+
+export interface CorosBatteryUsageDetail {
+  name: string;
+  percent?: number;
+}
+
+export interface CorosBatteryUsageGroup {
+  name: string;
+  percent?: number;
+  details: CorosBatteryUsageDetail[];
+}
+
+/** A daily battery-consumption record normalized from COROS's mobile API. */
+export interface CorosBatteryDay {
+  date: string;
+  percentAtQueryTime?: number;
+  totalPercent?: number;
+  groups: CorosBatteryUsageGroup[];
+}
+
+export interface CorosBatteryReport {
+  alarmStatus?: number;
+  updatedAt?: string;
+  days: CorosBatteryDay[];
 }
 
 /** A validated archive held by the main process after the user selected it. */
@@ -132,6 +174,92 @@ export interface CorosWatchfacePublishInput {
 export interface CorosWatchfaceCreatorInput {
   sourceArchiveId: string;
   backgroundDataUrl: string;
+  /**
+   * Renderer-generated PNG sprites (bitmap-font digits, tinted icons and
+   * weekday labels) that replace template assets of identical size.
+   */
+  assetReplacements?: CorosWatchfaceAssetReplacement[];
+  /**
+   * Layout experiments: rewrites the values of keys that already exist in a
+   * template config file (element positions, rects, colors). Keys absent from
+   * the original file are rejected rather than appended.
+   */
+  configOverrides?: CorosWatchfaceConfigOverride[];
+}
+
+export interface CorosWatchfaceConfigOverride {
+  /** A config file entry of the archive, e.g. "watchface_800x800/config.txt". */
+  path: string;
+  values: Record<string, string>;
+}
+
+export interface CorosWatchfaceAssetReplacement {
+  /** Zip entry path inside the selected template archive. */
+  path: string;
+  dataUrl: string;
+}
+
+/** One PNG inside a template archive, addressed by its zip entry path. */
+export interface CorosWatchfaceSpriteFile {
+  path: string;
+  width: number;
+  height: number;
+}
+
+/**
+ * A bitmap-font folder inside a resolution directory: `digits` folders hold
+ * 00.png–09.png, `week` folders hold 00.png–06.png weekday labels.
+ */
+export interface CorosWatchfaceSpriteFolder {
+  /** Folder path relative to the resolution directory, e.g. "01" or "a/01". */
+  folder: string;
+  kind: "digits" | "week";
+  /** True when the folder belongs to the always-on-display asset tree. */
+  aod: boolean;
+  files: CorosWatchfaceSpriteFile[];
+}
+
+export interface CorosWatchfaceResolutionDetails {
+  /** e.g. "watchface_800x800" */
+  directory: string;
+  width: number;
+  height: number;
+  /** Raw `[key]=value` pairs from config.txt. */
+  config: Record<string, string>;
+  /** Raw `[key]=value` pairs from AODconfig.txt, when present. */
+  aodConfig: Record<string, string>;
+  spriteFolders: CorosWatchfaceSpriteFolder[];
+  icons: CorosWatchfaceSpriteFile[];
+}
+
+/** Everything the renderer needs to restyle a selected template archive. */
+export interface CorosWatchfaceTemplateDetails {
+  archiveId: string;
+  resolutions: CorosWatchfaceResolutionDetails[];
+}
+
+/** A template PNG exported to the renderer for tinting or preview. */
+/** The outcome of downloading an official theme's package resource. */
+export interface CorosWatchfaceThemeDownload {
+  fileName: string;
+  sizeBytes: number;
+  /** True when the package validated as a DIY starter template archive. */
+  usableAsTemplate: boolean;
+  /** Set when usable: the registered archive, ready for the creator. */
+  archive?: CorosWatchfaceArchive;
+  /** Top-level entries when the package is a ZIP but not a starter template. */
+  entries?: string[];
+  message: string;
+}
+
+export interface CorosWatchfaceThemeDownloadInput {
+  packageUrl: string;
+  /** Display name used for the downloaded archive, usually the theme name. */
+  name?: string;
+}
+
+export interface CorosWatchfaceTemplateAsset extends CorosWatchfaceSpriteFile {
+  dataUrl: string;
 }
 
 export interface CorosWatchfaceArtwork {

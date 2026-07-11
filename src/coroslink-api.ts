@@ -91,8 +91,15 @@ import type {
   CorosWatchfacePublishInput,
   CorosWatchfaceShareLink,
   CorosWatchfaceStatus,
+  CorosWatchfaceTemplateAsset,
+  CorosWatchfaceTemplateDetails,
   CorosWatchfaceTheme,
-  CorosWatchfaceThemeListInput
+  CorosWatchfaceThemeDownload,
+  CorosWatchfaceThemeDownloadInput,
+  CorosWatchfaceThemeListInput,
+  CorosBatteryQueryInput,
+  CorosBatteryReport,
+  CorosPairedDevice
 } from "../electron/types";
 
 export interface CorosLinkApi {
@@ -104,14 +111,28 @@ export interface CorosLinkApi {
     password: string
   ) => Promise<CorosWatchfaceStatus>;
   logoutCorosWatchfaces: () => Promise<CorosWatchfaceStatus>;
+  listCorosPairedDevices: () => Promise<CorosPairedDevice[]>;
+  getCorosBatteryReport: (
+    input: CorosBatteryQueryInput
+  ) => Promise<CorosBatteryReport>;
   listCorosWatchfaceThemes: (
     input: CorosWatchfaceThemeListInput
   ) => Promise<CorosWatchfaceTheme[]>;
+  downloadCorosWatchfaceTheme: (
+    input: CorosWatchfaceThemeDownloadInput
+  ) => Promise<CorosWatchfaceThemeDownload>;
   chooseCorosWatchfaceArchive: () => Promise<CorosWatchfaceArchive | null>;
   chooseCorosWatchfaceArtwork: () => Promise<CorosWatchfaceArtwork | null>;
   createCorosWatchfaceArchive: (
     input: CorosWatchfaceCreatorInput
   ) => Promise<CorosWatchfaceArchive>;
+  describeCorosWatchfaceTemplate: (
+    archiveId: string
+  ) => Promise<CorosWatchfaceTemplateDetails>;
+  loadCorosWatchfaceTemplateAssets: (
+    archiveId: string,
+    paths: string[]
+  ) => Promise<CorosWatchfaceTemplateAsset[]>;
   publishCorosWatchface: (
     input: CorosWatchfacePublishInput
   ) => Promise<CorosWatchfaceShareLink>;

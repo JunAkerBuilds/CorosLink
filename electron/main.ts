@@ -57,9 +57,14 @@ import {
 } from "./trainingHubService";
 import {
   createCorosWatchfaceArchive,
+  describeCorosWatchfaceTemplate,
+  downloadCorosWatchfaceTheme,
+  getCorosBatteryReport,
   getCorosWatchfaceStatus,
+  listCorosPairedDevices,
   listCorosWatchfaceThemes,
   loadCorosWatchfaceArtwork,
+  loadCorosWatchfaceTemplateAssets,
   loginCorosWatchfaces,
   logoutCorosWatchfaces,
   publishCorosWatchface,
@@ -130,7 +135,9 @@ import type {
 import type {
   CorosWatchfaceCreatorInput,
   CorosWatchfacePublishInput,
-  CorosWatchfaceThemeListInput
+  CorosWatchfaceThemeDownloadInput,
+  CorosWatchfaceThemeListInput,
+  CorosBatteryQueryInput
 } from "./types";
 import {
   deleteWatchTrack,
@@ -560,9 +567,22 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("watchfaces:logout", () => logoutCorosWatchfaces());
 
+  ipcMain.handle("watchfaces:listPairedDevices", () => listCorosPairedDevices());
+
+  ipcMain.handle(
+    "watchfaces:getBatteryReport",
+    (_event, input: CorosBatteryQueryInput) => getCorosBatteryReport(input)
+  );
+
   ipcMain.handle(
     "watchfaces:listThemes",
     (_event, input: CorosWatchfaceThemeListInput) => listCorosWatchfaceThemes(input)
+  );
+
+  ipcMain.handle(
+    "watchfaces:downloadTheme",
+    (_event, input: CorosWatchfaceThemeDownloadInput) =>
+      downloadCorosWatchfaceTheme(input)
   );
 
   ipcMain.handle("watchfaces:chooseArchive", async () => {
@@ -611,6 +631,17 @@ function registerIpcHandlers(): void {
     "watchfaces:createArchive",
     (_event, input: CorosWatchfaceCreatorInput) =>
       createCorosWatchfaceArchive(input)
+  );
+
+  ipcMain.handle(
+    "watchfaces:describeTemplate",
+    (_event, archiveId: string) => describeCorosWatchfaceTemplate(archiveId)
+  );
+
+  ipcMain.handle(
+    "watchfaces:loadTemplateAssets",
+    (_event, archiveId: string, paths: string[]) =>
+      loadCorosWatchfaceTemplateAssets(archiveId, paths)
   );
 
   ipcMain.handle(

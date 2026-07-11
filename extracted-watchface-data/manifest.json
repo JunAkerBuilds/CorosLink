@@ -1,0 +1,1272 @@
+{
+  "source": "/private/var/folders/0f/ktqqdb4j44jd7v8xjkfnc0kr0000gn/T/coroslink-watchface-themes/02d022c7-3c9a-43cc-bba2-d81bfd51a711-raw.bin",
+  "magic": "614A",
+  "sizeBytes": 671604,
+  "layoutBytes": 8904,
+  "layoutFile": "layout.bin",
+  "bitmapGroups": 33,
+  "bitmapFrames": 241,
+  "blocks": [
+    {
+      "index": 0,
+      "offset": "0x22c8",
+      "width": 416,
+      "height": 416,
+      "frameCount": 1,
+      "files": [
+        {
+          "file": "group-00-416x416-0x22c8/frame-00.png",
+          "encodedBytes": 9964
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "offset": "0x58bd4",
+      "width": 24,
+      "height": 41,
+      "frameCount": 1,
+      "files": [
+        {
+          "file": "group-01-24x41-0x58bd4/frame-00.png",
+          "encodedBytes": 677
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "offset": "0x58e8b",
+      "width": 24,
+      "height": 41,
+      "frameCount": 1,
+      "files": [
+        {
+          "file": "group-02-24x41-0x58e8b/frame-00.png",
+          "encodedBytes": 655
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "offset": "0x5912c",
+      "width": 83,
+      "height": 54,
+      "frameCount": 12,
+      "files": [
+        {
+          "file": "group-03-83x54-0x5912c/frame-00.png",
+          "encodedBytes": 1379
+        },
+        {
+          "file": "group-03-83x54-0x5912c/frame-01.png",
+          "encodedBytes": 1266
+        },
+        {
+          "file": "group-03-83x54-0x5912c/frame-02.png",
+          "encodedBytes": 1025
+        },
+        {
+          "file": "group-03-83x54-0x5912c/frame-03.png",
+          "encodedBytes": 1036
+        },
+        {
+          "file": "group-03-83x54-0x5912c/frame-04.png",
+          "encodedBytes": 1063
+        },
+        {
+          "file": "group-03-83x54-0x5912c/frame-05.png",
+          "encodedBytes": 1039
+        },
+        {
+          "file": "group-03-83x54-0x5912c/frame-06.png",
+          "encodedBytes": 1035
+        },
+        {
+          "file": "group-03-83x54-0x5912c/frame-07.png",
+          "encodedBytes": 1040
+        },
+        {
+          "file": "group-03-83x54-0x5912c/frame-08.png",
+          "encodedBytes": 1048
+        },
+        {
+          "file": "group-03-83x54-0x5912c/frame-09.png",
+          "encodedBytes": 1042
+        },
+        {
+          "file": "group-03-83x54-0x5912c/frame-10.png",
+          "encodedBytes": 1049
+        },
+        {
+          "file": "group-03-83x54-0x5912c/frame-11.png",
+          "encodedBytes": 1043
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "offset": "0x5c473",
+      "width": 15,
+      "height": 28,
+      "frameCount": 10,
+      "files": [
+        {
+          "file": "group-04-15x28-0x5c473/frame-00.png",
+          "encodedBytes": 554
+        },
+        {
+          "file": "group-04-15x28-0x5c473/frame-01.png",
+          "encodedBytes": 260
+        },
+        {
+          "file": "group-04-15x28-0x5c473/frame-02.png",
+          "encodedBytes": 523
+        },
+        {
+          "file": "group-04-15x28-0x5c473/frame-03.png",
+          "encodedBytes": 550
+        },
+        {
+          "file": "group-04-15x28-0x5c473/frame-04.png",
+          "encodedBytes": 445
+        },
+        {
+          "file": "group-04-15x28-0x5c473/frame-05.png",
+          "encodedBytes": 497
+        },
+        {
+          "file": "group-04-15x28-0x5c473/frame-06.png",
+          "encodedBytes": 551
+        },
+        {
+          "file": "group-04-15x28-0x5c473/frame-07.png",
+          "encodedBytes": 449
+        },
+        {
+          "file": "group-04-15x28-0x5c473/frame-08.png",
+          "encodedBytes": 651
+        },
+        {
+          "file": "group-04-15x28-0x5c473/frame-09.png",
+          "encodedBytes": 561
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "offset": "0x5d85a",
+      "width": 7,
+      "height": 27,
+      "frameCount": 1,
+      "files": [
+        {
+          "file": "group-05-7x27-0x5d85a/frame-00.png",
+          "encodedBytes": 148
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "offset": "0x5d900",
+      "width": 12,
+      "height": 24,
+      "frameCount": 1,
+      "files": [
+        {
+          "file": "group-06-12x24-0x5d900/frame-00.png",
+          "encodedBytes": 89
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "offset": "0x5d96b",
+      "width": 13,
+      "height": 24,
+      "frameCount": 10,
+      "files": [
+        {
+          "file": "group-07-13x24-0x5d96b/frame-00.png",
+          "encodedBytes": 627
+        },
+        {
+          "file": "group-07-13x24-0x5d96b/frame-01.png",
+          "encodedBytes": 271
+        },
+        {
+          "file": "group-07-13x24-0x5d96b/frame-02.png",
+          "encodedBytes": 562
+        },
+        {
+          "file": "group-07-13x24-0x5d96b/frame-03.png",
+          "encodedBytes": 600
+        },
+        {
+          "file": "group-07-13x24-0x5d96b/frame-04.png",
+          "encodedBytes": 565
+        },
+        {
+          "file": "group-07-13x24-0x5d96b/frame-05.png",
+          "encodedBytes": 589
+        },
+        {
+          "file": "group-07-13x24-0x5d96b/frame-06.png",
+          "encodedBytes": 587
+        },
+        {
+          "file": "group-07-13x24-0x5d96b/frame-07.png",
+          "encodedBytes": 542
+        },
+        {
+          "file": "group-07-13x24-0x5d96b/frame-08.png",
+          "encodedBytes": 636
+        },
+        {
+          "file": "group-07-13x24-0x5d96b/frame-09.png",
+          "encodedBytes": 574
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "offset": "0x5ef52",
+      "width": 67,
+      "height": 42,
+      "frameCount": 7,
+      "files": [
+        {
+          "file": "group-08-67x42-0x5ef52/frame-00.png",
+          "encodedBytes": 1477
+        },
+        {
+          "file": "group-08-67x42-0x5ef52/frame-01.png",
+          "encodedBytes": 1050
+        },
+        {
+          "file": "group-08-67x42-0x5ef52/frame-02.png",
+          "encodedBytes": 1304
+        },
+        {
+          "file": "group-08-67x42-0x5ef52/frame-03.png",
+          "encodedBytes": 1162
+        },
+        {
+          "file": "group-08-67x42-0x5ef52/frame-04.png",
+          "encodedBytes": 1026
+        },
+        {
+          "file": "group-08-67x42-0x5ef52/frame-05.png",
+          "encodedBytes": 1094
+        },
+        {
+          "file": "group-08-67x42-0x5ef52/frame-06.png",
+          "encodedBytes": 1356
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "offset": "0x61091",
+      "width": 67,
+      "height": 42,
+      "frameCount": 7,
+      "files": [
+        {
+          "file": "group-09-67x42-0x61091/frame-00.png",
+          "encodedBytes": 871
+        },
+        {
+          "file": "group-09-67x42-0x61091/frame-01.png",
+          "encodedBytes": 904
+        },
+        {
+          "file": "group-09-67x42-0x61091/frame-02.png",
+          "encodedBytes": 923
+        },
+        {
+          "file": "group-09-67x42-0x61091/frame-03.png",
+          "encodedBytes": 1254
+        },
+        {
+          "file": "group-09-67x42-0x61091/frame-04.png",
+          "encodedBytes": 1075
+        },
+        {
+          "file": "group-09-67x42-0x61091/frame-05.png",
+          "encodedBytes": 1073
+        },
+        {
+          "file": "group-09-67x42-0x61091/frame-06.png",
+          "encodedBytes": 1063
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "offset": "0x62cb6",
+      "width": 67,
+      "height": 42,
+      "frameCount": 7,
+      "files": [
+        {
+          "file": "group-10-67x42-0x62cb6/frame-00.png",
+          "encodedBytes": 1477
+        },
+        {
+          "file": "group-10-67x42-0x62cb6/frame-01.png",
+          "encodedBytes": 1024
+        },
+        {
+          "file": "group-10-67x42-0x62cb6/frame-02.png",
+          "encodedBytes": 1124
+        },
+        {
+          "file": "group-10-67x42-0x62cb6/frame-03.png",
+          "encodedBytes": 1325
+        },
+        {
+          "file": "group-10-67x42-0x62cb6/frame-04.png",
+          "encodedBytes": 1018
+        },
+        {
+          "file": "group-10-67x42-0x62cb6/frame-05.png",
+          "encodedBytes": 1333
+        },
+        {
+          "file": "group-10-67x42-0x62cb6/frame-06.png",
+          "encodedBytes": 1339
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "offset": "0x64ea0",
+      "width": 67,
+      "height": 42,
+      "frameCount": 7,
+      "files": [
+        {
+          "file": "group-11-67x42-0x64ea0/frame-00.png",
+          "encodedBytes": 1220
+        },
+        {
+          "file": "group-11-67x42-0x64ea0/frame-01.png",
+          "encodedBytes": 1363
+        },
+        {
+          "file": "group-11-67x42-0x64ea0/frame-02.png",
+          "encodedBytes": 1174
+        },
+        {
+          "file": "group-11-67x42-0x64ea0/frame-03.png",
+          "encodedBytes": 1097
+        },
+        {
+          "file": "group-11-67x42-0x64ea0/frame-04.png",
+          "encodedBytes": 1039
+        },
+        {
+          "file": "group-11-67x42-0x64ea0/frame-05.png",
+          "encodedBytes": 1239
+        },
+        {
+          "file": "group-11-67x42-0x64ea0/frame-06.png",
+          "encodedBytes": 1405
+        }
+      ]
+    },
+    {
+      "index": 12,
+      "offset": "0x67023",
+      "width": 67,
+      "height": 42,
+      "frameCount": 7,
+      "files": [
+        {
+          "file": "group-12-67x42-0x67023/frame-00.png",
+          "encodedBytes": 1220
+        },
+        {
+          "file": "group-12-67x42-0x67023/frame-01.png",
+          "encodedBytes": 1363
+        },
+        {
+          "file": "group-12-67x42-0x67023/frame-02.png",
+          "encodedBytes": 1246
+        },
+        {
+          "file": "group-12-67x42-0x67023/frame-03.png",
+          "encodedBytes": 1094
+        },
+        {
+          "file": "group-12-67x42-0x67023/frame-04.png",
+          "encodedBytes": 1191
+        },
+        {
+          "file": "group-12-67x42-0x67023/frame-05.png",
+          "encodedBytes": 1333
+        },
+        {
+          "file": "group-12-67x42-0x67023/frame-06.png",
+          "encodedBytes": 1241
+        }
+      ]
+    },
+    {
+      "index": 13,
+      "offset": "0x6923d",
+      "width": 67,
+      "height": 42,
+      "frameCount": 7,
+      "files": [
+        {
+          "file": "group-13-67x42-0x6923d/frame-00.png",
+          "encodedBytes": 1277
+        },
+        {
+          "file": "group-13-67x42-0x6923d/frame-01.png",
+          "encodedBytes": 1029
+        },
+        {
+          "file": "group-13-67x42-0x6923d/frame-02.png",
+          "encodedBytes": 1023
+        },
+        {
+          "file": "group-13-67x42-0x6923d/frame-03.png",
+          "encodedBytes": 1287
+        },
+        {
+          "file": "group-13-67x42-0x6923d/frame-04.png",
+          "encodedBytes": 830
+        },
+        {
+          "file": "group-13-67x42-0x6923d/frame-05.png",
+          "encodedBytes": 967
+        },
+        {
+          "file": "group-13-67x42-0x6923d/frame-06.png",
+          "encodedBytes": 1221
+        }
+      ]
+    },
+    {
+      "index": 14,
+      "offset": "0x6b039",
+      "width": 67,
+      "height": 42,
+      "frameCount": 7,
+      "files": [
+        {
+          "file": "group-14-67x42-0x6b039/frame-00.png",
+          "encodedBytes": 1138
+        },
+        {
+          "file": "group-14-67x42-0x6b039/frame-01.png",
+          "encodedBytes": 1060
+        },
+        {
+          "file": "group-14-67x42-0x6b039/frame-02.png",
+          "encodedBytes": 1308
+        },
+        {
+          "file": "group-14-67x42-0x6b039/frame-03.png",
+          "encodedBytes": 1203
+        },
+        {
+          "file": "group-14-67x42-0x6b039/frame-04.png",
+          "encodedBytes": 1122
+        },
+        {
+          "file": "group-14-67x42-0x6b039/frame-05.png",
+          "encodedBytes": 1239
+        },
+        {
+          "file": "group-14-67x42-0x6b039/frame-06.png",
+          "encodedBytes": 1405
+        }
+      ]
+    },
+    {
+      "index": 15,
+      "offset": "0x6d17e",
+      "width": 67,
+      "height": 42,
+      "frameCount": 7,
+      "files": [
+        {
+          "file": "group-15-67x42-0x6d17e/frame-00.png",
+          "encodedBytes": 1220
+        },
+        {
+          "file": "group-15-67x42-0x6d17e/frame-01.png",
+          "encodedBytes": 1363
+        },
+        {
+          "file": "group-15-67x42-0x6d17e/frame-02.png",
+          "encodedBytes": 1246
+        },
+        {
+          "file": "group-15-67x42-0x6d17e/frame-03.png",
+          "encodedBytes": 1173
+        },
+        {
+          "file": "group-15-67x42-0x6d17e/frame-04.png",
+          "encodedBytes": 1191
+        },
+        {
+          "file": "group-15-67x42-0x6d17e/frame-05.png",
+          "encodedBytes": 1209
+        },
+        {
+          "file": "group-15-67x42-0x6d17e/frame-06.png",
+          "encodedBytes": 1405
+        }
+      ]
+    },
+    {
+      "index": 16,
+      "offset": "0x6f40f",
+      "width": 11,
+      "height": 20,
+      "frameCount": 1,
+      "files": [
+        {
+          "file": "group-16-11x20-0x6f40f/frame-00.png",
+          "encodedBytes": 360
+        }
+      ]
+    },
+    {
+      "index": 17,
+      "offset": "0x6f589",
+      "width": 83,
+      "height": 166,
+      "frameCount": 10,
+      "files": [
+        {
+          "file": "group-17-83x166-0x6f589/frame-00.png",
+          "encodedBytes": 4365
+        },
+        {
+          "file": "group-17-83x166-0x6f589/frame-01.png",
+          "encodedBytes": 2507
+        },
+        {
+          "file": "group-17-83x166-0x6f589/frame-02.png",
+          "encodedBytes": 3039
+        },
+        {
+          "file": "group-17-83x166-0x6f589/frame-03.png",
+          "encodedBytes": 3432
+        },
+        {
+          "file": "group-17-83x166-0x6f589/frame-04.png",
+          "encodedBytes": 4298
+        },
+        {
+          "file": "group-17-83x166-0x6f589/frame-05.png",
+          "encodedBytes": 3369
+        },
+        {
+          "file": "group-17-83x166-0x6f589/frame-06.png",
+          "encodedBytes": 4172
+        },
+        {
+          "file": "group-17-83x166-0x6f589/frame-07.png",
+          "encodedBytes": 2515
+        },
+        {
+          "file": "group-17-83x166-0x6f589/frame-08.png",
+          "encodedBytes": 4442
+        },
+        {
+          "file": "group-17-83x166-0x6f589/frame-09.png",
+          "encodedBytes": 3355
+        }
+      ]
+    },
+    {
+      "index": 18,
+      "offset": "0x78065",
+      "width": 83,
+      "height": 166,
+      "frameCount": 10,
+      "files": [
+        {
+          "file": "group-18-83x166-0x78065/frame-00.png",
+          "encodedBytes": 2117
+        },
+        {
+          "file": "group-18-83x166-0x78065/frame-01.png",
+          "encodedBytes": 1447
+        },
+        {
+          "file": "group-18-83x166-0x78065/frame-02.png",
+          "encodedBytes": 1618
+        },
+        {
+          "file": "group-18-83x166-0x78065/frame-03.png",
+          "encodedBytes": 1881
+        },
+        {
+          "file": "group-18-83x166-0x78065/frame-04.png",
+          "encodedBytes": 1644
+        },
+        {
+          "file": "group-18-83x166-0x78065/frame-05.png",
+          "encodedBytes": 1619
+        },
+        {
+          "file": "group-18-83x166-0x78065/frame-06.png",
+          "encodedBytes": 1790
+        },
+        {
+          "file": "group-18-83x166-0x78065/frame-07.png",
+          "encodedBytes": 1488
+        },
+        {
+          "file": "group-18-83x166-0x78065/frame-08.png",
+          "encodedBytes": 2116
+        },
+        {
+          "file": "group-18-83x166-0x78065/frame-09.png",
+          "encodedBytes": 1784
+        }
+      ]
+    },
+    {
+      "index": 19,
+      "offset": "0x7c5d7",
+      "width": 83,
+      "height": 86,
+      "frameCount": 1,
+      "files": [
+        {
+          "file": "group-19-83x86-0x7c5d7/frame-00.png",
+          "encodedBytes": 1559
+        }
+      ]
+    },
+    {
+      "index": 20,
+      "offset": "0x7cc00",
+      "width": 83,
+      "height": 86,
+      "frameCount": 1,
+      "files": [
+        {
+          "file": "group-20-83x86-0x7cc00/frame-00.png",
+          "encodedBytes": 1439
+        }
+      ]
+    },
+    {
+      "index": 21,
+      "offset": "0x7d1b1",
+      "width": 83,
+      "height": 86,
+      "frameCount": 1,
+      "files": [
+        {
+          "file": "group-21-83x86-0x7d1b1/frame-00.png",
+          "encodedBytes": 1243
+        }
+      ]
+    },
+    {
+      "index": 22,
+      "offset": "0x7d69e",
+      "width": 83,
+      "height": 86,
+      "frameCount": 1,
+      "files": [
+        {
+          "file": "group-22-83x86-0x7d69e/frame-00.png",
+          "encodedBytes": 260
+        }
+      ]
+    },
+    {
+      "index": 23,
+      "offset": "0x7d7b4",
+      "width": 37,
+      "height": 70,
+      "frameCount": 10,
+      "files": [
+        {
+          "file": "group-23-37x70-0x7d7b4/frame-00.png",
+          "encodedBytes": 116
+        },
+        {
+          "file": "group-23-37x70-0x7d7b4/frame-01.png",
+          "encodedBytes": 116
+        },
+        {
+          "file": "group-23-37x70-0x7d7b4/frame-02.png",
+          "encodedBytes": 116
+        },
+        {
+          "file": "group-23-37x70-0x7d7b4/frame-03.png",
+          "encodedBytes": 116
+        },
+        {
+          "file": "group-23-37x70-0x7d7b4/frame-04.png",
+          "encodedBytes": 116
+        },
+        {
+          "file": "group-23-37x70-0x7d7b4/frame-05.png",
+          "encodedBytes": 116
+        },
+        {
+          "file": "group-23-37x70-0x7d7b4/frame-06.png",
+          "encodedBytes": 116
+        },
+        {
+          "file": "group-23-37x70-0x7d7b4/frame-07.png",
+          "encodedBytes": 116
+        },
+        {
+          "file": "group-23-37x70-0x7d7b4/frame-08.png",
+          "encodedBytes": 116
+        },
+        {
+          "file": "group-23-37x70-0x7d7b4/frame-09.png",
+          "encodedBytes": 116
+        }
+      ]
+    },
+    {
+      "index": 24,
+      "offset": "0x8302a",
+      "width": 76,
+      "height": 76,
+      "frameCount": 41,
+      "files": [
+        {
+          "file": "group-24-76x76-0x8302a/frame-00.png",
+          "encodedBytes": 1058
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-01.png",
+          "encodedBytes": 847
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-02.png",
+          "encodedBytes": 788
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-03.png",
+          "encodedBytes": 728
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-04.png",
+          "encodedBytes": 729
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-05.png",
+          "encodedBytes": 1143
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-06.png",
+          "encodedBytes": 667
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-07.png",
+          "encodedBytes": 850
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-08.png",
+          "encodedBytes": 1130
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-09.png",
+          "encodedBytes": 986
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-10.png",
+          "encodedBytes": 1185
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-11.png",
+          "encodedBytes": 1192
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-12.png",
+          "encodedBytes": 885
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-13.png",
+          "encodedBytes": 1014
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-14.png",
+          "encodedBytes": 955
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-15.png",
+          "encodedBytes": 955
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-16.png",
+          "encodedBytes": 1009
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-17.png",
+          "encodedBytes": 1222
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-18.png",
+          "encodedBytes": 1042
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-19.png",
+          "encodedBytes": 1010
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-20.png",
+          "encodedBytes": 948
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-21.png",
+          "encodedBytes": 1028
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-22.png",
+          "encodedBytes": 1013
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-23.png",
+          "encodedBytes": 1093
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-24.png",
+          "encodedBytes": 1017
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-25.png",
+          "encodedBytes": 1407
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-26.png",
+          "encodedBytes": 1406
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-27.png",
+          "encodedBytes": 1235
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-28.png",
+          "encodedBytes": 1250
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-29.png",
+          "encodedBytes": 953
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-30.png",
+          "encodedBytes": 1755
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-31.png",
+          "encodedBytes": 961
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-32.png",
+          "encodedBytes": 998
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-33.png",
+          "encodedBytes": 1506
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-34.png",
+          "encodedBytes": 756
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-35.png",
+          "encodedBytes": 835
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-36.png",
+          "encodedBytes": 846
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-37.png",
+          "encodedBytes": 987
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-38.png",
+          "encodedBytes": 640
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-39.png",
+          "encodedBytes": 757
+        },
+        {
+          "file": "group-24-76x76-0x8302a/frame-40.png",
+          "encodedBytes": 1187
+        }
+      ]
+    },
+    {
+      "index": 25,
+      "offset": "0x8d4d1",
+      "width": 76,
+      "height": 76,
+      "frameCount": 41,
+      "files": [
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-00.png",
+          "encodedBytes": 980
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-01.png",
+          "encodedBytes": 928
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-02.png",
+          "encodedBytes": 788
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-03.png",
+          "encodedBytes": 728
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-04.png",
+          "encodedBytes": 729
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-05.png",
+          "encodedBytes": 980
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-06.png",
+          "encodedBytes": 667
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-07.png",
+          "encodedBytes": 850
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-08.png",
+          "encodedBytes": 1162
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-09.png",
+          "encodedBytes": 986
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-10.png",
+          "encodedBytes": 1185
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-11.png",
+          "encodedBytes": 1192
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-12.png",
+          "encodedBytes": 885
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-13.png",
+          "encodedBytes": 1014
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-14.png",
+          "encodedBytes": 955
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-15.png",
+          "encodedBytes": 955
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-16.png",
+          "encodedBytes": 1009
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-17.png",
+          "encodedBytes": 1222
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-18.png",
+          "encodedBytes": 1042
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-19.png",
+          "encodedBytes": 1010
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-20.png",
+          "encodedBytes": 948
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-21.png",
+          "encodedBytes": 1028
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-22.png",
+          "encodedBytes": 1095
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-23.png",
+          "encodedBytes": 1205
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-24.png",
+          "encodedBytes": 1017
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-25.png",
+          "encodedBytes": 1407
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-26.png",
+          "encodedBytes": 1406
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-27.png",
+          "encodedBytes": 1235
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-28.png",
+          "encodedBytes": 1250
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-29.png",
+          "encodedBytes": 953
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-30.png",
+          "encodedBytes": 1755
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-31.png",
+          "encodedBytes": 961
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-32.png",
+          "encodedBytes": 998
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-33.png",
+          "encodedBytes": 1506
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-34.png",
+          "encodedBytes": 756
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-35.png",
+          "encodedBytes": 835
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-36.png",
+          "encodedBytes": 846
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-37.png",
+          "encodedBytes": 987
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-38.png",
+          "encodedBytes": 640
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-39.png",
+          "encodedBytes": 757
+        },
+        {
+          "file": "group-25-76x76-0x8d4d1/frame-40.png",
+          "encodedBytes": 1187
+        }
+      ]
+    },
+    {
+      "index": 26,
+      "offset": "0x979ba",
+      "width": 14,
+      "height": 31,
+      "frameCount": 10,
+      "files": [
+        {
+          "file": "group-26-14x31-0x979ba/frame-00.png",
+          "encodedBytes": 577
+        },
+        {
+          "file": "group-26-14x31-0x979ba/frame-01.png",
+          "encodedBytes": 329
+        },
+        {
+          "file": "group-26-14x31-0x979ba/frame-02.png",
+          "encodedBytes": 572
+        },
+        {
+          "file": "group-26-14x31-0x979ba/frame-03.png",
+          "encodedBytes": 608
+        },
+        {
+          "file": "group-26-14x31-0x979ba/frame-04.png",
+          "encodedBytes": 523
+        },
+        {
+          "file": "group-26-14x31-0x979ba/frame-05.png",
+          "encodedBytes": 547
+        },
+        {
+          "file": "group-26-14x31-0x979ba/frame-06.png",
+          "encodedBytes": 585
+        },
+        {
+          "file": "group-26-14x31-0x979ba/frame-07.png",
+          "encodedBytes": 498
+        },
+        {
+          "file": "group-26-14x31-0x979ba/frame-08.png",
+          "encodedBytes": 707
+        },
+        {
+          "file": "group-26-14x31-0x979ba/frame-09.png",
+          "encodedBytes": 599
+        }
+      ]
+    },
+    {
+      "index": 27,
+      "offset": "0x98f99",
+      "width": 14,
+      "height": 31,
+      "frameCount": 1,
+      "files": [
+        {
+          "file": "group-27-14x31-0x98f99/frame-00.png",
+          "encodedBytes": 97
+        }
+      ]
+    },
+    {
+      "index": 28,
+      "offset": "0x9900c",
+      "width": 13,
+      "height": 31,
+      "frameCount": 1,
+      "files": [
+        {
+          "file": "group-28-13x31-0x9900c/frame-00.png",
+          "encodedBytes": 363
+        }
+      ]
+    },
+    {
+      "index": 29,
+      "offset": "0x99189",
+      "width": 83,
+      "height": 54,
+      "frameCount": 1,
+      "files": [
+        {
+          "file": "group-29-83x54-0x99189/frame-00.png",
+          "encodedBytes": 1130
+        }
+      ]
+    },
+    {
+      "index": 30,
+      "offset": "0x99605",
+      "width": 83,
+      "height": 83,
+      "frameCount": 7,
+      "files": [
+        {
+          "file": "group-30-83x83-0x99605/frame-00.png",
+          "encodedBytes": 1318
+        },
+        {
+          "file": "group-30-83x83-0x99605/frame-01.png",
+          "encodedBytes": 1334
+        },
+        {
+          "file": "group-30-83x83-0x99605/frame-02.png",
+          "encodedBytes": 1350
+        },
+        {
+          "file": "group-30-83x83-0x99605/frame-03.png",
+          "encodedBytes": 1362
+        },
+        {
+          "file": "group-30-83x83-0x99605/frame-04.png",
+          "encodedBytes": 1370
+        },
+        {
+          "file": "group-30-83x83-0x99605/frame-05.png",
+          "encodedBytes": 1498
+        },
+        {
+          "file": "group-30-83x83-0x99605/frame-06.png",
+          "encodedBytes": 252
+        }
+      ]
+    },
+    {
+      "index": 31,
+      "offset": "0x9b753",
+      "width": 416,
+      "height": 416,
+      "frameCount": 1,
+      "files": [
+        {
+          "file": "group-31-416x416-0x9b753/frame-00.png",
+          "encodedBytes": 7550
+        }
+      ]
+    },
+    {
+      "index": 32,
+      "offset": "0x9d4e3",
+      "width": 83,
+      "height": 166,
+      "frameCount": 10,
+      "files": [
+        {
+          "file": "group-32-83x166-0x9d4e3/frame-00.png",
+          "encodedBytes": 3519
+        },
+        {
+          "file": "group-32-83x166-0x9d4e3/frame-01.png",
+          "encodedBytes": 2224
+        },
+        {
+          "file": "group-32-83x166-0x9d4e3/frame-02.png",
+          "encodedBytes": 2425
+        },
+        {
+          "file": "group-32-83x166-0x9d4e3/frame-03.png",
+          "encodedBytes": 2886
+        },
+        {
+          "file": "group-32-83x166-0x9d4e3/frame-04.png",
+          "encodedBytes": 2405
+        },
+        {
+          "file": "group-32-83x166-0x9d4e3/frame-05.png",
+          "encodedBytes": 2542
+        },
+        {
+          "file": "group-32-83x166-0x9d4e3/frame-06.png",
+          "encodedBytes": 2770
+        },
+        {
+          "file": "group-32-83x166-0x9d4e3/frame-07.png",
+          "encodedBytes": 2123
+        },
+        {
+          "file": "group-32-83x166-0x9d4e3/frame-08.png",
+          "encodedBytes": 3361
+        },
+        {
+          "file": "group-32-83x166-0x9d4e3/frame-09.png",
+          "encodedBytes": 2752
+        }
+      ]
+    }
+  ]
+}

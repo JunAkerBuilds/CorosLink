@@ -39,6 +39,7 @@
     "test:zip-store": "npm run build:electron && node scripts/test-zip-store.mjs",
     "test:coros-upload-config": "npm run build:electron && node scripts/test-coros-upload-config.mjs",
     "test:coros-watchfaces": "npm run build:electron && node scripts/test-coros-watchface-service.mjs",
+    "test:watchface-studio": "node --experimental-strip-types scripts/test-watchface-studio.mjs",
     "test:coros-watchface-creator": "npm run build:electron && electron scripts/test-coros-watchface-creator.cjs",
     "test:intervals-service": "npm run build:electron && node scripts/test-intervals-service.mjs",
     "test:intervals-imported-store": "npm run build:electron && node scripts/test-intervals-imported-store.mjs",

@@ -92,8 +92,15 @@ import type {
   CorosWatchfacePublishInput,
   CorosWatchfaceShareLink,
   CorosWatchfaceStatus,
+  CorosWatchfaceTemplateAsset,
+  CorosWatchfaceTemplateDetails,
   CorosWatchfaceTheme,
-  CorosWatchfaceThemeListInput
+  CorosWatchfaceThemeDownload,
+  CorosWatchfaceThemeDownloadInput,
+  CorosWatchfaceThemeListInput,
+  CorosBatteryQueryInput,
+  CorosBatteryReport,
+  CorosPairedDevice
 } from "./types";
 
 const api = {
@@ -110,9 +117,18 @@ const api = {
     ipcRenderer.invoke("watchfaces:login", email, password),
   logoutCorosWatchfaces: (): Promise<CorosWatchfaceStatus> =>
     ipcRenderer.invoke("watchfaces:logout"),
+  listCorosPairedDevices: (): Promise<CorosPairedDevice[]> =>
+    ipcRenderer.invoke("watchfaces:listPairedDevices"),
+  getCorosBatteryReport: (
+    input: CorosBatteryQueryInput
+  ): Promise<CorosBatteryReport> => ipcRenderer.invoke("watchfaces:getBatteryReport", input),
   listCorosWatchfaceThemes: (
     input: CorosWatchfaceThemeListInput
   ): Promise<CorosWatchfaceTheme[]> => ipcRenderer.invoke("watchfaces:listThemes", input),
+  downloadCorosWatchfaceTheme: (
+    input: CorosWatchfaceThemeDownloadInput
+  ): Promise<CorosWatchfaceThemeDownload> =>
+    ipcRenderer.invoke("watchfaces:downloadTheme", input),
   chooseCorosWatchfaceArchive: (): Promise<CorosWatchfaceArchive | null> =>
     ipcRenderer.invoke("watchfaces:chooseArchive"),
   chooseCorosWatchfaceArtwork: (): Promise<CorosWatchfaceArtwork | null> =>
@@ -121,6 +137,15 @@ const api = {
     input: CorosWatchfaceCreatorInput
   ): Promise<CorosWatchfaceArchive> =>
     ipcRenderer.invoke("watchfaces:createArchive", input),
+  describeCorosWatchfaceTemplate: (
+    archiveId: string
+  ): Promise<CorosWatchfaceTemplateDetails> =>
+    ipcRenderer.invoke("watchfaces:describeTemplate", archiveId),
+  loadCorosWatchfaceTemplateAssets: (
+    archiveId: string,
+    paths: string[]
+  ): Promise<CorosWatchfaceTemplateAsset[]> =>
+    ipcRenderer.invoke("watchfaces:loadTemplateAssets", archiveId, paths),
   publishCorosWatchface: (
     input: CorosWatchfacePublishInput
   ): Promise<CorosWatchfaceShareLink> =>

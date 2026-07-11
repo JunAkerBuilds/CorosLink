@@ -182,11 +182,25 @@ Direct cloud upload to your COROS account is not wired yet; GPX export via the p
 Publish an existing, valid COROS custom-watchface template archive from desktop,
 then claim it through COROS's official share page on iPhone.
 
-- **Template creator** — compose a background with colors, a label, and optional
-  artwork; CorosLink builds a fresh archive while retaining the template's
+- **Template creator** — compose a background with colors and optional artwork;
+  CorosLink builds a fresh archive while retaining the template's
   live time, date, battery, and complication controls
-- **Official-theme browser** — view the COROS theme catalog available to a
-  selected model, firmware capability, and locale before creating a face
+- **Digit & theme studio** — re-render the template's bitmap-font digit sprites
+  in a locally installed font and color, and recolor weekday labels, battery
+  digits, and metric icons; every resolution and the always-on-display tree is
+  regenerated (AOD sprites are auto-dimmed) at the template's exact pixel sizes
+- **Live sprite preview** — the on-screen face is composited from the same
+  sprite bitmaps and `config.txt` layout the watch itself will render
+- **Drag-to-move layout (experimental)** — drag the time, date, battery, and
+  metric elements directly on the preview; CorosLink rewrites the matching
+  `config.txt` position keys for every resolution (scaled automatically),
+  leaving the always-on-display layout untouched
+- **Live metric studio (experimental)** — activate fixed heart rate, steps,
+  calories, and elevation fields when the source template exposes them; preview
+  the selectable metric slot and drag every enabled field into place
+- **Official source-template browser** — query COROS's editable-template
+  catalog for the selected watch model, download the source ZIP, validate its
+  manifest, and select it as the creator's starter in one step
 - **Archive validation** — checks the ZIP/.dat package has `info.json`, a source
   template ID, DIY version, and a custom-face preview before upload
 - **Separate mobile session** — signs in to the mobile COROS API; only the
