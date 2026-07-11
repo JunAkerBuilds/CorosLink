@@ -20,7 +20,7 @@ function pngDataUrl(buffer) {
 }
 
 async function findCreatorOutput(created) {
-  const outputDirectory = path.join(os.tmpdir(), "coroslink-watchface-creator");
+  const outputDirectory = path.join(app.getPath("userData"), "watchface-archives");
   const candidates = await Promise.all(
     (await fs.readdir(outputDirectory)).map(async (name) => {
       const candidatePath = path.join(outputDirectory, name);
@@ -262,7 +262,7 @@ async function main() {
     backgroundDataUrl: pngDataUrl(icon),
     assetReplacements: [
       {
-        path: "watchface_800x800/studio/time/00.png",
+        path: "watchface_800x800/cl_hh/00.png",
         dataUrl: pngDataUrl(generatedMetricDigit),
         create: true
       }
@@ -270,7 +270,7 @@ async function main() {
     configOverrides: [
       {
         path: "watchface_800x800/config.txt",
-        values: { time_hour_high_font: "studio/time" }
+        values: { time_hour_high_font: "cl_hh" }
       }
     ]
   });
@@ -279,7 +279,7 @@ async function main() {
   const generatedSpriteZip = await unzipper.Open.file(generatedSpriteOutput.path);
   const generatedSpriteEntry = generatedSpriteZip.files.find(
     (entry) =>
-      entry.type === "File" && entry.path === "watchface_800x800/studio/time/00.png"
+      entry.type === "File" && entry.path === "watchface_800x800/cl_hh/00.png"
   );
   assert.ok(generatedSpriteEntry, "a generated studio sprite should be added to the archive");
   assert.deepEqual(await generatedSpriteEntry.buffer(), generatedMetricDigit);

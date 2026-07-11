@@ -55,7 +55,7 @@ const MAX_CONFIG_OVERRIDE_FILES = 8;
 const MAX_CONFIG_OVERRIDE_KEYS = 200;
 const CONFIG_KEY_PATTERN = /^[a-z0-9_]{1,64}$/i;
 const CREATED_STUDIO_SPRITE_PATTERN =
-  /^watchface_(?:416x416|800x800)\/studio\/[a-z0-9_-]{1,64}\/\d{2}\.png$/i;
+  /^watchface_(?:416x416|800x800)\/(?:studio\/[a-z0-9_-]{1,64}|cl_[a-z0-9_]{1,32})\/\d{2}\.png$/i;
 // Values stay on one printable-ASCII line, matching the firmware's own syntax.
 const CONFIG_VALUE_PATTERN = /^[\x20-\x7e]{0,160}$/;
 
@@ -711,7 +711,7 @@ export async function createCorosWatchfaceArchive(
     sprites,
     configOverrides
   );
-  const outputDirectory = path.join(os.tmpdir(), "coroslink-watchface-creator");
+  const outputDirectory = path.join(app.getPath("userData"), "watchface-archives");
   await fs.promises.mkdir(outputDirectory, { recursive: true });
   const outputPath = path.join(outputDirectory, `${crypto.randomUUID()}.dat`);
   await fs.promises.writeFile(outputPath, zip);

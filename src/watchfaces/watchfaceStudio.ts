@@ -148,17 +148,28 @@ export function buildStaticSeparatorOverrides(
   details: CorosWatchfaceTemplateDetails,
   separators: WatchfaceStaticSeparators
 ): CorosWatchfaceConfigOverride[] {
-  if (!separators.colon.enabled) {
+  if (!separators.colon.enabled && !separators.dateSlash.enabled) {
     return [];
   }
-  return details.resolutions.flatMap((resolution) =>
-    Object.prototype.hasOwnProperty.call(resolution.config, "colon_icon")
-      ? [{
-          path: `${resolution.directory}/config.txt`,
-          values: { colon_icon: "" }
-        }]
-      : []
-  );
+  return details.resolutions.flatMap((resolution) => {
+    const values: Record<string, string> = {};
+    if (
+      separators.colon.enabled &&
+      Object.prototype.hasOwnProperty.call(resolution.config, "colon_icon")
+    ) {
+      values.colon_icon = "";
+    }
+    if (
+      separators.colon.enabled &&
+      separators.dateSlash.enabled &&
+      Object.prototype.hasOwnProperty.call(resolution.config, "arc_cut_icon")
+    ) {
+      values.arc_cut_icon = "";
+    }
+    return Object.keys(values).length > 0
+      ? [{ path: `${resolution.directory}/config.txt`, values }]
+      : [];
+  });
 }
 
 /**
@@ -482,6 +493,20 @@ export const WATCHFACE_FIXED_METRICS: WatchfaceFixedMetricDefinition[] = [
   }
 ];
 
+const METRIC_STUDIO_FOLDERS: Record<WatchfaceMetricId, string> = {
+  heartRate: "cl_hr",
+  steps: "cl_steps",
+  calories: "cl_kcal",
+  elevation: "cl_elev"
+};
+
+function timeStudioFolder(
+  part: WatchfaceTimePartId,
+  slot: "high" | "low"
+): string {
+  return `cl_${part === "hours" ? "h" : "m"}${slot === "high" ? "h" : "l"}`;
+}
+
 export const WATCHFACE_COMPLICATIONS: WatchfaceComplicationDefinition[] = [
   { id: "heartRate", label: "Heart rate", controlPrefix: "hr", sampleValue: "96" },
   { id: "steps", label: "Steps", controlPrefix: "step", sampleValue: "8420" },
@@ -648,7 +673,7 @@ export function buildMetricStyleOverrides(
       }
       values[metric.rectKey] = rect;
       if (useStudioFolders) {
-        values[metric.fontKey] = `studio/${metric.id}`;
+        values[metric.fontKey] = METRIC_STUDIO_FOLDERS[metric.id];
       }
     }
     if (Object.keys(values).length > 0) {
@@ -685,7 +710,7 @@ export async function buildMetricSpriteReplacements(
       source.files.slice(0, 10).forEach((file, digit) => {
         jobs.push({
           source: file,
-          path: `${resolution.directory}/studio/${metric.id}/${String(digit).padStart(2, "0")}.png`,
+          path: `${resolution.directory}/${METRIC_STUDIO_FOLDERS[metric.id]}/${String(digit).padStart(2, "0")}.png`,
           digit,
           width: Math.max(1, Math.round(file.width * normalizedScale)),
           height: Math.max(1, Math.round(file.height * normalizedScale)),
@@ -754,7 +779,10 @@ export function buildTimeStyleOverrides(
         const y = Math.round(centerY + (item.pos.y - centerY) * normalizedScale);
         values[item.digit.posKey] = `{${x},${y}}`;
         if (useStudioFolders) {
-          values[item.digit.fontKey] = `studio/${part.id}-${item.digit.slot}`;
+          values[item.digit.fontKey] = timeStudioFolder(
+            part.id,
+            item.digit.slot
+          );
         }
       }
     }
@@ -795,7 +823,7 @@ export async function buildTimeSpriteReplacements(
         source.files.slice(0, 10).forEach((file, value) => {
           jobs.push({
             source: file,
-            path: `${resolution.directory}/studio/${part.id}-${digit.slot}/${String(value).padStart(2, "0")}.png`,
+            path: `${resolution.directory}/${timeStudioFolder(part.id, digit.slot)}/${String(value).padStart(2, "0")}.png`,
             digit: value,
             width: Math.max(1, Math.round(file.width * normalizedScale)),
             height: Math.max(1, Math.round(file.height * normalizedScale)),
@@ -913,6 +941,11 @@ export const WATCHFACE_LAYOUT_GROUPS: WatchfaceLayoutGroup[] = [
     id: "dateDay",
     label: "Date day",
     patterns: [/^[a-z_]+_date_day_rect$/]
+  },
+  {
+    id: "separators",
+    label: "Time & date separators",
+    patterns: [/^arc_cut_icon_pos$/]
   },
   {
     id: "battery",
@@ -1286,6 +1319,19 @@ export async function drawStudioPreview(
       color: options.tintIcons ? options.accentColor : null
     });
   }
+  const arcCutValue = config["arc_cut_icon"]?.replace(/\\/g, "/");
+  const arcCutPath = arcCutValue
+    ? `${resolution.directory}/${arcCutValue}`
+    : null;
+  const arcCutFile = arcCutPath
+    ? resolution.icons.find((icon) => icon.path === arcCutPath) ?? null
+    : null;
+  const arcCutPos = parseConfigPos(config["arc_cut_icon_pos"]);
+  if (arcCutFile) {
+    wantedSprites.set(arcCutFile.path, {
+      color: options.tintIcons ? options.accentColor : null
+    });
+  }
 
   // Weekday label: sprite order inside week folders is firmware-defined, so
   // the preview simply shows one representative label sprite.
@@ -1541,6 +1587,19 @@ export async function drawStudioPreview(
         (gapCenterY - colonFile.height / 2) * scale,
         colonFile.width * scale,
         colonFile.height * scale
+      );
+    }
+  }
+
+  if (arcCutFile && arcCutPos) {
+    const image = loaded.get(arcCutFile.path);
+    if (image) {
+      context.drawImage(
+        image,
+        arcCutPos.x * scale,
+        arcCutPos.y * scale,
+        arcCutFile.width * scale,
+        arcCutFile.height * scale
       );
     }
   }

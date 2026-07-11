@@ -40,6 +40,8 @@ function resolution(width, digitWidth, digitHeight) {
       elevation_rect: "",
       elevation_font: "",
       colon_icon: "icon\\colon.png",
+      arc_cut_icon_pos: `{${Math.round(width * 0.3)},${Math.round(width * 0.2)}}`,
+      arc_cut_icon: "icon\\cut.png",
       time_hour_high_pos: `{${Math.round(width * 0.125)},${Math.round(width * 0.125)}}`,
       time_hour_high_font: "13x19",
       time_hour_low_pos: `{${Math.round(width * 0.2)},${Math.round(width * 0.125)}}`,
@@ -66,7 +68,13 @@ function resolution(width, digitWidth, digitHeight) {
         files: digitFiles(digitWidth, digitHeight, directory, "13x19")
       }
     ],
-    icons: []
+    icons: [
+      {
+        path: `${directory}/icon/cut.png`,
+        width: Math.round(width * 0.2),
+        height: Math.round(width * 0.3)
+      }
+    ]
   };
 }
 
@@ -149,6 +157,15 @@ assert.equal(
     ?.values.colon_icon,
   ""
 );
+const replacedCompositeSeparators = buildStaticSeparatorOverrides(withMetrics, {
+  colon: { ...inferredSeparators.colon, enabled: true },
+  dateSlash: { ...inferredSeparators.dateSlash, enabled: true }
+});
+assert.equal(
+  replacedCompositeSeparators.find((entry) => entry.path.includes("800x800"))
+    ?.values.arc_cut_icon,
+  ""
+);
 const metricStyleOverrides = buildMetricStyleOverrides(
   withMetrics,
   { heartRate: { color: "#ff3366", scale: 1.5 } },
@@ -161,7 +178,7 @@ assert.equal(
   fullMetricStyle?.values.heartreate_level_rect,
   "{101,560,299,656,hcenter|vcenter}"
 );
-assert.equal(fullMetricStyle?.values.heartreate_level_font, "studio/heartRate");
+assert.equal(fullMetricStyle?.values.heartreate_level_font, "cl_hr");
 const timeStyleOverrides = buildTimeStyleOverrides(
   withMetrics,
   { hours: { color: "#33ddff", scale: 1.5 } },
@@ -172,9 +189,17 @@ const fullTimeStyle = timeStyleOverrides.find((entry) =>
 );
 assert.equal(fullTimeStyle?.values.time_hour_high_pos, "{74,84}");
 assert.equal(fullTimeStyle?.values.time_hour_low_pos, "{164,84}");
-assert.equal(fullTimeStyle?.values.time_hour_high_font, "studio/hours-high");
-assert.equal(fullTimeStyle?.values.time_hour_low_font, "studio/hours-low");
+assert.equal(fullTimeStyle?.values.time_hour_high_font, "cl_hh");
+assert.equal(fullTimeStyle?.values.time_hour_low_font, "cl_hl");
 const fullBounds = computeLayoutGroupBounds(withMetrics.resolutions[1]);
+assert.deepEqual(fullBounds.find((entry) => entry.id === "separators"), {
+  id: "separators",
+  label: "Time & date separators",
+  x0: 240,
+  y0: 160,
+  x1: 400,
+  y1: 400
+});
 assert.deepEqual(
   fullBounds.filter((entry) =>
     ["hours", "minutes", "weekday", "dateMonth", "dateDay"].includes(entry.id)

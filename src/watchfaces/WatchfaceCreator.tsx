@@ -1336,7 +1336,8 @@ export function WatchfaceCreator({
               <p className="watchface-studio-summary">
                 Enable a separator, then drag its outline on the preview or
                 enter exact X/Y coordinates. Static separators are baked into
-                the background and do not blink.
+                the background and do not blink. If the template uses a
+                combined cut.png, enable both to replace it without duplicates.
               </p>
               <div className="watchface-separator-grid">
                 {([
@@ -1589,8 +1590,8 @@ export function WatchfaceCreator({
               </p>
               <p className="watchface-studio-summary">
                 Drag hours, minutes, weekday, month, and day independently.
-                COROS positions the : and date separator from their neighboring
-                fields. Use fine-tune for exact pixel offsets.
+                Templates with cut.png also expose “Time &amp; date separators”
+                as one movable pair. Use fine-tune for exact pixel offsets.
               </p>
               <details className="watchface-layout-finetune">
                 <summary>Fine-tune offsets</summary>
