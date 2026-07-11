@@ -92,6 +92,7 @@ import type {
   CorosWatchfaceProjectSaveInput,
   CorosWatchfaceProjectSummary,
   CorosWatchfacePublishInput,
+  CorosWatchfaceRegion,
   CorosWatchfaceShareLink,
   CorosWatchfaceStatus,
   CorosWatchfaceTemplateAsset,
@@ -111,7 +112,8 @@ export interface CorosLinkApi {
   getCorosWatchfaceStatus: () => Promise<CorosWatchfaceStatus>;
   loginCorosWatchfaces: (
     email: string,
-    password: string
+    password: string,
+    region: CorosWatchfaceRegion
   ) => Promise<CorosWatchfaceStatus>;
   logoutCorosWatchfaces: () => Promise<CorosWatchfaceStatus>;
   listCorosPairedDevices: () => Promise<CorosPairedDevice[]>;

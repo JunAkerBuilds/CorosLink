@@ -139,6 +139,7 @@ import type {
 import type {
   CorosWatchfaceCreatorInput,
   CorosWatchfacePublishInput,
+  CorosWatchfaceRegion,
   CorosWatchfaceThemeDownloadInput,
   CorosWatchfaceThemeListInput,
   CorosBatteryQueryInput
@@ -565,8 +566,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "watchfaces:login",
-    (_event, email: string, password: string) =>
-      loginCorosWatchfaces(email, password)
+    (_event, email: string, password: string, region?: CorosWatchfaceRegion) =>
+      loginCorosWatchfaces(email, password, region)
   );
 
   ipcMain.handle("watchfaces:logout", () => logoutCorosWatchfaces());

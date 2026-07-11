@@ -21,10 +21,17 @@ import type {
   CorosWatchfaceArchive,
   CorosWatchfaceProject,
   CorosWatchfaceProjectSummary,
+  CorosWatchfaceRegion,
   CorosWatchfaceShareLink,
   CorosWatchfaceStatus,
   CorosWatchfaceTheme
 } from "../../electron/types";
+
+const REGION_OPTIONS: { value: CorosWatchfaceRegion; label: string }[] = [
+  { value: "eu", label: "Europe" },
+  { value: "us", label: "United States" },
+  { value: "cn", label: "China / Asia-Pacific" }
+];
 import type { CorosLinkApi } from "../coroslink-api";
 import { WatchfaceCreator } from "./WatchfaceCreator";
 import { BatteryHistoryPanel } from "./BatteryHistoryPanel";
@@ -39,6 +46,8 @@ export function WatchfacesView({ api }: WatchfacesViewProps) {
   const [status, setStatus] = useState<CorosWatchfaceStatus | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [region, setRegion] = useState<CorosWatchfaceRegion>("us");
+  const [regionTouched, setRegionTouched] = useState(false);
   const [archive, setArchive] = useState<CorosWatchfaceArchive | null>(null);
   const [starterArchive, setStarterArchive] =
     useState<CorosWatchfaceArchive | null>(null);
@@ -69,9 +78,14 @@ export function WatchfacesView({ api }: WatchfacesViewProps) {
   useEffect(() => {
     void api
       .getCorosWatchfaceStatus()
-      .then(setStatus)
+      .then((nextStatus) => {
+        setStatus(nextStatus);
+        if (!regionTouched) {
+          setRegion(nextStatus.region ?? nextStatus.suggestedRegion);
+        }
+      })
       .catch((caught) => setError(toErrorMessage(caught)));
-  }, [api]);
+  }, [api, regionTouched]);
 
   useEffect(() => {
     void api
@@ -97,7 +111,7 @@ export function WatchfacesView({ api }: WatchfacesViewProps) {
     setError(null);
     setNotice(null);
     try {
-      const nextStatus = await api.loginCorosWatchfaces(email, password);
+      const nextStatus = await api.loginCorosWatchfaces(email, password, region);
       setStatus(nextStatus);
       setPassword("");
       setNotice("COROS mobile session connected.");
@@ -320,6 +334,22 @@ export function WatchfacesView({ api }: WatchfacesViewProps) {
             session is kept in encrypted OS storage; CorosLink does not save the password.
           </p>
           <form className="watchfaces-form" onSubmit={handleLogin}>
+            <label className="field">
+              COROS account region
+              <select
+                value={region}
+                onChange={(event) => {
+                  setRegion(event.target.value as CorosWatchfaceRegion);
+                  setRegionTouched(true);
+                }}
+              >
+                {REGION_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="field">
               COROS email
               <input

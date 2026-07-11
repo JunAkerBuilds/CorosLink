@@ -85,10 +85,17 @@ export interface WatchStatus {
   error?: string;
 }
 
+/** COROS account region, selecting the regional mobile API host. */
+export type CorosWatchfaceRegion = "eu" | "us" | "cn";
+
 /** A separate COROS mobile-app session used only for custom-watchface sharing. */
 export interface CorosWatchfaceStatus {
   authenticated: boolean;
   secureStorageAvailable: boolean;
+  /** Region of the active mobile session, when signed in. */
+  region?: CorosWatchfaceRegion;
+  /** Best-guess region to preselect in the login form. */
+  suggestedRegion: CorosWatchfaceRegion;
 }
 
 /** Parameters required by COROS's official editable-template catalog request. */

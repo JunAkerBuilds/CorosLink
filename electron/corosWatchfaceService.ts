@@ -16,6 +16,7 @@ import type {
   CorosWatchfaceProject,
   CorosWatchfaceProjectSaveInput,
   CorosWatchfaceProjectSummary,
+  CorosWatchfaceRegion,
   CorosWatchfaceResolutionDetails,
   CorosWatchfaceShareLink,
   CorosWatchfaceSpriteFile,
@@ -35,7 +36,53 @@ import type {
   CorosPairedDevice
 } from "./types";
 
-const API_BASE_URL = "https://api.coros.com/coros";
+// COROS accounts are region-bound: a mobile session is only valid on the host
+// its account was registered on. Hitting the wrong host returns "Account is not
+// registered", so the region is chosen at login and persisted with the session.
+const MOBILE_API_BASE_URLS: Record<CorosWatchfaceRegion, string> = {
+  eu: "https://apieu.coros.com/coros",
+  us: "https://api.coros.com/coros",
+  cn: "https://apicn.coros.com/coros"
+};
+const MOBILE_API_HOSTNAMES: Record<CorosWatchfaceRegion, string> = {
+  eu: "apieu.coros.com",
+  us: "api.coros.com",
+  cn: "apicn.coros.com"
+};
+const DEFAULT_WATCHFACE_REGION: CorosWatchfaceRegion = "us";
+
+function normalizeWatchfaceRegion(value: unknown): CorosWatchfaceRegion {
+  return value === "eu" || value === "us" || value === "cn"
+    ? value
+    : DEFAULT_WATCHFACE_REGION;
+}
+
+function mobileApiBaseUrl(region: CorosWatchfaceRegion | undefined): string {
+  return MOBILE_API_BASE_URLS[region ?? DEFAULT_WATCHFACE_REGION];
+}
+
+/** Best-guess region for the login form, from the Training Hub session or locale. */
+function suggestWatchfaceRegion(): CorosWatchfaceRegion {
+  const trainingHubBaseUrl = getSetting("trainingHub.baseUrl") ?? "";
+  if (trainingHubBaseUrl.includes("teameuapi")) {
+    return "eu";
+  }
+  if (trainingHubBaseUrl.includes("teamcnapi")) {
+    return "cn";
+  }
+  if (trainingHubBaseUrl.includes("teamapi")) {
+    return "us";
+  }
+  const country =
+    Intl.DateTimeFormat().resolvedOptions().locale.match(/[-_]([A-Z]{2})\b/)?.[1] ?? "";
+  if (["CN", "HK", "MO", "TW"].includes(country)) {
+    return "cn";
+  }
+  if (country && !["US", "CA", "MX"].includes(country)) {
+    return "eu";
+  }
+  return DEFAULT_WATCHFACE_REGION;
+}
 const MOBILE_APP_KEY = "3475792298363620";
 const MOBILE_LOGIN_IV = "weloop3_2015_03#";
 const MOBILE_VERSION_CODE = "407081000";
@@ -86,6 +133,8 @@ interface StoredMobileSession {
   accessToken: string;
   /** Kept as text because COROS user IDs exceed Number.MAX_SAFE_INTEGER. */
   userId?: string;
+  /** Regional mobile host the session was created on. */
+  region?: CorosWatchfaceRegion;
 }
 
 interface MobileApiEnvelope<T> {
@@ -149,25 +198,32 @@ export function encryptMobileLoginField(value: string): string {
 }
 
 export function getCorosWatchfaceStatus(): CorosWatchfaceStatus {
+  const session = readStoredSession();
   return {
-    authenticated: Boolean(readStoredSession()),
-    secureStorageAvailable: safeStorage.isEncryptionAvailable()
+    authenticated: Boolean(session),
+    secureStorageAvailable: safeStorage.isEncryptionAvailable(),
+    region: session?.region,
+    suggestedRegion: session?.region ?? suggestWatchfaceRegion()
   };
 }
 
 export async function loginCorosWatchfaces(
   email: string,
-  password: string
+  password: string,
+  region?: CorosWatchfaceRegion
 ): Promise<CorosWatchfaceStatus> {
   const account = email.trim();
   if (!account || !password) {
     throw new Error("Enter your COROS email and password.");
   }
+  const resolvedRegion = normalizeWatchfaceRegion(region);
+  const baseUrl = mobileApiBaseUrl(resolvedRegion);
 
   let envelope = await mobileRequest<{ accessToken?: string }>(
     "/user/login",
     {
       method: "POST",
+      baseUrl,
       body: JSON.stringify(buildMobileLoginPayload(account, password, 1)),
       allowedResultCodes: ["1115"]
     }
@@ -179,6 +235,7 @@ export async function loginCorosWatchfaces(
   if (mobileApiResult(envelope) === "1115") {
     envelope = await mobileRequest<{ accessToken?: string }>("/user/login", {
       method: "POST",
+      baseUrl,
       body: JSON.stringify(buildMobileLoginPayload(account, password, 0))
     });
   }
@@ -190,7 +247,8 @@ export async function loginCorosWatchfaces(
 
   writeStoredSession({
     accessToken,
-    userId: extractDecimalProperty(envelope.raw, "userId")
+    userId: extractDecimalProperty(envelope.raw, "userId"),
+    region: resolvedRegion
   });
   return getCorosWatchfaceStatus();
 }
@@ -366,8 +424,9 @@ async function fetchThemeResource(
 
 function withAccessTokenParam(url: string, session: StoredMobileSession): string {
   const parsed = new URL(url);
+  const regionalHosts = Object.values(MOBILE_API_HOSTNAMES);
   if (
-    parsed.hostname === "api.coros.com" &&
+    regionalHosts.includes(parsed.hostname) &&
     !parsed.searchParams.has("accessToken")
   ) {
     parsed.searchParams.set("accessToken", session.accessToken);
@@ -1766,6 +1825,8 @@ async function mobileRequest<T>(
     includeAccessTokenInQuery?: boolean;
     userId?: string;
     allowedResultCodes?: string[];
+    /** Override the regional host (used by login, before a session exists). */
+    baseUrl?: string;
   }
 ): Promise<MobileApiEnvelope<T> & { raw: string }> {
   const query = options.accessToken && options.includeAccessTokenInQuery !== false
@@ -1775,7 +1836,8 @@ async function mobileRequest<T>(
   if (typeof options.body === "string") {
     headers["Content-Type"] = "application/json";
   }
-  const response = await fetch(`${API_BASE_URL}${endpoint}${query}`, {
+  const baseUrl = options.baseUrl ?? mobileApiBaseUrl(readStoredSession()?.region);
+  const response = await fetch(`${baseUrl}${endpoint}${query}`, {
     method: options.method,
     headers,
     body: options.body

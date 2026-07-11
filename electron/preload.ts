@@ -93,6 +93,7 @@ import type {
   CorosWatchfaceProjectSaveInput,
   CorosWatchfaceProjectSummary,
   CorosWatchfacePublishInput,
+  CorosWatchfaceRegion,
   CorosWatchfaceShareLink,
   CorosWatchfaceStatus,
   CorosWatchfaceTemplateAsset,
@@ -115,9 +116,10 @@ const api = {
     ipcRenderer.invoke("watchfaces:getStatus"),
   loginCorosWatchfaces: (
     email: string,
-    password: string
+    password: string,
+    region: CorosWatchfaceRegion
   ): Promise<CorosWatchfaceStatus> =>
-    ipcRenderer.invoke("watchfaces:login", email, password),
+    ipcRenderer.invoke("watchfaces:login", email, password, region),
   logoutCorosWatchfaces: (): Promise<CorosWatchfaceStatus> =>
     ipcRenderer.invoke("watchfaces:logout"),
   listCorosPairedDevices: (): Promise<CorosPairedDevice[]> =>
