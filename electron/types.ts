@@ -173,7 +173,8 @@ export interface CorosWatchfaceArchive {
   archiveId: string;
   fileName: string;
   sizeBytes: number;
-  sourceTemplateId: number;
+  /** Decimal text: official template IDs exceed Number.MAX_SAFE_INTEGER. */
+  sourceTemplateId: string;
   diyVersion: number;
 }
 
@@ -435,7 +436,8 @@ export interface CorosWatchfaceProjectSummary {
   projectId: string;
   name: string;
   updatedAt: string;
-  sourceTemplateId: number;
+  /** Decimal text: official template IDs exceed Number.MAX_SAFE_INTEGER. */
+  sourceTemplateId: string;
 }
 
 export interface CorosWatchfaceProjectSaveInput {

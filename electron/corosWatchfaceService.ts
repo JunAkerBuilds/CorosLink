@@ -599,7 +599,8 @@ interface StoredWatchfaceProject {
   projectId: string;
   name: string;
   updatedAt: string;
-  sourceTemplateId: number;
+  /** Decimal text; older saves stored a number and are migrated on read. */
+  sourceTemplateId: string;
   design: CorosWatchfaceProjectSaveInput["design"];
 }
 
@@ -649,18 +650,27 @@ async function readStoredWatchfaceProject(
   }
   const parsed = JSON.parse(
     await fs.promises.readFile(manifestPath, "utf8")
-  ) as StoredWatchfaceProject;
+  ) as Omit<StoredWatchfaceProject, "sourceTemplateId"> & {
+    sourceTemplateId: string | number;
+  };
+  // Migrate pre-string saves; large IDs must already be stored as text.
+  const sourceTemplateId =
+    typeof parsed.sourceTemplateId === "number" &&
+    Number.isSafeInteger(parsed.sourceTemplateId)
+      ? String(parsed.sourceTemplateId)
+      : parsed.sourceTemplateId;
   if (
     parsed.projectId !== id ||
     typeof parsed.name !== "string" ||
     typeof parsed.updatedAt !== "string" ||
-    !Number.isSafeInteger(parsed.sourceTemplateId) ||
+    typeof sourceTemplateId !== "string" ||
+    !/^\d{1,20}$/.test(sourceTemplateId) ||
     !parsed.design ||
     parsed.design.version !== 1
   ) {
     throw new Error("The saved watchface project metadata is invalid.");
   }
-  return parsed;
+  return { ...parsed, sourceTemplateId };
 }
 
 export async function saveCorosWatchfaceProject(
@@ -1286,6 +1296,9 @@ export async function publishCorosWatchface(
   }
 
   const archiveBytes = await fs.promises.readFile(freshArchive.path);
+  if (!/^\d+$/.test(freshArchive.sourceTemplateId)) {
+    throw new Error("Invalid COROS source template ID.");
+  }
   const saveBody = {
     accessToken: session.accessToken,
     backgroundImageId: input.backgroundImageId,
@@ -1294,12 +1307,20 @@ export async function publishCorosWatchface(
     maxWatchFaceVersion: 0,
     releaseType: 1,
     saveOrUpdate: 1,
-    srcWatchFaceTemplateId: freshArchive.sourceTemplateId,
+    // Placeholder: the ID must be a raw JSON number, but it exceeds
+    // Number.MAX_SAFE_INTEGER, so it is spliced in after stringification.
+    srcWatchFaceTemplateId: "__SRC_TEMPLATE_ID__",
     version: 2,
     watchFaceTemplateName: name
   };
   const form = new FormData();
-  form.append("jsonParameter", JSON.stringify(saveBody));
+  form.append(
+    "jsonParameter",
+    JSON.stringify(saveBody).replace(
+      '"__SRC_TEMPLATE_ID__"',
+      freshArchive.sourceTemplateId
+    )
+  );
   form.append("saveOrUpdate", "1");
   form.append(
     "watchFaceTemplateUserCustomZipFile",
@@ -1367,11 +1388,12 @@ export async function publishCorosWatchface(
 export function buildCreateLinkBody(input: {
   backgroundImageId: number;
   firmwareType: string;
-  sourceTemplateId: number;
+  /** Decimal text, inserted as a raw JSON number. */
+  sourceTemplateId: string;
   templateId: string;
   name: string;
 }): string {
-  if (!/^\d+$/.test(input.templateId)) {
+  if (!/^\d+$/.test(input.templateId) || !/^\d+$/.test(input.sourceTemplateId)) {
     throw new Error("Invalid COROS watchface template ID.");
   }
 
@@ -1961,15 +1983,26 @@ async function inspectArchive(
     throw new Error("The archive is missing watchface_customize.png.");
   }
 
+  const rawInfo = (await infoEntry.buffer()).toString("utf8");
   let manifest: ArchiveInfo;
   try {
-    manifest = JSON.parse((await infoEntry.buffer()).toString("utf8")) as ArchiveInfo;
+    manifest = JSON.parse(rawInfo) as ArchiveInfo;
   } catch {
     throw new Error("info.json is not valid UTF-8 JSON.");
   }
-  const sourceTemplateId = Number(manifest.o_template_id);
+  // Official template IDs exceed Number.MAX_SAFE_INTEGER, so take the digits
+  // straight from the raw manifest text and keep the ID as decimal text.
+  const sourceTemplateId =
+    extractDecimalProperty(rawInfo, "o_template_id") ??
+    (typeof manifest.o_template_id === "string"
+      ? manifest.o_template_id.trim()
+      : undefined);
   const diyVersion = Number(manifest.o_diy_version ?? 1);
-  if (!Number.isSafeInteger(sourceTemplateId) || sourceTemplateId <= 0) {
+  if (
+    !sourceTemplateId ||
+    !/^\d{1,20}$/.test(sourceTemplateId) ||
+    /^0+$/.test(sourceTemplateId)
+  ) {
     throw new Error("info.json must include a valid o_template_id.");
   }
   if (!Number.isSafeInteger(diyVersion) || diyVersion < 1) {
