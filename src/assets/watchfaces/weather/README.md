@@ -13,6 +13,13 @@ square canvas and is named in firmware order from `00.png` through `40.png`.
 - `weather-contact-sheet.png`: visual alignment/transparency QA
 - `extras/`: the final atlas row, which is not part of the 41-state set
 
+The compiled weather-frame size is template-specific: two decoded official
+416px faces use 76×76 (PLANET) and 42×42 (GO FISHING) frames. CorosLink keeps
+the existing `weather/` folder's dimensions when present; when adding weather
+to a template without that folder it uses the bundled 64×64 source artwork.
+When an `AODconfig.txt` is present, it points at the same source folder; the
+COROS compiler creates the separate dimmed AOD weather table.
+
 Use the matching resolution directory as `weather` in the watchface archive:
 
 ```ini

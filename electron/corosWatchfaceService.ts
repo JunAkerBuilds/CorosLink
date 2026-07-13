@@ -1513,11 +1513,14 @@ export function normalizeCorosBatteryReport(data: unknown): CorosBatteryReport {
 
 export function normalizeCorosPairedDevices(data: unknown): CorosPairedDevice[] {
   const record = asRecord(data);
-  const entries = record && Array.isArray(record.deviceParamList)
-    ? record.deviceParamList
+  const entries = record
+    ? [
+        ...(Array.isArray(record.deviceParamList) ? record.deviceParamList : []),
+        ...(Array.isArray(record.deviceProfiles) ? record.deviceProfiles : [])
+      ]
     : [];
   const devices: CorosPairedDevice[] = [];
-  const seen = new Set<string>();
+  const byDeviceId = new Map<string, CorosPairedDevice>();
   for (const entry of entries) {
     const device = asRecord(entry);
     if (!device) {
@@ -1526,17 +1529,34 @@ export function normalizeCorosPairedDevices(data: unknown): CorosPairedDevice[] 
     const deviceId = readString(device, ["deviceId"]);
     const firmwareType = readString(device, ["firmwareType"]);
     const uuid = readString(device, ["uuid"]);
-    if (!deviceId || !firmwareType || !uuid || seen.has(deviceId)) {
+    if (!deviceId || !firmwareType || !uuid) {
       continue;
     }
-    seen.add(deviceId);
     const mac = readString(device, ["mac"]);
-    devices.push({
+    const colorType = readString(device, ["colorType"]);
+    const imagePackUrl = readHttpsUrl(device, ["imagePackUrl"]);
+    const profileVersion = readFiniteNumber(device, ["version"]);
+    const existing = byDeviceId.get(deviceId);
+    if (existing) {
+      if (!existing.mac && mac) existing.mac = mac;
+      if (!existing.colorType && colorType) existing.colorType = colorType;
+      if (!existing.imagePackUrl && imagePackUrl) existing.imagePackUrl = imagePackUrl;
+      if (existing.profileVersion === undefined && profileVersion !== undefined) {
+        existing.profileVersion = profileVersion;
+      }
+      continue;
+    }
+    const pairedDevice: CorosPairedDevice = {
       deviceId,
       firmwareType,
       uuid,
-      ...(mac ? { mac } : {})
-    });
+      ...(mac ? { mac } : {}),
+      ...(colorType ? { colorType } : {}),
+      ...(imagePackUrl ? { imagePackUrl } : {}),
+      ...(profileVersion !== undefined ? { profileVersion } : {})
+    };
+    byDeviceId.set(deviceId, pairedDevice);
+    devices.push(pairedDevice);
   }
   return devices;
 }

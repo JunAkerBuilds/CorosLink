@@ -138,13 +138,20 @@ import type {
   ManualActivityInput
 } from "./types";
 import type {
+  CorosLegacy614aCarrierPatchInput,
   CorosWatchfaceCreatorInput,
   CorosWatchfacePublishInput,
   CorosWatchfaceRegion,
   CorosWatchfaceThemeDownloadInput,
   CorosWatchfaceThemeListInput,
-  CorosBatteryQueryInput
+  CorosBatteryQueryInput,
+  CorosBluetoothDeviceChoice
 } from "./types";
+import {
+  MULTIDATA_ELEV_416_PROFILE,
+  inspectLegacy614aCarrier,
+  patchLegacy614aFeatures
+} from "./legacy614a";
 import {
   deleteWatchTrack,
   getWatchConnectionSmokeOption,
@@ -246,6 +253,14 @@ import type {
 } from "./types";
 
 let mainWindow: BrowserWindow | undefined;
+let pendingCorosBluetoothSelection:
+  | {
+      callback: (deviceId: string) => void;
+      timeout: ReturnType<typeof setTimeout>;
+    }
+  | undefined;
+
+const legacy614aCarrierSelections = new Map<string, { sourcePath: string }>();
 
 /** Matches --bg-base in styles.css; updated when the renderer theme changes. */
 const DEFAULT_WINDOW_BACKGROUND = "#05080b";
@@ -411,6 +426,32 @@ function configureAppPermissions(): void {
   );
 }
 
+function configureCorosBluetoothSelection(window: BrowserWindow): void {
+  // Electron does not provide a built-in Web Bluetooth chooser. A PACE Pro
+  // does not reliably advertise its full name, so the renderer receives the
+  // nearby-device list and lets the user explicitly choose the watch.
+  window.webContents.on("select-bluetooth-device", (event, devices, callback) => {
+    event.preventDefault();
+    if (pendingCorosBluetoothSelection) {
+      clearTimeout(pendingCorosBluetoothSelection.timeout);
+    }
+    const timeout = setTimeout(() => {
+      const pending = pendingCorosBluetoothSelection;
+      pendingCorosBluetoothSelection = undefined;
+      pending?.callback("");
+      if (!window.isDestroyed()) {
+        window.webContents.send("watchfaces:bluetoothDevices", []);
+      }
+    }, 45_000);
+    pendingCorosBluetoothSelection = { callback, timeout };
+    const choices: CorosBluetoothDeviceChoice[] = devices.map((device) => ({
+      deviceId: device.deviceId,
+      deviceName: device.deviceName
+    }));
+    window.webContents.send("watchfaces:bluetoothDevices", choices);
+  });
+}
+
 function createWindow(): void {
   const iconPath = getAppIconPath();
 
@@ -443,6 +484,7 @@ function createWindow(): void {
     shell.openExternal(url);
     return { action: "deny" };
   });
+  configureCorosBluetoothSelection(mainWindow);
 
   // macOS fullscreen exposes the window background in the title-bar inset;
   // re-apply after transitions so it stays in sync with the active theme.
@@ -578,6 +620,26 @@ function registerIpcHandlers(): void {
   ipcMain.handle("watchfaces:logout", () => logoutCorosWatchfaces());
 
   ipcMain.handle("watchfaces:listPairedDevices", () => listCorosPairedDevices());
+  ipcMain.handle(
+    "watchfaces:selectBluetoothDevice",
+    (_event, deviceId: string) => {
+      const pending = pendingCorosBluetoothSelection;
+      pendingCorosBluetoothSelection = undefined;
+      if (!pending) {
+        throw new Error("There is no active Bluetooth device scan.");
+      }
+      clearTimeout(pending.timeout);
+      pending.callback(deviceId);
+    }
+  );
+  ipcMain.handle("watchfaces:cancelBluetoothDevice", () => {
+    const pending = pendingCorosBluetoothSelection;
+    pendingCorosBluetoothSelection = undefined;
+    if (pending) {
+      clearTimeout(pending.timeout);
+      pending.callback("");
+    }
+  });
 
   ipcMain.handle(
     "watchfaces:getBatteryReport",
@@ -615,6 +677,75 @@ function registerIpcHandlers(): void {
       ? null
       : selectCorosWatchfaceArchive(archivePath);
   });
+
+  ipcMain.handle("watchfaces:chooseLegacy614aCarrier", async () => {
+    const options: OpenDialogOptions = {
+      title: "Choose the original MULTIDATA ELEV legacy carrier",
+      properties: ["openFile"],
+      filters: [{ name: "COROS legacy watchface BIN", extensions: ["bin"] }]
+    };
+    const result =
+      mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showOpenDialog(mainWindow, options)
+        : await dialog.showOpenDialog(options);
+    const sourcePath = result.filePaths[0];
+    if (result.canceled || !sourcePath) return null;
+
+    const reference = await fs.promises.readFile(sourcePath);
+    // This validates the exact file hash in addition to its 614A shape. A
+    // previously patched carrier, another model, or a similar lookalike BIN
+    // cannot become the base for another edit.
+    const carrier = inspectLegacy614aCarrier(reference, MULTIDATA_ELEV_416_PROFILE);
+    const selectionId = `legacy614a-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    legacy614aCarrierSelections.set(selectionId, { sourcePath });
+    return {
+      selectionId,
+      inspection: {
+        profile: "multidata-elev-416" as const,
+        profileName: carrier.profileName,
+        fileName: path.basename(sourcePath),
+        watchFaceId: carrier.watchFaceId,
+        sizeBytes: carrier.sizeBytes,
+        payloadCrc16: carrier.payloadCrc16,
+        fullFileCrc16: carrier.fullFileCrc16,
+        weatherSpriteSize: carrier.weatherSpriteSize,
+        weatherPosition: carrier.weatherPosition,
+        temperatureRect: carrier.temperatureRect
+      }
+    };
+  });
+
+  ipcMain.handle(
+    "watchfaces:exportLegacy614aCarrier",
+    async (_event, selectionId: string, patch: CorosLegacy614aCarrierPatchInput) => {
+      const selection = legacy614aCarrierSelections.get(selectionId);
+      if (!selection) {
+        throw new Error("Choose and validate the original MULTIDATA ELEV carrier again before exporting.");
+      }
+      const reference = await fs.promises.readFile(selection.sourcePath);
+      const output = patchLegacy614aFeatures(reference, patch, MULTIDATA_ELEV_416_PROFILE);
+      const saveOptions = {
+        title: "Export guarded MULTIDATA carrier",
+        defaultPath: "MULTIDATA-ELEV-SLENDER-614A.bin",
+        filters: [{ name: "COROS legacy watchface BIN", extensions: ["bin"] }]
+      };
+      const result =
+        mainWindow && !mainWindow.isDestroyed()
+          ? await dialog.showSaveDialog(mainWindow, saveOptions)
+          : await dialog.showSaveDialog(saveOptions);
+      if (result.canceled || !result.filePath) {
+        return { saved: false, watchFaceId: MULTIDATA_ELEV_416_PROFILE.watchFaceId };
+      }
+      // Never overwrite the downloaded public reference or another export by
+      // mistake. The user can choose a fresh filename in the save dialog.
+      await fs.promises.writeFile(result.filePath, output, { flag: "wx" });
+      return {
+        saved: true,
+        filePath: result.filePath,
+        watchFaceId: MULTIDATA_ELEV_416_PROFILE.watchFaceId
+      };
+    }
+  );
 
   ipcMain.handle("watchfaces:chooseArtwork", async () => {
     const options: OpenDialogOptions = {

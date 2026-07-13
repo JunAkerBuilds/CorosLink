@@ -49,6 +49,13 @@ const FIXTURE_CONFIG = [
   "[empty_value]="
 ].join("\r\n");
 
+const FIXTURE_AOD_CONFIG = [
+  "[background_icon]=background.png",
+  "[weather_icon_pos]=",
+  "[weather_icon_dir]=",
+  "[empty_value]="
+].join("\r\n");
+
 async function main() {
   app.setPath("userData", path.join(tempRoot, "user-data"));
   await app.whenReady();
@@ -71,6 +78,7 @@ async function main() {
     },
     { name: "watchface_customize.png", data: icon },
     { name: "watchface_800x800/config.txt", data: Buffer.from(FIXTURE_CONFIG) },
+    { name: "watchface_800x800/AODconfig.txt", data: Buffer.from(FIXTURE_AOD_CONFIG) },
     { name: "watchface_800x800/background.png", data: icon },
     { name: "watchface_800x800/thmb.png", data: icon },
     { name: "custom/custom_bg.png", data: sourceCustomBackground },
@@ -128,7 +136,7 @@ async function main() {
     design: projectDesign
   });
   assert.equal(savedProject.name, "Saved creator fixture");
-  assert.equal(savedProject.archive.sourceTemplateId, 250601);
+  assert.equal(savedProject.archive.sourceTemplateId, "250601");
   assert.deepEqual(savedProject.design.layoutOffsets.hours, { dx: 10, dy: 20 });
   const updatedProject = await watchfaces.saveCorosWatchfaceProject({
     projectId: savedProject.projectId,
@@ -160,7 +168,7 @@ async function main() {
   const loadedProject = await watchfaces.loadCorosWatchfaceProject(
     savedProject.projectId
   );
-  assert.equal(loadedProject.archive.sourceTemplateId, 250601);
+  assert.equal(loadedProject.archive.sourceTemplateId, "250601");
   assert.equal(loadedProject.design.backgroundColor, "#123456");
   const repairedProjectZip = await unzipper.Open.file(nestedProjectStarter);
   assert.ok(
@@ -190,7 +198,8 @@ async function main() {
   assert.equal(resolution.config.time_hour_high_font, "01");
   assert.equal(resolution.config.time_hour_high_pos, "{524,234}");
   assert.equal(resolution.config.empty_value, "");
-  assert.deepEqual(resolution.aodConfig, {});
+  assert.equal(resolution.aodConfig.weather_icon_pos, "");
+  assert.equal(resolution.aodConfig.weather_icon_dir, "");
 
   const digitFolder = resolution.spriteFolders.find((folder) => folder.folder === "01");
   assert.ok(digitFolder, "digit sprite folder should be discovered");
@@ -240,7 +249,7 @@ async function main() {
     backgroundDataUrl: pngDataUrl(icon)
   });
 
-  assert.equal(created.sourceTemplateId, 250601);
+  assert.equal(created.sourceTemplateId, "250601");
   assert.equal(created.diyVersion, 1);
   assert.ok(created.sizeBytes > 0);
   assert.notEqual(created.archiveId, starter.archiveId);
@@ -331,6 +340,37 @@ async function main() {
     ),
     "new resource folders must precede their config for COROS's compiler"
   );
+
+  // --- Weather must be wired into normal and always-on configs ----------
+  const withAodWeather = await watchfaces.createCorosWatchfaceArchive({
+    sourceArchiveId: starter.archiveId,
+    backgroundDataUrl: pngDataUrl(icon),
+    configOverrides: [
+      {
+        path: "watchface_800x800/config.txt",
+        values: { weather_icon_pos: "{187,57}", weather_icon_dir: "weather" }
+      },
+      {
+        path: "watchface_800x800/AODconfig.txt",
+        values: { weather_icon_pos: "{187,57}", weather_icon_dir: "weather" }
+      }
+    ]
+  });
+  const aodWeatherOutput = await findCreatorOutput(withAodWeather);
+  assert.ok(aodWeatherOutput, "weather AOD output should be available");
+  const aodWeatherZip = await unzipper.Open.file(aodWeatherOutput.path);
+  for (const configPath of [
+    "watchface_800x800/config.txt",
+    "watchface_800x800/AODconfig.txt"
+  ]) {
+    const configEntry = aodWeatherZip.files.find(
+      (entry) => entry.type === "File" && entry.path === configPath
+    );
+    assert.ok(configEntry, `${configPath} should remain in the archive`);
+    const config = (await configEntry.buffer()).toString("utf8");
+    assert.ok(config.includes("[weather_icon_pos]={187,57}"));
+    assert.ok(config.includes("[weather_icon_dir]=weather"));
+  }
 
   // --- Selectable-control temperature digits and optional config keys ----
   const withTemperature = await watchfaces.createCorosWatchfaceArchive({

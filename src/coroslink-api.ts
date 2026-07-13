@@ -85,6 +85,9 @@ import type {
   ManualActivityInput
 } from "../electron/types";
 import type {
+  CorosLegacy614aCarrierExportResult,
+  CorosLegacy614aCarrierPatchInput,
+  CorosLegacy614aCarrierSelection,
   CorosWatchfaceArchive,
   CorosWatchfaceArtwork,
   CorosWatchfaceCreatorInput,
@@ -103,7 +106,8 @@ import type {
   CorosWatchfaceThemeListInput,
   CorosBatteryQueryInput,
   CorosBatteryReport,
-  CorosPairedDevice
+  CorosPairedDevice,
+  CorosBluetoothDeviceChoice
 } from "../electron/types";
 
 export interface CorosLinkApi {
@@ -119,6 +123,11 @@ export interface CorosLinkApi {
   ) => Promise<CorosWatchfaceStatus>;
   logoutCorosWatchfaces: () => Promise<CorosWatchfaceStatus>;
   listCorosPairedDevices: () => Promise<CorosPairedDevice[]>;
+  selectCorosBluetoothDevice: (deviceId: string) => Promise<void>;
+  cancelCorosBluetoothDeviceSelection: () => Promise<void>;
+  onCorosBluetoothDevices: (
+    callback: (devices: CorosBluetoothDeviceChoice[]) => void
+  ) => () => void;
   getCorosBatteryReport: (
     input: CorosBatteryQueryInput
   ) => Promise<CorosBatteryReport>;
@@ -129,6 +138,11 @@ export interface CorosLinkApi {
     input: CorosWatchfaceThemeDownloadInput
   ) => Promise<CorosWatchfaceThemeDownload>;
   chooseCorosWatchfaceArchive: () => Promise<CorosWatchfaceArchive | null>;
+  chooseLegacy614aCarrier: () => Promise<CorosLegacy614aCarrierSelection | null>;
+  exportLegacy614aCarrier: (
+    selectionId: string,
+    patch: CorosLegacy614aCarrierPatchInput
+  ) => Promise<CorosLegacy614aCarrierExportResult>;
   chooseCorosWatchfaceArtwork: () => Promise<CorosWatchfaceArtwork | null>;
   createCorosWatchfaceArchive: (
     input: CorosWatchfaceCreatorInput

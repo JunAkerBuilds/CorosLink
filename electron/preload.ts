@@ -86,6 +86,9 @@ import type {
   ManualActivityInput
 } from "./types";
 import type {
+  CorosLegacy614aCarrierExportResult,
+  CorosLegacy614aCarrierPatchInput,
+  CorosLegacy614aCarrierSelection,
   CorosWatchfaceArchive,
   CorosWatchfaceArtwork,
   CorosWatchfaceCreatorInput,
@@ -104,7 +107,8 @@ import type {
   CorosWatchfaceThemeListInput,
   CorosBatteryQueryInput,
   CorosBatteryReport,
-  CorosPairedDevice
+  CorosPairedDevice,
+  CorosBluetoothDeviceChoice
 } from "./types";
 
 const api = {
@@ -126,6 +130,18 @@ const api = {
     ipcRenderer.invoke("watchfaces:logout"),
   listCorosPairedDevices: (): Promise<CorosPairedDevice[]> =>
     ipcRenderer.invoke("watchfaces:listPairedDevices"),
+  selectCorosBluetoothDevice: (deviceId: string): Promise<void> =>
+    ipcRenderer.invoke("watchfaces:selectBluetoothDevice", deviceId),
+  cancelCorosBluetoothDeviceSelection: (): Promise<void> =>
+    ipcRenderer.invoke("watchfaces:cancelBluetoothDevice"),
+  onCorosBluetoothDevices: (
+    callback: (devices: CorosBluetoothDeviceChoice[]) => void
+  ): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, devices: CorosBluetoothDeviceChoice[]) =>
+      callback(devices);
+    ipcRenderer.on("watchfaces:bluetoothDevices", listener);
+    return () => ipcRenderer.removeListener("watchfaces:bluetoothDevices", listener);
+  },
   getCorosBatteryReport: (
     input: CorosBatteryQueryInput
   ): Promise<CorosBatteryReport> => ipcRenderer.invoke("watchfaces:getBatteryReport", input),
@@ -138,6 +154,13 @@ const api = {
     ipcRenderer.invoke("watchfaces:downloadTheme", input),
   chooseCorosWatchfaceArchive: (): Promise<CorosWatchfaceArchive | null> =>
     ipcRenderer.invoke("watchfaces:chooseArchive"),
+  chooseLegacy614aCarrier: (): Promise<CorosLegacy614aCarrierSelection | null> =>
+    ipcRenderer.invoke("watchfaces:chooseLegacy614aCarrier"),
+  exportLegacy614aCarrier: (
+    selectionId: string,
+    patch: CorosLegacy614aCarrierPatchInput
+  ): Promise<CorosLegacy614aCarrierExportResult> =>
+    ipcRenderer.invoke("watchfaces:exportLegacy614aCarrier", selectionId, patch),
   chooseCorosWatchfaceArtwork: (): Promise<CorosWatchfaceArtwork | null> =>
     ipcRenderer.invoke("watchfaces:chooseArtwork"),
   createCorosWatchfaceArchive: (

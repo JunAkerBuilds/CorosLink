@@ -304,6 +304,32 @@ assert.deepEqual(
   "paired-device normalizer should return complete, unique profile devices"
 );
 
+assert.deepEqual(
+  normalizeCorosPairedDevices({
+    deviceProfiles: [
+      {
+        colorType: "B",
+        deviceId: "pace-pro",
+        firmwareType: "COROS W332",
+        imagePackUrl: "https://s3.coros.com/device_image_pack/COROS_W332_B.zip",
+        uuid: "watch-uuid-profile",
+        version: 1752786660
+      }
+    ]
+  }),
+  [
+    {
+      colorType: "B",
+      deviceId: "pace-pro",
+      firmwareType: "COROS W332",
+      imagePackUrl: "https://s3.coros.com/device_image_pack/COROS_W332_B.zip",
+      profileVersion: 1752786660,
+      uuid: "watch-uuid-profile"
+    }
+  ],
+  "paired-device normalizer should retain the authenticated mobile device-profile shape"
+);
+
 const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "coros-watchface-test-"));
 try {
   const archivePath = path.join(tempDirectory, "fixture.dat");
@@ -321,7 +347,7 @@ try {
 
   const selected = await selectCorosWatchfaceArchive(archivePath);
   assert.equal(selected.fileName, "fixture.dat");
-  assert.equal(selected.sourceTemplateId, 250601);
+  assert.equal(selected.sourceTemplateId, "250601");
   assert.equal(selected.diyVersion, 1);
   assert.ok(selected.archiveId.length > 0);
 } finally {

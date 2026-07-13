@@ -30,12 +30,16 @@ import type {
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { BatteryHistoryPanel } from "./BatteryHistoryPanel";
+import { DeviceInfoPanel } from "./DeviceInfoPanel";
+import { LegacyCarrierEditorPanel } from "./LegacyCarrierEditorPanel";
+import { RawBinInstallerPanel } from "./RawBinInstallerPanel";
 import { WatchfaceEditor } from "./WatchfaceEditor";
 import { createWatchfaceEditorSessionId } from "./watchfaceEditorHistory";
 import "./watchfaces.css";
 
 interface WatchfacesViewProps {
   api: CorosLinkApi;
+  showDevelopmentTools: boolean;
 }
 
 type WatchfaceSurface = "sign-in" | "hub" | "studio";
@@ -50,6 +54,7 @@ interface StudioSession {
 
 const DEFAULT_FIRMWARE_TYPE = "COROS W332";
 const DEFAULT_MODEL_VERSION = "W332-3.1708.0";
+const IS_DEVELOPMENT_BUILD = import.meta.env.DEV;
 
 const REGION_OPTIONS: { value: CorosWatchfaceRegion; label: string }[] = [
   { value: "eu", label: "Europe" },
@@ -57,7 +62,7 @@ const REGION_OPTIONS: { value: CorosWatchfaceRegion; label: string }[] = [
   { value: "cn", label: "China / Asia-Pacific" }
 ];
 
-export function WatchfacesView({ api }: WatchfacesViewProps) {
+export function WatchfacesView({ api, showDevelopmentTools }: WatchfacesViewProps) {
   const [status, setStatus] = useState<CorosWatchfaceStatus | null>(null);
   const [surface, setSurface] = useState<WatchfaceSurface>("sign-in");
   const [hubTab, setHubTab] = useState<HubTab>("projects");
@@ -633,6 +638,14 @@ export function WatchfacesView({ api }: WatchfacesViewProps) {
               </button>
             </div>
           </section>
+
+          {IS_DEVELOPMENT_BUILD && showDevelopmentTools ? (
+            <>
+              <DeviceInfoPanel api={api} />
+              <LegacyCarrierEditorPanel api={api} />
+              <RawBinInstallerPanel api={api} />
+            </>
+          ) : null}
 
           <div
             className="watchface-hub-tabs"

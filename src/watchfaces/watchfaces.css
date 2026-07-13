@@ -2715,3 +2715,564 @@
   scrollbar-color: color-mix(in srgb, var(--text-secondary) 42%, transparent) transparent;
   scrollbar-width: thin;
 }
+
+.watchface-raw-installer {
+  margin-top: 18px;
+}
+
+.legacy-carrier-editor {
+  margin-top: 18px;
+}
+
+.coros-device-info {
+  margin-top: 18px;
+}
+
+.coros-device-info-snapshot {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.coros-device-info-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.coros-device-info-name > svg {
+  color: var(--accent);
+}
+
+.coros-device-info-name > span {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.coros-device-info-details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--wf-border);
+  border-radius: 10px;
+  background: var(--wf-border);
+}
+
+.coros-device-info-details > div {
+  min-width: 0;
+  padding: 10px;
+  background: var(--wf-surface);
+}
+
+.coros-device-info-details dt {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.coros-device-info-details dd {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coros-device-info-updated {
+  margin: -5px 0 0;
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-align: right;
+}
+
+.coros-device-info-protected {
+  display: grid;
+  gap: 5px;
+  padding: 11px 12px;
+  border: 1px solid var(--wf-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--wf-surface) 90%, var(--wf-surface-strong));
+}
+
+.coros-device-info-protected > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.coros-device-info-protected strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.coros-device-info-protected span,
+.coros-device-info-protected p {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.coros-device-info-protected p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.coros-device-gatt-map {
+  overflow: hidden;
+  border: 1px solid var(--wf-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--wf-surface) 86%, var(--wf-surface-strong));
+}
+
+.coros-device-gatt-map-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--wf-border);
+}
+
+.coros-device-gatt-map-heading h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.coros-device-gatt-map-heading p {
+  max-width: 620px;
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.coros-device-gatt-map-heading > span {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.coros-device-gatt-channels {
+  display: grid;
+}
+
+.coros-device-gatt-channels article {
+  padding: 12px 14px;
+}
+
+.coros-device-gatt-channels article + article {
+  border-top: 1px solid var(--wf-border);
+}
+
+.coros-device-gatt-channels header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.coros-device-gatt-channels header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.coros-device-gatt-channels header strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.coros-device-gatt-channels header span {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.coros-device-gatt-channels header > code {
+  flex: 0 0 auto;
+  padding: 3px 5px;
+  border: 1px solid var(--wf-border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.coros-device-gatt-channels dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.coros-device-gatt-channels dl > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 8px;
+}
+
+.coros-device-gatt-channels dt {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.coros-device-gatt-channels dd {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  gap: 5px;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 10px;
+  text-align: right;
+}
+
+.coros-device-gatt-channels dd code {
+  color: var(--text-primary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.coros-device-gatt-channels dd span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coros-device-gatt-empty {
+  margin: 0;
+  padding: 13px 14px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.coros-device-gatt-diagnostics {
+  border-top: 1px solid var(--wf-border);
+}
+
+.coros-device-gatt-diagnostics summary {
+  padding: 11px 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  user-select: none;
+}
+
+.coros-device-gatt-diagnostics[open] summary {
+  color: var(--text-primary);
+}
+
+.coros-device-gatt-diagnostics .coros-device-info-services {
+  padding: 0 14px 14px;
+}
+
+.coros-device-info-services {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.coros-device-info-services article {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--wf-border);
+  border-radius: 10px;
+  opacity: 0.68;
+}
+
+.coros-device-info-services article.is-available {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--wf-border));
+  opacity: 1;
+}
+
+.coros-device-info-services header,
+.coros-device-info-services li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.coros-device-info-services header span {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.coros-device-info-services > article > code,
+.coros-device-info-services li code {
+  display: block;
+  overflow: hidden;
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coros-device-info-services ul {
+  display: grid;
+  gap: 5px;
+  margin: 10px 0 0;
+  padding: 9px 0 0;
+  border-top: 1px solid var(--wf-border);
+  list-style: none;
+}
+
+.coros-device-info-services li {
+  align-items: center;
+}
+
+.coros-device-info-services li code {
+  max-width: 56%;
+  margin: 0;
+}
+
+.coros-device-info-services li span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 9px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coros-device-info-limitation {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 14px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.coros-device-info-limitation svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.legacy-carrier-reference {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--wf-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--wf-surface));
+}
+
+.legacy-carrier-reference > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.legacy-carrier-reference > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.legacy-carrier-reference strong,
+.legacy-carrier-reference span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legacy-carrier-reference > div span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.legacy-carrier-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.legacy-carrier-layout {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--wf-border);
+}
+
+.legacy-carrier-layout-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.legacy-carrier-layout-heading > div {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.legacy-carrier-layout-heading > div svg {
+  color: var(--accent);
+}
+
+.legacy-carrier-layout .text-button {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.legacy-carrier-layout .text-button:hover:not(:disabled) {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.legacy-carrier-layout .text-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.legacy-carrier-coordinate-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.legacy-carrier-coordinate-grid .field {
+  gap: 5px;
+  font-size: 11px;
+}
+
+.legacy-carrier-coordinate-grid input {
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.legacy-carrier-layout .watchface-studio-summary {
+  margin-top: 10px;
+}
+
+@media (max-width: 680px) {
+  .legacy-carrier-reference {
+    flex-wrap: wrap;
+  }
+
+  .legacy-carrier-lock {
+    width: 100%;
+    margin-left: 27px;
+  }
+
+  .legacy-carrier-coordinate-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .coros-device-info-details,
+  .coros-device-info-services {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .coros-device-gatt-map-heading {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .coros-device-gatt-channels dl {
+    grid-template-columns: 1fr;
+  }
+}
+
+.watchface-raw-installer .watchface-hub-section-heading {
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.watchface-raw-installer-kicker {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.watchface-raw-installer h2 {
+  margin-top: 5px;
+}
+
+.watchface-raw-installer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.watchface-raw-installer-file {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: baseline;
+  margin: 16px 0 0;
+  color: var(--text-primary);
+}
+
+.watchface-raw-installer-file span,
+.watchface-raw-installer-file.is-empty,
+.watchface-raw-installer-message {
+  color: var(--text-secondary);
+}
+
+.watchface-raw-installer-file.is-empty,
+.watchface-raw-installer-message {
+  margin: 16px 0 0;
+}
+
+.watchface-raw-installer-file-input {
+  display: none;
+}
+
+.watchface-raw-installer-devices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 16px;
+  color: var(--text-secondary);
+}
+
+.watchface-raw-installer-devices > span {
+  flex-basis: 100%;
+}
+
+.watchface-raw-installer-progress {
+  height: 6px;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--text-secondary) 20%, transparent);
+}
+
+.watchface-raw-installer-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 160ms ease;
+}
