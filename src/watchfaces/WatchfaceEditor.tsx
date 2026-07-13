@@ -73,6 +73,7 @@ import {
 import {
   computeLayoutGroupBounds,
   computeLayoutOffsetLimits,
+  downscaleArtwork,
   drawStudioPreview,
   getAmPmCapability,
   getAvailableComplications,
@@ -1077,7 +1078,7 @@ export function WatchfaceEditor({
     try {
       const selected = await api.chooseCorosWatchfaceArtwork();
       if (selected) {
-        patchDesign({ artwork: selected, zoom: 1 });
+        patchDesign({ artwork: await downscaleArtwork(selected), zoom: 1 });
         onNotice("Artwork added. Select the Background layer to scale it.");
       }
     } catch (caught) {
@@ -1687,13 +1688,6 @@ export function WatchfaceEditor({
     if (layer.kind === "background") {
       return (
         <div className="watchface-inspector-group">
-          <label className="field">
-            Base color
-            <span className="watchface-color-control">
-              <input type="color" value={design.backgroundColor} onChange={(e) => patchDesign({ backgroundColor: e.target.value })} />
-              <code>{design.backgroundColor}</code>
-            </span>
-          </label>
           <label className="field">
             Accent color
             <span className="watchface-color-control">

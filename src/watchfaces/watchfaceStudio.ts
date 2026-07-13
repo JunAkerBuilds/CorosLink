@@ -1,4 +1,5 @@
 import type {
+  CorosWatchfaceArtwork,
   CorosWatchfaceAssetReplacement,
   CorosWatchfaceConfigOverride,
   CorosWatchfaceResolutionDetails,
@@ -483,6 +484,36 @@ export function loadStudioImage(dataUrl: string): Promise<HTMLImageElement> {
     image.onerror = () => reject(new Error("A studio image failed to load."));
     image.src = dataUrl;
   });
+}
+
+const MAX_ARTWORK_DIMENSION = 1400;
+
+/**
+ * Caps imported artwork at 1400px on its longest side so project files stay
+ * small. Runs in the renderer because Chromium's decode honors the source
+ * ICC profile, and uses a wide-gamut canvas so P3 colors survive the resize.
+ */
+export async function downscaleArtwork(
+  artwork: CorosWatchfaceArtwork
+): Promise<CorosWatchfaceArtwork> {
+  const largest = Math.max(artwork.width, artwork.height);
+  if (largest <= MAX_ARTWORK_DIMENSION) {
+    return artwork;
+  }
+  const image = await loadStudioImage(artwork.dataUrl);
+  const scale = MAX_ARTWORK_DIMENSION / largest;
+  const width = Math.max(1, Math.round(artwork.width * scale));
+  const height = Math.max(1, Math.round(artwork.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+  if (!context) {
+    return artwork;
+  }
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image, 0, 0, width, height);
+  return { dataUrl: canvas.toDataURL("image/png"), width, height };
 }
 
 function isAodSprite(file: CorosWatchfaceSpriteFile): boolean {
@@ -2242,7 +2273,9 @@ export async function drawStudioPreview(
   loadAssets: WatchfaceAssetLoader
 ): Promise<void> {
   const resolution = pickPreviewResolution(details);
-  const context = canvas.getContext("2d");
+  // Match the wide-gamut background canvas; an sRGB preview canvas would
+  // clamp P3 artwork colors and render them darker than the source image.
+  const context = canvas.getContext("2d", { colorSpace: "display-p3" });
   if (!resolution || !context) {
     return;
   }

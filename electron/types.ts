@@ -422,7 +422,11 @@ export type CorosWatchfaceBackgroundElement =
 
 export interface CorosWatchfaceDesignState {
   version: 1;
-  backgroundColor: string;
+  /**
+   * Retained only so projects saved by older releases can still be opened.
+   * The editor no longer paints a solid base colour behind the face.
+   */
+  backgroundColor?: string;
   accentColor: string;
   artwork: CorosWatchfaceArtwork | null;
   zoom: number;

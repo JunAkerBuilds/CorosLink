@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -35,7 +35,42 @@ import { LegacyCarrierEditorPanel } from "./LegacyCarrierEditorPanel";
 import { RawBinInstallerPanel } from "./RawBinInstallerPanel";
 import { WatchfaceEditor } from "./WatchfaceEditor";
 import { createWatchfaceEditorSessionId } from "./watchfaceEditorHistory";
+import arcFace from "../assets/watchfaces/arc.png";
+import colorHalftoneFace from "../assets/watchfaces/color-halftone.png";
+import copperStateFace from "../assets/watchfaces/copper-state.png";
+import dashboardFace from "../assets/watchfaces/dashboard.png";
+import dawnFace from "../assets/watchfaces/dawn.png";
+import fearlessFace from "../assets/watchfaces/fearless.png";
+import glassFace from "../assets/watchfaces/glass.png";
+import goFishingFace from "../assets/watchfaces/go-fishing.png";
+import gridlineFace from "../assets/watchfaces/gridline.png";
+import kineticEnergyFace from "../assets/watchfaces/kinetic-energy.png";
+import lilyFace from "../assets/watchfaces/lily.png";
+import markFace from "../assets/watchfaces/mark.png";
+import multidataElevFace from "../assets/watchfaces/multidata-elev.png";
+import planetFace from "../assets/watchfaces/planet.png";
+import preClassicFace from "../assets/watchfaces/pre-classic.png";
+import snowingFace from "../assets/watchfaces/snowing.png";
 import "./watchfaces.css";
+
+const AUTH_WATCH_FACE_PREVIEWS = [
+  preClassicFace,
+  multidataElevFace,
+  kineticEnergyFace,
+  goFishingFace,
+  gridlineFace,
+  planetFace,
+  lilyFace,
+  colorHalftoneFace,
+  dashboardFace,
+  dawnFace,
+  markFace,
+  copperStateFace,
+  glassFace,
+  fearlessFace,
+  arcFace,
+  snowingFace
+] as const;
 
 interface WatchfacesViewProps {
   api: CorosLinkApi;
@@ -468,7 +503,11 @@ export function WatchfacesView({ api, showDevelopmentTools }: WatchfacesViewProp
   }
 
   return (
-    <div className="watchfaces-view wf-watchfaces watchface-shell watchface-shell--hub">
+    <div
+      className={`watchfaces-view wf-watchfaces watchface-shell watchface-shell--hub ${
+        surface === "sign-in" ? "watchface-shell--signin" : ""
+      }`}
+    >
       <header className="watchface-hub-header">
         <div className="watchface-hub-brand">
           <span className="watchface-hub-mark" aria-hidden="true">
@@ -520,28 +559,36 @@ export function WatchfacesView({ api, showDevelopmentTools }: WatchfacesViewProp
         </main>
       ) : surface === "sign-in" ? (
         <main className="watchface-auth">
+          <WatchFaceStudioShowcase />
           <section className="watchface-auth-intro">
-            <h2>Design with precision. Send through COROS.</h2>
+            <div className="watchface-auth-kicker">
+              <Watch size={17} aria-hidden="true" />
+              Watch Face Studio
+            </div>
+            <h2>
+              Design it.{" "}
+              <span className="watchface-auth-highlight">
+                Wear it.
+              </span>
+            </h2>
             <p>
-              Open a template, edit every visual layer, and hand the finished face
-              to the official COROS app.
+              Choose a face, edit every detail, and preview it before sending.
             </p>
           </section>
           <section className="watchface-auth-card" aria-labelledby="watchface-login-title">
             <span className="watchface-auth-icon" aria-hidden="true">
               <KeyRound size={20} />
             </span>
-            <h2 id="watchface-login-title">Connect your COROS account</h2>
+            <h2 id="watchface-login-title">Sign in to COROS</h2>
             <p>
-              Your password is used only for this sign-in. The session is stored
-              securely by your operating system when available.
+              Sign in when you want to send a watch face to COROS.
             </p>
             <form
               className="watchface-auth-form"
               onSubmit={(event) => void handleLogin(event)}
             >
               <label className="field">
-                Account region
+                Region
                 <select
                   value={region}
                   onChange={(event) => {
@@ -582,7 +629,7 @@ export function WatchfacesView({ api, showDevelopmentTools }: WatchfacesViewProp
                 ) : (
                   <KeyRound size={16} aria-hidden="true" />
                 )}
-                Connect COROS
+                Sign in
               </button>
               <button
                 className="secondary-button watchface-auth-skip"
@@ -593,17 +640,15 @@ export function WatchfacesView({ api, showDevelopmentTools }: WatchfacesViewProp
                   clearMessages();
                 }}
               >
-                Skip for now
+                Continue without signing in
               </button>
             </form>
             <p className="watchface-auth-local-note">
-              You can open archives, edit, and save projects without signing in.
-              Connect only when you are ready to send a face to COROS.
+              You can pick templates, edit them, and save your work without signing in.
             </p>
             {!status.secureStorageAvailable ? (
               <p className="watchface-auth-warning">
-                Secure storage is unavailable. This session will be cleared when
-                CorosLink closes.
+                Your sign-in will be removed when you close CorosLink.
               </p>
             ) : null}
           </section>
@@ -614,6 +659,60 @@ export function WatchfacesView({ api, showDevelopmentTools }: WatchfacesViewProp
             <div>
               <h2>Pick up where you left off.</h2>
               <p>Open a saved project or start with a watch-face template.</p>
+            </div>
+          </section>
+
+          {IS_DEVELOPMENT_BUILD && showDevelopmentTools ? (
+            <>
+              <DeviceInfoPanel api={api} />
+              <LegacyCarrierEditorPanel api={api} />
+              <RawBinInstallerPanel api={api} />
+            </>
+          ) : null}
+
+          <div className="watchface-hub-toolbar">
+            <div
+              className="watchface-hub-tabs"
+              role="tablist"
+              aria-label="Watch-face hub"
+              onKeyDown={(event) => {
+                if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+                  event.preventDefault();
+                  const nextTab = hubTab === "projects" ? "templates" : "projects";
+                  setHubTab(nextTab);
+                  window.requestAnimationFrame(() => {
+                    document
+                      .getElementById(`watchface-${nextTab}-tab`)
+                      ?.focus();
+                  });
+                }
+              }}
+            >
+              <button
+                id="watchface-projects-tab"
+                type="button"
+                role="tab"
+                aria-selected={hubTab === "projects"}
+                aria-controls="watchface-projects-panel"
+                tabIndex={hubTab === "projects" ? 0 : -1}
+                className={hubTab === "projects" ? "is-active" : ""}
+                onClick={() => setHubTab("projects")}
+              >
+                <FileArchive size={16} aria-hidden="true" /> Projects
+                <span>{projects.length}</span>
+              </button>
+              <button
+                id="watchface-templates-tab"
+                type="button"
+                role="tab"
+                aria-selected={hubTab === "templates"}
+                aria-controls="watchface-templates-panel"
+                tabIndex={hubTab === "templates" ? 0 : -1}
+                className={hubTab === "templates" ? "is-active" : ""}
+                onClick={() => setHubTab("templates")}
+              >
+                <LayoutGrid size={16} aria-hidden="true" /> Templates
+              </button>
             </div>
             <div className="watchface-hub-actions">
               <button
@@ -629,66 +728,7 @@ export function WatchfacesView({ api, showDevelopmentTools }: WatchfacesViewProp
                 )}
                 Open archive
               </button>
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() => setHubTab("templates")}
-              >
-                <LayoutGrid size={16} aria-hidden="true" /> Browse templates
-              </button>
             </div>
-          </section>
-
-          {IS_DEVELOPMENT_BUILD && showDevelopmentTools ? (
-            <>
-              <DeviceInfoPanel api={api} />
-              <LegacyCarrierEditorPanel api={api} />
-              <RawBinInstallerPanel api={api} />
-            </>
-          ) : null}
-
-          <div
-            className="watchface-hub-tabs"
-            role="tablist"
-            aria-label="Watch-face hub"
-            onKeyDown={(event) => {
-              if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-                event.preventDefault();
-                const nextTab = hubTab === "projects" ? "templates" : "projects";
-                setHubTab(nextTab);
-                window.requestAnimationFrame(() => {
-                  document
-                    .getElementById(`watchface-${nextTab}-tab`)
-                    ?.focus();
-                });
-              }
-            }}
-          >
-            <button
-              id="watchface-projects-tab"
-              type="button"
-              role="tab"
-              aria-selected={hubTab === "projects"}
-              aria-controls="watchface-projects-panel"
-              tabIndex={hubTab === "projects" ? 0 : -1}
-              className={hubTab === "projects" ? "is-active" : ""}
-              onClick={() => setHubTab("projects")}
-            >
-              <FileArchive size={16} aria-hidden="true" /> Projects
-              <span>{projects.length}</span>
-            </button>
-            <button
-              id="watchface-templates-tab"
-              type="button"
-              role="tab"
-              aria-selected={hubTab === "templates"}
-              aria-controls="watchface-templates-panel"
-              tabIndex={hubTab === "templates" ? 0 : -1}
-              className={hubTab === "templates" ? "is-active" : ""}
-              onClick={() => setHubTab("templates")}
-            >
-              <LayoutGrid size={16} aria-hidden="true" /> Templates
-            </button>
           </div>
 
           {hubTab === "projects" ? (
@@ -702,15 +742,8 @@ export function WatchfacesView({ api, showDevelopmentTools }: WatchfacesViewProp
                 <div className="watchface-hub-section-heading">
                   <div>
                     <h3 id="projects-title">Recent projects</h3>
+                    <p>Everything you saved locally, newest first.</p>
                   </div>
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() => void handleChooseArchive()}
-                  >
-                    <Upload size={16} aria-hidden="true" /> Open archive
-                  </button>
                 </div>
                 {projectsLoading ? (
                   <div className="watchface-project-skeletons" aria-label="Loading projects">
@@ -1313,6 +1346,29 @@ function ConfirmDeleteDialog({
           </button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function WatchFaceStudioShowcase() {
+  return (
+    <div className="watchface-auth-gallery" aria-hidden="true">
+      {AUTH_WATCH_FACE_PREVIEWS.map((src, index) => (
+        <div
+          className={`watchface-auth-gallery-runner watchface-auth-gallery-runner--${index % 3}`}
+          key={src}
+          style={{
+            "--face-index": index,
+            "--face-slot": Math.floor(index / 3),
+            "--face-delay": `${Math.floor(index / 3) * -6.1 - (index % 3) * 1.2}s`,
+            "--face-scale": 0.76 + ((index + 1) % 3) * 0.1
+          } as CSSProperties}
+        >
+          <div className="watchface-auth-gallery-face">
+            <img src={src} alt="" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

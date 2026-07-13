@@ -27,7 +27,6 @@ export const DEFAULT_AMPM_STYLE: WatchfaceAmPmStyle = {
 export function makeDefaultDesign(): CorosWatchfaceDesignState {
   return {
     version: 1,
-    backgroundColor: "#081116",
     accentColor: "#51e0b5",
     artwork: null,
     zoom: 1,
@@ -57,17 +56,9 @@ export function makeDefaultDesign(): CorosWatchfaceDesignState {
   };
 }
 
-function hexToRgba(hex: string, alpha: number): string {
-  const normalized = hex.replace("#", "");
-  const red = Number.parseInt(normalized.slice(0, 2), 16);
-  const green = Number.parseInt(normalized.slice(2, 4), 16);
-  const blue = Number.parseInt(normalized.slice(4, 6), 16);
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-}
-
 /**
- * Paints the watch-face background for both preview and export: base
- * color, artwork, shade gradient, imported sprites, and static separators —
+ * Paints the watch-face background for both preview and export: artwork,
+ * imported sprites, and static separators —
  * and returns the 800×800 PNG data URL used as the archive background.
  */
 export async function renderDesignBackground(
@@ -77,15 +68,15 @@ export async function renderDesignBackground(
   const canvas = document.createElement("canvas");
   canvas.width = CREATOR_CANVAS_SIZE;
   canvas.height = CREATOR_CANVAS_SIZE;
-  const context = canvas.getContext("2d");
+  // Wide-gamut canvas: an sRGB canvas clamps Display P3 artwork colors to the
+  // smaller sRGB gamut, visibly darkening saturated tones on P3 screens.
+  const context = canvas.getContext("2d", { colorSpace: "display-p3" });
   if (!context) {
     throw new Error("Background rendering is unavailable in this window.");
   }
   const size = CREATOR_CANVAS_SIZE;
 
   context.clearRect(0, 0, size, size);
-  context.fillStyle = design.backgroundColor;
-  context.fillRect(0, 0, size, size);
 
   if (design.artwork) {
     const image = await loadStudioImage(design.artwork.dataUrl).catch(() => undefined);
@@ -97,13 +88,6 @@ export async function renderDesignBackground(
       context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
     }
   }
-
-  const shade = context.createLinearGradient(0, 0, size, size);
-  shade.addColorStop(0, hexToRgba(design.backgroundColor, 0.3));
-  shade.addColorStop(0.46, "rgba(0, 0, 0, 0.06)");
-  shade.addColorStop(1, "rgba(0, 0, 0, 0.56)");
-  context.fillStyle = shade;
-  context.fillRect(0, 0, size, size);
 
   // Freeform shapes are authored directly in this 800px space.
   if (design.backgroundElements && design.backgroundElements.length > 0) {

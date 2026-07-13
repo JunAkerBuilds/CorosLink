@@ -675,11 +675,59 @@
 
 .watchface-shell--hub {
   display: grid;
+  align-content: start;
   height: 100%;
   min-height: 0;
   overflow: auto;
-  gap: 18px;
-  padding: 6px 0 28px;
+  gap: 16px;
+  padding: 14px 16px 30px;
+}
+
+.watchface-shell--signin {
+  position: relative;
+  display: block;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+}
+
+.watchface-shell--signin .watchface-hub-header {
+  position: absolute;
+  z-index: 5;
+  top: 14px;
+  left: 50%;
+  width: min(1180px, calc(100% - 32px));
+  max-width: 1180px;
+  min-height: 68px;
+  margin: 0;
+  transform: translateX(-50%);
+  border: 1px solid rgba(224, 239, 234, 0.14);
+  border-radius: 18px;
+  padding: 12px 16px;
+}
+
+:root:not([data-theme="paper"]) .watchface-shell--signin .watchface-hub-header {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.025) 58%),
+    rgba(16, 24, 28, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.035),
+    0 18px 48px rgba(2, 9, 12, 0.24);
+  -webkit-backdrop-filter: blur(26px) saturate(145%) contrast(1.04);
+  backdrop-filter: blur(26px) saturate(145%) contrast(1.04);
+}
+
+:root[data-theme="paper"] .watchface-shell--signin .watchface-hub-header {
+  border-color: rgba(255, 255, 255, 0.58);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.3)),
+    rgba(238, 243, 240, 0.48);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 18px 48px rgba(48, 62, 57, 0.12);
+  -webkit-backdrop-filter: blur(26px) saturate(135%);
+  backdrop-filter: blur(26px) saturate(135%);
 }
 
 .watchface-shell--studio {
@@ -694,6 +742,10 @@
   padding: 0 14px 14px;
 }
 
+.content:has(> .watchface-shell--signin) {
+  padding: 0;
+}
+
 .content > .watchfaces-view {
   flex: 1;
   min-height: 0;
@@ -703,7 +755,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: min(1180px, 100%);
   min-height: 68px;
+  margin: 0 auto;
   gap: 18px;
   border: 1px solid var(--wf-border);
   border-radius: var(--wf-pane-radius);
@@ -776,40 +830,318 @@
 }
 
 .watchface-shell .watchface-auth {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(360px, 0.72fr);
+  grid-template-columns: minmax(0, 1fr) minmax(390px, 0.74fr);
+  align-items: stretch;
+  width: 100%;
+  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background:
+    radial-gradient(circle at 24% 76%, rgba(39, 184, 135, 0.17), transparent 33%),
+    radial-gradient(circle at 52% 92%, rgba(35, 112, 127, 0.12), transparent 28%),
+    linear-gradient(112deg, rgba(5, 8, 10, 0.96), rgba(8, 13, 16, 0.9) 58%, rgba(7, 10, 12, 0.98)),
+    #060a0c;
+  box-shadow: none;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+:root[data-theme="paper"] .watchface-shell--signin .watchface-auth {
+  background:
+    radial-gradient(circle at 23% 73%, rgba(55, 184, 139, 0.2), transparent 35%),
+    radial-gradient(circle at 57% 92%, rgba(105, 164, 156, 0.14), transparent 30%),
+    linear-gradient(112deg, #f8fbf9 0%, #edf4f1 58%, #f5f8f6 100%);
+}
+
+.watchface-shell .watchface-auth-intro {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  background: linear-gradient(90deg, rgba(5, 8, 10, 0.3), transparent 70%);
+  padding: clamp(96px, 10.5vh, 116px) clamp(38px, 6vw, 88px) clamp(110px, 18vh, 180px) clamp(48px, 8vw, 130px);
+}
+
+.watchface-shell .watchface-auth-kicker {
+  display: inline-flex;
   align-items: center;
-  width: min(1040px, 100%);
-  min-height: min(620px, calc(100dvh - 130px));
-  gap: clamp(34px, 7vw, 92px);
-  margin: 0 auto;
-  padding: clamp(28px, 6vw, 72px);
+  width: fit-content;
+  gap: 9px;
+  margin-bottom: 18px;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 
 .watchface-shell .watchface-auth-intro h2,
 .watchface-shell .watchface-hub-intro h2 {
-  margin: 8px 0 0;
+  max-width: 640px;
+  margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(28px, 4vw, 46px);
-  line-height: 1.05;
-  letter-spacing: -0.045em;
+  font-size: clamp(42px, 4.6vw, 62px);
+  font-weight: 850;
+  line-height: 0.98;
+  letter-spacing: 0;
+  text-shadow: 0 8px 28px rgba(0, 0, 0, 0.38);
 }
 
-.watchface-shell .watchface-auth-intro p:last-child,
+.watchface-shell .watchface-auth-intro > p,
 .watchface-shell .watchface-hub-intro > div > p:last-child {
-  max-width: 54ch;
-  margin: 14px 0 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.65;
+  max-width: 430px;
+  margin: 20px 0 0;
+  color: rgba(245, 245, 247, 0.78);
+  font-size: 19px;
+  line-height: 1.42;
+}
+
+.watchface-shell .watchface-auth-highlight {
+  color: var(--accent-strong);
+}
+
+:root[data-theme="paper"] .watchface-shell--signin .watchface-auth-intro {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0) 72%);
+}
+
+:root[data-theme="paper"] .watchface-shell--signin .watchface-auth-intro h2 {
+  color: var(--text-primary);
+  text-shadow: 0 5px 24px rgba(255, 255, 255, 0.9);
+}
+
+:root[data-theme="paper"] .watchface-shell--signin .watchface-auth-intro > p {
+  color: color-mix(in srgb, var(--text-primary) 72%, transparent);
+}
+
+.watchface-shell .watchface-auth-gallery {
+  position: absolute;
+  z-index: 0;
+  inset: 38% 30% -6% 0;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent 0%, #000 12%, #000 86%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 12%, #000 86%, transparent 100%);
+  pointer-events: none;
+}
+
+.watchface-shell .watchface-auth-gallery-runner {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  animation-delay: var(--face-delay);
+  will-change: transform, opacity;
+}
+
+.watchface-shell .watchface-auth-gallery-runner--0 {
+  animation-name: watchface-studio-flow-upper;
+  animation-duration: 31s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.watchface-shell .watchface-auth-gallery-runner--1 {
+  animation-name: watchface-studio-flow-middle;
+  animation-duration: 36s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.watchface-shell .watchface-auth-gallery-runner--2 {
+  animation-name: watchface-studio-flow-lower;
+  animation-duration: 40s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.watchface-shell .watchface-auth-gallery-face {
+  position: absolute;
+  top: 4%;
+  left: 0;
+  width: clamp(118px, 12vw, 172px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(218, 235, 229, 0.22);
+  border-radius: 50%;
+  background: #11181b;
+  box-shadow:
+    0 22px 42px rgba(1, 5, 7, 0.44),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 0 7px rgba(15, 22, 25, 0.72);
+  padding: 4px;
+  animation: watchface-studio-face-float 5.6s ease-in-out infinite;
+  animation-delay: calc(var(--face-index) * -0.7s);
+  will-change: transform;
+}
+
+.watchface-shell .watchface-auth-gallery-runner--1 .watchface-auth-gallery-face {
+  top: 35%;
+}
+
+.watchface-shell .watchface-auth-gallery-runner--2 .watchface-auth-gallery-face {
+  top: 63%;
+}
+
+.watchface-shell .watchface-auth-gallery-face img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+:root[data-theme="paper"] .watchface-shell--signin .watchface-auth-gallery-face {
+  border-color: rgba(42, 73, 63, 0.18);
+  background: #f8fbfa;
+  box-shadow:
+    0 20px 42px rgba(41, 71, 61, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    0 0 0 7px rgba(255, 255, 255, 0.78),
+    0 0 0 8px rgba(42, 73, 63, 0.1);
+}
+
+@keyframes watchface-studio-flow-upper {
+  0% {
+    opacity: 0;
+    transform: translate3d(-26%, 10%, 0);
+  }
+
+  11% {
+    opacity: 0.72;
+  }
+
+  38%,
+  66% {
+    opacity: 1;
+  }
+
+  89% {
+    opacity: 0.58;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(112%, -12%, 0);
+  }
+}
+
+@keyframes watchface-studio-flow-middle {
+  0% {
+    opacity: 0;
+    transform: translate3d(112%, -8%, 0);
+  }
+
+  12% {
+    opacity: 0.52;
+  }
+
+  40%,
+  68% {
+    opacity: 0.86;
+  }
+
+  90% {
+    opacity: 0.42;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(-27%, 9%, 0);
+  }
+}
+
+@keyframes watchface-studio-flow-lower {
+  0% {
+    opacity: 0;
+    transform: translate3d(-24%, -7%, 0);
+  }
+
+  13% {
+    opacity: 0.44;
+  }
+
+  42%,
+  70% {
+    opacity: 0.74;
+  }
+
+  90% {
+    opacity: 0.36;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(111%, 10%, 0);
+  }
+}
+
+@keyframes watchface-studio-face-float {
+  0%,
+  100% {
+    transform: translateY(-5px) scale(var(--face-scale)) rotate(-2deg);
+  }
+
+  50% {
+    transform: translateY(8px) scale(var(--face-scale)) rotate(2deg);
+  }
 }
 
 .watchface-shell .watchface-auth-card {
-  border: 1px solid var(--wf-border);
-  border-radius: var(--wf-pane-radius);
-  background: var(--wf-surface-raised);
-  box-shadow: var(--wf-shadow);
-  padding: clamp(20px, 3vw, 28px);
+  position: relative;
+  z-index: 2;
+  align-self: center;
+  width: min(calc(100% - clamp(32px, 4vw, 56px)), 520px);
+  margin: clamp(22px, 3.4vw, 42px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(14, 20, 24, 0.46);
+  box-shadow:
+    0 24px 64px rgba(2, 8, 11, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.035);
+  -webkit-backdrop-filter: blur(28px) saturate(140%) contrast(1.03);
+  backdrop-filter: blur(28px) saturate(140%) contrast(1.03);
+  padding: clamp(28px, 3.8vw, 48px) clamp(24px, 3.6vw, 42px);
+}
+
+:root:not([data-theme="paper"]) .watchface-shell--signin .watchface-auth-card {
+  border-color: rgba(224, 239, 234, 0.16);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.12), transparent 32%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.018) 64%),
+    rgba(16, 24, 28, 0.44);
+}
+
+:root[data-theme="paper"] .watchface-shell--signin .watchface-auth-card {
+  border-color: rgba(255, 255, 255, 0.86);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.98), transparent 35%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.82), rgba(245, 249, 247, 0.62)),
+    rgba(239, 246, 242, 0.72);
+  box-shadow:
+    0 24px 64px rgba(48, 75, 65, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    inset 0 -1px 0 rgba(66, 99, 87, 0.06);
+}
+
+:root[data-theme="paper"] .watchface-shell--signin .watchface-auth-card :is(input, select) {
+  border-color: rgba(62, 91, 81, 0.18);
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96);
+}
+
+:root[data-theme="paper"] .watchface-shell--signin .watchface-auth-card .secondary-button {
+  border-color: rgba(62, 91, 81, 0.18);
+  background: rgba(255, 255, 255, 0.52);
+  color: var(--text-primary);
+}
+
+:root:not([data-theme="paper"]) .watchface-shell--signin .watchface-auth-card :is(input, select) {
+  border-color: rgba(224, 239, 234, 0.15);
+  background: rgba(214, 232, 225, 0.065);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
 }
 
 .watchface-shell .watchface-auth-card h2 {
@@ -873,8 +1205,10 @@
 
 .watchface-shell .watchface-hub-main {
   display: grid;
+  width: min(1180px, 100%);
   min-width: 0;
-  gap: 16px;
+  margin: 0 auto;
+  gap: 14px;
 }
 
 .watchface-shell .watchface-hub-intro {
@@ -883,7 +1217,7 @@
   justify-content: space-between;
   min-width: 0;
   gap: 24px;
-  padding: clamp(14px, 3vw, 28px) 2px 4px;
+  padding: clamp(6px, 1.6vw, 16px) 2px 2px;
 }
 
 .watchface-shell .watchface-hub-intro h2 {
@@ -893,6 +1227,15 @@
 .watchface-shell .watchface-hub-actions {
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.watchface-shell .watchface-hub-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 12px;
 }
 
 .watchface-shell .watchface-hub-tabs {
@@ -2383,12 +2726,24 @@
   .watchface-shell .watchface-auth {
     grid-template-columns: 1fr;
     min-height: auto;
-    gap: 28px;
-    padding: 34px clamp(8px, 5vw, 36px);
+    gap: 0;
+    padding: 0;
   }
 
   .watchface-shell .watchface-auth-intro {
     max-width: 660px;
+    padding: 112px clamp(24px, 6vw, 48px) clamp(250px, 44vw, 330px);
+  }
+
+  .watchface-shell .watchface-auth-gallery {
+    inset: 178px 0 auto;
+    height: 340px;
+  }
+
+  .watchface-shell .watchface-auth-card {
+    width: calc(100% - clamp(28px, 7vw, 48px));
+    margin: clamp(16px, 5vw, 24px);
+    padding: clamp(28px, 7vw, 42px) clamp(22px, 6vw, 34px);
   }
 
   .watchface-shell .watchface-auth--loading {
@@ -2417,7 +2772,7 @@
 
   .watchface-shell--hub {
     gap: 12px;
-    padding-top: 0;
+    padding: 8px 10px 22px;
   }
 
   .watchface-shell .watchface-hub-header {
@@ -2431,8 +2786,18 @@
     gap: 16px;
   }
 
+  .watchface-shell .watchface-hub-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .watchface-shell .watchface-hub-actions {
     justify-content: flex-start;
+  }
+
+  .watchface-shell .watchface-hub-actions > .secondary-button {
+    flex: 1;
+    justify-content: center;
   }
 
   .watchface-shell .watchface-hub-tabs {
@@ -2592,6 +2957,16 @@
 }
 
 @media (max-width: 479px) {
+  .watchface-shell.watchface-shell--signin .watchface-hub-header,
+  .watchface-shell.watchface-shell--signin .watchface-hub-account {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .watchface-shell.watchface-shell--signin .watchface-hub-header {
+    padding: 12px 16px;
+  }
+
   .watchface-shell .watchface-hub-header,
   .watchface-shell .watchface-hub-account {
     align-items: stretch;
@@ -2607,11 +2982,22 @@
   }
 
   .watchface-shell .watchface-auth {
-    padding: 24px 0;
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
   }
 
   .watchface-shell .watchface-auth-intro h2 {
-    font-size: 30px;
+    font-size: clamp(34px, 11vw, 42px);
+  }
+
+  .watchface-shell .watchface-auth-gallery {
+    top: 190px;
+    height: 270px;
+  }
+
+  .watchface-shell .watchface-auth-gallery-face {
+    width: 118px;
   }
 
   .watchface-shell .watchface-hub-section {
@@ -2666,6 +3052,35 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+
+  .watchface-shell .watchface-auth-gallery-runner {
+    opacity: 0.74;
+    transform: none;
+  }
+
+  .watchface-shell .watchface-auth-gallery-runner:nth-child(n + 7) {
+    display: none;
+  }
+
+  .watchface-shell .watchface-auth-gallery-runner:nth-child(2) {
+    transform: translateX(31%);
+  }
+
+  .watchface-shell .watchface-auth-gallery-runner:nth-child(3) {
+    transform: translateX(62%);
+  }
+
+  .watchface-shell .watchface-auth-gallery-runner:nth-child(4) {
+    transform: translate(16%, 48%);
+  }
+
+  .watchface-shell .watchface-auth-gallery-runner:nth-child(5) {
+    transform: translate(47%, 48%);
+  }
+
+  .watchface-shell .watchface-auth-gallery-runner:nth-child(6) {
+    transform: translate(78%, 48%);
+  }
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -2694,6 +3109,22 @@
     ) {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+
+  :root:not([data-theme="paper"]) .watchface-shell--signin .watchface-hub-header {
+    background: #172126;
+  }
+
+  :root:not([data-theme="paper"]) .watchface-shell--signin .watchface-auth-card {
+    background: #1b2529;
+  }
+
+  :root[data-theme="paper"] .watchface-shell--signin .watchface-hub-header {
+    background: #f3f8f5;
+  }
+
+  :root[data-theme="paper"] .watchface-shell--signin .watchface-auth-card {
+    background: #f6faf8;
   }
 }
 

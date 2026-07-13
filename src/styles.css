@@ -4067,13 +4067,14 @@ td span {
 }
 
 .watchface-font-picker-panel {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 7px);
-  left: 0;
-  width: min(420px, calc(100vw - 56px));
+  position: fixed;
+  z-index: 100;
+  max-width: calc(100vw - 24px);
   display: grid;
   gap: 9px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-base) 92%, #000);

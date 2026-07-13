@@ -1,5 +1,6 @@
 import { ChevronDown, Loader2, Type } from "lucide-react";
-import { type CSSProperties, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { CorosLinkApi } from "../coroslink-api";
 import type { WatchfaceTypography } from "./watchfaceStudio";
 
@@ -13,6 +14,17 @@ interface LocalFontPickerProps {
   onTypographyChange?: (typography: WatchfaceTypography) => void;
   disabled?: boolean;
 }
+
+interface FontPickerPopoverPosition {
+  top: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+}
+
+const FONT_PICKER_VIEWPORT_MARGIN = 12;
+const FONT_PICKER_POPOVER_GAP = 8;
+const FONT_PICKER_POPOVER_WIDTH = 420;
 
 /**
  * A searchable picker for the font families installed on the current machine.
@@ -35,6 +47,11 @@ export function LocalFontPicker({
   const [candidate, setCandidate] = useState(value);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [popoverPosition, setPopoverPosition] =
+    useState<FontPickerPopoverPosition | null>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const matchingFamilies = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -67,6 +84,7 @@ export function LocalFontPicker({
       return;
     }
     setCandidate(value);
+    setPopoverPosition(null);
     setOpen(true);
     if (families !== null || loading) {
       return;
@@ -89,6 +107,7 @@ export function LocalFontPicker({
 
   function closePicker() {
     setOpen(false);
+    setPopoverPosition(null);
     setQuery("");
   }
 
@@ -105,24 +124,199 @@ export function LocalFontPicker({
     closePicker();
   }
 
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function closeOnOutsidePress(event: PointerEvent) {
+      const target = event.target;
+      if (
+        !(target instanceof Node) ||
+        (!pickerRef.current?.contains(target) && !panelRef.current?.contains(target))
+      ) {
+        closePicker();
+      }
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closePicker();
+        triggerRef.current?.focus();
+      }
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePress);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function positionPopover() {
+      const trigger = triggerRef.current;
+      if (!trigger) {
+        return;
+      }
+
+      const rect = trigger.getBoundingClientRect();
+      const width = Math.min(
+        FONT_PICKER_POPOVER_WIDTH,
+        window.innerWidth - FONT_PICKER_VIEWPORT_MARGIN * 2
+      );
+      const panelHeight = panelRef.current?.getBoundingClientRect().height ?? 440;
+      const spaceBelow = Math.max(
+        0,
+        window.innerHeight - rect.bottom - FONT_PICKER_POPOVER_GAP - FONT_PICKER_VIEWPORT_MARGIN
+      );
+      const spaceAbove = Math.max(
+        0,
+        rect.top - FONT_PICKER_POPOVER_GAP - FONT_PICKER_VIEWPORT_MARGIN
+      );
+      const openAbove = panelHeight > spaceBelow && spaceAbove > spaceBelow;
+      const availableHeight = openAbove ? spaceAbove : spaceBelow;
+      const left = Math.max(
+        FONT_PICKER_VIEWPORT_MARGIN,
+        Math.min(rect.left, window.innerWidth - width - FONT_PICKER_VIEWPORT_MARGIN)
+      );
+      const top = openAbove
+        ? Math.max(
+            FONT_PICKER_VIEWPORT_MARGIN,
+            rect.top - FONT_PICKER_POPOVER_GAP - Math.min(panelHeight, availableHeight)
+          )
+        : Math.min(
+            rect.bottom + FONT_PICKER_POPOVER_GAP,
+            window.innerHeight - FONT_PICKER_VIEWPORT_MARGIN
+          );
+
+      setPopoverPosition({ top, left, width, maxHeight: availableHeight });
+    }
+
+    positionPopover();
+    window.addEventListener("resize", positionPopover);
+    document.addEventListener("scroll", positionPopover, true);
+    return () => {
+      window.removeEventListener("resize", positionPopover);
+      document.removeEventListener("scroll", positionPopover, true);
+    };
+  }, [families, loading, open, query]);
+
   return (
-    <div className="field watchface-font-picker">
+    <div ref={pickerRef} className="field watchface-font-picker">
       <span className="watchface-font-picker-label">{label}</span>
-      <button
-        className="watchface-font-picker-trigger"
-        type="button"
-        aria-expanded={open}
-        disabled={disabled}
-        onClick={() => void openPicker()}
-      >
-        <span
-          className={value ? "watchface-font-picker-value" : "watchface-font-picker-placeholder"}
-          style={value ? { fontFamily: value, ...sampleStyle } : undefined}
+      <div className="watchface-font-picker-menu">
+        <button
+          ref={triggerRef}
+          className="watchface-font-picker-trigger"
+          type="button"
+          aria-expanded={open}
+          disabled={disabled}
+          onClick={() => {
+            if (open) {
+              closePicker();
+            } else {
+              void openPicker();
+            }
+          }}
         >
-          {value || emptyLabel}
-        </span>
-        <ChevronDown size={15} aria-hidden="true" />
-      </button>
+          <span
+            className={value ? "watchface-font-picker-value" : "watchface-font-picker-placeholder"}
+            style={value ? { fontFamily: value, ...sampleStyle } : undefined}
+          >
+            {value || emptyLabel}
+          </span>
+          <ChevronDown size={15} aria-hidden="true" />
+        </button>
+
+        {open && typeof document !== "undefined"
+          ? createPortal(
+          <div
+            ref={panelRef}
+            className="watchface-font-picker-panel"
+            role="dialog"
+            aria-label={`${label} picker`}
+            style={{
+              top: popoverPosition?.top ?? 0,
+              left: popoverPosition?.left ?? 0,
+              width: popoverPosition?.width ?? FONT_PICKER_POPOVER_WIDTH,
+              maxHeight: popoverPosition?.maxHeight,
+              visibility: popoverPosition ? "visible" : "hidden"
+            }}
+          >
+            <div className="watchface-font-picker-search">
+              <Type size={15} aria-hidden="true" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search or enter a font family"
+                aria-label="Search installed fonts"
+              />
+            </div>
+
+            {loading ? (
+              <p className="watchface-font-picker-status">
+                <Loader2 className="spin" size={14} /> Loading your local font library…
+              </p>
+            ) : null}
+            {error ? <p className="watchface-font-picker-status">{error}</p> : null}
+            {families !== null && !loading ? (
+              <p className="watchface-font-picker-status">
+                {families.length} installed font {families.length === 1 ? "family" : "families"} available locally.
+              </p>
+            ) : null}
+
+            {query.trim() && !exactMatch ? (
+              <button
+                className="watchface-font-custom-option"
+                type="button"
+                onClick={() => setCandidate(query.trim())}
+              >
+                Use “{query.trim()}” as entered
+              </button>
+            ) : null}
+
+            <div className="watchface-font-picker-results" role="listbox" aria-label="Installed font families">
+              {matchingFamilies.slice(0, 100).map((family) => (
+                <button
+                  key={family}
+                  className={candidate === family ? "is-selected" : ""}
+                  type="button"
+                  role="option"
+                  aria-selected={candidate === family}
+                  onClick={() => setCandidate(family)}
+                >
+                  <strong style={{ fontFamily: family, ...sampleStyle }}>{family}</strong>
+                  <span style={{ fontFamily: family, ...sampleStyle }}>0123456789 · Wed</span>
+                </button>
+              ))}
+            </div>
+            {matchingFamilies.length > 100 ? (
+              <p className="watchface-font-picker-status">Showing the first 100 matches—keep typing to narrow the list.</p>
+            ) : null}
+
+            <div className="watchface-font-picker-actions">
+              <button className="secondary-button" type="button" onClick={restoreTemplate}>
+                {emptyLabel}
+              </button>
+              <button className="primary-button" type="button" disabled={!candidate.trim()} onClick={applyCandidate}>
+                Rasterize into preview
+              </button>
+            </div>
+            <p className="watchface-font-picker-note">
+              Weight and style affect each glyph. Digit spacing adjusts the gap between time digits, then creating the archive bakes the result into watch-ready PNG sprites.
+            </p>
+          </div>,
+          document.body
+        )
+          : null}
+      </div>
 
       {typography && onTypographyChange ? (
         <div className="watchface-typography-controls">
@@ -175,73 +369,6 @@ export function LocalFontPicker({
         </p>
       ) : null}
 
-      {open ? (
-        <div className="watchface-font-picker-panel">
-          <div className="watchface-font-picker-search">
-            <Type size={15} aria-hidden="true" />
-            <input
-              autoFocus
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search or enter a font family"
-              aria-label="Search installed fonts"
-            />
-          </div>
-
-          {loading ? (
-            <p className="watchface-font-picker-status">
-              <Loader2 className="spin" size={14} /> Loading your local font library…
-            </p>
-          ) : null}
-          {error ? <p className="watchface-font-picker-status">{error}</p> : null}
-          {families !== null && !loading ? (
-            <p className="watchface-font-picker-status">
-              {families.length} installed font {families.length === 1 ? "family" : "families"} available locally.
-            </p>
-          ) : null}
-
-          {query.trim() && !exactMatch ? (
-            <button
-              className="watchface-font-custom-option"
-              type="button"
-              onClick={() => setCandidate(query.trim())}
-            >
-              Use “{query.trim()}” as entered
-            </button>
-          ) : null}
-
-          <div className="watchface-font-picker-results" role="listbox" aria-label="Installed font families">
-            {matchingFamilies.slice(0, 100).map((family) => (
-              <button
-                key={family}
-                className={candidate === family ? "is-selected" : ""}
-                type="button"
-                role="option"
-                aria-selected={candidate === family}
-                onClick={() => setCandidate(family)}
-              >
-                <strong style={{ fontFamily: family, ...sampleStyle }}>{family}</strong>
-                <span style={{ fontFamily: family, ...sampleStyle }}>0123456789 · Wed</span>
-              </button>
-            ))}
-          </div>
-          {matchingFamilies.length > 100 ? (
-            <p className="watchface-font-picker-status">Showing the first 100 matches—keep typing to narrow the list.</p>
-          ) : null}
-
-          <div className="watchface-font-picker-actions">
-            <button className="secondary-button" type="button" onClick={restoreTemplate}>
-              {emptyLabel}
-            </button>
-            <button className="primary-button" type="button" disabled={!candidate.trim()} onClick={applyCandidate}>
-              Rasterize into preview
-            </button>
-          </div>
-          <p className="watchface-font-picker-note">
-            Weight and style affect each glyph. Digit spacing adjusts the gap between time digits, then creating the archive bakes the result into watch-ready PNG sprites.
-          </p>
-        </div>
-      ) : null}
     </div>
   );
 }

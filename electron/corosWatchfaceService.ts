@@ -806,9 +806,30 @@ export async function deleteCorosWatchfaceProject(
   });
 }
 
+function artworkMimeType(bytes: Buffer): string {
+  if (bytes.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]))) {
+    return "image/png";
+  }
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    bytes.subarray(0, 4).toString("ascii") === "RIFF" &&
+    bytes.subarray(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  return "application/octet-stream";
+}
+
 /**
  * Import a user-selected image as an editor asset. It stays renderer-visible
- * only as a resized data URL; the original path never crosses the IPC bridge.
+ * only as a data URL; the original path never crosses the IPC bridge.
+ *
+ * The original bytes are shipped untouched: Chromium's color-managed decoder
+ * honors any embedded ICC profile, while a nativeImage re-encode strips it
+ * and leaves wide-gamut (Display P3) artwork looking darker than the source.
+ * Oversized images are downscaled by the renderer after that correct decode.
  */
 export async function loadCorosWatchfaceArtwork(
   artworkPath: string
@@ -822,19 +843,14 @@ export async function loadCorosWatchfaceArtwork(
   if (image.isEmpty()) {
     throw new Error("That image could not be opened.");
   }
-  const originalSize = image.getSize();
-  const maxDimension = Math.max(originalSize.width, originalSize.height);
-  const scaled =
-    maxDimension > 1400
-      ? image.resize({
-          width: Math.round((originalSize.width / maxDimension) * 1400),
-          height: Math.round((originalSize.height / maxDimension) * 1400),
-          quality: "best"
-        })
-      : image;
-  const size = scaled.getSize();
+  const bytes = await fs.promises.readFile(artworkPath);
+  const mimeType = artworkMimeType(bytes);
+  if (mimeType === "application/octet-stream") {
+    throw new Error("Choose a PNG, JPEG, or WebP image.");
+  }
+  const size = image.getSize();
   return {
-    dataUrl: scaled.toDataURL(),
+    dataUrl: `data:${mimeType};base64,${bytes.toString("base64")}`,
     width: size.width,
     height: size.height
   };
