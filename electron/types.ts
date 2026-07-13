@@ -1322,6 +1322,41 @@ export interface TrainingHubActivitySeriesPoint {
   power?: number;
 }
 
+export interface StrengthSet {
+  reps: number;
+  weightKg: number;
+  workSec: number;
+  restSec: number;
+  calories: number;
+}
+
+export interface StrengthExercise {
+  nameKey: string;   // "T####"/"S####" library code, or a custom name
+  rawName?: string;  // payload name, used to resolve custom exercises
+  sets: number;
+  totalReps: number;
+  entries: StrengthSet[];
+}
+
+export interface StrengthSummary {
+  sets: number;
+  totalReps: number;
+  totalWeightKg: number;
+  exercises: number;
+  calories: number;
+  durationSec: number;
+  avgHr?: number;
+  maxHr?: number;
+  trainingLoad?: number;
+  aerobicEffect?: number;
+  anaerobicEffect?: number;
+}
+
+export interface StrengthDetail {
+  summary: StrengthSummary;
+  exercises: StrengthExercise[];
+}
+
 export interface TrainingHubActivityDetail {
   activityId?: string;
   name?: string;
@@ -1338,6 +1373,7 @@ export interface TrainingHubActivityDetail {
   laps: TrainingHubActivityLap[];
   track?: TrainingHubActivityTrack;
   series?: TrainingHubActivitySeriesPoint[];
+  strength?: StrengthDetail;
   raw: Record<string, unknown>;
 }
 

@@ -22335,6 +22335,31 @@ body.is-backgrounded .training-backup-progress-track.is-indeterminate span {
   animation-play-state: running !important;
 }
 
+.strength-exercise-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.strength-exercise-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+
+.strength-exercise-meta {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.strength-exercise .table-shell table {
+  width: 100%;
 /* ── Watchface editor (3-pane, Figma-style) ─────────────────────────── */
 .watchface-editor {
   display: flex;

@@ -67,6 +67,7 @@ import {
   stsRequestUrl,
   decodeStsCredentials
 } from "./corosUploadConfig";
+import { parseStrengthDetail } from "./strengthDetail";
 
 interface LoginResult {
   loginData: TrainingHubLoginData;
@@ -4220,6 +4221,7 @@ export function parseActivityDetail(raw: Record<string, unknown>): TrainingHubAc
     laps,
     track,
     series: parseActivitySeries(raw),
+    strength: parseStrengthDetail(raw),
     raw
   };
 }
