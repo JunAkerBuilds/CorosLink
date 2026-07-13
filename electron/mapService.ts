@@ -1123,6 +1123,20 @@ export async function searchRouteLocations(
   return searchNominatim(trimmed);
 }
 
+/** Reverse geocode coordinates using the same throttled Nominatim client as route search. */
+export async function reverseGeocodeRouteLocation(
+  lat: number,
+  lon: number
+): Promise<RouteGeocodeResult> {
+  if (!Number.isFinite(lat) || Math.abs(lat) > 90) {
+    throw new Error("Latitude must be between -90 and 90.");
+  }
+  if (!Number.isFinite(lon) || Math.abs(lon) > 180) {
+    throw new Error("Longitude must be between -180 and 180.");
+  }
+  return reverseGeocodeNominatim(lat, lon);
+}
+
 export async function generateRoute(
   request: GenerateRouteRequest
 ): Promise<GeneratedRoute> {

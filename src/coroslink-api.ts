@@ -375,6 +375,10 @@ export interface CorosLinkApi {
   listGeneratedRoutes: () => Promise<GeneratedRoute[]>;
   geocodeRouteLocation: (query: string) => Promise<RouteGeocodeResult>;
   searchRouteLocations: (query: string) => Promise<RouteGeocodeResult[]>;
+  reverseGeocodeRouteLocation: (
+    lat: number,
+    lon: number
+  ) => Promise<RouteGeocodeResult>;
   generateRoute: (request: GenerateRouteRequest) => Promise<GeneratedRoute>;
   routeWaypoints: (request: RouteWaypointRequest) => Promise<RouteGeometry>;
   saveDrawnRoute: (payload: DrawnRoutePayload) => Promise<GeneratedRoute>;

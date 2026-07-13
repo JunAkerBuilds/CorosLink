@@ -29,6 +29,7 @@ export interface OverallActivityStats {
 }
 
 export interface GeoHeatBucket {
+  key: string;
   lat: number;
   lon: number;
   count: number;
@@ -42,6 +43,12 @@ const VISIT_CONCURRENCY = 3;
 const MAX_CACHED_ROUTE_POINTS = 280;
 /** ~0.5° geographic grid for visit density (~55 km). */
 const GEO_HEAT_STEP = 0.5;
+
+export function geoHeatBucketKey(point: GlobePoint): string {
+  const latKey = Math.round(point.lat / GEO_HEAT_STEP);
+  const lonKey = Math.round(point.lon / GEO_HEAT_STEP);
+  return `${latKey}:${lonKey}`;
+}
 
 export function isGlobePoint(
   point: TrainingHubTrackPoint,
@@ -225,9 +232,7 @@ export function bucketVisitsGeographically(
 
   const buckets = new Map<string, GeoHeatBucket>();
   for (const visit of visits) {
-    const latKey = Math.round(visit.lat / GEO_HEAT_STEP);
-    const lonKey = Math.round(visit.lon / GEO_HEAT_STEP);
-    const key = `${latKey}:${lonKey}`;
+    const key = geoHeatBucketKey(visit);
     const existing = buckets.get(key);
     if (existing) {
       existing.count += 1;
@@ -235,6 +240,7 @@ export function bucketVisitsGeographically(
       existing.lon = (existing.lon * (existing.count - 1) + visit.lon) / existing.count;
     } else {
       buckets.set(key, {
+        key,
         lat: visit.lat,
         lon: visit.lon,
         count: 1,

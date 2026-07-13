@@ -993,6 +993,8 @@ export interface RouteGeocodeResult {
   label: string;
   lat: number;
   lon: number;
+  city?: string;
+  country?: string;
 }
 
 export interface GenerateRouteRequest {
