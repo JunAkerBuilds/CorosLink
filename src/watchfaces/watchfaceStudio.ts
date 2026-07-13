@@ -2,6 +2,7 @@ import type {
   CorosWatchfaceArtwork,
   CorosWatchfaceAssetReplacement,
   CorosWatchfaceConfigOverride,
+  CorosWatchfaceRasterFont,
   CorosWatchfaceResolutionDetails,
   CorosWatchfaceSpriteFile,
   CorosWatchfaceTemplateAsset,
@@ -19,6 +20,8 @@ export interface WatchfaceTypography {
   fontStyle?: "normal" | "italic";
   /** Character spacing expressed as a fraction of the rendered font size. */
   letterSpacing?: number;
+  /** Optional portable PNG atlas used when no desktop font family is set. */
+  rasterFont?: CorosWatchfaceRasterFont;
 }
 
 export interface WatchfaceStudioOptions extends WatchfaceTypography {
@@ -382,6 +385,178 @@ export async function buildAmPmSpriteReplacements(
   return replacements;
 }
 
+/** Removes separators and duplicate mappings from a PNG-atlas glyph label. */
+export function normalizeRasterFontGlyphs(value: string): string {
+  const seen = new Set<string>();
+  const glyphs: string[] = [];
+  for (const glyph of value.toUpperCase()) {
+    if (/\s/.test(glyph) || seen.has(glyph)) {
+      continue;
+    }
+    seen.add(glyph);
+    glyphs.push(glyph);
+  }
+  return glyphs.join("");
+}
+
+/** Returns whether a PNG font atlas contains every character in `text`. */
+export function rasterFontSupportsText(
+  rasterFont: CorosWatchfaceRasterFont | undefined,
+  text: string
+): boolean {
+  if (!rasterFont?.dataUrl) {
+    return false;
+  }
+  if (rasterFont.labels?.[text.toUpperCase()]) {
+    return true;
+  }
+  const glyphs = new Set(normalizeRasterFontGlyphs(rasterFont.glyphs));
+  return [...text.toUpperCase()].every((glyph) => glyphs.has(glyph));
+}
+
+/** A desktop family takes priority; otherwise use the atlas when it has the text. */
+export function shouldRenderWatchfaceText(
+  text: string,
+  fontFamily: string,
+  typography: WatchfaceTypography = {}
+): boolean {
+  return Boolean(fontFamily) || rasterFontSupportsText(typography.rasterFont, text);
+}
+
+/**
+ * Renders text from a user-provided PNG atlas. The atlas is deliberately
+ * preserved as a single data URL in the project so a design remains portable
+ * even when its original desktop font is not installed elsewhere.
+ */
+export async function renderRasterFontSprite(
+  text: string,
+  width: number,
+  height: number,
+  rasterFont: CorosWatchfaceRasterFont,
+  color: string,
+  typography: WatchfaceTypography = {}
+): Promise<string> {
+  const glyphs = normalizeRasterFontGlyphs(rasterFont.glyphs);
+  const characters = [...text.toUpperCase()];
+  if (!rasterFontSupportsText(rasterFont, text) || characters.length === 0) {
+    throw new Error("The uploaded PNG font does not include every requested glyph.");
+  }
+  const labelSprite = rasterFont.labels?.[text.toUpperCase()];
+  if (labelSprite) {
+    return renderRasterImageSprite(labelSprite, width, height, color, rasterFont.tint);
+  }
+  const atlas = await loadStudioImage(rasterFont.dataUrl);
+  const columns = Math.max(1, Math.min(glyphs.length, Math.round(rasterFont.columns)));
+  const rows = Math.ceil(glyphs.length / columns);
+  const cellWidth = atlas.naturalWidth / columns;
+  const cellHeight = atlas.naturalHeight / rows;
+  if (cellWidth <= 0 || cellHeight <= 0) {
+    throw new Error("The uploaded PNG font atlas has no drawable cells.");
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Sprite rendering is unavailable in this window.");
+  }
+  context.imageSmoothingEnabled = false;
+  const aspect = cellWidth / cellHeight;
+  const tracking = Math.max(-0.1, Math.min(0.25, typography.letterSpacing ?? 0));
+  const occupiedAspect = Math.max(
+    0.1,
+    characters.length * aspect + Math.max(0, characters.length - 1) * tracking
+  );
+  const heightByWidth =
+    (width * 0.94) / occupiedAspect;
+  const glyphHeight = Math.max(1, Math.min(height * 0.94, heightByWidth));
+  const glyphWidth = glyphHeight * aspect;
+  const gap = glyphHeight * tracking;
+  const totalWidth = glyphWidth * characters.length + gap * Math.max(0, characters.length - 1);
+  let x = (width - totalWidth) / 2;
+  const y = (height - glyphHeight) / 2;
+
+  for (const character of characters) {
+    const index = glyphs.indexOf(character);
+    const sourceX = (index % columns) * cellWidth;
+    const sourceY = Math.floor(index / columns) * cellHeight;
+    context.drawImage(
+      atlas,
+      sourceX,
+      sourceY,
+      cellWidth,
+      cellHeight,
+      x,
+      y,
+      glyphWidth,
+      glyphHeight
+    );
+    x += glyphWidth + gap;
+  }
+  if (rasterFont.tint) {
+    context.globalCompositeOperation = "source-in";
+    context.fillStyle = color;
+    context.fillRect(0, 0, width, height);
+  }
+  return canvas.toDataURL("image/png");
+}
+
+/** Fits one pre-rasterized label sprite inside a watchface sprite slot. */
+async function renderRasterImageSprite(
+  dataUrl: string,
+  width: number,
+  height: number,
+  color: string,
+  tint: boolean
+): Promise<string> {
+  const image = await loadStudioImage(dataUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Sprite rendering is unavailable in this window.");
+  }
+  context.imageSmoothingEnabled = false;
+  const scale = Math.min(
+    (width * 0.94) / image.naturalWidth,
+    (height * 0.94) / image.naturalHeight
+  );
+  const drawWidth = Math.max(1, image.naturalWidth * scale);
+  const drawHeight = Math.max(1, image.naturalHeight * scale);
+  context.drawImage(
+    image,
+    (width - drawWidth) / 2,
+    (height - drawHeight) / 2,
+    drawWidth,
+    drawHeight
+  );
+  if (tint) {
+    context.globalCompositeOperation = "source-in";
+    context.fillStyle = color;
+    context.fillRect(0, 0, width, height);
+  }
+  return canvas.toDataURL("image/png");
+}
+
+/**
+ * Renders either a host-installed font or a project-local PNG font atlas.
+ */
+export async function renderWatchfaceTextSprite(
+  text: string,
+  width: number,
+  height: number,
+  fontFamily: string,
+  color: string,
+  typography: WatchfaceTypography = {}
+): Promise<string> {
+  if (!fontFamily && typography.rasterFont && rasterFontSupportsText(typography.rasterFont, text)) {
+    return renderRasterFontSprite(text, width, height, typography.rasterFont, color, typography);
+  }
+  return renderDigitSprite(text, width, height, fontFamily, color, typography);
+}
+
 /**
  * Renders one digit into a sprite of the template's exact pixel size. The
  * glyph is measured and centered so mixed fonts still align on the face.
@@ -539,14 +714,17 @@ export async function buildStudioReplacements(
 
   for (const resolution of details.resolutions) {
     for (const folder of resolution.spriteFolders) {
-      if (folder.kind === "digits" && options.fontFamily) {
+      if (
+        folder.kind === "digits" &&
+        shouldRenderWatchfaceText("0123456789", options.fontFamily, options)
+      ) {
         const color = folder.aod
           ? dimHexColor(options.digitColor, AOD_DIM_FACTOR)
           : options.digitColor;
-        folder.files.forEach((file, digit) => {
+        for (const [digit, file] of folder.files.entries()) {
           replacements.push({
             path: file.path,
-            dataUrl: renderDigitSprite(
+            dataUrl: await renderWatchfaceTextSprite(
               String(digit),
               file.width,
               file.height,
@@ -555,13 +733,28 @@ export async function buildStudioReplacements(
               options
             )
           });
-        });
-      } else if (folder.kind === "week" && options.tintLabels) {
+        }
+      } else if (folder.kind === "week") {
         const color = folder.aod
           ? dimHexColor(labelColor, AOD_DIM_FACTOR)
           : labelColor;
-        for (const file of folder.files) {
-          tintJobs.push({ file, color });
+        for (const [index, file] of folder.files.entries()) {
+          const label = WEEKDAY_LABELS[index] ?? "DAY";
+          if (rasterFontSupportsText(options.rasterFont, label)) {
+            replacements.push({
+              path: file.path,
+              dataUrl: await renderRasterFontSprite(
+                label,
+                file.width,
+                file.height,
+                options.rasterFont!,
+                color,
+                options
+              )
+            });
+          } else if (options.tintLabels) {
+            tintJobs.push({ file, color });
+          }
         }
       }
     }
@@ -609,10 +802,17 @@ export function summarizeStudioReplacements(
   let icons = 0;
   for (const resolution of details.resolutions) {
     for (const folder of resolution.spriteFolders) {
-      if (folder.kind === "digits" && options.fontFamily) {
+      if (
+        folder.kind === "digits" &&
+        shouldRenderWatchfaceText("0123456789", options.fontFamily, options)
+      ) {
         digits += folder.files.length;
-      } else if (folder.kind === "week" && options.tintLabels) {
-        labels += folder.files.length;
+      } else if (folder.kind === "week") {
+        labels += folder.files.filter(
+          (_, index) =>
+            rasterFontSupportsText(options.rasterFont, WEEKDAY_LABELS[index] ?? "DAY") ||
+            options.tintLabels
+        ).length;
       }
     }
     if (options.tintIcons) {
@@ -1169,15 +1369,16 @@ export async function buildControlTemperatureSpriteReplacements(
     });
   }
   const selectedFont = style.fontFamily ?? fontFamily;
-  const assets = selectedFont
+  const rasterized = shouldRenderWatchfaceText("0123456789", selectedFont, typography);
+  const assets = rasterized
     ? []
     : await loadAssets([...new Set(jobs.map((job) => job.source.path))]);
   const byPath = new Map(assets.map((asset) => [asset.path, asset]));
   return Promise.all(jobs.map(async (job) => ({
     path: job.path,
     create: job.create,
-    dataUrl: selectedFont
-      ? renderDigitSprite(
+    dataUrl: rasterized
+      ? await renderWatchfaceTextSprite(
           String(job.digit), job.width, job.height, selectedFont,
           style.color ?? "#ffffff", typography
         )
@@ -1387,6 +1588,7 @@ export async function buildMetricSpriteReplacements(
     height: number;
     color?: string;
     fontFamily: string;
+    rasterized: boolean;
     create: boolean;
   }[] = [];
   for (const resolution of details.resolutions) {
@@ -1415,6 +1617,11 @@ export async function buildMetricSpriteReplacements(
           height: Math.max(1, Math.round(file.height * normalizedScale)),
           color: style.color,
           fontFamily: metricFontFamily,
+          rasterized: shouldRenderWatchfaceText(
+            String(digit),
+            metricFontFamily,
+            typography
+          ),
           create: !existsInTemplate
         });
       });
@@ -1422,14 +1629,14 @@ export async function buildMetricSpriteReplacements(
   }
   const sourceAssets = await loadAssets([
     ...new Set(
-      jobs.filter((job) => !job.fontFamily).map((job) => job.source.path)
+      jobs.filter((job) => !job.rasterized).map((job) => job.source.path)
     )
   ]);
   const assetsByPath = new Map(sourceAssets.map((asset) => [asset.path, asset]));
   const replacements: CorosWatchfaceAssetReplacement[] = [];
   for (const job of jobs) {
-    const dataUrl = job.fontFamily
-      ? renderDigitSprite(
+    const dataUrl = job.rasterized
+      ? await renderWatchfaceTextSprite(
           String(job.digit),
           job.width,
           job.height,
@@ -1557,6 +1764,7 @@ export async function buildTimeSpriteReplacements(
     height: number;
     color?: string;
     fontFamily: string;
+    rasterized: boolean;
   }[] = [];
   for (const resolution of details.resolutions) {
     for (const part of WATCHFACE_TIME_PARTS) {
@@ -1579,7 +1787,12 @@ export async function buildTimeSpriteReplacements(
             width: Math.max(1, Math.round(file.width * normalizedScale)),
             height: Math.max(1, Math.round(file.height * normalizedScale)),
             color: style.color,
-            fontFamily: partFontFamily
+            fontFamily: partFontFamily,
+            rasterized: shouldRenderWatchfaceText(
+              String(value),
+              partFontFamily,
+              typography
+            )
           });
         });
       }
@@ -1587,14 +1800,14 @@ export async function buildTimeSpriteReplacements(
   }
   const sourceAssets = await loadAssets([
     ...new Set(
-      jobs.filter((job) => !job.fontFamily).map((job) => job.source.path)
+      jobs.filter((job) => !job.rasterized).map((job) => job.source.path)
     )
   ]);
   const assetsByPath = new Map(sourceAssets.map((asset) => [asset.path, asset]));
   const replacements: CorosWatchfaceAssetReplacement[] = [];
   for (const job of jobs) {
-    const dataUrl = job.fontFamily
-      ? renderDigitSprite(
+    const dataUrl = job.rasterized
+      ? await renderWatchfaceTextSprite(
           String(job.digit),
           job.width,
           job.height,
@@ -1656,7 +1869,7 @@ export async function buildDateSpriteReplacements(
   styles: WatchfaceDateStyles,
   options: Pick<
     WatchfaceStudioOptions,
-    "fontFamily" | "digitColor" | "tintLabels" | "fontWeight" | "fontStyle" | "letterSpacing"
+    "fontFamily" | "digitColor" | "tintLabels" | "fontWeight" | "fontStyle" | "letterSpacing" | "rasterFont"
   >,
   loadAssets: WatchfaceAssetLoader
 ): Promise<CorosWatchfaceAssetReplacement[]> {
@@ -1668,6 +1881,7 @@ export async function buildDateSpriteReplacements(
     height: number;
     kind: "digits" | "week";
     fontFamily: string;
+    rasterized: boolean;
     color?: string;
   }[] = [];
   for (const resolution of details.resolutions) {
@@ -1691,6 +1905,13 @@ export async function buildDateSpriteReplacements(
           height: Math.max(1, Math.round(file.height * normalizedScale)),
           kind: part.kind,
           fontFamily: partFontFamily,
+          rasterized: shouldRenderWatchfaceText(
+            part.kind === "week"
+              ? WEEKDAY_LABELS[value] ?? String(value)
+              : String(value),
+            partFontFamily,
+            options
+          ),
           color: style.color
         });
       });
@@ -1698,18 +1919,18 @@ export async function buildDateSpriteReplacements(
   }
   const assets = await loadAssets([
     ...new Set(
-      jobs.filter((job) => !job.fontFamily).map((job) => job.source.path)
+      jobs.filter((job) => !job.rasterized).map((job) => job.source.path)
     )
   ]);
   const assetsByPath = new Map(assets.map((asset) => [asset.path, asset]));
   const replacements: CorosWatchfaceAssetReplacement[] = [];
   for (const job of jobs) {
     const asset = assetsByPath.get(job.source.path);
-    if (!asset && !job.fontFamily) {
+    if (!asset && !job.rasterized) {
       continue;
     }
-    const dataUrl = job.fontFamily
-      ? renderDigitSprite(
+    const dataUrl = job.rasterized
+      ? await renderWatchfaceTextSprite(
           job.kind === "week"
             ? WEEKDAY_LABELS[job.value] ?? String(job.value)
             : String(job.value),
@@ -2552,7 +2773,7 @@ export async function drawStudioPreview(
       (planned.partId
         ? options.timeStyles?.[planned.partId]?.fontFamily
         : undefined) ?? options.fontFamily;
-    if (file && !fontFamily) {
+    if (file && !shouldRenderWatchfaceText(String(planned.digit), fontFamily, options)) {
       wantedSprites.set(file.path, { color: null });
     }
   }
@@ -2562,7 +2783,7 @@ export async function drawStudioPreview(
       : plan.metricId
         ? options.metricStyles?.[plan.metricId]?.fontFamily ?? options.fontFamily
         : options.fontFamily;
-    if (fontFamily) {
+    if (shouldRenderWatchfaceText(plan.value, fontFamily, options)) {
       continue;
     }
     for (const digit of plan.value) {
@@ -2587,11 +2808,11 @@ export async function drawStudioPreview(
     }
   }
 
-  if (options.fontFamily) {
+  if (shouldRenderWatchfaceText("0123456789", options.fontFamily, options)) {
     for (const planned of digitPlan) {
       const file = planned.source?.files[planned.digit];
       if (file) {
-        const dataUrl = renderDigitSprite(
+        const dataUrl = await renderWatchfaceTextSprite(
           String(planned.digit),
           file.width,
           file.height,
@@ -2608,7 +2829,7 @@ export async function drawStudioPreview(
         if (!file || digitSprites.has(file.path)) {
           continue;
         }
-        const dataUrl = renderDigitSprite(
+        const dataUrl = await renderWatchfaceTextSprite(
           digit,
           file.width,
           file.height,
@@ -2647,9 +2868,9 @@ export async function drawStudioPreview(
       const cacheKey = `${file.path}|${timeFontFamily}|${timeColor}|${timeScale}`;
       image = styledTimeGlyphs.get(cacheKey);
       if (!image) {
-        if (timeFontFamily) {
+        if (shouldRenderWatchfaceText(String(planned.digit), timeFontFamily, options)) {
           image = await loadStudioImage(
-            renderDigitSprite(
+            await renderWatchfaceTextSprite(
               String(planned.digit),
               width,
               height,
@@ -2761,9 +2982,9 @@ export async function drawStudioPreview(
     );
     const weekWidth = Math.max(1, Math.round(weekFile.width * weekScale));
     const weekHeight = Math.max(1, Math.round(weekFile.height * weekScale));
-    if (weekFontFamily) {
+    if (shouldRenderWatchfaceText(WEEKDAY_LABELS[weekdayIndex] ?? "DAY", weekFontFamily, options)) {
       image = await loadStudioImage(
-        renderDigitSprite(
+        await renderWatchfaceTextSprite(
           WEEKDAY_LABELS[weekdayIndex] ?? "DAY",
           weekWidth,
           weekHeight,
@@ -2884,9 +3105,9 @@ export async function drawStudioPreview(
       const cacheKey = `${file.path}|${glyphFontFamily}|${glyphColor}|${glyphScale}`;
       let image = styledMetricGlyphs.get(cacheKey);
       if (!image) {
-        if (glyphFontFamily) {
+        if (shouldRenderWatchfaceText(digit, glyphFontFamily, options)) {
           image = await loadStudioImage(
-            renderDigitSprite(
+            await renderWatchfaceTextSprite(
               digit,
               styledFile.width,
               styledFile.height,

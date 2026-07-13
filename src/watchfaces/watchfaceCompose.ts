@@ -30,6 +30,7 @@ import {
   getAvailableComplications,
   mergeAssetReplacements,
   mergeConfigOverrides,
+  rasterFontSupportsText,
   rebaseNegativeControlChildren,
   type WatchfaceAssetLoader,
   type WatchfaceDateStyles,
@@ -89,6 +90,7 @@ export function toStudioOptions(
     fontWeight: design.fontWeight,
     fontStyle: design.fontStyle,
     letterSpacing: design.letterSpacing,
+    rasterFont: design.rasterFont,
     digitColor: design.digitColor,
     accentColor: design.accentColor,
     tintLabels: design.tintLabels,
@@ -168,14 +170,16 @@ export async function composeWatchfaceReplacements(
   const timeStyles = timeStylesOf(design);
   const dateStyles = dateStylesOf(design);
 
+  const rasterFontActive = rasterFontSupportsText(design.rasterFont, "0123456789");
   const studioActive =
-    Boolean(design.fontFamily) || design.tintLabels || design.tintIcons;
+    Boolean(design.fontFamily) || rasterFontActive || design.tintLabels || design.tintIcons;
   const metricStyleActive = hasEntries(metricStyles);
   const timeStyleActive = hasEntries(timeStyles);
   const dateStyleActive = hasEntries(dateStyles);
   const layerColorActive = hasEntries(design.layerColors);
   const typographyActive =
     Boolean(design.fontFamily) ||
+    rasterFontActive ||
     Object.values(timeStyles).some((style) => Boolean(style?.fontFamily));
   const ampmStyle = design.ampmIndicator;
   const ampmSupported = Boolean(getAmPmCapability(details) && ampmStyle);
@@ -190,6 +194,7 @@ export async function composeWatchfaceReplacements(
   const controlTemperatureRasterActive = Boolean(
     controlTemperatureStyle.fontFamily ||
     design.fontFamily ||
+    rasterFontActive ||
     controlTemperatureStyle.scale !== 1
   );
 

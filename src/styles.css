@@ -4121,6 +4121,124 @@ td span {
   gap: 6px;
 }
 
+.watchface-raster-font-panel {
+  display: grid;
+  gap: 8px;
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-soft) 28%, transparent);
+  padding: 10px;
+}
+
+.watchface-raster-font-panel > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.watchface-raster-font-panel strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.watchface-raster-font-panel span,
+.watchface-raster-font-panel p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.watchface-raster-font-panel .watchface-raster-font-warning {
+  color: var(--warning-text);
+  font-weight: 700;
+}
+
+.watchface-raster-font-panel .watchface-raster-font-status {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.watchface-raster-font-upload {
+  position: relative;
+  display: inline-flex;
+  width: fit-content;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  color: var(--accent-strong);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.watchface-raster-font-upload:hover {
+  border-color: var(--accent);
+}
+
+.watchface-raster-font-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.watchface-raster-font-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  gap: 8px;
+}
+
+.watchface-raster-font-fields label {
+  display: grid;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.watchface-raster-font-fields input:not([type="checkbox"]) {
+  min-width: 0;
+  min-height: 32px;
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  padding: 0 8px;
+  font: inherit;
+}
+
+.watchface-raster-font-glyphs,
+.watchface-raster-font-tint,
+.watchface-raster-font-fields .secondary-button {
+  grid-column: 1 / -1;
+}
+
+.watchface-raster-font-tint {
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+}
+
+.watchface-raster-font-tint input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.watchface-raster-font-fields .secondary-button {
+  width: fit-content;
+  min-height: 32px;
+  font-size: 11px;
+}
+
 .watchface-font-picker-results {
   display: grid;
   max-height: 248px;

@@ -141,6 +141,7 @@ import type {
   CorosLegacy614aCarrierPatchInput,
   CorosWatchfaceCreatorInput,
   CorosWatchfacePublishInput,
+  CorosWatchfaceRasterFontFolder,
   CorosWatchfaceRegion,
   CorosWatchfaceThemeDownloadInput,
   CorosWatchfaceThemeListInput,
@@ -261,6 +262,7 @@ let pendingCorosBluetoothSelection:
   | undefined;
 
 const legacy614aCarrierSelections = new Map<string, { sourcePath: string }>();
+const MAX_RASTER_FONT_SPRITE_FOLDER_BYTES = 12 * 1024 * 1024;
 
 /** Matches --bg-base in styles.css; updated when the renderer theme changes. */
 const DEFAULT_WINDOW_BACKGROUND = "#05080b";
@@ -307,6 +309,46 @@ function sanitizeExportFileName(name?: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 120);
+}
+
+async function loadRasterFontSpriteFolder(
+  folderPath: string
+): Promise<CorosWatchfaceRasterFontFolder> {
+  const sprites: CorosWatchfaceRasterFontFolder["sprites"] = [];
+  let totalBytes = 0;
+
+  async function walk(directoryPath: string, relativeDirectory = ""): Promise<void> {
+    const entries = await fs.promises.readdir(directoryPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const absolutePath = path.join(directoryPath, entry.name);
+      const relativePath = path.join(relativeDirectory, entry.name);
+      if (entry.isDirectory()) {
+        await walk(absolutePath, relativePath);
+        continue;
+      }
+      if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== ".png") {
+        continue;
+      }
+
+      const image = await fs.promises.readFile(absolutePath);
+      totalBytes += image.byteLength;
+      if (totalBytes > MAX_RASTER_FONT_SPRITE_FOLDER_BYTES) {
+        throw new Error("PNG sprite folders must be 12 MB or smaller.");
+      }
+      sprites.push({
+        name: entry.name,
+        relativePath,
+        dataUrl: `data:image/png;base64,${image.toString("base64")}`,
+        sizeBytes: image.byteLength
+      });
+    }
+  }
+
+  await walk(folderPath);
+  if (sprites.length === 0) {
+    throw new Error("The selected folder does not contain any PNG files.");
+  }
+  return { label: path.basename(folderPath), sprites };
 }
 
 function formatYyyymmddDay(date: Date): string {
@@ -766,6 +808,21 @@ function registerIpcHandlers(): void {
     return result.canceled || !artworkPath
       ? null
       : loadCorosWatchfaceArtwork(artworkPath);
+  });
+
+  ipcMain.handle("watchfaces:chooseRasterFontFolder", async () => {
+    const options: OpenDialogOptions = {
+      title: "Choose a PNG watchface sprite folder",
+      properties: ["openDirectory"]
+    };
+    const result =
+      mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showOpenDialog(mainWindow, options)
+        : await dialog.showOpenDialog(options);
+    const folderPath = result.filePaths[0];
+    return result.canceled || !folderPath
+      ? null
+      : loadRasterFontSpriteFolder(folderPath);
   });
 
   ipcMain.handle(

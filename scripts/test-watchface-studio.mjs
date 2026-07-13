@@ -22,6 +22,8 @@ import {
   inferStaticSeparators,
   mergeAssetReplacements,
   mergeConfigOverrides,
+  normalizeRasterFontGlyphs,
+  rasterFontSupportsText,
   rebaseNegativeControlChildren,
   scaleConfigRectValue
 } from "../src/watchfaces/watchfaceStudio.ts";
@@ -29,6 +31,20 @@ import {
 assert.equal(corosWeekdayIndex(0), 6);
 assert.equal(corosWeekdayIndex(1), 0);
 assert.equal(corosWeekdayIndex(6), 5);
+
+assert.equal(normalizeRasterFontGlyphs("0 1 2 2 a"), "012A");
+const rasterFont = {
+  label: "Pixel digits",
+  dataUrl: "data:image/png;base64,AA==",
+  glyphs: "0123456789SUN",
+  columns: 10,
+  labels: { MON: "data:image/png;base64,AA==" },
+  tint: true
+};
+assert.equal(rasterFontSupportsText(rasterFont, "08"), true);
+assert.equal(rasterFontSupportsText(rasterFont, "sun"), true);
+assert.equal(rasterFontSupportsText(rasterFont, "mon"), true);
+assert.equal(rasterFontSupportsText(rasterFont, "wed"), false);
 
 function digitFiles(width, height, directory, folder) {
   return Array.from({ length: 10 }, (_, digit) => ({

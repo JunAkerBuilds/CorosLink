@@ -906,6 +906,15 @@ export function WatchfaceEditor({
     setDesign((prev) => ({ ...prev, ...partial }));
   }
 
+  function setRasterFont(rasterFont: CorosWatchfaceDesignState["rasterFont"]) {
+    patchDesign({
+      rasterFont,
+      // A PNG atlas replaces the font-rendered sprites, so a regular face font
+      // must not remain selected as the fallback for this shared pipeline.
+      ...(rasterFont ? { fontFamily: "" } : {})
+    });
+  }
+
   function setMetricVisible(metricId: WatchfaceMetricId, visible: boolean) {
     setDesign((prev) => {
       const metricStyles = { ...prev.metricStyles };
@@ -1703,6 +1712,13 @@ export function WatchfaceEditor({
             value={design.fontFamily}
             emptyLabel="Keep template font"
             onChange={(fontFamily) => patchDesign({ fontFamily })}
+            rasterFont={design.rasterFont}
+            onRasterFontChange={(rasterFont) =>
+              patchDesign({
+                rasterFont,
+                ...(rasterFont ? { fontFamily: "" } : {})
+              })
+            }
             typography={{
               fontWeight: design.fontWeight ?? 400,
               fontStyle: design.fontStyle ?? "normal",
@@ -1770,6 +1786,11 @@ export function WatchfaceEditor({
             onChange={(fontFamily) =>
               setTimeStyle(layer.timePartId!, { fontFamily })
             }
+            rasterFont={design.rasterFont}
+            onRasterFontChange={(rasterFont) => {
+              setTimeStyle(layer.timePartId!, { fontFamily: "" });
+              setRasterFont(rasterFont);
+            }}
             typography={{
               fontWeight: design.fontWeight ?? 400,
               fontStyle: design.fontStyle ?? "normal",
@@ -1817,6 +1838,11 @@ export function WatchfaceEditor({
             onChange={(fontFamily) =>
               setMetricStyle(layer.metricId!, { fontFamily })
             }
+            rasterFont={design.rasterFont}
+            onRasterFontChange={(rasterFont) => {
+              setMetricStyle(layer.metricId!, { fontFamily: "" });
+              setRasterFont(rasterFont);
+            }}
             typography={{
               fontWeight: design.fontWeight ?? 400,
               fontStyle: design.fontStyle ?? "normal",
@@ -1865,6 +1891,12 @@ export function WatchfaceEditor({
             value={style?.fontFamily ?? design.fontFamily}
             emptyLabel="Keep template font"
             onChange={(fontFamily) => setDateStyle(partId, { fontFamily })}
+            rasterFont={design.rasterFont}
+            rasterFontRequiredText={partId === "weekday" ? "MON" : undefined}
+            onRasterFontChange={(rasterFont) => {
+              setDateStyle(partId, { fontFamily: "" });
+              setRasterFont(rasterFont);
+            }}
             typography={{
               fontWeight: design.fontWeight ?? 400,
               fontStyle: design.fontStyle ?? "normal",
@@ -2152,6 +2184,11 @@ export function WatchfaceEditor({
               value={design.metricStyles?.temperature?.fontFamily ?? design.fontFamily}
               emptyLabel="Keep control digits"
               onChange={(fontFamily) => setMetricStyle("temperature", { fontFamily })}
+              rasterFont={design.rasterFont}
+              onRasterFontChange={(rasterFont) => {
+                setMetricStyle("temperature", { fontFamily: "" });
+                setRasterFont(rasterFont);
+              }}
               typography={{
                 fontWeight: design.fontWeight ?? 400,
                 fontStyle: design.fontStyle ?? "normal",

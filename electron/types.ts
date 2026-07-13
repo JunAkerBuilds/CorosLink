@@ -342,6 +342,39 @@ export interface CorosWatchfaceArtwork {
   height: number;
 }
 
+/**
+ * A user-supplied PNG font atlas. Glyphs are laid out left-to-right,
+ * top-to-bottom in equally sized cells; `glyphs` maps those cells to text.
+ */
+export interface CorosWatchfaceRasterFont {
+  /** Friendly name shown in the font selector and saved with the project. */
+  label: string;
+  /** PNG data URL for the full glyph atlas. */
+  dataUrl: string;
+  /** One character per atlas cell, in reading order. */
+  glyphs: string;
+  /** Number of equally sized cells across the atlas. */
+  columns: number;
+  /** Optional pre-rasterized labels such as MON, TUE, and WED. */
+  labels?: Record<string, string>;
+  /** When true, use the design's selected digit colour for the atlas alpha. */
+  tint: boolean;
+}
+
+/** A PNG decoded from a sprite folder by the main process. */
+export interface CorosWatchfaceRasterFontSprite {
+  name: string;
+  relativePath: string;
+  dataUrl: string;
+  sizeBytes: number;
+}
+
+/** A user-selected folder of PNG digit and optional weekday sprites. */
+export interface CorosWatchfaceRasterFontFolder {
+  label: string;
+  sprites: CorosWatchfaceRasterFontSprite[];
+}
+
 export interface CorosWatchfaceDesignSprite {
   id: string;
   dataUrl: string;
@@ -431,6 +464,8 @@ export interface CorosWatchfaceDesignState {
   artwork: CorosWatchfaceArtwork | null;
   zoom: number;
   fontFamily: string;
+  /** Optional portable PNG glyph atlas, used when no local font is selected. */
+  rasterFont?: CorosWatchfaceRasterFont;
   /** Typography settings for rasterized digit and date sprites. */
   fontWeight?: number;
   fontStyle?: "normal" | "italic";
