@@ -21,6 +21,7 @@
   --map-globe-label-bg: rgba(6, 12, 14, 0.92);
   --map-globe-label-border: rgba(131, 243, 206, 0.16);
   --map-globe-label-text: #eaf8f3;
+  --map-globe-control-shadow: rgba(1, 8, 12, 0.3);
   --map-heat-low: rgba(53, 189, 145, 0.2);
   --map-heat-medium: rgba(72, 204, 160, 0.6);
   --map-heat-high: rgba(194, 247, 226, 0.94);
@@ -50,6 +51,7 @@
   --map-globe-label-bg: rgba(32, 39, 43, 0.91);
   --map-globe-label-border: rgba(8, 123, 91, 0.2);
   --map-globe-label-text: #f5faf8;
+  --map-globe-control-shadow: rgba(42, 61, 72, 0.14);
   --map-heat-low: rgba(36, 174, 132, 0.2);
   --map-heat-medium: rgba(20, 157, 116, 0.58);
   --map-heat-high: rgba(4, 111, 80, 0.92);
@@ -656,7 +658,7 @@
 
 .training-map-globe-stage .activity-globe-webgl {
   position: absolute;
-  inset: 52px 22px 50px;
+  inset: 0;
   min-height: 0;
   opacity: 1;
   transition: opacity 240ms ease;
@@ -772,7 +774,12 @@
   min-height: 34px;
   border: 1px solid var(--map-border-strong);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--map-secondary-surface) 88%, transparent);
+  background: color-mix(in srgb, var(--map-secondary-surface) 76%, transparent);
+  backdrop-filter: blur(14px) saturate(1.14);
+  -webkit-backdrop-filter: blur(14px) saturate(1.14);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--map-text-primary) 8%, transparent),
+    0 10px 28px var(--map-globe-control-shadow);
   color: var(--map-text-secondary);
   padding: 0 11px;
   font-size: 10.5px;

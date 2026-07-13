@@ -68,12 +68,12 @@ type LandTopology = Topology<{ land: GeometryCollection }>;
 
 const topology = landAtlas as unknown as LandTopology;
 const land = feature(topology, topology.objects.land);
-const LAND_DOT_STEP_DEGREES = 1.45;
+const LAND_DOT_STEP_DEGREES = 1;
 const GLOBE_RADIUS = 100;
 const SURFACE_ALTITUDE = 0.0025;
 const DEFAULT_VIEW: GlobeView = { lat: 18, lng: -20, altitude: 2.2 };
 const SELECTED_VIEW_ALTITUDE = 2.2;
-const FRAMING_VERSION = "full-rim-v2";
+const FRAMING_VERSION = "full-panel-v3";
 const SELECTED_LATITUDE_OFFSET = 6.5;
 const CAMERA_FOCUS_MS = 600;
 const STREET_VIEW_ALTITUDE = 0.42;
@@ -212,8 +212,8 @@ function createGeographyPoints(paperTheme: boolean): LandLayerData {
       uColor: {
         value: new Color(paperTheme ? "#667179" : "#c4d5e1"),
       },
-      uOpacity: { value: paperTheme ? 0.52 : 0.34 },
-      uPointSize: { value: paperTheme ? 2.25 : 2.1 },
+      uOpacity: { value: paperTheme ? 0.5 : 0.32 },
+      uPointSize: { value: paperTheme ? 1.9 : 1.78 },
       uPixelRatio: {
         value: Math.min(window.devicePixelRatio || 1, 2),
       },
@@ -674,12 +674,12 @@ const ActivityGlobeRendererComponent = forwardRef<
         pointLat={(point) => (point as ActivityPoint).lat}
         pointLng={(point) => (point as ActivityPoint).lon}
         pointAltitude={(point) =>
-          (point as ActivityPoint).key === selectedLocation?.key ? 0.006 : 0.0035
+          (point as ActivityPoint).key === selectedLocation?.key ? 0.008 : 0.0035
         }
         pointRadius={(point) => {
           const activity = point as ActivityPoint;
           return activity.key === selectedLocation?.key
-            ? 0.16
+            ? 0.28
             : 0.1 + activity.intensity * 0.1;
         }}
         pointColor={(point) => {
@@ -691,7 +691,7 @@ const ActivityGlobeRendererComponent = forwardRef<
             ? "rgba(8, 123, 91, 0.76)"
             : "rgba(66, 214, 165, 0.55)";
         }}
-        pointResolution={10}
+        pointResolution={12}
         pointsMerge={false}
         pointsTransitionDuration={0}
         pointLabel={() => ""}
@@ -712,13 +712,21 @@ const ActivityGlobeRendererComponent = forwardRef<
         ringAltitude={0.007}
         ringColor={() =>
           paperTheme
-            ? ["rgba(8, 123, 91, 0.42)", "rgba(8, 123, 91, 0)"]
-            : ["rgba(131, 243, 206, 0.48)", "rgba(131, 243, 206, 0)"]
+            ? [
+                "rgba(8, 123, 91, 0.62)",
+                "rgba(8, 123, 91, 0.22)",
+                "rgba(8, 123, 91, 0)",
+              ]
+            : [
+                "rgba(131, 243, 206, 0.7)",
+                "rgba(73, 207, 163, 0.24)",
+                "rgba(73, 207, 163, 0)",
+              ]
         }
-        ringMaxRadius={1.8}
-        ringPropagationSpeed={1.64}
-        ringRepeatPeriod={1_100}
-        ringResolution={48}
+        ringMaxRadius={2.8}
+        ringPropagationSpeed={2.3}
+        ringRepeatPeriod={820}
+        ringResolution={64}
         htmlElementsData={selectedData}
         htmlLat={(point) => (point as GeoHeatBucket).lat}
         htmlLng={(point) => (point as GeoHeatBucket).lon}
