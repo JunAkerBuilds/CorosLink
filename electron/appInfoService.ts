@@ -38,6 +38,22 @@ const STORAGE_LOCATION_SPECS: StorageLocationSpec[] = [
     resolvePath: () => path.join(app.getPath("userData"), "routes")
   },
   {
+    id: "watchface-projects",
+    label: "Watchface projects",
+    description:
+      "Saved editable designs together with private copies of their starter templates.",
+    kind: "directory",
+    resolvePath: () => path.join(app.getPath("userData"), "watchface-projects")
+  },
+  {
+    id: "watchface-archives",
+    label: "Generated watchface archives",
+    description:
+      "Upload-ready .dat archives created by the watchface designer.",
+    kind: "directory",
+    resolvePath: () => path.join(app.getPath("userData"), "watchface-archives")
+  },
+  {
     id: "database",
     label: "Library database",
     description:

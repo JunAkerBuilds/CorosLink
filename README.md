@@ -177,6 +177,59 @@ Direct cloud upload to your COROS account is not wired yet; GPX export via the p
 
 ---
 
+### Watch Faces — official iPhone hand-off (EXPERIMENTAL)
+
+Publish an existing, valid COROS custom-watchface template archive from desktop,
+then claim it through COROS's official share page on iPhone.
+
+- **Template creator** — compose a background with colors and optional artwork;
+  CorosLink builds a fresh archive while retaining the template's
+  live time, date, battery, and complication controls
+- **Digit & theme studio** — re-render the template's bitmap-font digit sprites
+  in a locally installed font and color, and recolor weekday labels, battery
+  digits, and metric icons; every resolution and the always-on-display tree is
+  regenerated (AOD sprites are auto-dimmed) at the template's exact pixel sizes
+- **Live sprite preview** — the on-screen face is composited from the same
+  sprite bitmaps and `config.txt` layout the watch itself will render
+- **Independent time styling** — resize and recolor hour and minute bitmap
+  sprites separately while keeping each two-digit group centered
+- **Draggable static separators (experimental)** — replace the template-anchored
+  time colon and date slash with background-rendered separators that support
+  exact X/Y, size, color, and direct preview dragging
+- **Custom design sprites** — import up to twelve static PNG/JPEG/WebP layers,
+  then drag, scale, rotate, position, and remove them before they are composited
+  into the generated watchface background
+- **Persistent watchface projects** — save the starter `.dat` together with
+  artwork, custom sprites, component styles, separators, and layout offsets;
+  reopen the project after restarting CorosLink and continue editing
+- **Per-metric bitmap styling (experimental)** — give fixed heart-rate, steps,
+  calorie, and elevation values their own color and 50–200% sprite scale;
+  CorosLink generates an isolated ten-digit folder for each customized metric
+- **Drag-to-move layout (experimental)** — position hours, minutes, weekday,
+  month, day, battery, and metric elements independently; CorosLink rewrites the matching
+  `config.txt` position keys for every resolution (scaled automatically),
+  leaving the always-on-display layout untouched
+- **Live metric studio (experimental)** — activate fixed heart rate, steps,
+  calories, and elevation fields when the source template exposes them; preview
+  the selectable metric slot and drag every enabled field into place
+- **Official source-template browser** — query COROS's editable-template
+  catalog for the selected watch model, download the source ZIP, validate its
+  manifest, and select it as the creator's starter in one step
+- **Archive validation** — checks the ZIP/.dat package has `info.json`, a source
+  template ID, DIY version, and a custom-face preview before upload
+- **Separate mobile session** — signs in to the mobile COROS API; only the
+  resulting session is kept in encrypted OS storage, never the password
+- **Precision-safe publish flow** — preserves COROS's large template IDs exactly
+  while creating the custom template and its time-limited share URL
+- **QR hand-off** — scan the generated official COROS URL on the paired iPhone,
+  save the face in COROS, then send it to the watch from the COROS app
+
+This is not direct Bluetooth sideloading and does not bypass the iPhone COROS
+app. The endpoints are undocumented and may change; only upload archives you
+are entitled to use.
+
+---
+
 ### Training Hub — COROS analytics dashboard
 
 Log in with your COROS account to view training data, fitness scores, and race predictions — right on your desktop.

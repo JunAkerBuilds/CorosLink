@@ -92,6 +92,7 @@ import {
   saveStartupView,
 } from "./navigation/startupView";
 import { MapsView } from "./maps/MapsView";
+import { WatchfacesView } from "./watchfaces/WatchfacesView";
 import { SettingsView } from "./settings/SettingsView";
 import { CalendarView } from "./calendar/CalendarView";
 import { DataView } from "./data/DataView";
@@ -128,6 +129,7 @@ const YOUTUBE_HOME_URL = "https://www.youtube.com/";
 const YOUTUBE_DOWNLOAD_CONSOLE_PREFIX = "__COROSLINK_YOUTUBE_DOWNLOAD__";
 const APPLE_MUSIC_SELECTED_PLAYLIST_STORAGE_KEY =
   "coroslink.appleMusic.selectedPlaylistId";
+const IS_DEVELOPMENT_BUILD = import.meta.env.DEV;
 
 let appleMusicSelectedPlaylistIdMemory = "";
 let appleMusicDetailCacheMemory: Record<string, AppleMusicPlaylist> = {};
@@ -143,6 +145,9 @@ export default function App() {
   const [startupView, setStartupView] = useState<View>(readStartupView);
   const [sidebarExpanded, setSidebarExpanded] = useState(
     createInitialSidebarExpanded,
+  );
+  const [showDevelopmentTools, setShowDevelopmentTools] = useState(
+    IS_DEVELOPMENT_BUILD,
   );
   const [sidebarOverlayOpen, setSidebarOverlayOpen] = useState(() => {
     if (typeof window === "undefined") {
@@ -1503,11 +1508,28 @@ export default function App() {
             onInstall={handleInstallUpdate}
             onPreferencesChange={handleUpdatePreferencesChange}
           />
-          <WatchConnectionSmokeControls
-            api={api}
-            onWatchStatusChange={setWatchStatus}
-            onError={setError}
-          />
+          {IS_DEVELOPMENT_BUILD ? (
+            <button
+              className="app-dev-view-toggle"
+              type="button"
+              aria-pressed={showDevelopmentTools}
+              title={
+                showDevelopmentTools
+                  ? "Switch to production view"
+                  : "Switch to developer view"
+              }
+              onClick={() => setShowDevelopmentTools((visible) => !visible)}
+            >
+              {showDevelopmentTools ? "Dev view" : "Prod view"}
+            </button>
+          ) : null}
+          {IS_DEVELOPMENT_BUILD && showDevelopmentTools ? (
+            <WatchConnectionSmokeControls
+              api={api}
+              onWatchStatusChange={setWatchStatus}
+              onError={setError}
+            />
+          ) : null}
           <div
             className={`watch-status-chip${watchStatus?.connected ? " connected" : ""}`}
             title={watchStatus?.rootPath ?? "No watch volume found"}
@@ -1672,6 +1694,12 @@ export default function App() {
                 onWatchStatusChange={setWatchStatus}
                 onMessage={setMessage}
                 onError={setError}
+              />
+            ) : null}
+            {activeView === "watchfaces" ? (
+              <WatchfacesView
+                api={api}
+                showDevelopmentTools={showDevelopmentTools}
               />
             ) : null}
             {activeView === "training" ? (

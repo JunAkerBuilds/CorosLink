@@ -7,6 +7,7 @@ import {
   MessageCircle,
   Music,
   Settings,
+  Watch,
   type LucideIcon,
 } from "lucide-react";
 
@@ -17,6 +18,7 @@ export type PrimaryView =
   | "data"
   | "calendar"
   | "maps"
+  | "watchfaces"
   | "coach"
   | "settings";
 
@@ -34,6 +36,7 @@ export const PRIMARY_NAV_ITEMS: PrimaryNavItem[] = [
   { id: "overview", label: "Overview", icon: LayoutGrid },
   { id: "media", label: "Media", icon: Music },
   { id: "maps", label: "Maps", icon: MapIcon, beta: true },
+  { id: "watchfaces", label: "Watch Faces", icon: Watch, beta: true },
   { id: "training", label: "Training Hub", icon: Activity },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
   {

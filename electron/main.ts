@@ -1,7 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
+import type { OpenDialogOptions } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { listLocalFontFamilies } from "./fontService";
 import { deleteDownload, getDownloadById, initializeDatabase, listDownloads, markDownloadTransferred, clearDownloadTransferredByFileName } from "./database";
 import { downloadAudio, getBinaryStatus } from "./downloadService";
 import {
@@ -54,6 +56,25 @@ import {
   uploadActivityFitToCoros,
   uploadTrainingPlan
 } from "./trainingHubService";
+import {
+  createCorosWatchfaceArchive,
+  describeCorosWatchfaceTemplate,
+  downloadCorosWatchfaceTheme,
+  getCorosBatteryReport,
+  getCorosWatchfaceStatus,
+  listCorosPairedDevices,
+  listCorosWatchfaceThemes,
+  loadCorosWatchfaceArtwork,
+  loadCorosWatchfaceTemplateAssets,
+  loadCorosWatchfaceProject,
+  loginCorosWatchfaces,
+  logoutCorosWatchfaces,
+  listCorosWatchfaceProjects,
+  publishCorosWatchface,
+  saveCorosWatchfaceProject,
+  deleteCorosWatchfaceProject,
+  selectCorosWatchfaceArchive
+} from "./corosWatchfaceService";
 import {
   getIntervalsStatus,
   connectIntervals,
@@ -116,6 +137,22 @@ import type {
   IntervalsActivityWithStatus,
   ManualActivityInput
 } from "./types";
+import type {
+  CorosLegacy614aCarrierPatchInput,
+  CorosWatchfaceCreatorInput,
+  CorosWatchfacePublishInput,
+  CorosWatchfaceRasterFontFolder,
+  CorosWatchfaceRegion,
+  CorosWatchfaceThemeDownloadInput,
+  CorosWatchfaceThemeListInput,
+  CorosBatteryQueryInput,
+  CorosBluetoothDeviceChoice
+} from "./types";
+import {
+  MULTIDATA_ELEV_416_PROFILE,
+  inspectLegacy614aCarrier,
+  patchLegacy614aFeatures
+} from "./legacy614a";
 import {
   deleteWatchTrack,
   getWatchConnectionSmokeOption,
@@ -220,6 +257,15 @@ import type {
 } from "./types";
 
 let mainWindow: BrowserWindow | undefined;
+let pendingCorosBluetoothSelection:
+  | {
+      callback: (deviceId: string) => void;
+      timeout: ReturnType<typeof setTimeout>;
+    }
+  | undefined;
+
+const legacy614aCarrierSelections = new Map<string, { sourcePath: string }>();
+const MAX_RASTER_FONT_SPRITE_FOLDER_BYTES = 12 * 1024 * 1024;
 
 /** Matches --bg-base in styles.css; updated when the renderer theme changes. */
 const DEFAULT_WINDOW_BACKGROUND = "#05080b";
@@ -266,6 +312,46 @@ function sanitizeExportFileName(name?: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 120);
+}
+
+async function loadRasterFontSpriteFolder(
+  folderPath: string
+): Promise<CorosWatchfaceRasterFontFolder> {
+  const sprites: CorosWatchfaceRasterFontFolder["sprites"] = [];
+  let totalBytes = 0;
+
+  async function walk(directoryPath: string, relativeDirectory = ""): Promise<void> {
+    const entries = await fs.promises.readdir(directoryPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const absolutePath = path.join(directoryPath, entry.name);
+      const relativePath = path.join(relativeDirectory, entry.name);
+      if (entry.isDirectory()) {
+        await walk(absolutePath, relativePath);
+        continue;
+      }
+      if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== ".png") {
+        continue;
+      }
+
+      const image = await fs.promises.readFile(absolutePath);
+      totalBytes += image.byteLength;
+      if (totalBytes > MAX_RASTER_FONT_SPRITE_FOLDER_BYTES) {
+        throw new Error("PNG sprite folders must be 12 MB or smaller.");
+      }
+      sprites.push({
+        name: entry.name,
+        relativePath,
+        dataUrl: `data:image/png;base64,${image.toString("base64")}`,
+        sizeBytes: image.byteLength
+      });
+    }
+  }
+
+  await walk(folderPath);
+  if (sprites.length === 0) {
+    throw new Error("The selected folder does not contain any PNG files.");
+  }
+  return { label: path.basename(folderPath), sprites };
 }
 
 function formatYyyymmddDay(date: Date): string {
@@ -385,6 +471,32 @@ function configureAppPermissions(): void {
   );
 }
 
+function configureCorosBluetoothSelection(window: BrowserWindow): void {
+  // Electron does not provide a built-in Web Bluetooth chooser. A PACE Pro
+  // does not reliably advertise its full name, so the renderer receives the
+  // nearby-device list and lets the user explicitly choose the watch.
+  window.webContents.on("select-bluetooth-device", (event, devices, callback) => {
+    event.preventDefault();
+    if (pendingCorosBluetoothSelection) {
+      clearTimeout(pendingCorosBluetoothSelection.timeout);
+    }
+    const timeout = setTimeout(() => {
+      const pending = pendingCorosBluetoothSelection;
+      pendingCorosBluetoothSelection = undefined;
+      pending?.callback("");
+      if (!window.isDestroyed()) {
+        window.webContents.send("watchfaces:bluetoothDevices", []);
+      }
+    }, 45_000);
+    pendingCorosBluetoothSelection = { callback, timeout };
+    const choices: CorosBluetoothDeviceChoice[] = devices.map((device) => ({
+      deviceId: device.deviceId,
+      deviceName: device.deviceName
+    }));
+    window.webContents.send("watchfaces:bluetoothDevices", choices);
+  });
+}
+
 function createWindow(): void {
   const iconPath = getAppIconPath();
 
@@ -417,6 +529,7 @@ function createWindow(): void {
     shell.openExternal(url);
     return { action: "deny" };
   });
+  configureCorosBluetoothSelection(mainWindow);
 
   // macOS fullscreen exposes the window background in the title-bar inset;
   // re-apply after transitions so it stays in sync with the active theme.
@@ -536,6 +649,216 @@ function registerIpcHandlers(): void {
   ipcMain.handle("window:isFullscreen", () => mainWindow?.isFullScreen() ?? false);
 
   ipcMain.handle("watch:getStatus", () => getWatchStatus());
+
+  ipcMain.handle("watchfaces:getStatus", () => getCorosWatchfaceStatus());
+
+  // Font names are host-local metadata only. Glyph rendering remains in the
+  // renderer, where they are baked into the watchface's PNG sprites.
+  ipcMain.handle("watchfaces:listLocalFontFamilies", () => listLocalFontFamilies());
+
+  ipcMain.handle(
+    "watchfaces:login",
+    (_event, email: string, password: string, region?: CorosWatchfaceRegion) =>
+      loginCorosWatchfaces(email, password, region)
+  );
+
+  ipcMain.handle("watchfaces:logout", () => logoutCorosWatchfaces());
+
+  ipcMain.handle("watchfaces:listPairedDevices", () => listCorosPairedDevices());
+  ipcMain.handle(
+    "watchfaces:selectBluetoothDevice",
+    (_event, deviceId: string) => {
+      const pending = pendingCorosBluetoothSelection;
+      pendingCorosBluetoothSelection = undefined;
+      if (!pending) {
+        throw new Error("There is no active Bluetooth device scan.");
+      }
+      clearTimeout(pending.timeout);
+      pending.callback(deviceId);
+    }
+  );
+  ipcMain.handle("watchfaces:cancelBluetoothDevice", () => {
+    const pending = pendingCorosBluetoothSelection;
+    pendingCorosBluetoothSelection = undefined;
+    if (pending) {
+      clearTimeout(pending.timeout);
+      pending.callback("");
+    }
+  });
+
+  ipcMain.handle(
+    "watchfaces:getBatteryReport",
+    (_event, input: CorosBatteryQueryInput) => getCorosBatteryReport(input)
+  );
+
+  ipcMain.handle(
+    "watchfaces:listThemes",
+    (_event, input: CorosWatchfaceThemeListInput) => listCorosWatchfaceThemes(input)
+  );
+
+  ipcMain.handle(
+    "watchfaces:downloadTheme",
+    (_event, input: CorosWatchfaceThemeDownloadInput) =>
+      downloadCorosWatchfaceTheme(input)
+  );
+
+  ipcMain.handle("watchfaces:chooseArchive", async () => {
+    const options: OpenDialogOptions = {
+      title: "Choose a COROS custom watchface archive",
+      properties: ["openFile"],
+      filters: [
+        {
+          name: "Watchface archive",
+          extensions: ["zip", "dat"]
+        }
+      ]
+    };
+    const result =
+      mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showOpenDialog(mainWindow, options)
+        : await dialog.showOpenDialog(options);
+    const archivePath = result.filePaths[0];
+    return result.canceled || !archivePath
+      ? null
+      : selectCorosWatchfaceArchive(archivePath);
+  });
+
+  ipcMain.handle("watchfaces:chooseLegacy614aCarrier", async () => {
+    const options: OpenDialogOptions = {
+      title: "Choose the original MULTIDATA ELEV legacy carrier",
+      properties: ["openFile"],
+      filters: [{ name: "COROS legacy watchface BIN", extensions: ["bin"] }]
+    };
+    const result =
+      mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showOpenDialog(mainWindow, options)
+        : await dialog.showOpenDialog(options);
+    const sourcePath = result.filePaths[0];
+    if (result.canceled || !sourcePath) return null;
+
+    const reference = await fs.promises.readFile(sourcePath);
+    // This validates the exact file hash in addition to its 614A shape. A
+    // previously patched carrier, another model, or a similar lookalike BIN
+    // cannot become the base for another edit.
+    const carrier = inspectLegacy614aCarrier(reference, MULTIDATA_ELEV_416_PROFILE);
+    const selectionId = `legacy614a-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    legacy614aCarrierSelections.set(selectionId, { sourcePath });
+    return {
+      selectionId,
+      inspection: {
+        profile: "multidata-elev-416" as const,
+        profileName: carrier.profileName,
+        fileName: path.basename(sourcePath),
+        watchFaceId: carrier.watchFaceId,
+        sizeBytes: carrier.sizeBytes,
+        payloadCrc16: carrier.payloadCrc16,
+        fullFileCrc16: carrier.fullFileCrc16,
+        weatherSpriteSize: carrier.weatherSpriteSize,
+        weatherPosition: carrier.weatherPosition,
+        temperatureRect: carrier.temperatureRect
+      }
+    };
+  });
+
+  ipcMain.handle(
+    "watchfaces:exportLegacy614aCarrier",
+    async (_event, selectionId: string, patch: CorosLegacy614aCarrierPatchInput) => {
+      const selection = legacy614aCarrierSelections.get(selectionId);
+      if (!selection) {
+        throw new Error("Choose and validate the original MULTIDATA ELEV carrier again before exporting.");
+      }
+      const reference = await fs.promises.readFile(selection.sourcePath);
+      const output = patchLegacy614aFeatures(reference, patch, MULTIDATA_ELEV_416_PROFILE);
+      const saveOptions = {
+        title: "Export guarded MULTIDATA carrier",
+        defaultPath: "MULTIDATA-ELEV-SLENDER-614A.bin",
+        filters: [{ name: "COROS legacy watchface BIN", extensions: ["bin"] }]
+      };
+      const result =
+        mainWindow && !mainWindow.isDestroyed()
+          ? await dialog.showSaveDialog(mainWindow, saveOptions)
+          : await dialog.showSaveDialog(saveOptions);
+      if (result.canceled || !result.filePath) {
+        return { saved: false, watchFaceId: MULTIDATA_ELEV_416_PROFILE.watchFaceId };
+      }
+      // Never overwrite the downloaded public reference or another export by
+      // mistake. The user can choose a fresh filename in the save dialog.
+      await fs.promises.writeFile(result.filePath, output, { flag: "wx" });
+      return {
+        saved: true,
+        filePath: result.filePath,
+        watchFaceId: MULTIDATA_ELEV_416_PROFILE.watchFaceId
+      };
+    }
+  );
+
+  ipcMain.handle("watchfaces:chooseArtwork", async () => {
+    const options: OpenDialogOptions = {
+      title: "Choose watchface artwork",
+      properties: ["openFile"],
+      filters: [
+        {
+          name: "Images",
+          extensions: ["png", "jpg", "jpeg", "webp"]
+        }
+      ]
+    };
+    const result =
+      mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showOpenDialog(mainWindow, options)
+        : await dialog.showOpenDialog(options);
+    const artworkPath = result.filePaths[0];
+    return result.canceled || !artworkPath
+      ? null
+      : loadCorosWatchfaceArtwork(artworkPath);
+  });
+
+  ipcMain.handle("watchfaces:chooseRasterFontFolder", async () => {
+    const options: OpenDialogOptions = {
+      title: "Choose a PNG watchface sprite folder",
+      properties: ["openDirectory"]
+    };
+    const result =
+      mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showOpenDialog(mainWindow, options)
+        : await dialog.showOpenDialog(options);
+    const folderPath = result.filePaths[0];
+    return result.canceled || !folderPath
+      ? null
+      : loadRasterFontSpriteFolder(folderPath);
+  });
+
+  ipcMain.handle(
+    "watchfaces:createArchive",
+    (_event, input: CorosWatchfaceCreatorInput) =>
+      createCorosWatchfaceArchive(input)
+  );
+  ipcMain.handle("watchfaces:listProjects", () => listCorosWatchfaceProjects());
+  ipcMain.handle("watchfaces:saveProject", (_event, input) =>
+    saveCorosWatchfaceProject(input)
+  );
+  ipcMain.handle("watchfaces:loadProject", (_event, projectId: string) =>
+    loadCorosWatchfaceProject(projectId)
+  );
+  ipcMain.handle("watchfaces:deleteProject", (_event, projectId: string) =>
+    deleteCorosWatchfaceProject(projectId)
+  );
+
+  ipcMain.handle(
+    "watchfaces:describeTemplate",
+    (_event, archiveId: string) => describeCorosWatchfaceTemplate(archiveId)
+  );
+
+  ipcMain.handle(
+    "watchfaces:loadTemplateAssets",
+    (_event, archiveId: string, paths: string[]) =>
+      loadCorosWatchfaceTemplateAssets(archiveId, paths)
+  );
+
+  ipcMain.handle(
+    "watchfaces:publish",
+    (_event, input: CorosWatchfacePublishInput) => publishCorosWatchface(input)
+  );
 
   ipcMain.handle("watch:getConnectionSmokeOption", () =>
     getWatchConnectionSmokeOption()

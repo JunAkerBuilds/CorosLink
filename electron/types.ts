@@ -85,6 +85,474 @@ export interface WatchStatus {
   error?: string;
 }
 
+/** COROS account region, selecting the regional mobile API host. */
+export type CorosWatchfaceRegion = "eu" | "us" | "cn";
+
+/** A separate COROS mobile-app session used only for custom-watchface sharing. */
+export interface CorosWatchfaceStatus {
+  authenticated: boolean;
+  secureStorageAvailable: boolean;
+  /** Region of the active mobile session, when signed in. */
+  region?: CorosWatchfaceRegion;
+  /** Best-guess region to preselect in the login form. */
+  suggestedRegion: CorosWatchfaceRegion;
+}
+
+/** The only carrier currently approved for the guarded legacy editor. */
+export type CorosLegacy614aCarrierProfile = "multidata-elev-416";
+
+export interface CorosLegacy614aCarrierInspection {
+  profile: CorosLegacy614aCarrierProfile;
+  profileName: string;
+  fileName: string;
+  watchFaceId: number;
+  sizeBytes: number;
+  payloadCrc16: number;
+  fullFileCrc16: number;
+  weatherSpriteSize: number;
+  weatherPosition: { x: number; y: number };
+  temperatureRect: { x0: number; y0: number; x1: number; y1: number };
+}
+
+/** Opaque main-process handle returned after an exact reference is inspected. */
+export interface CorosLegacy614aCarrierSelection {
+  selectionId: string;
+  inspection: CorosLegacy614aCarrierInspection;
+}
+
+/** Safe normal-display geometry only. Carrier identity and resources are locked. */
+export interface CorosLegacy614aCarrierPatchInput {
+  weatherPosition: { x: number; y: number };
+  temperatureRect: { x0: number; y0: number; x1: number; y1: number };
+}
+
+export interface CorosLegacy614aCarrierExportResult {
+  saved: boolean;
+  filePath?: string;
+  watchFaceId: number;
+}
+
+/** A source-template, on-watch, or user-created watchface catalog. */
+export type CorosWatchfaceThemeCatalog = "editable" | "official" | "custom";
+
+/** Parameters required by a COROS watchface catalog request. */
+export interface CorosWatchfaceThemeListInput {
+  firmwareType: string;
+  language?: string;
+  maxWatchFaceVersion?: number;
+  /** On-watch and custom-face catalogs require the watch serial (`snCode`). */
+  snCode?: string;
+  /** Optional firmware model header captured from the mobile app. */
+  modelVersion?: string;
+  catalog?: CorosWatchfaceThemeCatalog;
+}
+
+/** An entry returned by a COROS watchface catalog. */
+export interface CorosWatchfaceTheme {
+  id?: string;
+  name: string;
+  previewImageUrl?: string;
+  /** The theme's downloadable package resource, when the catalog exposes one. */
+  packageUrl?: string;
+  firmwareType?: string;
+  backgroundImageId?: number;
+  watchFaceVersion?: number;
+  diyVersion?: number;
+  templateType?: number;
+  category?: string;
+}
+
+/** Device identifiers supplied by the user for the COROS battery-history API. */
+export interface CorosBatteryQueryInput {
+  deviceId: string;
+  firmwareType: string;
+  uuid: string;
+}
+
+/** A paired watch returned by the signed-in COROS account profile. */
+export interface CorosPairedDevice {
+  deviceId: string;
+  firmwareType: string;
+  uuid: string;
+  mac?: string;
+  /** Optional cosmetic variant reported by the authenticated mobile profile. */
+  colorType?: string;
+  /** Optional official device artwork pack, accepted only when served over HTTPS. */
+  imagePackUrl?: string;
+  /** Profile revision returned by COROS for this paired device. */
+  profileVersion?: number;
+}
+
+/** A nearby Bluetooth device exposed by Electron's Web Bluetooth chooser. */
+export interface CorosBluetoothDeviceChoice {
+  deviceId: string;
+  deviceName: string;
+}
+
+export interface CorosBatteryUsageDetail {
+  name: string;
+  percent?: number;
+}
+
+export interface CorosBatteryUsageGroup {
+  name: string;
+  percent?: number;
+  details: CorosBatteryUsageDetail[];
+}
+
+/** A daily battery-consumption record normalized from COROS's mobile API. */
+export interface CorosBatteryDay {
+  date: string;
+  percentAtQueryTime?: number;
+  totalPercent?: number;
+  groups: CorosBatteryUsageGroup[];
+}
+
+export interface CorosBatteryReport {
+  alarmStatus?: number;
+  updatedAt?: string;
+  days: CorosBatteryDay[];
+}
+
+/** A validated archive held by the main process after the user selected it. */
+export interface CorosWatchfaceArchive {
+  archiveId: string;
+  fileName: string;
+  sizeBytes: number;
+  /** Decimal text: official template IDs exceed Number.MAX_SAFE_INTEGER. */
+  sourceTemplateId: string;
+  diyVersion: number;
+}
+
+export interface CorosWatchfacePublishInput {
+  archiveId: string;
+  name: string;
+  firmwareType: string;
+  backgroundImageId: number;
+  language?: string;
+}
+
+/** A browser-rendered 800×800 face background, kept within a selected template. */
+export interface CorosWatchfaceCreatorInput {
+  sourceArchiveId: string;
+  backgroundDataUrl: string;
+  /**
+   * Renderer-generated PNG sprites (bitmap-font digits, tinted icons and
+   * weekday labels) that replace template assets of identical size.
+   */
+  assetReplacements?: CorosWatchfaceAssetReplacement[];
+  /**
+   * Layout experiments: rewrites the values of keys that already exist in a
+   * template config file (element positions, rects, colors). Keys absent from
+   * the original file are rejected rather than appended.
+   */
+  configOverrides?: CorosWatchfaceConfigOverride[];
+  /**
+   * Raises info.json's `o_wf_ver` to at least this value. The phone-app
+   * compiler only bakes weather/temperature elements into the on-watch binary
+   * when the template declares a high-enough watchface version (official
+   * weather-bearing faces ship `o_wf_ver:4`); a stock DIY face at version 0
+   * renders those elements in the preview but drops them on the watch.
+   */
+  minWatchFaceVersion?: number;
+}
+
+export interface CorosWatchfaceConfigOverride {
+  /** A config file entry of the archive, e.g. "watchface_800x800/config.txt". */
+  path: string;
+  values: Record<string, string>;
+}
+
+export interface CorosWatchfaceAssetReplacement {
+  /** Zip entry path inside the selected template archive or a studio sprite path. */
+  path: string;
+  dataUrl: string;
+  /** Adds a new isolated sprite instead of replacing a template entry. */
+  create?: boolean;
+}
+
+/** One PNG inside a template archive, addressed by its zip entry path. */
+export interface CorosWatchfaceSpriteFile {
+  path: string;
+  width: number;
+  height: number;
+}
+
+/**
+ * A numbered sprite folder inside a resolution directory. `state` folders are
+ * firmware-swapped icon sets such as battery and weather, never bitmap fonts.
+ */
+export interface CorosWatchfaceSpriteFolder {
+  /** Folder path relative to the resolution directory, e.g. "01" or "a/01". */
+  folder: string;
+  kind: "digits" | "week" | "state";
+  /** True when the folder belongs to the always-on-display asset tree. */
+  aod: boolean;
+  files: CorosWatchfaceSpriteFile[];
+}
+
+export interface CorosWatchfaceResolutionDetails {
+  /** e.g. "watchface_800x800" */
+  directory: string;
+  width: number;
+  height: number;
+  /** Raw `[key]=value` pairs from config.txt. */
+  config: Record<string, string>;
+  /** Raw `[key]=value` pairs from AODconfig.txt, when present. */
+  aodConfig: Record<string, string>;
+  spriteFolders: CorosWatchfaceSpriteFolder[];
+  icons: CorosWatchfaceSpriteFile[];
+}
+
+/** Everything the renderer needs to restyle a selected template archive. */
+export interface CorosWatchfaceTemplateDetails {
+  archiveId: string;
+  resolutions: CorosWatchfaceResolutionDetails[];
+}
+
+/** A template PNG exported to the renderer for tinting or preview. */
+/** The outcome of downloading an official theme's package resource. */
+export interface CorosWatchfaceThemeDownload {
+  fileName: string;
+  sizeBytes: number;
+  /** True when the package validated as a DIY starter template archive. */
+  usableAsTemplate: boolean;
+  /** Set when usable: the registered archive, ready for the creator. */
+  archive?: CorosWatchfaceArchive;
+  /** Top-level entries when the package is a ZIP but not a starter template. */
+  entries?: string[];
+  /** Local copy retained so it can be inspected or shared. */
+  savedPath?: string;
+  message: string;
+}
+
+export interface CorosWatchfaceThemeDownloadInput {
+  packageUrl: string;
+  /** Display name used for the downloaded archive, usually the theme name. */
+  name?: string;
+}
+
+export interface CorosWatchfaceTemplateAsset extends CorosWatchfaceSpriteFile {
+  dataUrl: string;
+}
+
+export interface CorosWatchfaceArtwork {
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
+/**
+ * A user-supplied PNG font atlas. Glyphs are laid out left-to-right,
+ * top-to-bottom in equally sized cells; `glyphs` maps those cells to text.
+ */
+export interface CorosWatchfaceRasterFont {
+  /** Friendly name shown in the font selector and saved with the project. */
+  label: string;
+  /** PNG data URL for the full glyph atlas. */
+  dataUrl: string;
+  /** One character per atlas cell, in reading order. */
+  glyphs: string;
+  /** Number of equally sized cells across the atlas. */
+  columns: number;
+  /** Optional pre-rasterized labels such as MON, TUE, and WED. */
+  labels?: Record<string, string>;
+  /** When true, use the design's selected digit colour for the atlas alpha. */
+  tint: boolean;
+}
+
+/** A PNG decoded from a sprite folder by the main process. */
+export interface CorosWatchfaceRasterFontSprite {
+  name: string;
+  relativePath: string;
+  dataUrl: string;
+  sizeBytes: number;
+}
+
+/** A user-selected folder of PNG digit and optional weekday sprites. */
+export interface CorosWatchfaceRasterFontFolder {
+  label: string;
+  sprites: CorosWatchfaceRasterFontSprite[];
+}
+
+export interface CorosWatchfaceDesignSprite {
+  id: string;
+  dataUrl: string;
+  sourceWidth: number;
+  sourceHeight: number;
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  /** Absent means visible for projects saved before layer toggles. */
+  visible?: boolean;
+  /** Optional monochrome tint while preserving the imported image alpha. */
+  tintColor?: string | null;
+}
+
+/** A two-stop linear gradient fill, angle in degrees clockwise from +x. */
+export interface CorosWatchfaceGradientFill {
+  from: string;
+  to: string;
+  angle: number;
+}
+
+/** Base fields shared by every freeform background shape (in 800px space). */
+interface CorosWatchfaceBackgroundElementBase {
+  id: string;
+  x: number;
+  y: number;
+  rotation: number;
+}
+
+export interface CorosWatchfaceBackgroundRect extends CorosWatchfaceBackgroundElementBase {
+  kind: "rect";
+  width: number;
+  height: number;
+  cornerRadius: number;
+  fill: string;
+  gradient?: CorosWatchfaceGradientFill;
+  strokeColor?: string;
+  strokeWidth?: number;
+}
+
+export interface CorosWatchfaceBackgroundEllipse extends CorosWatchfaceBackgroundElementBase {
+  kind: "ellipse";
+  width: number;
+  height: number;
+  fill: string;
+  gradient?: CorosWatchfaceGradientFill;
+  strokeColor?: string;
+  strokeWidth?: number;
+}
+
+export interface CorosWatchfaceBackgroundLine extends CorosWatchfaceBackgroundElementBase {
+  kind: "line";
+  /** End point relative to (x, y). */
+  dx: number;
+  dy: number;
+  color: string;
+  strokeWidth: number;
+}
+
+export interface CorosWatchfaceBackgroundText extends CorosWatchfaceBackgroundElementBase {
+  kind: "text";
+  text: string;
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+  weight: number;
+  align: "left" | "center" | "right";
+}
+
+export type CorosWatchfaceBackgroundElement =
+  | CorosWatchfaceBackgroundRect
+  | CorosWatchfaceBackgroundEllipse
+  | CorosWatchfaceBackgroundLine
+  | CorosWatchfaceBackgroundText;
+
+export interface CorosWatchfaceDesignState {
+  version: 1;
+  /**
+   * Retained only so projects saved by older releases can still be opened.
+   * The editor no longer paints a solid base colour behind the face.
+   */
+  backgroundColor?: string;
+  accentColor: string;
+  artwork: CorosWatchfaceArtwork | null;
+  zoom: number;
+  fontFamily: string;
+  /** Optional portable PNG glyph atlas, used when no local font is selected. */
+  rasterFont?: CorosWatchfaceRasterFont;
+  /** Typography settings for rasterized digit and date sprites. */
+  fontWeight?: number;
+  fontStyle?: "normal" | "italic";
+  /** Character spacing as a fraction of the font size (for example 0.04). */
+  letterSpacing?: number;
+  digitColor: string;
+  tintLabels: boolean;
+  tintIcons: boolean;
+  previewComplication: string;
+  metricChanges: Record<string, boolean>;
+  metricStyles: Record<string, { color?: string; scale: number; fontFamily?: string }>;
+  /** Per selectable-control icon offsets, independent from the slot origin/value. */
+  controlIconOffsets?: Record<string, { dx: number; dy: number }>;
+  timeStyles: Record<string, { color?: string; scale: number; fontFamily?: string }>;
+  /** Weekday/month/day scaling; absent in projects saved before resizing. */
+  dateStyles?: Record<
+    string,
+    { scale: number; fontFamily?: string; color?: string }
+  >;
+  staticSeparators: Record<
+    "colon" | "dateSlash",
+    {
+      enabled: boolean;
+      x: number;
+      y: number;
+      size: number;
+      color: string;
+      fontFamily?: string;
+    }
+  >;
+  /** AM/PM indicator styling; absent in projects saved before the feature. */
+  ampmIndicator?: {
+    enabled: boolean;
+    x: number;
+    y: number;
+    scale: number;
+    color: string;
+    fontFamily?: string;
+  };
+  /** Dynamic 41-state weather icon; absent in older projects. */
+  weatherIndicator?: {
+    enabled: boolean;
+    x: number;
+    y: number;
+    scale: number;
+  };
+  layoutOffsets: Record<string, { dx: number; dy: number }>;
+  /** Visibility overrides for firmware-backed editor layers. */
+  layerVisibility?: Record<string, boolean>;
+  /** Per-layer colors for firmware components without specialized styles. */
+  layerColors?: Record<string, string>;
+  designSprites: CorosWatchfaceDesignSprite[];
+  /**
+   * Freeform vector shapes baked into the background PNG (800px space).
+   * Absent in projects saved before the background design canvas.
+   */
+  backgroundElements?: CorosWatchfaceBackgroundElement[];
+}
+
+export interface CorosWatchfaceProjectSummary {
+  projectId: string;
+  name: string;
+  updatedAt: string;
+  /** Decimal text: official template IDs exceed Number.MAX_SAFE_INTEGER. */
+  sourceTemplateId: string;
+}
+
+export interface CorosWatchfaceProjectSaveInput {
+  projectId?: string;
+  name: string;
+  sourceArchiveId: string;
+  design: CorosWatchfaceDesignState;
+}
+
+export interface CorosWatchfaceProject extends CorosWatchfaceProjectSummary {
+  archive: CorosWatchfaceArchive;
+  design: CorosWatchfaceDesignState;
+}
+
+/** The official COROS hand-off link and an offline QR image for opening it. */
+export interface CorosWatchfaceShareLink {
+  url: string;
+  qrDataUrl: string;
+  expiresAt: string;
+  previewImageUrl?: string;
+}
+
 export interface LocalTrack {
   id: string;
   url: string;

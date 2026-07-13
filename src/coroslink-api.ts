@@ -86,10 +86,89 @@ import type {
   DeleteWorkoutResult,
   ManualActivityInput
 } from "../electron/types";
+import type {
+  CorosLegacy614aCarrierExportResult,
+  CorosLegacy614aCarrierPatchInput,
+  CorosLegacy614aCarrierSelection,
+  CorosWatchfaceArchive,
+  CorosWatchfaceArtwork,
+  CorosWatchfaceCreatorInput,
+  CorosWatchfaceRasterFontFolder,
+  CorosWatchfaceProject,
+  CorosWatchfaceProjectSaveInput,
+  CorosWatchfaceProjectSummary,
+  CorosWatchfacePublishInput,
+  CorosWatchfaceRegion,
+  CorosWatchfaceShareLink,
+  CorosWatchfaceStatus,
+  CorosWatchfaceTemplateAsset,
+  CorosWatchfaceTemplateDetails,
+  CorosWatchfaceTheme,
+  CorosWatchfaceThemeDownload,
+  CorosWatchfaceThemeDownloadInput,
+  CorosWatchfaceThemeListInput,
+  CorosBatteryQueryInput,
+  CorosBatteryReport,
+  CorosPairedDevice,
+  CorosBluetoothDeviceChoice
+} from "../electron/types";
 
 export interface CorosLinkApi {
   platform: string;
   getWatchStatus: () => Promise<WatchStatus>;
+  getCorosWatchfaceStatus: () => Promise<CorosWatchfaceStatus>;
+  /** Font families installed on this computer, for local watchface rasterization. */
+  listLocalFontFamilies: () => Promise<string[]>;
+  loginCorosWatchfaces: (
+    email: string,
+    password: string,
+    region: CorosWatchfaceRegion
+  ) => Promise<CorosWatchfaceStatus>;
+  logoutCorosWatchfaces: () => Promise<CorosWatchfaceStatus>;
+  listCorosPairedDevices: () => Promise<CorosPairedDevice[]>;
+  selectCorosBluetoothDevice: (deviceId: string) => Promise<void>;
+  cancelCorosBluetoothDeviceSelection: () => Promise<void>;
+  onCorosBluetoothDevices: (
+    callback: (devices: CorosBluetoothDeviceChoice[]) => void
+  ) => () => void;
+  getCorosBatteryReport: (
+    input: CorosBatteryQueryInput
+  ) => Promise<CorosBatteryReport>;
+  listCorosWatchfaceThemes: (
+    input: CorosWatchfaceThemeListInput
+  ) => Promise<CorosWatchfaceTheme[]>;
+  downloadCorosWatchfaceTheme: (
+    input: CorosWatchfaceThemeDownloadInput
+  ) => Promise<CorosWatchfaceThemeDownload>;
+  chooseCorosWatchfaceArchive: () => Promise<CorosWatchfaceArchive | null>;
+  chooseLegacy614aCarrier: () => Promise<CorosLegacy614aCarrierSelection | null>;
+  exportLegacy614aCarrier: (
+    selectionId: string,
+    patch: CorosLegacy614aCarrierPatchInput
+  ) => Promise<CorosLegacy614aCarrierExportResult>;
+  chooseCorosWatchfaceArtwork: () => Promise<CorosWatchfaceArtwork | null>;
+  chooseCorosWatchfaceRasterFontFolder: () => Promise<CorosWatchfaceRasterFontFolder | null>;
+  createCorosWatchfaceArchive: (
+    input: CorosWatchfaceCreatorInput
+  ) => Promise<CorosWatchfaceArchive>;
+  listCorosWatchfaceProjects: () => Promise<CorosWatchfaceProjectSummary[]>;
+  saveCorosWatchfaceProject: (
+    input: CorosWatchfaceProjectSaveInput
+  ) => Promise<CorosWatchfaceProject>;
+  loadCorosWatchfaceProject: (
+    projectId: string
+  ) => Promise<CorosWatchfaceProject>;
+  deleteCorosWatchfaceProject: (projectId: string) => Promise<void>;
+  describeCorosWatchfaceTemplate: (
+    archiveId: string
+  ) => Promise<CorosWatchfaceTemplateDetails>;
+  loadCorosWatchfaceTemplateAssets: (
+    archiveId: string,
+    paths: string[]
+  ) => Promise<CorosWatchfaceTemplateAsset[]>;
+  publishCorosWatchface: (
+    input: CorosWatchfacePublishInput
+  ) => Promise<CorosWatchfaceShareLink>;
   getWatchConnectionSmokeOption: () => Promise<WatchConnectionSmokeOptionId>;
   setWatchConnectionSmokeOption: (
     optionId: WatchConnectionSmokeOptionId

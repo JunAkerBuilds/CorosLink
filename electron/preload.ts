@@ -87,12 +87,116 @@ import type {
   DeleteWorkoutResult,
   ManualActivityInput
 } from "./types";
+import type {
+  CorosLegacy614aCarrierExportResult,
+  CorosLegacy614aCarrierPatchInput,
+  CorosLegacy614aCarrierSelection,
+  CorosWatchfaceArchive,
+  CorosWatchfaceArtwork,
+  CorosWatchfaceCreatorInput,
+  CorosWatchfaceRasterFontFolder,
+  CorosWatchfaceProject,
+  CorosWatchfaceProjectSaveInput,
+  CorosWatchfaceProjectSummary,
+  CorosWatchfacePublishInput,
+  CorosWatchfaceRegion,
+  CorosWatchfaceShareLink,
+  CorosWatchfaceStatus,
+  CorosWatchfaceTemplateAsset,
+  CorosWatchfaceTemplateDetails,
+  CorosWatchfaceTheme,
+  CorosWatchfaceThemeDownload,
+  CorosWatchfaceThemeDownloadInput,
+  CorosWatchfaceThemeListInput,
+  CorosBatteryQueryInput,
+  CorosBatteryReport,
+  CorosPairedDevice,
+  CorosBluetoothDeviceChoice
+} from "./types";
 
 const api = {
   // Host OS, so the renderer can reserve space for the macOS traffic lights.
   platform: process.platform,
   getWatchStatus: (): Promise<WatchStatus> =>
     ipcRenderer.invoke("watch:getStatus"),
+  getCorosWatchfaceStatus: (): Promise<CorosWatchfaceStatus> =>
+    ipcRenderer.invoke("watchfaces:getStatus"),
+  listLocalFontFamilies: (): Promise<string[]> =>
+    ipcRenderer.invoke("watchfaces:listLocalFontFamilies"),
+  loginCorosWatchfaces: (
+    email: string,
+    password: string,
+    region: CorosWatchfaceRegion
+  ): Promise<CorosWatchfaceStatus> =>
+    ipcRenderer.invoke("watchfaces:login", email, password, region),
+  logoutCorosWatchfaces: (): Promise<CorosWatchfaceStatus> =>
+    ipcRenderer.invoke("watchfaces:logout"),
+  listCorosPairedDevices: (): Promise<CorosPairedDevice[]> =>
+    ipcRenderer.invoke("watchfaces:listPairedDevices"),
+  selectCorosBluetoothDevice: (deviceId: string): Promise<void> =>
+    ipcRenderer.invoke("watchfaces:selectBluetoothDevice", deviceId),
+  cancelCorosBluetoothDeviceSelection: (): Promise<void> =>
+    ipcRenderer.invoke("watchfaces:cancelBluetoothDevice"),
+  onCorosBluetoothDevices: (
+    callback: (devices: CorosBluetoothDeviceChoice[]) => void
+  ): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, devices: CorosBluetoothDeviceChoice[]) =>
+      callback(devices);
+    ipcRenderer.on("watchfaces:bluetoothDevices", listener);
+    return () => ipcRenderer.removeListener("watchfaces:bluetoothDevices", listener);
+  },
+  getCorosBatteryReport: (
+    input: CorosBatteryQueryInput
+  ): Promise<CorosBatteryReport> => ipcRenderer.invoke("watchfaces:getBatteryReport", input),
+  listCorosWatchfaceThemes: (
+    input: CorosWatchfaceThemeListInput
+  ): Promise<CorosWatchfaceTheme[]> => ipcRenderer.invoke("watchfaces:listThemes", input),
+  downloadCorosWatchfaceTheme: (
+    input: CorosWatchfaceThemeDownloadInput
+  ): Promise<CorosWatchfaceThemeDownload> =>
+    ipcRenderer.invoke("watchfaces:downloadTheme", input),
+  chooseCorosWatchfaceArchive: (): Promise<CorosWatchfaceArchive | null> =>
+    ipcRenderer.invoke("watchfaces:chooseArchive"),
+  chooseLegacy614aCarrier: (): Promise<CorosLegacy614aCarrierSelection | null> =>
+    ipcRenderer.invoke("watchfaces:chooseLegacy614aCarrier"),
+  exportLegacy614aCarrier: (
+    selectionId: string,
+    patch: CorosLegacy614aCarrierPatchInput
+  ): Promise<CorosLegacy614aCarrierExportResult> =>
+    ipcRenderer.invoke("watchfaces:exportLegacy614aCarrier", selectionId, patch),
+  chooseCorosWatchfaceArtwork: (): Promise<CorosWatchfaceArtwork | null> =>
+    ipcRenderer.invoke("watchfaces:chooseArtwork"),
+  chooseCorosWatchfaceRasterFontFolder: (): Promise<CorosWatchfaceRasterFontFolder | null> =>
+    ipcRenderer.invoke("watchfaces:chooseRasterFontFolder"),
+  createCorosWatchfaceArchive: (
+    input: CorosWatchfaceCreatorInput
+  ): Promise<CorosWatchfaceArchive> =>
+    ipcRenderer.invoke("watchfaces:createArchive", input),
+  listCorosWatchfaceProjects: (): Promise<CorosWatchfaceProjectSummary[]> =>
+    ipcRenderer.invoke("watchfaces:listProjects"),
+  saveCorosWatchfaceProject: (
+    input: CorosWatchfaceProjectSaveInput
+  ): Promise<CorosWatchfaceProject> =>
+    ipcRenderer.invoke("watchfaces:saveProject", input),
+  loadCorosWatchfaceProject: (
+    projectId: string
+  ): Promise<CorosWatchfaceProject> =>
+    ipcRenderer.invoke("watchfaces:loadProject", projectId),
+  deleteCorosWatchfaceProject: (projectId: string): Promise<void> =>
+    ipcRenderer.invoke("watchfaces:deleteProject", projectId),
+  describeCorosWatchfaceTemplate: (
+    archiveId: string
+  ): Promise<CorosWatchfaceTemplateDetails> =>
+    ipcRenderer.invoke("watchfaces:describeTemplate", archiveId),
+  loadCorosWatchfaceTemplateAssets: (
+    archiveId: string,
+    paths: string[]
+  ): Promise<CorosWatchfaceTemplateAsset[]> =>
+    ipcRenderer.invoke("watchfaces:loadTemplateAssets", archiveId, paths),
+  publishCorosWatchface: (
+    input: CorosWatchfacePublishInput
+  ): Promise<CorosWatchfaceShareLink> =>
+    ipcRenderer.invoke("watchfaces:publish", input),
   getWatchConnectionSmokeOption: (): Promise<WatchConnectionSmokeOptionId> =>
     ipcRenderer.invoke("watch:getConnectionSmokeOption"),
   setWatchConnectionSmokeOption: (
