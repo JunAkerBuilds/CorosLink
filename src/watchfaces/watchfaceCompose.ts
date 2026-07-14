@@ -23,6 +23,7 @@ import {
   buildMetricOverrides,
   buildMetricSpriteReplacements,
   buildMetricStyleOverrides,
+  buildSeparateTimeOverrides,
   buildStaticSeparatorOverrides,
   buildStudioReplacements,
   buildTimeSpriteReplacements,
@@ -51,6 +52,7 @@ import {
  * metric-toggle and component-style overrides so element bounds move correctly.
  */
 export interface DesignDetails {
+  timeFormatOverrides: CorosWatchfaceConfigOverride[];
   metricOverrides: CorosWatchfaceConfigOverride[];
   metricDetails: CorosWatchfaceTemplateDetails;
   styledMetricDetails: CorosWatchfaceTemplateDetails;
@@ -115,8 +117,22 @@ export function deriveDesignDetails(
   details: CorosWatchfaceTemplateDetails,
   design: CorosWatchfaceDesignState
 ): DesignDetails {
-  const metricOverrides = buildMetricOverrides(details, design.metricChanges ?? {});
-  const metricDetails = applyConfigOverridesToDetails(details, metricOverrides);
+  const timeFormatOverrides = buildSeparateTimeOverrides(
+    details,
+    design.separateAutoTime === true
+  );
+  const timeFormatDetails = applyConfigOverridesToDetails(
+    details,
+    timeFormatOverrides
+  );
+  const metricOverrides = buildMetricOverrides(
+    timeFormatDetails,
+    design.metricChanges ?? {}
+  );
+  const metricDetails = applyConfigOverridesToDetails(
+    timeFormatDetails,
+    metricOverrides
+  );
   const controlTemperatureStyle = metricStylesOf(design).temperature ?? {
     color: design.digitColor,
     scale: 1
@@ -148,7 +164,13 @@ export function deriveDesignDetails(
     laidOutDetails,
     buildLayerVisibilityOverrides(laidOutDetails, design.layerVisibility ?? {})
   );
-  return { metricOverrides, metricDetails, styledMetricDetails, previewDetails };
+  return {
+    timeFormatOverrides,
+    metricOverrides,
+    metricDetails,
+    styledMetricDetails,
+    previewDetails
+  };
 }
 
 function hasEntries(record: Record<string, unknown> | undefined): boolean {
@@ -171,7 +193,12 @@ export async function composeWatchfaceReplacements(
   design: CorosWatchfaceDesignState,
   loadAssets: WatchfaceAssetLoader
 ): Promise<WatchfaceComposeResult> {
-  const { metricOverrides, metricDetails, styledMetricDetails } =
+  const {
+    timeFormatOverrides,
+    metricOverrides,
+    metricDetails,
+    styledMetricDetails
+  } =
     deriveDesignDetails(details, design);
   const metricStyles = metricStylesOf(design);
   const timeStyles = timeStylesOf(design);
@@ -229,7 +256,7 @@ export async function composeWatchfaceReplacements(
       : [],
     timeStyleActive
       ? await buildTimeSpriteReplacements(
-          details,
+          metricDetails,
           timeStyles,
           design.fontFamily,
           loadAssets,
@@ -262,7 +289,7 @@ export async function composeWatchfaceReplacements(
   );
 
   const timeStyleOverrides = timeStyleActive
-    ? buildTimeStyleOverrides(details, timeStyles, true)
+    ? buildTimeStyleOverrides(metricDetails, timeStyles, true)
     : [];
   const timePositionDetails = applyConfigOverridesToDetails(
     styledMetricDetails,
@@ -284,6 +311,7 @@ export async function composeWatchfaceReplacements(
     details,
     mergeConfigOverrides(
       metricOverrides,
+      timeFormatOverrides,
       metricStyleActive ? buildMetricStyleOverrides(metricDetails, metricStyles, true) : [],
       controlTemperatureActive
         ? buildControlTemperatureOverrides(

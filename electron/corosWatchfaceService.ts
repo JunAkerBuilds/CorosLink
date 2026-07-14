@@ -1261,7 +1261,16 @@ export function applyCorosWatchfaceConfigOverrides(
     "control_temperature_font",
     "control_temperature_font_color",
     "control_temperature_negative_sign_icon",
-    "control_negative_sign_icon"
+    "control_negative_sign_icon",
+    "time_hour_high_pos",
+    "time_hour_high_font",
+    "time_hour_low_pos",
+    "time_hour_low_font",
+    "time_minute_high_pos",
+    "time_minute_high_font",
+    "time_minute_low_pos",
+    "time_minute_low_font",
+    "colon_icon"
   ]);
   const appended: string[] = [];
   for (const [key, value] of pending) {

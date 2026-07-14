@@ -8,6 +8,7 @@ import {
   buildDateStyleOverrides,
   buildMetricOverrides,
   buildMetricStyleOverrides,
+  buildSeparateTimeOverrides,
   buildTimeStyleOverrides,
   computeLayoutGroupBounds,
   getFixedMetricCapabilities,
@@ -101,6 +102,7 @@ const NO_CAPABILITIES: EditorLayerCapabilities = {
 
 /** Panel order, top (front-most overlay) to bottom (background). */
 const LAYER_ORDER: string[] = [
+  "autoTime",
   "hours",
   "minutes",
   "seconds",
@@ -126,6 +128,7 @@ const METRIC_IDS = new Set<WatchfaceMetricId>([
 ]);
 
 const TIME_GROUP_PARTS: Record<string, WatchfaceTimePartId> = {
+  autoTime: "autoTime",
   hours: "hours",
   minutes: "minutes"
 };
@@ -180,9 +183,13 @@ export function deriveEditorLayers(
   details: CorosWatchfaceTemplateDetails,
   design: CorosWatchfaceDesignState
 ): EditorLayer[] {
-  const metricDetails = applyConfigOverridesToDetails(
+  const timeFormatDetails = applyConfigOverridesToDetails(
     details,
-    buildMetricOverrides(details, design.metricChanges ?? {})
+    buildSeparateTimeOverrides(details, design.separateAutoTime === true)
+  );
+  const metricDetails = applyConfigOverridesToDetails(
+    timeFormatDetails,
+    buildMetricOverrides(timeFormatDetails, design.metricChanges ?? {})
   );
   const styledDetails = applyConfigOverridesToDetails(
     metricDetails,

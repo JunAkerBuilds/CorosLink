@@ -11,6 +11,7 @@ import {
   buildLayoutOverrides,
   buildMetricOverrides,
   buildMetricStyleOverrides,
+  buildSeparateTimeOverrides,
   buildStaticSeparatorOverrides,
   buildTimeStyleOverrides,
   buildTimeTrackingOverrides,
@@ -25,6 +26,7 @@ import {
   getFixedMetricCapabilities,
   getTemplateBackgroundAssetPaths,
   getWatchfaceAnalogPreviewLayers,
+  hasAutoAlignedTime,
   hasWatchfaceAod,
   inferStaticSeparators,
   listWatchfaceConfigAssets,
@@ -244,6 +246,84 @@ const details = {
   resolutions: [resolution(416, 23, 33), resolution(800, 44, 64)]
 };
 
+const autoTimeResolution = resolution(240, 12, 20);
+Object.assign(autoTimeResolution.config, {
+  watchface_time_format: "1",
+  autoalign_time_rect: "{60,80,180,120,hcenter|vcenter}",
+  autoalign_time_font: "13x19",
+  autoalign_time_font_color: "",
+  autoalign_time_colon_icon: "icon\\colon.png"
+});
+const autoTimeDetails = {
+  archiveId: "auto-time",
+  resolutions: [autoTimeResolution]
+};
+assert.equal(hasAutoAlignedTime(autoTimeResolution), true);
+assert.deepEqual(
+  computeLayoutGroupBounds(autoTimeResolution).find(({ id }) => id === "autoTime"),
+  { id: "autoTime", label: "Time", x0: 60, y0: 80, x1: 180, y1: 120 },
+  "Auto-aligned time should be one movable editor layer"
+);
+assert.deepEqual(
+  buildTimeStyleOverrides(
+    autoTimeDetails,
+    { autoTime: { color: "#12abef", scale: 1.5 } },
+    true
+  )[0],
+  {
+    path: "watchface_240x240/config.txt",
+    values: {
+      autoalign_time_rect: "{30,70,210,130,hcenter|vcenter}",
+      autoalign_time_font: "cl_auto_time"
+    }
+  },
+  "Auto-aligned time styling should scale its shared rect and use an isolated font folder"
+);
+assert.deepEqual(
+  buildLayoutOverrides(autoTimeDetails, { autoTime: { dx: 7, dy: -5 } })[0],
+  {
+    path: "watchface_240x240/config.txt",
+    values: {
+      autoalign_time_rect: "{67,75,187,115,hcenter|vcenter}"
+    }
+  },
+  "Dragging auto-aligned time should move its shared firmware rect"
+);
+assert.equal(
+  computeLayoutGroupBounds(autoTimeResolution).some(
+    ({ id }) => id === "hours" || id === "minutes"
+  ),
+  false,
+  "Inactive individually positioned time keys must not create duplicate layers"
+);
+const separateTimeOverrides = buildSeparateTimeOverrides(autoTimeDetails, true);
+assert.deepEqual(separateTimeOverrides[0], {
+  path: "watchface_240x240/config.txt",
+  values: {
+    watchface_time_format: "0",
+    time_hour_high_pos: "{91,90}",
+    time_hour_high_font: "13x19",
+    time_hour_low_pos: "{103,90}",
+    time_hour_low_font: "13x19",
+    time_minute_high_pos: "{125,90}",
+    time_minute_high_font: "13x19",
+    time_minute_low_pos: "{137,90}",
+    time_minute_low_font: "13x19",
+    colon_icon: "icon\\colon.png"
+  }
+});
+const separateTimeResolution = applyConfigOverridesToDetails(
+  autoTimeDetails,
+  separateTimeOverrides
+).resolutions[0];
+assert.equal(hasAutoAlignedTime(separateTimeResolution), false);
+assert.deepEqual(
+  computeLayoutGroupBounds(separateTimeResolution)
+    .filter(({ id }) => id === "hours" || id === "minutes")
+    .map(({ id }) => id),
+  ["hours", "minutes"],
+  "Converted time should expose independent hour and minute layers"
+);
 assert.equal(hasWatchfaceAod(details), true);
 assert.equal(
   hasWatchfaceAod({
