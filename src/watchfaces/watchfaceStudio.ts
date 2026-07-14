@@ -132,7 +132,7 @@ export function detailsForPreviewMode(
   details: CorosWatchfaceTemplateDetails,
   mode: WatchfacePreviewMode
 ): CorosWatchfaceTemplateDetails {
-  if (mode === "current") return details;
+  if (mode === "current" || !hasWatchfaceAod(details)) return details;
   return {
     ...details,
     resolutions: details.resolutions

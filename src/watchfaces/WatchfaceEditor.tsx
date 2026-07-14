@@ -627,6 +627,10 @@ export function WatchfaceEditor({
       design.fontFamily
     ]
   );
+  const supportsAod = useMemo(
+    () => (details ? hasWatchfaceAod(details) : false),
+    [details]
+  );
   const studioOptions = useMemo(
     () => toStudioOptions(design),
     [
@@ -649,7 +653,7 @@ export function WatchfaceEditor({
     ]
   );
   const previewStudioOptions = useMemo(
-    () => previewMode === "current"
+    () => previewMode === "current" || !supportsAod
       ? studioOptions
       : {
           ...studioOptions,
@@ -663,7 +667,7 @@ export function WatchfaceEditor({
           ampmStyle: undefined,
           configAssetScope: "aod" as const
         },
-    [previewMode, studioOptions]
+    [previewMode, studioOptions, supportsAod]
   );
   const designDetails = useMemo(
     () => (details ? deriveDesignDetails(details, design) : null),
@@ -682,15 +686,6 @@ export function WatchfaceEditor({
       design.digitColor
     ]
   );
-  const supportsAod = useMemo(
-    () => (details ? hasWatchfaceAod(details) : false),
-    [details]
-  );
-  useEffect(() => {
-    if (!supportsAod && previewMode === "aod") {
-      setPreviewMode("current");
-    }
-  }, [previewMode, supportsAod]);
   const basePreviewDetails = designDetails?.previewDetails ?? null;
   const previewDetails = useMemo(
     () => basePreviewDetails
@@ -822,7 +817,7 @@ export function WatchfaceEditor({
   }, [configAssetReferences, loadAssets, sessionId]);
 
   useEffect(() => {
-    if (previewMode !== "aod") {
+    if (previewMode !== "aod" || !supportsAod) {
       setAodBackgroundDataUrl("");
       return;
     }
@@ -868,6 +863,7 @@ export function WatchfaceEditor({
     loadAssets,
     previewMode,
     sessionId,
+    supportsAod,
     watchPreviewResolution
   ]);
   const selectorIconTarget = useMemo(() => {
@@ -921,7 +917,7 @@ export function WatchfaceEditor({
   }, [design.previewComplication, previewDetails, previewResolution, previewWidth]);
   const backgroundElements = design.backgroundElements ?? [];
   const activeBackgroundElements = previewMode === "current" ? backgroundElements : [];
-  const previewBackgroundDataUrl = previewMode === "aod"
+  const previewBackgroundDataUrl = previewMode === "aod" && supportsAod
     ? aodBackgroundDataUrl
     : backgroundDataUrl;
   const selectedElementId = selectedId.startsWith("bgel:")
@@ -2836,7 +2832,9 @@ export function WatchfaceEditor({
               <p className="watchface-editor-pane-title">Layers</p>
               <span>
                 {previewMode === "aod"
-                  ? `${layers.length} always-on assets`
+                  ? supportsAod
+                    ? `${layers.length} always-on assets`
+                    : "Uses the current face"
                   : `${layers.length + activeBackgroundElements.length} items`}
               </span>
             </div>
@@ -2945,8 +2943,9 @@ export function WatchfaceEditor({
               <button
                 type="button"
                 aria-pressed={previewMode === "aod"}
-                disabled={!supportsAod}
-                title={supportsAod ? "Preview and edit always-on assets" : "This template has no separate always-on configuration"}
+                title={supportsAod
+                  ? "Preview and edit always-on assets"
+                  : "This MIP template uses the current face when always on"}
                 onClick={() => setPreviewMode("aod")}
               >
                 <MoonStar size={14} aria-hidden="true" /> Always-on
@@ -3078,7 +3077,8 @@ export function WatchfaceEditor({
               ) : null}
             </div> : (
               <span className="wf-aod-preview-label">
-                <MoonStar size={14} aria-hidden="true" /> AODconfig.txt
+                <MoonStar size={14} aria-hidden="true" />
+                {supportsAod ? "AODconfig.txt" : "Current face stays on"}
               </span>
             )}
           </div>
@@ -3118,7 +3118,11 @@ export function WatchfaceEditor({
               {snapStatus ?? (selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? "No selection")}
             </span>
             <span>{watchCoordinateWidth} × {watchCoordinateHeight} preview</span>
-            <span>{previewMode === "aod" ? "Always-on display" : "Current display"}</span>
+            <span>
+              {previewMode === "aod"
+                ? supportsAod ? "Always-on display" : "Always-on uses Current"
+                : "Current display"}
+            </span>
             <span>{starterArchive.fileName}</span>
           </div>
         </main>
@@ -3168,9 +3172,11 @@ export function WatchfaceEditor({
           {selectedElement ? renderElementInspector(selectedElement) : selectedLayer ? renderInspector(selectedLayer) : previewMode === "aod" ? (
             <div className="watchface-inspector-group wf-aod-empty-inspector">
               <MoonStar size={20} aria-hidden="true" />
-              <strong>No replaceable AOD assets</strong>
+              <strong>{supportsAod ? "No replaceable AOD assets" : "Current is already always on"}</strong>
               <p className="watchface-studio-summary">
-                This template has an always-on layout, but it does not reference a standalone PNG that Studio can replace.
+                {supportsAod
+                  ? "This template has an always-on layout, but it does not reference a standalone PNG that Studio can replace."
+                  : "This MIP template has no separate AOD configuration. The Current face shown here is the same face the watch keeps visible."}
               </p>
             </div>
           ) : null}
