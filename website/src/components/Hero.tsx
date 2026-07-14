@@ -7,6 +7,8 @@ import { usePrefersReducedMotion } from "../hooks/usePrefersReducedMotion";
 import { BuyMeCoffee } from "./BuyMeCoffee";
 import { GitHubLink } from "./GitHubLink";
 import { SourceStrip } from "./SourceStrip";
+import { SupporterBubbles } from "./SupporterBubbles";
+import type { PublicSupporter } from "../lib/supporters";
 
 const WATCHES = [
   { src: "/assets/pace-pro-hero.webp", label: "Pace Pro" },
@@ -15,7 +17,7 @@ const WATCHES = [
   { src: "/assets/nomad-hero.webp", label: "Nomad" },
 ];
 
-export function Hero() {
+export function Hero({ supporters }: { supporters: PublicSupporter[] }) {
   const reduced = usePrefersReducedMotion();
 
   const fade = (delay: number) => ({
@@ -27,7 +29,7 @@ export function Hero() {
   return (
     <section
       id="top"
-      className="relative flex min-h-[100svh] flex-col overflow-hidden px-5 pt-24 pb-5"
+      className="relative flex min-h-[100dvh] flex-col overflow-hidden px-5 pt-24 pb-5"
     >
       {/* Aurora backdrop */}
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
@@ -46,8 +48,10 @@ export function Hero() {
         />
       </div>
 
+      <SupporterBubbles supporters={supporters} />
+
       {/* Main content */}
-      <div className="flex flex-1 flex-col items-center justify-center text-center">
+      <div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center">
         <motion.span
           {...fade(0)}
           className="glass-soft mb-6 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium text-muted"
@@ -111,7 +115,9 @@ export function Hero() {
       </div>
 
       {/* Scrolling source marquee — kept in view within the hero */}
-      <SourceStrip />
+      <div className="relative z-10">
+        <SourceStrip />
+      </div>
     </section>
   );
 }
