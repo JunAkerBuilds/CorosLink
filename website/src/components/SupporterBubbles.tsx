@@ -63,7 +63,11 @@ export function SupporterBubbles({
               width: path.width,
               height: path.height,
             }}
-            initial={{ opacity: 0, x: path.drift[0], y: 130, scale: 0.68 }}
+            initial={
+              index === 0
+                ? { opacity: 0.92, x: path.drift[1], y: -82, scale: 1 }
+                : { opacity: 0, x: path.drift[0], y: 130, scale: 0.68 }
+            }
             animate={{
               opacity: [0, 0.92, 0.92, 0.78, 0],
               x: path.drift,
@@ -79,7 +83,7 @@ export function SupporterBubbles({
             }}
             transition={{
               duration: 12,
-              delay: index * 2.2 - 0.35,
+              delay: index * 2.2 - 3.4,
               repeat: Infinity,
               ease: [0.37, 0, 0.63, 1],
               times: [0, 0.16, 0.48, 0.78, 1],
