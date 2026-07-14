@@ -164,6 +164,253 @@ body::after {
       0 0 60px -20px rgba(216, 155, 34, 0.35);
   }
 
+  .hero-supporter-bubbles {
+    position: absolute;
+    inset: 0 0 0 auto;
+    z-index: 0;
+    width: min(38vw, 560px);
+    overflow: hidden;
+    pointer-events: none;
+    mask-image: linear-gradient(to left, #000 76%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to left, #000 76%, transparent 100%);
+  }
+
+  .hero-supporter-bubbles__wake {
+    position: absolute;
+    right: -10%;
+    bottom: -12%;
+    height: 52%;
+    width: 86%;
+    border-radius: 50%;
+    background: rgba(230, 174, 58, 0.2);
+    filter: blur(70px);
+  }
+
+  .hero-supporter-bubble {
+    position: absolute;
+    bottom: -100px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    overflow: visible;
+    border: 1px solid rgba(255, 218, 133, 0.72);
+    border-radius: 12px;
+    background:
+      radial-gradient(circle at 28% 18%, rgba(255, 247, 210, 0.54), transparent 20%),
+      radial-gradient(circle at 72% 76%, rgba(255, 177, 41, 0.2), transparent 38%),
+      linear-gradient(145deg, rgba(126, 86, 16, 0.7), rgba(31, 18, 3, 0.9));
+    padding: 10px 12px;
+    backdrop-filter: blur(20px) saturate(170%);
+    -webkit-backdrop-filter: blur(20px) saturate(170%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 250, 224, 0.78),
+      inset 0 -22px 34px rgba(38, 18, 0, 0.46),
+      inset 12px 0 30px rgba(255, 196, 70, 0.08),
+      0 0 0 1px rgba(180, 111, 12, 0.34),
+      0 20px 56px -22px rgba(242, 177, 44, 0.88);
+    color: #fff4dc;
+    text-align: center;
+    will-change: transform, opacity;
+  }
+
+  .hero-supporter-bubble::after {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border: 1px solid rgba(255, 235, 178, 0.26);
+    border-radius: inherit;
+    pointer-events: none;
+  }
+
+  .hero-supporter-bubble__surface {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+
+  .hero-supporter-bubble__shine {
+    position: absolute;
+    left: -76%;
+    top: -32%;
+    height: 168%;
+    width: 42%;
+    transform: translate3d(0, 0, 0) rotate(18deg);
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 250, 224, 0.08) 24%,
+      rgba(255, 255, 245, 0.82) 52%,
+      rgba(255, 225, 142, 0.12) 76%,
+      transparent
+    );
+    filter: blur(2px);
+    animation: supporter-bubble-shine 3.4s cubic-bezier(0.55, 0, 0.25, 1) infinite;
+    pointer-events: none;
+  }
+
+  .hero-supporter-bubble:nth-child(2n) .hero-supporter-bubble__shine {
+    animation-delay: -1.25s;
+  }
+
+  .hero-supporter-bubble:nth-child(3n) .hero-supporter-bubble__shine {
+    animation-delay: -2.1s;
+  }
+
+  .hero-supporter-bubble__sparks {
+    position: absolute;
+    inset: -18px;
+    overflow: visible;
+    pointer-events: none;
+  }
+
+  .hero-supporter-bubble__spark {
+    --spark-x: 0px;
+    --spark-y: -16px;
+    --spark-rotate: 0deg;
+    position: absolute;
+    width: 3px;
+    height: 7px;
+    border-radius: 999px;
+    background: linear-gradient(to bottom, #fffdf2, #ffd568 58%, rgba(222, 142, 19, 0));
+    box-shadow:
+      0 0 5px rgba(255, 250, 220, 0.92),
+      0 0 12px rgba(255, 184, 48, 0.76);
+    opacity: 0;
+    animation: supporter-spark-burst 2.8s cubic-bezier(0.3, 0, 0.25, 1) infinite;
+    will-change: transform, opacity;
+  }
+
+  .hero-supporter-bubble__spark:nth-child(1) {
+    top: 10%;
+    left: 14%;
+    --spark-x: -12px;
+    --spark-y: -18px;
+    --spark-rotate: -28deg;
+    animation-delay: -0.4s;
+  }
+
+  .hero-supporter-bubble__spark:nth-child(2) {
+    top: 22%;
+    right: 6%;
+    --spark-x: 17px;
+    --spark-y: -11px;
+    --spark-rotate: 48deg;
+    animation-delay: -1.65s;
+  }
+
+  .hero-supporter-bubble__spark:nth-child(3) {
+    bottom: 2%;
+    left: 38%;
+    width: 2px;
+    height: 6px;
+    --spark-x: -4px;
+    --spark-y: 17px;
+    --spark-rotate: 12deg;
+    animation-delay: -2.25s;
+  }
+
+  .hero-supporter-bubble__spark:nth-child(4) {
+    top: 54%;
+    left: 1%;
+    width: 2px;
+    height: 5px;
+    --spark-x: -16px;
+    --spark-y: 3px;
+    --spark-rotate: -72deg;
+    animation-delay: -1.05s;
+  }
+
+  .hero-supporter-bubble__spark:nth-child(5) {
+    right: 22%;
+    bottom: 0;
+    width: 2px;
+    height: 5px;
+    --spark-x: 10px;
+    --spark-y: 16px;
+    --spark-rotate: 32deg;
+    animation-delay: -2.6s;
+  }
+
+  .hero-supporter-bubble__avatar {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow:
+      0 0 0 2px rgba(255, 239, 188, 0.92),
+      0 0 0 5px rgba(217, 154, 33, 0.26),
+      0 9px 22px -10px rgba(34, 17, 0, 0.94);
+  }
+
+  .hero-supporter-bubble span {
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    color: #fff1cf;
+    font-size: 11px;
+    font-weight: 650;
+    line-height: 1.2;
+    text-shadow: 0 1px 8px rgba(255, 196, 70, 0.24);
+    white-space: nowrap;
+  }
+
+  .hero-supporter-bubbles--static {
+    display: grid;
+    grid-template-columns: minmax(218px, 236px);
+    align-content: end;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 0 3vw 16vh 0;
+  }
+
+  .hero-supporter-bubble--static {
+    position: relative;
+    bottom: auto;
+    flex: 0 0 auto;
+  }
+
+  @keyframes supporter-bubble-shine {
+    0%, 18% {
+      opacity: 0;
+      transform: translate3d(0, 0, 0) rotate(18deg);
+    }
+    32% {
+      opacity: 0.92;
+    }
+    58% {
+      opacity: 0.4;
+      transform: translate3d(420%, 0, 0) rotate(18deg);
+    }
+    72%, 100% {
+      opacity: 0;
+      transform: translate3d(420%, 0, 0) rotate(18deg);
+    }
+  }
+
+  @keyframes supporter-spark-burst {
+    0%, 38% {
+      opacity: 0;
+      transform: translate3d(0, 0, 0) rotate(var(--spark-rotate)) scale(0.35);
+    }
+    47% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) rotate(var(--spark-rotate)) scale(1);
+    }
+    72% {
+      opacity: 0.5;
+      transform: translate3d(var(--spark-x), var(--spark-y), 0) rotate(var(--spark-rotate)) scale(0.72);
+    }
+    100% {
+      opacity: 0;
+      transform: translate3d(var(--spark-x), var(--spark-y), 0) rotate(var(--spark-rotate)) scale(0.25);
+    }
+  }
+
   .github-star-badge {
     --star-gold-deep: #5c3d08;
     --star-gold-mid: #8f6310;
@@ -311,6 +558,50 @@ body::after {
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
+  }
+}
+
+@media (max-width: 767px) {
+  .hero-supporter-bubbles {
+    width: 48vw;
+    opacity: 0.72;
+    mask-image: linear-gradient(to left, #000 68%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to left, #000 68%, transparent 100%);
+  }
+
+  .hero-supporter-bubble {
+    width: min(170px, 44vw) !important;
+    height: 66px !important;
+    border-radius: 10px;
+    gap: 8px;
+    padding: 8px 9px;
+  }
+
+  .hero-supporter-bubble__avatar {
+    width: 32px;
+    height: 32px;
+  }
+
+  .hero-supporter-bubble span {
+    max-width: none;
+    font-size: 9px;
+  }
+
+  .hero-supporter-bubble__spark:nth-child(n + 4) {
+    display: none;
+  }
+
+  .hero-supporter-bubbles--static {
+    display: grid;
+    grid-template-columns: min(166px, 43vw);
+    align-content: end;
+    gap: 8px;
+    padding: 0 14px 22vh 0;
+  }
+
+  .hero-supporter-bubble--static {
+    width: min(166px, 43vw) !important;
+    height: 64px !important;
   }
 }
 
@@ -2545,6 +2836,14 @@ body::after {
   animation-delay: 0.9s;
 }
 
+@media (prefers-reduced-transparency: reduce) {
+  .hero-supporter-bubble {
+    background: #4a2d08;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .animate-float,
@@ -2552,6 +2851,8 @@ body::after {
   .aurora-b,
   .animate-marquee,
   .coffee-steam span,
+  .hero-supporter-bubble__shine,
+  .hero-supporter-bubble__spark,
   .github-star-badge,
   .github-star-count-link__icon,
   .music-transfer-mock__flying-note,
