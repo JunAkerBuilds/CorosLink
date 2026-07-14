@@ -348,10 +348,9 @@ body::after {
   }
 
   .hero-supporter-bubble span {
-    min-width: 0;
-    max-width: calc(100% - 52px);
-    overflow: hidden;
-    text-overflow: ellipsis;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
     color: #fff1cf;
     font-size: 11px;
     font-weight: 650;
@@ -362,7 +361,7 @@ body::after {
 
   .hero-supporter-bubbles--static {
     display: grid;
-    grid-template-columns: repeat(2, minmax(132px, 156px));
+    grid-template-columns: minmax(218px, 236px);
     align-content: end;
     justify-content: flex-end;
     gap: 10px;
@@ -571,7 +570,7 @@ body::after {
   }
 
   .hero-supporter-bubble {
-    width: 118px !important;
+    width: min(170px, 44vw) !important;
     height: 66px !important;
     border-radius: 10px;
     gap: 8px;
@@ -584,7 +583,7 @@ body::after {
   }
 
   .hero-supporter-bubble span {
-    max-width: calc(100% - 40px);
+    max-width: none;
     font-size: 9px;
   }
 
@@ -594,14 +593,14 @@ body::after {
 
   .hero-supporter-bubbles--static {
     display: grid;
-    grid-template-columns: 112px;
+    grid-template-columns: min(166px, 43vw);
     align-content: end;
     gap: 8px;
     padding: 0 14px 22vh 0;
   }
 
   .hero-supporter-bubble--static {
-    width: 112px !important;
+    width: min(166px, 43vw) !important;
     height: 64px !important;
   }
 }

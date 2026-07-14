@@ -6,12 +6,12 @@ import type { PublicSupporter } from "../lib/supporters";
 import { usePrefersReducedMotion } from "../hooks/usePrefersReducedMotion";
 
 const BUBBLE_PATHS = [
-  { right: "8%", width: 168, height: 72, drift: [0, -28, 14, -42, 0] },
-  { right: "31%", width: 148, height: 64, drift: [0, 24, -12, 34, 0] },
-  { right: "2%", width: 158, height: 68, drift: [0, -18, 22, -24, 0] },
-  { right: "24%", width: 176, height: 74, drift: [0, 30, -18, 18, 0] },
-  { right: "42%", width: 142, height: 62, drift: [0, -22, 14, -30, 0] },
-  { right: "14%", width: 154, height: 66, drift: [0, 18, -20, 26, 0] },
+  { right: "8%", width: 228, height: 72, drift: [0, -28, 14, -42, 0] },
+  { right: "31%", width: 220, height: 64, drift: [0, 24, -12, 34, 0] },
+  { right: "2%", width: 236, height: 68, drift: [0, -18, 22, -24, 0] },
+  { right: "24%", width: 232, height: 74, drift: [0, 30, -18, 18, 0] },
+  { right: "42%", width: 218, height: 62, drift: [0, -22, 14, -30, 0] },
+  { right: "14%", width: 224, height: 66, drift: [0, 18, -20, 26, 0] },
 ];
 
 export function SupporterBubbles({
