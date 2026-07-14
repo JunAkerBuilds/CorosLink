@@ -182,7 +182,7 @@ body::after {
     height: 52%;
     width: 86%;
     border-radius: 50%;
-    background: rgba(230, 174, 58, 0.2);
+    background: rgba(255, 202, 48, 0.28);
     filter: blur(70px);
   }
 
@@ -194,22 +194,22 @@ body::after {
     justify-content: flex-start;
     gap: 10px;
     overflow: visible;
-    border: 1px solid rgba(255, 218, 133, 0.72);
+    border: 1px solid rgba(255, 229, 105, 0.9);
     border-radius: 12px;
     background:
-      radial-gradient(circle at 28% 18%, rgba(255, 247, 210, 0.54), transparent 20%),
-      radial-gradient(circle at 72% 76%, rgba(255, 177, 41, 0.2), transparent 38%),
-      linear-gradient(145deg, rgba(126, 86, 16, 0.7), rgba(31, 18, 3, 0.9));
+      radial-gradient(circle at 28% 18%, rgba(255, 255, 220, 0.7), transparent 22%),
+      radial-gradient(circle at 72% 76%, rgba(255, 208, 42, 0.38), transparent 42%),
+      linear-gradient(145deg, rgba(196, 137, 10, 0.88), rgba(72, 42, 0, 0.94));
     padding: 10px 12px;
     backdrop-filter: blur(20px) saturate(170%);
     -webkit-backdrop-filter: blur(20px) saturate(170%);
     box-shadow:
-      inset 0 1px 0 rgba(255, 250, 224, 0.78),
-      inset 0 -22px 34px rgba(38, 18, 0, 0.46),
-      inset 12px 0 30px rgba(255, 196, 70, 0.08),
-      0 0 0 1px rgba(180, 111, 12, 0.34),
-      0 20px 56px -22px rgba(242, 177, 44, 0.88);
-    color: #fff4dc;
+      inset 0 1px 0 rgba(255, 255, 224, 0.92),
+      inset 0 -22px 34px rgba(62, 32, 0, 0.42),
+      inset 12px 0 30px rgba(255, 224, 72, 0.18),
+      0 0 0 1px rgba(225, 157, 10, 0.5),
+      0 20px 58px -20px rgba(255, 203, 45, 0.96);
+    color: #fff9d9;
     text-align: center;
     will-change: transform, opacity;
   }
@@ -218,7 +218,7 @@ body::after {
     content: "";
     position: absolute;
     inset: 4px;
-    border: 1px solid rgba(255, 235, 178, 0.26);
+    border: 1px solid rgba(255, 242, 155, 0.42);
     border-radius: inherit;
     pointer-events: none;
   }
@@ -342,8 +342,8 @@ body::after {
     border-radius: 50%;
     object-fit: cover;
     box-shadow:
-      0 0 0 2px rgba(255, 239, 188, 0.92),
-      0 0 0 5px rgba(217, 154, 33, 0.26),
+      0 0 0 2px rgba(255, 247, 172, 0.98),
+      0 0 0 5px rgba(255, 196, 28, 0.38),
       0 9px 22px -10px rgba(34, 17, 0, 0.94);
   }
 
@@ -351,11 +351,11 @@ body::after {
     max-width: none;
     overflow: visible;
     text-overflow: clip;
-    color: #fff1cf;
+    color: #fff8d0;
     font-size: 11px;
     font-weight: 650;
     line-height: 1.2;
-    text-shadow: 0 1px 8px rgba(255, 196, 70, 0.24);
+    text-shadow: 0 1px 10px rgba(255, 219, 86, 0.42);
     white-space: nowrap;
   }
 
@@ -2838,7 +2838,7 @@ body::after {
 
 @media (prefers-reduced-transparency: reduce) {
   .hero-supporter-bubble {
-    background: #4a2d08;
+    background: #6a4305;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
