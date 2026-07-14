@@ -19,8 +19,7 @@ export const DEFAULT_AMPM_STYLE: WatchfaceAmPmStyle = {
   enabled: false,
   x: 480,
   y: 360,
-  scale: 1,
-  color: "#ffffff"
+  scale: 1
 };
 
 /** A blank design used when the editor opens without a saved project. */
@@ -29,6 +28,7 @@ export function makeDefaultDesign(): CorosWatchfaceDesignState {
     version: 1,
     accentColor: "#51e0b5",
     artwork: null,
+    artworkVisible: true,
     zoom: 1,
     fontFamily: "",
     fontWeight: 400,
@@ -50,6 +50,7 @@ export function makeDefaultDesign(): CorosWatchfaceDesignState {
     ampmIndicator: { ...DEFAULT_AMPM_STYLE },
     weatherIndicator: undefined,
     layoutOffsets: {},
+    linkedLayerGroups: [],
     layerVisibility: {},
     layerColors: {},
     configAssetOverrides: {},
@@ -80,7 +81,7 @@ export async function renderDesignBackground(
   context.clearRect(0, 0, size, size);
 
   const backgroundOverride = design.configAssetOverrides?.["config:background_icon"];
-  const backgroundArtwork = backgroundOverride?.enabled === false
+  const backgroundArtwork = design.artworkVisible === false
     ? null
     : backgroundOverride?.replacement ?? design.artwork;
 

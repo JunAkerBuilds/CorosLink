@@ -505,6 +505,8 @@ export interface CorosWatchfaceDesignState {
   backgroundColor?: string;
   accentColor: string;
   artwork: CorosWatchfaceArtwork | null;
+  /** Whether the source artwork is painted into the composed background. */
+  artworkVisible?: boolean;
   zoom: number;
   fontFamily: string;
   /** Optional portable PNG glyph atlas, used when no local font is selected. */
@@ -545,7 +547,8 @@ export interface CorosWatchfaceDesignState {
     x: number;
     y: number;
     scale: number;
-    color: string;
+    /** Optional tint; absent preserves the template sprite color. */
+    color?: string;
     fontFamily?: string;
   };
   /** Dynamic 41-state weather icon; absent in older projects. */
@@ -554,8 +557,16 @@ export interface CorosWatchfaceDesignState {
     x: number;
     y: number;
     scale: number;
+    /** Optional tint applied to all weather states. */
+    color?: string;
   };
   layoutOffsets: Record<string, { dx: number; dy: number }>;
+  /**
+   * Editor layer ids whose positions should change together. The ids are kept
+   * at editor level so firmware-backed layers and freeform artwork can share a
+   * link group without changing the exported watch-face format.
+   */
+  linkedLayerGroups?: string[][];
   /** Visibility overrides for firmware-backed editor layers. */
   layerVisibility?: Record<string, boolean>;
   /** Per-layer colors for firmware components without specialized styles. */

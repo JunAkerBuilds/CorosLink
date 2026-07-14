@@ -308,6 +308,10 @@ export function buildWatchfaceConfigAssetOverrides(
     for (const scope of ["config", "aod"] as const) {
       const values: Record<string, string> = {};
       for (const [configKey] of pngConfigEntries(resolution, scope)) {
+        // The current background is always a composed Studio PNG written back
+        // to the template's original path. Artwork visibility is handled while
+        // composing that PNG, never by clearing or repointing this config key.
+        if (scope === "config" && configKey === "background_icon") continue;
         const id = watchfaceConfigAssetId(scope, configKey);
         const override = overrides[id];
         if (!override) continue;
@@ -315,8 +319,7 @@ export function buildWatchfaceConfigAssetOverrides(
           values[configKey] = "";
         } else if (
           includeReplacementPaths &&
-          override.replacement &&
-          !(scope === "config" && configKey === "background_icon")
+          override.replacement
         ) {
           values[configKey] = configAssetCreatedRelativePath(id).replace(/\//g, "\\");
         }
@@ -481,7 +484,8 @@ export interface WatchfaceAmPmStyle {
   x: number;
   y: number;
   scale: number;
-  color: string;
+  /** Optional tint; absent preserves the template sprite color. */
+  color?: string;
   /** Optional desktop font rasterized into the live AM and PM sprites. */
   fontFamily?: string;
 }
@@ -667,7 +671,7 @@ export async function buildAmPmSpriteReplacements(
             width,
             height,
             style.fontFamily,
-            style.color
+            style.color ?? "#ffffff"
           )
         : await resizeAndTintSprite(
             assetsByPath.get(job.source.path)?.dataUrl ?? "",
@@ -3629,7 +3633,7 @@ export async function drawStudioPreview(
             width,
             height,
             ampmStyle.fontFamily,
-            ampmStyle.color
+            ampmStyle.color ?? options.digitColor
           )
         : await resizeAndTintSprite(
             sourceDataUrl!,

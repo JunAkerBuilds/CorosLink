@@ -4,7 +4,12 @@ import type {
   CorosWatchfaceResolutionDetails,
   CorosWatchfaceTemplateDetails
 } from "../../electron/types";
-import { loadStudioImage, parseConfigPos, pickPreviewResolution } from "./watchfaceStudio";
+import {
+  loadStudioImage,
+  parseConfigPos,
+  pickPreviewResolution,
+  resizeAndTintSprite
+} from "./watchfaceStudio";
 
 export interface WatchfaceWeatherStyle {
   enabled: boolean;
@@ -12,6 +17,8 @@ export interface WatchfaceWeatherStyle {
   x: number;
   y: number;
   scale: number;
+  /** Optional tint applied consistently to all 41 states. */
+  color?: string;
 }
 
 const weather416 = import.meta.glob(
@@ -140,6 +147,16 @@ export function weatherPreviewUrl(width: number): string {
   return (width >= 800 ? urls800 : urls416)[0] ?? "";
 }
 
+export async function weatherPreviewDataUrl(
+  width: number,
+  color?: string
+): Promise<string> {
+  const url = weatherPreviewUrl(width);
+  if (!url || !color) return url;
+  const edge = width >= 800 ? 123 : 64;
+  return resizeAndTintSprite(url, edge, edge, color);
+}
+
 export async function buildWeatherSpriteReplacements(
   details: CorosWatchfaceTemplateDetails,
   style: WatchfaceWeatherStyle
@@ -155,7 +172,12 @@ export async function buildWeatherSpriteReplacements(
     }
     const edge = weatherSpriteSize(resolution) * style.scale;
     const dataUrls = await Promise.all(
-      urls.map((url) => imageUrlToDataUrl(url, edge))
+      urls.map(async (url) => {
+        const dataUrl = await imageUrlToDataUrl(url, edge);
+        return style.color
+          ? resizeAndTintSprite(dataUrl, Math.round(edge), Math.round(edge), style.color)
+          : dataUrl;
+      })
     );
     dataUrls.forEach((dataUrl, index) => {
       const path = `${resolution.directory}/weather/${String(index).padStart(2, "0")}.png`;

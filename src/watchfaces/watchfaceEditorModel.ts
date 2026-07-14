@@ -308,8 +308,7 @@ export function deriveEditorLayers(
     const style = design.ampmIndicator ?? {
       enabled: ampmCapability.active,
       ...ampmCapability.defaultPos,
-      scale: 1,
-      color: design.digitColor
+      scale: 1
     };
     const width = ampmCapability.icon.width * style.scale;
     const height = ampmCapability.icon.height * style.scale;
@@ -369,6 +368,13 @@ export function deriveEditorLayers(
   }
 
   for (const reference of listWatchfaceConfigAssets(details)) {
+    // The current-face background_icon is the source behind the editable
+    // Artwork → Background layer below. Exposing it again as a template asset
+    // creates two controls for the same on-watch image. Keep AOD background
+    // assets visible because those are independent of the current artwork.
+    if (reference.id === "config:background_icon") {
+      continue;
+    }
     const override = design.configAssetOverrides?.[reference.id];
     layers.push({
       id: `configAsset:${reference.id}`,
@@ -417,8 +423,8 @@ export function deriveEditorLayers(
     id: "background",
     kind: "background",
     label: "Background",
-    visible: true,
-    canHide: false,
+    visible: design.artworkVisible !== false,
+    canHide: true,
     present: true,
     bounds: resolution
       ? { id: "background", label: "Background", x0: 0, y0: 0, x1: resolution.width, y1: resolution.height }

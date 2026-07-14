@@ -244,6 +244,20 @@ async function main() {
   );
   assert.ok(stepIcon, "step icon should be discovered");
   assert.equal(stepIcon.width, 16);
+  const configuredBackground = resolution.icons.find(
+    (entry) => entry.path === "watchface_800x800/background.png"
+  );
+  assert.ok(
+    configuredBackground,
+    "PNG files referenced directly by config or AODconfig should be discoverable"
+  );
+  assert.equal(
+    resolution.icons.filter(
+      (entry) => entry.path === "watchface_800x800/background.png"
+    ).length,
+    1,
+    "A PNG shared by config and AODconfig should only be described once"
+  );
 
   // --- Template asset export ---------------------------------------------
   const [stepAsset] = await watchfaces.loadCorosWatchfaceTemplateAssets(
