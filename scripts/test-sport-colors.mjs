@@ -11,7 +11,8 @@ const {
   parseSportColors,
   DEFAULT_SPORT_COLORS,
   happenDayFromTimestamp,
-  buildDominantSportByDay
+  buildDominantSportByDay,
+  buildSportCategoriesByDay
 } = await import(`${modUrl.href}?c=${Date.now()}`);
 
 // Categorization (trail before run; bike before run; French + English names).
@@ -73,5 +74,21 @@ const tie = buildDominantSportByDay([
   { activityId: "g", sportType: 0, sportName: "Run", trainingLoad: 30, startTime: noonMs }
 ]);
 assert.equal(tie.get("20260714"), "bike");
+
+// buildSportCategoriesByDay: distinct categories per day, canonical order,
+// same-category activities collapse to one slice.
+const cats = buildSportCategoriesByDay([
+  // One day: trail + bike + a second bike → 2 slices (trail, bike).
+  { activityId: "h", sportType: 0, sportName: "Trail Run", trainingLoad: 30, startTime: noonMs },
+  { activityId: "i", sportType: 0, sportName: "VirtualRide", trainingLoad: 20, startTime: noonMs },
+  { activityId: "j", sportType: 0, sportName: "Cyclisme", trainingLoad: 25, startTime: noonMs },
+  // Another day: single run.
+  { activityId: "k", sportType: 0, sportName: "Run", trainingLoad: 40, startTime: new Date(2026, 6, 15, 9).getTime() },
+  // No startTime → skipped.
+  { activityId: "l", sportType: 0, sportName: "Run" }
+]);
+assert.deepEqual([...cats.get("20260714")], ["trail", "bike"]); // canonical order
+assert.deepEqual([...cats.get("20260715")], ["run"]);
+assert.equal(cats.size, 2);
 
 console.log("sport-colors tests passed");

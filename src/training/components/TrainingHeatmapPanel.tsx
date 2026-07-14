@@ -18,8 +18,10 @@ import {
 } from "../weeklyActivity";
 import {
   buildDominantSportByDay,
+  buildSportCategoriesByDay,
   SPORT_COLOR_CATEGORIES,
-  SPORT_COLOR_LABELS
+  SPORT_COLOR_LABELS,
+  type SportColorCategory
 } from "../sportColors";
 import type { HeatmapCell, TrainingHubSnapshot } from "../types";
 
@@ -30,6 +32,29 @@ interface TrainingHeatmapPanelProps {
 
 const WEEKDAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 const LEGEND_LEVELS = [0, 1, 2, 3, 4] as const;
+
+// Opacity per intensity level, mirroring the single-sport CSS levels so a
+// multi-sport pie reads at the same darkness as a solid cell of the same load.
+const LEVEL_ALPHA: Record<number, number> = { 1: 28, 2: 48, 3: 72, 4: 100 };
+
+function sliceColor(cat: SportColorCategory, level: number): string {
+  const pct = LEVEL_ALPHA[level] ?? 100;
+  return `color-mix(in srgb, var(--sport-${cat}) ${pct}%, transparent)`;
+}
+
+// Split a day's cell into equal pie slices, one per distinct sport category.
+function pieBackground(
+  categories: SportColorCategory[],
+  level: number
+): string {
+  const n = categories.length;
+  const stops = categories.map((cat, index) => {
+    const from = ((index / n) * 360).toFixed(3);
+    const to = (((index + 1) / n) * 360).toFixed(3);
+    return `${sliceColor(cat, level)} ${from}deg ${to}deg`;
+  });
+  return `conic-gradient(${stops.join(", ")})`;
+}
 
 function usePrefersReducedMotion() {
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -84,11 +109,22 @@ export function TrainingHeatmapPanel({
     () => buildDominantSportByDay(activities),
     [activities]
   );
-  // Only show sports that actually appear in the visible range, in canonical order.
+  // Distinct sport categories per day → equal pie slices when there are 2+.
+  const sportsByDay = useMemo(
+    () => buildSportCategoriesByDay(activities),
+    [activities]
+  );
+  // Only show sports that actually appear in the visible range, in canonical
+  // order — including those that only ever show up as a pie slice.
   const presentSports = useMemo(() => {
-    const seen = new Set(sportByDay.values());
+    const seen = new Set<SportColorCategory>();
+    for (const set of sportsByDay.values()) {
+      for (const cat of set) {
+        seen.add(cat);
+      }
+    }
     return SPORT_COLOR_CATEGORIES.filter((cat) => seen.has(cat));
-  }, [sportByDay]);
+  }, [sportsByDay]);
   const hasData = cells.some((cell) => cell.level > 0);
 
   useEffect(() => {
@@ -169,14 +205,23 @@ export function TrainingHeatmapPanel({
                   const loadLabel = formatOptionalNumber(cell.trainingLoad);
                   const distanceLabel = formatDistanceMeters(cell.distance);
                   const durationLabel = formatDurationSeconds(cell.duration);
-                  const sportCategory =
+                  const dominantSport =
                     cell.level > 0 ? sportByDay.get(cell.happenDay) : undefined;
+                  const daySports =
+                    cell.level > 0
+                      ? [...(sportsByDay.get(cell.happenDay) ?? [])]
+                      : [];
                   const cellStyle: Record<string, string> = {};
                   if (!reducedMotion) {
                     cellStyle.animationDelay = `${staggerDelay}ms`;
                   }
-                  if (sportCategory) {
-                    cellStyle["--cell-color"] = `var(--sport-${sportCategory})`;
+                  // Dominant sport sets the hue for glow/hover and the single-
+                  // sport fill; 2+ sports split the cell into equal pie slices.
+                  if (dominantSport) {
+                    cellStyle["--cell-color"] = `var(--sport-${dominantSport})`;
+                  }
+                  if (daySports.length >= 2) {
+                    cellStyle.background = pieBackground(daySports, cell.level);
                   }
 
                   return (

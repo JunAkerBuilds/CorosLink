@@ -148,3 +148,37 @@ export function buildDominantSportByDay(
   }
   return result;
 }
+
+/**
+ * Map each day (YYYYMMDD) to the distinct sport color categories done that day,
+ * in canonical order. Multiple activities of the same category collapse to a
+ * single entry (e.g. two bike rides → one "bike"). Used to split a day's cell
+ * into equal slices, one per sport.
+ */
+export function buildSportCategoriesByDay(
+  activities: TrainingHubActivity[]
+): Map<string, Set<SportColorCategory>> {
+  const byDay = new Map<string, Set<SportColorCategory>>();
+
+  for (const activity of activities) {
+    const happenDay = happenDayFromTimestamp(activity.startTime);
+    if (!happenDay) {
+      continue;
+    }
+
+    const category = sportColorCategory(activity.sportName);
+    const set = byDay.get(happenDay) ?? new Set<SportColorCategory>();
+    set.add(category);
+    byDay.set(happenDay, set);
+  }
+
+  // Re-emit each set as canonically ordered for deterministic slice order.
+  const result = new Map<string, Set<SportColorCategory>>();
+  for (const [happenDay, set] of byDay) {
+    result.set(
+      happenDay,
+      new Set(SPORT_COLOR_CATEGORIES.filter((cat) => set.has(cat)))
+    );
+  }
+  return result;
+}
