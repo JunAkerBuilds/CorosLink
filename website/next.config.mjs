@@ -12,6 +12,15 @@ const nextConfig = {
   turbopack: {
     root: monorepoRoot,
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "cdn.buymeacoffee.com",
+        pathname: "/uploads/profile_pictures/**",
+      },
+    ],
+  },
 };
 
 export default nextConfig;
