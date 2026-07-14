@@ -98,6 +98,7 @@ import {
   exportGeneratedRoute,
   generateRoute,
   geocodeRouteLocation,
+  reverseGeocodeRouteLocation,
   getCorosMapInstallProgress,
   getCorosMapManifest,
   getRouteBuilderConfig,
@@ -1489,6 +1490,11 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("maps:searchRouteLocations", (_event, query: string) =>
     searchRouteLocations(query)
+  );
+
+  ipcMain.handle(
+    "maps:reverseGeocodeRouteLocation",
+    (_event, lat: number, lon: number) => reverseGeocodeRouteLocation(lat, lon)
   );
 
   ipcMain.handle("maps:generateRoute", (_event, request: GenerateRouteRequest) =>

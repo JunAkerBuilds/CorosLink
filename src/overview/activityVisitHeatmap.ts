@@ -29,6 +29,7 @@ export interface OverallActivityStats {
 }
 
 export interface GeoHeatBucket {
+  key: string;
   lat: number;
   lon: number;
   count: number;
@@ -37,11 +38,137 @@ export interface GeoHeatBucket {
 const VISIT_CACHE = new Map<string, GlobePoint | null>();
 const ROUTE_CACHE = new Map<string, GlobePoint[] | null>();
 const MAX_VISIT_ACTIVITIES = 20;
-const VISIT_CONCURRENCY = 3;
+const VISIT_CONCURRENCY = 5;
 /** Cap cached track points per activity to keep memory bounded. */
 const MAX_CACHED_ROUTE_POINTS = 280;
+/** Keep only recent, downsampled coordinates in the renderer's local storage. */
+const MAX_PERSISTED_GEO_ACTIVITIES = 80;
+const GEO_CACHE_STORAGE_KEY = "coroslink.activity-globe.geo-cache.v1";
 /** ~0.5° geographic grid for visit density (~55 km). */
 const GEO_HEAT_STEP = 0.5;
+
+interface PersistedGeoRecord {
+  activityId: string;
+  visit?: GlobePoint | null;
+  route?: GlobePoint[] | null;
+}
+
+interface PersistedGeoCache {
+  version: 1;
+  records: PersistedGeoRecord[];
+}
+
+let geoCacheHydrated = false;
+let geoCacheWriteScheduled = false;
+
+function isStoredGlobePoint(value: unknown): value is GlobePoint {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const point = value as Partial<GlobePoint>;
+  return (
+    typeof point.lat === "number" &&
+    Number.isFinite(point.lat) &&
+    Math.abs(point.lat) <= 90 &&
+    typeof point.lon === "number" &&
+    Number.isFinite(point.lon) &&
+    Math.abs(point.lon) <= 180
+  );
+}
+
+function hydrateGeoCache(): void {
+  if (geoCacheHydrated) {
+    return;
+  }
+  geoCacheHydrated = true;
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    const stored = window.localStorage.getItem(GEO_CACHE_STORAGE_KEY);
+    if (!stored) {
+      return;
+    }
+    const parsed = JSON.parse(stored) as Partial<PersistedGeoCache>;
+    if (parsed.version !== 1 || !Array.isArray(parsed.records)) {
+      return;
+    }
+    for (const record of parsed.records.slice(-MAX_PERSISTED_GEO_ACTIVITIES)) {
+      if (!record || typeof record.activityId !== "string") {
+        continue;
+      }
+      if (record.visit === null || isStoredGlobePoint(record.visit)) {
+        VISIT_CACHE.set(record.activityId, record.visit);
+      }
+      if (record.route === null) {
+        ROUTE_CACHE.set(record.activityId, null);
+      } else if (Array.isArray(record.route)) {
+        const route = record.route
+          .filter(isStoredGlobePoint)
+          .slice(0, MAX_CACHED_ROUTE_POINTS);
+        ROUTE_CACHE.set(record.activityId, route.length >= 2 ? route : null);
+      }
+    }
+  } catch {
+    // Storage is best-effort; a corrupt or unavailable cache must not block UI.
+  }
+}
+
+function persistGeoCache(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    const activityIds = Array.from(
+      new Set([...VISIT_CACHE.keys(), ...ROUTE_CACHE.keys()]),
+    ).slice(-MAX_PERSISTED_GEO_ACTIVITIES);
+    const records = activityIds.map<PersistedGeoRecord>((activityId) => ({
+      activityId,
+      ...(VISIT_CACHE.has(activityId)
+        ? { visit: VISIT_CACHE.get(activityId) ?? null }
+        : {}),
+      ...(ROUTE_CACHE.has(activityId)
+        ? { route: ROUTE_CACHE.get(activityId) ?? null }
+        : {}),
+    }));
+    const payload: PersistedGeoCache = { version: 1, records };
+    window.localStorage.setItem(GEO_CACHE_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Quota and privacy settings can disable storage; memory cache still works.
+  }
+}
+
+function scheduleGeoCacheWrite(): void {
+  if (geoCacheWriteScheduled || typeof window === "undefined") {
+    return;
+  }
+  geoCacheWriteScheduled = true;
+  const write = () => {
+    geoCacheWriteScheduled = false;
+    persistGeoCache();
+  };
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(write, { timeout: 1_500 });
+  } else {
+    window.setTimeout(write, 400);
+  }
+}
+
+function rememberCacheEntry<T>(
+  cache: Map<string, T>,
+  activityId: string,
+  value: T,
+): void {
+  cache.delete(activityId);
+  cache.set(activityId, value);
+}
+
+export function geoHeatBucketKey(point: GlobePoint): string {
+  const latKey = Math.round(point.lat / GEO_HEAT_STEP);
+  const lonKey = Math.round(point.lon / GEO_HEAT_STEP);
+  return `${latKey}:${lonKey}`;
+}
 
 export function isGlobePoint(
   point: TrainingHubTrackPoint,
@@ -102,24 +229,30 @@ export function rememberVisitCentroid(
   activityId: string,
   point: GlobePoint | null,
 ): void {
-  VISIT_CACHE.set(activityId, point);
+  hydrateGeoCache();
+  rememberCacheEntry(VISIT_CACHE, activityId, point);
+  scheduleGeoCacheWrite();
 }
 
 export function rememberActivityRoute(
   activityId: string,
   points: GlobePoint[] | null,
 ): void {
+  hydrateGeoCache();
   if (!points || points.length < 2) {
-    ROUTE_CACHE.set(activityId, null);
+    rememberCacheEntry(ROUTE_CACHE, activityId, null);
+    scheduleGeoCacheWrite();
     return;
   }
-  ROUTE_CACHE.set(activityId, sampleGlobePoints(points));
+  rememberCacheEntry(ROUTE_CACHE, activityId, sampleGlobePoints(points));
+  scheduleGeoCacheWrite();
 }
 
 export function rememberActivityGeo(
   activityId: string,
   detail: TrainingHubActivityDetail | null | undefined,
 ): { centroid: GlobePoint | null; route: GlobePoint[] | null } {
+  hydrateGeoCache();
   const track = extractTrackPoints(detail);
   const centroid =
     track.length >= 2
@@ -129,20 +262,23 @@ export function rememberActivityGeo(
         }
       : null;
   const route = track.length >= 2 ? sampleGlobePoints(track) : null;
-  VISIT_CACHE.set(activityId, centroid);
-  ROUTE_CACHE.set(activityId, route);
+  rememberCacheEntry(VISIT_CACHE, activityId, centroid);
+  rememberCacheEntry(ROUTE_CACHE, activityId, route);
+  scheduleGeoCacheWrite();
   return { centroid, route };
 }
 
 export function getCachedVisitCentroid(
   activityId: string,
 ): GlobePoint | null | undefined {
+  hydrateGeoCache();
   return VISIT_CACHE.get(activityId);
 }
 
 export function getCachedVisitPoints(
   activities: TrainingHubActivity[],
 ): ActivityVisitPoint[] {
+  hydrateGeoCache();
   const visits: ActivityVisitPoint[] = [];
   for (const activity of activities) {
     const cached = VISIT_CACHE.get(activity.activityId);
@@ -160,6 +296,7 @@ export function getCachedVisitPoints(
 export function getCachedRoutePolylines(
   activities: TrainingHubActivity[],
 ): ActivityRoutePolyline[] {
+  hydrateGeoCache();
   const routes: ActivityRoutePolyline[] = [];
   for (const activity of activities) {
     const cached = ROUTE_CACHE.get(activity.activityId);
@@ -225,9 +362,7 @@ export function bucketVisitsGeographically(
 
   const buckets = new Map<string, GeoHeatBucket>();
   for (const visit of visits) {
-    const latKey = Math.round(visit.lat / GEO_HEAT_STEP);
-    const lonKey = Math.round(visit.lon / GEO_HEAT_STEP);
-    const key = `${latKey}:${lonKey}`;
+    const key = geoHeatBucketKey(visit);
     const existing = buckets.get(key);
     if (existing) {
       existing.count += 1;
@@ -235,6 +370,7 @@ export function bucketVisitsGeographically(
       existing.lon = (existing.lon * (existing.count - 1) + visit.lon) / existing.count;
     } else {
       buckets.set(key, {
+        key,
         lat: visit.lat,
         lon: visit.lon,
         count: 1,
@@ -304,6 +440,7 @@ export async function loadActivityVisitCentroids(
     onRoute?: (route: ActivityRoutePolyline) => void;
   },
 ): Promise<ActivityVisitPoint[]> {
+  hydrateGeoCache();
   const limit = options?.limit ?? MAX_VISIT_ACTIVITIES;
   const concurrency = options?.concurrency ?? VISIT_CONCURRENCY;
   const signal = options?.signal;

@@ -585,6 +585,11 @@ const api = {
     ipcRenderer.invoke("maps:geocodeRouteLocation", query),
   searchRouteLocations: (query: string): Promise<RouteGeocodeResult[]> =>
     ipcRenderer.invoke("maps:searchRouteLocations", query),
+  reverseGeocodeRouteLocation: (
+    lat: number,
+    lon: number
+  ): Promise<RouteGeocodeResult> =>
+    ipcRenderer.invoke("maps:reverseGeocodeRouteLocation", lat, lon),
   generateRoute: (request: GenerateRouteRequest): Promise<GeneratedRoute> =>
     ipcRenderer.invoke("maps:generateRoute", request),
   routeWaypoints: (request: RouteWaypointRequest): Promise<RouteGeometry> =>

@@ -189,6 +189,43 @@ const probes = [
     id: "t9-info-diy-version-4",
     description: "Baseline config with info.json's DIY version raised to the source format version.",
     infoValues: { o_diy_version: 4 }
+  },
+  {
+    id: "t10-exact-temperature-icon",
+    description: "The user-specified selectable-temperature block, with a temporary temperature.png resource alias.",
+    values: (layout) => ({
+      rect_control1_pos: layout.slotPosition,
+      control_temperature_icon_pos: layout.temperatureIconPosition,
+      control_temperature_icon: "icon\\temperature.png",
+      control_temperature_rect: layout.wideRect,
+      control_temperature_font: "13x19",
+      control_temperature_font_color: "0xFFFFFF",
+      control_temperature_negative_sign_icon: "",
+      control_negative_sign_icon: "icon\\negative.png"
+    }),
+    copies: (layoutNames) =>
+      layoutNames.map((layoutName) => ({
+        from: `${layoutName}/icon/step.png`,
+        to: `${layoutName}/icon/temperature.png`
+      }))
+  },
+  {
+    id: "t11-temperature-icon-overlay",
+    description: "The user-specified block applied over the existing config, preserving its pre-existing temperature sign icon.",
+    values: (layout) => ({
+      rect_control1_pos: layout.slotPosition,
+      control_temperature_icon_pos: layout.temperatureIconPosition,
+      control_temperature_icon: "icon\\temperature.png",
+      control_temperature_rect: layout.wideRect,
+      control_temperature_font: "13x19",
+      control_temperature_font_color: "0xFFFFFF",
+      control_negative_sign_icon: "icon\\negative.png"
+    }),
+    copies: (layoutNames) =>
+      layoutNames.map((layoutName) => ({
+        from: `${layoutName}/icon/step.png`,
+        to: `${layoutName}/icon/temperature.png`
+      }))
   }
 ];
 
@@ -232,6 +269,10 @@ if (configEntries.length === 0) {
   throw new Error(`No layout config.txt entries found in ${sourcePath}`);
 }
 
+const layoutNames = configEntries.map((entry) =>
+  entry.name.replace(/\/config\.txt$/i, "")
+);
+
 await fs.rm(outputDirectory, { recursive: true, force: true });
 await fs.mkdir(outputDirectory, { recursive: true });
 
@@ -257,6 +298,14 @@ for (const probe of probes) {
     changes[entry.name] = values;
     return { ...entry, data: applyValues(entry.data, values) };
   });
+  for (const copy of probe.copies?.(layoutNames) ?? []) {
+    const source = sourceEntries.find((entry) => entry.name === copy.from);
+    if (!source) {
+      throw new Error(`Cannot create ${copy.to}: missing source resource ${copy.from}`);
+    }
+    changes[copy.to] = { copiedFrom: copy.from };
+    entries.push({ name: copy.to, data: source.data });
+  }
   const archivePath = path.join(outputDirectory, `${probe.id}.zip`);
   await fs.writeFile(archivePath, createStoreZip(entries));
   manifest.probes.push({

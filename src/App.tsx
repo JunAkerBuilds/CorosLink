@@ -130,6 +130,25 @@ const YOUTUBE_DOWNLOAD_CONSOLE_PREFIX = "__COROSLINK_YOUTUBE_DOWNLOAD__";
 const APPLE_MUSIC_SELECTED_PLAYLIST_STORAGE_KEY =
   "coroslink.appleMusic.selectedPlaylistId";
 const IS_DEVELOPMENT_BUILD = import.meta.env.DEV;
+const TRAINING_HISTORY_PAGE_SIZE = 100;
+const TRAINING_HISTORY_MAX_PAGES = 100;
+
+async function listAllTrainingHubActivities(
+  api: CorosLinkApi
+): Promise<TrainingHubActivity[]> {
+  const activities: TrainingHubActivity[] = [];
+  for (let page = 1; page <= TRAINING_HISTORY_MAX_PAGES; page += 1) {
+    const batch = await api.listTrainingHubActivities(
+      page,
+      TRAINING_HISTORY_PAGE_SIZE
+    );
+    activities.push(...batch);
+    if (batch.length < TRAINING_HISTORY_PAGE_SIZE) {
+      break;
+    }
+  }
+  return activities;
+}
 
 let appleMusicSelectedPlaylistIdMemory = "";
 let appleMusicDetailCacheMemory: Record<string, AppleMusicPlaylist> = {};
@@ -366,7 +385,7 @@ export default function App() {
       sleepResult,
       dailyHealthResult,
     ] = await Promise.allSettled([
-      api.listTrainingHubActivities(1, 50),
+      listAllTrainingHubActivities(api),
       api.getTrainingAnalytics(),
       fetchTrainingDashboard(api),
       api.getDailyMetrics(dateList),
@@ -1596,6 +1615,7 @@ export default function App() {
                 onDeleteDownload={handleDeleteDownload}
                 onOpenLibrary={() => openMediaTab("library")}
                 onOpenTraining={() => setActiveView("training")}
+                onSelectTrainingActivity={handleTrainingHubActivityDetail}
               />
             ) : null}
             {activeView === "media" ? (
@@ -2063,6 +2083,7 @@ interface MediaOverviewTabProps {
   onDeleteDownload: (track: LocalTrack) => void;
   onOpenLibrary: () => void;
   onOpenTraining: () => void;
+  onSelectTrainingActivity: (activity: TrainingHubActivity) => void;
 }
 
 function MediaOverviewTab({
@@ -2078,6 +2099,7 @@ function MediaOverviewTab({
   onDeleteDownload,
   onOpenLibrary,
   onOpenTraining,
+  onSelectTrainingActivity,
 }: MediaOverviewTabProps) {
   const greeting = useTimeOfDayGreeting();
   const watchTracks = watchStatus?.tracks ?? [];
@@ -2256,6 +2278,7 @@ function MediaOverviewTab({
           detail={trainingActivityDetail}
           loading={busy?.startsWith("training-detail:") ?? false}
           onOpenTraining={onOpenTraining}
+          onSelectActivity={onSelectTrainingActivity}
         />
       </div>
     </div>

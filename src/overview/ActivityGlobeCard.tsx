@@ -1,46 +1,45 @@
 import {
-  geoCentroid,
-  geoDistance,
-  geoEquirectangular,
-  geoOrthographic,
-  geoPath,
-  type GeoPermissibleObjects,
-} from "d3-geo";
-import type { Feature, MultiPoint } from "geojson";
-import {
+  Activity,
   ArrowRight,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  CircleAlert,
+  Clock3,
+  Flame,
   Footprints,
+  Gauge,
+  Hand,
   LockKeyhole,
   MapPin,
+  Mountain,
+  Route,
   RotateCcw,
+  Timer,
 } from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  ResponsiveContainer,
+} from "recharts";
 import {
   useEffect,
   useMemo,
   useRef,
   useState,
-  type PointerEvent as ReactPointerEvent,
-  type WheelEvent as ReactWheelEvent,
+  type CSSProperties,
 } from "react";
-import { feature } from "topojson-client";
-import type {
-  GeometryCollection,
-  Topology,
-} from "topojson-specification";
-import landAtlas from "world-atlas/land-110m.json";
 import type {
   TrainingHubActivity,
   TrainingHubActivityDetail,
 } from "../../electron/types";
-import {
-  formatTrainingTimestamp,
-} from "../training/formatters";
 import {
   aggregateActivityStats,
   bucketVisitsGeographically,
   extractTrackPoints,
   formatOverallDistance,
   formatOverallDuration,
+  geoHeatBucketKey,
   getCachedRoutePolylines,
   getCachedVisitPoints,
   loadActivityVisitCentroids,
@@ -55,6 +54,11 @@ import {
   ActivityGlobeStreetMap,
   type StreetMapFocus,
 } from "./ActivityGlobeStreetMap";
+import {
+  ActivityGlobeRenderer,
+  type ActivityGlobeRendererHandle,
+} from "./ActivityGlobeRenderer";
+import "./activityGlobe.css";
 
 interface ActivityGlobeCardProps {
   activities: TrainingHubActivity[];
@@ -62,149 +66,122 @@ interface ActivityGlobeCardProps {
   detail: TrainingHubActivityDetail | null;
   loading: boolean;
   onOpenTraining: () => void;
+  onSelectActivity: (activity: TrainingHubActivity) => void;
 }
 
-type LandTopology = Topology<{ land: GeometryCollection }>;
+type ActivityPeriod = "all" | "year" | "90-days" | "custom";
 
-const topology = landAtlas as unknown as LandTopology;
-const land = feature(topology, topology.objects.land);
-const MAX_RENDERED_POINTS = 900;
-/** Zoomed-out land grid — sparse enough to read as dots, not a fill. */
-const DOT_STEP_FAR_DEGREES = 1.9;
-/** Mid zoom / light regional framing. */
-const DOT_STEP_MID_DEGREES = 1.15;
-/** Cluster baseline / closer framing — sharper continental silhouette. */
-const DOT_STEP_NEAR_DEGREES = 0.85;
-/** Regional framing floor (~18°). Drill-down can go tighter. */
-const MIN_HALF_SPAN_RAD = (18 * Math.PI) / 180;
-const DRILL_MIN_HALF_SPAN_RAD = (6 * Math.PI) / 180;
-const MIN_SCALE_FACTOR = 1;
-const MAX_SCALE_FACTOR = 4.2;
-/** Past this globe scale, crossfade into the street heatmap map. */
-const STREET_ENTER_SCALE = 3.05;
-const DEFAULT_ROTATION: [number, number, number] = [20, -18, 0];
-const IDLE_SPIN_DEG_PER_MS = 0.008;
-const CLUSTER_RADIUS_RAD = (14 * Math.PI) / 180;
-const DRILL_RADIUS_RAD = (5 * Math.PI) / 180;
-const HIT_PIXEL_RADIUS = 28;
-const DRAG_CLICK_SLOP_PX = 8;
-const CAMERA_EASE_MS = 780;
-
-const landDotsCache = new Map<number, Float64Array>();
-let landMaskCache: {
-  width: number;
-  height: number;
-  pixels: Uint8ClampedArray;
-  projection: ReturnType<typeof geoEquirectangular>;
-} | null = null;
-
-function landDotStepForScale(scaleFactor: number): number {
-  // Cluster framing is typically ~2–3.2; keep far/home (≈1) on the coarse grid.
-  if (scaleFactor >= 2) {
-    return DOT_STEP_NEAR_DEGREES;
-  }
-  if (scaleFactor >= 1.35) {
-    return DOT_STEP_MID_DEGREES;
-  }
-  return DOT_STEP_FAR_DEGREES;
+interface PlaceLabel {
+  city: string;
+  country: string;
+  full: string;
 }
 
-function getLandMask(): NonNullable<typeof landMaskCache> | null {
-  if (landMaskCache) {
-    return landMaskCache;
-  }
+interface LocationSummary {
+  key: string;
+  bucket: GeoHeatBucket;
+  activities: TrainingHubActivity[];
+  activityIds: Set<string>;
+  distanceMeters: number;
+  durationSeconds: number;
+  elevationMeters: number;
+  lastVisited?: number;
+  routeCount: number;
+  trend: Array<{ order: number; elevation: number; distance: number }>;
+}
 
-  const width = 1440;
-  const height = 720;
-  const raster = document.createElement("canvas");
-  raster.width = width;
-  raster.height = height;
-  const rasterContext = raster.getContext("2d", {
-    willReadFrequently: true,
-  });
-  if (!rasterContext) {
-    return null;
-  }
+const PLACE_LABEL_CACHE = new Map<string, PlaceLabel>();
+const PLACE_LABEL_REQUESTS = new Map<string, Promise<PlaceLabel>>();
 
-  const projection = geoEquirectangular().fitExtent(
-    [
-      [0, 0],
-      [width, height],
-    ],
-    { type: "Sphere" },
-  );
-  rasterContext.fillStyle = "#fff";
-  rasterContext.beginPath();
-  geoPath(projection, rasterContext)(land as GeoPermissibleObjects);
-  rasterContext.fill();
-  landMaskCache = {
-    width,
-    height,
-    pixels: rasterContext.getImageData(0, 0, width, height).data,
-    projection,
+function activityTimestampMs(value?: number): number {
+  if (!value || !Number.isFinite(value)) {
+    return 0;
+  }
+  return value < 10_000_000_000 ? value * 1000 : value;
+}
+
+function formatVisitDate(value?: number): string {
+  const timestamp = activityTimestampMs(value);
+  if (!timestamp) {
+    return "Date unavailable";
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(timestamp));
+}
+
+function coordinateLabel(point: GlobePoint): PlaceLabel {
+  const lat = `${Math.abs(point.lat).toFixed(1)}° ${point.lat >= 0 ? "N" : "S"}`;
+  const lon = `${Math.abs(point.lon).toFixed(1)}° ${point.lon >= 0 ? "E" : "W"}`;
+  return {
+    city: `${lat}, ${lon}`,
+    country: "Location",
+    full: `${lat}, ${lon}`,
   };
-  return landMaskCache;
 }
 
-function getLandDots(stepDegrees: number): Float64Array {
-  const cached = landDotsCache.get(stepDegrees);
+function parsePlaceLabel(label: string, point: GlobePoint): PlaceLabel {
+  const parts = label
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) {
+    return coordinateLabel(point);
+  }
+  return {
+    city: parts[0]!,
+    country: parts.length > 1 ? parts[parts.length - 1]! : "Location",
+    full: label,
+  };
+}
+
+function loadPlaceLabel(summary: LocationSummary): Promise<PlaceLabel> {
+  const cached = PLACE_LABEL_CACHE.get(summary.key);
   if (cached) {
-    return cached;
+    return Promise.resolve(cached);
   }
-
-  const mask = getLandMask();
-  if (!mask) {
-    return new Float64Array(0);
+  const pending = PLACE_LABEL_REQUESTS.get(summary.key);
+  if (pending) {
+    return pending;
   }
-
-  const { width, height, pixels, projection } = mask;
-  const dots: number[] = [];
-  for (let row = 0; ; row += 1) {
-    const lat = -84 + row * stepDegrees;
-    if (lat > 84) {
-      break;
-    }
-
-    const lonStep =
-      stepDegrees / Math.max(Math.cos((lat * Math.PI) / 180), 0.08);
-    for (
-      let lon = -180 + (row % 2) * lonStep * 0.5;
-      lon < 180;
-      lon += lonStep
-    ) {
-      const projected = projection([lon, lat]);
-      if (!projected) {
-        continue;
-      }
-
-      const pixelX = Math.min(width - 1, Math.max(0, Math.round(projected[0])));
-      const pixelY = Math.min(
-        height - 1,
-        Math.max(0, Math.round(projected[1])),
-      );
-      if (pixels[(pixelY * width + pixelX) * 4 + 3]! > 128) {
-        dots.push(lon, lat);
-      }
-    }
+  const api = window.corosLink;
+  if (!api?.reverseGeocodeRouteLocation) {
+    return Promise.resolve(coordinateLabel(summary.bucket));
   }
-
-  const built = Float64Array.from(dots);
-  landDotsCache.set(stepDegrees, built);
-  return built;
+  const request = api
+    .reverseGeocodeRouteLocation(summary.bucket.lat, summary.bucket.lon)
+    .then((result) =>
+      result.city
+        ? {
+            city: result.city,
+            country: result.country ?? "Location",
+            full: result.label,
+          }
+        : parsePlaceLabel(result.label, summary.bucket),
+    )
+    .catch(() => coordinateLabel(summary.bucket))
+    .then((result) => {
+      PLACE_LABEL_CACHE.set(summary.key, result);
+      PLACE_LABEL_REQUESTS.delete(summary.key);
+      return result;
+    });
+  PLACE_LABEL_REQUESTS.set(summary.key, request);
+  return request;
 }
 
-interface GlobeCamera {
-  rotation: [number, number, number];
-  scaleFactor: number;
+function formatLocationDuration(seconds: number): string {
+  const totalMinutes = Math.max(0, Math.round(seconds / 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) {
+    return `${minutes} min`;
+  }
+  return minutes > 0 ? `${hours} h ${minutes} m` : `${hours} h`;
 }
 
-interface GlobeLayout {
-  width: number;
-  height: number;
-  sphereX: number;
-  sphereY: number;
-  sphereRadius: number;
-}
+const MAX_RENDERED_POINTS = 900;
 
 function samplePoints(points: GlobePoint[]): GlobePoint[] {
   return sampleGlobePoints(points, MAX_RENDERED_POINTS);
@@ -214,142 +191,56 @@ function mergeVisits(
   base: ActivityVisitPoint[],
   next: ActivityVisitPoint,
 ): ActivityVisitPoint[] {
-  if (base.some((visit) => visit.activityId === next.activityId)) {
+  return mergeVisitBatch(base, [next]);
+}
+
+function mergeVisitBatch(
+  base: ActivityVisitPoint[],
+  incoming: ActivityVisitPoint[],
+): ActivityVisitPoint[] {
+  if (incoming.length === 0) {
     return base;
   }
-  return [...base, next];
+  const activityIds = new Set(base.map((visit) => visit.activityId));
+  const additions = incoming.filter((visit) => {
+    if (activityIds.has(visit.activityId)) {
+      return false;
+    }
+    activityIds.add(visit.activityId);
+    return true;
+  });
+  return additions.length > 0 ? [...base, ...additions] : base;
 }
 
 function mergeRoutes(
   base: ActivityRoutePolyline[],
   next: ActivityRoutePolyline,
 ): ActivityRoutePolyline[] {
-  if (next.points.length < 2) {
+  return mergeRouteBatch(base, [next]);
+}
+
+function mergeRouteBatch(
+  base: ActivityRoutePolyline[],
+  incoming: ActivityRoutePolyline[],
+): ActivityRoutePolyline[] {
+  if (incoming.length === 0) {
     return base;
   }
-  const index = base.findIndex((route) => route.activityId === next.activityId);
-  if (index < 0) {
-    return [...base, next];
-  }
-  if (base[index]!.points.length >= next.points.length) {
-    return base;
-  }
-  const updated = [...base];
-  updated[index] = next;
-  return updated;
-}
-
-function clampScale(scale: number): number {
-  return Math.min(MAX_SCALE_FACTOR, Math.max(MIN_SCALE_FACTOR, scale));
-}
-
-function computeCamera(
-  points: GlobePoint[],
-  options?: { minHalfSpan?: number; maxScale?: number },
-): GlobeCamera {
-  if (points.length === 0) {
-    return { rotation: [...DEFAULT_ROTATION], scaleFactor: 1 };
-  }
-
-  const minHalfSpan = options?.minHalfSpan ?? MIN_HALF_SPAN_RAD;
-  const maxScale = options?.maxScale ?? MAX_SCALE_FACTOR;
-
-  const route: Feature<MultiPoint> = {
-    type: "Feature",
-    properties: {},
-    geometry: {
-      type: "MultiPoint",
-      coordinates: points.map((point) => [point.lon, point.lat]),
-    },
-  };
-  const [longitude, latitude] = geoCentroid(route);
-  const centroid: [number, number] = [longitude, latitude];
-
-  let maxDist = 0;
-  for (const point of points) {
-    maxDist = Math.max(
-      maxDist,
-      geoDistance([point.lon, point.lat], centroid),
-    );
-  }
-
-  const halfSpan = Math.min(
-    Math.PI / 2.15,
-    Math.max(maxDist * 1.7, minHalfSpan),
+  const routesById = new Map(
+    base.map((route) => [route.activityId, route] as const),
   );
-  const scaleFactor = Math.min(
-    maxScale,
-    Math.max(1.12, 1 / Math.sin(halfSpan)),
-  );
-
-  return {
-    rotation: [-longitude, -latitude, 0],
-    scaleFactor: clampScale(scaleFactor),
-  };
-}
-
-function findPeakBucket(buckets: GeoHeatBucket[]): GeoHeatBucket | null {
-  if (buckets.length === 0) {
-    return null;
-  }
-
-  let peak = buckets[0]!;
-  for (const bucket of buckets) {
-    if (bucket.count > peak.count) {
-      peak = bucket;
+  let changed = false;
+  for (const route of incoming) {
+    if (route.points.length < 2) {
+      continue;
+    }
+    const current = routesById.get(route.activityId);
+    if (!current || current.points.length < route.points.length) {
+      routesById.set(route.activityId, route);
+      changed = true;
     }
   }
-  return peak;
-}
-
-function clusterAround(
-  buckets: GeoHeatBucket[],
-  center: GlobePoint,
-  radiusRad: number,
-): GeoHeatBucket[] {
-  const nearby = buckets.filter(
-    (bucket) =>
-      geoDistance([bucket.lon, bucket.lat], [center.lon, center.lat]) <=
-      radiusRad,
-  );
-  return nearby.length > 0 ? nearby : [{ ...center, count: 1 }];
-}
-
-function heavyClusterPoints(buckets: GeoHeatBucket[]): GlobePoint[] {
-  const peak = findPeakBucket(buckets);
-  if (!peak) {
-    return [];
-  }
-  return clusterAround(buckets, peak, CLUSTER_RADIUS_RAD);
-}
-
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-function lerpAngleDeg(a: number, b: number, t: number): number {
-  let delta = ((b - a + 540) % 360) - 180;
-  return a + delta * t;
-}
-
-function interpolateCamera(
-  from: GlobeCamera,
-  to: GlobeCamera,
-  t: number,
-): GlobeCamera {
-  const e = easeInOutCubic(t);
-  return {
-    rotation: [
-      lerpAngleDeg(from.rotation[0], to.rotation[0], e),
-      lerp(from.rotation[1], to.rotation[1], e),
-      0,
-    ],
-    scaleFactor: lerp(from.scaleFactor, to.scaleFactor, e),
-  };
+  return changed ? Array.from(routesById.values()) : base;
 }
 
 interface GlobeProfile {
@@ -409,58 +300,74 @@ export function ActivityGlobeCard({
   detail,
   loading,
   onOpenTraining,
+  onSelectActivity,
 }: ActivityGlobeCardProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rotationRef = useRef<[number, number, number]>([...DEFAULT_ROTATION]);
-  const scaleFactorRef = useRef(1);
-  const drawRef = useRef<(() => void) | null>(null);
-  const layoutRef = useRef<GlobeLayout | null>(null);
-  const heatBucketsRef = useRef<GeoHeatBucket[]>([]);
-  const hoverBucketRef = useRef<GeoHeatBucket | null>(null);
-  const spinRateRef = useRef(IDLE_SPIN_DEG_PER_MS);
-  const baselineCameraRef = useRef<GlobeCamera>({
-    rotation: [...DEFAULT_ROTATION],
-    scaleFactor: 1,
-  });
-  const cameraAnimRef = useRef<{
-    from: GlobeCamera;
-    to: GlobeCamera;
-    start: number;
-    duration: number;
-  } | null>(null);
-  const dragRef = useRef<{
-    pointerId: number;
-    x: number;
-    y: number;
-    rotation: [number, number, number];
-    moved: boolean;
-  } | null>(null);
-  const hasFramedRef = useRef(false);
-  const streetModeRef = useRef(false);
+  const globeRendererRef = useRef<ActivityGlobeRendererHandle>(null);
   const streetEnterTimerRef = useRef<number | null>(null);
-  /** While true, pointer/wheel must not cancel the home-camera tween. */
-  const cameraResetLockRef = useRef(false);
 
-  const activitiesRef = useRef(activities);
-  activitiesRef.current = activities;
+  const [period, setPeriod] = useState<ActivityPeriod>("all");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+  const [selectedLocationKey, setSelectedLocationKey] = useState<string | null>(
+    null,
+  );
+  const [recentStart, setRecentStart] = useState(0);
+  const [placeLabels, setPlaceLabels] = useState<Record<string, PlaceLabel>>(
+    () => Object.fromEntries(PLACE_LABEL_CACHE),
+  );
+  const [globeError, setGlobeError] = useState(false);
+
+  const filteredActivities = useMemo(() => {
+    if (period === "all") {
+      return activities;
+    }
+    const now = new Date();
+    const yearStart = new Date(now.getFullYear(), 0, 1).getTime();
+    const ninetyDaysAgo = now.getTime() - 90 * 86_400_000;
+    const customStartMs = customStart
+      ? new Date(`${customStart}T00:00:00`).getTime()
+      : Number.NEGATIVE_INFINITY;
+    const customEndMs = customEnd
+      ? new Date(`${customEnd}T23:59:59.999`).getTime()
+      : Number.POSITIVE_INFINITY;
+
+    return activities.filter((activity) => {
+      const timestamp = activityTimestampMs(activity.startTime);
+      if (!timestamp) {
+        return false;
+      }
+      if (period === "year") {
+        return timestamp >= yearStart;
+      }
+      if (period === "90-days") {
+        return timestamp >= ninetyDaysAgo;
+      }
+      return timestamp >= customStartMs && timestamp <= customEndMs;
+    });
+  }, [activities, period, customStart, customEnd]);
+
+  const activitiesRef = useRef(filteredActivities);
+  activitiesRef.current = filteredActivities;
 
   const activityKey = useMemo(
-    () => activities.map((activity) => activity.activityId).join("|"),
-    [activities],
+    () =>
+      filteredActivities
+        .map((activity) => activity.activityId)
+        .join("|"),
+    [filteredActivities],
   );
 
   const [visits, setVisits] = useState<ActivityVisitPoint[]>(() =>
-    getCachedVisitPoints(activities),
+    getCachedVisitPoints(filteredActivities),
   );
   const [routes, setRoutes] = useState<ActivityRoutePolyline[]>(() =>
-    getCachedRoutePolylines(activities),
+    getCachedRoutePolylines(filteredActivities),
   );
   const [visitsLoading, setVisitsLoading] = useState(false);
   const [canResetView, setCanResetView] = useState(false);
   const [hoveringCluster, setHoveringCluster] = useState(false);
   const [streetFocus, setStreetFocus] = useState<StreetMapFocus | null>(null);
   const streetMode = streetFocus !== null;
-  streetModeRef.current = streetMode;
 
   const routePoints = useMemo(() => {
     return samplePoints(extractTrackPoints(detail));
@@ -482,45 +389,156 @@ export function ActivityGlobeCard({
     () => bucketVisitsGeographically(visits),
     [visits],
   );
-  heatBucketsRef.current = heatBuckets;
 
   const overall = useMemo(
-    () => aggregateActivityStats(activities),
-    [activities],
+    () => aggregateActivityStats(filteredActivities),
+    [filteredActivities],
   );
 
-  const syncResetAffordances = () => {
-    if (streetModeRef.current) {
-      setCanResetView(true);
-      return;
+  const locationSummaries = useMemo<LocationSummary[]>(() => {
+    const activitiesById = new Map(
+      filteredActivities.map((activity) => [activity.activityId, activity]),
+    );
+    const routesByActivityId = new Set(
+      routes.map((route) => route.activityId),
+    );
+    const visitIdsByBucket = new Map<string, Set<string>>();
+    for (const visit of visits) {
+      const key = geoHeatBucketKey(visit);
+      const activityIds = visitIdsByBucket.get(key);
+      if (activityIds) {
+        activityIds.add(visit.activityId);
+      } else {
+        visitIdsByBucket.set(key, new Set([visit.activityId]));
+      }
     }
-    const baseline = baselineCameraRef.current;
-    const drilled =
-      Math.abs(scaleFactorRef.current - baseline.scaleFactor) > 0.08 ||
-      Math.abs(rotationRef.current[1] - baseline.rotation[1]) > 4;
-    setCanResetView(drilled && heatBucketsRef.current.length > 0);
-  };
+    return heatBuckets
+      .map((bucket) => {
+        const activityIds =
+          visitIdsByBucket.get(bucket.key) ?? new Set<string>();
+        const placeActivities = [...activityIds]
+          .map((activityId) => activitiesById.get(activityId))
+          .filter(
+            (activity): activity is TrainingHubActivity => Boolean(activity),
+          )
+          .sort(
+            (left, right) =>
+              activityTimestampMs(right.startTime) -
+              activityTimestampMs(left.startTime),
+          );
+        const distanceMeters = placeActivities.reduce(
+          (sum, activity) => sum + (activity.distance ?? 0),
+          0,
+        );
+        const durationSeconds = placeActivities.reduce(
+          (sum, activity) => sum + (activity.duration ?? 0),
+          0,
+        );
+        const elevationMeters = placeActivities.reduce(
+          (sum, activity) => sum + (activity.elevationGain ?? 0),
+          0,
+        );
+        const trend = [...placeActivities]
+          .reverse()
+          .map((activity, order) => ({
+            order,
+            elevation: Math.max(0, activity.elevationGain ?? 0),
+            distance: Math.max(0, (activity.distance ?? 0) / 1000),
+          }));
+        return {
+          key: bucket.key,
+          bucket,
+          activities: placeActivities,
+          activityIds,
+          distanceMeters,
+          durationSeconds,
+          elevationMeters,
+          lastVisited: placeActivities[0]?.startTime,
+          routeCount: [...activityIds].filter((activityId) =>
+            routesByActivityId.has(activityId),
+          ).length,
+          trend,
+        };
+      })
+      .filter((summary) => summary.activities.length > 0)
+      .sort(
+        (left, right) =>
+          activityTimestampMs(right.lastVisited) -
+          activityTimestampMs(left.lastVisited),
+      );
+  }, [filteredActivities, heatBuckets, routes, visits]);
 
-  const snapCamera = (camera: GlobeCamera) => {
-    rotationRef.current = [...camera.rotation];
-    scaleFactorRef.current = clampScale(camera.scaleFactor);
-  };
+  const selectedLocation = useMemo(
+    () =>
+      locationSummaries.find(
+        (summary) => summary.key === selectedLocationKey,
+      ) ?? null,
+    [locationSummaries, selectedLocationKey],
+  );
+  const globeLocations = useMemo(
+    () => locationSummaries.map((summary) => summary.bucket),
+    [locationSummaries],
+  );
+
+  useEffect(() => {
+    setRecentStart((current) =>
+      Math.min(current, Math.max(0, locationSummaries.length - 5)),
+    );
+  }, [locationSummaries.length]);
+
+  useEffect(() => {
+    if (
+      selectedLocationKey &&
+      !locationSummaries.some((summary) => summary.key === selectedLocationKey)
+    ) {
+      setSelectedLocationKey(null);
+    }
+  }, [locationSummaries, selectedLocationKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const summaries = locationSummaries.slice(0, 8);
+    if (
+      selectedLocation &&
+      !summaries.some((summary) => summary.key === selectedLocation.key)
+    ) {
+      summaries.push(selectedLocation);
+    }
+    for (const summary of summaries) {
+      void loadPlaceLabel(summary).then((label) => {
+        if (cancelled) {
+          return;
+        }
+        setPlaceLabels((current) =>
+          current[summary.key]?.full === label.full
+            ? current
+            : { ...current, [summary.key]: label },
+        );
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [locationSummaries, selectedLocation]);
+
+  useEffect(() => {
+    if (streetEnterTimerRef.current !== null) {
+      window.clearTimeout(streetEnterTimerRef.current);
+      streetEnterTimerRef.current = null;
+    }
+    setSelectedLocationKey(null);
+    setStreetFocus(null);
+    setCanResetView(false);
+  }, [period, customStart, customEnd]);
 
   const enterStreetFocus = (focus: StreetMapFocus) => {
     if (streetEnterTimerRef.current !== null) {
       window.clearTimeout(streetEnterTimerRef.current);
       streetEnterTimerRef.current = null;
     }
-    // Finish any in-flight drill tween so exit starts from a known deep zoom.
-    if (cameraAnimRef.current) {
-      snapCamera(cameraAnimRef.current.to);
-      cameraAnimRef.current = null;
-    }
-    cameraResetLockRef.current = false;
     setStreetFocus(focus);
     setCanResetView(true);
     setHoveringCluster(false);
-    hoverBucketRef.current = null;
   };
 
   const scheduleStreetFocus = (focus: StreetMapFocus, delayMs: number) => {
@@ -533,19 +551,22 @@ export function ActivityGlobeCard({
     }, delayMs);
   };
 
-  const animateToCamera = (to: GlobeCamera, duration = CAMERA_EASE_MS) => {
-    cameraAnimRef.current = {
-      from: {
-        rotation: [...rotationRef.current],
-        scaleFactor: scaleFactorRef.current,
-      },
-      to: {
-        rotation: [...to.rotation],
-        scaleFactor: clampScale(to.scaleFactor),
-      },
-      start: performance.now(),
-      duration,
-    };
+  const selectLocation = (
+    bucket: GeoHeatBucket,
+    options?: { openStreet?: boolean },
+  ) => {
+    const summary = locationSummaries.find(
+      (candidate) => candidate.key === bucket.key,
+    );
+    setSelectedLocationKey(bucket.key);
+    const latestActivity = summary?.activities[0];
+    if (latestActivity) {
+      onSelectActivity(latestActivity);
+    }
+    if (options?.openStreet) {
+      scheduleStreetFocus({ lat: bucket.lat, lon: bucket.lon }, 620);
+    }
+    setCanResetView(true);
   };
 
   const restoreBaselineCamera = (duration = 900) => {
@@ -553,14 +574,7 @@ export function ActivityGlobeCard({
       window.clearTimeout(streetEnterTimerRef.current);
       streetEnterTimerRef.current = null;
     }
-    const baseline: GlobeCamera = {
-      rotation: [...baselineCameraRef.current.rotation],
-      scaleFactor: baselineCameraRef.current.scaleFactor,
-    };
-    // Drop any leftover street/drill tween, then ease back to the load frame.
-    cameraAnimRef.current = null;
-    cameraResetLockRef.current = true;
-    animateToCamera(baseline, duration);
+    globeRendererRef.current?.resetView(duration);
     setCanResetView(false);
   };
 
@@ -573,24 +587,14 @@ export function ActivityGlobeCard({
     restoreBaselineCamera(900);
   };
 
-  const globeCenterFocus = (): StreetMapFocus | null => {
-    const layout = layoutRef.current;
-    if (!layout) {
-      const peak = findPeakBucket(heatBucketsRef.current);
-      return peak ? { lat: peak.lat, lon: peak.lon } : null;
-    }
-    const projection = geoOrthographic()
-      .translate([layout.sphereX, layout.sphereY])
-      .scale(layout.sphereRadius * scaleFactorRef.current)
-      .precision(0.35)
-      .clipAngle(90)
-      .rotate(rotationRef.current);
-    const center = projection.invert?.([layout.sphereX, layout.sphereY]);
-    if (!center) {
-      return null;
-    }
-    return { lon: center[0], lat: center[1] };
-  };
+  useEffect(
+    () => () => {
+      if (streetEnterTimerRef.current !== null) {
+        window.clearTimeout(streetEnterTimerRef.current);
+      }
+    },
+    [],
+  );
 
   // Seed / refresh latest activity geo into the visit + route caches.
   useEffect(() => {
@@ -628,6 +632,33 @@ export function ActivityGlobeCard({
     }
 
     const controller = new AbortController();
+    const pendingVisits: ActivityVisitPoint[] = [];
+    const pendingRoutes: ActivityRoutePolyline[] = [];
+    let flushTimer: number | null = null;
+    const flushUpdates = () => {
+      if (flushTimer !== null) {
+        window.clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      if (controller.signal.aborted) {
+        pendingVisits.length = 0;
+        pendingRoutes.length = 0;
+        return;
+      }
+      const visitBatch = pendingVisits.splice(0);
+      const routeBatch = pendingRoutes.splice(0);
+      if (visitBatch.length > 0) {
+        setVisits((current) => mergeVisitBatch(current, visitBatch));
+      }
+      if (routeBatch.length > 0) {
+        setRoutes((current) => mergeRouteBatch(current, routeBatch));
+      }
+    };
+    const scheduleFlush = () => {
+      if (flushTimer === null) {
+        flushTimer = window.setTimeout(flushUpdates, 80);
+      }
+    };
     setVisits(getCachedVisitPoints(list));
     setRoutes(getCachedRoutePolylines(list));
     setVisitsLoading(true);
@@ -637,703 +668,38 @@ export function ActivityGlobeCard({
       (activityId, sportType, listActivity) =>
         api.getTrainingHubActivityDetail(activityId, sportType, listActivity),
       {
+        limit: list.length,
         signal: controller.signal,
         onVisit: (visit) => {
           if (controller.signal.aborted) {
             return;
           }
-          setVisits((current) => mergeVisits(current, visit));
+          pendingVisits.push(visit);
+          scheduleFlush();
         },
         onRoute: (route) => {
           if (controller.signal.aborted) {
             return;
           }
-          setRoutes((current) => mergeRoutes(current, route));
+          pendingRoutes.push(route);
+          scheduleFlush();
         },
       },
     ).finally(() => {
       if (!controller.signal.aborted) {
+        flushUpdates();
         setVisitsLoading(false);
       }
     });
 
     return () => {
       controller.abort();
+      if (flushTimer !== null) {
+        window.clearTimeout(flushTimer);
+      }
     };
   }, [activityKey, connected]);
 
-  useEffect(() => {
-    if (heatBuckets.length === 0 && routePoints.length === 0) {
-      hasFramedRef.current = false;
-      scaleFactorRef.current = 1;
-      baselineCameraRef.current = {
-        rotation: [...DEFAULT_ROTATION],
-        scaleFactor: 1,
-      };
-      setCanResetView(false);
-      return;
-    }
-
-    // Frame once when first geo data arrives — ease into the densest cluster.
-    if (!hasFramedRef.current) {
-      const focusPoints =
-        heatBuckets.length > 0
-          ? heavyClusterPoints(heatBuckets)
-          : routePoints;
-      const camera = computeCamera(focusPoints, {
-        minHalfSpan: MIN_HALF_SPAN_RAD,
-        maxScale: 2.9,
-      });
-      baselineCameraRef.current = camera;
-      hasFramedRef.current = true;
-      animateToCamera(camera, 1100);
-      setCanResetView(false);
-    }
-  }, [heatBuckets, routePoints]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return;
-    }
-
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return;
-    }
-
-    let width = 0;
-    let height = 0;
-    let animationFrame = 0;
-    let previousTime = performance.now();
-    let pulsePhase = 0;
-    let pulseAccum = 0;
-    const reducedMotionQuery = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    );
-
-    const draw = () => {
-      if (width <= 0 || height <= 0) {
-        return;
-      }
-
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-      const computedStyle = getComputedStyle(canvas);
-      const paperTheme = document.documentElement.dataset.theme === "paper";
-      const accent = computedStyle.getPropertyValue("--accent").trim();
-      const accentStrong = computedStyle
-        .getPropertyValue("--accent-strong")
-        .trim();
-      const gold = computedStyle.getPropertyValue("--accent-gold").trim();
-      const sphereRadius = Math.min(width * 0.46, height * 0.44);
-      const sphereX = width * 0.52;
-      const sphereY = height * 0.5;
-      const scaleFactor = scaleFactorRef.current;
-      const projectionScale = sphereRadius * scaleFactor;
-      layoutRef.current = { width, height, sphereX, sphereY, sphereRadius };
-
-      const projection = geoOrthographic()
-        .translate([sphereX, sphereY])
-        .scale(projectionScale)
-        .precision(0.35)
-        .clipAngle(90)
-        .rotate(rotationRef.current);
-
-      context.save();
-      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-      context.clearRect(0, 0, width, height);
-
-      const halo = context.createRadialGradient(
-        sphereX,
-        sphereY,
-        sphereRadius * 0.94,
-        sphereX,
-        sphereY,
-        sphereRadius * 1.32,
-      );
-      halo.addColorStop(0, "rgba(172, 192, 212, 0)");
-      halo.addColorStop(
-        0.22,
-        paperTheme
-          ? "rgba(47, 190, 145, 0.1)"
-          : "rgba(47, 190, 145, 0.07)",
-      );
-      halo.addColorStop(1, "rgba(172, 192, 212, 0)");
-      context.beginPath();
-      context.arc(sphereX, sphereY, sphereRadius * 1.32, 0, Math.PI * 2);
-      context.fillStyle = halo;
-      context.fill();
-
-      const sphere = context.createRadialGradient(
-        sphereX - sphereRadius * 0.1,
-        sphereY - sphereRadius * 0.38,
-        sphereRadius * 0.06,
-        sphereX,
-        sphereY - sphereRadius * 0.08,
-        sphereRadius * 1.14,
-      );
-      if (paperTheme) {
-        sphere.addColorStop(0, "rgba(255, 255, 255, 1)");
-        sphere.addColorStop(0.45, "rgba(246, 247, 249, 1)");
-        sphere.addColorStop(0.78, "rgba(226, 230, 235, 1)");
-        sphere.addColorStop(1, "rgba(198, 204, 212, 1)");
-      } else {
-        sphere.addColorStop(0, "rgba(108, 117, 130, 1)");
-        sphere.addColorStop(0.42, "rgba(48, 53, 62, 1)");
-        sphere.addColorStop(0.74, "rgba(20, 22, 27, 1)");
-        sphere.addColorStop(1, "rgba(6, 7, 9, 1)");
-      }
-
-      context.beginPath();
-      context.arc(sphereX, sphereY, sphereRadius, 0, Math.PI * 2);
-      context.fillStyle = sphere;
-      context.fill();
-      context.strokeStyle = paperTheme
-        ? "rgba(100, 110, 122, 0.16)"
-        : "rgba(255, 255, 255, 0.05)";
-      context.lineWidth = 1;
-      context.stroke();
-
-      const center = (projection.invert?.([sphereX, sphereY]) ?? [0, 0]) as [
-        number,
-        number,
-      ];
-
-      // Clip so regional zoom stays a spherical disk.
-      context.save();
-      context.beginPath();
-      context.arc(sphereX, sphereY, sphereRadius - 0.5, 0, Math.PI * 2);
-      context.clip();
-
-      const landDotStep = landDotStepForScale(scaleFactor);
-      const landDots = getLandDots(landDotStep);
-      // Radius tracks grid spacing so denser levels stay dotted, not solid fill.
-      const baseDotRadius =
-        sphereRadius * ((landDotStep * Math.PI) / 180) * 0.4;
-      const minDotRadius = landDotStep <= DOT_STEP_NEAR_DEGREES ? 0.4 : 0.55;
-      const litColor = paperTheme ? [255, 255, 255] : [242, 247, 252];
-      const shadeColor = paperTheme ? [104, 115, 128] : [96, 106, 118];
-
-      for (let i = 0; i < landDots.length; i += 2) {
-        const coordinate: [number, number] = [
-          landDots[i]!,
-          landDots[i + 1]!,
-        ];
-        const distance = geoDistance(coordinate, center);
-        if (distance >= Math.PI / 2) {
-          continue;
-        }
-
-        const projected = projection(coordinate);
-        if (!projected) {
-          continue;
-        }
-
-        const [x, y] = projected;
-        const dx = x - sphereX;
-        const dy = y - sphereY;
-        if (dx * dx + dy * dy > sphereRadius * sphereRadius) {
-          continue;
-        }
-
-        const foreshorten = Math.cos(distance);
-        const normalX = (x - sphereX) / sphereRadius;
-        const normalY = (y - sphereY) / sphereRadius;
-        const light = Math.max(
-          0.1,
-          Math.min(1, 0.66 - 0.46 * (normalX * 0.6 + normalY * 0.75)),
-        );
-        const sparkle = 0.82 + (0.18 * (((i * 2654435761) >>> 0) % 997)) / 997;
-        const alpha =
-          (0.32 + 0.68 * light) * (0.3 + 0.7 * foreshorten) * sparkle;
-        const dotRadius = baseDotRadius * (0.45 + 0.55 * foreshorten);
-        const red = Math.round(
-          shadeColor[0]! + (litColor[0]! - shadeColor[0]!) * light,
-        );
-        const green = Math.round(
-          shadeColor[1]! + (litColor[1]! - shadeColor[1]!) * light,
-        );
-        const blue = Math.round(
-          shadeColor[2]! + (litColor[2]! - shadeColor[2]!) * light,
-        );
-
-        context.beginPath();
-        context.arc(x, y, Math.max(minDotRadius, dotRadius), 0, Math.PI * 2);
-        context.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha.toFixed(3)})`;
-        context.fill();
-      }
-
-      const buckets = heatBucketsRef.current;
-      const maxVisitCount = Math.max(
-        1,
-        ...buckets.map((bucket) => bucket.count),
-      );
-      let peak: { x: number; y: number; intensity: number } | null = null;
-      const hover = hoverBucketRef.current;
-      const projectedBuckets: Array<{
-        bucket: GeoHeatBucket;
-        x: number;
-        y: number;
-        intensity: number;
-        isHovered: boolean;
-      }> = [];
-
-      for (const bucket of buckets) {
-        const coordinate: [number, number] = [bucket.lon, bucket.lat];
-        if (geoDistance(coordinate, center) > Math.PI / 2) {
-          continue;
-        }
-
-        const projected = projection(coordinate);
-        if (!projected) {
-          continue;
-        }
-
-        const [x, y] = projected;
-        const dx = x - sphereX;
-        const dy = y - sphereY;
-        if (dx * dx + dy * dy > sphereRadius * sphereRadius) {
-          continue;
-        }
-
-        const intensity = Math.sqrt(bucket.count / maxVisitCount);
-        const isHovered =
-          hover !== null &&
-          hover.lat === bucket.lat &&
-          hover.lon === bucket.lon;
-        projectedBuckets.push({ bucket, x, y, intensity, isHovered });
-        if (!peak || intensity > peak.intensity) {
-          peak = { x, y, intensity };
-        }
-      }
-
-      // Additive cyan/teal bloom — command-center heat look from the reference.
-      context.save();
-      context.globalCompositeOperation = "lighter";
-      for (const entry of projectedBuckets) {
-        const { x, y, intensity, isHovered } = entry;
-        const radius =
-          (14 + intensity * 28) * (isHovered ? 1.18 : 1) * (0.92 + 0.08 * scaleFactor);
-        const heat = context.createRadialGradient(x, y, 0, x, y, radius);
-        heat.addColorStop(0, "rgba(255, 244, 205, 0.95)");
-        heat.addColorStop(0.18, gold);
-        heat.addColorStop(0.42, accentStrong);
-        heat.addColorStop(0.72, accent);
-        heat.addColorStop(1, "rgba(47, 190, 145, 0)");
-        context.globalAlpha = isHovered
-          ? 0.4 + intensity * 0.45
-          : 0.26 + intensity * 0.48;
-        context.fillStyle = heat;
-        context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
-      }
-
-      // Extra soft bloom on the densest cluster so one glow reads as the hero.
-      if (peak) {
-        const heroRadius = 22 + peak.intensity * 34;
-        const hero = context.createRadialGradient(
-          peak.x,
-          peak.y,
-          0,
-          peak.x,
-          peak.y,
-          heroRadius,
-        );
-        hero.addColorStop(0, "rgba(79, 214, 166, 0.55)");
-        hero.addColorStop(0.45, "rgba(47, 190, 145, 0.22)");
-        hero.addColorStop(1, "rgba(47, 190, 145, 0)");
-        context.globalAlpha = 0.55 + peak.intensity * 0.25;
-        context.fillStyle = hero;
-        context.fillRect(
-          peak.x - heroRadius,
-          peak.y - heroRadius,
-          heroRadius * 2,
-          heroRadius * 2,
-        );
-      }
-      context.restore();
-
-      for (const entry of projectedBuckets) {
-        if (!entry.isHovered) {
-          continue;
-        }
-        context.beginPath();
-        context.arc(entry.x, entry.y, 7 + entry.intensity * 4, 0, Math.PI * 2);
-        context.strokeStyle = gold;
-        context.globalAlpha = 0.4;
-        context.lineWidth = 1.2;
-        context.stroke();
-        context.globalAlpha = 1;
-      }
-
-      if (routePoints.length >= 2) {
-        const pathPoints: Array<[number, number]> = [];
-        for (const point of routePoints) {
-          const coordinate: [number, number] = [point.lon, point.lat];
-          if (geoDistance(coordinate, center) > Math.PI / 2) {
-            if (pathPoints.length > 1) {
-              drawRouteSegment(context, pathPoints, accentStrong);
-            }
-            pathPoints.length = 0;
-            continue;
-          }
-
-          const projected = projection(coordinate);
-          if (!projected) {
-            if (pathPoints.length > 1) {
-              drawRouteSegment(context, pathPoints, accentStrong);
-            }
-            pathPoints.length = 0;
-            continue;
-          }
-
-          const [x, y] = projected;
-          const dx = x - sphereX;
-          const dy = y - sphereY;
-          if (dx * dx + dy * dy > sphereRadius * sphereRadius) {
-            if (pathPoints.length > 1) {
-              drawRouteSegment(context, pathPoints, accentStrong);
-            }
-            pathPoints.length = 0;
-            continue;
-          }
-
-          pathPoints.push([x, y]);
-        }
-        if (pathPoints.length > 1) {
-          drawRouteSegment(context, pathPoints, accentStrong);
-        }
-      }
-
-      if (peak) {
-        const pulse = reducedMotionQuery.matches
-          ? 1
-          : 0.9 + 0.1 * Math.sin(pulsePhase);
-        // Bright yellowish-white / gold center pin
-        context.beginPath();
-        context.arc(peak.x, peak.y, 5.8 * pulse, 0, Math.PI * 2);
-        context.fillStyle = "rgba(255, 246, 210, 0.22)";
-        context.fill();
-
-        context.beginPath();
-        context.arc(peak.x, peak.y, 2.4 * pulse, 0, Math.PI * 2);
-        context.fillStyle = "#fff6d0";
-        context.globalAlpha = 0.95;
-        context.fill();
-
-        context.beginPath();
-        context.arc(peak.x, peak.y, 1.15 * pulse, 0, Math.PI * 2);
-        context.fillStyle = gold;
-        context.globalAlpha = 0.9;
-        context.fill();
-        context.globalAlpha = 1;
-      }
-
-      const limb = context.createRadialGradient(
-        sphereX - sphereRadius * 0.18,
-        sphereY - sphereRadius * 0.28,
-        sphereRadius * 0.2,
-        sphereX,
-        sphereY,
-        sphereRadius,
-      );
-      limb.addColorStop(0, "rgba(255, 255, 255, 0)");
-      limb.addColorStop(
-        0.62,
-        paperTheme ? "rgba(80, 92, 106, 0)" : "rgba(0, 0, 0, 0)",
-      );
-      limb.addColorStop(
-        1,
-        paperTheme ? "rgba(70, 82, 96, 0.14)" : "rgba(0, 0, 0, 0.26)",
-      );
-      context.beginPath();
-      context.arc(sphereX, sphereY, sphereRadius, 0, Math.PI * 2);
-      context.fillStyle = limb;
-      context.fill();
-
-      context.restore();
-      context.restore();
-    };
-
-    drawRef.current = draw;
-
-    const resizeObserver = new ResizeObserver(([entry]) => {
-      if (!entry) {
-        return;
-      }
-
-      width = entry.contentRect.width;
-      height = entry.contentRect.height;
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = Math.max(1, Math.floor(width * pixelRatio));
-      canvas.height = Math.max(1, Math.floor(height * pixelRatio));
-      draw();
-    });
-    resizeObserver.observe(canvas);
-
-    const themeObserver = new MutationObserver(draw);
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme"],
-    });
-
-    const animate = (time: number) => {
-      const elapsed = Math.min(time - previousTime, 40);
-      previousTime = time;
-      const reduced = reducedMotionQuery.matches;
-      const backgrounded = document.body.classList.contains("is-backgrounded");
-      const dragging = Boolean(dragRef.current);
-      const animating = Boolean(cameraAnimRef.current);
-
-      // Ease idle spin rate: full when idle, near-zero while dragging/animating.
-      const targetSpin =
-        reduced ||
-        backgrounded ||
-        dragging ||
-        animating ||
-        streetModeRef.current
-          ? 0
-          : IDLE_SPIN_DEG_PER_MS;
-      spinRateRef.current += (targetSpin - spinRateRef.current) * 0.08;
-
-      if (cameraAnimRef.current) {
-        const anim = cameraAnimRef.current;
-        const t = Math.min(1, (time - anim.start) / anim.duration);
-        const camera = interpolateCamera(anim.from, anim.to, t);
-        rotationRef.current = camera.rotation;
-        scaleFactorRef.current = camera.scaleFactor;
-        if (t >= 1) {
-          // Hard-snap so easing never leaves an intermediate street/drill scale.
-          snapCamera(anim.to);
-          cameraAnimRef.current = null;
-          cameraResetLockRef.current = false;
-          syncResetAffordances();
-        }
-        draw();
-      } else if (spinRateRef.current > 0.00005) {
-        rotationRef.current = [
-          rotationRef.current[0] + elapsed * spinRateRef.current,
-          rotationRef.current[1],
-          0,
-        ];
-        draw();
-      } else if (
-        heatBucketsRef.current.length > 0 &&
-        !reduced &&
-        !backgrounded
-      ) {
-        pulsePhase += elapsed * 0.003;
-        pulseAccum += elapsed;
-        if (pulseAccum >= 66) {
-          pulseAccum = 0;
-          draw();
-        }
-      }
-
-      animationFrame = requestAnimationFrame(animate);
-    };
-    animationFrame = requestAnimationFrame(animate);
-
-    return () => {
-      drawRef.current = null;
-      resizeObserver.disconnect();
-      themeObserver.disconnect();
-      cancelAnimationFrame(animationFrame);
-      if (streetEnterTimerRef.current !== null) {
-        window.clearTimeout(streetEnterTimerRef.current);
-        streetEnterTimerRef.current = null;
-      }
-    };
-  }, [routePoints]);
-
-  const projectBuckets = () => {
-    const layout = layoutRef.current;
-    if (!layout) {
-      return [] as Array<{ bucket: GeoHeatBucket; x: number; y: number }>;
-    }
-
-    const { sphereX, sphereY, sphereRadius } = layout;
-    const projection = geoOrthographic()
-      .translate([sphereX, sphereY])
-      .scale(sphereRadius * scaleFactorRef.current)
-      .precision(0.35)
-      .clipAngle(90)
-      .rotate(rotationRef.current);
-    const center = (projection.invert?.([sphereX, sphereY]) ?? [0, 0]) as [
-      number,
-      number,
-    ];
-
-    const projected: Array<{ bucket: GeoHeatBucket; x: number; y: number }> =
-      [];
-    for (const bucket of heatBucketsRef.current) {
-      const coordinate: [number, number] = [bucket.lon, bucket.lat];
-      if (geoDistance(coordinate, center) > Math.PI / 2) {
-        continue;
-      }
-      const point = projection(coordinate);
-      if (!point) {
-        continue;
-      }
-      const [x, y] = point;
-      const dx = x - sphereX;
-      const dy = y - sphereY;
-      if (dx * dx + dy * dy > sphereRadius * sphereRadius) {
-        continue;
-      }
-      projected.push({ bucket, x, y });
-    }
-    return projected;
-  };
-
-  const hitTestCluster = (
-    clientX: number,
-    clientY: number,
-  ): GeoHeatBucket | null => {
-    const canvas = canvasRef.current;
-    const layout = layoutRef.current;
-    if (!canvas || !layout) {
-      return null;
-    }
-
-    const rect = canvas.getBoundingClientRect();
-    const x = ((clientX - rect.left) / rect.width) * layout.width;
-    const y = ((clientY - rect.top) / rect.height) * layout.height;
-    const projected = projectBuckets();
-    let best: { bucket: GeoHeatBucket; dist: number } | null = null;
-    for (const entry of projected) {
-      const dx = entry.x - x;
-      const dy = entry.y - y;
-      const dist = Math.hypot(dx, dy);
-      if (dist <= HIT_PIXEL_RADIUS && (!best || dist < best.dist)) {
-        best = { bucket: entry.bucket, dist };
-      }
-    }
-    return best?.bucket ?? null;
-  };
-
-  const handlePointerDown = (
-    event: ReactPointerEvent<HTMLCanvasElement>,
-  ) => {
-    // Don't interrupt a locked home-camera reset (street → globe / Reset view).
-    if (cameraResetLockRef.current) {
-      return;
-    }
-    event.currentTarget.setPointerCapture(event.pointerId);
-    cameraAnimRef.current = null;
-    dragRef.current = {
-      pointerId: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-      rotation: [...rotationRef.current],
-      moved: false,
-    };
-    event.currentTarget.classList.add("is-dragging");
-  };
-
-  const handlePointerMove = (
-    event: ReactPointerEvent<HTMLCanvasElement>,
-  ) => {
-    const drag = dragRef.current;
-    if (drag && drag.pointerId === event.pointerId) {
-      const dx = event.clientX - drag.x;
-      const dy = event.clientY - drag.y;
-      if (Math.hypot(dx, dy) > DRAG_CLICK_SLOP_PX) {
-        drag.moved = true;
-      }
-      rotationRef.current = [
-        drag.rotation[0] + dx * 0.28,
-        Math.max(-70, Math.min(70, drag.rotation[1] - dy * 0.24)),
-        0,
-      ];
-      drawRef.current?.();
-      return;
-    }
-
-    const hit = hitTestCluster(event.clientX, event.clientY);
-    const prev = hoverBucketRef.current;
-    const changed =
-      (prev?.lat !== hit?.lat || prev?.lon !== hit?.lon) &&
-      (prev !== null || hit !== null);
-    hoverBucketRef.current = hit;
-    if (changed) {
-      setHoveringCluster(Boolean(hit));
-      drawRef.current?.();
-    }
-  };
-
-  const handlePointerUp = (
-    event: ReactPointerEvent<HTMLCanvasElement>,
-  ) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) {
-      return;
-    }
-
-    dragRef.current = null;
-    event.currentTarget.classList.remove("is-dragging");
-
-    if (!drag.moved) {
-      const hit = hitTestCluster(event.clientX, event.clientY);
-      if (hit) {
-        const focus = clusterAround(
-          heatBucketsRef.current,
-          hit,
-          DRILL_RADIUS_RAD,
-        );
-        const camera = computeCamera(focus, {
-          minHalfSpan: DRILL_MIN_HALF_SPAN_RAD,
-          maxScale: MAX_SCALE_FACTOR,
-        });
-        animateToCamera(camera, 620);
-        // After a short camera ease, open the street heatmap at this cluster.
-        scheduleStreetFocus({ lat: hit.lat, lon: hit.lon }, 580);
-        setCanResetView(true);
-        return;
-      }
-    }
-
-    syncResetAffordances();
-  };
-
-  const handlePointerLeave = () => {
-    if (hoverBucketRef.current) {
-      hoverBucketRef.current = null;
-      setHoveringCluster(false);
-      drawRef.current?.();
-    }
-  };
-
-  const handleWheel = (event: ReactWheelEvent<HTMLCanvasElement>) => {
-    event.preventDefault();
-    if (streetMode) {
-      return;
-    }
-    // Residual scroll from street-map zoom-out must not cancel the home tween.
-    if (cameraResetLockRef.current) {
-      return;
-    }
-    cameraAnimRef.current = null;
-    const delta = event.deltaY;
-    const zoomFactor = Math.exp(-delta * 0.00135);
-    const nextScale = clampScale(scaleFactorRef.current * zoomFactor);
-
-    if (
-      delta < 0 &&
-      nextScale >= STREET_ENTER_SCALE &&
-      (heatBucketsRef.current.length > 0 || routePoints.length > 0)
-    ) {
-      const focus = globeCenterFocus() ?? findPeakBucket(heatBucketsRef.current);
-      if (focus) {
-        scaleFactorRef.current = nextScale;
-        enterStreetFocus({ lat: focus.lat, lon: focus.lon });
-        return;
-      }
-    }
-
-    scaleFactorRef.current = nextScale;
-    syncResetAffordances();
-    drawRef.current?.();
-  };
 
   const handleResetView = () => {
     if (streetFocus) {
@@ -1343,341 +709,527 @@ export function ActivityGlobeCard({
     restoreBaselineCamera(900);
   };
 
-  const profile = useMemo(() => extractProfile(detail), [detail]);
-  const profileChart = useMemo(() => {
-    if (!profile) {
-      return null;
-    }
-
-    const { values } = profile;
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const span = Math.max(max - min, 1e-6);
-    const chartWidth = 240;
-    const points = values.map((value, index) => {
-      const x = (index / (values.length - 1)) * chartWidth;
-      const y = 50 - ((value - min) / span) * 40;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    });
-
-    return {
-      line: `M${points.join(" L")}`,
-      area: `M0,56 L${points.join(" L")} L${chartWidth},56 Z`,
-      range: `${Math.round(min)}–${Math.round(max)} ${profile.unit}`,
-    };
-  }, [profile]);
-
-  const hasRoute = routePoints.length > 0;
-  const hasVisits = visits.length > 0;
-  const routeTrackCount = streetRoutes.length;
-  const title = detail?.name ?? detail?.sportName ?? "Latest activity";
-  const distance = formatOverallDistance(overall.totalDistanceMeters);
-  const duration = formatOverallDuration(overall.totalDurationSeconds);
-  const placeCount = heatBuckets.length;
-
-  const statusLabel = loading
-    ? "Loading your latest route"
-    : visitsLoading && !hasVisits
-      ? "Mapping where you’ve been"
-      : hasVisits && routeTrackCount > 1
-        ? `${placeCount.toLocaleString()} ${placeCount === 1 ? "place" : "places"} · ${routeTrackCount.toLocaleString()} GPS routes`
-      : hasVisits && hasRoute
-        ? `${placeCount.toLocaleString()} ${placeCount === 1 ? "place" : "places"} · ${routePoints.length.toLocaleString()} GPS on latest`
-        : hasVisits
-          ? `${visits.length.toLocaleString()} ${visits.length === 1 ? "visit" : "visits"} mapped`
-          : hasRoute
-            ? `${routePoints.length.toLocaleString()} mapped GPS samples`
-            : connected
-              ? "Outdoor GPS activities will map here"
-              : "Connect Training Hub to add your routes";
-
-  const metaParts = detail
-    ? [
-        detail.sportName,
-        detail.startTime ? formatTrainingTimestamp(detail.startTime) : null,
-      ].filter(Boolean)
-    : [];
-
-  const periodLabel =
-    overall.count > 0
-      ? `Last ${overall.count} ${overall.count === 1 ? "activity" : "activities"}`
-      : connected
-        ? "No recent activities yet"
-        : "Training Hub offline";
-
-  const hasOverall = overall.count > 0;
+  const mapDistance = formatOverallDistance(overall.totalDistanceMeters);
+  const mapDuration = formatOverallDuration(overall.totalDurationSeconds);
+  const mapHasRoute = routePoints.length > 0;
+  const mapHasVisits = visits.length > 0;
+  const mapPlaceCount = locationSummaries.length;
+  const recentPlaces = locationSummaries.slice(recentStart, recentStart + 5);
+  const mostVisited = [...locationSummaries].sort(
+    (left, right) => right.activities.length - left.activities.length,
+  )[0];
+  const latestPlace = locationSummaries[0];
+  const selectedPlaceLabel = selectedLocation
+    ? (placeLabels[selectedLocation.key] ??
+      coordinateLabel(selectedLocation.bucket))
+    : null;
+  const primaryStats = [
+    {
+      label: "Total distance",
+      value: mapDistance.value,
+      unit: mapDistance.unit,
+      icon: Route,
+    },
+    {
+      label: "Training time",
+      value: mapDuration.value,
+      unit: mapDuration.unit,
+      icon: Timer,
+    },
+    {
+      label: "Activities",
+      value: overall.count.toLocaleString(),
+      unit: overall.count === 1 ? "activity" : "activities",
+      icon: Activity,
+    },
+    {
+      label: "Places visited",
+      value: mapPlaceCount.toLocaleString(),
+      unit: mapPlaceCount === 1 ? "place" : "places",
+      icon: MapPin,
+    },
+  ];
+  const secondaryStats = [
+    routes.length > 0
+      ? {
+          label: "GPS routes",
+          value: routes.length.toLocaleString(),
+          unit: "",
+          icon: Route,
+        }
+      : null,
+    overall.totalElevationMeters > 0
+      ? {
+          label: "Elevation gained",
+          value: Math.round(overall.totalElevationMeters).toLocaleString(),
+          unit: "m",
+          icon: Mountain,
+        }
+      : null,
+    overall.totalTrainingLoad > 0
+      ? {
+          label: "Training load",
+          value: Math.round(overall.totalTrainingLoad).toLocaleString(),
+          unit: "TL",
+          icon: Gauge,
+        }
+      : null,
+    overall.totalCalories > 0
+      ? {
+          label: "Calories",
+          value: Math.round(overall.totalCalories).toLocaleString(),
+          unit: "kcal",
+          icon: Flame,
+        }
+      : null,
+  ].filter(
+    (
+      stat,
+    ): stat is {
+      label: string;
+      value: string;
+      unit: string;
+      icon: typeof Route;
+    } => Boolean(stat),
+  );
 
   return (
-    <section className="activity-globe-card panel">
-      <div className="activity-globe-panel">
-        <header className="activity-globe-header">
-          <div>
-            <p className="eyebrow">Training</p>
-            <h2>Where you’ve been</h2>
-            <p className="activity-globe-period">{periodLabel}</p>
-          </div>
-        </header>
+    <section className="training-map" aria-labelledby="training-map-title">
+      <div className="training-map-main">
+        <div className="training-map-information">
+          <header className="training-map-header">
+            <p className="training-map-eyebrow">Training map</p>
+            <h2 id="training-map-title">Where you’ve been</h2>
+            <p>Explore every place your training has taken you.</p>
+          </header>
 
-        {hasOverall ? (
-          <>
-            <dl className="activity-globe-heroes">
-              <div
-                className="activity-globe-hero"
-                style={{ animationDelay: "40ms" }}
-              >
-                <dt>Distance</dt>
-                <dd>
-                  <span className="activity-globe-hero-value">
-                    {distance.value}
-                  </span>
-                  <span className="activity-globe-hero-unit">
-                    {distance.unit}
-                  </span>
-                </dd>
-              </div>
-              <div
-                className="activity-globe-hero"
-                style={{ animationDelay: "90ms" }}
-              >
-                <dt>Time</dt>
-                <dd>
-                  <span className="activity-globe-hero-value">
-                    {duration.value}
-                  </span>
-                  <span className="activity-globe-hero-unit">
-                    {duration.unit}
-                  </span>
-                </dd>
-              </div>
-              <div
-                className="activity-globe-hero"
-                style={{ animationDelay: "140ms" }}
-              >
-                <dt>Activities</dt>
-                <dd>
-                  <span className="activity-globe-hero-value">
-                    {overall.count}
-                  </span>
-                </dd>
-              </div>
-            </dl>
-
-            <div className="activity-globe-chips">
-              {overall.totalElevationMeters > 0 ? (
-                <span className="activity-globe-chip">
-                  <strong>
-                    {Math.round(overall.totalElevationMeters).toLocaleString()}
-                  </strong>
-                  m elev
-                </span>
-              ) : null}
-              {overall.totalTrainingLoad > 0 ? (
-                <span className="activity-globe-chip">
-                  <strong>
-                    {Math.round(overall.totalTrainingLoad).toLocaleString()}
-                  </strong>
-                  load
-                </span>
-              ) : null}
-              {overall.totalCalories > 0 ? (
-                <span className="activity-globe-chip">
-                  <strong>
-                    {Math.round(overall.totalCalories).toLocaleString()}
-                  </strong>
-                  kcal
-                </span>
-              ) : null}
-              {placeCount > 0 ? (
-                <span className="activity-globe-chip activity-globe-chip--accent">
-                  <strong>{placeCount}</strong>
-                  {placeCount === 1 ? "place" : "places"}
-                </span>
-              ) : null}
-            </div>
-          </>
-        ) : (
-          <p className="activity-globe-empty">
-            {connected
-              ? "Once activities sync, overall totals and visit density land here."
-              : "Connect Training Hub to map your routes on the globe."}
-          </p>
-        )}
-
-        {detail ? (
-          <div className="activity-globe-featured">
-            <div className="activity-globe-featured-head">
-              <span className="activity-globe-featured-icon" aria-hidden="true">
-                <Footprints size={16} />
-              </span>
-              <div className="activity-globe-featured-text">
-                <strong>{title}</strong>
-                <span>
-                  {metaParts.length > 0
-                    ? metaParts.join(" · ")
-                    : "Latest GPS activity"}
-                </span>
-              </div>
-            </div>
-            {profile && profileChart ? (
-              <div className="activity-globe-profile">
-                <div className="activity-globe-profile-head">
-                  <span>{profile.label}</span>
-                  <span>{profileChart.range}</span>
-                </div>
-                <svg
-                  viewBox="0 0 240 56"
-                  preserveAspectRatio="none"
-                  aria-hidden="true"
+          <div className="training-map-period-wrap">
+            <div
+              className="training-map-periods"
+              role="group"
+              aria-label="Training period"
+            >
+              {([
+                ["all", "All time"],
+                ["year", "This year"],
+                ["90-days", "Last 90 days"],
+                ["custom", "Custom"],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={period === value ? "is-selected" : undefined}
+                  aria-pressed={period === value}
+                  onClick={() => setPeriod(value)}
                 >
-                  <defs>
-                    <linearGradient
-                      id="activityGlobeProfileFill"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop
-                        offset="0%"
-                        stopColor="var(--accent)"
-                        stopOpacity="0.26"
-                      />
-                      <stop
-                        offset="100%"
-                        stopColor="var(--accent)"
-                        stopOpacity="0"
-                      />
-                    </linearGradient>
-                  </defs>
-                  <path
-                    d={profileChart.area}
-                    fill="url(#activityGlobeProfileFill)"
+                  {label}
+                  {value === "custom" ? (
+                    <CalendarDays size={14} aria-hidden="true" />
+                  ) : null}
+                </button>
+              ))}
+            </div>
+            {period === "custom" ? (
+              <div className="training-map-date-range">
+                <label>
+                  <span>From</span>
+                  <input
+                    type="date"
+                    value={customStart}
+                    max={customEnd || undefined}
+                    onChange={(event) => setCustomStart(event.target.value)}
                   />
-                  <path
-                    d={profileChart.line}
-                    fill="none"
-                    stroke="var(--accent)"
-                    strokeWidth="1.6"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                    vectorEffect="non-scaling-stroke"
+                </label>
+                <label>
+                  <span>To</span>
+                  <input
+                    type="date"
+                    value={customEnd}
+                    min={customStart || undefined}
+                    onChange={(event) => setCustomEnd(event.target.value)}
                   />
-                </svg>
+                </label>
               </div>
             ) : null}
           </div>
-        ) : null}
 
-        <div className="activity-globe-panel-footer">
-          <div className="activity-globe-meta">
-            <div className="activity-globe-status">
-              <MapPin size={14} aria-hidden="true" />
-              <span>{statusLabel}</span>
-            </div>
-            <div className="activity-globe-status">
-              <LockKeyhole size={14} aria-hidden="true" />
-              <span>Rendered locally on your device</span>
-            </div>
+          <section className="training-map-stats" aria-label="Training summary">
+            <dl className="training-map-primary-stats">
+              {primaryStats.map((stat, index) => {
+                const Icon = stat.icon;
+                return (
+                  <div
+                    key={stat.label}
+                    className="training-map-primary-stat"
+                    style={{ "--stat-delay": `${index * 45}ms` } as CSSProperties}
+                  >
+                    <dt>
+                      <Icon size={17} aria-hidden="true" />
+                      <span>{stat.label}</span>
+                    </dt>
+                    <dd aria-label={`${stat.value} ${stat.unit}`}>
+                      <strong>{stat.value}</strong>
+                      <span>{stat.unit}</span>
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+            {secondaryStats.length > 0 ? (
+              <dl className="training-map-secondary-stats">
+                {secondaryStats.map((stat) => {
+                  const Icon = stat.icon;
+                  return (
+                    <div key={stat.label}>
+                      <Icon size={16} aria-hidden="true" />
+                      <span>
+                        <dt>{stat.label}</dt>
+                        <dd aria-label={`${stat.value} ${stat.unit}`}>
+                          <strong>{stat.value}</strong>
+                          {stat.unit ? <small>{stat.unit}</small> : null}
+                        </dd>
+                      </span>
+                    </div>
+                  );
+                })}
+              </dl>
+            ) : null}
+          </section>
+
+          <section
+            className="training-map-location"
+            aria-label="Selected location"
+            aria-live="polite"
+          >
+            {selectedLocation && selectedPlaceLabel ? (
+              <div
+                key={selectedLocation.key}
+                className="training-map-location-content is-selected"
+              >
+                <header className="training-map-location-header">
+                  <span className="training-map-location-icon" aria-hidden="true">
+                    <MapPin size={19} />
+                  </span>
+                  <div>
+                    <h3>{selectedPlaceLabel.city}</h3>
+                    <p>{selectedPlaceLabel.country}</p>
+                  </div>
+                  <span className="training-map-selected-label">Selected</span>
+                </header>
+
+                <dl className="training-map-location-metrics">
+                  <div>
+                    <dt>Activities</dt>
+                    <dd>{selectedLocation.activities.length.toLocaleString()}</dd>
+                  </div>
+                  <div>
+                    <dt>Distance</dt>
+                    <dd>
+                      {(selectedLocation.distanceMeters / 1000).toLocaleString(
+                        undefined,
+                        { maximumFractionDigits: 1 },
+                      )} <small>km</small>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Time</dt>
+                    <dd>{formatLocationDuration(selectedLocation.durationSeconds)}</dd>
+                  </div>
+                  <div>
+                    <dt>Last visited</dt>
+                    <dd>{formatVisitDate(selectedLocation.lastVisited)}</dd>
+                  </div>
+                </dl>
+
+                <div className="training-map-location-trend">
+                  <div>
+                    <span>
+                      {selectedLocation.elevationMeters > 0
+                        ? "Elevation gained"
+                        : "Distance trend"}
+                    </span>
+                    <strong>
+                      {selectedLocation.elevationMeters > 0
+                        ? `${Math.round(selectedLocation.elevationMeters).toLocaleString()} m`
+                        : `${(selectedLocation.distanceMeters / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} km`}
+                    </strong>
+                  </div>
+                  {selectedLocation.trend.length > 1 ? (
+                    <div className="training-map-location-chart" aria-hidden="true">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={selectedLocation.trend}>
+                          <defs>
+                            <linearGradient
+                              id="trainingMapLocationFill"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="0%"
+                                stopColor="var(--map-accent)"
+                                stopOpacity={0.3}
+                              />
+                              <stop
+                                offset="100%"
+                                stopColor="var(--map-accent)"
+                                stopOpacity={0}
+                              />
+                            </linearGradient>
+                          </defs>
+                          <Area
+                            type="monotone"
+                            dataKey={
+                              selectedLocation.elevationMeters > 0
+                                ? "elevation"
+                                : "distance"
+                            }
+                            stroke="var(--map-accent)"
+                            strokeWidth={1.8}
+                            fill="url(#trainingMapLocationFill)"
+                            isAnimationActive={false}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <p className="training-map-trend-empty">
+                      More activities will build a location trend.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    className="training-map-view-action"
+                    onClick={onOpenTraining}
+                  >
+                    {loading ? "Loading route" : "View activities"}
+                    <ArrowRight size={15} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="training-map-location-content training-map-overview">
+                {visitsLoading && !mapHasVisits ? (
+                  <div className="training-map-location-loading" aria-label="Mapping GPS activities">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                ) : overall.count === 0 ? (
+                  <div className="training-map-location-empty">
+                    <MapPin size={22} aria-hidden="true" />
+                    <h3>{connected ? "No activities in this period" : "Training Hub is offline"}</h3>
+                    <p>
+                      {connected
+                        ? "Choose another period when more activity history is available."
+                        : "Connect Training Hub to map your routes and training history."}
+                    </p>
+                  </div>
+                ) : !mapHasVisits ? (
+                  <div className="training-map-location-empty">
+                    <Route size={22} aria-hidden="true" />
+                    <h3>No GPS routes found</h3>
+                    <p>Outdoor activities with location data will appear here.</p>
+                  </div>
+                ) : (
+                  <>
+                    <header>
+                      <h3>Your training world</h3>
+                      <p>Select a location on the globe to explore your training history.</p>
+                    </header>
+                    <dl className="training-map-overview-values">
+                      {mostVisited ? (
+                        <div>
+                          <dt>Most visited</dt>
+                          <dd>
+                            {(placeLabels[mostVisited.key] ??
+                              coordinateLabel(mostVisited.bucket)).city}
+                          </dd>
+                        </div>
+                      ) : null}
+                      {latestPlace ? (
+                        <div>
+                          <dt>Most recent</dt>
+                          <dd>
+                            {(placeLabels[latestPlace.key] ??
+                              coordinateLabel(latestPlace.bucket)).city}
+                          </dd>
+                        </div>
+                      ) : null}
+                      <div>
+                        <dt>Places explored</dt>
+                        <dd>{mapPlaceCount.toLocaleString()}</dd>
+                      </div>
+                    </dl>
+                  </>
+                )}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <section
+          className={`training-map-globe-panel${streetMode ? " is-street-mode" : ""}`}
+          aria-label="Interactive training globe"
+        >
+          <div className="training-map-globe-helper">
+            <Hand size={18} aria-hidden="true" />
+            <span>Drag to explore · Scroll to zoom</span>
           </div>
           <button
             type="button"
-            className="activity-globe-action"
-            onClick={onOpenTraining}
-          >
-            {connected ? "View training" : "Connect Training Hub"}
-            <ArrowRight size={15} aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-
-      <div
-        className={`activity-globe-stage${streetMode ? " is-street-mode" : ""}`}
-        role="img"
-        aria-label={
-          streetMode
-            ? `Street map heatmap centered near recent visits. Zoom out or reset to return to the globe.`
-            : hasVisits
-              ? `Interactive globe showing visit density across ${placeCount} places. Drag to rotate, scroll to zoom, click a cluster to open the street heatmap.`
-              : hasRoute
-                ? `Interactive globe showing the latest route for ${title}`
-                : "Interactive globe waiting for GPS activity data"
-        }
-      >
-        <canvas
-          ref={canvasRef}
-          className={`activity-globe-canvas${hoveringCluster ? " is-hovering-cluster" : ""}${streetMode ? " is-street-hidden" : ""}`}
-          onPointerDown={streetMode ? undefined : handlePointerDown}
-          onPointerMove={streetMode ? undefined : handlePointerMove}
-          onPointerUp={streetMode ? undefined : handlePointerUp}
-          onPointerCancel={streetMode ? undefined : handlePointerUp}
-          onPointerLeave={streetMode ? undefined : handlePointerLeave}
-          onWheel={streetMode ? undefined : handleWheel}
-          aria-hidden="true"
-        />
-
-        {streetFocus ? (
-          <ActivityGlobeStreetMap
-            focus={streetFocus}
-            visits={visits}
-            routes={streetRoutes}
-            onRequestExit={exitStreetMode}
-          />
-        ) : null}
-
-        {canResetView ? (
-          <button
-            type="button"
-            className="activity-globe-reset"
+            className="training-map-reset"
             onClick={handleResetView}
+            disabled={!canResetView}
+            aria-label={streetMode ? "Back to globe" : "Reset globe view"}
           >
-            <RotateCcw size={13} aria-hidden="true" />
+            <RotateCcw size={14} aria-hidden="true" />
             {streetMode ? "Back to globe" : "Reset view"}
           </button>
-        ) : null}
 
-        {hasVisits || hasRoute ? (
-          <div className="activity-globe-legend" aria-label="Visit density">
-            <span>Low</span>
-            <i aria-hidden="true" />
-            <span>High</span>
+          <div
+            className={`training-map-globe-stage${hoveringCluster ? " is-hovering-cluster" : ""}`}
+            role="img"
+            aria-label={
+              streetMode
+                ? "Street map heatmap near the selected location. Zoom out or reset to return to the globe."
+                : mapHasVisits
+                  ? `Interactive globe showing ${mapPlaceCount} training locations. Drag to rotate, scroll to zoom, and select a location for details.`
+                  : mapHasRoute
+                    ? "Interactive globe showing the latest GPS route."
+                    : "Interactive globe waiting for GPS activity data."
+            }
+          >
+            <ActivityGlobeRenderer
+              ref={globeRendererRef}
+              frameKey={activityKey}
+              locations={globeLocations}
+              routePoints={routePoints}
+              selectedLocation={selectedLocation?.bucket ?? null}
+              selectedLabel={selectedPlaceLabel?.city ?? ""}
+              streetMode={streetMode}
+              onError={setGlobeError}
+              onHoverChange={setHoveringCluster}
+              onRequestStreet={enterStreetFocus}
+              onSelectLocation={(bucket) =>
+                selectLocation(bucket, { openStreet: true })
+              }
+              onViewChange={setCanResetView}
+            />
+            {streetFocus ? (
+              <ActivityGlobeStreetMap
+                focus={streetFocus}
+                visits={visits}
+                routes={streetRoutes}
+                onRequestExit={exitStreetMode}
+              />
+            ) : null}
+            {globeError ? (
+              <div className="training-map-globe-error" role="status">
+                <CircleAlert size={20} aria-hidden="true" />
+                <span>The globe could not be rendered on this device.</span>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+
+          <div className="training-map-globe-meta">
+            <div>
+              <Route size={14} aria-hidden="true" />
+              <span>
+                {visitsLoading
+                  ? "Mapping GPS activity"
+                  : `${routes.length.toLocaleString()} GPS ${routes.length === 1 ? "route" : "routes"}`}
+              </span>
+            </div>
+            <div>
+              <LockKeyhole size={14} aria-hidden="true" />
+              <span>Rendered locally</span>
+            </div>
+          </div>
+
+          {(mapHasVisits || mapHasRoute) ? (
+            <div className="training-map-legend" aria-label="Activity intensity from low to high">
+              <span>Low</span>
+              <i className="is-low" aria-hidden="true" />
+              <i className="is-medium" aria-hidden="true" />
+              <i className="is-high" aria-hidden="true" />
+              <span>High</span>
+            </div>
+          ) : null}
+        </section>
       </div>
+
+      {recentPlaces.length > 0 ? (
+        <section className="training-map-recent" aria-labelledby="recent-places-title">
+          <header>
+            <h3 id="recent-places-title">Recent places</h3>
+            {locationSummaries.length > 5 ? (
+              <div className="training-map-recent-controls">
+                <button
+                  type="button"
+                  aria-label="Previous recent places"
+                  title="Previous places"
+                  disabled={recentStart === 0}
+                  onClick={() => setRecentStart((current) => Math.max(0, current - 1))}
+                >
+                  <ChevronLeft size={16} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Next recent places"
+                  title="Next places"
+                  disabled={recentStart + 5 >= locationSummaries.length}
+                  onClick={() =>
+                    setRecentStart((current) =>
+                      Math.min(locationSummaries.length - 5, current + 1),
+                    )
+                  }
+                >
+                  <ChevronRight size={16} aria-hidden="true" />
+                </button>
+              </div>
+            ) : null}
+          </header>
+          <div className="training-map-recent-list">
+            {recentPlaces.map((summary) => {
+              const label = placeLabels[summary.key] ?? coordinateLabel(summary.bucket);
+              const selected = selectedLocationKey === summary.key;
+              return (
+                <button
+                  key={summary.key}
+                  type="button"
+                  className={selected ? "is-selected" : undefined}
+                  aria-pressed={selected}
+                  onClick={() => selectLocation(summary.bucket)}
+                >
+                  <span className="training-map-recent-pin" aria-hidden="true">
+                    <MapPin size={17} />
+                  </span>
+                  <span className="training-map-recent-place">
+                    <strong>{label.city}</strong>
+                    <small>{label.country}</small>
+                  </span>
+                  <span className="training-map-recent-value">
+                    <strong>{summary.activities.length}</strong>
+                    <small>{summary.activities.length === 1 ? "activity" : "activities"}</small>
+                  </span>
+                  <span className="training-map-recent-value">
+                    <strong>
+                      {(summary.distanceMeters / 1000).toLocaleString(undefined, {
+                        maximumFractionDigits: 0,
+                      })} <small>km</small>
+                    </strong>
+                    <small>{formatVisitDate(summary.lastVisited)}</small>
+                  </span>
+                  <ChevronRight className="training-map-recent-chevron" size={16} aria-hidden="true" />
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </section>
   );
-}
 
-function drawRouteSegment(
-  context: CanvasRenderingContext2D,
-  points: Array<[number, number]>,
-  stroke: string,
-): void {
-  if (points.length < 2) {
-    return;
-  }
-
-  context.save();
-  context.lineJoin = "round";
-  context.lineCap = "round";
-
-  context.beginPath();
-  context.moveTo(points[0]![0], points[0]![1]);
-  for (let i = 1; i < points.length; i += 1) {
-    context.lineTo(points[i]![0], points[i]![1]);
-  }
-  context.strokeStyle = stroke;
-  context.globalAlpha = 0.28;
-  context.lineWidth = 2.6;
-  context.stroke();
-
-  context.beginPath();
-  context.moveTo(points[0]![0], points[0]![1]);
-  for (let i = 1; i < points.length; i += 1) {
-    context.lineTo(points[i]![0], points[i]![1]);
-  }
-  context.strokeStyle = stroke;
-  context.globalAlpha = 0.88;
-  context.lineWidth = 1.25;
-  context.stroke();
-  context.restore();
 }

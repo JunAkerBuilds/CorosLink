@@ -7,7 +7,14 @@ export default defineConfig({
   server: {
     host: "127.0.0.1",
     port: 5173,
-    strictPort: true
+    strictPort: true,
+    // Electron preparation and TypeScript builds write hundreds of generated
+    // files while the renderer is running. Watching those outputs can trigger
+    // a reload during dependency optimization, leaving the browser with stale
+    // hashed React URLs and Vite's "Outdated Optimize Dep" 504 response.
+    watch: {
+      ignored: ["**/bin/**", "**/dist/**", "**/dist-electron/**"]
+    }
   },
   build: {
     outDir: "dist",
