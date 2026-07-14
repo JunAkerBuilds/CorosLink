@@ -16,6 +16,13 @@ import {
 import {
   enrichDayListWithActivityTotals
 } from "../weeklyActivity";
+import {
+  buildDominantSportByDay,
+  buildSportCategoriesByDay,
+  SPORT_COLOR_CATEGORIES,
+  SPORT_COLOR_LABELS,
+  type SportColorCategory
+} from "../sportColors";
 import type { HeatmapCell, TrainingHubSnapshot } from "../types";
 
 interface TrainingHeatmapPanelProps {
@@ -25,6 +32,29 @@ interface TrainingHeatmapPanelProps {
 
 const WEEKDAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 const LEGEND_LEVELS = [0, 1, 2, 3, 4] as const;
+
+// Opacity per intensity level, mirroring the single-sport CSS levels so a
+// multi-sport pie reads at the same darkness as a solid cell of the same load.
+const LEVEL_ALPHA: Record<number, number> = { 1: 28, 2: 48, 3: 72, 4: 100 };
+
+function sliceColor(cat: SportColorCategory, level: number): string {
+  const pct = LEVEL_ALPHA[level] ?? 100;
+  return `color-mix(in srgb, var(--sport-${cat}) ${pct}%, transparent)`;
+}
+
+// Split a day's cell into equal pie slices, one per distinct sport category.
+function pieBackground(
+  categories: SportColorCategory[],
+  level: number
+): string {
+  const n = categories.length;
+  const stops = categories.map((cat, index) => {
+    const from = ((index / n) * 360).toFixed(3);
+    const to = (((index + 1) / n) * 360).toFixed(3);
+    return `${sliceColor(cat, level)} ${from}deg ${to}deg`;
+  });
+  return `conic-gradient(${stops.join(", ")})`;
+}
 
 function usePrefersReducedMotion() {
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -74,6 +104,27 @@ export function TrainingHeatmapPanel({
   );
   const grid = useMemo(() => buildHeatmapGrid(cells), [cells]);
   const summary = useMemo(() => buildHeatmapSummary(cells), [cells]);
+  // Color each day by the sport of that day's highest-training-load activity.
+  const sportByDay = useMemo(
+    () => buildDominantSportByDay(activities),
+    [activities]
+  );
+  // Distinct sport categories per day → equal pie slices when there are 2+.
+  const sportsByDay = useMemo(
+    () => buildSportCategoriesByDay(activities),
+    [activities]
+  );
+  // Only show sports that actually appear in the visible range, in canonical
+  // order — including those that only ever show up as a pie slice.
+  const presentSports = useMemo(() => {
+    const seen = new Set<SportColorCategory>();
+    for (const set of sportsByDay.values()) {
+      for (const cat of set) {
+        seen.add(cat);
+      }
+    }
+    return SPORT_COLOR_CATEGORIES.filter((cat) => seen.has(cat));
+  }, [sportsByDay]);
   const hasData = cells.some((cell) => cell.level > 0);
 
   useEffect(() => {
@@ -154,6 +205,24 @@ export function TrainingHeatmapPanel({
                   const loadLabel = formatOptionalNumber(cell.trainingLoad);
                   const distanceLabel = formatDistanceMeters(cell.distance);
                   const durationLabel = formatDurationSeconds(cell.duration);
+                  const dominantSport =
+                    cell.level > 0 ? sportByDay.get(cell.happenDay) : undefined;
+                  const daySports =
+                    cell.level > 0
+                      ? [...(sportsByDay.get(cell.happenDay) ?? [])]
+                      : [];
+                  const cellStyle: Record<string, string> = {};
+                  if (!reducedMotion) {
+                    cellStyle.animationDelay = `${staggerDelay}ms`;
+                  }
+                  // Dominant sport sets the hue for glow/hover and the single-
+                  // sport fill; 2+ sports split the cell into equal pie slices.
+                  if (dominantSport) {
+                    cellStyle["--cell-color"] = `var(--sport-${dominantSport})`;
+                  }
+                  if (daySports.length >= 2) {
+                    cellStyle.background = pieBackground(daySports, cell.level);
+                  }
 
                   return (
                     <span
@@ -165,11 +234,7 @@ export function TrainingHeatmapPanel({
                       role="gridcell"
                       tabIndex={0}
                       aria-label={formatCellAriaLabel(cell)}
-                      style={
-                        reducedMotion
-                          ? undefined
-                          : { animationDelay: `${staggerDelay}ms` }
-                      }
+                      style={cellStyle as CSSProperties}
                     >
                       <span className="training-heatmap-tooltip" role="tooltip">
                         <strong>{cell.label}</strong>
@@ -185,16 +250,37 @@ export function TrainingHeatmapPanel({
           </div>
 
           <div className="training-heatmap-footer">
-            <div className="training-heatmap-legend" aria-hidden="true">
-              <span className="training-heatmap-legend-label">Less</span>
-              {LEGEND_LEVELS.map((level) => (
-                <span
-                  key={level}
-                  className="training-heatmap-legend-cell"
-                  data-level={level}
-                />
-              ))}
-              <span className="training-heatmap-legend-label">More</span>
+            <div className="training-heatmap-legends">
+              <div className="training-heatmap-legend" aria-hidden="true">
+                <span className="training-heatmap-legend-label">Less</span>
+                {LEGEND_LEVELS.map((level) => (
+                  <span
+                    key={level}
+                    className="training-heatmap-legend-cell"
+                    data-level={level}
+                  />
+                ))}
+                <span className="training-heatmap-legend-label">More</span>
+              </div>
+
+              {presentSports.length > 0 ? (
+                <ul className="training-heatmap-sport-legend">
+                  {presentSports.map((cat) => (
+                    <li key={cat} className="training-heatmap-sport-legend-item">
+                      <span
+                        className="training-heatmap-sport-swatch"
+                        style={
+                          {
+                            "--cell-color": `var(--sport-${cat})`
+                          } as CSSProperties
+                        }
+                        aria-hidden="true"
+                      />
+                      <span>{SPORT_COLOR_LABELS[cat]}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
 
             <div className="training-heatmap-summary">

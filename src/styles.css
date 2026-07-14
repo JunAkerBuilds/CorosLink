@@ -1,6 +1,16 @@
 :root {
   color-scheme: dark;
 
+  /* Per-sport activity colors. Overridden at runtime from localStorage via
+     applySportColors(); customizable in Settings → Activity colors.
+     Mirrors DEFAULT_SPORT_COLORS in src/training/sportColors.ts (the source
+     of truth) — test:sport-colors asserts the two stay in sync. */
+  --sport-strength: #e5484d;
+  --sport-trail: #4c8dff;
+  --sport-run: #2fbe91;
+  --sport-bike: #e6b800;
+  --sport-other: #7fd8cf;
+
   --bg-base: #05080b;
   --bg-ambient-green: rgba(47, 190, 145, 0.1);
   --bg-ambient-teal: rgba(31, 182, 166, 0.07);
@@ -12038,6 +12048,12 @@ td span {
 }
 
 .training-heatmap-cell {
+  /* Base hue for the day; overridden inline per cell with the dominant sport
+     color so intensity (level) and sport (hue) compose. Falls back to the
+     original green when a day has load but no matching activity — this is the
+     legacy pre-sport-colors heatmap green, intentionally not a --sport-* value
+     (and intentionally distinct from --sport-run). */
+  --cell-color: #2d9a74;
   position: relative;
   width: 100%;
   height: 100%;
@@ -12070,8 +12086,8 @@ td span {
   inset: 0;
   border-radius: inherit;
   box-shadow:
-    0 0 22px rgba(45, 154, 116, 0.55),
-    0 0 36px rgba(45, 154, 116, 0.2);
+    0 0 22px color-mix(in srgb, var(--cell-color) 55%, transparent),
+    0 0 36px color-mix(in srgb, var(--cell-color) 20%, transparent);
   opacity: 0;
   pointer-events: none;
   animation: heatmap-peak-glow 2.8s ease-in-out 1.1s infinite;
@@ -12089,20 +12105,25 @@ td span {
 }
 
 .training-heatmap-cell[data-level="1"] {
-  background: rgba(45, 154, 116, 0.28);
+  background: color-mix(in srgb, var(--cell-color) 28%, transparent);
 }
 
 .training-heatmap-cell[data-level="2"] {
-  background: rgba(45, 154, 116, 0.48);
+  background: color-mix(in srgb, var(--cell-color) 48%, transparent);
 }
 
 .training-heatmap-cell[data-level="3"] {
-  background: rgba(45, 154, 116, 0.72);
+  background: color-mix(in srgb, var(--cell-color) 72%, transparent);
 }
 
 .training-heatmap-cell[data-level="4"] {
-  background: linear-gradient(145deg, #3eb889 0%, #2d9a74 55%, #248f6a 100%);
-  box-shadow: 0 0 14px rgba(45, 154, 116, 0.35);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--cell-color) 88%, #fff) 0%,
+    var(--cell-color) 55%,
+    color-mix(in srgb, var(--cell-color) 88%, #000) 100%
+  );
+  box-shadow: 0 0 14px color-mix(in srgb, var(--cell-color) 35%, transparent);
 }
 
 .training-heatmap-cell:not(.is-empty):hover,
@@ -12111,7 +12132,7 @@ td span {
   filter: brightness(1.12);
   box-shadow:
     0 0 0 2px rgba(255, 255, 255, 0.2),
-    0 0 20px rgba(45, 154, 116, 0.45);
+    0 0 20px color-mix(in srgb, var(--cell-color) 45%, transparent);
   z-index: 2;
 }
 
@@ -12164,10 +12185,44 @@ td span {
   padding-top: 4px;
 }
 
+.training-heatmap-legends {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+}
+
 .training-heatmap-legend {
   display: flex;
   align-items: center;
   gap: clamp(5px, 0.6vw, 8px);
+}
+
+.training-heatmap-sport-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.training-heatmap-sport-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: clamp(11px, 1vw, 13px);
+  font-weight: 600;
+}
+
+.training-heatmap-sport-swatch {
+  width: clamp(11px, 1.1vw, 14px);
+  height: clamp(11px, 1.1vw, 14px);
+  border-radius: 4px;
+  background: var(--cell-color);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
 }
 
 .training-heatmap-legend-label {
@@ -22127,6 +22182,25 @@ tr.data-intervals-row-missing {
   border-left-color: var(--accent-strong);
 }
 
+/* Completed-activity chips are tinted by sport, matching the training heatmap.
+   Two classes (.calendar-chip is always present) beat the single-class
+   activity/paired defaults above. */
+.calendar-chip.calendar-sport-strength {
+  border-left-color: var(--sport-strength);
+}
+.calendar-chip.calendar-sport-trail {
+  border-left-color: var(--sport-trail);
+}
+.calendar-chip.calendar-sport-run {
+  border-left-color: var(--sport-run);
+}
+.calendar-chip.calendar-sport-bike {
+  border-left-color: var(--sport-bike);
+}
+.calendar-chip.calendar-sport-other {
+  border-left-color: var(--sport-other);
+}
+
 .calendar-cat-easy { border-left-color: #5eb9f0; }
 .calendar-cat-long { border-left-color: #a78bfa; }
 .calendar-cat-intervals { border-left-color: #f0785e; }
@@ -22730,6 +22804,163 @@ tr.data-intervals-row-missing {
   max-width: 980px;
 }
 
+.settings-sport-hint {
+  max-width: 760px;
+  margin: 7px 0 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.settings-sport-panel {
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 56%),
+    var(--glass-bg);
+}
+.settings-sport-heading {
+  align-items: flex-start;
+}
+.settings-sport-heading h2 {
+  margin-top: 3px;
+  font-size: clamp(21px, 2.2vw, 26px);
+  letter-spacing: -0.025em;
+}
+.settings-sport-heading .secondary-button {
+  min-height: 36px;
+  padding-inline: 12px;
+  white-space: nowrap;
+}
+.settings-sport-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.settings-sport-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-height: 64px;
+  padding: 8px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease;
+}
+.settings-sport-row:hover {
+  border-color: color-mix(in srgb, var(--sport-color) 34%, var(--glass-border));
+  background: color-mix(in srgb, var(--sport-color) 5%, var(--glass-bg-hover));
+  transform: translateY(-1px);
+}
+.settings-sport-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--sport-color) 55%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--sport-color) 13%, transparent);
+  color: var(--sport-color);
+}
+.settings-sport-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.settings-sport-copy strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.3;
+}
+.settings-sport-copy > span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-sport-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 164px;
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 5px 10px 5px 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+.settings-sport-picker:hover {
+  border-color: var(--glass-border);
+  background: var(--glass-bg-hover);
+}
+.settings-sport-picker:has(.settings-sport-input:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--sport-color) 65%, white);
+  outline-offset: 2px;
+}
+.settings-sport-swatch {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 32px;
+  border: 3px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-sm);
+  background: var(--sport-color);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.24) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.16);
+}
+.settings-sport-hex {
+  min-width: 62px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.settings-sport-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.settings-sport-tip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  padding: 10px 13px;
+  color: var(--text-muted);
+}
+.settings-sport-tip svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.settings-sport-tip p {
+  margin: 0;
+  font-size: 13px;
+}
+.settings-sport-tip strong {
+  color: var(--text-secondary);
+}
+
 .settings-about-panel {
   display: flex;
   flex-direction: column;
@@ -22828,6 +23059,125 @@ tr.data-intervals-row-missing {
   color: var(--accent);
 }
 
+.settings-storage-panel {
+  padding: 20px;
+}
+
+.settings-storage-panel > .eyebrow {
+  margin: 0 0 10px;
+}
+
+.settings-storage-link {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  padding: 12px 14px;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.settings-storage-link:hover {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--glass-border));
+  background: var(--glass-bg-hover);
+  transform: translateY(-1px);
+}
+
+.settings-storage-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.settings-storage-link-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--glass-border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.settings-storage-link-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-storage-link-copy strong {
+  font-size: 15px;
+}
+
+.settings-storage-link-copy > span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-storage-link-chevron {
+  color: var(--text-muted);
+}
+
+.settings-subpage {
+  gap: 12px;
+}
+
+.settings-subpage-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: flex-start;
+  min-height: 36px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  padding: 0 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.settings-subpage-back:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--glass-border));
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-subpage-back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.settings-storage-detail-panel {
+  padding: 24px;
+}
+
+.settings-storage-detail-heading {
+  align-items: flex-start;
+}
+
+.settings-subpage-description {
+  max-width: 620px;
+  margin: 7px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .settings-storage-list {
   list-style: none;
   display: flex;
@@ -22894,6 +23244,35 @@ tr.data-intervals-row-missing {
 }
 
 @media (max-width: 720px) {
+  .settings-sport-panel {
+    padding: 18px;
+  }
+
+  .settings-sport-heading {
+    gap: 14px;
+  }
+
+  .settings-sport-row {
+    grid-template-columns: 42px minmax(0, 1fr);
+    min-height: 0;
+    padding: 12px;
+  }
+
+  .settings-sport-icon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .settings-sport-picker {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .settings-sport-picker svg {
+    margin-left: auto;
+  }
+
   .settings-about-header {
     flex-wrap: wrap;
   }
@@ -22901,6 +23280,26 @@ tr.data-intervals-row-missing {
   .settings-storage-row {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .settings-storage-panel {
+    padding: 18px;
+  }
+
+  .settings-storage-detail-panel {
+    padding: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-sport-row,
+  .settings-storage-link {
+    transition: none;
+  }
+
+  .settings-sport-row:hover,
+  .settings-storage-link:hover {
+    transform: none;
   }
 }
 

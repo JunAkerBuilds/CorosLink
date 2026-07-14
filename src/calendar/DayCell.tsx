@@ -10,6 +10,7 @@ import {
   formatUpcomingWorkoutVolumeDisplay,
   inferUpcomingWorkoutCategory
 } from "../training/formatters";
+import { sportColorCategory } from "../training/sportColors";
 import type { CalendarDay, PlannedActualPair } from "./calendarTypes";
 import { dayNumber } from "./dateUtils";
 
@@ -34,6 +35,11 @@ interface DayCellProps {
 
 function categoryClass(name: string): string {
   return `calendar-cat-${inferUpcomingWorkoutCategory(name).toLowerCase()}`;
+}
+
+// Color a completed activity chip by sport, matching the training heatmap.
+function sportClass(activity: TrainingHubActivity): string {
+  return `calendar-sport-${sportColorCategory(activity.sportType)}`;
 }
 
 function completionTone(pct?: number): string {
@@ -80,7 +86,7 @@ function PairChip({
     return (
       <button
         type="button"
-        className={`calendar-chip calendar-chip-paired ${categoryClass(scheduled.name)}`}
+        className={`calendar-chip calendar-chip-paired ${categoryClass(scheduled.name)} ${sportClass(activity)}`}
         onClick={() => onSelectActivity(activity)}
         title={`${scheduled.name} — planned vs actual`}
       >
@@ -221,7 +227,7 @@ export function DayCell({
           <button
             key={`activity-${activity.activityId}`}
             type="button"
-            className="calendar-chip calendar-chip-activity"
+            className={`calendar-chip calendar-chip-activity ${sportClass(activity)}`}
             onClick={() => onSelectActivity(activity)}
             title={activity.name ?? activity.sportName ?? "Activity"}
           >
