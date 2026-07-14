@@ -41,6 +41,7 @@ export function makeDefaultDesign(): CorosWatchfaceDesignState {
     metricChanges: {},
     metricStyles: {},
     controlIconOffsets: {},
+    separateAutoTime: false,
     timeStyles: {},
     dateStyles: {},
     staticSeparators: {

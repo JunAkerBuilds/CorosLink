@@ -1182,7 +1182,7 @@ export type WatchfaceMetricStyles = Partial<
   Record<WatchfaceMetricId, WatchfaceMetricSpriteStyle>
 >;
 
-export type WatchfaceTimePartId = "hours" | "minutes";
+export type WatchfaceTimePartId = "hours" | "minutes" | "autoTime";
 
 export type WatchfaceTimeStyles = Partial<
   Record<WatchfaceTimePartId, WatchfaceMetricSpriteStyle>
@@ -1385,7 +1385,67 @@ function timeStudioFolder(
   part: WatchfaceTimePartId,
   slot: "high" | "low"
 ): string {
+  if (part === "autoTime") return "cl_auto_time";
   return `cl_${part === "hours" ? "h" : "m"}${slot === "high" ? "h" : "l"}`;
+}
+
+/** True when firmware lays out the complete HH:MM value inside one rectangle. */
+export function hasAutoAlignedTime(
+  resolution: CorosWatchfaceResolutionDetails
+): boolean {
+  return (
+    resolution.config.watchface_time_format?.trim() === "1" &&
+    parseConfigRect(resolution.config.autoalign_time_rect) !== null &&
+    Boolean(resolution.config.autoalign_time_font?.trim())
+  );
+}
+
+/**
+ * Converts firmware's shared auto-aligned HH:MM block into the four position
+ * keys used by normal digital faces. The original font and colon artwork are
+ * reused, so conversion changes layout behavior without changing appearance.
+ */
+export function buildSeparateTimeOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  enabled: boolean
+): CorosWatchfaceConfigOverride[] {
+  if (!enabled) return [];
+  const overrides: CorosWatchfaceConfigOverride[] = [];
+  for (const resolution of details.resolutions) {
+    if (!hasAutoAlignedTime(resolution)) continue;
+    const rect = parseConfigRect(resolution.config.autoalign_time_rect);
+    const font = resolution.config.autoalign_time_font?.trim();
+    const source = findSpriteFolder(resolution, font);
+    const sample = source?.files[0];
+    if (!rect || !font || !sample) continue;
+
+    const colonValue = resolution.config.autoalign_time_colon_icon?.trim();
+    const colon = colonValue
+      ? resolution.icons.find(
+          (icon) =>
+            icon.path ===
+            `${resolution.directory}/${colonValue.replace(/\\/g, "/")}`
+        )
+      : undefined;
+    const colonWidth = colon?.width ?? 0;
+    const totalWidth = sample.width * 4 + colonWidth;
+    const x = Math.round((rect.x0 + rect.x1 - totalWidth) / 2);
+    const y = Math.round((rect.y0 + rect.y1 - sample.height) / 2);
+    const values: Record<string, string> = {
+      watchface_time_format: "0",
+      time_hour_high_pos: `{${x},${y}}`,
+      time_hour_high_font: font,
+      time_hour_low_pos: `{${x + sample.width},${y}}`,
+      time_hour_low_font: font,
+      time_minute_high_pos: `{${x + sample.width * 2 + colonWidth},${y}}`,
+      time_minute_high_font: font,
+      time_minute_low_pos: `{${x + sample.width * 3 + colonWidth},${y}}`,
+      time_minute_low_font: font
+    };
+    if (colonValue) values.colon_icon = colonValue;
+    overrides.push({ path: `${resolution.directory}/config.txt`, values });
+  }
+  return overrides;
 }
 
 export const WATCHFACE_COMPLICATIONS: WatchfaceComplicationDefinition[] = [
@@ -1996,6 +2056,17 @@ export function buildTimeStyleOverrides(
   const overrides: CorosWatchfaceConfigOverride[] = [];
   for (const resolution of details.resolutions) {
     const values: Record<string, string> = {};
+    const autoStyle = styles.autoTime;
+    if (autoStyle && hasAutoAlignedTime(resolution)) {
+      const rect = scaleConfigRectValue(
+        resolution.config.autoalign_time_rect ?? "",
+        autoStyle.scale
+      );
+      if (rect) values.autoalign_time_rect = rect;
+      if (useStudioFolders) {
+        values.autoalign_time_font = timeStudioFolder("autoTime", "high");
+      }
+    }
     for (const part of WATCHFACE_TIME_PARTS) {
       const style = styles[part.id];
       if (!style) {
@@ -2096,6 +2167,30 @@ export async function buildTimeSpriteReplacements(
     rasterized: boolean;
   }[] = [];
   for (const resolution of details.resolutions) {
+    const autoStyle = styles.autoTime;
+    const autoSource = autoStyle && hasAutoAlignedTime(resolution)
+      ? findSpriteFolder(resolution, resolution.config.autoalign_time_font)
+      : null;
+    if (autoStyle && autoSource) {
+      const normalizedScale = Math.max(0.5, Math.min(2, autoStyle.scale));
+      const partFontFamily = autoStyle.fontFamily ?? fontFamily;
+      autoSource.files.slice(0, 10).forEach((file, value) => {
+        jobs.push({
+          source: file,
+          path: `${resolution.directory}/${timeStudioFolder("autoTime", "high")}/${String(value).padStart(2, "0")}.png`,
+          digit: value,
+          width: Math.max(1, Math.round(file.width * normalizedScale)),
+          height: Math.max(1, Math.round(file.height * normalizedScale)),
+          color: autoStyle.color,
+          fontFamily: partFontFamily,
+          rasterized: shouldRenderWatchfaceText(
+            String(value),
+            partFontFamily,
+            typography
+          )
+        });
+      });
+    }
     for (const part of WATCHFACE_TIME_PARTS) {
       const style = styles[part.id];
       if (!style) {
@@ -2347,6 +2442,11 @@ export function mergeAssetReplacements(
  */
 export const WATCHFACE_LAYOUT_GROUPS: WatchfaceLayoutGroup[] = [
   {
+    id: "autoTime",
+    label: "Time",
+    patterns: [/^autoalign_time_rect$/]
+  },
+  {
     id: "hours",
     label: "Hour digits",
     patterns: [/^time_hour_(high|low)_pos$/]
@@ -2444,6 +2544,13 @@ export function layoutGroupKeys(
   resolution: CorosWatchfaceResolutionDetails,
   group: WatchfaceLayoutGroup
 ): string[] {
+  const autoAligned = hasAutoAlignedTime(resolution);
+  if (
+    (group.id === "autoTime" && !autoAligned) ||
+    ((group.id === "hours" || group.id === "minutes") && autoAligned)
+  ) {
+    return [];
+  }
   return Object.keys(resolution.config).filter(
     (key) =>
       group.patterns.some((pattern) => pattern.test(key)) &&
@@ -2528,6 +2635,7 @@ export function buildLayerColorOverrides(
   colors: Record<string, string>
 ): CorosWatchfaceConfigOverride[] {
   const colorKeys: Record<string, RegExp[]> = {
+    autoTime: [/^autoalign_time_font_color$/],
     hours: [/^time_hour_(high|low)_font_color$/],
     minutes: [/^time_minute_(high|low)_font_color$/],
     seconds: [/^time_second_(high|low)_font_color$/],
@@ -2577,6 +2685,7 @@ export async function buildLayerColorSpriteReplacements(
       }
     };
     addIcon(resolution.config["colon_icon"], colors.separators);
+    addIcon(resolution.config["autoalign_time_colon_icon"], colors.separators);
     addIcon(resolution.config["arc_cut_icon"], colors.separators);
     if (colors.complication) {
       for (const [key, value] of Object.entries(resolution.config)) {
@@ -2920,16 +3029,19 @@ export async function drawStudioPreview(
     ["time_minute_high_pos", "time_minute_high_font", minute[0]!, "minutes"],
     ["time_minute_low_pos", "time_minute_low_font", minute[1]!, "minutes"]
   ];
-  for (const [posKey, fontKey, digitText, partId] of timeKeys) {
-    const source = findSpriteFolder(resolution, config[fontKey]);
-    digitPlan.push({
-      pos: parseConfigPos(config[posKey]),
-      source,
-      digit: Number(digitText),
-      partId,
-      slot: posKey.includes("_high_") ? "high" : "low",
-      componentId: partId
-    });
+  const autoAlignedTime = hasAutoAlignedTime(resolution);
+  if (!autoAlignedTime) {
+    for (const [posKey, fontKey, digitText, partId] of timeKeys) {
+      const source = findSpriteFolder(resolution, config[fontKey]);
+      digitPlan.push({
+        pos: parseConfigPos(config[posKey]),
+        source,
+        digit: Number(digitText),
+        partId,
+        slot: posKey.includes("_high_") ? "high" : "low",
+        componentId: partId
+      });
+    }
   }
   for (const [posKey, fontKey, digitText] of [
     ["time_second_high_pos", "time_second_high_font", second[0]!],
@@ -2942,7 +3054,9 @@ export async function drawStudioPreview(
       componentId: "seconds"
     });
   }
-  const colonValue = config["colon_icon"]?.replace(/\\/g, "/");
+  const colonValue = !autoAlignedTime
+    ? config["colon_icon"]?.replace(/\\/g, "/")
+    : undefined;
   const colonPath = colonValue ? `${resolution.directory}/${colonValue}` : null;
   const colonFile = colonPath
     ? resolution.icons.find((icon) => icon.path === colonPath) ?? null
@@ -3108,8 +3222,39 @@ export async function drawStudioPreview(
     value: string;
     metricId?: WatchfaceMetricId;
     datePartId?: WatchfaceDatePartId;
+    timePartId?: WatchfaceTimePartId;
     componentId?: string;
+    separator?: {
+      configKey: string;
+      file: CorosWatchfaceSpriteFile;
+    };
   }[] = [];
+  if (autoAlignedTime) {
+    const rect = parseConfigRect(config.autoalign_time_rect);
+    const source = findSpriteFolder(resolution, config.autoalign_time_font);
+    const separatorValue = config.autoalign_time_colon_icon?.replace(/\\/g, "/");
+    const separatorPath = separatorValue
+      ? `${resolution.directory}/${separatorValue}`
+      : null;
+    const separatorFile = separatorPath
+      ? resolution.icons.find((icon) => icon.path === separatorPath) ?? null
+      : null;
+    if (rect && source) {
+      numberPlans.push({
+        rect,
+        source,
+        value: `${hour}${minute}`,
+        timePartId: "autoTime",
+        componentId: "autoTime",
+        ...(separatorFile
+          ? { separator: { configKey: "autoalign_time_colon_icon", file: separatorFile } }
+          : {})
+      });
+      if (separatorFile) {
+        wantedSprites.set(separatorFile.path, { color: separatorIconColor });
+      }
+    }
+  }
   if (complication && complicationSource) {
     for (const part of relativeComplicationRects) {
       numberPlans.push({
@@ -3185,7 +3330,9 @@ export async function drawStudioPreview(
     }
   }
   for (const plan of numberPlans) {
-    const fontFamily = plan.datePartId
+    const fontFamily = plan.timePartId
+      ? options.timeStyles?.[plan.timePartId]?.fontFamily ?? options.fontFamily
+      : plan.datePartId
       ? options.dateStyles?.[plan.datePartId]?.fontFamily ?? options.fontFamily
       : plan.metricId
         ? options.metricStyles?.[plan.metricId]?.fontFamily ?? options.fontFamily
@@ -3507,11 +3654,14 @@ export async function drawStudioPreview(
     const dateStyle = plan.datePartId
       ? options.dateStyles?.[plan.datePartId]
       : undefined;
+    const timeStyle = plan.timePartId
+      ? options.timeStyles?.[plan.timePartId]
+      : undefined;
     const componentColor = plan.componentId
       ? options.layerColors?.[plan.componentId]
       : undefined;
     const glyphFontFamily =
-      metricStyle?.fontFamily ?? dateStyle?.fontFamily ?? options.fontFamily;
+      timeStyle?.fontFamily ?? metricStyle?.fontFamily ?? dateStyle?.fontFamily ?? options.fontFamily;
     const glyphs: {
       file: CorosWatchfaceSpriteFile;
       image: HTMLImageElement;
@@ -3521,7 +3671,7 @@ export async function drawStudioPreview(
       if (!file) {
         continue;
       }
-      if (!metricStyle && !dateStyle && !componentColor) {
+      if (!timeStyle && !metricStyle && !dateStyle && !componentColor) {
         const image = digitSprites.get(file.path) ?? loaded.get(file.path);
         if (image) {
           glyphs.push({ file, image });
@@ -3530,7 +3680,7 @@ export async function drawStudioPreview(
       }
       const glyphScale = Math.max(
         0.5,
-        Math.min(2, metricStyle?.scale ?? dateStyle?.scale ?? 1)
+        Math.min(2, timeStyle?.scale ?? metricStyle?.scale ?? dateStyle?.scale ?? 1)
       );
       const styledFile = {
         ...file,
@@ -3538,6 +3688,7 @@ export async function drawStudioPreview(
         height: Math.max(1, Math.round(file.height * glyphScale))
       };
       const glyphColor =
+        timeStyle?.color ??
         metricStyle?.color ??
         dateStyle?.color ??
         componentColor ??
@@ -3556,7 +3707,7 @@ export async function drawStudioPreview(
               options
             )
           );
-        } else if (metricStyle?.color || dateStyle?.color || componentColor) {
+        } else if (timeStyle?.color || metricStyle?.color || dateStyle?.color || componentColor) {
           image = await loadStudioImage(
             await resizeAndTintSprite(
               loadedAssets.get(file.path)?.dataUrl ?? "",
@@ -3579,11 +3730,31 @@ export async function drawStudioPreview(
     if (glyphs.length === 0) {
       continue;
     }
-    const totalWidth = glyphs.reduce((sum, glyph) => sum + glyph.file.width, 0);
+    const separatorImage = plan.separator
+      ? await configuredAssetImage(
+          plan.separator.configKey,
+          plan.separator.file,
+          separatorIconColor
+        )
+      : undefined;
+    const separatorWidth = separatorImage && plan.separator
+      ? plan.separator.file.width
+      : 0;
+    const totalWidth = glyphs.reduce((sum, glyph) => sum + glyph.file.width, 0) + separatorWidth;
     const centerX = (plan.rect.x0 + plan.rect.x1) / 2;
     const centerY = (plan.rect.y0 + plan.rect.y1) / 2;
     let x = centerX - totalWidth / 2;
-    for (const glyph of glyphs) {
+    for (const [index, glyph] of glyphs.entries()) {
+      if (index === 2 && separatorImage && plan.separator) {
+        context.drawImage(
+          separatorImage,
+          x * scale,
+          (centerY - plan.separator.file.height / 2) * scale,
+          plan.separator.file.width * scale,
+          plan.separator.file.height * scale
+        );
+        x += plan.separator.file.width;
+      }
       context.drawImage(
         glyph.image,
         x * scale,

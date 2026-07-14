@@ -708,6 +708,7 @@ export function WatchfaceEditor({
       design.tintIcons,
       design.previewComplication,
       design.metricStyles,
+      design.separateAutoTime,
       design.timeStyles,
       design.dateStyles,
       design.layerColors,
@@ -738,6 +739,7 @@ export function WatchfaceEditor({
       details,
       design.metricChanges,
       design.metricStyles,
+      design.separateAutoTime,
       design.timeStyles,
       design.dateStyles,
       design.layerColors,
@@ -2893,6 +2895,41 @@ export function WatchfaceEditor({
     });
   }
 
+  function convertAutoTimeToSeparate() {
+    setDesign((prev) => {
+      const timeStyles = { ...prev.timeStyles };
+      const autoStyle = timeStyles.autoTime;
+      delete timeStyles.autoTime;
+      if (autoStyle) {
+        timeStyles.hours = { ...autoStyle };
+        timeStyles.minutes = { ...autoStyle };
+      }
+      const layoutOffsets = { ...prev.layoutOffsets };
+      const autoOffset = layoutOffsets.autoTime;
+      delete layoutOffsets.autoTime;
+      if (autoOffset) {
+        layoutOffsets.hours = { ...autoOffset };
+        layoutOffsets.minutes = { ...autoOffset };
+      }
+      const layerVisibility = { ...prev.layerVisibility };
+      const autoVisible = layerVisibility.autoTime;
+      delete layerVisibility.autoTime;
+      if (autoVisible !== undefined) {
+        layerVisibility.hours = autoVisible;
+        layerVisibility.minutes = autoVisible;
+      }
+      return {
+        ...prev,
+        separateAutoTime: true,
+        timeStyles,
+        layoutOffsets,
+        layerVisibility
+      };
+    });
+    setSelectedId("hours");
+    setSelectedIds(["hours"]);
+  }
+
   function setDateStyle(
     partId: WatchfaceDatePartId,
     patch: { scale?: number; fontFamily?: string; color?: string }
@@ -4144,6 +4181,15 @@ export function WatchfaceEditor({
       return (
         <div className="watchface-inspector-group">
           {renderLayerVisibilityToggle(layer)}
+          {layer.timePartId === "autoTime" ? (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={convertAutoTimeToSeparate}
+            >
+              Separate hours and minutes
+            </button>
+          ) : null}
           <LocalFontPicker
             api={api}
             label="Digit font"

@@ -524,6 +524,8 @@ export interface CorosWatchfaceDesignState {
   metricStyles: Record<string, { color?: string; scale: number; fontFamily?: string }>;
   /** Per selectable-control icon offsets, independent from the slot origin/value. */
   controlIconOffsets?: Record<string, { dx: number; dy: number }>;
+  /** Converts firmware auto-aligned HH:MM into four independently positioned digits. */
+  separateAutoTime?: boolean;
   timeStyles: Record<string, { color?: string; scale: number; fontFamily?: string }>;
   /** Weekday/month/day scaling; absent in projects saved before resizing. */
   dateStyles?: Record<
