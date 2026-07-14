@@ -12,6 +12,15 @@ import { useCallback, useEffect, useState } from "react";
 import type { AppInfo, AppUpdateSnapshot } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { formatBytes } from "../media/libraryUtils";
+import {
+  SPORT_COLOR_CATEGORIES,
+  SPORT_COLOR_LABELS,
+  DEFAULT_SPORT_COLORS,
+  readStoredSportColors,
+  storeSportColors,
+  applySportColors,
+  type SportColorCategory
+} from "../calendar/sportColors";
 import appLogo from "../../build/icon.png";
 
 const ABOUT_LINKS = [
@@ -68,6 +77,21 @@ export function SettingsView({
   const [openingLocationId, setOpeningLocationId] = useState<string | null>(
     null,
   );
+  const [sportColors, setSportColors] = useState(() => readStoredSportColors());
+
+  function updateSportColor(cat: SportColorCategory, value: string) {
+    const next = { ...sportColors, [cat]: value };
+    setSportColors(next);
+    storeSportColors(next);
+    applySportColors(next);
+  }
+
+  function resetSportColors() {
+    const next = { ...DEFAULT_SPORT_COLORS };
+    setSportColors(next);
+    storeSportColors(next);
+    applySportColors(next);
+  }
 
   const loadAppInfo = useCallback(async () => {
     setLoading(true);
@@ -253,6 +277,49 @@ export function SettingsView({
             Loading storage locations…
           </p>
         )}
+      </div>
+
+      <div className="panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Calendar</p>
+            <h2>Activity colors</h2>
+          </div>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={resetSportColors}
+          >
+            <RefreshCw size={15} aria-hidden="true" />
+            Reset to defaults
+          </button>
+        </div>
+        <p className="settings-sport-hint">
+          Color of the right edge of each activity in the calendar, by sport.
+        </p>
+        <ul className="settings-sport-list">
+          {SPORT_COLOR_CATEGORIES.map((cat) => (
+            <li className="settings-sport-row" key={cat}>
+              <span
+                className={`calendar-chip calendar-chip-activity calendar-sport-${cat} settings-sport-preview`}
+                aria-hidden="true"
+              >
+                <span className="calendar-chip-title">
+                  <span className="calendar-chip-name">
+                    {SPORT_COLOR_LABELS[cat]}
+                  </span>
+                </span>
+              </span>
+              <input
+                type="color"
+                className="settings-sport-input"
+                value={sportColors[cat]}
+                onChange={(event) => updateSportColor(cat, event.target.value)}
+                aria-label={`${SPORT_COLOR_LABELS[cat]} color`}
+              />
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );

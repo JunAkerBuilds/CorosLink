@@ -35,6 +35,14 @@
   --accent-gradient: linear-gradient(135deg, #2fbe91 0%, #1fb6a6 100%);
   --accent-gold: #d89b22;
 
+  /* Per-sport activity colors (calendar right liseré). Overridden at runtime
+     from localStorage via applySportColors(). */
+  --sport-strength: #e5484d;
+  --sport-trail: #4c8dff;
+  --sport-run: #2fbe91;
+  --sport-bike: #e6b800;
+  --sport-other: #7fd8cf;
+
   --success-bg: rgba(47, 190, 145, 0.15);
   --success-border: rgba(110, 231, 168, 0.28);
   --success-text: #6ee7a8;
@@ -21912,6 +21920,50 @@ tr.data-intervals-row-missing {
 .calendar-cat-speed { border-left-color: var(--accent-gold); }
 .calendar-cat-race { border-left-color: #ef5da8; }
 .calendar-cat-run { border-left-color: var(--accent); }
+
+/* Per-sport color on the LEFT border of completed-activity chips — replaces
+   the default green accent so each activity reads by its sport at a glance. */
+.calendar-chip-activity.calendar-sport-strength { border-left-color: var(--sport-strength); }
+.calendar-chip-activity.calendar-sport-trail { border-left-color: var(--sport-trail); }
+.calendar-chip-activity.calendar-sport-run { border-left-color: var(--sport-run); }
+.calendar-chip-activity.calendar-sport-bike { border-left-color: var(--sport-bike); }
+.calendar-chip-activity.calendar-sport-other { border-left-color: var(--sport-other); }
+
+/* Settings → Activity colors card. */
+.settings-sport-hint {
+  margin: 4px 0 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.settings-sport-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-sport-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.settings-sport-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: default;
+}
+.settings-sport-input {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
 
 .calendar-chip-title {
   display: flex;

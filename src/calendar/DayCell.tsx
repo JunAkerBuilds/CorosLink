@@ -12,6 +12,7 @@ import {
 } from "../training/formatters";
 import type { CalendarDay, PlannedActualPair } from "./calendarTypes";
 import { dayNumber } from "./dateUtils";
+import { sportColorCategory } from "./sportColors";
 
 export const CALENDAR_DRAG_MIME = "application/x-coroslink-scheduled-workout";
 
@@ -34,6 +35,11 @@ interface DayCellProps {
 
 function categoryClass(name: string): string {
   return `calendar-cat-${inferUpcomingWorkoutCategory(name).toLowerCase()}`;
+}
+
+// Per-sport color class for the right-side liseré on completed-activity chips.
+function sportChipClass(name: string | undefined): string {
+  return `calendar-sport-${sportColorCategory(name)}`;
 }
 
 function completionTone(pct?: number): string {
@@ -221,7 +227,7 @@ export function DayCell({
           <button
             key={`activity-${activity.activityId}`}
             type="button"
-            className="calendar-chip calendar-chip-activity"
+            className={`calendar-chip calendar-chip-activity ${sportChipClass(activity.sportName ?? activity.name)}`}
             onClick={() => onSelectActivity(activity)}
             title={activity.name ?? activity.sportName ?? "Activity"}
           >
