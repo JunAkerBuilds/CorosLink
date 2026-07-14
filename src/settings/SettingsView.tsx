@@ -8,10 +8,19 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import type { AppInfo, AppUpdateSnapshot } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { formatBytes } from "../media/libraryUtils";
+import {
+  DEFAULT_SPORT_COLORS,
+  SPORT_COLOR_CATEGORIES,
+  SPORT_COLOR_LABELS,
+  applySportColors,
+  readStoredSportColors,
+  storeSportColors,
+  type SportColorCategory,
+} from "../training/sportColors";
 import appLogo from "../../build/icon.png";
 
 const ABOUT_LINKS = [
@@ -68,6 +77,21 @@ export function SettingsView({
   const [openingLocationId, setOpeningLocationId] = useState<string | null>(
     null,
   );
+  const [sportColors, setSportColors] = useState(() => readStoredSportColors());
+
+  function updateSportColor(cat: SportColorCategory, value: string) {
+    const next = { ...sportColors, [cat]: value };
+    setSportColors(next);
+    storeSportColors(next);
+    applySportColors(next);
+  }
+
+  function resetSportColors() {
+    const next = { ...DEFAULT_SPORT_COLORS };
+    setSportColors(next);
+    storeSportColors(next);
+    applySportColors(next);
+  }
 
   const loadAppInfo = useCallback(async () => {
     setLoading(true);
@@ -184,6 +208,50 @@ export function SettingsView({
             </a>
           ))}
         </div>
+      </div>
+
+      <div className="panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Appearance</p>
+            <h2>Activity colors</h2>
+          </div>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={resetSportColors}
+          >
+            <RefreshCw size={15} aria-hidden="true" />
+            Reset to defaults
+          </button>
+        </div>
+        <p className="settings-sport-hint">
+          Color activities by sport in the training load heatmap. Each day uses
+          the color of its highest-load activity.
+        </p>
+        <ul className="settings-sport-list">
+          {SPORT_COLOR_CATEGORIES.map((cat) => (
+            <li className="settings-sport-row" key={cat}>
+              <span className="settings-sport-preview">
+                <span
+                  className="settings-sport-swatch"
+                  style={
+                    { "--sport-color": sportColors[cat] } as CSSProperties
+                  }
+                  aria-hidden="true"
+                />
+                <span>{SPORT_COLOR_LABELS[cat]}</span>
+              </span>
+              <input
+                type="color"
+                className="settings-sport-input"
+                value={sportColors[cat]}
+                onChange={(event) => updateSportColor(cat, event.target.value)}
+                aria-label={`${SPORT_COLOR_LABELS[cat]} color`}
+              />
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div className="panel">

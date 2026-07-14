@@ -1,6 +1,14 @@
 :root {
   color-scheme: dark;
 
+  /* Per-sport activity colors. Overridden at runtime from localStorage via
+     applySportColors(); customizable in Settings → Activity colors. */
+  --sport-strength: #e5484d;
+  --sport-trail: #4c8dff;
+  --sport-run: #2fbe91;
+  --sport-bike: #e6b800;
+  --sport-other: #7fd8cf;
+
   --bg-base: #05080b;
   --bg-ambient-green: rgba(47, 190, 145, 0.1);
   --bg-ambient-teal: rgba(31, 182, 166, 0.07);
@@ -11817,6 +11825,10 @@ td span {
 }
 
 .training-heatmap-cell {
+  /* Base hue for the day; overridden inline per cell with the dominant sport
+     color so intensity (level) and sport (hue) compose. Falls back to the
+     original green when a day has load but no matching activity. */
+  --cell-color: #2d9a74;
   position: relative;
   width: 100%;
   height: 100%;
@@ -11849,8 +11861,8 @@ td span {
   inset: 0;
   border-radius: inherit;
   box-shadow:
-    0 0 22px rgba(45, 154, 116, 0.55),
-    0 0 36px rgba(45, 154, 116, 0.2);
+    0 0 22px color-mix(in srgb, var(--cell-color) 55%, transparent),
+    0 0 36px color-mix(in srgb, var(--cell-color) 20%, transparent);
   opacity: 0;
   pointer-events: none;
   animation: heatmap-peak-glow 2.8s ease-in-out 1.1s infinite;
@@ -11868,20 +11880,25 @@ td span {
 }
 
 .training-heatmap-cell[data-level="1"] {
-  background: rgba(45, 154, 116, 0.28);
+  background: color-mix(in srgb, var(--cell-color) 28%, transparent);
 }
 
 .training-heatmap-cell[data-level="2"] {
-  background: rgba(45, 154, 116, 0.48);
+  background: color-mix(in srgb, var(--cell-color) 48%, transparent);
 }
 
 .training-heatmap-cell[data-level="3"] {
-  background: rgba(45, 154, 116, 0.72);
+  background: color-mix(in srgb, var(--cell-color) 72%, transparent);
 }
 
 .training-heatmap-cell[data-level="4"] {
-  background: linear-gradient(145deg, #3eb889 0%, #2d9a74 55%, #248f6a 100%);
-  box-shadow: 0 0 14px rgba(45, 154, 116, 0.35);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--cell-color) 88%, #fff) 0%,
+    var(--cell-color) 55%,
+    color-mix(in srgb, var(--cell-color) 88%, #000) 100%
+  );
+  box-shadow: 0 0 14px color-mix(in srgb, var(--cell-color) 35%, transparent);
 }
 
 .training-heatmap-cell:not(.is-empty):hover,
@@ -11890,7 +11907,7 @@ td span {
   filter: brightness(1.12);
   box-shadow:
     0 0 0 2px rgba(255, 255, 255, 0.2),
-    0 0 20px rgba(45, 154, 116, 0.45);
+    0 0 20px color-mix(in srgb, var(--cell-color) 45%, transparent);
   z-index: 2;
 }
 
@@ -11943,10 +11960,44 @@ td span {
   padding-top: 4px;
 }
 
+.training-heatmap-legends {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+}
+
 .training-heatmap-legend {
   display: flex;
   align-items: center;
   gap: clamp(5px, 0.6vw, 8px);
+}
+
+.training-heatmap-sport-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.training-heatmap-sport-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: clamp(11px, 1vw, 13px);
+  font-weight: 600;
+}
+
+.training-heatmap-sport-swatch {
+  width: clamp(11px, 1.1vw, 14px);
+  height: clamp(11px, 1.1vw, 14px);
+  border-radius: 4px;
+  background: var(--cell-color);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
 }
 
 .training-heatmap-legend-label {
@@ -22507,6 +22558,52 @@ tr.data-intervals-row-missing {
   flex-direction: column;
   gap: 18px;
   max-width: 980px;
+}
+
+.settings-sport-hint {
+  margin: 4px 0 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.settings-sport-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-sport-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.settings-sport-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+}
+.settings-sport-swatch {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--sport-color);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+}
+.settings-sport-input {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
 }
 
 .settings-about-panel {

@@ -16,6 +16,11 @@ import {
 import {
   enrichDayListWithActivityTotals
 } from "../weeklyActivity";
+import {
+  buildDominantSportByDay,
+  SPORT_COLOR_CATEGORIES,
+  SPORT_COLOR_LABELS
+} from "../sportColors";
 import type { HeatmapCell, TrainingHubSnapshot } from "../types";
 
 interface TrainingHeatmapPanelProps {
@@ -74,6 +79,16 @@ export function TrainingHeatmapPanel({
   );
   const grid = useMemo(() => buildHeatmapGrid(cells), [cells]);
   const summary = useMemo(() => buildHeatmapSummary(cells), [cells]);
+  // Color each day by the sport of that day's highest-training-load activity.
+  const sportByDay = useMemo(
+    () => buildDominantSportByDay(activities),
+    [activities]
+  );
+  // Only show sports that actually appear in the visible range, in canonical order.
+  const presentSports = useMemo(() => {
+    const seen = new Set(sportByDay.values());
+    return SPORT_COLOR_CATEGORIES.filter((cat) => seen.has(cat));
+  }, [sportByDay]);
   const hasData = cells.some((cell) => cell.level > 0);
 
   useEffect(() => {
@@ -154,6 +169,15 @@ export function TrainingHeatmapPanel({
                   const loadLabel = formatOptionalNumber(cell.trainingLoad);
                   const distanceLabel = formatDistanceMeters(cell.distance);
                   const durationLabel = formatDurationSeconds(cell.duration);
+                  const sportCategory =
+                    cell.level > 0 ? sportByDay.get(cell.happenDay) : undefined;
+                  const cellStyle: Record<string, string> = {};
+                  if (!reducedMotion) {
+                    cellStyle.animationDelay = `${staggerDelay}ms`;
+                  }
+                  if (sportCategory) {
+                    cellStyle["--cell-color"] = `var(--sport-${sportCategory})`;
+                  }
 
                   return (
                     <span
@@ -165,11 +189,7 @@ export function TrainingHeatmapPanel({
                       role="gridcell"
                       tabIndex={0}
                       aria-label={formatCellAriaLabel(cell)}
-                      style={
-                        reducedMotion
-                          ? undefined
-                          : { animationDelay: `${staggerDelay}ms` }
-                      }
+                      style={cellStyle as CSSProperties}
                     >
                       <span className="training-heatmap-tooltip" role="tooltip">
                         <strong>{cell.label}</strong>
@@ -185,16 +205,37 @@ export function TrainingHeatmapPanel({
           </div>
 
           <div className="training-heatmap-footer">
-            <div className="training-heatmap-legend" aria-hidden="true">
-              <span className="training-heatmap-legend-label">Less</span>
-              {LEGEND_LEVELS.map((level) => (
-                <span
-                  key={level}
-                  className="training-heatmap-legend-cell"
-                  data-level={level}
-                />
-              ))}
-              <span className="training-heatmap-legend-label">More</span>
+            <div className="training-heatmap-legends">
+              <div className="training-heatmap-legend" aria-hidden="true">
+                <span className="training-heatmap-legend-label">Less</span>
+                {LEGEND_LEVELS.map((level) => (
+                  <span
+                    key={level}
+                    className="training-heatmap-legend-cell"
+                    data-level={level}
+                  />
+                ))}
+                <span className="training-heatmap-legend-label">More</span>
+              </div>
+
+              {presentSports.length > 0 ? (
+                <ul className="training-heatmap-sport-legend">
+                  {presentSports.map((cat) => (
+                    <li key={cat} className="training-heatmap-sport-legend-item">
+                      <span
+                        className="training-heatmap-sport-swatch"
+                        style={
+                          {
+                            "--cell-color": `var(--sport-${cat})`
+                          } as CSSProperties
+                        }
+                        aria-hidden="true"
+                      />
+                      <span>{SPORT_COLOR_LABELS[cat]}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
 
             <div className="training-heatmap-summary">
