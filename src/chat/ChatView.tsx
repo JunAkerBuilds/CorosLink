@@ -29,6 +29,7 @@ import type {
   LocalChatConnectionTest,
   LocalChatDiscovery,
   CorosMcpStatus,
+  McpServerStatus,
   PlanDraftPreview,
   TrainingHubExportResult,
   UploadPlanResult,
@@ -39,7 +40,6 @@ import { ActivityVisualCard } from "./ActivityVisualCard";
 import { FitnessTrendCard } from "./FitnessTrendCard";
 import { HrZoneCard } from "./HrZoneCard";
 import { ChatSettingsModal } from "./ChatSettingsModal";
-import { CorosMcpToolsPanel } from "./CorosMcpToolsPanel";
 import { ChatSidebar } from "./ChatSidebar";
 import { ProviderSwitch } from "./ProviderSwitch";
 import {
@@ -365,6 +365,7 @@ export function ChatView({
   const [exportingLatestActivity, setExportingLatestActivity] = useState(false);
   const [currentSource, setCurrentSource] = useState<SourceInfo | null>(null);
   const [mcpStatus, setMcpStatus] = useState<CorosMcpStatus | null>(null);
+  const [mcpStatuses, setMcpStatuses] = useState<McpServerStatus[]>([]);
   const [mcpBusy, setMcpBusy] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [uploadingDraftId, setUploadingDraftId] = useState<string | null>(null);
@@ -544,13 +545,20 @@ export function ChatView({
   useEffect(() => {
     if (!api) return;
     let cancelled = false;
-    const load = () =>
-      api
+    const load = () => {
+      void api
         .getCorosMcpStatus()
         .then((status) => {
           if (!cancelled) setMcpStatus(status);
         })
         .catch(() => undefined);
+      void api
+        .getMcpStatuses()
+        .then((statuses) => {
+          if (!cancelled) setMcpStatuses(statuses);
+        })
+        .catch(() => undefined);
+    };
     void load();
     const timer = setTimeout(() => void load(), 2500);
     return () => {
@@ -1547,24 +1555,49 @@ export function ChatView({
             Settings
           </button>
           <div className="chat-mcp" ref={mcpRef}>
-            {mcpStatus?.connected ? (
+            {(() => {
+              const connectedServers = mcpStatuses.filter((s) => s.connected);
+              const totalTools = connectedServers.reduce(
+                (n, s) => n + s.toolCount,
+                0
+              );
+              return connectedServers.length > 0 ? (
               <>
                 <button
                   type="button"
                   className="chat-mcp-pill connected"
                   onClick={() => setShowTools((open) => !open)}
-                  title="COROS data connected via MCP"
+                  title={`Connected via MCP: ${connectedServers
+                    .map((s) => s.name)
+                    .join(", ")}`}
                   aria-expanded={showTools}
                   aria-haspopup="dialog"
                 >
                   <Database size={13} aria-hidden="true" />
-                  COROS · {mcpStatus.tools.length} tools
+                  {connectedServers.length === 1
+                    ? connectedServers[0].name
+                    : `${connectedServers.length} MCP servers`}{" "}
+                  · {totalTools} tools
                 </button>
                 {showTools ? (
-                  <CorosMcpToolsPanel
-                    tools={mcpStatus.tools}
-                    onDisconnect={() => void handleDisconnectMcp()}
-                  />
+                  <div className="chat-mcp-panel">
+                    <ul>
+                      {connectedServers.map((s) => (
+                        <li key={s.id}>
+                          <code>{s.name}</code>
+                          <span>{s.toolCount} tools</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="chat-mcp-panel-head">
+                      <button
+                        type="button"
+                        onClick={() => setSettingsOpen(true)}
+                      >
+                        Manage servers
+                      </button>
+                    </div>
+                  </div>
                 ) : null}
               </>
             ) : (
@@ -1588,7 +1621,8 @@ export function ChatView({
                     ? "Reconnect COROS"
                     : "Connect COROS"}
               </button>
-            )}
+            );
+            })()}
           </div>
           {isChatGptProvider && authStatus?.email ? (
             <span className="chat-account">{authStatus.email}</span>
