@@ -333,6 +333,44 @@ export function buildWatchfaceConfigAssetOverrides(
           values[configKey] = configAssetCreatedRelativePath(id).replace(/\//g, "\\");
         }
       }
+      // Battery state bitmaps are anchored at their top-left corner by the
+      // firmware. When the bitmap scale changes their canvas,
+      // compensate the configured position so the original icon centre stays
+      // in place on both the preview and the watch.
+      const batteryOverride = overrides["config:battery_icon"];
+      const batteryScale = batteryOverride?.scale ?? 1;
+      if (scope === "config" && batteryOverride && batteryScale !== 1) {
+        const batteryFolderName = (
+          resolution.config.battery_icon_dir || resolution.config.control_battery_icon_dir
+        )?.replace(/\\/g, "/");
+        const batteryFolder =
+          (batteryFolderName
+            ? resolution.spriteFolders.find(
+                (folder) => folder.kind === "state" && folder.folder === batteryFolderName
+              )
+            : undefined) ??
+          resolution.spriteFolders.find(
+            (folder) => folder.kind === "state" && folder.folder.replace(/^a\//, "") === "battery"
+          );
+        const sprite = batteryFolder?.files[0];
+        const position = parseConfigPos(resolution.config.battery_icon_pos);
+        if (sprite && position) {
+          const artwork = Object.values(batteryOverride.stateReplacements ?? {})[0] ??
+            batteryOverride.replacement;
+          const scaledSize = artwork
+            ? scaledBatterySpriteCanvasSize(
+                artwork.width,
+                artwork.height,
+                sprite.width,
+                sprite.height,
+                batteryScale
+              )
+            : { width: sprite.width * batteryScale, height: sprite.height * batteryScale };
+          const offsetX = Math.round((scaledSize.width - sprite.width) / 2);
+          const offsetY = Math.round((scaledSize.height - sprite.height) / 2);
+          values.battery_icon_pos = `{${position.x - offsetX},${position.y - offsetY}}`;
+        }
+      }
       if (Object.keys(values).length > 0) {
         result.push({
           path: `${resolution.directory}/${scope === "aod" ? "AODconfig" : "config"}.txt`,
@@ -404,7 +442,8 @@ export async function buildWatchfaceConfigAssetReplacements(
             Math.max(1, sprite.width),
             Math.max(1, sprite.height),
             batteryOverride.scale ?? 1
-          )
+          ),
+          allowDimensionOverride: (batteryOverride.scale ?? 1) !== 1
         });
       }
     }
@@ -1070,7 +1109,24 @@ export async function resizeAndTintSprite(
   return canvas.toDataURL("image/png");
 }
 
-/** Renders artwork at a chosen scale without changing COROS's sprite canvas. */
+/** Returns the exported dimensions for a scaled, aspect-preserving battery PNG. */
+export function scaledBatterySpriteCanvasSize(
+  sourceWidth: number,
+  sourceHeight: number,
+  templateWidth: number,
+  templateHeight: number,
+  scale = 1
+): { width: number; height: number } {
+  const safeScale = Math.max(0.1, Math.min(4, scale));
+  if (safeScale === 1) return { width: templateWidth, height: templateHeight };
+  const fit = Math.min(templateWidth / sourceWidth, templateHeight / sourceHeight);
+  return {
+    width: Math.max(1, Math.round(sourceWidth * fit * safeScale)),
+    height: Math.max(1, Math.round(sourceHeight * fit * safeScale))
+  };
+}
+
+/** Renders a battery-state sprite at the selected bitmap scale. */
 export async function renderScaledSpriteInSlot(
   dataUrl: string,
   width: number,
@@ -1078,25 +1134,28 @@ export async function renderScaledSpriteInSlot(
   scale = 1
 ): Promise<string> {
   const image = await loadStudioImage(dataUrl);
+  const { width: outputWidth, height: outputHeight } = scaledBatterySpriteCanvasSize(
+    image.naturalWidth,
+    image.naturalHeight,
+    width,
+    height,
+    scale
+  );
   const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
   const context = canvas.getContext("2d");
   if (!context) {
     throw new Error("Sprite rendering is unavailable in this window.");
   }
-  const safeScale = Math.max(0.1, Math.min(4, scale));
-  const contain = Math.min(width / image.naturalWidth, height / image.naturalHeight);
-  const drawWidth = image.naturalWidth * contain * safeScale;
-  const drawHeight = image.naturalHeight * contain * safeScale;
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
   context.drawImage(
     image,
-    (width - drawWidth) / 2,
-    (height - drawHeight) / 2,
-    drawWidth,
-    drawHeight
+    0,
+    0,
+    outputWidth,
+    outputHeight
   );
   return canvas.toDataURL("image/png");
 }
@@ -1334,7 +1393,7 @@ export type WatchfaceMetricStyles = Partial<
   Record<WatchfaceMetricId, WatchfaceMetricSpriteStyle>
 >;
 
-export type WatchfaceTimePartId = "hours" | "minutes" | "autoTime";
+export type WatchfaceTimePartId = "hours" | "minutes" | "seconds" | "autoTime";
 
 export type WatchfaceTimeStyles = Partial<
   Record<WatchfaceTimePartId, WatchfaceMetricSpriteStyle>
@@ -1420,6 +1479,14 @@ export const WATCHFACE_TIME_PARTS: WatchfaceTimePartDefinition[] = [
     digits: [
       { slot: "high", posKey: "time_minute_high_pos", fontKey: "time_minute_high_font" },
       { slot: "low", posKey: "time_minute_low_pos", fontKey: "time_minute_low_font" }
+    ]
+  },
+  {
+    id: "seconds",
+    label: "Seconds",
+    digits: [
+      { slot: "high", posKey: "time_second_high_pos", fontKey: "time_second_high_font" },
+      { slot: "low", posKey: "time_second_low_pos", fontKey: "time_second_low_font" }
     ]
   }
 ];
@@ -1552,7 +1619,8 @@ function timeStudioFolder(
   slot: "high" | "low"
 ): string {
   if (part === "autoTime") return "cl_auto_time";
-  return `cl_${part === "hours" ? "h" : "m"}${slot === "high" ? "h" : "l"}`;
+  const prefix = part === "hours" ? "h" : part === "minutes" ? "m" : "s";
+  return `cl_${prefix}${slot === "high" ? "h" : "l"}`;
 }
 
 /** True when firmware lays out the complete HH:MM value inside one rectangle. */
@@ -2220,7 +2288,7 @@ export async function buildMetricSpriteReplacements(
   return replacements;
 }
 
-/** Resizes hour/minute positions around each two-digit group's own center. */
+/** Resizes time-part positions around each two-digit group's own center. */
 export function buildTimeStyleOverrides(
   details: CorosWatchfaceTemplateDetails,
   styles: WatchfaceTimeStyles,
@@ -2321,7 +2389,7 @@ export function buildTimeTrackingOverrides(
   return overrides;
 }
 
-/** Generates isolated high/low digit folders for customized hours and minutes. */
+/** Generates isolated high/low digit folders for customized time parts. */
 export async function buildTimeSpriteReplacements(
   details: CorosWatchfaceTemplateDetails,
   styles: WatchfaceTimeStyles,
@@ -3232,14 +3300,16 @@ export async function drawStudioPreview(
       });
     }
   }
-  for (const [posKey, fontKey, digitText] of [
-    ["time_second_high_pos", "time_second_high_font", second[0]!],
-    ["time_second_low_pos", "time_second_low_font", second[1]!]
+  for (const [posKey, fontKey, digitText, slot] of [
+    ["time_second_high_pos", "time_second_high_font", second[0]!, "high"],
+    ["time_second_low_pos", "time_second_low_font", second[1]!, "low"]
   ] as const) {
     digitPlan.push({
       pos: parseConfigPos(config[posKey]),
       source: findSpriteFolder(resolution, config[fontKey]),
       digit: Number(digitText),
+      partId: "seconds",
+      slot,
       componentId: "seconds"
     });
   }
@@ -3760,8 +3830,8 @@ export async function drawStudioPreview(
         image,
         batteryIconPos.x * scale,
         batteryIconPos.y * scale,
-        batteryFile.width * scale,
-        batteryFile.height * scale
+        image.naturalWidth * scale,
+        image.naturalHeight * scale
       );
     }
   }

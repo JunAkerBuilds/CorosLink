@@ -1659,6 +1659,7 @@ interface DecodedSpriteReplacement {
   width: number;
   height: number;
   create: boolean;
+  allowDimensionOverride: boolean;
 }
 
 function decodeSpriteReplacements(
@@ -1703,7 +1704,8 @@ function decodeSpriteReplacements(
     decoded.set(replacement.path, {
       data,
       ...image.getSize(),
-      create: replacement.create === true
+      create: replacement.create === true,
+      allowDimensionOverride: replacement.allowDimensionOverride === true
     });
   }
   return decoded;
@@ -2461,7 +2463,10 @@ async function rewriteTemplateArchive(
       // digits and icons out with the original bitmap dimensions.
       const original = nativeImage.createFromBuffer(await entry.buffer());
       const { width, height } = original.getSize();
-      if (original.isEmpty() || width !== sprite.width || height !== sprite.height) {
+      if (
+        original.isEmpty() ||
+        (!sprite.allowDimensionOverride && (width !== sprite.width || height !== sprite.height))
+      ) {
         throw new Error(
           `The replacement for ${entry.path} must be a ${width}×${height} PNG like the template's.`
         );

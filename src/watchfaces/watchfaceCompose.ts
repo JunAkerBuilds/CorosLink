@@ -307,6 +307,16 @@ export async function composeWatchfaceReplacements(
     timePositionDetails,
     timeTrackingOverrides
   );
+  const layoutOverrides = layoutIsActive(design)
+    ? buildLayoutOverrides(layoutDetails, design.layoutOffsets ?? {})
+    : [];
+  // Battery canvas scaling adjusts battery_icon_pos. Apply that adjustment to
+  // the already-positioned layout so export preserves the same position shown
+  // in the preview instead of overwriting the user's layout offset.
+  const configAssetPositionDetails = applyConfigOverridesToDetails(
+    layoutDetails,
+    layoutOverrides
+  );
 
   const configOverrides = rebaseNegativeControlChildren(
     details,
@@ -329,12 +339,10 @@ export async function composeWatchfaceReplacements(
       buildStaticSeparatorOverrides(details, design.staticSeparators),
       ampmSupported ? buildAmPmOverrides(details, ampmStyle!) : [],
       weatherStyle ? buildWeatherOverrides(details, weatherStyle) : [],
-      layoutIsActive(design)
-        ? buildLayoutOverrides(layoutDetails, design.layoutOffsets ?? {})
-        : [],
+      layoutOverrides,
       buildLayerVisibilityOverrides(details, design.layerVisibility ?? {}),
       buildWatchfaceConfigAssetOverrides(
-        details,
+        configAssetPositionDetails,
         design.configAssetOverrides ?? {},
         true
       )

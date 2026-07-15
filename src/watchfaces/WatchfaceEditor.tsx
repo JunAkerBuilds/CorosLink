@@ -100,6 +100,51 @@ type BackgroundElementPatch = Partial<
     Omit<CorosWatchfaceBackgroundLine, "kind"> &
     Omit<CorosWatchfaceBackgroundText, "kind">
 >;
+
+/** Centers the visible pixels without altering the source PNG canvas size. */
+function centerSpriteArtwork(image: HTMLImageElement): string | null {
+  const source = document.createElement("canvas");
+  source.width = image.naturalWidth;
+  source.height = image.naturalHeight;
+  const sourceContext = source.getContext("2d", { willReadFrequently: true });
+  if (!sourceContext) return null;
+  sourceContext.drawImage(image, 0, 0);
+  const pixels = sourceContext.getImageData(0, 0, source.width, source.height).data;
+  let left = source.width;
+  let top = source.height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < source.height; y += 1) {
+    for (let x = 0; x < source.width; x += 1) {
+      if (pixels[(y * source.width + x) * 4 + 3]! < 8) continue;
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
+    }
+  }
+  if (right < left || bottom < top) return null;
+  const contentWidth = right - left + 1;
+  const contentHeight = bottom - top + 1;
+  const canvas = document.createElement("canvas");
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  context.drawImage(
+    source,
+    left,
+    top,
+    contentWidth,
+    contentHeight,
+    Math.round((canvas.width - contentWidth) / 2),
+    Math.round((canvas.height - contentHeight) / 2),
+    contentWidth,
+    contentHeight
+  );
+  return canvas.toDataURL("image/png");
+}
+
 import type { CorosLinkApi } from "../coroslink-api";
 import {
   deriveEditorLayers,
@@ -2985,8 +3030,9 @@ export function WatchfaceEditor({
         const match = sprite.name.match(/^(\d{1,2})\.png$/i);
         if (!match) return null;
         const image = await loadStudioImage(sprite.dataUrl);
+        const centeredDataUrl = centerSpriteArtwork(image) ?? sprite.dataUrl;
         return [String(Number(match[1])), {
-          dataUrl: sprite.dataUrl,
+          dataUrl: centeredDataUrl,
           width: image.naturalWidth,
           height: image.naturalHeight
         }] as const;
@@ -4576,7 +4622,7 @@ export function WatchfaceEditor({
             ) : null}
           </div>
           <p className="watchface-studio-summary">
-            Import PNGs named 00.png, 01.png, and so on. Each file replaces its matching battery charge state and is sized automatically for each watch resolution.
+            Import PNGs named 00.png, 01.png, and so on. Each file replaces its matching battery charge state. Icon scale resizes every state bitmap and keeps it centered at the selected position.
           </p>
           <label className="watchface-inspector-field">
             <span>Icon scale</span>
@@ -5140,12 +5186,14 @@ export function WatchfaceEditor({
             </label>
             <label className="field">
               Temperature sprite scale
-              <input
-                type="number"
+              <EditableNumberInput
                 min="0.01"
                 step="0.01"
                 value={design.metricStyles?.temperature?.scale ?? 1}
-                onChange={(event) => setMetricStyle("temperature", { scale: Math.max(0.01, Number(event.target.value) || 1) })}
+                fallback={1}
+                onValueChange={(value) =>
+                  setMetricStyle("temperature", { scale: Math.max(0.01, value) })
+                }
               />
             </label>
           </>

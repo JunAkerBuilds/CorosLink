@@ -305,6 +305,8 @@ export interface CorosWatchfaceAssetReplacement {
   dataUrl: string;
   /** Adds a new isolated sprite instead of replacing a template entry. */
   create?: boolean;
+  /** Allows a supported state-sprite replacement to change template PNG dimensions. */
+  allowDimensionOverride?: boolean;
 }
 
 /** One PNG inside a template archive, addressed by its zip entry path. */
@@ -388,7 +390,7 @@ export interface CorosWatchfaceArtwork {
 export interface CorosWatchfaceConfigAssetOverride {
   /** Absent means the template config entry remains enabled. */
   enabled?: boolean;
-  /** Visual scale within the template's fixed, device-safe sprite canvas. */
+  /** Bitmap-canvas scale for a battery state sprite. */
   scale?: number;
   /** One source PNG is resized independently for every device resolution. */
   replacement?: CorosWatchfaceArtwork;

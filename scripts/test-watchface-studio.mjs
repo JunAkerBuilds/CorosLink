@@ -124,6 +124,10 @@ function resolution(width, digitWidth, digitHeight) {
       time_minute_high_font: "13x19",
       time_minute_low_pos: `{${Math.round(width * 0.425)},${Math.round(width * 0.125)}}`,
       time_minute_low_font: "13x19",
+      time_second_high_pos: `{${Math.round(width * 0.55)},${Math.round(width * 0.125)}}`,
+      time_second_high_font: "13x19",
+      time_second_low_pos: `{${Math.round(width * 0.6)},${Math.round(width * 0.125)}}`,
+      time_second_low_font: "13x19",
       time_second_high_font_color: "",
       time_second_low_font_color: "",
       english_date_week_rect: `{${Math.round(width * 0.1)},${Math.round(width * 0.4)},${Math.round(width * 0.3)},${Math.round(width * 0.48)},hcenter|vcenter}`,
@@ -444,6 +448,14 @@ const configAssetOverrides = buildWatchfaceConfigAssetOverrides(
     "aod:background_icon": { enabled: false }
   },
   true
+);
+const scaledBatteryOverrides = buildWatchfaceConfigAssetOverrides(details, {
+  "config:battery_icon": { enabled: true, scale: 2 }
+});
+assert.deepEqual(
+  scaledBatteryOverrides.find(({ path }) => path.includes("416x416"))?.values,
+  { battery_icon_pos: "{60,25}" },
+  "A scaled battery bitmap should remain centered on its original position"
 );
 for (const override of configAssetOverrides.filter(({ path }) => /\/config\.txt$/i.test(path))) {
   assert.equal(override.values.colon_icon, "");
@@ -809,7 +821,10 @@ assert.equal(
 );
 const timeStyleOverrides = buildTimeStyleOverrides(
   withMetrics,
-  { hours: { color: "#33ddff", scale: 1.5 } },
+  {
+    hours: { color: "#33ddff", scale: 1.5 },
+    seconds: { color: "#ffcc22", scale: 2 }
+  },
   true
 );
 const fullTimeStyle = timeStyleOverrides.find((entry) =>
@@ -819,6 +834,10 @@ assert.equal(fullTimeStyle?.values.time_hour_high_pos, "{74,84}");
 assert.equal(fullTimeStyle?.values.time_hour_low_pos, "{164,84}");
 assert.equal(fullTimeStyle?.values.time_hour_high_font, "cl_hh");
 assert.equal(fullTimeStyle?.values.time_hour_low_font, "cl_hl");
+assert.equal(fullTimeStyle?.values.time_second_high_pos, "{398,68}");
+assert.equal(fullTimeStyle?.values.time_second_low_pos, "{478,68}");
+assert.equal(fullTimeStyle?.values.time_second_high_font, "cl_sh");
+assert.equal(fullTimeStyle?.values.time_second_low_font, "cl_sl");
 const timeTrackingOverrides = buildTimeTrackingOverrides(withMetrics, 0.2);
 const fullTimeTracking = timeTrackingOverrides.find((entry) =>
   entry.path.includes("800x800")

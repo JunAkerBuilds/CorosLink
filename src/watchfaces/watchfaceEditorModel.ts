@@ -6,6 +6,8 @@ import {
   applyConfigOverridesToDetails,
   applyLayoutToDetails,
   buildDateStyleOverrides,
+  buildWatchfaceConfigAssetOverrides,
+  scaledBatterySpriteCanvasSize,
   buildMetricOverrides,
   buildMetricStyleOverrides,
   buildSeparateTimeOverrides,
@@ -132,7 +134,8 @@ const METRIC_IDS = new Set<WatchfaceMetricId>([
 const TIME_GROUP_PARTS: Record<string, WatchfaceTimePartId> = {
   autoTime: "autoTime",
   hours: "hours",
-  minutes: "minutes"
+  minutes: "minutes",
+  seconds: "seconds"
 };
 
 function labelForGroup(groupId: string): string {
@@ -152,13 +155,13 @@ function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
     return { position: true, color: true, scale: true, font: false };
   }
   if (groupId === "batteryIcon") {
-    return { position: true, color: false, scale: false, font: false };
+    return { position: true, color: false, scale: true, font: false };
   }
   return { position: true, color: true, scale: false, font: false };
 }
 
 function kindForGroup(groupId: string): EditorLayerKind {
-  if (groupId in TIME_GROUP_PARTS || groupId === "seconds") {
+  if (groupId in TIME_GROUP_PARTS) {
     return groupId === "seconds" ? "seconds" : "time";
   }
   if (METRIC_IDS.has(groupId as WatchfaceMetricId)) {
@@ -213,6 +216,10 @@ export function deriveEditorLayers(
       buildDateStyleOverrides(
         metricDetails,
         (design.dateStyles ?? {}) as WatchfaceDateStyles
+      ),
+      buildWatchfaceConfigAssetOverrides(
+        metricDetails,
+        design.configAssetOverrides ?? {}
       )
     )
   );
@@ -224,7 +231,33 @@ export function deriveEditorLayers(
   const boundsById = new Map<string, WatchfaceLayoutGroupBounds>();
   if (resolution) {
     for (const box of computeLayoutGroupBounds(resolution)) {
-      boundsById.set(box.id, box);
+      if (box.id === "batteryIcon") {
+        const batteryOverride = design.configAssetOverrides?.["config:battery_icon"];
+        const batteryScale = batteryOverride?.scale ?? 1;
+        const artwork = Object.values(batteryOverride?.stateReplacements ?? {})[0] ??
+          batteryOverride?.replacement;
+        const canvas = artwork
+          ? scaledBatterySpriteCanvasSize(
+              artwork.width,
+              artwork.height,
+              box.x1 - box.x0,
+              box.y1 - box.y0,
+              batteryScale
+            )
+          : {
+              width: (box.x1 - box.x0) * batteryScale,
+              height: (box.y1 - box.y0) * batteryScale
+            };
+        // The selection represents the full exported bitmap canvas, including
+        // its intentional transparent/black padding.
+        boundsById.set(box.id, {
+          ...box,
+          x1: box.x0 + canvas.width,
+          y1: box.y0 + canvas.height
+        });
+      } else {
+        boundsById.set(box.id, box);
+      }
     }
   }
 
