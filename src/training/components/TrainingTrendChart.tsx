@@ -122,6 +122,7 @@ export function TrainingTrendCharts({ points }: TrainingTrendChartsProps) {
     strokeWidth: 2
   };
   const loadPoints = points.filter((point) => point.trainingLoad !== undefined);
+  const rpePoints = points.filter((point) => point.rpeLoad !== undefined);
   const hrvPoints = points.filter(
     (point) => point.avgSleepHrv !== undefined || point.sleepHrvBase !== undefined
   );
@@ -161,6 +162,44 @@ export function TrainingTrendCharts({ points }: TrainingTrendChartsProps) {
           </div>
         ) : (
           <p className="training-empty-chart">No training load data this week.</p>
+        )}
+      </section>
+
+      <section className="panel training-chart-panel">
+        <div className="section-heading compact">
+          <div>
+            <p className="eyebrow">RPE Load</p>
+            <h2>Last 7 days</h2>
+          </div>
+        </div>
+        {rpePoints.length > 0 ? (
+          <div className="training-chart-shell">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={rpePoints} margin={trainingChartMargin}>
+                <defs>
+                  <ChartAreaGradient id="rpeLoadFill" />
+                </defs>
+                <TrendChartAxes />
+                <Area
+                  type="monotone"
+                  dataKey="rpeLoad"
+                  name="RPE"
+                  stroke={colors.accentBright}
+                  fill="url(#rpeLoadFill)"
+                  strokeWidth={2.5}
+                  dot={trendDot}
+                  activeDot={activeDot}
+                  connectNulls
+                  isAnimationActive={!reducedMotion}
+                  animationDuration={900}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p className="training-empty-chart">
+            No RPE data yet — rate activities in COROS.
+          </p>
         )}
       </section>
 

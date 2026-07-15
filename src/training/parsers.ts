@@ -17,6 +17,7 @@ import type {
   HeatmapCell,
   HeatmapGrid,
   HeatmapIntensityLevel,
+  HeatmapMetric,
   HeatmapMonthLabel,
   HeatmapSummary,
   TrainingHubSnapshot,
@@ -67,43 +68,43 @@ function loadToLevel(
 
 export function buildHeatmapCells(
   dayList: TrainingHubDailyMetric[],
-  days = TRAINING_HEATMAP_DAYS
+  days = TRAINING_HEATMAP_DAYS,
+  metric: HeatmapMetric = "trainingLoad"
 ): HeatmapCell[] {
   const dayMap = new Map(dayList.map((day) => [day.happenDay, day]));
   const dateKeys = recentTrainingHubDateList(days).reverse();
-  const loads = dateKeys
-    .map((key) => dayMap.get(key)?.trainingLoad)
+  const values = dateKeys
+    .map((key) => dayMap.get(key)?.[metric])
     .filter(
       (value): value is number =>
         value !== undefined && Number.isFinite(value) && value > 0
     );
-  const maxLoad = loads.length > 0 ? Math.max(...loads) : 0;
+  const maxValue = values.length > 0 ? Math.max(...values) : 0;
 
   return dateKeys.map((happenDay) => {
     const day = dayMap.get(happenDay);
-    const trainingLoad = day?.trainingLoad;
+    const value = day?.[metric];
 
     return {
       happenDay,
-      trainingLoad,
+      trainingLoad: day?.trainingLoad,
+      rpeLoad: day?.rpeLoad,
+      value,
       distance: day?.distance,
       duration: day?.duration,
-      level: loadToLevel(trainingLoad, maxLoad),
+      level: loadToLevel(value, maxValue),
       label: formatHappenDayLabel(happenDay)
     };
   });
 }
 
 export function buildHeatmapSummary(cells: HeatmapCell[]): HeatmapSummary {
-  const activeDays = cells.filter((cell) => (cell.trainingLoad ?? 0) > 0).length;
-  const totalLoad = cells.reduce(
-    (total, cell) => total + (cell.trainingLoad ?? 0),
-    0
-  );
+  const activeDays = cells.filter((cell) => (cell.value ?? 0) > 0).length;
+  const totalLoad = cells.reduce((total, cell) => total + (cell.value ?? 0), 0);
 
   let currentStreak = 0;
   for (let index = cells.length - 1; index >= 0; index -= 1) {
-    if ((cells[index].trainingLoad ?? 0) > 0) {
+    if ((cells[index].value ?? 0) > 0) {
       currentStreak += 1;
     } else {
       break;
@@ -113,7 +114,7 @@ export function buildHeatmapSummary(cells: HeatmapCell[]): HeatmapSummary {
   let longestStreak = 0;
   let streak = 0;
   for (const cell of cells) {
-    if ((cell.trainingLoad ?? 0) > 0) {
+    if ((cell.value ?? 0) > 0) {
       streak += 1;
       longestStreak = Math.max(longestStreak, streak);
     } else {

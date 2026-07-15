@@ -11,9 +11,13 @@ import {
   deleteSettings,
   getSetting,
   listStoredTrainingActivities,
+  listTrainingActivitiesMissingFeelType,
+  listTrainingActivityRpeInputs,
   setSetting,
+  setTrainingActivityFeelType,
   upsertTrainingActivities
 } from "./database";
+import { dailyRpeLoad } from "./rpeLoad";
 import type {
   ActivityPaceBaseline,
   ActivityPaceBaselines,
@@ -463,6 +467,8 @@ export async function getTrainingHubActivityDetail(
   );
 
   let detail = parseActivityDetail(raw);
+  // Opportunistically cache the end-of-activity feeling while we have the detail.
+  cacheFeelTypeFromDetail(activityId, raw);
   if (listActivity) {
     detail = mergeActivityDetailWithList(detail, listActivity);
   }
@@ -577,6 +583,75 @@ export async function getRacePredictor(): Promise<TrainingHubRacePredictor> {
   return dashboard.racePredictor;
 }
 
+// Pull sportFeelInfo.feelType out of a raw /activity/detail payload and cache
+// it (0 = the user left it unrated; 1..5 = a smiley). Best-effort.
+function cacheFeelTypeFromDetail(
+  activityId: string,
+  raw: Record<string, unknown>
+): void {
+  try {
+    const feelInfo = raw.sportFeelInfo as { feelType?: unknown } | undefined;
+    const feelType = toOptionalNumber(feelInfo?.feelType);
+    if (feelType !== undefined && Number.isInteger(feelType)) {
+      setTrainingActivityFeelType(activityId, feelType);
+    }
+  } catch {
+    // best-effort cache; never block the detail request on it.
+  }
+}
+
+const HEATMAP_WINDOW_DAYS = 365;
+// Per background run. Detail fetches are ~1 MB and awaited sequentially, so
+// they self-throttle; a run of this size finishes in a handful of seconds and
+// the next Training Hub load continues where it left off.
+const FEEL_BACKFILL_BATCH = 150;
+let feelBackfillRunning = false;
+
+function heatmapWindowStartEpochSeconds(): number {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - HEATMAP_WINDOW_DAYS);
+  return Math.floor(start.getTime() / 1000);
+}
+
+// Fetch feelType for activities in the heatmap window that were never fetched,
+// one small throttled batch at a time. Fire-and-forget; guarded so only one
+// run happens at once. Each detail is ~1 MB, so keep batches modest.
+async function backfillFeelTypes(): Promise<void> {
+  if (feelBackfillRunning) {
+    return;
+  }
+  feelBackfillRunning = true;
+  try {
+    const since = heatmapWindowStartEpochSeconds();
+    const pending = listTrainingActivitiesMissingFeelType(
+      since,
+      FEEL_BACKFILL_BATCH
+    );
+    const userId = getStoredAuth()?.userId;
+    for (const { activityId, sportType } of pending) {
+      try {
+        const raw = await trainingHubRequest<Record<string, unknown>>(
+          "/activity/detail/query",
+          {
+            method: "POST",
+            params: {
+              labelId: activityId,
+              sportType,
+              ...(userId ? { userId } : {})
+            }
+          }
+        );
+        cacheFeelTypeFromDetail(activityId, raw);
+      } catch {
+        // Skip this one; it'll be retried on a later pass.
+      }
+    }
+  } finally {
+    feelBackfillRunning = false;
+  }
+}
+
 export async function getDailyMetrics(
   dateList: string[]
 ): Promise<TrainingHubDailyMetrics> {
@@ -596,7 +671,36 @@ export async function getDailyMetrics(
     }
   );
 
-  return parseDailyMetrics(raw);
+  const metrics = parseDailyMetrics(raw);
+
+  // Attach per-day Foster sRPE from cached feelType, then top up the cache in
+  // the background so coverage improves on the next load.
+  try {
+    const since = heatmapWindowStartEpochSeconds();
+    const rpeByDay = dailyRpeLoad(listTrainingActivityRpeInputs(since));
+    const dayByKey = new Map(
+      metrics.dayList.map((day) => [day.happenDay, day])
+    );
+    for (const [happenDay, load] of rpeByDay) {
+      if (load <= 0) {
+        continue;
+      }
+      const existing = dayByKey.get(happenDay);
+      if (existing) {
+        existing.rpeLoad = load;
+      } else {
+        // A rated day COROS returned no daily metric for still needs to show.
+        const day = { happenDay, rpeLoad: load };
+        dayByKey.set(happenDay, day);
+        metrics.dayList.push(day);
+      }
+    }
+  } catch {
+    // RPE is additive; never fail daily metrics if the cache read throws.
+  }
+  void backfillFeelTypes();
+
+  return metrics;
 }
 
 export async function getSportTypeMap(): Promise<TrainingHubSportType[]> {

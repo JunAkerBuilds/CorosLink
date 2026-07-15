@@ -49,6 +49,7 @@ export function buildTrendPoints(dayList: TrainingHubDailyMetric[]): TrainingTre
     date: day.happenDay,
     label: formatHappenDayLabel(day.happenDay),
     trainingLoad: day.trainingLoad,
+    rpeLoad: day.rpeLoad,
     avgSleepHrv: day.avgSleepHrv,
     sleepHrvBase: day.sleepHrvBase,
     rhr: day.rhr

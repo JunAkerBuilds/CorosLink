@@ -20,6 +20,7 @@ export interface TrainingTrendPoint {
   date: string;
   label: string;
   trainingLoad?: number;
+  rpeLoad?: number;
   avgSleepHrv?: number;
   sleepHrvBase?: number;
   rhr?: number;
@@ -51,9 +52,14 @@ export interface TrainingHubSnapshot {
 
 export type HeatmapIntensityLevel = 0 | 1 | 2 | 3 | 4;
 
+export type HeatmapMetric = "trainingLoad" | "rpeLoad";
+
 export interface HeatmapCell {
   happenDay: string;
   trainingLoad?: number;
+  rpeLoad?: number;
+  /** Value of the currently selected metric — drives level and summary. */
+  value?: number;
   distance?: number;
   duration?: number;
   level: HeatmapIntensityLevel;

@@ -250,6 +250,9 @@ export function initializeDatabase(userDataPath: string): Database.Database {
   `);
 
   ensureColumn(db, "generated_routes", "activity_type", "TEXT");
+  // feel_type caches the COROS end-of-activity feeling (sportFeelInfo.feelType,
+  // 1..5; 0 = unrated). NULL = never fetched from the detail endpoint yet.
+  ensureColumn(db, "training_activities", "feel_type", "INTEGER");
   migrateChatSessionProviderConstraint(db);
   migrateChatTranscriptsToSessions(db);
 
@@ -1103,6 +1106,67 @@ export function upsertTrainingActivities(
   });
 
   writeAll(activities);
+}
+
+/** Cache the COROS feeling (feelType) for one activity. 0 = rated "unrated". */
+export function setTrainingActivityFeelType(
+  activityId: string,
+  feelType: number
+): void {
+  requireDatabase()
+    .prepare(
+      `UPDATE training_activities SET feel_type = ? WHERE activity_id = ?`
+    )
+    .run(feelType, activityId);
+}
+
+/**
+ * Activities on/after `sinceEpochSeconds` whose feel_type has never been
+ * fetched (NULL), oldest first, for backfilling from the detail endpoint.
+ */
+export function listTrainingActivitiesMissingFeelType(
+  sinceEpochSeconds: number,
+  limit = 500
+): { activityId: string; sportType: number }[] {
+  const rows = requireDatabase()
+    .prepare(
+      `SELECT activity_id, sport_type
+       FROM training_activities
+       WHERE feel_type IS NULL AND start_time >= ?
+       ORDER BY start_time ASC
+       LIMIT ?`
+    )
+    .all(sinceEpochSeconds, limit) as {
+    activity_id: string;
+    sport_type: number;
+  }[];
+  return rows.map((row) => ({
+    activityId: row.activity_id,
+    sportType: row.sport_type
+  }));
+}
+
+/** Rated activities on/after `sinceEpochSeconds`, for computing daily sRPE. */
+export function listTrainingActivityRpeInputs(
+  sinceEpochSeconds: number
+): { startTime?: number; duration?: number; feelType?: number | null }[] {
+  const rows = requireDatabase()
+    .prepare(
+      `SELECT start_time, duration, feel_type
+       FROM training_activities
+       WHERE start_time >= ? AND feel_type IS NOT NULL AND feel_type > 0
+       ORDER BY start_time ASC`
+    )
+    .all(sinceEpochSeconds) as {
+    start_time: number | null;
+    duration: number | null;
+    feel_type: number | null;
+  }[];
+  return rows.map((row) => ({
+    startTime: row.start_time ?? undefined,
+    duration: row.duration ?? undefined,
+    feelType: row.feel_type
+  }));
 }
 
 export function listStoredTrainingActivities(limit = 500): TrainingHubActivity[] {

@@ -11754,6 +11754,44 @@ td span {
   font-size: clamp(1.35rem, 2vw, 1.65rem);
 }
 
+.training-heatmap-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.training-metric-toggle {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: var(--glass-bg);
+}
+
+.training-metric-option {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.training-metric-option:hover {
+  color: var(--text-primary);
+}
+
+.training-metric-option.is-active {
+  background: var(--accent);
+  color: #06110e;
+}
+
 .training-heatmap-scroll {
   width: 100%;
   /* overflow must stay visible so the hover tooltip (which pops above the
@@ -12241,7 +12279,7 @@ td span {
 
 .training-chart-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
 
