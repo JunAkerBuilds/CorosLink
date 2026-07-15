@@ -12,16 +12,18 @@ import {
 
 interface CustomPngFontPanelProps {
   api: CorosLinkApi;
+  /** The shared face-wide PNG set. */
   rasterFont?: CorosWatchfaceRasterFont;
   onRasterFontChange: (font: CorosWatchfaceRasterFont | undefined) => void;
+  /** When supplied, imports can alternatively be isolated to this layer. */
+  componentRasterFont?: CorosWatchfaceRasterFont;
+  componentLabel?: string;
+  onComponentRasterFontChange?: (font: CorosWatchfaceRasterFont | undefined) => void;
   onActivate?: () => void;
 }
 
 interface RasterSpriteFolderImport
-  extends Pick<
-    CorosWatchfaceRasterFont,
-    "dataUrl" | "glyphs" | "columns" | "labels"
-  > {
+  extends Pick<CorosWatchfaceRasterFont, "dataUrl" | "glyphs" | "columns" | "labels" | "sprites"> {
   importedDigitCount: number;
   importedWeekdayCount: number;
 }
@@ -112,11 +114,13 @@ async function createAtlasFromSprites(
 
 async function readRasterSpriteFolder(
   folder: CorosWatchfaceRasterFontFolder,
-  currentRasterFont?: CorosWatchfaceRasterFont
+  currentRasterFont?: CorosWatchfaceRasterFont,
+  treatNumericSpritesAsWeekdays = false
 ): Promise<RasterSpriteFolderImport> {
   const digitSprites = new Map<string, string>();
   const labelSprites = new Map<string, string>();
-  const folderIsWeekdays = /^weekdays?$/i.test(folder.label.trim());
+  const folderIsWeekdays =
+    treatNumericSpritesAsWeekdays || /^weekdays?$/i.test(folder.label.trim());
   for (const file of folder.sprites) {
     const relativePath = file.relativePath.replace(/\\/g, "/").toLowerCase();
     if (folderIsWeekdays || /(^|\/)weekdays?\//.test(relativePath)) {
@@ -150,10 +154,16 @@ async function readRasterSpriteFolder(
               "Choose a digits folder, a weekdays folder, or a parent folder containing PNG sprites."
             );
           })();
+  const sprites = {
+    ...currentRasterFont?.sprites,
+    ...Object.fromEntries(digitSprites),
+    ...Object.fromEntries(labelSprites)
+  };
   const labels = { ...currentRasterFont?.labels, ...Object.fromEntries(labelSprites) };
   return {
     ...atlas,
     ...(Object.keys(labels).length > 0 ? { labels } : {}),
+    ...(Object.keys(sprites).length > 0 ? { sprites } : {}),
     importedDigitCount: digitSprites.size,
     importedWeekdayCount: labelSprites.size
   };
@@ -167,18 +177,36 @@ export function CustomPngFontPanel({
   api,
   rasterFont,
   onRasterFontChange,
+  componentRasterFont,
+  componentLabel,
+  onComponentRasterFontChange,
   onActivate
 }: CustomPngFontPanelProps) {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const supportsComponentScope = Boolean(onComponentRasterFontChange);
+  const [scope, setScope] = useState<"component" | "all">(
+    supportsComponentScope ? "component" : "all"
+  );
+  const activeRasterFont = scope === "component" ? componentRasterFont : rasterFont;
+  const setActiveRasterFont = (font: CorosWatchfaceRasterFont | undefined) => {
+    if (scope === "component" && onComponentRasterFontChange) {
+      onComponentRasterFontChange(font);
+    } else {
+      onRasterFontChange(font);
+    }
+  };
   const rasterFontHasDigits = rasterFontSupportsText(
-    rasterFont,
+    activeRasterFont,
     DEFAULT_RASTER_GLYPHS
+  );
+  const rasterFontHasWeekday = WEEKDAY_LABELS.some((label) =>
+    rasterFontSupportsText(activeRasterFont, label)
   );
 
   function updateRasterFont(patch: Partial<CorosWatchfaceRasterFont>) {
-    if (rasterFont) {
-      onRasterFontChange({ ...rasterFont, ...patch });
+    if (activeRasterFont) {
+      setActiveRasterFont({ ...activeRasterFont, ...patch });
     }
   }
 
@@ -197,12 +225,12 @@ export function CustomPngFontPanel({
     try {
       const dataUrl = await fileToDataUrl(file);
       onActivate?.();
-      onRasterFontChange({
-        label: rasterFont?.label || labelFromFileName(file.name),
+      setActiveRasterFont({
+        label: activeRasterFont?.label || labelFromFileName(file.name),
         dataUrl,
-        glyphs: normalizeRasterFontGlyphs(rasterFont?.glyphs || DEFAULT_RASTER_GLYPHS),
-        columns: rasterFont?.columns || DEFAULT_RASTER_GLYPHS.length,
-        tint: rasterFont?.tint ?? false
+        glyphs: normalizeRasterFontGlyphs(activeRasterFont?.glyphs || DEFAULT_RASTER_GLYPHS),
+        columns: activeRasterFont?.columns || DEFAULT_RASTER_GLYPHS.length,
+        tint: activeRasterFont?.tint ?? false
       });
       setStatus(`Loaded ${file.name}.`);
       setError(null);
@@ -220,12 +248,16 @@ export function CustomPngFontPanel({
         setStatus(null);
         return;
       }
-      const raster = await readRasterSpriteFolder(folder, rasterFont);
+      const raster = await readRasterSpriteFolder(
+        folder,
+        activeRasterFont,
+        scope === "component" && componentLabel === "Weekday"
+      );
       onActivate?.();
-      onRasterFontChange({
-        label: rasterFont?.label || labelFromSpriteFolder(folder),
+      setActiveRasterFont({
+        label: activeRasterFont?.label || labelFromSpriteFolder(folder),
         ...raster,
-        tint: rasterFont?.tint ?? false
+        tint: activeRasterFont?.tint ?? false
       });
       const importSummary = [
         raster.importedDigitCount > 0
@@ -251,15 +283,62 @@ export function CustomPngFontPanel({
     }
   }
 
+  async function chooseIndividualSprites(files: FileList | null) {
+    if (!files?.length) return;
+    const nextSprites: Record<string, string> = { ...(activeRasterFont?.sprites ?? {}) };
+    try {
+      for (const file of Array.from(files)) {
+        if (file.type !== "image/png" || file.size > MAX_RASTER_FONT_BYTES) {
+          throw new Error("Each individual sprite must be a PNG no larger than 5 MB.");
+        }
+        const isWeekdayComponent =
+          scope === "component" && componentLabel === "Weekday";
+        const weekday = isWeekdayComponent ? weekdayLabelFor(file.name) : null;
+        const digit = isWeekdayComponent ? null : numericSpriteIndex(file.name);
+        const key = weekday ?? (digit === null ? file.name.replace(/\.png$/i, "").trim().toUpperCase() : String(digit));
+        if (!key) {
+          throw new Error("Name each sprite 00.png–09.png or with its label, such as MON.png.");
+        }
+        nextSprites[key] = await fileToDataUrl(file);
+      }
+      onActivate?.();
+      setActiveRasterFont({
+        label: activeRasterFont?.label || "Individual PNG sprites",
+        dataUrl: activeRasterFont?.dataUrl || Object.values(nextSprites)[0]!,
+        // Do not claim that a single imported PNG represents every digit.
+        // Direct sprites opt in one glyph/label at a time; an existing atlas
+        // remains available when the project already has one.
+        glyphs: normalizeRasterFontGlyphs(activeRasterFont?.glyphs || ""),
+        columns: activeRasterFont?.columns || 1,
+        labels: activeRasterFont?.labels,
+        sprites: nextSprites,
+        tint: activeRasterFont?.tint ?? false
+      });
+      setStatus(`Imported ${files.length} independent PNG sprite${files.length === 1 ? "" : "s"}.`);
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The PNG sprites could not be imported.");
+    }
+  }
+
   return (
     <section className="watchface-raster-font-panel" aria-label="Custom PNG font">
       <div>
         <strong>Custom PNG font</strong>
-        <span>Upload a uniformly gridded glyph atlas.</span>
+        <span>Choose whether this PNG set belongs to one component or the whole face.</span>
       </div>
+      {supportsComponentScope ? (
+        <label className="field">
+          Apply PNG sprites to
+          <select value={scope} onChange={(event) => setScope(event.target.value as "component" | "all")}>
+            <option value="component">This component{componentLabel ? ` (${componentLabel})` : ""}</option>
+            <option value="all">All text components</option>
+          </select>
+        </label>
+      ) : null}
       <label className="watchface-raster-font-upload">
         <ImagePlus size={15} aria-hidden="true" />
-        <span>{rasterFont ? "Replace PNG atlas" : "Upload PNG atlas"}</span>
+        <span>{activeRasterFont ? "Replace PNG atlas" : "Upload PNG atlas"}</span>
         <input
           type="file"
           accept="image/png"
@@ -274,12 +353,22 @@ export function CustomPngFontPanel({
         <ImagePlus size={15} aria-hidden="true" />
         <span>Import PNG sprite folder</span>
       </button>
-      {rasterFont ? (
+      <label className="watchface-raster-font-upload">
+        <ImagePlus size={15} aria-hidden="true" />
+        <span>Import individual PNG sprites</span>
+        <input
+          type="file"
+          accept="image/png"
+          multiple
+          onChange={(event) => void chooseIndividualSprites(event.currentTarget.files)}
+        />
+      </label>
+      {activeRasterFont ? (
         <div className="watchface-raster-font-fields">
           <label>
             Font label
             <input
-              value={rasterFont.label}
+              value={activeRasterFont.label}
               onChange={(event) => updateRasterFont({ label: event.target.value })}
               placeholder="My pixel font"
             />
@@ -290,7 +379,7 @@ export function CustomPngFontPanel({
               type="number"
               min="1"
               max="64"
-              value={rasterFont.columns}
+              value={activeRasterFont.columns}
               onChange={(event) =>
                 updateRasterFont({
                   columns: Math.max(1, Math.min(64, Number(event.target.value) || 1))
@@ -301,7 +390,7 @@ export function CustomPngFontPanel({
           <label className="watchface-raster-font-glyphs">
             Glyph labels (left-to-right, then top-to-bottom)
             <input
-              value={rasterFont.glyphs}
+              value={activeRasterFont.glyphs}
               onChange={(event) =>
                 updateRasterFont({ glyphs: normalizeRasterFontGlyphs(event.target.value) })
               }
@@ -311,7 +400,7 @@ export function CustomPngFontPanel({
           <label className="watchface-raster-font-tint">
             <input
               type="checkbox"
-              checked={rasterFont.tint}
+              checked={activeRasterFont.tint}
               onChange={(event) => updateRasterFont({ tint: event.target.checked })}
             />
             Apply selected digit color (overrides PNG colors)
@@ -319,14 +408,14 @@ export function CustomPngFontPanel({
           <button
             className="secondary-button"
             type="button"
-            onClick={() => onRasterFontChange(undefined)}
+            onClick={() => setActiveRasterFont(undefined)}
           >
             Remove PNG font
           </button>
         </div>
       ) : null}
-      {rasterFont && !rasterFontHasDigits ? (
-        rasterFontSupportsText(rasterFont, "MON") ? (
+      {activeRasterFont && !rasterFontHasDigits ? (
+        rasterFontHasWeekday ? (
           <p className="watchface-raster-font-status">
             This PNG set provides weekday labels and leaves numeric fields unchanged.
           </p>
@@ -339,7 +428,7 @@ export function CustomPngFontPanel({
       {error ? <p className="watchface-raster-font-warning">{error}</p> : null}
       {status ? <p className="watchface-raster-font-status">{status}</p> : null}
       <p>
-        PNG colors are preserved by default. An atlas needs 0123456789 for live numeric fields. A sprite folder can contain digits/00.png-09.png and optional weekdays/00.png-06.png (Monday to Sunday).
+        PNG colors are preserved by default. Import individual sprites named 00.png–09.png or by label (for example MON.png); each is retained independently and takes priority over the atlas. A sprite folder can contain digits/00.png-09.png and optional weekdays/00.png-06.png (Monday to Sunday).
       </p>
     </section>
   );

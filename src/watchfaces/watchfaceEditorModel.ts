@@ -44,6 +44,7 @@ export type EditorLayerKind =
   | "seconds"
   | "separators"
   | "battery"
+  | "batteryIcon"
   | "complication"
   | "metric"
   | "weather"
@@ -111,6 +112,7 @@ const LAYER_ORDER: string[] = [
   "dateMonth",
   "dateDay",
   "battery",
+  "batteryIcon",
   "complication",
   "heartRate",
   "steps",
@@ -149,6 +151,9 @@ function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
   if (groupId === "weekday" || groupId === "dateMonth" || groupId === "dateDay") {
     return { position: true, color: true, scale: true, font: false };
   }
+  if (groupId === "batteryIcon") {
+    return { position: true, color: false, scale: false, font: false };
+  }
   return { position: true, color: true, scale: false, font: false };
 }
 
@@ -167,6 +172,9 @@ function kindForGroup(groupId: string): EditorLayerKind {
   }
   if (groupId === "battery") {
     return "battery";
+  }
+  if (groupId === "batteryIcon") {
+    return "batteryIcon";
   }
   if (groupId === "complication") {
     return "complication";

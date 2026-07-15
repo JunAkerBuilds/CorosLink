@@ -26,6 +26,7 @@ export const DEFAULT_AMPM_STYLE: WatchfaceAmPmStyle = {
 export function makeDefaultDesign(): CorosWatchfaceDesignState {
   return {
     version: 1,
+    backgroundColor: "#000000",
     accentColor: "#51e0b5",
     artwork: null,
     artworkVisible: true,
@@ -52,6 +53,7 @@ export function makeDefaultDesign(): CorosWatchfaceDesignState {
     weatherIndicator: undefined,
     layoutOffsets: {},
     linkedLayerGroups: [],
+    lockedLayerIds: [],
     layerVisibility: {},
     layerColors: {},
     configAssetOverrides: {},
@@ -79,7 +81,10 @@ export async function renderDesignBackground(
   }
   const size = CREATOR_CANVAS_SIZE;
 
-  context.clearRect(0, 0, size, size);
+  if (design.backgroundColor !== "transparent") {
+    context.fillStyle = design.backgroundColor ?? "#000000";
+    context.fillRect(0, 0, size, size);
+  }
 
   const backgroundOverride = design.configAssetOverrides?.["config:background_icon"];
   const backgroundArtwork = design.artworkVisible === false

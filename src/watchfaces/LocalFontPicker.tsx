@@ -373,7 +373,7 @@ export function LocalFontPicker({
             Digit spacing <span>{Math.round(letterSpacing * 100)}%</span>
             <input
               type="range"
-              min="-0.1"
+              min="-0.35"
               max="0.25"
               step="0.01"
               value={letterSpacing}

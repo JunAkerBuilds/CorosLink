@@ -13,6 +13,7 @@ import type {
   CorosWatchfaceCreatorInput,
   CorosWatchfacePublishInput,
   CorosWatchfaceProject,
+  CorosWatchfaceProjectExportInput,
   CorosWatchfaceProjectSaveInput,
   CorosWatchfaceProjectSummary,
   CorosWatchfaceRegion,
@@ -96,6 +97,8 @@ const MAX_INFO_BYTES = 1024 * 1024;
 const MAX_SHARE_PAGE_BYTES = 1024 * 1024;
 const MAX_ARTWORK_BYTES = 10 * 1024 * 1024;
 const MAX_PROJECT_BYTES = 60 * 1024 * 1024;
+const MAX_PROJECT_MANIFEST_BYTES = MAX_PROJECT_BYTES + 64 * 1024;
+const MAX_PROJECT_PACKAGE_BYTES = 100 * 1024 * 1024;
 const CREATOR_CANVAS_SIZE = 800;
 const MAX_SPRITE_REPLACEMENTS = 800;
 const MAX_SPRITE_BYTES = 2 * 1024 * 1024;
@@ -159,6 +162,21 @@ interface SelectedArchive extends CorosWatchfaceArchive {
   path: string;
   modifiedMs: number;
   resolutionDirectories: string[];
+}
+
+interface CorosLinkWatchfaceProjectManifest {
+  format: "coroslink-watchface-project";
+  version: 1;
+  name: string;
+  sourceTemplateId: string;
+  firmwareType?: string;
+  design: CorosWatchfaceProjectExportInput["design"];
+}
+
+interface CorosLinkWatchfaceProjectPackage {
+  manifest: CorosLinkWatchfaceProjectManifest;
+  starterArchive: Buffer;
+  preview: Buffer;
 }
 
 interface UnzipperFile {
@@ -738,9 +756,188 @@ export async function listCorosPairedDevices(): Promise<CorosPairedDevice[]> {
 export async function selectCorosWatchfaceArchive(
   archivePath: string
 ): Promise<CorosWatchfaceArchive> {
-  const selected = await inspectArchive(archivePath);
+  const editablePackage = await readCorosWatchfaceProjectPackage(archivePath);
+  if (!editablePackage) {
+    const selected = await inspectArchive(archivePath);
+    selectedArchives.set(selected.archiveId, selected);
+    return toPublicArchive(selected);
+  }
+
+  const temporaryDirectory = await fs.promises.mkdtemp(
+    path.join(app.getPath("temp"), "coroslink-watchface-")
+  );
+  const starterPath = path.join(temporaryDirectory, "starter.dat");
+  await fs.promises.writeFile(starterPath, editablePackage.starterArchive);
+  let inspected: SelectedArchive;
+  try {
+    inspected = await inspectArchive(starterPath);
+  } catch (caught) {
+    await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });
+    throw caught;
+  }
+  if (inspected.sourceTemplateId !== editablePackage.manifest.sourceTemplateId) {
+    await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });
+    throw new Error("The editable project does not match its bundled starter template.");
+  }
+  const selected: SelectedArchive = {
+    ...inspected,
+    fileName: path.basename(archivePath),
+    ...(editablePackage.manifest.firmwareType
+      ? { firmwareType: editablePackage.manifest.firmwareType }
+      : {}),
+    editableProject: {
+      name: editablePackage.manifest.name,
+      design: editablePackage.manifest.design
+    }
+  };
   selectedArchives.set(selected.archiveId, selected);
   return toPublicArchive(selected);
+}
+
+/**
+ * Build a portable project ZIP for website distribution. The original starter
+ * is kept separate from the design state so importing and exporting again does
+ * not apply layout changes twice.
+ */
+export async function exportCorosWatchfaceProject(
+  input: CorosWatchfaceProjectExportInput,
+  destinationPath: string
+): Promise<void> {
+  if (!input || typeof input.sourceArchiveId !== "string") {
+    throw new Error("Choose a starter template before exporting the project.");
+  }
+  const source = requireSelectedArchive(input.sourceArchiveId);
+  const verified = await inspectArchive(source.path, source.archiveId);
+  if (verified.modifiedMs !== source.modifiedMs) {
+    throw new Error(
+      "The starter template changed. Open the project again before exporting."
+    );
+  }
+  const name = sanitizeProjectName(input.name);
+  validateProjectDesign(input.design);
+  const firmwareType =
+    normalizeOptionalFirmwareType(input.firmwareType) ?? source.firmwareType;
+  const preview = decodePortableProjectPreview(input.previewDataUrl);
+  const manifest: CorosLinkWatchfaceProjectManifest = {
+    format: "coroslink-watchface-project",
+    version: 1,
+    name,
+    sourceTemplateId: verified.sourceTemplateId,
+    ...(firmwareType ? { firmwareType } : {}),
+    design: input.design
+  };
+  const projectZip = createStoreZip([
+    {
+      name: "coroslink-project.json",
+      data: Buffer.from(JSON.stringify(manifest), "utf8")
+    },
+    { name: "starter.dat", data: await fs.promises.readFile(source.path) },
+    { name: "preview.png", data: preview }
+  ]);
+  if (projectZip.byteLength > MAX_PROJECT_PACKAGE_BYTES) {
+    throw new Error("The editable watch-face package is too large to export.");
+  }
+  await fs.promises.writeFile(destinationPath, projectZip);
+}
+
+export async function readCorosWatchfaceProjectPackage(
+  packagePath: string
+): Promise<CorosLinkWatchfaceProjectPackage | null> {
+  const stat = await fs.promises.stat(packagePath);
+  if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_PROJECT_PACKAGE_BYTES) {
+    throw new Error("The editable watch-face package must be smaller than 100 MB.");
+  }
+  const directory = await openTemplateArchive(packagePath);
+  const files = directory.files.filter((entry) => entry.type === "File");
+  const manifestEntry = files.find(
+    (entry) => entry.path === "coroslink-project.json"
+  );
+  if (!manifestEntry) return null;
+  const starterEntry = files.find((entry) => entry.path === "starter.dat");
+  const previewEntry = files.find((entry) => entry.path === "preview.png");
+  if (!starterEntry || !previewEntry) {
+    throw new Error("The editable watch-face package is incomplete.");
+  }
+  assertPackageEntrySize(
+    manifestEntry,
+    MAX_PROJECT_MANIFEST_BYTES,
+    "project manifest"
+  );
+  assertPackageEntrySize(starterEntry, MAX_ARCHIVE_BYTES, "starter archive");
+  assertPackageEntrySize(previewEntry, MAX_ARTWORK_BYTES, "preview image");
+
+  let manifest: CorosLinkWatchfaceProjectManifest;
+  try {
+    manifest = JSON.parse(
+      (await manifestEntry.buffer()).toString("utf8")
+    ) as CorosLinkWatchfaceProjectManifest;
+  } catch {
+    throw new Error("The editable watch-face project manifest is not valid JSON.");
+  }
+  if (
+    manifest.format !== "coroslink-watchface-project" ||
+    manifest.version !== 1 ||
+    typeof manifest.name !== "string" ||
+    typeof manifest.sourceTemplateId !== "string" ||
+    !/^\d{1,20}$/.test(manifest.sourceTemplateId)
+  ) {
+    throw new Error("This is not a supported CorosLink watch-face project.");
+  }
+  const normalizedFirmwareType = normalizeOptionalFirmwareType(
+    manifest.firmwareType
+  );
+  const { firmwareType: _firmwareType, ...manifestWithoutFirmwareType } = manifest;
+  manifest = {
+    ...manifestWithoutFirmwareType,
+    name: sanitizeProjectName(manifest.name),
+    ...(normalizedFirmwareType ? { firmwareType: normalizedFirmwareType } : {})
+  };
+  validateProjectDesign(manifest.design);
+  const starterArchive = await starterEntry.buffer();
+  const preview = await previewEntry.buffer();
+  if (starterArchive.byteLength > MAX_ARCHIVE_BYTES) {
+    throw new Error("The editable watch-face starter archive is too large.");
+  }
+  if (preview.byteLength > MAX_ARTWORK_BYTES) {
+    throw new Error("The editable watch-face preview is too large.");
+  }
+  assertPngBytes(preview, "The editable watch-face preview is not a PNG image.");
+  return { manifest, starterArchive, preview };
+}
+
+function assertPackageEntrySize(
+  entry: UnzipperFile,
+  maximum: number,
+  label: string
+): void {
+  const size = entry.uncompressedSize ?? entry.size;
+  if (!Number.isFinite(size) || !size || size < 1 || size > maximum) {
+    throw new Error(`The editable watch-face ${label} has an invalid size.`);
+  }
+}
+
+function decodePortableProjectPreview(dataUrl: string): Buffer {
+  const prefix = "data:image/png;base64,";
+  if (typeof dataUrl !== "string" || !dataUrl.startsWith(prefix)) {
+    throw new Error("The editable watch-face preview must be a PNG image.");
+  }
+  const encoded = dataUrl.slice(prefix.length);
+  if (!encoded || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+    throw new Error("The editable watch-face preview is not valid base64 data.");
+  }
+  const preview = Buffer.from(encoded, "base64");
+  if (preview.byteLength === 0 || preview.byteLength > MAX_ARTWORK_BYTES) {
+    throw new Error("The editable watch-face preview must be smaller than 10 MB.");
+  }
+  assertPngBytes(preview, "The editable watch-face preview is not a PNG image.");
+  return preview;
+}
+
+function assertPngBytes(bytes: Buffer, message: string): void {
+  const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (bytes.byteLength < pngSignature.byteLength || !bytes.subarray(0, 8).equals(pngSignature)) {
+    throw new Error(message);
+  }
 }
 
 interface StoredWatchfaceProject {

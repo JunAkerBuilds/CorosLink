@@ -130,6 +130,37 @@ async function main() {
     layoutOffsets: { hours: { dx: 10, dy: 20 } },
     designSprites: []
   };
+  const portableProjectPath = path.join(tempRoot, "editable-website-face.zip");
+  await watchfaces.exportCorosWatchfaceProject(
+    {
+      sourceArchiveId: starter.archiveId,
+      name: "Editable website face",
+      firmwareType: "COROS W332",
+      design: projectDesign,
+      previewDataUrl: pngDataUrl(icon)
+    },
+    portableProjectPath
+  );
+  const importedPortableProject =
+    await watchfaces.selectCorosWatchfaceArchive(portableProjectPath);
+  assert.equal(importedPortableProject.sourceTemplateId, "250601");
+  assert.equal(importedPortableProject.firmwareType, "COROS W332");
+  assert.equal(
+    importedPortableProject.editableProject.name,
+    "Editable website face"
+  );
+  assert.deepEqual(
+    importedPortableProject.editableProject.design,
+    projectDesign,
+    "website ZIP imports should restore the complete editable design state"
+  );
+  assert.equal(
+    (await watchfaces.describeCorosWatchfaceTemplate(
+      importedPortableProject.archiveId
+    )).resolutions.length,
+    1,
+    "an imported editable project should retain its original starter template"
+  );
   const savedProject = await watchfaces.saveCorosWatchfaceProject({
     name: "Saved creator fixture",
     sourceArchiveId: starter.archiveId,

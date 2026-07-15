@@ -785,7 +785,7 @@
 }
 
 .watchface-shell .watchface-hub-disconnect,
-.watchface-shell :where(.wf-save-button, .wf-send-button) {
+.watchface-shell :where(.wf-save-button, .wf-export-button, .wf-send-button) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2094,7 +2094,9 @@
 }
 
 .watchface-shell .wf-command-bar {
-  grid-template-columns: auto minmax(180px, 1fr) auto;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  gap: 10px;
+  padding: 8px 12px;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-command-start, .watchface-editor-title) {
@@ -2105,6 +2107,7 @@
 }
 
 .watchface-shell .wf-project-title {
+  gap: 10px;
   overflow: hidden;
 }
 
@@ -2126,9 +2129,24 @@
 .watchface-shell .wf-back-button {
   display: inline-flex;
   width: auto;
+  min-width: 0;
+  height: 40px;
+  min-height: 40px;
+  border: 1px solid var(--wf-border-strong);
+  background: var(--wf-surface-hover);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
   padding: 0 10px;
-  gap: 7px;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 720;
   white-space: nowrap;
+}
+
+.watchface-shell .wf-back-button:hover {
+  border-color: var(--wf-accent-border);
+  background: color-mix(in srgb, var(--wf-surface-hover) 74%, var(--accent-soft));
+  color: var(--text-primary);
 }
 
 .watchface-shell .wf-pane-toggle {
@@ -2136,32 +2154,64 @@
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-project-name, .watchface-editor-name) {
-  width: min(360px, 42vw);
+  flex: 0 1 min(320px, 32vw);
+  width: min(320px, 32vw);
   min-height: 40px;
-  border-color: transparent;
-  background: transparent;
+  border-color: var(--wf-border-strong);
+  background: color-mix(in srgb, var(--wf-surface-raised) 76%, transparent);
+  padding-inline: 11px;
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 720;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-project-name, .watchface-editor-name):hover {
-  border-color: var(--wf-border);
-  background: var(--wf-surface-hover);
+  border-color: var(--wf-border-strong);
+  background: var(--wf-surface-raised);
+}
+
+:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-project-name, .watchface-editor-name):focus {
+  border-color: var(--accent-strong);
+  background: var(--wf-surface-raised);
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-save-state, .watchface-save-state) {
   display: inline-flex;
   align-items: center;
-  min-height: 32px;
+  min-height: 24px;
+  gap: 6px;
+  border: 1px solid var(--wf-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wf-surface-raised) 72%, transparent);
   color: var(--text-secondary);
-  font-size: 11px;
+  padding: 0 8px;
+  font-size: 10px;
   font-weight: 680;
   white-space: nowrap;
 }
 
+:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-save-state, .watchface-save-state)::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-save-state, .watchface-save-state).is-dirty {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
   color: var(--warning-text);
+}
+
+.watchface-shell .wf-command-actions {
+  gap: 5px;
+}
+
+.watchface-shell .wf-command-actions > .wf-icon-button {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-studio-grid, .watchface-editor-grid) {
@@ -2313,7 +2363,7 @@
 .watchface-shell .wf-layer-list > li:not(.wf-layer-group),
 .watchface-shell .watchface-bg-sublayers > li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 40px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 3px;
 }
@@ -2436,6 +2486,33 @@
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-layer-visibility, .watchface-layer-visibility):hover {
   background: color-mix(in srgb, var(--wf-surface-raised) 70%, transparent);
   color: var(--text-primary);
+}
+
+.watchface-shell .watchface-layer-lock {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0;
+  place-items: center;
+}
+
+.watchface-shell .watchface-layer-lock:hover {
+  background: color-mix(in srgb, var(--wf-surface-raised) 70%, transparent);
+  color: var(--text-primary);
+}
+
+.watchface-shell .watchface-layer-lock.is-locked {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.watchface-shell .watchface-layer-lock:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: -2px;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-layer-children, .watchface-bg-sublayers) {
@@ -3023,9 +3100,119 @@
   gap: 8px;
 }
 
+:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-position-inputs, .wf-position-inputs) label {
+  display: grid;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-position-inputs, .wf-position-inputs) input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--wf-border);
+  border-radius: 7px;
+  background: var(--wf-surface-raised);
+  color: var(--text-primary);
+  padding: 0 9px;
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-position-inputs, .wf-position-inputs) input:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 1px;
+}
+
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-inspector-position, .wf-position-section) {
   display: grid;
-  gap: 9px;
+  gap: 8px;
+}
+
+.watchface-shell .wf-position-heading {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 24px;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 720;
+  letter-spacing: -0.01em;
+}
+
+.watchface-shell .wf-position-controls {
+  display: grid;
+  min-inline-size: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 10px;
+  row-gap: 6px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.watchface-shell .wf-position-controls > .watchface-position-inputs {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.watchface-shell .wf-position-controls > span {
+  align-self: end;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.watchface-shell .wf-position-controls > span:nth-of-type(1),
+.watchface-shell .wf-position-controls > .watchface-align-grid {
+  grid-column: 1;
+}
+
+.watchface-shell .wf-position-controls > span:nth-of-type(2),
+.watchface-shell .wf-position-controls > .watchface-nudge-pad {
+  grid-column: 2;
+}
+
+.watchface-shell .wf-position-controls > span:nth-of-type(1),
+.watchface-shell .wf-position-controls > span:nth-of-type(2) {
+  grid-row: 2;
+}
+
+.watchface-shell .wf-position-controls > :is(.watchface-align-grid, .watchface-nudge-pad) {
+  grid-row: 3;
+}
+
+.watchface-shell .wf-position-controls > .wf-position-nudge-only {
+  grid-column: 1;
+  justify-self: start;
+}
+
+.watchface-shell .wf-position-controls > .watchface-studio-summary {
+  grid-column: 1 / -1;
+}
+
+.watchface-shell .wf-position-help {
+  border-top: 1px solid var(--wf-border);
+  padding-top: 8px;
+}
+
+.watchface-shell .wf-position-controls:disabled {
+  opacity: 0.5;
+}
+
+.watchface-shell .wf-position-controls:disabled :is(button, input) {
+  cursor: not-allowed;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-align-grid, .wf-align-grid) {
@@ -3037,11 +3224,12 @@
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-align-grid, .wf-align-grid) button,
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-nudge-pad, .wf-nudge-pad) button {
   min-width: 0;
-  min-height: 40px;
+  min-height: 32px;
   border: 1px solid var(--wf-border);
   border-radius: 7px;
   background: var(--wf-surface-raised);
   color: var(--text-secondary);
+  font-size: 11px;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-align-grid, .wf-align-grid) button:hover,
@@ -3050,10 +3238,15 @@
   color: var(--text-primary);
 }
 
+:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-align-grid, .wf-align-grid) button:active:not(:disabled),
+:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-nudge-pad, .wf-nudge-pad) button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-nudge-pad, .wf-nudge-pad) {
   display: grid;
-  grid-template-columns: repeat(3, 40px);
-  grid-template-rows: repeat(3, 40px);
+  grid-template-columns: repeat(3, 32px);
+  grid-template-rows: repeat(3, 32px);
   justify-content: center;
   gap: 4px;
 }
@@ -3062,6 +3255,21 @@
   grid-column: 2;
   grid-row: 2;
   font-size: 9px;
+}
+
+@media (max-width: 420px) {
+  .watchface-shell .wf-position-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .watchface-shell .wf-position-controls > :is(span:nth-of-type(1), span:nth-of-type(2), .watchface-align-grid, .watchface-nudge-pad) {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .watchface-shell .wf-position-controls > .watchface-nudge-pad {
+    justify-self: start;
+  }
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-shape-tools-row, .wf-shape-tools) {
@@ -3355,6 +3563,7 @@
   }
 
   :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-project-name, .watchface-editor-name) {
+    flex: 1 1 auto;
     width: 100%;
   }
 

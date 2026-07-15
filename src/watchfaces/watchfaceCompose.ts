@@ -229,6 +229,7 @@ export async function composeWatchfaceReplacements(
     controlTemperatureStyle.fontFamily ||
     design.fontFamily ||
     rasterFontActive ||
+    rasterFontSupportsText(controlTemperatureStyle.rasterFont, "0123456789") ||
     controlTemperatureStyle.scale !== 1
   );
 

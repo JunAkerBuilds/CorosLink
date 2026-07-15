@@ -92,6 +92,8 @@ import type {
   CorosLegacy614aCarrierPatchInput,
   CorosLegacy614aCarrierSelection,
   CorosWatchfaceArchive,
+  CorosWatchfaceProjectExportInput,
+  CorosWatchfaceProjectExportResult,
   CorosWatchfaceArtwork,
   CorosWatchfaceCreatorInput,
   CorosWatchfaceRasterFontFolder,
@@ -177,6 +179,10 @@ const api = {
     input: CorosWatchfaceCreatorInput
   ): Promise<CorosWatchfaceArchive> =>
     ipcRenderer.invoke("watchfaces:createArchive", input),
+  exportCorosWatchfaceProject: (
+    input: CorosWatchfaceProjectExportInput
+  ): Promise<CorosWatchfaceProjectExportResult> =>
+    ipcRenderer.invoke("watchfaces:exportProject", input),
   listCorosWatchfaceProjects: (): Promise<CorosWatchfaceProjectSummary[]> =>
     ipcRenderer.invoke("watchfaces:listProjects"),
   saveCorosWatchfaceProject: (

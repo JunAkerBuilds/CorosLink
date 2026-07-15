@@ -233,6 +233,15 @@ export interface CorosWatchfaceArchive {
   firmwareType?: string;
   /** Detected from resolution folders, independent of COROS's firmware ID. */
   resolutionProfile: CorosWatchfaceResolutionProfile;
+  /** Portable CorosLink project metadata bundled with an editable website ZIP. */
+  editableProject?: CorosWatchfaceEditableProject;
+}
+
+export interface CorosWatchfaceProjectExportResult {
+  /** False when the user cancelled the save dialog. */
+  saved: boolean;
+  /** Absolute path to the editable website ZIP, when saved. */
+  filePath?: string;
 }
 
 /** A public COROS share page downloaded and registered as a Studio archive. */
@@ -379,8 +388,12 @@ export interface CorosWatchfaceArtwork {
 export interface CorosWatchfaceConfigAssetOverride {
   /** Absent means the template config entry remains enabled. */
   enabled?: boolean;
+  /** Visual scale within the template's fixed, device-safe sprite canvas. */
+  scale?: number;
   /** One source PNG is resized independently for every device resolution. */
   replacement?: CorosWatchfaceArtwork;
+  /** Per-state PNGs for a stateful sprite folder such as the battery indicator. */
+  stateReplacements?: Record<string, CorosWatchfaceArtwork>;
 }
 
 /**
@@ -398,6 +411,12 @@ export interface CorosWatchfaceRasterFont {
   columns: number;
   /** Optional pre-rasterized labels such as MON, TUE, and WED. */
   labels?: Record<string, string>;
+  /**
+   * Optional independent PNGs keyed by their exact glyph or label (for
+   * example `"7"`, `"MON"`, or `"PM"`). These take priority over the atlas,
+   * so a font does not have to reuse a uniformly gridded source image.
+   */
+  sprites?: Record<string, string>;
   /** When true, use the design's selected digit colour for the atlas alpha. */
   tint: boolean;
 }
@@ -498,10 +517,7 @@ export interface CorosWatchfaceDesignState {
   version: 1;
   /** Exact archive `o_wf_ver`; absent keeps automatic compatibility behavior. */
   archiveWatchFaceVersion?: number;
-  /**
-   * Retained only so projects saved by older releases can still be opened.
-   * The editor no longer paints a solid base colour behind the face.
-   */
+  /** Solid base colour painted behind artwork and freeform background elements. */
   backgroundColor?: string;
   accentColor: string;
   artwork: CorosWatchfaceArtwork | null;
@@ -521,16 +537,16 @@ export interface CorosWatchfaceDesignState {
   tintIcons: boolean;
   previewComplication: string;
   metricChanges: Record<string, boolean>;
-  metricStyles: Record<string, { color?: string; scale: number; fontFamily?: string }>;
+  metricStyles: Record<string, { color?: string; scale: number; fontFamily?: string; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Per selectable-control icon offsets, independent from the slot origin/value. */
   controlIconOffsets?: Record<string, { dx: number; dy: number }>;
   /** Converts firmware auto-aligned HH:MM into four independently positioned digits. */
   separateAutoTime?: boolean;
-  timeStyles: Record<string, { color?: string; scale: number; fontFamily?: string }>;
+  timeStyles: Record<string, { color?: string; scale: number; fontFamily?: string; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Weekday/month/day scaling; absent in projects saved before resizing. */
   dateStyles?: Record<
     string,
-    { scale: number; fontFamily?: string; color?: string }
+    { scale: number; fontFamily?: string; color?: string; rasterFont?: CorosWatchfaceRasterFont }
   >;
   staticSeparators: Record<
     "colon" | "dateSlash",
@@ -569,6 +585,12 @@ export interface CorosWatchfaceDesignState {
    * link group without changing the exported watch-face format.
    */
   linkedLayerGroups?: string[][];
+  /**
+   * Editor layer ids whose positions are protected from drag, nudge, and
+   * inspector position edits. This is an editor-only setting and does not
+   * alter the exported watch-face format.
+   */
+  lockedLayerIds?: string[];
   /** Visibility overrides for firmware-backed editor layers. */
   layerVisibility?: Record<string, boolean>;
   /** Per-layer colors for firmware components without specialized styles. */
@@ -599,6 +621,19 @@ export interface CorosWatchfaceProjectSaveInput {
   sourceArchiveId: string;
   firmwareType?: string;
   design: CorosWatchfaceDesignState;
+}
+
+export interface CorosWatchfaceEditableProject {
+  name: string;
+  design: CorosWatchfaceDesignState;
+}
+
+export interface CorosWatchfaceProjectExportInput
+  extends CorosWatchfaceEditableProject {
+  sourceArchiveId: string;
+  firmwareType?: string;
+  /** Current rendered face used by websites as the package thumbnail. */
+  previewDataUrl: string;
 }
 
 export interface CorosWatchfaceProject extends CorosWatchfaceProjectSummary {

@@ -68,6 +68,15 @@ export function dimHexColor(hex: string, factor: number): string {
   return `#${channel(0)}${channel(2)}${channel(4)}`;
 }
 
+/**
+ * Styled text is written into Studio-owned sprite folders, not over the
+ * template files. Those folders may use any positive bitmap scale; the
+ * archive writer still enforces PNG byte limits before export.
+ */
+function normalizeSpriteScale(scale: number | undefined): number {
+  return Number.isFinite(scale) && scale! > 0 ? scale! : 1;
+}
+
 /** Parses a firmware position value such as `{524,234}`. */
 export function parseConfigPos(
   value: string | undefined
@@ -362,6 +371,40 @@ export async function buildWatchfaceConfigAssetReplacements(
             Math.max(1, height)
           ),
           create: true
+        });
+      }
+    }
+    const batteryOverride = overrides["config:battery_icon"];
+    if (
+      (batteryOverride?.replacement || batteryOverride?.stateReplacements) &&
+      batteryOverride.enabled !== false
+    ) {
+      const batteryFolderName = (
+        resolution.config.battery_icon_dir || resolution.config.control_battery_icon_dir
+      )?.replace(/\\/g, "/");
+      const batteryFolder =
+        (batteryFolderName
+          ? resolution.spriteFolders.find(
+              (folder) => folder.kind === "state" && folder.folder === batteryFolderName
+            )
+          : undefined) ??
+        resolution.spriteFolders.find(
+          (folder) =>
+            folder.kind === "state" && folder.folder.replace(/^a\//, "") === "battery"
+        );
+      for (const [index, sprite] of (batteryFolder?.files ?? []).entries()) {
+        const replacement =
+          batteryOverride.stateReplacements?.[String(index)] ??
+          batteryOverride.replacement;
+        if (!replacement) continue;
+        replacements.push({
+          path: sprite.path,
+          dataUrl: await renderScaledSpriteInSlot(
+            replacement.dataUrl,
+            Math.max(1, sprite.width),
+            Math.max(1, sprite.height),
+            batteryOverride.scale ?? 1
+          )
         });
       }
     }
@@ -704,14 +747,16 @@ export function rasterFontSupportsText(
   rasterFont: CorosWatchfaceRasterFont | undefined,
   text: string
 ): boolean {
-  if (!rasterFont?.dataUrl) {
+  if (!rasterFont) {
     return false;
   }
-  if (rasterFont.labels?.[text.toUpperCase()]) {
+  const normalizedText = text.toUpperCase();
+  if (rasterFont.sprites?.[normalizedText] || rasterFont.labels?.[normalizedText]) {
     return true;
   }
+  if (!rasterFont.dataUrl) return false;
   const glyphs = new Set(normalizeRasterFontGlyphs(rasterFont.glyphs));
-  return [...text.toUpperCase()].every((glyph) => glyphs.has(glyph));
+  return [...normalizedText].every((glyph) => glyphs.has(glyph));
 }
 
 /** A desktop family takes priority; otherwise use the atlas when it has the text. */
@@ -741,9 +786,51 @@ export async function renderRasterFontSprite(
   if (!rasterFontSupportsText(rasterFont, text) || characters.length === 0) {
     throw new Error("The uploaded PNG font does not include every requested glyph.");
   }
-  const labelSprite = rasterFont.labels?.[text.toUpperCase()];
-  if (labelSprite) {
-    return renderRasterImageSprite(labelSprite, width, height, color, rasterFont.tint);
+  const directSprite =
+    rasterFont.sprites?.[text.toUpperCase()] ??
+    rasterFont.labels?.[text.toUpperCase()];
+  if (directSprite) {
+    // A font folder contains individual glyph artwork. Fit those glyphs by
+    // height, rather than independently constraining each one by width: a wide
+    // "5" must not become shorter than a narrow "1" in the same font.
+    return renderRasterImageSprite(
+      directSprite,
+      width,
+      height,
+      color,
+      rasterFont.tint,
+      characters.length === 1
+    );
+  }
+  const directGlyphSprites = characters.map(
+    (character) => rasterFont.sprites?.[character]
+  );
+  if (directGlyphSprites.every((sprite): sprite is string => Boolean(sprite))) {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Sprite rendering is unavailable in this window.");
+    }
+    const tracking = Math.max(-0.35, Math.min(0.25, typography.letterSpacing ?? 0));
+    const gap = height * tracking;
+    const glyphWidth = Math.max(
+      1,
+      Math.round((width - gap * Math.max(0, characters.length - 1)) / characters.length)
+    );
+    let x = Math.round((width - (glyphWidth * characters.length + gap * Math.max(0, characters.length - 1))) / 2);
+    for (const sprite of directGlyphSprites) {
+      const image = await loadStudioImage(
+        await renderRasterImageSprite(sprite, glyphWidth, height, color, rasterFont.tint)
+      );
+      context.drawImage(image, x, 0, glyphWidth, height);
+      x += Math.round(glyphWidth + gap);
+    }
+    return canvas.toDataURL("image/png");
+  }
+  if (!rasterFont.dataUrl) {
+    throw new Error("The PNG font does not include an atlas for this glyph.");
   }
   const atlas = await loadStudioImage(rasterFont.dataUrl);
   const columns = Math.max(1, Math.min(glyphs.length, Math.round(rasterFont.columns)));
@@ -763,7 +850,7 @@ export async function renderRasterFontSprite(
   }
   context.imageSmoothingEnabled = false;
   const aspect = cellWidth / cellHeight;
-  const tracking = Math.max(-0.1, Math.min(0.25, typography.letterSpacing ?? 0));
+  const tracking = Math.max(-0.35, Math.min(0.25, typography.letterSpacing ?? 0));
   const occupiedAspect = Math.max(
     0.1,
     characters.length * aspect + Math.max(0, characters.length - 1) * tracking
@@ -808,9 +895,41 @@ async function renderRasterImageSprite(
   width: number,
   height: number,
   color: string,
-  tint: boolean
+  tint: boolean,
+  fitByHeight = false
 ): Promise<string> {
   const image = await loadStudioImage(dataUrl);
+  const source = document.createElement("canvas");
+  source.width = image.naturalWidth;
+  source.height = image.naturalHeight;
+  const sourceContext = source.getContext("2d", { willReadFrequently: true });
+  if (!sourceContext) {
+    throw new Error("Sprite rendering is unavailable in this window.");
+  }
+  sourceContext.drawImage(image, 0, 0);
+  const pixels = sourceContext.getImageData(0, 0, source.width, source.height).data;
+  let left = source.width;
+  let top = source.height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < source.height; y += 1) {
+    for (let x = 0; x < source.width; x += 1) {
+      if (pixels[(y * source.width + x) * 4 + 3]! < 8) continue;
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
+    }
+  }
+  const sourceX = right >= left ? left : 0;
+  const sourceY = bottom >= top ? top : 0;
+  const sourceWidth = right >= left ? right - left + 1 : source.width;
+  const sourceHeight = bottom >= top ? bottom - top + 1 : source.height;
+  const scale = fitByHeight
+    ? (height * 0.98) / sourceHeight
+    : Math.min((width * 0.98) / sourceWidth, (height * 0.98) / sourceHeight);
+  const drawWidth = Math.max(1, sourceWidth * scale);
+  const drawHeight = Math.max(1, sourceHeight * scale);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -818,15 +937,14 @@ async function renderRasterImageSprite(
   if (!context) {
     throw new Error("Sprite rendering is unavailable in this window.");
   }
-  context.imageSmoothingEnabled = false;
-  const scale = Math.min(
-    (width * 0.94) / image.naturalWidth,
-    (height * 0.94) / image.naturalHeight
-  );
-  const drawWidth = Math.max(1, image.naturalWidth * scale);
-  const drawHeight = Math.max(1, image.naturalHeight * scale);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
   context.drawImage(
     image,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
     (width - drawWidth) / 2,
     (height - drawHeight) / 2,
     drawWidth,
@@ -879,7 +997,7 @@ export function renderDigitSprite(
 
   const fontWeight = normalizeFontWeight(typography.fontWeight);
   const fontStyle = typography.fontStyle === "italic" ? "italic" : "normal";
-  const letterSpacing = Math.max(-0.1, Math.min(0.25, typography.letterSpacing ?? 0));
+  const letterSpacing = Math.max(-0.35, Math.min(0.25, typography.letterSpacing ?? 0));
   let fontSize = Math.floor(height * 0.92);
   context.textBaseline = "alphabetic";
   context.fillStyle = color;
@@ -949,6 +1067,37 @@ export async function resizeAndTintSprite(
     context.fillStyle = color;
     context.fillRect(0, 0, width, height);
   }
+  return canvas.toDataURL("image/png");
+}
+
+/** Renders artwork at a chosen scale without changing COROS's sprite canvas. */
+export async function renderScaledSpriteInSlot(
+  dataUrl: string,
+  width: number,
+  height: number,
+  scale = 1
+): Promise<string> {
+  const image = await loadStudioImage(dataUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Sprite rendering is unavailable in this window.");
+  }
+  const safeScale = Math.max(0.1, Math.min(4, scale));
+  const contain = Math.min(width / image.naturalWidth, height / image.naturalHeight);
+  const drawWidth = image.naturalWidth * contain * safeScale;
+  const drawHeight = image.naturalHeight * contain * safeScale;
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(
+    image,
+    (width - drawWidth) / 2,
+    (height - drawHeight) / 2,
+    drawWidth,
+    drawHeight
+  );
   return canvas.toDataURL("image/png");
 }
 
@@ -1163,6 +1312,7 @@ export interface WatchfaceLayoutGroup {
 }
 
 export type WatchfaceMetricId =
+  | "battery"
   | "heartRate"
   | "steps"
   | "calories"
@@ -1176,6 +1326,8 @@ export interface WatchfaceMetricSpriteStyle {
   scale: number;
   /** Optional per-layer font; falls back to the design font. */
   fontFamily?: string;
+  /** A PNG set scoped to this component rather than the shared face font. */
+  rasterFont?: CorosWatchfaceRasterFont;
 }
 
 export type WatchfaceMetricStyles = Partial<
@@ -1196,6 +1348,8 @@ export interface WatchfaceDateSpriteStyle {
   /** Optional per-layer font; falls back to the design font. */
   fontFamily?: string;
   color?: string;
+  /** A PNG set scoped to this date layer rather than the shared face font. */
+  rasterFont?: CorosWatchfaceRasterFont;
 }
 
 export type WatchfaceDateStyles = Partial<
@@ -1308,6 +1462,17 @@ interface WatchfaceComplicationDefinition {
 
 export const WATCHFACE_FIXED_METRICS: WatchfaceFixedMetricDefinition[] = [
   {
+    id: "battery",
+    label: "Battery data",
+    rectKey: "battery_level_rect",
+    fontKey: "battery_level_font",
+    fontColorKey: "battery_level_font_color",
+    controlPrefix: "battery",
+    sampleValue: "82",
+    maxDigits: 3,
+    center: { x: 0.5, y: 0.9 }
+  },
+  {
     id: "heartRate",
     label: "Heart rate",
     // `heartreate` is the spelling used by COROS's source templates.
@@ -1362,6 +1527,7 @@ export const WATCHFACE_FIXED_METRICS: WatchfaceFixedMetricDefinition[] = [
 ];
 
 const METRIC_STUDIO_FOLDERS: Record<WatchfaceMetricId, string> = {
+  battery: "cl_battery",
   heartRate: "cl_hr",
   steps: "cl_steps",
   calories: "cl_kcal",
@@ -1742,7 +1908,7 @@ export async function buildControlTemperatureSpriteReplacements(
   for (const resolution of details.resolutions) {
     const source = controlTemperatureFontFolder(resolution);
     if (!source) continue;
-    const scale = Math.max(0.5, Math.min(2, style.scale));
+    const scale = normalizeSpriteScale(style.scale);
     source.files.slice(0, 10).forEach((file, digit) => {
       const path = `${resolution.directory}/cl_ctemp/${String(digit).padStart(2, "0")}.png`;
       jobs.push({
@@ -1758,7 +1924,11 @@ export async function buildControlTemperatureSpriteReplacements(
     });
   }
   const selectedFont = style.fontFamily ?? fontFamily;
-  const rasterized = shouldRenderWatchfaceText("0123456789", selectedFont, typography);
+  const spriteTypography = {
+    ...typography,
+    rasterFont: style.rasterFont ?? typography.rasterFont
+  };
+  const rasterized = shouldRenderWatchfaceText("0123456789", selectedFont, spriteTypography);
   const assets = rasterized
     ? []
     : await loadAssets([...new Set(jobs.map((job) => job.source.path))]);
@@ -1769,7 +1939,7 @@ export async function buildControlTemperatureSpriteReplacements(
     dataUrl: rasterized
       ? await renderWatchfaceTextSprite(
           String(job.digit), job.width, job.height, selectedFont,
-          style.color ?? "#ffffff", typography
+          style.color ?? "#ffffff", spriteTypography
         )
       : await resizeAndTintSprite(
           byPath.get(job.source.path)?.dataUrl ?? "",
@@ -1907,7 +2077,7 @@ export function scaleConfigRectValue(value: string, scale: number): string | nul
   const y0 = Number(match[2]);
   const x1 = Number(match[3]);
   const y1 = Number(match[4]);
-  const normalizedScale = Math.max(0.5, Math.min(2, scale));
+  const normalizedScale = normalizeSpriteScale(scale);
   const centerX = (x0 + x1) / 2;
   const centerY = (y0 + y1) / 2;
   const width = Math.max(1, Math.round((x1 - x0) * normalizedScale));
@@ -1977,6 +2147,7 @@ export async function buildMetricSpriteReplacements(
     height: number;
     color?: string;
     fontFamily: string;
+    typography: WatchfaceTypography;
     rasterized: boolean;
     create: boolean;
   }[] = [];
@@ -1991,8 +2162,9 @@ export async function buildMetricSpriteReplacements(
       if (!style || !rect || !source) {
         continue;
       }
-      const normalizedScale = Math.max(0.5, Math.min(2, style.scale));
+      const normalizedScale = normalizeSpriteScale(style.scale);
       const metricFontFamily = style.fontFamily ?? fontFamily;
+      const metricTypography = { ...typography, rasterFont: style.rasterFont ?? typography.rasterFont };
       source.files.slice(0, 10).forEach((file, digit) => {
         const path = `${resolution.directory}/${METRIC_STUDIO_FOLDERS[metric.id]}/${String(digit).padStart(2, "0")}.png`;
         const existsInTemplate = resolution.spriteFolders.some((folder) =>
@@ -2006,10 +2178,11 @@ export async function buildMetricSpriteReplacements(
           height: Math.max(1, Math.round(file.height * normalizedScale)),
           color: style.color,
           fontFamily: metricFontFamily,
+          typography: metricTypography,
           rasterized: shouldRenderWatchfaceText(
             String(digit),
             metricFontFamily,
-            typography
+            metricTypography
           ),
           create: !existsInTemplate
         });
@@ -2034,7 +2207,7 @@ export async function buildMetricSpriteReplacements(
             ("digitColor" in typography && typeof typography.digitColor === "string"
               ? typography.digitColor
               : "#ffffff"),
-          typography
+          job.typography
         )
       : await resizeAndTintSprite(
           assetsByPath.get(job.source.path)?.dataUrl ?? "",
@@ -2087,7 +2260,7 @@ export function buildTimeStyleOverrides(
       const y1 = Math.max(...planned.map((item) => item.pos.y + item.sample.height));
       const centerX = (x0 + x1) / 2;
       const centerY = (y0 + y1) / 2;
-      const normalizedScale = Math.max(0.5, Math.min(2, style.scale));
+      const normalizedScale = normalizeSpriteScale(style.scale);
       for (const item of planned) {
         const x = Math.round(centerX + (item.pos.x - centerX) * normalizedScale);
         const y = Math.round(centerY + (item.pos.y - centerY) * normalizedScale);
@@ -2118,7 +2291,7 @@ export function buildTimeTrackingOverrides(
   letterSpacing: number,
   styles: WatchfaceTimeStyles = {}
 ): CorosWatchfaceConfigOverride[] {
-  const normalizedSpacing = Math.max(-0.1, Math.min(0.25, letterSpacing));
+  const normalizedSpacing = Math.max(-0.35, Math.min(0.25, letterSpacing));
   if (Math.abs(normalizedSpacing) < 0.001) {
     return [];
   }
@@ -2126,7 +2299,7 @@ export function buildTimeTrackingOverrides(
   for (const resolution of details.resolutions) {
     const values: Record<string, string> = {};
     for (const part of WATCHFACE_TIME_PARTS) {
-      const scale = Math.max(0.5, Math.min(2, styles[part.id]?.scale ?? 1));
+      const scale = normalizeSpriteScale(styles[part.id]?.scale);
       for (const digit of part.digits) {
         const position = parseConfigPos(resolution.config[digit.posKey]);
         const sample = findSpriteFolder(
@@ -2164,6 +2337,7 @@ export async function buildTimeSpriteReplacements(
     height: number;
     color?: string;
     fontFamily: string;
+    typography: WatchfaceTypography;
     rasterized: boolean;
   }[] = [];
   for (const resolution of details.resolutions) {
@@ -2172,8 +2346,9 @@ export async function buildTimeSpriteReplacements(
       ? findSpriteFolder(resolution, resolution.config.autoalign_time_font)
       : null;
     if (autoStyle && autoSource) {
-      const normalizedScale = Math.max(0.5, Math.min(2, autoStyle.scale));
+      const normalizedScale = normalizeSpriteScale(autoStyle.scale);
       const partFontFamily = autoStyle.fontFamily ?? fontFamily;
+      const partTypography = { ...typography, rasterFont: autoStyle.rasterFont ?? typography.rasterFont };
       autoSource.files.slice(0, 10).forEach((file, value) => {
         jobs.push({
           source: file,
@@ -2183,10 +2358,11 @@ export async function buildTimeSpriteReplacements(
           height: Math.max(1, Math.round(file.height * normalizedScale)),
           color: autoStyle.color,
           fontFamily: partFontFamily,
+          typography: partTypography,
           rasterized: shouldRenderWatchfaceText(
             String(value),
             partFontFamily,
-            typography
+            partTypography
           )
         });
       });
@@ -2196,8 +2372,9 @@ export async function buildTimeSpriteReplacements(
       if (!style) {
         continue;
       }
-      const normalizedScale = Math.max(0.5, Math.min(2, style.scale));
+      const normalizedScale = normalizeSpriteScale(style.scale);
       const partFontFamily = style.fontFamily ?? fontFamily;
+      const partTypography = { ...typography, rasterFont: style.rasterFont ?? typography.rasterFont };
       for (const digit of part.digits) {
         const source = findSpriteFolder(resolution, resolution.config[digit.fontKey]);
         if (!source) {
@@ -2212,10 +2389,11 @@ export async function buildTimeSpriteReplacements(
             height: Math.max(1, Math.round(file.height * normalizedScale)),
             color: style.color,
             fontFamily: partFontFamily,
+            typography: partTypography,
             rasterized: shouldRenderWatchfaceText(
               String(value),
               partFontFamily,
-              typography
+              partTypography
             )
           });
         });
@@ -2240,7 +2418,7 @@ export async function buildTimeSpriteReplacements(
             ("digitColor" in typography && typeof typography.digitColor === "string"
               ? typography.digitColor
               : "#ffffff"),
-          typography
+          job.typography
         )
       : await resizeAndTintSprite(
           assetsByPath.get(job.source.path)?.dataUrl ?? "",
@@ -2305,6 +2483,7 @@ export async function buildDateSpriteReplacements(
     height: number;
     kind: "digits" | "week";
     fontFamily: string;
+    typography: WatchfaceTypography;
     rasterized: boolean;
     color?: string;
   }[] = [];
@@ -2317,8 +2496,12 @@ export async function buildDateSpriteReplacements(
       if (!style || !source) {
         continue;
       }
-      const normalizedScale = Math.max(0.5, Math.min(2, style.scale));
+      const normalizedScale = normalizeSpriteScale(style.scale);
       const partFontFamily = style.fontFamily ?? options.fontFamily;
+      const partTypography = {
+        ...options,
+        rasterFont: style.rasterFont ?? options.rasterFont
+      };
       const limit = part.kind === "week" ? 7 : 10;
       source.files.slice(0, limit).forEach((file, value) => {
         jobs.push({
@@ -2329,12 +2512,13 @@ export async function buildDateSpriteReplacements(
           height: Math.max(1, Math.round(file.height * normalizedScale)),
           kind: part.kind,
           fontFamily: partFontFamily,
+          typography: partTypography,
           rasterized: shouldRenderWatchfaceText(
             part.kind === "week"
               ? WEEKDAY_LABELS[value] ?? String(value)
               : String(value),
             partFontFamily,
-            options
+            partTypography
           ),
           color: style.color
         });
@@ -2362,7 +2546,7 @@ export async function buildDateSpriteReplacements(
           job.height,
           job.fontFamily,
           job.color ?? options.digitColor,
-          options
+          job.typography
         )
       : await resizeAndTintSprite(
           asset!.dataUrl,
@@ -2483,8 +2667,13 @@ export const WATCHFACE_LAYOUT_GROUPS: WatchfaceLayoutGroup[] = [
   },
   {
     id: "battery",
-    label: "Battery",
-    patterns: [/^battery_level_rect$/, /^battery_icon_pos$/]
+    label: "Battery data",
+    patterns: [/^battery_level_rect$/]
+  },
+  {
+    id: "batteryIcon",
+    label: "Battery icon",
+    patterns: [/^battery_icon_pos$/]
   },
   {
     id: "complication",
@@ -3116,17 +3305,31 @@ export async function drawStudioPreview(
   const batteryFolderName = (
     config.control_battery_icon_dir || config.battery_icon_dir
   )?.replace(/\\/g, "/");
-  const batteryFolder = batteryFolderName
-    ? resolution.spriteFolders.find(
-        (folder) => folder.kind === "state" && folder.folder === batteryFolderName
-      )
-    : null;
+  const batteryFolder =
+    (batteryFolderName
+      ? resolution.spriteFolders.find(
+          (folder) => folder.kind === "state" && folder.folder === batteryFolderName
+        )
+      : undefined) ??
+    resolution.spriteFolders.find(
+      (folder) =>
+        folder.kind === "state" && folder.folder.replace(/^a\//, "") === "battery"
+    ) ??
+    null;
   // Prefer a normal high-charge state; the last entries can represent special
   // charging/low-power states in COROS's 12-image battery sets.
-  const batteryFile = batteryFolder?.files[
-    Math.min(8, Math.max(0, batteryFolder.files.length - 1))
-  ] ?? null;
-  const batteryIconPos = parseConfigPos(config.battery_icon_pos);
+  const batteryFileIndex = batteryFolder
+    ? Math.min(8, Math.max(0, batteryFolder.files.length - 1))
+    : 0;
+  const batteryFile = batteryFolder?.files[batteryFileIndex] ?? null;
+  const batteryRect = parseConfigRect(config["battery_level_rect"]);
+  const batteryIconPos = parseConfigPos(config.battery_icon_pos) ??
+    (batteryFile && batteryRect
+      ? {
+          x: Math.max(0, batteryRect.x0 - batteryFile.width - Math.round(resolution.width * 0.012)),
+          y: batteryRect.y0 + Math.round((batteryRect.y1 - batteryRect.y0 - batteryFile.height) / 2)
+        }
+      : null);
   if (batteryFile) {
     wantedSprites.set(batteryFile.path, { color: null });
   }
@@ -3270,7 +3473,6 @@ export async function drawStudioPreview(
       });
     }
   }
-  const batteryRect = parseConfigRect(config["battery_level_rect"]);
   const batterySource = findSpriteFolder(
     resolution,
     config["battery_level_font"]
@@ -3280,6 +3482,7 @@ export async function drawStudioPreview(
       rect: batteryRect,
       source: batterySource,
       value: "82",
+      metricId: "battery",
       componentId: "battery"
     });
   }
@@ -3430,13 +3633,15 @@ export async function drawStudioPreview(
       : undefined;
     const componentColor = options.layerColors?.[planned.componentId];
     const timeFontFamily = timeStyle?.fontFamily ?? options.fontFamily;
+    const timeTypography = {
+      ...options,
+      rasterFont: timeStyle?.rasterFont ?? options.rasterFont
+    };
     const timeColor = timeStyle?.color ?? componentColor ?? options.digitColor;
-    const timeScale = timeStyle
-      ? Math.max(0.5, Math.min(2, timeStyle.scale))
-      : 1;
+    const timeScale = timeStyle ? normalizeSpriteScale(timeStyle.scale) : 1;
     const width = Math.max(1, Math.round(file.width * timeScale));
     const height = Math.max(1, Math.round(file.height * timeScale));
-    const tracking = Math.max(-0.1, Math.min(0.25, options.letterSpacing ?? 0));
+    const tracking = Math.max(-0.35, Math.min(0.25, options.letterSpacing ?? 0));
     const trackingOffset = planned.slot
       ? Math.round((height * tracking) / 2) * (planned.slot === "high" ? -1 : 1)
       : 0;
@@ -3445,7 +3650,7 @@ export async function drawStudioPreview(
       const cacheKey = `${file.path}|${timeFontFamily}|${timeColor}|${timeScale}`;
       image = styledTimeGlyphs.get(cacheKey);
       if (!image) {
-        if (shouldRenderWatchfaceText(String(planned.digit), timeFontFamily, options)) {
+        if (shouldRenderWatchfaceText(String(planned.digit), timeFontFamily, timeTypography)) {
           image = await loadStudioImage(
             await renderWatchfaceTextSprite(
               String(planned.digit),
@@ -3453,7 +3658,7 @@ export async function drawStudioPreview(
               height,
               timeFontFamily,
               timeColor,
-              options
+              timeTypography
             )
           );
         } else if (timeStyle?.color || componentColor) {
@@ -3537,7 +3742,19 @@ export async function drawStudioPreview(
   }
 
   if (batteryFile && batteryIconPos) {
-    const image = loaded.get(batteryFile.path);
+    const stateReplacement = options.configAssetOverrides?.["config:battery_icon"]
+      ?.stateReplacements?.[String(batteryFileIndex)];
+    const batteryIconScale = options.configAssetOverrides?.["config:battery_icon"]?.scale ?? 1;
+    const image = stateReplacement
+      ? await loadStudioImage(
+          await renderScaledSpriteInSlot(
+            stateReplacement.dataUrl,
+            batteryFile.width,
+            batteryFile.height,
+            batteryIconScale
+          )
+        )
+      : await configuredAssetImage("battery_icon", batteryFile);
     if (image) {
       context.drawImage(
         image,
@@ -3552,14 +3769,15 @@ export async function drawStudioPreview(
   if (weekFile && weekRect) {
     const weekStyle = options.dateStyles?.weekday;
     const weekFontFamily = weekStyle?.fontFamily ?? options.fontFamily;
+    const weekTypography = {
+      ...options,
+      rasterFont: weekStyle?.rasterFont ?? options.rasterFont
+    };
     let image = loaded.get(weekFile.path);
-    const weekScale = Math.max(
-      0.5,
-      Math.min(2, weekStyle?.scale ?? 1)
-    );
+    const weekScale = normalizeSpriteScale(weekStyle?.scale);
     const weekWidth = Math.max(1, Math.round(weekFile.width * weekScale));
     const weekHeight = Math.max(1, Math.round(weekFile.height * weekScale));
-    if (shouldRenderWatchfaceText(WEEKDAY_LABELS[weekdayIndex] ?? "DAY", weekFontFamily, options)) {
+    if (shouldRenderWatchfaceText(WEEKDAY_LABELS[weekdayIndex] ?? "DAY", weekFontFamily, weekTypography)) {
       image = await loadStudioImage(
         await renderWatchfaceTextSprite(
           WEEKDAY_LABELS[weekdayIndex] ?? "DAY",
@@ -3567,7 +3785,7 @@ export async function drawStudioPreview(
           weekHeight,
           weekFontFamily,
           weekColor ?? options.digitColor,
-          options
+          weekTypography
         )
       );
     }
@@ -3662,6 +3880,14 @@ export async function drawStudioPreview(
       : undefined;
     const glyphFontFamily =
       timeStyle?.fontFamily ?? metricStyle?.fontFamily ?? dateStyle?.fontFamily ?? options.fontFamily;
+    const glyphTypography = {
+      ...options,
+      rasterFont:
+        timeStyle?.rasterFont ??
+        metricStyle?.rasterFont ??
+        dateStyle?.rasterFont ??
+        options.rasterFont
+    };
     const glyphs: {
       file: CorosWatchfaceSpriteFile;
       image: HTMLImageElement;
@@ -3696,7 +3922,7 @@ export async function drawStudioPreview(
       const cacheKey = `${file.path}|${glyphFontFamily}|${glyphColor}|${glyphScale}`;
       let image = styledMetricGlyphs.get(cacheKey);
       if (!image) {
-        if (shouldRenderWatchfaceText(digit, glyphFontFamily, options)) {
+        if (shouldRenderWatchfaceText(digit, glyphFontFamily, glyphTypography)) {
           image = await loadStudioImage(
             await renderWatchfaceTextSprite(
               digit,
@@ -3704,7 +3930,7 @@ export async function drawStudioPreview(
               styledFile.height,
               glyphFontFamily,
               glyphColor,
-              options
+              glyphTypography
             )
           );
         } else if (timeStyle?.color || metricStyle?.color || dateStyle?.color || componentColor) {

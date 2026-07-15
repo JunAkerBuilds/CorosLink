@@ -14,12 +14,14 @@ const {
   buildCreateLinkBody,
   buildMobileLoginRegion,
   encryptMobileLoginField,
+  exportCorosWatchfaceProject,
   extractDecimalProperty,
   findHttpsUrlInJson,
   normalizeCorosBatteryReport,
   normalizeCorosPairedDevices,
   normalizeCorosWatchfaceThemes,
   parseCorosWatchfaceSharePage,
+  readCorosWatchfaceProjectPackage,
   selectCorosWatchfaceArchive
 } = await import(`${distUrl("corosWatchfaceService.js")}?cacheBust=${Date.now()}`);
 const { createStoreZip } = await import(
@@ -411,6 +413,34 @@ try {
   assert.equal(selected.diyVersion, 1);
   assert.equal(selected.watchFaceVersion, 0);
   assert.ok(selected.archiveId.length > 0);
+
+  const exportedPath = path.join(tempDirectory, "website-face.zip");
+  const editableDesign = { version: 1, accentColor: "#55d6be" };
+  const preview = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    "base64"
+  );
+  await exportCorosWatchfaceProject(
+    {
+      sourceArchiveId: selected.archiveId,
+      name: "Website face",
+      firmwareType: "COROS W332",
+      design: editableDesign,
+      previewDataUrl: `data:image/png;base64,${preview.toString("base64")}`
+    },
+    exportedPath
+  );
+  const editablePackage = await readCorosWatchfaceProjectPackage(exportedPath);
+  assert.ok(editablePackage, "website ZIP should be recognized as an editable project");
+  assert.equal(editablePackage.manifest.name, "Website face");
+  assert.equal(editablePackage.manifest.firmwareType, "COROS W332");
+  assert.deepEqual(editablePackage.manifest.design, editableDesign);
+  assert.deepEqual(
+    editablePackage.starterArchive,
+    archive,
+    "editable website ZIP should preserve the original starter archive exactly"
+  );
+  assert.deepEqual(editablePackage.preview, preview);
 } finally {
   await fs.rm(tempDirectory, { recursive: true, force: true });
 }

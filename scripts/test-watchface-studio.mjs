@@ -57,6 +57,14 @@ assert.equal(rasterFontSupportsText(rasterFont, "08"), true);
 assert.equal(rasterFontSupportsText(rasterFont, "sun"), true);
 assert.equal(rasterFontSupportsText(rasterFont, "mon"), true);
 assert.equal(rasterFontSupportsText(rasterFont, "wed"), false);
+assert.equal(
+  rasterFontSupportsText(
+    { label: "Independent", dataUrl: "", glyphs: "", columns: 1, tint: false, sprites: { "7": "data:image/png;base64,AA==" } },
+    "7"
+  ),
+  true,
+  "an individually imported glyph should not require an atlas"
+);
 
 function digitFiles(width, height, directory, folder) {
   return Array.from({ length: 10 }, (_, digit) => ({
@@ -884,9 +892,9 @@ assert.deepEqual(
     y1: 264
   }
 );
-assert.deepEqual(fullBounds.find((entry) => entry.id === "battery"), {
-  id: "battery",
-  label: "Battery",
+assert.deepEqual(fullBounds.find((entry) => entry.id === "batteryIcon"), {
+  id: "batteryIcon",
+  label: "Battery icon",
   x0: 160,
   y0: 80,
   x1: 248,

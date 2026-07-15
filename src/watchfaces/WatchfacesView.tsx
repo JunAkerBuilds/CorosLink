@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import type {
   CorosWatchfaceArchive,
+  CorosWatchfaceDesignState,
   CorosWatchfaceProject,
   CorosWatchfaceProjectSummary,
   CorosWatchfaceRegion,
@@ -112,6 +113,7 @@ interface StudioSession {
   id: string;
   archive: CorosWatchfaceArchive;
   project?: CorosWatchfaceProject;
+  initialDesign?: CorosWatchfaceDesignState;
   initialName: string;
   targetFirmwareType: string;
   targetWatchModel?: WatchModelId;
@@ -343,7 +345,13 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
       id: createWatchfaceEditorSessionId(project?.projectId ?? archive.archiveId),
       archive,
       project,
-      initialName: initialName.trim() || "Untitled watch face",
+      ...(project?.design || archive.editableProject?.design
+        ? { initialDesign: project?.design ?? archive.editableProject?.design }
+        : {}),
+      initialName:
+        project?.name ??
+        archive.editableProject?.name ??
+        (initialName.trim() || "Untitled watch face"),
       targetFirmwareType,
       ...(targetWatchModel ? { targetWatchModel } : {})
     });
@@ -372,7 +380,9 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
       if (!selected) return;
       openStudio(
         selected,
-        selected.fileName.replace(/\.(zip|dat)$/i, "") || "Custom watch face"
+        selected.editableProject?.name ??
+          (selected.fileName.replace(/\.(zip|dat)$/i, "") ||
+            "Custom watch face")
       );
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -572,7 +582,7 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
           starterArchive={studioSession.archive}
           targetFirmwareType={studioSession.targetFirmwareType}
           targetWatchModel={studioSession.targetWatchModel}
-          initialDesign={studioSession.project?.design}
+          initialDesign={studioSession.initialDesign}
           initialProjectId={studioSession.project?.projectId}
           initialProjectName={studioSession.project?.name ?? studioSession.initialName}
           onBack={returnToHub}
