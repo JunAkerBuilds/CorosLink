@@ -23661,3 +23661,148 @@ body.is-backgrounded .training-backup-progress-track.is-indeterminate span {
   color: var(--text-primary);
   border-color: var(--accent);
 }
+
+/* ----- MCP servers registry panel (chat settings) ----- */
+.mcp-servers-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mcp-servers-error {
+  margin: 0;
+  color: var(--error-text);
+  font-size: 12px;
+}
+.mcp-servers-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mcp-server-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+}
+.mcp-server-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.mcp-server-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.mcp-server-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--glass-bg-elevated);
+  color: var(--text-secondary);
+}
+.mcp-server-pill.is-connected {
+  background: color-mix(in srgb, var(--success-text) 22%, transparent);
+  color: var(--success-text);
+}
+.mcp-server-url {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.mcp-server-row-error {
+  font-size: 11px;
+  color: var(--error-text);
+}
+.mcp-server-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.mcp-server-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg-elevated);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mcp-server-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.mcp-server-remove {
+  padding: 5px 7px !important;
+  color: var(--text-muted) !important;
+}
+.mcp-server-bearer,
+.mcp-servers-add {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.mcp-server-bearer input,
+.mcp-servers-add input,
+.mcp-servers-add select {
+  padding: 6px 9px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.mcp-servers-add input[type="url"] {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.mcp-server-bearer button,
+.mcp-servers-add button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: #06110e;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mcp-server-bearer button:disabled,
+.mcp-servers-add button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.mcp-servers-presets {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.mcp-servers-presets button {
+  padding: 5px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: var(--glass-bg-elevated);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}

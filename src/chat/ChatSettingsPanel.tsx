@@ -19,6 +19,8 @@ import type {
   LocalChatDiscovery
 } from "../../electron/types";
 import { CorosMcpToolsPanel } from "./CorosMcpToolsPanel";
+import { McpServersPanel } from "./McpServersPanel";
+import type { CorosLinkApi } from "../coroslink-api";
 
 function claudeStatusLabel(status: ClaudeCodeStatus | null): string {
   if (!status) return "Not checked";
@@ -31,6 +33,7 @@ function claudeStatusLabel(status: ClaudeCodeStatus | null): string {
 }
 
 export function ChatSettingsPanel({
+  api,
   chatSettings,
   authStatus,
   claudeStatus,
@@ -66,6 +69,7 @@ export function ChatSettingsPanel({
   onToggleTools,
   onUpdateChatSettings
 }: {
+  api: CorosLinkApi | undefined;
   chatSettings: ChatSettings;
   authStatus: ChatAuthStatus | null;
   claudeStatus: ClaudeCodeStatus | null;
@@ -535,6 +539,15 @@ export function ChatSettingsPanel({
             plans, and upload workouts to your COROS calendar.
           </p>
         </div>
+      </section>
+
+      <section className="chat-settings-section">
+        <h3>MCP servers</h3>
+        <p className="chat-settings-copy">
+          Connect additional Model Context Protocol servers so the coach can call
+          their tools. Their tools appear alongside COROS, namespaced per server.
+        </p>
+        <McpServersPanel api={api} />
       </section>
     </div>
   );

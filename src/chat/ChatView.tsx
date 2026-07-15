@@ -1329,6 +1329,7 @@ export function ChatView({
   };
 
   const settingsModalProps = {
+    api,
     open: settingsOpen,
     chatSettings,
     authStatus,

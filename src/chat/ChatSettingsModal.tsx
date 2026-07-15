@@ -8,9 +8,11 @@ import type {
   LocalChatConnectionTest,
   LocalChatDiscovery
 } from "../../electron/types";
+import type { CorosLinkApi } from "../coroslink-api";
 import { ChatSettingsPanel } from "./ChatSettingsPanel";
 
 export function ChatSettingsModal({
+  api,
   open,
   chatSettings,
   authStatus,
@@ -48,6 +50,7 @@ export function ChatSettingsModal({
   onToggleTools,
   onUpdateChatSettings
 }: {
+  api: CorosLinkApi | undefined;
   open: boolean;
   chatSettings: ChatSettings;
   authStatus: ChatAuthStatus | null;
@@ -134,6 +137,7 @@ export function ChatSettingsModal({
         </header>
         <div className="chat-settings-modal-body">
           <ChatSettingsPanel
+            api={api}
             chatSettings={chatSettings}
             authStatus={authStatus}
             claudeStatus={claudeStatus}
