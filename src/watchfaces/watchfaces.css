@@ -691,43 +691,12 @@
   padding: 0;
 }
 
-.watchface-shell--signin .watchface-hub-header {
-  position: absolute;
-  z-index: 5;
-  top: 14px;
-  left: 50%;
-  width: min(1180px, calc(100% - 32px));
-  max-width: 1180px;
-  min-height: 68px;
-  margin: 0;
-  transform: translateX(-50%);
-  border: 1px solid rgba(224, 239, 234, 0.14);
-  border-radius: 18px;
-  padding: 12px 16px;
-}
-
-:root:not([data-theme="paper"]) .watchface-shell--signin .watchface-hub-header {
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.025) 58%),
-    rgba(16, 24, 28, 0.42);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.035),
-    0 18px 48px rgba(2, 9, 12, 0.24);
-  -webkit-backdrop-filter: blur(26px) saturate(145%) contrast(1.04);
-  backdrop-filter: blur(26px) saturate(145%) contrast(1.04);
-}
-
-:root[data-theme="paper"] .watchface-shell--signin .watchface-hub-header {
-  border-color: rgba(255, 255, 255, 0.58);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.3)),
-    rgba(238, 243, 240, 0.48);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 18px 48px rgba(48, 62, 57, 0.12);
-  -webkit-backdrop-filter: blur(26px) saturate(135%);
-  backdrop-filter: blur(26px) saturate(135%);
+:root .watchface-shell--hub.watchface-shell--signin {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
 }
 
 .watchface-shell--studio {
@@ -766,7 +735,6 @@
 }
 
 .watchface-shell .watchface-hub-brand,
-.watchface-shell .watchface-hub-account,
 .watchface-shell .watchface-hub-actions {
   display: flex;
   align-items: center;
@@ -805,8 +773,7 @@
   letter-spacing: 0.1em;
 }
 
-.watchface-shell .watchface-hub-connected,
-.watchface-shell .watchface-hub-auth-status {
+.watchface-shell .watchface-hub-connected {
   display: inline-flex;
   align-items: center;
   min-height: 40px;
@@ -818,7 +785,7 @@
 }
 
 .watchface-shell .watchface-hub-disconnect,
-.watchface-shell :where(.wf-save-button, .wf-send-button) {
+.watchface-shell :where(.wf-save-button, .wf-export-button, .wf-send-button) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1759,6 +1726,101 @@
   margin-top: 20px;
 }
 
+.watchface-shell .wf-export-preview-modal {
+  width: min(760px, 100%);
+}
+
+.watchface-shell .wf-export-preview-header,
+.watchface-shell .wf-export-preview-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.watchface-shell .wf-export-preview-header {
+  margin-bottom: 18px;
+}
+
+.watchface-shell .wf-export-preview-header h2,
+.watchface-shell .wf-export-preview-header p,
+.watchface-shell .wf-export-preview-grid p {
+  margin: 0;
+}
+
+.watchface-shell .wf-export-preview-header h2 {
+  font-family: var(--font-display);
+  font-size: 22px;
+}
+
+.watchface-shell .wf-export-preview-header p,
+.watchface-shell .wf-export-preview-grid p,
+.watchface-shell .wf-export-preview-label span,
+.watchface-shell .wf-export-preview-header > span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.watchface-shell .wf-export-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.watchface-shell .wf-export-preview-grid article {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--wf-border);
+  border-radius: 10px;
+  background: var(--wf-surface);
+  padding: 14px;
+}
+
+.watchface-shell .wf-export-preview-label strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.watchface-shell .wf-export-phone-preview,
+.watchface-shell .wf-export-watch-preview {
+  display: grid;
+  width: min(100%, 280px);
+  aspect-ratio: 1;
+  place-self: center;
+  overflow: hidden;
+}
+
+.watchface-shell .wf-export-phone-preview {
+  border: 1px solid var(--wf-border-strong);
+  border-radius: 12px;
+  background: var(--wf-surface-raised);
+  box-shadow: var(--wf-shadow-soft);
+}
+
+.watchface-shell .wf-export-watch-preview {
+  border: 8px solid color-mix(in srgb, var(--wf-surface-raised) 74%, #000);
+  border-radius: 50%;
+  background: #05090b;
+  box-shadow:
+    0 0 0 1px var(--wf-border-strong),
+    var(--wf-shadow-soft);
+}
+
+.watchface-shell .wf-export-phone-preview img,
+.watchface-shell .wf-export-watch-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (max-width: 680px) {
+  .watchface-shell .wf-export-preview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-publish-settings, .watchfaces-publish-form) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1849,6 +1911,46 @@
   color: var(--text-secondary);
   font-size: 11px;
   line-height: 1.55;
+}
+
+.watchface-shell .watchface-import-dialog {
+  width: min(520px, 100%);
+}
+
+.watchface-shell .watchface-import-file {
+  width: 100%;
+  min-height: 46px;
+  justify-content: center;
+  margin-top: 22px;
+}
+
+.watchface-shell .watchface-import-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.watchface-shell .watchface-import-divider::before,
+.watchface-shell .watchface-import-divider::after {
+  height: 1px;
+  flex: 1;
+  background: var(--wf-border);
+  content: "";
+}
+
+.watchface-shell .watchface-import-link-form {
+  display: grid;
+  gap: 14px;
+}
+
+.watchface-shell .watchface-import-link-form > .primary-button {
+  justify-self: end;
 }
 
 .watchface-shell .watchface-share-result {
@@ -1992,7 +2094,9 @@
 }
 
 .watchface-shell .wf-command-bar {
-  grid-template-columns: auto minmax(180px, 1fr) auto;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  gap: 10px;
+  padding: 8px 12px;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-command-start, .watchface-editor-title) {
@@ -2003,6 +2107,7 @@
 }
 
 .watchface-shell .wf-project-title {
+  gap: 10px;
   overflow: hidden;
 }
 
@@ -2024,9 +2129,24 @@
 .watchface-shell .wf-back-button {
   display: inline-flex;
   width: auto;
+  min-width: 0;
+  height: 40px;
+  min-height: 40px;
+  border: 1px solid var(--wf-border-strong);
+  background: var(--wf-surface-hover);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
   padding: 0 10px;
-  gap: 7px;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 720;
   white-space: nowrap;
+}
+
+.watchface-shell .wf-back-button:hover {
+  border-color: var(--wf-accent-border);
+  background: color-mix(in srgb, var(--wf-surface-hover) 74%, var(--accent-soft));
+  color: var(--text-primary);
 }
 
 .watchface-shell .wf-pane-toggle {
@@ -2034,32 +2154,64 @@
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-project-name, .watchface-editor-name) {
-  width: min(360px, 42vw);
+  flex: 0 1 min(320px, 32vw);
+  width: min(320px, 32vw);
   min-height: 40px;
-  border-color: transparent;
-  background: transparent;
+  border-color: var(--wf-border-strong);
+  background: color-mix(in srgb, var(--wf-surface-raised) 76%, transparent);
+  padding-inline: 11px;
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 720;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-project-name, .watchface-editor-name):hover {
-  border-color: var(--wf-border);
-  background: var(--wf-surface-hover);
+  border-color: var(--wf-border-strong);
+  background: var(--wf-surface-raised);
+}
+
+:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-project-name, .watchface-editor-name):focus {
+  border-color: var(--accent-strong);
+  background: var(--wf-surface-raised);
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-save-state, .watchface-save-state) {
   display: inline-flex;
   align-items: center;
-  min-height: 32px;
+  min-height: 24px;
+  gap: 6px;
+  border: 1px solid var(--wf-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wf-surface-raised) 72%, transparent);
   color: var(--text-secondary);
-  font-size: 11px;
+  padding: 0 8px;
+  font-size: 10px;
   font-weight: 680;
   white-space: nowrap;
 }
 
+:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-save-state, .watchface-save-state)::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-save-state, .watchface-save-state).is-dirty {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
   color: var(--warning-text);
+}
+
+.watchface-shell .wf-command-actions {
+  gap: 5px;
+}
+
+.watchface-shell .wf-command-actions > .wf-icon-button {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-studio-grid, .watchface-editor-grid) {
@@ -2211,7 +2363,7 @@
 .watchface-shell .wf-layer-list > li:not(.wf-layer-group),
 .watchface-shell .watchface-bg-sublayers > li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 40px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 3px;
 }
@@ -2239,8 +2391,23 @@
 }
 
 .watchface-shell .watchface-layer-row {
-  grid-template-columns: 20px minmax(0, 1fr);
+  grid-template-columns: 20px minmax(0, 1fr) auto;
   width: 100%;
+}
+
+.watchface-shell .wf-layer-state {
+  color: var(--accent-strong);
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: 0.03em;
+}
+
+.watchface-shell .wf-layer-link-state {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  color: var(--accent-strong);
+  place-items: center;
 }
 
 .watchface-shell .wf-pane-loading {
@@ -2321,6 +2488,33 @@
   color: var(--text-primary);
 }
 
+.watchface-shell .watchface-layer-lock {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0;
+  place-items: center;
+}
+
+.watchface-shell .watchface-layer-lock:hover {
+  background: color-mix(in srgb, var(--wf-surface-raised) 70%, transparent);
+  color: var(--text-primary);
+}
+
+.watchface-shell .watchface-layer-lock.is-locked {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.watchface-shell .watchface-layer-lock:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: -2px;
+}
+
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-layer-children, .watchface-bg-sublayers) {
   display: grid;
   gap: 3px;
@@ -2391,6 +2585,164 @@
   color: var(--accent-strong);
 }
 
+.watchface-shell .wf-placement-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+.watchface-shell .wf-placement-trigger {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  gap: 7px;
+  border: 1px solid var(--wf-border);
+  border-radius: 8px;
+  background: var(--wf-surface);
+  color: var(--text-secondary);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-placement-trigger:hover,
+.watchface-shell .wf-placement-trigger[aria-expanded="true"] {
+  border-color: var(--wf-border-strong);
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-placement-trigger.is-active {
+  border-color: var(--wf-accent-border);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.watchface-shell .wf-placement-trigger:active {
+  transform: translateY(1px);
+}
+
+.watchface-shell .wf-layer-context-menu {
+  display: grid;
+  position: fixed;
+  z-index: 120;
+  width: 230px;
+  gap: 3px;
+  border: 1px solid var(--wf-border-strong);
+  border-radius: 10px;
+  background: var(--wf-surface-raised);
+  box-shadow: var(--wf-shadow);
+  padding: 6px;
+  transform: translate(2px, 2px);
+}
+
+.watchface-shell .wf-layer-context-menu button {
+  display: grid;
+  min-height: 36px;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0 9px;
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.watchface-shell .wf-layer-context-menu button:hover:not(:disabled) {
+  background: var(--wf-surface-hover);
+  color: var(--accent-strong);
+}
+
+.watchface-shell .wf-layer-context-menu button:disabled {
+  color: color-mix(in srgb, var(--text-secondary) 55%, transparent);
+  cursor: not-allowed;
+}
+
+.watchface-shell .wf-layer-context-menu p {
+  margin: 3px 5px 1px;
+  border-top: 1px solid var(--wf-border);
+  color: var(--text-secondary);
+  padding: 7px 4px 2px;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.watchface-shell .wf-placement-popover {
+  display: grid;
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 7px);
+  right: 0;
+  width: min(310px, calc(100vw - 36px));
+  gap: 9px;
+  border: 1px solid var(--wf-border-strong);
+  border-radius: 10px;
+  background: var(--wf-surface-raised);
+  box-shadow: var(--wf-shadow);
+  padding: 12px;
+}
+
+.watchface-shell .wf-placement-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--wf-border);
+}
+
+.watchface-shell .wf-placement-heading strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.watchface-shell .wf-placement-heading span {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.watchface-shell .wf-placement-field,
+.watchface-shell .wf-placement-safe-area {
+  gap: 6px;
+}
+
+.watchface-shell .wf-placement-field select {
+  min-height: 38px;
+}
+
+.watchface-shell .wf-placement-safe-area {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.watchface-shell .wf-placement-safe-area input {
+  grid-column: 1 / -1;
+}
+
+.watchface-shell .wf-placement-note {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.watchface-shell .wf-archive-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.watchface-shell .wf-stage-status .is-snap-status {
+  color: var(--accent-strong);
+  font-weight: 720;
+}
+
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-stage-tools, .watchface-stage-tools) {
   display: flex;
   align-items: center;
@@ -2422,6 +2774,62 @@
   color: var(--text-primary);
 }
 
+.watchface-shell .wf-preview-mode-switch {
+  display: inline-grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: 3px;
+  border: 1px solid var(--wf-border);
+  border-radius: 9px;
+  background: var(--wf-surface);
+  padding: 3px;
+}
+
+.watchface-shell .wf-preview-mode-switch button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-preview-mode-switch button:hover:not(:disabled) {
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-preview-mode-switch button[aria-pressed="true"] {
+  border-color: var(--wf-accent-border);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent-strong) 12%, transparent);
+}
+
+.watchface-shell .wf-preview-mode-switch button:disabled {
+  color: color-mix(in srgb, var(--text-secondary) 46%, transparent);
+  cursor: not-allowed;
+}
+
+.watchface-shell .wf-aod-preview-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  margin-left: auto;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 680;
+  white-space: nowrap;
+}
+
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-stage-viewport, .watchface-stage-viewport) {
   display: grid;
   min-width: 0;
@@ -2446,6 +2854,25 @@
 
 .watchface-shell .watchface-preview-stack {
   position: relative;
+}
+
+.watchface-shell .wf-preview-resolution {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.watchface-shell .wf-preview-resolution select {
+  min-height: 32px;
+  max-width: 220px;
+  border: 1px solid var(--wf-border);
+  border-radius: 8px;
+  padding: 0 28px 0 10px;
+  color: var(--text-primary);
+  background: var(--wf-surface);
 }
 
 .watchface-shell .watchface-editor-device.is-fit {
@@ -2473,8 +2900,21 @@
   width: calc(100% - 18px);
   height: calc(100% - 18px);
   border-radius: 50%;
+  z-index: 2;
   cursor: crosshair;
   touch-action: none;
+}
+
+.watchface-shell .watchface-preview-drag {
+  position: absolute;
+  inset: 9px;
+  width: calc(100% - 18px);
+  height: calc(100% - 18px);
+  border-radius: 50%;
+  background: #0f1417;
+  z-index: 1;
+  pointer-events: none;
+  visibility: hidden;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-stage-status, .watchface-stage-status, .watchface-editor-hint) {
@@ -2504,6 +2944,16 @@
   text-align: right;
 }
 
+.watchface-shell .wf-aod-empty-inspector {
+  justify-items: start;
+  color: var(--text-secondary);
+}
+
+.watchface-shell .wf-aod-empty-inspector > strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
 /* Properties */
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-inspector-section, .watchface-inspector-group) {
@@ -2528,6 +2978,91 @@
   height: 1px;
   margin: 3px 0;
   background: var(--wf-border);
+}
+
+.watchface-shell .wf-config-asset-preview {
+  display: grid;
+  min-height: 112px;
+  overflow: hidden;
+  border: 1px solid var(--wf-border);
+  border-radius: 10px;
+  background:
+    linear-gradient(45deg, color-mix(in srgb, var(--wf-surface-raised) 88%, transparent) 25%, transparent 25%) 0 0 / 16px 16px,
+    linear-gradient(-45deg, color-mix(in srgb, var(--wf-surface-raised) 88%, transparent) 25%, transparent 25%) 0 8px / 16px 16px,
+    var(--wf-canvas);
+  color: var(--text-secondary);
+  place-items: center;
+  transition: opacity 160ms ease;
+}
+
+.watchface-shell .wf-config-asset-preview.is-disabled {
+  opacity: 0.4;
+}
+
+.watchface-shell .wf-config-asset-preview img {
+  display: block;
+  width: 100%;
+  height: 112px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.watchface-shell .wf-background-asset-preview {
+  min-height: 160px;
+}
+
+.watchface-shell .wf-background-asset-preview img {
+  height: 160px;
+  object-fit: contain;
+  image-rendering: auto;
+}
+
+.watchface-shell .wf-config-asset-meta {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.watchface-shell .wf-config-asset-meta strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.watchface-shell .wf-config-asset-meta span,
+.watchface-shell .wf-config-asset-meta code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-config-asset-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.watchface-shell .wf-config-asset-actions > :only-child {
+  grid-column: 1 / -1;
+}
+
+.watchface-shell .wf-inline-config-asset {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--wf-border);
+  border-radius: 9px;
+  background: var(--wf-surface-raised);
+  padding: 5px 6px 5px 10px;
+}
+
+.watchface-shell .wf-inline-config-asset .secondary-button {
+  min-height: 36px;
+  padding-inline: 10px;
+  white-space: nowrap;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-color-control, .wf-color-control) {
@@ -2565,9 +3100,119 @@
   gap: 8px;
 }
 
+:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-position-inputs, .wf-position-inputs) label {
+  display: grid;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-position-inputs, .wf-position-inputs) input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--wf-border);
+  border-radius: 7px;
+  background: var(--wf-surface-raised);
+  color: var(--text-primary);
+  padding: 0 9px;
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-position-inputs, .wf-position-inputs) input:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 1px;
+}
+
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-inspector-position, .wf-position-section) {
   display: grid;
-  gap: 9px;
+  gap: 8px;
+}
+
+.watchface-shell .wf-position-heading {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 24px;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 720;
+  letter-spacing: -0.01em;
+}
+
+.watchface-shell .wf-position-controls {
+  display: grid;
+  min-inline-size: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 10px;
+  row-gap: 6px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.watchface-shell .wf-position-controls > .watchface-position-inputs {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.watchface-shell .wf-position-controls > span {
+  align-self: end;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.watchface-shell .wf-position-controls > span:nth-of-type(1),
+.watchface-shell .wf-position-controls > .watchface-align-grid {
+  grid-column: 1;
+}
+
+.watchface-shell .wf-position-controls > span:nth-of-type(2),
+.watchface-shell .wf-position-controls > .watchface-nudge-pad {
+  grid-column: 2;
+}
+
+.watchface-shell .wf-position-controls > span:nth-of-type(1),
+.watchface-shell .wf-position-controls > span:nth-of-type(2) {
+  grid-row: 2;
+}
+
+.watchface-shell .wf-position-controls > :is(.watchface-align-grid, .watchface-nudge-pad) {
+  grid-row: 3;
+}
+
+.watchface-shell .wf-position-controls > .wf-position-nudge-only {
+  grid-column: 1;
+  justify-self: start;
+}
+
+.watchface-shell .wf-position-controls > .watchface-studio-summary {
+  grid-column: 1 / -1;
+}
+
+.watchface-shell .wf-position-help {
+  border-top: 1px solid var(--wf-border);
+  padding-top: 8px;
+}
+
+.watchface-shell .wf-position-controls:disabled {
+  opacity: 0.5;
+}
+
+.watchface-shell .wf-position-controls:disabled :is(button, input) {
+  cursor: not-allowed;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-align-grid, .wf-align-grid) {
@@ -2579,11 +3224,12 @@
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-align-grid, .wf-align-grid) button,
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-nudge-pad, .wf-nudge-pad) button {
   min-width: 0;
-  min-height: 40px;
+  min-height: 32px;
   border: 1px solid var(--wf-border);
   border-radius: 7px;
   background: var(--wf-surface-raised);
   color: var(--text-secondary);
+  font-size: 11px;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-align-grid, .wf-align-grid) button:hover,
@@ -2592,10 +3238,15 @@
   color: var(--text-primary);
 }
 
+:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-align-grid, .wf-align-grid) button:active:not(:disabled),
+:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-nudge-pad, .wf-nudge-pad) button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-nudge-pad, .wf-nudge-pad) {
   display: grid;
-  grid-template-columns: repeat(3, 40px);
-  grid-template-rows: repeat(3, 40px);
+  grid-template-columns: repeat(3, 32px);
+  grid-template-rows: repeat(3, 32px);
   justify-content: center;
   gap: 4px;
 }
@@ -2604,6 +3255,21 @@
   grid-column: 2;
   grid-row: 2;
   font-size: 9px;
+}
+
+@media (max-width: 420px) {
+  .watchface-shell .wf-position-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .watchface-shell .wf-position-controls > :is(span:nth-of-type(1), span:nth-of-type(2), .watchface-align-grid, .watchface-nudge-pad) {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .watchface-shell .wf-position-controls > .watchface-nudge-pad {
+    justify-self: start;
+  }
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-shape-tools-row, .wf-shape-tools) {
@@ -2897,6 +3563,7 @@
   }
 
   :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-project-name, .watchface-editor-name) {
+    flex: 1 1 auto;
     width: 100%;
   }
 
@@ -2941,6 +3608,10 @@
     overflow-x: auto;
   }
 
+  :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-stage-toolbar, .watchface-stage-toolbar):has(.wf-placement-popover) {
+    overflow: visible;
+  }
+
   :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-stage-viewport, .watchface-stage-viewport) {
     padding: 18px;
   }
@@ -2957,24 +3628,17 @@
 }
 
 @media (max-width: 479px) {
-  .watchface-shell.watchface-shell--signin .watchface-hub-header,
-  .watchface-shell.watchface-shell--signin .watchface-hub-account {
-    align-items: center;
-    flex-direction: row;
+  .watchface-shell .wf-placement-trigger > span {
+    display: none;
   }
 
-  .watchface-shell.watchface-shell--signin .watchface-hub-header {
-    padding: 12px 16px;
+  .watchface-shell .wf-placement-popover {
+    right: -4px;
   }
 
-  .watchface-shell .watchface-hub-header,
-  .watchface-shell .watchface-hub-account {
+  .watchface-shell .watchface-hub-header {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .watchface-shell .watchface-hub-account {
-    width: 100%;
   }
 
   .watchface-shell .watchface-hub-connected {
@@ -3111,16 +3775,8 @@
     backdrop-filter: none;
   }
 
-  :root:not([data-theme="paper"]) .watchface-shell--signin .watchface-hub-header {
-    background: #172126;
-  }
-
   :root:not([data-theme="paper"]) .watchface-shell--signin .watchface-auth-card {
     background: #1b2529;
-  }
-
-  :root[data-theme="paper"] .watchface-shell--signin .watchface-hub-header {
-    background: #f3f8f5;
   }
 
   :root[data-theme="paper"] .watchface-shell--signin .watchface-auth-card {
@@ -3131,6 +3787,7 @@
 @media (forced-colors: active) {
   :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.primary-button, .wf-button-primary),
   :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-layer-row, .watchface-layer-row).is-selected,
+  .watchface-shell .wf-placement-trigger.is-active,
   :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-hub-tab, .watchfaces-hub-tab)[aria-selected="true"] {
     border: 2px solid Highlight;
   }
@@ -3706,4 +4363,1154 @@
   border-radius: inherit;
   background: var(--accent);
   transition: width 160ms ease;
+}
+
+/* Watch Faces project dashboard */
+
+.watchface-shell--hub {
+  --wf-dashboard-card: color-mix(
+    in srgb,
+    var(--glass-bg-elevated) 88%,
+    var(--bg-base)
+  );
+  --wf-dashboard-card-hover: color-mix(
+    in srgb,
+    var(--glass-bg-hover) 84%,
+    var(--surface)
+  );
+  --wf-dashboard-stage: color-mix(
+    in srgb,
+    var(--bg-base) 90%,
+    var(--text-primary) 10%
+  );
+  --wf-dashboard-border: var(--glass-border);
+  --wf-dashboard-radius: 14px;
+  gap: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 18px clamp(28px, 3.2vw, 36px) 36px;
+}
+
+:root:not([data-theme="paper"]) .watchface-shell--hub {
+  border: 0;
+  background: var(--wf-workspace-bg);
+  box-shadow: none;
+}
+
+:root[data-theme="paper"] .watchface-shell--hub {
+  --wf-dashboard-stage: color-mix(
+    in srgb,
+    var(--bg-base) 80%,
+    var(--text-primary) 20%
+  );
+}
+
+:root[data-theme="paper"] .watchface-project-preview {
+  background: color-mix(
+    in srgb,
+    var(--text-primary) 86%,
+    var(--bg-base)
+  );
+}
+
+:root .watchface-shell--hub .watchface-dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(1220px, 100%);
+  min-height: 74px;
+  gap: 28px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 4px 0 22px;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.watchface-shell--hub .watchface-hub-brand {
+  gap: 16px;
+}
+
+.watchface-shell--hub .watchface-hub-mark {
+  width: 54px;
+  height: 54px;
+  border-color: var(--wf-dashboard-border);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--accent-soft) 62%, var(--glass-bg));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 9%, transparent);
+}
+
+.watchface-shell--hub .watchface-hub-brand-copy {
+  min-width: 0;
+}
+
+.watchface-shell--hub .watchface-hub-brand h1 {
+  margin: 0;
+  font-size: clamp(27px, 2.6vw, 31px);
+  font-weight: 760;
+  letter-spacing: -0.035em;
+}
+
+.watchface-shell--hub .watchface-hub-brand-copy p {
+  max-width: 520px;
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.watchface-shell--hub .watchface-hub-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.watchface-shell--hub .watchface-header-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  gap: 8px;
+  padding-inline: 15px;
+}
+
+.watchface-shell--hub :where(
+    .watchface-header-action,
+    .watchface-device-trigger,
+    .watchface-project-menu-trigger,
+    .watchface-project-popover button,
+    .watchface-device-account-action,
+    .watchface-create-card,
+    .watchface-project-card-open,
+    .watchfaces-battery-toggle
+  ) {
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.watchface-device-menu,
+.watchface-project-menu {
+  position: relative;
+}
+
+.watchface-device-menu {
+  z-index: 8;
+}
+
+.watchface-device-trigger {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  max-width: 260px;
+  gap: 8px;
+  border: 1px solid var(--wf-dashboard-border);
+  border-radius: 10px;
+  background: var(--wf-dashboard-card);
+  color: var(--text-secondary);
+  padding: 0 11px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.watchface-device-trigger > span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-device-trigger:hover:not(:disabled),
+.watchface-device-trigger[aria-expanded="true"] {
+  border-color: var(--wf-border-strong);
+  background: var(--wf-dashboard-card-hover);
+  color: var(--text-primary);
+}
+
+.watchface-device-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-secondary) 58%, transparent);
+}
+
+.watchface-device-trigger.is-connected .watchface-device-dot {
+  background: var(--success-dot);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success-dot) 13%, transparent);
+}
+
+.watchface-device-label-skeleton {
+  width: 128px;
+  height: 11px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--text-secondary) 22%, transparent);
+}
+
+.watchface-device-popover {
+  display: grid;
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(320px, calc(100vw - 44px));
+  gap: 14px;
+  border: 1px solid var(--wf-border-strong);
+  border-radius: 12px;
+  background: var(--wf-dashboard-card);
+  box-shadow: var(--shadow-elevated);
+  padding: 14px;
+}
+
+.watchface-device-popover-heading {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+}
+
+.watchface-device-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--wf-dashboard-border);
+  border-radius: 10px;
+  background: var(--wf-dashboard-stage);
+  color: var(--text-secondary);
+  place-items: center;
+}
+
+.watchface-device-icon.is-connected {
+  border-color: color-mix(in srgb, var(--success-dot) 38%, var(--wf-dashboard-border));
+  color: var(--success-text);
+}
+
+.watchface-device-popover-heading strong,
+.watchface-device-popover-heading span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-device-popover-heading strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.watchface-device-popover-heading span {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.watchface-device-details {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  border-top: 1px solid var(--wf-dashboard-border);
+  padding-top: 12px;
+}
+
+.watchface-device-details > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.watchface-device-details :where(dt, dd) {
+  margin: 0;
+  font-size: 11px;
+}
+
+.watchface-device-details dt {
+  color: var(--text-secondary);
+}
+
+.watchface-device-details dd {
+  overflow: hidden;
+  color: var(--text-primary);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-device-error {
+  margin: 0;
+  border: 1px solid var(--error-border);
+  border-radius: 8px;
+  background: var(--error-bg);
+  color: var(--error-text);
+  padding: 8px 9px;
+  font-size: 10px;
+}
+
+.watchface-device-account-action {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 40px;
+  gap: 8px;
+  border: 1px solid var(--wf-dashboard-border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.watchface-device-account-action:hover:not(:disabled) {
+  background: var(--wf-dashboard-card-hover);
+}
+
+.watchface-device-account-action.is-danger {
+  color: var(--error-text);
+}
+
+.watchface-device-account-action.is-danger:hover:not(:disabled) {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+}
+
+.watchface-shell--hub .watchface-hub-main {
+  width: min(1220px, 100%);
+  gap: 28px;
+}
+
+:root .watchface-shell--hub .watchface-dashboard-tabs {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 4px;
+  border: 0;
+  border-bottom: 1px solid var(--wf-dashboard-border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.watchface-shell--hub .watchface-dashboard-tabs > button {
+  position: relative;
+  min-height: 48px;
+  gap: 7px;
+  border-radius: 0;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.watchface-shell--hub .watchface-dashboard-tabs > button:hover {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.watchface-shell--hub .watchface-dashboard-tabs > button.is-active,
+.watchface-shell--hub .watchface-dashboard-tabs > button[aria-selected="true"] {
+  background: transparent;
+  box-shadow: none;
+  color: var(--accent-strong);
+  font-weight: 760;
+}
+
+.watchface-shell--hub .watchface-dashboard-tabs > button.is-active::after,
+.watchface-shell--hub .watchface-dashboard-tabs > button[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  bottom: -1px;
+  left: 8px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+}
+
+.watchface-shell--hub .watchface-dashboard-tabs > button > span {
+  min-width: 21px;
+  height: 20px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+  font-size: 10px;
+}
+
+.watchface-dashboard-projects {
+  gap: 30px;
+}
+
+.watchface-featured-card {
+  position: relative;
+  min-height: 214px;
+  overflow: visible;
+  border: 1px solid var(--wf-dashboard-border);
+  border-radius: var(--wf-dashboard-radius);
+  background: var(--wf-dashboard-card);
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--bg-base) 42%, transparent);
+  padding: 20px;
+}
+
+.watchface-featured-label {
+  display: block;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 720;
+}
+
+.watchface-featured-layout {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.85fr) minmax(260px, 1.15fr);
+  align-items: center;
+  min-height: 150px;
+  gap: clamp(24px, 4vw, 54px);
+  padding: 7px clamp(34px, 6vw, 82px) 0 clamp(16px, 4vw, 54px);
+}
+
+.watchface-featured-stage {
+  display: grid;
+  min-height: 150px;
+  border-radius: 12px;
+  background: radial-gradient(
+    circle at 50% 46%,
+    color-mix(in srgb, var(--text-primary) 7%, transparent),
+    transparent 63%
+  );
+  place-items: center;
+}
+
+.watchface-featured-stage .watchface-project-preview {
+  width: min(158px, 78%);
+}
+
+.watchface-featured-copy {
+  display: grid;
+  min-width: 0;
+  justify-items: start;
+}
+
+.watchface-featured-copy h2 {
+  width: 100%;
+  overflow: hidden;
+  margin: 0 0 5px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: -0.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-featured-copy p {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.watchface-featured-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 154px;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.watchface-featured-open svg:last-child {
+  margin-left: auto;
+}
+
+.watchface-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.watchface-section-heading h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 720;
+  letter-spacing: -0.015em;
+}
+
+.watchface-project-grid,
+.watchface-project-grid-skeleton {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.watchface-project-card {
+  position: relative;
+  display: block;
+  min-width: 0;
+  min-height: 346px;
+  overflow: visible;
+  border-radius: var(--wf-dashboard-radius);
+}
+
+.watchface-project-card-open {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 346px;
+  overflow: hidden;
+  grid-template-rows: minmax(226px, 1fr) auto;
+  border: 1px solid var(--wf-dashboard-border);
+  border-radius: var(--wf-dashboard-radius);
+  background: var(--wf-dashboard-card);
+  color: var(--text-primary);
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.watchface-project-card-open:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--wf-dashboard-border));
+  background: var(--wf-dashboard-card-hover);
+  transform: translateY(-2px);
+}
+
+.watchface-project-card-stage {
+  display: grid;
+  min-width: 0;
+  min-height: 226px;
+  background:
+    radial-gradient(
+      circle at 50% 46%,
+      color-mix(in srgb, var(--text-primary) 8%, transparent),
+      transparent 57%
+    ),
+    var(--wf-dashboard-stage);
+  place-items: center;
+}
+
+.watchface-project-card-stage .watchface-project-preview {
+  width: min(72%, 196px);
+}
+
+.watchface-project-preview {
+  display: grid;
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 17%, transparent);
+  border-radius: 50%;
+  background: color-mix(
+    in srgb,
+    var(--wf-dashboard-stage) 84%,
+    var(--bg-base)
+  );
+  box-shadow:
+    0 12px 30px color-mix(in srgb, var(--bg-base) 64%, transparent),
+    0 0 0 5px color-mix(in srgb, var(--text-primary) 7%, transparent);
+  place-items: center;
+}
+
+.watchface-project-preview canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.watchface-project-preview.is-ready canvas {
+  opacity: 1;
+}
+
+.watchface-project-preview-fallback {
+  display: grid;
+  position: absolute;
+  inset: 0;
+  color: var(--text-secondary);
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+}
+
+.watchface-project-preview-fallback small {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.watchface-project-preview-fallback > span {
+  width: 68%;
+  height: 68%;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-secondary) 13%, transparent);
+}
+
+.watchface-project-preview.is-error {
+  border-style: dashed;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
+.watchface-project-card-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 14px 16px 15px;
+}
+
+.watchface-project-card-copy strong,
+.watchface-project-card-copy > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-project-card-copy strong {
+  padding-right: 26px;
+  font-size: 14px;
+  font-weight: 720;
+}
+
+.watchface-project-card-copy > span {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.watchface-project-card-copy > span:last-child {
+  margin-top: 4px;
+}
+
+.watchface-project-menu {
+  position: absolute;
+  z-index: 6;
+  top: 10px;
+  right: 10px;
+}
+
+.watchface-featured-card > .watchface-project-menu {
+  top: 13px;
+  right: 13px;
+}
+
+.watchface-project-menu-trigger {
+  display: grid;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--wf-dashboard-card) 78%, transparent);
+  color: var(--text-secondary);
+  cursor: pointer;
+  place-items: center;
+}
+
+.watchface-project-menu-trigger:hover:not(:disabled),
+.watchface-project-menu-trigger[aria-expanded="true"] {
+  border-color: var(--wf-dashboard-border);
+  background: var(--wf-dashboard-card-hover);
+  color: var(--text-primary);
+}
+
+.watchface-project-popover {
+  display: grid;
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 146px;
+  gap: 3px;
+  border: 1px solid var(--wf-border-strong);
+  border-radius: 10px;
+  background: var(--wf-dashboard-card);
+  box-shadow: var(--shadow-elevated);
+  padding: 5px;
+}
+
+.watchface-project-popover button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 38px;
+  gap: 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0 9px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.watchface-project-popover button:hover {
+  background: var(--wf-dashboard-card-hover);
+}
+
+.watchface-project-popover button.is-danger {
+  color: var(--error-text);
+}
+
+.watchface-project-popover button.is-danger:hover {
+  background: var(--error-bg);
+}
+
+.watchface-create-card {
+  display: grid;
+  min-height: 346px;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  border: 1px dashed var(--wf-border-strong);
+  border-radius: var(--wf-dashboard-radius);
+  background: color-mix(in srgb, var(--wf-dashboard-card) 52%, transparent);
+  color: var(--text-primary);
+  padding: 24px;
+  cursor: pointer;
+}
+
+.watchface-create-card > span,
+.watchface-project-empty-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  place-items: center;
+}
+
+.watchface-create-card strong {
+  font-size: 13px;
+}
+
+.watchface-create-card:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--wf-dashboard-border));
+  background: color-mix(in srgb, var(--accent-soft) 48%, var(--wf-dashboard-card));
+  transform: translateY(-2px);
+}
+
+.watchface-project-empty {
+  display: grid;
+  min-height: 330px;
+  justify-items: center;
+  border: 1px dashed var(--wf-border-strong);
+  border-radius: var(--wf-dashboard-radius);
+  background: color-mix(in srgb, var(--wf-dashboard-card) 68%, transparent);
+  padding: 42px 24px;
+  text-align: center;
+  place-content: center;
+}
+
+.watchface-project-empty h2 {
+  margin: 16px 0 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.watchface-project-empty p {
+  max-width: 480px;
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.watchface-project-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.watchface-dashboard-skeleton {
+  display: grid;
+  gap: 30px;
+}
+
+.watchface-featured-skeleton {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.85fr) minmax(260px, 1.15fr);
+  align-items: center;
+  min-height: 214px;
+  gap: 40px;
+  border: 1px solid var(--wf-dashboard-border);
+  border-radius: var(--wf-dashboard-radius);
+  background: var(--wf-dashboard-card);
+  padding: 30px 70px;
+}
+
+.watchface-featured-skeleton span {
+  width: 150px;
+  height: 150px;
+  justify-self: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-secondary) 13%, transparent);
+}
+
+.watchface-featured-skeleton div {
+  width: min(300px, 80%);
+  height: 86px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text-secondary) 11%, transparent);
+}
+
+.watchface-project-grid-skeleton > div {
+  min-height: 346px;
+  border: 1px solid var(--wf-dashboard-border);
+  border-radius: var(--wf-dashboard-radius);
+  background:
+    linear-gradient(
+      to bottom,
+      var(--wf-dashboard-stage) 0 68%,
+      var(--wf-dashboard-card) 68% 100%
+    );
+}
+
+:root .watchface-shell--hub .watchface-template-browser {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.watchface-shell--hub .watchface-template-browser .watchface-hub-section-heading {
+  margin-bottom: 16px;
+}
+
+.watchface-shell--hub .watchface-template-browser .watchface-hub-section-heading h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.watchface-shell--hub .watchface-template-controls {
+  border: 1px solid var(--wf-dashboard-border);
+  border-radius: var(--wf-dashboard-radius);
+  background: var(--wf-dashboard-card);
+  padding: 14px;
+}
+
+.watchface-shell--hub .watchface-template-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+}
+
+.watchface-template-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.watchface-template-skeleton-grid > div {
+  min-height: 320px;
+  border: 1px solid var(--wf-dashboard-border);
+  border-radius: var(--wf-dashboard-radius);
+  background:
+    linear-gradient(
+      to bottom,
+      var(--wf-dashboard-stage) 0 68%,
+      var(--wf-dashboard-card) 68% 100%
+    );
+}
+
+:root .watchface-shell--hub .watchface-template-card {
+  border-color: var(--wf-dashboard-border);
+  border-radius: var(--wf-dashboard-radius);
+  background: var(--wf-dashboard-card);
+  box-shadow: none;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.watchface-shell--hub .watchface-template-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--wf-dashboard-border));
+  background: var(--wf-dashboard-card-hover);
+  transform: translateY(-2px);
+}
+
+.watchface-shell--hub .watchface-template-preview {
+  aspect-ratio: 4 / 3;
+  background:
+    radial-gradient(
+      circle at 50% 48%,
+      color-mix(in srgb, var(--text-primary) 8%, transparent),
+      transparent 56%
+    ),
+    var(--wf-dashboard-stage);
+}
+
+.watchface-shell--hub .watchface-template-preview img {
+  inset: 14px;
+  width: calc(100% - 28px);
+  height: calc(100% - 28px);
+}
+
+.watchface-shell--hub .watchface-template-copy {
+  gap: 9px;
+  padding: 14px;
+}
+
+.watchface-shell--hub .watchface-template-copy > strong {
+  font-size: 14px;
+}
+
+.watchface-shell--hub .watchface-template-meta span {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
+  padding: 3px 6px;
+  font-size: 9px;
+}
+
+.watchface-shell--hub .watchface-template-copy .secondary-button {
+  justify-self: start;
+}
+
+:root .watchface-shell--hub .watchfaces-battery-card {
+  min-width: 0;
+  border: 1px solid var(--wf-dashboard-border);
+  border-radius: var(--wf-dashboard-radius);
+  background: var(--wf-dashboard-card);
+  box-shadow: none;
+  padding: 16px 18px;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.watchfaces-battery-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.watchface-shell--hub .watchfaces-battery-card .watchfaces-panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.watchface-shell--hub .watchfaces-battery-card .watchfaces-panel-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border: 1px solid var(--wf-dashboard-border);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--accent-soft) 56%, transparent);
+  color: var(--accent-strong);
+  place-items: center;
+}
+
+.watchface-shell--hub .watchfaces-battery-card .watchfaces-panel-heading h2 {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: -0.015em;
+}
+
+.watchface-shell--hub .watchfaces-battery-card .watchfaces-panel-heading p {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.watchfaces-battery-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.watchfaces-battery-toggle svg {
+  transition: transform 160ms ease;
+}
+
+.watchfaces-battery-toggle svg.is-open {
+  transform: rotate(180deg);
+}
+
+.watchfaces-battery-content {
+  margin-top: 16px;
+  border-top: 1px solid var(--wf-dashboard-border);
+  padding-top: 16px;
+}
+
+.watchface-shell--hub .watchfaces-battery-content .watchfaces-battery-local-state {
+  margin-top: 0;
+}
+
+@container watchfaces (max-width: 1099px) {
+  .watchface-project-grid,
+  .watchface-project-grid-skeleton,
+  .watchface-shell--hub .watchface-template-grid,
+  .watchface-template-skeleton-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :root .watchface-shell--hub .watchface-dashboard-header {
+    align-items: flex-start;
+  }
+
+  .watchface-shell--hub .watchface-hub-actions {
+    max-width: 520px;
+  }
+}
+
+@container watchfaces (max-width: 899px) {
+  :root .watchface-shell--hub .watchface-dashboard-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .watchface-shell--hub .watchface-hub-actions {
+    max-width: none;
+    justify-content: flex-start;
+  }
+
+  .watchface-featured-layout {
+    grid-template-columns: minmax(200px, 0.75fr) minmax(240px, 1fr);
+    gap: 24px;
+    padding-inline: 12px 48px;
+  }
+}
+
+@container watchfaces (max-width: 699px) {
+  .watchface-project-grid,
+  .watchface-project-grid-skeleton,
+  .watchface-shell--hub .watchface-template-grid,
+  .watchface-template-skeleton-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .watchface-featured-layout,
+  .watchface-featured-skeleton {
+    grid-template-columns: 1fr;
+  }
+
+  .watchface-featured-layout {
+    gap: 8px;
+    padding: 16px 8px 4px;
+  }
+
+  .watchface-featured-stage {
+    min-height: 178px;
+  }
+
+  .watchface-featured-stage .watchface-project-preview {
+    width: 150px;
+  }
+
+  .watchface-featured-copy {
+    padding: 0 8px 8px;
+  }
+
+  .watchface-featured-skeleton {
+    gap: 18px;
+    padding: 28px;
+  }
+
+  .watchface-featured-skeleton div {
+    justify-self: center;
+  }
+
+  .watchfaces-battery-card-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .watchfaces-battery-toggle {
+    width: 100%;
+  }
+
+  .watchface-shell--hub .watchface-template-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
+@container watchfaces (max-width: 559px) {
+  .watchface-shell--hub .watchface-hub-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .watchface-device-menu {
+    grid-column: 1 / -1;
+  }
+
+  .watchface-device-trigger {
+    width: 100%;
+    max-width: none;
+  }
+
+  .watchface-header-action {
+    width: 100%;
+  }
+
+  .watchface-device-popover {
+    right: auto;
+    left: 0;
+    width: min(320px, 100%);
+  }
+
+  .watchface-project-empty-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: min(100%, 260px);
+  }
+
+  .watchface-project-empty-actions button {
+    justify-content: center;
+    width: 100%;
+  }
+}
+
+@media (max-width: 759px) {
+  .watchface-shell--hub {
+    padding: 14px 16px 28px;
+  }
+
+  .watchface-shell--hub .watchface-dashboard-tabs {
+    display: flex;
+    width: 100%;
+    grid-template-columns: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .watchface-project-preview canvas,
+  .watchfaces-battery-toggle svg {
+    transition: none;
+  }
 }

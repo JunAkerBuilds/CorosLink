@@ -14,11 +14,14 @@ const {
   buildCreateLinkBody,
   buildMobileLoginRegion,
   encryptMobileLoginField,
+  exportCorosWatchfaceProject,
   extractDecimalProperty,
   findHttpsUrlInJson,
   normalizeCorosBatteryReport,
   normalizeCorosPairedDevices,
   normalizeCorosWatchfaceThemes,
+  parseCorosWatchfaceSharePage,
+  readCorosWatchfaceProjectPackage,
   selectCorosWatchfaceArchive
 } = await import(`${distUrl("corosWatchfaceService.js")}?cacheBust=${Date.now()}`);
 const { createStoreZip } = await import(
@@ -71,6 +74,65 @@ assert.equal(
   ).length,
   64,
   "mobile password must encrypt the 32-character MD5 digest"
+);
+
+const sharePageState = {
+  apiData: {
+    data: {
+      data: {
+        watchFaceTemplateUserCustom: {
+          firmwareType: "COROS W541",
+          watchFaceTemplateName: "BOLD2",
+          watchFaceTemplateUrl:
+            "https://s3eu.coros.com/watchface_template_user_custom/0/bold2.zip"
+        }
+      }
+    }
+  },
+  pageData: { isExpired: false }
+};
+assert.deepEqual(
+  parseCorosWatchfaceSharePage(
+    `<html><script> window.__INITIAL_STATE__= ${JSON.stringify(sharePageState)};</script></html>`
+  ),
+  {
+    firmwareType: "COROS W541",
+    name: "BOLD2",
+    packageUrl:
+      "https://s3eu.coros.com/watchface_template_user_custom/0/bold2.zip"
+  },
+  "public COROS share pages should expose their editable archive metadata"
+);
+assert.throws(
+  () =>
+    parseCorosWatchfaceSharePage(
+      `<script>window.__INITIAL_STATE__=${JSON.stringify({
+        ...sharePageState,
+        pageData: { isExpired: true }
+      })};</script>`
+    ),
+  /expired/,
+  "expired COROS share links should not import"
+);
+assert.throws(
+  () =>
+    parseCorosWatchfaceSharePage(
+      `<script>window.__INITIAL_STATE__=${JSON.stringify({
+        ...sharePageState,
+        apiData: {
+          data: {
+            data: {
+              watchFaceTemplateUserCustom: {
+                watchFaceTemplateName: "Untrusted",
+                watchFaceTemplateUrl: "https://example.com/watchface.zip"
+              }
+            }
+          }
+        }
+      })};</script>`
+    ),
+  /not hosted by COROS/,
+  "share imports should reject archives hosted outside COROS"
 );
 
 assert.equal(
@@ -349,7 +411,36 @@ try {
   assert.equal(selected.fileName, "fixture.dat");
   assert.equal(selected.sourceTemplateId, "250601");
   assert.equal(selected.diyVersion, 1);
+  assert.equal(selected.watchFaceVersion, 0);
   assert.ok(selected.archiveId.length > 0);
+
+  const exportedPath = path.join(tempDirectory, "website-face.zip");
+  const editableDesign = { version: 1, accentColor: "#55d6be" };
+  const preview = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    "base64"
+  );
+  await exportCorosWatchfaceProject(
+    {
+      sourceArchiveId: selected.archiveId,
+      name: "Website face",
+      firmwareType: "COROS W332",
+      design: editableDesign,
+      previewDataUrl: `data:image/png;base64,${preview.toString("base64")}`
+    },
+    exportedPath
+  );
+  const editablePackage = await readCorosWatchfaceProjectPackage(exportedPath);
+  assert.ok(editablePackage, "website ZIP should be recognized as an editable project");
+  assert.equal(editablePackage.manifest.name, "Website face");
+  assert.equal(editablePackage.manifest.firmwareType, "COROS W332");
+  assert.deepEqual(editablePackage.manifest.design, editableDesign);
+  assert.deepEqual(
+    editablePackage.starterArchive,
+    archive,
+    "editable website ZIP should preserve the original starter archive exactly"
+  );
+  assert.deepEqual(editablePackage.preview, preview);
 } finally {
   await fs.rm(tempDirectory, { recursive: true, force: true });
 }

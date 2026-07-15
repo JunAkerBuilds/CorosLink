@@ -130,6 +130,37 @@ async function main() {
     layoutOffsets: { hours: { dx: 10, dy: 20 } },
     designSprites: []
   };
+  const portableProjectPath = path.join(tempRoot, "editable-website-face.zip");
+  await watchfaces.exportCorosWatchfaceProject(
+    {
+      sourceArchiveId: starter.archiveId,
+      name: "Editable website face",
+      firmwareType: "COROS W332",
+      design: projectDesign,
+      previewDataUrl: pngDataUrl(icon)
+    },
+    portableProjectPath
+  );
+  const importedPortableProject =
+    await watchfaces.selectCorosWatchfaceArchive(portableProjectPath);
+  assert.equal(importedPortableProject.sourceTemplateId, "250601");
+  assert.equal(importedPortableProject.firmwareType, "COROS W332");
+  assert.equal(
+    importedPortableProject.editableProject.name,
+    "Editable website face"
+  );
+  assert.deepEqual(
+    importedPortableProject.editableProject.design,
+    projectDesign,
+    "website ZIP imports should restore the complete editable design state"
+  );
+  assert.equal(
+    (await watchfaces.describeCorosWatchfaceTemplate(
+      importedPortableProject.archiveId
+    )).resolutions.length,
+    1,
+    "an imported editable project should retain its original starter template"
+  );
   const savedProject = await watchfaces.saveCorosWatchfaceProject({
     name: "Saved creator fixture",
     sourceArchiveId: starter.archiveId,
@@ -180,6 +211,20 @@ async function main() {
     false
   );
   await fs.access(`${nestedProjectStarter}.nested-backup`);
+  const legacyProjectStarter = path.join(
+    path.dirname(nestedProjectStarter),
+    "starter.zip"
+  );
+  await fs.rename(nestedProjectStarter, legacyProjectStarter);
+  const legacyLoadedProject = await watchfaces.loadCorosWatchfaceProject(
+    savedProject.projectId
+  );
+  assert.equal(legacyLoadedProject.archive.fileName, "starter.zip");
+  assert.equal(
+    legacyLoadedProject.archive.sourceTemplateId,
+    "250601",
+    "projects saved with the legacy starter.zip filename should remain readable"
+  );
   await watchfaces.deleteCorosWatchfaceProject(savedProject.projectId);
   assert.equal(
     (await watchfaces.listCorosWatchfaceProjects()).some(
@@ -230,6 +275,20 @@ async function main() {
   );
   assert.ok(stepIcon, "step icon should be discovered");
   assert.equal(stepIcon.width, 16);
+  const configuredBackground = resolution.icons.find(
+    (entry) => entry.path === "watchface_800x800/background.png"
+  );
+  assert.ok(
+    configuredBackground,
+    "PNG files referenced directly by config or AODconfig should be discoverable"
+  );
+  assert.equal(
+    resolution.icons.filter(
+      (entry) => entry.path === "watchface_800x800/background.png"
+    ).length,
+    1,
+    "A PNG shared by config and AODconfig should only be described once"
+  );
 
   // --- Template asset export ---------------------------------------------
   const [stepAsset] = await watchfaces.loadCorosWatchfaceTemplateAssets(
@@ -238,6 +297,15 @@ async function main() {
   );
   assert.ok(stepAsset.dataUrl.startsWith("data:image/png;base64,"));
   assert.equal(stepAsset.width, 16);
+  const [backgroundAsset] = await watchfaces.loadCorosWatchfaceTemplateAssets(
+    starter.archiveId,
+    ["watchface_800x800/background.png"]
+  );
+  assert.ok(
+    backgroundAsset.dataUrl.startsWith("data:image/png;base64,"),
+    "Studio should be able to load the starter template background as artwork"
+  );
+  assert.ok(backgroundAsset.width > 0 && backgroundAsset.height > 0);
   await assert.rejects(
     watchfaces.loadCorosWatchfaceTemplateAssets(starter.archiveId, ["missing.png"]),
     /does not contain/
@@ -251,6 +319,7 @@ async function main() {
 
   assert.equal(created.sourceTemplateId, "250601");
   assert.equal(created.diyVersion, 1);
+  assert.equal(created.watchFaceVersion, 0);
   assert.ok(created.sizeBytes > 0);
   assert.notEqual(created.archiveId, starter.archiveId);
 
@@ -265,6 +334,131 @@ async function main() {
     await generatedCustomBackground.buffer(),
     sourceCustomBackground,
     "the active custom background should be replaced"
+  );
+
+  // --- APEX 4 / W541 multi-resolution export -----------------------------
+  await assert.rejects(
+    watchfaces.createCorosWatchfaceArchive({
+      sourceArchiveId: starter.archiveId,
+      backgroundDataUrl: pngDataUrl(icon),
+      firmwareType: "COROS W999",
+      watchModel: "apex-4"
+    }),
+    /requires 240×240 and 260×260 exports/,
+    "APEX exports must reject AMOLED/800-only starter archives regardless of firmware ID"
+  );
+  await assert.rejects(
+    watchfaces.createCorosWatchfaceArchive({
+      sourceArchiveId: starter.archiveId,
+      backgroundDataUrl: pngDataUrl(icon),
+      minWatchFaceVersion: 4,
+      watchFaceVersion: 3
+    }),
+    /version 3 is too low.*version 4 or newer/,
+    "an explicit archive version must satisfy feature-required minimums"
+  );
+
+  const apexEntries = [
+    {
+      name: "info.json",
+      data: Buffer.from(
+        JSON.stringify({
+          o_template_id: 120061,
+          o_diy_version: 1,
+          o_wf_ver: 0
+        })
+      )
+    },
+    { name: "watchface_customize.png", data: solidPng(800, 800, 0x11) }
+  ];
+  for (const size of [240, 260, 800]) {
+    const thumbnailSize = size === 240 ? 182 : size === 260 ? 197 : 800;
+    apexEntries.push(
+      {
+        name: `watchface_${size}x${size}/config.txt`,
+        data: Buffer.from(FIXTURE_CONFIG)
+      },
+      {
+        name: `watchface_${size}x${size}/background.png`,
+        data: solidPng(size, size, 0x22)
+      },
+      {
+        name: `watchface_${size}x${size}/thmb.png`,
+        data: solidPng(thumbnailSize, thumbnailSize, 0x33)
+      },
+      {
+        name: `watchface_${size}x${size}/watchface_customize.png`,
+        data: solidPng(800, 800, 0x44)
+      }
+    );
+  }
+  const apexSourcePath = path.join(tempRoot, "apex-4-starter.dat");
+  await fs.writeFile(apexSourcePath, createStoreZip(apexEntries));
+  const apexStarter = await watchfaces.selectCorosWatchfaceArchive(apexSourcePath);
+  const apexCreated = await watchfaces.createCorosWatchfaceArchive({
+    sourceArchiveId: apexStarter.archiveId,
+    backgroundDataUrl: pngDataUrl(icon),
+    previewDataUrl: pngDataUrl(solidPng(800, 800, 0xff)),
+    firmwareType: "COROS W999",
+    watchModel: "apex-4",
+    watchFaceVersion: 2,
+    assetReplacements: [
+      {
+        path: "watchface_240x240/cl_hh/00.png",
+        dataUrl: pngDataUrl(solidPng(8, 12, 0x55)),
+        create: true
+      }
+    ]
+  });
+  assert.equal(apexCreated.firmwareType, "COROS W999");
+  assert.equal(apexCreated.resolutionProfile, "mip-240-260-800");
+  assert.equal(apexCreated.watchFaceVersion, 2);
+  const apexOutput = await findCreatorOutput(apexCreated);
+  assert.ok(apexOutput, "APEX 4 output should be available for verification");
+  const apexZip = await unzipper.Open.file(apexOutput.path);
+  const apexInfo = apexZip.files.find(
+    (entry) => entry.type === "File" && entry.path === "info.json"
+  );
+  assert.ok(apexInfo, "APEX 4 export should retain info.json");
+  assert.equal(JSON.parse((await apexInfo.buffer()).toString("utf8")).o_wf_ver, 2);
+  const apexRootPreview = apexZip.files.find(
+    (entry) => entry.type === "File" && entry.path === "watchface_customize.png"
+  );
+  const apexMasterBackground = apexZip.files.find(
+    (entry) =>
+      entry.type === "File" && entry.path === "watchface_800x800/background.png"
+  );
+  assert.ok(apexRootPreview && apexMasterBackground);
+  assert.deepEqual(
+    nativeImage.createFromBuffer(await apexRootPreview.buffer()).getSize(),
+    { width: 800, height: 800 }
+  );
+  assert.notDeepEqual(
+    await apexRootPreview.buffer(),
+    await apexMasterBackground.buffer(),
+    "the archive root preview should use the rendered face, not the background-only canvas"
+  );
+  for (const [entryPath, width, height] of [
+    ["watchface_240x240/background.png", 240, 240],
+    ["watchface_240x240/thmb.png", 182, 182],
+    ["watchface_260x260/background.png", 260, 260],
+    ["watchface_260x260/thmb.png", 197, 197],
+    ["watchface_800x800/background.png", 800, 800]
+  ]) {
+    const entry = apexZip.files.find(
+      (candidate) => candidate.type === "File" && candidate.path === entryPath
+    );
+    assert.ok(entry, `${entryPath} should exist in the APEX 4 export`);
+    const image = nativeImage.createFromBuffer(await entry.buffer());
+    assert.deepEqual(image.getSize(), { width, height });
+  }
+  assert.ok(
+    apexZip.files.some(
+      (entry) =>
+        entry.type === "File" &&
+        entry.path === "watchface_240x240/cl_hh/00.png"
+    ),
+    "generated Studio sprites should support APEX 4 resolution trees"
   );
 
   // --- Full studio creation with sprite replacements ----------------------

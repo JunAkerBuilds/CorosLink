@@ -77,6 +77,7 @@ import { TrainingHubView } from "./training/TrainingHubView";
 import type { TrainingHubSnapshot } from "./training/types";
 import type { CorosLinkApi } from "./coroslink-api";
 import { AppUpdateControls } from "./components/AppUpdateControls";
+import { UpdateAvailablePrompt } from "./components/UpdateAvailablePrompt";
 import {
   AppSidebar,
   createInitialSidebarExpanded,
@@ -130,6 +131,22 @@ const YOUTUBE_DOWNLOAD_CONSOLE_PREFIX = "__COROSLINK_YOUTUBE_DOWNLOAD__";
 const APPLE_MUSIC_SELECTED_PLAYLIST_STORAGE_KEY =
   "coroslink.appleMusic.selectedPlaylistId";
 const IS_DEVELOPMENT_BUILD = import.meta.env.DEV;
+const DEV_UPDATE_PREVIEW_VERSION = "0.1.18-dev-preview";
+const DEV_UPDATE_PREVIEW_NOTES = `## Version 0.1.18
+
+### Added
+
+- A one-time update window with the complete release changelog
+- An explicit choice to update now or dismiss this version
+- A development preview so the update experience can be reviewed before release
+
+### Improved
+
+- Update notes now include every missed version when upgrading across multiple releases
+
+### Fixed
+
+- Choosing **Not now** no longer allows the downloaded update to install silently when CorosLink quits`;
 const TRAINING_HISTORY_PAGE_SIZE = 100;
 const TRAINING_HISTORY_MAX_PAGES = 100;
 
@@ -168,6 +185,10 @@ export default function App() {
   const [showDevelopmentTools, setShowDevelopmentTools] = useState(
     IS_DEVELOPMENT_BUILD,
   );
+  const [devUpdatePreviewKey, setDevUpdatePreviewKey] = useState<
+    number | undefined
+  >(undefined);
+  const devUpdatePreviewSequenceRef = useRef(0);
   const [sidebarOverlayOpen, setSidebarOverlayOpen] = useState(() => {
     if (typeof window === "undefined") {
       return false;
@@ -261,6 +282,7 @@ export default function App() {
       autoDownload: true,
     },
   );
+  const installAcceptedVersionRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!api) {
@@ -270,6 +292,33 @@ export default function App() {
     void api.getAppUpdateStatus().then(setAppUpdateSnapshot);
     return api.onAppUpdateStatus(setAppUpdateSnapshot);
   }, [api]);
+
+  useEffect(() => {
+    const acceptedVersion = installAcceptedVersionRef.current;
+    if (!acceptedVersion) {
+      return;
+    }
+
+    if (
+      appUpdateSnapshot.status === "downloaded" &&
+      appUpdateSnapshot.availableVersion === acceptedVersion
+    ) {
+      installAcceptedVersionRef.current = null;
+      handleInstallUpdate();
+      return;
+    }
+
+    if (appUpdateSnapshot.status === "error") {
+      installAcceptedVersionRef.current = null;
+      setError(
+        appUpdateSnapshot.error ?? "Could not download the update.",
+      );
+    }
+  }, [
+    appUpdateSnapshot.availableVersion,
+    appUpdateSnapshot.error,
+    appUpdateSnapshot.status,
+  ]);
 
   // Tag the document with the host OS so the header can clear the macOS
   // traffic lights that overlay it.
@@ -784,6 +833,67 @@ export default function App() {
       setError(toErrorMessage(caught));
     } finally {
       setBusy(null);
+    }
+  }
+
+  function handleAcceptAvailableUpdate(version: string) {
+    if (IS_DEVELOPMENT_BUILD && devUpdatePreviewKey !== undefined) {
+      restoreUpdateSnapshotAfterPreview();
+      setMessage(
+        `Test update ${version} accepted. No files were downloaded in the development build.`,
+      );
+      return;
+    }
+
+    installAcceptedVersionRef.current = version;
+
+    if (
+      appUpdateSnapshot.status === "downloaded" &&
+      appUpdateSnapshot.availableVersion === version
+    ) {
+      installAcceptedVersionRef.current = null;
+      handleInstallUpdate();
+      return;
+    }
+
+    // electron-updater starts this itself when auto-download is enabled.
+    // Otherwise the explicit acceptance starts the download here.
+    if (
+      appUpdateSnapshot.status !== "downloading" &&
+      !(
+        appUpdateSnapshot.status === "available" &&
+        appUpdateSnapshot.autoDownload
+      )
+    ) {
+      void handleDownloadUpdate();
+    }
+  }
+
+  function showDevUpdatePreview() {
+    if (!IS_DEVELOPMENT_BUILD) {
+      return;
+    }
+
+    devUpdatePreviewSequenceRef.current += 1;
+    setDevUpdatePreviewKey(devUpdatePreviewSequenceRef.current);
+    setAppUpdateSnapshot((current) => ({
+      supported: true,
+      currentVersion:
+        current.currentVersion === "0.0.0" ? "0.1.17" : current.currentVersion,
+      status: "available",
+      availableVersion: DEV_UPDATE_PREVIEW_VERSION,
+      releaseNotes: DEV_UPDATE_PREVIEW_NOTES,
+      autoCheck: current.autoCheck,
+      autoDownload: false,
+    }));
+  }
+
+  function restoreUpdateSnapshotAfterPreview() {
+    setDevUpdatePreviewKey(undefined);
+    if (api) {
+      void api.getAppUpdateStatus().then(setAppUpdateSnapshot).catch((caught) => {
+        setError(toErrorMessage(caught));
+      });
     }
   }
 
@@ -1613,6 +1723,17 @@ export default function App() {
             </button>
           ) : null}
           {IS_DEVELOPMENT_BUILD && showDevelopmentTools ? (
+            <button
+              className="app-dev-view-toggle app-dev-update-test"
+              type="button"
+              title="Preview the update changelog prompt"
+              onClick={showDevUpdatePreview}
+            >
+              <Sparkles size={13} aria-hidden="true" />
+              Test update
+            </button>
+          ) : null}
+          {IS_DEVELOPMENT_BUILD && showDevelopmentTools ? (
             <WatchConnectionSmokeControls
               api={api}
               onWatchStatusChange={setWatchStatus}
@@ -1790,6 +1911,7 @@ export default function App() {
               <WatchfacesView
                 api={api}
                 showDevelopmentTools={showDevelopmentTools}
+                watchStatus={watchStatus}
               />
             ) : null}
             {activeView === "training" ? (
@@ -1876,6 +1998,16 @@ export default function App() {
       </main>
       </div>
 
+      <UpdateAvailablePrompt
+        snapshot={appUpdateSnapshot}
+        onAccept={handleAcceptAvailableUpdate}
+        onDecline={
+          devUpdatePreviewKey === undefined
+            ? undefined
+            : restoreUpdateSnapshotAfterPreview
+        }
+        previewKey={devUpdatePreviewKey}
+      />
       <Toaster toasts={toasts} onDismiss={dismissToast} />
     </div>
   );

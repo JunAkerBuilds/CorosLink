@@ -39,7 +39,7 @@ function categoryClass(name: string): string {
 
 // Color a completed activity chip by sport, matching the training heatmap.
 function sportClass(activity: TrainingHubActivity): string {
-  return `calendar-sport-${sportColorCategory(activity.sportName ?? activity.name)}`;
+  return `calendar-sport-${sportColorCategory(activity.sportType)}`;
 }
 
 function completionTone(pct?: number): string {

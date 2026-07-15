@@ -91,6 +91,8 @@ import type {
   CorosLegacy614aCarrierPatchInput,
   CorosLegacy614aCarrierSelection,
   CorosWatchfaceArchive,
+  CorosWatchfaceProjectExportInput,
+  CorosWatchfaceProjectExportResult,
   CorosWatchfaceArtwork,
   CorosWatchfaceCreatorInput,
   CorosWatchfaceRasterFontFolder,
@@ -99,6 +101,7 @@ import type {
   CorosWatchfaceProjectSummary,
   CorosWatchfacePublishInput,
   CorosWatchfaceRegion,
+  CorosWatchfaceShareImport,
   CorosWatchfaceShareLink,
   CorosWatchfaceStatus,
   CorosWatchfaceTemplateAsset,
@@ -140,6 +143,9 @@ export interface CorosLinkApi {
   downloadCorosWatchfaceTheme: (
     input: CorosWatchfaceThemeDownloadInput
   ) => Promise<CorosWatchfaceThemeDownload>;
+  importCorosWatchfaceShareLink: (
+    shareUrl: string
+  ) => Promise<CorosWatchfaceShareImport>;
   chooseCorosWatchfaceArchive: () => Promise<CorosWatchfaceArchive | null>;
   chooseLegacy614aCarrier: () => Promise<CorosLegacy614aCarrierSelection | null>;
   exportLegacy614aCarrier: (
@@ -151,6 +157,9 @@ export interface CorosLinkApi {
   createCorosWatchfaceArchive: (
     input: CorosWatchfaceCreatorInput
   ) => Promise<CorosWatchfaceArchive>;
+  exportCorosWatchfaceProject: (
+    input: CorosWatchfaceProjectExportInput
+  ) => Promise<CorosWatchfaceProjectExportResult>;
   listCorosWatchfaceProjects: () => Promise<CorosWatchfaceProjectSummary[]>;
   saveCorosWatchfaceProject: (
     input: CorosWatchfaceProjectSaveInput

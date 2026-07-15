@@ -63,8 +63,10 @@ import {
   createCorosWatchfaceArchive,
   describeCorosWatchfaceTemplate,
   downloadCorosWatchfaceTheme,
+  exportCorosWatchfaceProject,
   getCorosBatteryReport,
   getCorosWatchfaceStatus,
+  importCorosWatchfaceShareLink,
   listCorosPairedDevices,
   listCorosWatchfaceThemes,
   loadCorosWatchfaceArtwork,
@@ -144,6 +146,7 @@ import type {
 import type {
   CorosLegacy614aCarrierPatchInput,
   CorosWatchfaceCreatorInput,
+  CorosWatchfaceProjectExportInput,
   CorosWatchfacePublishInput,
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceRegion,
@@ -706,6 +709,10 @@ function registerIpcHandlers(): void {
       downloadCorosWatchfaceTheme(input)
   );
 
+  ipcMain.handle("watchfaces:importShareLink", (_event, shareUrl: string) =>
+    importCorosWatchfaceShareLink(shareUrl)
+  );
+
   ipcMain.handle("watchfaces:chooseArchive", async () => {
     const options: OpenDialogOptions = {
       title: "Choose a COROS custom watchface archive",
@@ -836,6 +843,30 @@ function registerIpcHandlers(): void {
     "watchfaces:createArchive",
     (_event, input: CorosWatchfaceCreatorInput) =>
       createCorosWatchfaceArchive(input)
+  );
+  ipcMain.handle(
+    "watchfaces:exportProject",
+    async (_event, input: CorosWatchfaceProjectExportInput) => {
+      const baseName =
+        sanitizeExportFileName(input?.name) || "CorosLink-watch-face";
+      const saveOptions = {
+        title: "Export editable watch face for website",
+        defaultPath: `${baseName}.zip`,
+        filters: [{ name: "Watch-face ZIP archive", extensions: ["zip"] }]
+      };
+      const result =
+        mainWindow && !mainWindow.isDestroyed()
+          ? await dialog.showSaveDialog(mainWindow, saveOptions)
+          : await dialog.showSaveDialog(saveOptions);
+      if (result.canceled || !result.filePath) {
+        return { saved: false };
+      }
+      const destinationPath = result.filePath.toLowerCase().endsWith(".zip")
+        ? result.filePath
+        : `${result.filePath}.zip`;
+      await exportCorosWatchfaceProject(input, destinationPath);
+      return { saved: true, filePath: destinationPath };
+    }
   );
   ipcMain.handle("watchfaces:listProjects", () => listCorosWatchfaceProjects());
   ipcMain.handle("watchfaces:saveProject", (_event, input) =>

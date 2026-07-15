@@ -16,6 +16,7 @@ import {
   SITE_URL,
   absoluteUrl,
 } from "../src/lib/site";
+import { getPublicSupporters } from "../src/lib/supporters";
 
 const structuredData = {
   "@context": "https://schema.org",
@@ -83,7 +84,9 @@ const structuredData = {
   ],
 };
 
-export default function Home() {
+export default async function Home() {
+  const supporters = await getPublicSupporters();
+
   return (
     <>
       <script
@@ -93,7 +96,7 @@ export default function Home() {
       <SmoothScroll />
       <Nav />
       <main>
-        <Hero />
+        <Hero supporters={supporters} />
 
         {/* Section intro */}
         <section className="mx-auto max-w-3xl px-5 pt-16 text-center md:pt-24">

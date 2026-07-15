@@ -6,12 +6,16 @@ import {
   applyConfigOverridesToDetails,
   applyLayoutToDetails,
   buildDateStyleOverrides,
+  buildWatchfaceConfigAssetOverrides,
+  scaledBatterySpriteCanvasSize,
   buildMetricOverrides,
   buildMetricStyleOverrides,
+  buildSeparateTimeOverrides,
   buildTimeStyleOverrides,
   computeLayoutGroupBounds,
   getFixedMetricCapabilities,
   getAmPmCapability,
+  listWatchfaceConfigAssets,
   mergeConfigOverrides,
   pickPreviewResolution,
   WATCHFACE_LAYOUT_GROUPS,
@@ -42,9 +46,11 @@ export type EditorLayerKind =
   | "seconds"
   | "separators"
   | "battery"
+  | "batteryIcon"
   | "complication"
   | "metric"
   | "weather"
+  | "configAsset"
   | "customSprite";
 
 /** Which inspector controls a layer supports. */
@@ -73,6 +79,9 @@ export interface EditorLayer {
   spriteId?: string;
   /** Set for editor-authored colon and date-slash layers. */
   staticSeparatorId?: WatchfaceStaticSeparatorId;
+  /** Set for a direct PNG reference parsed from config.txt/AODconfig.txt. */
+  configAssetId?: string;
+  configAssetReplaced?: boolean;
   /** Set for the firmware-swapped AM/PM sprite pair. */
   ampmIndicator?: true;
   /** Set for the dynamic 41-state weather sprite folder. */
@@ -96,6 +105,7 @@ const NO_CAPABILITIES: EditorLayerCapabilities = {
 
 /** Panel order, top (front-most overlay) to bottom (background). */
 const LAYER_ORDER: string[] = [
+  "autoTime",
   "hours",
   "minutes",
   "seconds",
@@ -104,6 +114,7 @@ const LAYER_ORDER: string[] = [
   "dateMonth",
   "dateDay",
   "battery",
+  "batteryIcon",
   "complication",
   "heartRate",
   "steps",
@@ -121,8 +132,10 @@ const METRIC_IDS = new Set<WatchfaceMetricId>([
 ]);
 
 const TIME_GROUP_PARTS: Record<string, WatchfaceTimePartId> = {
+  autoTime: "autoTime",
   hours: "hours",
-  minutes: "minutes"
+  minutes: "minutes",
+  seconds: "seconds"
 };
 
 function labelForGroup(groupId: string): string {
@@ -141,11 +154,14 @@ function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
   if (groupId === "weekday" || groupId === "dateMonth" || groupId === "dateDay") {
     return { position: true, color: true, scale: true, font: false };
   }
+  if (groupId === "batteryIcon") {
+    return { position: true, color: false, scale: true, font: false };
+  }
   return { position: true, color: true, scale: false, font: false };
 }
 
 function kindForGroup(groupId: string): EditorLayerKind {
-  if (groupId in TIME_GROUP_PARTS || groupId === "seconds") {
+  if (groupId in TIME_GROUP_PARTS) {
     return groupId === "seconds" ? "seconds" : "time";
   }
   if (METRIC_IDS.has(groupId as WatchfaceMetricId)) {
@@ -159,6 +175,9 @@ function kindForGroup(groupId: string): EditorLayerKind {
   }
   if (groupId === "battery") {
     return "battery";
+  }
+  if (groupId === "batteryIcon") {
+    return "batteryIcon";
   }
   if (groupId === "complication") {
     return "complication";
@@ -175,9 +194,13 @@ export function deriveEditorLayers(
   details: CorosWatchfaceTemplateDetails,
   design: CorosWatchfaceDesignState
 ): EditorLayer[] {
-  const metricDetails = applyConfigOverridesToDetails(
+  const timeFormatDetails = applyConfigOverridesToDetails(
     details,
-    buildMetricOverrides(details, design.metricChanges ?? {})
+    buildSeparateTimeOverrides(details, design.separateAutoTime === true)
+  );
+  const metricDetails = applyConfigOverridesToDetails(
+    timeFormatDetails,
+    buildMetricOverrides(timeFormatDetails, design.metricChanges ?? {})
   );
   const styledDetails = applyConfigOverridesToDetails(
     metricDetails,
@@ -193,6 +216,10 @@ export function deriveEditorLayers(
       buildDateStyleOverrides(
         metricDetails,
         (design.dateStyles ?? {}) as WatchfaceDateStyles
+      ),
+      buildWatchfaceConfigAssetOverrides(
+        metricDetails,
+        design.configAssetOverrides ?? {}
       )
     )
   );
@@ -204,7 +231,33 @@ export function deriveEditorLayers(
   const boundsById = new Map<string, WatchfaceLayoutGroupBounds>();
   if (resolution) {
     for (const box of computeLayoutGroupBounds(resolution)) {
-      boundsById.set(box.id, box);
+      if (box.id === "batteryIcon") {
+        const batteryOverride = design.configAssetOverrides?.["config:battery_icon"];
+        const batteryScale = batteryOverride?.scale ?? 1;
+        const artwork = Object.values(batteryOverride?.stateReplacements ?? {})[0] ??
+          batteryOverride?.replacement;
+        const canvas = artwork
+          ? scaledBatterySpriteCanvasSize(
+              artwork.width,
+              artwork.height,
+              box.x1 - box.x0,
+              box.y1 - box.y0,
+              batteryScale
+            )
+          : {
+              width: (box.x1 - box.x0) * batteryScale,
+              height: (box.y1 - box.y0) * batteryScale
+            };
+        // The selection represents the full exported bitmap canvas, including
+        // its intentional transparent/black padding.
+        boundsById.set(box.id, {
+          ...box,
+          x1: box.x0 + canvas.width,
+          y1: box.y0 + canvas.height
+        });
+      } else {
+        boundsById.set(box.id, box);
+      }
     }
   }
 
@@ -263,8 +316,8 @@ export function deriveEditorLayers(
 
   const staticSeparatorLayers: EditorLayer[] = [];
   for (const [staticSeparatorId, id, label] of [
-    ["colon", "staticColon", "Time colon"],
-    ["dateSlash", "staticDateSlash", "Date slash"]
+    ["colon", "staticColon", "Custom time colon"],
+    ["dateSlash", "staticDateSlash", "Custom date slash"]
   ] as const) {
     const separator = design.staticSeparators?.[staticSeparatorId];
     const visible = Boolean(separator?.enabled);
@@ -303,8 +356,7 @@ export function deriveEditorLayers(
     const style = design.ampmIndicator ?? {
       enabled: ampmCapability.active,
       ...ampmCapability.defaultPos,
-      scale: 1,
-      color: design.digitColor
+      scale: 1
     };
     const width = ampmCapability.icon.width * style.scale;
     const height = ampmCapability.icon.height * style.scale;
@@ -363,6 +415,29 @@ export function deriveEditorLayers(
     });
   }
 
+  for (const reference of listWatchfaceConfigAssets(details)) {
+    // The current-face background_icon is the source behind the editable
+    // Artwork → Background layer below. Exposing it again as a template asset
+    // creates two controls for the same on-watch image. Keep AOD background
+    // assets visible because those are independent of the current artwork.
+    if (reference.id === "config:background_icon") {
+      continue;
+    }
+    const override = design.configAssetOverrides?.[reference.id];
+    layers.push({
+      id: `configAsset:${reference.id}`,
+      kind: "configAsset",
+      label: reference.label,
+      configAssetId: reference.id,
+      configAssetReplaced: Boolean(override?.replacement),
+      visible: override?.enabled !== false,
+      canHide: true,
+      present: true,
+      bounds: null,
+      capabilities: NO_CAPABILITIES
+    });
+  }
+
   for (const sprite of design.designSprites ?? []) {
     // Sprites are drawn centered on (x, y); use a rotation-aware bounding box
     // so the selection outline hugs the image.
@@ -396,8 +471,8 @@ export function deriveEditorLayers(
     id: "background",
     kind: "background",
     label: "Background",
-    visible: true,
-    canHide: false,
+    visible: design.artworkVisible !== false,
+    canHide: true,
     present: true,
     bounds: resolution
       ? { id: "background", label: "Background", x0: 0, y0: 0, x1: resolution.width, y1: resolution.height }

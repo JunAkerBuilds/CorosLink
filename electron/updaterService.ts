@@ -135,7 +135,13 @@ function registerAutoUpdaterListeners(): void {
   }
 
   listenersRegistered = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // Applying an update is always an explicit choice from the update prompt or
+  // update controls. In particular, choosing "Not now" must not silently
+  // install the already-downloaded update when the app later quits.
+  autoUpdater.autoInstallOnAppQuit = false;
+  // Include notes for every release newer than the installed version so users
+  // who skip one or more versions still see the complete changelog.
+  autoUpdater.fullChangelog = true;
 
   autoUpdater.on("checking-for-update", () => {
     setSnapshot({ status: "checking", error: undefined });
@@ -304,7 +310,11 @@ export async function quitAndInstallUpdate(): Promise<{
 }
 
 function formatReleaseNotes(
-  releaseNotes: string | Array<{ note?: string | null }> | null | undefined
+  releaseNotes:
+    | string
+    | Array<{ version?: string; note?: string | null }>
+    | null
+    | undefined
 ): string | undefined {
   if (!releaseNotes) {
     return undefined;
@@ -314,8 +324,16 @@ function formatReleaseNotes(
     return releaseNotes;
   }
 
-  return releaseNotes
-    .map((entry) => entry.note?.trim())
-    .filter(Boolean)
-    .join("\n\n");
+  const sections = releaseNotes.flatMap((entry) => {
+    const note = entry.note?.trim();
+    if (!note) {
+      return [];
+    }
+
+    return entry.version
+      ? [`## Version ${entry.version}\n\n${note}`]
+      : [note];
+  });
+
+  return sections.length > 0 ? sections.join("\n\n") : undefined;
 }

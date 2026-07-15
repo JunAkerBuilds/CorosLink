@@ -13,10 +13,12 @@ import type {
   CorosWatchfaceCreatorInput,
   CorosWatchfacePublishInput,
   CorosWatchfaceProject,
+  CorosWatchfaceProjectExportInput,
   CorosWatchfaceProjectSaveInput,
   CorosWatchfaceProjectSummary,
   CorosWatchfaceRegion,
   CorosWatchfaceResolutionDetails,
+  CorosWatchfaceShareImport,
   CorosWatchfaceShareLink,
   CorosWatchfaceSpriteFile,
   CorosWatchfaceSpriteFolder,
@@ -33,7 +35,8 @@ import type {
   CorosBatteryUsageDetail,
   CorosBatteryUsageGroup,
   CorosBatteryDay,
-  CorosPairedDevice
+  CorosPairedDevice,
+  WatchModelId
 } from "./types";
 
 // COROS accounts are region-bound: a mobile session is only valid on the host
@@ -91,8 +94,11 @@ const MOBILE_USER_SETTING_SCOPE = "CAEQARgBIAEoATABOAFAAQ==";
 const API_SUCCESS = "0000";
 const MAX_ARCHIVE_BYTES = 25 * 1024 * 1024;
 const MAX_INFO_BYTES = 1024 * 1024;
+const MAX_SHARE_PAGE_BYTES = 1024 * 1024;
 const MAX_ARTWORK_BYTES = 10 * 1024 * 1024;
 const MAX_PROJECT_BYTES = 60 * 1024 * 1024;
+const MAX_PROJECT_MANIFEST_BYTES = MAX_PROJECT_BYTES + 64 * 1024;
+const MAX_PROJECT_PACKAGE_BYTES = 100 * 1024 * 1024;
 const CREATOR_CANVAS_SIZE = 800;
 const MAX_SPRITE_REPLACEMENTS = 800;
 const MAX_SPRITE_BYTES = 2 * 1024 * 1024;
@@ -102,7 +108,9 @@ const MAX_CONFIG_OVERRIDE_FILES = 8;
 const MAX_CONFIG_OVERRIDE_KEYS = 200;
 const CONFIG_KEY_PATTERN = /^[a-z0-9_]{1,64}$/i;
 const CREATED_STUDIO_SPRITE_PATTERN =
-  /^watchface_(?:416x416|800x800)\/(?:studio\/[a-z0-9_-]{1,64}|cl_[a-z0-9_]{1,32}|weather)\/\d{2}\.png$/i;
+  /^watchface_(\d{3,4})x\1\/(?:studio\/[a-z0-9_-]{1,64}|cl_[a-z0-9_]{1,32}|weather)\/\d{2}\.png$/i;
+const CREATOR_ARTWORK_ENTRY_PATTERN =
+  /^(?:watchface_customize\.png|watchface_\d{3,4}x\d{3,4}\/(?:background|watchface_customize|thmb)\.png)$/i;
 // Values stay on one printable-ASCII line, matching the firmware's own syntax.
 const CONFIG_VALUE_PATTERN = /^[\x20-\x7e]{0,160}$/;
 
@@ -147,11 +155,28 @@ interface MobileApiEnvelope<T> {
 interface ArchiveInfo {
   o_template_id?: number | string;
   o_diy_version?: number | string;
+  o_wf_ver?: number | string;
 }
 
 interface SelectedArchive extends CorosWatchfaceArchive {
   path: string;
   modifiedMs: number;
+  resolutionDirectories: string[];
+}
+
+interface CorosLinkWatchfaceProjectManifest {
+  format: "coroslink-watchface-project";
+  version: 1;
+  name: string;
+  sourceTemplateId: string;
+  firmwareType?: string;
+  design: CorosWatchfaceProjectExportInput["design"];
+}
+
+interface CorosLinkWatchfaceProjectPackage {
+  manifest: CorosLinkWatchfaceProjectManifest;
+  starterArchive: Buffer;
+  preview: Buffer;
 }
 
 interface UnzipperFile {
@@ -350,6 +375,7 @@ export async function downloadCorosWatchfaceTheme(
 ): Promise<CorosWatchfaceThemeDownload> {
   const session = requireSession();
   const packageUrl = typeof input?.packageUrl === "string" ? input.packageUrl : "";
+  const firmwareType = normalizeOptionalFirmwareType(input?.firmwareType);
   if (!knownThemePackageUrls.has(packageUrl)) {
     throw new Error("Load the template catalog first, then choose a listed template.");
   }
@@ -409,7 +435,11 @@ export async function downloadCorosWatchfaceTheme(
 
   try {
     const inspected = await inspectArchive(outputPath);
-    const selected: SelectedArchive = { ...inspected, fileName: `${safeName}.dat` };
+    const selected: SelectedArchive = {
+      ...inspected,
+      fileName: `${safeName}.dat`,
+      ...(firmwareType ? { firmwareType } : {})
+    };
     selectedArchives.set(selected.archiveId, selected);
     return {
       fileName: selected.fileName,
@@ -543,6 +573,142 @@ export function findHttpsUrlInJson(text: string): string | undefined {
   return undefined;
 }
 
+interface ParsedCorosWatchfaceSharePage {
+  packageUrl: string;
+  name: string;
+  firmwareType?: string;
+}
+
+function normalizeCorosWatchfaceShareUrl(value: string): URL {
+  if (typeof value !== "string" || value.length > 2_048) {
+    throw new Error("Paste a valid COROS watch-face share link.");
+  }
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    throw new Error("Paste a valid COROS watch-face share link.");
+  }
+  if (
+    url.protocol !== "https:" ||
+    url.hostname !== "faq.coros.com" ||
+    url.pathname.replace(/\/$/, "") !== "/share/watchface" ||
+    !/^\d{1,20}$/.test(url.searchParams.get("id") ?? "") ||
+    url.searchParams.get("type") !== "2"
+  ) {
+    throw new Error("Use an official https://faq.coros.com/share/watchface link for a custom watch face.");
+  }
+  return url;
+}
+
+/** Extracts the downloadable DIY archive metadata embedded in a COROS share page. */
+export function parseCorosWatchfaceSharePage(
+  html: string
+): ParsedCorosWatchfaceSharePage {
+  const stateMatch = html.match(
+    /window\.__INITIAL_STATE__\s*=\s*(\{[\s\S]*?\});\s*<\/script>/
+  );
+  if (!stateMatch) {
+    throw new Error("COROS did not return readable watch-face share data.");
+  }
+
+  let state: Record<string, unknown> | null = null;
+  try {
+    state = asRecord(JSON.parse(stateMatch[1]!));
+  } catch {
+    // Use the same user-facing error as a missing state block.
+  }
+  const apiData = state ? asRecord(state.apiData) : null;
+  const apiEnvelope = apiData ? asRecord(apiData.data) : null;
+  const payload = apiEnvelope ? asRecord(apiEnvelope.data) : null;
+  const template = payload ? asRecord(payload.watchFaceTemplateUserCustom) : null;
+  const pageData = state ? asRecord(state.pageData) : null;
+  if (!template || pageData?.isExpired === true) {
+    throw new Error(
+      pageData?.isExpired === true
+        ? "This COROS watch-face share link has expired."
+        : "COROS did not include an editable watch-face archive in this share link."
+    );
+  }
+
+  const packageUrl = readHttpsUrl(template, ["watchFaceTemplateUrl"]);
+  if (!packageUrl) {
+    throw new Error("COROS did not include an editable watch-face archive in this share link.");
+  }
+  const parsedPackageUrl = new URL(packageUrl);
+  if (!/^s3[a-z0-9-]*\.coros\.com$/i.test(parsedPackageUrl.hostname)) {
+    throw new Error("The watch-face package is not hosted by COROS.");
+  }
+
+  const rawName = readString(template, ["watchFaceTemplateName"]) ?? "COROS watch face";
+  const name =
+    rawName
+      .replace(/[\u0000-\u001f\u007f/\\:*?"<>|]/g, "")
+      .trim()
+      .slice(0, 60) || "COROS watch face";
+  const firmwareType = readString(template, ["firmwareType"]);
+  return {
+    packageUrl: parsedPackageUrl.toString(),
+    name,
+    ...(firmwareType ? { firmwareType } : {})
+  };
+}
+
+/** Downloads an official public share link and registers its ZIP for Studio. */
+export async function importCorosWatchfaceShareLink(
+  shareUrl: string
+): Promise<CorosWatchfaceShareImport> {
+  const url = normalizeCorosWatchfaceShareUrl(shareUrl);
+  const pageResponse = await fetch(url, {
+    headers: { accept: "text/html,application/xhtml+xml" }
+  });
+  if (!pageResponse.ok) {
+    throw new Error(`The COROS share page request failed (HTTP ${pageResponse.status}).`);
+  }
+  const pageBytes = Buffer.from(await pageResponse.arrayBuffer());
+  if (pageBytes.length === 0 || pageBytes.length > MAX_SHARE_PAGE_BYTES) {
+    throw new Error("The COROS share page response was empty or unexpectedly large.");
+  }
+  const shared = parseCorosWatchfaceSharePage(pageBytes.toString("utf8"));
+
+  const packageResponse = await fetch(shared.packageUrl, {
+    headers: { accept: "application/zip,application/octet-stream" }
+  });
+  if (!packageResponse.ok) {
+    throw new Error(`The COROS watch-face download failed (HTTP ${packageResponse.status}).`);
+  }
+  const bytes = Buffer.from(await packageResponse.arrayBuffer());
+  if (bytes.length === 0 || bytes.length > MAX_ARCHIVE_BYTES) {
+    throw new Error("The COROS watch-face archive must be between 1 byte and 25 MB.");
+  }
+  if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
+    throw new Error("COROS did not return a ZIP watch-face archive.");
+  }
+
+  const outputDirectory = path.join(app.getPath("userData"), "watchface-share-imports");
+  await fs.promises.mkdir(outputDirectory, { recursive: true });
+  const outputPath = path.join(outputDirectory, `${crypto.randomUUID()}.zip`);
+  await fs.promises.writeFile(outputPath, bytes);
+
+  try {
+    const inspected = await inspectArchive(outputPath);
+    const selected: SelectedArchive = {
+      ...inspected,
+      fileName: `${shared.name}.zip`,
+      ...(shared.firmwareType ? { firmwareType: shared.firmwareType } : {})
+    };
+    selectedArchives.set(selected.archiveId, selected);
+    return {
+      archive: toPublicArchive(selected),
+      name: shared.name,
+      ...(shared.firmwareType ? { firmwareType: shared.firmwareType } : {})
+    };
+  } catch (caught) {
+    await fs.promises.rm(outputPath, { force: true });
+    throw caught;
+  }
+}
+
 /**
  * Reads COROS's battery-consumption history for a user-supplied paired watch.
  * The device identifiers are deliberately not persisted by CorosLink.
@@ -590,9 +756,188 @@ export async function listCorosPairedDevices(): Promise<CorosPairedDevice[]> {
 export async function selectCorosWatchfaceArchive(
   archivePath: string
 ): Promise<CorosWatchfaceArchive> {
-  const selected = await inspectArchive(archivePath);
+  const editablePackage = await readCorosWatchfaceProjectPackage(archivePath);
+  if (!editablePackage) {
+    const selected = await inspectArchive(archivePath);
+    selectedArchives.set(selected.archiveId, selected);
+    return toPublicArchive(selected);
+  }
+
+  const temporaryDirectory = await fs.promises.mkdtemp(
+    path.join(app.getPath("temp"), "coroslink-watchface-")
+  );
+  const starterPath = path.join(temporaryDirectory, "starter.dat");
+  await fs.promises.writeFile(starterPath, editablePackage.starterArchive);
+  let inspected: SelectedArchive;
+  try {
+    inspected = await inspectArchive(starterPath);
+  } catch (caught) {
+    await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });
+    throw caught;
+  }
+  if (inspected.sourceTemplateId !== editablePackage.manifest.sourceTemplateId) {
+    await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });
+    throw new Error("The editable project does not match its bundled starter template.");
+  }
+  const selected: SelectedArchive = {
+    ...inspected,
+    fileName: path.basename(archivePath),
+    ...(editablePackage.manifest.firmwareType
+      ? { firmwareType: editablePackage.manifest.firmwareType }
+      : {}),
+    editableProject: {
+      name: editablePackage.manifest.name,
+      design: editablePackage.manifest.design
+    }
+  };
   selectedArchives.set(selected.archiveId, selected);
   return toPublicArchive(selected);
+}
+
+/**
+ * Build a portable project ZIP for website distribution. The original starter
+ * is kept separate from the design state so importing and exporting again does
+ * not apply layout changes twice.
+ */
+export async function exportCorosWatchfaceProject(
+  input: CorosWatchfaceProjectExportInput,
+  destinationPath: string
+): Promise<void> {
+  if (!input || typeof input.sourceArchiveId !== "string") {
+    throw new Error("Choose a starter template before exporting the project.");
+  }
+  const source = requireSelectedArchive(input.sourceArchiveId);
+  const verified = await inspectArchive(source.path, source.archiveId);
+  if (verified.modifiedMs !== source.modifiedMs) {
+    throw new Error(
+      "The starter template changed. Open the project again before exporting."
+    );
+  }
+  const name = sanitizeProjectName(input.name);
+  validateProjectDesign(input.design);
+  const firmwareType =
+    normalizeOptionalFirmwareType(input.firmwareType) ?? source.firmwareType;
+  const preview = decodePortableProjectPreview(input.previewDataUrl);
+  const manifest: CorosLinkWatchfaceProjectManifest = {
+    format: "coroslink-watchface-project",
+    version: 1,
+    name,
+    sourceTemplateId: verified.sourceTemplateId,
+    ...(firmwareType ? { firmwareType } : {}),
+    design: input.design
+  };
+  const projectZip = createStoreZip([
+    {
+      name: "coroslink-project.json",
+      data: Buffer.from(JSON.stringify(manifest), "utf8")
+    },
+    { name: "starter.dat", data: await fs.promises.readFile(source.path) },
+    { name: "preview.png", data: preview }
+  ]);
+  if (projectZip.byteLength > MAX_PROJECT_PACKAGE_BYTES) {
+    throw new Error("The editable watch-face package is too large to export.");
+  }
+  await fs.promises.writeFile(destinationPath, projectZip);
+}
+
+export async function readCorosWatchfaceProjectPackage(
+  packagePath: string
+): Promise<CorosLinkWatchfaceProjectPackage | null> {
+  const stat = await fs.promises.stat(packagePath);
+  if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_PROJECT_PACKAGE_BYTES) {
+    throw new Error("The editable watch-face package must be smaller than 100 MB.");
+  }
+  const directory = await openTemplateArchive(packagePath);
+  const files = directory.files.filter((entry) => entry.type === "File");
+  const manifestEntry = files.find(
+    (entry) => entry.path === "coroslink-project.json"
+  );
+  if (!manifestEntry) return null;
+  const starterEntry = files.find((entry) => entry.path === "starter.dat");
+  const previewEntry = files.find((entry) => entry.path === "preview.png");
+  if (!starterEntry || !previewEntry) {
+    throw new Error("The editable watch-face package is incomplete.");
+  }
+  assertPackageEntrySize(
+    manifestEntry,
+    MAX_PROJECT_MANIFEST_BYTES,
+    "project manifest"
+  );
+  assertPackageEntrySize(starterEntry, MAX_ARCHIVE_BYTES, "starter archive");
+  assertPackageEntrySize(previewEntry, MAX_ARTWORK_BYTES, "preview image");
+
+  let manifest: CorosLinkWatchfaceProjectManifest;
+  try {
+    manifest = JSON.parse(
+      (await manifestEntry.buffer()).toString("utf8")
+    ) as CorosLinkWatchfaceProjectManifest;
+  } catch {
+    throw new Error("The editable watch-face project manifest is not valid JSON.");
+  }
+  if (
+    manifest.format !== "coroslink-watchface-project" ||
+    manifest.version !== 1 ||
+    typeof manifest.name !== "string" ||
+    typeof manifest.sourceTemplateId !== "string" ||
+    !/^\d{1,20}$/.test(manifest.sourceTemplateId)
+  ) {
+    throw new Error("This is not a supported CorosLink watch-face project.");
+  }
+  const normalizedFirmwareType = normalizeOptionalFirmwareType(
+    manifest.firmwareType
+  );
+  const { firmwareType: _firmwareType, ...manifestWithoutFirmwareType } = manifest;
+  manifest = {
+    ...manifestWithoutFirmwareType,
+    name: sanitizeProjectName(manifest.name),
+    ...(normalizedFirmwareType ? { firmwareType: normalizedFirmwareType } : {})
+  };
+  validateProjectDesign(manifest.design);
+  const starterArchive = await starterEntry.buffer();
+  const preview = await previewEntry.buffer();
+  if (starterArchive.byteLength > MAX_ARCHIVE_BYTES) {
+    throw new Error("The editable watch-face starter archive is too large.");
+  }
+  if (preview.byteLength > MAX_ARTWORK_BYTES) {
+    throw new Error("The editable watch-face preview is too large.");
+  }
+  assertPngBytes(preview, "The editable watch-face preview is not a PNG image.");
+  return { manifest, starterArchive, preview };
+}
+
+function assertPackageEntrySize(
+  entry: UnzipperFile,
+  maximum: number,
+  label: string
+): void {
+  const size = entry.uncompressedSize ?? entry.size;
+  if (!Number.isFinite(size) || !size || size < 1 || size > maximum) {
+    throw new Error(`The editable watch-face ${label} has an invalid size.`);
+  }
+}
+
+function decodePortableProjectPreview(dataUrl: string): Buffer {
+  const prefix = "data:image/png;base64,";
+  if (typeof dataUrl !== "string" || !dataUrl.startsWith(prefix)) {
+    throw new Error("The editable watch-face preview must be a PNG image.");
+  }
+  const encoded = dataUrl.slice(prefix.length);
+  if (!encoded || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+    throw new Error("The editable watch-face preview is not valid base64 data.");
+  }
+  const preview = Buffer.from(encoded, "base64");
+  if (preview.byteLength === 0 || preview.byteLength > MAX_ARTWORK_BYTES) {
+    throw new Error("The editable watch-face preview must be smaller than 10 MB.");
+  }
+  assertPngBytes(preview, "The editable watch-face preview is not a PNG image.");
+  return preview;
+}
+
+function assertPngBytes(bytes: Buffer, message: string): void {
+  const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (bytes.byteLength < pngSignature.byteLength || !bytes.subarray(0, 8).equals(pngSignature)) {
+    throw new Error(message);
+  }
 }
 
 interface StoredWatchfaceProject {
@@ -601,6 +946,7 @@ interface StoredWatchfaceProject {
   updatedAt: string;
   /** Decimal text; older saves stored a number and are migrated on read. */
   sourceTemplateId: string;
+  firmwareType?: string;
   design: CorosWatchfaceProjectSaveInput["design"];
 }
 
@@ -670,7 +1016,12 @@ async function readStoredWatchfaceProject(
   ) {
     throw new Error("The saved watchface project metadata is invalid.");
   }
-  return { ...parsed, sourceTemplateId };
+  const firmwareType = normalizeOptionalFirmwareType(parsed.firmwareType);
+  return {
+    ...parsed,
+    sourceTemplateId,
+    ...(firmwareType ? { firmwareType } : {})
+  };
 }
 
 export async function saveCorosWatchfaceProject(
@@ -693,17 +1044,23 @@ export async function saveCorosWatchfaceProject(
     await fs.promises.rename(temporaryTemplate, templatePath);
   }
   const updatedAt = new Date().toISOString();
+  const projectFirmwareType =
+    normalizeOptionalFirmwareType(input.firmwareType) ?? source.firmwareType;
   const stored: StoredWatchfaceProject = {
     projectId,
     name,
     updatedAt,
     sourceTemplateId: source.sourceTemplateId,
+    ...(projectFirmwareType ? { firmwareType: projectFirmwareType } : {}),
     design: input.design
   };
   const temporaryManifest = `${manifestPath}.tmp`;
   await fs.promises.writeFile(temporaryManifest, JSON.stringify(stored), "utf8");
   await fs.promises.rename(temporaryManifest, manifestPath);
-  const selected = await inspectArchive(templatePath);
+  const selected = {
+    ...(await inspectArchive(templatePath)),
+    ...(stored.firmwareType ? { firmwareType: stored.firmwareType } : {})
+  };
   selectedArchives.set(selected.archiveId, selected);
   return { ...stored, archive: toPublicArchive(selected) };
 }
@@ -736,15 +1093,33 @@ export async function loadCorosWatchfaceProject(
   projectId: string
 ): Promise<CorosWatchfaceProject> {
   const stored = await readStoredWatchfaceProject(projectId);
-  const templatePath = path.join(
+  const projectDirectory = path.join(
     watchfaceProjectsDirectory(),
-    stored.projectId,
-    "starter.dat"
+    stored.projectId
   );
+  const primaryTemplatePath = path.join(projectDirectory, "starter.dat");
+  const legacyTemplatePath = path.join(projectDirectory, "starter.zip");
+  const templatePath = (await pathIsFile(primaryTemplatePath))
+    ? primaryTemplatePath
+    : (await pathIsFile(legacyTemplatePath))
+      ? legacyTemplatePath
+      : primaryTemplatePath;
   await normalizeNestedProjectStarter(templatePath);
-  const selected = await inspectArchive(templatePath);
+  const selected = {
+    ...(await inspectArchive(templatePath)),
+    ...(stored.firmwareType ? { firmwareType: stored.firmwareType } : {})
+  };
   selectedArchives.set(selected.archiveId, selected);
   return { ...stored, archive: toPublicArchive(selected) };
+}
+
+async function pathIsFile(filePath: string): Promise<boolean> {
+  try {
+    return (await fs.promises.stat(filePath)).isFile();
+  } catch (caught) {
+    if ((caught as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw caught;
+  }
 }
 
 /**
@@ -857,9 +1232,9 @@ export async function loadCorosWatchfaceArtwork(
 }
 
 /**
- * Builds a new uploadable archive by replacing only the source template's
- * background and preview assets. Its time, date, battery, and complications
- * remain the known-good template controls rather than a simulated preview.
+ * Builds a new uploadable archive from the source template. Dynamic controls
+ * remain firmware-backed; the renderer supplies a composed root image so the
+ * COROS share/install preview matches the face instead of showing only artwork.
  */
 export async function createCorosWatchfaceArchive(
   input: CorosWatchfaceCreatorInput
@@ -871,23 +1246,65 @@ export async function createCorosWatchfaceArchive(
   if (!source) {
     throw new Error("The starter template is no longer available. Choose it again.");
   }
-  const verifiedSource = await inspectArchive(source.path, source.archiveId);
+  const verifiedSource = {
+    ...(await inspectArchive(source.path, source.archiveId)),
+    ...(source.firmwareType ? { firmwareType: source.firmwareType } : {})
+  };
   if (verifiedSource.modifiedMs !== source.modifiedMs) {
     selectedArchives.set(verifiedSource.archiveId, verifiedSource);
     throw new Error("The starter template changed. Choose it again before creating.");
   }
 
+  const requestedFirmwareType = normalizeOptionalFirmwareType(input.firmwareType);
+  if (
+    requestedFirmwareType &&
+    source.firmwareType &&
+    requestedFirmwareType.toUpperCase() !== source.firmwareType.toUpperCase()
+  ) {
+    throw new Error(
+      `This starter template was selected for ${source.firmwareType}, not ${requestedFirmwareType}. Browse templates again for the connected watch.`
+    );
+  }
+  const firmwareType = requestedFirmwareType ?? source.firmwareType;
+  assertFirmwareResolutionCompatibility(
+    verifiedSource.resolutionDirectories,
+    firmwareType,
+    input.watchModel
+  );
+
   const background = renderCreatorBackground(input.backgroundDataUrl);
-  const replacements = buildCreatorAssetReplacements(background);
+  const preview = input.previewDataUrl
+    ? renderCreatorBackground(input.previewDataUrl, "preview")
+    : background;
+  const replacements = new Map<string, Buffer>();
   const sprites = decodeSpriteReplacements(input.assetReplacements);
   const configOverrides = validateConfigOverrides(input.configOverrides);
+  const minimumWatchFaceVersion = validateOptionalWatchFaceVersion(
+    input.minWatchFaceVersion,
+    "Minimum watch-face version"
+  );
+  const watchFaceVersion = validateOptionalWatchFaceVersion(
+    input.watchFaceVersion,
+    "Archive watch-face version"
+  );
+  if (
+    watchFaceVersion !== undefined &&
+    minimumWatchFaceVersion !== undefined &&
+    watchFaceVersion < minimumWatchFaceVersion
+  ) {
+    throw new Error(
+      `Archive watch-face version ${watchFaceVersion} is too low for the selected features; use version ${minimumWatchFaceVersion} or newer.`
+    );
+  }
   const zip = await rewriteTemplateArchive(
     verifiedSource.path,
     replacements,
     background,
+    preview,
     sprites,
     configOverrides,
-    input.minWatchFaceVersion
+    minimumWatchFaceVersion,
+    watchFaceVersion
   );
   const outputDirectory = path.join(app.getPath("userData"), "watchface-archives");
   await fs.promises.mkdir(outputDirectory, { recursive: true });
@@ -897,7 +1314,8 @@ export async function createCorosWatchfaceArchive(
   const generated = await inspectArchive(outputPath);
   const selected: SelectedArchive = {
     ...generated,
-    fileName: "CorosLink custom face.dat"
+    fileName: "CorosLink custom face.dat",
+    ...(firmwareType ? { firmwareType } : {})
   };
   selectedArchives.set(selected.archiveId, selected);
   return toPublicArchive(selected);
@@ -938,7 +1356,7 @@ export async function describeCorosWatchfaceTemplate(
       height: Number(dims[2]),
       config,
       aodConfig,
-      ...(await discoverSpriteAssets(files, directoryName, { ...config, ...aodConfig }))
+      ...(await discoverSpriteAssets(files, directoryName, [config, aodConfig]))
     });
   }
 
@@ -1040,7 +1458,16 @@ export function applyCorosWatchfaceConfigOverrides(
     "control_temperature_font",
     "control_temperature_font_color",
     "control_temperature_negative_sign_icon",
-    "control_negative_sign_icon"
+    "control_negative_sign_icon",
+    "time_hour_high_pos",
+    "time_hour_high_font",
+    "time_hour_low_pos",
+    "time_hour_low_font",
+    "time_minute_high_pos",
+    "time_minute_high_font",
+    "time_minute_low_pos",
+    "time_minute_low_font",
+    "colon_icon"
   ]);
   const appended: string[] = [];
   for (const [key, value] of pending) {
@@ -1122,11 +1549,24 @@ async function readTemplateConfig(
 async function discoverSpriteAssets(
   files: UnzipperFile[],
   resolutionDirectory: string,
-  config: Record<string, string>
+  configs: Record<string, string>[]
 ): Promise<Pick<CorosWatchfaceResolutionDetails, "spriteFolders" | "icons">> {
   const prefix = `${resolutionDirectory}/`;
   const folderFiles = new Map<string, Map<number, UnzipperFile>>();
   const iconEntries: UnzipperFile[] = [];
+  const iconEntryPaths = new Set<string>();
+  const directlyReferencedPngs = new Set(
+    configs.flatMap((config) => Object.values(config))
+      .map((value) => value.replace(/\\/g, "/").replace(/^\.\//, ""))
+      .filter((value) => /^[^/].*\.png$/i.test(value))
+  );
+
+  const addIconEntry = (entry: UnzipperFile) => {
+    if (!iconEntryPaths.has(entry.path)) {
+      iconEntryPaths.add(entry.path);
+      iconEntries.push(entry);
+    }
+  };
 
   for (const entry of files) {
     if (!entry.path.startsWith(prefix)) {
@@ -1141,14 +1581,17 @@ async function discoverSpriteAssets(
       folderFiles.set(folder, numbered);
       continue;
     }
-    if (/^(a\/)?icon\/[^/]+\.png$/i.test(relative)) {
-      iconEntries.push(entry);
+    if (
+      /^(a\/)?icon\/[^/]+\.png$/i.test(relative) ||
+      directlyReferencedPngs.has(relative)
+    ) {
+      addIconEntry(entry);
     }
   }
 
   const spriteFolders: CorosWatchfaceSpriteFolder[] = [];
   const stateFolders = new Set(
-    Object.entries(config)
+    configs.flatMap((config) => Object.entries(config))
       .filter(([key, value]) => /_icon_dir$/.test(key) && Boolean(value))
       .map(([, value]) => value.replace(/\\/g, "/").replace(/^\.\//, ""))
   );
@@ -1216,6 +1659,7 @@ interface DecodedSpriteReplacement {
   width: number;
   height: number;
   create: boolean;
+  allowDimensionOverride: boolean;
 }
 
 function decodeSpriteReplacements(
@@ -1260,7 +1704,8 @@ function decodeSpriteReplacements(
     decoded.set(replacement.path, {
       data,
       ...image.getSize(),
-      create: replacement.create === true
+      create: replacement.create === true,
+      allowDimensionOverride: replacement.allowDimensionOverride === true
     });
   }
   return decoded;
@@ -1304,10 +1749,22 @@ export async function publishCorosWatchface(
   }
 
   const name = sanitizeTemplateName(input.name);
-  const firmwareType = input.firmwareType.trim();
+  const firmwareType = normalizeOptionalFirmwareType(input.firmwareType);
   if (!firmwareType) {
     throw new Error("Enter the COROS firmware type for this template.");
   }
+  if (
+    archive.firmwareType &&
+    archive.firmwareType.toUpperCase() !== firmwareType.toUpperCase()
+  ) {
+    throw new Error(
+      `This archive was built for ${archive.firmwareType}, not ${firmwareType}. Reopen a compatible template for the connected watch.`
+    );
+  }
+  assertFirmwareResolutionCompatibility(
+    freshArchive.resolutionDirectories,
+    firmwareType
+  );
   if (!Number.isSafeInteger(input.backgroundImageId) || input.backgroundImageId < 0) {
     throw new Error("Background image ID must be a non-negative integer.");
   }
@@ -1321,7 +1778,7 @@ export async function publishCorosWatchface(
     backgroundImageId: input.backgroundImageId,
     firmwareType,
     language: normalizeLanguage(input.language),
-    maxWatchFaceVersion: 0,
+    maxWatchFaceVersion: freshArchive.watchFaceVersion,
     releaseType: 1,
     saveOrUpdate: 1,
     // Placeholder: the ID must be a raw JSON number, but it exceeds
@@ -1826,9 +2283,12 @@ function buildMobileLoginPayload(
   };
 }
 
-function renderCreatorBackground(dataUrl: string) {
+function renderCreatorBackground(
+  dataUrl: string,
+  imageKind: "background" | "preview" = "background"
+) {
   if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:image/png;base64,")) {
-    throw new Error("The creator background must be a PNG canvas image.");
+    throw new Error(`The creator ${imageKind} must be a PNG canvas image.`);
   }
   const encoded = dataUrl.slice("data:image/png;base64,".length);
   const bytes = Buffer.from(encoded, "base64");
@@ -1837,38 +2297,13 @@ function renderCreatorBackground(dataUrl: string) {
   }
   const image = nativeImage.createFromDataURL(dataUrl);
   if (image.isEmpty()) {
-    throw new Error("The created watchface image could not be rendered.");
+    throw new Error(`The created watchface ${imageKind} could not be rendered.`);
   }
   return image.resize({
     width: CREATOR_CANVAS_SIZE,
     height: CREATOR_CANVAS_SIZE,
     quality: "best"
   });
-}
-
-function buildCreatorAssetReplacements(background: Electron.NativeImage): Map<string, Buffer> {
-  const full = background.toPNG();
-  const compact = background
-    .resize({ width: 416, height: 416, quality: "best" })
-    .toPNG();
-  const replacements = new Map<string, Buffer>();
-
-  // The full-size background is the only active visual element we alter. The
-  // template renders dynamic fields above it from config.txt and sprite assets.
-  replacements.set("watchface_800x800/background.png", full);
-  replacements.set("watchface_416x416/background.png", compact);
-  replacements.set("watchface_customize.png", full);
-  replacements.set("watchface_800x800/watchface_customize.png", full);
-  replacements.set("watchface_416x416/watchface_customize.png", compact);
-  replacements.set(
-    "watchface_800x800/thmb.png",
-    background.resize({ width: 606, height: 606, quality: "best" }).toPNG()
-  );
-  replacements.set(
-    "watchface_416x416/thmb.png",
-    background.resize({ width: 315, height: 315, quality: "best" }).toPNG()
-  );
-  return replacements;
 }
 
 /**
@@ -1889,13 +2324,22 @@ function raiseWatchFaceVersion(rawInfo: string, minimum: number): string {
   return rawInfo.replace(/^(\s*\{)/, `$1"o_wf_ver":${minimum},`);
 }
 
+function setWatchFaceVersion(rawInfo: string, version: number): string {
+  if (/"o_wf_ver"\s*:\s*\d+/.test(rawInfo)) {
+    return rawInfo.replace(/"o_wf_ver"\s*:\s*\d+/, `"o_wf_ver":${version}`);
+  }
+  return rawInfo.replace(/^(\s*\{)/, `$1"o_wf_ver":${version},`);
+}
+
 async function rewriteTemplateArchive(
   sourcePath: string,
   replacements: Map<string, Buffer>,
   background: Electron.NativeImage,
+  preview: Electron.NativeImage,
   spriteReplacements: Map<string, DecodedSpriteReplacement> = new Map(),
   configOverrides: Map<string, Record<string, string>> = new Map(),
-  minWatchFaceVersion?: number
+  minWatchFaceVersion?: number,
+  watchFaceVersion?: number
 ): Promise<Buffer> {
   const directory = await openTemplateArchive(sourcePath);
   const sourceFiles = directory.files.filter((entry) => entry.type === "File");
@@ -1909,10 +2353,39 @@ async function rewriteTemplateArchive(
       throw new Error("This template does not include the assets required by the creator.");
     }
   }
+
+  // Every firmware family ships its own resolution trees. Replace each
+  // template artwork entry at its native size instead of assuming the
+  // 416px AMOLED layout used by PACE Pro.
+  await Promise.all(
+    sourceFiles
+      .filter((entry) => CREATOR_ARTWORK_ENTRY_PATTERN.test(entry.path))
+      .map(async (entry) => {
+        const original = nativeImage.createFromBuffer(await entry.buffer());
+        const { width, height } = original.getSize();
+        if (original.isEmpty() || width <= 0 || height <= 0) {
+          throw new Error(`This template has an unreadable artwork image at ${entry.path}.`);
+        }
+        const artwork = entry.path.toLowerCase() === "watchface_customize.png"
+          ? preview
+          : background;
+        replacements.set(
+          entry.path,
+          artwork.resize({ width, height, quality: "best" }).toPNG()
+        );
+      })
+  );
+
   for (const spritePath of spriteReplacements.keys()) {
     const sprite = spriteReplacements.get(spritePath)!;
     if (sprite.create && sourcePaths.has(spritePath)) {
       throw new Error("A new studio sprite collides with a starter template entry.");
+    }
+    if (
+      sprite.create &&
+      !sourcePaths.has(`${spritePath.split("/", 1)[0]!}/config.txt`)
+    ) {
+      throw new Error("A new studio sprite targets a resolution the template does not have.");
     }
     if (!sprite.create && !sourcePaths.has(spritePath)) {
       throw new Error("A sprite replacement does not exist in the starter template.");
@@ -1951,16 +2424,16 @@ async function rewriteTemplateArchive(
   const entries = await Promise.all(
     sourceFiles.map(async (entry) => {
       if (
-        minWatchFaceVersion !== undefined &&
+        (minWatchFaceVersion !== undefined || watchFaceVersion !== undefined) &&
         entry.path.replace(/^\.\//, "") === "info.json"
       ) {
+        const rawInfo = (await entry.buffer()).toString("utf8");
         return {
           name: entry.path,
           data: Buffer.from(
-            raiseWatchFaceVersion(
-              (await entry.buffer()).toString("utf8"),
-              minWatchFaceVersion
-            ),
+            watchFaceVersion !== undefined
+              ? setWatchFaceVersion(rawInfo, watchFaceVersion)
+              : raiseWatchFaceVersion(rawInfo, minWatchFaceVersion!),
             "utf8"
           )
         };
@@ -1990,7 +2463,10 @@ async function rewriteTemplateArchive(
       // digits and icons out with the original bitmap dimensions.
       const original = nativeImage.createFromBuffer(await entry.buffer());
       const { width, height } = original.getSize();
-      if (original.isEmpty() || width !== sprite.width || height !== sprite.height) {
+      if (
+        original.isEmpty() ||
+        (!sprite.allowDimensionOverride && (width !== sprite.width || height !== sprite.height))
+      ) {
         throw new Error(
           `The replacement for ${entry.path} must be a ${width}×${height} PNG like the template's.`
         );
@@ -2040,6 +2516,17 @@ async function inspectArchive(
   }
 
   const directory = await openTemplateArchive(normalizedPath);
+  const resolutionDirectories = [
+    ...new Set(
+      directory.files.flatMap((entry) => {
+        const match = entry.path.match(/^(watchface_(\d+)x(\d+))\/config\.txt$/i);
+        return match ? [match[1]!] : [];
+      })
+    )
+  ].sort();
+  const resolutionProfile = detectWatchfaceResolutionProfile(
+    resolutionDirectories
+  );
 
   const infoEntry = directory.files.find(
     (entry) => entry.type === "File" && entry.path.replace(/^\.\//, "") === "info.json"
@@ -2069,6 +2556,7 @@ async function inspectArchive(
       ? manifest.o_template_id.trim()
       : undefined);
   const diyVersion = Number(manifest.o_diy_version ?? 1);
+  const watchFaceVersion = Number(manifest.o_wf_ver ?? 0);
   if (
     !sourceTemplateId ||
     !/^\d{1,20}$/.test(sourceTemplateId) ||
@@ -2079,6 +2567,13 @@ async function inspectArchive(
   if (!Number.isSafeInteger(diyVersion) || diyVersion < 1) {
     throw new Error("info.json must include a valid o_diy_version.");
   }
+  if (
+    !Number.isSafeInteger(watchFaceVersion) ||
+    watchFaceVersion < 0 ||
+    watchFaceVersion > 999
+  ) {
+    throw new Error("info.json must include a valid o_wf_ver when present.");
+  }
 
   return {
     archiveId,
@@ -2087,12 +2582,20 @@ async function inspectArchive(
     fileName: path.basename(normalizedPath),
     sizeBytes: stat.size,
     sourceTemplateId,
-    diyVersion
+    diyVersion,
+    watchFaceVersion,
+    resolutionDirectories,
+    resolutionProfile
   };
 }
 
 function toPublicArchive(archive: SelectedArchive): CorosWatchfaceArchive {
-  const { path: _path, modifiedMs: _modifiedMs, ...publicArchive } = archive;
+  const {
+    path: _path,
+    modifiedMs: _modifiedMs,
+    resolutionDirectories: _resolutionDirectories,
+    ...publicArchive
+  } = archive;
   return publicArchive;
 }
 
@@ -2113,6 +2616,78 @@ function normalizeLanguage(value: string | undefined): string {
     throw new Error("Language must use a locale such as en-US.");
   }
   return language;
+}
+
+function normalizeOptionalFirmwareType(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  const firmwareType = typeof value === "string" ? value.trim() : "";
+  if (
+    !firmwareType ||
+    firmwareType.length > 120 ||
+    /[\u0000-\u001f\u007f]/.test(firmwareType)
+  ) {
+    throw new Error("Enter a valid COROS firmware type.");
+  }
+  return firmwareType;
+}
+
+function validateOptionalWatchFaceVersion(
+  value: unknown,
+  label: string
+): number | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  if (!Number.isSafeInteger(value) || Number(value) < 0 || Number(value) > 999) {
+    throw new Error(`${label} must be a whole number from 0 to 999.`);
+  }
+  return Number(value);
+}
+
+function assertFirmwareResolutionCompatibility(
+  resolutionDirectories: string[],
+  firmwareType: string | undefined,
+  watchModel?: WatchModelId
+): void {
+  if (
+    firmwareType?.trim().toUpperCase() !== "COROS W541" &&
+    watchModel !== "apex-4"
+  ) {
+    return;
+  }
+  const required = ["watchface_240x240", "watchface_260x260"];
+  const missing = required.filter(
+    (directory) => !resolutionDirectories.includes(directory)
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `APEX 4 (${firmwareType}) requires 240×240 and 260×260 exports. This template is missing ${missing
+        .map((directory) => directory.replace("watchface_", ""))
+        .join(" and ")}. Browse and choose an APEX 4 template before exporting.`
+    );
+  }
+}
+
+function detectWatchfaceResolutionProfile(
+  resolutionDirectories: string[]
+): CorosWatchfaceArchive["resolutionProfile"] {
+  const resolutions = new Set(resolutionDirectories);
+  if (
+    resolutions.has("watchface_240x240") &&
+    resolutions.has("watchface_260x260") &&
+    resolutions.has("watchface_800x800")
+  ) {
+    return "mip-240-260-800";
+  }
+  if (
+    resolutions.has("watchface_416x416") &&
+    resolutions.has("watchface_800x800")
+  ) {
+    return "amoled-416-800";
+  }
+  return "other";
 }
 
 async function mobileRequest<T>(

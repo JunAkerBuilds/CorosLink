@@ -10,6 +10,8 @@ export const SPORT_COLOR_CATEGORIES: SportColorCategory[] = [
   "other"
 ];
 
+// Source of truth for the default palette. The :root --sport-* fallbacks in
+// src/styles.css mirror these values; test:sport-colors asserts they match.
 export const DEFAULT_SPORT_COLORS: Record<SportColorCategory, string> = {
   strength: "#e5484d",
   trail: "#4c8dff",
@@ -29,22 +31,36 @@ export const SPORT_COLOR_LABELS: Record<SportColorCategory, string> = {
 const STORAGE_KEY = "coroslink.sportColors";
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
+// Stable COROS sportType codes → color category; keep the codes in sync with
+// electron/corosSportTypes.ts. Everything not listed (swim, triathlon, ski,
+// rowing, climbing, walk, unknown codes) falls back to "other".
+const SPORT_TYPE_CATEGORY: Record<number, SportColorCategory> = {
+  100: "run", //      Run
+  101: "run", //      Indoor Run
+  102: "trail", //    Trail Run
+  103: "run", //      Track Run
+  104: "run", //      Treadmill Run
+  200: "bike", //     Road Bike
+  201: "bike", //     Indoor Bike
+  202: "bike", //     E-Bike
+  203: "bike", //     Gravel Bike
+  204: "bike", //     Mountain Bike
+  402: "strength", // Strength
+  403: "strength", // Cardio (gym)
+  700: "trail" //     Hiking
+};
+
 /**
- * Categorize an activity by its sport name. Trail and bike are checked before
- * run so "TrailRun"/"VirtualRide" don't fall into run. Matches FR + EN names.
+ * Categorize an activity by its numeric COROS sportType code — names are
+ * user-editable free text and unreliable. Unknown or missing codes → "other".
  */
 export function sportColorCategory(
-  name: string | undefined
+  sportType: number | undefined
 ): SportColorCategory {
-  const n = (name ?? "").toLowerCase();
-  if (!n) return "other";
-  if (/trail/.test(n)) return "trail";
-  if (/(bike|cycl|ride|v[ée]lo|spin)/.test(n)) return "bike";
-  if (/(run|jog|course|marathon|tempo|track|\d+\s?k\b)/.test(n)) return "run";
-  if (/(muscu|weight|strength|gym|\bcore\b|workout|entra[iî]n)/.test(n)) {
-    return "strength";
-  }
-  return "other";
+  return (
+    (sportType !== undefined ? SPORT_TYPE_CATEGORY[sportType] : undefined) ??
+    "other"
+  );
 }
 
 /** Parse a stored JSON blob, merging valid hex values over the defaults. */
@@ -115,7 +131,7 @@ export function happenDayFromTimestamp(timestamp?: number): string | undefined {
 /**
  * Map each day (YYYYMMDD) to the sport color category of that day's activity
  * with the highest training load. Ties and missing/zero TL keep the first
- * activity seen for the day; a missing sport name resolves to "other".
+ * activity seen for the day; an unknown sportType code resolves to "other".
  */
 export function buildDominantSportByDay(
   activities: TrainingHubActivity[]
@@ -133,7 +149,7 @@ export function buildDominantSportByDay(
       Number.isFinite(activity.trainingLoad)
         ? activity.trainingLoad
         : 0;
-    const category = sportColorCategory(activity.sportName);
+    const category = sportColorCategory(activity.sportType);
     const current = best.get(happenDay);
 
     // Strictly greater keeps the first activity on a tie (deterministic).
@@ -166,7 +182,7 @@ export function buildSportCategoriesByDay(
       continue;
     }
 
-    const category = sportColorCategory(activity.sportName);
+    const category = sportColorCategory(activity.sportType);
     const set = byDay.get(happenDay) ?? new Set<SportColorCategory>();
     set.add(category);
     byDay.set(happenDay, set);

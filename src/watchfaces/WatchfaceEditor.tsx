@@ -1,31 +1,83 @@
 import {
   Fragment,
+  type ComponentProps,
   type CSSProperties,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState
 } from "react";
+
+/** A numeric field that permits clearing/retyping without snapping to zero. */
+function EditableNumberInput({
+  value,
+  fallback = 0,
+  onValueChange,
+  onBlur,
+  ...props
+}: Omit<ComponentProps<"input">, "type" | "value" | "defaultValue" | "onChange"> & {
+  value: number;
+  fallback?: number;
+  onValueChange: (value: number) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) setDraft(String(value));
+  }, [value]);
+  return (
+    <input
+      {...props}
+      ref={inputRef}
+      type="number"
+      value={draft}
+      onChange={(event) => {
+        const next = event.target.value;
+        setDraft(next);
+        if (next !== "" && Number.isFinite(Number(next))) onValueChange(Number(next));
+      }}
+      onBlur={(event) => {
+        if (draft.trim() === "") {
+          setDraft(String(fallback));
+          onValueChange(fallback);
+        }
+        onBlur?.(event);
+      }}
+    />
+  );
+}
 import {
   ArrowLeft,
+  Battery,
+  ChevronDown,
   Circle,
+  Download,
   Image,
   Eye,
   EyeOff,
   ImagePlus,
   Layers,
+  Link2,
+  Lock,
   Loader2,
+  Magnet,
   Minus,
   PanelLeft,
   PanelRight,
   Redo2,
+  RotateCcw,
   Save,
   Send,
+  SunMedium,
   Square,
   Trash2,
   Type,
-  Undo2
+  Unlink2,
+  Unlock,
+  Undo2,
+  MoonStar
 } from "lucide-react";
 import type {
   CorosWatchfaceArchive,
@@ -37,7 +89,8 @@ import type {
   CorosWatchfaceDesignState,
   CorosWatchfaceProject,
   CorosWatchfaceTemplateAsset,
-  CorosWatchfaceTemplateDetails
+  CorosWatchfaceTemplateDetails,
+  WatchModelId
 } from "../../electron/types";
 
 /** Any subset of shape fields, minus the discriminant, for in-place edits. */
@@ -47,12 +100,58 @@ type BackgroundElementPatch = Partial<
     Omit<CorosWatchfaceBackgroundLine, "kind"> &
     Omit<CorosWatchfaceBackgroundText, "kind">
 >;
+
+/** Centers the visible pixels without altering the source PNG canvas size. */
+function centerSpriteArtwork(image: HTMLImageElement): string | null {
+  const source = document.createElement("canvas");
+  source.width = image.naturalWidth;
+  source.height = image.naturalHeight;
+  const sourceContext = source.getContext("2d", { willReadFrequently: true });
+  if (!sourceContext) return null;
+  sourceContext.drawImage(image, 0, 0);
+  const pixels = sourceContext.getImageData(0, 0, source.width, source.height).data;
+  let left = source.width;
+  let top = source.height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < source.height; y += 1) {
+    for (let x = 0; x < source.width; x += 1) {
+      if (pixels[(y * source.width + x) * 4 + 3]! < 8) continue;
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
+    }
+  }
+  if (right < left || bottom < top) return null;
+  const contentWidth = right - left + 1;
+  const contentHeight = bottom - top + 1;
+  const canvas = document.createElement("canvas");
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  context.drawImage(
+    source,
+    left,
+    top,
+    contentWidth,
+    contentHeight,
+    Math.round((canvas.width - contentWidth) / 2),
+    Math.round((canvas.height - contentHeight) / 2),
+    contentWidth,
+    contentHeight
+  );
+  return canvas.toDataURL("image/png");
+}
+
 import type { CorosLinkApi } from "../coroslink-api";
 import {
   deriveEditorLayers,
   editorLayerAtPoint,
   type EditorLayer
 } from "./watchfaceEditorModel";
+import type { WatchfaceEditorBounds } from "./watchfaceEditorGeometry";
 import {
   composeWatchfaceReplacements,
   deriveDesignDetails,
@@ -66,30 +165,43 @@ import {
 import {
   BACKGROUND_SPACE,
   backgroundElementAtPoint,
-  backgroundElementBounds,
   backgroundElementLabel,
   createBackgroundElement
 } from "./watchfaceBackgroundElements";
 import {
   computeLayoutGroupBounds,
   computeLayoutOffsetLimits,
+  AOD_DIM_FACTOR,
+  detailsForPreviewMode,
+  detailsForPreviewResolution,
+  dimHexColor,
   downscaleArtwork,
   drawStudioPreview,
   getAmPmCapability,
+  scaleAmPmStyleForResolution,
   getAvailableComplications,
+  getTemplateBackgroundAssetPaths,
+  hasWatchfaceAod,
   inferStaticSeparators,
+  listWatchfaceConfigAssets,
   loadStudioImage,
   parseConfigPos,
   pickPreviewResolution,
+  pickWatchPreviewResolution,
   type WatchfaceDatePartId,
+  type WatchfaceAssetLoader,
+  type WatchfaceConfigAssetReference,
   type WatchfaceMetricId,
+  type WatchfacePreviewMode,
+  type WatchfaceStudioOptions,
   type WatchfaceStaticSeparatorId,
   type WatchfaceTimePartId
 } from "./watchfaceStudio";
 import {
   getWeatherCapability,
-  weatherPreviewUrl
+  weatherPreviewDataUrl
 } from "./weatherAssets";
+import { CustomPngFontPanel } from "./CustomPngFontPanel";
 import { LocalFontPicker } from "./LocalFontPicker";
 import {
   beginWatchfaceEditorHistoryTransaction,
@@ -105,11 +217,29 @@ import {
   undoWatchfaceEditorHistory,
   updateWatchfaceEditorHistoryTransaction
 } from "./watchfaceEditorHistory";
+import {
+  WATCHFACE_SNAP_SCREEN_THRESHOLD,
+  backgroundElementSnapBounds,
+  formatWatchfaceSnapStatus,
+  readWatchfacePlacementPreferences,
+  scaleWatchfaceBounds,
+  snapWatchfaceBounds,
+  translateWatchfaceBounds,
+  watchfaceDesignThreshold,
+  watchfaceSafeAreaBounds,
+  writeWatchfacePlacementPreferences,
+  type WatchfaceGridStep,
+  type WatchfacePlacementPreferences,
+  type WatchfaceSnapGuide,
+  type WatchfaceSnapTarget
+} from "./watchfaceEditorSnapping";
 
 interface WatchfaceEditorProps {
   api: CorosLinkApi;
   sessionId: string;
   starterArchive: CorosWatchfaceArchive;
+  targetFirmwareType?: string;
+  targetWatchModel?: WatchModelId;
   initialDesign?: CorosWatchfaceDesignState;
   initialProjectId?: string;
   initialProjectName?: string;
@@ -121,21 +251,177 @@ interface WatchfaceEditorProps {
   onNotice: (message: string) => void;
 }
 
+interface WatchfaceDragState {
+  kind: "layout" | "bgElement" | "sprite" | "staticSeparator" | "ampm" | "weather" | "selectorIcon";
+  targetId: string;
+  startX: number;
+  startY: number;
+  baseX: number;
+  baseY: number;
+  snapId: string;
+  baseBounds: WatchfaceEditorBounds;
+}
+
+interface WatchfaceContextMenuState {
+  x: number;
+  y: number;
+}
+
+interface PendingWatchfaceDrag {
+  drag: WatchfaceDragState;
+  point: { x: number; y: number };
+  bypassSnap: boolean;
+}
+
+interface WatchfacePreviewRenderRequest {
+  canvas: HTMLCanvasElement;
+  sessionId: string;
+  backgroundDataUrl: string;
+  details: CorosWatchfaceTemplateDetails;
+  options: ReturnType<typeof toStudioOptions>;
+  weather: CorosWatchfaceDesignState["weatherIndicator"];
+  previewWidth: number;
+  loadAssets: WatchfaceAssetLoader;
+  dragCommitId: number | null;
+}
+
+interface WatchfaceBackgroundRenderRequest {
+  sessionId: string;
+  design: CorosWatchfaceDesignState;
+  previewWidth: number;
+}
+
+interface WatchfaceDragVisual {
+  drag: WatchfaceDragState;
+  baseFrame: HTMLCanvasElement | null;
+  movingFrame: HTMLCanvasElement | null;
+  movement: { dx: number; dy: number };
+  clipBounds: WatchfaceEditorBounds;
+  preparationId: number;
+  awaitingCommitId: number | null;
+}
+
 const PREVIEW_SIZE = 520;
+
+function maskCanvasToCircle(canvas: HTMLCanvasElement): void {
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  context.save();
+  context.globalCompositeOperation = "destination-in";
+  context.beginPath();
+  context.arc(
+    canvas.width / 2,
+    canvas.height / 2,
+    Math.min(canvas.width, canvas.height) / 2,
+    0,
+    Math.PI * 2
+  );
+  context.fill();
+  context.restore();
+}
+
+function solidPreviewBackground(colorValue: string | undefined): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  const context = canvas.getContext("2d");
+  const hex = colorValue?.trim().match(/^0x([0-9a-f]{6})$/i)?.[1];
+  if (context) {
+    context.fillStyle = hex ? `#${hex}` : "#000000";
+    context.fillRect(0, 0, 1, 1);
+  }
+  return canvas.toDataURL("image/png");
+}
+
+function parseBackgroundColor(colorValue: string | undefined): {
+  hex: string;
+  alpha: number;
+  isTransparent: boolean;
+} {
+  const value = colorValue?.trim().toLowerCase();
+  if (value === "transparent") {
+    return { hex: "#000000", alpha: 0, isTransparent: true };
+  }
+  const hex = value?.match(/^#([0-9a-f]{6})$/i)?.[1];
+  if (hex) {
+    return { hex: `#${hex}`, alpha: 1, isTransparent: false };
+  }
+  const rgba = value?.match(
+    /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(0|1|0?\.\d+))?\s*\)$/
+  );
+  if (rgba) {
+    const [red, green, blue] = rgba.slice(1, 4).map((part) =>
+      Math.max(0, Math.min(255, Number(part)))
+    );
+    const alpha = rgba[4] === undefined ? 1 : Number(rgba[4]);
+    return {
+      hex: `#${[red, green, blue]
+        .map((channel) => channel.toString(16).padStart(2, "0"))
+        .join("")}`,
+      alpha,
+      isTransparent: false
+    };
+  }
+  return { hex: "#000000", alpha: 1, isTransparent: false };
+}
+
+function toRgbaColor(hex: string, alpha: number): string {
+  const channels = hex.match(/[0-9a-f]{2}/gi)?.map((value) => parseInt(value, 16));
+  if (!channels || channels.length !== 3) return "#000000";
+  return `rgba(${channels[0]}, ${channels[1]}, ${channels[2]}, ${alpha})`;
+}
+
+function browserPlacementStorage(): Storage | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+function watchfaceSnapGuidesEqual(
+  left: WatchfaceSnapGuide[],
+  right: WatchfaceSnapGuide[]
+): boolean {
+  return left.length === right.length && left.every((guide, index) => {
+    const candidate = right[index];
+    return Boolean(candidate) &&
+      guide.axis === candidate.axis &&
+      guide.value === candidate.value &&
+      guide.kind === candidate.kind &&
+      guide.message === candidate.message;
+  });
+}
 
 function normalizeEditorDesign(
   design: CorosWatchfaceDesignState
 ): CorosWatchfaceDesignState {
+  const legacyBackgroundOverride =
+    design.configAssetOverrides?.["config:background_icon"];
+  const normalized = {
+    ...design,
+    artworkVisible:
+      design.artworkVisible ?? legacyBackgroundOverride?.enabled !== false,
+    configAssetOverrides: design.configAssetOverrides ?? {},
+    linkedLayerGroups: (design.linkedLayerGroups ?? [])
+      .map((group) => [...new Set(group.filter(Boolean))])
+      .filter((group) => group.length >= 2),
+    lockedLayerIds: [...new Set((design.lockedLayerIds ?? []).filter(Boolean))],
+    // Global tinting has been replaced by explicit controls in each layer.
+    tintLabels: false,
+    tintIcons: false
+  };
   if (
-    design.metricChanges?.temperature !== true ||
-    design.metricStyles?.temperature
+    normalized.metricChanges?.temperature !== true ||
+    normalized.metricStyles?.temperature
   ) {
-    return design;
+    return normalized;
   }
   return {
-    ...design,
+    ...normalized,
     metricStyles: {
-      ...design.metricStyles,
+      ...normalized.metricStyles,
       temperature: {
         scale: 1
       }
@@ -147,6 +433,8 @@ export function WatchfaceEditor({
   api,
   sessionId,
   starterArchive,
+  targetFirmwareType,
+  targetWatchModel,
   initialDesign,
   initialProjectId,
   initialProjectName,
@@ -158,17 +446,32 @@ export function WatchfaceEditor({
   onNotice
 }: WatchfaceEditorProps) {
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const dragPreviewCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const mountedRef = useRef(true);
+  const previewSessionRef = useRef(sessionId);
+  previewSessionRef.current = sessionId;
+  const previewRenderQueueRef = useRef<{
+    running: boolean;
+    pending: WatchfacePreviewRenderRequest | null;
+  }>({ running: false, pending: null });
+  const backgroundRenderQueueRef = useRef<{
+    running: boolean;
+    pending: WatchfaceBackgroundRenderRequest | null;
+  }>({ running: false, pending: null });
+  const dragAnimationFrameRef = useRef<number | null>(null);
+  const pendingDragRef = useRef<PendingWatchfaceDrag | null>(null);
+  const dragVisualRef = useRef<WatchfaceDragVisual | null>(null);
+  const dragPreparationIdRef = useRef(0);
+  const dragCommitIdRef = useRef(0);
+  const placementMenuRef = useRef<HTMLDivElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   const assetCacheRef = useRef(new Map<string, CorosWatchfaceTemplateAsset>());
-  const dragRef = useRef<{
-    kind: "layout" | "bgElement" | "sprite" | "staticSeparator" | "ampm" | "weather" | "selectorIcon";
-    targetId: string;
-    startX: number;
-    startY: number;
-    baseX: number;
-    baseY: number;
-  } | null>(null);
+  const dragRef = useRef<WatchfaceDragState | null>(null);
   const [loadingSprite, setLoadingSprite] = useState(false);
+  const [configAssetPreviews, setConfigAssetPreviews] = useState(
+    () => new Map<string, CorosWatchfaceTemplateAsset>()
+  );
 
   type EditorValue = { design: CorosWatchfaceDesignState; projectName: string };
   const initialValue = useMemo<EditorValue>(
@@ -189,20 +492,37 @@ export function WatchfaceEditor({
   const design = history.present.value.design;
   const projectName = history.present.value.projectName;
   const [selectedId, setSelectedId] = useState<string>("background");
+  const [selectedIds, setSelectedIds] = useState<string[]>(["background"]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [backgroundDataUrl, setBackgroundDataUrl] = useState("");
+  const [aodBackgroundDataUrl, setAodBackgroundDataUrl] = useState("");
+  const [previewMode, setPreviewMode] = useState<WatchfacePreviewMode>("current");
   const [projectId, setProjectId] = useState<string | undefined>(initialProjectId);
   const [creating, setCreating] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [previewingExport, setPreviewingExport] = useState(false);
+  const [exportPreviewDataUrl, setExportPreviewDataUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [stageZoom, setStageZoom] = useState<"fit" | number>("fit");
+  const [watchPreviewDirectory, setWatchPreviewDirectory] = useState("");
+  const [placementMenuOpen, setPlacementMenuOpen] = useState(false);
+  const [placementPreferences, setPlacementPreferences] =
+    useState<WatchfacePlacementPreferences>(() =>
+      readWatchfacePlacementPreferences(browserPlacementStorage())
+    );
+  const [snapGuides, setSnapGuides] = useState<WatchfaceSnapGuide[]>([]);
+  const [dragVisualActive, setDragVisualActive] = useState(false);
+  const [contextMenu, setContextMenu] =
+    useState<WatchfaceContextMenuState | null>(null);
 
   const isDirty = isWatchfaceEditorHistoryDirty(history, checkpoint, sessionId);
   const canUndo = canUndoWatchfaceEditorHistory(history);
   const canRedo = canRedoWatchfaceEditorHistory(history);
+  const snapStatus = formatWatchfaceSnapStatus(snapGuides);
 
   function applyHistory(next: typeof history) {
     historyRef.current = next;
@@ -252,6 +572,93 @@ export function WatchfaceEditor({
     applyHistory(redoWatchfaceEditorHistory(historyRef.current));
   }
 
+  function patchPlacementPreferences(
+    patch: Partial<WatchfacePlacementPreferences>
+  ) {
+    setPlacementPreferences((current) => ({ ...current, ...patch }));
+  }
+
+  function clearSnapGuides() {
+    setSnapGuides((current) => (current.length > 0 ? [] : current));
+  }
+
+  useEffect(() => {
+    writeWatchfacePlacementPreferences(
+      browserPlacementStorage(),
+      placementPreferences
+    );
+  }, [placementPreferences]);
+
+  useEffect(() => {
+    if (!placementMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!placementMenuRef.current?.contains(event.target as Node)) {
+        setPlacementMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPlacementMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [placementMenuOpen]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = (event: PointerEvent) => {
+      if (!contextMenuRef.current?.contains(event.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setContextMenu(null);
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [contextMenu]);
+
+  useEffect(() => {
+    const handleSnapBypass = (event: KeyboardEvent) => {
+      if (event.key === "Alt" && dragRef.current) {
+        if (pendingDragRef.current) {
+          pendingDragRef.current = {
+            ...pendingDragRef.current,
+            bypassSnap: true
+          };
+        }
+        setSnapGuides([]);
+      }
+    };
+    window.addEventListener("keydown", handleSnapBypass);
+    return () => window.removeEventListener("keydown", handleSnapBypass);
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (dragAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(dragAnimationFrameRef.current);
+      }
+      dragAnimationFrameRef.current = null;
+      pendingDragRef.current = null;
+      dragPreparationIdRef.current += 1;
+      dragVisualRef.current = null;
+      backgroundRenderQueueRef.current.pending = null;
+      previewRenderQueueRef.current.pending = null;
+    };
+  }, []);
+
   const loadAssets = useCallback(
     async (paths: string[]): Promise<CorosWatchfaceTemplateAsset[]> => {
       const cache = assetCacheRef.current;
@@ -278,9 +685,29 @@ export function WatchfaceEditor({
     setCheckpoint(createWatchfaceEditorCheckpoint(reset, sessionId));
     setProjectId(initialProjectId);
     setSelectedId("background");
+    setSelectedIds(["background"]);
     setHoveredId(null);
     setBackgroundDataUrl("");
+    setAodBackgroundDataUrl("");
+    setPreviewMode("current");
     setDetails(null);
+    setPlacementMenuOpen(false);
+    setContextMenu(null);
+    clearSnapGuides();
+    if (dragAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragAnimationFrameRef.current);
+      dragAnimationFrameRef.current = null;
+    }
+    pendingDragRef.current = null;
+    dragRef.current = null;
+    dragPreparationIdRef.current += 1;
+    dragVisualRef.current = null;
+    setDragVisualActive(false);
+    if (dragPreviewCanvasRef.current) {
+      dragPreviewCanvasRef.current.style.visibility = "hidden";
+    }
+    backgroundRenderQueueRef.current.pending = null;
+    previewRenderQueueRef.current.pending = null;
     assetCacheRef.current.clear();
   }, [initialProjectId, initialValue, sessionId]);
 
@@ -289,55 +716,79 @@ export function WatchfaceEditor({
     let cancelled = false;
     api
       .describeCorosWatchfaceTemplate(starterArchive.archiveId)
-      .then((described) => {
-        if (!cancelled) {
-          setDetails(described);
-          const current = historyRef.current;
-          let nextDesign = current.present.value.design;
-          if (!initialDesign) {
-              nextDesign = {
-                ...nextDesign,
-                staticSeparators: inferStaticSeparators(described, nextDesign.digitColor)
-              };
-          }
-          if (!initialDesign?.ampmIndicator) {
-              const capability = getAmPmCapability(described);
-              if (capability) {
-                nextDesign = {
-                  ...nextDesign,
-                  ampmIndicator: {
-                    enabled: capability.active,
-                    ...capability.defaultPos,
-                    scale: 1,
-                    color: nextDesign.digitColor
-                  }
-                };
+      .then(async (described) => {
+        let templateArtwork: CorosWatchfaceTemplateAsset | undefined;
+        if (!initialDesign) {
+          for (const assetPath of getTemplateBackgroundAssetPaths(described)) {
+            try {
+              const [asset] = await loadAssets([assetPath]);
+              if (asset) {
+                templateArtwork = asset;
+                break;
               }
-          }
-          if (!initialDesign?.weatherIndicator) {
-              const capability = getWeatherCapability(described);
-              if (capability) {
-                nextDesign = {
-                  ...nextDesign,
-                  weatherIndicator: {
-                    enabled: capability.active,
-                    ...capability.defaultPos,
-                    scale: 1
-                  }
-                };
-              }
-          }
-          const initialized = {
-            ...current,
-            present: {
-              ...current.present,
-              value: { ...current.present.value, design: nextDesign }
+            } catch {
+              // Older templates may only include one of the preview variants.
             }
-          };
-          historyRef.current = initialized;
-          setHistoryState(initialized);
-          setCheckpoint(createWatchfaceEditorCheckpoint(initialized, sessionId));
+          }
         }
+        if (cancelled) return;
+
+        setDetails(described);
+        const current = historyRef.current;
+        let nextDesign = current.present.value.design;
+        if (!initialDesign) {
+          nextDesign = {
+            ...nextDesign,
+            ...(templateArtwork
+              ? {
+                  artwork: {
+                    dataUrl: templateArtwork.dataUrl,
+                    width: templateArtwork.width,
+                    height: templateArtwork.height
+                  },
+                  zoom: 1
+                }
+              : {}),
+            staticSeparators: inferStaticSeparators(described, nextDesign.digitColor)
+          };
+        }
+        if (!initialDesign?.ampmIndicator) {
+          const capability = getAmPmCapability(described);
+          if (capability) {
+            nextDesign = {
+              ...nextDesign,
+              ampmIndicator: {
+                enabled: capability.active,
+                ...capability.defaultPos,
+                scale: 1,
+                color: undefined
+              }
+            };
+          }
+        }
+        if (!initialDesign?.weatherIndicator) {
+          const capability = getWeatherCapability(described);
+          if (capability) {
+            nextDesign = {
+              ...nextDesign,
+              weatherIndicator: {
+                enabled: capability.active,
+                ...capability.defaultPos,
+                scale: 1
+              }
+            };
+          }
+        }
+        const initialized = {
+          ...current,
+          present: {
+            ...current.present,
+            value: { ...current.present.value, design: nextDesign }
+          }
+        };
+        historyRef.current = initialized;
+        setHistoryState(initialized);
+        setCheckpoint(createWatchfaceEditorCheckpoint(initialized, sessionId));
       })
       .catch((caught) => {
         if (!cancelled) {
@@ -347,24 +798,119 @@ export function WatchfaceEditor({
     return () => {
       cancelled = true;
     };
-  }, [api, initialDesign, onError, sessionId, starterArchive.archiveId]);
+  }, [
+    api,
+    initialDesign,
+    loadAssets,
+    onError,
+    sessionId,
+    starterArchive.archiveId
+  ]);
 
+  const backgroundDesign = useMemo(
+    () => design,
+    [
+      design.artwork,
+      design.artworkVisible,
+      design.backgroundColor,
+      design.zoom,
+      design.backgroundElements,
+      design.designSprites,
+      design.configAssetOverrides,
+      design.staticSeparators,
+      design.fontFamily
+    ]
+  );
+  const supportsAod = useMemo(
+    () => (details ? hasWatchfaceAod(details) : false),
+    [details]
+  );
+  const studioOptions = useMemo(
+    () => toStudioOptions(design),
+    [
+      design.fontFamily,
+      design.fontWeight,
+      design.fontStyle,
+      design.letterSpacing,
+      design.rasterFont,
+      design.digitColor,
+      design.accentColor,
+      design.tintLabels,
+      design.tintIcons,
+      design.previewComplication,
+      design.metricStyles,
+      design.separateAutoTime,
+      design.timeStyles,
+      design.dateStyles,
+      design.layerColors,
+      design.configAssetOverrides,
+      design.ampmIndicator
+    ]
+  );
+  const previewStudioOptions = useMemo(
+    () => previewMode === "current" || !supportsAod
+      ? studioOptions
+      : {
+          ...studioOptions,
+          digitColor: dimHexColor(studioOptions.digitColor, AOD_DIM_FACTOR),
+          accentColor: dimHexColor(studioOptions.accentColor, AOD_DIM_FACTOR),
+          previewComplication: undefined,
+          metricStyles: {},
+          timeStyles: {},
+          dateStyles: {},
+          layerColors: {},
+          ampmStyle: undefined,
+          configAssetScope: "aod" as const
+        },
+    [previewMode, studioOptions, supportsAod]
+  );
   const designDetails = useMemo(
     () => (details ? deriveDesignDetails(details, design) : null),
-    [details, design]
+    [
+      details,
+      design.metricChanges,
+      design.metricStyles,
+      design.separateAutoTime,
+      design.timeStyles,
+      design.dateStyles,
+      design.layerColors,
+      design.controlIconOffsets,
+      design.configAssetOverrides,
+      design.staticSeparators,
+      design.layoutOffsets,
+      design.layerVisibility,
+      design.digitColor
+    ]
   );
-  const previewDetails = designDetails?.previewDetails ?? null;
+  const basePreviewDetails = designDetails?.previewDetails ?? null;
+  const previewDetails = useMemo(
+    () => basePreviewDetails
+      ? detailsForPreviewMode(basePreviewDetails, previewMode)
+      : null,
+    [basePreviewDetails, previewMode]
+  );
   const previewResolution = useMemo(
     () => (previewDetails ? pickPreviewResolution(previewDetails) : null),
     [previewDetails]
   );
   const previewWidth = previewResolution?.width ?? 800;
-  const watchCoordinateResolution = useMemo(
-    () => details?.resolutions.reduce((smallest, resolution) =>
-      resolution.width < smallest.width ? resolution : smallest
-    ) ?? null,
-    [details]
+  const previewHeight = previewResolution?.height ?? previewWidth;
+  const watchPreviewResolution = useMemo(
+    () => previewDetails?.resolutions.find(
+      (resolution) => resolution.directory === watchPreviewDirectory
+    ) ?? (previewDetails ? pickWatchPreviewResolution(previewDetails) : null),
+    [previewDetails, watchPreviewDirectory]
   );
+  const renderedPreviewDetails = useMemo(
+    () => previewDetails && watchPreviewResolution
+      ? detailsForPreviewResolution(
+          previewDetails,
+          watchPreviewResolution.directory
+        )
+      : previewDetails,
+    [previewDetails, watchPreviewResolution]
+  );
+  const watchCoordinateResolution = watchPreviewResolution;
   const watchCoordinateWidth = watchCoordinateResolution?.width ?? previewWidth;
   const watchCoordinateHeight = watchCoordinateResolution?.height ?? previewWidth;
   const watchCoordinateScale = previewWidth > 0
@@ -374,6 +920,41 @@ export function WatchfaceEditor({
     Math.round(value * watchCoordinateScale);
   const fromWatchCoordinate = (value: number) =>
     value / watchCoordinateScale;
+  const studioOptionsForResolution = useCallback(
+    (
+      options: WatchfaceStudioOptions,
+      resolutionDetails: CorosWatchfaceTemplateDetails
+    ): WatchfaceStudioOptions => {
+      const target = pickPreviewResolution(resolutionDetails);
+      if (!options.ampmStyle || !previewResolution || !target) {
+        return options;
+      }
+      return {
+        ...options,
+        ampmStyle: scaleAmPmStyleForResolution(
+          options.ampmStyle,
+          previewResolution,
+          target
+        )
+      };
+    },
+    [previewResolution]
+  );
+
+  useEffect(() => {
+    setWatchPreviewDirectory("");
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!previewDetails) return;
+    setWatchPreviewDirectory((current) =>
+      previewDetails.resolutions.some(
+        (resolution) => resolution.directory === current
+      )
+        ? current
+        : pickWatchPreviewResolution(previewDetails)?.directory ?? ""
+    );
+  }, [previewDetails]);
   const layoutLimits = useMemo(() => {
     const base = designDetails
       ? pickPreviewResolution(designDetails.styledMetricDetails)
@@ -386,11 +967,122 @@ export function WatchfaceEditor({
       : null;
     return base ? computeLayoutGroupBounds(base) : [];
   }, [designDetails]);
-  const layers = useMemo(
-    () => (details ? deriveEditorLayers(details, design) : []),
-    [details, design]
+  const layers = useMemo(() => {
+    if (!details) return [];
+    return deriveEditorLayers(details, design).filter((layer) =>
+      previewMode === "current"
+        ? !layer.configAssetId || layer.configAssetId.startsWith("config:")
+        : layer.configAssetId?.startsWith("aod:")
+    );
+  }, [details, design, previewMode]);
+  const configAssetReferences = useMemo(
+    () => (details
+      ? listWatchfaceConfigAssets(details).filter(
+          (reference) => reference.scope === (previewMode === "aod" ? "aod" : "config")
+        )
+      : []),
+    [details, previewMode]
+  );
+  const configAssetsById = useMemo(
+    () => new Map(configAssetReferences.map((reference) => [reference.id, reference])),
+    [configAssetReferences]
   );
   const selectedLayer = layers.find((layer) => layer.id === selectedId) ?? null;
+
+  useEffect(() => {
+    setSelectedId(previewMode === "current" ? "background" : "");
+    setSelectedIds(previewMode === "current" ? ["background"] : []);
+    setHoveredId(null);
+    setPlacementMenuOpen(false);
+    clearSnapGuides();
+  }, [previewMode]);
+
+  useEffect(() => {
+    if (layers.some((layer) => layer.id === selectedId)) return;
+    const nextId = previewMode === "current"
+      ? layers.find((layer) => layer.id === "background")?.id ?? layers[0]?.id ?? ""
+      : layers[0]?.id ?? "";
+    setSelectedId(nextId);
+    setSelectedIds(nextId ? [nextId] : []);
+  }, [layers, previewMode, selectedId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const paths = [...new Set(
+      configAssetReferences
+        .filter((reference) => reference.source)
+        .map((reference) => reference.archivePath)
+    )];
+    setConfigAssetPreviews(new Map());
+    if (paths.length === 0) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    void loadAssets(paths)
+      .then((assets) => {
+        if (!cancelled) {
+          setConfigAssetPreviews(new Map(assets.map((asset) => [asset.path, asset])));
+        }
+      })
+      .catch(() => {
+        // Missing optional assets remain visible in the list with a text fallback.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [configAssetReferences, loadAssets, sessionId]);
+
+  useEffect(() => {
+    if (previewMode !== "aod" || !supportsAod) {
+      setAodBackgroundDataUrl("");
+      return;
+    }
+    const resolution = watchPreviewResolution;
+    if (!resolution) {
+      setAodBackgroundDataUrl("");
+      return;
+    }
+    const fallback = solidPreviewBackground(resolution.config.bg_color);
+    const override = design.configAssetOverrides?.["aod:background_icon"];
+    if (override?.enabled === false) {
+      setAodBackgroundDataUrl(fallback);
+      return;
+    }
+    if (override?.replacement) {
+      setAodBackgroundDataUrl(override.replacement.dataUrl);
+      return;
+    }
+    const relativePath = resolution.config.background_icon
+      ?.trim()
+      .replace(/\\/g, "/")
+      .replace(/^\.\//, "");
+    if (!relativePath) {
+      setAodBackgroundDataUrl(fallback);
+      return;
+    }
+    let cancelled = false;
+    setAodBackgroundDataUrl(fallback);
+    void loadAssets([`${resolution.directory}/${relativePath}`])
+      .then(([asset]) => {
+        if (!cancelled && asset) {
+          setAodBackgroundDataUrl(asset.dataUrl);
+        }
+      })
+      .catch(() => {
+        // The configured background may be optional; retain the config color.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    design.configAssetOverrides,
+    loadAssets,
+    previewMode,
+    sessionId,
+    supportsAod,
+    watchPreviewResolution
+  ]);
   const selectorIconTarget = useMemo(() => {
     if (!previewDetails || !previewResolution) {
       return null;
@@ -441,6 +1133,10 @@ export function WatchfaceEditor({
     };
   }, [design.previewComplication, previewDetails, previewResolution, previewWidth]);
   const backgroundElements = design.backgroundElements ?? [];
+  const activeBackgroundElements = previewMode === "current" ? backgroundElements : [];
+  const previewBackgroundDataUrl = previewMode === "aod" && supportsAod
+    ? aodBackgroundDataUrl
+    : backgroundDataUrl;
   const selectedElementId = selectedId.startsWith("bgel:")
     ? selectedId.slice("bgel:".length)
     : null;
@@ -448,14 +1144,493 @@ export function WatchfaceEditor({
     backgroundElements.find((element) => element.id === selectedElementId) ?? null;
   const backgroundContext = selectedId === "background" || selectedElement !== null;
 
+  function linkedIdsFor(id: string): string[] {
+    return design.linkedLayerGroups?.find((group) => group.includes(id)) ?? [id];
+  }
+
+  function isPositionLocked(id: string): boolean {
+    return (design.lockedLayerIds ?? []).includes(id);
+  }
+
+  /** A linked group cannot move when any of its components is position-locked. */
+  function isMovementLockedForId(id: string): boolean {
+    return linkedIdsFor(id).some(isPositionLocked);
+  }
+
+  function isMovableSelectionId(id: string): boolean {
+    if (id.startsWith("bgel:")) {
+      return backgroundElements.some((element) => `bgel:${element.id}` === id);
+    }
+    const layer = layers.find((candidate) => candidate.id === id);
+    return Boolean(
+      layer &&
+        (layer.capabilities.position ||
+          layer.kind === "customSprite" ||
+          layer.staticSeparatorId ||
+          layer.ampmIndicator ||
+          layer.weatherIndicator)
+    );
+  }
+
+  function selectEditorItem(id: string, additive = false) {
+    setContextMenu(null);
+    if (!additive) {
+      const group = linkedIdsFor(id);
+      setSelectedId(id);
+      setSelectedIds(group);
+      return;
+    }
+    setSelectedIds((current) => {
+      if (current.includes(id)) {
+        const next = current.filter((candidate) => candidate !== id);
+        if (selectedId === id) setSelectedId(next[next.length - 1] ?? "");
+        return next;
+      }
+      setSelectedId(id);
+      return [...current, id];
+    });
+  }
+
+  function openLayerContextMenu(
+    event: { preventDefault(): void; clientX: number; clientY: number },
+    id: string
+  ) {
+    event.preventDefault();
+    if (!selectedIds.includes(id)) selectEditorItem(id);
+    setContextMenu({
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - 246)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 198))
+    });
+  }
+
+  function linkSelectedLayers() {
+    const movable = [...new Set(selectedIds.filter(isMovableSelectionId))];
+    if (movable.length < 2) return;
+    setDesign((current) => {
+      const groups = current.linkedLayerGroups ?? [];
+      const touching = groups.filter((group) =>
+        group.some((id) => movable.includes(id))
+      );
+      const merged = [
+        ...new Set([...movable, ...touching.flat()])
+      ];
+      return {
+        ...current,
+        linkedLayerGroups: [
+          ...groups.filter((group) => !touching.includes(group)),
+          merged
+        ]
+      };
+    });
+    const mergedSelection = [
+      ...new Set([
+        ...movable,
+        ...(design.linkedLayerGroups ?? [])
+          .filter((group) => group.some((id) => movable.includes(id)))
+          .flat()
+      ])
+    ];
+    setSelectedIds(mergedSelection);
+    setContextMenu(null);
+    onNotice(`${mergedSelection.length} components linked. They now move together.`);
+  }
+
+  function unlinkSelectedLayers() {
+    const groups = design.linkedLayerGroups ?? [];
+    const removed = groups.filter((group) =>
+      group.some((id) => selectedIds.includes(id))
+    );
+    if (removed.length === 0) return;
+    setDesign((current) => ({
+      ...current,
+      linkedLayerGroups: (current.linkedLayerGroups ?? []).filter(
+        (group) => !group.some((id) => selectedIds.includes(id))
+      )
+    }));
+    setSelectedIds(selectedId ? [selectedId] : []);
+    setContextMenu(null);
+    onNotice("Components unlinked. They can now move independently.");
+  }
+
+  function setLayerPositionLocked(id: string, locked: boolean) {
+    setDesign((current) => {
+      const lockedIds = new Set(current.lockedLayerIds ?? []);
+      if (locked) lockedIds.add(id);
+      else lockedIds.delete(id);
+      return { ...current, lockedLayerIds: [...lockedIds] };
+    });
+  }
+
+  function lockSelectedLayers() {
+    const movable = [...new Set(selectedIds.filter(isMovableSelectionId))];
+    if (movable.length === 0) return;
+    setDesign((current) => ({
+      ...current,
+      lockedLayerIds: [...new Set([...(current.lockedLayerIds ?? []), ...movable])]
+    }));
+    setContextMenu(null);
+    onNotice(
+      movable.length === 1
+        ? "Component position locked."
+        : `${movable.length} component positions locked.`
+    );
+  }
+
+  function unlockSelectedLayers() {
+    const movable = new Set(selectedIds.filter(isMovableSelectionId));
+    if (movable.size === 0) return;
+    setDesign((current) => ({
+      ...current,
+      lockedLayerIds: (current.lockedLayerIds ?? []).filter(
+        (id) => !movable.has(id)
+      )
+    }));
+    setContextMenu(null);
+    onNotice(
+      movable.size === 1
+        ? "Component position unlocked."
+        : `${movable.size} component positions unlocked.`
+    );
+  }
+
+  const selectedMovableIds = selectedIds.filter(isMovableSelectionId);
+  const selectionHasLink = (design.linkedLayerGroups ?? []).some((group) =>
+    group.some((id) => selectedIds.includes(id))
+  );
+  const selectionHasLockedPosition = selectedMovableIds.some(isPositionLocked);
+
+  function hideDragVisual() {
+    dragPreparationIdRef.current += 1;
+    dragVisualRef.current = null;
+    const canvas = dragPreviewCanvasRef.current;
+    if (canvas) {
+      canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+      canvas.style.visibility = "hidden";
+    }
+    setDragVisualActive(false);
+  }
+
+  function drawDragVisual() {
+    const visual = dragVisualRef.current;
+    const canvas = dragPreviewCanvasRef.current;
+    if (!visual?.baseFrame || !visual.movingFrame || !canvas) return;
+    if (canvas.width !== PREVIEW_SIZE) canvas.width = PREVIEW_SIZE;
+    if (canvas.height !== PREVIEW_SIZE) canvas.height = PREVIEW_SIZE;
+    const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+    if (!context) return;
+    const scaleX = canvas.width / previewWidth;
+    const scaleY = canvas.height / previewHeight;
+
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.save();
+    context.beginPath();
+    context.arc(
+      canvas.width / 2,
+      canvas.height / 2,
+      Math.min(canvas.width, canvas.height) / 2,
+      0,
+      Math.PI * 2
+    );
+    context.clip();
+    context.drawImage(visual.baseFrame, 0, 0, canvas.width, canvas.height);
+    context.translate(
+      visual.movement.dx * scaleX,
+      visual.movement.dy * scaleY
+    );
+    const x = visual.clipBounds.x0 * scaleX;
+    const y = visual.clipBounds.y0 * scaleY;
+    const width = (visual.clipBounds.x1 - visual.clipBounds.x0) * scaleX;
+    const height = (visual.clipBounds.y1 - visual.clipBounds.y0) * scaleY;
+    context.drawImage(
+      visual.movingFrame,
+      x,
+      y,
+      width,
+      height,
+      x,
+      y,
+      width,
+      height
+    );
+    context.restore();
+
+    const primaryId = visual.drag.kind === "selectorIcon"
+      ? "complication"
+      : visual.drag.snapId;
+    const linkedBounds = (design.linkedLayerGroups?.find((group) =>
+      group.includes(primaryId)
+    ) ?? [primaryId])
+      .map(selectionBoundsForId)
+      .filter((box): box is WatchfaceEditorBounds => Boolean(box));
+    const baseBounds = linkedBounds.length > 1
+      ? linkedBounds.reduce((result, box) => ({
+          x0: Math.min(result.x0, box.x0),
+          y0: Math.min(result.y0, box.y0),
+          x1: Math.max(result.x1, box.x1),
+          y1: Math.max(result.y1, box.y1)
+        }))
+      : visual.drag.baseBounds;
+    const bounds = translateWatchfaceBounds(
+      baseBounds,
+      visual.movement.dx,
+      visual.movement.dy
+    );
+    context.strokeStyle = "rgba(81, 224, 181, 0.95)";
+    context.lineWidth = 2;
+    context.setLineDash([]);
+    context.strokeRect(
+      bounds.x0 * scaleX,
+      bounds.y0 * scaleY,
+      (bounds.x1 - bounds.x0) * scaleX,
+      (bounds.y1 - bounds.y0) * scaleY
+    );
+    canvas.style.visibility = "visible";
+  }
+
+  function isolateDragDesigns(drag: WatchfaceDragState): {
+    base: CorosWatchfaceDesignState;
+    moving: CorosWatchfaceDesignState;
+    clipBounds: WatchfaceEditorBounds;
+  } {
+    const primaryId = drag.kind === "selectorIcon" ? "complication" : drag.snapId;
+    const movingIds = design.linkedLayerGroups?.find((group) =>
+      group.includes(primaryId)
+    ) ?? [primaryId];
+    const movingIdSet = new Set(movingIds);
+    const movingElementIds = new Set(
+      movingIds
+        .filter((id) => id.startsWith("bgel:"))
+        .map((id) => id.slice("bgel:".length))
+    );
+    const movingLayers = layers.filter((layer) => movingIdSet.has(layer.id));
+    const movingSpriteIds = new Set(
+      movingLayers
+        .map((layer) => layer.spriteId)
+        .filter((id): id is string => Boolean(id))
+    );
+    const movingSeparatorIds = new Set(
+      movingLayers
+        .map((layer) => layer.staticSeparatorId)
+        .filter((id): id is WatchfaceStaticSeparatorId => Boolean(id))
+    );
+    const movesAmPm = movingLayers.some((layer) => layer.ampmIndicator);
+    const movesWeather = movingLayers.some((layer) => layer.weatherIndicator);
+    const hiddenLayerVisibility = { ...design.layerVisibility };
+    for (const layer of layers) {
+      if (layer.layoutGroupId) {
+        hiddenLayerVisibility[layer.layoutGroupId] = false;
+      }
+    }
+    for (const layer of movingLayers) {
+      if (layer.layoutGroupId) hiddenLayerVisibility[layer.layoutGroupId] = true;
+    }
+    if (drag.kind === "selectorIcon") {
+      hiddenLayerVisibility.complication = true;
+    }
+
+    const baseSeparators = { ...design.staticSeparators };
+    for (const separatorId of movingSeparatorIds) {
+      baseSeparators[separatorId] = {
+        ...baseSeparators[separatorId],
+        enabled: false
+      };
+    }
+    const base: CorosWatchfaceDesignState = {
+      ...design,
+      backgroundElements: (design.backgroundElements ?? []).filter(
+        (element) => !movingElementIds.has(element.id)
+      ),
+      designSprites: (design.designSprites ?? []).filter(
+        (sprite) => !movingSpriteIds.has(sprite.id)
+      ),
+      staticSeparators: baseSeparators,
+      ampmIndicator:
+        movesAmPm && design.ampmIndicator
+          ? { ...design.ampmIndicator, enabled: false }
+          : design.ampmIndicator,
+      weatherIndicator:
+        movesWeather && design.weatherIndicator
+          ? { ...design.weatherIndicator, enabled: false }
+          : design.weatherIndicator,
+      layerVisibility: {
+        ...design.layerVisibility,
+        ...Object.fromEntries(
+          movingLayers
+            .map((layer) => layer.layoutGroupId)
+            .filter((id): id is string => Boolean(id))
+            .map((id) => [id, false])
+        )
+      },
+      ...(drag.kind === "selectorIcon"
+        ? {
+            controlIconOffsets: {
+              ...(design.controlIconOffsets ?? {}),
+              [drag.targetId]: {
+                dx: previewWidth * 8,
+                dy: previewHeight * 8
+              }
+            }
+          }
+        : {})
+    };
+
+    const moving: CorosWatchfaceDesignState = {
+      ...design,
+      artwork: null,
+      // The moving frame is composited over the stationary base frame. Keep
+      // its background transparent so a clipped piece of project artwork does
+      // not travel with the selected components while dragging.
+      artworkVisible: false,
+      backgroundElements: (design.backgroundElements ?? []).filter(
+        (element) => movingElementIds.has(element.id)
+      ),
+      designSprites: (design.designSprites ?? []).filter((sprite) =>
+        movingSpriteIds.has(sprite.id)
+      ),
+      staticSeparators: {
+        colon: {
+          ...design.staticSeparators.colon,
+          enabled:
+            movingSeparatorIds.has("colon")
+        },
+        dateSlash: {
+          ...design.staticSeparators.dateSlash,
+          enabled:
+            movingSeparatorIds.has("dateSlash")
+        }
+      },
+      ampmIndicator: design.ampmIndicator
+        ? { ...design.ampmIndicator, enabled: movesAmPm }
+        : undefined,
+      weatherIndicator: design.weatherIndicator
+        ? { ...design.weatherIndicator, enabled: movesWeather }
+        : undefined,
+      layerVisibility: hiddenLayerVisibility
+    };
+
+    const linkedBounds = movingIds
+      .map(selectionBoundsForId)
+      .filter((box): box is WatchfaceEditorBounds => Boolean(box));
+    const movingBounds = linkedBounds.length > 0
+      ? linkedBounds.reduce((result, box) => ({
+          x0: Math.min(result.x0, box.x0),
+          y0: Math.min(result.y0, box.y0),
+          x1: Math.max(result.x1, box.x1),
+          y1: Math.max(result.y1, box.y1)
+        }))
+      : drag.baseBounds;
+    const clipPadding = 2;
+    return {
+      base,
+      moving,
+      clipBounds: {
+        x0: Math.max(0, movingBounds.x0 - clipPadding),
+        y0: Math.max(0, movingBounds.y0 - clipPadding),
+        x1: Math.min(previewWidth, movingBounds.x1 + clipPadding),
+        y1: Math.min(previewHeight, movingBounds.y1 + clipPadding)
+      }
+    };
+  }
+
+  async function renderDragFrame(
+    frameDesign: CorosWatchfaceDesignState
+  ): Promise<HTMLCanvasElement> {
+    if (!details) {
+      throw new Error("Watch face details are not ready.");
+    }
+    const frame = document.createElement("canvas");
+    frame.width = PREVIEW_SIZE;
+    frame.height = PREVIEW_SIZE;
+    const allFrameDetails = deriveDesignDetails(details, frameDesign).previewDetails;
+    const frameDetails = watchPreviewResolution
+      ? detailsForPreviewResolution(
+          allFrameDetails,
+          watchPreviewResolution.directory
+        )
+      : allFrameDetails;
+    const frameBackground = await renderDesignBackground(
+      frameDesign,
+      previewWidth
+    );
+    await drawStudioPreview(
+      frame,
+      frameBackground,
+      frameDetails,
+      studioOptionsForResolution(toStudioOptions(frameDesign), frameDetails),
+      loadAssets
+    );
+    if (frameDesign.weatherIndicator?.enabled) {
+      const url = await weatherPreviewDataUrl(
+        previewWidth,
+        frameDesign.weatherIndicator.color
+      );
+      if (url) {
+        const image = await loadStudioImage(url);
+        const context = frame.getContext("2d");
+        const scale = frame.width / previewWidth;
+        context?.drawImage(
+          image,
+          frameDesign.weatherIndicator.x * scale,
+          frameDesign.weatherIndicator.y * scale,
+          image.naturalWidth * frameDesign.weatherIndicator.scale * scale,
+          image.naturalHeight * frameDesign.weatherIndicator.scale * scale
+        );
+      }
+    }
+    return frame;
+  }
+
+  function prepareDragVisual(drag: WatchfaceDragState) {
+    if (!details) return;
+    const preparationId = ++dragPreparationIdRef.current;
+    const isolated = isolateDragDesigns(drag);
+    dragVisualRef.current = {
+      drag,
+      baseFrame: null,
+      movingFrame: null,
+      movement: { dx: 0, dy: 0 },
+      clipBounds: isolated.clipBounds,
+      preparationId,
+      awaitingCommitId: null
+    };
+    const canvas = dragPreviewCanvasRef.current;
+    if (canvas) {
+      canvas.style.visibility = "hidden";
+    }
+    setDragVisualActive(true);
+    const activeSessionId = sessionId;
+    void Promise.all([
+      renderDragFrame(isolated.base),
+      renderDragFrame(isolated.moving)
+    ]).then(([baseFrame, movingFrame]) => {
+      const visual = dragVisualRef.current;
+      if (
+        !mountedRef.current ||
+        previewSessionRef.current !== activeSessionId ||
+        dragRef.current !== drag ||
+        !visual ||
+        visual.preparationId !== preparationId
+      ) {
+        return;
+      }
+      visual.baseFrame = baseFrame;
+      visual.movingFrame = movingFrame;
+      drawDragVisual();
+    }).catch(() => {
+      // The accurate preview stays visible if the isolated drag layer fails.
+    });
+  }
+
   function updateElement(id: string, patch: BackgroundElementPatch) {
+    const { x, y, ...otherPatch } = patch;
+    const canMove = !isPositionLocked(`bgel:${id}`);
     const boundedPatch = {
-      ...patch,
-      ...(patch.x !== undefined
-        ? { x: Math.max(0, Math.min(BACKGROUND_SPACE, Math.round(patch.x))) }
+      ...otherPatch,
+      ...(canMove && x !== undefined
+        ? { x: Math.max(0, Math.min(BACKGROUND_SPACE, Math.round(x))) }
         : {}),
-      ...(patch.y !== undefined
-        ? { y: Math.max(0, Math.min(BACKGROUND_SPACE, Math.round(patch.y))) }
+      ...(canMove && y !== undefined
+        ? { y: Math.max(0, Math.min(BACKGROUND_SPACE, Math.round(y))) }
         : {})
     };
     setDesign((prev) => ({
@@ -479,100 +1654,304 @@ export function WatchfaceEditor({
       backgroundElements: [...(prev.backgroundElements ?? []), element]
     }));
     setSelectedId(`bgel:${element.id}`);
+    setSelectedIds([`bgel:${element.id}`]);
   }
 
   function removeElement(id: string) {
+    const editorId = `bgel:${id}`;
     setDesign((prev) => ({
       ...prev,
-      backgroundElements: (prev.backgroundElements ?? []).filter((e) => e.id !== id)
+      backgroundElements: (prev.backgroundElements ?? []).filter((e) => e.id !== id),
+      linkedLayerGroups: (prev.linkedLayerGroups ?? [])
+        .map((group) => group.filter((candidate) => candidate !== editorId))
+        .filter((group) => group.length >= 2),
+      lockedLayerIds: (prev.lockedLayerIds ?? []).filter(
+        (candidate) => candidate !== editorId
+      )
     }));
     setSelectedId("background");
+    setSelectedIds(["background"]);
   }
 
-  // Repaint the background PNG whenever a background-affecting field changes.
-  useEffect(() => {
-    let cancelled = false;
-    void renderDesignBackground(design, previewWidth)
-      .then((url) => {
-        if (!cancelled) {
-          setBackgroundDataUrl(url);
+  const queueBackgroundRender = useCallback(
+    (request: WatchfaceBackgroundRenderRequest) => {
+      const queue = backgroundRenderQueueRef.current;
+      queue.pending = request;
+      if (queue.running) return;
+      queue.running = true;
+      void (async () => {
+        while (queue.pending) {
+          const next = queue.pending;
+          queue.pending = null;
+          try {
+            const url = await renderDesignBackground(
+              next.design,
+              next.previewWidth
+            );
+            if (
+              mountedRef.current &&
+              previewSessionRef.current === next.sessionId
+            ) {
+              setBackgroundDataUrl(url);
+            }
+          } catch {
+            // Keep the last complete background when a draft frame fails.
+          }
         }
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [design, previewWidth]);
+        queue.running = false;
+      })();
+    },
+    []
+  );
 
-  // Draw the live sprite preview from the composed design.
+  // Background composition is also single-flight. Rapid sprite and shape
+  // updates replace the pending draft instead of stacking 800px PNG encodes.
+  useEffect(() => {
+    queueBackgroundRender({
+      sessionId,
+      design: backgroundDesign,
+      previewWidth
+    });
+  }, [
+    backgroundDesign,
+    previewWidth,
+    queueBackgroundRender,
+    sessionId
+  ]);
+
+  const queuePreviewRender = useCallback(
+    (request: WatchfacePreviewRenderRequest) => {
+      const queue = previewRenderQueueRef.current;
+      queue.pending = request;
+      if (queue.running) return;
+      queue.running = true;
+      void (async () => {
+        while (queue.pending) {
+          const next = queue.pending;
+          queue.pending = null;
+          try {
+            const frame = document.createElement("canvas");
+            frame.width = PREVIEW_SIZE;
+            frame.height = PREVIEW_SIZE;
+            await drawStudioPreview(
+              frame,
+              next.backgroundDataUrl,
+              next.details,
+              studioOptionsForResolution(next.options, next.details),
+              next.loadAssets
+            );
+            if (next.weather?.enabled) {
+              const url = await weatherPreviewDataUrl(
+                next.previewWidth,
+                next.weather.color
+              );
+              if (url) {
+                const image = await loadStudioImage(url);
+                const frameContext = frame.getContext("2d");
+                const scale = frame.width / next.previewWidth;
+                frameContext?.drawImage(
+                  image,
+                  next.weather.x * scale,
+                  next.weather.y * scale,
+                  image.naturalWidth * next.weather.scale * scale,
+                  image.naturalHeight * next.weather.scale * scale
+                );
+              }
+            }
+            if (
+              mountedRef.current &&
+              previewSessionRef.current === next.sessionId &&
+              previewCanvasRef.current === next.canvas &&
+              !dragRef.current &&
+              (!dragVisualRef.current?.awaitingCommitId ||
+                dragVisualRef.current.awaitingCommitId === next.dragCommitId)
+            ) {
+              const context = next.canvas.getContext("2d", {
+                colorSpace: "display-p3"
+              });
+              if (context) {
+                context.clearRect(0, 0, next.canvas.width, next.canvas.height);
+                context.drawImage(
+                  frame,
+                  0,
+                  0,
+                  next.canvas.width,
+                  next.canvas.height
+                );
+              }
+              if (
+                dragVisualRef.current?.awaitingCommitId &&
+                dragVisualRef.current.awaitingCommitId === next.dragCommitId
+              ) {
+                dragPreparationIdRef.current += 1;
+                dragVisualRef.current = null;
+                const dragCanvas = dragPreviewCanvasRef.current;
+                if (dragCanvas) {
+                  dragCanvas.getContext("2d")?.clearRect(
+                    0,
+                    0,
+                    dragCanvas.width,
+                    dragCanvas.height
+                  );
+                  dragCanvas.style.visibility = "hidden";
+                }
+                setDragVisualActive(false);
+              }
+            }
+          } catch {
+            // Keep the last complete frame if one preview pass fails.
+          }
+        }
+        queue.running = false;
+      })();
+    },
+    [studioOptionsForResolution]
+  );
+
+  // Coalesce accurate preview work into one active render plus the newest
+  // pending frame. Pointer movement is handled by the isolated drag canvas, so
+  // this path only reconciles the full face after a gesture ends.
   useEffect(() => {
     const canvas = previewCanvasRef.current;
-    if (!canvas || !previewDetails || !backgroundDataUrl) {
-      return;
-    }
-    canvas.width = PREVIEW_SIZE;
-    canvas.height = PREVIEW_SIZE;
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        await drawStudioPreview(
-          canvas,
-          backgroundDataUrl,
-          previewDetails,
-          toStudioOptions(design),
-          loadAssets
-        );
-        const weather = design.weatherIndicator;
-        if (!weather?.enabled) {
-          return;
-        }
-        const url = weatherPreviewUrl(previewWidth);
-        if (!url) {
-          return;
-        }
-        const image = await loadStudioImage(url);
-        const context = canvas.getContext("2d");
-        const scale = canvas.width / previewWidth;
-        context?.drawImage(
-          image,
-          weather.x * scale,
-          weather.y * scale,
-          image.naturalWidth * weather.scale * scale,
-          image.naturalHeight * weather.scale * scale
-        );
-      })().catch(() => undefined);
-    }, 90);
-    return () => window.clearTimeout(timer);
-  }, [previewDetails, backgroundDataUrl, design, loadAssets]);
+    if (!canvas || !renderedPreviewDetails || !previewBackgroundDataUrl) return;
+    queuePreviewRender({
+      canvas,
+      sessionId,
+      backgroundDataUrl: previewBackgroundDataUrl,
+      details: renderedPreviewDetails,
+      options: previewStudioOptions,
+      weather: previewMode === "current" ? design.weatherIndicator : undefined,
+      previewWidth,
+      loadAssets,
+      dragCommitId: dragVisualRef.current?.awaitingCommitId ?? null
+    });
+  }, [
+    renderedPreviewDetails,
+    previewBackgroundDataUrl,
+    previewStudioOptions,
+    design.weatherIndicator,
+    previewMode,
+    previewWidth,
+    loadAssets,
+    queuePreviewRender,
+    sessionId
+  ]);
 
-  // Draw the selection / layer outlines on the overlay.
+  // Draw placement aids and selection outlines on the interaction overlay.
   useEffect(() => {
     const canvas = overlayCanvasRef.current;
-    const context = canvas?.getContext("2d");
-    if (!canvas || !context) {
-      return;
-    }
-    canvas.width = PREVIEW_SIZE;
-    canvas.height = PREVIEW_SIZE;
-    const scale = canvas.width / previewWidth;
-    const bgScale = canvas.width / BACKGROUND_SPACE;
+    if (!canvas) return;
+    if (canvas.width !== PREVIEW_SIZE) canvas.width = PREVIEW_SIZE;
+    if (canvas.height !== PREVIEW_SIZE) canvas.height = PREVIEW_SIZE;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const scaleX = canvas.width / previewWidth;
+    const scaleY = canvas.height / previewHeight;
+    const bgScaleX = canvas.width / BACKGROUND_SPACE;
+    const bgScaleY = canvas.height / BACKGROUND_SPACE;
+    const activeDrag = dragVisualActive ? dragVisualRef.current?.drag : null;
+    const activeDragId = activeDrag?.kind === "selectorIcon"
+      ? "complication"
+      : activeDrag?.snapId;
+    const activeDragIds = activeDragId
+      ? design.linkedLayerGroups?.find((group) => group.includes(activeDragId)) ?? [activeDragId]
+      : [];
     context.clearRect(0, 0, canvas.width, canvas.height);
 
+    context.save();
+    context.beginPath();
+    context.arc(
+      canvas.width / 2,
+      canvas.height / 2,
+      Math.min(canvas.width, canvas.height) / 2,
+      0,
+      Math.PI * 2
+    );
+    context.clip();
+
+    if (previewMode === "current" && placementPreferences.gridVisible) {
+      const gridStep = placementPreferences.gridStep / watchCoordinateScale;
+      context.beginPath();
+      for (let x = gridStep; x < previewWidth; x += gridStep) {
+        context.moveTo(x * scaleX, 0);
+        context.lineTo(x * scaleX, canvas.height);
+      }
+      for (let y = gridStep; y < previewHeight; y += gridStep) {
+        context.moveTo(0, y * scaleY);
+        context.lineTo(canvas.width, y * scaleY);
+      }
+      context.strokeStyle = "rgba(81, 224, 181, 0.2)";
+      context.lineWidth = 1;
+      context.setLineDash([]);
+      context.stroke();
+    }
+
+    if (previewMode === "current" && placementPreferences.guidesVisible) {
+      const safeArea = watchfaceSafeAreaBounds(
+        previewWidth,
+        previewHeight,
+        placementPreferences.safeAreaInsetPercent
+      );
+      context.beginPath();
+      context.moveTo((previewWidth / 2) * scaleX, 0);
+      context.lineTo((previewWidth / 2) * scaleX, canvas.height);
+      context.moveTo(0, (previewHeight / 2) * scaleY);
+      context.lineTo(canvas.width, (previewHeight / 2) * scaleY);
+      context.strokeStyle = "rgba(81, 224, 181, 0.58)";
+      context.lineWidth = 1;
+      context.setLineDash([5, 5]);
+      context.stroke();
+
+      context.beginPath();
+      context.ellipse(
+        ((safeArea.x0 + safeArea.x1) / 2) * scaleX,
+        ((safeArea.y0 + safeArea.y1) / 2) * scaleY,
+        ((safeArea.x1 - safeArea.x0) / 2) * scaleX,
+        ((safeArea.y1 - safeArea.y0) / 2) * scaleY,
+        0,
+        0,
+        Math.PI * 2
+      );
+      context.strokeStyle = "rgba(81, 224, 181, 0.68)";
+      context.setLineDash([7, 5]);
+      context.stroke();
+    }
+
+    if (previewMode === "current" && snapGuides.length > 0) {
+      context.beginPath();
+      for (const guide of snapGuides) {
+        if (guide.axis === "x") {
+          context.moveTo(guide.value * scaleX, 0);
+          context.lineTo(guide.value * scaleX, canvas.height);
+        } else {
+          context.moveTo(0, guide.value * scaleY);
+          context.lineTo(canvas.width, guide.value * scaleY);
+        }
+      }
+      context.strokeStyle = "rgba(81, 224, 181, 0.98)";
+      context.lineWidth = 1.5;
+      context.setLineDash([]);
+      context.stroke();
+    }
+    context.restore();
+
     // Keep the stage quiet: only the selected or hovered object gets an outline.
-    for (const element of backgroundElements) {
-      const box = backgroundElementBounds(element);
-      const active = selectedId === `bgel:${element.id}`;
+    for (const element of activeBackgroundElements) {
+      const box = backgroundElementSnapBounds(element);
+      const active = selectedIds.includes(`bgel:${element.id}`);
       const hovered = hoveredId === `bgel:${element.id}`;
       if (!active && !hovered) continue;
+      if (activeDragIds.includes(`bgel:${element.id}`)) continue;
       context.strokeStyle = active
         ? "rgba(81, 224, 181, 0.95)"
         : "rgba(255, 255, 255, 0.55)";
       context.lineWidth = active ? 2 : 1;
       context.setLineDash(active ? [] : [4, 4]);
       context.strokeRect(
-        box.x0 * bgScale,
-        box.y0 * bgScale,
-        (box.x1 - box.x0) * bgScale,
-        (box.y1 - box.y0) * bgScale
+        box.x0 * bgScaleX,
+        box.y0 * bgScaleY,
+        (box.x1 - box.x0) * bgScaleX,
+        (box.y1 - box.y0) * bgScaleY
       );
     }
 
@@ -580,34 +1959,54 @@ export function WatchfaceEditor({
       if (!layer.bounds || layer.kind === "background" || !layer.visible) {
         continue;
       }
-      const active = layer.id === selectedId;
+      const active = selectedIds.includes(layer.id);
       const hovered = layer.id === hoveredId;
       if (!active && !hovered) continue;
+      if (activeDragIds.includes(layer.id)) continue;
       context.strokeStyle = active
         ? "rgba(81, 224, 181, 0.95)"
         : "rgba(255, 255, 255, 0.55)";
       context.lineWidth = active ? 2 : 1;
       context.setLineDash(active ? [] : [4, 4]);
       context.strokeRect(
-        layer.bounds.x0 * scale,
-        layer.bounds.y0 * scale,
-        (layer.bounds.x1 - layer.bounds.x0) * scale,
-        (layer.bounds.y1 - layer.bounds.y0) * scale
+        layer.bounds.x0 * scaleX,
+        layer.bounds.y0 * scaleY,
+        (layer.bounds.x1 - layer.bounds.x0) * scaleX,
+        (layer.bounds.y1 - layer.bounds.y0) * scaleY
       );
     }
-    if (selectorIconTarget && selectedId === "complication") {
+    if (
+      selectorIconTarget &&
+      selectedIds.includes("complication") &&
+      activeDrag?.kind !== "selectorIcon"
+    ) {
       context.strokeStyle = "rgba(255, 206, 84, 0.98)";
       context.lineWidth = 2;
       context.setLineDash([]);
       context.strokeRect(
-        selectorIconTarget.x0 * scale,
-        selectorIconTarget.y0 * scale,
-        (selectorIconTarget.x1 - selectorIconTarget.x0) * scale,
-        (selectorIconTarget.y1 - selectorIconTarget.y0) * scale
+        selectorIconTarget.x0 * scaleX,
+        selectorIconTarget.y0 * scaleY,
+        (selectorIconTarget.x1 - selectorIconTarget.x0) * scaleX,
+        (selectorIconTarget.y1 - selectorIconTarget.y0) * scaleY
       );
     }
     context.setLineDash([]);
-  }, [layers, selectedId, hoveredId, previewWidth, backgroundElements, selectorIconTarget]);
+  }, [
+    layers,
+    selectedId,
+    selectedIds,
+    hoveredId,
+    previewWidth,
+    previewHeight,
+    activeBackgroundElements,
+    selectorIconTarget,
+    placementPreferences,
+    snapGuides,
+    watchCoordinateScale,
+    dragVisualActive,
+    previewMode,
+    design.linkedLayerGroups
+  ]);
 
   const toResolutionPoint = useCallback(
     (event: { clientX: number; clientY: number }) => {
@@ -618,18 +2017,156 @@ export function WatchfaceEditor({
       const rect = canvas.getBoundingClientRect();
       return {
         x: ((event.clientX - rect.left) / rect.width) * previewWidth,
-        y: ((event.clientY - rect.top) / rect.height) * previewWidth
+        y: ((event.clientY - rect.top) / rect.height) * previewHeight
       };
     },
-    [previewWidth]
+    [previewWidth, previewHeight]
   );
 
+  function editorItemAtPoint(point: { x: number; y: number }): string | null {
+    if (
+      selectorIconTarget &&
+      point.x >= selectorIconTarget.x0 &&
+      point.x <= selectorIconTarget.x1 &&
+      point.y >= selectorIconTarget.y0 &&
+      point.y <= selectorIconTarget.y1
+    ) {
+      return "complication";
+    }
+    const liveHit = editorLayerAtPoint(layers, point.x, point.y);
+    const backgroundHit = backgroundElementAtPoint(
+      backgroundElements,
+      point.x * (BACKGROUND_SPACE / previewWidth),
+      point.y * (BACKGROUND_SPACE / previewHeight)
+    );
+    return backgroundContext && backgroundHit
+      ? `bgel:${backgroundHit.id}`
+      : liveHit?.id ?? (backgroundHit ? `bgel:${backgroundHit.id}` : null);
+  }
+
+  function handleCanvasContextMenu(event: React.MouseEvent<HTMLCanvasElement>) {
+    if (previewMode === "aod") return;
+    const point = toResolutionPoint(event);
+    const hitId = point ? editorItemAtPoint(point) : null;
+    if (!hitId) return;
+    openLayerContextMenu(event, hitId);
+  }
+
+  function placementSnapTargets(movingId: string): WatchfaceSnapTarget[] {
+    const movingIds = new Set(
+      design.linkedLayerGroups?.find((group) => group.includes(movingId)) ?? [movingId]
+    );
+    const backgroundScaleX = previewWidth / BACKGROUND_SPACE;
+    const backgroundScaleY = previewHeight / BACKGROUND_SPACE;
+    const targets: WatchfaceSnapTarget[] = layers
+      .filter(
+        (layer) =>
+          layer.kind !== "background" &&
+          layer.bounds &&
+          !movingIds.has(layer.id) &&
+          !(movingId.startsWith("selectorIcon:") && layer.id === "complication")
+      )
+      .map((layer) => ({
+        id: layer.id,
+        label: layer.label,
+        bounds: layer.bounds!,
+        visible: layer.visible && layer.present
+      }));
+
+    for (const element of backgroundElements) {
+      if (movingIds.has(`bgel:${element.id}`)) continue;
+      targets.push({
+        id: `bgel:${element.id}`,
+        label: backgroundElementLabel(element),
+        bounds: scaleWatchfaceBounds(
+          backgroundElementSnapBounds(element),
+          backgroundScaleX,
+          backgroundScaleY
+        )
+      });
+    }
+    if (selectorIconTarget && movingId !== "complication") {
+      targets.push({
+        id: `selectorIcon:${selectorIconTarget.complicationId}`,
+        label: "Complication icon",
+        bounds: selectorIconTarget
+      });
+    }
+    return targets;
+  }
+
+  function resolveDragMovement(
+    drag: NonNullable<typeof dragRef.current>,
+    point: { x: number; y: number },
+    bypassSnap: boolean
+  ): { dx: number; dy: number } {
+    const rawDx = point.x - drag.startX;
+    const rawDy = point.y - drag.startY;
+    if (!placementPreferences.snapEnabled || bypassSnap) {
+      clearSnapGuides();
+      return { dx: rawDx, dy: rawDy };
+    }
+    const renderedWidth =
+      overlayCanvasRef.current?.getBoundingClientRect().width ?? PREVIEW_SIZE;
+    const primaryId = drag.kind === "selectorIcon" ? "complication" : drag.snapId;
+    const linkedIds = design.linkedLayerGroups?.find((group) =>
+      group.includes(primaryId)
+    ) ?? [primaryId];
+    const linkedBounds = linkedIds
+      .map(selectionBoundsForId)
+      .filter((box): box is WatchfaceEditorBounds => Boolean(box));
+    const baseBounds = linkedBounds.length > 1
+      ? linkedBounds.reduce((result, box) => ({
+          x0: Math.min(result.x0, box.x0),
+          y0: Math.min(result.y0, box.y0),
+          x1: Math.max(result.x1, box.x1),
+          y1: Math.max(result.y1, box.y1)
+        }))
+      : drag.baseBounds;
+    const result = snapWatchfaceBounds({
+      movingId: drag.snapId,
+      movingBounds: translateWatchfaceBounds(
+        baseBounds,
+        rawDx,
+        rawDy
+      ),
+      faceWidth: previewWidth,
+      faceHeight: previewHeight,
+      threshold: watchfaceDesignThreshold(
+        WATCHFACE_SNAP_SCREEN_THRESHOLD,
+        previewWidth,
+        renderedWidth
+      ),
+      safeAreaInsetPercent: placementPreferences.safeAreaInsetPercent,
+      targets: placementSnapTargets(drag.snapId),
+      ...(placementPreferences.gridVisible
+        ? {
+            gridStep: placementPreferences.gridStep / watchCoordinateScale,
+            gridLabel: `${placementPreferences.gridStep} px`
+          }
+        : {})
+    });
+    setSnapGuides((current) =>
+      watchfaceSnapGuidesEqual(current, result.guides)
+        ? current
+        : result.guides
+    );
+    return { dx: rawDx + result.dx, dy: rawDy + result.dy };
+  }
+
   function handlePointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (previewMode === "aod" || event.button !== 0) return;
     const point = toResolutionPoint(event);
     if (!point) {
       return;
     }
-    const toBg = BACKGROUND_SPACE / previewWidth;
+    if (event.shiftKey || event.metaKey || event.ctrlKey) {
+      const hitId = editorItemAtPoint(point);
+      if (hitId) selectEditorItem(hitId, true);
+      return;
+    }
+    const toBgX = BACKGROUND_SPACE / previewWidth;
+    const toBgY = BACKGROUND_SPACE / previewHeight;
 
     if (
       selectorIconTarget &&
@@ -638,19 +2175,25 @@ export function WatchfaceEditor({
       point.y >= selectorIconTarget.y0 &&
       point.y <= selectorIconTarget.y1
     ) {
+      selectEditorItem("complication");
+      if (isMovementLockedForId("complication")) {
+        return;
+      }
       beginDesignTransaction();
       const iconOffset = design.controlIconOffsets?.[
         selectorIconTarget.complicationId
       ] ?? { dx: 0, dy: 0 };
-      setSelectedId("complication");
       dragRef.current = {
         kind: "selectorIcon",
         targetId: selectorIconTarget.complicationId,
         startX: point.x,
         startY: point.y,
         baseX: iconOffset.dx,
-        baseY: iconOffset.dy
+        baseY: iconOffset.dy,
+        snapId: `selectorIcon:${selectorIconTarget.complicationId}`,
+        baseBounds: selectorIconTarget
       };
+      prepareDragVisual(dragRef.current);
       event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
@@ -662,20 +2205,30 @@ export function WatchfaceEditor({
     if (backgroundContext || !liveIsElement) {
       const bgHit = backgroundElementAtPoint(
         backgroundElements,
-        point.x * toBg,
-        point.y * toBg
+        point.x * toBgX,
+        point.y * toBgY
       );
       if (bgHit) {
+        selectEditorItem(`bgel:${bgHit.id}`);
+        if (isMovementLockedForId(`bgel:${bgHit.id}`)) {
+          return;
+        }
         beginDesignTransaction();
-        setSelectedId(`bgel:${bgHit.id}`);
         dragRef.current = {
           kind: "bgElement",
           targetId: bgHit.id,
-          startX: point.x * toBg,
-          startY: point.y * toBg,
+          startX: point.x,
+          startY: point.y,
           baseX: bgHit.x,
-          baseY: bgHit.y
+          baseY: bgHit.y,
+          snapId: `bgel:${bgHit.id}`,
+          baseBounds: scaleWatchfaceBounds(
+            backgroundElementSnapBounds(bgHit),
+            previewWidth / BACKGROUND_SPACE,
+            previewHeight / BACKGROUND_SPACE
+          )
         };
+        prepareDragVisual(dragRef.current);
         event.currentTarget.setPointerCapture(event.pointerId);
         return;
       }
@@ -684,7 +2237,10 @@ export function WatchfaceEditor({
     if (!liveHit) {
       return;
     }
-    setSelectedId(liveHit.id);
+    selectEditorItem(liveHit.id);
+    if (isMovementLockedForId(liveHit.id)) {
+      return;
+    }
     if (liveHit.weatherIndicator && design.weatherIndicator) {
       beginDesignTransaction();
       dragRef.current = {
@@ -693,8 +2249,11 @@ export function WatchfaceEditor({
         startX: point.x,
         startY: point.y,
         baseX: design.weatherIndicator.x,
-        baseY: design.weatherIndicator.y
+        baseY: design.weatherIndicator.y,
+        snapId: liveHit.id,
+        baseBounds: liveHit.bounds!
       };
+      prepareDragVisual(dragRef.current);
       event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
@@ -706,8 +2265,11 @@ export function WatchfaceEditor({
         startX: point.x,
         startY: point.y,
         baseX: design.ampmIndicator.x,
-        baseY: design.ampmIndicator.y
+        baseY: design.ampmIndicator.y,
+        snapId: liveHit.id,
+        baseBounds: liveHit.bounds!
       };
+      prepareDragVisual(dragRef.current);
       event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
@@ -720,8 +2282,11 @@ export function WatchfaceEditor({
         startX: point.x,
         startY: point.y,
         baseX: separator.x,
-        baseY: separator.y
+        baseY: separator.y,
+        snapId: liveHit.id,
+        baseBounds: liveHit.bounds!
       };
+      prepareDragVisual(dragRef.current);
       event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
@@ -735,8 +2300,11 @@ export function WatchfaceEditor({
           startX: point.x,
           startY: point.y,
           baseX: sprite.x,
-          baseY: sprite.y
+          baseY: sprite.y,
+          snapId: liveHit.id,
+          baseBounds: liveHit.bounds!
         };
+        prepareDragVisual(dragRef.current);
         event.currentTarget.setPointerCapture(event.pointerId);
       }
       return;
@@ -750,48 +2318,221 @@ export function WatchfaceEditor({
         startX: point.x,
         startY: point.y,
         baseX: offset.dx,
-        baseY: offset.dy
+        baseY: offset.dy,
+        snapId: liveHit.id,
+        baseBounds: liveHit.bounds!
       };
+      prepareDragVisual(dragRef.current);
       event.currentTarget.setPointerCapture(event.pointerId);
     }
   }
 
-  function handlePointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
-    const drag = dragRef.current;
-    if (!drag) {
-      const point = toResolutionPoint(event);
-      if (!point) return;
-      const liveHit = editorLayerAtPoint(layers, point.x, point.y);
-      const backgroundHit = backgroundElementAtPoint(
-        backgroundElements,
-        point.x * (BACKGROUND_SPACE / previewWidth),
-        point.y * (BACKGROUND_SPACE / previewWidth)
-      );
-      setHoveredId(
-        backgroundContext && backgroundHit
-          ? `bgel:${backgroundHit.id}`
-          : liveHit?.id ?? (backgroundHit ? `bgel:${backgroundHit.id}` : null)
-      );
-      return;
-    }
-    const point = toResolutionPoint(event);
-    if (!point) {
-      return;
-    }
+  function clampSingleDragMovement(
+    drag: WatchfaceDragState,
+    movement: { dx: number; dy: number }
+  ): { dx: number; dy: number } {
     if (drag.kind === "bgElement") {
-      const toBg = BACKGROUND_SPACE / previewWidth;
+      const toBgX = BACKGROUND_SPACE / previewWidth;
+      const toBgY = BACKGROUND_SPACE / previewHeight;
+      const x = Math.max(
+        0,
+        Math.min(BACKGROUND_SPACE, Math.round(drag.baseX + movement.dx * toBgX))
+      );
+      const y = Math.max(
+        0,
+        Math.min(BACKGROUND_SPACE, Math.round(drag.baseY + movement.dy * toBgY))
+      );
+      return {
+        dx: (x - drag.baseX) / toBgX,
+        dy: (y - drag.baseY) / toBgY
+      };
+    }
+    if (drag.kind === "sprite") {
+      const x = Math.max(
+        0,
+        Math.min(previewWidth, Math.round(drag.baseX + movement.dx))
+      );
+      const y = Math.max(
+        0,
+        Math.min(previewHeight, Math.round(drag.baseY + movement.dy))
+      );
+      return { dx: x - drag.baseX, dy: y - drag.baseY };
+    }
+    if (drag.kind === "staticSeparator") {
+      const separator = design.staticSeparators[
+        drag.targetId as WatchfaceStaticSeparatorId
+      ];
+      const halfWidth = Math.max(24, separator.size * 0.65) / 2;
+      const halfHeight = Math.max(24, separator.size * 1.15) / 2;
+      const x = Math.round(
+        Math.max(
+          halfWidth,
+          Math.min(previewWidth - halfWidth, drag.baseX + movement.dx)
+        )
+      );
+      const y = Math.round(
+        Math.max(
+          halfHeight,
+          Math.min(previewHeight - halfHeight, drag.baseY + movement.dy)
+        )
+      );
+      return { dx: x - drag.baseX, dy: y - drag.baseY };
+    }
+    if (drag.kind === "ampm") {
+      const capability = details ? getAmPmCapability(details) : null;
+      const style = design.ampmIndicator;
+      if (!capability || !style) return { dx: 0, dy: 0 };
+      const width = capability.icon.width * style.scale;
+      const height = capability.icon.height * style.scale;
+      const x = Math.round(
+        Math.max(0, Math.min(previewWidth - width, drag.baseX + movement.dx))
+      );
+      const y = Math.round(
+        Math.max(0, Math.min(previewHeight - height, drag.baseY + movement.dy))
+      );
+      return { dx: x - drag.baseX, dy: y - drag.baseY };
+    }
+    if (drag.kind === "weather") {
+      const capability = details ? getWeatherCapability(details) : null;
+      const style = design.weatherIndicator;
+      if (!capability || !style) return { dx: 0, dy: 0 };
+      const width = capability.size.width * style.scale;
+      const height = capability.size.height * style.scale;
+      const x = Math.round(
+        Math.max(0, Math.min(previewWidth - width, drag.baseX + movement.dx))
+      );
+      const y = Math.round(
+        Math.max(0, Math.min(previewHeight - height, drag.baseY + movement.dy))
+      );
+      return { dx: x - drag.baseX, dy: y - drag.baseY };
+    }
+    if (drag.kind === "selectorIcon") {
+      return {
+        dx: Math.round(drag.baseX + movement.dx) - drag.baseX,
+        dy: Math.round(drag.baseY + movement.dy) - drag.baseY
+      };
+    }
+    const limits = layoutLimits[drag.targetId];
+    const fallbackLimit = Math.max(previewWidth, previewHeight);
+    const x = Math.max(
+      limits?.minDx ?? -fallbackLimit,
+      Math.min(
+        limits?.maxDx ?? fallbackLimit,
+        Math.round(drag.baseX + movement.dx)
+      )
+    );
+    const y = Math.max(
+      limits?.minDy ?? -fallbackLimit,
+      Math.min(
+        limits?.maxDy ?? fallbackLimit,
+        Math.round(drag.baseY + movement.dy)
+      )
+    );
+    return { dx: x - drag.baseX, dy: y - drag.baseY };
+  }
+
+  function selectionBoundsForId(id: string): WatchfaceEditorBounds | null {
+    if (id.startsWith("bgel:")) {
+      const element = backgroundElements.find(
+        (candidate) => `bgel:${candidate.id}` === id
+      );
+      return element
+        ? scaleWatchfaceBounds(
+            backgroundElementSnapBounds(element),
+            previewWidth / BACKGROUND_SPACE,
+            previewHeight / BACKGROUND_SPACE
+          )
+        : null;
+    }
+    return layers.find((layer) => layer.id === id)?.bounds ?? null;
+  }
+
+  function clampMovementForSelectionIds(
+    ids: string[],
+    movement: { dx: number; dy: number }
+  ): { dx: number; dy: number } {
+    const bounds = ids
+      .map(selectionBoundsForId)
+      .filter((box): box is WatchfaceEditorBounds => Boolean(box));
+    if (bounds.length === 0) return movement;
+    const union = bounds.reduce((result, box) => ({
+      x0: Math.min(result.x0, box.x0),
+      y0: Math.min(result.y0, box.y0),
+      x1: Math.max(result.x1, box.x1),
+      y1: Math.max(result.y1, box.y1)
+    }));
+    let minDx = -union.x0;
+    let maxDx = previewWidth - union.x1;
+    let minDy = -union.y0;
+    let maxDy = previewHeight - union.y1;
+    for (const id of ids) {
+      const layer = layers.find((candidate) => candidate.id === id);
+      if (!layer?.layoutGroupId || !layer.capabilities.position) continue;
+      const offset = design.layoutOffsets?.[layer.layoutGroupId] ?? { dx: 0, dy: 0 };
+      const limits = layoutLimits[layer.layoutGroupId];
+      if (!limits) continue;
+      minDx = Math.max(minDx, limits.minDx - offset.dx);
+      maxDx = Math.min(maxDx, limits.maxDx - offset.dx);
+      minDy = Math.max(minDy, limits.minDy - offset.dy);
+      maxDy = Math.min(maxDy, limits.maxDy - offset.dy);
+    }
+    if (minDx > maxDx) minDx = maxDx = 0;
+    if (minDy > maxDy) minDy = maxDy = 0;
+    return {
+      dx: Math.max(minDx, Math.min(maxDx, movement.dx)),
+      dy: Math.max(minDy, Math.min(maxDy, movement.dy))
+    };
+  }
+
+  function clampDragMovement(
+    drag: WatchfaceDragState,
+    movement: { dx: number; dy: number }
+  ): { dx: number; dy: number } {
+    const clamped = clampSingleDragMovement(drag, movement);
+    const primaryId = drag.kind === "selectorIcon" ? "complication" : drag.snapId;
+    const linked = design.linkedLayerGroups?.find((group) =>
+      group.includes(primaryId)
+    );
+    if (!linked || linked.length < 2) return clamped;
+    return clampMovementForSelectionIds(linked, clamped);
+  }
+
+  function previewDragMovement(
+    drag: WatchfaceDragState,
+    point: { x: number; y: number },
+    bypassSnap: boolean
+  ) {
+    const movement = clampDragMovement(
+      drag,
+      resolveDragMovement(drag, point, bypassSnap)
+    );
+    const visual = dragVisualRef.current;
+    if (visual?.drag === drag) {
+      visual.movement = movement;
+      drawDragVisual();
+    }
+  }
+
+  function commitSingleDragMovement(
+    drag: WatchfaceDragState,
+    movement: { dx: number; dy: number }
+  ) {
+    if (drag.kind === "bgElement") {
+      const toBgX = BACKGROUND_SPACE / previewWidth;
+      const toBgY = BACKGROUND_SPACE / previewHeight;
       const clampBg = (v: number) => Math.max(0, Math.min(BACKGROUND_SPACE, Math.round(v)));
       updateElement(drag.targetId, {
-        x: clampBg(drag.baseX + point.x * toBg - drag.startX),
-        y: clampBg(drag.baseY + point.y * toBg - drag.startY)
+        x: clampBg(drag.baseX + movement.dx * toBgX),
+        y: clampBg(drag.baseY + movement.dy * toBgY)
       });
       return;
     }
     if (drag.kind === "sprite") {
-      const clampRes = (v: number) => Math.max(0, Math.min(previewWidth, Math.round(v)));
+      const clampX = (v: number) => Math.max(0, Math.min(previewWidth, Math.round(v)));
+      const clampY = (v: number) => Math.max(0, Math.min(previewHeight, Math.round(v)));
       updateSprite(drag.targetId, {
-        x: clampRes(drag.baseX + point.x - drag.startX),
-        y: clampRes(drag.baseY + point.y - drag.startY)
+        x: clampX(drag.baseX + movement.dx),
+        y: clampY(drag.baseY + movement.dy)
       });
       return;
     }
@@ -804,15 +2545,15 @@ export function WatchfaceEditor({
         x: Math.round(
           Math.max(
             halfWidth,
-            Math.min(previewWidth - halfWidth, drag.baseX + point.x - drag.startX)
+            Math.min(previewWidth - halfWidth, drag.baseX + movement.dx)
           )
         ),
         y: Math.round(
           Math.max(
             halfHeight,
             Math.min(
-              (previewResolution?.height ?? previewWidth) - halfHeight,
-              drag.baseY + point.y - drag.startY
+              previewHeight - halfHeight,
+              drag.baseY + movement.dy
             )
           )
         )
@@ -826,15 +2567,15 @@ export function WatchfaceEditor({
         return;
       }
       const faceWidth = previewResolution?.width ?? previewWidth;
-      const faceHeight = previewResolution?.height ?? previewWidth;
+      const faceHeight = previewResolution?.height ?? previewHeight;
       const width = capability.icon.width * style.scale;
       const height = capability.icon.height * style.scale;
       updateAmPmIndicator({
         x: Math.round(
-          Math.max(0, Math.min(faceWidth - width, drag.baseX + point.x - drag.startX))
+          Math.max(0, Math.min(faceWidth - width, drag.baseX + movement.dx))
         ),
         y: Math.round(
-          Math.max(0, Math.min(faceHeight - height, drag.baseY + point.y - drag.startY))
+          Math.max(0, Math.min(faceHeight - height, drag.baseY + movement.dy))
         )
       });
       return;
@@ -846,22 +2587,22 @@ export function WatchfaceEditor({
         return;
       }
       const faceWidth = previewResolution?.width ?? previewWidth;
-      const faceHeight = previewResolution?.height ?? previewWidth;
+      const faceHeight = previewResolution?.height ?? previewHeight;
       const width = capability.size.width * style.scale;
       const height = capability.size.height * style.scale;
       updateWeatherIndicator({
         x: Math.round(
-          Math.max(0, Math.min(faceWidth - width, drag.baseX + point.x - drag.startX))
+          Math.max(0, Math.min(faceWidth - width, drag.baseX + movement.dx))
         ),
         y: Math.round(
-          Math.max(0, Math.min(faceHeight - height, drag.baseY + point.y - drag.startY))
+          Math.max(0, Math.min(faceHeight - height, drag.baseY + movement.dy))
         )
       });
       return;
     }
     if (drag.kind === "selectorIcon") {
-      const dx = Math.round(drag.baseX + point.x - drag.startX);
-      const dy = Math.round(drag.baseY + point.y - drag.startY);
+      const dx = Math.round(drag.baseX + movement.dx);
+      const dy = Math.round(drag.baseY + movement.dy);
       setDesign((current) => ({
         ...current,
         controlIconOffsets: {
@@ -879,12 +2620,12 @@ export function WatchfaceEditor({
     const clamp = (v: number, min: number, max: number) =>
       Math.max(min, Math.min(max, Math.round(v)));
     const dx = clamp(
-      drag.baseX + point.x - drag.startX,
+      drag.baseX + movement.dx,
       limits?.minDx ?? -fallbackLimit,
       limits?.maxDx ?? fallbackLimit
     );
     const dy = clamp(
-      drag.baseY + point.y - drag.startY,
+      drag.baseY + movement.dy,
       limits?.minDy ?? -fallbackLimit,
       limits?.maxDy ?? fallbackLimit
     );
@@ -894,16 +2635,242 @@ export function WatchfaceEditor({
     }));
   }
 
+  function moveLinkedSelectionIds(
+    current: CorosWatchfaceDesignState,
+    ids: string[],
+    movement: { dx: number; dy: number }
+  ): CorosWatchfaceDesignState {
+    let next = current;
+    const movedLayoutGroups = new Set<string>();
+    for (const id of ids) {
+      if (isPositionLocked(id)) continue;
+      if (id.startsWith("bgel:")) {
+        const elementId = id.slice("bgel:".length);
+        const toBgX = BACKGROUND_SPACE / previewWidth;
+        const toBgY = BACKGROUND_SPACE / previewHeight;
+        next = {
+          ...next,
+          backgroundElements: (next.backgroundElements ?? []).map((element) =>
+            element.id === elementId
+              ? {
+                  ...element,
+                  x: Math.max(0, Math.min(BACKGROUND_SPACE, Math.round(element.x + movement.dx * toBgX))),
+                  y: Math.max(0, Math.min(BACKGROUND_SPACE, Math.round(element.y + movement.dy * toBgY)))
+                }
+              : element
+          )
+        };
+        continue;
+      }
+      const layer = layers.find((candidate) => candidate.id === id);
+      if (!layer) continue;
+      if (layer.kind === "customSprite" && layer.spriteId) {
+        next = {
+          ...next,
+          designSprites: (next.designSprites ?? []).map((sprite) =>
+            sprite.id === layer.spriteId
+              ? {
+                  ...sprite,
+                  x: Math.max(0, Math.min(previewWidth, Math.round(sprite.x + movement.dx))),
+                  y: Math.max(0, Math.min(previewHeight, Math.round(sprite.y + movement.dy)))
+                }
+              : sprite
+          )
+        };
+        continue;
+      }
+      if (layer.staticSeparatorId) {
+        const separator = next.staticSeparators[layer.staticSeparatorId];
+        const halfWidth = Math.max(24, separator.size * 0.65) / 2;
+        const halfHeight = Math.max(24, separator.size * 1.15) / 2;
+        next = {
+          ...next,
+          staticSeparators: {
+            ...next.staticSeparators,
+            [layer.staticSeparatorId]: {
+              ...separator,
+              x: Math.round(Math.max(halfWidth, Math.min(previewWidth - halfWidth, separator.x + movement.dx))),
+              y: Math.round(Math.max(halfHeight, Math.min(previewHeight - halfHeight, separator.y + movement.dy)))
+            }
+          }
+        };
+        continue;
+      }
+      if (layer.ampmIndicator && next.ampmIndicator) {
+        const capability = details ? getAmPmCapability(details) : null;
+        const width = (capability?.icon.width ?? 0) * next.ampmIndicator.scale;
+        const height = (capability?.icon.height ?? 0) * next.ampmIndicator.scale;
+        next = {
+          ...next,
+          ampmIndicator: {
+            ...next.ampmIndicator,
+            x: Math.round(Math.max(0, Math.min(previewWidth - width, next.ampmIndicator.x + movement.dx))),
+            y: Math.round(Math.max(0, Math.min(previewHeight - height, next.ampmIndicator.y + movement.dy)))
+          }
+        };
+        continue;
+      }
+      if (layer.weatherIndicator && next.weatherIndicator) {
+        const capability = details ? getWeatherCapability(details) : null;
+        const width = (capability?.size.width ?? 0) * next.weatherIndicator.scale;
+        const height = (capability?.size.height ?? 0) * next.weatherIndicator.scale;
+        next = {
+          ...next,
+          weatherIndicator: {
+            ...next.weatherIndicator,
+            x: Math.round(Math.max(0, Math.min(previewWidth - width, next.weatherIndicator.x + movement.dx))),
+            y: Math.round(Math.max(0, Math.min(previewHeight - height, next.weatherIndicator.y + movement.dy)))
+          }
+        };
+        continue;
+      }
+      if (
+        layer.layoutGroupId &&
+        layer.capabilities.position &&
+        !movedLayoutGroups.has(layer.layoutGroupId)
+      ) {
+        movedLayoutGroups.add(layer.layoutGroupId);
+        const groupId = layer.layoutGroupId;
+        const offset = next.layoutOffsets?.[groupId] ?? { dx: 0, dy: 0 };
+        const limits = layoutLimits[groupId];
+        const fallback = Math.max(previewWidth, previewHeight);
+        next = {
+          ...next,
+          layoutOffsets: {
+            ...next.layoutOffsets,
+            [groupId]: {
+              dx: Math.max(limits?.minDx ?? -fallback, Math.min(limits?.maxDx ?? fallback, Math.round(offset.dx + movement.dx))),
+              dy: Math.max(limits?.minDy ?? -fallback, Math.min(limits?.maxDy ?? fallback, Math.round(offset.dy + movement.dy)))
+            }
+          }
+        };
+      }
+    }
+    return next;
+  }
+
+  function commitDragMovement(
+    drag: WatchfaceDragState,
+    movement: { dx: number; dy: number }
+  ) {
+    commitSingleDragMovement(drag, movement);
+    const primaryId = drag.kind === "selectorIcon" ? "complication" : drag.snapId;
+    const linked = design.linkedLayerGroups?.find((group) =>
+      group.includes(primaryId)
+    );
+    const companions = linked?.filter((id) => id !== primaryId) ?? [];
+    if (companions.length > 0) {
+      setDesign((current) => moveLinkedSelectionIds(current, companions, movement));
+    }
+  }
+
+  function flushPendingDragFrame() {
+    if (dragAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragAnimationFrameRef.current);
+      dragAnimationFrameRef.current = null;
+    }
+    const pending = pendingDragRef.current;
+    pendingDragRef.current = null;
+    if (pending && dragRef.current === pending.drag) {
+      previewDragMovement(pending.drag, pending.point, pending.bypassSnap);
+    }
+  }
+
+  function scheduleDragMovement(pending: PendingWatchfaceDrag) {
+    pendingDragRef.current = pending;
+    if (dragAnimationFrameRef.current !== null) return;
+    dragAnimationFrameRef.current = window.requestAnimationFrame(() => {
+      dragAnimationFrameRef.current = null;
+      const latest = pendingDragRef.current;
+      pendingDragRef.current = null;
+      if (latest && dragRef.current === latest.drag) {
+        previewDragMovement(latest.drag, latest.point, latest.bypassSnap);
+      }
+    });
+  }
+
+  function handlePointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (previewMode === "aod") {
+      setHoveredId(null);
+      return;
+    }
+    const coalesced = event.nativeEvent.getCoalescedEvents?.();
+    const pointer = coalesced?.[coalesced.length - 1] ?? event;
+    const point = toResolutionPoint(pointer);
+    if (!point) return;
+    const drag = dragRef.current;
+    if (!drag) {
+      const liveHit = editorLayerAtPoint(layers, point.x, point.y);
+      const backgroundHit = backgroundElementAtPoint(
+        backgroundElements,
+        point.x * (BACKGROUND_SPACE / previewWidth),
+        point.y * (BACKGROUND_SPACE / previewHeight)
+      );
+      setHoveredId(
+        backgroundContext && backgroundHit
+          ? `bgel:${backgroundHit.id}`
+          : liveHit?.id ?? (backgroundHit ? `bgel:${backgroundHit.id}` : null)
+      );
+      return;
+    }
+    scheduleDragMovement({ drag, point, bypassSnap: event.altKey });
+  }
+
   function handlePointerEnd(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (dragRef.current) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    const drag = dragRef.current;
+    if (drag) {
+      if (event.type === "pointerup") {
+        const point = toResolutionPoint(event);
+        if (point) {
+          pendingDragRef.current = {
+            drag,
+            point,
+            bypassSnap: event.altKey
+          };
+        }
+      }
+      flushPendingDragFrame();
+      const movement = dragVisualRef.current?.drag === drag
+        ? dragVisualRef.current.movement
+        : { dx: 0, dy: 0 };
+      if (movement.dx !== 0 || movement.dy !== 0) {
+        const commitId = ++dragCommitIdRef.current;
+        if (dragVisualRef.current?.drag === drag) {
+          dragVisualRef.current.awaitingCommitId = commitId;
+        }
+        commitDragMovement(drag, movement);
+      } else {
+        hideDragVisual();
+      }
       dragRef.current = null;
+      clearSnapGuides();
       endDesignTransaction();
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
     }
   }
 
   function patchDesign(partial: Partial<CorosWatchfaceDesignState>) {
     setDesign((prev) => ({ ...prev, ...partial }));
+  }
+
+  function setBackgroundArtwork(
+    artwork: CorosWatchfaceDesignState["artwork"]
+  ) {
+    setDesign((prev) => {
+      const configAssetOverrides = { ...(prev.configAssetOverrides ?? {}) };
+      // Background replacements from the former duplicate template-asset row
+      // are now owned by the single Artwork → Background layer.
+      delete configAssetOverrides["config:background_icon"];
+      return {
+        ...prev,
+        artwork,
+        artworkVisible: artwork ? true : prev.artworkVisible,
+        ...(artwork ? { zoom: 1 } : {}),
+        configAssetOverrides
+      };
+    });
   }
 
   function setRasterFont(rasterFont: CorosWatchfaceDesignState["rasterFont"]) {
@@ -965,13 +2932,151 @@ export function WatchfaceEditor({
       CorosWatchfaceDesignState["staticSeparators"][WatchfaceStaticSeparatorId]
     >
   ) {
+    const editorId = separatorId === "colon" ? "staticColon" : "staticDateSlash";
+    const { x, y, ...otherPatch } = patch;
+    const safePatch = isPositionLocked(editorId)
+      ? otherPatch
+      : {
+          ...otherPatch,
+          ...(x !== undefined ? { x } : {}),
+          ...(y !== undefined ? { y } : {})
+        };
+    setDesign((prev) => {
+      const next: CorosWatchfaceDesignState = {
+        ...prev,
+        staticSeparators: {
+          ...prev.staticSeparators,
+          [separatorId]: {
+            ...prev.staticSeparators[separatorId],
+            ...safePatch
+          }
+        }
+      };
+      if (safePatch.enabled === true) {
+        const configAssetId = separatorId === "colon"
+          ? "config:colon_icon"
+          : "config:arc_cut_icon";
+        next.configAssetOverrides = {
+          ...(prev.configAssetOverrides ?? {}),
+          [configAssetId]: {
+            ...(prev.configAssetOverrides?.[configAssetId] ?? {}),
+            enabled: false
+          }
+        };
+      }
+      return next;
+    });
+  }
+
+  function updateConfigAsset(
+    reference: WatchfaceConfigAssetReference,
+    patch: NonNullable<CorosWatchfaceDesignState["configAssetOverrides"]>[string]
+  ) {
+    setDesign((prev) => {
+      const current = prev.configAssetOverrides?.[reference.id] ?? {};
+      const nextDesign: CorosWatchfaceDesignState = {
+        ...prev,
+        configAssetOverrides: {
+          ...(prev.configAssetOverrides ?? {}),
+          [reference.id]: { ...current, ...patch }
+        }
+      };
+      if (
+        reference.id === "config:colon_icon" &&
+        (patch.enabled === false || patch.replacement)
+      ) {
+        nextDesign.staticSeparators = {
+          ...prev.staticSeparators,
+          colon: { ...prev.staticSeparators.colon, enabled: false }
+        };
+      }
+      return nextDesign;
+    });
+  }
+
+  function restoreConfigAsset(reference: WatchfaceConfigAssetReference) {
+    setDesign((prev) => {
+      const configAssetOverrides = { ...(prev.configAssetOverrides ?? {}) };
+      const current = configAssetOverrides[reference.id];
+      if (!current) return prev;
+      if (current.enabled === false) {
+        configAssetOverrides[reference.id] = { enabled: false };
+      } else {
+        delete configAssetOverrides[reference.id];
+      }
+      return { ...prev, configAssetOverrides };
+    });
+  }
+
+  async function chooseConfigAsset(reference: WatchfaceConfigAssetReference) {
+    try {
+      const selected = await api.chooseCorosWatchfaceArtwork();
+      if (!selected) return;
+      updateConfigAsset(reference, {
+        enabled: true,
+        replacement: await downscaleArtwork(selected)
+      });
+      onNotice(`${reference.label} replaced for every supported resolution.`);
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : "Could not replace the template image.");
+    }
+  }
+
+  async function chooseBatterySpriteFolder() {
+    try {
+      const folder = await api.chooseCorosWatchfaceRasterFontFolder();
+      if (!folder) return;
+      const entries = await Promise.all(folder.sprites.map(async (sprite) => {
+        const match = sprite.name.match(/^(\d{1,2})\.png$/i);
+        if (!match) return null;
+        const image = await loadStudioImage(sprite.dataUrl);
+        const centeredDataUrl = centerSpriteArtwork(image) ?? sprite.dataUrl;
+        return [String(Number(match[1])), {
+          dataUrl: centeredDataUrl,
+          width: image.naturalWidth,
+          height: image.naturalHeight
+        }] as const;
+      }));
+      const stateReplacements = Object.fromEntries(
+        entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+      );
+      if (Object.keys(stateReplacements).length === 0) {
+        throw new Error("Name battery sprites 00.png, 01.png, and so on.");
+      }
+      setDesign((prev) => ({
+        ...prev,
+        configAssetOverrides: {
+          ...(prev.configAssetOverrides ?? {}),
+          "config:battery_icon": {
+            ...(prev.configAssetOverrides?.["config:battery_icon"] ?? {}),
+            enabled: true,
+            stateReplacements
+          }
+        }
+      }));
+      onNotice(`Imported ${Object.keys(stateReplacements).length} battery sprite states.`);
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : "Could not load the battery sprite folder.");
+    }
+  }
+
+  function restoreBatteryIcon() {
+    setDesign((prev) => {
+      const configAssetOverrides = { ...(prev.configAssetOverrides ?? {}) };
+      delete configAssetOverrides["config:battery_icon"];
+      return { ...prev, configAssetOverrides };
+    });
+  }
+
+  function setBatteryIconScale(scale: number) {
     setDesign((prev) => ({
       ...prev,
-      staticSeparators: {
-        ...prev.staticSeparators,
-        [separatorId]: {
-          ...prev.staticSeparators[separatorId],
-          ...patch
+      configAssetOverrides: {
+        ...(prev.configAssetOverrides ?? {}),
+        "config:battery_icon": {
+          ...(prev.configAssetOverrides?.["config:battery_icon"] ?? {}),
+          enabled: true,
+          scale: Math.max(0.1, Math.min(4, Number.isFinite(scale) ? scale : 1))
         }
       }
     }));
@@ -980,6 +3085,14 @@ export function WatchfaceEditor({
   function updateAmPmIndicator(
     patch: Partial<NonNullable<CorosWatchfaceDesignState["ampmIndicator"]>>
   ) {
+    const { x, y, ...otherPatch } = patch;
+    const safePatch = isPositionLocked("ampm")
+      ? otherPatch
+      : {
+          ...otherPatch,
+          ...(x !== undefined ? { x } : {}),
+          ...(y !== undefined ? { y } : {})
+        };
     setDesign((prev) => ({
       ...prev,
       ampmIndicator: {
@@ -987,8 +3100,8 @@ export function WatchfaceEditor({
         x: prev.ampmIndicator?.x ?? 0,
         y: prev.ampmIndicator?.y ?? 0,
         scale: prev.ampmIndicator?.scale ?? 1,
-        color: prev.ampmIndicator?.color ?? prev.digitColor,
-        ...patch
+        color: prev.ampmIndicator?.color,
+        ...safePatch
       }
     }));
   }
@@ -996,6 +3109,14 @@ export function WatchfaceEditor({
   function updateWeatherIndicator(
     patch: Partial<NonNullable<CorosWatchfaceDesignState["weatherIndicator"]>>
   ) {
+    const { x, y, ...otherPatch } = patch;
+    const safePatch = isPositionLocked("weather")
+      ? otherPatch
+      : {
+          ...otherPatch,
+          ...(x !== undefined ? { x } : {}),
+          ...(y !== undefined ? { y } : {})
+        };
     setDesign((prev) => ({
       ...prev,
       weatherIndicator: {
@@ -1003,14 +3124,14 @@ export function WatchfaceEditor({
         x: prev.weatherIndicator?.x ?? 0,
         y: prev.weatherIndicator?.y ?? 0,
         scale: prev.weatherIndicator?.scale ?? 1,
-        ...patch
+        ...safePatch
       }
     }));
   }
 
   function setMetricStyle(
     metricId: WatchfaceMetricId,
-    patch: { color?: string; scale?: number; fontFamily?: string }
+    patch: { color?: string; scale?: number; fontFamily?: string; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
   ) {
     setDesign((prev) => {
       const current = prev.metricStyles?.[metricId] ?? { scale: 1 };
@@ -1034,7 +3155,7 @@ export function WatchfaceEditor({
 
   function setTimeStyle(
     partId: WatchfaceTimePartId,
-    patch: { color?: string; scale?: number; fontFamily?: string }
+    patch: { color?: string; scale?: number; fontFamily?: string; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
   ) {
     setDesign((prev) => {
       const current = prev.timeStyles?.[partId] ?? { scale: 1 };
@@ -1056,9 +3177,44 @@ export function WatchfaceEditor({
     });
   }
 
+  function convertAutoTimeToSeparate() {
+    setDesign((prev) => {
+      const timeStyles = { ...prev.timeStyles };
+      const autoStyle = timeStyles.autoTime;
+      delete timeStyles.autoTime;
+      if (autoStyle) {
+        timeStyles.hours = { ...autoStyle };
+        timeStyles.minutes = { ...autoStyle };
+      }
+      const layoutOffsets = { ...prev.layoutOffsets };
+      const autoOffset = layoutOffsets.autoTime;
+      delete layoutOffsets.autoTime;
+      if (autoOffset) {
+        layoutOffsets.hours = { ...autoOffset };
+        layoutOffsets.minutes = { ...autoOffset };
+      }
+      const layerVisibility = { ...prev.layerVisibility };
+      const autoVisible = layerVisibility.autoTime;
+      delete layerVisibility.autoTime;
+      if (autoVisible !== undefined) {
+        layerVisibility.hours = autoVisible;
+        layerVisibility.minutes = autoVisible;
+      }
+      return {
+        ...prev,
+        separateAutoTime: true,
+        timeStyles,
+        layoutOffsets,
+        layerVisibility
+      };
+    });
+    setSelectedId("hours");
+    setSelectedIds(["hours"]);
+  }
+
   function setDateStyle(
     partId: WatchfaceDatePartId,
-    patch: { scale?: number; fontFamily?: string; color?: string }
+    patch: { scale?: number; fontFamily?: string; color?: string; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
   ) {
     setDesign((prev) => {
       const current = prev.dateStyles?.[partId] ?? { scale: 1 };
@@ -1087,7 +3243,7 @@ export function WatchfaceEditor({
     try {
       const selected = await api.chooseCorosWatchfaceArtwork();
       if (selected) {
-        patchDesign({ artwork: await downscaleArtwork(selected), zoom: 1 });
+        setBackgroundArtwork(await downscaleArtwork(selected));
         onNotice("Artwork added. Select the Background layer to scale it.");
       }
     } catch (caught) {
@@ -1096,11 +3252,19 @@ export function WatchfaceEditor({
   }
 
   function removeSprite(spriteId: string) {
+    const editorId = `sprite:${spriteId}`;
     setDesign((prev) => ({
       ...prev,
-      designSprites: (prev.designSprites ?? []).filter((s) => s.id !== spriteId)
+      designSprites: (prev.designSprites ?? []).filter((s) => s.id !== spriteId),
+      linkedLayerGroups: (prev.linkedLayerGroups ?? [])
+        .map((group) => group.filter((candidate) => candidate !== editorId))
+        .filter((group) => group.length >= 2),
+      lockedLayerIds: (prev.lockedLayerIds ?? []).filter(
+        (candidate) => candidate !== editorId
+      )
     }));
     setSelectedId("background");
+    setSelectedIds(["background"]);
   }
 
   function updateSprite(
@@ -1114,16 +3278,18 @@ export function WatchfaceEditor({
       tintColor: string | null;
     }>
   ) {
+    const { x, y, ...otherPatch } = patch;
+    const canMove = !isPositionLocked(`sprite:${spriteId}`);
     const boundedPatch = {
-      ...patch,
-      ...(patch.x !== undefined
-        ? { x: Math.max(0, Math.min(previewWidth, Math.round(patch.x))) }
+      ...otherPatch,
+      ...(canMove && x !== undefined
+        ? { x: Math.max(0, Math.min(previewWidth, Math.round(x))) }
         : {}),
-      ...(patch.y !== undefined
+      ...(canMove && y !== undefined
         ? {
             y: Math.max(
               0,
-              Math.min(previewResolution?.height ?? previewWidth, Math.round(patch.y))
+              Math.min(previewResolution?.height ?? previewWidth, Math.round(y))
             )
           }
         : {})
@@ -1168,11 +3334,122 @@ export function WatchfaceEditor({
         designSprites: [...(prev.designSprites ?? []), sprite]
       }));
       setSelectedId(`sprite:${sprite.id}`);
+      setSelectedIds([`sprite:${sprite.id}`]);
       onNotice("Image added. Drag it on the face to position it.");
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "Could not add the image.");
     } finally {
       setLoadingSprite(false);
+    }
+  }
+
+  async function renderExportPreview(): Promise<string> {
+    if (!details || !backgroundDataUrl) {
+      throw new Error("The editor is still loading. Try again in a moment.");
+    }
+    const archivePreview = document.createElement("canvas");
+    archivePreview.width = 800;
+    archivePreview.height = 800;
+    // The archive/phone thumbnail always represents the current face, even if
+    // the editor happens to be displaying the Always-on tab when previewed.
+    const exportDetails = basePreviewDetails
+      ? watchPreviewResolution
+        ? detailsForPreviewResolution(
+            basePreviewDetails,
+            watchPreviewResolution.directory
+          )
+        : basePreviewDetails
+      : details;
+    await drawStudioPreview(
+      archivePreview,
+      backgroundDataUrl,
+      exportDetails,
+      studioOptionsForResolution(studioOptions, exportDetails),
+      loadAssets
+    );
+    if (design.weatherIndicator?.enabled) {
+      const url = await weatherPreviewDataUrl(
+        previewWidth,
+        design.weatherIndicator.color
+      );
+      if (url) {
+        const image = await loadStudioImage(url);
+        const context = archivePreview.getContext("2d");
+        const scale = archivePreview.width / previewWidth;
+        context?.drawImage(
+          image,
+          design.weatherIndicator.x * scale,
+          design.weatherIndicator.y * scale,
+          image.naturalWidth * design.weatherIndicator.scale * scale,
+          image.naturalHeight * design.weatherIndicator.scale * scale
+        );
+      }
+    }
+    maskCanvasToCircle(archivePreview);
+    return archivePreview.toDataURL("image/png");
+  }
+
+  async function renderExportBackground(): Promise<string> {
+    if (!backgroundDataUrl) {
+      throw new Error("The editor is still loading. Try again in a moment.");
+    }
+    const exportBackground = document.createElement("canvas");
+    exportBackground.width = 800;
+    exportBackground.height = 800;
+    const context = exportBackground.getContext("2d", {
+      colorSpace: "display-p3"
+    });
+    if (!context) {
+      throw new Error("Could not render the circular watch background.");
+    }
+    context.drawImage(
+      await loadStudioImage(backgroundDataUrl, false),
+      0,
+      0,
+      exportBackground.width,
+      exportBackground.height
+    );
+    maskCanvasToCircle(exportBackground);
+    return exportBackground.toDataURL("image/png");
+  }
+
+  async function openExportPreview() {
+    setPreviewingExport(true);
+    try {
+      setExportPreviewDataUrl(await renderExportPreview());
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : "Could not render the export preview.");
+    } finally {
+      setPreviewingExport(false);
+    }
+  }
+
+  async function exportEditableProject() {
+    if (!details || !backgroundDataUrl) {
+      onError("The editor is still loading. Try again in a moment.");
+      return;
+    }
+    setExporting(true);
+    try {
+      const name = projectName.trim() || "Custom watch face";
+      const result = await api.exportCorosWatchfaceProject({
+        sourceArchiveId: starterArchive.archiveId,
+        name,
+        ...(targetFirmwareType ? { firmwareType: targetFirmwareType } : {}),
+        design,
+        previewDataUrl: await renderExportPreview()
+      });
+      if (result.saved) {
+        onNotice(`Exported “${name}” as an editable website ZIP.`);
+      }
+    } catch (caught) {
+      onError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not export the editable project."
+      );
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -1183,17 +3460,29 @@ export function WatchfaceEditor({
     }
     setCreating(true);
     try {
+      const [composition, exportPreview, exportBackground] = await Promise.all([
+        composeWatchfaceReplacements(details, design, loadAssets),
+        renderExportPreview(),
+        renderExportBackground()
+      ]);
       const { assetReplacements, configOverrides, minWatchFaceVersion } =
-        await composeWatchfaceReplacements(details, design, loadAssets);
+        composition;
       const archive = await api.createCorosWatchfaceArchive({
         sourceArchiveId: starterArchive.archiveId,
-        backgroundDataUrl,
+        backgroundDataUrl: exportBackground,
+        previewDataUrl: exportPreview,
+        ...(targetFirmwareType ? { firmwareType: targetFirmwareType } : {}),
+        ...(targetWatchModel ? { watchModel: targetWatchModel } : {}),
+        ...(design.archiveWatchFaceVersion !== undefined
+          ? { watchFaceVersion: design.archiveWatchFaceVersion }
+          : {}),
         ...(assetReplacements.length > 0 ? { assetReplacements } : {}),
         ...(configOverrides.length > 0 ? { configOverrides } : {}),
         ...(minWatchFaceVersion !== undefined ? { minWatchFaceVersion } : {})
       });
       onArchiveCreated?.(archive);
-      onPublish(archive, projectName.trim() || "Custom watch face");
+      const name = projectName.trim() || "Custom watch face";
+      onPublish(archive, name);
       onNotice("Watch face prepared for COROS.");
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "Could not build the archive.");
@@ -1218,6 +3507,7 @@ export function WatchfaceEditor({
         ...(projectId ? { projectId } : {}),
         name,
         sourceArchiveId: starterArchive.archiveId,
+        ...(targetFirmwareType ? { firmwareType: targetFirmwareType } : {}),
         design
       });
       setProjectId(saved.projectId);
@@ -1256,11 +3546,23 @@ export function WatchfaceEditor({
     }
   }
 
-  function nudgeSelected(dx: number, dy: number) {
+  function nudgeSingleSelected(dx: number, dy: number) {
     if (selectedElement) {
       updateElement(selectedElement.id, {
-        x: Math.max(0, Math.min(BACKGROUND_SPACE, selectedElement.x + dx)),
-        y: Math.max(0, Math.min(BACKGROUND_SPACE, selectedElement.y + dy))
+        x: Math.max(
+          0,
+          Math.min(
+            BACKGROUND_SPACE,
+            selectedElement.x + dx * (BACKGROUND_SPACE / previewWidth)
+          )
+        ),
+        y: Math.max(
+          0,
+          Math.min(
+            BACKGROUND_SPACE,
+            selectedElement.y + dy * (BACKGROUND_SPACE / previewHeight)
+          )
+        )
       });
       return;
     }
@@ -1343,6 +3645,23 @@ export function WatchfaceEditor({
     }
   }
 
+  function nudgeSelected(dx: number, dy: number) {
+    if (isMovementLockedForId(selectedId)) return;
+    const linked = design.linkedLayerGroups?.find((group) =>
+      group.includes(selectedId)
+    );
+    const movement = linked
+      ? clampMovementForSelectionIds(linked, { dx, dy })
+      : { dx, dy };
+    nudgeSingleSelected(movement.dx, movement.dy);
+    const companions = linked?.filter((id) => id !== selectedId) ?? [];
+    if (companions.length > 0) {
+      setDesign((current) =>
+        moveLinkedSelectionIds(current, companions, movement)
+      );
+    }
+  }
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -1386,7 +3705,9 @@ export function WatchfaceEditor({
       const delta = movement[event.key];
       if (delta) {
         event.preventDefault();
+        beginDesignTransaction();
         nudgeSelected(delta[0], delta[1]);
+        endDesignTransaction();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -1432,6 +3753,7 @@ export function WatchfaceEditor({
             className="wf-icon-button wf-pane-toggle"
             type="button"
             aria-label="Toggle layers"
+            title={layersOpen ? "Hide layers" : "Show layers"}
             aria-pressed={layersOpen}
             onClick={() => setLayersOpen((open) => !open)}
           >
@@ -1441,23 +3763,42 @@ export function WatchfaceEditor({
             className="wf-icon-button wf-pane-toggle"
             type="button"
             aria-label="Toggle properties"
+            title={propertiesOpen ? "Hide properties" : "Show properties"}
             aria-pressed={propertiesOpen}
             onClick={() => setPropertiesOpen((open) => !open)}
           >
             <PanelRight size={17} />
           </button>
           <span className="wf-command-separator" aria-hidden="true" />
-          <button className="wf-icon-button" type="button" disabled={!canUndo} aria-label="Undo" onClick={undo}>
+          <button className="wf-icon-button" type="button" disabled={!canUndo} aria-label="Undo" title="Undo" onClick={undo}>
             <Undo2 size={17} />
           </button>
-          <button className="wf-icon-button" type="button" disabled={!canRedo} aria-label="Redo" onClick={redo}>
+          <button className="wf-icon-button" type="button" disabled={!canRedo} aria-label="Redo" title="Redo" onClick={redo}>
             <Redo2 size={17} />
           </button>
           <button className="secondary-button wf-save-button" type="button" disabled={saving || !isDirty} onClick={() => void saveProject()}>
             {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}
             Save
           </button>
-          <button className="primary-button wf-send-button" type="button" disabled={creating || !backgroundDataUrl} onClick={() => void createArchive()}>
+          <button
+            className="secondary-button wf-export-preview-button"
+            type="button"
+            disabled={previewingExport || creating || exporting || !backgroundDataUrl}
+            onClick={() => void openExportPreview()}
+          >
+            {previewingExport ? <Loader2 className="spin" size={15} /> : <Eye size={15} />}
+            Preview export
+          </button>
+          <button
+            className="secondary-button wf-export-button"
+            type="button"
+            disabled={creating || exporting || !backgroundDataUrl}
+            onClick={() => void exportEditableProject()}
+          >
+            {exporting ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
+            Export editable ZIP
+          </button>
+          <button className="primary-button wf-send-button" type="button" disabled={creating || exporting || !backgroundDataUrl} onClick={() => void createArchive()}>
             {creating ? <Loader2 className="spin" size={15} /> : <Send size={15} />}
             Send to COROS
           </button>
@@ -1469,9 +3810,15 @@ export function WatchfaceEditor({
           <div className="watchface-editor-pane-heading wf-pane-heading">
             <div>
               <p className="watchface-editor-pane-title">Layers</p>
-              <span>{layers.length + backgroundElements.length} items</span>
+              <span>
+                {previewMode === "aod"
+                  ? supportsAod
+                    ? `${layers.length} always-on assets`
+                    : "Uses the current face"
+                  : `${layers.length + activeBackgroundElements.length} items`}
+              </span>
             </div>
-            <div className="wf-add-menu">
+            {previewMode === "current" ? <div className="wf-add-menu">
               <button
                 type="button"
                 className="watchface-add-sprite"
@@ -1491,28 +3838,37 @@ export function WatchfaceEditor({
                   <button type="button" role="menuitem" onClick={() => { setAddMenuOpen(false); addElement("text"); }}><Type size={15} /> Text</button>
                 </div>
               ) : null}
-            </div>
+            </div> : null}
           </div>
           {details ? (
             <ul className="wf-layer-list">
-              {layers.map((layer, index) => {
-                const group = layerGroupLabel(layer);
-                const previousGroup = index > 0 ? layerGroupLabel(layers[index - 1]!) : null;
-                return (
-                  <Fragment key={layer.id}>
-                    {group !== previousGroup ? <li className="wf-layer-group">{group}</li> : null}
-                    <li>
+              {groupLayersForDisplay(layers).map(({ label: group, layers: groupedLayers }) => (
+                <Fragment key={group}>
+                  <li className="wf-layer-group">{group}</li>
+                  {groupedLayers.map((layer) => (
+                    <li key={layer.id}>
                       <button
                         type="button"
-                        aria-selected={layer.id === selectedId}
-                        className={`watchface-layer-row${layer.id === selectedId ? " is-selected" : ""}`}
+                        aria-selected={selectedIds.includes(layer.id)}
+                        className={`watchface-layer-row${selectedIds.includes(layer.id) ? " is-selected" : ""}`}
                         onMouseEnter={() => setHoveredId(layer.id)}
                         onMouseLeave={() => setHoveredId(null)}
-                        onClick={() => { setSelectedId(layer.id); setPropertiesOpen(true); }}
+                        onClick={(event) => {
+                          selectEditorItem(layer.id, event.shiftKey || event.metaKey || event.ctrlKey);
+                          setPropertiesOpen(true);
+                        }}
+                        onContextMenu={(event) => openLayerContextMenu(event, layer.id)}
                       >
                         <span className="wf-layer-icon" aria-hidden="true">{layerIcon(layer)}</span>
                         <span className={`watchface-layer-name${layer.visible ? "" : " is-hidden"}`}>{layer.label}</span>
+                        {(design.linkedLayerGroups ?? []).some((group) => group.includes(layer.id)) ? (
+                          <span className="wf-layer-link-state" title="Linked component" aria-label="Linked component">
+                            <Link2 size={12} aria-hidden="true" />
+                          </span>
+                        ) : null}
+                        {layer.configAssetReplaced ? <span className="wf-layer-state">Custom</span> : null}
                       </button>
+                      {renderLayerPositionLockButton(layer.id, layer.label)}
                       {layer.canHide ? (
                         <button
                           type="button"
@@ -1524,21 +3880,34 @@ export function WatchfaceEditor({
                           {layer.visible ? <Eye size={15} /> : <EyeOff size={15} />}
                         </button>
                       ) : null}
-                      {layer.kind === "background" && backgroundElements.length > 0 ? (
+                      {layer.kind === "background" && activeBackgroundElements.length > 0 ? (
                         <ul className="watchface-bg-sublayers">
-                          {backgroundElements.map((element) => (
+                          {activeBackgroundElements.map((element) => (
                             <li key={element.id}>
                               <button
                                 type="button"
-                                aria-selected={selectedId === `bgel:${element.id}`}
-                                className={`watchface-layer-row${selectedId === `bgel:${element.id}` ? " is-selected" : ""}`}
+                                aria-selected={selectedIds.includes(`bgel:${element.id}`)}
+                                className={`watchface-layer-row${selectedIds.includes(`bgel:${element.id}`) ? " is-selected" : ""}`}
                                 onMouseEnter={() => setHoveredId(`bgel:${element.id}`)}
                                 onMouseLeave={() => setHoveredId(null)}
-                                onClick={() => { setSelectedId(`bgel:${element.id}`); setPropertiesOpen(true); }}
+                                onClick={(event) => {
+                                  selectEditorItem(`bgel:${element.id}`, event.shiftKey || event.metaKey || event.ctrlKey);
+                                  setPropertiesOpen(true);
+                                }}
+                                onContextMenu={(event) => openLayerContextMenu(event, `bgel:${element.id}`)}
                               >
                                 <span className="wf-layer-icon"><Square size={14} /></span>
                                 <span className="watchface-layer-name">{backgroundElementLabel(element)}</span>
+                                {(design.linkedLayerGroups ?? []).some((group) => group.includes(`bgel:${element.id}`)) ? (
+                                  <span className="wf-layer-link-state" title="Linked component" aria-label="Linked component">
+                                    <Link2 size={12} aria-hidden="true" />
+                                  </span>
+                                ) : null}
                               </button>
+                              {renderLayerPositionLockButton(
+                                `bgel:${element.id}`,
+                                backgroundElementLabel(element)
+                              )}
                               <button type="button" className="watchface-layer-visibility" aria-label={`Remove ${backgroundElementLabel(element)}`} onClick={() => removeElement(element.id)}>
                                 <Trash2 size={14} />
                               </button>
@@ -1547,9 +3916,9 @@ export function WatchfaceEditor({
                         </ul>
                       ) : null}
                     </li>
-                  </Fragment>
-                );
-              })}
+                  ))}
+                </Fragment>
+              ))}
             </ul>
           ) : (
             <div className="wf-pane-loading" role="status"><Loader2 className="spin" size={16} /> Reading template</div>
@@ -1557,13 +3926,162 @@ export function WatchfaceEditor({
         </aside>
 
         <main className="watchface-editor-stage wf-stage">
-          <div className="wf-stage-toolbar" aria-label="Stage zoom">
+          <div className="wf-stage-toolbar" aria-label="Preview controls">
             <div className="wf-zoom-control">
               <button type="button" aria-pressed={stageZoom === "fit"} onClick={() => setStageZoom("fit")}>Fit</button>
               <button type="button" aria-pressed={stageZoom === 1} onClick={() => setStageZoom(1)}>100%</button>
               <button type="button" aria-label="Zoom out" onClick={() => setStageZoom((zoom) => Math.max(0.6, (zoom === "fit" ? 1 : zoom) - 0.1))}>-</button>
               <button type="button" aria-label="Zoom in" onClick={() => setStageZoom((zoom) => Math.min(1.4, (zoom === "fit" ? 1 : zoom) + 0.1))}>+</button>
             </div>
+            <div className="wf-preview-mode-switch" role="group" aria-label="Watch display preview">
+              <button
+                type="button"
+                aria-pressed={previewMode === "current"}
+                onClick={() => setPreviewMode("current")}
+              >
+                <SunMedium size={14} aria-hidden="true" /> Current
+              </button>
+              <button
+                type="button"
+                aria-pressed={previewMode === "aod"}
+                title={supportsAod
+                  ? "Preview and edit always-on assets"
+                  : "This MIP template uses the current face when always on"}
+                onClick={() => setPreviewMode("aod")}
+              >
+                <MoonStar size={14} aria-hidden="true" /> Always-on
+              </button>
+            </div>
+            {previewDetails && previewDetails.resolutions.length > 1 ? (
+              <label className="wf-preview-resolution">
+                Watch preview
+                <select
+                  value={watchPreviewResolution?.directory ?? ""}
+                  onChange={(event) => setWatchPreviewDirectory(event.target.value)}
+                >
+                  {[...previewDetails.resolutions]
+                    .sort((left, right) => left.width - right.width)
+                    .map((resolution) => (
+                      <option key={resolution.directory} value={resolution.directory}>
+                        {resolution.width === 240 &&
+                        (targetWatchModel === "apex-4" || targetFirmwareType?.toUpperCase() === "COROS W541")
+                          ? "APEX 4 42 mm · 240×240"
+                          : resolution.width === 260 &&
+                              (targetWatchModel === "apex-4" || targetFirmwareType?.toUpperCase() === "COROS W541")
+                            ? "APEX 4 46 mm · 260×260"
+                            : resolution.width === 800
+                              ? "Master · 800×800"
+                              : `${resolution.width}×${resolution.height}`}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            ) : null}
+            {previewMode === "current" ? <div className="wf-placement-menu" ref={placementMenuRef}>
+              <button
+                className={`wf-placement-trigger${
+                  placementPreferences.snapEnabled ||
+                  placementPreferences.guidesVisible ||
+                  placementPreferences.gridVisible
+                    ? " is-active"
+                    : ""
+                }`}
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded={placementMenuOpen}
+                aria-controls={`wf-placement-panel-${sessionId}`}
+                onClick={() => setPlacementMenuOpen((open) => !open)}
+              >
+                <Magnet size={15} aria-hidden="true" />
+                <span>Placement</span>
+                <ChevronDown size={14} aria-hidden="true" />
+              </button>
+              {placementMenuOpen ? (
+                <div
+                  id={`wf-placement-panel-${sessionId}`}
+                  className="wf-placement-popover"
+                  role="dialog"
+                  aria-label="Placement tools"
+                >
+                  <div className="wf-placement-heading">
+                    <strong>Placement tools</strong>
+                    <span>Editor only</span>
+                  </div>
+                  <label className="watchface-studio-toggle">
+                    <input
+                      type="checkbox"
+                      checked={placementPreferences.snapEnabled}
+                      onChange={(event) => {
+                        patchPlacementPreferences({ snapEnabled: event.target.checked });
+                        if (!event.target.checked) clearSnapGuides();
+                      }}
+                    />
+                    Snap while dragging
+                  </label>
+                  <label className="watchface-studio-toggle">
+                    <input
+                      type="checkbox"
+                      checked={placementPreferences.guidesVisible}
+                      onChange={(event) =>
+                        patchPlacementPreferences({ guidesVisible: event.target.checked })
+                      }
+                    />
+                    Show center and safe-area guides
+                  </label>
+                  <label className="field wf-placement-field">
+                    Grid
+                    <select
+                      value={
+                        placementPreferences.gridVisible
+                          ? String(placementPreferences.gridStep)
+                          : "off"
+                      }
+                      onChange={(event) => {
+                        if (event.target.value === "off") {
+                          patchPlacementPreferences({ gridVisible: false });
+                          return;
+                        }
+                        patchPlacementPreferences({
+                          gridVisible: true,
+                          gridStep: Number(event.target.value) as WatchfaceGridStep
+                        });
+                      }}
+                    >
+                      <option value="off">Off</option>
+                      <option value="4">4 px</option>
+                      <option value="8">8 px</option>
+                      <option value="16">16 px</option>
+                      <option value="32">32 px</option>
+                    </select>
+                  </label>
+                  <label className="field watchface-zoom-control wf-placement-safe-area">
+                    Safe-area inset
+                    <span>{placementPreferences.safeAreaInsetPercent}%</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="25"
+                      step="1"
+                      value={placementPreferences.safeAreaInsetPercent}
+                      onChange={(event) =>
+                        patchPlacementPreferences({
+                          safeAreaInsetPercent: Number(event.target.value)
+                        })
+                      }
+                    />
+                  </label>
+                  <p className="wf-placement-note">
+                    The safe area is a design aid, not a COROS firmware limit.
+                    Hold Alt or Option while dragging to bypass snapping.
+                  </p>
+                </div>
+              ) : null}
+            </div> : (
+              <span className="wf-aod-preview-label">
+                <MoonStar size={14} aria-hidden="true" />
+                {supportsAod ? "AODconfig.txt" : "Current face stays on"}
+              </span>
+            )}
           </div>
           <div
             className={`watchface-preview-stack watchface-editor-device${stageZoom === "fit" ? " is-fit" : ""}`}
@@ -1571,24 +4089,88 @@ export function WatchfaceEditor({
           >
             <canvas ref={previewCanvasRef} className="watchface-studio-preview" width={PREVIEW_SIZE} height={PREVIEW_SIZE} />
             <canvas
+              ref={dragPreviewCanvasRef}
+              className="watchface-preview-drag"
+              width={PREVIEW_SIZE}
+              height={PREVIEW_SIZE}
+              aria-hidden="true"
+            />
+            <canvas
               ref={overlayCanvasRef}
               className="watchface-preview-overlay"
               width={PREVIEW_SIZE}
               height={PREVIEW_SIZE}
               tabIndex={0}
               role="img"
-              aria-label="Interactive watch face preview. Select a layer, then use arrow keys to move it."
-              style={{ cursor: selectedLayer?.capabilities.position ? "grab" : "default" }}
+              aria-label={previewMode === "aod"
+                ? "Always-on watch face preview"
+                : "Interactive watch face preview. Select a layer, then use arrow keys to move it."}
+              style={{
+                cursor: selectedLayer?.capabilities.position &&
+                    !isMovementLockedForId(selectedLayer.id)
+                  ? "grab"
+                  : "default"
+              }}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerLeave={() => setHoveredId(null)}
               onPointerUp={handlePointerEnd}
               onPointerCancel={handlePointerEnd}
+              onLostPointerCapture={handlePointerEnd}
+              onContextMenu={handleCanvasContextMenu}
             />
           </div>
+          {contextMenu ? (
+            <div
+              ref={contextMenuRef}
+              className="wf-layer-context-menu"
+              role="menu"
+              aria-label="Component actions"
+              style={{ left: contextMenu.x, top: contextMenu.y }}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                disabled={selectedMovableIds.length < 2}
+                onClick={linkSelectedLayers}
+              >
+                <Link2 size={15} aria-hidden="true" />
+                <span>Link components</span>
+              </button>
+              {selectionHasLink ? (
+                <button type="button" role="menuitem" onClick={unlinkSelectedLayers}>
+                  <Unlink2 size={15} aria-hidden="true" />
+                  <span>Unlink components</span>
+                </button>
+              ) : null}
+              <button
+                type="button"
+                role="menuitem"
+                disabled={selectedMovableIds.length === 0}
+                onClick={selectionHasLockedPosition ? unlockSelectedLayers : lockSelectedLayers}
+              >
+                {selectionHasLockedPosition ? <Unlock size={15} aria-hidden="true" /> : <Lock size={15} aria-hidden="true" />}
+                <span>{selectionHasLockedPosition ? "Unlock position" : "Lock position"}</span>
+              </button>
+              <p>
+                {selectedMovableIds.length >= 2
+                  ? `${selectedMovableIds.length} components selected`
+                  : selectedMovableIds.length === 1
+                    ? "Lock this component to prevent accidental moves"
+                    : "Shift-click to select another component"}
+              </p>
+            </div>
+          ) : null}
           <div className="wf-stage-status" role="status">
-            <span>{selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? "No selection"}</span>
-            <span>{watchCoordinateWidth} × {watchCoordinateHeight}</span>
+            <span className={snapStatus ? "is-snap-status" : undefined}>
+              {snapStatus ?? (selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? "No selection")}
+            </span>
+            <span>{watchCoordinateWidth} × {watchCoordinateHeight} preview</span>
+            <span>
+              {previewMode === "aod"
+                ? supportsAod ? "Always-on display" : "Always-on uses Current"
+                : "Current display"}
+            </span>
             <span>{starterArchive.fileName}</span>
           </div>
         </main>
@@ -1610,12 +4192,117 @@ export function WatchfaceEditor({
               <strong>{selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? "Inspector"}</strong>
             </div>
           </div>
-          {selectedElement ? renderElementInspector(selectedElement) : selectedLayer ? renderInspector(selectedLayer) : null}
+          <div className="watchface-inspector-group wf-archive-settings">
+            <h3 className="wf-inspector-heading">Archive</h3>
+            <label className="field">
+              Watch-face version
+              <input
+                type="number"
+                min="0"
+                max="999"
+                step="1"
+                placeholder={`Auto (template v${starterArchive.watchFaceVersion})`}
+                value={design.archiveWatchFaceVersion ?? ""}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  patchDesign({
+                    archiveWatchFaceVersion:
+                      value === "" ? undefined : Number(value)
+                  });
+                }}
+              />
+            </label>
+            <p className="wf-archive-note">
+              Leave blank to preserve the template version and automatically
+              raise it only when selected features require a newer version.
+            </p>
+          </div>
+          {selectedElement ? renderElementInspector(selectedElement) : selectedLayer ? renderInspector(selectedLayer) : previewMode === "aod" ? (
+            <div className="watchface-inspector-group wf-aod-empty-inspector">
+              <MoonStar size={20} aria-hidden="true" />
+              <strong>{supportsAod ? "No replaceable AOD assets" : "Current is already always on"}</strong>
+              <p className="watchface-studio-summary">
+                {supportsAod
+                  ? "This template has an always-on layout, but it does not reference a standalone PNG that Studio can replace."
+                  : "This MIP template has no separate AOD configuration. The Current face shown here is the same face the watch keeps visible."}
+              </p>
+            </div>
+          ) : null}
         </aside>
       </div>
 
       {(layersOpen || propertiesOpen) ? (
         <button className="wf-sheet-scrim is-open" type="button" aria-label="Close editor panel" onClick={() => { setLayersOpen(false); setPropertiesOpen(false); }} />
+      ) : null}
+
+      {exportPreviewDataUrl ? (
+        <div className="wf-modal-backdrop" role="presentation">
+          <section
+            className="wf-modal wf-export-preview-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="wf-export-preview-title"
+          >
+            <header className="wf-export-preview-header">
+              <div>
+                <h2 id="wf-export-preview-title">Export preview</h2>
+                <p>This is rendered by the same path used when you send the face to COROS.</p>
+              </div>
+              <span>{watchCoordinateWidth} × {watchCoordinateHeight}</span>
+            </header>
+            <div className="wf-export-preview-grid">
+              <article>
+                <div className="wf-export-preview-label">
+                  <strong>COROS app</strong>
+                  <span>Archive preview</span>
+                </div>
+                <div className="wf-export-phone-preview">
+                  <img src={exportPreviewDataUrl} alt="COROS app archive preview" />
+                </div>
+                <p>The exact 800 × 800 <code>watchface_customize.png</code> included in the archive.</p>
+              </article>
+              <article>
+                <div className="wf-export-preview-label">
+                  <strong>On watch</strong>
+                  <span>Circular display</span>
+                </div>
+                <div className="wf-export-watch-preview">
+                  <img src={exportPreviewDataUrl} alt="Circular on-watch preview" />
+                </div>
+                <p>How the same rendered face is cropped on the selected watch display.</p>
+              </article>
+            </div>
+            <div className="wf-modal-actions">
+              <button type="button" className="secondary-button" onClick={() => setExportPreviewDataUrl(null)}>
+                Close
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={exporting}
+                onClick={() => {
+                  setExportPreviewDataUrl(null);
+                  void exportEditableProject();
+                }}
+              >
+                {exporting ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
+                Export editable ZIP
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={creating}
+                onClick={() => {
+                  setExportPreviewDataUrl(null);
+                  void createArchive();
+                }}
+              >
+                {creating ? <Loader2 className="spin" size={15} /> : <Send size={15} />}
+                Send to COROS
+              </button>
+            </div>
+          </section>
+        </div>
       ) : null}
 
       {leaveOpen ? (
@@ -1638,6 +4325,9 @@ export function WatchfaceEditor({
 
   function layerGroupLabel(layer: EditorLayer): string {
     if (layer.kind === "background" || layer.kind === "customSprite") return "Artwork";
+    if (layer.kind === "configAsset") {
+      return previewMode === "aod" ? "Always-on assets" : "Template assets";
+    }
     if (
       layer.kind === "time" ||
       layer.kind === "seconds" ||
@@ -1650,8 +4340,31 @@ export function WatchfaceEditor({
     return "Data";
   }
 
+  function groupLayersForDisplay(
+    sourceLayers: EditorLayer[]
+  ): Array<{ label: string; layers: EditorLayer[] }> {
+    const groups = new Map<string, EditorLayer[]>();
+    for (const layer of sourceLayers) {
+      const label = layerGroupLabel(layer);
+      const group = groups.get(label);
+      if (group) {
+        group.push(layer);
+      } else {
+        groups.set(label, [layer]);
+      }
+    }
+    return [...groups].map(([label, groupLayers]) => ({
+      label,
+      layers: groupLayers
+    }));
+  }
+
   function layerIcon(layer: EditorLayer) {
-    if (layer.kind === "background" || layer.kind === "customSprite") {
+    if (
+      layer.kind === "background" ||
+      layer.kind === "customSprite" ||
+      layer.kind === "configAsset"
+    ) {
       return <Image size={14} />;
     }
     if (
@@ -1662,11 +4375,17 @@ export function WatchfaceEditor({
     ) {
       return <Type size={14} />;
     }
+    if (layer.kind === "battery" || layer.kind === "batteryIcon") {
+      return <Battery size={14} />;
+    }
     return <Layers size={14} />;
   }
 
   function toggleLayerVisibility(layer: EditorLayer) {
-    if (layer.metricId) {
+    if (layer.configAssetId) {
+      const reference = configAssetsById.get(layer.configAssetId);
+      if (reference) updateConfigAsset(reference, { enabled: !layer.visible });
+    } else if (layer.metricId) {
       setMetricVisible(layer.metricId, !layer.visible);
     } else if (layer.weatherIndicator) {
       updateWeatherIndicator({ enabled: !layer.visible });
@@ -1676,12 +4395,107 @@ export function WatchfaceEditor({
       updateStaticSeparator(layer.staticSeparatorId, { enabled: !layer.visible });
     } else if (layer.spriteId) {
       updateSprite(layer.spriteId, { visible: !layer.visible });
+    } else if (layer.kind === "background") {
+      patchDesign({ artworkVisible: !layer.visible });
     } else if (layer.layoutGroupId) {
       setFirmwareLayerVisible(layer.layoutGroupId, !layer.visible);
     }
   }
 
+  function renderConfigAssetInspector(reference: WatchfaceConfigAssetReference) {
+    const override = design.configAssetOverrides?.[reference.id];
+    const enabled = override?.enabled !== false;
+    const templatePreview = configAssetPreviews.get(reference.archivePath);
+    const previewDataUrl = override?.replacement?.dataUrl ?? templatePreview?.dataUrl;
+    const dimensions = override?.replacement
+      ? `${override.replacement.width} × ${override.replacement.height} source`
+      : reference.source
+        ? `${reference.source.width} × ${reference.source.height}px`
+        : "Source file unavailable";
+    const deviceResolution = watchPreviewResolution ?? previewResolution;
+    const center = parseConfigPos(deviceResolution?.config.time_center_pos);
+    const centerLabel = center && deviceResolution
+      ? `Centered at ${center.x}, ${center.y} on the ${deviceResolution.width}px preview.`
+      : "Centered on the watch face.";
+    const onWatchBehavior = (() => {
+      switch (reference.configKey) {
+        case "time_center_polygon_icon1":
+          return `${centerLabel} Fixed above the hour and minute hands.`;
+        case "time_center_polygon_icon2":
+          return `${centerLabel} Fixed above all analog hands.`;
+        case "time_hour_icon":
+          return `${centerLabel} Rotates as the analog hour hand.`;
+        case "time_minute_icon":
+          return `${centerLabel} Rotates as the analog minute hand.`;
+        case "time_second_icon":
+          return `${centerLabel} Rotates as the analog second hand.`;
+        case "colon_icon":
+          return "Placed automatically between the hour and minute digits.";
+        case "control_colon_icon":
+          return "Shown automatically between split values in the selected data slot.";
+        case "watchface_thmb_icon":
+          return "Archive thumbnail only; this image is not drawn on the watch face.";
+        case "negative_sign_icon":
+        case "control_negative_sign_icon":
+          return "Shown only when the watch renders a negative value.";
+        default:
+          return reference.configKey.startsWith("control_")
+            ? "Shown when this data type is active in the selectable watch slot."
+            : null;
+      }
+    })();
+    return (
+      <div className="watchface-inspector-group wf-config-asset-inspector">
+        <div className={`wf-config-asset-preview${enabled ? "" : " is-disabled"}`}>
+          {previewDataUrl ? (
+            <img src={previewDataUrl} alt={`${reference.label} preview`} />
+          ) : (
+            <Image size={24} aria-hidden="true" />
+          )}
+        </div>
+        <div className="wf-config-asset-meta">
+          <strong>{reference.label}</strong>
+          <span>{dimensions}</span>
+          <code>{reference.relativePath}</code>
+          <code>[{reference.configKey}]</code>
+        </div>
+        {onWatchBehavior ? (
+          <p className="watchface-studio-summary">{onWatchBehavior}</p>
+        ) : null}
+        <label className="watchface-studio-toggle">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(event) =>
+              updateConfigAsset(reference, { enabled: event.target.checked })
+            }
+          />
+          Use this config asset
+        </label>
+        <div className="wf-config-asset-actions">
+          <button type="button" className="secondary-button" onClick={() => void chooseConfigAsset(reference)}>
+            <ImagePlus size={15} /> {override?.replacement ? "Replace again" : "Replace image"}
+          </button>
+          {override?.replacement ? (
+            <button type="button" className="secondary-button" onClick={() => restoreConfigAsset(reference)}>
+              <RotateCcw size={15} /> Restore original
+            </button>
+          ) : null}
+        </div>
+        <p className="watchface-studio-summary">
+          Parsed from {reference.scope === "aod" ? "AODconfig.txt" : "config.txt"}.
+          Visibility changes only this key. Replacements are resized for each device and do not alter other keys that share the original file.
+        </p>
+      </div>
+    );
+  }
+
   function renderInspector(layer: EditorLayer) {
+    if (layer.configAssetId) {
+      const reference = configAssetsById.get(layer.configAssetId);
+      return reference ? renderConfigAssetInspector(reference) : null;
+    }
+
     if (layer.weatherIndicator) {
       return renderWeatherInspector();
     }
@@ -1695,80 +4509,169 @@ export function WatchfaceEditor({
     }
 
     if (layer.kind === "background") {
+      const backgroundOverride =
+        design.configAssetOverrides?.["config:background_icon"];
+      const backgroundArtwork = backgroundOverride?.replacement ?? design.artwork;
+      const backgroundVisible = design.artworkVisible !== false;
+      const backgroundColor = parseBackgroundColor(design.backgroundColor);
       return (
         <div className="watchface-inspector-group">
+          <h3 className="wf-inspector-heading">Color</h3>
           <label className="field">
-            Accent color
-            <span className="watchface-color-control">
-              <input type="color" value={design.accentColor} onChange={(e) => patchDesign({ accentColor: e.target.value })} />
-              <code>{design.accentColor}</code>
-            </span>
-          </label>
-          <div className="wf-inspector-divider" />
-          <h3 className="wf-inspector-heading">Face styles</h3>
-          <LocalFontPicker
-            api={api}
-            label="Face font"
-            value={design.fontFamily}
-            emptyLabel="Keep template font"
-            onChange={(fontFamily) => patchDesign({ fontFamily })}
-            rasterFont={design.rasterFont}
-            onRasterFontChange={(rasterFont) =>
-              patchDesign({
-                rasterFont,
-                ...(rasterFont ? { fontFamily: "" } : {})
-              })
-            }
-            typography={{
-              fontWeight: design.fontWeight ?? 400,
-              fontStyle: design.fontStyle ?? "normal",
-              letterSpacing: design.letterSpacing ?? 0
-            }}
-            onTypographyChange={(typography) => patchDesign(typography)}
-          />
-          <label className="field">
-            Default digit color
+            Background color
             <span className="watchface-color-control">
               <input
                 type="color"
-                value={design.digitColor}
-                onChange={(event) => patchDesign({ digitColor: event.target.value })}
+                value={backgroundColor.hex}
+                onChange={(event) =>
+                  patchDesign({
+                    backgroundColor: toRgbaColor(
+                      event.target.value,
+                      backgroundColor.isTransparent ? 1 : backgroundColor.alpha
+                    )
+                  })
+                }
               />
-              <code>{design.digitColor}</code>
+              <code>{backgroundColor.isTransparent ? "none" : design.backgroundColor}</code>
             </span>
           </label>
-          <label className="watchface-studio-toggle">
+          <label className="field watchface-zoom-control">
+            Opacity <span>{Math.round(backgroundColor.alpha * 100)}%</span>
             <input
-              type="checkbox"
-              checked={design.tintLabels}
-              onChange={(event) => patchDesign({ tintLabels: event.target.checked })}
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              disabled={backgroundColor.isTransparent}
+              value={Math.round(backgroundColor.alpha * 100)}
+              onChange={(event) =>
+                patchDesign({
+                  backgroundColor: toRgbaColor(
+                    backgroundColor.hex,
+                    Number(event.target.value) / 100
+                  )
+                })
+              }
             />
-            Tint template labels
           </label>
-          <label className="watchface-studio-toggle">
-            <input
-              type="checkbox"
-              checked={design.tintIcons}
-              onChange={(event) => patchDesign({ tintIcons: event.target.checked })}
-            />
-            Tint template icons
-          </label>
-          <div className="wf-inspector-divider" />
-          <h3 className="wf-inspector-heading">Artwork</h3>
-          <button className="secondary-button" type="button" onClick={() => void chooseArtwork()}>
-            <ImagePlus size={15} /> {design.artwork ? "Replace artwork" : "Add artwork"}
+          <button
+            className="watchface-color-none"
+            type="button"
+            disabled={backgroundColor.isTransparent}
+            onClick={() => patchDesign({ backgroundColor: "transparent" })}
+          >
+            No background color
           </button>
-          {design.artwork ? (
+          <h3 className="wf-inspector-heading">Artwork</h3>
+          <div
+            className={`wf-config-asset-preview wf-background-asset-preview${
+              backgroundVisible ? "" : " is-disabled"
+            }`}
+          >
+            {backgroundArtwork ? (
+              <img src={backgroundArtwork.dataUrl} alt="Background artwork preview" />
+            ) : (
+              <Image size={28} aria-hidden="true" />
+            )}
+          </div>
+          <label className="watchface-studio-toggle">
+            <input
+              type="checkbox"
+              checked={backgroundVisible}
+              disabled={!backgroundArtwork}
+              onChange={(event) =>
+                patchDesign({ artworkVisible: event.target.checked })
+              }
+            />
+            Show background artwork
+          </label>
+          <button className="secondary-button" type="button" onClick={() => void chooseArtwork()}>
+            <ImagePlus size={15} /> {backgroundArtwork ? "Replace artwork" : "Add artwork"}
+          </button>
+          {backgroundArtwork ? (
             <>
               <label className="field watchface-zoom-control">
                 Artwork scale <span>{design.zoom.toFixed(2)}×</span>
                 <input type="range" min="1" max="2.25" step="0.01" value={design.zoom} onChange={(e) => patchDesign({ zoom: Number(e.target.value) })} />
               </label>
-              <button className="secondary-button" type="button" onClick={() => patchDesign({ artwork: null })}>
+              <button className="secondary-button" type="button" onClick={() => setBackgroundArtwork(null)}>
                 <Trash2 size={15} /> Remove artwork
               </button>
             </>
           ) : null}
+        </div>
+      );
+    }
+
+    if (layer.kind === "batteryIcon") {
+      const stateReplacements = design.configAssetOverrides?.["config:battery_icon"]?.stateReplacements;
+      const stateCount = Object.keys(stateReplacements ?? {}).length;
+      const iconScale = design.configAssetOverrides?.["config:battery_icon"]?.scale ?? 1;
+      return (
+        <div className="watchface-inspector-group">
+          {renderLayerVisibilityToggle(layer)}
+          <h3 className="wf-inspector-heading">Battery sprite folder</h3>
+          <div className="wf-config-asset-actions">
+            <button className="secondary-button" type="button" onClick={() => void chooseBatterySpriteFolder()}>
+              <ImagePlus size={15} /> {stateCount > 0 ? "Replace sprite folder" : "Import sprite folder"}
+            </button>
+            {stateCount > 0 ? (
+              <button className="secondary-button" type="button" onClick={restoreBatteryIcon}>
+                <RotateCcw size={15} /> Restore template icon
+              </button>
+            ) : null}
+          </div>
+          <p className="watchface-studio-summary">
+            Import PNGs named 00.png, 01.png, and so on. Each file replaces its matching battery charge state. Icon scale resizes every state bitmap and keeps it centered at the selected position.
+          </p>
+          <label className="watchface-inspector-field">
+            <span>Icon scale</span>
+            <EditableNumberInput
+              min="0.1"
+              max="4"
+              step="0.01"
+              value={iconScale}
+              fallback={1}
+              onValueChange={setBatteryIconScale}
+            />
+          </label>
+          {renderPositionReadout(layer)}
+        </div>
+      );
+    }
+
+    if (layer.kind === "battery") {
+      const style = design.metricStyles?.battery;
+      return (
+        <div className="watchface-inspector-group">
+          {renderLayerVisibilityToggle(layer)}
+          <h3 className="wf-inspector-heading">Battery digit sprites</h3>
+          <CustomPngFontPanel
+            api={api}
+            rasterFont={design.rasterFont}
+            componentRasterFont={style?.rasterFont}
+            componentLabel="Battery data"
+            onActivate={() => setMetricStyle("battery", { fontFamily: "" })}
+            onRasterFontChange={setRasterFont}
+            onComponentRasterFontChange={(rasterFont) =>
+              setMetricStyle("battery", { rasterFont })
+            }
+          />
+          <label className="field">
+            Sprite scale
+            <EditableNumberInput
+              min="0.01"
+              step="0.01"
+              value={style?.scale ?? 1}
+              fallback={1}
+              onValueChange={(value) =>
+                setMetricStyle("battery", {
+                  scale: Math.max(0.01, value)
+                })
+              }
+            />
+          </label>
+          {renderPositionReadout(layer)}
         </div>
       );
     }
@@ -1778,6 +4681,15 @@ export function WatchfaceEditor({
       return (
         <div className="watchface-inspector-group">
           {renderLayerVisibilityToggle(layer)}
+          {layer.timePartId === "autoTime" ? (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={convertAutoTimeToSeparate}
+            >
+              Separate hours and minutes
+            </button>
+          ) : null}
           <LocalFontPicker
             api={api}
             label="Digit font"
@@ -1787,10 +4699,7 @@ export function WatchfaceEditor({
               setTimeStyle(layer.timePartId!, { fontFamily })
             }
             rasterFont={design.rasterFont}
-            onRasterFontChange={(rasterFont) => {
-              setTimeStyle(layer.timePartId!, { fontFamily: "" });
-              setRasterFont(rasterFont);
-            }}
+            onRasterFontChange={setRasterFont}
             typography={{
               fontWeight: design.fontWeight ?? 400,
               fontStyle: design.fontStyle ?? "normal",
@@ -1798,8 +4707,17 @@ export function WatchfaceEditor({
             }}
             onTypographyChange={(typography) => patchDesign(typography)}
           />
+          <CustomPngFontPanel
+            api={api}
+            rasterFont={design.rasterFont}
+            componentRasterFont={style?.rasterFont}
+            componentLabel={layer.label}
+            onActivate={() => setTimeStyle(layer.timePartId!, { fontFamily: "" })}
+            onRasterFontChange={setRasterFont}
+            onComponentRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont })}
+          />
           <label className="field">
-            Digit color
+            Digit tint
             <span className="watchface-color-control">
               <input type="color" value={style?.color ?? design.digitColor} onChange={(e) => setTimeStyle(layer.timePartId!, { color: e.target.value })} />
               <code>{style?.color ?? design.digitColor}</code>
@@ -1809,13 +4727,13 @@ export function WatchfaceEditor({
                 disabled={!style?.color}
                 onClick={() => clearTimeColor(layer.timePartId!)}
               >
-                Use default
+                Remove tint
               </button>
             </span>
           </label>
-          <label className="field watchface-zoom-control">
-            Size <span>{(style?.scale ?? 1).toFixed(2)}×</span>
-            <input type="range" min="0.5" max="1.6" step="0.02" value={style?.scale ?? 1} onChange={(e) => setTimeStyle(layer.timePartId!, { scale: Number(e.target.value) })} />
+          <label className="field">
+            Sprite scale
+            <EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(value) => setTimeStyle(layer.timePartId!, { scale: Math.max(0.01, value) })} />
           </label>
           {renderPositionReadout(layer)}
         </div>
@@ -1839,10 +4757,7 @@ export function WatchfaceEditor({
               setMetricStyle(layer.metricId!, { fontFamily })
             }
             rasterFont={design.rasterFont}
-            onRasterFontChange={(rasterFont) => {
-              setMetricStyle(layer.metricId!, { fontFamily: "" });
-              setRasterFont(rasterFont);
-            }}
+            onRasterFontChange={setRasterFont}
             typography={{
               fontWeight: design.fontWeight ?? 400,
               fontStyle: design.fontStyle ?? "normal",
@@ -1850,8 +4765,17 @@ export function WatchfaceEditor({
             }}
             onTypographyChange={(typography) => patchDesign(typography)}
           />
+          <CustomPngFontPanel
+            api={api}
+            rasterFont={design.rasterFont}
+            componentRasterFont={style?.rasterFont}
+            componentLabel={layer.label}
+            onActivate={() => setMetricStyle(layer.metricId!, { fontFamily: "" })}
+            onRasterFontChange={setRasterFont}
+            onComponentRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont })}
+          />
           <label className="field">
-            Color
+            Tint
             <span className="watchface-color-control">
               <input type="color" value={style?.color ?? design.digitColor} onChange={(e) => setMetricStyle(layer.metricId!, { color: e.target.value })} />
               <code>{style?.color ?? design.digitColor}</code>
@@ -1861,13 +4785,13 @@ export function WatchfaceEditor({
                 disabled={!style?.color}
                 onClick={() => clearMetricColor(layer.metricId!)}
               >
-                Use default
+                Remove tint
               </button>
             </span>
           </label>
-          <label className="field watchface-zoom-control">
-            Size <span>{(style?.scale ?? 1).toFixed(2)}×</span>
-            <input type="range" min="0.5" max="1.6" step="0.02" value={style?.scale ?? 1} onChange={(e) => setMetricStyle(layer.metricId!, { scale: Number(e.target.value) })} />
+          <label className="field">
+            Sprite scale
+            <EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(value) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, value) })} />
           </label>
           {renderPositionReadout(layer)}
         </div>
@@ -1893,10 +4817,7 @@ export function WatchfaceEditor({
             onChange={(fontFamily) => setDateStyle(partId, { fontFamily })}
             rasterFont={design.rasterFont}
             rasterFontRequiredText={partId === "weekday" ? "MON" : undefined}
-            onRasterFontChange={(rasterFont) => {
-              setDateStyle(partId, { fontFamily: "" });
-              setRasterFont(rasterFont);
-            }}
+            onRasterFontChange={setRasterFont}
             typography={{
               fontWeight: design.fontWeight ?? 400,
               fontStyle: design.fontStyle ?? "normal",
@@ -1904,8 +4825,17 @@ export function WatchfaceEditor({
             }}
             onTypographyChange={(typography) => patchDesign(typography)}
           />
+          <CustomPngFontPanel
+            api={api}
+            rasterFont={design.rasterFont}
+            componentRasterFont={style?.rasterFont}
+            componentLabel={layer.label}
+            onActivate={() => setDateStyle(partId, { fontFamily: "" })}
+            onRasterFontChange={setRasterFont}
+            onComponentRasterFontChange={(rasterFont) => setDateStyle(partId, { rasterFont })}
+          />
           <label className="field">
-            Color
+            Tint
             <span className="watchface-color-control">
               <input
                 type="color"
@@ -1919,19 +4849,18 @@ export function WatchfaceEditor({
                 disabled={!style?.color}
                 onClick={() => clearDateColor(partId)}
               >
-                Use default
+                Remove tint
               </button>
             </span>
           </label>
-          <label className="field watchface-zoom-control">
-            Scale <span>{scale.toFixed(2)}×</span>
-            <input
-              type="range"
-              min="0.5"
-              max="2"
-              step="0.02"
+          <label className="field">
+            Sprite scale
+            <EditableNumberInput
+              min="0.01"
+              step="0.01"
               value={scale}
-              onChange={(e) => setDateStyle(partId, { scale: Number(e.target.value) })}
+              fallback={1}
+              onValueChange={(value) => setDateStyle(partId, { scale: Math.max(0.01, value) })}
             />
           </label>
           {renderPositionReadout(layer)}
@@ -1969,8 +4898,7 @@ export function WatchfaceEditor({
               onChange={(e) => updateSprite(sprite.id, { rotation: Number(e.target.value) })}
             />
           </label>
-          <div className="watchface-inspector-position">
-            <span>Watch screen position</span>
+          {renderPositionPanel(layer.id, "Watch screen position", <>
             <div className="watchface-position-inputs">
               <label>
                 X
@@ -2018,7 +4946,7 @@ export function WatchfaceEditor({
               <button type="button" aria-label="Nudge image down" onClick={() => updateSprite(sprite.id, { y: sprite.y + fromWatchCoordinate(1) })}>↓</button>
               <button type="button" className="watchface-nudge-reset" onClick={() => updateSprite(sprite.id, { x: previewWidth / 2, y: (previewResolution?.height ?? previewWidth) / 2 })}>Reset</button>
             </div>
-          </div>
+          </>)}
           <label className="watchface-studio-toggle">
             <input
               type="checkbox"
@@ -2043,6 +4971,13 @@ export function WatchfaceEditor({
                   }
                 />
                 <code>{sprite.tintColor}</code>
+                <button
+                  type="button"
+                  className="watchface-color-none"
+                  onClick={() => updateSprite(sprite.id, { tintColor: null })}
+                >
+                  Remove tint
+                </button>
               </span>
             </label>
           ) : null}
@@ -2059,7 +4994,7 @@ export function WatchfaceEditor({
         {layer.layoutGroupId === "complication" ? renderComplicationPicker() : null}
         {layer.capabilities.color && layer.layoutGroupId ? (
           <label className="field">
-            Color
+            Tint
             <span className="watchface-color-control">
               <input
                 type="color"
@@ -2085,15 +5020,12 @@ export function WatchfaceEditor({
                 disabled={!design.layerColors?.[layer.layoutGroupId]}
                 onClick={() => clearLayerColor(layer.layoutGroupId!)}
               >
-                Use default
+                Remove tint
               </button>
             </span>
           </label>
         ) : null}
         {renderPositionReadout(layer)}
-        <p className="watchface-studio-summary">
-          This element is drawn live by the watch. Drag it on the face to reposition it.
-        </p>
       </div>
     );
   }
@@ -2111,6 +5043,9 @@ export function WatchfaceEditor({
     const selectedComplication = available.find(
       (complication) => complication.id === selected
     );
+    const controlColonReference = configAssetsById.get("config:control_colon_icon");
+    const controlColonEnabled =
+      design.configAssetOverrides?.["config:control_colon_icon"]?.enabled !== false;
     const sourceResolution = details ? pickPreviewResolution(details) : null;
     const iconPositionKey = selectedComplication
       ? `control_${selectedComplication.controlPrefix}_icon_pos`
@@ -2139,6 +5074,7 @@ export function WatchfaceEditor({
         }
       : null;
     const setIconOffset = (dx: number, dy: number) => {
+      if (isMovementLockedForId("complication")) return;
       setDesign((current) => ({
         ...current,
         controlIconOffsets: {
@@ -2176,6 +5112,33 @@ export function WatchfaceEditor({
             ))}
           </select>
         </label>
+        {selectedComplication?.valueParts && controlColonReference ? (
+          <div className="wf-inline-config-asset">
+            <label className="watchface-studio-toggle">
+              <input
+                type="checkbox"
+                checked={controlColonEnabled}
+                onChange={(event) =>
+                  updateConfigAsset(controlColonReference, {
+                    enabled: event.target.checked
+                  })
+                }
+              />
+              Show colon between values
+            </label>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                setSelectedId("configAsset:config:control_colon_icon");
+                setSelectedIds(["configAsset:config:control_colon_icon"]);
+                setPropertiesOpen(true);
+              }}
+            >
+              Edit colon image
+            </button>
+          </div>
+        ) : null}
         {selected === "temperature" ? (
           <>
             <LocalFontPicker
@@ -2185,10 +5148,7 @@ export function WatchfaceEditor({
               emptyLabel="Keep control digits"
               onChange={(fontFamily) => setMetricStyle("temperature", { fontFamily })}
               rasterFont={design.rasterFont}
-              onRasterFontChange={(rasterFont) => {
-                setMetricStyle("temperature", { fontFamily: "" });
-                setRasterFont(rasterFont);
-              }}
+              onRasterFontChange={setRasterFont}
               typography={{
                 fontWeight: design.fontWeight ?? 400,
                 fontStyle: design.fontStyle ?? "normal",
@@ -2196,8 +5156,17 @@ export function WatchfaceEditor({
               }}
               onTypographyChange={(typography) => patchDesign(typography)}
             />
+            <CustomPngFontPanel
+              api={api}
+              rasterFont={design.rasterFont}
+              componentRasterFont={design.metricStyles?.temperature?.rasterFont}
+              componentLabel="Temperature"
+              onActivate={() => setMetricStyle("temperature", { fontFamily: "" })}
+              onRasterFontChange={setRasterFont}
+              onComponentRasterFontChange={(rasterFont) => setMetricStyle("temperature", { rasterFont })}
+            />
             <label className="field">
-              Temperature color
+              Temperature tint
               <span className="watchface-color-control">
                 <input
                   type="color"
@@ -2211,26 +5180,26 @@ export function WatchfaceEditor({
                   disabled={!design.metricStyles?.temperature?.color}
                   onClick={() => clearMetricColor("temperature")}
                 >
-                  Use default
+                  Remove tint
                 </button>
               </span>
             </label>
-            <label className="field watchface-zoom-control">
-              Temperature size <span>{(design.metricStyles?.temperature?.scale ?? 1).toFixed(2)}×</span>
-              <input
-                type="range"
-                min="0.5"
-                max="2"
-                step="0.02"
+            <label className="field">
+              Temperature sprite scale
+              <EditableNumberInput
+                min="0.01"
+                step="0.01"
                 value={design.metricStyles?.temperature?.scale ?? 1}
-                onChange={(event) => setMetricStyle("temperature", { scale: Number(event.target.value) })}
+                fallback={1}
+                onValueChange={(value) =>
+                  setMetricStyle("temperature", { scale: Math.max(0.01, value) })
+                }
               />
             </label>
           </>
         ) : null}
         {baseIconPosition ? (
-          <div className="watchface-inspector-position">
-            <span>Selector icon screen position</span>
+          renderPositionPanel("complication", "Selector icon position", <>
             <div className="watchface-position-inputs">
               <label>
                 X
@@ -2266,7 +5235,7 @@ export function WatchfaceEditor({
               </label>
             </div>
             <span>Fine tune (1 px)</span>
-            <div className="watchface-nudge-pad">
+            <div className="watchface-nudge-pad wf-position-nudge-only">
               <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy - fromWatchCoordinate(1))} aria-label="Nudge selector icon up">↑</button>
               <button type="button" onClick={() => setIconOffset(iconOffset.dx - fromWatchCoordinate(1), iconOffset.dy)} aria-label="Nudge selector icon left">←</button>
               <button type="button" onClick={() => setIconOffset(iconOffset.dx + fromWatchCoordinate(1), iconOffset.dy)} aria-label="Nudge selector icon right">→</button>
@@ -2277,7 +5246,7 @@ export function WatchfaceEditor({
               This moves only the {selectedComplication?.label.toLowerCase()} icon.
               Move the Selectable metric layer to reposition its icon and value together.
             </p>
-          </div>
+          </>)
         ) : null}
         <p className="watchface-studio-summary">
           Temperature exports only through control_temperature_* and
@@ -2317,6 +5286,45 @@ export function WatchfaceEditor({
     );
   }
 
+  function renderLayerPositionLockButton(id: string, label: string) {
+    if (!isMovableSelectionId(id)) return null;
+    const locked = isPositionLocked(id);
+    return (
+      <button
+        type="button"
+        className={`watchface-layer-lock${locked ? " is-locked" : ""}`}
+        aria-label={`${locked ? "Unlock" : "Lock"} ${label} position`}
+        aria-pressed={locked}
+        title={locked ? "Unlock position" : "Lock position"}
+        onClick={() => setLayerPositionLocked(id, !locked)}
+      >
+        {locked ? <Lock size={15} /> : <Unlock size={15} />}
+      </button>
+    );
+  }
+
+  function renderPositionPanel(
+    id: string,
+    title: string,
+    children: ReactNode,
+    helper?: ReactNode
+  ) {
+    return (
+      <div className="watchface-inspector-position">
+        <div className="wf-position-heading">
+          <span>{title}</span>
+        </div>
+        <fieldset
+          className="wf-position-controls"
+          disabled={isMovementLockedForId(id)}
+        >
+          {children}
+        </fieldset>
+        {helper ? <div className="wf-position-help">{helper}</div> : null}
+      </div>
+    );
+  }
+
   function renderPositionReadout(layer: EditorLayer) {
     if (!layer.capabilities.position || !layer.layoutGroupId) {
       return null;
@@ -2332,7 +5340,8 @@ export function WatchfaceEditor({
     );
     const clamp = (value: number, minimum: number, maximum: number) =>
       Math.max(minimum, Math.min(maximum, Math.round(value)));
-    const setOffset = (dx: number, dy: number) =>
+    const setOffset = (dx: number, dy: number) => {
+      if (isMovementLockedForId(layer.id)) return;
       setDesign((prev) => {
         return {
           ...prev,
@@ -2353,6 +5362,7 @@ export function WatchfaceEditor({
           }
         };
       });
+    };
     const alignX = (position: "start" | "center" | "end") => {
       const min = limits?.minDx ?? -fallbackLimit;
       const max = limits?.maxDx ?? fallbackLimit;
@@ -2363,9 +5373,7 @@ export function WatchfaceEditor({
       const max = limits?.maxDy ?? fallbackLimit;
       setOffset(offset.dx, position === "start" ? min : position === "end" ? max : (min + max) / 2);
     };
-    return (
-      <div className="watchface-inspector-position">
-        <span>Watch screen position</span>
+    return renderPositionPanel(layer.id, "Watch screen position", <>
         <div className="watchface-position-inputs">
           <label>
             X
@@ -2419,7 +5427,10 @@ export function WatchfaceEditor({
             <button type="button" className="watchface-nudge-reset" onClick={() => setOffset(0, 0)}>Reset</button>
           ) : null}
         </div>
-      </div>
+      </>,
+      <p className="watchface-studio-summary">
+        This element is drawn live by the watch. Drag it on the face to reposition it.
+      </p>
     );
   }
 
@@ -2432,6 +5443,7 @@ export function WatchfaceEditor({
       halfHeight: Math.max(24, size * 1.15) / 2
     });
     const setPosition = (x: number, y: number, size = separator.size) => {
+      if (isMovementLockedForId(separatorId === "colon" ? "staticColon" : "staticDateSlash")) return;
       const { halfWidth, halfHeight } = boundsForSize(size);
       updateStaticSeparator(separatorId, {
         x: Math.round(Math.max(halfWidth, Math.min(faceWidth - halfWidth, x))),
@@ -2495,7 +5507,7 @@ export function WatchfaceEditor({
           />
         </label>
         <label className="field">
-          Color
+          Tint
           <span className="watchface-color-control">
             <input
               type="color"
@@ -2511,12 +5523,14 @@ export function WatchfaceEditor({
                 updateStaticSeparator(separatorId, { color: design.digitColor })
               }
             >
-              Use default
+              Remove tint
             </button>
           </span>
         </label>
-        <div className="watchface-inspector-position">
-          <span>Watch screen position</span>
+        {renderPositionPanel(
+          separatorId === "colon" ? "staticColon" : "staticDateSlash",
+          "Watch screen position",
+          <>
           <div className="watchface-position-inputs">
             <label>
               X
@@ -2555,7 +5569,8 @@ export function WatchfaceEditor({
             <button type="button" onClick={() => setPosition(separator.x + fromWatchCoordinate(1), separator.y)} aria-label="Nudge right">→</button>
             <button type="button" onClick={() => setPosition(separator.x, separator.y + fromWatchCoordinate(1))} aria-label="Nudge down">↓</button>
           </div>
-        </div>
+          </>
+        )}
         <p className="watchface-studio-summary">
           Enable it, then drag its outline on the face or use the exact controls.
         </p>
@@ -2576,6 +5591,7 @@ export function WatchfaceEditor({
       height: capability.icon.height * scale
     });
     const setPosition = (x: number, y: number, scale = indicator.scale) => {
+      if (isMovementLockedForId("ampm")) return;
       const { width, height } = boundsForScale(scale);
       updateAmPmIndicator({
         x: Math.round(Math.max(0, Math.min(faceWidth - width, x))),
@@ -2624,23 +5640,23 @@ export function WatchfaceEditor({
           onChange={(fontFamily) => updateAmPmIndicator({ fontFamily })}
         />
         <label className="field">
-          Color
+          Tint
           <span className="watchface-color-control">
             <input
               type="color"
-              value={indicator.color}
+              value={indicator.color ?? design.digitColor}
               onChange={(event) =>
                 updateAmPmIndicator({ color: event.target.value })
               }
             />
-            <code>{indicator.color}</code>
+            <code>{indicator.color ?? "Template colors"}</code>
             <button
               type="button"
               className="watchface-color-none"
-              disabled={indicator.color === design.digitColor}
-              onClick={() => updateAmPmIndicator({ color: design.digitColor })}
+              disabled={!indicator.color}
+              onClick={() => updateAmPmIndicator({ color: undefined })}
             >
-              Use default
+              Remove tint
             </button>
           </span>
         </label>
@@ -2659,8 +5675,7 @@ export function WatchfaceEditor({
             }}
           />
         </label>
-        <div className="watchface-inspector-position">
-          <span>Watch screen position</span>
+        {renderPositionPanel("ampm", "Watch screen position", <>
           <div className="watchface-position-inputs">
             <label>
               X
@@ -2703,7 +5718,7 @@ export function WatchfaceEditor({
             <button type="button" onClick={() => setPosition(indicator.x + fromWatchCoordinate(1), indicator.y)} aria-label="Nudge right">→</button>
             <button type="button" onClick={() => setPosition(indicator.x, indicator.y + fromWatchCoordinate(1))} aria-label="Nudge down">↓</button>
           </div>
-        </div>
+        </>)}
         <p className="watchface-studio-summary">
           The watch automatically swaps this sprite between AM and PM in 12-hour mode.
         </p>
@@ -2724,6 +5739,7 @@ export function WatchfaceEditor({
       height: capability.size.height * scale
     });
     const setPosition = (x: number, y: number, scale = indicator.scale) => {
+      if (isMovementLockedForId("weather")) return;
       const { width, height } = boundsForScale(scale);
       updateWeatherIndicator({
         x: Math.round(Math.max(0, Math.min(faceWidth - width, x))),
@@ -2764,6 +5780,27 @@ export function WatchfaceEditor({
           />
           Show weather icon
         </label>
+        <label className="field">
+          Tint
+          <span className="watchface-color-control">
+            <input
+              type="color"
+              value={indicator.color ?? design.accentColor}
+              onChange={(event) =>
+                updateWeatherIndicator({ color: event.target.value })
+              }
+            />
+            <code>{indicator.color ?? "Template colors"}</code>
+            <button
+              type="button"
+              className="watchface-color-none"
+              disabled={!indicator.color}
+              onClick={() => updateWeatherIndicator({ color: undefined })}
+            >
+              Remove tint
+            </button>
+          </span>
+        </label>
         <label className="field watchface-zoom-control">
           Size <span>{indicator.scale.toFixed(2)}×</span>
           <input
@@ -2779,8 +5816,7 @@ export function WatchfaceEditor({
             }}
           />
         </label>
-        <div className="watchface-inspector-position">
-          <span>Watch screen position</span>
+        {renderPositionPanel("weather", "Watch screen position", <>
           <div className="watchface-position-inputs">
             <label>
               X
@@ -2829,7 +5865,7 @@ export function WatchfaceEditor({
             <button type="button" onClick={() => setPosition(indicator.x + fromWatchCoordinate(1), indicator.y)} aria-label="Nudge right">→</button>
             <button type="button" onClick={() => setPosition(indicator.x, indicator.y + fromWatchCoordinate(1))} aria-label="Nudge down">↓</button>
           </div>
-        </div>
+        </>)}
         <p className="watchface-studio-summary">
           The editor previews the sunny state. The watch automatically swaps among all 41 weather states.
         </p>
@@ -2960,8 +5996,7 @@ export function WatchfaceEditor({
           </>
         ) : null}
 
-        <div className="watchface-inspector-position">
-          <span>Background position</span>
+        {renderPositionPanel(`bgel:${element.id}`, "Background position", <>
           <div className="watchface-position-inputs">
             <label>
               X
@@ -3001,7 +6036,7 @@ export function WatchfaceEditor({
             <button type="button" aria-label="Nudge shape down" onClick={() => set({ y: element.y + 1 })}>↓</button>
             <button type="button" className="watchface-nudge-reset" onClick={() => set({ x: BACKGROUND_SPACE / 2, y: BACKGROUND_SPACE / 2 })}>Reset</button>
           </div>
-        </div>
+        </>)}
 
         <label className="field watchface-zoom-control">
           Rotation <span>{element.rotation}°</span>

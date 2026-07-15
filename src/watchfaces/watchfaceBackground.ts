@@ -19,16 +19,17 @@ export const DEFAULT_AMPM_STYLE: WatchfaceAmPmStyle = {
   enabled: false,
   x: 480,
   y: 360,
-  scale: 1,
-  color: "#ffffff"
+  scale: 1
 };
 
 /** A blank design used when the editor opens without a saved project. */
 export function makeDefaultDesign(): CorosWatchfaceDesignState {
   return {
     version: 1,
+    backgroundColor: "#000000",
     accentColor: "#51e0b5",
     artwork: null,
+    artworkVisible: true,
     zoom: 1,
     fontFamily: "",
     fontWeight: 400,
@@ -41,6 +42,7 @@ export function makeDefaultDesign(): CorosWatchfaceDesignState {
     metricChanges: {},
     metricStyles: {},
     controlIconOffsets: {},
+    separateAutoTime: false,
     timeStyles: {},
     dateStyles: {},
     staticSeparators: {
@@ -50,8 +52,11 @@ export function makeDefaultDesign(): CorosWatchfaceDesignState {
     ampmIndicator: { ...DEFAULT_AMPM_STYLE },
     weatherIndicator: undefined,
     layoutOffsets: {},
+    linkedLayerGroups: [],
+    lockedLayerIds: [],
     layerVisibility: {},
     layerColors: {},
+    configAssetOverrides: {},
     designSprites: []
   };
 }
@@ -76,10 +81,18 @@ export async function renderDesignBackground(
   }
   const size = CREATOR_CANVAS_SIZE;
 
-  context.clearRect(0, 0, size, size);
+  if (design.backgroundColor !== "transparent") {
+    context.fillStyle = design.backgroundColor ?? "#000000";
+    context.fillRect(0, 0, size, size);
+  }
 
-  if (design.artwork) {
-    const image = await loadStudioImage(design.artwork.dataUrl).catch(() => undefined);
+  const backgroundOverride = design.configAssetOverrides?.["config:background_icon"];
+  const backgroundArtwork = design.artworkVisible === false
+    ? null
+    : backgroundOverride?.replacement ?? design.artwork;
+
+  if (backgroundArtwork) {
+    const image = await loadStudioImage(backgroundArtwork.dataUrl).catch(() => undefined);
     if (image) {
       const scale =
         Math.max(size / image.naturalWidth, size / image.naturalHeight) * design.zoom;

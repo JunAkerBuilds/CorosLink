@@ -2,7 +2,9 @@
   color-scheme: dark;
 
   /* Per-sport activity colors. Overridden at runtime from localStorage via
-     applySportColors(); customizable in Settings → Activity colors. */
+     applySportColors(); customizable in Settings → Activity colors.
+     Mirrors DEFAULT_SPORT_COLORS in src/training/sportColors.ts (the source
+     of truth) — test:sport-colors asserts the two stay in sync. */
   --sport-strength: #e5484d;
   --sport-trail: #4c8dff;
   --sport-run: #2fbe91;
@@ -350,6 +352,19 @@ input::placeholder {
   border-color: var(--glass-border);
   background: var(--glass-bg);
   color: var(--text-secondary);
+}
+
+.app-dev-update-test {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-color: color-mix(in srgb, var(--accent-gold) 48%, var(--glass-border));
+  background: color-mix(in srgb, var(--accent-gold) 13%, var(--glass-bg));
+}
+
+.app-dev-update-test:hover {
+  border-color: color-mix(in srgb, var(--accent-gold) 72%, var(--glass-border));
+  background: color-mix(in srgb, var(--accent-gold) 20%, var(--glass-bg));
 }
 
 .app-body {
@@ -1111,6 +1126,214 @@ input::placeholder {
   font-size: 12px;
   line-height: 1.35;
   color: var(--text-secondary);
+}
+
+.update-prompt-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: rgba(2, 5, 8, 0.68);
+  -webkit-backdrop-filter: blur(12px) saturate(125%);
+  backdrop-filter: blur(12px) saturate(125%);
+}
+
+.update-prompt {
+  width: min(620px, 100%);
+  max-height: min(720px, calc(100vh - 56px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--glass-border));
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 12% 0%, var(--accent-soft), transparent 34%),
+    color-mix(in srgb, var(--bg-base) 94%, var(--glass-bg-elevated));
+  box-shadow:
+    0 34px 90px rgba(0, 0, 0, 0.58),
+    var(--glass-inset);
+}
+
+.update-prompt-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 26px 28px 20px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.update-prompt-icon {
+  width: 46px;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  border-radius: 15px;
+  background: var(--accent-gradient);
+  color: #ffffff;
+  box-shadow: 0 12px 28px var(--accent-glow);
+}
+
+.update-prompt-eyebrow {
+  margin: 0 0 3px;
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.update-prompt-header h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(22px, 3vw, 28px);
+  line-height: 1.15;
+}
+
+.update-prompt-header div > p:last-child {
+  margin: 7px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.update-prompt-changelog {
+  min-height: 120px;
+  max-height: 360px;
+  overflow-y: auto;
+  margin: 20px 28px;
+  padding: 18px 20px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--glass-bg) 72%, transparent);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  scrollbar-color: var(--glass-border) transparent;
+}
+
+.update-prompt-changelog:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.update-prompt-changelog > :first-child {
+  margin-top: 0;
+}
+
+.update-prompt-changelog > :last-child {
+  margin-bottom: 0;
+}
+
+.update-prompt-changelog h1,
+.update-prompt-changelog h2,
+.update-prompt-changelog h3 {
+  margin: 18px 0 8px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.update-prompt-changelog p,
+.update-prompt-changelog ul,
+.update-prompt-changelog ol {
+  margin: 0 0 10px;
+}
+
+.update-prompt-changelog ul,
+.update-prompt-changelog ol {
+  padding-left: 20px;
+}
+
+.update-prompt-changelog li + li {
+  margin-top: 5px;
+}
+
+.update-prompt-changelog a {
+  color: var(--accent-strong);
+}
+
+.update-prompt-changelog code {
+  border-radius: 5px;
+  background: var(--glass-bg-elevated);
+  color: var(--text-primary);
+  padding: 1px 5px;
+  font-size: 0.92em;
+}
+
+.update-prompt-changelog pre {
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.24);
+  padding: 12px;
+}
+
+.update-prompt-changelog pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.update-prompt-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 28px 26px;
+}
+
+.update-prompt-footer > p {
+  max-width: 300px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.update-prompt-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.update-prompt-actions .primary-button,
+.update-prompt-actions .secondary-button {
+  min-height: 40px;
+}
+
+@media (max-width: 600px) {
+  .update-prompt-backdrop {
+    padding: 14px;
+  }
+
+  .update-prompt-header {
+    padding: 22px 20px 18px;
+  }
+
+  .update-prompt-changelog {
+    margin: 16px 20px;
+  }
+
+  .update-prompt-footer {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 0 20px 20px;
+  }
+
+  .update-prompt-footer > p {
+    max-width: none;
+  }
+
+  .update-prompt-actions > button {
+    flex: 1;
+  }
 }
 
 .resources-menu {
@@ -11879,7 +12102,9 @@ td span {
 .training-heatmap-cell {
   /* Base hue for the day; overridden inline per cell with the dominant sport
      color so intensity (level) and sport (hue) compose. Falls back to the
-     original green when a day has load but no matching activity. */
+     original green when a day has load but no matching activity — this is the
+     legacy pre-sport-colors heatmap green, intentionally not a --sport-* value
+     (and intentionally distinct from --sport-run). */
   --cell-color: #2d9a74;
   position: relative;
   width: 100%;
@@ -22632,9 +22857,31 @@ tr.data-intervals-row-missing {
 }
 
 .settings-sport-hint {
-  margin: 4px 0 12px;
+  max-width: 760px;
+  margin: 7px 0 14px;
   color: var(--text-muted);
   font-size: 13px;
+  line-height: 1.5;
+}
+.settings-sport-panel {
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 56%),
+    var(--glass-bg);
+}
+.settings-sport-heading {
+  align-items: flex-start;
+}
+.settings-sport-heading h2 {
+  margin-top: 3px;
+  font-size: clamp(21px, 2.2vw, 26px);
+  letter-spacing: -0.025em;
+}
+.settings-sport-heading .secondary-button {
+  min-height: 36px;
+  padding-inline: 12px;
+  white-space: nowrap;
 }
 .settings-sport-list {
   list-style: none;
@@ -22642,39 +22889,128 @@ tr.data-intervals-row-missing {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .settings-sport-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 11px;
+  min-height: 64px;
+  padding: 8px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease;
 }
-.settings-sport-preview {
+.settings-sport-row:hover {
+  border-color: color-mix(in srgb, var(--sport-color) 34%, var(--glass-border));
+  background: color-mix(in srgb, var(--sport-color) 5%, var(--glass-bg-hover));
+  transform: translateY(-1px);
+}
+.settings-sport-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--sport-color) 55%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--sport-color) 13%, transparent);
+  color: var(--sport-color);
+}
+.settings-sport-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.settings-sport-copy strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.3;
+}
+.settings-sport-copy > span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-sport-picker {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: 14px;
+  gap: 9px;
+  min-width: 164px;
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 5px 10px 5px 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+.settings-sport-picker:hover {
+  border-color: var(--glass-border);
+  background: var(--glass-bg-hover);
+}
+.settings-sport-picker:has(.settings-sport-input:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--sport-color) 65%, white);
+  outline-offset: 2px;
 }
 .settings-sport-swatch {
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
+  width: 40px;
+  height: 32px;
+  border: 3px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-sm);
   background: var(--sport-color);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.24) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.16);
+}
+.settings-sport-hex {
+  min-width: 62px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
 }
 .settings-sport-input {
-  flex: 0 0 auto;
-  width: 44px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-sm);
-  background: transparent;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  opacity: 0;
   cursor: pointer;
+}
+.settings-sport-tip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  padding: 10px 13px;
+  color: var(--text-muted);
+}
+.settings-sport-tip svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.settings-sport-tip p {
+  margin: 0;
+  font-size: 13px;
+}
+.settings-sport-tip strong {
+  color: var(--text-secondary);
 }
 
 .settings-about-panel {
@@ -22775,6 +23111,125 @@ tr.data-intervals-row-missing {
   color: var(--accent);
 }
 
+.settings-storage-panel {
+  padding: 20px;
+}
+
+.settings-storage-panel > .eyebrow {
+  margin: 0 0 10px;
+}
+
+.settings-storage-link {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  padding: 12px 14px;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.settings-storage-link:hover {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--glass-border));
+  background: var(--glass-bg-hover);
+  transform: translateY(-1px);
+}
+
+.settings-storage-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.settings-storage-link-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--glass-border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.settings-storage-link-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-storage-link-copy strong {
+  font-size: 15px;
+}
+
+.settings-storage-link-copy > span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-storage-link-chevron {
+  color: var(--text-muted);
+}
+
+.settings-subpage {
+  gap: 12px;
+}
+
+.settings-subpage-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: flex-start;
+  min-height: 36px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  padding: 0 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.settings-subpage-back:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--glass-border));
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-subpage-back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.settings-storage-detail-panel {
+  padding: 24px;
+}
+
+.settings-storage-detail-heading {
+  align-items: flex-start;
+}
+
+.settings-subpage-description {
+  max-width: 620px;
+  margin: 7px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .settings-storage-list {
   list-style: none;
   display: flex;
@@ -22841,6 +23296,35 @@ tr.data-intervals-row-missing {
 }
 
 @media (max-width: 720px) {
+  .settings-sport-panel {
+    padding: 18px;
+  }
+
+  .settings-sport-heading {
+    gap: 14px;
+  }
+
+  .settings-sport-row {
+    grid-template-columns: 42px minmax(0, 1fr);
+    min-height: 0;
+    padding: 12px;
+  }
+
+  .settings-sport-icon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .settings-sport-picker {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .settings-sport-picker svg {
+    margin-left: auto;
+  }
+
   .settings-about-header {
     flex-wrap: wrap;
   }
@@ -22848,6 +23332,26 @@ tr.data-intervals-row-missing {
   .settings-storage-row {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .settings-storage-panel {
+    padding: 18px;
+  }
+
+  .settings-storage-detail-panel {
+    padding: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-sport-row,
+  .settings-storage-link {
+    transition: none;
+  }
+
+  .settings-sport-row:hover,
+  .settings-storage-link:hover {
+    transform: none;
   }
 }
 

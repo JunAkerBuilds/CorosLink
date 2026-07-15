@@ -25,6 +25,39 @@ export const APEX_PRO_BYTES = PACE_PRO_BYTES;
 export const APEX_BYTES = PACE_4_BYTES;
 export const PACE_2_BYTES = PACE_4_BYTES;
 
+export interface WatchfaceDeviceProfile {
+  firmwareType: string;
+  /** Optional x-model-version header. Empty avoids sending another watch's version. */
+  modelVersion?: string;
+}
+
+const WATCHFACE_DEVICE_PROFILES: Partial<
+  Record<WatchModelId, WatchfaceDeviceProfile>
+> = {
+  "pace-pro": {
+    firmwareType: "COROS W332",
+    modelVersion: "W332-3.1708.0"
+  },
+  "apex-4": {
+    firmwareType: "COROS W541"
+  }
+};
+
+export function getWatchfaceDeviceProfile(
+  model?: WatchModelId
+): WatchfaceDeviceProfile | undefined {
+  return model ? WATCHFACE_DEVICE_PROFILES[model] : undefined;
+}
+
+export function getWatchfaceDeviceProfileByFirmware(
+  firmwareType: string
+): WatchfaceDeviceProfile | undefined {
+  const normalized = firmwareType.trim().toUpperCase();
+  return Object.values(WATCHFACE_DEVICE_PROFILES).find(
+    (profile) => profile?.firmwareType.toUpperCase() === normalized
+  );
+}
+
 export function normalizeVolumeName(name?: string): string {
   return (name ?? "")
     .trim()

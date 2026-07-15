@@ -11,6 +11,11 @@ import pace4Hero from "../public/assets/pace-4-hero.webp";
 import paceProHero from "../public/assets/pace-pro-hero.webp";
 import vertix2Hero from "../public/assets/vertix-2-hero.webp";
 import vertix2sHero from "../public/assets/vertix-2s-hero.webp";
+export {
+  getWatchfaceDeviceProfile,
+  getWatchfaceDeviceProfileByFirmware,
+  type WatchfaceDeviceProfile
+} from "../electron/watchModels";
 
 export const PACE_PRO_BYTES = 32 * 1024 * 1024 * 1024;
 export const PACE_4_BYTES = 4 * 1024 * 1024 * 1024;

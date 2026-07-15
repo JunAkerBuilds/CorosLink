@@ -12,6 +12,8 @@ import {
   buildControlTemperatureOverrides,
   buildControlTemperatureSpriteReplacements,
   buildControlIconPositionOverrides,
+  buildWatchfaceConfigAssetOverrides,
+  buildWatchfaceConfigAssetReplacements,
   buildDateSpriteReplacements,
   buildDateStyleOverrides,
   buildLayerVisibilityOverrides,
@@ -21,6 +23,7 @@ import {
   buildMetricOverrides,
   buildMetricSpriteReplacements,
   buildMetricStyleOverrides,
+  buildSeparateTimeOverrides,
   buildStaticSeparatorOverrides,
   buildStudioReplacements,
   buildTimeSpriteReplacements,
@@ -49,6 +52,7 @@ import {
  * metric-toggle and component-style overrides so element bounds move correctly.
  */
 export interface DesignDetails {
+  timeFormatOverrides: CorosWatchfaceConfigOverride[];
   metricOverrides: CorosWatchfaceConfigOverride[];
   metricDetails: CorosWatchfaceTemplateDetails;
   styledMetricDetails: CorosWatchfaceTemplateDetails;
@@ -100,6 +104,7 @@ export function toStudioOptions(
     timeStyles: timeStylesOf(design),
     dateStyles: dateStylesOf(design),
     layerColors: design.layerColors ?? {},
+    configAssetOverrides: design.configAssetOverrides ?? {},
     ampmStyle: design.ampmIndicator
   };
 }
@@ -112,8 +117,22 @@ export function deriveDesignDetails(
   details: CorosWatchfaceTemplateDetails,
   design: CorosWatchfaceDesignState
 ): DesignDetails {
-  const metricOverrides = buildMetricOverrides(details, design.metricChanges ?? {});
-  const metricDetails = applyConfigOverridesToDetails(details, metricOverrides);
+  const timeFormatOverrides = buildSeparateTimeOverrides(
+    details,
+    design.separateAutoTime === true
+  );
+  const timeFormatDetails = applyConfigOverridesToDetails(
+    details,
+    timeFormatOverrides
+  );
+  const metricOverrides = buildMetricOverrides(
+    timeFormatDetails,
+    design.metricChanges ?? {}
+  );
+  const metricDetails = applyConfigOverridesToDetails(
+    timeFormatDetails,
+    metricOverrides
+  );
   const controlTemperatureStyle = metricStylesOf(design).temperature ?? {
     color: design.digitColor,
     scale: 1
@@ -127,7 +146,11 @@ export function deriveDesignDetails(
     buildDateStyleOverrides(metricDetails, dateStylesOf(design)),
     buildLayerColorOverrides(metricDetails, design.layerColors ?? {}),
     buildControlIconPositionOverrides(metricDetails, design.controlIconOffsets ?? {}),
-    buildStaticSeparatorOverrides(details, design.staticSeparators)
+    buildStaticSeparatorOverrides(details, design.staticSeparators),
+    buildWatchfaceConfigAssetOverrides(
+      details,
+      design.configAssetOverrides ?? {}
+    )
   );
   const styledMetricDetails = applyConfigOverridesToDetails(
     metricDetails,
@@ -139,9 +162,15 @@ export function deriveDesignDetails(
   );
   const previewDetails = applyConfigOverridesToDetails(
     laidOutDetails,
-    buildLayerVisibilityOverrides(details, design.layerVisibility ?? {})
+    buildLayerVisibilityOverrides(laidOutDetails, design.layerVisibility ?? {})
   );
-  return { metricOverrides, metricDetails, styledMetricDetails, previewDetails };
+  return {
+    timeFormatOverrides,
+    metricOverrides,
+    metricDetails,
+    styledMetricDetails,
+    previewDetails
+  };
 }
 
 function hasEntries(record: Record<string, unknown> | undefined): boolean {
@@ -164,7 +193,12 @@ export async function composeWatchfaceReplacements(
   design: CorosWatchfaceDesignState,
   loadAssets: WatchfaceAssetLoader
 ): Promise<WatchfaceComposeResult> {
-  const { metricOverrides, metricDetails, styledMetricDetails } =
+  const {
+    timeFormatOverrides,
+    metricOverrides,
+    metricDetails,
+    styledMetricDetails
+  } =
     deriveDesignDetails(details, design);
   const metricStyles = metricStylesOf(design);
   const timeStyles = timeStylesOf(design);
@@ -195,6 +229,7 @@ export async function composeWatchfaceReplacements(
     controlTemperatureStyle.fontFamily ||
     design.fontFamily ||
     rasterFontActive ||
+    rasterFontSupportsText(controlTemperatureStyle.rasterFont, "0123456789") ||
     controlTemperatureStyle.scale !== 1
   );
 
@@ -222,7 +257,7 @@ export async function composeWatchfaceReplacements(
       : [],
     timeStyleActive
       ? await buildTimeSpriteReplacements(
-          details,
+          metricDetails,
           timeStyles,
           design.fontFamily,
           loadAssets,
@@ -244,6 +279,10 @@ export async function composeWatchfaceReplacements(
           loadAssets
         )
       : [],
+    await buildWatchfaceConfigAssetReplacements(
+      details,
+      design.configAssetOverrides ?? {}
+    ),
     ampmActive ? await buildAmPmSpriteReplacements(details, ampmStyle!, loadAssets) : [],
     weatherStyle?.enabled
       ? await buildWeatherSpriteReplacements(details, weatherStyle)
@@ -251,7 +290,7 @@ export async function composeWatchfaceReplacements(
   );
 
   const timeStyleOverrides = timeStyleActive
-    ? buildTimeStyleOverrides(details, timeStyles, true)
+    ? buildTimeStyleOverrides(metricDetails, timeStyles, true)
     : [];
   const timePositionDetails = applyConfigOverridesToDetails(
     styledMetricDetails,
@@ -268,11 +307,22 @@ export async function composeWatchfaceReplacements(
     timePositionDetails,
     timeTrackingOverrides
   );
+  const layoutOverrides = layoutIsActive(design)
+    ? buildLayoutOverrides(layoutDetails, design.layoutOffsets ?? {})
+    : [];
+  // Battery canvas scaling adjusts battery_icon_pos. Apply that adjustment to
+  // the already-positioned layout so export preserves the same position shown
+  // in the preview instead of overwriting the user's layout offset.
+  const configAssetPositionDetails = applyConfigOverridesToDetails(
+    layoutDetails,
+    layoutOverrides
+  );
 
   const configOverrides = rebaseNegativeControlChildren(
     details,
     mergeConfigOverrides(
       metricOverrides,
+      timeFormatOverrides,
       metricStyleActive ? buildMetricStyleOverrides(metricDetails, metricStyles, true) : [],
       controlTemperatureActive
         ? buildControlTemperatureOverrides(
@@ -289,10 +339,13 @@ export async function composeWatchfaceReplacements(
       buildStaticSeparatorOverrides(details, design.staticSeparators),
       ampmSupported ? buildAmPmOverrides(details, ampmStyle!) : [],
       weatherStyle ? buildWeatherOverrides(details, weatherStyle) : [],
-      layoutIsActive(design)
-        ? buildLayoutOverrides(layoutDetails, design.layoutOffsets ?? {})
-        : [],
-      buildLayerVisibilityOverrides(details, design.layerVisibility ?? {})
+      layoutOverrides,
+      buildLayerVisibilityOverrides(details, design.layerVisibility ?? {}),
+      buildWatchfaceConfigAssetOverrides(
+        configAssetPositionDetails,
+        design.configAssetOverrides ?? {},
+        true
+      )
     )
   );
 

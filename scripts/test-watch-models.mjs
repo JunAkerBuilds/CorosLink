@@ -10,7 +10,12 @@ const modelsUrl = pathToFileURL(
 const FOUR_GB = 4 * 1024 * 1024 * 1024;
 const THIRTY_TWO_GB = 32 * 1024 * 1024 * 1024;
 
-const { normalizeVolumeName, resolveWatchModel } = await import(
+const {
+  getWatchfaceDeviceProfile,
+  getWatchfaceDeviceProfileByFirmware,
+  normalizeVolumeName,
+  resolveWatchModel
+} = await import(
   `${modelsUrl.href}?cacheBust=${Date.now()}`
 );
 
@@ -77,5 +82,16 @@ assert.equal(normalizeVolumeName("  coros apex-2  "), "APEX 2");
 assert.equal(resolveWatchModel("COROS PACE", FOUR_GB), undefined);
 assert.equal(resolveWatchModel("UNKNOWN", FOUR_GB), undefined);
 assert.equal(resolveWatchModel("UNKNOWN", THIRTY_TWO_GB), undefined);
+
+assert.deepEqual(getWatchfaceDeviceProfile("apex-4"), {
+  firmwareType: "COROS W541"
+});
+assert.deepEqual(getWatchfaceDeviceProfile("pace-pro"), {
+  firmwareType: "COROS W332",
+  modelVersion: "W332-3.1708.0"
+});
+assert.deepEqual(getWatchfaceDeviceProfileByFirmware("coros w541"), {
+  firmwareType: "COROS W541"
+});
 
 console.log("Watch model resolution tests passed.");

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- One-time update prompt with release notes, explicit update confirmation, and per-version dismissal when choosing **Not now**
+- Full in-app changelog covering every newer release when updating across multiple versions
+- Development-only **Test update** control for previewing the complete update prompt without downloading or restarting
+
 ## [0.1.17] - 2026-07-13
 
 ### Added
