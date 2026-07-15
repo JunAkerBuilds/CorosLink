@@ -113,11 +113,9 @@ export function TrainingHeatmapPanel({
     () => buildHeatmapCells(dayList, TRAINING_HEATMAP_DAYS, metric),
     [dayList, metric]
   );
-  // RPE data may still be backfilling; note whether any day has an sRPE load.
-  const hasRpeData = useMemo(
-    () => dayList.some((day) => (day.rpeLoad ?? 0) > 0),
-    [dayList]
-  );
+  // RPE feelTypes may still be backfilling from the COROS detail endpoint.
+  const rpeBackfillActive =
+    rpeBackfill !== null && (rpeBackfill.pending > 0 || rpeBackfill.running);
   const grid = useMemo(() => buildHeatmapGrid(cells), [cells]);
   const summary = useMemo(() => buildHeatmapSummary(cells), [cells]);
   // Color each day by the sport of that day's highest-training-load activity.
@@ -189,7 +187,7 @@ export function TrainingHeatmapPanel({
         </div>
       </div>
 
-      {isRpe && rpeBackfill && (rpeBackfill.pending > 0 || rpeBackfill.running) ? (
+      {isRpe && rpeBackfill && rpeBackfillActive ? (
         <div className="training-heatmap-loading" role="status">
           <Loader2 size={14} className="spin" aria-hidden="true" />
           <span>
@@ -355,9 +353,9 @@ export function TrainingHeatmapPanel({
           <CalendarDays size={22} aria-hidden="true" />
           <p>
             {isRpe
-              ? hasRpeData
-                ? "No rated sessions in the last 365 days."
-                : "RPE data is still loading — rate activities in COROS to see it here."
+              ? rpeBackfillActive
+                ? "RPE data is still loading — rate activities in COROS to see it here."
+                : `No rated sessions in the last ${TRAINING_HEATMAP_DAYS} days.`
               : `No training data in the last ${TRAINING_HEATMAP_DAYS} days.`}
           </p>
         </div>

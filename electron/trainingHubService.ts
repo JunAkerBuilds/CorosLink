@@ -585,7 +585,10 @@ export async function getRacePredictor(): Promise<TrainingHubRacePredictor> {
 }
 
 // Pull sportFeelInfo.feelType out of a raw /activity/detail payload and cache
-// it (0 = the user left it unrated; 1..5 = a smiley). Best-effort.
+// it (0 = the user left it unrated; 1..5 = a smiley). The raw payload comes
+// from a successful, envelope-validated response, so a missing/invalid
+// sportFeelInfo genuinely means "never rated" — persist 0 in that case too,
+// otherwise the row stays NULL and the backfill would refetch it forever.
 function cacheFeelTypeFromDetail(
   activityId: string,
   raw: Record<string, unknown>
@@ -593,9 +596,10 @@ function cacheFeelTypeFromDetail(
   try {
     const feelInfo = raw.sportFeelInfo as { feelType?: unknown } | undefined;
     const feelType = toOptionalNumber(feelInfo?.feelType);
-    if (feelType !== undefined && Number.isInteger(feelType)) {
-      setTrainingActivityFeelType(activityId, feelType);
-    }
+    setTrainingActivityFeelType(
+      activityId,
+      feelType !== undefined && Number.isInteger(feelType) ? feelType : 0
+    );
   } catch {
     // best-effort cache; never block the detail request on it.
   }
@@ -605,7 +609,22 @@ const HEATMAP_WINDOW_DAYS = 365;
 // Query pending activities in chunks so the DB read stays small; the whole
 // window is still drained in one background run.
 const FEEL_BACKFILL_CHUNK = 50;
+// Pause between detail fetches: each response is ~1 MB and a full window can
+// be hundreds of activities, so pace the drain instead of hammering COROS.
+const FEEL_BACKFILL_DELAY_MS = 400;
+// Abort the run when the API errors repeatedly (down / rate-limiting us) …
+const FEEL_BACKFILL_MAX_CONSECUTIVE_FAILURES = 5;
+// … and refuse to start another run for a while afterwards.
+const FEEL_BACKFILL_COOLDOWN_MS = 5 * 60 * 1000;
 let feelBackfillRunning = false;
+let feelBackfillCooldownUntil = 0;
+// Activities whose detail fetch failed this session: left NULL in the DB so a
+// future session retries them, but skipped for the rest of this one.
+const feelBackfillFailedIds = new Set<string>();
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function heatmapWindowStartEpochSeconds(): number {
   const start = new Date();
@@ -620,7 +639,10 @@ export function getRpeBackfillStatus(): {
   running: boolean;
 } {
   const since = heatmapWindowStartEpochSeconds();
-  const pending = countTrainingActivitiesMissingFeelType(since);
+  const missing = countTrainingActivitiesMissingFeelType(since);
+  // Failed fetches stay NULL in the DB (a future session retries them) but
+  // won't be refetched this session — report only what can still load now.
+  const pending = Math.max(0, missing - feelBackfillFailedIds.size);
   return { pending, running: feelBackfillRunning };
 }
 
@@ -632,11 +654,13 @@ export function getRpeLoadByDay(): Record<string, number> {
 }
 
 // Fetch feelType for every activity in the heatmap window that was never
-// fetched, draining the queue in one throttled background run. Fire-and-forget;
-// guarded so only one run happens at once. Each detail is ~1 MB and awaited
-// sequentially, so the fetches self-throttle.
+// fetched, draining the queue in one background run paced by
+// FEEL_BACKFILL_DELAY_MS between requests. Fire-and-forget; guarded so only
+// one run happens at once. Transient failures leave the row NULL (retried in
+// a later session), and repeated failures abort the run and start a cooldown
+// so a struggling API isn't hammered.
 export async function backfillFeelTypes(): Promise<void> {
-  if (feelBackfillRunning) {
+  if (feelBackfillRunning || Date.now() < feelBackfillCooldownUntil) {
     return;
   }
   if (!getStoredAuth()) {
@@ -646,16 +670,25 @@ export async function backfillFeelTypes(): Promise<void> {
   try {
     const since = heatmapWindowStartEpochSeconds();
     const userId = getStoredAuth()?.userId;
-    // Re-query each chunk: rows drop out of "missing" as we cache them.
+    // Every activity touched this run, success or failure — filtered out of
+    // each re-query so a row that stays NULL can't wedge the loop.
+    const attempted = new Set<string>();
+    let consecutiveFailures = 0;
+    // Re-query each chunk: rows drop out of "missing" as we cache them. The
+    // limit grows with the skip sets so unattempted rows stay reachable.
     for (;;) {
       const pending = listTrainingActivitiesMissingFeelType(
         since,
-        FEEL_BACKFILL_CHUNK
+        FEEL_BACKFILL_CHUNK + attempted.size + feelBackfillFailedIds.size
+      ).filter(
+        ({ activityId }) =>
+          !attempted.has(activityId) && !feelBackfillFailedIds.has(activityId)
       );
       if (pending.length === 0) {
         break;
       }
       for (const { activityId, sportType } of pending) {
+        attempted.add(activityId);
         try {
           const raw = await trainingHubRequest<Record<string, unknown>>(
             "/activity/detail/query",
@@ -669,15 +702,18 @@ export async function backfillFeelTypes(): Promise<void> {
             }
           );
           cacheFeelTypeFromDetail(activityId, raw);
+          consecutiveFailures = 0;
         } catch {
-          // Mark as attempted (0 = unrated) so a permanently failing activity
-          // doesn't wedge the drain loop into an infinite retry.
-          try {
-            setTrainingActivityFeelType(activityId, 0);
-          } catch {
-            // ignore
+          // Leave the row NULL so the fetch is retried in a future session;
+          // skip it for the rest of this one.
+          feelBackfillFailedIds.add(activityId);
+          consecutiveFailures += 1;
+          if (consecutiveFailures >= FEEL_BACKFILL_MAX_CONSECUTIVE_FAILURES) {
+            feelBackfillCooldownUntil = Date.now() + FEEL_BACKFILL_COOLDOWN_MS;
+            return;
           }
         }
+        await delay(FEEL_BACKFILL_DELAY_MS);
       }
     }
   } finally {
