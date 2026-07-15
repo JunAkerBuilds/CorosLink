@@ -11,10 +11,12 @@ import {
   getUpcomingWorkouts
 } from "./trainingHubService";
 import {
-  callCorosMcpTool,
-  ensureCorosMcpConnected,
-  getCorosMcpTools
-} from "./corosMcpService";
+  callMcpTool,
+  ensureAllMcpConnected,
+  getAllMcpTools,
+  getMcpServerCachedTools
+} from "./mcpClientManager";
+import { prefixToolName } from "./mcpToolNames";
 import {
   getChatWorkoutTools,
   handleChatWorkoutTool,
@@ -603,7 +605,7 @@ export async function streamChat(
         );
       }
 
-      await ensureCorosMcpConnected();
+      await ensureAllMcpConnected();
       const chatTools = getClaudeCodeTools(settings.claudeCode.permissions);
       const { text: instructions, hasData } = await buildTrainingContext(
         settings.claudeCode.permissions
@@ -681,7 +683,7 @@ export async function streamChat(
       const runtimeConfig = getLocalRuntimeConfig(settings.local);
 
       if (runtimeConfig.toolsEnabled) {
-        await ensureCorosMcpConnected();
+        await ensureAllMcpConnected();
       }
       const chatTools = runtimeConfig.toolsEnabled ? getAllChatTools() : getChatWorkoutTools();
       const effectiveInstructions = withLiveCorosToolInstructions(
@@ -751,7 +753,7 @@ export async function streamChat(
 
     // Reconnect a previously-authorized COROS MCP session, then expose its tools
     // to the model as function tools so it can pull data on demand.
-    await ensureCorosMcpConnected();
+    await ensureAllMcpConnected();
     const tools = buildChatFunctionTools();
 
     // When live tools are available, steer the model to use them rather than
@@ -942,7 +944,7 @@ export async function confirmWorkoutDelete(
 
 function getAllChatTools(): CorosMcpTool[] {
   return [
-    ...getCorosMcpTools(),
+    ...getAllMcpTools(),
     ...getChatActivityTools(),
     ...getChatAnalyticsTools(),
     ...getChatWorkoutTools()
@@ -979,9 +981,14 @@ export function getClaudeCodeTools(
     }
   }
 
-  const remoteTools = getCorosMcpTools().filter((tool) =>
-    remoteAllowedNames.has(tool.name)
-  );
+  // COROS remote tools are permission-gated by their (unprefixed) names, then
+  // exposed prefixed. Other MCP servers the user configured are exposed in full.
+  const remoteTools = [
+    ...getMcpServerCachedTools("coros")
+      .filter((tool) => remoteAllowedNames.has(tool.name))
+      .map((tool) => ({ ...tool, name: prefixToolName("coros", tool.name) })),
+    ...getAllMcpTools().filter((tool) => !tool.name.startsWith("coros__"))
+  ];
   const activityTools = permissions.recentActivities
     ? getChatActivityTools()
     : [];
@@ -1086,7 +1093,7 @@ async function executeChatTool(
     }
   }
   try {
-    return await callCorosMcpTool(name, args);
+    return await callMcpTool(name, args);
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : String(caught);
     send("chat:streamInfo", {
