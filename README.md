@@ -522,13 +522,13 @@ Because `better-sqlite3` is native, build Windows installers on Windows or in CI
 1. Prepare the version in `package.json` and `package-lock.json` so they match the tag you are about to create:
 
 ```sh
-npm run release:prepare -- v0.1.17
-git commit -am "chore: release v0.1.17"
-git tag v0.1.17
-git push origin main v0.1.17
+npm run release:prepare -- v0.1.18
+git commit -am "chore: release v0.1.18"
+git tag v0.1.18
+git push origin main v0.1.18
 ```
 
-2. That triggers the [Release installers](.github/workflows/release.yml) workflow. CI syncs the tag into `package.json` before building, then verifies the versions match, so installer names like `CorosLink-0.1.17-arm64.dmg` and `CorosLink-0.1.17-x64.dmg` always follow the git tag. The workflow also uploads `latest-mac.yml`, `latest-linux.yml`, and `latest.yml` plus macOS/Windows blockmaps so packaged apps can auto-update via `electron-updater` (Linux AppImage embeds its blockmap in the file). Each platform build runs `scripts/verify-release-artifacts.mjs` and fails if update metadata is missing.
+2. That triggers the [Release installers](.github/workflows/release.yml) workflow. CI syncs the tag into `package.json` before building, then verifies the versions match, so installer names like `CorosLink-0.1.18-arm64.dmg` and `CorosLink-0.1.18-x64.dmg` always follow the git tag. The workflow also uploads `latest-mac.yml`, `latest-linux.yml`, and `latest.yml` plus macOS/Windows blockmaps so packaged apps can auto-update via `electron-updater` (Linux AppImage embeds its blockmap in the file). Each platform build runs `scripts/verify-release-artifacts.mjs` and fails if update metadata is missing.
 
 You can also run the workflow manually from **Actions → Release installers** (it uses the current `package.json` version when no tag is pushed).
 

@@ -7,11 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.18] - 2026-07-15
+
 ### Added
 
-- One-time update prompt with release notes, explicit update confirmation, and per-version dismissal when choosing **Not now**
-- Full in-app changelog covering every newer release when updating across multiple versions
-- Development-only **Test update** control for previewing the complete update prompt without downloading or restarting
+- **RPE (Foster session-RPE) load** — Training Hub heatmap TL/RPE toggle, RPE trend chart, and rate-limited backfill with live progress ([#55](https://github.com/JunAkerBuilds/CorosLink/pull/55))
+- **Per-sport activity colors** — color the load heatmap and calendar by sport (multi-sport pie days); customizable sport colors in settings ([#48](https://github.com/JunAkerBuilds/CorosLink/pull/48))
+- **Training map globe** — overhauled activity globe with refined visualization, geography worker, and persisted geo cache ([#47](https://github.com/JunAkerBuilds/CorosLink/pull/47))
+- **Watch Face Studio** — export/import editable projects; sprite resize/rotate; battery scaling and seconds time customization; auto-aligned watchface time; scoped asset editing ([#51](https://github.com/JunAkerBuilds/CorosLink/pull/51), [#52](https://github.com/JunAkerBuilds/CorosLink/pull/52))
+- **Update changelog prompt** — one-time update window with release notes, explicit update confirmation, and per-version dismissal when choosing **Not now**; covers every newer release when updating across versions ([#50](https://github.com/JunAkerBuilds/CorosLink/pull/50))
+- **Animated supporter plaques** on the marketing website hero ([#53](https://github.com/JunAkerBuilds/CorosLink/pull/53))
+- Development-only **Test update** control for previewing the update prompt without downloading or restarting
+
+### Changed
+
+- Watch Face Studio editing polish (AM/PM preview, device-targeted exports, MIP always-on guidance)
+- Supporter plaque styling (gold glow and name fitting) on the website
+
+### Fixed
+
+- Watch Face Studio firmware type is taken from the connected watch instead of a hardcoded value, so template browse and exports target the correct device ([#51](https://github.com/JunAkerBuilds/CorosLink/pull/51))
+- Load-heatmap streak no longer resets to 0 on an untrained today ([#49](https://github.com/JunAkerBuilds/CorosLink/pull/49))
+- Choosing **Not now** no longer allows a downloaded update to install silently when CorosLink quits
 
 ## [0.1.17] - 2026-07-13
 
@@ -268,6 +285,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - GitHub Actions release workflow and installer build documentation
 
+[0.1.18]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.14...v0.1.15
