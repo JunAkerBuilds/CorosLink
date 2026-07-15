@@ -437,7 +437,7 @@ function ensureColumn(
   database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
-function requireDatabase(): Database.Database {
+export function requireDatabase(): Database.Database {
   if (!db) {
     throw new Error("Database has not been initialized.");
   }
