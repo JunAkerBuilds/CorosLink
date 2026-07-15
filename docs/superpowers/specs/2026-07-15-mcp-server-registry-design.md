@@ -102,8 +102,11 @@ Beside the existing `CorosMcpToolsPanel`:
 - Add / edit / remove (built-in COROS is edit-limited, not removable).
 - **Connect** button → triggers OAuth loopback for `oauth` servers; a token
   field for `bearer`.
-- **Presets:** Freddy (`freddy.coach` URL + scope) and Strava, one-click "Add"
-  so the user only clicks Connect. (Exact URLs TBD — filled when provided.)
+- **Presets:** one-click "Add" so the user only clicks Connect —
+  - Freddy: `https://freddy.coach/mcp`
+  - Strava: `https://mcp.strava.com/mcp`
+  Both hosted URL + OAuth (transport `streamable-http`, `auth_type: oauth`);
+  scope discovered from each server's auth metadata by the MCP SDK.
 - Per-server "Test / Refresh tools" showing the exposed tool names.
 
 ### 6. COROS migration
