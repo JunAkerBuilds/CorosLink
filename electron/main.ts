@@ -247,13 +247,13 @@ import {
 import {
   connectCorosMcp,
   disconnectCorosMcp,
-  ensureCorosMcpConnected,
   getCorosMcpStatus,
   listCorosMcpTools
 } from "./corosMcpService";
 import {
   connectMcpServer,
   disconnectMcpServer,
+  ensureAllMcpConnected,
   getMcpStatuses
 } from "./mcpClientManager";
 import {
@@ -640,8 +640,9 @@ app.whenReady().then(() => {
   createWindow();
   applyAppIcon();
 
-  // Silently restore a previous COROS MCP session (no browser popup).
-  void ensureCorosMcpConnected();
+  // Silently restore previously-authorized MCP sessions (COROS + any other
+  // configured servers), no browser popup.
+  void ensureAllMcpConnected();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
