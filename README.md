@@ -9,7 +9,11 @@
 </p>
 
 <p align="center">
-  <strong>Live site:</strong> <a href="https://coros-link.vercel.app/">coros-link.vercel.app</a>
+  <strong>Live site:</strong> <a href="https://coroslink.com/">coroslink.com</a>
+</p>
+
+<p align="center">
+  <strong>Documentation:</strong> <a href="https://doc.coroslink.com/">doc.coroslink.com</a>
 </p>
 
 <p align="center">
