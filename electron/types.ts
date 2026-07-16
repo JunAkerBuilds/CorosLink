@@ -155,6 +155,8 @@ export interface CorosWatchfaceThemeListInput {
 /** An entry returned by a COROS watchface catalog. */
 export interface CorosWatchfaceTheme {
   id?: string;
+  /** Original editable template used to create a custom watch face. */
+  sourceTemplateId?: string;
   name: string;
   previewImageUrl?: string;
   /** The theme's downloadable package resource, when the catalog exposes one. */
@@ -265,6 +267,15 @@ export interface CorosWatchfacePublishInput {
   language?: string;
 }
 
+/** Existing custom face metadata used to request a fresh COROS share link. */
+export interface CorosWatchfaceExistingShareInput {
+  templateId: string;
+  sourceTemplateId: string;
+  name: string;
+  firmwareType: string;
+  backgroundImageId: number;
+}
+
 /** A browser-rendered 800×800 face background, kept within a selected template. */
 export interface CorosWatchfaceCreatorInput {
   sourceArchiveId: string;
@@ -277,6 +288,13 @@ export interface CorosWatchfaceCreatorInput {
   watchModel?: WatchModelId;
   /** Exact `o_wf_ver` to write. Omit to preserve/auto-raise the template value. */
   watchFaceVersion?: number;
+  /**
+   * Experimental export-only `o_template_id` override. Decimal text is used
+   * because official COROS template IDs can exceed Number.MAX_SAFE_INTEGER.
+   */
+  templateIdOverride?: string;
+  /** Experimental export-only `m_name` override for template-identity tests. */
+  templateNameOverride?: string;
   /**
    * Renderer-generated PNG sprites (bitmap-font digits, tinted icons and
    * weekday labels) that replace template assets of identical size.
@@ -630,7 +648,15 @@ export interface CorosWatchfaceDesignState {
   /** Weekday/month/day scaling; absent in projects saved before resizing. */
   dateStyles?: Record<
     string,
-    { scale: number; fontFamily?: string; color?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }
+    {
+      scale: number;
+      fontFamily?: string;
+      color?: string;
+      letterSpacing?: number;
+      rasterFont?: CorosWatchfaceRasterFont;
+      /** Weekday/date-day: preserve natural glyph width instead of fitting the template canvas. */
+      nativeSize?: boolean;
+    }
   >;
   staticSeparators: Record<
     "colon" | "dateSlash",

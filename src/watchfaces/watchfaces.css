@@ -1615,6 +1615,12 @@
   white-space: nowrap;
 }
 
+.watchface-shell .watchface-template-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .watchface-shell .watchface-template-unavailable {
   display: inline-flex;
   align-items: center;
@@ -5641,7 +5647,7 @@
   font-size: 9px;
 }
 
-.watchface-shell--hub .watchface-template-copy .secondary-button {
+.watchface-shell--hub .watchface-template-actions .secondary-button {
   justify-self: start;
 }
 

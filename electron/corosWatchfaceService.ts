@@ -11,6 +11,7 @@ import type {
   CorosWatchfaceAssetReplacement,
   CorosWatchfaceConfigOverride,
   CorosWatchfaceCreatorInput,
+  CorosWatchfaceExistingShareInput,
   CorosWatchfacePublishInput,
   CorosWatchfaceProject,
   CorosWatchfaceProjectExportInput,
@@ -1288,6 +1289,26 @@ export async function createCorosWatchfaceArchive(
     input.watchFaceVersion,
     "Archive watch-face version"
   );
+  const templateIdOverride =
+    input.templateIdOverride === undefined
+      ? undefined
+      : String(input.templateIdOverride).trim();
+  const templateNameOverride =
+    input.templateNameOverride === undefined
+      ? undefined
+      : String(input.templateNameOverride).trim();
+  if (
+    templateIdOverride !== undefined &&
+    (!/^\d{1,20}$/.test(templateIdOverride) || /^0+$/.test(templateIdOverride))
+  ) {
+    throw new Error("Template ID overrides must contain 1–20 decimal digits.");
+  }
+  if (
+    templateNameOverride !== undefined &&
+    (templateNameOverride.length === 0 || templateNameOverride.length > 64)
+  ) {
+    throw new Error("Template name overrides must contain 1–64 characters.");
+  }
   if (
     watchFaceVersion !== undefined &&
     minimumWatchFaceVersion !== undefined &&
@@ -1305,7 +1326,9 @@ export async function createCorosWatchfaceArchive(
     sprites,
     configOverrides,
     minimumWatchFaceVersion,
-    watchFaceVersion
+    watchFaceVersion,
+    templateIdOverride,
+    templateNameOverride
   );
   const outputDirectory = path.join(app.getPath("userData"), "watchface-archives");
   await fs.promises.mkdir(outputDirectory, { recursive: true });
@@ -1871,13 +1894,54 @@ export async function publishCorosWatchface(
     throw new Error("COROS saved the template but did not return its ID.");
   }
 
-  const linkBody = buildCreateLinkBody({
+  return requestCorosWatchfaceShareLink(session, {
     backgroundImageId: input.backgroundImageId,
     firmwareType,
     sourceTemplateId: freshArchive.sourceTemplateId,
     templateId,
     name
   });
+}
+
+export async function createCorosWatchfaceShareLink(
+  input: CorosWatchfaceExistingShareInput
+): Promise<CorosWatchfaceShareLink> {
+  const session = requireSession();
+  const name = sanitizeTemplateName(input.name);
+  const firmwareType = normalizeOptionalFirmwareType(input.firmwareType);
+  if (!firmwareType) {
+    throw new Error("This custom face does not include a COROS firmware type.");
+  }
+  if (!Number.isSafeInteger(input.backgroundImageId) || input.backgroundImageId < 0) {
+    throw new Error("Background image ID must be a non-negative integer.");
+  }
+
+  const templateId = input.templateId.trim();
+  const sourceTemplateId = input.sourceTemplateId.trim();
+  if (!/^\d{1,20}$/.test(templateId) || !/^\d{1,20}$/.test(sourceTemplateId)) {
+    throw new Error("This custom face does not include valid COROS template IDs.");
+  }
+
+  return requestCorosWatchfaceShareLink(session, {
+    backgroundImageId: input.backgroundImageId,
+    firmwareType,
+    sourceTemplateId,
+    templateId,
+    name
+  });
+}
+
+async function requestCorosWatchfaceShareLink(
+  session: StoredMobileSession,
+  input: {
+    backgroundImageId: number;
+    firmwareType: string;
+    sourceTemplateId: string;
+    templateId: string;
+    name: string;
+  }
+): Promise<CorosWatchfaceShareLink> {
+  const linkBody = buildCreateLinkBody(input);
   const link = await mobileRequest<{
     url?: string;
     expireTimestamp?: number;
@@ -1933,6 +1997,18 @@ export function extractDecimalProperty(raw: string, property: string): string | 
 }
 
 /**
+ * Preserve COROS watch-face IDs as decimal text before JSON.parse can round
+ * values above Number.MAX_SAFE_INTEGER.
+ */
+export function parseCorosMobileJson(raw: string): unknown {
+  const losslessRaw = raw.replace(
+    /("(?:watchFaceThemeId|watchFaceTemplateId|srcWatchFaceTemplateId|watchfaceId)"\s*:\s*)(\d{16,})(?=\s*[,}])/g,
+    (_match, prefix: string, value: string) => `${prefix}"${value}"`
+  );
+  return JSON.parse(losslessRaw) as unknown;
+}
+
+/**
  * The mobile client has used a few response shapes for this endpoint. Keep
  * the renderer insulated from those server-side naming changes and expose a
  * small, safe read-only catalog shape instead.
@@ -1951,6 +2027,10 @@ export function normalizeCorosWatchfaceThemes(
       continue;
     }
     const id = readWatchfaceId(record);
+    const sourceTemplateId = readString(record, [
+      "srcWatchFaceTemplateId",
+      "sourceTemplateId"
+    ]);
     const name = readString(record, [
       "watchFaceThemeName",
       "watchFaceTemplateName",
@@ -1992,6 +2072,7 @@ export function normalizeCorosWatchfaceThemes(
     seen.add(key);
     themes.push({
       ...(id ? { id } : {}),
+      ...(sourceTemplateId ? { sourceTemplateId } : {}),
       name: name || (id ? `COROS theme ${id}` : "Untitled COROS theme"),
       ...(previewImageUrl ? { previewImageUrl } : {}),
       ...(packageUrl ? { packageUrl } : {}),
@@ -2383,6 +2464,42 @@ function setWatchFaceVersion(rawInfo: string, version: number): string {
   return rawInfo.replace(/^(\s*\{)/, `$1"o_wf_ver":${version},`);
 }
 
+/** Rewrites the lossless raw numeric template ID without JSON round-tripping. */
+export function setWatchfaceTemplateId(
+  rawInfo: string,
+  templateId: string
+): string {
+  if (!/^\d{1,20}$/.test(templateId) || /^0+$/.test(templateId)) {
+    throw new Error("Template ID overrides must contain 1–20 decimal digits.");
+  }
+  if (/"o_template_id"\s*:\s*(?:"\d+"|\d+)/.test(rawInfo)) {
+    return rawInfo.replace(
+      /"o_template_id"\s*:\s*(?:"\d+"|\d+)/,
+      `"o_template_id":${templateId}`
+    );
+  }
+  return rawInfo.replace(/^(\s*\{)/, `$1"o_template_id":${templateId},`);
+}
+
+/** Rewrites the manifest name while preserving all other raw fields. */
+export function setWatchfaceTemplateName(
+  rawInfo: string,
+  templateName: string
+): string {
+  const name = templateName.trim();
+  if (name.length === 0 || name.length > 64) {
+    throw new Error("Template name overrides must contain 1–64 characters.");
+  }
+  const encoded = JSON.stringify(name);
+  if (/"m_name"\s*:\s*"(?:\\.|[^"\\])*"/.test(rawInfo)) {
+    return rawInfo.replace(
+      /"m_name"\s*:\s*"(?:\\.|[^"\\])*"/,
+      `"m_name":${encoded}`
+    );
+  }
+  return rawInfo.replace(/^(\s*\{)/, `$1"m_name":${encoded},`);
+}
+
 async function rewriteTemplateArchive(
   sourcePath: string,
   replacements: Map<string, Buffer>,
@@ -2391,7 +2508,9 @@ async function rewriteTemplateArchive(
   spriteReplacements: Map<string, DecodedSpriteReplacement> = new Map(),
   configOverrides: Map<string, Record<string, string>> = new Map(),
   minWatchFaceVersion?: number,
-  watchFaceVersion?: number
+  watchFaceVersion?: number,
+  templateIdOverride?: string,
+  templateNameOverride?: string
 ): Promise<Buffer> {
   const directory = await openTemplateArchive(sourcePath);
   const originalSourceFiles = directory.files.filter((entry) => entry.type === "File");
@@ -2482,9 +2601,6 @@ async function rewriteTemplateArchive(
 
   for (const spritePath of spriteReplacements.keys()) {
     const sprite = spriteReplacements.get(spritePath)!;
-    if (sprite.create && sourcePaths.has(spritePath)) {
-      throw new Error("A new studio sprite collides with a starter template entry.");
-    }
     if (
       sprite.create &&
       !sourcePaths.has(`${spritePath.split("/", 1)[0]!}/config.txt`)
@@ -2528,16 +2644,31 @@ async function rewriteTemplateArchive(
   const entries = await Promise.all(
     sourceFiles.map(async (entry) => {
       if (
-        (minWatchFaceVersion !== undefined || watchFaceVersion !== undefined) &&
+        (
+          minWatchFaceVersion !== undefined ||
+          watchFaceVersion !== undefined ||
+          templateIdOverride !== undefined ||
+          templateNameOverride !== undefined
+        ) &&
         entry.path.replace(/^\.\//, "") === "info.json"
       ) {
         const rawInfo = (await entry.buffer()).toString("utf8");
+        const versionedInfo =
+          watchFaceVersion !== undefined
+            ? setWatchFaceVersion(rawInfo, watchFaceVersion)
+            : minWatchFaceVersion !== undefined
+              ? raiseWatchFaceVersion(rawInfo, minWatchFaceVersion)
+              : rawInfo;
+        const identifiedInfo =
+          templateIdOverride !== undefined
+            ? setWatchfaceTemplateId(versionedInfo, templateIdOverride)
+            : versionedInfo;
         return {
           name: entry.path,
           data: Buffer.from(
-            watchFaceVersion !== undefined
-              ? setWatchFaceVersion(rawInfo, watchFaceVersion)
-              : raiseWatchFaceVersion(rawInfo, minWatchFaceVersion!),
+            templateNameOverride !== undefined
+              ? setWatchfaceTemplateName(identifiedInfo, templateNameOverride)
+              : identifiedInfo,
             "utf8"
           )
         };
@@ -2580,6 +2711,11 @@ async function rewriteTemplateArchive(
       if (!sprite) {
         return { name: entry.path, data: await entry.buffer() };
       }
+      // Studio paths are upserts: rebuilding from a previously generated
+      // archive should replace the old sprite, even when its size changed.
+      if (sprite.create) {
+        return { name: entry.path, data: sprite.data };
+      }
       // Sprites must keep the template's exact pixel size: the firmware lays
       // digits and icons out with the original bitmap dimensions.
       const original = nativeImage.createFromBuffer(await entry.buffer());
@@ -2596,8 +2732,9 @@ async function rewriteTemplateArchive(
     })
   );
   const createdByResolution = new Map<string, { name: string; data: Buffer }[]>();
+  const retainedSourcePaths = new Set(sourceFiles.map((entry) => entry.path));
   for (const [spritePath, sprite] of spriteReplacements) {
-    if (!sprite.create) {
+    if (!sprite.create || retainedSourcePaths.has(spritePath)) {
       continue;
     }
     const resolutionDirectory = spritePath.split("/", 1)[0]!;
@@ -2848,7 +2985,7 @@ async function mobileRequest<T>(
 
   let payload: MobileApiEnvelope<T>;
   try {
-    payload = JSON.parse(raw) as MobileApiEnvelope<T>;
+    payload = parseCorosMobileJson(raw) as MobileApiEnvelope<T>;
   } catch {
     throw new Error("COROS returned an unreadable watchface response.");
   }

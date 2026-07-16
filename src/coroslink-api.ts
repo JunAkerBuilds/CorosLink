@@ -96,6 +96,7 @@ import type {
   CorosWatchfaceArchiveExportInput,
   CorosWatchfaceArtwork,
   CorosWatchfaceCreatorInput,
+  CorosWatchfaceExistingShareInput,
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceProject,
   CorosWatchfaceProjectSaveInput,
@@ -181,6 +182,9 @@ export interface CorosLinkApi {
   ) => Promise<CorosWatchfaceTemplateAsset[]>;
   publishCorosWatchface: (
     input: CorosWatchfacePublishInput
+  ) => Promise<CorosWatchfaceShareLink>;
+  createCorosWatchfaceShareLink: (
+    input: CorosWatchfaceExistingShareInput
   ) => Promise<CorosWatchfaceShareLink>;
   getWatchConnectionSmokeOption: () => Promise<WatchConnectionSmokeOptionId>;
   setWatchConnectionSmokeOption: (

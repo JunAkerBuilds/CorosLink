@@ -202,6 +202,7 @@ import {
   scaleAmPmStyleForResolution,
   getAvailableComplications,
   getTemplateBackgroundAssetPaths,
+  hasControlBattery,
   hasWatchfaceAod,
   inferStaticSeparators,
   listWatchfaceConfigAssets,
@@ -609,6 +610,8 @@ export function WatchfaceEditor({
   const assetCacheRef = useRef(new Map<string, CorosWatchfaceTemplateAsset>());
   const dragRef = useRef<WatchfaceDragState | null>(null);
   const [loadingSprite, setLoadingSprite] = useState(false);
+  const [devTemplateIdOverride, setDevTemplateIdOverride] = useState("");
+  const [devTemplateNameOverride, setDevTemplateNameOverride] = useState("");
   const [configAssetPreviews, setConfigAssetPreviews] = useState(
     () => new Map<string, CorosWatchfaceTemplateAsset>()
   );
@@ -4343,7 +4346,14 @@ export function WatchfaceEditor({
 
   function setDateStyle(
     partId: WatchfaceDatePartId,
-    patch: { scale?: number; fontFamily?: string; color?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
+    patch: {
+      scale?: number;
+      fontFamily?: string;
+      color?: string;
+      letterSpacing?: number;
+      rasterFont?: CorosWatchfaceDesignState["rasterFont"];
+      nativeSize?: boolean;
+    }
   ) {
     setDesign((prev) => {
       const current = prev.dateStyles?.[partId] ?? { scale: 1 };
@@ -4639,6 +4649,18 @@ export function WatchfaceEditor({
     }
     setCreating(true);
     try {
+      const templateIdOverride = devTemplateIdOverride.trim();
+      const templateNameOverride = devTemplateNameOverride.trim();
+      if (
+        showDevelopmentTools &&
+        templateIdOverride &&
+        (!/^\d{1,20}$/.test(templateIdOverride) || /^0+$/.test(templateIdOverride))
+      ) {
+        throw new Error("Template ID overrides must contain 1–20 decimal digits.");
+      }
+      if (showDevelopmentTools && templateNameOverride.length > 64) {
+        throw new Error("Template name overrides must be 64 characters or fewer.");
+      }
       const [composition, exportPreview, exportBackground] = await Promise.all([
         composeWatchfaceReplacements(details, design, loadAssets),
         renderExportPreview(),
@@ -4654,6 +4676,12 @@ export function WatchfaceEditor({
         ...(targetWatchModel ? { watchModel: targetWatchModel } : {}),
         ...(design.archiveWatchFaceVersion !== undefined
           ? { watchFaceVersion: design.archiveWatchFaceVersion }
+          : {}),
+        ...(showDevelopmentTools && templateIdOverride
+          ? { templateIdOverride }
+          : {}),
+        ...(showDevelopmentTools && templateNameOverride
+          ? { templateNameOverride }
           : {}),
         ...(assetReplacements.length > 0 ? { assetReplacements } : {}),
         ...(configOverrides.length > 0 ? { configOverrides } : {}),
@@ -5648,6 +5676,48 @@ export function WatchfaceEditor({
               Leave blank to preserve the template version and automatically
               raise it only when selected features require a newer version.
             </p>
+            {showDevelopmentTools ? (
+              <>
+                <label className="field">
+                  Template ID override (experimental)
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={20}
+                    placeholder={starterArchive.sourceTemplateId}
+                    value={devTemplateIdOverride}
+                    onChange={(event) =>
+                      setDevTemplateIdOverride(
+                        event.target.value.replace(/\D/g, "").slice(0, 20)
+                      )
+                    }
+                  />
+                </label>
+                <p className="wf-archive-note">
+                  Dev export only. Leave blank to keep template ID{" "}
+                  <code>{starterArchive.sourceTemplateId}</code>. A different
+                  ID may be rejected or compiled using another template’s
+                  selector rules.
+                </p>
+                <label className="field">
+                  Template manifest name override (experimental)
+                  <input
+                    type="text"
+                    maxLength={64}
+                    placeholder="TOP PART"
+                    value={devTemplateNameOverride}
+                    onChange={(event) =>
+                      setDevTemplateNameOverride(event.target.value.slice(0, 64))
+                    }
+                  />
+                </label>
+                <p className="wf-archive-note">
+                  Dev export only. Rewrites <code>m_name</code> in{" "}
+                  <code>info.json</code>; it does not rename the Studio project.
+                </p>
+              </>
+            ) : null}
           </div>
           {selectedElement ? renderElementInspector(selectedElement) : selectedLayer ? renderInspector(selectedLayer) : previewMode === "aod" ? (
             <div className="watchface-inspector-group wf-aod-empty-inspector">
@@ -6566,6 +6636,8 @@ export function WatchfaceEditor({
       const partId = layer.layoutGroupId as WatchfaceDatePartId;
       const style = design.dateStyles?.[partId];
       const scale = style?.scale ?? 1;
+      const supportsNativeSize =
+        partId === "weekday" || partId === "dateDay";
       return (
         <div className="watchface-inspector-group">
           {renderLayerVisibilityToggle(layer)}
@@ -6574,7 +6646,14 @@ export function WatchfaceEditor({
             label="Font"
             value={style?.fontFamily ?? design.fontFamily}
             emptyLabel="Keep template font"
-            onChange={(fontFamily) => setDateStyle(partId, { fontFamily })}
+            onChange={(fontFamily) =>
+              setDateStyle(partId, {
+                fontFamily,
+                ...(supportsNativeSize && fontFamily
+                  ? { nativeSize: true }
+                  : {})
+              })
+            }
             rasterFont={design.rasterFont}
             rasterFontRequiredText={partId === "weekday" ? "MON" : undefined}
             onRasterFontChange={setRasterFont}
@@ -6593,9 +6672,19 @@ export function WatchfaceEditor({
             rasterFont={design.rasterFont}
             componentRasterFont={style?.rasterFont}
             componentLabel={layer.label}
-            onActivate={() => setDateStyle(partId, { fontFamily: "" })}
+            onActivate={() =>
+              setDateStyle(partId, {
+                fontFamily: "",
+                ...(supportsNativeSize ? { nativeSize: true } : {})
+              })
+            }
             onRasterFontChange={setRasterFont}
-            onComponentRasterFontChange={(rasterFont) => setDateStyle(partId, { rasterFont })}
+            onComponentRasterFontChange={(rasterFont) =>
+              setDateStyle(partId, {
+                rasterFont,
+                ...(supportsNativeSize ? { nativeSize: true } : {})
+              })
+            }
           />
           <label className="field">
             Tint
@@ -6616,6 +6705,21 @@ export function WatchfaceEditor({
               </button>
             </span>
           </label>
+          {supportsNativeSize ? (
+            <label className="watchface-studio-toggle">
+              <input
+                type="checkbox"
+                checked={
+                  style?.nativeSize ??
+                  Boolean(style?.fontFamily || style?.rasterFont)
+                }
+                onChange={(event) =>
+                  setDateStyle(partId, { nativeSize: event.target.checked })
+                }
+              />
+              Native width (no template bound)
+            </label>
+          ) : null}
           <label className="field">
             Artwork zoom
             <EditableNumberInput
@@ -6626,7 +6730,13 @@ export function WatchfaceEditor({
               onValueChange={(value) => setDateStyle(partId, { scale: Math.max(0.01, value) })}
             />
             <span className="watchface-studio-summary">
-              Zooms and crops inside the component's fixed COROS canvas.
+              {supportsNativeSize &&
+              (style?.nativeSize ??
+                Boolean(style?.fontFamily || style?.rasterFont))
+                ? partId === "dateDay"
+                  ? "Changes digit height while preserving each digit's natural width."
+                  : "Changes label height while preserving its natural width."
+                : "Zooms and crops inside the component's fixed COROS canvas."}
             </span>
           </label>
           {renderPositionReadout(layer)}
@@ -7015,7 +7125,8 @@ export function WatchfaceEditor({
     if (available.length === 0) {
       return null;
     }
-    const controlBatteryEnabled = design.controlBatteryEnabled !== false;
+    const controlBatteryEnabled =
+      design.controlBatteryEnabled ?? hasControlBattery(details!);
     const previewChoices = available.filter(
       (complication) => complication.id !== "battery" || controlBatteryEnabled
     );

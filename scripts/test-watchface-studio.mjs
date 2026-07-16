@@ -6,6 +6,7 @@ import {
   buildControlTemperatureOverrides,
   buildControlIconPositionOverrides,
   buildControlBatteryVisibilityOverrides,
+  buildDateSpriteComposition,
   buildDateStyleOverrides,
   buildLayerVisibilityOverrides,
   buildLayerColorOverrides,
@@ -29,6 +30,7 @@ import {
   getFixedMetricCapabilities,
   getTemplateBackgroundAssetPaths,
   getWatchfaceAnalogPreviewLayers,
+  hasControlBattery,
   hasAutoAlignedTime,
   hasWatchfaceAod,
   inferStaticSeparators,
@@ -40,6 +42,7 @@ import {
   pickWatchPreviewResolution,
   rasterFontSupportsText,
   rebaseNegativeControlChildren,
+  resizeConfigRectToCanvas,
   scaleConfigRectValue,
   watchfaceEffectRenderScale
 } from "../src/watchfaces/watchfaceStudio.ts";
@@ -529,6 +532,14 @@ const controlBatteryDetails = {
       control_battery_icon_pos: "{12,8}",
       control_battery_level_rect: "{30,0,80,24,hcenter|vcenter}",
       control_battery_level_font: "13x19"
+    },
+    aodConfig: {
+      ...resolution.aodConfig,
+      control_battery_icon_pos: "",
+      control_battery_icon_dir: "",
+      control_battery_level_rect: "",
+      control_battery_level_font: "",
+      control_battery_level_font_color: ""
     }
   }))
 };
@@ -536,7 +547,8 @@ const hiddenControlBattery = buildControlBatteryVisibilityOverrides(
   controlBatteryDetails,
   false
 );
-assert.equal(hiddenControlBattery.length, details.resolutions.length);
+assert.equal(hasControlBattery(controlBatteryDetails), true);
+assert.equal(hiddenControlBattery.length, details.resolutions.length * 2);
 for (const override of hiddenControlBattery) {
   assert.equal(
     override.values.control_battery_icon_dir,
@@ -555,7 +567,38 @@ for (const override of hiddenControlBattery) {
     "__COROSLINK_DELETE_CONFIG_KEY__"
   );
 }
+assert.deepEqual(
+  hiddenControlBattery.map(({ path }) => path),
+  details.resolutions.flatMap(({ directory }) => [
+    `${directory}/config.txt`,
+    `${directory}/AODconfig.txt`
+  ]),
+  "disabling selectable Battery should remove its declarations from current and AOD configs"
+);
 assert.deepEqual(buildControlBatteryVisibilityOverrides(details, true), []);
+const reopenedDisabledBatteryDetails = {
+  ...details,
+  resolutions: details.resolutions.map((resolution) => ({
+    ...resolution,
+    aodConfig: {
+      ...resolution.aodConfig,
+      control_battery_icon_pos: "",
+      control_battery_icon_dir: "",
+      control_battery_level_rect: "",
+      control_battery_level_font: "",
+      control_battery_level_font_color: ""
+    }
+  }))
+};
+assert.equal(hasControlBattery(reopenedDisabledBatteryDetails), false);
+assert.equal(
+  buildControlBatteryVisibilityOverrides(
+    reopenedDisabledBatteryDetails,
+    undefined
+  ).length,
+  details.resolutions.length,
+  "a reopened template without current-face Battery should clean stale AOD declarations"
+);
 const baseComplicationBounds = computeLayoutGroupBounds(
   details.resolutions.find(({ width }) => width === 800)
 ).find(({ id }) => id === "complication");
@@ -1073,6 +1116,40 @@ assert.equal(
   "{400,320,464,384,hcenter|vcenter}"
 );
 assert.equal(fullDateStyle?.values.english_date_day_font, "cl_date_day");
+const detailsWithoutDateDayColor = {
+  ...withMetrics,
+  resolutions: withMetrics.resolutions.map((candidate) => {
+    const config = { ...candidate.config };
+    delete config.english_date_day_font_color;
+    return { ...candidate, config };
+  })
+};
+const dateStyleWithoutUnsupportedColor = buildDateStyleOverrides(
+  detailsWithoutDateDayColor,
+  {
+    weekday: { scale: 1, color: "#aa44ee" },
+    dateDay: { scale: 1, color: "#22cc88" }
+  },
+  true
+);
+assert.equal(
+  dateStyleWithoutUnsupportedColor[0]?.values.english_date_week_font_color,
+  "0xAA44EE"
+);
+assert.equal(
+  dateStyleWithoutUnsupportedColor[0]?.values.english_date_day_font_color,
+  undefined,
+  "date styling should not add a font-color key missing from the starter"
+);
+assert.equal(
+  resizeConfigRectToCanvas(
+    "{100,40,180,84,hcenter|vcenter}",
+    132,
+    44
+  ),
+  "{74,40,206,84,hcenter|vcenter}",
+  "native weekday width should expand around the existing center without face clamping"
+);
 const layerColorOverrides = buildLayerColorOverrides(withMetrics, {
   seconds: "#22cc88",
   weekday: "#aa44ee",
@@ -1194,25 +1271,44 @@ const existingControlDetails = {
   }))
 };
 const nativeDocument = globalThis.document;
+const nativeDateImage = globalThis.Image;
 globalThis.document = {
   createElement: () => {
+    let renderedText = "";
     const context = {
       fillStyle: "",
       font: "",
       textBaseline: "alphabetic",
-      measureText: () => ({
-        width: 8,
+      measureText: (text) => ({
+        width: text.length * 8,
         actualBoundingBoxAscent: 8,
         actualBoundingBoxDescent: 2
       }),
-      fillText: () => {}
+      fillText: (text) => {
+        renderedText = text;
+      },
+      drawImage: () => {}
     };
-    return {
+    const canvas = {
       width: 0,
       height: 0,
       getContext: () => context,
-      toDataURL: () => "data:image/png;base64,RENDERED"
+      toDataURL: () =>
+        `data:image/png;base64,W${canvas.width}H${canvas.height}T${renderedText}`
     };
+    return canvas;
+  }
+};
+globalThis.Image = class FakeNativeDateImage {
+  naturalWidth = 1;
+  naturalHeight = 1;
+  onload = null;
+  onerror = null;
+  set src(value) {
+    const dimensions = /W(\d+)H(\d+)/.exec(value);
+    this.naturalWidth = Number(dimensions?.[1] ?? 1);
+    this.naturalHeight = Number(dimensions?.[2] ?? 1);
+    queueMicrotask(() => this.onload?.());
   }
 };
 try {
@@ -1231,11 +1327,98 @@ try {
     true,
     "existing cl_control digits should be replaced in place on a round trip"
   );
+
+  const existingDateDetails = {
+    ...details,
+    resolutions: details.resolutions.map((candidate) => ({
+      ...candidate,
+      spriteFolders: [
+        ...candidate.spriteFolders,
+        {
+          folder: "cl_weekday",
+          kind: "week",
+          aod: false,
+          files: weekFiles(
+            candidate.width === 800 ? 132 : 69,
+            candidate.width === 800 ? 64 : 33,
+            candidate.directory,
+            "cl_weekday"
+          )
+        },
+        {
+          folder: "cl_date_day",
+          kind: "digits",
+          aod: false,
+          files: digitFiles(
+            candidate.width === 800 ? 44 : 23,
+            candidate.width === 800 ? 64 : 33,
+            candidate.directory,
+            "cl_date_day"
+          )
+        }
+      ]
+    }))
+  };
+  const reopenedDateComposition = await buildDateSpriteComposition(
+    existingDateDetails,
+    {
+      weekday: {
+        scale: 1,
+        fontFamily: "Fixture Sans",
+        nativeSize: true
+      },
+      dateDay: {
+        scale: 1,
+        fontFamily: "Fixture Sans",
+        nativeSize: true
+      }
+    },
+    {
+      fontFamily: "",
+      digitColor: "#ffffff",
+      tintLabels: false
+    },
+    async (paths) => {
+      assert.deepEqual(
+        paths,
+        [],
+        "local date-font rendering should not request source sprites"
+      );
+      return [];
+    }
+  );
+  assert.ok(reopenedDateComposition.replacements.length > 0);
+  assert.equal(
+    reopenedDateComposition.replacements.every(
+      ({ create }) => create === false
+    ),
+    true,
+    "existing cl_weekday and cl_date_day sprites should be replaced in place"
+  );
+  assert.match(
+    reopenedDateComposition.replacements.find(({ path }) =>
+      path.endsWith("/cl_weekday/00.png")
+    )?.dataUrl ?? "",
+    /TMON$/,
+    "weekday sprite zero should render MON"
+  );
+  assert.match(
+    reopenedDateComposition.replacements.find(({ path }) =>
+      path.endsWith("/cl_date_day/00.png")
+    )?.dataUrl ?? "",
+    /T0$/,
+    "date-day sprite zero should render 0 rather than MON"
+  );
 } finally {
   if (nativeDocument === undefined) {
     delete globalThis.document;
   } else {
     globalThis.document = nativeDocument;
+  }
+  if (nativeDateImage === undefined) {
+    delete globalThis.Image;
+  } else {
+    globalThis.Image = nativeDateImage;
   }
 }
 

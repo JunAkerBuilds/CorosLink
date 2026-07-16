@@ -577,6 +577,36 @@ async function main() {
     "new resource folders must precede their config for COROS's compiler"
   );
 
+  const regeneratedMetricDigit = solidPng(20, 32, 0x71);
+  const withRegeneratedSprite = await watchfaces.createCorosWatchfaceArchive({
+    sourceArchiveId: withGeneratedSprite.archiveId,
+    backgroundDataUrl: pngDataUrl(icon),
+    assetReplacements: [
+      {
+        path: "watchface_800x800/cl_hh/00.png",
+        dataUrl: pngDataUrl(regeneratedMetricDigit),
+        create: true
+      }
+    ]
+  });
+  const regeneratedSpriteOutput = await findCreatorOutput(withRegeneratedSprite);
+  assert.ok(regeneratedSpriteOutput, "regenerated-sprite output should be available");
+  const regeneratedSpriteZip = await unzipper.Open.file(regeneratedSpriteOutput.path);
+  const regeneratedSpriteEntries = regeneratedSpriteZip.files.filter(
+    (entry) =>
+      entry.type === "File" && entry.path === "watchface_800x800/cl_hh/00.png"
+  );
+  assert.equal(
+    regeneratedSpriteEntries.length,
+    1,
+    "regenerated studio sprites should overwrite instead of creating duplicate ZIP entries"
+  );
+  assert.deepEqual(
+    await regeneratedSpriteEntries[0].buffer(),
+    regeneratedMetricDigit,
+    "regenerated studio sprites should replace the previous bytes even when dimensions change"
+  );
+
   // --- Weather must be wired into normal and always-on configs ----------
   const withAodWeather = await watchfaces.createCorosWatchfaceArchive({
     sourceArchiveId: starter.archiveId,

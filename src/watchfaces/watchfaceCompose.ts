@@ -17,7 +17,7 @@ import {
   buildControlIconPositionOverrides,
   buildWatchfaceConfigAssetOverrides,
   buildWatchfaceConfigAssetReplacements,
-  buildDateSpriteReplacements,
+  buildDateSpriteComposition,
   buildDateStyleOverrides,
   buildLayerVisibilityOverrides,
   buildLayerColorOverrides,
@@ -463,6 +463,14 @@ export async function composeWatchfaceReplacements(
     design,
     loadAssets
   );
+  const dateSpriteComposition = dateStyleActive
+    ? await buildDateSpriteComposition(
+        applyLayoutToDetails(details, design.layoutOffsets ?? {}),
+        dateStyles,
+        toStudioOptions(design),
+        loadAssets
+      )
+    : { replacements: [], configOverrides: [] };
 
   const baseAssetReplacements = mergeAssetReplacements(
     studioActive
@@ -504,14 +512,7 @@ export async function composeWatchfaceReplacements(
           toStudioOptions(design)
         )
       : [],
-    dateStyleActive
-      ? await buildDateSpriteReplacements(
-          details,
-          dateStyles,
-          toStudioOptions(design),
-          loadAssets
-        )
-      : [],
+    dateSpriteComposition.replacements,
     layerColorActive
       ? await buildLayerColorSpriteReplacements(
           details,
@@ -609,6 +610,7 @@ export async function composeWatchfaceReplacements(
       // and therefore correctly avoids emitting them a second time.
       layoutConfigAssetOverrides,
       layoutOverrides,
+      dateSpriteComposition.configOverrides,
       buildEffectPaddingOverrides(configAssetPositionDetails, effectedAssets.padding),
       buildLayerVisibilityOverrides(details, design.layerVisibility ?? {}),
       buildControlBatteryVisibilityOverrides(details, design.controlBatteryEnabled),

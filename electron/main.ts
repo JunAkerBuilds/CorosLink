@@ -61,6 +61,7 @@ import {
 } from "./trainingHubService";
 import {
   createCorosWatchfaceArchive,
+  createCorosWatchfaceShareLink,
   describeCorosWatchfaceTemplate,
   downloadCorosWatchfaceTheme,
   exportCorosWatchfaceProject,
@@ -147,6 +148,7 @@ import type {
 import type {
   CorosLegacy614aCarrierPatchInput,
   CorosWatchfaceCreatorInput,
+  CorosWatchfaceExistingShareInput,
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceArchiveExportInput,
   CorosWatchfacePublishInput,
@@ -920,6 +922,12 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "watchfaces:publish",
     (_event, input: CorosWatchfacePublishInput) => publishCorosWatchface(input)
+  );
+
+  ipcMain.handle(
+    "watchfaces:createShareLink",
+    (_event, input: CorosWatchfaceExistingShareInput) =>
+      createCorosWatchfaceShareLink(input)
   );
 
   ipcMain.handle("watch:getConnectionSmokeOption", () =>

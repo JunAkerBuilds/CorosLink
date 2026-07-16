@@ -20,9 +20,12 @@ const {
   normalizeCorosBatteryReport,
   normalizeCorosPairedDevices,
   normalizeCorosWatchfaceThemes,
+  parseCorosMobileJson,
   parseCorosWatchfaceSharePage,
   readCorosWatchfaceProjectPackage,
   repairStandaloneBatteryConfigOverrides,
+  setWatchfaceTemplateId,
+  setWatchfaceTemplateName,
   selectCorosWatchfaceArchive
 } = await import(`${distUrl("corosWatchfaceService.js")}?cacheBust=${Date.now()}`);
 const { createStoreZip } = await import(
@@ -30,6 +33,42 @@ const { createStoreZip } = await import(
 );
 
 const configWithoutWeather = "[time_hour_high_pos]={1,2}\r\n";
+assert.equal(
+  setWatchfaceTemplateId(
+    '{"o_template_id":251134,"o_diy_version":1}',
+    "478814257230741704"
+  ),
+  '{"o_template_id":478814257230741704,"o_diy_version":1}',
+  "template ID override must preserve IDs larger than Number.MAX_SAFE_INTEGER"
+);
+assert.throws(
+  () => setWatchfaceTemplateId('{"o_template_id":251134}', "not-a-number"),
+  /1–20 decimal digits/
+);
+
+assert.deepEqual(
+  parseCorosMobileJson(
+    '{"data":{"watchFaceTemplateId":478947569257513340,"srcWatchFaceTemplateId":478943290396344519}}'
+  ),
+  {
+    data: {
+      watchFaceTemplateId: "478947569257513340",
+      srcWatchFaceTemplateId: "478943290396344519"
+    }
+  },
+  "mobile JSON parser must preserve watch-face IDs above Number.MAX_SAFE_INTEGER"
+);
+assert.equal(
+  setWatchfaceTemplateName(
+    '{"m_name":"SLENDER","o_template_id":251134}',
+    "TOP PART"
+  ),
+  '{"m_name":"TOP PART","o_template_id":251134}'
+);
+assert.throws(
+  () => setWatchfaceTemplateName('{"m_name":"SLENDER"}', " "),
+  /1–64 characters/
+);
 assert.deepEqual(
   repairStandaloneBatteryConfigOverrides(
     "[battery_icon_pos]={20,30}\r\n[battery_icon_dir]=\r\n",
@@ -265,7 +304,9 @@ assert.deepEqual(
           watchFaceTemplateName: "My custom summit face",
           watchFaceTemplatePreviewImageUrl: "https://s3.coros.com/custom/summit-preview.png",
           watchFaceTemplateUserCustomUrl: "https://s3.coros.com/custom/summit-face.dat",
-          firmwareType: "COROS W332"
+          firmwareType: "COROS W332",
+          srcWatchFaceTemplateId: "250506",
+          backgroundImageId: 13
         }
       ],
       watchFaceThemeList: [
@@ -277,10 +318,12 @@ assert.deepEqual(
   [
     {
       id: "478814257230741704",
+      sourceTemplateId: "250506",
       name: "My custom summit face",
       previewImageUrl: "https://s3.coros.com/custom/summit-preview.png",
       packageUrl: "https://s3.coros.com/custom/summit-face.dat",
-      firmwareType: "COROS W332"
+      firmwareType: "COROS W332",
+      backgroundImageId: 13
     }
   ],
   "custom catalog should select only the signed-in user's faces and retain their download URL"
