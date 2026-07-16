@@ -958,72 +958,72 @@ export function TrainingZoneDistributionCharts({
         </h2>
       </div>
       <div className="training-chart-grid training-zone-grid">
-      <ZoneDistributionPanel
-        title="Threshold Heart Rate"
-        subtitle="Training Load"
-        emptyMessage="No threshold heart rate zone distribution data loaded."
-        variant="heart"
-        heroKicker="Primary zone"
-        metricColumnLabel={HEART_RATE_METRIC_LABELS[heartRateMetric]}
-        data={buildHeartRateData(
-          lthrZones,
-          activities,
-          heartRateMetric,
-          analytics
-        )}
-        getCaption={(datum) => heartRateZoneCaption(datum.zoneIndex)}
-        metricControl={
-          <MetricDropdown
-            label="Heart rate distribution metric"
-            value={heartRateMetric}
-            options={HEART_RATE_METRIC_OPTIONS}
-            onChange={setHeartRateMetric}
-          />
-        }
-      />
-      <ZoneDistributionPanel
-        title="Distance Zones"
-        subtitle="Distribution"
-        emptyMessage="No distance zone distribution data loaded."
-        variant="distance"
-        heroKicker="Most runs"
-        metricColumnLabel={
-          distanceMetric === "frequency"
-            ? "Runs"
-            : DISTANCE_METRIC_LABELS[distanceMetric]
-        }
-        data={buildDistanceData(activities, distanceMetric, analytics)}
-        getCaption={(datum) => distanceZoneCaption(datum.label)}
-        metricControl={
-          <MetricDropdown
-            label="Distance distribution metric"
-            value={distanceMetric}
-            options={DISTANCE_METRIC_OPTIONS}
-            onChange={setDistanceMetric}
-          />
-        }
-      />
-      <ZoneDistributionPanel
-        title="Perceived Effort"
-        subtitle="RPE"
-        emptyMessage="No RPE-rated sessions in the last 4 weeks."
-        variant="rpe"
-        heroKicker="Most sessions"
-        metricColumnLabel={
-          rpeMetric === "frequency" ? "Sessions" : RPE_METRIC_LABELS[rpeMetric]
-        }
-        coverageNote={rpeCoverageNote}
-        data={buildRpeData(analytics?.rpeDistribution, rpeMetric)}
-        getCaption={(datum) => rpeLevelCaption(datum.zoneIndex)}
-        metricControl={
-          <MetricDropdown
-            label="RPE distribution metric"
-            value={rpeMetric}
-            options={RPE_METRIC_OPTIONS}
-            onChange={setRpeMetric}
-          />
-        }
-      />
+        <ZoneDistributionPanel
+          title="Threshold Heart Rate"
+          subtitle="Training Load"
+          emptyMessage="No threshold heart rate zone distribution data loaded."
+          variant="heart"
+          heroKicker="Primary zone"
+          metricColumnLabel={HEART_RATE_METRIC_LABELS[heartRateMetric]}
+          data={buildHeartRateData(
+            lthrZones,
+            activities,
+            heartRateMetric,
+            analytics
+          )}
+          getCaption={(datum) => heartRateZoneCaption(datum.zoneIndex)}
+          metricControl={
+            <MetricDropdown
+              label="Heart rate distribution metric"
+              value={heartRateMetric}
+              options={HEART_RATE_METRIC_OPTIONS}
+              onChange={setHeartRateMetric}
+            />
+          }
+        />
+        <ZoneDistributionPanel
+          title="Distance Zones"
+          subtitle="Distribution"
+          emptyMessage="No distance zone distribution data loaded."
+          variant="distance"
+          heroKicker="Most runs"
+          metricColumnLabel={
+            distanceMetric === "frequency"
+              ? "Runs"
+              : DISTANCE_METRIC_LABELS[distanceMetric]
+          }
+          data={buildDistanceData(activities, distanceMetric, analytics)}
+          getCaption={(datum) => distanceZoneCaption(datum.label)}
+          metricControl={
+            <MetricDropdown
+              label="Distance distribution metric"
+              value={distanceMetric}
+              options={DISTANCE_METRIC_OPTIONS}
+              onChange={setDistanceMetric}
+            />
+          }
+        />
+        <ZoneDistributionPanel
+          title="Perceived Effort"
+          subtitle="RPE"
+          emptyMessage="No RPE-rated sessions in the last 4 weeks."
+          variant="rpe"
+          heroKicker="Most sessions"
+          metricColumnLabel={
+            rpeMetric === "frequency" ? "Sessions" : RPE_METRIC_LABELS[rpeMetric]
+          }
+          coverageNote={rpeCoverageNote}
+          data={buildRpeData(analytics?.rpeDistribution, rpeMetric)}
+          getCaption={(datum) => rpeLevelCaption(datum.zoneIndex)}
+          metricControl={
+            <MetricDropdown
+              label="RPE distribution metric"
+              value={rpeMetric}
+              options={RPE_METRIC_OPTIONS}
+              onChange={setRpeMetric}
+            />
+          }
+        />
       </div>
     </section>
   );
