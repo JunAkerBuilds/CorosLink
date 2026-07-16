@@ -9,6 +9,7 @@ import {
 } from "./corosSportTypes";
 import {
   countTrainingActivitiesMissingFeelType,
+  countTrainingActivitiesSince,
   deleteSettings,
   getSetting,
   listStoredTrainingActivities,
@@ -18,7 +19,7 @@ import {
   setTrainingActivityFeelType,
   upsertTrainingActivities
 } from "./database";
-import { dailyRpeLoad } from "./rpeLoad";
+import { buildRpeDistribution, dailyRpeLoad } from "./rpeLoad";
 import type {
   ActivityPaceBaseline,
   ActivityPaceBaselines,
@@ -2051,11 +2052,20 @@ function parseAnalytics(raw: Record<string, unknown>): TrainingHubAnalytics {
   const sportStatistics = extractSportStatistics(raw);
   const summary = pickObject(raw, ["summaryInfo"]) ?? {};
 
+  const fourWeeksAgoSec = Math.floor(
+    (Date.now() - 28 * 24 * 60 * 60 * 1000) / 1000
+  );
+  const rpeDistribution = buildRpeDistribution(
+    listTrainingActivityRpeInputs(fourWeeksAgoSec),
+    countTrainingActivitiesSince(fourWeeksAgoSec)
+  );
+
   return {
     dayList,
     weekList,
     sportStatistics,
     zoneDistributions: parseZoneDistributions(summary),
+    rpeDistribution,
     raw
   };
 }

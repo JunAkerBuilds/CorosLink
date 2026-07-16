@@ -1393,6 +1393,7 @@ export interface TrainingHubAnalytics {
   weekList: Record<string, unknown>[];
   sportStatistics: TrainingHubSportStatistic[];
   zoneDistributions: TrainingHubZoneDistributions;
+  rpeDistribution: RpeDistribution;
   raw?: Record<string, unknown>;
 }
 
