@@ -53,6 +53,7 @@ const MOBILE_API_HOSTNAMES: Record<CorosWatchfaceRegion, string> = {
   cn: "apicn.coros.com"
 };
 const DEFAULT_WATCHFACE_REGION: CorosWatchfaceRegion = "us";
+const COROS_CONFIG_DELETE_VALUE = "__COROSLINK_DELETE_CONFIG_KEY__";
 
 function normalizeWatchfaceRegion(value: unknown): CorosWatchfaceRegion {
   return value === "eu" || value === "us" || value === "cn"
@@ -1321,6 +1322,20 @@ export async function createCorosWatchfaceArchive(
   return toPublicArchive(selected);
 }
 
+/** Saves an already composed final watch-face archive without publishing it. */
+export async function exportCorosWatchfaceArchive(
+  archiveId: string,
+  destinationPath: string
+): Promise<void> {
+  const archive = requireSelectedArchive(archiveId);
+  const freshArchive = await inspectArchive(archive.path, archive.archiveId);
+  if (freshArchive.modifiedMs !== archive.modifiedMs) {
+    selectedArchives.set(freshArchive.archiveId, freshArchive);
+    throw new Error("The generated watch-face archive changed before export.");
+  }
+  await fs.promises.copyFile(archive.path, destinationPath);
+}
+
 /**
  * Describes everything the renderer's studio needs to restyle a template:
  * the per-resolution layout configs plus the bitmap-font sprite folders and
@@ -1436,18 +1451,25 @@ export function applyCorosWatchfaceConfigOverrides(
 ): string {
   const pending = new Map(Object.entries(overrides));
   const newline = text.includes("\r\n") ? "\r\n" : "\n";
-  const lines = text.split(/\r?\n/).map((line) => {
+  const lines = text.split(/\r?\n/).flatMap((line) => {
     const match = line.match(/^(\s*)\[([^\]]+)\]\s*=.*$/);
     if (!match || !pending.has(match[2]!)) {
-      return line;
+      return [line];
     }
     const value = pending.get(match[2]!)!;
     pending.delete(match[2]!);
-    return `${match[1]}[${match[2]}]=${value}`;
+    return value === COROS_CONFIG_DELETE_VALUE
+      ? []
+      : [`${match[1]}[${match[2]}]=${value}`];
   });
   const appendableKeys = new Set([
     "weather_icon_pos",
     "weather_icon_dir",
+    "battery_icon_pos",
+    "battery_icon_dir",
+    "battery_level_rect",
+    "battery_level_font",
+    "battery_level_font_color",
     "temperature_rect",
     "temperature_font",
     "temperature_font_color",
@@ -1459,6 +1481,16 @@ export function applyCorosWatchfaceConfigOverrides(
     "control_temperature_font_color",
     "control_temperature_negative_sign_icon",
     "control_negative_sign_icon",
+    "control_hr_font_color",
+    "control_step_font_color",
+    "control_kcal_font_color",
+    "control_floor_font_color",
+    "control_elevation_font_color",
+    "control_exercise_font_color",
+    "control_sunrise_font_color",
+    "control_sunset_font_color",
+    "control_battery_level_font",
+    "control_battery_level_font_color",
     "time_hour_high_pos",
     "time_hour_high_font",
     "time_hour_low_pos",
@@ -1471,6 +1503,11 @@ export function applyCorosWatchfaceConfigOverrides(
   ]);
   const appended: string[] = [];
   for (const [key, value] of pending) {
+    if (value === COROS_CONFIG_DELETE_VALUE) {
+      // Deleting an optional key that is already absent is idempotent.
+      pending.delete(key);
+      continue;
+    }
     if (appendableKeys.has(key)) {
       appended.push(`[${key}]=${value}`);
       pending.delete(key);
@@ -1486,6 +1523,21 @@ export function applyCorosWatchfaceConfigOverrides(
     lines.splice(insertionIndex, 0, ...appended);
   }
   return lines.join(newline);
+}
+
+/** Ensures a composed standalone battery folder is actually referenced. */
+export function repairStandaloneBatteryConfigOverrides(
+  text: string,
+  overrides: Record<string, string>,
+  hasStudioBatteryFolder: boolean
+): Record<string, string> {
+  if (!hasStudioBatteryFolder) return overrides;
+  const config = parseCorosWatchfaceConfig(text);
+  const position = overrides.battery_icon_pos ?? config.battery_icon_pos ?? "";
+  const folder = overrides.battery_icon_dir ?? config.battery_icon_dir ?? "";
+  return position.trim() && !folder.trim()
+    ? { ...overrides, battery_icon_dir: "cl_battery_icon" }
+    : overrides;
 }
 
 function validateConfigOverrides(
@@ -1598,7 +1650,7 @@ async function discoverSpriteAssets(
   for (const [folder, numbered] of folderFiles) {
     const plainFolder = folder.replace(/^a\//, "");
     const kind = stateFolders.has(folder) || stateFolders.has(plainFolder) ||
-      /^(?:battery|weather)$/i.test(plainFolder)
+      /^(?:battery|weather|cl_battery_icon)$/i.test(plainFolder)
       ? "state"
       : classifySpriteFolder(numbered);
     if (!kind) {
@@ -2342,8 +2394,60 @@ async function rewriteTemplateArchive(
   watchFaceVersion?: number
 ): Promise<Buffer> {
   const directory = await openTemplateArchive(sourcePath);
-  const sourceFiles = directory.files.filter((entry) => entry.type === "File");
-  const sourcePaths = new Set(sourceFiles.map((entry) => entry.path));
+  const originalSourceFiles = directory.files.filter((entry) => entry.type === "File");
+  const sourcePaths = new Set(originalSourceFiles.map((entry) => entry.path));
+  const configEntries = originalSourceFiles.filter((entry) =>
+    /(^|\/)(?:AODconfig|config)\.txt$/i.test(entry.path)
+  );
+  const parsedConfigs = new Map<string, Record<string, string>>();
+  for (const entry of configEntries) {
+    parsedConfigs.set(
+      entry.path,
+      parseCorosWatchfaceConfig((await entry.buffer()).toString("utf8"))
+    );
+  }
+  const normalizeConfigFolder = (value: string | undefined) =>
+    value
+      ?.replace(/\\/g, "/")
+      .replace(/^\.\//, "")
+      .replace(/^\/+|\/+$/g, "") ?? "";
+  const removedControlBatteryPrefixes = new Set<string>();
+  for (const [configPath, overrides] of configOverrides) {
+    if (overrides.control_battery_icon_dir !== COROS_CONFIG_DELETE_VALUE) continue;
+    const config = parsedConfigs.get(configPath);
+    if (!config) continue;
+    const folder = normalizeConfigFolder(config.control_battery_icon_dir);
+    const resolutionDirectory = configPath.split("/", 1)[0]!;
+    const folderIsStillReferenced = configEntries.some((entry) => {
+      if (entry.path.split("/", 1)[0] !== resolutionDirectory) return false;
+      const effectiveConfig = {
+        ...(parsedConfigs.get(entry.path) ?? {}),
+        ...(configOverrides.get(entry.path) ?? {})
+      };
+      return Object.entries(effectiveConfig).some(
+        ([key, value]) =>
+          /_icon_dir$/i.test(key) &&
+          value !== COROS_CONFIG_DELETE_VALUE &&
+          normalizeConfigFolder(value) === folder
+      );
+    });
+    if (folder && !folderIsStillReferenced) {
+      removedControlBatteryPrefixes.add(
+        `${resolutionDirectory}/${folder}/`
+      );
+    }
+  }
+  const sourceFiles = originalSourceFiles.filter(
+    (entry) =>
+      ![...removedControlBatteryPrefixes].some((prefix) =>
+        entry.path.startsWith(prefix)
+      )
+  );
+  const studioBatteryResolutions = new Set<string>();
+  for (const spritePath of [...sourcePaths, ...spriteReplacements.keys()]) {
+    const match = spritePath.match(/^(watchface_\d+x\d+)\/cl_battery_icon\/\d{2}\.png$/i);
+    if (match) studioBatteryResolutions.add(match[1]!);
+  }
   for (const required of [
     "watchface_customize.png",
     "watchface_800x800/background.png",
@@ -2443,13 +2547,30 @@ async function rewriteTemplateArchive(
         return { name: entry.path, data: backgroundData };
       }
       const overrides = configOverrides.get(entry.path);
-      if (overrides) {
+      const isNormalConfig = /(^|\/)config\.txt$/i.test(entry.path);
+      if (
+        overrides ||
+        (isNormalConfig &&
+          studioBatteryResolutions.has(entry.path.split("/", 1)[0]!))
+      ) {
+        const rawConfig = (await entry.buffer()).toString("utf8");
+        const resolutionDirectory = entry.path.split("/", 1)[0]!;
+        const effectiveOverrides = isNormalConfig
+          ? repairStandaloneBatteryConfigOverrides(
+              rawConfig,
+              overrides ?? {},
+              studioBatteryResolutions.has(resolutionDirectory)
+            )
+          : overrides!;
+        if (Object.keys(effectiveOverrides).length === 0) {
+          return { name: entry.path, data: Buffer.from(rawConfig, "utf8") };
+        }
         return {
           name: entry.path,
           data: Buffer.from(
             applyCorosWatchfaceConfigOverrides(
-              (await entry.buffer()).toString("utf8"),
-              overrides
+              rawConfig,
+              effectiveOverrides
             ),
             "utf8"
           )

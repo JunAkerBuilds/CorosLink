@@ -585,6 +585,7 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
           initialDesign={studioSession.initialDesign}
           initialProjectId={studioSession.project?.projectId}
           initialProjectName={studioSession.project?.name ?? studioSession.initialName}
+          showDevelopmentTools={IS_DEVELOPMENT_BUILD && showDevelopmentTools}
           onBack={returnToHub}
           onArchiveCreated={setBuiltArchive}
           onPublish={openPublish}
@@ -1483,7 +1484,10 @@ function WatchFacePreview({
           previewDetails,
           watchResolution.directory
         ),
-        toStudioOptions(loadedProject.design),
+        {
+          ...toStudioOptions(loadedProject.design),
+          effectResolutionScale: watchResolution.width / resolution.width
+        },
         loadAssets
       );
       const weather = loadedProject.design.weatherIndicator;

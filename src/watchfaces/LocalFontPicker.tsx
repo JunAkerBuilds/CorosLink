@@ -21,6 +21,11 @@ interface LocalFontPickerProps {
   onRasterFontChange?: (font: CorosWatchfaceRasterFont | undefined) => void;
   typography?: WatchfaceTypography;
   onTypographyChange?: (typography: WatchfaceTypography) => void;
+  /**
+   * Routes the digit-spacing slider to this component's own style instead of
+   * the shared design typography; weight and style still edit the design.
+   */
+  onLetterSpacingChange?: (letterSpacing: number) => void;
   disabled?: boolean;
 }
 
@@ -51,6 +56,7 @@ export function LocalFontPicker({
   onRasterFontChange,
   typography,
   onTypographyChange,
+  onLetterSpacingChange,
   disabled = false
 }: LocalFontPickerProps) {
   const [open, setOpen] = useState(false);
@@ -87,13 +93,28 @@ export function LocalFontPicker({
   );
   const typographyDisabled = disabled || (!value && !rasterFontIsActive);
   const fontShapeControlsDisabled = typographyDisabled || rasterFontIsActive;
-  const sampleStyle: CSSProperties = {
+  // Keep picker labels and samples at natural tracking. Component-specific
+  // spacing belongs to the exported watch glyphs, not the font-selection UI.
+  const pickerPreviewStyle: CSSProperties = {
     fontWeight,
-    fontStyle,
-    letterSpacing: `${letterSpacing}em`
+    fontStyle
   };
 
   function updateTypography(patch: WatchfaceTypography) {
+    if (onLetterSpacingChange) {
+      if (patch.letterSpacing !== undefined) {
+        onLetterSpacingChange(patch.letterSpacing);
+        return;
+      }
+      // The typography prop carries this component's effective spacing;
+      // writing it back would pin the design-wide value to it.
+      const { letterSpacing: _componentSpacing, ...shared } = {
+        ...typography,
+        ...patch
+      };
+      onTypographyChange?.(shared);
+      return;
+    }
     onTypographyChange?.({ ...typography, ...patch });
   }
 
@@ -247,7 +268,7 @@ export function LocalFontPicker({
         >
           <span
             className={value || rasterFontIsActive ? "watchface-font-picker-value" : "watchface-font-picker-placeholder"}
-            style={value ? { fontFamily: value, ...sampleStyle } : undefined}
+            style={value ? { fontFamily: value, ...pickerPreviewStyle } : undefined}
           >
             {rasterFontIsActive && rasterFont ? rasterFont.label + " (PNG)" : value || emptyLabel}
           </span>
@@ -312,8 +333,8 @@ export function LocalFontPicker({
                   aria-selected={candidate === family}
                   onClick={() => setCandidate(family)}
                 >
-                  <strong style={{ fontFamily: family, ...sampleStyle }}>{family}</strong>
-                  <span style={{ fontFamily: family, ...sampleStyle }}>0123456789 · Wed</span>
+                  <strong style={{ fontFamily: family, ...pickerPreviewStyle }}>{family}</strong>
+                  <span style={{ fontFamily: family, ...pickerPreviewStyle }}>0123456789 · Wed</span>
                 </button>
               ))}
             </div>

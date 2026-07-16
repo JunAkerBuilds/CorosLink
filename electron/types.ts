@@ -244,6 +244,11 @@ export interface CorosWatchfaceProjectExportResult {
   filePath?: string;
 }
 
+export interface CorosWatchfaceArchiveExportInput {
+  archiveId: string;
+  name: string;
+}
+
 /** A public COROS share page downloaded and registered as a Studio archive. */
 export interface CorosWatchfaceShareImport {
   archive: CorosWatchfaceArchive;
@@ -437,6 +442,62 @@ export interface CorosWatchfaceRasterFontFolder {
   sprites: CorosWatchfaceRasterFontSprite[];
 }
 
+export interface CorosWatchfaceSpriteCrop {
+  /** Normalized source coordinates in the inclusive 0..1 image space. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface CorosWatchfaceTransformOrigin {
+  /** Normalized horizontal pivot, where 0.5 is the visual center. */
+  x: number;
+  /** Normalized vertical pivot, where 0.5 is the visual center. */
+  y: number;
+}
+
+export interface CorosWatchfaceShadowEffect {
+  id: string;
+  kind: "outer-shadow" | "inner-shadow";
+  enabled: boolean;
+  color: string;
+  /** Normalized 0..1 alpha multiplied with the shadow color. */
+  opacity: number;
+  /** Blur radius in 800px master watch-face pixels. */
+  blur: number;
+  /** Positive values expand the mask; negative values contract it. */
+  spread: number;
+  /** Offset distance in 800px master watch-face pixels. */
+  distance: number;
+  /** Clockwise degrees from the positive X axis. */
+  angle: number;
+}
+
+export interface CorosWatchfaceEffectStyle {
+  id: string;
+  name: string;
+  effects: CorosWatchfaceShadowEffect[];
+}
+
+export type CorosWatchfaceEffectBinding =
+  | { kind: "local"; effects: CorosWatchfaceShadowEffect[] }
+  | { kind: "style"; styleId: string };
+
+export interface CorosWatchfaceEditorGroup {
+  id: string;
+  name: string;
+  /** Flat editor-layer ids. Groups are flattened during watch export. */
+  layerIds: string[];
+}
+
+export interface CorosWatchfaceEditorGuide {
+  id: string;
+  axis: "x" | "y";
+  /** Position in the editor's largest preview-resolution coordinate space. */
+  position: number;
+}
+
 export interface CorosWatchfaceDesignSprite {
   id: string;
   dataUrl: string;
@@ -448,6 +509,19 @@ export interface CorosWatchfaceDesignSprite {
   y: number;
   scale: number;
   rotation: number;
+  /** Absent means fully opaque for legacy projects. */
+  opacity?: number;
+  flipX?: boolean;
+  flipY?: boolean;
+  /** Skew angles are clamped to -80..80 degrees by the editor. */
+  skewX?: number;
+  skewY?: number;
+  /** Imported images preserve proportions unless explicitly unlocked. */
+  aspectLocked?: boolean;
+  /** Normalized source crop. Absent means the complete source image. */
+  crop?: CorosWatchfaceSpriteCrop;
+  /** Normalized pivot for rotation and skew. */
+  origin?: CorosWatchfaceTransformOrigin;
   /** Absent means visible for projects saved before layer toggles. */
   visible?: boolean;
   /** Optional monochrome tint while preserving the imported image alpha. */
@@ -467,6 +541,10 @@ interface CorosWatchfaceBackgroundElementBase {
   x: number;
   y: number;
   rotation: number;
+  /** Absent means visible for projects saved before group visibility controls. */
+  visible?: boolean;
+  /** Absent means fully opaque for legacy projects. */
+  opacity?: number;
 }
 
 export interface CorosWatchfaceBackgroundRect extends CorosWatchfaceBackgroundElementBase {
@@ -539,16 +617,20 @@ export interface CorosWatchfaceDesignState {
   tintIcons: boolean;
   previewComplication: string;
   metricChanges: Record<string, boolean>;
-  metricStyles: Record<string, { color?: string; scale: number; fontFamily?: string; rasterFont?: CorosWatchfaceRasterFont }>;
+  metricStyles: Record<string, { color?: string; scale: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
+  /** Shared digit style for every value shown in the selectable control slot. */
+  selectableMetricStyle?: { color?: string; scale: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont };
+  /** False removes the Battery choice from the firmware-selectable control slot. */
+  controlBatteryEnabled?: boolean;
   /** Per selectable-control icon offsets, independent from the slot origin/value. */
   controlIconOffsets?: Record<string, { dx: number; dy: number }>;
   /** Converts firmware auto-aligned HH:MM into four independently positioned digits. */
   separateAutoTime?: boolean;
-  timeStyles: Record<string, { color?: string; scale: number; fontFamily?: string; rasterFont?: CorosWatchfaceRasterFont }>;
+  timeStyles: Record<string, { color?: string; scale: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Weekday/month/day scaling; absent in projects saved before resizing. */
   dateStyles?: Record<
     string,
-    { scale: number; fontFamily?: string; color?: string; rasterFont?: CorosWatchfaceRasterFont }
+    { scale: number; fontFamily?: string; color?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }
   >;
   staticSeparators: Record<
     "colon" | "dateSlash",
@@ -587,12 +669,20 @@ export interface CorosWatchfaceDesignState {
    * link group without changing the exported watch-face format.
    */
   linkedLayerGroups?: string[][];
+  /** Persistent flat groups used by the modern editor. */
+  editorGroups?: CorosWatchfaceEditorGroup[];
+  /** Project-specific ruler guides in preview coordinates. */
+  editorGuides?: CorosWatchfaceEditorGuide[];
   /**
    * Editor layer ids whose positions are protected from drag, nudge, and
    * inspector position edits. This is an editor-only setting and does not
    * alter the exported watch-face format.
    */
   lockedLayerIds?: string[];
+  /** Reusable, live-linked visual-effect styles. */
+  effectStyles?: CorosWatchfaceEffectStyle[];
+  /** Effects keyed by editor layer id, or by `aod:<id>` for always-on assets. */
+  layerEffects?: Record<string, CorosWatchfaceEffectBinding>;
   /** Visibility overrides for firmware-backed editor layers. */
   layerVisibility?: Record<string, boolean>;
   /** Per-layer colors for firmware components without specialized styles. */

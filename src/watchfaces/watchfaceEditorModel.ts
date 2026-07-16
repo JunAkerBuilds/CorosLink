@@ -5,28 +5,21 @@ import type {
 import {
   applyConfigOverridesToDetails,
   applyLayoutToDetails,
-  buildDateStyleOverrides,
-  buildWatchfaceConfigAssetOverrides,
+  batteryPreviewStateIndex,
+  buildControlBatteryVisibilityOverrides,
   scaledBatterySpriteCanvasSize,
-  buildMetricOverrides,
-  buildMetricStyleOverrides,
-  buildSeparateTimeOverrides,
-  buildTimeStyleOverrides,
   computeLayoutGroupBounds,
   getFixedMetricCapabilities,
   getAmPmCapability,
   listWatchfaceConfigAssets,
-  mergeConfigOverrides,
   pickPreviewResolution,
   WATCHFACE_LAYOUT_GROUPS,
-  type WatchfaceDateStyles,
   type WatchfaceLayoutGroupBounds,
   type WatchfaceMetricId,
-  type WatchfaceMetricStyles,
   type WatchfaceStaticSeparatorId,
-  type WatchfaceTimeStyles,
   type WatchfaceTimePartId
 } from "./watchfaceStudio";
+import { deriveDesignDetails } from "./watchfaceCompose";
 import { getWeatherCapability } from "./weatherAssets";
 import { rotatedCenterBounds } from "./watchfaceEditorGeometry";
 
@@ -63,6 +56,13 @@ export interface EditorLayerCapabilities {
   scale: boolean;
   /** Participates in the global digit-font choice. */
   font: boolean;
+  resize?: boolean;
+  rotate?: boolean;
+  crop?: boolean;
+  skew?: boolean;
+  opacity?: boolean;
+  grouping?: boolean;
+  effects?: boolean;
 }
 
 export interface EditorLayer {
@@ -146,18 +146,63 @@ function labelForGroup(groupId: string): string {
 
 function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
   if (groupId in TIME_GROUP_PARTS) {
-    return { position: true, color: true, scale: true, font: true };
+    return {
+      position: true,
+      color: true,
+      scale: true,
+      font: true,
+      grouping: true,
+      effects: true
+    };
   }
   if (METRIC_IDS.has(groupId as WatchfaceMetricId)) {
-    return { position: true, color: true, scale: true, font: false };
+    return {
+      position: true,
+      color: true,
+      scale: true,
+      font: false,
+      grouping: true,
+      effects: true
+    };
+  }
+  if (groupId === "battery") {
+    return {
+      position: true,
+      color: true,
+      scale: true,
+      font: true,
+      grouping: true,
+      effects: true
+    };
   }
   if (groupId === "weekday" || groupId === "dateMonth" || groupId === "dateDay") {
-    return { position: true, color: true, scale: true, font: false };
+    return {
+      position: true,
+      color: true,
+      scale: true,
+      font: false,
+      grouping: true,
+      effects: true
+    };
   }
   if (groupId === "batteryIcon") {
-    return { position: true, color: false, scale: true, font: false };
+    return {
+      position: true,
+      color: false,
+      scale: true,
+      font: false,
+      grouping: true,
+      effects: true
+    };
   }
-  return { position: true, color: true, scale: false, font: false };
+  return {
+    position: true,
+    color: true,
+    scale: false,
+    font: false,
+    grouping: true,
+    effects: true
+  };
 }
 
 function kindForGroup(groupId: string): EditorLayerKind {
@@ -194,38 +239,21 @@ export function deriveEditorLayers(
   details: CorosWatchfaceTemplateDetails,
   design: CorosWatchfaceDesignState
 ): EditorLayer[] {
-  const timeFormatDetails = applyConfigOverridesToDetails(
-    details,
-    buildSeparateTimeOverrides(details, design.separateAutoTime === true)
-  );
-  const metricDetails = applyConfigOverridesToDetails(
-    timeFormatDetails,
-    buildMetricOverrides(timeFormatDetails, design.metricChanges ?? {})
-  );
-  const styledDetails = applyConfigOverridesToDetails(
-    metricDetails,
-    mergeConfigOverrides(
-      buildMetricStyleOverrides(
-        metricDetails,
-        (design.metricStyles ?? {}) as WatchfaceMetricStyles
-      ),
-      buildTimeStyleOverrides(
-        metricDetails,
-        (design.timeStyles ?? {}) as WatchfaceTimeStyles
-      ),
-      buildDateStyleOverrides(
-        metricDetails,
-        (design.dateStyles ?? {}) as WatchfaceDateStyles
-      ),
-      buildWatchfaceConfigAssetOverrides(
-        metricDetails,
-        design.configAssetOverrides ?? {}
-      )
-    )
-  );
-  const offsetDetails = applyLayoutToDetails(
+  // Keep selection geometry aligned with selectable styling and layout while
+  // retaining hidden top-level layers in the layer list so users can re-enable
+  // them. Control-battery is different: disabling it removes only children of
+  // the still-visible selectable layer, so omit those children from its bounds.
+  const styledDetails = deriveDesignDetails(details, design).styledMetricDetails;
+  const laidOutDetails = applyLayoutToDetails(
     styledDetails,
     design.layoutOffsets ?? {}
+  );
+  const offsetDetails = applyConfigOverridesToDetails(
+    laidOutDetails,
+    buildControlBatteryVisibilityOverrides(
+      laidOutDetails,
+      design.controlBatteryEnabled
+    )
   );
   const resolution = pickPreviewResolution(offsetDetails);
   const boundsById = new Map<string, WatchfaceLayoutGroupBounds>();
@@ -234,19 +262,46 @@ export function deriveEditorLayers(
       if (box.id === "batteryIcon") {
         const batteryOverride = design.configAssetOverrides?.["config:battery_icon"];
         const batteryScale = batteryOverride?.scale ?? 1;
-        const artwork = Object.values(batteryOverride?.stateReplacements ?? {})[0] ??
+        const configuredFolder = resolution.config.battery_icon_dir?.replace(/\\/g, "/");
+        const batteryFolder =
+          (configuredFolder
+            ? resolution.spriteFolders.find(
+                (folder) =>
+                  folder.kind === "state" && folder.folder === configuredFolder
+              )
+            : undefined);
+        const templateStateIndex = batteryPreviewStateIndex(
+          batteryFolder?.files.length ?? 0
+        );
+        const templateState = batteryFolder?.files[templateStateIndex];
+        const importedStates = Object.entries(
+          batteryOverride?.stateReplacements ?? {}
+        )
+          .filter(([key]) => /^\d+$/.test(key))
+          .sort(([left], [right]) => Number(left) - Number(right));
+        const importedPreviewState = importedStates[
+          batteryPreviewStateIndex(importedStates.length)
+        ];
+        const artwork =
+          batteryOverride?.stateReplacements?.[String(templateStateIndex)] ??
+          importedPreviewState?.[1] ??
           batteryOverride?.replacement;
-        const canvas = artwork
-          ? scaledBatterySpriteCanvasSize(
+        const canvas = artwork && !templateState
+          ? {
+              width: artwork.width * batteryScale,
+              height: artwork.height * batteryScale
+            }
+          : artwork && templateState
+            ? scaledBatterySpriteCanvasSize(
               artwork.width,
               artwork.height,
-              box.x1 - box.x0,
-              box.y1 - box.y0,
+              templateState.width,
+              templateState.height,
               batteryScale
             )
-          : {
-              width: (box.x1 - box.x0) * batteryScale,
-              height: (box.y1 - box.y0) * batteryScale
+            : {
+              width: templateState?.width ?? box.x1 - box.x0,
+              height: templateState?.height ?? box.y1 - box.y0
             };
         // The selection represents the full exported bitmap canvas, including
         // its intentional transparent/black padding.
@@ -269,6 +324,42 @@ export function deriveEditorLayers(
 
   for (const groupId of LAYER_ORDER) {
     const bounds = boundsById.get(groupId) ?? null;
+
+    // Battery data is a fixed metric even though it has a dedicated inspector.
+    // Keep it available when the starter template omits its config keys: turning
+    // it on creates battery_level_rect/font through buildMetricOverrides.
+    if (groupId === "battery") {
+      const capability = metricActivity.get("battery");
+      const visible = design.metricChanges?.battery ?? capability?.active ?? false;
+      layers.push({
+        id: groupId,
+        kind: "battery",
+        label: capability?.label ?? "Battery data",
+        layoutGroupId: groupId,
+        metricId: "battery",
+        visible,
+        canHide: true,
+        present: bounds !== null,
+        bounds,
+        capabilities: capabilitiesForGroup(groupId)
+      });
+      continue;
+    }
+
+    if (groupId === "batteryIcon") {
+      layers.push({
+        id: groupId,
+        kind: "batteryIcon",
+        label: labelForGroup(groupId),
+        layoutGroupId: groupId,
+        visible: bounds !== null && design.layerVisibility?.batteryIcon !== false,
+        canHide: true,
+        present: bounds !== null,
+        bounds,
+        capabilities: capabilitiesForGroup(groupId)
+      });
+      continue;
+    }
 
     if (METRIC_IDS.has(groupId as WatchfaceMetricId)) {
       const metricId = groupId as WatchfaceMetricId;
@@ -448,7 +539,9 @@ export function deriveEditorLayers(
       sprite.y,
       width,
       height,
-      sprite.rotation
+      sprite.rotation,
+      sprite.skewX,
+      sprite.skewY
     );
     layers.push({
       id: `sprite:${sprite.id}`,
@@ -463,7 +556,19 @@ export function deriveEditorLayers(
         label: "Imported sprite",
         ...bounds
       },
-      capabilities: { position: true, color: false, scale: true, font: false }
+      capabilities: {
+        position: true,
+        color: false,
+        scale: true,
+        font: false,
+        resize: true,
+        rotate: true,
+        crop: true,
+        skew: true,
+        opacity: true,
+        grouping: true,
+        effects: true
+      }
     });
   }
 

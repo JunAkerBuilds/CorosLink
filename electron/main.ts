@@ -64,6 +64,7 @@ import {
   describeCorosWatchfaceTemplate,
   downloadCorosWatchfaceTheme,
   exportCorosWatchfaceProject,
+  exportCorosWatchfaceArchive,
   getCorosBatteryReport,
   getCorosWatchfaceStatus,
   importCorosWatchfaceShareLink,
@@ -147,6 +148,7 @@ import type {
   CorosLegacy614aCarrierPatchInput,
   CorosWatchfaceCreatorInput,
   CorosWatchfaceProjectExportInput,
+  CorosWatchfaceArchiveExportInput,
   CorosWatchfacePublishInput,
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceRegion,
@@ -865,6 +867,31 @@ function registerIpcHandlers(): void {
         ? result.filePath
         : `${result.filePath}.zip`;
       await exportCorosWatchfaceProject(input, destinationPath);
+      return { saved: true, filePath: destinationPath };
+    }
+  );
+  ipcMain.handle(
+    "watchfaces:exportArchive",
+    async (_event, input: CorosWatchfaceArchiveExportInput) => {
+      if (!input || typeof input.archiveId !== "string") {
+        throw new Error("Build a final watch-face archive before exporting it.");
+      }
+      const baseName =
+        sanitizeExportFileName(input.name) || "CorosLink-watch-face";
+      const saveOptions = {
+        title: "Export final watch-face ZIP",
+        defaultPath: `${baseName}.zip`,
+        filters: [{ name: "Final watch-face ZIP", extensions: ["zip"] }]
+      };
+      const result =
+        mainWindow && !mainWindow.isDestroyed()
+          ? await dialog.showSaveDialog(mainWindow, saveOptions)
+          : await dialog.showSaveDialog(saveOptions);
+      if (result.canceled || !result.filePath) return { saved: false };
+      const destinationPath = result.filePath.toLowerCase().endsWith(".zip")
+        ? result.filePath
+        : `${result.filePath}.zip`;
+      await exportCorosWatchfaceArchive(input.archiveId, destinationPath);
       return { saved: true, filePath: destinationPath };
     }
   );

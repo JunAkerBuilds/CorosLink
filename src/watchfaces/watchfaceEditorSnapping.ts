@@ -1,4 +1,7 @@
-import type { CorosWatchfaceBackgroundElement } from "../../electron/types";
+import type {
+  CorosWatchfaceBackgroundElement,
+  CorosWatchfaceEditorGuide
+} from "../../electron/types";
 import type { WatchfaceEditorBounds } from "./watchfaceEditorGeometry";
 
 export const WATCHFACE_PLACEMENT_STORAGE_KEY =
@@ -16,7 +19,7 @@ export interface WatchfacePlacementPreferences {
 }
 
 export const DEFAULT_WATCHFACE_PLACEMENT_PREFERENCES: WatchfacePlacementPreferences = {
-  snapEnabled: false,
+  snapEnabled: true,
   guidesVisible: false,
   gridVisible: false,
   gridStep: 8,
@@ -101,8 +104,11 @@ export interface WatchfaceSnapTarget {
 
 export type WatchfaceSnapGuideKind =
   | "face-center"
+  | "face-edge"
   | "safe-area"
+  | "guide"
   | "layer"
+  | "spacing"
   | "grid";
 
 export interface WatchfaceSnapGuide {
@@ -110,6 +116,16 @@ export interface WatchfaceSnapGuide {
   value: number;
   kind: WatchfaceSnapGuideKind;
   message: string;
+  targetId?: string;
+}
+
+export interface WatchfaceSnapMeasurement {
+  axis: "x" | "y";
+  start: number;
+  end: number;
+  cross: number;
+  label: string;
+  kind: "distance" | "spacing";
 }
 
 export interface SnapWatchfaceBoundsInput {
@@ -120,6 +136,10 @@ export interface SnapWatchfaceBoundsInput {
   safeAreaInsetPercent: number;
   targets: WatchfaceSnapTarget[];
   movingId?: string;
+  guides?: CorosWatchfaceEditorGuide[];
+  /** Previously acquired guides retained until releaseThreshold is exceeded. */
+  retainedGuides?: WatchfaceSnapGuide[];
+  releaseThreshold?: number;
   /** Grid spacing in preview-resolution pixels. Omit when the grid is off. */
   gridStep?: number;
   /** Human-readable grid spacing in watch pixels. */
@@ -130,6 +150,7 @@ export interface SnapWatchfaceBoundsResult {
   dx: number;
   dy: number;
   guides: WatchfaceSnapGuide[];
+  measurements: WatchfaceSnapMeasurement[];
 }
 
 interface SnapCandidate extends WatchfaceSnapGuide {
@@ -145,9 +166,12 @@ interface AxisAnchors {
 
 const SNAP_PRIORITY: Record<WatchfaceSnapGuideKind, number> = {
   "face-center": 0,
-  "safe-area": 1,
-  layer: 2,
-  grid: 3
+  guide: 1,
+  "face-edge": 2,
+  "safe-area": 3,
+  layer: 4,
+  spacing: 5,
+  grid: 6
 };
 
 export function watchfaceSafeAreaBounds(
@@ -282,6 +306,11 @@ export function snapWatchfaceBounds(
     "face-center",
     "Snapped to face center"
   );
+
+  addCandidate(xCandidates, "x", x.start, 0, "face-edge", "Snapped to face edge");
+  addCandidate(xCandidates, "x", x.end, input.faceWidth, "face-edge", "Snapped to face edge");
+  addCandidate(yCandidates, "y", y.start, 0, "face-edge", "Snapped to face edge");
+  addCandidate(yCandidates, "y", y.end, input.faceHeight, "face-edge", "Snapped to face edge");
   addCandidate(
     yCandidates,
     "y",
@@ -336,7 +365,8 @@ export function snapWatchfaceBounds(
           moving,
           fixed,
           "layer",
-          `Aligned with ${target.label}`
+          `Aligned with ${target.label}`,
+          target.id
         );
       }
     }
@@ -348,11 +378,30 @@ export function snapWatchfaceBounds(
           moving,
           fixed,
           "layer",
-          `Aligned with ${target.label}`
+          `Aligned with ${target.label}`,
+          target.id
         );
       }
     }
   }
+
+  for (const guide of input.guides ?? []) {
+    const anchors = guide.axis === "x" ? x : y;
+    const candidates = guide.axis === "x" ? xCandidates : yCandidates;
+    for (const anchor of Object.values(anchors)) {
+      addCandidate(
+        candidates,
+        guide.axis,
+        anchor,
+        guide.position,
+        "guide",
+        "Snapped to guide",
+        guide.id
+      );
+    }
+  }
+
+  addSpacingCandidates(input, xCandidates, yCandidates);
 
   if (input.gridStep && input.gridStep > 0) {
     const message = `Snapped to ${input.gridLabel ?? `${input.gridStep}px`} grid`;
@@ -374,14 +423,28 @@ export function snapWatchfaceBounds(
     );
   }
 
-  const snappedX = pickCandidate(xCandidates, input.threshold);
-  const snappedY = pickCandidate(yCandidates, input.threshold);
+  const snappedX = pickCandidate(
+    xCandidates,
+    input.threshold,
+    input.retainedGuides?.find((guide) => guide.axis === "x"),
+    input.releaseThreshold
+  );
+  const snappedY = pickCandidate(
+    yCandidates,
+    input.threshold,
+    input.retainedGuides?.find((guide) => guide.axis === "y"),
+    input.releaseThreshold
+  );
+  const dx = snappedX?.adjustment ?? 0;
+  const dy = snappedY?.adjustment ?? 0;
+  const moved = translateWatchfaceBounds(input.movingBounds, dx, dy);
   return {
-    dx: snappedX?.adjustment ?? 0,
-    dy: snappedY?.adjustment ?? 0,
+    dx,
+    dy,
     guides: [snappedX, snappedY].filter(
       (guide): guide is SnapCandidate => guide !== null
-    )
+    ),
+    measurements: watchfaceSpacingMeasurements(moved, input.targets)
   };
 }
 
@@ -402,7 +465,8 @@ function addCandidate(
   movingValue: number,
   targetValue: number,
   kind: WatchfaceSnapGuideKind,
-  message: string
+  message: string,
+  targetId?: string
 ): void {
   candidates.push({
     axis,
@@ -410,8 +474,128 @@ function addCandidate(
     kind,
     message,
     adjustment: targetValue - movingValue,
-    priority: SNAP_PRIORITY[kind]
+    priority: SNAP_PRIORITY[kind],
+    ...(targetId ? { targetId } : {})
   });
+}
+
+function addSpacingCandidates(
+  input: SnapWatchfaceBoundsInput,
+  xCandidates: SnapCandidate[],
+  yCandidates: SnapCandidate[]
+): void {
+  const targets = input.targets.filter(
+    (target) => target.visible !== false && target.id !== input.movingId
+  );
+  const addAxis = (
+    axis: "x" | "y",
+    candidates: SnapCandidate[],
+    startKey: "x0" | "y0",
+    endKey: "x1" | "y1"
+  ) => {
+    const movingStart = input.movingBounds[startKey];
+    const movingEnd = input.movingBounds[endKey];
+    const movingSize = movingEnd - movingStart;
+    const before = targets
+      .filter((target) => target.bounds[endKey] <= movingStart)
+      .sort((left, right) => right.bounds[endKey] - left.bounds[endKey]);
+    const after = targets
+      .filter((target) => target.bounds[startKey] >= movingEnd)
+      .sort((left, right) => left.bounds[startKey] - right.bounds[startKey]);
+
+    if (before[0] && after[0]) {
+      const targetStart =
+        (before[0].bounds[endKey] + after[0].bounds[startKey] - movingSize) / 2;
+      addCandidate(
+        candidates,
+        axis,
+        movingStart,
+        targetStart,
+        "spacing",
+        "Matched equal spacing",
+        `${before[0].id}|${after[0].id}`
+      );
+    }
+    if (before[0] && before[1]) {
+      const gap = before[0].bounds[startKey] - before[1].bounds[endKey];
+      addCandidate(
+        candidates,
+        axis,
+        movingStart,
+        before[0].bounds[endKey] + gap,
+        "spacing",
+        "Matched equal spacing",
+        `${before[1].id}|${before[0].id}`
+      );
+    }
+    if (after[0] && after[1]) {
+      const gap = after[1].bounds[startKey] - after[0].bounds[endKey];
+      addCandidate(
+        candidates,
+        axis,
+        movingEnd,
+        after[0].bounds[startKey] - gap,
+        "spacing",
+        "Matched equal spacing",
+        `${after[0].id}|${after[1].id}`
+      );
+    }
+  };
+  addAxis("x", xCandidates, "x0", "x1");
+  addAxis("y", yCandidates, "y0", "y1");
+}
+
+export function watchfaceSpacingMeasurements(
+  moving: WatchfaceEditorBounds,
+  targets: WatchfaceSnapTarget[]
+): WatchfaceSnapMeasurement[] {
+  const visible = targets.filter((target) => target.visible !== false);
+  const measurements: WatchfaceSnapMeasurement[] = [];
+  const left = visible
+    .filter((target) => target.bounds.x1 <= moving.x0)
+    .sort((a, b) => b.bounds.x1 - a.bounds.x1)[0];
+  const right = visible
+    .filter((target) => target.bounds.x0 >= moving.x1)
+    .sort((a, b) => a.bounds.x0 - b.bounds.x0)[0];
+  const top = visible
+    .filter((target) => target.bounds.y1 <= moving.y0)
+    .sort((a, b) => b.bounds.y1 - a.bounds.y1)[0];
+  const bottom = visible
+    .filter((target) => target.bounds.y0 >= moving.y1)
+    .sort((a, b) => a.bounds.y0 - b.bounds.y0)[0];
+  if (left) measurements.push({
+    axis: "x",
+    start: left.bounds.x1,
+    end: moving.x0,
+    cross: Math.max(left.bounds.y0, moving.y0),
+    label: `${Math.round(moving.x0 - left.bounds.x1)} px`,
+    kind: "distance"
+  });
+  if (right) measurements.push({
+    axis: "x",
+    start: moving.x1,
+    end: right.bounds.x0,
+    cross: Math.max(right.bounds.y0, moving.y0),
+    label: `${Math.round(right.bounds.x0 - moving.x1)} px`,
+    kind: "distance"
+  });
+  if (top) measurements.push({
+    axis: "y",
+    start: top.bounds.y1,
+    end: moving.y0,
+    cross: Math.max(top.bounds.x0, moving.x0),
+    label: `${Math.round(moving.y0 - top.bounds.y1)} px`,
+    kind: "distance"
+  });
+  if (bottom) measurements.push({
+    axis: "y",
+    start: moving.y1,
+    end: bottom.bounds.y0,
+    cross: Math.max(bottom.bounds.x0, moving.x0),
+    label: `${Math.round(bottom.bounds.y0 - moving.y1)} px`,
+    kind: "distance"
+  });
+  return measurements;
 }
 
 function addGridCandidates(
@@ -430,8 +614,21 @@ function addGridCandidates(
 
 function pickCandidate(
   candidates: SnapCandidate[],
-  threshold: number
+  threshold: number,
+  retained?: WatchfaceSnapGuide,
+  releaseThreshold = threshold * 1.5
 ): SnapCandidate | null {
+  if (retained) {
+    const held = candidates.find(
+      (candidate) =>
+        candidate.axis === retained.axis &&
+        candidate.kind === retained.kind &&
+        candidate.value === retained.value &&
+        candidate.targetId === retained.targetId &&
+        Math.abs(candidate.adjustment) <= releaseThreshold
+    );
+    if (held) return held;
+  }
   const eligible = candidates.filter(
     (candidate) => Math.abs(candidate.adjustment) <= threshold
   );

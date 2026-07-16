@@ -3,12 +3,20 @@ import type {
   CorosWatchfaceAssetReplacement,
   CorosWatchfaceConfigAssetOverride,
   CorosWatchfaceConfigOverride,
+  CorosWatchfaceEffectBinding,
+  CorosWatchfaceEffectStyle,
   CorosWatchfaceRasterFont,
   CorosWatchfaceResolutionDetails,
   CorosWatchfaceSpriteFile,
   CorosWatchfaceTemplateAsset,
   CorosWatchfaceTemplateDetails
 } from "../../electron/types";
+import {
+  renderWatchfaceCanvasEffects,
+  resolveWatchfaceLayerEffects
+} from "./watchfaceEditorEffects.ts";
+
+const COROS_CONFIG_DELETE_VALUE = "__COROSLINK_DELETE_CONFIG_KEY__";
 
 /**
  * Styling choices the studio applies to a template. Digit bitmaps are
@@ -36,6 +44,10 @@ export interface WatchfaceStudioOptions extends WatchfaceTypography {
   previewComplication?: WatchfaceComplicationId;
   /** Per-fixed-metric bitmap styles, isolated into their own sprite folders. */
   metricStyles?: WatchfaceMetricStyles;
+  /** Shared bitmap style for values shown in the selectable control slot. */
+  complicationStyle?: WatchfaceMetricSpriteStyle;
+  /** Scales a Studio-created standalone battery folder from authoring size. */
+  batteryIconResolutionScale?: number;
   /** Independent hour/minute bitmap styles. */
   timeStyles?: WatchfaceTimeStyles;
   /** Independent weekday/month/day bitmap scaling. */
@@ -48,6 +60,20 @@ export interface WatchfaceStudioOptions extends WatchfaceTypography {
   configAssetScope?: WatchfaceConfigAssetScope;
   /** Live AM/PM indicator sprite styling, when the template supports it. */
   ampmStyle?: WatchfaceAmPmStyle;
+  /** Reusable shadow styles used by the live preview. */
+  effectStyles?: CorosWatchfaceEffectStyle[];
+  /** Local or live-linked effects keyed by editor layer id. */
+  layerEffects?: Record<string, CorosWatchfaceEffectBinding>;
+  /** Target-resolution/master-resolution ratio for 800px-authored effects. */
+  effectResolutionScale?: number;
+}
+
+/** Converts 800px-authored effect values into the active preview canvas. */
+export function watchfaceEffectRenderScale(
+  canvasToResolutionScale: number,
+  resolutionToMasterScale = 1
+): number {
+  return canvasToResolutionScale * resolutionToMasterScale;
 }
 
 export type WatchfaceAssetLoader = (
@@ -75,6 +101,20 @@ export function dimHexColor(hex: string, factor: number): string {
  */
 function normalizeSpriteScale(scale: number | undefined): number {
   return Number.isFinite(scale) && scale! > 0 ? scale! : 1;
+}
+
+/** Component styles override the face-wide raster font and digit spacing. */
+function componentTypography(
+  typography: WatchfaceTypography,
+  style:
+    | { rasterFont?: CorosWatchfaceRasterFont; letterSpacing?: number }
+    | undefined
+): WatchfaceTypography {
+  return {
+    ...typography,
+    rasterFont: style?.rasterFont ?? typography.rasterFont,
+    letterSpacing: style?.letterSpacing ?? typography.letterSpacing
+  };
 }
 
 /** Parses a firmware position value such as `{524,234}`. */
@@ -334,6 +374,43 @@ export function buildWatchfaceConfigAssetOverrides(
   includeReplacementPaths = false
 ): CorosWatchfaceConfigOverride[] {
   const result: CorosWatchfaceConfigOverride[] = [];
+  const batteryOverride = overrides["config:battery_icon"];
+  const baseResolution = pickPreviewResolution(details);
+  const baseConfiguredBatteryFolder = baseResolution
+    ? baseResolution.config.battery_icon_dir?.replace(/\\/g, "/")
+    : undefined;
+  const baseBatteryFolder = baseResolution
+    ? (baseConfiguredBatteryFolder
+        ? baseResolution.spriteFolders.find(
+            (folder) =>
+              folder.kind === "state" &&
+              folder.folder === baseConfiguredBatteryFolder
+          )
+        : undefined) ??
+      baseResolution.spriteFolders.find(
+        (folder) =>
+          folder.kind === "state" &&
+          folder.folder.replace(/^a\//, "") === "cl_battery_icon"
+      ) ??
+      baseResolution.spriteFolders.find(
+        (folder) =>
+          folder.kind === "state" &&
+          folder.folder.replace(/^a\//, "") === "battery"
+      )
+    : undefined;
+  const baseImportedBattery =
+    batteryOverride?.replacement ??
+    Object.values(batteryOverride?.stateReplacements ?? {})[0];
+  const baseBatteryWidth =
+    baseImportedBattery?.width ?? baseBatteryFolder?.files[0]?.width ?? 40;
+  const baseBatteryHeight =
+    baseImportedBattery?.height ?? baseBatteryFolder?.files[0]?.height ?? 40;
+  const baseBatteryPosition = baseResolution
+    ? {
+        x: Math.max(0, Math.round(baseResolution.width * 0.5 - baseBatteryWidth / 2)),
+        y: Math.max(0, Math.round(baseResolution.height * 0.82 - baseBatteryHeight / 2))
+      }
+    : null;
   for (const resolution of details.resolutions) {
     for (const scope of ["config", "aod"] as const) {
       const values: Record<string, string> = {};
@@ -353,6 +430,57 @@ export function buildWatchfaceConfigAssetOverrides(
           !replaceConfigAssetInPlace(configKey)
         ) {
           values[configKey] = configAssetCreatedRelativePath(id).replace(/\//g, "\\");
+        }
+      }
+      if (scope === "config") {
+        const configuredBatteryFolder =
+          resolution.config.battery_icon_dir?.replace(/\\/g, "/");
+        const batteryFolder =
+          (configuredBatteryFolder
+            ? resolution.spriteFolders.find(
+                (folder) =>
+                  folder.kind === "state" &&
+                  folder.folder === configuredBatteryFolder
+              )
+            : undefined) ??
+          resolution.spriteFolders.find(
+            (folder) =>
+              folder.kind === "state" &&
+              folder.folder.replace(/^a\//, "") === "cl_battery_icon"
+          ) ??
+          resolution.spriteFolders.find(
+            (folder) =>
+              folder.kind === "state" &&
+              folder.folder.replace(/^a\//, "") === "battery"
+          );
+        const importedBattery =
+          batteryOverride?.replacement ??
+          Object.values(batteryOverride?.stateReplacements ?? {})[0];
+        const existingStudioBattery =
+          batteryFolder?.folder.replace(/^a\//, "") === "cl_battery_icon";
+        const batteryEnabled = batteryOverride
+          ? batteryOverride.enabled !== false
+          : existingStudioBattery &&
+            parseConfigPos(resolution.config.battery_icon_pos) !== null;
+        if (batteryEnabled && (batteryFolder || importedBattery)) {
+          // A template's control battery folder belongs to the selectable
+          // complication. Imported fixed-battery states must get an isolated
+          // folder or the two battery elements overwrite each other.
+          const folderName =
+            resolution.config.battery_icon_dir?.replace(/\\/g, "/") ||
+            (importedBattery || existingStudioBattery
+              ? "cl_battery_icon"
+              : batteryFolder?.folder) ||
+            "cl_battery_icon";
+          if (!resolution.config.battery_icon_dir) {
+            values.battery_icon_dir = folderName.replace(/\//g, "\\");
+          }
+          if (!parseConfigPos(resolution.config.battery_icon_pos)) {
+            const ratio = baseResolution
+              ? resolution.width / baseResolution.width
+              : 1;
+            values.battery_icon_pos = `{${Math.round((baseBatteryPosition?.x ?? 0) * ratio)},${Math.round((baseBatteryPosition?.y ?? 0) * ratio)}}`;
+          }
         }
       }
       // `battery_icon_pos` is the bitmap's firmware position. Scaling changes
@@ -411,9 +539,8 @@ export async function buildWatchfaceConfigAssetReplacements(
       (batteryOverride?.replacement || batteryOverride?.stateReplacements) &&
       batteryOverride.enabled !== false
     ) {
-      const batteryFolderName = (
-        resolution.config.battery_icon_dir || resolution.config.control_battery_icon_dir
-      )?.replace(/\\/g, "/");
+      const batteryFolderName =
+        resolution.config.battery_icon_dir?.replace(/\\/g, "/");
       const batteryFolder =
         (batteryFolderName
           ? resolution.spriteFolders.find(
@@ -422,7 +549,8 @@ export async function buildWatchfaceConfigAssetReplacements(
           : undefined) ??
         resolution.spriteFolders.find(
           (folder) =>
-            folder.kind === "state" && folder.folder.replace(/^a\//, "") === "battery"
+            folder.kind === "state" &&
+            folder.folder.replace(/^a\//, "") === "cl_battery_icon"
         );
       for (const [index, sprite] of (batteryFolder?.files ?? []).entries()) {
         const replacement =
@@ -439,6 +567,31 @@ export async function buildWatchfaceConfigAssetReplacements(
           ),
           allowDimensionOverride: (batteryOverride.scale ?? 1) !== 1
         });
+      }
+      if (!batteryFolder) {
+        const createdFolder = "cl_battery_icon";
+        const baseResolution = pickPreviewResolution(details);
+        const resolutionScale = baseResolution
+          ? resolution.width / baseResolution.width
+          : 1;
+        const states = Object.entries(batteryOverride.stateReplacements ?? {})
+          .filter(([key]) => /^\d+$/.test(key))
+          .sort(([left], [right]) => Number(left) - Number(right));
+        if (states.length === 0 && batteryOverride.replacement) {
+          states.push(["0", batteryOverride.replacement]);
+        }
+        for (const [state, replacement] of states) {
+          replacements.push({
+            path: `${resolution.directory}/${createdFolder}/${String(Number(state)).padStart(2, "0")}.png`,
+            dataUrl: await renderScaledSpriteInSlot(
+              replacement.dataUrl,
+              Math.max(1, Math.round(replacement.width * resolutionScale)),
+              Math.max(1, Math.round(replacement.height * resolutionScale)),
+              batteryOverride.scale ?? 1
+            ),
+            create: true
+          });
+        }
       }
     }
   }
@@ -1192,6 +1345,11 @@ export function scaledBatterySpriteCanvasSize(
   };
 }
 
+/** Representative normal-charge state used consistently by preview and bounds. */
+export function batteryPreviewStateIndex(stateCount: number): number {
+  return Math.min(8, Math.max(0, stateCount - 1));
+}
+
 /** Renders a battery-state sprite at the selected bitmap scale. */
 export async function renderScaledSpriteInSlot(
   dataUrl: string,
@@ -1451,6 +1609,8 @@ export interface WatchfaceMetricSpriteStyle {
   scale: number;
   /** Optional per-layer font; falls back to the design font. */
   fontFamily?: string;
+  /** Digit spacing for this component only; falls back to the design value. */
+  letterSpacing?: number;
   /** A PNG set scoped to this component rather than the shared face font. */
   rasterFont?: CorosWatchfaceRasterFont;
 }
@@ -1473,6 +1633,8 @@ export interface WatchfaceDateSpriteStyle {
   /** Optional per-layer font; falls back to the design font. */
   fontFamily?: string;
   color?: string;
+  /** Digit spacing for this component only; falls back to the design value. */
+  letterSpacing?: number;
   /** A PNG set scoped to this date layer rather than the shared face font. */
   rasterFont?: CorosWatchfaceRasterFont;
 }
@@ -1796,7 +1958,7 @@ export interface WatchfaceMetricCapability {
   active: boolean;
 }
 
-/** Fixed metrics supported by a template and whether they are already active. */
+/** Fixed metrics available to the editor and whether they are already active. */
 export function getFixedMetricCapabilities(
   details: CorosWatchfaceTemplateDetails
 ): WatchfaceMetricCapability[] {
@@ -1804,18 +1966,26 @@ export function getFixedMetricCapabilities(
   if (!resolution) {
     return [];
   }
-  return WATCHFACE_FIXED_METRICS.flatMap((metric) =>
-    Object.prototype.hasOwnProperty.call(resolution.config, metric.rectKey) &&
-          (metric.id === "temperature" ||
-          (!metric.fontKey ||
-            Object.prototype.hasOwnProperty.call(resolution.config, metric.fontKey)))
-        ? [{
-            id: metric.id,
-            label: metric.label,
-            active: parseConfigRect(resolution.config[metric.rectKey]) !== null
-          }]
-        : []
-  );
+  return WATCHFACE_FIXED_METRICS.flatMap((metric) => {
+    // Battery can be added to templates that did not originally declare it;
+    // buildMetricOverrides supplies both missing config entries when enabled.
+    const canAdd = metric.id === "battery";
+    const hasRect = Object.prototype.hasOwnProperty.call(
+      resolution.config,
+      metric.rectKey
+    );
+    const hasFont =
+      !metric.fontKey ||
+      metric.id === "temperature" ||
+      Object.prototype.hasOwnProperty.call(resolution.config, metric.fontKey);
+    return canAdd || (hasRect && hasFont)
+      ? [{
+          id: metric.id,
+          label: metric.label,
+          active: parseConfigRect(resolution.config[metric.rectKey]) !== null
+        }]
+      : [];
+  });
 }
 
 /** Complication choices implemented by the template's control slot. */
@@ -1850,6 +2020,24 @@ export function getAvailableComplications(
           )
         )
   );
+}
+
+/** Removes control-battery from the firmware selector without affecting the fixed icon. */
+export function buildControlBatteryVisibilityOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  enabled: boolean | undefined
+): CorosWatchfaceConfigOverride[] {
+  if (enabled !== false) return [];
+  return details.resolutions.flatMap((resolution) => {
+    const values = Object.fromEntries(
+      Object.keys(resolution.config)
+        .filter((key) => key.startsWith("control_battery_"))
+        .map((key) => [key, COROS_CONFIG_DELETE_VALUE])
+    );
+    return Object.keys(values).length > 0
+      ? [{ path: `${resolution.directory}/config.txt`, values }]
+      : [];
+  });
 }
 
 /** Moves selectable-control icons independently from their value rectangles. */
@@ -2058,11 +2246,110 @@ export async function buildControlTemperatureSpriteReplacements(
     });
   }
   const selectedFont = style.fontFamily ?? fontFamily;
-  const spriteTypography = {
-    ...typography,
-    rasterFont: style.rasterFont ?? typography.rasterFont
-  };
+  const spriteTypography = componentTypography(typography, style);
   const rasterized = shouldRenderWatchfaceText("0123456789", selectedFont, spriteTypography);
+  const assets = rasterized
+    ? []
+    : await loadAssets([...new Set(jobs.map((job) => job.source.path))]);
+  const byPath = new Map(assets.map((asset) => [asset.path, asset]));
+  return Promise.all(jobs.map(async (job) => ({
+    path: job.path,
+    create: job.create,
+    dataUrl: rasterized
+      ? await renderWatchfaceTextSprite(
+          String(job.digit), job.width, job.height, selectedFont,
+          style.color ?? "#ffffff", spriteTypography
+        )
+      : await resizeAndTintSprite(
+          byPath.get(job.source.path)?.dataUrl ?? "",
+          job.width,
+          job.height,
+          style.color
+        )
+  })));
+}
+
+/** Applies one isolated digit style to every implemented selectable value. */
+export function buildSelectableMetricStyleOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  style: WatchfaceMetricSpriteStyle,
+  useStudioFolder = false
+): CorosWatchfaceConfigOverride[] {
+  return details.resolutions.flatMap((resolution) => {
+    const values: Record<string, string> = {};
+    for (const complication of WATCHFACE_COMPLICATIONS) {
+      const rectKeys = complication.id === "battery"
+        ? ["control_battery_level_rect"]
+        : complication.valueParts
+          ? complication.valueParts.map(
+              ({ rectSuffix }) =>
+                `control_${complication.controlPrefix}_${rectSuffix}_rect`
+            )
+          : [`control_${complication.controlPrefix}_rect`];
+      const implementedRects = rectKeys.flatMap((key) => {
+        const value = resolution.config[key];
+        return value && parseConfigRect(value) ? [{ key, value }] : [];
+      });
+      if (implementedRects.length === 0) continue;
+      const fontKey = complication.id === "battery"
+        ? "control_battery_level_font"
+        : `control_${complication.controlPrefix}_font`;
+      const source = findSpriteFolder(resolution, resolution.config[fontKey]) ??
+        controlTemperatureFontFolder(resolution);
+      if (!source) continue;
+      for (const rect of implementedRects) {
+        values[rect.key] = scaleConfigRectValue(rect.value, style.scale) ?? rect.value;
+      }
+      values[fontKey] = useStudioFolder ? "cl_control" : source.folder;
+      if (style.color) values[`${fontKey}_color`] = configHexColor(style.color);
+    }
+    return Object.keys(values).length > 0
+      ? [{ path: `${resolution.directory}/config.txt`, values }]
+      : [];
+  });
+}
+
+/** Generates the shared ten-digit folder used by selectable control values. */
+export async function buildSelectableMetricSpriteReplacements(
+  details: CorosWatchfaceTemplateDetails,
+  style: WatchfaceMetricSpriteStyle,
+  fontFamily: string,
+  loadAssets: WatchfaceAssetLoader,
+  typography: WatchfaceTypography = {}
+): Promise<CorosWatchfaceAssetReplacement[]> {
+  const jobs: Array<{
+    source: CorosWatchfaceSpriteFile;
+    path: string;
+    digit: number;
+    width: number;
+    height: number;
+    create: boolean;
+  }> = [];
+  for (const resolution of details.resolutions) {
+    const source = controlTemperatureFontFolder(resolution);
+    if (!source) continue;
+    const scale = normalizeSpriteScale(style.scale);
+    source.files.slice(0, 10).forEach((file, digit) => {
+      const path = `${resolution.directory}/cl_control/${String(digit).padStart(2, "0")}.png`;
+      jobs.push({
+        source: file,
+        path,
+        digit,
+        width: Math.max(1, Math.round(file.width * scale)),
+        height: Math.max(1, Math.round(file.height * scale)),
+        create: !resolution.spriteFolders.some((folder) =>
+          folder.files.some((candidate) => candidate.path === path)
+        )
+      });
+    });
+  }
+  const selectedFont = style.fontFamily ?? fontFamily;
+  const spriteTypography = componentTypography(typography, style);
+  const rasterized = shouldRenderWatchfaceText(
+    "0123456789",
+    selectedFont,
+    spriteTypography
+  );
   const assets = rasterized
     ? []
     : await loadAssets([...new Set(jobs.map((job) => job.source.path))]);
@@ -2146,8 +2433,10 @@ export function buildMetricOverrides(
       }
       if (
         enabled === undefined ||
-        !Object.prototype.hasOwnProperty.call(resolution.config, metric.rectKey) ||
+        (metric.id !== "battery" &&
+          !Object.prototype.hasOwnProperty.call(resolution.config, metric.rectKey)) ||
         (metric.fontKey &&
+          metric.id !== "battery" &&
           metric.id !== "temperature" &&
           !Object.prototype.hasOwnProperty.call(resolution.config, metric.fontKey))
       ) {
@@ -2298,7 +2587,7 @@ export async function buildMetricSpriteReplacements(
       }
       const normalizedScale = normalizeSpriteScale(style.scale);
       const metricFontFamily = style.fontFamily ?? fontFamily;
-      const metricTypography = { ...typography, rasterFont: style.rasterFont ?? typography.rasterFont };
+      const metricTypography = componentTypography(typography, style);
       source.files.slice(0, 10).forEach((file, digit) => {
         const path = `${resolution.directory}/${METRIC_STUDIO_FOLDERS[metric.id]}/${String(digit).padStart(2, "0")}.png`;
         const existsInTemplate = resolution.spriteFolders.some((folder) =>
@@ -2425,14 +2714,17 @@ export function buildTimeTrackingOverrides(
   letterSpacing: number,
   styles: WatchfaceTimeStyles = {}
 ): CorosWatchfaceConfigOverride[] {
-  const normalizedSpacing = Math.max(-0.35, Math.min(0.25, letterSpacing));
-  if (Math.abs(normalizedSpacing) < 0.001) {
-    return [];
-  }
   const overrides: CorosWatchfaceConfigOverride[] = [];
   for (const resolution of details.resolutions) {
     const values: Record<string, string> = {};
     for (const part of WATCHFACE_TIME_PARTS) {
+      const partSpacing = Math.max(
+        -0.35,
+        Math.min(0.25, styles[part.id]?.letterSpacing ?? letterSpacing)
+      );
+      if (Math.abs(partSpacing) < 0.001) {
+        continue;
+      }
       const scale = normalizeSpriteScale(styles[part.id]?.scale);
       for (const digit of part.digits) {
         const position = parseConfigPos(resolution.config[digit.posKey]);
@@ -2443,7 +2735,7 @@ export function buildTimeTrackingOverrides(
         if (!position || !sample) {
           continue;
         }
-        const offset = Math.round((sample.height * scale * normalizedSpacing) / 2);
+        const offset = Math.round((sample.height * scale * partSpacing) / 2);
         const direction = digit.slot === "high" ? -1 : 1;
         values[digit.posKey] = `{${position.x + direction * offset},${position.y}}`;
       }
@@ -2482,7 +2774,7 @@ export async function buildTimeSpriteReplacements(
     if (autoStyle && autoSource) {
       const normalizedScale = normalizeSpriteScale(autoStyle.scale);
       const partFontFamily = autoStyle.fontFamily ?? fontFamily;
-      const partTypography = { ...typography, rasterFont: autoStyle.rasterFont ?? typography.rasterFont };
+      const partTypography = componentTypography(typography, autoStyle);
       autoSource.files.slice(0, 10).forEach((file, value) => {
         jobs.push({
           source: file,
@@ -2508,7 +2800,7 @@ export async function buildTimeSpriteReplacements(
       }
       const normalizedScale = normalizeSpriteScale(style.scale);
       const partFontFamily = style.fontFamily ?? fontFamily;
-      const partTypography = { ...typography, rasterFont: style.rasterFont ?? typography.rasterFont };
+      const partTypography = componentTypography(typography, style);
       for (const digit of part.digits) {
         const source = findSpriteFolder(resolution, resolution.config[digit.fontKey]);
         if (!source) {
@@ -2630,10 +2922,7 @@ export async function buildDateSpriteReplacements(
         continue;
       }
       const partFontFamily = style.fontFamily ?? options.fontFamily;
-      const partTypography = {
-        ...options,
-        rasterFont: style.rasterFont ?? options.rasterFont
-      };
+      const partTypography = componentTypography(options, style);
       const limit = part.kind === "week" ? 7 : 10;
       source.files.slice(0, limit).forEach((file, value) => {
         jobs.push({
@@ -2707,6 +2996,20 @@ export function applyConfigOverridesToDetails(
   overrides: CorosWatchfaceConfigOverride[]
 ): CorosWatchfaceTemplateDetails {
   const byPath = new Map(overrides.map((entry) => [entry.path, entry.values]));
+  const applyValues = (
+    config: Record<string, string>,
+    values: Record<string, string>
+  ) => {
+    const next = { ...config };
+    for (const [key, value] of Object.entries(values)) {
+      if (value === COROS_CONFIG_DELETE_VALUE) {
+        delete next[key];
+      } else {
+        next[key] = value;
+      }
+    }
+    return next;
+  };
   return {
     ...details,
     resolutions: details.resolutions.map((resolution) => {
@@ -2716,10 +3019,10 @@ export function applyConfigOverridesToDetails(
         ? {
             ...resolution,
             ...(values
-              ? { config: { ...resolution.config, ...values } }
+              ? { config: applyValues(resolution.config, values) }
               : {}),
             ...(aodValues
-              ? { aodConfig: { ...resolution.aodConfig, ...aodValues } }
+              ? { aodConfig: applyValues(resolution.aodConfig, aodValues) }
               : {})
           }
         : resolution;
@@ -3307,6 +3610,51 @@ function findSpriteFolder(
   return folder ? { folder: folder.folder, files: folder.files } : null;
 }
 
+function drawStudioLayerImage(
+  context: CanvasRenderingContext2D,
+  image: CanvasImageSource,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  previewScale: number,
+  options: WatchfaceStudioOptions,
+  layerId?: string
+): void {
+  const effects = layerId
+    ? resolveWatchfaceLayerEffects(options, layerId)
+    : [];
+  if (effects.length === 0) {
+    context.drawImage(image, x, y, width, height);
+    return;
+  }
+  const source = document.createElement("canvas");
+  source.width = Math.max(1, Math.ceil(width));
+  source.height = Math.max(1, Math.ceil(height));
+  const sourceContext = source.getContext("2d", { colorSpace: "display-p3" });
+  if (!sourceContext) {
+    context.drawImage(image, x, y, width, height);
+    return;
+  }
+  sourceContext.imageSmoothingEnabled = true;
+  sourceContext.imageSmoothingQuality = "high";
+  sourceContext.drawImage(image, 0, 0, width, height);
+  const rendered = renderWatchfaceCanvasEffects(
+    source,
+    effects,
+    watchfaceEffectRenderScale(
+      previewScale,
+      options.effectResolutionScale ?? 1
+    ),
+    true
+  );
+  context.drawImage(
+    rendered.canvas,
+    x - rendered.padding.left,
+    y - rendered.padding.top
+  );
+}
+
 /**
  * Draws a live preview of the face: the canvas background plus the actual
  * sprites the watch will render, placed with the template's own layout keys.
@@ -3443,26 +3791,39 @@ export async function drawStudioPreview(
     wantedSprites.set(weekFile.path, { color: weekColor });
   }
 
-  const batteryFolderName = (
-    config.control_battery_icon_dir || config.battery_icon_dir
-  )?.replace(/\\/g, "/");
+  const batteryOverride = options.configAssetOverrides?.["config:battery_icon"];
+  const importedBatteryStates = Object.entries(
+    batteryOverride?.stateReplacements ?? {}
+  )
+    .filter(([key]) => /^\d+$/.test(key))
+    .sort(([left], [right]) => Number(left) - Number(right));
+  const importedBatteryState =
+    importedBatteryStates[batteryPreviewStateIndex(importedBatteryStates.length)] ??
+    (batteryOverride?.replacement ? ["0", batteryOverride.replacement] as const : null);
+  const batteryFolderName = config.battery_icon_dir?.replace(/\\/g, "/");
   const batteryFolder =
     (batteryFolderName
       ? resolution.spriteFolders.find(
           (folder) => folder.kind === "state" && folder.folder === batteryFolderName
         )
-      : undefined) ??
-    resolution.spriteFolders.find(
-      (folder) =>
-        folder.kind === "state" && folder.folder.replace(/^a\//, "") === "battery"
-    ) ??
-    null;
+      : undefined) ?? null;
   // Prefer a normal high-charge state; the last entries can represent special
   // charging/low-power states in COROS's 12-image battery sets.
   const batteryFileIndex = batteryFolder
-    ? Math.min(8, Math.max(0, batteryFolder.files.length - 1))
-    : 0;
-  const batteryFile = batteryFolder?.files[batteryFileIndex] ?? null;
+    ? batteryPreviewStateIndex(batteryFolder.files.length)
+    : Number(importedBatteryState?.[0] ?? 0);
+  const batteryReplacement =
+    batteryOverride?.stateReplacements?.[String(batteryFileIndex)] ??
+    importedBatteryState?.[1] ??
+    batteryOverride?.replacement;
+  const batteryFile = batteryFolder?.files[batteryFileIndex] ??
+    (batteryReplacement
+      ? {
+          path: "",
+          width: batteryReplacement.width,
+          height: batteryReplacement.height
+        }
+      : null);
   const batteryRect = parseConfigRect(config["battery_level_rect"]);
   const batteryIconPos = parseConfigPos(config.battery_icon_pos) ??
     (batteryFile && batteryRect
@@ -3471,7 +3832,7 @@ export async function drawStudioPreview(
           y: batteryRect.y0 + Math.round((batteryRect.y1 - batteryRect.y0 - batteryFile.height) / 2)
         }
       : null);
-  if (batteryFile) {
+  if (batteryFile && batteryFolder) {
     wantedSprites.set(batteryFile.path, { color: null });
   }
 
@@ -3784,21 +4145,21 @@ export async function drawStudioPreview(
       : undefined;
     const componentColor = options.layerColors?.[planned.componentId];
     const timeFontFamily = timeStyle?.fontFamily ?? options.fontFamily;
-    const timeTypography = {
-      ...options,
-      rasterFont: timeStyle?.rasterFont ?? options.rasterFont
-    };
+    const timeTypography = componentTypography(options, timeStyle);
     const timeColor = timeStyle?.color ?? componentColor ?? options.digitColor;
     const timeScale = timeStyle ? normalizeSpriteScale(timeStyle.scale) : 1;
     const width = Math.max(1, Math.round(file.width * timeScale));
     const height = Math.max(1, Math.round(file.height * timeScale));
-    const tracking = Math.max(-0.35, Math.min(0.25, options.letterSpacing ?? 0));
+    const tracking = Math.max(
+      -0.35,
+      Math.min(0.25, timeTypography.letterSpacing ?? 0)
+    );
     const trackingOffset = planned.slot
       ? Math.round((height * tracking) / 2) * (planned.slot === "high" ? -1 : 1)
       : 0;
     let image = digitSprites.get(file.path) ?? loaded.get(file.path);
     if (timeStyle || componentColor) {
-      const cacheKey = `${file.path}|${timeFontFamily}|${timeColor}|${timeScale}`;
+      const cacheKey = `${file.path}|${timeFontFamily}|${timeColor}|${timeScale}|${timeTypography.letterSpacing ?? 0}`;
       image = styledTimeGlyphs.get(cacheKey);
       if (!image) {
         if (shouldRenderWatchfaceText(String(planned.digit), timeFontFamily, timeTypography)) {
@@ -3830,12 +4191,16 @@ export async function drawStudioPreview(
       }
     }
     if (image) {
-      context.drawImage(
+      drawStudioLayerImage(
+        context,
         image,
         (planned.pos.x + trackingOffset) * scale,
         planned.pos.y * scale,
         width * scale,
-        height * scale
+        height * scale,
+        scale,
+        options,
+        planned.partId ?? planned.componentId
       );
     }
   }
@@ -3893,28 +4258,31 @@ export async function drawStudioPreview(
   }
 
   if (batteryFile && batteryIconPos) {
-    const batteryOverride = options.configAssetOverrides?.["config:battery_icon"];
-    const batteryReplacement =
-      batteryOverride?.stateReplacements?.[String(batteryFileIndex)] ??
-      batteryOverride?.replacement;
     const batteryIconScale = batteryOverride?.scale ?? 1;
+    const createdBatteryScale = batteryFolder
+      ? 1
+      : options.batteryIconResolutionScale ?? 1;
     const image = batteryReplacement
       ? await loadStudioImage(
           await renderScaledSpriteInSlot(
             batteryReplacement.dataUrl,
-            batteryFile.width,
-            batteryFile.height,
+            Math.max(1, Math.round(batteryFile.width * createdBatteryScale)),
+            Math.max(1, Math.round(batteryFile.height * createdBatteryScale)),
             batteryIconScale
           )
         )
       : await configuredAssetImage("battery_icon", batteryFile);
     if (image) {
-      context.drawImage(
+      drawStudioLayerImage(
+        context,
         image,
         batteryIconPos.x * scale,
         batteryIconPos.y * scale,
         image.naturalWidth * scale,
-        image.naturalHeight * scale
+        image.naturalHeight * scale,
+        scale,
+        options,
+        "batteryIcon"
       );
     }
   }
@@ -3922,10 +4290,7 @@ export async function drawStudioPreview(
   if (weekFile && weekRect) {
     const weekStyle = options.dateStyles?.weekday;
     const weekFontFamily = weekStyle?.fontFamily ?? options.fontFamily;
-    const weekTypography = {
-      ...options,
-      rasterFont: weekStyle?.rasterFont ?? options.rasterFont
-    };
+    const weekTypography = componentTypography(options, weekStyle);
     let image = loaded.get(weekFile.path);
     const weekScale = normalizeSpriteScale(weekStyle?.scale);
     const weekWidth = weekFile.width;
@@ -3965,12 +4330,16 @@ export async function drawStudioPreview(
     if (image) {
       const centerX = ((weekRect.x0 + weekRect.x1) / 2) * scale;
       const centerY = ((weekRect.y0 + weekRect.y1) / 2) * scale;
-      context.drawImage(
+      drawStudioLayerImage(
+        context,
         image,
         centerX - (weekWidth * scale) / 2,
         centerY - (weekHeight * scale) / 2,
         weekWidth * scale,
-        weekHeight * scale
+        weekHeight * scale,
+        scale,
+        options,
+        "weekday"
       );
     }
   }
@@ -3988,12 +4357,16 @@ export async function drawStudioPreview(
         )
       : loaded.get(complicationIcon.path);
     if (image) {
-      context.drawImage(
+      drawStudioLayerImage(
+        context,
         image,
         complicationIconPos.x * scale,
         complicationIconPos.y * scale,
         image.naturalWidth * scale,
-        image.naturalHeight * scale
+        image.naturalHeight * scale,
+        scale,
+        options,
+        "complication"
       );
     }
   } else if (complication?.id === "battery" && complicationIconPos) {
@@ -4048,19 +4421,18 @@ export async function drawStudioPreview(
     const timeStyle = plan.timePartId
       ? options.timeStyles?.[plan.timePartId]
       : undefined;
+    const complicationStyle = plan.componentId === "complication"
+      ? options.complicationStyle
+      : undefined;
     const componentColor = plan.componentId
       ? options.layerColors?.[plan.componentId]
       : undefined;
     const glyphFontFamily =
-      timeStyle?.fontFamily ?? metricStyle?.fontFamily ?? dateStyle?.fontFamily ?? options.fontFamily;
-    const glyphTypography = {
-      ...options,
-      rasterFont:
-        timeStyle?.rasterFont ??
-        metricStyle?.rasterFont ??
-        dateStyle?.rasterFont ??
-        options.rasterFont
-    };
+      timeStyle?.fontFamily ?? metricStyle?.fontFamily ?? dateStyle?.fontFamily ?? complicationStyle?.fontFamily ?? options.fontFamily;
+    const glyphTypography = componentTypography(
+      options,
+      timeStyle ?? metricStyle ?? dateStyle ?? complicationStyle
+    );
     const glyphs: {
       file: CorosWatchfaceSpriteFile;
       image: HTMLImageElement;
@@ -4070,7 +4442,7 @@ export async function drawStudioPreview(
       if (!file) {
         continue;
       }
-      if (!timeStyle && !metricStyle && !dateStyle && !componentColor) {
+      if (!timeStyle && !metricStyle && !dateStyle && !complicationStyle && !componentColor) {
         const image = digitSprites.get(file.path) ?? loaded.get(file.path);
         if (image) {
           glyphs.push({ file, image });
@@ -4079,7 +4451,7 @@ export async function drawStudioPreview(
       }
       const glyphScale = Math.max(
         0.5,
-        Math.min(2, timeStyle?.scale ?? metricStyle?.scale ?? dateStyle?.scale ?? 1)
+        Math.min(2, timeStyle?.scale ?? metricStyle?.scale ?? dateStyle?.scale ?? complicationStyle?.scale ?? 1)
       );
       const styledFile = {
         ...file,
@@ -4090,9 +4462,10 @@ export async function drawStudioPreview(
         timeStyle?.color ??
         metricStyle?.color ??
         dateStyle?.color ??
+        complicationStyle?.color ??
         componentColor ??
         options.digitColor;
-      const cacheKey = `${file.path}|${glyphFontFamily}|${glyphColor}|${glyphScale}`;
+      const cacheKey = `${file.path}|${glyphFontFamily}|${glyphColor}|${glyphScale}|${glyphTypography.letterSpacing ?? 0}`;
       let image = styledMetricGlyphs.get(cacheKey);
       if (!image) {
         if (shouldRenderWatchfaceText(digit, glyphFontFamily, glyphTypography)) {
@@ -4114,7 +4487,7 @@ export async function drawStudioPreview(
                 )
               : rendered
           );
-        } else if (timeStyle?.color || metricStyle?.color || dateStyle?.color || componentColor) {
+        } else if (timeStyle?.color || metricStyle?.color || dateStyle?.color || complicationStyle?.color || componentColor) {
           const rendered = await resizeAndTintSprite(
               loadedAssets.get(file.path)?.dataUrl ?? "",
               styledFile.width,
@@ -4166,23 +4539,32 @@ export async function drawStudioPreview(
     const centerX = (plan.rect.x0 + plan.rect.x1) / 2;
     const centerY = (plan.rect.y0 + plan.rect.y1) / 2;
     let x = centerX - totalWidth / 2;
+    const layerId = plan.timePartId ?? plan.metricId ?? plan.datePartId ?? plan.componentId;
     for (const [index, glyph] of glyphs.entries()) {
       if (index === 2 && separatorImage && plan.separator) {
-        context.drawImage(
+        drawStudioLayerImage(
+          context,
           separatorImage,
           x * scale,
           (centerY - separatorImage.naturalHeight / 2) * scale,
           separatorImage.naturalWidth * scale,
-          separatorImage.naturalHeight * scale
+          separatorImage.naturalHeight * scale,
+          scale,
+          options,
+          layerId
         );
         x += separatorImage.naturalWidth;
       }
-      context.drawImage(
+      drawStudioLayerImage(
+        context,
         glyph.image,
         x * scale,
         (centerY - glyph.file.height / 2) * scale,
         glyph.file.width * scale,
-        glyph.file.height * scale
+        glyph.file.height * scale,
+        scale,
+        options,
+        layerId
       );
       x += glyph.file.width;
     }
@@ -4201,12 +4583,16 @@ export async function drawStudioPreview(
       const centerX = controlOrigin.x + (first.x1 + second.x0) / 2;
       const centerY = controlOrigin.y +
         (first.y0 + first.y1 + second.y0 + second.y1) / 4;
-      context.drawImage(
+      drawStudioLayerImage(
+        context,
         image,
         (centerX - image.naturalWidth / 2) * scale,
         (centerY - image.naturalHeight / 2) * scale,
         image.naturalWidth * scale,
-        image.naturalHeight * scale
+        image.naturalHeight * scale,
+        scale,
+        options,
+        "complication"
       );
     }
   }

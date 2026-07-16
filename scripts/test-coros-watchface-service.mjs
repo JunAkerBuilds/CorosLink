@@ -22,6 +22,7 @@ const {
   normalizeCorosWatchfaceThemes,
   parseCorosWatchfaceSharePage,
   readCorosWatchfaceProjectPackage,
+  repairStandaloneBatteryConfigOverrides,
   selectCorosWatchfaceArchive
 } = await import(`${distUrl("corosWatchfaceService.js")}?cacheBust=${Date.now()}`);
 const { createStoreZip } = await import(
@@ -29,6 +30,23 @@ const { createStoreZip } = await import(
 );
 
 const configWithoutWeather = "[time_hour_high_pos]={1,2}\r\n";
+assert.deepEqual(
+  repairStandaloneBatteryConfigOverrides(
+    "[battery_icon_pos]={20,30}\r\n[battery_icon_dir]=\r\n",
+    {},
+    true
+  ),
+  { battery_icon_dir: "cl_battery_icon" },
+  "a final Studio battery folder must be linked even if renderer overrides omit it"
+);
+assert.equal(
+  applyCorosWatchfaceConfigOverrides(
+    "[control_battery_icon_dir]=battery\r\n[control_step_icon]=icon\\step.png\r\n",
+    { control_battery_icon_dir: "__COROSLINK_DELETE_CONFIG_KEY__" }
+  ),
+  "[control_step_icon]=icon\\step.png\r\n",
+  "disabled selectable metrics must be removed instead of exported as blank pages"
+);
 assert.equal(
   applyCorosWatchfaceConfigOverrides(configWithoutWeather, {
     weather_icon_pos: "{187,57}",
@@ -37,6 +55,34 @@ assert.equal(
   "[time_hour_high_pos]={1,2}\r\n[weather_icon_pos]={187,57}\r\n[weather_icon_dir]=weather\r\n",
   "confirmed optional weather keys should be appended without changing CRLF"
 );
+const configWithSynthesizedBattery = applyCorosWatchfaceConfigOverrides(
+  configWithoutWeather,
+  {
+    battery_icon_pos: "{20,30}",
+    battery_icon_dir: "cl_battery_icon",
+    battery_level_rect: "{10,40,90,60,hcenter|vcenter}",
+    battery_level_font: "13x19",
+    battery_level_font_color: "0xFFFFFF",
+    control_step_font_color: "0x12ABEF",
+    control_battery_level_font: "13x19",
+    control_battery_level_font_color: "0x12ABEF"
+  }
+);
+for (const expected of [
+  "[battery_icon_pos]={20,30}",
+  "[battery_icon_dir]=cl_battery_icon",
+  "[battery_level_rect]={10,40,90,60,hcenter|vcenter}",
+  "[battery_level_font]=13x19",
+  "[battery_level_font_color]=0xFFFFFF",
+  "[control_step_font_color]=0x12ABEF",
+  "[control_battery_level_font]=13x19",
+  "[control_battery_level_font_color]=0x12ABEF"
+]) {
+  assert.ok(
+    configWithSynthesizedBattery.includes(expected),
+    `confirmed Studio battery key should be appendable: ${expected}`
+  );
+}
 assert.throws(
   () => applyCorosWatchfaceConfigOverrides(configWithoutWeather, { weather_typo: "x" }),
   /does not define: weather_typo/,
@@ -415,7 +461,19 @@ try {
   assert.ok(selected.archiveId.length > 0);
 
   const exportedPath = path.join(tempDirectory, "website-face.zip");
-  const editableDesign = { version: 1, accentColor: "#55d6be" };
+  const editableDesign = {
+    version: 1,
+    accentColor: "#55d6be",
+    editorGroups: [{ id: "group-1", name: "Metrics", layerIds: ["steps", "calories"] }],
+    linkedLayerGroups: [["steps", "calories"]],
+    editorGuides: [{ id: "guide-1", axis: "y", position: 208 }],
+    effectStyles: [{
+      id: "style-1",
+      name: "Inner depth",
+      effects: [{ id: "shadow-1", kind: "inner-shadow", enabled: true, color: "#112233", opacity: 0.5, blur: 6, spread: -2, distance: 3, angle: 90 }]
+    }],
+    layerEffects: { steps: { kind: "style", styleId: "style-1" } }
+  };
   const preview = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
     "base64"

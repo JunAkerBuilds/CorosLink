@@ -5,12 +5,15 @@ import {
   buildAmPmOverrides,
   buildControlTemperatureOverrides,
   buildControlIconPositionOverrides,
+  buildControlBatteryVisibilityOverrides,
   buildDateStyleOverrides,
   buildLayerVisibilityOverrides,
   buildLayerColorOverrides,
   buildLayoutOverrides,
   buildMetricOverrides,
   buildMetricStyleOverrides,
+  buildSelectableMetricSpriteReplacements,
+  buildSelectableMetricStyleOverrides,
   buildSeparateTimeOverrides,
   buildStaticSeparatorOverrides,
   buildTimeStyleOverrides,
@@ -37,12 +40,14 @@ import {
   pickWatchPreviewResolution,
   rasterFontSupportsText,
   rebaseNegativeControlChildren,
-  scaleConfigRectValue
+  scaleConfigRectValue,
+  watchfaceEffectRenderScale
 } from "../src/watchfaces/watchfaceStudio.ts";
 
 assert.equal(corosWeekdayIndex(0), 6);
 assert.equal(corosWeekdayIndex(1), 0);
 assert.equal(corosWeekdayIndex(6), 5);
+assert.equal(watchfaceEffectRenderScale(520 / 416, 416 / 800), 0.65);
 
 assert.equal(normalizeRasterFontGlyphs("0 1 2 2 a"), "012A");
 const rasterFont = {
@@ -476,6 +481,158 @@ assert.equal(
   undefined,
   "Battery scaling must not alter the firmware position"
 );
+const detailsWithoutBatteryIcon = {
+  ...details,
+  resolutions: details.resolutions.map((candidate) => {
+    const config = { ...candidate.config };
+    delete config.battery_icon_pos;
+    delete config.battery_icon_dir;
+    return {
+      ...candidate,
+      config,
+      spriteFolders: candidate.spriteFolders.filter(
+        (folder) => folder.folder !== "battery"
+      )
+    };
+  })
+};
+for (const resolution of detailsWithoutBatteryIcon.resolutions) {
+  resolution.config.control_battery_icon_dir = "battery";
+}
+const createdBatteryIconOverrides = buildWatchfaceConfigAssetOverrides(
+  detailsWithoutBatteryIcon,
+  {
+    "config:battery_icon": {
+      stateReplacements: {
+        "0": { dataUrl: "data:image/png;base64,AA==", width: 48, height: 24 }
+      }
+    }
+  }
+);
+const createdFullBatteryIcon = createdBatteryIconOverrides.find(({ path }) =>
+  path.includes("800x800")
+);
+assert.equal(createdFullBatteryIcon?.values.battery_icon_dir, "cl_battery_icon");
+assert.equal(createdFullBatteryIcon?.values.battery_icon_pos, "{376,644}");
+assert.equal(
+  createdBatteryIconOverrides.find(({ path }) => path.includes("416x416"))
+    ?.values.battery_icon_pos,
+  "{196,335}"
+);
+const controlBatteryDetails = {
+  ...details,
+  resolutions: details.resolutions.map((resolution) => ({
+    ...resolution,
+    config: {
+      ...resolution.config,
+      control_battery_icon_dir: "battery",
+      control_battery_icon_pos: "{12,8}",
+      control_battery_level_rect: "{30,0,80,24,hcenter|vcenter}",
+      control_battery_level_font: "13x19"
+    }
+  }))
+};
+const hiddenControlBattery = buildControlBatteryVisibilityOverrides(
+  controlBatteryDetails,
+  false
+);
+assert.equal(hiddenControlBattery.length, details.resolutions.length);
+for (const override of hiddenControlBattery) {
+  assert.equal(
+    override.values.control_battery_icon_dir,
+    "__COROSLINK_DELETE_CONFIG_KEY__"
+  );
+  assert.equal(
+    override.values.control_battery_icon_pos,
+    "__COROSLINK_DELETE_CONFIG_KEY__"
+  );
+  assert.equal(
+    override.values.control_battery_level_rect,
+    "__COROSLINK_DELETE_CONFIG_KEY__"
+  );
+  assert.equal(
+    override.values.control_battery_level_font,
+    "__COROSLINK_DELETE_CONFIG_KEY__"
+  );
+}
+assert.deepEqual(buildControlBatteryVisibilityOverrides(details, true), []);
+const baseComplicationBounds = computeLayoutGroupBounds(
+  details.resolutions.find(({ width }) => width === 800)
+).find(({ id }) => id === "complication");
+const scaledComplicationDetails = applyConfigOverridesToDetails(
+  details,
+  buildSelectableMetricStyleOverrides(
+    details,
+    { fontFamily: "Inter", scale: 2 },
+    false
+  )
+);
+const scaledComplicationBounds = computeLayoutGroupBounds(
+  scaledComplicationDetails.resolutions.find(({ width }) => width === 800)
+).find(({ id }) => id === "complication");
+assert.ok(baseComplicationBounds && scaledComplicationBounds);
+assert.ok(
+  scaledComplicationBounds.x1 - scaledComplicationBounds.x0 >
+    baseComplicationBounds.x1 - baseComplicationBounds.x0,
+  "selectable style overrides should expand the geometry used by editor layers"
+);
+const farControlBatteryDetails = {
+  ...controlBatteryDetails,
+  resolutions: controlBatteryDetails.resolutions.map((resolution) => ({
+    ...resolution,
+    config: {
+      ...resolution.config,
+      control_battery_icon_pos: `{${Math.round(resolution.width * 0.75)},0}`,
+      control_battery_level_rect: `{${Math.round(resolution.width * 0.75)},0,${Math.round(resolution.width * 0.9)},24,hcenter|vcenter}`
+    }
+  }))
+};
+const visibleControlBatteryBounds = computeLayoutGroupBounds(
+  farControlBatteryDetails.resolutions.find(({ width }) => width === 800)
+).find(({ id }) => id === "complication");
+const hiddenControlBatteryDetails = applyConfigOverridesToDetails(
+  farControlBatteryDetails,
+  buildControlBatteryVisibilityOverrides(farControlBatteryDetails, false)
+);
+const hiddenControlBatteryBounds = computeLayoutGroupBounds(
+  hiddenControlBatteryDetails.resolutions.find(({ width }) => width === 800)
+).find(({ id }) => id === "complication");
+assert.ok(visibleControlBatteryBounds && hiddenControlBatteryBounds);
+assert.ok(
+  visibleControlBatteryBounds.x1 > hiddenControlBatteryBounds.x1,
+  "deleted control-battery children should not remain in editor geometry"
+);
+const reopenedStudioBatteryDetails = {
+  ...detailsWithoutBatteryIcon,
+  resolutions: detailsWithoutBatteryIcon.resolutions.map((resolution) => ({
+    ...resolution,
+    config: {
+      ...resolution.config,
+      battery_icon_pos: "{20,30}",
+      battery_icon_dir: ""
+    },
+    spriteFolders: [
+      ...resolution.spriteFolders,
+      {
+        folder: "cl_battery_icon",
+        kind: "state",
+        aod: false,
+        files: [{
+          path: `${resolution.directory}/cl_battery_icon/00.png`,
+          width: 48,
+          height: 24
+        }]
+      }
+    ]
+  }))
+};
+const reopenedStudioBatteryOverrides = buildWatchfaceConfigAssetOverrides(
+  reopenedStudioBatteryDetails,
+  {}
+);
+for (const override of reopenedStudioBatteryOverrides) {
+  assert.equal(override.values.battery_icon_dir, "cl_battery_icon");
+}
 for (const override of configAssetOverrides.filter(({ path }) => /\/config\.txt$/i.test(path))) {
   assert.equal(override.values.colon_icon, "");
   assert.match(override.values.control_colon_icon, /^studio\\config-control_colon_icon-/);
@@ -531,6 +688,7 @@ assert.equal(
 assert.deepEqual(
   getFixedMetricCapabilities(details),
   [
+    { id: "battery", label: "Battery data", active: false },
     { id: "heartRate", label: "Heart rate", active: false },
     { id: "steps", label: "Steps", active: false },
     { id: "calories", label: "Calories", active: false },
@@ -541,6 +699,21 @@ assert.deepEqual(
 assert.deepEqual(
   getAvailableComplications(details).map(({ id }) => id),
   ["heartRate", "steps", "battery", "temperature"]
+);
+const selectableStyleOverrides = buildSelectableMetricStyleOverrides(
+  details,
+  { fontFamily: "Inter", color: "#12abef", scale: 1.25 },
+  true
+);
+const selectableFull = selectableStyleOverrides.find(({ path }) =>
+  path.includes("800x800")
+);
+assert.equal(selectableFull?.values.control_hr_font, "cl_control");
+assert.equal(selectableFull?.values.control_step_font, "cl_control");
+assert.equal(selectableFull?.values.control_hr_font_color, "0x12ABEF");
+assert.equal(
+  selectableFull?.values.control_hr_rect,
+  "{144,-8,304,72,hcenter|vcenter}"
 );
 
 const iconPositionDetails = applyConfigOverridesToDetails(details, [
@@ -645,6 +818,7 @@ assert.deepEqual(
 );
 
 const metricOverrides = buildMetricOverrides(details, {
+  battery: true,
   heartRate: true,
   steps: true,
   temperature: true,
@@ -653,6 +827,8 @@ const metricOverrides = buildMetricOverrides(details, {
 assert.equal(metricOverrides.length, 2);
 const full = metricOverrides.find((entry) => entry.path.includes("800x800"));
 assert.ok(full);
+assert.match(full.values.battery_level_rect, /^\{\d+,\d+,\d+,\d+,hcenter\|vcenter\}$/);
+assert.equal(full.values.battery_level_font, "13x19");
 assert.equal(
   full.values.heartreate_level_rect,
   "{134,576,266,640,hcenter|vcenter}"
@@ -994,6 +1170,74 @@ assert.equal(
   merged.find((entry) => entry.path.includes("800x800"))?.values.heartreate_level_rect,
   "{144,596,276,660,hcenter|vcenter}"
 );
+
+// Reopening a Studio-produced archive should replace its existing shared
+// selectable digit folder instead of attempting to create colliding entries.
+const existingControlDetails = {
+  ...details,
+  resolutions: details.resolutions.map((candidate) => ({
+    ...candidate,
+    spriteFolders: [
+      ...candidate.spriteFolders,
+      {
+        folder: "cl_control",
+        kind: "digits",
+        aod: false,
+        files: digitFiles(
+          candidate.width === 800 ? 44 : 23,
+          candidate.width === 800 ? 64 : 33,
+          candidate.directory,
+          "cl_control"
+        )
+      }
+    ]
+  }))
+};
+const nativeDocument = globalThis.document;
+globalThis.document = {
+  createElement: () => {
+    const context = {
+      fillStyle: "",
+      font: "",
+      textBaseline: "alphabetic",
+      measureText: () => ({
+        width: 8,
+        actualBoundingBoxAscent: 8,
+        actualBoundingBoxDescent: 2
+      }),
+      fillText: () => {}
+    };
+    return {
+      width: 0,
+      height: 0,
+      getContext: () => context,
+      toDataURL: () => "data:image/png;base64,RENDERED"
+    };
+  }
+};
+try {
+  const reopenedControlReplacements =
+    await buildSelectableMetricSpriteReplacements(
+      existingControlDetails,
+      { scale: 1, fontFamily: "Fixture Sans" },
+      "",
+      async () => {
+        throw new Error("local-font rendering should not load source sprites");
+      }
+    );
+  assert.ok(reopenedControlReplacements.length > 0);
+  assert.equal(
+    reopenedControlReplacements.every(({ create }) => create === false),
+    true,
+    "existing cl_control digits should be replaced in place on a round trip"
+  );
+} finally {
+  if (nativeDocument === undefined) {
+    delete globalThis.document;
+  } else {
+    globalThis.document = nativeDocument;
+  }
+}
 
 // Stable template assets reuse their decoded image, while dynamic background
 // frames can explicitly bypass the cache during drag rendering.
