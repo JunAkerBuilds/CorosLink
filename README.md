@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <strong>Documentation:</strong> <a href="https://doc.coroslink.com/">doc.coroslink.com</a>
+  <strong>Documentation:</strong> <a href="https://docs.coroslink.com/">doc.coroslink.com</a>
 </p>
 
 <p align="center">
