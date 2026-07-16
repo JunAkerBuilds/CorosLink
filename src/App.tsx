@@ -422,6 +422,14 @@ export default function App() {
     setTrainingHubDailyHealthData(null);
   }, []);
 
+  const applyTrainingHubStatus = useCallback((status: TrainingHubStatus) => {
+    setTrainingHubStatus(status);
+    if (status.email) {
+      setTrainingHubEmail(status.email);
+    }
+    setTrainingHubRemember(status.rememberCredentials ?? true);
+  }, []);
+
   const loadTrainingHubData = useCallback(async () => {
     if (!api) {
       return;
@@ -529,12 +537,7 @@ export default function App() {
     }
 
     const status = await api.getTrainingHubStatus();
-    setTrainingHubStatus(status);
-
-    if (status.email) {
-      setTrainingHubEmail(status.email);
-    }
-    setTrainingHubRemember(status.rememberCredentials ?? true);
+    applyTrainingHubStatus(status);
 
     if (status.authenticated) {
       await ensureTrainingHubMcp();
@@ -544,10 +547,21 @@ export default function App() {
     }
   }, [
     api,
+    applyTrainingHubStatus,
     clearTrainingHubData,
     ensureTrainingHubMcp,
     loadTrainingHubData,
   ]);
+
+  useEffect(() => {
+    if (!api || activeView !== "training") {
+      return;
+    }
+    void api
+      .getTrainingHubStatus()
+      .then(applyTrainingHubStatus)
+      .catch((caught) => setError(toErrorMessage(caught)));
+  }, [activeView, api, applyTrainingHubStatus]);
 
   const handleTrainingHubActivityDetail = useCallback(
     async (activity: TrainingHubActivity) => {
@@ -1171,7 +1185,7 @@ export default function App() {
     try {
       const status = await api.reconnectTrainingHub();
       setTrainingHubStatus(status);
-      setMessage("COROS Training Hub reconnected.");
+      setMessage("COROS Training Hub connected with your saved account.");
       await loadTrainingHubData();
     } catch (caught) {
       setError(toErrorMessage(caught));

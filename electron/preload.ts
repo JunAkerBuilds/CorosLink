@@ -132,9 +132,14 @@ const api = {
   loginCorosWatchfaces: (
     email: string,
     password: string,
+    region: CorosWatchfaceRegion,
+    remember: boolean
+  ): Promise<CorosWatchfaceStatus> =>
+    ipcRenderer.invoke("watchfaces:login", email, password, region, remember),
+  loginCorosWatchfacesWithSavedCredentials: (
     region: CorosWatchfaceRegion
   ): Promise<CorosWatchfaceStatus> =>
-    ipcRenderer.invoke("watchfaces:login", email, password, region),
+    ipcRenderer.invoke("watchfaces:loginSaved", region),
   logoutCorosWatchfaces: (): Promise<CorosWatchfaceStatus> =>
     ipcRenderer.invoke("watchfaces:logout"),
   listCorosPairedDevices: (): Promise<CorosPairedDevice[]> =>

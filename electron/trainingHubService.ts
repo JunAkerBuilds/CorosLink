@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { safeStorage } from "electron";
 import {
   corosSportName,
   enrichActivitiesWithSportNames,
@@ -73,6 +72,12 @@ import {
   decodeStsCredentials
 } from "./corosUploadConfig";
 import { parseStrengthDetail } from "./strengthDetail";
+import {
+  clearStoredCorosCredentials,
+  getStoredCorosCredentials,
+  hashCorosPassword,
+  storeCorosCredentials
+} from "./corosCredentialStore";
 
 interface LoginResult {
   loginData: TrainingHubLoginData;
@@ -106,8 +111,7 @@ const SETTINGS = {
   accessToken: "trainingHub.accessToken",
   userId: "trainingHub.userId",
   regionId: "trainingHub.regionId",
-  baseUrl: "trainingHub.baseUrl",
-  credentials: "trainingHub.credentials"
+  baseUrl: "trainingHub.baseUrl"
 };
 
 interface TrainingHubAuthState {
@@ -115,11 +119,6 @@ interface TrainingHubAuthState {
   userId: string;
   regionId: string;
   baseUrl: string;
-}
-
-interface StoredTrainingHubCredentials {
-  account: string;
-  pwdHash: string;
 }
 
 interface TrainingHubApiResponse<T> {
@@ -225,7 +224,7 @@ interface TrainingHubFileUrlData {
 
 export function getTrainingHubStatus(): TrainingHubStatus {
   const auth = getStoredAuth();
-  const credentials = getStoredCredentials();
+  const credentials = getStoredCorosCredentials();
 
   return {
     authenticated: Boolean(auth),
@@ -247,15 +246,15 @@ export async function loginTrainingHub(
     throw new Error("Enter your COROS email and password.");
   }
 
-  const pwdHash = crypto.createHash("md5").update(password).digest("hex");
+  const pwdHash = hashCorosPassword(password);
   const session = await establishTrainingHubSession(account, pwdHash);
 
   persistTrainingHubSession(session);
 
   if (remember) {
-    storeCredentials(account, pwdHash);
+    storeCorosCredentials(account, pwdHash);
   } else {
-    clearStoredCredentials();
+    clearStoredCorosCredentials();
   }
 
   return getTrainingHubStatus();
@@ -396,7 +395,7 @@ async function queryTrainingHubAccount(
 
 export function logoutTrainingHub(): TrainingHubStatus {
   clearTrainingHubAuth();
-  clearStoredCredentials();
+  clearStoredCorosCredentials();
   return getTrainingHubStatus();
 }
 
@@ -4898,58 +4897,6 @@ function clearTrainingHubAuth(): void {
   ]);
 }
 
-function storeCredentials(account: string, pwdHash: string): boolean {
-  if (!safeStorage.isEncryptionAvailable()) {
-    console.warn(
-      "[trainingHub] Cannot remember COROS credentials: OS secure storage " +
-        "(safeStorage) is unavailable. The access token will still be saved, " +
-        "but the session cannot be refreshed automatically once it expires."
-    );
-    return false;
-  }
-
-  try {
-    const blob = JSON.stringify({
-      account,
-      pwdHash
-    } satisfies StoredTrainingHubCredentials);
-    const encrypted = safeStorage.encryptString(blob).toString("base64");
-    setSetting(SETTINGS.credentials, encrypted);
-    return true;
-  } catch (error) {
-    console.warn(
-      "[trainingHub] Failed to encrypt and store COROS credentials; " +
-        "automatic session refresh will not be available.",
-      error
-    );
-    return false;
-  }
-}
-
-function getStoredCredentials(): StoredTrainingHubCredentials | null {
-  const encoded = getSetting(SETTINGS.credentials);
-  if (!encoded || !safeStorage.isEncryptionAvailable()) {
-    return null;
-  }
-
-  try {
-    const decrypted = safeStorage.decryptString(
-      Buffer.from(encoded, "base64")
-    );
-    const parsed = JSON.parse(decrypted) as StoredTrainingHubCredentials;
-    if (!parsed.account || !parsed.pwdHash) {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function clearStoredCredentials(): void {
-  deleteSettings([SETTINGS.credentials]);
-}
-
 // A single in-flight re-authentication shared by all concurrent callers.
 // When a token expires, every parallel request would otherwise trigger its own
 // full COROS login; because COROS invalidates the previous token each time a new
@@ -4968,7 +4915,7 @@ function reauthenticateFromStoredCredentials(): Promise<TrainingHubAuthState | n
 }
 
 async function performReauthentication(): Promise<TrainingHubAuthState | null> {
-  const credentials = getStoredCredentials();
+  const credentials = getStoredCorosCredentials();
   if (!credentials) {
     console.warn(
       "[trainingHub] COROS access token expired but no stored credentials " +

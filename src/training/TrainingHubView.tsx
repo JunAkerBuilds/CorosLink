@@ -237,9 +237,9 @@ export function TrainingHubView({
               {canReconnect ? (
                 <div className="training-login-reconnect">
                   <div className="training-login-reconnect-text">
-                    <strong>Signed in as {status?.email}</strong>
+                    <strong>Saved COROS account: {status?.email}</strong>
                     <small>
-                      Your session expired. Reconnect using your saved
+                      Create a Training Hub session using your saved COROS
                       credentials — no password needed.
                     </small>
                   </div>
@@ -254,7 +254,7 @@ export function TrainingHubView({
                     ) : (
                       <RefreshCw size={17} aria-hidden="true" />
                     )}
-                    Reconnect
+                    Sign in
                   </button>
                 </div>
               ) : null}
@@ -311,10 +311,10 @@ export function TrainingHubView({
                   disabled={busy === "training-login"}
                 />
                 <span>
-                  Remember me
+                  Save this COROS account
                   <small>
-                    Securely stores your COROS credentials on this device so
-                    CorosLink can sign back in automatically.
+                    Securely stores an encrypted password digest so Training
+                    Hub and Watch Face Studio can each create their own session.
                   </small>
                 </span>
               </label>

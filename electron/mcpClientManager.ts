@@ -21,6 +21,7 @@ import {
   mcpSecretKey,
   updateMcpServer
 } from "./mcpServersStore";
+import { mcpOAuthClientName } from "./mcpOAuthCompatibility";
 import { prefixToolName, splitToolName } from "./mcpToolNames";
 import type {
   CorosMcpTool,
@@ -179,7 +180,10 @@ class McpOAuthProvider implements OAuthClientProvider {
 
   get clientMetadata(): OAuthClientMetadata {
     return {
-      client_name: "CorosLink",
+      client_name: mcpOAuthClientName(
+        this.config.resourceUrl,
+        this.config.serverName
+      ),
       redirect_uris: [this.redirectUri],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],

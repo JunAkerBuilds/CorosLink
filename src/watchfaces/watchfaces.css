@@ -1131,6 +1131,93 @@
   margin-top: 20px;
 }
 
+.watchface-shell .watchface-saved-login {
+  display: grid;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--wf-border));
+  border-radius: var(--wf-control-radius);
+  background: color-mix(in srgb, var(--accent) 8%, var(--wf-surface-raised));
+  padding: 13px;
+}
+
+.watchface-shell .watchface-saved-login > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.watchface-shell .watchface-saved-login span {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.watchface-shell .watchface-saved-login strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-shell .watchface-saved-login small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.watchface-shell .watchface-saved-login .secondary-button {
+  width: 100%;
+}
+
+.watchface-shell .watchface-auth-divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.watchface-shell .watchface-auth-divider::before,
+.watchface-shell .watchface-auth-divider::after {
+  content: "";
+  height: 1px;
+  background: var(--wf-border);
+}
+
+.watchface-shell .watchface-auth-remember {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.watchface-shell .watchface-auth-remember input {
+  margin: 3px 0 0;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+
+.watchface-shell .watchface-auth-remember span {
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.watchface-shell .watchface-auth-remember small {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
 .watchface-shell .watchface-auth-form .primary-button {
   margin-top: 3px;
 }

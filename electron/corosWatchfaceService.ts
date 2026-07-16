@@ -4,6 +4,12 @@ import path from "node:path";
 import { app, nativeImage, safeStorage } from "electron";
 import QRCode from "qrcode";
 import { deleteSettings, getSetting, setSetting } from "./database";
+import {
+  clearStoredCorosCredentials,
+  getStoredCorosCredentials,
+  hashCorosPassword,
+  storeCorosCredentials
+} from "./corosCredentialStore";
 import { createStoreZip } from "./zipStore";
 import type {
   CorosWatchfaceArchive,
@@ -224,9 +230,12 @@ export function encryptMobileLoginField(value: string): string {
 
 export function getCorosWatchfaceStatus(): CorosWatchfaceStatus {
   const session = readStoredSession();
+  const credentials = getStoredCorosCredentials();
   return {
     authenticated: Boolean(session),
     secureStorageAvailable: safeStorage.isEncryptionAvailable(),
+    savedCredentialsAvailable: Boolean(credentials),
+    savedEmail: credentials?.account,
     region: session?.region,
     suggestedRegion: session?.region ?? suggestWatchfaceRegion()
   };
@@ -235,12 +244,46 @@ export function getCorosWatchfaceStatus(): CorosWatchfaceStatus {
 export async function loginCorosWatchfaces(
   email: string,
   password: string,
-  region?: CorosWatchfaceRegion
+  region?: CorosWatchfaceRegion,
+  remember = false
 ): Promise<CorosWatchfaceStatus> {
   const account = email.trim();
   if (!account || !password) {
     throw new Error("Enter your COROS email and password.");
   }
+  const pwdHash = hashCorosPassword(password);
+  await establishCorosWatchfaceSession(account, pwdHash, region);
+
+  if (remember) {
+    storeCorosCredentials(account, pwdHash);
+  } else {
+    clearStoredCorosCredentials();
+  }
+
+  return getCorosWatchfaceStatus();
+}
+
+export async function loginCorosWatchfacesWithSavedCredentials(
+  region?: CorosWatchfaceRegion
+): Promise<CorosWatchfaceStatus> {
+  const credentials = getStoredCorosCredentials();
+  if (!credentials) {
+    throw new Error(
+      "No saved COROS credentials are available. Enter your email and password first."
+    );
+  }
+  return establishCorosWatchfaceSession(
+    credentials.account,
+    credentials.pwdHash,
+    region
+  );
+}
+
+async function establishCorosWatchfaceSession(
+  account: string,
+  pwdHash: string,
+  region?: CorosWatchfaceRegion
+): Promise<CorosWatchfaceStatus> {
   const resolvedRegion = normalizeWatchfaceRegion(region);
   const baseUrl = mobileApiBaseUrl(resolvedRegion);
 
@@ -249,7 +292,7 @@ export async function loginCorosWatchfaces(
     {
       method: "POST",
       baseUrl,
-      body: JSON.stringify(buildMobileLoginPayload(account, password, 1)),
+      body: JSON.stringify(buildMobileLoginPayload(account, pwdHash, 1)),
       allowedResultCodes: ["1115"]
     }
   );
@@ -261,7 +304,7 @@ export async function loginCorosWatchfaces(
     envelope = await mobileRequest<{ accessToken?: string }>("/user/login", {
       method: "POST",
       baseUrl,
-      body: JSON.stringify(buildMobileLoginPayload(account, password, 0))
+      body: JSON.stringify(buildMobileLoginPayload(account, pwdHash, 0))
     });
   }
 
@@ -2262,9 +2305,12 @@ export function buildMobileLoginRegion(options?: {
 
 function buildMobileLoginPayload(
   account: string,
-  password: string,
+  pwdHash: string,
   checkStatus: 0 | 1
 ): Record<string, string | number | boolean> {
+  if (!/^[a-f0-9]{32}$/i.test(pwdHash)) {
+    throw new Error("COROS password digest is invalid.");
+  }
   return {
     account: encryptMobileLoginField(account),
     accountType: 2,
@@ -2273,11 +2319,10 @@ function buildMobileLoginPayload(
     clientType: 1,
     hasHrCalibrated: 0,
     kbValidity: 0,
-    // The Android client MD5-hashes the password before passing its
-    // 32-character hex value through the mobile-field cipher.
-    pwd: encryptMobileLoginField(
-      crypto.createHash("md5").update(password, "utf8").digest("hex")
-    ),
+    // The Android client passes the 32-character MD5 digest through the
+    // mobile-field cipher. Keeping that digest in secure storage lets the
+    // separate Training Hub and mobile APIs create their own sessions.
+    pwd: encryptMobileLoginField(pwdHash.toLowerCase()),
     region: buildMobileLoginRegion(),
     skipValidation: false
   };

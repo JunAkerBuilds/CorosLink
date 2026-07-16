@@ -73,6 +73,7 @@ import {
   loadCorosWatchfaceTemplateAssets,
   loadCorosWatchfaceProject,
   loginCorosWatchfaces,
+  loginCorosWatchfacesWithSavedCredentials,
   logoutCorosWatchfaces,
   listCorosWatchfaceProjects,
   publishCorosWatchface,
@@ -683,8 +684,19 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "watchfaces:login",
-    (_event, email: string, password: string, region?: CorosWatchfaceRegion) =>
-      loginCorosWatchfaces(email, password, region)
+    (
+      _event,
+      email: string,
+      password: string,
+      region?: CorosWatchfaceRegion,
+      remember?: boolean
+    ) => loginCorosWatchfaces(email, password, region, remember)
+  );
+
+  ipcMain.handle(
+    "watchfaces:loginSaved",
+    (_event, region?: CorosWatchfaceRegion) =>
+      loginCorosWatchfacesWithSavedCredentials(region)
   );
 
   ipcMain.handle("watchfaces:logout", () => logoutCorosWatchfaces());

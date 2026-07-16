@@ -97,6 +97,10 @@ export type CorosWatchfaceRegion = "eu" | "us" | "cn";
 export interface CorosWatchfaceStatus {
   authenticated: boolean;
   secureStorageAvailable: boolean;
+  /** Whether an encrypted COROS account is available to create a new mobile session. */
+  savedCredentialsAvailable: boolean;
+  /** Account identifier only; the saved password digest never leaves the main process. */
+  savedEmail?: string;
   /** Region of the active mobile session, when signed in. */
   region?: CorosWatchfaceRegion;
   /** Best-guess region to preselect in the login form. */

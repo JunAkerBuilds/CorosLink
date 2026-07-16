@@ -137,6 +137,7 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberCredentials, setRememberCredentials] = useState(true);
   const [region, setRegion] = useState<CorosWatchfaceRegion>("us");
   const [regionTouched, setRegionTouched] = useState(false);
 
@@ -222,12 +223,16 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
         if (!regionTouched) {
           setRegion(nextStatus.region ?? nextStatus.suggestedRegion);
         }
+        if (nextStatus.savedEmail) {
+          setEmail((current) => current || nextStatus.savedEmail || "");
+        }
       })
       .catch((caught) => {
         if (!cancelled) {
           setStatus({
             authenticated: false,
             secureStorageAvailable: false,
+            savedCredentialsAvailable: false,
             suggestedRegion: "us"
           });
           setSurface("sign-in");
@@ -296,11 +301,35 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
     setBusy("login");
     clearMessages();
     try {
-      const nextStatus = await api.loginCorosWatchfaces(email, password, region);
+      const nextStatus = await api.loginCorosWatchfaces(
+        email,
+        password,
+        region,
+        rememberCredentials
+      );
       setStatus(nextStatus);
       setPassword("");
       if (destination === "hub") setSurface("hub");
       setNotice("COROS mobile session connected.");
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+      void api.getCorosWatchfaceStatus().then(setStatus).catch(() => undefined);
+    }
+  }
+
+  async function handleSavedLogin(destination: "hub" | "publish" = "hub") {
+    setBusy("login");
+    clearMessages();
+    try {
+      const nextStatus =
+        await api.loginCorosWatchfacesWithSavedCredentials(region);
+      setStatus(nextStatus);
+      setEmail(nextStatus.savedEmail ?? email);
+      setPassword("");
+      if (destination === "hub") setSurface("hub");
+      setNotice("COROS mobile session connected with your saved account.");
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -606,6 +635,11 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
             password={password}
             region={region}
             secureStorageAvailable={status?.secureStorageAvailable ?? false}
+            savedCredentialsAvailable={
+              status?.savedCredentialsAvailable ?? false
+            }
+            savedEmail={status?.savedEmail}
+            rememberCredentials={rememberCredentials}
             busy={busy === "publish" || busy === "login"}
             loginBusy={busy === "login"}
             onNameChange={setPublishName}
@@ -614,11 +648,13 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
             onLanguageChange={setLanguage}
             onEmailChange={setEmail}
             onPasswordChange={setPassword}
+            onRememberCredentialsChange={setRememberCredentials}
             onRegionChange={(nextRegion) => {
               setRegion(nextRegion);
               setRegionTouched(true);
             }}
             onLogin={(event) => void handleLogin(event, "publish")}
+            onSavedLogin={() => void handleSavedLogin("publish")}
             onSubmit={handlePublish}
             onCopy={() => void handleCopy()}
             onClose={() => setPublishOpen(false)}
@@ -686,6 +722,36 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
               className="watchface-auth-form"
               onSubmit={(event) => void handleLogin(event)}
             >
+              {status.savedCredentialsAvailable && status.savedEmail ? (
+                <>
+                  <div className="watchface-saved-login">
+                    <div>
+                      <span>Saved COROS account</span>
+                      <strong>{status.savedEmail}</strong>
+                      <small>
+                        Creates a separate Watch Face Studio session without
+                        asking for your password again.
+                      </small>
+                    </div>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => void handleSavedLogin()}
+                    >
+                      {busy === "login" ? (
+                        <Loader2 className="spin" size={16} aria-hidden="true" />
+                      ) : (
+                        <KeyRound size={16} aria-hidden="true" />
+                      )}
+                      Use saved account
+                    </button>
+                  </div>
+                  <div className="watchface-auth-divider">
+                    <span>or use another account</span>
+                  </div>
+                </>
+              ) : null}
               <label className="field">
                 Region
                 <select
@@ -722,6 +788,25 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
                   required
                 />
               </label>
+              {status.secureStorageAvailable ? (
+                <label className="watchface-auth-remember">
+                  <input
+                    type="checkbox"
+                    checked={rememberCredentials}
+                    onChange={(event) =>
+                      setRememberCredentials(event.target.checked)
+                    }
+                    disabled={busy !== null}
+                  />
+                  <span>
+                    Save this COROS account
+                    <small>
+                      Stores an encrypted password digest so Training Hub and
+                      Watch Face Studio can each create their own session.
+                    </small>
+                  </span>
+                </label>
+              ) : null}
               <button className="primary-button" type="submit" disabled={busy !== null}>
                 {busy === "login" ? (
                   <Loader2 className="spin" size={16} aria-hidden="true" />
@@ -1772,6 +1857,9 @@ interface PublishDialogProps {
   password: string;
   region: CorosWatchfaceRegion;
   secureStorageAvailable: boolean;
+  savedCredentialsAvailable: boolean;
+  savedEmail?: string;
+  rememberCredentials: boolean;
   busy: boolean;
   loginBusy: boolean;
   onNameChange: (value: string) => void;
@@ -1780,8 +1868,10 @@ interface PublishDialogProps {
   onLanguageChange: (value: string) => void;
   onEmailChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
+  onRememberCredentialsChange: (value: boolean) => void;
   onRegionChange: (value: CorosWatchfaceRegion) => void;
   onLogin: (event: FormEvent<HTMLFormElement>) => void;
+  onSavedLogin: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onCopy: () => void;
   onClose: () => void;
@@ -1868,6 +1958,35 @@ function PublishDialog(props: PublishDialogProps) {
               className="watchface-publish-form watchface-publish-login"
               onSubmit={props.onLogin}
             >
+              {props.savedCredentialsAvailable && props.savedEmail ? (
+                <>
+                  <div className="watchface-saved-login">
+                    <div>
+                      <span>Saved COROS account</span>
+                      <strong>{props.savedEmail}</strong>
+                      <small>
+                        Use it to create the separate mobile upload session.
+                      </small>
+                    </div>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      disabled={props.loginBusy}
+                      onClick={props.onSavedLogin}
+                    >
+                      {props.loginBusy ? (
+                        <Loader2 className="spin" size={16} aria-hidden="true" />
+                      ) : (
+                        <KeyRound size={16} aria-hidden="true" />
+                      )}
+                      Use saved account
+                    </button>
+                  </div>
+                  <div className="watchface-auth-divider">
+                    <span>or use another account</span>
+                  </div>
+                </>
+              ) : null}
               <label className="field">
                 Account region
                 <select
@@ -1904,6 +2023,24 @@ function PublishDialog(props: PublishDialogProps) {
                   required
                 />
               </label>
+              {props.secureStorageAvailable ? (
+                <label className="watchface-auth-remember">
+                  <input
+                    type="checkbox"
+                    checked={props.rememberCredentials}
+                    onChange={(event) =>
+                      props.onRememberCredentialsChange(event.target.checked)
+                    }
+                    disabled={props.loginBusy}
+                  />
+                  <span>
+                    Save this COROS account
+                    <small>
+                      Reuse it for Training Hub or future watch-face sign-ins.
+                    </small>
+                  </span>
+                </label>
+              ) : null}
               <button
                 className="primary-button watchface-publish-submit"
                 type="submit"

@@ -128,6 +128,10 @@ export interface CorosLinkApi {
   loginCorosWatchfaces: (
     email: string,
     password: string,
+    region: CorosWatchfaceRegion,
+    remember: boolean
+  ) => Promise<CorosWatchfaceStatus>;
+  loginCorosWatchfacesWithSavedCredentials: (
     region: CorosWatchfaceRegion
   ) => Promise<CorosWatchfaceStatus>;
   logoutCorosWatchfaces: () => Promise<CorosWatchfaceStatus>;
