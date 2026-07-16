@@ -247,10 +247,23 @@ import {
 import {
   connectCorosMcp,
   disconnectCorosMcp,
-  ensureCorosMcpConnected,
   getCorosMcpStatus,
   listCorosMcpTools
 } from "./corosMcpService";
+import {
+  connectMcpServer,
+  disconnectMcpServer,
+  ensureAllMcpConnected,
+  getMcpStatuses
+} from "./mcpClientManager";
+import {
+  addMcpServer,
+  getMcpServer,
+  listMcpServers,
+  removeMcpServer,
+  setMcpBearer,
+  updateMcpServer
+} from "./mcpServersStore";
 import { getTrainingDailyHealthData } from "./dailyHealthDataService";
 import { getTrainingSleepData } from "./sleepDataService";
 import type {
@@ -455,7 +468,11 @@ function applyAppIcon(): void {
   }
 
   if (process.platform === "darwin" && app.dock) {
-    app.dock.setIcon(iconPath);
+    try {
+      app.dock.setIcon(iconPath);
+    } catch {
+      // A bad/missing dock icon (e.g. in dev) must not abort app startup.
+    }
   }
 }
 
@@ -628,8 +645,9 @@ app.whenReady().then(() => {
   createWindow();
   applyAppIcon();
 
-  // Silently restore a previous COROS MCP session (no browser popup).
-  void ensureCorosMcpConnected();
+  // Silently restore previously-authorized MCP sessions (COROS + any other
+  // configured servers), no browser popup.
+  void ensureAllMcpConnected();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -1080,6 +1098,53 @@ function registerIpcHandlers(): void {
   ipcMain.handle("chatMcp:disconnect", () => disconnectCorosMcp());
 
   ipcMain.handle("chatMcp:listTools", () => listCorosMcpTools());
+
+  // Generic MCP server registry.
+  ipcMain.handle("mcp:listServers", () => listMcpServers());
+  ipcMain.handle("mcp:addServer", (_event, input) => addMcpServer(input));
+  ipcMain.handle("mcp:updateServer", async (_event, id: string, patch) => {
+    const existing = getMcpServer(id);
+    if (!existing) {
+      throw new Error(`Unknown MCP server "${id}".`);
+    }
+    const updated = updateMcpServer(id, patch);
+    const connectionChanged =
+      updated.url !== existing.url ||
+      updated.transport !== existing.transport ||
+      updated.authType !== existing.authType ||
+      updated.scope !== existing.scope;
+    if (!updated.enabled || connectionChanged) {
+      await disconnectMcpServer(id, {
+        clearAuthorization: connectionChanged
+      });
+    }
+    return updated;
+  });
+  ipcMain.handle("mcp:removeServer", async (_event, id: string) => {
+    const existing = getMcpServer(id);
+    if (!existing) return;
+    if (existing.builtin) {
+      removeMcpServer(id);
+      return;
+    }
+    await disconnectMcpServer(id);
+    removeMcpServer(id);
+  });
+  ipcMain.handle("mcp:connect", (_event, id: string) =>
+    connectMcpServer(id, true, mainWindow)
+  );
+  ipcMain.handle("mcp:disconnect", async (_event, id: string) => {
+    const server = getMcpServer(id);
+    await disconnectMcpServer(id);
+    if (server?.authType === "none") {
+      updateMcpServer(id, { enabled: false });
+    }
+  });
+  ipcMain.handle("mcp:statuses", () => getMcpStatuses());
+  ipcMain.handle("mcp:setBearer", async (_event, id: string, token: string) => {
+    setMcpBearer(id, token);
+    await disconnectMcpServer(id, { clearAuthorization: false });
+  });
 
   ipcMain.handle("chat:uploadPlanDraft", (_event, draftId: string) =>
     uploadTrainingPlanDraft(draftId)

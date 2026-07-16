@@ -79,6 +79,9 @@ import type {
   LocalChatDiscovery,
   CorosMcpStatus,
   CorosMcpTool,
+  McpServerConfig,
+  McpServerInput,
+  McpServerStatus,
   CorosTrainingPlanDraftInput,
   UploadPlanResult,
   IntervalsStatus,
@@ -447,6 +450,17 @@ export interface CorosLinkApi {
   connectCorosMcp: () => Promise<CorosMcpStatus>;
   disconnectCorosMcp: () => Promise<CorosMcpStatus>;
   listCorosMcpTools: () => Promise<CorosMcpTool[]>;
+  listMcpServers: () => Promise<McpServerConfig[]>;
+  addMcpServer: (input: McpServerInput) => Promise<McpServerConfig>;
+  updateMcpServer: (
+    id: string,
+    patch: Partial<McpServerInput>
+  ) => Promise<McpServerConfig>;
+  removeMcpServer: (id: string) => Promise<void>;
+  connectMcpServer: (id: string) => Promise<McpServerStatus>;
+  disconnectMcpServer: (id: string) => Promise<void>;
+  getMcpStatuses: () => Promise<McpServerStatus[]>;
+  setMcpBearer: (id: string, token: string) => Promise<void>;
   uploadTrainingPlanDraft: (draftId: string) => Promise<UploadPlanResult>;
   confirmWorkoutDelete: (requestId: string) => Promise<DeleteWorkoutResult>;
   setWindowBackground: (color: string) => Promise<void>;

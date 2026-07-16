@@ -80,6 +80,9 @@ import type {
   LocalChatDiscovery,
   CorosMcpStatus,
   CorosMcpTool,
+  McpServerConfig,
+  McpServerInput,
+  McpServerStatus,
   CorosTrainingPlanDraftInput,
   UploadPlanResult,
   IntervalsStatus,
@@ -743,6 +746,25 @@ const api = {
     ipcRenderer.invoke("chatMcp:disconnect"),
   listCorosMcpTools: (): Promise<CorosMcpTool[]> =>
     ipcRenderer.invoke("chatMcp:listTools"),
+  listMcpServers: (): Promise<McpServerConfig[]> =>
+    ipcRenderer.invoke("mcp:listServers"),
+  addMcpServer: (input: McpServerInput): Promise<McpServerConfig> =>
+    ipcRenderer.invoke("mcp:addServer", input),
+  updateMcpServer: (
+    id: string,
+    patch: Partial<McpServerInput>
+  ): Promise<McpServerConfig> =>
+    ipcRenderer.invoke("mcp:updateServer", id, patch),
+  removeMcpServer: (id: string): Promise<void> =>
+    ipcRenderer.invoke("mcp:removeServer", id),
+  connectMcpServer: (id: string): Promise<McpServerStatus> =>
+    ipcRenderer.invoke("mcp:connect", id),
+  disconnectMcpServer: (id: string): Promise<void> =>
+    ipcRenderer.invoke("mcp:disconnect", id),
+  getMcpStatuses: (): Promise<McpServerStatus[]> =>
+    ipcRenderer.invoke("mcp:statuses"),
+  setMcpBearer: (id: string, token: string): Promise<void> =>
+    ipcRenderer.invoke("mcp:setBearer", id, token),
   uploadTrainingPlanDraft: (draftId: string): Promise<UploadPlanResult> =>
     ipcRenderer.invoke("chat:uploadPlanDraft", draftId),
   confirmWorkoutDelete: (requestId: string): Promise<DeleteWorkoutResult> =>

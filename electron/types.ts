@@ -1819,6 +1819,45 @@ export interface CorosMcpStatus {
   tools: CorosMcpTool[];
 }
 
+// ----- Configurable MCP server registry -----
+
+export type McpTransport = "streamable-http";
+export type McpAuthType = "oauth" | "bearer" | "none";
+
+export interface McpServerConfig {
+  id: string;
+  name: string;
+  url: string;
+  transport: McpTransport;
+  authType: McpAuthType;
+  scope?: string;
+  enabled: boolean;
+  /** Built-in (COROS): non-deletable, url/id immutable, can be disabled. */
+  builtin: boolean;
+  sortOrder: number;
+}
+
+export interface McpServerInput {
+  id?: string;
+  name: string;
+  url: string;
+  transport?: McpTransport;
+  authType?: McpAuthType;
+  scope?: string | null;
+  enabled?: boolean;
+}
+
+export interface McpServerStatus {
+  id: string;
+  name: string;
+  enabled: boolean;
+  connected: boolean;
+  /** Auth is satisfied (OAuth tokens stored, or bearer set, or authType none). */
+  authenticated: boolean;
+  toolCount: number;
+  error?: string;
+}
+
 // Streaming chat is push-based: `chat:send` kicks off the request and the
 // assistant text arrives via these main->renderer events, correlated by
 // requestId. Renderers must not await `chat:send` for content.

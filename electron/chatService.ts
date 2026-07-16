@@ -11,10 +11,12 @@ import {
   getUpcomingWorkouts
 } from "./trainingHubService";
 import {
-  callCorosMcpTool,
-  ensureCorosMcpConnected,
-  getCorosMcpTools
-} from "./corosMcpService";
+  callMcpTool,
+  ensureAllMcpConnected,
+  getAllMcpTools,
+  getMcpServerCachedTools
+} from "./mcpClientManager";
+import { prefixToolName } from "./mcpToolNames";
 import {
   getChatWorkoutTools,
   handleChatWorkoutTool,
@@ -603,12 +605,12 @@ export async function streamChat(
         );
       }
 
-      await ensureCorosMcpConnected();
+      await ensureAllMcpConnected();
       const chatTools = getClaudeCodeTools(settings.claudeCode.permissions);
       const { text: instructions, hasData } = await buildTrainingContext(
         settings.claudeCode.permissions
       );
-      const effectiveInstructions = withLiveCorosToolInstructions(
+      const effectiveInstructions = withLiveToolInstructions(
         instructions,
         chatTools
       );
@@ -681,10 +683,10 @@ export async function streamChat(
       const runtimeConfig = getLocalRuntimeConfig(settings.local);
 
       if (runtimeConfig.toolsEnabled) {
-        await ensureCorosMcpConnected();
+        await ensureAllMcpConnected();
       }
       const chatTools = runtimeConfig.toolsEnabled ? getAllChatTools() : getChatWorkoutTools();
-      const effectiveInstructions = withLiveCorosToolInstructions(
+      const effectiveInstructions = withLiveToolInstructions(
         instructions,
         chatTools
       );
@@ -751,12 +753,12 @@ export async function streamChat(
 
     // Reconnect a previously-authorized COROS MCP session, then expose its tools
     // to the model as function tools so it can pull data on demand.
-    await ensureCorosMcpConnected();
+    await ensureAllMcpConnected();
     const tools = buildChatFunctionTools();
 
     // When live tools are available, steer the model to use them rather than
     // leaning on the brief snapshot in `instructions`.
-    const effectiveInstructions = withLiveCorosToolInstructions(
+    const effectiveInstructions = withLiveToolInstructions(
       instructions,
       getAllChatTools()
     );
@@ -942,7 +944,7 @@ export async function confirmWorkoutDelete(
 
 function getAllChatTools(): CorosMcpTool[] {
   return [
-    ...getCorosMcpTools(),
+    ...getAllMcpTools(),
     ...getChatActivityTools(),
     ...getChatAnalyticsTools(),
     ...getChatWorkoutTools()
@@ -979,9 +981,14 @@ export function getClaudeCodeTools(
     }
   }
 
-  const remoteTools = getCorosMcpTools().filter((tool) =>
-    remoteAllowedNames.has(tool.name)
-  );
+  // COROS remote tools are permission-gated by their (unprefixed) names, then
+  // exposed prefixed. Other MCP servers the user configured are exposed in full.
+  const remoteTools = [
+    ...getMcpServerCachedTools("coros")
+      .filter((tool) => remoteAllowedNames.has(tool.name))
+      .map((tool) => ({ ...tool, name: prefixToolName("coros", tool.name) })),
+    ...getAllMcpTools().filter((tool) => !tool.name.startsWith("coros__"))
+  ];
   const activityTools = permissions.recentActivities
     ? getChatActivityTools()
     : [];
@@ -1086,7 +1093,7 @@ async function executeChatTool(
     }
   }
   try {
-    return await callCorosMcpTool(name, args);
+    return await callMcpTool(name, args);
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : String(caught);
     send("chat:streamInfo", {
@@ -1206,7 +1213,7 @@ function toInputMessageItem(message: ChatMessage): Record<string, unknown> {
   };
 }
 
-/** Exposes COROS MCP + local workout tools to the model as function tools. */
+/** Exposes connected MCP and local workout tools to the model as functions. */
 function buildChatFunctionTools(): Record<string, unknown>[] {
   return getAllChatTools().map((tool) => ({
     type: "function",
@@ -1217,7 +1224,7 @@ function buildChatFunctionTools(): Record<string, unknown>[] {
   }));
 }
 
-function withLiveCorosToolInstructions(
+function withLiveToolInstructions(
   instructions: string,
   tools: CorosMcpTool[]
 ): string {
@@ -1232,8 +1239,14 @@ function withLiveCorosToolInstructions(
       !isChatActivityTool(tool.name) &&
       !isChatAnalyticsTool(tool.name)
   );
+  const corosMcpTools = mcpTools.filter((tool) =>
+    tool.name.startsWith("coros__")
+  );
+  const otherMcpTools = mcpTools.filter(
+    (tool) => !tool.name.startsWith("coros__")
+  );
   const planTools = tools.filter((tool) => isChatWorkoutTool(tool.name));
-  const sections = [instructions, "", "## Live COROS data (tools)"];
+  const sections = [instructions, "", "## Live training data and tools"];
   if (activityTools.length > 0) {
     sections.push(
       `Local Training Hub tools (preferred for laps/splits): ${activityTools
@@ -1252,11 +1265,20 @@ function withLiveCorosToolInstructions(
         "Inline charts are shown automatically when these tools return data."
     );
   }
-  if (mcpTools.length > 0) {
+  if (corosMcpTools.length > 0) {
     sections.push(
-      `COROS MCP tools: ${mcpTools.map((tool) => tool.name).join(", ")}. ` +
+      `COROS MCP tools: ${corosMcpTools.map((tool) => tool.name).join(", ")}. ` +
         "Use these for sleep, HRV, recovery, and other MCP-only metrics. " +
         "For lap splits and interval breakdowns, prefer get_activity_detail."
+    );
+  }
+  if (otherMcpTools.length > 0) {
+    sections.push(
+      `Other connected MCP server tools: ${otherMcpTools
+        .map((tool) => tool.name)
+        .join(", ")}. ` +
+        "Use each tool according to its own name, description, and schema. " +
+        "Do not assume these tools return COROS data."
     );
   }
   if (planTools.length > 0) {

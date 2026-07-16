@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Database,
   ExternalLink,
@@ -29,6 +29,7 @@ import type {
   LocalChatConnectionTest,
   LocalChatDiscovery,
   CorosMcpStatus,
+  McpServerStatus,
   PlanDraftPreview,
   TrainingHubExportResult,
   UploadPlanResult,
@@ -39,7 +40,6 @@ import { ActivityVisualCard } from "./ActivityVisualCard";
 import { FitnessTrendCard } from "./FitnessTrendCard";
 import { HrZoneCard } from "./HrZoneCard";
 import { ChatSettingsModal } from "./ChatSettingsModal";
-import { CorosMcpToolsPanel } from "./CorosMcpToolsPanel";
 import { ChatSidebar } from "./ChatSidebar";
 import { ProviderSwitch } from "./ProviderSwitch";
 import {
@@ -284,7 +284,7 @@ function SourceBadge({ source }: { source: SourceInfo }) {
     return (
       <div className={`chat-source ${source.mcpError ? "chat-source-error" : "chat-source-mcp"}`}>
         <Database size={12} aria-hidden="true" />
-        COROS MCP
+        MCP
         {tools.length > 0 ? ` · ${[...new Set(tools)].join(", ")}` : ""}
         {source.mcpError ? " · failed" : ""}
       </div>
@@ -365,6 +365,8 @@ export function ChatView({
   const [exportingLatestActivity, setExportingLatestActivity] = useState(false);
   const [currentSource, setCurrentSource] = useState<SourceInfo | null>(null);
   const [mcpStatus, setMcpStatus] = useState<CorosMcpStatus | null>(null);
+  const [mcpStatuses, setMcpStatuses] = useState<McpServerStatus[]>([]);
+  const [mcpRefreshVersion, setMcpRefreshVersion] = useState(0);
   const [mcpBusy, setMcpBusy] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [uploadingDraftId, setUploadingDraftId] = useState<string | null>(null);
@@ -539,25 +541,31 @@ export function ChatView({
     onActivityChange?.(streaming || exportingLatestActivity);
   }, [streaming, exportingLatestActivity, onActivityChange]);
 
-  // Load COROS MCP connection status on mount (and shortly after, to catch the
+  const refreshMcpStatuses = useCallback(async () => {
+    if (!api) return;
+    const [corosResult, statusesResult] = await Promise.allSettled([
+      api.getCorosMcpStatus(),
+      api.getMcpStatuses()
+    ]);
+    if (corosResult.status === "fulfilled") {
+      setMcpStatus(corosResult.value);
+    }
+    if (statusesResult.status === "fulfilled") {
+      setMcpStatuses(statusesResult.value);
+    }
+    setMcpRefreshVersion((version) => version + 1);
+  }, [api]);
+
+  // Load MCP connection status on mount (and shortly after, to catch the
   // silent startup reconnect completing in the main process).
   useEffect(() => {
     if (!api) return;
-    let cancelled = false;
-    const load = () =>
-      api
-        .getCorosMcpStatus()
-        .then((status) => {
-          if (!cancelled) setMcpStatus(status);
-        })
-        .catch(() => undefined);
-    void load();
-    const timer = setTimeout(() => void load(), 2500);
+    void refreshMcpStatuses();
+    const timer = setTimeout(() => void refreshMcpStatuses(), 2500);
     return () => {
-      cancelled = true;
       clearTimeout(timer);
     };
-  }, [api]);
+  }, [api, refreshMcpStatuses]);
 
   useEffect(() => {
     if (!showTools || settingsOpen) {
@@ -1115,15 +1123,9 @@ export function ChatView({
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "COROS connection failed.");
     } finally {
+      await refreshMcpStatuses();
       setMcpBusy(false);
     }
-  };
-
-  const handleDisconnectMcp = async () => {
-    if (!api) return;
-    setShowTools(false);
-    const status = await api.disconnectCorosMcp();
-    setMcpStatus(status);
   };
 
   const handleSend = async () => {
@@ -1329,6 +1331,8 @@ export function ChatView({
   };
 
   const settingsModalProps = {
+    api,
+    mcpRefreshVersion,
     open: settingsOpen,
     chatSettings,
     authStatus,
@@ -1343,9 +1347,6 @@ export function ChatView({
     checkingClaude,
     connectingClaude,
     testingClaude,
-    mcpStatus,
-    mcpBusy,
-    showTools,
     busy: isBusy,
     onClose: () => setSettingsOpen(false),
     onSignIn: () => void handleSignIn(),
@@ -1362,9 +1363,7 @@ export function ChatView({
     onTestLocalConnection: () => void handleTestLocalConnection(),
     onSaveLocalSettings: () => void handleSaveLocalSettings(),
     onClearLocalApiKey: () => void handleClearLocalApiKey(),
-    onConnectMcp: () => void handleConnectMcp(),
-    onDisconnectMcp: () => void handleDisconnectMcp(),
-    onToggleTools: () => setShowTools((value) => !value),
+    onMcpServersChange: refreshMcpStatuses,
     onUpdateChatSettings: (patch: Partial<ChatSettings>) =>
       void handleUpdateChatSettings(patch)
   };
@@ -1546,24 +1545,49 @@ export function ChatView({
             Settings
           </button>
           <div className="chat-mcp" ref={mcpRef}>
-            {mcpStatus?.connected ? (
+            {(() => {
+              const connectedServers = mcpStatuses.filter((s) => s.connected);
+              const totalTools = connectedServers.reduce(
+                (n, s) => n + s.toolCount,
+                0
+              );
+              return connectedServers.length > 0 ? (
               <>
                 <button
                   type="button"
                   className="chat-mcp-pill connected"
                   onClick={() => setShowTools((open) => !open)}
-                  title="COROS data connected via MCP"
+                  title={`Connected via MCP: ${connectedServers
+                    .map((s) => s.name)
+                    .join(", ")}`}
                   aria-expanded={showTools}
                   aria-haspopup="dialog"
                 >
                   <Database size={13} aria-hidden="true" />
-                  COROS · {mcpStatus.tools.length} tools
+                  {connectedServers.length === 1
+                    ? connectedServers[0].name
+                    : `${connectedServers.length} MCP servers`}{" "}
+                  · {totalTools} tools
                 </button>
                 {showTools ? (
-                  <CorosMcpToolsPanel
-                    tools={mcpStatus.tools}
-                    onDisconnect={() => void handleDisconnectMcp()}
-                  />
+                  <div className="chat-mcp-panel">
+                    <ul>
+                      {connectedServers.map((s) => (
+                        <li key={s.id}>
+                          <code>{s.name}</code>
+                          <span>{s.toolCount} tools</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="chat-mcp-panel-head">
+                      <button
+                        type="button"
+                        onClick={() => setSettingsOpen(true)}
+                      >
+                        Manage servers
+                      </button>
+                    </div>
+                  </div>
                 ) : null}
               </>
             ) : (
@@ -1587,7 +1611,8 @@ export function ChatView({
                     ? "Reconnect COROS"
                     : "Connect COROS"}
               </button>
-            )}
+            );
+            })()}
           </div>
           {isChatGptProvider && authStatus?.email ? (
             <span className="chat-account">{authStatus.email}</span>

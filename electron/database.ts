@@ -247,6 +247,18 @@ export function initializeDatabase(userDataPath: string): Database.Database {
 
     CREATE INDEX IF NOT EXISTS idx_chat_plan_drafts_created
       ON chat_plan_drafts(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS mcp_servers (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      transport TEXT NOT NULL DEFAULT 'streamable-http',
+      auth_type TEXT NOT NULL DEFAULT 'oauth',
+      scope TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      builtin INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
   `);
 
   ensureColumn(db, "generated_routes", "activity_type", "TEXT");
@@ -255,6 +267,16 @@ export function initializeDatabase(userDataPath: string): Database.Database {
   ensureColumn(db, "training_activities", "feel_type", "INTEGER");
   migrateChatSessionProviderConstraint(db);
   migrateChatTranscriptsToSessions(db);
+
+  // Seed the built-in COROS MCP server so existing users get a registry entry
+  // with the exact resource/scope they already use. Its secrets stay under the
+  // legacy corosMcp.* / mcp.coros.* settings keys.
+  db.prepare(
+    `INSERT INTO mcp_servers (id, name, url, transport, auth_type, scope, enabled, builtin, sort_order)
+     VALUES ('coros', 'COROS', 'https://mcpus.coros.com/mcp', 'streamable-http', 'oauth',
+             'openid mcp.tools offline_access', 1, 1, 0)
+     ON CONFLICT(id) DO NOTHING`
+  ).run();
 
   return db;
 }
@@ -415,7 +437,7 @@ function ensureColumn(
   database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
-function requireDatabase(): Database.Database {
+export function requireDatabase(): Database.Database {
   if (!db) {
     throw new Error("Database has not been initialized.");
   }

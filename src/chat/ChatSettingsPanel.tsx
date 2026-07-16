@@ -1,7 +1,6 @@
 import {
   Bot,
   CircleCheck,
-  Database,
   ExternalLink,
   KeyRound,
   Loader2,
@@ -14,11 +13,11 @@ import type {
   ChatAuthStatus,
   ChatSettings,
   ClaudeCodeStatus,
-  CorosMcpStatus,
   LocalChatConnectionTest,
   LocalChatDiscovery
 } from "../../electron/types";
-import { CorosMcpToolsPanel } from "./CorosMcpToolsPanel";
+import { McpServersPanel } from "./McpServersPanel";
+import type { CorosLinkApi } from "../coroslink-api";
 
 function claudeStatusLabel(status: ClaudeCodeStatus | null): string {
   if (!status) return "Not checked";
@@ -31,6 +30,7 @@ function claudeStatusLabel(status: ClaudeCodeStatus | null): string {
 }
 
 export function ChatSettingsPanel({
+  api,
   chatSettings,
   authStatus,
   claudeStatus,
@@ -44,9 +44,7 @@ export function ChatSettingsPanel({
   checkingClaude,
   connectingClaude,
   testingClaude,
-  mcpStatus,
-  mcpBusy,
-  showTools,
+  mcpRefreshVersion,
   busy,
   onSignIn,
   onSignOut,
@@ -61,11 +59,10 @@ export function ChatSettingsPanel({
   onTestLocalConnection,
   onSaveLocalSettings,
   onClearLocalApiKey,
-  onConnectMcp,
-  onDisconnectMcp,
-  onToggleTools,
+  onMcpServersChange,
   onUpdateChatSettings
 }: {
+  api: CorosLinkApi | undefined;
   chatSettings: ChatSettings;
   authStatus: ChatAuthStatus | null;
   claudeStatus: ClaudeCodeStatus | null;
@@ -79,9 +76,7 @@ export function ChatSettingsPanel({
   checkingClaude: boolean;
   connectingClaude: boolean;
   testingClaude: boolean;
-  mcpStatus: CorosMcpStatus | null;
-  mcpBusy: boolean;
-  showTools: boolean;
+  mcpRefreshVersion: number;
   busy?: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
@@ -98,9 +93,7 @@ export function ChatSettingsPanel({
   onTestLocalConnection: () => void;
   onSaveLocalSettings: () => void;
   onClearLocalApiKey: () => void;
-  onConnectMcp: () => void;
-  onDisconnectMcp: () => void;
-  onToggleTools: () => void;
+  onMcpServersChange: () => void | Promise<void>;
   onUpdateChatSettings: (patch: Partial<ChatSettings>) => void;
 }) {
   const availableLocalServers =
@@ -327,8 +320,10 @@ export function ChatSettingsPanel({
           </label>
         </div>
         <p className="chat-settings-copy">
-          Only selected categories are included in Coach context or exposed as
-          tools. Drafts stay local until you click an upload or delete button.
+          These selections control built-in COROS and Training Hub data.
+          Connected custom MCP servers are trusted separately and can expose
+          their tools to Claude. Drafts stay local until you click an upload or
+          delete button.
         </p>
       </section>
 
@@ -491,50 +486,18 @@ export function ChatSettingsPanel({
       </section>
 
       <section className="chat-settings-section">
-        <h3>COROS data</h3>
-        <div className="chat-settings-mcp">
-          {mcpStatus?.connected ? (
-            <>
-              <button
-                type="button"
-                className="chat-mcp-pill connected chat-mcp-pill-settings"
-                onClick={onToggleTools}
-              >
-                <Database size={13} aria-hidden="true" />
-                COROS · {mcpStatus.tools.length} tools
-              </button>
-              {showTools ? (
-                <CorosMcpToolsPanel
-                  tools={mcpStatus.tools}
-                  onDisconnect={onDisconnectMcp}
-                  className="chat-mcp-panel-settings"
-                />
-              ) : null}
-            </>
-          ) : (
-            <button
-              type="button"
-              className="chat-mcp-pill chat-mcp-pill-settings"
-              onClick={onConnectMcp}
-              disabled={mcpBusy || busy}
-            >
-              {mcpBusy ? (
-                <Loader2 className="chat-spinner" size={13} aria-hidden="true" />
-              ) : (
-                <Database size={13} aria-hidden="true" />
-              )}
-              {mcpBusy
-                ? "Connecting…"
-                : mcpStatus?.authorized
-                  ? "Reconnect COROS"
-                  : "Connect COROS"}
-            </button>
-          )}
-          <p className="chat-settings-copy">
-            Connect Training Hub so the coach can read activities, create training
-            plans, and upload workouts to your COROS calendar.
-          </p>
-        </div>
+        <h3>MCP servers</h3>
+        <p className="chat-settings-copy">
+          Connect additional Model Context Protocol servers so the coach can call
+          their tools. Their tools appear alongside COROS, namespaced per server.
+          Only add servers you trust because tool descriptions and returned data
+          are shared with the selected coach provider.
+        </p>
+        <McpServersPanel
+          api={api}
+          refreshVersion={mcpRefreshVersion}
+          onChange={onMcpServersChange}
+        />
       </section>
     </div>
   );
