@@ -4235,6 +4235,21 @@ export function WatchfaceEditor({
     }));
   }
 
+  function setControlBatteryEnabled(enabled: boolean) {
+    const fallbackComplication = details
+      ? getAvailableComplications(details).find(
+          (complication) => complication.id !== "battery"
+        )?.id ?? ""
+      : "";
+    setDesign((current) => ({
+      ...current,
+      controlBatteryEnabled: enabled,
+      ...(!enabled && current.previewComplication === "battery"
+        ? { previewComplication: fallbackComplication }
+        : {})
+    }));
+  }
+
   function updateAmPmIndicator(
     patch: Partial<NonNullable<CorosWatchfaceDesignState["ampmIndicator"]>>
   ) {
@@ -6027,7 +6042,10 @@ export function WatchfaceEditor({
 
   function layerGroupLabel(layer: EditorLayer): string {
     if (layer.kind === "background" || layer.kind === "customSprite") return "Artwork";
-    if (layer.kind === "configAsset") {
+    if (
+      layer.kind === "configAsset" ||
+      layer.kind === "controlBatteryIcon"
+    ) {
       return previewMode === "aod" ? "Always-on assets" : "Template assets";
     }
     if (
@@ -6056,6 +6074,14 @@ export function WatchfaceEditor({
       }
     }
     return [...groups].map(([label, groupLayers]) => {
+      if (label === "Template assets" || label === "Always-on assets") {
+        return {
+          label,
+          layers: [...groupLayers].sort((left, right) =>
+            left.label.localeCompare(right.label)
+          )
+        };
+      }
       if (label !== "Artwork") return { label, layers: groupLayers };
       const importedLayers = groupLayers
         .filter((layer) => layer.kind === "customSprite")
@@ -6086,7 +6112,11 @@ export function WatchfaceEditor({
     ) {
       return <Type size={14} />;
     }
-    if (layer.kind === "battery" || layer.kind === "batteryIcon") {
+    if (
+      layer.kind === "battery" ||
+      layer.kind === "batteryIcon" ||
+      layer.kind === "controlBatteryIcon"
+    ) {
       return <Battery size={14} />;
     }
     return <Layers size={14} />;
@@ -6316,6 +6346,8 @@ export function WatchfaceEditor({
       patchDesign({ artworkVisible: !layer.visible });
     } else if (layer.kind === "batteryIcon") {
       setBatteryIconVisible(!layer.visible);
+    } else if (layer.kind === "controlBatteryIcon") {
+      setControlBatteryEnabled(!layer.visible);
     } else if (layer.layoutGroupId) {
       setFirmwareLayerVisible(layer.layoutGroupId, !layer.visible);
     }
@@ -6469,6 +6501,176 @@ export function WatchfaceEditor({
     );
   }
 
+  function renderControlBatteryInspector(layer: EditorLayer) {
+    const override =
+      design.configAssetOverrides?.["config:control_battery_icon"];
+    const stateCount = Object.keys(
+      override?.stateReplacements ?? {}
+    ).length;
+    const iconScale = override?.scale ?? 1;
+    const sourceResolution = details ? pickPreviewResolution(details) : null;
+    const baseIconPosition = parseConfigPos(
+      sourceResolution?.config.control_battery_icon_pos
+    );
+    const iconOffset =
+      design.controlIconOffsets?.battery ?? { dx: 0, dy: 0 };
+    const controlOriginKey = sourceResolution
+      ? Object.keys(sourceResolution.config).find((key) =>
+          /^rect_control\d+_pos$/.test(key)
+        )
+      : undefined;
+    const controlOrigin = parseConfigPos(
+      controlOriginKey
+        ? sourceResolution?.config[controlOriginKey]
+        : undefined
+    ) ?? { x: 0, y: 0 };
+    const controlOffset =
+      design.layoutOffsets?.complication ?? { dx: 0, dy: 0 };
+    const iconScreenPosition = baseIconPosition
+      ? {
+          x: toWatchCoordinate(
+            controlOrigin.x +
+              controlOffset.dx +
+              baseIconPosition.x +
+              iconOffset.dx
+          ),
+          y: toWatchCoordinate(
+            controlOrigin.y +
+              controlOffset.dy +
+              baseIconPosition.y +
+              iconOffset.dy
+          )
+        }
+      : null;
+    const setIconOffset = (dx: number, dy: number) => {
+      if (isMovementLockedForId("complication")) return;
+      setDesign((current) => ({
+        ...current,
+        controlIconOffsets: {
+          ...(current.controlIconOffsets ?? {}),
+          battery: { dx: Math.round(dx), dy: Math.round(dy) }
+        }
+      }));
+    };
+
+    return (
+      <div className="watchface-inspector-group">
+        <label className="watchface-studio-toggle">
+          <input
+            type="checkbox"
+            checked={layer.visible}
+            onChange={(event) =>
+              setControlBatteryEnabled(event.target.checked)
+            }
+          />
+          Include Battery in selectable metrics
+        </label>
+        <h3 className="wf-inspector-heading">Control battery sprite folder</h3>
+        <div className="wf-config-asset-actions">
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() =>
+              void chooseBatterySpriteFolder(
+                "config:control_battery_icon"
+              )
+            }
+          >
+            <ImagePlus size={15} />{" "}
+            {stateCount > 0
+              ? "Replace control sprite folder"
+              : "Import control sprite folder"}
+          </button>
+          {stateCount > 0 ? (
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() =>
+                restoreBatteryIcon("config:control_battery_icon")
+              }
+            >
+              <RotateCcw size={15} /> Restore control icon
+            </button>
+          ) : null}
+        </div>
+        <label className="watchface-inspector-field">
+          <span>Control icon scale</span>
+          <EditableNumberInput
+            min="0.1"
+            step="0.01"
+            value={iconScale}
+            fallback={1}
+            onValueChange={(scale) =>
+              setBatteryIconScale(
+                scale,
+                "config:control_battery_icon"
+              )
+            }
+          />
+        </label>
+        {baseIconPosition
+          ? renderPositionPanel("complication", "Control icon position", <>
+              <div className="watchface-position-inputs">
+                <label>
+                  X
+                  <input
+                    type="number"
+                    min="0"
+                    max={watchCoordinateWidth}
+                    value={iconScreenPosition?.x ?? 0}
+                    onChange={(event) =>
+                      setIconOffset(
+                        fromWatchCoordinate(
+                          Number(event.target.value) || 0
+                        ) -
+                          controlOrigin.x -
+                          controlOffset.dx -
+                          baseIconPosition.x,
+                        iconOffset.dy
+                      )
+                    }
+                  />
+                </label>
+                <label>
+                  Y
+                  <input
+                    type="number"
+                    min="0"
+                    max={watchCoordinateHeight}
+                    value={iconScreenPosition?.y ?? 0}
+                    onChange={(event) =>
+                      setIconOffset(
+                        iconOffset.dx,
+                        fromWatchCoordinate(
+                          Number(event.target.value) || 0
+                        ) -
+                          controlOrigin.y -
+                          controlOffset.dy -
+                          baseIconPosition.y
+                      )
+                    }
+                  />
+                </label>
+              </div>
+              <span>Fine tune (1 px)</span>
+              <div className="watchface-nudge-pad wf-position-nudge-only">
+                <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy - fromWatchCoordinate(1))} aria-label="Nudge control battery icon up">↑</button>
+                <button type="button" onClick={() => setIconOffset(iconOffset.dx - fromWatchCoordinate(1), iconOffset.dy)} aria-label="Nudge control battery icon left">←</button>
+                <button type="button" onClick={() => setIconOffset(iconOffset.dx + fromWatchCoordinate(1), iconOffset.dy)} aria-label="Nudge control battery icon right">→</button>
+                <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy + fromWatchCoordinate(1))} aria-label="Nudge control battery icon down">↓</button>
+                <button type="button" className="watchface-nudge-reset" onClick={() => setIconOffset(0, 0)}>Reset</button>
+              </div>
+            </>)
+          : null}
+        <p className="watchface-studio-summary">
+          This icon is used only for the Battery choice in the selectable data
+          slot. Its sprite folder, scale, and position are managed here
+          independently from the Selectable metric layer.
+        </p>
+      </div>
+    );
+  }
+
   function renderInspector(layer: EditorLayer) {
     if (isPositionLocked(layer.id)) {
       return (
@@ -6503,6 +6705,10 @@ export function WatchfaceEditor({
 
     if (layer.staticSeparatorId) {
       return <>{renderStaticSeparatorInspector(layer.staticSeparatorId)}{renderEffectsInspector(layer.id)}</>;
+    }
+
+    if (layer.kind === "controlBatteryIcon") {
+      return renderControlBatteryInspector(layer);
     }
 
     if (layer.kind === "background") {
@@ -7461,12 +7667,6 @@ export function WatchfaceEditor({
     const controlColonReference = configAssetsById.get("config:control_colon_icon");
     const controlColonEnabled =
       design.configAssetOverrides?.["config:control_colon_icon"]?.enabled !== false;
-    const controlBatteryOverride =
-      design.configAssetOverrides?.["config:control_battery_icon"];
-    const controlBatteryStateCount = Object.keys(
-      controlBatteryOverride?.stateReplacements ?? {}
-    ).length;
-    const controlBatteryIconScale = controlBatteryOverride?.scale ?? 1;
     const sourceResolution = details ? pickPreviewResolution(details) : null;
     const iconPositionKey = selectedComplication
       ? `control_${selectedComplication.controlPrefix}_icon_pos`
@@ -7506,28 +7706,6 @@ export function WatchfaceEditor({
     };
     return (
       <>
-        {available.some((complication) => complication.id === "battery") ? (
-          <label className="watchface-studio-toggle">
-            <input
-              type="checkbox"
-              checked={controlBatteryEnabled}
-              onChange={(event) => {
-                const enabled = event.target.checked;
-                setDesign((current) => ({
-                  ...current,
-                  controlBatteryEnabled: enabled,
-                  ...(!enabled && current.previewComplication === "battery"
-                    ? {
-                        previewComplication:
-                          available.find((item) => item.id !== "battery")?.id ?? ""
-                      }
-                    : {})
-                }));
-              }}
-            />
-            Include Battery in selectable metrics
-          </label>
-        ) : null}
         <label className="field">
           Preview data
           <select
@@ -7556,57 +7734,6 @@ export function WatchfaceEditor({
             ))}
           </select>
         </label>
-        {selectedComplication?.id === "battery" ? (
-          <div className="watchface-inspector-group">
-            <h3 className="wf-inspector-heading">Battery control icon</h3>
-            <div className="wf-config-asset-actions">
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() =>
-                  void chooseBatterySpriteFolder(
-                    "config:control_battery_icon"
-                  )
-                }
-              >
-                <ImagePlus size={15} />{" "}
-                {controlBatteryStateCount > 0
-                  ? "Replace control sprite folder"
-                  : "Import control sprite folder"}
-              </button>
-              {controlBatteryStateCount > 0 ? (
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() =>
-                    restoreBatteryIcon("config:control_battery_icon")
-                  }
-                >
-                  <RotateCcw size={15} /> Restore control icon
-                </button>
-              ) : null}
-            </div>
-            <label className="watchface-inspector-field">
-              <span>Control icon scale</span>
-              <EditableNumberInput
-                min="0.1"
-                step="0.01"
-                value={controlBatteryIconScale}
-                fallback={1}
-                onValueChange={(scale) =>
-                  setBatteryIconScale(
-                    scale,
-                    "config:control_battery_icon"
-                  )
-                }
-              />
-            </label>
-            <p className="watchface-studio-summary">
-              This folder is used only when Battery is shown in the selectable
-              data slot. The fixed Battery icon keeps its own sprite folder.
-            </p>
-          </div>
-        ) : null}
         {selectedComplication?.valueParts && controlColonReference ? (
           <div className="wf-inline-config-asset">
             <label className="watchface-studio-toggle">
@@ -7727,7 +7854,7 @@ export function WatchfaceEditor({
               : "Scales digits inside the selectable value's fixed COROS canvas."}
           </span>
         </label>
-        {baseIconPosition ? (
+        {baseIconPosition && selectedComplication?.id !== "battery" ? (
           renderPositionPanel("complication", "Selector icon position", <>
             <div className="watchface-position-inputs">
               <label>
@@ -7801,6 +7928,8 @@ export function WatchfaceEditor({
         updateSprite(layer.spriteId, { visible });
       } else if (layer.kind === "batteryIcon") {
         setBatteryIconVisible(visible);
+      } else if (layer.kind === "controlBatteryIcon") {
+        setControlBatteryEnabled(visible);
       } else if (layer.layoutGroupId) {
         setFirmwareLayerVisible(layer.layoutGroupId, visible);
       }

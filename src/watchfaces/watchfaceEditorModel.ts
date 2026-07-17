@@ -14,6 +14,7 @@ import {
   getFixedMetricCapabilities,
   getAmPmCapability,
   getWatchfaceControlStatusPreviewLayers,
+  hasControlBattery,
   listWatchfaceConfigAssets,
   pickPreviewResolution,
   WATCHFACE_LAYOUT_GROUPS,
@@ -43,6 +44,7 @@ export type EditorLayerKind =
   | "separators"
   | "battery"
   | "batteryIcon"
+  | "controlBatteryIcon"
   | "complication"
   | "metric"
   | "weather"
@@ -118,6 +120,7 @@ const LAYER_ORDER: string[] = [
   "dateDay",
   "battery",
   "batteryIcon",
+  "controlBatteryIcon",
   "complication",
   "heartRate",
   "steps",
@@ -198,6 +201,14 @@ function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
       effects: true
     };
   }
+  if (groupId === "controlBatteryIcon") {
+    return {
+      position: false,
+      color: false,
+      scale: true,
+      font: false
+    };
+  }
   return {
     position: true,
     color: true,
@@ -226,6 +237,9 @@ function kindForGroup(groupId: string): EditorLayerKind {
   }
   if (groupId === "batteryIcon") {
     return "batteryIcon";
+  }
+  if (groupId === "controlBatteryIcon") {
+    return "controlBatteryIcon";
   }
   if (groupId === "complication") {
     return "complication";
@@ -359,6 +373,24 @@ export function deriveEditorLayers(
         canHide: true,
         present: bounds !== null,
         bounds,
+        capabilities: capabilitiesForGroup(groupId)
+      });
+      continue;
+    }
+
+    if (groupId === "controlBatteryIcon") {
+      if (!hasControlBattery(details)) {
+        continue;
+      }
+      layers.push({
+        id: groupId,
+        kind: "controlBatteryIcon",
+        label: "Control battery icon",
+        visible:
+          design.controlBatteryEnabled ?? hasControlBattery(details),
+        canHide: true,
+        present: true,
+        bounds: null,
         capabilities: capabilitiesForGroup(groupId)
       });
       continue;
