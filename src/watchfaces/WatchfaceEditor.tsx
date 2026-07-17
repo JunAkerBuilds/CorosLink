@@ -172,7 +172,10 @@ import {
   editorLayerAtPoint,
   type EditorLayer
 } from "./watchfaceEditorModel";
-import type { WatchfaceEditorBounds } from "./watchfaceEditorGeometry";
+import {
+  watchfaceEditorSelectionExists,
+  type WatchfaceEditorBounds
+} from "./watchfaceEditorGeometry";
 import {
   composeWatchfaceReplacements,
   deriveDesignDetails,
@@ -189,6 +192,13 @@ import {
   backgroundElementLabel,
   createBackgroundElement
 } from "./watchfaceBackgroundElements";
+import {
+  moveWatchfaceArtworkLayer,
+  reorderWatchfaceArtworkLayer,
+  resolveWatchfaceArtworkLayerOrder,
+  watchfaceBackgroundElementLayerId,
+  watchfaceSpriteLayerId
+} from "./watchfaceArtworkLayers";
 import {
   computeLayoutGroupBounds,
   computeLayoutOffsetLimits,
@@ -268,11 +278,11 @@ import {
   normalizeWatchfaceRotation,
   normalizeWatchfaceSkew,
   normalizeWatchfaceTransformOrigin,
-  reorderWatchfaceDesignSpriteLayer,
   resizeWatchfaceTransformGroup,
   resizeWatchfaceSprite,
   rotateWatchfaceTransformGroup,
   rotateWatchfaceSprite,
+  watchfaceDesignSpriteName,
   type WatchfaceGroupTransformItem,
   type WatchfaceSpriteResizeHandle,
   type WatchfaceSpriteTransform
@@ -535,6 +545,7 @@ function normalizeEditorDesign(
       crop: normalizeWatchfaceCrop(sprite.crop),
       origin: normalizeWatchfaceTransformOrigin(sprite.origin)
     })),
+    artworkLayerOrder: resolveWatchfaceArtworkLayerOrder(design),
     backgroundElements: (design.backgroundElements ?? []).map((element) => ({
       ...element,
       visible: element.visible !== false,
@@ -644,9 +655,10 @@ export function WatchfaceEditor({
   const [selectedId, setSelectedId] = useState<string>("background");
   const [selectedIds, setSelectedIds] = useState<string[]>(["background"]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [draggedLayerSpriteId, setDraggedLayerSpriteId] = useState<string | null>(null);
+  const [draggedArtworkLayerId, setDraggedArtworkLayerId] =
+    useState<string | null>(null);
   const [layerDropTarget, setLayerDropTarget] = useState<{
-    spriteId: string;
+    layerId: string;
     placement: "before" | "after";
   } | null>(null);
   const [backgroundDataUrl, setBackgroundDataUrl] = useState("");
@@ -1047,6 +1059,7 @@ export function WatchfaceEditor({
       design.artworkVisible,
       design.backgroundColor,
       design.zoom,
+      design.artworkLayerOrder,
       design.backgroundElements,
       design.designSprites,
       design.configAssetOverrides,
@@ -1330,13 +1343,19 @@ export function WatchfaceEditor({
   }, [previewMode]);
 
   useEffect(() => {
-    if (layers.some((layer) => layer.id === selectedId)) return;
+    if (
+      watchfaceEditorSelectionExists(
+        selectedId,
+        layers,
+        backgroundElements
+      )
+    ) return;
     const nextId = previewMode === "current"
       ? layers.find((layer) => layer.id === "background")?.id ?? layers[0]?.id ?? ""
       : layers[0]?.id ?? "";
     setSelectedId(nextId);
     setSelectedIds(nextId ? [nextId] : []);
-  }, [layers, previewMode, selectedId]);
+  }, [backgroundElements, layers, previewMode, selectedId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2519,7 +2538,11 @@ export function WatchfaceEditor({
     );
     setDesign((prev) => ({
       ...prev,
-      backgroundElements: [...(prev.backgroundElements ?? []), element]
+      backgroundElements: [...(prev.backgroundElements ?? []), element],
+      artworkLayerOrder: [
+        ...resolveWatchfaceArtworkLayerOrder(prev),
+        watchfaceBackgroundElementLayerId(element.id)
+      ]
     }));
     setSelectedId(`bgel:${element.id}`);
     setSelectedIds([`bgel:${element.id}`]);
@@ -2531,6 +2554,9 @@ export function WatchfaceEditor({
     setDesign((prev) => syncLegacyWatchfaceGroups({
       ...prev,
       backgroundElements: (prev.backgroundElements ?? []).filter((e) => e.id !== id),
+      artworkLayerOrder: resolveWatchfaceArtworkLayerOrder(prev).filter(
+        (layerId) => layerId !== editorId
+      ),
       editorGroups: (prev.editorGroups ?? [])
         .map((group) => ({
           ...group,
@@ -4473,6 +4499,10 @@ export function WatchfaceEditor({
     setDesign((current) => ({
       ...current,
       designSprites: [...(current.designSprites ?? []), duplicate],
+      artworkLayerOrder: [
+        ...resolveWatchfaceArtworkLayerOrder(current),
+        watchfaceSpriteLayerId(duplicateId)
+      ],
       ...(sourceEffect
         ? {
             layerEffects: {
@@ -4496,6 +4526,9 @@ export function WatchfaceEditor({
     setDesign((prev) => syncLegacyWatchfaceGroups({
       ...prev,
       designSprites: (prev.designSprites ?? []).filter((s) => s.id !== spriteId),
+      artworkLayerOrder: resolveWatchfaceArtworkLayerOrder(prev).filter(
+        (layerId) => layerId !== editorId
+      ),
       editorGroups: (prev.editorGroups ?? [])
         .map((group) => ({
           ...group,
@@ -4510,21 +4543,62 @@ export function WatchfaceEditor({
     setSelectedIds(["background"]);
   }
 
-  function reorderSpriteLayer(
-    draggedSpriteId: string,
-    targetSpriteId: string,
+  function reorderArtworkLayer(
+    draggedLayerId: string,
+    targetLayerId: string,
     placement: "before" | "after"
   ) {
-    if (isPositionLocked(`sprite:${draggedSpriteId}`)) return;
+    if (isPositionLocked(draggedLayerId)) return;
     setDesign((current) => ({
       ...current,
-      designSprites: reorderWatchfaceDesignSpriteLayer(
-        current.designSprites ?? [],
-        draggedSpriteId,
-        targetSpriteId,
+      artworkLayerOrder: reorderWatchfaceArtworkLayer(
+        resolveWatchfaceArtworkLayerOrder(current),
+        draggedLayerId,
+        targetLayerId,
         placement
       )
     }));
+  }
+
+  function moveArtworkLayer(
+    layerId: string,
+    direction: "forward" | "backward"
+  ) {
+    if (isPositionLocked(layerId)) return;
+    setDesign((current) => ({
+      ...current,
+      artworkLayerOrder: moveWatchfaceArtworkLayer(
+        resolveWatchfaceArtworkLayerOrder(current),
+        layerId,
+        direction
+      )
+    }));
+  }
+
+  function renderArtworkLayerOrderControls(layerId: string) {
+    const order = resolveWatchfaceArtworkLayerOrder(design);
+    const index = order.indexOf(layerId);
+    if (index < 0) return null;
+    return (
+      <div className="wf-config-asset-actions" aria-label="Layer order">
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={index === 0 || isPositionLocked(layerId)}
+          onClick={() => moveArtworkLayer(layerId, "backward")}
+        >
+          Move backward
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={index === order.length - 1 || isPositionLocked(layerId)}
+          onClick={() => moveArtworkLayer(layerId, "forward")}
+        >
+          Move forward
+        </button>
+      </div>
+    );
   }
 
   function updateSprite(
@@ -4637,7 +4711,11 @@ export function WatchfaceEditor({
       };
       setDesign((prev) => ({
         ...prev,
-        designSprites: [...(prev.designSprites ?? []), sprite]
+        designSprites: [...(prev.designSprites ?? []), sprite],
+        artworkLayerOrder: [
+          ...resolveWatchfaceArtworkLayerOrder(prev),
+          watchfaceSpriteLayerId(sprite.id)
+        ]
       }));
       setSelectedId(`sprite:${sprite.id}`);
       setSelectedIds([`sprite:${sprite.id}`]);
@@ -4891,6 +4969,9 @@ export function WatchfaceEditor({
       ),
       designSprites: (current.designSprites ?? []).filter(
         (sprite) => !spriteIds.has(sprite.id)
+      ),
+      artworkLayerOrder: resolveWatchfaceArtworkLayerOrder(current).filter(
+        (id) => !removedEditorIds.has(id)
       ),
       editorGroups: (current.editorGroups ?? [])
         .map((group) => ({
@@ -5311,14 +5392,15 @@ export function WatchfaceEditor({
                 <Fragment key={group}>
                   <li className="wf-layer-group">{group}</li>
                   {groupedLayers.map((layer) => {
+                    const authoredLayer =
+                      layer.kind === "customSprite" ||
+                      layer.kind === "backgroundElement";
                     const reorderable =
-                      layer.kind === "customSprite" &&
-                      Boolean(layer.spriteId) &&
+                      authoredLayer &&
                       !isPositionLocked(layer.id);
                     const dropPlacement =
-                      layer.kind === "customSprite" &&
-                      layer.spriteId &&
-                      layerDropTarget?.spriteId === layer.spriteId
+                      authoredLayer &&
+                      layerDropTarget?.layerId === layer.id
                         ? layerDropTarget.placement
                         : null;
                     return (
@@ -5327,26 +5409,25 @@ export function WatchfaceEditor({
                       className={[
                         "wf-layer-item",
                         reorderable ? "is-reorderable" : "",
-                        layer.spriteId === draggedLayerSpriteId ? "is-dragging" : "",
+                        layer.id === draggedArtworkLayerId ? "is-dragging" : "",
                         dropPlacement ? `is-drop-${dropPlacement}` : ""
                       ].filter(Boolean).join(" ")}
                       draggable={reorderable}
                       onDragStart={(event) => {
-                        if (!reorderable || !layer.spriteId) {
+                        if (!reorderable) {
                           event.preventDefault();
                           return;
                         }
                         event.dataTransfer.effectAllowed = "move";
-                        event.dataTransfer.setData("text/plain", layer.spriteId);
-                        setDraggedLayerSpriteId(layer.spriteId);
+                        event.dataTransfer.setData("text/plain", layer.id);
+                        setDraggedArtworkLayerId(layer.id);
                         setLayerDropTarget(null);
                       }}
                       onDragOver={(event) => {
                         if (
-                          layer.kind !== "customSprite" ||
-                          !layer.spriteId ||
-                          !draggedLayerSpriteId ||
-                          draggedLayerSpriteId === layer.spriteId
+                          !authoredLayer ||
+                          !draggedArtworkLayerId ||
+                          draggedArtworkLayerId === layer.id
                         ) {
                           return;
                         }
@@ -5354,7 +5435,7 @@ export function WatchfaceEditor({
                         event.dataTransfer.dropEffect = "move";
                         const bounds = event.currentTarget.getBoundingClientRect();
                         setLayerDropTarget({
-                          spriteId: layer.spriteId,
+                          layerId: layer.id,
                           placement:
                             event.clientY < bounds.top + bounds.height / 2
                               ? "before"
@@ -5362,34 +5443,29 @@ export function WatchfaceEditor({
                         });
                       }}
                       onDrop={(event) => {
-                        if (
-                          layer.kind !== "customSprite" ||
-                          !layer.spriteId
-                        ) {
-                          return;
-                        }
-                        const draggedSpriteId =
-                          draggedLayerSpriteId ||
+                        if (!authoredLayer) return;
+                        const draggedLayerId =
+                          draggedArtworkLayerId ||
                           event.dataTransfer.getData("text/plain");
-                        if (!draggedSpriteId || draggedSpriteId === layer.spriteId) {
-                          setDraggedLayerSpriteId(null);
+                        if (!draggedLayerId || draggedLayerId === layer.id) {
+                          setDraggedArtworkLayerId(null);
                           setLayerDropTarget(null);
                           return;
                         }
                         event.preventDefault();
                         const bounds = event.currentTarget.getBoundingClientRect();
-                        reorderSpriteLayer(
-                          draggedSpriteId,
-                          layer.spriteId,
+                        reorderArtworkLayer(
+                          draggedLayerId,
+                          layer.id,
                           event.clientY < bounds.top + bounds.height / 2
                             ? "before"
                             : "after"
                         );
-                        setDraggedLayerSpriteId(null);
+                        setDraggedArtworkLayerId(null);
                         setLayerDropTarget(null);
                       }}
                       onDragEnd={() => {
-                        setDraggedLayerSpriteId(null);
+                        setDraggedArtworkLayerId(null);
                         setLayerDropTarget(null);
                       }}
                     >
@@ -5425,45 +5501,6 @@ export function WatchfaceEditor({
                         >
                           {layer.visible ? <Eye size={15} /> : <EyeOff size={15} />}
                         </button>
-                      ) : null}
-                      {layer.kind === "background" && backgroundElements.some(
-                        (element) => !groupedEditorLayerIds.has(`bgel:${element.id}`)
-                      ) ? (
-                        <ul className="watchface-bg-sublayers">
-                          {backgroundElements
-                            .filter((element) => !groupedEditorLayerIds.has(`bgel:${element.id}`))
-                            .map((element) => (
-                            <li key={element.id}>
-                              <button
-                                type="button"
-                                aria-selected={selectedIds.includes(`bgel:${element.id}`)}
-                                className={`watchface-layer-row${selectedIds.includes(`bgel:${element.id}`) ? " is-selected" : ""}`}
-                                onMouseEnter={() => setHoveredId(`bgel:${element.id}`)}
-                                onMouseLeave={() => setHoveredId(null)}
-                                onClick={(event) => {
-                                  selectEditorItem(`bgel:${element.id}`, event.shiftKey || event.metaKey || event.ctrlKey);
-                                  setPropertiesOpen(true);
-                                }}
-                                onContextMenu={(event) => openLayerContextMenu(event, `bgel:${element.id}`)}
-                              >
-                                <span className="wf-layer-icon"><Square size={14} /></span>
-                                <span className={`watchface-layer-name${element.visible === false ? " is-hidden" : ""}`}>{backgroundElementLabel(element)}</span>
-                                {(design.linkedLayerGroups ?? []).some((group) => group.includes(`bgel:${element.id}`)) ? (
-                                  <span className="wf-layer-link-state" title="Linked component" aria-label="Linked component">
-                                    <Link2 size={12} aria-hidden="true" />
-                                  </span>
-                                ) : null}
-                              </button>
-                              {renderLayerPositionLockButton(
-                                `bgel:${element.id}`,
-                                backgroundElementLabel(element)
-                              )}
-                              <button type="button" className="watchface-layer-visibility" aria-label={`Remove ${backgroundElementLabel(element)}`} onClick={() => removeElement(element.id)}>
-                                <Trash2 size={14} />
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
                       ) : null}
                     </li>
                     );
@@ -6041,7 +6078,11 @@ export function WatchfaceEditor({
   );
 
   function layerGroupLabel(layer: EditorLayer): string {
-    if (layer.kind === "background" || layer.kind === "customSprite") return "Artwork";
+    if (
+      layer.kind === "background" ||
+      layer.kind === "backgroundElement" ||
+      layer.kind === "customSprite"
+    ) return "Artwork";
     if (
       layer.kind === "configAsset" ||
       layer.kind === "controlBatteryIcon"
@@ -6083,14 +6124,56 @@ export function WatchfaceEditor({
         };
       }
       if (label !== "Artwork") return { label, layers: groupLayers };
-      const importedLayers = groupLayers
-        .filter((layer) => layer.kind === "customSprite")
-        .reverse();
+      const authoredLayers = [
+        ...groupLayers.filter((layer) => layer.kind === "customSprite"),
+        ...backgroundElements
+          .filter(
+            (element) =>
+              !groupedEditorLayerIds.has(
+                watchfaceBackgroundElementLayerId(element.id)
+              )
+          )
+          .map<EditorLayer>((element) => ({
+            id: watchfaceBackgroundElementLayerId(element.id),
+            kind: "backgroundElement",
+            label: backgroundElementLabel(element),
+            backgroundElementId: element.id,
+            visible: element.visible !== false,
+            canHide: true,
+            present: true,
+            bounds: null,
+            capabilities: {
+              position: true,
+              color: false,
+              scale: false,
+              font: element.kind === "text",
+              resize: element.kind === "rect" || element.kind === "ellipse",
+              rotate: true,
+              opacity: true,
+              grouping: true,
+              effects: true
+            }
+          }))
+      ];
+      const authoredById = new Map(
+        authoredLayers.map((layer) => [layer.id, layer])
+      );
+      const orderedAuthoredLayers = resolveWatchfaceArtworkLayerOrder(design)
+        .slice()
+        .reverse()
+        .flatMap((id) => {
+          const layer = authoredById.get(id);
+          return layer ? [layer] : [];
+        });
       return {
         label,
         layers: [
-          ...importedLayers,
-          ...groupLayers.filter((layer) => layer.kind !== "customSprite")
+          ...orderedAuthoredLayers,
+          ...groupLayers.filter(
+            (layer) =>
+              layer.kind !== "customSprite" &&
+              layer.kind !== "backgroundElement"
+          )
         ]
       };
     });
@@ -6103,6 +6186,15 @@ export function WatchfaceEditor({
       layer.kind === "configAsset"
     ) {
       return <Image size={14} />;
+    }
+    if (layer.kind === "backgroundElement") {
+      const element = backgroundElements.find(
+        (candidate) => candidate.id === layer.backgroundElementId
+      );
+      if (element?.kind === "text") return <Type size={14} />;
+      if (element?.kind === "ellipse") return <Circle size={14} />;
+      if (element?.kind === "line") return <Minus size={14} />;
+      return <Square size={14} />;
     }
     if (
       layer.kind === "time" ||
@@ -6340,6 +6432,8 @@ export function WatchfaceEditor({
       updateAmPmIndicator({ enabled: !layer.visible });
     } else if (layer.staticSeparatorId) {
       updateStaticSeparator(layer.staticSeparatorId, { enabled: !layer.visible });
+    } else if (layer.backgroundElementId) {
+      updateElement(layer.backgroundElementId, { visible: !layer.visible });
     } else if (layer.spriteId) {
       updateSprite(layer.spriteId, { visible: !layer.visible });
     } else if (layer.kind === "background") {
@@ -7268,6 +7362,23 @@ export function WatchfaceEditor({
       }
       return (
         <div className="watchface-inspector-group">
+          <label className="field">
+            Layer name
+            <input
+              type="text"
+              value={sprite.name ?? ""}
+              maxLength={60}
+              placeholder={watchfaceDesignSpriteName(sprite)}
+              onChange={(event) =>
+                updateSprite(sprite.id, { name: event.target.value })
+              }
+              onBlur={() => {
+                const name = sprite.name?.trim() || undefined;
+                if (name !== sprite.name) updateSprite(sprite.id, { name });
+              }}
+              aria-label="Imported sprite layer name"
+            />
+          </label>
           {renderLayerVisibilityToggle(layer)}
           <label className="field watchface-zoom-control">
             Scale <span>{(sprite.scale * 100).toFixed(0)}%</span>
@@ -7578,6 +7689,7 @@ export function WatchfaceEditor({
               </span>
             </label>
           ) : null}
+          {renderArtworkLayerOrderControls(watchfaceSpriteLayerId(sprite.id))}
           {renderEffectsInspector(layer.id)}
           <div className="wf-config-asset-actions">
             <button
@@ -8741,6 +8853,9 @@ export function WatchfaceEditor({
           Rotation <span>{element.rotation}°</span>
           <input type="range" min="0" max="360" step="5" value={element.rotation} onChange={(e) => set({ rotation: Number(e.target.value) })} />
         </label>
+        {renderArtworkLayerOrderControls(
+          watchfaceBackgroundElementLayerId(element.id)
+        )}
         {renderEffectsInspector(`bgel:${element.id}`)}
         <button className="secondary-button" type="button" onClick={() => removeElement(element.id)}>
           <Trash2 size={15} /> Remove shape

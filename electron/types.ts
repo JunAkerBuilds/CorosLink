@@ -529,6 +529,8 @@ export interface CorosWatchfaceEditorGuide {
 
 export interface CorosWatchfaceDesignSprite {
   id: string;
+  /** User-facing layer name. Absent keeps the legacy “Imported sprite” label. */
+  name?: string;
   dataUrl: string;
   sourceWidth: number;
   sourceHeight: number;
@@ -740,6 +742,11 @@ export interface CorosWatchfaceDesignState {
   /** Per-config PNG visibility and isolated replacement choices. */
   configAssetOverrides?: Record<string, CorosWatchfaceConfigAssetOverride>;
   designSprites: CorosWatchfaceDesignSprite[];
+  /**
+   * Imported-image and freeform-element ids in bottom-to-top paint order.
+   * Absent preserves the legacy order: shapes first, imported images above.
+   */
+  artworkLayerOrder?: string[];
   /**
    * Freeform vector shapes baked into the background PNG (800px space).
    * Absent in projects saved before the background design canvas.
