@@ -16,6 +16,7 @@ import {
   normalizeWatchfaceOpacity,
   normalizeWatchfaceSkew
 } from "./watchfaceSpriteTransform";
+import { resolveWatchfaceArtworkLayerOrder } from "./watchfaceArtworkLayers";
 
 export const CREATOR_CANVAS_SIZE = 800;
 export const MAX_DESIGN_SPRITES = 12;
@@ -71,8 +72,81 @@ export function makeDefaultDesign(): CorosWatchfaceDesignState {
     layerVisibility: {},
     layerColors: {},
     configAssetOverrides: {},
-    designSprites: []
+    designSprites: [],
+    artworkLayerOrder: []
   };
+}
+
+async function drawDesignSprite(
+  context: CanvasRenderingContext2D,
+  design: CorosWatchfaceDesignState,
+  sprite: NonNullable<CorosWatchfaceDesignState["designSprites"]>[number],
+  canvasSize: number,
+  coordinateScale: number
+): Promise<void> {
+  if (sprite.visible === false) return;
+  const spriteDataUrl = sprite.tintColor
+    ? await resizeAndTintSprite(
+        sprite.dataUrl,
+        sprite.sourceWidth,
+        sprite.sourceHeight,
+        sprite.tintColor
+      ).catch(() => sprite.dataUrl)
+    : sprite.dataUrl;
+  const spriteImage = await watchfaceBitmapCache.decode(
+    `sprite:${sprite.id}:${sprite.tintColor ?? "none"}:${spriteDataUrl.length}:${spriteDataUrl.slice(-32)}`,
+    spriteDataUrl
+  ) ?? await loadStudioImage(spriteDataUrl).catch(() => undefined);
+  if (!spriteImage) return;
+  const sourceWidth = "naturalWidth" in spriteImage
+    ? spriteImage.naturalWidth
+    : spriteImage.width;
+  const sourceHeight = "naturalHeight" in spriteImage
+    ? spriteImage.naturalHeight
+    : spriteImage.height;
+  const width = sprite.width * sprite.scale * coordinateScale;
+  const height = sprite.height * sprite.scale * coordinateScale;
+  const crop = normalizeWatchfaceCrop(sprite.crop);
+  const layer = document.createElement("canvas");
+  layer.width = canvasSize;
+  layer.height = canvasSize;
+  const layerContext = layer.getContext("2d", { colorSpace: "display-p3" });
+  if (!layerContext) return;
+  layerContext.imageSmoothingEnabled = true;
+  layerContext.imageSmoothingQuality = "high";
+  layerContext.save();
+  layerContext.globalAlpha = normalizeWatchfaceOpacity(sprite.opacity);
+  layerContext.translate(sprite.x * coordinateScale, sprite.y * coordinateScale);
+  layerContext.rotate((sprite.rotation * Math.PI) / 180);
+  layerContext.transform(
+    1,
+    Math.tan((normalizeWatchfaceSkew(sprite.skewY) * Math.PI) / 180),
+    Math.tan((normalizeWatchfaceSkew(sprite.skewX) * Math.PI) / 180),
+    1,
+    0,
+    0
+  );
+  layerContext.scale(sprite.flipX ? -1 : 1, sprite.flipY ? -1 : 1);
+  layerContext.drawImage(
+    spriteImage,
+    crop.x * sourceWidth,
+    crop.y * sourceHeight,
+    crop.width * sourceWidth,
+    crop.height * sourceHeight,
+    -width / 2,
+    -height / 2,
+    width,
+    height
+  );
+  layerContext.restore();
+  const effects = resolveWatchfaceLayerEffects(design, `sprite:${sprite.id}`);
+  context.drawImage(
+    effects.length > 0
+      ? renderWatchfaceCanvasEffects(layer, effects).canvas
+      : layer,
+    0,
+    0
+  );
 }
 
 /**
@@ -136,85 +210,39 @@ export async function renderDesignBackground(
     }
   }
 
-  // Freeform shapes are authored directly in this 800px space.
-  if (design.backgroundElements && design.backgroundElements.length > 0) {
-    drawBackgroundElements(
-      context,
-      design.backgroundElements,
-      (id) => resolveWatchfaceLayerEffects(design, id)
-    );
-  }
-
   const separatorScale = size / (previewWidth || size);
-
-  for (const sprite of design.designSprites ?? []) {
-    if (sprite.visible === false) {
+  const elementsById = new Map(
+    (design.backgroundElements ?? []).map((element) => [
+      `bgel:${element.id}`,
+      element
+    ])
+  );
+  const spritesById = new Map(
+    (design.designSprites ?? []).map((sprite) => [
+      `sprite:${sprite.id}`,
+      sprite
+    ])
+  );
+  for (const id of resolveWatchfaceArtworkLayerOrder(design)) {
+    const element = elementsById.get(id);
+    if (element) {
+      drawBackgroundElements(
+        context,
+        [element],
+        (layerId) => resolveWatchfaceLayerEffects(design, layerId)
+      );
       continue;
     }
-    const spriteDataUrl = sprite.tintColor
-      ? await resizeAndTintSprite(
-          sprite.dataUrl,
-          sprite.sourceWidth,
-          sprite.sourceHeight,
-          sprite.tintColor
-        ).catch(() => sprite.dataUrl)
-      : sprite.dataUrl;
-    const spriteImage = await watchfaceBitmapCache.decode(
-      `sprite:${sprite.id}:${sprite.tintColor ?? "none"}:${spriteDataUrl.length}:${spriteDataUrl.slice(-32)}`,
-      spriteDataUrl
-    ) ?? await loadStudioImage(spriteDataUrl).catch(() => undefined);
-    if (!spriteImage) {
-      continue;
+    const sprite = spritesById.get(id);
+    if (sprite) {
+      await drawDesignSprite(
+        context,
+        design,
+        sprite,
+        size,
+        separatorScale
+      );
     }
-    const sourceWidth = "naturalWidth" in spriteImage
-      ? spriteImage.naturalWidth
-      : spriteImage.width;
-    const sourceHeight = "naturalHeight" in spriteImage
-      ? spriteImage.naturalHeight
-      : spriteImage.height;
-    const width = sprite.width * sprite.scale * separatorScale;
-    const height = sprite.height * sprite.scale * separatorScale;
-    const crop = normalizeWatchfaceCrop(sprite.crop);
-    const layer = document.createElement("canvas");
-    layer.width = size;
-    layer.height = size;
-    const layerContext = layer.getContext("2d", { colorSpace: "display-p3" });
-    if (!layerContext) continue;
-    layerContext.imageSmoothingEnabled = true;
-    layerContext.imageSmoothingQuality = "high";
-    layerContext.save();
-    layerContext.globalAlpha = normalizeWatchfaceOpacity(sprite.opacity);
-    layerContext.translate(sprite.x * separatorScale, sprite.y * separatorScale);
-    layerContext.rotate((sprite.rotation * Math.PI) / 180);
-    layerContext.transform(
-      1,
-      Math.tan((normalizeWatchfaceSkew(sprite.skewY) * Math.PI) / 180),
-      Math.tan((normalizeWatchfaceSkew(sprite.skewX) * Math.PI) / 180),
-      1,
-      0,
-      0
-    );
-    layerContext.scale(sprite.flipX ? -1 : 1, sprite.flipY ? -1 : 1);
-    layerContext.drawImage(
-      spriteImage,
-      crop.x * sourceWidth,
-      crop.y * sourceHeight,
-      crop.width * sourceWidth,
-      crop.height * sourceHeight,
-      -width / 2,
-      -height / 2,
-      width,
-      height
-    );
-    layerContext.restore();
-    const effects = resolveWatchfaceLayerEffects(design, `sprite:${sprite.id}`);
-    context.drawImage(
-      effects.length > 0
-        ? renderWatchfaceCanvasEffects(layer, effects).canvas
-        : layer,
-      0,
-      0
-    );
   }
 
   context.textAlign = "center";

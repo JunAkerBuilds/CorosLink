@@ -26,6 +26,7 @@ import {
 import { deriveDesignDetails } from "./watchfaceCompose";
 import { getWeatherCapability } from "./weatherAssets";
 import { rotatedCenterBounds } from "./watchfaceEditorGeometry";
+import { watchfaceDesignSpriteName } from "./watchfaceSpriteTransform";
 
 export { editorLayerAtPoint } from "./watchfaceEditorGeometry";
 
@@ -37,6 +38,7 @@ export { editorLayerAtPoint } from "./watchfaceEditorGeometry";
  */
 export type EditorLayerKind =
   | "background"
+  | "backgroundElement"
   | "time"
   | "date"
   | "weekday"
@@ -82,6 +84,8 @@ export interface EditorLayer {
   timePartId?: WatchfaceTimePartId;
   /** Set for imported sprite layers. */
   spriteId?: string;
+  /** Set for editor-created shapes, lines, and text. */
+  backgroundElementId?: string;
   /** Set for editor-authored colon and date-slash layers. */
   staticSeparatorId?: WatchfaceStaticSeparatorId;
   /** Set for a direct PNG reference parsed from config.txt/AODconfig.txt. */
@@ -621,17 +625,18 @@ export function deriveEditorLayers(
       sprite.skewX,
       sprite.skewY
     );
+    const label = watchfaceDesignSpriteName(sprite);
     layers.push({
       id: `sprite:${sprite.id}`,
       kind: "customSprite",
-      label: "Imported sprite",
+      label,
       spriteId: sprite.id,
       visible: sprite.visible !== false,
       canHide: true,
       present: true,
       bounds: {
         id: `sprite:${sprite.id}`,
-        label: "Imported sprite",
+        label,
         ...bounds
       },
       capabilities: {

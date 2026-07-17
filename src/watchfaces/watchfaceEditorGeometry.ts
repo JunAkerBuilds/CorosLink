@@ -11,6 +11,23 @@ export interface WatchfaceEditorHitLayer {
   bounds: WatchfaceEditorBounds | null;
 }
 
+/**
+ * Freeform background elements are displayed as sub-layers instead of being
+ * returned by the firmware-layer model. Selection validation must still
+ * recognize them, or their inspector is replaced with Background immediately.
+ */
+export function watchfaceEditorSelectionExists(
+  selectedId: string,
+  layers: ReadonlyArray<{ id: string }>,
+  backgroundElements: ReadonlyArray<{ id: string }>
+): boolean {
+  if (layers.some((layer) => layer.id === selectedId)) return true;
+  if (!selectedId.startsWith("bgel:")) return false;
+  return backgroundElements.some(
+    (element) => `bgel:${element.id}` === selectedId
+  );
+}
+
 export function rotatedCenterBounds(
   x: number,
   y: number,

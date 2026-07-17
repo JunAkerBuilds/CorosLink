@@ -34,6 +34,20 @@ export interface WatchfaceGroupTransformItem extends WatchfaceSpriteTransform {
 }
 
 const MIN_SPRITE_SIZE = 8;
+export const DEFAULT_WATCHFACE_SPRITE_NAME = "Imported sprite";
+
+/** Returns a stable layer label for both named and legacy imported sprites. */
+export function watchfaceDesignSpriteName(
+  sprite: Pick<CorosWatchfaceDesignSprite, "name">
+): string {
+  return sprite.name?.trim() || DEFAULT_WATCHFACE_SPRITE_NAME;
+}
+
+function duplicatedSpriteName(source: CorosWatchfaceDesignSprite): string {
+  const suffix = " copy";
+  const base = watchfaceDesignSpriteName(source);
+  return `${base.slice(0, Math.max(1, 60 - suffix.length)).trimEnd()}${suffix}`;
+}
 
 /** Creates an independent imported-image copy offset visibly from its source. */
 export function duplicateWatchfaceDesignSprite(
@@ -52,6 +66,7 @@ export function duplicateWatchfaceDesignSprite(
   return {
     ...clone,
     id,
+    name: duplicatedSpriteName(source),
     x: shift(source.x, bounds.width),
     y: shift(source.y, bounds.height)
   };

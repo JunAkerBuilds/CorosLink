@@ -18,7 +18,8 @@ import {
 } from "../src/watchfaces/watchfaceEditorHistory.ts";
 import {
   editorLayerAtPoint,
-  rotatedCenterBounds
+  rotatedCenterBounds,
+  watchfaceEditorSelectionExists
 } from "../src/watchfaces/watchfaceEditorGeometry.ts";
 import {
   duplicateWatchfaceDesignSprite,
@@ -31,7 +32,8 @@ import {
   resizeWatchfaceTransformGroup,
   resizeWatchfaceSprite,
   rotateWatchfaceTransformGroup,
-  rotateWatchfaceSprite
+  rotateWatchfaceSprite,
+  watchfaceDesignSpriteName
 } from "../src/watchfaces/watchfaceSpriteTransform.ts";
 import {
   alignWatchfaceItems,
@@ -48,6 +50,11 @@ import {
   watchfaceShadowMaskSpread
 } from "../src/watchfaces/watchfaceEditorEffects.ts";
 import { buildWatchfaceEffectPaddingOverrides } from "../src/watchfaces/watchfaceEffectPadding.ts";
+import {
+  moveWatchfaceArtworkLayer,
+  reorderWatchfaceArtworkLayer,
+  resolveWatchfaceArtworkLayerOrder
+} from "../src/watchfaces/watchfaceArtworkLayers.ts";
 import {
   DEFAULT_WATCHFACE_PLACEMENT_PREFERENCES,
   WATCHFACE_PLACEMENT_STORAGE_KEY,
@@ -92,6 +99,8 @@ const duplicatedImage = duplicateWatchfaceDesignSprite(
   16
 );
 assert.equal(duplicatedImage.id, "duplicate");
+assert.equal(watchfaceDesignSpriteName(importedImage), "Imported sprite");
+assert.equal(duplicatedImage.name, "Imported sprite copy");
 assert.equal(duplicatedImage.x, 216);
 assert.equal(duplicatedImage.y, 316);
 assert.equal(duplicatedImage.rotation, importedImage.rotation);
@@ -99,6 +108,48 @@ assert.equal(duplicatedImage.tintColor, importedImage.tintColor);
 assert.notEqual(duplicatedImage.crop, importedImage.crop);
 duplicatedImage.crop.x = 0.4;
 assert.equal(importedImage.crop.x, 0.1, "duplicate crop state must be independent");
+
+const legacyArtworkOrder = resolveWatchfaceArtworkLayerOrder({
+  backgroundElements: [
+    { id: "shape", kind: "rect" },
+    { id: "caption", kind: "text" }
+  ],
+  designSprites: [{ id: "photo" }, { id: "badge" }]
+});
+assert.deepEqual(legacyArtworkOrder, [
+  "bgel:shape",
+  "bgel:caption",
+  "sprite:photo",
+  "sprite:badge"
+]);
+assert.deepEqual(
+  reorderWatchfaceArtworkLayer(
+    legacyArtworkOrder,
+    "bgel:caption",
+    "sprite:badge",
+    "before"
+  ),
+  ["bgel:shape", "sprite:photo", "sprite:badge", "bgel:caption"],
+  "created text can be moved above an imported image"
+);
+assert.deepEqual(
+  moveWatchfaceArtworkLayer(
+    ["bgel:shape", "sprite:photo", "bgel:caption"],
+    "bgel:caption",
+    "backward"
+  ),
+  ["bgel:shape", "bgel:caption", "sprite:photo"],
+  "layer-order buttons move created artwork one step at a time"
+);
+assert.deepEqual(
+  resolveWatchfaceArtworkLayerOrder({
+    artworkLayerOrder: ["sprite:photo", "missing", "bgel:shape", "sprite:photo"],
+    backgroundElements: [{ id: "shape", kind: "rect" }],
+    designSprites: [{ id: "photo" }, { id: "new" }]
+  }),
+  ["sprite:photo", "bgel:shape", "sprite:new"],
+  "stored order prunes removed ids, deduplicates, and appends new artwork"
+);
 
 const layerStack = [
   { ...importedImage, id: "back" },
@@ -239,6 +290,16 @@ const editorLayers = [
 ];
 assert.equal(editorLayerAtPoint(editorLayers, 400, 400)?.id, "small");
 assert.equal(editorLayerAtPoint(editorLayers, 10, 10)?.id, "background");
+assert.equal(
+  watchfaceEditorSelectionExists("bgel:text-1", editorLayers, [{ id: "text-1" }]),
+  true,
+  "freeform text sub-layers must remain selected while their inspector is open"
+);
+assert.equal(
+  watchfaceEditorSelectionExists("bgel:removed", editorLayers, [{ id: "text-1" }]),
+  false,
+  "removed background elements should fall back to a live editor layer"
+);
 
 // Image transform handles preserve the opposite corner, work in local rotated
 // axes, and leave aspect-ratio locking to the caller's modifier key.
