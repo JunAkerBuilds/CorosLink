@@ -108,9 +108,15 @@ export function buildRpeDistribution(
     const bucket = buckets[level - 1];
     bucket.frequency += 1;
     bucket.srpe += sessionSrpe(level, activity.duration);
-    bucket.timeSeconds += Number.isFinite(activity.duration)
-      ? activity.duration ?? 0
-      : 0;
+    // Same usable-duration rule as sessionSrpe, so Time and sRPE agree on
+    // which sessions contribute.
+    if (
+      activity.duration !== undefined &&
+      Number.isFinite(activity.duration) &&
+      activity.duration > 0
+    ) {
+      bucket.timeSeconds += activity.duration;
+    }
     rated += 1;
   }
 

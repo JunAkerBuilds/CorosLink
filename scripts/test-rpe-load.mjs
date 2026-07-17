@@ -91,4 +91,19 @@ const guarded = buildRpeDistribution(
 assert.ok(guarded.buckets.every((b) => b.frequency === 0));
 assert.deepEqual(guarded.coverage, { rated: 0, total: 10 });
 
+// Rated but with an unusable duration: counts toward frequency/coverage, but
+// contributes to neither sRPE nor time (same rule as sessionSrpe).
+const noDuration = buildRpeDistribution(
+  [
+    { startTime: noonMs, feelType: 3 },
+    { startTime: noonMs, duration: -300, feelType: 3 },
+  ],
+  2
+);
+const noDurationLevel3 = noDuration.buckets.find((b) => b.level === 3);
+assert.equal(noDurationLevel3.frequency, 2);
+assert.equal(noDurationLevel3.srpe, 0);
+assert.equal(noDurationLevel3.timeSeconds, 0);
+assert.deepEqual(noDuration.coverage, { rated: 2, total: 2 });
+
 console.log("rpe-load tests passed");
