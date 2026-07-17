@@ -4229,7 +4229,7 @@ export function WatchfaceEditor({
         [overrideId]: {
           ...(prev.configAssetOverrides?.[overrideId] ?? {}),
           enabled: true,
-          scale: Math.max(0.1, Math.min(4, Number.isFinite(scale) ? scale : 1))
+          scale: Math.max(0.1, Number.isFinite(scale) ? scale : 1)
         }
       }
     }));
@@ -6431,7 +6431,7 @@ export function WatchfaceEditor({
               <input
                 type="range"
                 min="0.1"
-                max="4"
+                max={Math.max(10, Math.ceil(artworkZoom * 2))}
                 step="0.01"
                 value={artworkZoom}
                 onChange={(event) =>
@@ -6445,13 +6445,12 @@ export function WatchfaceEditor({
               <span>Precise zoom</span>
               <EditableNumberInput
                 min="0.1"
-                max="4"
                 step="0.01"
                 value={artworkZoom}
                 fallback={1}
                 onValueChange={(value) =>
                   updateConfigAsset(reference, {
-                    scale: Math.max(0.1, Math.min(4, value))
+                    scale: Math.max(0.1, value)
                   })
                 }
               />
@@ -6627,7 +6626,6 @@ export function WatchfaceEditor({
             <span>Icon scale</span>
             <EditableNumberInput
               min="0.1"
-              max="4"
               step="0.01"
               value={iconScale}
               fallback={1}
@@ -7592,7 +7590,6 @@ export function WatchfaceEditor({
               <span>Control icon scale</span>
               <EditableNumberInput
                 min="0.1"
-                max="4"
                 step="0.01"
                 value={controlBatteryIconScale}
                 fallback={1}

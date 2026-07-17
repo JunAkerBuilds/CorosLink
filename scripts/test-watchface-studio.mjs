@@ -52,6 +52,7 @@ import {
   rasterFontNativeSpriteSize,
   rebaseNegativeControlChildren,
   resizeConfigRectToCanvas,
+  scaledBatterySpriteCanvasSize,
   scaleConfigRectValue,
   watchfaceEffectRenderScale
 } from "../src/watchfaces/watchfaceStudio.ts";
@@ -676,6 +677,28 @@ assert.deepEqual(
   ),
   { width: 144, height: 72, native: true },
   "selectable control icons should be able to escape the template PNG canvas"
+);
+assert.deepEqual(
+  configAssetCanvasSize(
+    "control_hr_icon",
+    {
+      nativeSize: true,
+      scale: 6,
+      replacement: {
+        dataUrl: "data:image/png;base64,AA==",
+        width: 96,
+        height: 48
+      }
+    },
+    { width: 37, height: 37 }
+  ),
+  { width: 576, height: 288, native: true },
+  "native control icon scale should not have a fixed upper limit"
+);
+assert.deepEqual(
+  scaledBatterySpriteCanvasSize(48, 24, 24, 24, 6),
+  { width: 144, height: 72 },
+  "battery sprite scale should not have a fixed upper limit"
 );
 assert.deepEqual(
   configAssetCanvasSize(

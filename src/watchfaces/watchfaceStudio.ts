@@ -435,6 +435,11 @@ export function configAssetSupportsNativeSize(configKey: string): boolean {
   return NATIVE_CONTROL_ICON_KEYS.has(configKey);
 }
 
+function normalizePositiveScale(scale: number | undefined): number {
+  const candidate = scale ?? 1;
+  return Number.isFinite(candidate) ? Math.max(0.1, candidate) : 1;
+}
+
 /** Resolves a config asset's exported/preview canvas without mutating its position. */
 export function configAssetCanvasSize(
   configKey: string,
@@ -448,7 +453,7 @@ export function configAssetCanvasSize(
   ) {
     return { ...fallback, native: false };
   }
-  const scale = Math.max(0.1, Math.min(4, override.scale ?? 1));
+  const scale = normalizePositiveScale(override.scale);
   return {
     width: Math.max(1, Math.round(override.replacement.width * scale)),
     height: Math.max(1, Math.round(override.replacement.height * scale)),
@@ -1788,7 +1793,7 @@ export async function fitVisibleSpriteToCanvas(
   }
   const contentWidth = right - left + 1;
   const contentHeight = bottom - top + 1;
-  const safeZoom = Math.max(0.1, Math.min(4, zoom));
+  const safeZoom = normalizePositiveScale(zoom);
   const fit = Math.min(width / contentWidth, height / contentHeight) * safeZoom;
   const outputWidth = Math.max(1, Math.round(contentWidth * fit));
   const outputHeight = Math.max(1, Math.round(contentHeight * fit));
@@ -1823,7 +1828,7 @@ export function scaledBatterySpriteCanvasSize(
   templateHeight: number,
   scale = 1
 ): { width: number; height: number } {
-  const safeScale = Math.max(0.1, Math.min(4, scale));
+  const safeScale = normalizePositiveScale(scale);
   if (safeScale === 1) return { width: templateWidth, height: templateHeight };
   const fit = Math.min(templateWidth / sourceWidth, templateHeight / sourceHeight);
   return {
