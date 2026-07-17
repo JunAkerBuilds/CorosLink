@@ -1,4 +1,5 @@
 import type {
+  CorosWatchfaceDesignSprite,
   CorosWatchfaceSpriteCrop,
   CorosWatchfaceTransformOrigin
 } from "../../electron/types";
@@ -33,6 +34,53 @@ export interface WatchfaceGroupTransformItem extends WatchfaceSpriteTransform {
 }
 
 const MIN_SPRITE_SIZE = 8;
+
+/** Creates an independent imported-image copy offset visibly from its source. */
+export function duplicateWatchfaceDesignSprite(
+  source: CorosWatchfaceDesignSprite,
+  id: string,
+  bounds: { width: number; height: number },
+  offset = 16
+): CorosWatchfaceDesignSprite {
+  const clone = structuredClone(source);
+  const shift = (value: number, maximum: number) => {
+    const distance = Math.max(1, Math.round(Math.abs(offset)));
+    if (value + distance <= maximum) return value + distance;
+    if (value - distance >= 0) return value - distance;
+    return value;
+  };
+  return {
+    ...clone,
+    id,
+    x: shift(source.x, bounds.width),
+    y: shift(source.y, bounds.height)
+  };
+}
+
+/**
+ * Reorders imported images using the layer panel's front-to-back display.
+ * Later array entries paint above earlier ones on the canvas.
+ */
+export function reorderWatchfaceDesignSpriteLayer(
+  sprites: CorosWatchfaceDesignSprite[],
+  draggedSpriteId: string,
+  targetSpriteId: string,
+  placement: "before" | "after"
+): CorosWatchfaceDesignSprite[] {
+  if (draggedSpriteId === targetSpriteId) return sprites;
+  const dragged = sprites.find((sprite) => sprite.id === draggedSpriteId);
+  if (!dragged || !sprites.some((sprite) => sprite.id === targetSpriteId)) {
+    return sprites;
+  }
+  const reordered = sprites.filter((sprite) => sprite.id !== draggedSpriteId);
+  const targetIndex = reordered.findIndex(
+    (sprite) => sprite.id === targetSpriteId
+  );
+  // "Before" means visually above the target, which is later in paint order.
+  reordered.splice(placement === "before" ? targetIndex + 1 : targetIndex, 0, dragged);
+  if (reordered.every((sprite, index) => sprite === sprites[index])) return sprites;
+  return reordered;
+}
 
 function handleSigns(
   handle: WatchfaceSpriteResizeHandle

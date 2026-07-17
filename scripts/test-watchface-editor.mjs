@@ -21,11 +21,13 @@ import {
   rotatedCenterBounds
 } from "../src/watchfaces/watchfaceEditorGeometry.ts";
 import {
+  duplicateWatchfaceDesignSprite,
   normalizeWatchfaceCrop,
   normalizeWatchfaceOpacity,
   normalizeWatchfaceRotation,
   normalizeWatchfaceSkew,
   normalizeWatchfaceTransformOrigin,
+  reorderWatchfaceDesignSpriteLayer,
   resizeWatchfaceTransformGroup,
   resizeWatchfaceSprite,
   rotateWatchfaceTransformGroup,
@@ -62,6 +64,73 @@ import {
 } from "../src/watchfaces/watchfaceEditorSnapping.ts";
 
 assert.equal(WATCHFACE_EDITOR_HISTORY_LIMIT, 50);
+
+const importedImage = {
+  id: "original",
+  dataUrl: "data:image/png;base64,AA==",
+  sourceWidth: 100,
+  sourceHeight: 80,
+  width: 100,
+  height: 80,
+  x: 200,
+  y: 300,
+  scale: 1.25,
+  rotation: 25,
+  opacity: 0.7,
+  flipX: true,
+  skewX: 12,
+  aspectLocked: false,
+  crop: { x: 0.1, y: 0.2, width: 0.7, height: 0.6 },
+  origin: { x: 0, y: 1 },
+  visible: true,
+  tintColor: "#51e0b5"
+};
+const duplicatedImage = duplicateWatchfaceDesignSprite(
+  importedImage,
+  "duplicate",
+  { width: 800, height: 800 },
+  16
+);
+assert.equal(duplicatedImage.id, "duplicate");
+assert.equal(duplicatedImage.x, 216);
+assert.equal(duplicatedImage.y, 316);
+assert.equal(duplicatedImage.rotation, importedImage.rotation);
+assert.equal(duplicatedImage.tintColor, importedImage.tintColor);
+assert.notEqual(duplicatedImage.crop, importedImage.crop);
+duplicatedImage.crop.x = 0.4;
+assert.equal(importedImage.crop.x, 0.1, "duplicate crop state must be independent");
+
+const layerStack = [
+  { ...importedImage, id: "back" },
+  { ...importedImage, id: "middle" },
+  { ...importedImage, id: "front" }
+];
+const movedBefore = reorderWatchfaceDesignSpriteLayer(
+  layerStack,
+  "middle",
+  "front",
+  "before"
+);
+assert.deepEqual(movedBefore.map((sprite) => sprite.id), ["back", "front", "middle"]);
+assert.deepEqual(
+  reorderWatchfaceDesignSpriteLayer(
+    movedBefore,
+    "middle",
+    "front",
+    "after"
+  ).map((sprite) => sprite.id),
+  ["back", "middle", "front"]
+);
+assert.equal(
+  reorderWatchfaceDesignSpriteLayer(layerStack, "front", "middle", "before"),
+  layerStack,
+  "dropping in the current position leaves the stack unchanged"
+);
+assert.equal(
+  reorderWatchfaceDesignSpriteLayer(layerStack, "missing", "front", "before"),
+  layerStack,
+  "missing layer leaves the stack unchanged"
+);
 
 let history = createWatchfaceEditorHistory({ x: 0, name: "Face" });
 const sessionA = createWatchfaceEditorSessionId("project-a", "open-1");

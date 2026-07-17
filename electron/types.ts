@@ -418,8 +418,10 @@ export interface CorosWatchfaceArtwork {
 export interface CorosWatchfaceConfigAssetOverride {
   /** Absent means the template config entry remains enabled. */
   enabled?: boolean;
-  /** Battery canvas scale, or artwork zoom inside a fixed direct-asset canvas. */
+  /** Battery/native canvas scale, or artwork zoom inside a fixed direct-asset canvas. */
   scale?: number;
+  /** Allow supported selectable-control icons to use the imported PNG dimensions. */
+  nativeSize?: boolean;
   /** One source PNG is resized independently for every device resolution. */
   replacement?: CorosWatchfaceArtwork;
   /** Per-state PNGs for a stateful sprite folder such as the battery indicator. */
@@ -646,7 +648,15 @@ export interface CorosWatchfaceDesignState {
   metricChanges: Record<string, boolean>;
   metricStyles: Record<string, { color?: string; scale: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Shared digit style for every value shown in the selectable control slot. */
-  selectableMetricStyle?: { color?: string; scale: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont };
+  selectableMetricStyle?: {
+    color?: string;
+    scale: number;
+    fontFamily?: string;
+    letterSpacing?: number;
+    rasterFont?: CorosWatchfaceRasterFont;
+    /** Preserve each selectable digit's natural width and expand value rectangles. */
+    nativeSize?: boolean;
+  };
   /** False removes the Battery choice from the firmware-selectable control slot. */
   controlBatteryEnabled?: boolean;
   /** Per selectable-control icon offsets, independent from the slot origin/value. */

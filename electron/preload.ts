@@ -207,6 +207,10 @@ const api = {
     projectId: string
   ): Promise<CorosWatchfaceProject> =>
     ipcRenderer.invoke("watchfaces:loadProject", projectId),
+  duplicateCorosWatchfaceProject: (
+    projectId: string
+  ): Promise<CorosWatchfaceProject> =>
+    ipcRenderer.invoke("watchfaces:duplicateProject", projectId),
   deleteCorosWatchfaceProject: (projectId: string): Promise<void> =>
     ipcRenderer.invoke("watchfaces:deleteProject", projectId),
   describeCorosWatchfaceTemplate: (

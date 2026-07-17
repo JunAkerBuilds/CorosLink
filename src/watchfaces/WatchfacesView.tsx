@@ -12,6 +12,7 @@ import {
   Check,
   ChevronDown,
   Clipboard,
+  Copy,
   Download,
   ExternalLink,
   KeyRound,
@@ -473,6 +474,20 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
     }
   }
 
+  async function handleDuplicateProject(projectId: string) {
+    setBusy("project");
+    clearMessages();
+    try {
+      const duplicated = await api.duplicateCorosWatchfaceProject(projectId);
+      handleProjectSaved(duplicated);
+      setNotice(`Duplicated as “${duplicated.name}”.`);
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   function handleProjectSaved(saved: CorosWatchfaceProject) {
     const summary: CorosWatchfaceProjectSummary = {
       projectId: saved.projectId,
@@ -912,6 +927,9 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
               accountConnected={connected}
               onFirmwareTypeDetected={handlePairedFirmwareTypeDetected}
               onOpen={(project) => void handleLoadProject(project.projectId)}
+              onDuplicate={(project) =>
+                void handleDuplicateProject(project.projectId)
+              }
               onDelete={setDeleteTarget}
               onCreate={() => setHubTab("templates")}
               onImport={() => setImportOpen(true)}
@@ -981,6 +999,11 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
           password={password}
           region={region}
           secureStorageAvailable={status?.secureStorageAvailable ?? false}
+          savedCredentialsAvailable={
+            status?.savedCredentialsAvailable ?? false
+          }
+          savedEmail={status?.savedEmail}
+          rememberCredentials={rememberCredentials}
           busy={busy === "publish" || busy === "login"}
           loginBusy={busy === "login"}
           onNameChange={setPublishName}
@@ -989,11 +1012,13 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
           onLanguageChange={setLanguage}
           onEmailChange={setEmail}
           onPasswordChange={setPassword}
+          onRememberCredentialsChange={setRememberCredentials}
           onRegionChange={(nextRegion) => {
             setRegion(nextRegion);
             setRegionTouched(true);
           }}
           onLogin={(event) => void handleLogin(event, "publish")}
+          onSavedLogin={() => void handleSavedLogin("publish")}
           onSubmit={handlePublish}
           onCopy={() => void handleCopy()}
           onClose={() => setPublishOpen(false)}
@@ -1270,6 +1295,7 @@ interface ProjectsDashboardProps {
   accountConnected: boolean;
   onFirmwareTypeDetected: (firmwareType: string) => void;
   onOpen: (project: CorosWatchfaceProjectSummary) => void;
+  onDuplicate: (project: CorosWatchfaceProjectSummary) => void;
   onDelete: (project: CorosWatchfaceProjectSummary) => void;
   onCreate: () => void;
   onImport: () => void;
@@ -1285,6 +1311,7 @@ function ProjectsDashboard({
   accountConnected,
   onFirmwareTypeDetected,
   onOpen,
+  onDuplicate,
   onDelete,
   onCreate,
   onImport
@@ -1306,6 +1333,7 @@ function ProjectsDashboard({
             disabled={disabled}
             opening={openingProject}
             onOpen={() => onOpen(featuredProject)}
+            onDuplicate={() => onDuplicate(featuredProject)}
             onDelete={() => onDelete(featuredProject)}
           />
           <section className="watchface-recent-section" aria-labelledby="projects-title">
@@ -1320,6 +1348,7 @@ function ProjectsDashboard({
                   key={project.projectId}
                   disabled={disabled}
                   onOpen={() => onOpen(project)}
+                  onDuplicate={() => onDuplicate(project)}
                   onDelete={() => onDelete(project)}
                 />
               ))}
@@ -1362,6 +1391,7 @@ function ContinueDesigningCard({
   disabled,
   opening,
   onOpen,
+  onDuplicate,
   onDelete
 }: {
   api: CorosLinkApi;
@@ -1369,6 +1399,7 @@ function ContinueDesigningCard({
   disabled: boolean;
   opening: boolean;
   onOpen: () => void;
+  onDuplicate: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -1378,6 +1409,7 @@ function ContinueDesigningCard({
         projectName={project.name}
         disabled={disabled}
         onOpen={onOpen}
+        onDuplicate={onDuplicate}
         onDelete={onDelete}
       />
       <div className="watchface-featured-layout">
@@ -1412,12 +1444,14 @@ function ProjectCard({
   project,
   disabled,
   onOpen,
+  onDuplicate,
   onDelete
 }: {
   api: CorosLinkApi;
   project: CorosWatchfaceProjectSummary;
   disabled: boolean;
   onOpen: () => void;
+  onDuplicate: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -1444,6 +1478,7 @@ function ProjectCard({
         projectName={project.name}
         disabled={disabled}
         onOpen={onOpen}
+        onDuplicate={onDuplicate}
         onDelete={onDelete}
       />
     </article>
@@ -1474,11 +1509,13 @@ function ProjectOverflowMenu({
   projectName,
   disabled,
   onOpen,
+  onDuplicate,
   onDelete
 }: {
   projectName: string;
   disabled: boolean;
   onOpen: () => void;
+  onDuplicate: () => void;
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1528,6 +1565,17 @@ function ProjectOverflowMenu({
             }}
           >
             <ArrowRight size={15} aria-hidden="true" /> Open
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(event) => {
+              event.stopPropagation();
+              setOpen(false);
+              onDuplicate();
+            }}
+          >
+            <Copy size={15} aria-hidden="true" /> Duplicate
           </button>
           <button
             className="is-danger"

@@ -62,6 +62,7 @@ import {
 import {
   createCorosWatchfaceArchive,
   createCorosWatchfaceShareLink,
+  duplicateCorosWatchfaceProject,
   describeCorosWatchfaceTemplate,
   downloadCorosWatchfaceTheme,
   exportCorosWatchfaceProject,
@@ -933,6 +934,9 @@ function registerIpcHandlers(): void {
   );
   ipcMain.handle("watchfaces:loadProject", (_event, projectId: string) =>
     loadCorosWatchfaceProject(projectId)
+  );
+  ipcMain.handle("watchfaces:duplicateProject", (_event, projectId: string) =>
+    duplicateCorosWatchfaceProject(projectId)
   );
   ipcMain.handle("watchfaces:deleteProject", (_event, projectId: string) =>
     deleteCorosWatchfaceProject(projectId)

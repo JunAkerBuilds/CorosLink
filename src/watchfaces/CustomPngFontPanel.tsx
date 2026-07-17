@@ -6,6 +6,7 @@ import type {
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import {
+  corosMonthLabelForSpriteIndex,
   normalizeRasterFontGlyphs,
   rasterFontSupportsText,
   WATCHFACE_MONTH_LABELS
@@ -78,7 +79,7 @@ function monthLabelFor(fileName: string): string | null {
     return stem;
   }
   const index = numericSpriteIndex(fileName, 11);
-  return index === null ? null : WATCHFACE_MONTH_LABELS[index] ?? null;
+  return index === null ? null : corosMonthLabelForSpriteIndex(index);
 }
 
 function weekdayLabelFor(fileName: string): string | null {

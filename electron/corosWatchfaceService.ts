@@ -1030,6 +1030,38 @@ function sanitizeProjectName(value: string): string {
   return name;
 }
 
+export function createDuplicateProjectName(
+  sourceName: string,
+  existingNames: Iterable<string>
+): string {
+  const sanitizedSourceName = sanitizeProjectName(sourceName);
+  const copyMatch = sanitizedSourceName.match(
+    /^(.*?)\s+copy(?:\s+(\d+))?$/i
+  );
+  const rootName = copyMatch?.[1]?.trim() || sanitizedSourceName;
+  const sourceCopyNumber = copyMatch?.[2] ? Number(copyMatch[2]) : 1;
+  const firstCopyNumber = copyMatch
+    ? Number.isSafeInteger(sourceCopyNumber) &&
+      sourceCopyNumber < Number.MAX_SAFE_INTEGER
+      ? sourceCopyNumber + 1
+      : 2
+    : 1;
+  const occupiedNames = new Set(
+    Array.from(existingNames, (name) => name.trim().toLowerCase())
+  );
+
+  for (let copyNumber = firstCopyNumber; ; copyNumber += 1) {
+    const suffix = copyNumber === 1 ? " copy" : ` copy ${copyNumber}`;
+    const truncatedRoot = rootName
+      .slice(0, Math.max(1, 80 - suffix.length))
+      .trimEnd();
+    const candidate = `${truncatedRoot}${suffix}`;
+    if (!occupiedNames.has(candidate.toLowerCase())) {
+      return candidate;
+    }
+  }
+}
+
 async function readStoredWatchfaceProject(
   projectId: string
 ): Promise<StoredWatchfaceProject> {
@@ -1156,6 +1188,24 @@ export async function loadCorosWatchfaceProject(
   };
   selectedArchives.set(selected.archiveId, selected);
   return { ...stored, archive: toPublicArchive(selected) };
+}
+
+export async function duplicateCorosWatchfaceProject(
+  projectId: string
+): Promise<CorosWatchfaceProject> {
+  const sourceProject = await loadCorosWatchfaceProject(projectId);
+  const existingProjects = await listCorosWatchfaceProjects();
+  return saveCorosWatchfaceProject({
+    name: createDuplicateProjectName(
+      sourceProject.name,
+      existingProjects.map((project) => project.name)
+    ),
+    sourceArchiveId: sourceProject.archive.archiveId,
+    ...(sourceProject.firmwareType
+      ? { firmwareType: sourceProject.firmwareType }
+      : {}),
+    design: structuredClone(sourceProject.design)
+  });
 }
 
 async function pathIsFile(filePath: string): Promise<boolean> {

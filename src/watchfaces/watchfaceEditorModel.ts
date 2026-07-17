@@ -7,10 +7,13 @@ import {
   applyLayoutToDetails,
   batteryPreviewStateIndex,
   buildControlBatteryVisibilityOverrides,
+  configAssetCanvasSize,
+  controlStatusLayoutGroupId,
   scaledBatterySpriteCanvasSize,
   computeLayoutGroupBounds,
   getFixedMetricCapabilities,
   getAmPmCapability,
+  getWatchfaceControlStatusPreviewLayers,
   listWatchfaceConfigAssets,
   pickPreviewResolution,
   WATCHFACE_LAYOUT_GROUPS,
@@ -515,17 +518,60 @@ export function deriveEditorLayers(
       continue;
     }
     const override = design.configAssetOverrides?.[reference.id];
+    const statusLayoutGroupId =
+      reference.scope === "config"
+        ? controlStatusLayoutGroupId(reference.configKey)
+        : null;
+    const statusPreviewLayer =
+      statusLayoutGroupId && resolution
+        ? getWatchfaceControlStatusPreviewLayers(resolution).find(
+            (layer) => layer.layoutGroupId === statusLayoutGroupId
+          ) ?? null
+        : null;
+    const statusCanvas =
+      statusPreviewLayer
+        ? configAssetCanvasSize(
+            reference.configKey,
+            override,
+            {
+              width: statusPreviewLayer.source.width,
+              height: statusPreviewLayer.source.height
+            }
+          )
+        : null;
+    const statusBounds =
+      statusPreviewLayer && statusCanvas && override?.enabled !== false
+        ? {
+            id: `configAsset:${reference.id}`,
+            label: reference.label,
+            x0: statusPreviewLayer.position.x,
+            y0: statusPreviewLayer.position.y,
+            x1: statusPreviewLayer.position.x + statusCanvas.width,
+            y1: statusPreviewLayer.position.y + statusCanvas.height
+          }
+        : null;
     layers.push({
       id: `configAsset:${reference.id}`,
       kind: "configAsset",
       label: reference.label,
+      ...(statusLayoutGroupId
+        ? { layoutGroupId: statusLayoutGroupId }
+        : {}),
       configAssetId: reference.id,
       configAssetReplaced: Boolean(override?.replacement),
       visible: override?.enabled !== false,
       canHide: true,
-      present: true,
-      bounds: null,
-      capabilities: NO_CAPABILITIES
+      present: statusLayoutGroupId ? reference.source !== null : true,
+      bounds: statusBounds,
+      capabilities: statusLayoutGroupId
+        ? {
+            position: true,
+            color: false,
+            scale: true,
+            font: false,
+            grouping: true
+          }
+        : NO_CAPABILITIES
     });
   }
 

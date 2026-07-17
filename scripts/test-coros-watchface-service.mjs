@@ -13,6 +13,7 @@ const {
   applyCorosWatchfaceConfigOverrides,
   buildCreateLinkBody,
   buildMobileLoginRegion,
+  createDuplicateProjectName,
   encryptMobileLoginField,
   exportCorosWatchfaceProject,
   extractDecimalProperty,
@@ -33,6 +34,33 @@ const { createStoreZip } = await import(
 );
 
 const configWithoutWeather = "[time_hour_high_pos]={1,2}\r\n";
+assert.equal(
+  createDuplicateProjectName("Morning Run", []),
+  "Morning Run copy"
+);
+assert.equal(
+  createDuplicateProjectName("Morning Run", [
+    "Morning Run copy",
+    "morning run COPY 2"
+  ]),
+  "Morning Run copy 3",
+  "duplicate names should be unique regardless of casing"
+);
+assert.equal(
+  createDuplicateProjectName("Morning Run copy", ["Morning Run copy"]),
+  "Morning Run copy 2",
+  "duplicating an existing copy should increment the suffix"
+);
+assert.equal(
+  createDuplicateProjectName("Morning Run copy 2", ["Morning Run copy 2"]),
+  "Morning Run copy 3",
+  "duplicating a numbered copy should continue from its suffix"
+);
+assert.equal(
+  createDuplicateProjectName("x".repeat(80), []).length,
+  80,
+  "duplicate names must stay within the project-name limit"
+);
 assert.equal(
   setWatchfaceTemplateId(
     '{"o_template_id":251134,"o_diy_version":1}',

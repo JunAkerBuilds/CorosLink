@@ -2651,6 +2651,44 @@
   list-style: none;
 }
 
+.watchface-shell .wf-layer-item {
+  position: relative;
+}
+
+.watchface-shell .wf-layer-item.is-reorderable .watchface-layer-row {
+  cursor: grab;
+}
+
+.watchface-shell .wf-layer-item.is-reorderable .watchface-layer-row:active {
+  cursor: grabbing;
+}
+
+.watchface-shell .wf-layer-item.is-dragging {
+  opacity: 0.42;
+}
+
+.watchface-shell .wf-layer-item.is-drop-before::before,
+.watchface-shell .wf-layer-item.is-drop-after::after {
+  position: absolute;
+  z-index: 2;
+  right: 5px;
+  left: 5px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent-strong);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-strong) 22%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.watchface-shell .wf-layer-item.is-drop-before::before {
+  top: -2px;
+}
+
+.watchface-shell .wf-layer-item.is-drop-after::after {
+  bottom: -2px;
+}
+
 /* Stage */
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-stage, .watchface-editor-stage) {
@@ -3447,6 +3485,11 @@
   letter-spacing: -0.01em;
 }
 
+.watchface-shell .watchface-inspector-position {
+  min-inline-size: 0;
+  container: wf-position / inline-size;
+}
+
 .watchface-shell .wf-position-controls {
   display: grid;
   min-inline-size: 0;
@@ -3515,14 +3558,14 @@
   cursor: not-allowed;
 }
 
-:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-align-grid, .wf-align-grid) {
+.watchface-shell :is(.watchface-align-grid, .wf-align-grid) {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 5px;
 }
 
-:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-align-grid, .wf-align-grid) button,
-:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-nudge-pad, .wf-nudge-pad) button {
+.watchface-shell :is(.watchface-align-grid, .wf-align-grid) button,
+.watchface-shell :is(.watchface-nudge-pad, .wf-nudge-pad) button {
   min-width: 0;
   min-height: 32px;
   border: 1px solid var(--wf-border);
@@ -3530,20 +3573,22 @@
   background: var(--wf-surface-raised);
   color: var(--text-secondary);
   font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
-:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-align-grid, .wf-align-grid) button:hover,
-:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-nudge-pad, .wf-nudge-pad) button:hover {
+.watchface-shell :is(.watchface-align-grid, .wf-align-grid) button:hover,
+.watchface-shell :is(.watchface-nudge-pad, .wf-nudge-pad) button:hover {
   border-color: var(--wf-accent-border);
   color: var(--text-primary);
 }
 
-:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-align-grid, .wf-align-grid) button:active:not(:disabled),
-:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-nudge-pad, .wf-nudge-pad) button:active:not(:disabled) {
+.watchface-shell :is(.watchface-align-grid, .wf-align-grid) button:active:not(:disabled),
+.watchface-shell :is(.watchface-nudge-pad, .wf-nudge-pad) button:active:not(:disabled) {
   transform: translateY(1px);
 }
 
-:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-nudge-pad, .wf-nudge-pad) {
+.watchface-shell :is(.watchface-nudge-pad, .wf-nudge-pad) {
   display: grid;
   grid-template-columns: repeat(3, 32px);
   grid-template-rows: repeat(3, 32px);
@@ -3551,13 +3596,33 @@
   gap: 4px;
 }
 
-:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-nudge-reset, .wf-nudge-reset) {
+.watchface-shell :is(.watchface-nudge-pad, .wf-nudge-pad) > button:nth-child(1) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.watchface-shell :is(.watchface-nudge-pad, .wf-nudge-pad) > button:nth-child(2) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.watchface-shell :is(.watchface-nudge-pad, .wf-nudge-pad) > button:nth-child(3) {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.watchface-shell :is(.watchface-nudge-pad, .wf-nudge-pad) > button:nth-child(4) {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.watchface-shell :is(.watchface-nudge-reset, .wf-nudge-reset) {
   grid-column: 2;
   grid-row: 2;
   font-size: 9px;
 }
 
-@media (max-width: 420px) {
+@container wf-position (max-width: 420px) {
   .watchface-shell .wf-position-controls {
     grid-template-columns: 1fr;
   }

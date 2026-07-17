@@ -192,6 +192,8 @@ import {
 import {
   computeLayoutGroupBounds,
   computeLayoutOffsetLimits,
+  configAssetCanvasSize,
+  configAssetSupportsNativeSize,
   AOD_DIM_FACTOR,
   detailsForPreviewMode,
   detailsForPreviewResolution,
@@ -260,11 +262,13 @@ import {
   type WatchfaceSnapTarget
 } from "./watchfaceEditorSnapping";
 import {
+  duplicateWatchfaceDesignSprite,
   normalizeWatchfaceCrop,
   normalizeWatchfaceOpacity,
   normalizeWatchfaceRotation,
   normalizeWatchfaceSkew,
   normalizeWatchfaceTransformOrigin,
+  reorderWatchfaceDesignSpriteLayer,
   resizeWatchfaceTransformGroup,
   resizeWatchfaceSprite,
   rotateWatchfaceTransformGroup,
@@ -640,6 +644,11 @@ export function WatchfaceEditor({
   const [selectedId, setSelectedId] = useState<string>("background");
   const [selectedIds, setSelectedIds] = useState<string[]>(["background"]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [draggedLayerSpriteId, setDraggedLayerSpriteId] = useState<string | null>(null);
+  const [layerDropTarget, setLayerDropTarget] = useState<{
+    spriteId: string;
+    placement: "before" | "after";
+  } | null>(null);
   const [backgroundDataUrl, setBackgroundDataUrl] = useState("");
   const [aodBackgroundDataUrl, setAodBackgroundDataUrl] = useState("");
   const [previewMode, setPreviewMode] = useState<WatchfacePreviewMode>("current");
@@ -1448,6 +1457,12 @@ export function WatchfaceEditor({
       : null;
     const baseWidth = icon?.width ?? state?.width ?? Math.round(resolution.width * 0.05);
     const baseHeight = icon?.height ?? state?.height ?? Math.round(resolution.width * 0.04);
+    const configKey = `control_${complication.controlPrefix}_icon`;
+    const canvasSize = configAssetCanvasSize(
+      configKey,
+      design.configAssetOverrides?.[`config:${configKey}`],
+      { width: baseWidth, height: baseHeight }
+    );
     // The preview frame is rendered from the selected watch's native tree,
     // while the interaction overlay uses the largest template coordinate
     // space. Convert the bitmap's native top-left bounds into that space so
@@ -1459,10 +1474,11 @@ export function WatchfaceEditor({
       complicationId: complication.id,
       x0: x,
       y0: y,
-      x1: x + baseWidth * coordinateScale,
-      y1: y + baseHeight * coordinateScale
+      x1: x + canvasSize.width * coordinateScale,
+      y1: y + canvasSize.height * coordinateScale
     };
   }, [
+    design.configAssetOverrides,
     design.previewComplication,
     previewDetails,
     previewResolution,
@@ -1566,7 +1582,7 @@ export function WatchfaceEditor({
     if (!selectedIds.includes(id)) selectEditorItem(id);
     setContextMenu({
       x: Math.max(8, Math.min(event.clientX, window.innerWidth - 246)),
-      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 198))
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 236))
     });
   }
 
@@ -4103,7 +4119,10 @@ export function WatchfaceEditor({
       if (!selected) return;
       updateConfigAsset(reference, {
         enabled: true,
-        replacement: await downscaleArtwork(selected)
+        replacement: await downscaleArtwork(selected),
+        ...(configAssetSupportsNativeSize(reference.configKey)
+          ? { nativeSize: true }
+          : {})
       });
       onNotice(`${reference.label} replaced for every supported resolution.`);
     } catch (caught) {
@@ -4111,7 +4130,11 @@ export function WatchfaceEditor({
     }
   }
 
-  async function chooseBatterySpriteFolder() {
+  async function chooseBatterySpriteFolder(
+    overrideId:
+      | "config:battery_icon"
+      | "config:control_battery_icon" = "config:battery_icon"
+  ) {
     try {
       const folder = await api.chooseCorosWatchfaceRasterFontFolder();
       if (!folder) return;
@@ -4154,40 +4177,57 @@ export function WatchfaceEditor({
         ...prev,
         configAssetOverrides: {
           ...(prev.configAssetOverrides ?? {}),
-          "config:battery_icon": {
-            ...(prev.configAssetOverrides?.["config:battery_icon"] ?? {}),
+          [overrideId]: {
+            ...(prev.configAssetOverrides?.[overrideId] ?? {}),
             enabled: true,
             stateReplacements
           }
         },
-        layerVisibility: {
-          ...prev.layerVisibility,
-          batteryIcon: true
-        }
+        ...(overrideId === "config:battery_icon"
+          ? {
+              layerVisibility: {
+                ...prev.layerVisibility,
+                batteryIcon: true
+              }
+            }
+          : {})
       }));
       onNotice(
-        `Imported ${Object.keys(stateReplacements).length} battery sprite states on a shared ${canvasWidth}×${canvasHeight}px canvas.`
+        `Imported ${Object.keys(stateReplacements).length} ${
+          overrideId === "config:battery_icon"
+            ? "battery"
+            : "control battery"
+        } sprite states on a shared ${canvasWidth}×${canvasHeight}px canvas.`
       );
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "Could not load the battery sprite folder.");
     }
   }
 
-  function restoreBatteryIcon() {
+  function restoreBatteryIcon(
+    overrideId:
+      | "config:battery_icon"
+      | "config:control_battery_icon" = "config:battery_icon"
+  ) {
     setDesign((prev) => {
       const configAssetOverrides = { ...(prev.configAssetOverrides ?? {}) };
-      delete configAssetOverrides["config:battery_icon"];
+      delete configAssetOverrides[overrideId];
       return { ...prev, configAssetOverrides };
     });
   }
 
-  function setBatteryIconScale(scale: number) {
+  function setBatteryIconScale(
+    scale: number,
+    overrideId:
+      | "config:battery_icon"
+      | "config:control_battery_icon" = "config:battery_icon"
+  ) {
     setDesign((prev) => ({
       ...prev,
       configAssetOverrides: {
         ...(prev.configAssetOverrides ?? {}),
-        "config:battery_icon": {
-          ...(prev.configAssetOverrides?.["config:battery_icon"] ?? {}),
+        [overrideId]: {
+          ...(prev.configAssetOverrides?.[overrideId] ?? {}),
           enabled: true,
           scale: Math.max(0.1, Math.min(4, Number.isFinite(scale) ? scale : 1))
         }
@@ -4396,6 +4436,45 @@ export function WatchfaceEditor({
     }
   }
 
+  function duplicateSprite(spriteId: string) {
+    const sprites = design.designSprites ?? [];
+    if (sprites.length >= MAX_DESIGN_SPRITES) {
+      onError(`A design can contain up to ${MAX_DESIGN_SPRITES} imported images.`);
+      return;
+    }
+    const source = sprites.find((sprite) => sprite.id === spriteId);
+    if (!source) return;
+    const duplicateId = window.crypto.randomUUID();
+    const duplicate = duplicateWatchfaceDesignSprite(
+      source,
+      duplicateId,
+      {
+        width: previewWidth,
+        height: previewResolution?.height ?? previewWidth
+      },
+      Math.max(8, Math.round(previewWidth * 0.02))
+    );
+    const sourceEffect = design.layerEffects?.[`sprite:${spriteId}`];
+    setDesign((current) => ({
+      ...current,
+      designSprites: [...(current.designSprites ?? []), duplicate],
+      ...(sourceEffect
+        ? {
+            layerEffects: {
+              ...(current.layerEffects ?? {}),
+              [`sprite:${duplicateId}`]: structuredClone(sourceEffect)
+            }
+          }
+        : {})
+    }));
+    setCropSpriteId(null);
+    setSelectedId(`sprite:${duplicateId}`);
+    setSelectedIds([`sprite:${duplicateId}`]);
+    setContextMenu(null);
+    setPropertiesOpen(true);
+    onNotice("Imported image duplicated.");
+  }
+
   function removeSprite(spriteId: string) {
     const editorId = `sprite:${spriteId}`;
     if (isPositionLocked(editorId)) return;
@@ -4414,6 +4493,23 @@ export function WatchfaceEditor({
     }));
     setSelectedId("background");
     setSelectedIds(["background"]);
+  }
+
+  function reorderSpriteLayer(
+    draggedSpriteId: string,
+    targetSpriteId: string,
+    placement: "before" | "after"
+  ) {
+    if (isPositionLocked(`sprite:${draggedSpriteId}`)) return;
+    setDesign((current) => ({
+      ...current,
+      designSprites: reorderWatchfaceDesignSpriteLayer(
+        current.designSprites ?? [],
+        draggedSpriteId,
+        targetSpriteId,
+        placement
+      )
+    }));
   }
 
   function updateSprite(
@@ -4934,6 +5030,11 @@ export function WatchfaceEditor({
         return;
       }
       if (editable) return;
+      if (command && key === "d" && selectedSprite) {
+        event.preventDefault();
+        duplicateSprite(selectedSprite.id);
+        return;
+      }
       if (command && key === "g") {
         event.preventDefault();
         if (event.shiftKey) unlinkSelectedLayers();
@@ -5194,8 +5295,89 @@ export function WatchfaceEditor({
               ).map(({ label: group, layers: groupedLayers }) => (
                 <Fragment key={group}>
                   <li className="wf-layer-group">{group}</li>
-                  {groupedLayers.map((layer) => (
-                    <li key={layer.id}>
+                  {groupedLayers.map((layer) => {
+                    const reorderable =
+                      layer.kind === "customSprite" &&
+                      Boolean(layer.spriteId) &&
+                      !isPositionLocked(layer.id);
+                    const dropPlacement =
+                      layer.kind === "customSprite" &&
+                      layer.spriteId &&
+                      layerDropTarget?.spriteId === layer.spriteId
+                        ? layerDropTarget.placement
+                        : null;
+                    return (
+                    <li
+                      key={layer.id}
+                      className={[
+                        "wf-layer-item",
+                        reorderable ? "is-reorderable" : "",
+                        layer.spriteId === draggedLayerSpriteId ? "is-dragging" : "",
+                        dropPlacement ? `is-drop-${dropPlacement}` : ""
+                      ].filter(Boolean).join(" ")}
+                      draggable={reorderable}
+                      onDragStart={(event) => {
+                        if (!reorderable || !layer.spriteId) {
+                          event.preventDefault();
+                          return;
+                        }
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("text/plain", layer.spriteId);
+                        setDraggedLayerSpriteId(layer.spriteId);
+                        setLayerDropTarget(null);
+                      }}
+                      onDragOver={(event) => {
+                        if (
+                          layer.kind !== "customSprite" ||
+                          !layer.spriteId ||
+                          !draggedLayerSpriteId ||
+                          draggedLayerSpriteId === layer.spriteId
+                        ) {
+                          return;
+                        }
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                        const bounds = event.currentTarget.getBoundingClientRect();
+                        setLayerDropTarget({
+                          spriteId: layer.spriteId,
+                          placement:
+                            event.clientY < bounds.top + bounds.height / 2
+                              ? "before"
+                              : "after"
+                        });
+                      }}
+                      onDrop={(event) => {
+                        if (
+                          layer.kind !== "customSprite" ||
+                          !layer.spriteId
+                        ) {
+                          return;
+                        }
+                        const draggedSpriteId =
+                          draggedLayerSpriteId ||
+                          event.dataTransfer.getData("text/plain");
+                        if (!draggedSpriteId || draggedSpriteId === layer.spriteId) {
+                          setDraggedLayerSpriteId(null);
+                          setLayerDropTarget(null);
+                          return;
+                        }
+                        event.preventDefault();
+                        const bounds = event.currentTarget.getBoundingClientRect();
+                        reorderSpriteLayer(
+                          draggedSpriteId,
+                          layer.spriteId,
+                          event.clientY < bounds.top + bounds.height / 2
+                            ? "before"
+                            : "after"
+                        );
+                        setDraggedLayerSpriteId(null);
+                        setLayerDropTarget(null);
+                      }}
+                      onDragEnd={() => {
+                        setDraggedLayerSpriteId(null);
+                        setLayerDropTarget(null);
+                      }}
+                    >
                       <button
                         type="button"
                         aria-selected={selectedIds.includes(layer.id)}
@@ -5269,7 +5451,8 @@ export function WatchfaceEditor({
                         </ul>
                       ) : null}
                     </li>
-                  ))}
+                    );
+                  })}
                 </Fragment>
               ))}
             </ul>
@@ -5609,6 +5792,17 @@ export function WatchfaceEditor({
                   <span>Ungroup components</span>
                 </button>
               ) : null}
+              {selectedSprite ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={(design.designSprites ?? []).length >= MAX_DESIGN_SPRITES}
+                  onClick={() => duplicateSprite(selectedSprite.id)}
+                >
+                  <Copy size={15} aria-hidden="true" />
+                  <span>Duplicate image</span>
+                </button>
+              ) : null}
               <button
                 type="button"
                 role="menuitem"
@@ -5861,10 +6055,19 @@ export function WatchfaceEditor({
         groups.set(label, [layer]);
       }
     }
-    return [...groups].map(([label, groupLayers]) => ({
-      label,
-      layers: groupLayers
-    }));
+    return [...groups].map(([label, groupLayers]) => {
+      if (label !== "Artwork") return { label, layers: groupLayers };
+      const importedLayers = groupLayers
+        .filter((layer) => layer.kind === "customSprite")
+        .reverse();
+      return {
+        label,
+        layers: [
+          ...importedLayers,
+          ...groupLayers.filter((layer) => layer.kind !== "customSprite")
+        ]
+      };
+    });
   }
 
   function layerIcon(layer: EditorLayer) {
@@ -6118,10 +6321,16 @@ export function WatchfaceEditor({
     }
   }
 
-  function renderConfigAssetInspector(reference: WatchfaceConfigAssetReference) {
+  function renderConfigAssetInspector(
+    reference: WatchfaceConfigAssetReference,
+    layer: EditorLayer
+  ) {
     const override = design.configAssetOverrides?.[reference.id];
     const enabled = override?.enabled !== false;
     const artworkZoom = override?.scale ?? 1;
+    const supportsNativeSize =
+      configAssetSupportsNativeSize(reference.configKey);
+    const nativeSize = supportsNativeSize && override?.nativeSize === true;
     const templatePreview = configAssetPreviews.get(reference.archivePath);
     const previewDataUrl = override?.replacement?.dataUrl ?? templatePreview?.dataUrl;
     const dimensions = override?.replacement
@@ -6199,10 +6408,26 @@ export function WatchfaceEditor({
             </button>
           ) : null}
         </div>
+        {renderPositionReadout(layer)}
         {override?.replacement ? (
           <>
+            {supportsNativeSize ? (
+              <label className="watchface-studio-toggle">
+                <input
+                  type="checkbox"
+                  checked={nativeSize}
+                  onChange={(event) =>
+                    updateConfigAsset(reference, {
+                      nativeSize: event.target.checked
+                    })
+                  }
+                />
+                Native PNG size (no template bound)
+              </label>
+            ) : null}
             <label className="field watchface-zoom-control">
-              Artwork zoom <span>{artworkZoom.toFixed(2)}×</span>
+              {nativeSize ? "Native size scale" : "Artwork zoom"}{" "}
+              <span>{artworkZoom.toFixed(2)}×</span>
               <input
                 type="range"
                 min="0.1"
@@ -6235,7 +6460,11 @@ export function WatchfaceEditor({
         ) : null}
         <p className="watchface-studio-summary">
           Parsed from {reference.scope === "aod" ? "AODconfig.txt" : "config.txt"}.
-          Visibility changes only this key. Transparent padding is removed automatically. Artwork zoom enlarges and crops the image inside the firmware-required native canvas; it never changes the exported PNG dimensions. Other keys that share the original file are not altered.
+          Visibility changes only this key.{" "}
+          {nativeSize
+            ? "The selectable icon exports at the imported PNG dimensions; scale changes the canvas itself instead of cropping it."
+            : "Transparent padding is removed automatically. Artwork zoom enlarges and crops the image inside the firmware-required canvas without changing its PNG dimensions."}{" "}
+          Other keys that share the original file are not altered.
         </p>
       </div>
     );
@@ -6262,7 +6491,7 @@ export function WatchfaceEditor({
     }
     if (layer.configAssetId) {
       const reference = configAssetsById.get(layer.configAssetId);
-      return reference ? renderConfigAssetInspector(reference) : null;
+      return reference ? renderConfigAssetInspector(reference, layer) : null;
     }
 
     if (layer.weatherIndicator) {
@@ -6386,7 +6615,7 @@ export function WatchfaceEditor({
               <ImagePlus size={15} /> {stateCount > 0 ? "Replace sprite folder" : "Import sprite folder"}
             </button>
             {stateCount > 0 ? (
-              <button className="secondary-button" type="button" onClick={restoreBatteryIcon}>
+              <button className="secondary-button" type="button" onClick={() => restoreBatteryIcon()}>
                 <RotateCcw size={15} /> Restore template icon
               </button>
             ) : null}
@@ -6524,9 +6753,12 @@ export function WatchfaceEditor({
             value={style?.fontFamily ?? design.fontFamily}
             emptyLabel="Keep template digits"
             onChange={(fontFamily) =>
-              setTimeStyle(layer.timePartId!, { fontFamily })
+              setTimeStyle(layer.timePartId!, {
+                fontFamily,
+                rasterFont: undefined
+              })
             }
-            rasterFont={design.rasterFont}
+            rasterFont={style?.rasterFont ?? design.rasterFont}
             onRasterFontChange={setRasterFont}
             typography={{
               fontWeight: design.fontWeight ?? 400,
@@ -7143,9 +7375,19 @@ export function WatchfaceEditor({
             </label>
           ) : null}
           {renderEffectsInspector(layer.id)}
-          <button className="secondary-button" type="button" onClick={() => removeSprite(layer.spriteId!)}>
-            <Trash2 size={15} /> Remove image
-          </button>
+          <div className="wf-config-asset-actions">
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={(design.designSprites ?? []).length >= MAX_DESIGN_SPRITES}
+              onClick={() => duplicateSprite(sprite.id)}
+            >
+              <Copy size={15} /> Duplicate image
+            </button>
+            <button className="secondary-button" type="button" onClick={() => removeSprite(layer.spriteId!)}>
+              <Trash2 size={15} /> Remove image
+            </button>
+          </div>
         </div>
       );
     }
@@ -7221,6 +7463,12 @@ export function WatchfaceEditor({
     const controlColonReference = configAssetsById.get("config:control_colon_icon");
     const controlColonEnabled =
       design.configAssetOverrides?.["config:control_colon_icon"]?.enabled !== false;
+    const controlBatteryOverride =
+      design.configAssetOverrides?.["config:control_battery_icon"];
+    const controlBatteryStateCount = Object.keys(
+      controlBatteryOverride?.stateReplacements ?? {}
+    ).length;
+    const controlBatteryIconScale = controlBatteryOverride?.scale ?? 1;
     const sourceResolution = details ? pickPreviewResolution(details) : null;
     const iconPositionKey = selectedComplication
       ? `control_${selectedComplication.controlPrefix}_icon_pos`
@@ -7310,6 +7558,58 @@ export function WatchfaceEditor({
             ))}
           </select>
         </label>
+        {selectedComplication?.id === "battery" ? (
+          <div className="watchface-inspector-group">
+            <h3 className="wf-inspector-heading">Battery control icon</h3>
+            <div className="wf-config-asset-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() =>
+                  void chooseBatterySpriteFolder(
+                    "config:control_battery_icon"
+                  )
+                }
+              >
+                <ImagePlus size={15} />{" "}
+                {controlBatteryStateCount > 0
+                  ? "Replace control sprite folder"
+                  : "Import control sprite folder"}
+              </button>
+              {controlBatteryStateCount > 0 ? (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() =>
+                    restoreBatteryIcon("config:control_battery_icon")
+                  }
+                >
+                  <RotateCcw size={15} /> Restore control icon
+                </button>
+              ) : null}
+            </div>
+            <label className="watchface-inspector-field">
+              <span>Control icon scale</span>
+              <EditableNumberInput
+                min="0.1"
+                max="4"
+                step="0.01"
+                value={controlBatteryIconScale}
+                fallback={1}
+                onValueChange={(scale) =>
+                  setBatteryIconScale(
+                    scale,
+                    "config:control_battery_icon"
+                  )
+                }
+              />
+            </label>
+            <p className="watchface-studio-summary">
+              This folder is used only when Battery is shown in the selectable
+              data slot. The fixed Battery icon keeps its own sprite folder.
+            </p>
+          </div>
+        ) : null}
         {selectedComplication?.valueParts && controlColonReference ? (
           <div className="wf-inline-config-asset">
             <label className="watchface-studio-toggle">
@@ -7343,7 +7643,11 @@ export function WatchfaceEditor({
           value={design.selectableMetricStyle?.fontFamily ?? design.fontFamily}
           emptyLabel="Keep template digits"
           onChange={(fontFamily) =>
-            setSelectableMetricStyle({ fontFamily, rasterFont: undefined })
+            setSelectableMetricStyle({
+              fontFamily,
+              rasterFont: undefined,
+              ...(fontFamily ? { nativeSize: true } : {})
+            })
           }
           rasterFont={design.rasterFont}
           onRasterFontChange={setRasterFont}
@@ -7365,10 +7669,15 @@ export function WatchfaceEditor({
           rasterFont={design.rasterFont}
           componentRasterFont={design.selectableMetricStyle?.rasterFont}
           componentLabel="Selectable metric"
-          onActivate={() => setSelectableMetricStyle({ fontFamily: "" })}
+          onActivate={() =>
+            setSelectableMetricStyle({ fontFamily: "", nativeSize: true })
+          }
           onRasterFontChange={setRasterFont}
           onComponentRasterFontChange={(rasterFont) =>
-            setSelectableMetricStyle({ rasterFont })
+            setSelectableMetricStyle({
+              rasterFont,
+              ...(rasterFont ? { nativeSize: true } : {})
+            })
           }
         />
         <label className="field">
@@ -7392,8 +7701,20 @@ export function WatchfaceEditor({
             </button>
           </span>
         </label>
+        <label className="watchface-studio-toggle">
+          <input
+            type="checkbox"
+            checked={
+              design.selectableMetricStyle?.nativeSize ?? false
+            }
+            onChange={(event) =>
+              setSelectableMetricStyle({ nativeSize: event.target.checked })
+            }
+          />
+          Native width (no template bound)
+        </label>
         <label className="field">
-          Selectable value scale
+          Artwork zoom
           <EditableNumberInput
             min="0.01"
             step="0.01"
@@ -7403,6 +7724,11 @@ export function WatchfaceEditor({
               setSelectableMetricStyle({ scale: Math.max(0.01, value) })
             }
           />
+          <span className="watchface-studio-summary">
+            {(design.selectableMetricStyle?.nativeSize ?? false)
+              ? "Changes digit height while preserving each digit's natural width."
+              : "Scales digits inside the selectable value's fixed COROS canvas."}
+          </span>
         </label>
         {baseIconPosition ? (
           renderPositionPanel("complication", "Selector icon position", <>

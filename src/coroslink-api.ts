@@ -179,6 +179,9 @@ export interface CorosLinkApi {
   loadCorosWatchfaceProject: (
     projectId: string
   ) => Promise<CorosWatchfaceProject>;
+  duplicateCorosWatchfaceProject: (
+    projectId: string
+  ) => Promise<CorosWatchfaceProject>;
   deleteCorosWatchfaceProject: (projectId: string) => Promise<void>;
   describeCorosWatchfaceTemplate: (
     archiveId: string

@@ -14,6 +14,7 @@ import {
   buildLayoutOverrides,
   buildMetricOverrides,
   buildMetricStyleOverrides,
+  buildSelectableMetricSpriteComposition,
   buildSelectableMetricSpriteReplacements,
   buildSelectableMetricStyleOverrides,
   buildSeparateTimeOverrides,
@@ -21,8 +22,13 @@ import {
   buildTimeStyleOverrides,
   buildTimeTrackingOverrides,
   buildWatchfaceConfigAssetOverrides,
+  buildWatchfaceConfigAssetReplacements,
   computeLayoutGroupBounds,
   computeLayoutOffsetLimits,
+  configAssetCanvasSize,
+  configAssetSupportsNativeSize,
+  corosMonthLabelForSpriteIndex,
+  corosMonthSpriteIndex,
   corosWeekdayIndex,
   detailsForPreviewMode,
   detailsForPreviewResolution,
@@ -31,6 +37,7 @@ import {
   getFixedMetricCapabilities,
   getTemplateBackgroundAssetPaths,
   getWatchfaceAnalogPreviewLayers,
+  getWatchfaceControlStatusPreviewLayers,
   hasControlBattery,
   hasAutoAlignedTime,
   hasWatchfaceAod,
@@ -52,6 +59,11 @@ import {
 assert.equal(corosWeekdayIndex(0), 6);
 assert.equal(corosWeekdayIndex(1), 0);
 assert.equal(corosWeekdayIndex(6), 5);
+assert.equal(corosMonthSpriteIndex(0), 1);
+assert.equal(corosMonthSpriteIndex(6), 7);
+assert.equal(corosMonthSpriteIndex(11), 0);
+assert.equal(corosMonthLabelForSpriteIndex(0), "DEC");
+assert.equal(corosMonthLabelForSpriteIndex(7), "JUL");
 assert.equal(watchfaceEffectRenderScale(520 / 416, 416 / 800), 0.65);
 
 assert.equal(normalizeRasterFontGlyphs("0 1 2 2 a"), "012A");
@@ -310,9 +322,9 @@ const monthLabelStyle = {
   }
 };
 assert.deepEqual(
-  dateSpriteCanvasSize(monthLabelResolution, "dateMonth", monthLabelStyle, 0),
+  dateSpriteCanvasSize(monthLabelResolution, "dateMonth", monthLabelStyle, 1),
   { width: 73, height: 29, native: true },
-  "12-sprite month folders should resolve JAN instead of digit 0"
+  "12-sprite month folders should resolve JAN from firmware slot 01"
 );
 assert.equal(
   buildDateStyleOverrides(
@@ -513,6 +525,105 @@ assert.equal(
   "watchface_800x800/icon/colon.png",
   "Shared source files should remain separate editable config entries"
 );
+const statusPreviewResolution = {
+  ...resolution(800, 24, 38),
+  config: {
+    ...resolution(800, 24, 38).config,
+    rect_control1_pos: "{123,551}",
+    control_bluetooth_icon_pos: "{3,0}",
+    control_bluetooth_off_icon: "icon\\nobt.png",
+    control_no_disturb_icon_pos: "{67,0}",
+    control_no_disturb_on_icon: "icon\\noxx.png"
+  },
+  icons: [
+    ...resolution(800, 24, 38).icons,
+    {
+      path: "watchface_800x800/icon/nobt.png",
+      width: 42,
+      height: 42
+    },
+    {
+      path: "watchface_800x800/icon/noxx.png",
+      width: 42,
+      height: 42
+    }
+  ]
+};
+assert.deepEqual(
+  getWatchfaceControlStatusPreviewLayers(statusPreviewResolution).map(
+    ({ configKey, position }) => ({ configKey, position })
+  ),
+  [
+    {
+      configKey: "control_bluetooth_off_icon",
+      position: { x: 126, y: 551 }
+    },
+    {
+      configKey: "control_no_disturb_on_icon",
+      position: { x: 190, y: 551 }
+    }
+  ],
+  "Bluetooth-off and Do Not Disturb-on should preview at their control-relative positions"
+);
+assert.deepEqual(
+  computeLayoutGroupBounds(statusPreviewResolution)
+    .filter(({ id }) => id === "bluetoothOff" || id === "doNotDisturbOn")
+    .map(({ id, x0, y0, x1, y1 }) => ({ id, x0, y0, x1, y1 })),
+  [
+    {
+      id: "bluetoothOff",
+      x0: 126,
+      y0: 551,
+      x1: 168,
+      y1: 593
+    },
+    {
+      id: "doNotDisturbOn",
+      x0: 190,
+      y0: 551,
+      x1: 232,
+      y1: 593
+    }
+  ],
+  "both status icons should expose independent hit-test bounds"
+);
+assert.deepEqual(
+  buildLayoutOverrides(
+    {
+      archiveId: "control-status",
+      resolutions: [statusPreviewResolution]
+    },
+    {
+      bluetoothOff: { dx: 20, dy: -10 }
+    }
+  )[0]?.values,
+  {
+    control_bluetooth_icon_pos: "{23,-10}"
+  },
+  "status-icon movement should persist through the exported config position"
+);
+const hiddenBluetoothStatusDetails = applyConfigOverridesToDetails(
+  {
+    archiveId: "control-status",
+    resolutions: [statusPreviewResolution]
+  },
+  buildWatchfaceConfigAssetOverrides(
+    {
+      archiveId: "control-status",
+      resolutions: [statusPreviewResolution]
+    },
+    {
+      "config:control_bluetooth_off_icon": { enabled: false }
+    }
+  )
+);
+assert.deepEqual(
+  getWatchfaceControlStatusPreviewLayers(
+    hiddenBluetoothStatusDetails.resolutions[0]
+  ).map(({ configKey }) => configKey),
+  ["control_no_disturb_on_icon"],
+  "the existing config-asset visibility toggle should hide a status preview"
+);
 const replacement = {
   dataUrl: "data:image/png;base64,AA==",
   width: 32,
@@ -546,6 +657,42 @@ const configAssetOverrides = buildWatchfaceConfigAssetOverrides(
     "aod:background_icon": { enabled: false }
   },
   true
+);
+assert.equal(configAssetSupportsNativeSize("control_hr_icon"), true);
+assert.equal(configAssetSupportsNativeSize("control_colon_icon"), false);
+assert.deepEqual(
+  configAssetCanvasSize(
+    "control_hr_icon",
+    {
+      nativeSize: true,
+      scale: 1.5,
+      replacement: {
+        dataUrl: "data:image/png;base64,AA==",
+        width: 96,
+        height: 48
+      }
+    },
+    { width: 37, height: 37 }
+  ),
+  { width: 144, height: 72, native: true },
+  "selectable control icons should be able to escape the template PNG canvas"
+);
+assert.deepEqual(
+  configAssetCanvasSize(
+    "control_colon_icon",
+    {
+      nativeSize: true,
+      scale: 2,
+      replacement: {
+        dataUrl: "data:image/png;base64,AA==",
+        width: 96,
+        height: 48
+      }
+    },
+    { width: 20, height: 32 }
+  ),
+  { width: 20, height: 32, native: false },
+  "unsafe direct assets should retain their firmware canvas"
 );
 const scaledBatteryOverrides = buildWatchfaceConfigAssetOverrides(details, {
   "config:battery_icon": { enabled: true, scale: 2 }
@@ -614,6 +761,44 @@ const controlBatteryDetails = {
     }
   }))
 };
+const separatedBatteryAssetOverrides = buildWatchfaceConfigAssetOverrides(
+  controlBatteryDetails,
+  {
+    "config:battery_icon": {
+      stateReplacements: {
+        "0": {
+          dataUrl: "data:image/png;base64,W48H24",
+          width: 48,
+          height: 24
+        }
+      }
+    },
+    "config:control_battery_icon": {
+      stateReplacements: {
+        "0": {
+          dataUrl: "data:image/png;base64,W36H18",
+          width: 36,
+          height: 18
+        }
+      }
+    }
+  }
+);
+for (const resolution of controlBatteryDetails.resolutions) {
+  const override = separatedBatteryAssetOverrides.find(
+    ({ path }) => path === `${resolution.directory}/config.txt`
+  );
+  assert.equal(
+    override?.values.battery_icon_dir,
+    "cl_battery_icon",
+    "a customized fixed battery must leave the shared control folder untouched"
+  );
+  assert.equal(
+    override?.values.control_battery_icon_dir,
+    "cl_control_battery_icon",
+    "the selectable Battery icon must export through its own folder"
+  );
+}
 const hiddenControlBattery = buildControlBatteryVisibilityOverrides(
   controlBatteryDetails,
   false
@@ -828,6 +1013,38 @@ assert.equal(selectableFull?.values.control_hr_font_color, "0x12ABEF");
 assert.equal(
   selectableFull?.values.control_hr_rect,
   "{144,-8,304,72,hcenter|vcenter}"
+);
+const nativeSelectableStyle = buildSelectableMetricStyleOverrides(
+  details,
+  {
+    scale: 1,
+    nativeSize: true,
+    rasterFont: {
+      label: "Native selectable digits",
+      dataUrl: "",
+      glyphs: "",
+      columns: 1,
+      sprites: Object.fromEntries(
+        Array.from({ length: 10 }, (_, digit) => [
+          String(digit),
+          "data:image/png;base64,AA=="
+        ])
+      ),
+      spriteSizes: Object.fromEntries(
+        Array.from({ length: 10 }, (_, digit) => [
+          String(digit),
+          { width: 31, height: 47 }
+        ])
+      ),
+      tint: false
+    }
+  },
+  true
+).find(({ path }) => path.includes("800x800"));
+assert.equal(
+  nativeSelectableStyle?.values.control_hr_rect,
+  "{178,9,271,56,hcenter|vcenter}",
+  "native selectable digits should expand each value rectangle around its existing center"
 );
 
 const iconPositionDetails = applyConfigOverridesToDetails(details, [
@@ -1160,6 +1377,38 @@ assert.equal(fullTimeTracking?.values.time_hour_high_pos, "{94,100}");
 assert.equal(fullTimeTracking?.values.time_hour_low_pos, "{166,100}");
 assert.equal(fullTimeTracking?.values.time_minute_high_pos, "{274,100}");
 assert.equal(fullTimeTracking?.values.time_minute_low_pos, "{346,100}");
+const pngTimeTracking = buildTimeTrackingOverrides(
+  withMetrics,
+  0,
+  {
+    hours: {
+      scale: 1,
+      letterSpacing: 0.25,
+      rasterFont: {
+        label: "Hour PNGs",
+        dataUrl: "data:image/png;base64,AA==",
+        glyphs: "0123456789",
+        columns: 10,
+        tint: false
+      }
+    },
+    minutes: {
+      scale: 1,
+      letterSpacing: -0.25,
+      rasterFont: {
+        label: "Minute PNGs",
+        dataUrl: "data:image/png;base64,AA==",
+        glyphs: "0123456789",
+        columns: 10,
+        tint: false
+      }
+    }
+  }
+).find((entry) => entry.path.includes("800x800"));
+assert.equal(pngTimeTracking?.values.time_hour_high_pos, "{92,100}");
+assert.equal(pngTimeTracking?.values.time_hour_low_pos, "{168,100}");
+assert.equal(pngTimeTracking?.values.time_minute_high_pos, "{288,100}");
+assert.equal(pngTimeTracking?.values.time_minute_low_pos, "{332,100}");
 const dateStyleOverrides = buildDateStyleOverrides(
   withMetrics,
   {
@@ -1247,7 +1496,7 @@ assert.deepEqual(
     withMetrics.resolutions[1],
     "dateMonth",
     importedMonthLabelsOnDigitTemplate,
-    0
+    1
   ),
   { width: 73, height: 29, native: true },
   "importing JAN–DEC should switch a numeric-month template to label mode"
@@ -1422,6 +1671,108 @@ globalThis.Image = class FakeNativeDateImage {
   }
 };
 try {
+  const rotatedMonthComposition = await buildDateSpriteComposition(
+    { archiveId: "rotated-months", resolutions: [monthLabelResolution] },
+    {
+      dateMonth: {
+        scale: 1,
+        width: 51,
+        height: 26,
+        monthFormat: "labels",
+        fontFamily: "Fixture Sans"
+      }
+    },
+    {
+      fontFamily: "",
+      digitColor: "#ffffff",
+      tintLabels: false
+    },
+    async () => []
+  );
+  assert.match(
+    rotatedMonthComposition.replacements.find(({ path }) =>
+      path.endsWith("/cl_date_month/00.png")
+    )?.dataUrl ?? "",
+    /TDEC/,
+    "firmware month slot 00 should wrap to December"
+  );
+  assert.match(
+    rotatedMonthComposition.replacements.find(({ path }) =>
+      path.endsWith("/cl_date_month/07.png")
+    )?.dataUrl ?? "",
+    /TJUL/,
+    "firmware month slot 07 should contain July, not August"
+  );
+
+  const nativeControlIconReplacements =
+    await buildWatchfaceConfigAssetReplacements(
+      detailsWithControlIcon,
+      {
+        "config:control_hr_icon": {
+          nativeSize: true,
+          replacement: {
+            dataUrl: "data:image/png;base64,W96H48",
+            width: 96,
+            height: 48
+          }
+        }
+      }
+    );
+  const nativeFullControlIcon = nativeControlIconReplacements.find(({ path }) =>
+    path === "watchface_800x800/icon/hr.png"
+  );
+  assert.equal(nativeFullControlIcon?.allowDimensionOverride, true);
+  assert.equal(nativeFullControlIcon?.create, false);
+  assert.match(
+    nativeFullControlIcon?.dataUrl ?? "",
+    /W96H48/,
+    "native selectable icons should export their imported canvas instead of the template slot"
+  );
+
+  const separateBatteryReplacements =
+    await buildWatchfaceConfigAssetReplacements(
+      controlBatteryDetails,
+      {
+        "config:battery_icon": {
+          stateReplacements: {
+            "0": {
+              dataUrl: "data:image/png;base64,W48H24",
+              width: 48,
+              height: 24
+            }
+          }
+        },
+        "config:control_battery_icon": {
+          stateReplacements: {
+            "0": {
+              dataUrl: "data:image/png;base64,W36H18",
+              width: 36,
+              height: 18
+            }
+          }
+        }
+      }
+    );
+  assert.ok(
+    separateBatteryReplacements.some(({ path }) =>
+      path.includes("/cl_battery_icon/00.png")
+    ),
+    "fixed battery artwork should be written to its isolated folder"
+  );
+  assert.ok(
+    separateBatteryReplacements.some(({ path }) =>
+      path.includes("/cl_control_battery_icon/00.png")
+    ),
+    "control battery artwork should be written to a different isolated folder"
+  );
+  assert.equal(
+    separateBatteryReplacements.some(({ path }) =>
+      /\/battery\/00\.png$/.test(path)
+    ),
+    false,
+    "custom battery assets must not overwrite the template's shared battery folder"
+  );
+
   const reopenedControlReplacements =
     await buildSelectableMetricSpriteReplacements(
       existingControlDetails,
@@ -1436,6 +1787,31 @@ try {
     reopenedControlReplacements.every(({ create }) => create === false),
     true,
     "existing cl_control digits should be replaced in place on a round trip"
+  );
+  const nativeControlComposition =
+    await buildSelectableMetricSpriteComposition(
+      existingControlDetails,
+      { scale: 1, fontFamily: "Fixture Sans", nativeSize: true },
+      "",
+      async () => {
+        throw new Error("native local-font rendering should not load source sprites");
+      }
+    );
+  assert.ok(nativeControlComposition.replacements.length > 0);
+  assert.equal(
+    nativeControlComposition.replacements.every(
+      ({ create, allowDimensionOverride }) =>
+        create === false && allowDimensionOverride === true
+    ),
+    true,
+    "native selectable digits should replace existing sprites with dimension overrides"
+  );
+  assert.equal(
+    nativeControlComposition.configOverrides.find(({ path }) =>
+      path.includes("800x800")
+    )?.values.control_hr_rect,
+    "{206,0,242,64,hcenter|vcenter}",
+    "native selectable export geometry should follow the rendered digit width"
   );
 
   const existingDateDetails = {

@@ -11,3 +11,4 @@ release/
 .env
 .env.local
 bin/*/
+/tmp

@@ -12,7 +12,7 @@ import {
   buildControlTemperatureOverrides,
   buildControlTemperatureSpriteReplacements,
   buildControlBatteryVisibilityOverrides,
-  buildSelectableMetricSpriteReplacements,
+  buildSelectableMetricSpriteComposition,
   buildSelectableMetricStyleOverrides,
   buildControlIconPositionOverrides,
   buildWatchfaceConfigAssetOverrides,
@@ -458,6 +458,17 @@ export async function composeWatchfaceReplacements(
     rasterFontSupportsText(controlTemperatureStyle.rasterFont, "0123456789") ||
     controlTemperatureStyle.scale !== 1
   );
+  const exportedControlTemperatureOverrides = controlTemperatureActive
+    ? buildControlTemperatureOverrides(
+        metricDetails,
+        controlTemperatureStyle,
+        controlTemperatureRasterActive
+      )
+    : [];
+  const selectableConfigDetails = applyConfigOverridesToDetails(
+    metricDetails,
+    exportedControlTemperatureOverrides
+  );
   const batteryIconEffectSources = await buildBatteryIconEffectSources(
     details,
     design,
@@ -469,6 +480,18 @@ export async function composeWatchfaceReplacements(
         dateStyles,
         toStudioOptions(design),
         loadAssets
+      )
+    : { replacements: [], configOverrides: [] };
+  const selectableMetricComposition = selectableMetricStyleActive
+    ? await buildSelectableMetricSpriteComposition(
+        applyLayoutToDetails(
+          selectableConfigDetails,
+          design.layoutOffsets ?? {}
+        ),
+        selectableMetricStyle!,
+        design.fontFamily,
+        loadAssets,
+        toStudioOptions(design)
       )
     : { replacements: [], configOverrides: [] };
 
@@ -494,15 +517,7 @@ export async function composeWatchfaceReplacements(
           toStudioOptions(design)
         )
       : [],
-    selectableMetricStyleActive
-      ? await buildSelectableMetricSpriteReplacements(
-          metricDetails,
-          selectableMetricStyle!,
-          design.fontFamily,
-          loadAssets,
-          toStudioOptions(design)
-        )
-      : [],
+    selectableMetricComposition.replacements,
     timeStyleActive
       ? await buildTimeSpriteReplacements(
           metricDetails,
@@ -566,18 +581,6 @@ export async function composeWatchfaceReplacements(
     layoutDetails,
     layoutOverrides
   );
-  const exportedControlTemperatureOverrides = controlTemperatureActive
-    ? buildControlTemperatureOverrides(
-        metricDetails,
-        controlTemperatureStyle,
-        controlTemperatureRasterActive
-      )
-    : [];
-  const selectableConfigDetails = applyConfigOverridesToDetails(
-    metricDetails,
-    exportedControlTemperatureOverrides
-  );
-
   const effectedAssets = await applyFirmwareEffects(
     details,
     design,
@@ -611,6 +614,7 @@ export async function composeWatchfaceReplacements(
       layoutConfigAssetOverrides,
       layoutOverrides,
       dateSpriteComposition.configOverrides,
+      selectableMetricComposition.configOverrides,
       buildEffectPaddingOverrides(configAssetPositionDetails, effectedAssets.padding),
       buildLayerVisibilityOverrides(details, design.layerVisibility ?? {}),
       buildControlBatteryVisibilityOverrides(details, design.controlBatteryEnabled),
