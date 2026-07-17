@@ -97,8 +97,10 @@ import type {
   CorosWatchfaceArchive,
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceProjectExportResult,
+  CorosWatchfaceArchiveExportInput,
   CorosWatchfaceArtwork,
   CorosWatchfaceCreatorInput,
+  CorosWatchfaceExistingShareInput,
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceProject,
   CorosWatchfaceProjectSaveInput,
@@ -191,6 +193,10 @@ const api = {
     input: CorosWatchfaceProjectExportInput
   ): Promise<CorosWatchfaceProjectExportResult> =>
     ipcRenderer.invoke("watchfaces:exportProject", input),
+  exportCorosWatchfaceArchive: (
+    input: CorosWatchfaceArchiveExportInput
+  ): Promise<CorosWatchfaceProjectExportResult> =>
+    ipcRenderer.invoke("watchfaces:exportArchive", input),
   listCorosWatchfaceProjects: (): Promise<CorosWatchfaceProjectSummary[]> =>
     ipcRenderer.invoke("watchfaces:listProjects"),
   saveCorosWatchfaceProject: (
@@ -216,6 +222,10 @@ const api = {
     input: CorosWatchfacePublishInput
   ): Promise<CorosWatchfaceShareLink> =>
     ipcRenderer.invoke("watchfaces:publish", input),
+  createCorosWatchfaceShareLink: (
+    input: CorosWatchfaceExistingShareInput
+  ): Promise<CorosWatchfaceShareLink> =>
+    ipcRenderer.invoke("watchfaces:createShareLink", input),
   getWatchConnectionSmokeOption: (): Promise<WatchConnectionSmokeOptionId> =>
     ipcRenderer.invoke("watch:getConnectionSmokeOption"),
   setWatchConnectionSmokeOption: (

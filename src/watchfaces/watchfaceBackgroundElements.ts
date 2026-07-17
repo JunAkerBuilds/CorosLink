@@ -1,7 +1,9 @@
 import type {
   CorosWatchfaceBackgroundElement,
-  CorosWatchfaceGradientFill
+  CorosWatchfaceGradientFill,
+  CorosWatchfaceShadowEffect
 } from "../../electron/types";
+import { renderWatchfaceCanvasEffects } from "./watchfaceEditorEffects";
 
 /** All background shapes are authored in the 800×800 background pixel space. */
 export const BACKGROUND_SPACE = 800;
@@ -35,7 +37,13 @@ export function createBackgroundElement(
   fontFamily: string
 ): CorosWatchfaceBackgroundElement {
   const id = nextElementId();
-  const base = { id, x: Math.round(center.x), y: Math.round(center.y), rotation: 0 };
+  const base = {
+    id,
+    x: Math.round(center.x),
+    y: Math.round(center.y),
+    rotation: 0,
+    visible: true
+  };
   switch (kind) {
     case "rect":
       return { ...base, kind, width: 200, height: 120, cornerRadius: 12, fill: "#51e0b5" };
@@ -97,6 +105,7 @@ export function backgroundElementAtPoint(
   y: number
 ): CorosWatchfaceBackgroundElement | null {
   for (let index = elements.length - 1; index >= 0; index -= 1) {
+    if (elements[index]!.visible === false) continue;
     const box = backgroundElementBounds(elements[index]!);
     if (x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1) {
       return elements[index]!;
@@ -134,17 +143,16 @@ function applyFill(
   context.fillStyle = linear;
 }
 
-/** Draws every background element into a context already scaled to 800px. */
-export function drawBackgroundElements(
+function drawBackgroundElement(
   context: CanvasRenderingContext2D,
-  elements: CorosWatchfaceBackgroundElement[]
+  element: CorosWatchfaceBackgroundElement
 ): void {
-  for (const element of elements) {
-    context.save();
-    context.translate(element.x, element.y);
-    context.rotate((element.rotation * Math.PI) / 180);
+  context.save();
+  context.globalAlpha = Math.max(0, Math.min(1, element.opacity ?? 1));
+  context.translate(element.x, element.y);
+  context.rotate((element.rotation * Math.PI) / 180);
 
-    if (element.kind === "rect") {
+  if (element.kind === "rect") {
       const w = element.width;
       const h = element.height;
       const r = Math.max(0, Math.min(element.cornerRadius, Math.min(w, h) / 2));
@@ -162,7 +170,7 @@ export function drawBackgroundElements(
         context.lineWidth = element.strokeWidth;
         context.stroke();
       }
-    } else if (element.kind === "ellipse") {
+  } else if (element.kind === "ellipse") {
       context.beginPath();
       context.ellipse(0, 0, element.width / 2, element.height / 2, 0, 0, Math.PI * 2);
       applyFill(
@@ -177,7 +185,7 @@ export function drawBackgroundElements(
         context.lineWidth = element.strokeWidth;
         context.stroke();
       }
-    } else if (element.kind === "line") {
+  } else if (element.kind === "line") {
       context.beginPath();
       context.moveTo(0, 0);
       context.lineTo(element.dx, element.dy);
@@ -185,14 +193,38 @@ export function drawBackgroundElements(
       context.lineWidth = element.strokeWidth;
       context.lineCap = "round";
       context.stroke();
-    } else {
+  } else {
       context.fillStyle = element.color;
       context.textAlign = element.align;
       context.textBaseline = "middle";
       context.font = `${element.weight} ${element.fontSize}px ${quoteFamily(element.fontFamily)}`;
       context.fillText(element.text, 0, 0);
-    }
+  }
 
-    context.restore();
+  context.restore();
+}
+
+/** Draws every background element into a context already scaled to 800px. */
+export function drawBackgroundElements(
+  context: CanvasRenderingContext2D,
+  elements: CorosWatchfaceBackgroundElement[],
+  effectsForId?: (id: string) => CorosWatchfaceShadowEffect[]
+): void {
+  for (const element of elements) {
+    if (element.visible === false) continue;
+    const effects = effectsForId?.(`bgel:${element.id}`) ?? [];
+    if (effects.length === 0) {
+      drawBackgroundElement(context, element);
+      continue;
+    }
+    const layer = document.createElement("canvas");
+    layer.width = BACKGROUND_SPACE;
+    layer.height = BACKGROUND_SPACE;
+    const layerContext = layer.getContext("2d", { colorSpace: "display-p3" });
+    if (!layerContext) continue;
+    layerContext.imageSmoothingEnabled = true;
+    layerContext.imageSmoothingQuality = "high";
+    drawBackgroundElement(layerContext, element);
+    context.drawImage(renderWatchfaceCanvasEffects(layer, effects).canvas, 0, 0);
   }
 }

@@ -21,10 +21,31 @@ import {
   rotatedCenterBounds
 } from "../src/watchfaces/watchfaceEditorGeometry.ts";
 import {
+  normalizeWatchfaceCrop,
+  normalizeWatchfaceOpacity,
   normalizeWatchfaceRotation,
+  normalizeWatchfaceSkew,
+  normalizeWatchfaceTransformOrigin,
+  resizeWatchfaceTransformGroup,
   resizeWatchfaceSprite,
+  rotateWatchfaceTransformGroup,
   rotateWatchfaceSprite
 } from "../src/watchfaces/watchfaceSpriteTransform.ts";
+import {
+  alignWatchfaceItems,
+  distributeWatchfaceItems,
+  expandWatchfaceGroupSelection,
+  normalizeWatchfaceEditorGroups,
+  syncLegacyWatchfaceGroups,
+  watchfaceSelectionUnits
+} from "../src/watchfaces/watchfaceEditorLayout.ts";
+import {
+  normalizeWatchfaceShadowEffect,
+  resolveWatchfaceLayerEffects,
+  watchfaceEffectPadding,
+  watchfaceShadowMaskSpread
+} from "../src/watchfaces/watchfaceEditorEffects.ts";
+import { buildWatchfaceEffectPaddingOverrides } from "../src/watchfaces/watchfaceEffectPadding.ts";
 import {
   DEFAULT_WATCHFACE_PLACEMENT_PREFERENCES,
   WATCHFACE_PLACEMENT_STORAGE_KEY,
@@ -190,6 +211,162 @@ assert.deepEqual(
   { rotation: 80, rotationDelta: 90 }
 );
 assert.equal(normalizeWatchfaceRotation(-10), 350);
+assert.deepEqual(
+  resizeWatchfaceSprite(
+    { x: 100, y: 100, width: 40, height: 20, rotation: 0 },
+    "e",
+    12,
+    50
+  ),
+  { x: 106, y: 100, width: 52, height: 20, rotation: 0 }
+);
+assert.deepEqual(
+  resizeWatchfaceSprite(
+    { x: 100, y: 100, width: 40, height: 20, rotation: 0 },
+    "n",
+    30,
+    -10,
+    true,
+    true
+  ),
+  { x: 100, y: 100, width: 80, height: 40, rotation: 0 }
+);
+const originRotation = rotateWatchfaceSprite(
+  { x: 100, y: 100, width: 40, height: 20, rotation: 0 },
+  { x: 80, y: 80 },
+  { x: 100, y: 100 },
+  { x: 0, y: 0 },
+  15
+);
+assert.equal(originRotation.rotation, 120);
+assert.equal(Math.round(originRotation.x), 61);
+assert.equal(Math.round(originRotation.y), 102);
+const normalizedCrop = normalizeWatchfaceCrop({ x: -1, y: 0.9, width: 3, height: 3 });
+assert.deepEqual(
+  { x: normalizedCrop.x, y: normalizedCrop.y, width: normalizedCrop.width },
+  { x: 0, y: 0.9, width: 1 }
+);
+assert.ok(Math.abs(normalizedCrop.height - 0.1) < 1e-9);
+assert.equal(normalizeWatchfaceOpacity(1.4), 1);
+assert.equal(normalizeWatchfaceSkew(-120), -80);
+assert.deepEqual(normalizeWatchfaceTransformOrigin({ x: 2, y: -1 }), { x: 1, y: 0 });
+const skewBounds = rotatedCenterBounds(100, 100, 40, 20, 0, 45, 0);
+assert.equal(Math.round(skewBounds.x1 - skewBounds.x0), 60);
+const groupItems = [
+  { id: "left", x: 25, y: 50, width: 20, height: 10, rotation: 0 },
+  { id: "right", x: 75, y: 50, width: 20, height: 10, rotation: 30 }
+];
+assert.deepEqual(
+  resizeWatchfaceTransformGroup(
+    groupItems,
+    { x: 50, y: 50, width: 100, height: 50, rotation: 0 },
+    { x: 60, y: 60, width: 200, height: 100, rotation: 0 }
+  ),
+  [
+    { id: "left", x: 10, y: 60, width: 40, height: 20, rotation: 0 },
+    { id: "right", x: 110, y: 60, width: 40, height: 20, rotation: 30 }
+  ]
+);
+const rotatedGroup = rotateWatchfaceTransformGroup(groupItems, { x: 50, y: 50 }, 90);
+assert.equal(Math.round(rotatedGroup[0].x), 50);
+assert.equal(Math.round(rotatedGroup[0].y), 25);
+assert.equal(rotatedGroup[0].rotation, 90);
+assert.equal(Math.round(rotatedGroup[1].x), 50);
+assert.equal(Math.round(rotatedGroup[1].y), 75);
+assert.equal(rotatedGroup[1].rotation, 120);
+
+const layoutItems = [
+  { id: "a", bounds: { x0: 0, y0: 0, x1: 10, y1: 10 } },
+  { id: "b", bounds: { x0: 20, y0: 20, x1: 40, y1: 30 } },
+  { id: "c", bounds: { x0: 70, y0: 40, x1: 80, y1: 50 } }
+];
+assert.deepEqual(alignWatchfaceItems(layoutItems.slice(0, 2), "left"), {
+  a: { dx: 0, dy: 0 },
+  b: { dx: -20, dy: 0 }
+});
+assert.deepEqual(distributeWatchfaceItems(layoutItems, "horizontal"), {
+  a: { dx: 0, dy: 0 },
+  b: { dx: 10, dy: 0 },
+  c: { dx: 0, dy: 0 }
+});
+const legacyDesign = syncLegacyWatchfaceGroups({
+  version: 1,
+  linkedLayerGroups: [["a", "b"], ["b", "c"]]
+});
+assert.deepEqual(legacyDesign.linkedLayerGroups, [["a", "b"]]);
+assert.equal(normalizeWatchfaceEditorGroups(undefined, [["a", "b"]])[0]?.name, "Group 1");
+const atomicGroups = [{ id: "group-a", name: "A", layerIds: ["a", "b"] }];
+assert.deepEqual(expandWatchfaceGroupSelection(atomicGroups, ["a", "c"]), ["a", "b", "c"]);
+assert.deepEqual(watchfaceSelectionUnits(atomicGroups, ["b", "c"]), [
+  { id: "group:group-a", layerIds: ["a", "b"] },
+  { id: "layer:c", layerIds: ["c"] }
+]);
+
+const normalizedShadow = normalizeWatchfaceShadowEffect({
+  id: "shadow",
+  kind: "outer-shadow",
+  enabled: true,
+  color: "invalid",
+  opacity: 2,
+  blur: 100,
+  spread: -100,
+  distance: 200,
+  angle: 725
+});
+assert.deepEqual(
+  { color: normalizedShadow.color, opacity: normalizedShadow.opacity, blur: normalizedShadow.blur, spread: normalizedShadow.spread, distance: normalizedShadow.distance, angle: normalizedShadow.angle },
+  { color: "#000000", opacity: 1, blur: 64, spread: -32, distance: 128, angle: 5 }
+);
+const padding = watchfaceEffectPadding([{ ...normalizedShadow, blur: 10, spread: 2, distance: 10, angle: 0 }]);
+assert.deepEqual(padding, { left: 12, top: 22, right: 32, bottom: 22 });
+assert.equal(watchfaceShadowMaskSpread({ ...normalizedShadow, spread: 8 }, 0.5), 4);
+assert.equal(watchfaceShadowMaskSpread({ ...normalizedShadow, spread: 8 }, 0.5, true), -4);
+assert.equal(resolveWatchfaceLayerEffects({
+  effectStyles: [{ id: "raised", name: "Raised", effects: [normalizedShadow] }],
+  layerEffects: { steps: { kind: "style", styleId: "raised" } }
+}, "steps").length, 1);
+const scopedEffects = {
+  effectStyles: [],
+  layerEffects: {
+    steps: { kind: "local", effects: [{ ...normalizedShadow, id: "current" }] },
+    "aod:steps": { kind: "local", effects: [{ ...normalizedShadow, id: "aod", opacity: 0.2 }] }
+  }
+};
+assert.equal(resolveWatchfaceLayerEffects(scopedEffects, "steps", "current")[0].id, "current");
+assert.equal(resolveWatchfaceLayerEffects(scopedEffects, "steps", "aod")[0].id, "aod");
+const paddingDetails = {
+  archiveId: "fixture",
+  resolutions: [800, 416, 260, 240].map((width) => ({
+    directory: String(width),
+    width,
+    height: width,
+    config: {
+      steps_rect: "{100,100,140,120}",
+      time_hour_high_pos: "{200,80}",
+      time_hour_low_pos: "{230,80}",
+      battery_icon_pos: "{50,60}",
+      control_step_rect: "{10,20,40,50}"
+    }
+  }))
+};
+const paddingByResolution = new Map([
+  ["800", new Map([["steps", { left: 16, top: 12, right: 20, bottom: 24 }], ["hours", { left: 16, top: 12, right: 20, bottom: 24 }], ["batteryIcon", { left: 16, top: 12, right: 20, bottom: 24 }], ["complication", { left: 16, top: 12, right: 20, bottom: 24 }]])],
+  ["416", new Map([["steps", { left: 8, top: 6, right: 10, bottom: 12 }]])],
+  ["260", new Map([["steps", { left: 5, top: 4, right: 7, bottom: 8 }]])],
+  ["240", new Map([["steps", { left: 5, top: 4, right: 6, bottom: 7 }]])]
+]);
+const paddingOverrides = buildWatchfaceEffectPaddingOverrides(
+  paddingDetails,
+  paddingByResolution
+);
+assert.equal(paddingOverrides.length, 4);
+assert.equal(paddingOverrides[0].values.steps_rect, "{84,88,160,144}");
+assert.equal(paddingOverrides[0].values.time_hour_high_pos, "{184,68}");
+assert.equal(paddingOverrides[0].values.battery_icon_pos, "{34,48}");
+assert.equal(paddingOverrides[0].values.control_step_rect, "{-6,8,60,74}");
+assert.equal(paddingOverrides[1].values.steps_rect, "{92,94,150,132}");
+assert.equal(paddingOverrides[2].values.steps_rect, "{95,96,147,128}");
+assert.equal(paddingOverrides[3].values.steps_rect, "{95,96,146,127}");
 
 // Placement preferences are editor-only, tolerate invalid storage, and clamp
 // adjustable values without changing their opt-in defaults.
@@ -357,7 +534,7 @@ const outsideThreshold = snapWatchfaceBounds({
   safeAreaInsetPercent: 10,
   targets: []
 });
-assert.deepEqual(outsideThreshold, { dx: 0, dy: 0, guides: [] });
+assert.deepEqual(outsideThreshold, { dx: 0, dy: 0, guides: [], measurements: [] });
 
 // Equal-distance candidates honor semantic priority over layer and grid lines.
 const prioritySnap = snapWatchfaceBounds({
@@ -408,5 +585,85 @@ const layerPrioritySnap = snapWatchfaceBounds({
   ]
 });
 assert.equal(layerPrioritySnap.guides[0]?.kind, "layer");
+
+const faceEdgeSnap = snapWatchfaceBounds({
+  movingBounds: { x0: 2, y0: 100, x1: 42, y1: 140 },
+  faceWidth: 800,
+  faceHeight: 800,
+  threshold: 3,
+  safeAreaInsetPercent: 10,
+  targets: []
+});
+assert.equal(faceEdgeSnap.dx, -2);
+assert.equal(faceEdgeSnap.guides[0]?.kind, "face-edge");
+
+const projectGuideSnap = snapWatchfaceBounds({
+  movingBounds: { x0: 198, y0: 100, x1: 238, y1: 140 },
+  faceWidth: 800,
+  faceHeight: 800,
+  threshold: 3,
+  safeAreaInsetPercent: 10,
+  targets: [],
+  guides: [{ id: "guide", axis: "x", position: 200 }]
+});
+assert.equal(projectGuideSnap.dx, 2);
+assert.equal(projectGuideSnap.guides[0]?.kind, "guide");
+
+const heldGuide = snapWatchfaceBounds({
+  movingBounds: { x0: 204, y0: 100, x1: 244, y1: 140 },
+  faceWidth: 800,
+  faceHeight: 800,
+  threshold: 3,
+  releaseThreshold: 5,
+  safeAreaInsetPercent: 10,
+  targets: [],
+  guides: [{ id: "guide", axis: "x", position: 200 }],
+  retainedGuides: projectGuideSnap.guides
+});
+assert.equal(heldGuide.dx, -4);
+assert.equal(heldGuide.guides[0]?.targetId, "guide");
+
+const spacingSnap = snapWatchfaceBounds({
+  movingBounds: { x0: 41, y0: 100, x1: 51, y1: 110 },
+  faceWidth: 800,
+  faceHeight: 800,
+  threshold: 2,
+  safeAreaInsetPercent: 10,
+  targets: [
+    { id: "left", label: "Left", bounds: { x0: 20, y0: 100, x1: 30, y1: 110 } },
+    { id: "right", label: "Right", bounds: { x0: 60, y0: 100, x1: 70, y1: 110 } }
+  ]
+});
+assert.equal(spacingSnap.dx, -1);
+assert.equal(spacingSnap.guides[0]?.kind, "spacing");
+assert.ok(spacingSnap.measurements.some((measurement) => measurement.label === "10 px"));
+
+// Representative 20-layer snap fixture stays comfortably inside one frame.
+const performanceTargets = Array.from({ length: 20 }, (_, index) => ({
+  id: `layer-${index}`,
+  label: `Layer ${index}`,
+  bounds: {
+    x0: 20 + (index % 5) * 140,
+    y0: 20 + Math.floor(index / 5) * 180,
+    x1: 70 + (index % 5) * 140,
+    y1: 70 + Math.floor(index / 5) * 180
+  }
+}));
+const interactionDurations = [];
+for (let index = 0; index < 250; index += 1) {
+  const started = performance.now();
+  snapWatchfaceBounds({
+    movingBounds: { x0: 300 + (index % 9), y0: 300, x1: 380 + (index % 9), y1: 360 },
+    faceWidth: 800,
+    faceHeight: 800,
+    threshold: 6,
+    safeAreaInsetPercent: 10,
+    targets: performanceTargets,
+    gridStep: 8
+  });
+  interactionDurations.push(performance.now() - started);
+}
+interactionDurations.sort((left, right) => left - right);
+assert.ok(interactionDurations[Math.floor(interactionDurations.length * 0.95)] < 16.7);
 
 console.log("watchface editor history tests passed");

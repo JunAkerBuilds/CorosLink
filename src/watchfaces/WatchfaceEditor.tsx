@@ -49,14 +49,27 @@ function EditableNumberInput({
   );
 }
 import {
+  AlignHorizontalJustifyCenter,
+  AlignHorizontalJustifyEnd,
+  AlignHorizontalJustifyStart,
+  AlignHorizontalSpaceBetween,
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+  AlignVerticalJustifyStart,
+  AlignVerticalSpaceBetween,
   ArrowLeft,
   Battery,
   ChevronDown,
   Circle,
+  Copy,
+  Crop,
   Download,
   Image,
   Eye,
   EyeOff,
+  FlipHorizontal2,
+  FlipVertical2,
+  Group,
   ImagePlus,
   Layers,
   Link2,
@@ -64,6 +77,7 @@ import {
   Loader2,
   Magnet,
   Minus,
+  Plus,
   PanelLeft,
   PanelRight,
   Redo2,
@@ -74,7 +88,7 @@ import {
   Square,
   Trash2,
   Type,
-  Unlink2,
+  Ungroup,
   Unlock,
   Undo2,
   MoonStar
@@ -87,6 +101,9 @@ import type {
   CorosWatchfaceBackgroundRect,
   CorosWatchfaceBackgroundText,
   CorosWatchfaceDesignState,
+  CorosWatchfaceDesignSprite,
+  CorosWatchfaceEditorGuide,
+  CorosWatchfaceShadowEffect,
   CorosWatchfaceProject,
   CorosWatchfaceTemplateAsset,
   CorosWatchfaceTemplateDetails,
@@ -101,8 +118,12 @@ type BackgroundElementPatch = Partial<
     Omit<CorosWatchfaceBackgroundText, "kind">
 >;
 
-/** Centers the visible pixels without altering the source PNG canvas size. */
-function centerSpriteArtwork(image: HTMLImageElement): string | null {
+/** Centers visible pixels on a shared canvas used by every state in a set. */
+function centerSpriteArtwork(
+  image: HTMLImageElement,
+  canvasWidth = image.naturalWidth,
+  canvasHeight = image.naturalHeight
+): string | null {
   const source = document.createElement("canvas");
   source.width = image.naturalWidth;
   source.height = image.naturalHeight;
@@ -127,8 +148,8 @@ function centerSpriteArtwork(image: HTMLImageElement): string | null {
   const contentWidth = right - left + 1;
   const contentHeight = bottom - top + 1;
   const canvas = document.createElement("canvas");
-  canvas.width = source.width;
-  canvas.height = source.height;
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
   const context = canvas.getContext("2d");
   if (!context) return null;
   context.drawImage(
@@ -181,6 +202,7 @@ import {
   scaleAmPmStyleForResolution,
   getAvailableComplications,
   getTemplateBackgroundAssetPaths,
+  hasControlBattery,
   hasWatchfaceAod,
   inferStaticSeparators,
   listWatchfaceConfigAssets,
@@ -231,15 +253,46 @@ import {
   type WatchfaceGridStep,
   type WatchfacePlacementPreferences,
   type WatchfaceSnapGuide,
+  type WatchfaceSnapMeasurement,
   type WatchfaceSnapTarget
 } from "./watchfaceEditorSnapping";
 import {
+  normalizeWatchfaceCrop,
+  normalizeWatchfaceOpacity,
   normalizeWatchfaceRotation,
+  normalizeWatchfaceSkew,
+  normalizeWatchfaceTransformOrigin,
+  resizeWatchfaceTransformGroup,
   resizeWatchfaceSprite,
+  rotateWatchfaceTransformGroup,
   rotateWatchfaceSprite,
+  type WatchfaceGroupTransformItem,
   type WatchfaceSpriteResizeHandle,
   type WatchfaceSpriteTransform
 } from "./watchfaceSpriteTransform";
+import {
+  alignWatchfaceItems,
+  distributeWatchfaceItems,
+  editorGroupForLayer,
+  expandWatchfaceGroupSelection,
+  normalizeWatchfaceEditorGroups,
+  syncLegacyWatchfaceGroups,
+  unionWatchfaceBounds,
+  watchfaceSelectionUnits,
+  type WatchfaceAlignment,
+  type WatchfaceDistribution
+} from "./watchfaceEditorLayout";
+import {
+  createWatchfaceShadowEffect,
+  localWatchfaceEffectBinding,
+  normalizeWatchfaceShadowEffect,
+  resolveWatchfaceLayerEffects
+} from "./watchfaceEditorEffects";
+import {
+  paintWatchfaceMeasurements,
+  resizeWatchfaceCanvasBackings
+} from "./watchfaceInteractiveRenderer";
+import { WatchfacePointerController } from "./watchfacePointerController";
 
 interface WatchfaceEditorProps {
   api: CorosLinkApi;
@@ -250,6 +303,7 @@ interface WatchfaceEditorProps {
   initialDesign?: CorosWatchfaceDesignState;
   initialProjectId?: string;
   initialProjectName?: string;
+  showDevelopmentTools?: boolean;
   onBack: () => void;
   onPublish: (archive: CorosWatchfaceArchive, name: string) => void;
   onArchiveCreated?: (archive: CorosWatchfaceArchive) => void;
@@ -276,12 +330,23 @@ interface WatchfaceDragState {
   baseY: number;
   snapId: string;
   baseBounds: WatchfaceEditorBounds;
+  /** The complete unlocked selection translated by this gesture. */
+  selectionIds?: string[];
   spriteTransform?: {
     initial: WatchfaceSpriteTransform;
     scale: number;
     handle?: WatchfaceSpriteResizeHandle;
     startPointer?: { x: number; y: number };
+    groupItems?: WatchfaceGroupTransformItem[];
   };
+}
+
+interface WatchfaceMarqueeState {
+  start: { x: number; y: number };
+  current: { x: number; y: number };
+  additive: boolean;
+  openingSelection: string[];
+  snapshot: ImageData | null;
 }
 
 interface WatchfaceContextMenuState {
@@ -328,8 +393,17 @@ interface WatchfaceDragVisual {
   };
 }
 
+interface WatchfacePrecomposedDrag {
+  design: CorosWatchfaceDesignState;
+  selectionKey: string;
+  previewDirectory: string;
+  baseFrame: HTMLCanvasElement;
+  movingFrame: HTMLCanvasElement;
+  clipBounds: WatchfaceEditorBounds;
+}
+
 interface WatchfaceSpriteTransformDraft {
-  spriteId: string;
+  targetId: string;
   transform: WatchfaceSpriteTransform;
 }
 
@@ -424,20 +498,6 @@ function browserPlacementStorage(): Storage | undefined {
   }
 }
 
-function watchfaceSnapGuidesEqual(
-  left: WatchfaceSnapGuide[],
-  right: WatchfaceSnapGuide[]
-): boolean {
-  return left.length === right.length && left.every((guide, index) => {
-    const candidate = right[index];
-    return Boolean(candidate) &&
-      guide.axis === candidate.axis &&
-      guide.value === candidate.value &&
-      guide.kind === candidate.kind &&
-      guide.message === candidate.message;
-  });
-}
-
 function normalizeEditorDesign(
   design: CorosWatchfaceDesignState
 ): CorosWatchfaceDesignState {
@@ -448,9 +508,31 @@ function normalizeEditorDesign(
     artworkVisible:
       design.artworkVisible ?? legacyBackgroundOverride?.enabled !== false,
     configAssetOverrides: design.configAssetOverrides ?? {},
-    linkedLayerGroups: (design.linkedLayerGroups ?? [])
-      .map((group) => [...new Set(group.filter(Boolean))])
-      .filter((group) => group.length >= 2),
+    editorGroups: normalizeWatchfaceEditorGroups(
+      design.editorGroups,
+      design.linkedLayerGroups
+    ),
+    editorGuides: (design.editorGuides ?? []).filter(
+      (guide) => guide.axis === "x" || guide.axis === "y"
+    ),
+    effectStyles: design.effectStyles ?? [],
+    layerEffects: design.layerEffects ?? {},
+    designSprites: (design.designSprites ?? []).map((sprite) => ({
+      ...sprite,
+      opacity: normalizeWatchfaceOpacity(sprite.opacity),
+      flipX: sprite.flipX === true,
+      flipY: sprite.flipY === true,
+      skewX: normalizeWatchfaceSkew(sprite.skewX),
+      skewY: normalizeWatchfaceSkew(sprite.skewY),
+      aspectLocked: sprite.aspectLocked !== false,
+      crop: normalizeWatchfaceCrop(sprite.crop),
+      origin: normalizeWatchfaceTransformOrigin(sprite.origin)
+    })),
+    backgroundElements: (design.backgroundElements ?? []).map((element) => ({
+      ...element,
+      visible: element.visible !== false,
+      opacity: normalizeWatchfaceOpacity(element.opacity)
+    })),
     lockedLayerIds: [...new Set((design.lockedLayerIds ?? []).filter(Boolean))],
     // Global tinting has been replaced by explicit controls in each layer.
     tintLabels: false,
@@ -460,9 +542,9 @@ function normalizeEditorDesign(
     normalized.metricChanges?.temperature !== true ||
     normalized.metricStyles?.temperature
   ) {
-    return normalized;
+    return syncLegacyWatchfaceGroups(normalized);
   }
-  return {
+  return syncLegacyWatchfaceGroups({
     ...normalized,
     metricStyles: {
       ...normalized.metricStyles,
@@ -470,7 +552,7 @@ function normalizeEditorDesign(
         scale: 1
       }
     }
-  };
+  });
 }
 
 export function WatchfaceEditor({
@@ -482,6 +564,7 @@ export function WatchfaceEditor({
   initialDesign,
   initialProjectId,
   initialProjectName,
+  showDevelopmentTools = false,
   onBack,
   onPublish,
   onArchiveCreated,
@@ -492,6 +575,13 @@ export function WatchfaceEditor({
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const dragPreviewCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const previewStackRef = useRef<HTMLDivElement>(null);
+  const transformGroupRef = useRef<SVGGElement>(null);
+  const marqueeRef = useRef<WatchfaceMarqueeState | null>(null);
+  const dragOverlaySnapshotRef = useRef<ImageData | null>(null);
+  const snapGuidesRef = useRef<WatchfaceSnapGuide[]>([]);
+  const snapMeasurementsRef = useRef<WatchfaceSnapMeasurement[]>([]);
+  const snapStatusElementRef = useRef<HTMLSpanElement>(null);
   const mountedRef = useRef(true);
   const previewSessionRef = useRef(sessionId);
   previewSessionRef.current = sessionId;
@@ -503,9 +593,16 @@ export function WatchfaceEditor({
     running: boolean;
     pending: WatchfaceBackgroundRenderRequest | null;
   }>({ running: false, pending: null });
-  const dragAnimationFrameRef = useRef<number | null>(null);
-  const pendingDragRef = useRef<PendingWatchfaceDrag | null>(null);
+  const dragPaintCallbackRef = useRef<(pending: PendingWatchfaceDrag) => void>(() => {});
+  const pointerControllerRef = useRef<WatchfacePointerController<PendingWatchfaceDrag> | null>(null);
+  if (!pointerControllerRef.current) {
+    pointerControllerRef.current = new WatchfacePointerController((pending) =>
+      dragPaintCallbackRef.current(pending)
+    );
+  }
   const dragVisualRef = useRef<WatchfaceDragVisual | null>(null);
+  const precomposedDragRef = useRef<WatchfacePrecomposedDrag | null>(null);
+  const precomposeRevisionRef = useRef(0);
   const dragPreparationIdRef = useRef(0);
   const dragCommitIdRef = useRef(0);
   const placementMenuRef = useRef<HTMLDivElement>(null);
@@ -513,6 +610,8 @@ export function WatchfaceEditor({
   const assetCacheRef = useRef(new Map<string, CorosWatchfaceTemplateAsset>());
   const dragRef = useRef<WatchfaceDragState | null>(null);
   const [loadingSprite, setLoadingSprite] = useState(false);
+  const [devTemplateIdOverride, setDevTemplateIdOverride] = useState("");
+  const [devTemplateNameOverride, setDevTemplateNameOverride] = useState("");
   const [configAssetPreviews, setConfigAssetPreviews] = useState(
     () => new Map<string, CorosWatchfaceTemplateAsset>()
   );
@@ -558,17 +657,18 @@ export function WatchfaceEditor({
     useState<WatchfacePlacementPreferences>(() =>
       readWatchfacePlacementPreferences(browserPlacementStorage())
     );
-  const [snapGuides, setSnapGuides] = useState<WatchfaceSnapGuide[]>([]);
+  const [canvasBackingRevision, setCanvasBackingRevision] = useState(0);
   const [dragVisualActive, setDragVisualActive] = useState(false);
   const [spriteTransformDraft, setSpriteTransformDraft] =
     useState<WatchfaceSpriteTransformDraft | null>(null);
+  const [cropSpriteId, setCropSpriteId] = useState<string | null>(null);
+  const cropOpeningRef = useRef<CorosWatchfaceDesignSprite["crop"]>(undefined);
   const [contextMenu, setContextMenu] =
     useState<WatchfaceContextMenuState | null>(null);
 
   const isDirty = isWatchfaceEditorHistoryDirty(history, checkpoint, sessionId);
   const canUndo = canUndoWatchfaceEditorHistory(history);
   const canRedo = canRedoWatchfaceEditorHistory(history);
-  const snapStatus = formatWatchfaceSnapStatus(snapGuides);
 
   function applyHistory(next: typeof history) {
     historyRef.current = next;
@@ -625,8 +725,93 @@ export function WatchfaceEditor({
   }
 
   function clearSnapGuides() {
-    setSnapGuides((current) => (current.length > 0 ? [] : current));
+    snapGuidesRef.current = [];
+    snapMeasurementsRef.current = [];
+    const canvas = overlayCanvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (context && dragOverlaySnapshotRef.current) {
+      context.putImageData(dragOverlaySnapshotRef.current, 0, 0);
+    }
+    if (snapStatusElementRef.current) {
+      snapStatusElementRef.current.textContent = selectedElement
+        ? backgroundElementLabel(selectedElement)
+        : selectedLayer?.label ?? "No selection";
+      snapStatusElementRef.current.classList.remove("is-snap-status");
+    }
   }
+
+  function paintPlacementFeedback() {
+    const canvas = overlayCanvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context || !dragOverlaySnapshotRef.current) return;
+    context.putImageData(dragOverlaySnapshotRef.current, 0, 0);
+    const scaleX = canvas.width / previewWidth;
+    const scaleY = canvas.height / previewHeight;
+    context.save();
+    context.beginPath();
+    context.arc(
+      canvas.width / 2,
+      canvas.height / 2,
+      Math.min(canvas.width, canvas.height) / 2,
+      0,
+      Math.PI * 2
+    );
+    context.clip();
+    if (snapGuidesRef.current.length > 0) {
+      context.beginPath();
+      for (const guide of snapGuidesRef.current) {
+        if (guide.axis === "x") {
+          context.moveTo(guide.value * scaleX, 0);
+          context.lineTo(guide.value * scaleX, canvas.height);
+        } else {
+          context.moveTo(0, guide.value * scaleY);
+          context.lineTo(canvas.width, guide.value * scaleY);
+        }
+      }
+      context.strokeStyle = "rgba(81, 224, 181, 0.98)";
+      context.lineWidth = 1.5;
+      context.setLineDash([]);
+      context.stroke();
+    }
+    paintWatchfaceMeasurements(
+      context,
+      snapMeasurementsRef.current,
+      scaleX,
+      scaleY
+    );
+    context.restore();
+    const status = formatWatchfaceSnapStatus(snapGuidesRef.current);
+    if (snapStatusElementRef.current && status) {
+      snapStatusElementRef.current.textContent = status;
+      snapStatusElementRef.current.classList.add("is-snap-status");
+    }
+  }
+
+  useEffect(() => {
+    const stage = previewStackRef.current;
+    if (!stage || typeof ResizeObserver === "undefined") return;
+    let frame = 0;
+    const resize = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const preview = previewCanvasRef.current;
+        if (!preview) return;
+        const changed = resizeWatchfaceCanvasBackings([
+          previewCanvasRef.current,
+          dragPreviewCanvasRef.current,
+          overlayCanvasRef.current
+        ], window.devicePixelRatio || 1);
+        if (changed) setCanvasBackingRevision((revision) => revision + 1);
+      });
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(stage);
+    resize();
+    return () => {
+      observer.disconnect();
+      window.cancelAnimationFrame(frame);
+    };
+  }, []);
 
   useEffect(() => {
     writeWatchfacePlacementPreferences(
@@ -676,13 +861,11 @@ export function WatchfaceEditor({
   useEffect(() => {
     const handleSnapBypass = (event: KeyboardEvent) => {
       if (event.key === "Alt" && dragRef.current) {
-        if (pendingDragRef.current) {
-          pendingDragRef.current = {
-            ...pendingDragRef.current,
-            bypassSnap: true
-          };
-        }
-        setSnapGuides([]);
+        pointerControllerRef.current?.updatePending((pending) => ({
+          ...pending,
+          bypassSnap: true
+        }));
+        clearSnapGuides();
       }
     };
     window.addEventListener("keydown", handleSnapBypass);
@@ -693,11 +876,7 @@ export function WatchfaceEditor({
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      if (dragAnimationFrameRef.current !== null) {
-        window.cancelAnimationFrame(dragAnimationFrameRef.current);
-      }
-      dragAnimationFrameRef.current = null;
-      pendingDragRef.current = null;
+      pointerControllerRef.current?.cancel();
       dragPreparationIdRef.current += 1;
       dragVisualRef.current = null;
       backgroundRenderQueueRef.current.pending = null;
@@ -740,11 +919,7 @@ export function WatchfaceEditor({
     setPlacementMenuOpen(false);
     setContextMenu(null);
     clearSnapGuides();
-    if (dragAnimationFrameRef.current !== null) {
-      window.cancelAnimationFrame(dragAnimationFrameRef.current);
-      dragAnimationFrameRef.current = null;
-    }
-    pendingDragRef.current = null;
+    pointerControllerRef.current?.cancel();
     dragRef.current = null;
     dragPreparationIdRef.current += 1;
     dragVisualRef.current = null;
@@ -885,6 +1060,8 @@ export function WatchfaceEditor({
       design.tintIcons,
       design.previewComplication,
       design.metricStyles,
+      design.selectableMetricStyle,
+      design.controlBatteryEnabled,
       design.separateAutoTime,
       design.timeStyles,
       design.dateStyles,
@@ -902,6 +1079,7 @@ export function WatchfaceEditor({
           accentColor: dimHexColor(studioOptions.accentColor, AOD_DIM_FACTOR),
           previewComplication: undefined,
           metricStyles: {},
+          complicationStyle: undefined,
           timeStyles: {},
           dateStyles: {},
           layerColors: {},
@@ -916,6 +1094,8 @@ export function WatchfaceEditor({
       details,
       design.metricChanges,
       design.metricStyles,
+      design.selectableMetricStyle,
+      design.controlBatteryEnabled,
       design.separateAutoTime,
       design.timeStyles,
       design.dateStyles,
@@ -972,16 +1152,22 @@ export function WatchfaceEditor({
       resolutionDetails: CorosWatchfaceTemplateDetails
     ): WatchfaceStudioOptions => {
       const target = pickPreviewResolution(resolutionDetails);
-      if (!options.ampmStyle || !previewResolution || !target) {
+      if (!previewResolution || !target) {
         return options;
       }
       return {
         ...options,
-        ampmStyle: scaleAmPmStyleForResolution(
-          options.ampmStyle,
-          previewResolution,
-          target
-        )
+        batteryIconResolutionScale: target.width / previewResolution.width,
+        effectResolutionScale: target.width / previewResolution.width,
+        ...(options.ampmStyle
+          ? {
+              ampmStyle: scaleAmPmStyleForResolution(
+                options.ampmStyle,
+                previewResolution,
+                target
+              )
+            }
+          : {})
       };
     },
     [previewResolution]
@@ -1033,26 +1219,94 @@ export function WatchfaceEditor({
     () => new Map(configAssetReferences.map((reference) => [reference.id, reference])),
     [configAssetReferences]
   );
+  const backgroundElements = design.backgroundElements ?? [];
   const selectedLayer = layers.find((layer) => layer.id === selectedId) ?? null;
   const selectedSprite = selectedLayer?.kind === "customSprite" && selectedLayer.spriteId
     ? (design.designSprites ?? []).find((sprite) => sprite.id === selectedLayer.spriteId) ?? null
     : null;
-  const spriteTransform = selectedSprite
-    ? spriteTransformDraft?.spriteId === selectedSprite.id
-      ? spriteTransformDraft.transform
-      : {
+  const selectedFreeformTransformItems = selectedIds.length > 1
+    ? selectedIds.flatMap<WatchfaceGroupTransformItem>((id) => {
+        if (id.startsWith("bgel:")) {
+          const element = backgroundElements.find(
+            (candidate) => `bgel:${candidate.id}` === id
+          );
+          const bounds = selectionBoundsForId(id);
+          return element && bounds
+            ? [{
+                id,
+                x: element.x * (previewWidth / BACKGROUND_SPACE),
+                y: element.y * (previewHeight / BACKGROUND_SPACE),
+                width: Math.max(8, bounds.x1 - bounds.x0),
+                height: Math.max(8, bounds.y1 - bounds.y0),
+                rotation: element.rotation
+              }]
+            : [];
+        }
+        const layer = layers.find((candidate) => candidate.id === id);
+        const sprite = layer?.kind === "customSprite" && layer.spriteId
+          ? (design.designSprites ?? []).find((candidate) => candidate.id === layer.spriteId)
+          : null;
+        return sprite
+          ? [{
+              id,
+              x: sprite.x,
+              y: sprite.y,
+              width: sprite.width * sprite.scale,
+              height: sprite.height * sprite.scale,
+              rotation: sprite.rotation
+            }]
+          : [];
+      })
+    : [];
+  const selectedFreeformBounds = selectedIds.length > 1
+    ? unionWatchfaceBounds(
+        selectedIds
+          .map(selectionBoundsForId)
+          .filter((bounds): bounds is WatchfaceEditorBounds => Boolean(bounds))
+      )
+    : null;
+  const multiFreeformCanTransform = Boolean(
+    previewMode === "current" &&
+    selectedIds.length > 1 &&
+    selectedFreeformTransformItems.length === selectedIds.length &&
+    selectedFreeformBounds &&
+    selectedIds.every((id) => !isMovementLockedForId(id))
+  );
+  const multiFreeformBounds = multiFreeformCanTransform
+    ? selectedFreeformBounds
+    : null;
+  const transformTargetId = multiFreeformCanTransform
+    ? `selection:${selectedIds.slice().sort().join("|")}`
+    : selectedSprite?.id ?? null;
+  const baseSpriteTransform = multiFreeformBounds
+    ? {
+        x: (multiFreeformBounds.x0 + multiFreeformBounds.x1) / 2,
+        y: (multiFreeformBounds.y0 + multiFreeformBounds.y1) / 2,
+        width: multiFreeformBounds.x1 - multiFreeformBounds.x0,
+        height: multiFreeformBounds.y1 - multiFreeformBounds.y0,
+        rotation: 0
+      }
+    : selectedSprite
+      ? {
           x: selectedSprite.x,
           y: selectedSprite.y,
           width: selectedSprite.width * selectedSprite.scale,
           height: selectedSprite.height * selectedSprite.scale,
           rotation: selectedSprite.rotation
         }
-    : null;
+      : null;
+  const spriteTransform = transformTargetId &&
+      spriteTransformDraft?.targetId === transformTargetId
+    ? spriteTransformDraft.transform
+    : baseSpriteTransform;
   const selectedSpriteCanTransform = Boolean(
-    selectedLayer &&
-    selectedSprite &&
-    previewMode === "current" &&
-    !isMovementLockedForId(selectedLayer.id)
+    multiFreeformCanTransform || (
+      selectedLayer &&
+      selectedSprite &&
+      selectedIds.length === 1 &&
+      previewMode === "current" &&
+      !isMovementLockedForId(selectedLayer.id)
+    )
   );
 
   useEffect(() => {
@@ -1212,8 +1466,15 @@ export function WatchfaceEditor({
     previewWidth,
     watchPreviewResolution
   ]);
-  const backgroundElements = design.backgroundElements ?? [];
-  const activeBackgroundElements = previewMode === "current" ? backgroundElements : [];
+  const activeBackgroundElements = previewMode === "current"
+    ? backgroundElements.filter((element) => element.visible !== false)
+    : [];
+  const visibleEditorGroups = previewMode === "current"
+    ? design.editorGroups ?? []
+    : [];
+  const groupedEditorLayerIds = new Set(
+    visibleEditorGroups.flatMap((group) => group.layerIds)
+  );
   const previewBackgroundDataUrl = previewMode === "aod" && supportsAod
     ? aodBackgroundDataUrl
     : backgroundDataUrl;
@@ -1225,7 +1486,7 @@ export function WatchfaceEditor({
   const backgroundContext = selectedId === "background" || selectedElement !== null;
 
   function linkedIdsFor(id: string): string[] {
-    return design.linkedLayerGroups?.find((group) => group.includes(id)) ?? [id];
+    return editorGroupForLayer(design.editorGroups, id)?.layerIds ?? [id];
   }
 
   function isPositionLocked(id: string): boolean {
@@ -1252,22 +1513,45 @@ export function WatchfaceEditor({
     );
   }
 
+  function movableIdsForGesture(primaryId: string): string[] {
+    const source = selectedIds.includes(primaryId)
+      ? selectedIds
+      : linkedIdsFor(primaryId);
+    return expandWatchfaceGroupSelection(design.editorGroups, source).filter(
+      (id) => isMovableSelectionId(id) && !isMovementLockedForId(id)
+    );
+  }
+
+  function dragMovementIds(drag: WatchfaceDragState): string[] {
+    if (isSpriteTransformDrag(drag)) {
+      return drag.selectionIds?.length ? drag.selectionIds : [drag.snapId];
+    }
+    const primaryId = drag.kind === "selectorIcon" ? "complication" : drag.snapId;
+    return drag.selectionIds?.length ? drag.selectionIds : linkedIdsFor(primaryId);
+  }
+
   function selectEditorItem(id: string, additive = false) {
     setContextMenu(null);
+    const members = linkedIdsFor(id);
     if (!additive) {
-      const group = linkedIdsFor(id);
       setSelectedId(id);
-      setSelectedIds(group);
+      setSelectedIds(members);
       return;
     }
     setSelectedIds((current) => {
-      if (current.includes(id)) {
-        const next = current.filter((candidate) => candidate !== id);
-        if (selectedId === id) setSelectedId(next[next.length - 1] ?? "");
+      const selected = new Set(current);
+      const remove = members.every((member) => selected.has(member));
+      for (const member of members) {
+        if (remove) selected.delete(member);
+        else selected.add(member);
+      }
+      const next = [...selected];
+      if (remove) {
+        if (members.includes(selectedId)) setSelectedId(next.at(-1) ?? "");
         return next;
       }
       setSelectedId(id);
-      return [...current, id];
+      return next;
     });
   }
 
@@ -1284,52 +1568,62 @@ export function WatchfaceEditor({
   }
 
   function linkSelectedLayers() {
-    const movable = [...new Set(selectedIds.filter(isMovableSelectionId))];
+    const movable = [...new Set(selectedIds.filter(
+      (id) => isMovableSelectionId(id) && !isMovementLockedForId(id)
+    ))];
     if (movable.length < 2) return;
     setDesign((current) => {
-      const groups = current.linkedLayerGroups ?? [];
+      const groups = normalizeWatchfaceEditorGroups(
+        current.editorGroups,
+        current.linkedLayerGroups
+      );
       const touching = groups.filter((group) =>
-        group.some((id) => movable.includes(id))
+        group.layerIds.some((id) => movable.includes(id))
       );
       const merged = [
-        ...new Set([...movable, ...touching.flat()])
+        ...new Set([...movable, ...touching.flatMap((group) => group.layerIds)])
       ];
-      return {
+      return syncLegacyWatchfaceGroups({
         ...current,
-        linkedLayerGroups: [
+        editorGroups: [
           ...groups.filter((group) => !touching.includes(group)),
-          merged
+          {
+            id: touching[0]?.id ?? `group-${Date.now().toString(36)}`,
+            name: touching[0]?.name ?? `Group ${groups.length + 1}`,
+            layerIds: merged
+          }
         ]
-      };
+      });
     });
     const mergedSelection = [
       ...new Set([
         ...movable,
-        ...(design.linkedLayerGroups ?? [])
-          .filter((group) => group.some((id) => movable.includes(id)))
-          .flat()
+        ...(design.editorGroups ?? [])
+          .filter((group) => group.layerIds.some((id) => movable.includes(id)))
+          .flatMap((group) => group.layerIds)
       ])
     ];
     setSelectedIds(mergedSelection);
     setContextMenu(null);
-    onNotice(`${mergedSelection.length} components linked. They now move together.`);
+    onNotice(`${mergedSelection.length} components grouped. They now move together.`);
   }
 
   function unlinkSelectedLayers() {
-    const groups = design.linkedLayerGroups ?? [];
+    const groups = design.editorGroups ?? [];
     const removed = groups.filter((group) =>
-      group.some((id) => selectedIds.includes(id))
+      group.layerIds.some((id) => selectedIds.includes(id)) &&
+      group.layerIds.every((id) => !isPositionLocked(id))
     );
     if (removed.length === 0) return;
-    setDesign((current) => ({
+    setDesign((current) => syncLegacyWatchfaceGroups({
       ...current,
-      linkedLayerGroups: (current.linkedLayerGroups ?? []).filter(
-        (group) => !group.some((id) => selectedIds.includes(id))
+      editorGroups: (current.editorGroups ?? []).filter(
+        (group) => !group.layerIds.some((id) => selectedIds.includes(id))
       )
     }));
     setSelectedIds(selectedId ? [selectedId] : []);
     setContextMenu(null);
-    onNotice("Components unlinked. They can now move independently.");
+    onNotice("Group removed. Components can now move independently.");
   }
 
   function setLayerPositionLocked(id: string, locked: boolean) {
@@ -1373,11 +1667,106 @@ export function WatchfaceEditor({
     );
   }
 
+  function setEditorGroupLocked(groupId: string, locked: boolean) {
+    const group = design.editorGroups?.find((candidate) => candidate.id === groupId);
+    if (!group) return;
+    setDesign((current) => {
+      const ids = new Set(current.lockedLayerIds ?? []);
+      for (const id of group.layerIds) {
+        if (locked) ids.add(id);
+        else ids.delete(id);
+      }
+      return { ...current, lockedLayerIds: [...ids] };
+    });
+  }
+
+  function editorGroupVisible(groupId: string): boolean {
+    const group = design.editorGroups?.find((candidate) => candidate.id === groupId);
+    if (!group) return true;
+    return group.layerIds.some((id) => {
+      if (id.startsWith("bgel:")) {
+        return backgroundElements.find(
+          (element) => `bgel:${element.id}` === id
+        )?.visible !== false;
+      }
+      return layers.find((layer) => layer.id === id)?.visible ?? false;
+    });
+  }
+
+  function toggleEditorGroupVisibility(groupId: string) {
+    const group = design.editorGroups?.find((candidate) => candidate.id === groupId);
+    if (!group || group.layerIds.some(isPositionLocked)) return;
+    const visible = editorGroupVisible(groupId);
+    beginDesignTransaction();
+    for (const id of group.layerIds) {
+      if (id.startsWith("bgel:")) {
+        updateElement(id.slice("bgel:".length), { visible: !visible });
+        continue;
+      }
+      const layer = layers.find((candidate) => candidate.id === id);
+      if (layer && layer.visible === visible) toggleLayerVisibility(layer);
+    }
+    endDesignTransaction();
+  }
+
   const selectedMovableIds = selectedIds.filter(isMovableSelectionId);
-  const selectionHasLink = (design.linkedLayerGroups ?? []).some((group) =>
-    group.some((id) => selectedIds.includes(id))
+  const selectionHasLink = (design.editorGroups ?? []).some((group) =>
+    group.layerIds.some((id) => selectedIds.includes(id))
+  );
+  const selectionCanUnlink = (design.editorGroups ?? []).some((group) =>
+    group.layerIds.some((id) => selectedIds.includes(id)) &&
+    group.layerIds.every((id) => !isPositionLocked(id))
   );
   const selectionHasLockedPosition = selectedMovableIds.some(isPositionLocked);
+
+  function selectedLayoutItems() {
+    return watchfaceSelectionUnits(design.editorGroups, selectedMovableIds)
+      .filter((unit) => unit.layerIds.every((id) => !isMovementLockedForId(id)))
+      .flatMap((unit) => {
+        const bounds = unionWatchfaceBounds(
+          unit.layerIds
+            .map(selectionBoundsForId)
+            .filter((box): box is WatchfaceEditorBounds => Boolean(box))
+        );
+        return bounds ? [{ ...unit, bounds }] : [];
+      });
+  }
+
+  function applyLayoutMovements(
+    movements: Record<string, { dx: number; dy: number }>,
+    items = selectedLayoutItems()
+  ) {
+    setDesign((current) => items.reduce(
+      (next, item) => {
+        const movement = movements[item.id];
+        return movement
+          ? moveLinkedSelectionIds(next, item.layerIds, movement)
+          : next;
+      },
+      current
+    ));
+  }
+
+  function alignSelection(alignment: WatchfaceAlignment) {
+    const items = selectedLayoutItems();
+    if (items.length === 0) return;
+    applyLayoutMovements(
+      alignWatchfaceItems(
+        items,
+        alignment,
+        items.length === 1
+          ? { x0: 0, y0: 0, x1: previewWidth, y1: previewHeight }
+          : undefined
+      ),
+      items
+    );
+  }
+
+  function distributeSelection(direction: WatchfaceDistribution) {
+    const items = selectedLayoutItems();
+    if (items.length < 3) return;
+    applyLayoutMovements(distributeWatchfaceItems(items, direction), items);
+  }
 
   function hideDragVisual() {
     dragPreparationIdRef.current += 1;
@@ -1395,8 +1784,6 @@ export function WatchfaceEditor({
     const visual = dragVisualRef.current;
     const canvas = dragPreviewCanvasRef.current;
     if (!visual?.baseFrame || !visual.movingFrame || !canvas) return;
-    if (canvas.width !== PREVIEW_SIZE) canvas.width = PREVIEW_SIZE;
-    if (canvas.height !== PREVIEW_SIZE) canvas.height = PREVIEW_SIZE;
     const context = canvas.getContext("2d", { colorSpace: "display-p3" });
     if (!context) return;
     const scaleX = canvas.width / previewWidth;
@@ -1459,9 +1846,7 @@ export function WatchfaceEditor({
     const primaryId = visual.drag.kind === "selectorIcon"
       ? "complication"
       : visual.drag.snapId;
-    const movedIds = isSpriteTransformDrag(visual.drag)
-      ? [primaryId]
-      : design.linkedLayerGroups?.find((group) => group.includes(primaryId)) ?? [primaryId];
+    const movedIds = dragMovementIds(visual.drag);
     const linkedBounds = movedIds
       .map(selectionBoundsForId)
       .filter((box): box is WatchfaceEditorBounds => Boolean(box));
@@ -1498,9 +1883,7 @@ export function WatchfaceEditor({
     clipBounds: WatchfaceEditorBounds;
   } {
     const primaryId = drag.kind === "selectorIcon" ? "complication" : drag.snapId;
-    const movingIds = isSpriteTransformDrag(drag)
-      ? [primaryId]
-      : design.linkedLayerGroups?.find((group) => group.includes(primaryId)) ?? [primaryId];
+    const movingIds = dragMovementIds(drag);
     const movingIdSet = new Set(movingIds);
     const movingElementIds = new Set(
       movingIds
@@ -1644,8 +2027,8 @@ export function WatchfaceEditor({
       throw new Error("Watch face details are not ready.");
     }
     const frame = document.createElement("canvas");
-    frame.width = PREVIEW_SIZE;
-    frame.height = PREVIEW_SIZE;
+    frame.width = dragPreviewCanvasRef.current?.width ?? PREVIEW_SIZE;
+    frame.height = dragPreviewCanvasRef.current?.height ?? PREVIEW_SIZE;
     const allFrameDetails = deriveDesignDetails(details, frameDesign).previewDetails;
     const frameDetails = watchPreviewResolution
       ? detailsForPreviewResolution(
@@ -1689,12 +2072,20 @@ export function WatchfaceEditor({
     if (!details) return;
     const preparationId = ++dragPreparationIdRef.current;
     const isolated = isolateDragDesigns(drag);
+    const selectionKey = dragMovementIds(drag).slice().sort().join("|");
+    const cached = precomposedDragRef.current;
+    const cacheMatches = Boolean(
+      cached &&
+      cached.design === design &&
+      cached.selectionKey === selectionKey &&
+      cached.previewDirectory === (watchPreviewResolution?.directory ?? "")
+    );
     dragVisualRef.current = {
       drag,
-      baseFrame: null,
-      movingFrame: null,
+      baseFrame: cacheMatches ? cached!.baseFrame : null,
+      movingFrame: cacheMatches ? cached!.movingFrame : null,
       movement: { dx: 0, dy: 0 },
-      clipBounds: isolated.clipBounds,
+      clipBounds: cacheMatches ? cached!.clipBounds : isolated.clipBounds,
       preparationId,
       awaitingCommitId: null
     };
@@ -1703,36 +2094,107 @@ export function WatchfaceEditor({
       canvas.style.visibility = "hidden";
     }
     setDragVisualActive(true);
-    const activeSessionId = sessionId;
+    if (cacheMatches) drawDragVisual();
+  }
+
+  useEffect(() => {
+    if (!details || previewMode !== "current") {
+      precomposedDragRef.current = null;
+      return;
+    }
+    const selectionIds = selectedIds.filter(
+      (id) => isMovableSelectionId(id) && !isPositionLocked(id)
+    );
+    const bounds = selectionIds
+      .map(selectionBoundsForId)
+      .filter((box): box is WatchfaceEditorBounds => Boolean(box));
+    if (selectionIds.length === 0 || bounds.length === 0) {
+      precomposedDragRef.current = null;
+      return;
+    }
+    const baseBounds = bounds.slice(1).reduce((result, box) => ({
+      x0: Math.min(result.x0, box.x0),
+      y0: Math.min(result.y0, box.y0),
+      x1: Math.max(result.x1, box.x1),
+      y1: Math.max(result.y1, box.y1)
+    }), { ...bounds[0]! });
+    const primaryId = selectionIds.at(-1)!;
+    const synthetic: WatchfaceDragState = {
+      kind: "layout",
+      targetId: primaryId,
+      startX: 0,
+      startY: 0,
+      baseX: 0,
+      baseY: 0,
+      snapId: primaryId,
+      baseBounds,
+      selectionIds
+    };
+    const isolated = isolateDragDesigns(synthetic);
+    const revision = ++precomposeRevisionRef.current;
+    const selectionKey = selectionIds.slice().sort().join("|");
+    const previewDirectory = watchPreviewResolution?.directory ?? "";
     void Promise.all([
       renderDragFrame(isolated.base),
       renderDragFrame(isolated.moving)
     ]).then(([baseFrame, movingFrame]) => {
-      const visual = dragVisualRef.current;
       if (
         !mountedRef.current ||
-        previewSessionRef.current !== activeSessionId ||
-        dragRef.current !== drag ||
-        !visual ||
-        visual.preparationId !== preparationId
+        revision !== precomposeRevisionRef.current ||
+        previewSessionRef.current !== sessionId
+      ) return;
+      const cached: WatchfacePrecomposedDrag = {
+        design,
+        selectionKey,
+        previewDirectory,
+        baseFrame,
+        movingFrame,
+        clipBounds: isolated.clipBounds
+      };
+      precomposedDragRef.current = cached;
+      const active = dragVisualRef.current;
+      if (
+        active &&
+        active.baseFrame === null &&
+        dragMovementIds(active.drag).slice().sort().join("|") === selectionKey
       ) {
-        return;
+        active.baseFrame = baseFrame;
+        active.movingFrame = movingFrame;
+        active.clipBounds = isolated.clipBounds;
+        drawDragVisual();
       }
-      visual.baseFrame = baseFrame;
-      visual.movingFrame = movingFrame;
-      drawDragVisual();
     }).catch(() => {
-      // The accurate preview stays visible if the isolated drag layer fails.
+      if (revision === precomposeRevisionRef.current) {
+        precomposedDragRef.current = null;
+      }
     });
-  }
+    return () => {
+      precomposeRevisionRef.current += 1;
+    };
+  }, [
+    design,
+    selectedIds,
+    details,
+    previewMode,
+    previewWidth,
+    previewHeight,
+    watchPreviewResolution?.directory,
+    canvasBackingRevision,
+    sessionId
+  ]);
 
   function previewSpriteTransform(
     drag: WatchfaceDragState,
     point: { x: number; y: number },
-    preserveAspectRatio: boolean
+    shiftKey: boolean,
+    fromCenter: boolean
   ) {
     if (!isSpriteTransformDrag(drag)) return;
     const { initial, handle, startPointer } = drag.spriteTransform;
+    const sprite = (design.designSprites ?? []).find(
+      (candidate) => candidate.id === drag.targetId
+    );
+    const isGroupTransform = Boolean(drag.spriteTransform.groupItems?.length);
     let next: WatchfaceSpriteTransform;
     let rotationDelta = 0;
     if (drag.kind === "spriteResize" && handle) {
@@ -1741,15 +2203,25 @@ export function WatchfaceEditor({
         handle,
         point.x - drag.startX,
         point.y - drag.startY,
-        preserveAspectRatio
+        (isGroupTransform || sprite?.aspectLocked !== false) !== shiftKey,
+        fromCenter
       );
     } else {
       const rotation = rotateWatchfaceSprite(
         initial,
         startPointer ?? { x: drag.startX, y: drag.startY },
-        point
+        point,
+        isGroupTransform
+          ? { x: 0.5, y: 0.5 }
+          : normalizeWatchfaceTransformOrigin(sprite?.origin),
+        shiftKey ? 15 : 0
       );
-      next = { ...initial, rotation: rotation.rotation };
+      next = {
+        ...initial,
+        ...(rotation.x !== undefined ? { x: rotation.x } : {}),
+        ...(rotation.y !== undefined ? { y: rotation.y } : {}),
+        rotation: rotation.rotation
+      };
       rotationDelta = rotation.rotationDelta;
     }
     const transform = {
@@ -1767,51 +2239,101 @@ export function WatchfaceEditor({
       visual.spriteTransform = transform;
       if (visual.baseFrame && visual.movingFrame) drawDragVisual();
     }
-    setSpriteTransformDraft({
-      spriteId: drag.targetId,
-      transform
-    });
+    paintSpriteTransformOverlay(transform);
+  }
+
+  function paintSpriteTransformOverlay(transform: WatchfaceSpriteTransform) {
+    const group = transformGroupRef.current;
+    if (!group) return;
+    group.setAttribute(
+      "transform",
+      `translate(${transform.x} ${transform.y}) rotate(${transform.rotation})`
+    );
+    const box = group.querySelector<SVGRectElement>(".wf-sprite-transform-box");
+    box?.setAttribute("x", String(-transform.width / 2));
+    box?.setAttribute("y", String(-transform.height / 2));
+    box?.setAttribute("width", String(transform.width));
+    box?.setAttribute("height", String(transform.height));
+    const stem = group.querySelector<SVGLineElement>(".wf-sprite-transform-stem");
+    stem?.setAttribute("y1", String(-transform.height / 2));
+    stem?.setAttribute("y2", String(-transform.height / 2 - 20));
+    const rotate = group.querySelector<SVGCircleElement>("[data-sprite-transform-control='rotate']");
+    rotate?.setAttribute("cy", String(-transform.height / 2 - 24));
+    const positions: Record<WatchfaceSpriteResizeHandle, [number, number]> = {
+      nw: [-transform.width / 2, -transform.height / 2],
+      n: [0, -transform.height / 2],
+      ne: [transform.width / 2, -transform.height / 2],
+      e: [transform.width / 2, 0],
+      se: [transform.width / 2, transform.height / 2],
+      s: [0, transform.height / 2],
+      sw: [-transform.width / 2, transform.height / 2],
+      w: [-transform.width / 2, 0]
+    };
+    for (const [handle, [x, y]] of Object.entries(positions)) {
+      const node = group.querySelector<SVGCircleElement>(
+        `[data-sprite-transform-control='${handle}']`
+      );
+      node?.setAttribute("cx", String(x));
+      node?.setAttribute("cy", String(y));
+    }
+    const origin = normalizeWatchfaceTransformOrigin(
+      dragRef.current?.spriteTransform?.groupItems?.length
+        ? undefined
+        : (design.designSprites ?? []).find(
+            (sprite) => sprite.id === selectedSprite?.id
+          )?.origin
+    );
+    const marker = group.querySelector<SVGCircleElement>(".wf-transform-origin-marker");
+    marker?.setAttribute("cx", String((origin.x - 0.5) * transform.width));
+    marker?.setAttribute("cy", String((origin.y - 0.5) * transform.height));
   }
 
   function startSpriteTransform(
     event: React.PointerEvent<SVGSVGElement>,
     control: "rotate" | WatchfaceSpriteResizeHandle
   ) {
-    if (previewMode === "aod" || event.button !== 0 || !selectedLayer?.spriteId) {
+    if (
+      previewMode === "aod" ||
+      event.button !== 0 ||
+      !selectedSpriteCanTransform ||
+      !spriteTransform ||
+      !transformTargetId
+    ) {
       return;
     }
-    const sprite = (design.designSprites ?? []).find(
-      (candidate) => candidate.id === selectedLayer.spriteId
-    );
+    const groupItems = multiFreeformCanTransform
+      ? selectedFreeformTransformItems
+      : undefined;
+    const sprite = !groupItems && selectedLayer?.spriteId
+      ? (design.designSprites ?? []).find(
+          (candidate) => candidate.id === selectedLayer.spriteId
+        )
+      : null;
     const point = toResolutionPoint(event);
-    if (!sprite || !point || isMovementLockedForId(selectedLayer.id)) return;
+    if (!point || (!sprite && !groupItems)) return;
     event.preventDefault();
     event.stopPropagation();
-    const initial = {
-      x: sprite.x,
-      y: sprite.y,
-      width: sprite.width * sprite.scale,
-      height: sprite.height * sprite.scale,
-      rotation: sprite.rotation
-    };
+    const initial = { ...spriteTransform };
     const kind = control === "rotate" ? "spriteRotate" : "spriteResize";
     const drag: WatchfaceDragState = {
       kind,
-      targetId: sprite.id,
+      targetId: transformTargetId,
       startX: point.x,
       startY: point.y,
-      baseX: sprite.x,
-      baseY: sprite.y,
-      snapId: selectedLayer.id,
-      baseBounds: selectedLayer.bounds ?? {
-        x0: sprite.x - initial.width / 2,
-        y0: sprite.y - initial.height / 2,
-        x1: sprite.x + initial.width / 2,
-        y1: sprite.y + initial.height / 2
+      baseX: initial.x,
+      baseY: initial.y,
+      snapId: groupItems ? selectedIds.at(-1)! : selectedLayer!.id,
+      baseBounds: multiFreeformBounds ?? selectedLayer?.bounds ?? {
+        x0: initial.x - initial.width / 2,
+        y0: initial.y - initial.height / 2,
+        x1: initial.x + initial.width / 2,
+        y1: initial.y + initial.height / 2
       },
+      ...(groupItems ? { selectionIds: [...selectedIds] } : {}),
       spriteTransform: {
         initial,
-        scale: sprite.scale,
+        scale: sprite?.scale ?? 1,
+        ...(groupItems ? { groupItems } : {}),
         ...(control === "rotate"
           ? { startPointer: point }
           : { handle: control })
@@ -1819,7 +2341,7 @@ export function WatchfaceEditor({
     };
     beginDesignTransaction();
     dragRef.current = drag;
-    setSpriteTransformDraft({ spriteId: sprite.id, transform: initial });
+    setSpriteTransformDraft({ targetId: transformTargetId, transform: initial });
     prepareDragVisual(drag);
     event.currentTarget.setPointerCapture(event.pointerId);
   }
@@ -1829,8 +2351,9 @@ export function WatchfaceEditor({
   ) {
     const target = event.target as SVGElement;
     const control = target.getAttribute("data-sprite-transform-control");
-    if (control === "rotate" || control === "nw" || control === "ne" || control === "se" || control === "sw") {
-      startSpriteTransform(event, control);
+    if (control === "rotate") startSpriteTransform(event, control);
+    else if (["nw", "n", "ne", "e", "se", "s", "sw", "w"].includes(control ?? "")) {
+      startSpriteTransform(event, control as WatchfaceSpriteResizeHandle);
     }
   }
 
@@ -1852,6 +2375,91 @@ export function WatchfaceEditor({
     if (dragVisualRef.current?.drag === drag) {
       dragVisualRef.current.awaitingCommitId = commitId;
     }
+    const groupItems = drag.spriteTransform.groupItems;
+    if (groupItems?.length) {
+      const nextItems = drag.kind === "spriteRotate"
+        ? rotateWatchfaceTransformGroup(
+            groupItems,
+            { x: initial.x, y: initial.y },
+            transform.rotationDelta
+          )
+        : resizeWatchfaceTransformGroup(groupItems, initial, transform);
+      const nextById = new Map(nextItems.map((item) => [item.id, item]));
+      const initialById = new Map(groupItems.map((item) => [item.id, item]));
+      const spriteIdsByLayer = new Map(
+        layers.flatMap((layer) => layer.spriteId ? [[layer.id, layer.spriteId] as const] : [])
+      );
+      const backgroundScaleX = BACKGROUND_SPACE / previewWidth;
+      const backgroundScaleY = BACKGROUND_SPACE / previewHeight;
+      setDesign((current) => ({
+        ...current,
+        designSprites: (current.designSprites ?? []).map((sprite) => {
+          const editorId = [...spriteIdsByLayer.entries()].find(
+            ([, spriteId]) => spriteId === sprite.id
+          )?.[0];
+          const next = editorId ? nextById.get(editorId) : null;
+          return next
+            ? {
+                ...sprite,
+                x: Math.max(0, Math.min(previewWidth, next.x)),
+                y: Math.max(0, Math.min(previewHeight, next.y)),
+                width: next.width / sprite.scale,
+                height: next.height / sprite.scale,
+                rotation: normalizeWatchfaceRotation(next.rotation)
+              }
+            : sprite;
+        }),
+        backgroundElements: (current.backgroundElements ?? []).map((element) => {
+          const editorId = `bgel:${element.id}`;
+          const opening = initialById.get(editorId);
+          const next = nextById.get(editorId);
+          if (!opening || !next) return element;
+          const widthScale = next.width / Math.max(opening.width, 0.001);
+          const heightScale = next.height / Math.max(opening.height, 0.001);
+          const uniformScale = Math.sqrt(Math.abs(widthScale * heightScale));
+          const common = {
+            ...element,
+            x: Math.max(0, Math.min(BACKGROUND_SPACE, next.x * backgroundScaleX)),
+            y: Math.max(0, Math.min(BACKGROUND_SPACE, next.y * backgroundScaleY)),
+            rotation: normalizeWatchfaceRotation(next.rotation)
+          };
+          if (element.kind === "rect") {
+            return {
+              ...common,
+              width: Math.max(8, element.width * widthScale),
+              height: Math.max(8, element.height * heightScale),
+              cornerRadius: Math.max(0, element.cornerRadius * uniformScale),
+              ...(element.strokeWidth !== undefined
+                ? { strokeWidth: element.strokeWidth * uniformScale }
+                : {})
+            };
+          }
+          if (element.kind === "ellipse") {
+            return {
+              ...common,
+              width: Math.max(8, element.width * widthScale),
+              height: Math.max(8, element.height * heightScale),
+              ...(element.strokeWidth !== undefined
+                ? { strokeWidth: element.strokeWidth * uniformScale }
+                : {})
+            };
+          }
+          if (element.kind === "line") {
+            return {
+              ...common,
+              dx: element.dx * widthScale,
+              dy: element.dy * heightScale,
+              strokeWidth: Math.max(1, element.strokeWidth * uniformScale)
+            };
+          }
+          return {
+            ...common,
+            fontSize: Math.max(8, element.fontSize * uniformScale)
+          };
+        })
+      }));
+      return true;
+    }
     updateSprite(drag.targetId, {
       x: transform.x,
       y: transform.y,
@@ -1863,14 +2471,14 @@ export function WatchfaceEditor({
   }
 
   function updateElement(id: string, patch: BackgroundElementPatch) {
+    if (isPositionLocked(`bgel:${id}`)) return;
     const { x, y, ...otherPatch } = patch;
-    const canMove = !isPositionLocked(`bgel:${id}`);
     const boundedPatch = {
       ...otherPatch,
-      ...(canMove && x !== undefined
+      ...(x !== undefined
         ? { x: Math.max(0, Math.min(BACKGROUND_SPACE, Math.round(x))) }
         : {}),
-      ...(canMove && y !== undefined
+      ...(y !== undefined
         ? { y: Math.max(0, Math.min(BACKGROUND_SPACE, Math.round(y))) }
         : {})
     };
@@ -1900,12 +2508,16 @@ export function WatchfaceEditor({
 
   function removeElement(id: string) {
     const editorId = `bgel:${id}`;
-    setDesign((prev) => ({
+    if (isPositionLocked(editorId)) return;
+    setDesign((prev) => syncLegacyWatchfaceGroups({
       ...prev,
       backgroundElements: (prev.backgroundElements ?? []).filter((e) => e.id !== id),
-      linkedLayerGroups: (prev.linkedLayerGroups ?? [])
-        .map((group) => group.filter((candidate) => candidate !== editorId))
-        .filter((group) => group.length >= 2),
+      editorGroups: (prev.editorGroups ?? [])
+        .map((group) => ({
+          ...group,
+          layerIds: group.layerIds.filter((candidate) => candidate !== editorId)
+        }))
+        .filter((group) => group.layerIds.length >= 2),
       lockedLayerIds: (prev.lockedLayerIds ?? []).filter(
         (candidate) => candidate !== editorId
       )
@@ -2075,15 +2687,14 @@ export function WatchfaceEditor({
     previewWidth,
     loadAssets,
     queuePreviewRender,
-    sessionId
+    sessionId,
+    canvasBackingRevision
   ]);
 
   // Draw placement aids and selection outlines on the interaction overlay.
   useEffect(() => {
     const canvas = overlayCanvasRef.current;
     if (!canvas) return;
-    if (canvas.width !== PREVIEW_SIZE) canvas.width = PREVIEW_SIZE;
-    if (canvas.height !== PREVIEW_SIZE) canvas.height = PREVIEW_SIZE;
     const context = canvas.getContext("2d");
     if (!context) return;
     const scaleX = canvas.width / previewWidth;
@@ -2094,9 +2705,7 @@ export function WatchfaceEditor({
     const activeDragId = activeDrag?.kind === "selectorIcon"
       ? "complication"
       : activeDrag?.snapId;
-    const activeDragIds = activeDragId
-      ? design.linkedLayerGroups?.find((group) => group.includes(activeDragId)) ?? [activeDragId]
-      : [];
+    const activeDragIds = activeDrag ? dragMovementIds(activeDrag) : [];
     context.clearRect(0, 0, canvas.width, canvas.height);
 
     context.save();
@@ -2156,24 +2765,22 @@ export function WatchfaceEditor({
       context.strokeStyle = "rgba(81, 224, 181, 0.68)";
       context.setLineDash([7, 5]);
       context.stroke();
-    }
 
-    if (previewMode === "current" && snapGuides.length > 0) {
       context.beginPath();
-      for (const guide of snapGuides) {
+      for (const guide of design.editorGuides ?? []) {
         if (guide.axis === "x") {
-          context.moveTo(guide.value * scaleX, 0);
-          context.lineTo(guide.value * scaleX, canvas.height);
+          context.moveTo(guide.position * scaleX, 0);
+          context.lineTo(guide.position * scaleX, canvas.height);
         } else {
-          context.moveTo(0, guide.value * scaleY);
-          context.lineTo(canvas.width, guide.value * scaleY);
+          context.moveTo(0, guide.position * scaleY);
+          context.lineTo(canvas.width, guide.position * scaleY);
         }
       }
-      context.strokeStyle = "rgba(81, 224, 181, 0.98)";
-      context.lineWidth = 1.5;
+      context.strokeStyle = "rgba(96, 176, 255, 0.88)";
       context.setLineDash([]);
       context.stroke();
     }
+
     context.restore();
 
     // Keep the stage quiet: only the selected or hovered object gets an outline.
@@ -2182,6 +2789,7 @@ export function WatchfaceEditor({
       const active = selectedIds.includes(`bgel:${element.id}`);
       const hovered = hoveredId === `bgel:${element.id}`;
       if (!active && !hovered) continue;
+      if (selectedSpriteCanTransform && active) continue;
       if (activeDragIds.includes(`bgel:${element.id}`)) continue;
       context.strokeStyle = active
         ? "rgba(81, 224, 181, 0.95)"
@@ -2200,7 +2808,7 @@ export function WatchfaceEditor({
       if (!layer.bounds || layer.kind === "background" || !layer.visible) {
         continue;
       }
-      if (selectedSpriteCanTransform && layer.id === selectedLayer?.id) {
+      if (selectedSpriteCanTransform && selectedIds.includes(layer.id)) {
         continue;
       }
       const active = selectedIds.includes(layer.id);
@@ -2221,6 +2829,7 @@ export function WatchfaceEditor({
     }
     if (
       selectorIconTarget &&
+      !isMovementLockedForId("complication") &&
       selectedIds.includes("complication") &&
       activeDrag?.kind !== "selectorIcon"
     ) {
@@ -2235,6 +2844,13 @@ export function WatchfaceEditor({
       );
     }
     context.setLineDash([]);
+    dragOverlaySnapshotRef.current = context.getImageData(
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+    if (activeDrag) paintPlacementFeedback();
   }, [
     layers,
     selectedId,
@@ -2245,13 +2861,14 @@ export function WatchfaceEditor({
     activeBackgroundElements,
     selectorIconTarget,
     placementPreferences,
-    snapGuides,
     watchCoordinateScale,
     dragVisualActive,
     previewMode,
     design.linkedLayerGroups,
+    design.editorGuides,
     selectedLayer?.id,
-    selectedSpriteCanTransform
+    selectedSpriteCanTransform,
+    canvasBackingRevision
   ]);
 
   const toResolutionPoint = useCallback(
@@ -2269,9 +2886,73 @@ export function WatchfaceEditor({
     [previewWidth, previewHeight]
   );
 
+  function startProjectGuide(
+    axis: CorosWatchfaceEditorGuide["axis"],
+    event: React.PointerEvent<HTMLElement>,
+    existingId?: string
+  ) {
+    if (previewMode !== "current" || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const id = existingId ?? `guide-${Date.now().toString(36)}`;
+    const guideLayer = previewStackRef.current?.querySelector<HTMLElement>(
+      ".wf-project-guide-layer"
+    );
+    const original = existingId
+      ? guideLayer?.querySelector<HTMLElement>(`[data-guide-id='${existingId}']`)
+      : null;
+    if (original) original.style.visibility = "hidden";
+    const preview = document.createElement("div");
+    preview.className = `wf-project-guide is-${axis}`;
+    guideLayer?.appendChild(preview);
+    let latestPosition = 0;
+    const update = (pointer: { clientX: number; clientY: number }) => {
+      const point = toResolutionPoint(pointer);
+      if (!point) return;
+      latestPosition = axis === "x" ? point.x : point.y;
+      if (axis === "x") preview.style.left = `${(latestPosition / previewWidth) * 100}%`;
+      else preview.style.top = `${(latestPosition / previewHeight) * 100}%`;
+    };
+    update(event);
+    const move = (pointer: PointerEvent) => update(pointer);
+    const end = (pointer: PointerEvent) => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", end);
+      document.removeEventListener("pointercancel", end);
+      const rect = overlayCanvasRef.current?.getBoundingClientRect();
+      const outside = !rect || pointer.clientX < rect.left || pointer.clientX > rect.right ||
+        pointer.clientY < rect.top || pointer.clientY > rect.bottom;
+      preview.remove();
+      if (original) original.style.visibility = "";
+      if (outside && !existingId) return;
+      setDesign((current) => ({
+        ...current,
+        editorGuides: outside
+          ? (current.editorGuides ?? []).filter((guide) => guide.id !== id)
+          : [
+              ...(current.editorGuides ?? []).filter((guide) => guide.id !== id),
+              { id, axis, position: latestPosition }
+            ]
+      }));
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", end);
+    document.addEventListener("pointercancel", end);
+  }
+
+  function removeProjectGuide(id: string) {
+    setDesign((current) => ({
+      ...current,
+      editorGuides: (current.editorGuides ?? []).filter(
+        (guide) => guide.id !== id
+      )
+    }));
+  }
+
   function editorItemAtPoint(point: { x: number; y: number }): string | null {
     if (
       selectorIconTarget &&
+      !isPositionLocked("complication") &&
       point.x >= selectorIconTarget.x0 &&
       point.x <= selectorIconTarget.x1 &&
       point.y >= selectorIconTarget.y0 &&
@@ -2279,15 +2960,118 @@ export function WatchfaceEditor({
     ) {
       return "complication";
     }
-    const liveHit = editorLayerAtPoint(layers, point.x, point.y);
+    const liveHit = editorLayerAtPoint(
+      layers.filter((layer) => !isMovementLockedForId(layer.id)),
+      point.x,
+      point.y
+    );
     const backgroundHit = backgroundElementAtPoint(
-      backgroundElements,
+      backgroundElements.filter(
+        (element) => !isMovementLockedForId(`bgel:${element.id}`)
+      ),
       point.x * (BACKGROUND_SPACE / previewWidth),
       point.y * (BACKGROUND_SPACE / previewHeight)
     );
     return backgroundContext && backgroundHit
       ? `bgel:${backgroundHit.id}`
       : liveHit?.id ?? (backgroundHit ? `bgel:${backgroundHit.id}` : null);
+  }
+
+  function startMarqueeSelection(
+    event: React.PointerEvent<HTMLCanvasElement>,
+    point: { x: number; y: number },
+    additive: boolean
+  ) {
+    const canvas = overlayCanvasRef.current;
+    const context = canvas?.getContext("2d");
+    marqueeRef.current = {
+      start: point,
+      current: point,
+      additive,
+      openingSelection: [...selectedIds],
+      snapshot: canvas && context
+        ? context.getImageData(0, 0, canvas.width, canvas.height)
+        : null
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function drawMarqueeSelection(point: { x: number; y: number }) {
+    const marquee = marqueeRef.current;
+    const canvas = overlayCanvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (!marquee || !canvas || !context) return;
+    marquee.current = point;
+    if (marquee.snapshot) context.putImageData(marquee.snapshot, 0, 0);
+    const scaleX = canvas.width / previewWidth;
+    const scaleY = canvas.height / previewHeight;
+    const x0 = Math.min(marquee.start.x, point.x) * scaleX;
+    const y0 = Math.min(marquee.start.y, point.y) * scaleY;
+    const x1 = Math.max(marquee.start.x, point.x) * scaleX;
+    const y1 = Math.max(marquee.start.y, point.y) * scaleY;
+    context.save();
+    context.fillStyle = "rgba(81, 224, 181, 0.12)";
+    context.strokeStyle = "rgba(81, 224, 181, 0.98)";
+    context.lineWidth = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    context.setLineDash([5, 4]);
+    context.fillRect(x0, y0, x1 - x0, y1 - y0);
+    context.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    context.restore();
+  }
+
+  function finishMarqueeSelection() {
+    const marquee = marqueeRef.current;
+    marqueeRef.current = null;
+    if (!marquee) return;
+    const box = {
+      x0: Math.min(marquee.start.x, marquee.current.x),
+      y0: Math.min(marquee.start.y, marquee.current.y),
+      x1: Math.max(marquee.start.x, marquee.current.x),
+      y1: Math.max(marquee.start.y, marquee.current.y)
+    };
+    const intersects = (candidate: WatchfaceEditorBounds) =>
+      candidate.x1 >= box.x0 && candidate.x0 <= box.x1 &&
+      candidate.y1 >= box.y0 && candidate.y0 <= box.y1;
+    const hits = [
+      ...layers
+        .filter((layer) =>
+          layer.kind !== "background" && layer.visible && layer.present &&
+          layer.bounds && !isMovementLockedForId(layer.id) && intersects(layer.bounds)
+        )
+        .map((layer) => layer.id),
+      ...backgroundElements
+        .filter((element) => {
+          if (
+            element.visible === false ||
+            isMovementLockedForId(`bgel:${element.id}`)
+          ) return false;
+          return intersects(scaleWatchfaceBounds(
+            backgroundElementSnapBounds(element),
+            previewWidth / BACKGROUND_SPACE,
+            previewHeight / BACKGROUND_SPACE
+          ));
+        })
+        .map((element) => `bgel:${element.id}`)
+    ];
+    const hitUnits = watchfaceSelectionUnits(design.editorGroups, hits);
+    let next: string[];
+    if (marquee.additive) {
+      const selected = new Set(marquee.openingSelection);
+      for (const unit of hitUnits) {
+        const remove = unit.layerIds.every((id) => selected.has(id));
+        for (const id of unit.layerIds) {
+          if (remove) selected.delete(id);
+          else selected.add(id);
+        }
+      }
+      next = [...selected];
+    } else {
+      next = hitUnits.flatMap((unit) => unit.layerIds);
+    }
+    if (next.length === 0 && !marquee.additive) next = ["background"];
+    setSelectedIds(next);
+    setSelectedId(next.at(-1) ?? "");
+    setHoveredId(null);
   }
 
   function handleCanvasContextMenu(event: React.MouseEvent<HTMLCanvasElement>) {
@@ -2299,8 +3083,9 @@ export function WatchfaceEditor({
   }
 
   function placementSnapTargets(movingId: string): WatchfaceSnapTarget[] {
+    const activeDrag = dragRef.current;
     const movingIds = new Set(
-      design.linkedLayerGroups?.find((group) => group.includes(movingId)) ?? [movingId]
+      activeDrag ? dragMovementIds(activeDrag) : linkedIdsFor(movingId)
     );
     const backgroundScaleX = previewWidth / BACKGROUND_SPACE;
     const backgroundScaleY = previewHeight / BACKGROUND_SPACE;
@@ -2320,7 +3105,7 @@ export function WatchfaceEditor({
       }));
 
     for (const element of backgroundElements) {
-      if (movingIds.has(`bgel:${element.id}`)) continue;
+      if (element.visible === false || movingIds.has(`bgel:${element.id}`)) continue;
       targets.push({
         id: `bgel:${element.id}`,
         label: backgroundElementLabel(element),
@@ -2354,10 +3139,13 @@ export function WatchfaceEditor({
     }
     const renderedWidth =
       overlayCanvasRef.current?.getBoundingClientRect().width ?? PREVIEW_SIZE;
+    const threshold = watchfaceDesignThreshold(
+      WATCHFACE_SNAP_SCREEN_THRESHOLD,
+      previewWidth,
+      renderedWidth
+    );
     const primaryId = drag.kind === "selectorIcon" ? "complication" : drag.snapId;
-    const linkedIds = design.linkedLayerGroups?.find((group) =>
-      group.includes(primaryId)
-    ) ?? [primaryId];
+    const linkedIds = dragMovementIds(drag);
     const linkedBounds = linkedIds
       .map(selectionBoundsForId)
       .filter((box): box is WatchfaceEditorBounds => Boolean(box));
@@ -2378,11 +3166,10 @@ export function WatchfaceEditor({
       ),
       faceWidth: previewWidth,
       faceHeight: previewHeight,
-      threshold: watchfaceDesignThreshold(
-        WATCHFACE_SNAP_SCREEN_THRESHOLD,
-        previewWidth,
-        renderedWidth
-      ),
+      threshold,
+      releaseThreshold: threshold * 1.5,
+      retainedGuides: snapGuidesRef.current,
+      guides: design.editorGuides ?? [],
       safeAreaInsetPercent: placementPreferences.safeAreaInsetPercent,
       targets: placementSnapTargets(drag.snapId),
       ...(placementPreferences.gridVisible
@@ -2392,11 +3179,14 @@ export function WatchfaceEditor({
           }
         : {})
     });
-    setSnapGuides((current) =>
-      watchfaceSnapGuidesEqual(current, result.guides)
-        ? current
-        : result.guides
-    );
+    snapGuidesRef.current = result.guides;
+    snapMeasurementsRef.current = result.measurements.map((measurement) => ({
+      ...measurement,
+      label: `${Math.round(
+        Math.abs(measurement.end - measurement.start) * watchCoordinateScale
+      )} px`
+    }));
+    paintPlacementFeedback();
     return { dx: rawDx + result.dx, dy: rawDy + result.dy };
   }
 
@@ -2408,7 +3198,8 @@ export function WatchfaceEditor({
     }
     if (event.shiftKey || event.metaKey || event.ctrlKey) {
       const hitId = editorItemAtPoint(point);
-      if (hitId) selectEditorItem(hitId, true);
+      if (hitId && hitId !== "background") selectEditorItem(hitId, true);
+      else startMarqueeSelection(event, point, true);
       return;
     }
     const toBgX = BACKGROUND_SPACE / previewWidth;
@@ -2416,15 +3207,14 @@ export function WatchfaceEditor({
 
     if (
       selectorIconTarget &&
+      !isMovementLockedForId("complication") &&
       point.x >= selectorIconTarget.x0 &&
       point.x <= selectorIconTarget.x1 &&
       point.y >= selectorIconTarget.y0 &&
       point.y <= selectorIconTarget.y1
     ) {
-      selectEditorItem("complication");
-      if (isMovementLockedForId("complication")) {
-        return;
-      }
+      const movementIds = movableIdsForGesture("complication");
+      if (!selectedIds.includes("complication")) selectEditorItem("complication");
       beginDesignTransaction();
       const iconOffset = design.controlIconOffsets?.[
         selectorIconTarget.complicationId
@@ -2437,7 +3227,8 @@ export function WatchfaceEditor({
         baseX: iconOffset.dx,
         baseY: iconOffset.dy,
         snapId: `selectorIcon:${selectorIconTarget.complicationId}`,
-        baseBounds: selectorIconTarget
+        baseBounds: selectorIconTarget,
+        selectionIds: movementIds
       };
       prepareDragVisual(dragRef.current);
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -2446,19 +3237,24 @@ export function WatchfaceEditor({
 
     // When working on the background, clicks target the freeform shapes that
     // sit above it; otherwise the live firmware elements take priority.
-    const liveHit = editorLayerAtPoint(layers, point.x, point.y);
+    const liveHit = editorLayerAtPoint(
+      layers.filter((layer) => !isMovementLockedForId(layer.id)),
+      point.x,
+      point.y
+    );
     const liveIsElement = liveHit !== null && liveHit.kind !== "background";
     if (backgroundContext || !liveIsElement) {
       const bgHit = backgroundElementAtPoint(
-        backgroundElements,
+        backgroundElements.filter(
+          (element) => !isMovementLockedForId(`bgel:${element.id}`)
+        ),
         point.x * toBgX,
         point.y * toBgY
       );
       if (bgHit) {
-        selectEditorItem(`bgel:${bgHit.id}`);
-        if (isMovementLockedForId(`bgel:${bgHit.id}`)) {
-          return;
-        }
+        const hitId = `bgel:${bgHit.id}`;
+        const movementIds = movableIdsForGesture(hitId);
+        if (!selectedIds.includes(hitId)) selectEditorItem(hitId);
         beginDesignTransaction();
         dragRef.current = {
           kind: "bgElement",
@@ -2472,7 +3268,8 @@ export function WatchfaceEditor({
             backgroundElementSnapBounds(bgHit),
             previewWidth / BACKGROUND_SPACE,
             previewHeight / BACKGROUND_SPACE
-          )
+          ),
+          selectionIds: movementIds
         };
         prepareDragVisual(dragRef.current);
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -2480,13 +3277,12 @@ export function WatchfaceEditor({
       }
     }
 
-    if (!liveHit) {
+    if (!liveHit || liveHit.kind === "background") {
+      startMarqueeSelection(event, point, false);
       return;
     }
-    selectEditorItem(liveHit.id);
-    if (isMovementLockedForId(liveHit.id)) {
-      return;
-    }
+    const movementIds = movableIdsForGesture(liveHit.id);
+    if (!selectedIds.includes(liveHit.id)) selectEditorItem(liveHit.id);
     if (liveHit.weatherIndicator && design.weatherIndicator) {
       beginDesignTransaction();
       dragRef.current = {
@@ -2497,7 +3293,8 @@ export function WatchfaceEditor({
         baseX: design.weatherIndicator.x,
         baseY: design.weatherIndicator.y,
         snapId: liveHit.id,
-        baseBounds: liveHit.bounds!
+        baseBounds: liveHit.bounds!,
+        selectionIds: movementIds
       };
       prepareDragVisual(dragRef.current);
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -2513,7 +3310,8 @@ export function WatchfaceEditor({
         baseX: design.ampmIndicator.x,
         baseY: design.ampmIndicator.y,
         snapId: liveHit.id,
-        baseBounds: liveHit.bounds!
+        baseBounds: liveHit.bounds!,
+        selectionIds: movementIds
       };
       prepareDragVisual(dragRef.current);
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -2530,7 +3328,8 @@ export function WatchfaceEditor({
         baseX: separator.x,
         baseY: separator.y,
         snapId: liveHit.id,
-        baseBounds: liveHit.bounds!
+        baseBounds: liveHit.bounds!,
+        selectionIds: movementIds
       };
       prepareDragVisual(dragRef.current);
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -2548,7 +3347,8 @@ export function WatchfaceEditor({
           baseX: sprite.x,
           baseY: sprite.y,
           snapId: liveHit.id,
-          baseBounds: liveHit.bounds!
+          baseBounds: liveHit.bounds!,
+          selectionIds: movementIds
         };
         prepareDragVisual(dragRef.current);
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -2566,7 +3366,8 @@ export function WatchfaceEditor({
         baseX: offset.dx,
         baseY: offset.dy,
         snapId: liveHit.id,
-        baseBounds: liveHit.bounds!
+        baseBounds: liveHit.bounds!,
+        selectionIds: movementIds
       };
       prepareDragVisual(dragRef.current);
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -2736,10 +3537,8 @@ export function WatchfaceEditor({
   ): { dx: number; dy: number } {
     const clamped = clampSingleDragMovement(drag, movement);
     const primaryId = drag.kind === "selectorIcon" ? "complication" : drag.snapId;
-    const linked = design.linkedLayerGroups?.find((group) =>
-      group.includes(primaryId)
-    );
-    if (!linked || linked.length < 2) return clamped;
+    const linked = dragMovementIds(drag);
+    if (linked.length < 2) return clamped;
     return clampMovementForSelectionIds(linked, clamped);
   }
 
@@ -3001,39 +3800,25 @@ export function WatchfaceEditor({
   ) {
     commitSingleDragMovement(drag, movement);
     const primaryId = drag.kind === "selectorIcon" ? "complication" : drag.snapId;
-    const linked = design.linkedLayerGroups?.find((group) =>
-      group.includes(primaryId)
-    );
-    const companions = linked?.filter((id) => id !== primaryId) ?? [];
+    const companions = dragMovementIds(drag).filter((id) => id !== primaryId);
     if (companions.length > 0) {
       setDesign((current) => moveLinkedSelectionIds(current, companions, movement));
     }
   }
 
   function flushPendingDragFrame() {
-    if (dragAnimationFrameRef.current !== null) {
-      window.cancelAnimationFrame(dragAnimationFrameRef.current);
-      dragAnimationFrameRef.current = null;
-    }
-    const pending = pendingDragRef.current;
-    pendingDragRef.current = null;
-    if (pending && dragRef.current === pending.drag) {
-      previewDragMovement(pending.drag, pending.point, pending.bypassSnap);
-    }
+    pointerControllerRef.current?.flush();
   }
 
   function scheduleDragMovement(pending: PendingWatchfaceDrag) {
-    pendingDragRef.current = pending;
-    if (dragAnimationFrameRef.current !== null) return;
-    dragAnimationFrameRef.current = window.requestAnimationFrame(() => {
-      dragAnimationFrameRef.current = null;
-      const latest = pendingDragRef.current;
-      pendingDragRef.current = null;
-      if (latest && dragRef.current === latest.drag) {
-        previewDragMovement(latest.drag, latest.point, latest.bypassSnap);
-      }
-    });
+    pointerControllerRef.current?.schedule(pending);
   }
+
+  dragPaintCallbackRef.current = (pending) => {
+    if (dragRef.current === pending.drag) {
+      previewDragMovement(pending.drag, pending.point, pending.bypassSnap);
+    }
+  };
 
   function handlePointerMove(event: React.PointerEvent<Element>) {
     if (previewMode === "aod") {
@@ -3044,6 +3829,10 @@ export function WatchfaceEditor({
     const pointer = coalesced?.[coalesced.length - 1] ?? event;
     const point = toResolutionPoint(pointer);
     if (!point) return;
+    if (marqueeRef.current) {
+      drawMarqueeSelection(point);
+      return;
+    }
     const drag = dragRef.current;
     if (!drag) {
       const liveHit = editorLayerAtPoint(layers, point.x, point.y);
@@ -3060,19 +3849,33 @@ export function WatchfaceEditor({
       return;
     }
     if (isSpriteTransformDrag(drag)) {
-      previewSpriteTransform(drag, point, event.shiftKey);
+      previewSpriteTransform(drag, point, event.shiftKey, event.altKey);
       return;
     }
     scheduleDragMovement({ drag, point, bypassSnap: event.altKey });
   }
 
   function handlePointerEnd(event: React.PointerEvent<Element>) {
+    if (marqueeRef.current) {
+      if (event.type === "pointerup") {
+        const point = toResolutionPoint(event);
+        if (point) drawMarqueeSelection(point);
+      }
+      const snapshot = marqueeRef.current.snapshot;
+      const context = overlayCanvasRef.current?.getContext("2d");
+      if (snapshot && context) context.putImageData(snapshot, 0, 0);
+      finishMarqueeSelection();
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      return;
+    }
     const drag = dragRef.current;
     if (drag) {
       if (isSpriteTransformDrag(drag)) {
         if (event.type === "pointerup") {
           const point = toResolutionPoint(event);
-          if (point) previewSpriteTransform(drag, point, event.shiftKey);
+          if (point) previewSpriteTransform(drag, point, event.shiftKey, event.altKey);
         }
         const committed = commitSpriteTransform(drag);
         if (!committed) hideDragVisual();
@@ -3088,11 +3891,11 @@ export function WatchfaceEditor({
       if (event.type === "pointerup") {
         const point = toResolutionPoint(event);
         if (point) {
-          pendingDragRef.current = {
+          pointerControllerRef.current?.schedule({
             drag,
             point,
             bypassSnap: event.altKey
-          };
+          });
         }
       }
       flushPendingDragFrame();
@@ -3170,6 +3973,23 @@ export function WatchfaceEditor({
       layerVisibility: {
         ...prev.layerVisibility,
         [layerId]: visible
+      }
+    }));
+  }
+
+  function setBatteryIconVisible(visible: boolean) {
+    setDesign((prev) => ({
+      ...prev,
+      layerVisibility: {
+        ...prev.layerVisibility,
+        batteryIcon: visible
+      },
+      configAssetOverrides: {
+        ...(prev.configAssetOverrides ?? {}),
+        "config:battery_icon": {
+          ...(prev.configAssetOverrides?.["config:battery_icon"] ?? {}),
+          enabled: visible
+        }
       }
     }));
   }
@@ -3292,23 +4112,41 @@ export function WatchfaceEditor({
     try {
       const folder = await api.chooseCorosWatchfaceRasterFontFolder();
       if (!folder) return;
-      const entries = await Promise.all(folder.sprites.map(async (sprite) => {
+      const decoded = await Promise.all(folder.sprites.map(async (sprite) => {
+        // The shared PNG-folder picker is recursive for custom fonts. Battery
+        // imports are different: only numbered PNGs directly inside the
+        // selected folder are states. Ignoring descendants prevents an
+        // extracted watch-face/template below that folder from overwriting
+        // 00.png–10.png with weekday or digit sprites.
+        const relativePath = sprite.relativePath.replace(/\\/g, "/");
+        if (relativePath.includes("/")) return null;
         const match = sprite.name.match(/^(\d{1,2})\.png$/i);
         if (!match) return null;
         const image = await loadStudioImage(sprite.dataUrl);
-        const centeredDataUrl = centerSpriteArtwork(image) ?? sprite.dataUrl;
-        return [String(Number(match[1])), {
-          dataUrl: centeredDataUrl,
-          width: image.naturalWidth,
-          height: image.naturalHeight
-        }] as const;
+        return { state: String(Number(match[1])), sprite, image };
       }));
-      const stateReplacements = Object.fromEntries(
-        entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+      const validSprites = decoded.filter(
+        (entry): entry is NonNullable<typeof entry> => entry !== null
       );
-      if (Object.keys(stateReplacements).length === 0) {
+      if (validSprites.length === 0) {
         throw new Error("Name battery sprites 00.png, 01.png, and so on.");
       }
+      const canvasWidth = Math.max(
+        ...validSprites.map(({ image }) => image.naturalWidth)
+      );
+      const canvasHeight = Math.max(
+        ...validSprites.map(({ image }) => image.naturalHeight)
+      );
+      const entries = validSprites.map(({ state, sprite, image }) => {
+        const centeredDataUrl =
+          centerSpriteArtwork(image, canvasWidth, canvasHeight) ?? sprite.dataUrl;
+        return [state, {
+          dataUrl: centeredDataUrl,
+          width: canvasWidth,
+          height: canvasHeight
+        }] as const;
+      });
+      const stateReplacements = Object.fromEntries(entries);
       setDesign((prev) => ({
         ...prev,
         configAssetOverrides: {
@@ -3318,9 +4156,15 @@ export function WatchfaceEditor({
             enabled: true,
             stateReplacements
           }
+        },
+        layerVisibility: {
+          ...prev.layerVisibility,
+          batteryIcon: true
         }
       }));
-      onNotice(`Imported ${Object.keys(stateReplacements).length} battery sprite states.`);
+      onNotice(
+        `Imported ${Object.keys(stateReplacements).length} battery sprite states on a shared ${canvasWidth}×${canvasHeight}px canvas.`
+      );
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "Could not load the battery sprite folder.");
     }
@@ -3397,7 +4241,7 @@ export function WatchfaceEditor({
 
   function setMetricStyle(
     metricId: WatchfaceMetricId,
-    patch: { color?: string; scale?: number; fontFamily?: string; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
+    patch: { color?: string; scale?: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
   ) {
     setDesign((prev) => {
       const current = prev.metricStyles?.[metricId] ?? { scale: 1 };
@@ -3419,9 +4263,31 @@ export function WatchfaceEditor({
     });
   }
 
+  function setSelectableMetricStyle(
+    patch: Partial<NonNullable<CorosWatchfaceDesignState["selectableMetricStyle"]>>
+  ) {
+    setDesign((prev) => ({
+      ...prev,
+      selectableMetricStyle: {
+        scale: prev.selectableMetricStyle?.scale ?? 1,
+        ...prev.selectableMetricStyle,
+        ...patch
+      }
+    }));
+  }
+
+  function clearSelectableMetricColor() {
+    setDesign((prev) => {
+      if (!prev.selectableMetricStyle) return prev;
+      const { color: _color, ...selectableMetricStyle } =
+        prev.selectableMetricStyle;
+      return { ...prev, selectableMetricStyle };
+    });
+  }
+
   function setTimeStyle(
     partId: WatchfaceTimePartId,
-    patch: { color?: string; scale?: number; fontFamily?: string; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
+    patch: { color?: string; scale?: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
   ) {
     setDesign((prev) => {
       const current = prev.timeStyles?.[partId] ?? { scale: 1 };
@@ -3480,7 +4346,14 @@ export function WatchfaceEditor({
 
   function setDateStyle(
     partId: WatchfaceDatePartId,
-    patch: { scale?: number; fontFamily?: string; color?: string; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
+    patch: {
+      scale?: number;
+      fontFamily?: string;
+      color?: string;
+      letterSpacing?: number;
+      rasterFont?: CorosWatchfaceDesignState["rasterFont"];
+      nativeSize?: boolean;
+    }
   ) {
     setDesign((prev) => {
       const current = prev.dateStyles?.[partId] ?? { scale: 1 };
@@ -3519,12 +4392,16 @@ export function WatchfaceEditor({
 
   function removeSprite(spriteId: string) {
     const editorId = `sprite:${spriteId}`;
-    setDesign((prev) => ({
+    if (isPositionLocked(editorId)) return;
+    setDesign((prev) => syncLegacyWatchfaceGroups({
       ...prev,
       designSprites: (prev.designSprites ?? []).filter((s) => s.id !== spriteId),
-      linkedLayerGroups: (prev.linkedLayerGroups ?? [])
-        .map((group) => group.filter((candidate) => candidate !== editorId))
-        .filter((group) => group.length >= 2),
+      editorGroups: (prev.editorGroups ?? [])
+        .map((group) => ({
+          ...group,
+          layerIds: group.layerIds.filter((candidate) => candidate !== editorId)
+        }))
+        .filter((group) => group.layerIds.length >= 2),
       lockedLayerIds: (prev.lockedLayerIds ?? []).filter(
         (candidate) => candidate !== editorId
       )
@@ -3535,19 +4412,10 @@ export function WatchfaceEditor({
 
   function updateSprite(
     spriteId: string,
-    patch: Partial<{
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      scale: number;
-      rotation: number;
-      visible: boolean;
-      tintColor: string | null;
-    }>
+    patch: Partial<CorosWatchfaceDesignSprite>
   ) {
+    if (isPositionLocked(`sprite:${spriteId}`)) return;
     const { x, y, ...otherPatch } = patch;
-    const canMove = !isPositionLocked(`sprite:${spriteId}`);
     const boundedPatch = {
       ...otherPatch,
       ...(patch.width !== undefined
@@ -3556,10 +4424,10 @@ export function WatchfaceEditor({
       ...(patch.height !== undefined
         ? { height: Math.max(1, Math.round(patch.height * 100) / 100) }
         : {}),
-      ...(canMove && x !== undefined
+      ...(x !== undefined
         ? { x: Math.max(0, Math.min(previewWidth, Math.round(x))) }
         : {}),
-      ...(canMove && y !== undefined
+      ...(y !== undefined
         ? {
             y: Math.max(
               0,
@@ -3576,6 +4444,45 @@ export function WatchfaceEditor({
     }));
   }
 
+  function enterSpriteCrop(sprite: CorosWatchfaceDesignSprite) {
+    if (isPositionLocked(`sprite:${sprite.id}`)) return;
+    if (cropSpriteId === sprite.id) return;
+    cropOpeningRef.current = normalizeWatchfaceCrop(sprite.crop);
+    beginDesignTransaction();
+    setCropSpriteId(sprite.id);
+  }
+
+  function applySpriteCrop() {
+    if (!cropSpriteId) return;
+    setCropSpriteId(null);
+    cropOpeningRef.current = undefined;
+    endDesignTransaction();
+  }
+
+  function cancelSpriteCrop() {
+    if (!cropSpriteId) return;
+    const opening = cropOpeningRef.current;
+    if (opening) updateSprite(cropSpriteId, { crop: opening });
+    setCropSpriteId(null);
+    cropOpeningRef.current = undefined;
+    endDesignTransaction();
+  }
+
+  function handleCanvasDoubleClick(event: React.MouseEvent<HTMLCanvasElement>) {
+    if (previewMode !== "current") return;
+    const point = toResolutionPoint(event);
+    const id = point ? editorItemAtPoint(point) : null;
+    const layer = layers.find((candidate) => candidate.id === id);
+    const sprite = layer?.spriteId
+      ? (design.designSprites ?? []).find((candidate) => candidate.id === layer.spriteId)
+      : undefined;
+    if (sprite) {
+      selectEditorItem(layer!.id);
+      enterSpriteCrop(sprite);
+      setPropertiesOpen(true);
+    }
+  }
+
   async function chooseSprite() {
     if ((design.designSprites ?? []).length >= MAX_DESIGN_SPRITES) {
       onError(`A design can contain up to ${MAX_DESIGN_SPRITES} imported images.`);
@@ -3589,7 +4496,7 @@ export function WatchfaceEditor({
       }
       const maxSize = previewWidth * 0.28;
       const fitScale = Math.min(1, maxSize / Math.max(selected.width, selected.height));
-      const sprite = {
+      const sprite: CorosWatchfaceDesignSprite = {
         id: window.crypto.randomUUID(),
         dataUrl: selected.dataUrl,
         sourceWidth: selected.width,
@@ -3600,6 +4507,14 @@ export function WatchfaceEditor({
         y: Math.round((previewResolution?.height ?? previewWidth) / 2),
         scale: 1,
         rotation: 0,
+        opacity: 1,
+        flipX: false,
+        flipY: false,
+        skewX: 0,
+        skewY: 0,
+        aspectLocked: true,
+        crop: { x: 0, y: 0, width: 1, height: 1 },
+        origin: { x: 0.5, y: 0.5 },
         visible: true,
         tintColor: null
       };
@@ -3727,13 +4642,25 @@ export function WatchfaceEditor({
     }
   }
 
-  async function createArchive() {
+  async function createArchive(action: "publish" | "export" = "publish") {
     if (!details || !backgroundDataUrl) {
       onError("The editor is still loading. Try again in a moment.");
       return;
     }
     setCreating(true);
     try {
+      const templateIdOverride = devTemplateIdOverride.trim();
+      const templateNameOverride = devTemplateNameOverride.trim();
+      if (
+        showDevelopmentTools &&
+        templateIdOverride &&
+        (!/^\d{1,20}$/.test(templateIdOverride) || /^0+$/.test(templateIdOverride))
+      ) {
+        throw new Error("Template ID overrides must contain 1–20 decimal digits.");
+      }
+      if (showDevelopmentTools && templateNameOverride.length > 64) {
+        throw new Error("Template name overrides must be 64 characters or fewer.");
+      }
       const [composition, exportPreview, exportBackground] = await Promise.all([
         composeWatchfaceReplacements(details, design, loadAssets),
         renderExportPreview(),
@@ -3750,14 +4677,28 @@ export function WatchfaceEditor({
         ...(design.archiveWatchFaceVersion !== undefined
           ? { watchFaceVersion: design.archiveWatchFaceVersion }
           : {}),
+        ...(showDevelopmentTools && templateIdOverride
+          ? { templateIdOverride }
+          : {}),
+        ...(showDevelopmentTools && templateNameOverride
+          ? { templateNameOverride }
+          : {}),
         ...(assetReplacements.length > 0 ? { assetReplacements } : {}),
         ...(configOverrides.length > 0 ? { configOverrides } : {}),
         ...(minWatchFaceVersion !== undefined ? { minWatchFaceVersion } : {})
       });
       onArchiveCreated?.(archive);
       const name = projectName.trim() || "Custom watch face";
-      onPublish(archive, name);
-      onNotice("Watch face prepared for COROS.");
+      if (action === "export") {
+        const result = await api.exportCorosWatchfaceArchive({
+          archiveId: archive.archiveId,
+          name
+        });
+        if (result.saved) onNotice(`Exported final watch-face ZIP for “${name}”.`);
+      } else {
+        onPublish(archive, name);
+        onNotice("Watch face prepared for COROS.");
+      }
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "Could not build the archive.");
     } finally {
@@ -3811,13 +4752,46 @@ export function WatchfaceEditor({
   }
 
   function deleteSelected() {
-    if (selectedElement) {
-      removeElement(selectedElement.id);
-      return;
-    }
-    if (selectedLayer?.kind === "customSprite" && selectedLayer.spriteId) {
-      removeSprite(selectedLayer.spriteId);
-    }
+    const ids = new Set(selectedIds.filter((id) => !isMovementLockedForId(id)));
+    const elementIds = new Set(
+      [...ids].filter((id) => id.startsWith("bgel:")).map((id) => id.slice(5))
+    );
+    const spriteIds = new Set(
+      layers
+        .filter((layer) => ids.has(layer.id) && layer.kind === "customSprite")
+        .map((layer) => layer.spriteId)
+        .filter((id): id is string => Boolean(id))
+    );
+    if (elementIds.size === 0 && spriteIds.size === 0) return;
+    const removedEditorIds = new Set([
+      ...[...elementIds].map((id) => `bgel:${id}`),
+      ...[...spriteIds].map((id) => `sprite:${id}`)
+    ]);
+    setDesign((current) => syncLegacyWatchfaceGroups({
+      ...current,
+      backgroundElements: (current.backgroundElements ?? []).filter(
+        (element) => !elementIds.has(element.id)
+      ),
+      designSprites: (current.designSprites ?? []).filter(
+        (sprite) => !spriteIds.has(sprite.id)
+      ),
+      editorGroups: (current.editorGroups ?? [])
+        .map((group) => ({
+          ...group,
+          layerIds: group.layerIds.filter((id) => !removedEditorIds.has(id))
+        }))
+        .filter((group) => group.layerIds.length >= 2),
+      lockedLayerIds: (current.lockedLayerIds ?? []).filter(
+        (id) => !removedEditorIds.has(id)
+      ),
+      layerEffects: Object.fromEntries(
+        Object.entries(current.layerEffects ?? {}).filter(
+          ([id]) => !removedEditorIds.has(id)
+        )
+      )
+    }));
+    setSelectedId("background");
+    setSelectedIds(["background"]);
   }
 
   function nudgeSingleSelected(dx: number, dy: number) {
@@ -3920,20 +4894,12 @@ export function WatchfaceEditor({
   }
 
   function nudgeSelected(dx: number, dy: number) {
-    if (isMovementLockedForId(selectedId)) return;
-    const linked = design.linkedLayerGroups?.find((group) =>
-      group.includes(selectedId)
-    );
-    const movement = linked
+    const linked = movableIdsForGesture(selectedId);
+    if (linked.length === 0) return;
+    const movement = linked.length > 1
       ? clampMovementForSelectionIds(linked, { dx, dy })
       : { dx, dy };
-    nudgeSingleSelected(movement.dx, movement.dy);
-    const companions = linked?.filter((id) => id !== selectedId) ?? [];
-    if (companions.length > 0) {
-      setDesign((current) =>
-        moveLinkedSelectionIds(current, companions, movement)
-      );
-    }
+    setDesign((current) => moveLinkedSelectionIds(current, linked, movement));
   }
 
   useEffect(() => {
@@ -3945,12 +4911,29 @@ export function WatchfaceEditor({
       const command = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
 
+      if (cropSpriteId && event.key === "Escape") {
+        event.preventDefault();
+        cancelSpriteCrop();
+        return;
+      }
+      if (cropSpriteId && event.key === "Enter" && !editable) {
+        event.preventDefault();
+        applySpriteCrop();
+        return;
+      }
+
       if (command && key === "s") {
         event.preventDefault();
         void saveProject();
         return;
       }
       if (editable) return;
+      if (command && key === "g") {
+        event.preventDefault();
+        if (event.shiftKey) unlinkSelectedLayers();
+        else linkSelectedLayers();
+        return;
+      }
       if (command && key === "z") {
         event.preventDefault();
         if (event.shiftKey) redo();
@@ -3963,7 +4946,11 @@ export function WatchfaceEditor({
         return;
       }
       if (event.key === "Delete" || event.key === "Backspace") {
-        if (selectedElement || selectedLayer?.kind === "customSprite") {
+        if (selectedIds.some((id) =>
+          id.startsWith("bgel:") || layers.some(
+            (layer) => layer.id === id && layer.kind === "customSprite"
+          )
+        )) {
           event.preventDefault();
           deleteSelected();
         }
@@ -3996,7 +4983,8 @@ export function WatchfaceEditor({
     sessionId,
     previewWidth,
     previewResolution,
-    layoutLimits
+    layoutLimits,
+    cropSpriteId
   ]);
 
   return (
@@ -4072,6 +5060,17 @@ export function WatchfaceEditor({
             {exporting ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
             Export editable ZIP
           </button>
+          {showDevelopmentTools ? (
+            <button
+              className="secondary-button wf-export-button"
+              type="button"
+              disabled={creating || exporting || !backgroundDataUrl}
+              onClick={() => void createArchive("export")}
+            >
+              {creating ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
+              Export final ZIP
+            </button>
+          ) : null}
           <button className="primary-button wf-send-button" type="button" disabled={creating || exporting || !backgroundDataUrl} onClick={() => void createArchive()}>
             {creating ? <Loader2 className="spin" size={15} /> : <Send size={15} />}
             Send to COROS
@@ -4116,7 +5115,77 @@ export function WatchfaceEditor({
           </div>
           {details ? (
             <ul className="wf-layer-list">
-              {groupLayersForDisplay(layers).map(({ label: group, layers: groupedLayers }) => (
+              {visibleEditorGroups.length > 0 ? (
+                <li className="wf-layer-group">Groups</li>
+              ) : null}
+              {visibleEditorGroups.map((group) => {
+                const locked = group.layerIds.some(isPositionLocked);
+                const visible = editorGroupVisible(group.id);
+                return (
+                  <li className="wf-editor-group-tree" key={group.id}>
+                    <button
+                      type="button"
+                      className={`watchface-layer-row${group.layerIds.every((id) => selectedIds.includes(id)) ? " is-selected" : ""}`}
+                      onClick={() => {
+                        setSelectedIds(group.layerIds);
+                        setSelectedId(group.layerIds.at(-1) ?? "");
+                      }}
+                    >
+                      <span className="wf-layer-icon"><Group size={14} /></span>
+                      <span className="watchface-layer-name">{group.name}</span>
+                      <span className="wf-layer-state">{group.layerIds.length}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="watchface-layer-lock"
+                      aria-label={locked ? `Unlock ${group.name}` : `Lock ${group.name}`}
+                      onClick={() => setEditorGroupLocked(group.id, !locked)}
+                    >
+                      {locked ? <Lock size={13} /> : <Unlock size={13} />}
+                    </button>
+                    <button
+                      type="button"
+                      className="watchface-layer-visibility"
+                      disabled={group.layerIds.some(isPositionLocked)}
+                      aria-label={visible ? `Hide ${group.name}` : `Show ${group.name}`}
+                      onClick={() => toggleEditorGroupVisibility(group.id)}
+                    >
+                      {visible ? <Eye size={14} /> : <EyeOff size={14} />}
+                    </button>
+                    <ul>
+                      {group.layerIds.map((id) => {
+                        const layer = layers.find((candidate) => candidate.id === id);
+                        const element = id.startsWith("bgel:")
+                          ? backgroundElements.find((candidate) => `bgel:${candidate.id}` === id)
+                          : undefined;
+                        return (
+                          <li key={id}>
+                            <button
+                              type="button"
+                              aria-selected={selectedIds.includes(id)}
+                              onClick={(event) => {
+                                selectEditorItem(id, event.shiftKey || event.metaKey || event.ctrlKey);
+                                setPropertiesOpen(true);
+                              }}
+                            >
+                              <span className={`watchface-layer-name${
+                                (layer && !layer.visible) || element?.visible === false
+                                  ? " is-hidden"
+                                  : ""
+                              }`}>
+                                {layer?.label ?? (element ? backgroundElementLabel(element) : id)}
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </li>
+                );
+              })}
+              {groupLayersForDisplay(
+                layers.filter((layer) => !groupedEditorLayerIds.has(layer.id))
+              ).map(({ label: group, layers: groupedLayers }) => (
                 <Fragment key={group}>
                   <li className="wf-layer-group">{group}</li>
                   {groupedLayers.map((layer) => (
@@ -4154,9 +5223,13 @@ export function WatchfaceEditor({
                           {layer.visible ? <Eye size={15} /> : <EyeOff size={15} />}
                         </button>
                       ) : null}
-                      {layer.kind === "background" && activeBackgroundElements.length > 0 ? (
+                      {layer.kind === "background" && backgroundElements.some(
+                        (element) => !groupedEditorLayerIds.has(`bgel:${element.id}`)
+                      ) ? (
                         <ul className="watchface-bg-sublayers">
-                          {activeBackgroundElements.map((element) => (
+                          {backgroundElements
+                            .filter((element) => !groupedEditorLayerIds.has(`bgel:${element.id}`))
+                            .map((element) => (
                             <li key={element.id}>
                               <button
                                 type="button"
@@ -4171,7 +5244,7 @@ export function WatchfaceEditor({
                                 onContextMenu={(event) => openLayerContextMenu(event, `bgel:${element.id}`)}
                               >
                                 <span className="wf-layer-icon"><Square size={14} /></span>
-                                <span className="watchface-layer-name">{backgroundElementLabel(element)}</span>
+                                <span className={`watchface-layer-name${element.visible === false ? " is-hidden" : ""}`}>{backgroundElementLabel(element)}</span>
                                 {(design.linkedLayerGroups ?? []).some((group) => group.includes(`bgel:${element.id}`)) ? (
                                   <span className="wf-layer-link-state" title="Linked component" aria-label="Linked component">
                                     <Link2 size={12} aria-hidden="true" />
@@ -4357,10 +5430,58 @@ export function WatchfaceEditor({
               </span>
             )}
           </div>
+          {previewMode === "current" && selectedMovableIds.some((id) => !isPositionLocked(id)) ? (
+            <div className="wf-contextual-align-bar" role="toolbar" aria-label="Align and distribute selection">
+              <button type="button" title="Align left" aria-label="Align left" onClick={() => alignSelection("left")}><AlignHorizontalJustifyStart size={15} /></button>
+              <button type="button" title="Align horizontal centers" aria-label="Align horizontal centers" onClick={() => alignSelection("center-x")}><AlignHorizontalJustifyCenter size={15} /></button>
+              <button type="button" title="Align right" aria-label="Align right" onClick={() => alignSelection("right")}><AlignHorizontalJustifyEnd size={15} /></button>
+              <span aria-hidden="true" />
+              <button type="button" title="Align top" aria-label="Align top" onClick={() => alignSelection("top")}><AlignVerticalJustifyStart size={15} /></button>
+              <button type="button" title="Align vertical centers" aria-label="Align vertical centers" onClick={() => alignSelection("center-y")}><AlignVerticalJustifyCenter size={15} /></button>
+              <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignSelection("bottom")}><AlignVerticalJustifyEnd size={15} /></button>
+              <span aria-hidden="true" />
+              <button type="button" title="Distribute horizontal spacing" aria-label="Distribute horizontal spacing" disabled={selectedLayoutItems().length < 3} onClick={() => distributeSelection("horizontal")}><AlignHorizontalSpaceBetween size={15} /></button>
+              <button type="button" title="Distribute vertical spacing" aria-label="Distribute vertical spacing" disabled={selectedLayoutItems().length < 3} onClick={() => distributeSelection("vertical")}><AlignVerticalSpaceBetween size={15} /></button>
+              <span aria-hidden="true" />
+              <button type="button" title="Group selection" aria-label="Group selection" disabled={selectedLayoutItems().length < 2} onClick={linkSelectedLayers}><Group size={15} /></button>
+              <button type="button" title="Ungroup selection" aria-label="Ungroup selection" disabled={!selectionCanUnlink} onClick={unlinkSelectedLayers}><Ungroup size={15} /></button>
+            </div>
+          ) : null}
           <div
+            ref={previewStackRef}
             className={`watchface-preview-stack watchface-editor-device${stageZoom === "fit" ? " is-fit" : ""}`}
             style={{ "--wf-stage-scale": stageZoom === "fit" ? 1 : stageZoom } as CSSProperties}
           >
+            {previewMode === "current" && placementPreferences.guidesVisible ? (
+              <>
+                <div
+                  className="wf-stage-ruler is-horizontal"
+                  aria-label="Drag to create a vertical guide"
+                  onPointerDown={(event) => startProjectGuide("x", event)}
+                />
+                <div
+                  className="wf-stage-ruler is-vertical"
+                  aria-label="Drag to create a horizontal guide"
+                  onPointerDown={(event) => startProjectGuide("y", event)}
+                />
+                <div className="wf-project-guide-layer" aria-label="Project guides">
+                  {(design.editorGuides ?? []).map((guide) => (
+                    <button
+                      key={guide.id}
+                      type="button"
+                      className={`wf-project-guide is-${guide.axis}`}
+                      data-guide-id={guide.id}
+                      style={guide.axis === "x"
+                        ? { left: `${(guide.position / previewWidth) * 100}%` }
+                        : { top: `${(guide.position / previewHeight) * 100}%` }}
+                      aria-label="Drag guide; double-click to delete"
+                      onPointerDown={(event) => startProjectGuide(guide.axis, event, guide.id)}
+                      onDoubleClick={() => removeProjectGuide(guide.id)}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : null}
             <canvas ref={previewCanvasRef} className="watchface-studio-preview" width={PREVIEW_SIZE} height={PREVIEW_SIZE} />
             <canvas
               ref={dragPreviewCanvasRef}
@@ -4391,9 +5512,10 @@ export function WatchfaceEditor({
               onPointerUp={handlePointerEnd}
               onPointerCancel={handlePointerEnd}
               onLostPointerCapture={handlePointerEnd}
+              onDoubleClick={handleCanvasDoubleClick}
               onContextMenu={handleCanvasContextMenu}
             />
-            {selectedSprite && spriteTransform && previewMode === "current" ? (
+            {spriteTransform && selectedSpriteCanTransform && previewMode === "current" ? (
               <svg
                 className={`wf-sprite-transform${selectedSpriteCanTransform ? "" : " is-locked"}`}
                 viewBox={`0 0 ${previewWidth} ${previewHeight}`}
@@ -4404,7 +5526,10 @@ export function WatchfaceEditor({
                 onPointerCancel={handlePointerEnd}
                 onLostPointerCapture={handlePointerEnd}
               >
-                <g transform={`translate(${spriteTransform.x} ${spriteTransform.y}) rotate(${spriteTransform.rotation})`}>
+                <g
+                  ref={transformGroupRef}
+                  transform={`translate(${spriteTransform.x} ${spriteTransform.y}) rotate(${spriteTransform.rotation}) skewX(${normalizeWatchfaceSkew(multiFreeformCanTransform ? undefined : selectedSprite?.skewX)}) skewY(${normalizeWatchfaceSkew(multiFreeformCanTransform ? undefined : selectedSprite?.skewY)})`}
+                >
                   <rect
                     className="wf-sprite-transform-box"
                     x={-spriteTransform.width / 2}
@@ -4428,9 +5553,13 @@ export function WatchfaceEditor({
                   />
                   {([
                     ["nw", -1, -1],
+                    ["n", 0, -1],
                     ["ne", 1, -1],
+                    ["e", 1, 0],
                     ["se", 1, 1],
-                    ["sw", -1, 1]
+                    ["s", 0, 1],
+                    ["sw", -1, 1],
+                    ["w", -1, 0]
                   ] as const).map(([handle, x, y]) => (
                     <circle
                       key={handle}
@@ -4441,6 +5570,12 @@ export function WatchfaceEditor({
                       r="4.5"
                     />
                   ))}
+                  <circle
+                    className="wf-transform-origin-marker"
+                    cx={(normalizeWatchfaceTransformOrigin(multiFreeformCanTransform ? undefined : selectedSprite?.origin).x - 0.5) * spriteTransform.width}
+                    cy={(normalizeWatchfaceTransformOrigin(multiFreeformCanTransform ? undefined : selectedSprite?.origin).y - 0.5) * spriteTransform.height}
+                    r="3.5"
+                  />
                 </g>
               </svg>
             ) : null}
@@ -4456,16 +5591,16 @@ export function WatchfaceEditor({
               <button
                 type="button"
                 role="menuitem"
-                disabled={selectedMovableIds.length < 2}
+                disabled={selectedLayoutItems().length < 2}
                 onClick={linkSelectedLayers}
               >
-                <Link2 size={15} aria-hidden="true" />
-                <span>Link components</span>
+                <Group size={15} aria-hidden="true" />
+                <span>Group components</span>
               </button>
               {selectionHasLink ? (
-                <button type="button" role="menuitem" onClick={unlinkSelectedLayers}>
-                  <Unlink2 size={15} aria-hidden="true" />
-                  <span>Unlink components</span>
+                <button type="button" role="menuitem" disabled={!selectionCanUnlink} onClick={unlinkSelectedLayers}>
+                  <Ungroup size={15} aria-hidden="true" />
+                  <span>Ungroup components</span>
                 </button>
               ) : null}
               <button
@@ -4487,8 +5622,8 @@ export function WatchfaceEditor({
             </div>
           ) : null}
           <div className="wf-stage-status" role="status">
-            <span className={snapStatus ? "is-snap-status" : undefined}>
-              {snapStatus ?? (selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? "No selection")}
+            <span ref={snapStatusElementRef}>
+              {selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? "No selection"}
             </span>
             <span>{watchCoordinateWidth} × {watchCoordinateHeight} preview</span>
             <span>
@@ -4541,6 +5676,48 @@ export function WatchfaceEditor({
               Leave blank to preserve the template version and automatically
               raise it only when selected features require a newer version.
             </p>
+            {showDevelopmentTools ? (
+              <>
+                <label className="field">
+                  Template ID override (experimental)
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={20}
+                    placeholder={starterArchive.sourceTemplateId}
+                    value={devTemplateIdOverride}
+                    onChange={(event) =>
+                      setDevTemplateIdOverride(
+                        event.target.value.replace(/\D/g, "").slice(0, 20)
+                      )
+                    }
+                  />
+                </label>
+                <p className="wf-archive-note">
+                  Dev export only. Leave blank to keep template ID{" "}
+                  <code>{starterArchive.sourceTemplateId}</code>. A different
+                  ID may be rejected or compiled using another template’s
+                  selector rules.
+                </p>
+                <label className="field">
+                  Template manifest name override (experimental)
+                  <input
+                    type="text"
+                    maxLength={64}
+                    placeholder="TOP PART"
+                    value={devTemplateNameOverride}
+                    onChange={(event) =>
+                      setDevTemplateNameOverride(event.target.value.slice(0, 64))
+                    }
+                  />
+                </label>
+                <p className="wf-archive-note">
+                  Dev export only. Rewrites <code>m_name</code> in{" "}
+                  <code>info.json</code>; it does not rename the Studio project.
+                </p>
+              </>
+            ) : null}
           </div>
           {selectedElement ? renderElementInspector(selectedElement) : selectedLayer ? renderInspector(selectedLayer) : previewMode === "aod" ? (
             <div className="watchface-inspector-group wf-aod-empty-inspector">
@@ -4706,7 +5883,213 @@ export function WatchfaceEditor({
     return <Layers size={14} />;
   }
 
+  function layerEffectKey(layerId: string): string {
+    return previewMode === "aod" ? `aod:${layerId}` : layerId;
+  }
+
+  function writeLayerEffects(
+    layerId: string,
+    effects: CorosWatchfaceShadowEffect[]
+  ) {
+    if (isPositionLocked(layerId)) return;
+    const key = layerEffectKey(layerId);
+    setDesign((current) => {
+      const binding = current.layerEffects?.[key];
+      if (binding?.kind === "style") {
+        return {
+          ...current,
+          effectStyles: (current.effectStyles ?? []).map((style) =>
+            style.id === binding.styleId
+              ? { ...style, effects: effects.map(normalizeWatchfaceShadowEffect) }
+              : style
+          )
+        };
+      }
+      return {
+        ...current,
+        layerEffects: {
+          ...(current.layerEffects ?? {}),
+          [key]: localWatchfaceEffectBinding(effects)
+        }
+      };
+    });
+  }
+
+  function bindLayerEffectStyle(layerId: string, styleId: string) {
+    const key = layerEffectKey(layerId);
+    setDesign((current) => {
+      const layerEffects = { ...(current.layerEffects ?? {}) };
+      if (styleId) layerEffects[key] = { kind: "style", styleId };
+      else layerEffects[key] = localWatchfaceEffectBinding(
+        resolveWatchfaceLayerEffects(
+          current,
+          layerId,
+          previewMode === "aod" ? "aod" : "current"
+        )
+      );
+      return { ...current, layerEffects };
+    });
+  }
+
+  function detachLayerEffectStyle(layerId: string) {
+    const effects = resolveWatchfaceLayerEffects(
+      design,
+      layerId,
+      previewMode === "aod" ? "aod" : "current"
+    );
+    const key = layerEffectKey(layerId);
+    setDesign((current) => ({
+      ...current,
+      layerEffects: {
+        ...(current.layerEffects ?? {}),
+        [key]: localWatchfaceEffectBinding(effects)
+      }
+    }));
+  }
+
+  function saveLayerEffectStyle(layerId: string) {
+    const effects = resolveWatchfaceLayerEffects(
+      design,
+      layerId,
+      previewMode === "aod" ? "aod" : "current"
+    );
+    if (effects.length === 0) return;
+    const id = `effect-style-${Date.now().toString(36)}`;
+    setDesign((current) => ({
+      ...current,
+      effectStyles: [
+        ...(current.effectStyles ?? []),
+        { id, name: `Shadow style ${(current.effectStyles?.length ?? 0) + 1}`, effects }
+      ],
+      layerEffects: {
+        ...(current.layerEffects ?? {}),
+        [layerEffectKey(layerId)]: { kind: "style", styleId: id }
+      }
+    }));
+  }
+
+  function renderEffectsInspector(layerId: string, warning?: string) {
+    const scope = previewMode === "aod" ? "aod" : "current";
+    const effects = resolveWatchfaceLayerEffects(design, layerId, scope);
+    const binding = design.layerEffects?.[layerEffectKey(layerId)];
+    const patchEffect = (id: string, patch: Partial<CorosWatchfaceShadowEffect>) =>
+      writeLayerEffects(layerId, effects.map((effect) =>
+        effect.id === id ? normalizeWatchfaceShadowEffect({ ...effect, ...patch }) : effect
+      ));
+    return (
+      <div className="watchface-inspector-group wf-effects-inspector">
+        <div className="wf-effects-heading">
+          <div>
+            <h3 className="wf-inspector-heading">Effects</h3>
+            <span>{scope === "aod" ? "Always-on only" : "Current display only"}</span>
+          </div>
+          <button
+            type="button"
+            className="wf-icon-button"
+            aria-label="Add outer shadow"
+            title="Add outer shadow"
+            onClick={() => writeLayerEffects(layerId, [
+              ...effects,
+              createWatchfaceShadowEffect()
+            ])}
+          >
+            <Plus size={15} />
+          </button>
+        </div>
+        <label className="field wf-effect-style-select">
+          Effect style
+          <select
+            value={binding?.kind === "style" ? binding.styleId : ""}
+            onChange={(event) => bindLayerEffectStyle(layerId, event.target.value)}
+          >
+            <option value="">Local effects</option>
+            {(design.effectStyles ?? []).map((style) => (
+              <option key={style.id} value={style.id}>{style.name}</option>
+            ))}
+          </select>
+        </label>
+        <div className="wf-effect-style-actions">
+          {binding?.kind === "style" ? (
+            <button type="button" onClick={() => detachLayerEffectStyle(layerId)}>Detach style</button>
+          ) : (
+            <button type="button" disabled={effects.length === 0} onClick={() => saveLayerEffectStyle(layerId)}>Save as style</button>
+          )}
+        </div>
+        {effects.map((effect, index) => (
+          <section className="wf-shadow-card" key={effect.id}>
+            <div className="wf-shadow-card-heading">
+              <label className="watchface-studio-toggle">
+                <input type="checkbox" checked={effect.enabled} onChange={(event) => patchEffect(effect.id, { enabled: event.target.checked })} />
+                <span>{effect.kind === "inner-shadow" ? "Inner shadow" : "Drop shadow"}</span>
+              </label>
+              <div>
+                <button type="button" aria-label="Duplicate shadow" title="Duplicate" onClick={() => writeLayerEffects(layerId, [
+                  ...effects.slice(0, index + 1),
+                  { ...effect, id: createWatchfaceShadowEffect(effect.kind).id },
+                  ...effects.slice(index + 1)
+                ])}><Copy size={13} /></button>
+                <button type="button" aria-label="Move shadow up" disabled={index === 0} onClick={() => {
+                  const next = [...effects];
+                  [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
+                  writeLayerEffects(layerId, next);
+                }}>↑</button>
+                <button type="button" aria-label="Move shadow down" disabled={index === effects.length - 1} onClick={() => {
+                  const next = [...effects];
+                  [next[index + 1], next[index]] = [next[index]!, next[index + 1]!];
+                  writeLayerEffects(layerId, next);
+                }}>↓</button>
+                <button type="button" aria-label="Remove shadow" title="Remove" onClick={() => writeLayerEffects(layerId, effects.filter((candidate) => candidate.id !== effect.id))}><Trash2 size={13} /></button>
+              </div>
+            </div>
+            <label className="field">
+              Type
+              <select value={effect.kind} onChange={(event) => patchEffect(effect.id, { kind: event.target.value as CorosWatchfaceShadowEffect["kind"] })}>
+                <option value="outer-shadow">Outer shadow</option>
+                <option value="inner-shadow">Inner shadow</option>
+              </select>
+            </label>
+            <label className="field">
+              Color
+              <span className="watchface-color-control">
+                <input type="color" value={effect.color} onChange={(event) => patchEffect(effect.id, { color: event.target.value })} />
+                <code>{effect.color}</code>
+              </span>
+            </label>
+            {([
+              ["Opacity", "opacity", 0, 100, 1, Math.round(effect.opacity * 100)],
+              ["Blur", "blur", 0, 64, 1, effect.blur],
+              ["Spread", "spread", -32, 64, 1, effect.spread],
+              ["Distance", "distance", 0, 128, 1, effect.distance],
+              ["Angle", "angle", 0, 359, 1, effect.angle]
+            ] as const).map(([label, key, min, max, step, value]) => (
+              <label className="field watchface-zoom-control" key={key}>
+                {label} <span>{value}{key === "opacity" ? "%" : key === "angle" ? "°" : " px"}</span>
+                <input
+                  type="range"
+                  min={min}
+                  max={max}
+                  step={step}
+                  value={value}
+                  onChange={(event) => patchEffect(effect.id, {
+                    [key]: key === "opacity"
+                      ? Number(event.target.value) / 100
+                      : Number(event.target.value)
+                  })}
+                />
+              </label>
+            ))}
+          </section>
+        ))}
+        {effects.length === 0 ? (
+          <p className="watchface-studio-summary">No effects. Add a shadow to build an ordered effect stack.</p>
+        ) : null}
+        {warning ? <p className="wf-effect-warning">{warning}</p> : null}
+      </div>
+    );
+  }
+
   function toggleLayerVisibility(layer: EditorLayer) {
+    if (isPositionLocked(layer.id)) return;
     if (layer.configAssetId) {
       const reference = configAssetsById.get(layer.configAssetId);
       if (reference) updateConfigAsset(reference, { enabled: !layer.visible });
@@ -4722,6 +6105,8 @@ export function WatchfaceEditor({
       updateSprite(layer.spriteId, { visible: !layer.visible });
     } else if (layer.kind === "background") {
       patchDesign({ artworkVisible: !layer.visible });
+    } else if (layer.kind === "batteryIcon") {
+      setBatteryIconVisible(!layer.visible);
     } else if (layer.layoutGroupId) {
       setFirmwareLayerVisible(layer.layoutGroupId, !layer.visible);
     }
@@ -4851,6 +6236,24 @@ export function WatchfaceEditor({
   }
 
   function renderInspector(layer: EditorLayer) {
+    if (isPositionLocked(layer.id)) {
+      return (
+        <div className="watchface-inspector-group wf-locked-inspector">
+          <Lock size={20} aria-hidden="true" />
+          <strong>Layer locked</strong>
+          <p className="watchface-studio-summary">
+            Position, transforms, alignment, and appearance are protected.
+          </p>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => setLayerPositionLocked(layer.id, false)}
+          >
+            <Unlock size={15} /> Unlock layer
+          </button>
+        </div>
+      );
+    }
     if (layer.configAssetId) {
       const reference = configAssetsById.get(layer.configAssetId);
       return reference ? renderConfigAssetInspector(reference) : null;
@@ -4865,7 +6268,7 @@ export function WatchfaceEditor({
     }
 
     if (layer.staticSeparatorId) {
-      return renderStaticSeparatorInspector(layer.staticSeparatorId);
+      return <>{renderStaticSeparatorInspector(layer.staticSeparatorId)}{renderEffectsInspector(layer.id)}</>;
     }
 
     if (layer.kind === "background") {
@@ -4959,6 +6362,7 @@ export function WatchfaceEditor({
               </button>
             </>
           ) : null}
+          {backgroundArtwork ? renderEffectsInspector("background") : null}
         </div>
       );
     }
@@ -4996,6 +6400,10 @@ export function WatchfaceEditor({
             />
           </label>
           {renderPositionReadout(layer)}
+          {renderEffectsInspector(
+            layer.id,
+            "Native battery states keep their firmware slot dimensions. Shadows are clipped unless the artwork is a Studio-owned sprite folder."
+          )}
         </div>
       );
     }
@@ -5004,8 +6412,40 @@ export function WatchfaceEditor({
       const style = design.metricStyles?.battery;
       return (
         <div className="watchface-inspector-group">
-          {renderLayerVisibilityToggle(layer)}
+          <label className="watchface-studio-toggle">
+            <input
+              type="checkbox"
+              checked={layer.visible}
+              onChange={(event) =>
+                setMetricVisible("battery", event.target.checked)
+              }
+            />
+            Show this metric
+          </label>
           <h3 className="wf-inspector-heading">Battery digit sprites</h3>
+          <LocalFontPicker
+            api={api}
+            label="Digit font"
+            value={style?.fontFamily ?? design.fontFamily}
+            emptyLabel="Keep template digits"
+            onChange={(fontFamily) =>
+              setMetricStyle("battery", {
+                fontFamily,
+                rasterFont: undefined
+              })
+            }
+            rasterFont={design.rasterFont}
+            onRasterFontChange={setRasterFont}
+            typography={{
+              fontWeight: design.fontWeight ?? 400,
+              fontStyle: design.fontStyle ?? "normal",
+              letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0
+            }}
+            onTypographyChange={(typography) => patchDesign(typography)}
+            onLetterSpacingChange={(letterSpacing) =>
+              setMetricStyle("battery", { letterSpacing })
+            }
+          />
           <CustomPngFontPanel
             api={api}
             rasterFont={design.rasterFont}
@@ -5017,6 +6457,27 @@ export function WatchfaceEditor({
               setMetricStyle("battery", { rasterFont })
             }
           />
+          <label className="field">
+            Tint
+            <span className="watchface-color-control">
+              <input
+                type="color"
+                value={style?.color ?? design.digitColor}
+                onChange={(event) =>
+                  setMetricStyle("battery", { color: event.target.value })
+                }
+              />
+              <code>{style?.color ?? design.digitColor}</code>
+              <button
+                type="button"
+                className="watchface-color-none"
+                disabled={!style?.color}
+                onClick={() => clearMetricColor("battery")}
+              >
+                Remove tint
+              </button>
+            </span>
+          </label>
           <label className="field">
             Sprite scale
             <EditableNumberInput
@@ -5032,6 +6493,7 @@ export function WatchfaceEditor({
             />
           </label>
           {renderPositionReadout(layer)}
+          {renderEffectsInspector(layer.id)}
         </div>
       );
     }
@@ -5063,9 +6525,12 @@ export function WatchfaceEditor({
             typography={{
               fontWeight: design.fontWeight ?? 400,
               fontStyle: design.fontStyle ?? "normal",
-              letterSpacing: design.letterSpacing ?? 0
+              letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0
             }}
             onTypographyChange={(typography) => patchDesign(typography)}
+            onLetterSpacingChange={(letterSpacing) =>
+              setTimeStyle(layer.timePartId!, { letterSpacing })
+            }
           />
           <CustomPngFontPanel
             api={api}
@@ -5096,6 +6561,7 @@ export function WatchfaceEditor({
             <EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(value) => setTimeStyle(layer.timePartId!, { scale: Math.max(0.01, value) })} />
           </label>
           {renderPositionReadout(layer)}
+          {renderEffectsInspector(layer.id)}
         </div>
       );
     }
@@ -5121,9 +6587,12 @@ export function WatchfaceEditor({
             typography={{
               fontWeight: design.fontWeight ?? 400,
               fontStyle: design.fontStyle ?? "normal",
-              letterSpacing: design.letterSpacing ?? 0
+              letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0
             }}
             onTypographyChange={(typography) => patchDesign(typography)}
+            onLetterSpacingChange={(letterSpacing) =>
+              setMetricStyle(layer.metricId!, { letterSpacing })
+            }
           />
           <CustomPngFontPanel
             api={api}
@@ -5154,6 +6623,7 @@ export function WatchfaceEditor({
             <EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(value) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, value) })} />
           </label>
           {renderPositionReadout(layer)}
+          {renderEffectsInspector(layer.id)}
         </div>
       );
     }
@@ -5166,6 +6636,8 @@ export function WatchfaceEditor({
       const partId = layer.layoutGroupId as WatchfaceDatePartId;
       const style = design.dateStyles?.[partId];
       const scale = style?.scale ?? 1;
+      const supportsNativeSize =
+        partId === "weekday" || partId === "dateDay";
       return (
         <div className="watchface-inspector-group">
           {renderLayerVisibilityToggle(layer)}
@@ -5174,25 +6646,45 @@ export function WatchfaceEditor({
             label="Font"
             value={style?.fontFamily ?? design.fontFamily}
             emptyLabel="Keep template font"
-            onChange={(fontFamily) => setDateStyle(partId, { fontFamily })}
+            onChange={(fontFamily) =>
+              setDateStyle(partId, {
+                fontFamily,
+                ...(supportsNativeSize && fontFamily
+                  ? { nativeSize: true }
+                  : {})
+              })
+            }
             rasterFont={design.rasterFont}
             rasterFontRequiredText={partId === "weekday" ? "MON" : undefined}
             onRasterFontChange={setRasterFont}
             typography={{
               fontWeight: design.fontWeight ?? 400,
               fontStyle: design.fontStyle ?? "normal",
-              letterSpacing: design.letterSpacing ?? 0
+              letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0
             }}
             onTypographyChange={(typography) => patchDesign(typography)}
+            onLetterSpacingChange={(letterSpacing) =>
+              setDateStyle(partId, { letterSpacing })
+            }
           />
           <CustomPngFontPanel
             api={api}
             rasterFont={design.rasterFont}
             componentRasterFont={style?.rasterFont}
             componentLabel={layer.label}
-            onActivate={() => setDateStyle(partId, { fontFamily: "" })}
+            onActivate={() =>
+              setDateStyle(partId, {
+                fontFamily: "",
+                ...(supportsNativeSize ? { nativeSize: true } : {})
+              })
+            }
             onRasterFontChange={setRasterFont}
-            onComponentRasterFontChange={(rasterFont) => setDateStyle(partId, { rasterFont })}
+            onComponentRasterFontChange={(rasterFont) =>
+              setDateStyle(partId, {
+                rasterFont,
+                ...(supportsNativeSize ? { nativeSize: true } : {})
+              })
+            }
           />
           <label className="field">
             Tint
@@ -5213,6 +6705,21 @@ export function WatchfaceEditor({
               </button>
             </span>
           </label>
+          {supportsNativeSize ? (
+            <label className="watchface-studio-toggle">
+              <input
+                type="checkbox"
+                checked={
+                  style?.nativeSize ??
+                  Boolean(style?.fontFamily || style?.rasterFont)
+                }
+                onChange={(event) =>
+                  setDateStyle(partId, { nativeSize: event.target.checked })
+                }
+              />
+              Native width (no template bound)
+            </label>
+          ) : null}
           <label className="field">
             Artwork zoom
             <EditableNumberInput
@@ -5223,10 +6730,17 @@ export function WatchfaceEditor({
               onValueChange={(value) => setDateStyle(partId, { scale: Math.max(0.01, value) })}
             />
             <span className="watchface-studio-summary">
-              Zooms and crops inside the component's fixed COROS canvas.
+              {supportsNativeSize &&
+              (style?.nativeSize ??
+                Boolean(style?.fontFamily || style?.rasterFont))
+                ? partId === "dateDay"
+                  ? "Changes digit height while preserving each digit's natural width."
+                  : "Changes label height while preserving its natural width."
+                : "Zooms and crops inside the component's fixed COROS canvas."}
             </span>
           </label>
           {renderPositionReadout(layer)}
+          {renderEffectsInspector(layer.id)}
         </div>
       );
     }
@@ -5271,7 +6785,13 @@ export function WatchfaceEditor({
                 fallback={1}
                 onValueChange={(value) =>
                   updateSprite(sprite.id, {
-                    width: fromWatchCoordinate(Math.max(1, value)) / sprite.scale
+                    width: fromWatchCoordinate(Math.max(1, value)) / sprite.scale,
+                    ...(sprite.aspectLocked !== false
+                      ? {
+                          height: (fromWatchCoordinate(Math.max(1, value)) / sprite.scale) *
+                            (sprite.height / sprite.width)
+                        }
+                      : {})
                   })
                 }
               />
@@ -5285,7 +6805,13 @@ export function WatchfaceEditor({
                 fallback={1}
                 onValueChange={(value) =>
                   updateSprite(sprite.id, {
-                    height: fromWatchCoordinate(Math.max(1, value)) / sprite.scale
+                    height: fromWatchCoordinate(Math.max(1, value)) / sprite.scale,
+                    ...(sprite.aspectLocked !== false
+                      ? {
+                          width: (fromWatchCoordinate(Math.max(1, value)) / sprite.scale) *
+                            (sprite.width / sprite.height)
+                        }
+                      : {})
                   })
                 }
               />
@@ -5303,9 +6829,155 @@ export function WatchfaceEditor({
                 }
               />
             </label>
+            <label>
+              Skew X
+              <EditableNumberInput
+                min="-80"
+                max="80"
+                step="1"
+                value={normalizeWatchfaceSkew(sprite.skewX)}
+                fallback={0}
+                onValueChange={(value) => updateSprite(sprite.id, { skewX: normalizeWatchfaceSkew(value) })}
+              />
+            </label>
+            <label>
+              Skew Y
+              <EditableNumberInput
+                min="-80"
+                max="80"
+                step="1"
+                value={normalizeWatchfaceSkew(sprite.skewY)}
+                fallback={0}
+                onValueChange={(value) => updateSprite(sprite.id, { skewY: normalizeWatchfaceSkew(value) })}
+              />
+            </label>
+          </div>
+          <label className="field watchface-zoom-control">
+            Opacity <span>{Math.round(normalizeWatchfaceOpacity(sprite.opacity) * 100)}%</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={Math.round(normalizeWatchfaceOpacity(sprite.opacity) * 100)}
+              onChange={(event) => updateSprite(sprite.id, {
+                opacity: normalizeWatchfaceOpacity(Number(event.target.value) / 100)
+              })}
+            />
+          </label>
+          <div className="wf-image-transform-actions" role="group" aria-label="Image transform options">
+            <button type="button" aria-pressed={sprite.flipX === true} onClick={() => updateSprite(sprite.id, { flipX: !sprite.flipX })}>
+              <FlipHorizontal2 size={14} /> Flip X
+            </button>
+            <button type="button" aria-pressed={sprite.flipY === true} onClick={() => updateSprite(sprite.id, { flipY: !sprite.flipY })}>
+              <FlipVertical2 size={14} /> Flip Y
+            </button>
+            <label className="watchface-studio-toggle">
+              <input type="checkbox" checked={sprite.aspectLocked !== false} onChange={(event) => updateSprite(sprite.id, { aspectLocked: event.target.checked })} />
+              Lock ratio
+            </label>
+          </div>
+          <div className="wf-transform-origin-controls">
+            <label className="field">
+              Transform origin
+              <select
+                value={(() => {
+                  const origin = normalizeWatchfaceTransformOrigin(sprite.origin);
+                  return `${origin.x},${origin.y}`;
+                })()}
+                onChange={(event) => {
+                  const [x, y] = event.target.value.split(",").map(Number);
+                  updateSprite(sprite.id, { origin: normalizeWatchfaceTransformOrigin({ x, y }) });
+                }}
+              >
+                <option value="0,0">Top left</option>
+                <option value="0.5,0">Top center</option>
+                <option value="1,0">Top right</option>
+                <option value="0,0.5">Center left</option>
+                <option value="0.5,0.5">Center</option>
+                <option value="1,0.5">Center right</option>
+                <option value="0,1">Bottom left</option>
+                <option value="0.5,1">Bottom center</option>
+                <option value="1,1">Bottom right</option>
+              </select>
+            </label>
+            <div className="watchface-sprite-transform-fields">
+              <label>
+                Origin X %
+                <EditableNumberInput
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={Math.round(normalizeWatchfaceTransformOrigin(sprite.origin).x * 100)}
+                  fallback={50}
+                  onValueChange={(value) => updateSprite(sprite.id, {
+                    origin: normalizeWatchfaceTransformOrigin({
+                      ...normalizeWatchfaceTransformOrigin(sprite.origin),
+                      x: value / 100
+                    })
+                  })}
+                />
+              </label>
+              <label>
+                Origin Y %
+                <EditableNumberInput
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={Math.round(normalizeWatchfaceTransformOrigin(sprite.origin).y * 100)}
+                  fallback={50}
+                  onValueChange={(value) => updateSprite(sprite.id, {
+                    origin: normalizeWatchfaceTransformOrigin({
+                      ...normalizeWatchfaceTransformOrigin(sprite.origin),
+                      y: value / 100
+                    })
+                  })}
+                />
+              </label>
+            </div>
+          </div>
+          <div className={`wf-crop-controls${cropSpriteId === sprite.id ? " is-active" : ""}`}>
+            <div className="wf-crop-heading">
+              <strong>Crop</strong>
+              {cropSpriteId === sprite.id ? <span>Enter applies · Esc cancels</span> : null}
+            </div>
+            {cropSpriteId === sprite.id ? (
+              <>
+                <div className="watchface-sprite-transform-fields">
+                  {(["x", "y", "width", "height"] as const).map((key) => (
+                    <label key={key}>
+                      {key[0]!.toUpperCase() + key.slice(1)} %
+                      <EditableNumberInput
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={Math.round(normalizeWatchfaceCrop(sprite.crop)[key] * 100)}
+                        fallback={key === "width" || key === "height" ? 100 : 0}
+                        onValueChange={(value) => updateSprite(sprite.id, {
+                          crop: normalizeWatchfaceCrop({
+                            ...normalizeWatchfaceCrop(sprite.crop),
+                            [key]: value / 100
+                          })
+                        })}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <div className="wf-crop-actions">
+                  <button type="button" className="primary-button" onClick={applySpriteCrop}>Apply crop</button>
+                  <button type="button" className="secondary-button" onClick={cancelSpriteCrop}>Cancel</button>
+                  <button type="button" onClick={() => updateSprite(sprite.id, { crop: { x: 0, y: 0, width: 1, height: 1 } })}>Reset crop</button>
+                </div>
+              </>
+            ) : (
+              <div className="wf-crop-actions">
+                <button type="button" className="secondary-button" onClick={() => enterSpriteCrop(sprite)}><Crop size={14} /> Crop image</button>
+                <button type="button" disabled={JSON.stringify(normalizeWatchfaceCrop(sprite.crop)) === JSON.stringify({ x: 0, y: 0, width: 1, height: 1 })} onClick={() => updateSprite(sprite.id, { crop: { x: 0, y: 0, width: 1, height: 1 } })}>Reset crop</button>
+              </div>
+            )}
           </div>
           <p className="watchface-studio-summary">
-            Drag a corner on the face to resize. Hold Shift to keep proportions, or drag the round handle to rotate.
+            Drag any edge or corner to resize. Shift inverts ratio locking, Option resizes from center, and Shift snaps rotation to 15°.
           </p>
           {renderPositionPanel(layer.id, "Watch screen position", <>
             <div className="watchface-position-inputs">
@@ -5390,6 +7062,7 @@ export function WatchfaceEditor({
               </span>
             </label>
           ) : null}
+          {renderEffectsInspector(layer.id)}
           <button className="secondary-button" type="button" onClick={() => removeSprite(layer.spriteId!)}>
             <Trash2 size={15} /> Remove image
           </button>
@@ -5435,6 +7108,14 @@ export function WatchfaceEditor({
           </label>
         ) : null}
         {renderPositionReadout(layer)}
+        {layer.capabilities.effects
+          ? renderEffectsInspector(
+              layer.id,
+              layer.id === "batteryIcon"
+                ? "This native battery slot keeps its firmware dimensions; shadows are clipped to the slot when padding cannot be represented safely."
+                : undefined
+            )
+          : null}
       </div>
     );
   }
@@ -5444,11 +7125,16 @@ export function WatchfaceEditor({
     if (available.length === 0) {
       return null;
     }
-    const selected = available.some(
+    const controlBatteryEnabled =
+      design.controlBatteryEnabled ?? hasControlBattery(details!);
+    const previewChoices = available.filter(
+      (complication) => complication.id !== "battery" || controlBatteryEnabled
+    );
+    const selected = previewChoices.some(
       (complication) => complication.id === design.previewComplication
     )
       ? design.previewComplication
-      : available[0]!.id;
+      : previewChoices[0]?.id ?? "";
     const selectedComplication = available.find(
       (complication) => complication.id === selected
     );
@@ -5494,10 +7180,33 @@ export function WatchfaceEditor({
     };
     return (
       <>
+        {available.some((complication) => complication.id === "battery") ? (
+          <label className="watchface-studio-toggle">
+            <input
+              type="checkbox"
+              checked={controlBatteryEnabled}
+              onChange={(event) => {
+                const enabled = event.target.checked;
+                setDesign((current) => ({
+                  ...current,
+                  controlBatteryEnabled: enabled,
+                  ...(!enabled && current.previewComplication === "battery"
+                    ? {
+                        previewComplication:
+                          available.find((item) => item.id !== "battery")?.id ?? ""
+                      }
+                    : {})
+                }));
+              }}
+            />
+            Include Battery in selectable metrics
+          </label>
+        ) : null}
         <label className="field">
           Preview data
           <select
             value={selected}
+            disabled={previewChoices.length === 0}
             onChange={(event) => {
               const previewComplication = event.target.value;
               setDesign((current) => ({
@@ -5514,7 +7223,7 @@ export function WatchfaceEditor({
               }));
             }}
           >
-            {available.map((complication) => (
+            {previewChoices.map((complication) => (
               <option key={complication.id} value={complication.id}>
                 {complication.label}
               </option>
@@ -5548,65 +7257,73 @@ export function WatchfaceEditor({
             </button>
           </div>
         ) : null}
-        {selected === "temperature" ? (
-          <>
-            <LocalFontPicker
-              api={api}
-              label="Temperature font"
-              value={design.metricStyles?.temperature?.fontFamily ?? design.fontFamily}
-              emptyLabel="Keep control digits"
-              onChange={(fontFamily) => setMetricStyle("temperature", { fontFamily })}
-              rasterFont={design.rasterFont}
-              onRasterFontChange={setRasterFont}
-              typography={{
-                fontWeight: design.fontWeight ?? 400,
-                fontStyle: design.fontStyle ?? "normal",
-                letterSpacing: design.letterSpacing ?? 0
-              }}
-              onTypographyChange={(typography) => patchDesign(typography)}
+        <LocalFontPicker
+          api={api}
+          label="Selectable value font"
+          value={design.selectableMetricStyle?.fontFamily ?? design.fontFamily}
+          emptyLabel="Keep template digits"
+          onChange={(fontFamily) =>
+            setSelectableMetricStyle({ fontFamily, rasterFont: undefined })
+          }
+          rasterFont={design.rasterFont}
+          onRasterFontChange={setRasterFont}
+          typography={{
+            fontWeight: design.fontWeight ?? 400,
+            fontStyle: design.fontStyle ?? "normal",
+            letterSpacing:
+              design.selectableMetricStyle?.letterSpacing ??
+              design.letterSpacing ??
+              0
+          }}
+          onTypographyChange={(typography) => patchDesign(typography)}
+          onLetterSpacingChange={(letterSpacing) =>
+            setSelectableMetricStyle({ letterSpacing })
+          }
+        />
+        <CustomPngFontPanel
+          api={api}
+          rasterFont={design.rasterFont}
+          componentRasterFont={design.selectableMetricStyle?.rasterFont}
+          componentLabel="Selectable metric"
+          onActivate={() => setSelectableMetricStyle({ fontFamily: "" })}
+          onRasterFontChange={setRasterFont}
+          onComponentRasterFontChange={(rasterFont) =>
+            setSelectableMetricStyle({ rasterFont })
+          }
+        />
+        <label className="field">
+          Selectable value tint
+          <span className="watchface-color-control">
+            <input
+              type="color"
+              value={design.selectableMetricStyle?.color ?? design.digitColor}
+              onChange={(event) =>
+                setSelectableMetricStyle({ color: event.target.value })
+              }
             />
-            <CustomPngFontPanel
-              api={api}
-              rasterFont={design.rasterFont}
-              componentRasterFont={design.metricStyles?.temperature?.rasterFont}
-              componentLabel="Temperature"
-              onActivate={() => setMetricStyle("temperature", { fontFamily: "" })}
-              onRasterFontChange={setRasterFont}
-              onComponentRasterFontChange={(rasterFont) => setMetricStyle("temperature", { rasterFont })}
-            />
-            <label className="field">
-              Temperature tint
-              <span className="watchface-color-control">
-                <input
-                  type="color"
-                  value={design.metricStyles?.temperature?.color ?? design.digitColor}
-                  onChange={(event) => setMetricStyle("temperature", { color: event.target.value })}
-                />
-                <code>{design.metricStyles?.temperature?.color ?? design.digitColor}</code>
-                <button
-                  type="button"
-                  className="watchface-color-none"
-                  disabled={!design.metricStyles?.temperature?.color}
-                  onClick={() => clearMetricColor("temperature")}
-                >
-                  Remove tint
-                </button>
-              </span>
-            </label>
-            <label className="field">
-              Temperature sprite scale
-              <EditableNumberInput
-                min="0.01"
-                step="0.01"
-                value={design.metricStyles?.temperature?.scale ?? 1}
-                fallback={1}
-                onValueChange={(value) =>
-                  setMetricStyle("temperature", { scale: Math.max(0.01, value) })
-                }
-              />
-            </label>
-          </>
-        ) : null}
+            <code>{design.selectableMetricStyle?.color ?? design.digitColor}</code>
+            <button
+              type="button"
+              className="watchface-color-none"
+              disabled={!design.selectableMetricStyle?.color}
+              onClick={clearSelectableMetricColor}
+            >
+              Remove tint
+            </button>
+          </span>
+        </label>
+        <label className="field">
+          Selectable value scale
+          <EditableNumberInput
+            min="0.01"
+            step="0.01"
+            value={design.selectableMetricStyle?.scale ?? 1}
+            fallback={1}
+            onValueChange={(value) =>
+              setSelectableMetricStyle({ scale: Math.max(0.01, value) })
+            }
+          />
+        </label>
         {baseIconPosition ? (
           renderPositionPanel("complication", "Selector icon position", <>
             <div className="watchface-position-inputs">
@@ -5679,6 +7396,8 @@ export function WatchfaceEditor({
     const setVisible = (visible: boolean) => {
       if (layer.spriteId) {
         updateSprite(layer.spriteId, { visible });
+      } else if (layer.kind === "batteryIcon") {
+        setBatteryIconVisible(visible);
       } else if (layer.layoutGroupId) {
         setFirmwareLayerVisible(layer.layoutGroupId, visible);
       }
@@ -6283,10 +8002,36 @@ export function WatchfaceEditor({
   }
 
   function renderElementInspector(element: CorosWatchfaceBackgroundElement) {
+    if (isPositionLocked(`bgel:${element.id}`)) {
+      return (
+        <div className="watchface-inspector-group wf-locked-inspector">
+          <Lock size={20} aria-hidden="true" />
+          <strong>Object locked</strong>
+          <p className="watchface-studio-summary">
+            Unlock it here or from Layers before editing its appearance.
+          </p>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => setLayerPositionLocked(`bgel:${element.id}`, false)}
+          >
+            <Unlock size={15} /> Unlock object
+          </button>
+        </div>
+      );
+    }
     const set = (patch: BackgroundElementPatch) => updateElement(element.id, patch);
     const hasFill = element.kind === "rect" || element.kind === "ellipse";
     return (
       <div className="watchface-inspector-group">
+        <label className="watchface-studio-toggle">
+          <input
+            type="checkbox"
+            checked={element.visible !== false}
+            onChange={(event) => set({ visible: event.target.checked })}
+          />
+          Show object
+        </label>
         {hasFill ? (
           <>
             <label className="watchface-studio-toggle">
@@ -6448,9 +8193,23 @@ export function WatchfaceEditor({
         </>)}
 
         <label className="field watchface-zoom-control">
+          Opacity <span>{Math.round(normalizeWatchfaceOpacity(element.opacity) * 100)}%</span>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value={Math.round(normalizeWatchfaceOpacity(element.opacity) * 100)}
+            onChange={(event) => set({
+              opacity: normalizeWatchfaceOpacity(Number(event.target.value) / 100)
+            })}
+          />
+        </label>
+        <label className="field watchface-zoom-control">
           Rotation <span>{element.rotation}°</span>
           <input type="range" min="0" max="360" step="5" value={element.rotation} onChange={(e) => set({ rotation: Number(e.target.value) })} />
         </label>
+        {renderEffectsInspector(`bgel:${element.id}`)}
         <button className="secondary-button" type="button" onClick={() => removeElement(element.id)}>
           <Trash2 size={15} /> Remove shape
         </button>

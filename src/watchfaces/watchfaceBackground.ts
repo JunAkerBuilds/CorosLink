@@ -6,6 +6,16 @@ import {
   type WatchfaceStaticSeparators
 } from "./watchfaceStudio";
 import { drawBackgroundElements } from "./watchfaceBackgroundElements";
+import {
+  renderWatchfaceCanvasEffects,
+  resolveWatchfaceLayerEffects
+} from "./watchfaceEditorEffects";
+import { watchfaceBitmapCache } from "./watchfaceBitmapCache";
+import {
+  normalizeWatchfaceCrop,
+  normalizeWatchfaceOpacity,
+  normalizeWatchfaceSkew
+} from "./watchfaceSpriteTransform";
 
 export const CREATOR_CANVAS_SIZE = 800;
 export const MAX_DESIGN_SPRITES = 12;
@@ -53,7 +63,11 @@ export function makeDefaultDesign(): CorosWatchfaceDesignState {
     weatherIndicator: undefined,
     layoutOffsets: {},
     linkedLayerGroups: [],
+    editorGroups: [],
+    editorGuides: [],
     lockedLayerIds: [],
+    effectStyles: [],
+    layerEffects: {},
     layerVisibility: {},
     layerColors: {},
     configAssetOverrides: {},
@@ -98,13 +112,37 @@ export async function renderDesignBackground(
         Math.max(size / image.naturalWidth, size / image.naturalHeight) * design.zoom;
       const width = image.naturalWidth * scale;
       const height = image.naturalHeight * scale;
-      context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
+      const effects = resolveWatchfaceLayerEffects(design, "background");
+      if (effects.length === 0) {
+        context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
+      } else {
+        const layer = document.createElement("canvas");
+        layer.width = size;
+        layer.height = size;
+        const layerContext = layer.getContext("2d", { colorSpace: "display-p3" });
+        if (layerContext) {
+          layerContext.imageSmoothingEnabled = true;
+          layerContext.imageSmoothingQuality = "high";
+          layerContext.drawImage(
+            image,
+            (size - width) / 2,
+            (size - height) / 2,
+            width,
+            height
+          );
+          context.drawImage(renderWatchfaceCanvasEffects(layer, effects).canvas, 0, 0);
+        }
+      }
     }
   }
 
   // Freeform shapes are authored directly in this 800px space.
   if (design.backgroundElements && design.backgroundElements.length > 0) {
-    drawBackgroundElements(context, design.backgroundElements);
+    drawBackgroundElements(
+      context,
+      design.backgroundElements,
+      (id) => resolveWatchfaceLayerEffects(design, id)
+    );
   }
 
   const separatorScale = size / (previewWidth || size);
@@ -121,17 +159,62 @@ export async function renderDesignBackground(
           sprite.tintColor
         ).catch(() => sprite.dataUrl)
       : sprite.dataUrl;
-    const spriteImage = await loadStudioImage(spriteDataUrl).catch(() => undefined);
+    const spriteImage = await watchfaceBitmapCache.decode(
+      `sprite:${sprite.id}:${sprite.tintColor ?? "none"}:${spriteDataUrl.length}:${spriteDataUrl.slice(-32)}`,
+      spriteDataUrl
+    ) ?? await loadStudioImage(spriteDataUrl).catch(() => undefined);
     if (!spriteImage) {
       continue;
     }
+    const sourceWidth = "naturalWidth" in spriteImage
+      ? spriteImage.naturalWidth
+      : spriteImage.width;
+    const sourceHeight = "naturalHeight" in spriteImage
+      ? spriteImage.naturalHeight
+      : spriteImage.height;
     const width = sprite.width * sprite.scale * separatorScale;
     const height = sprite.height * sprite.scale * separatorScale;
-    context.save();
-    context.translate(sprite.x * separatorScale, sprite.y * separatorScale);
-    context.rotate((sprite.rotation * Math.PI) / 180);
-    context.drawImage(spriteImage, -width / 2, -height / 2, width, height);
-    context.restore();
+    const crop = normalizeWatchfaceCrop(sprite.crop);
+    const layer = document.createElement("canvas");
+    layer.width = size;
+    layer.height = size;
+    const layerContext = layer.getContext("2d", { colorSpace: "display-p3" });
+    if (!layerContext) continue;
+    layerContext.imageSmoothingEnabled = true;
+    layerContext.imageSmoothingQuality = "high";
+    layerContext.save();
+    layerContext.globalAlpha = normalizeWatchfaceOpacity(sprite.opacity);
+    layerContext.translate(sprite.x * separatorScale, sprite.y * separatorScale);
+    layerContext.rotate((sprite.rotation * Math.PI) / 180);
+    layerContext.transform(
+      1,
+      Math.tan((normalizeWatchfaceSkew(sprite.skewY) * Math.PI) / 180),
+      Math.tan((normalizeWatchfaceSkew(sprite.skewX) * Math.PI) / 180),
+      1,
+      0,
+      0
+    );
+    layerContext.scale(sprite.flipX ? -1 : 1, sprite.flipY ? -1 : 1);
+    layerContext.drawImage(
+      spriteImage,
+      crop.x * sourceWidth,
+      crop.y * sourceHeight,
+      crop.width * sourceWidth,
+      crop.height * sourceHeight,
+      -width / 2,
+      -height / 2,
+      width,
+      height
+    );
+    layerContext.restore();
+    const effects = resolveWatchfaceLayerEffects(design, `sprite:${sprite.id}`);
+    context.drawImage(
+      effects.length > 0
+        ? renderWatchfaceCanvasEffects(layer, effects).canvas
+        : layer,
+      0,
+      0
+    );
   }
 
   context.textAlign = "center";
@@ -150,7 +233,29 @@ export async function renderDesignBackground(
       : "system-ui, sans-serif";
     context.font = `700 ${Math.round(separator.size * separatorScale)}px ${family}`;
     context.fillStyle = separator.color;
-    context.fillText(text, separator.x * separatorScale, separator.y * separatorScale);
+    const effects = resolveWatchfaceLayerEffects(
+      design,
+      separatorId === "colon" ? "staticColon" : "staticDateSlash"
+    );
+    if (effects.length === 0) {
+      context.fillText(text, separator.x * separatorScale, separator.y * separatorScale);
+    } else {
+      const layer = document.createElement("canvas");
+      layer.width = size;
+      layer.height = size;
+      const layerContext = layer.getContext("2d", { colorSpace: "display-p3" });
+      if (!layerContext) continue;
+      layerContext.textAlign = "center";
+      layerContext.textBaseline = "middle";
+      layerContext.font = context.font;
+      layerContext.fillStyle = separator.color;
+      layerContext.fillText(
+        text,
+        separator.x * separatorScale,
+        separator.y * separatorScale
+      );
+      context.drawImage(renderWatchfaceCanvasEffects(layer, effects).canvas, 0, 0);
+    }
   }
   context.textAlign = "start";
   context.textBaseline = "alphabetic";

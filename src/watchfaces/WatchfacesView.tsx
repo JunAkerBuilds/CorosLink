@@ -22,6 +22,7 @@ import {
   Plus,
   Search,
   Send,
+  Share2,
   Trash2,
   Upload,
   Watch,
@@ -160,6 +161,7 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
   const [downloadingThemeUrl, setDownloadingThemeUrl] = useState<string | null>(
     null
   );
+  const [sharingThemeId, setSharingThemeId] = useState<string | null>(null);
 
   const [builtArchive, setBuiltArchive] =
     useState<CorosWatchfaceArchive | null>(null);
@@ -542,6 +544,51 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
     }
   }
 
+  async function handleShareTheme(theme: CorosWatchfaceTheme) {
+    if (!connected) {
+      setError("Connect your COROS account before creating a share link.");
+      setNotice(null);
+      return;
+    }
+
+    const templateId = theme.id?.trim();
+    const sourceTemplateId = theme.sourceTemplateId?.trim();
+    if (!templateId || !sourceTemplateId) {
+      setError(
+        "COROS did not return the source template ID for this face. Refresh My watch faces and try again."
+      );
+      setNotice(null);
+      return;
+    }
+
+    const themeFirmwareType = theme.firmwareType?.trim() || firmwareType;
+    const themeBackgroundImageId =
+      theme.backgroundImageId ?? Number(backgroundImageId);
+    setSharingThemeId(templateId);
+    setBusy("publish");
+    clearMessages();
+    try {
+      const nextLink = await api.createCorosWatchfaceShareLink({
+        templateId,
+        sourceTemplateId,
+        name: theme.name,
+        firmwareType: themeFirmwareType,
+        backgroundImageId: themeBackgroundImageId
+      });
+      setBuiltArchive(null);
+      setPublishName(theme.name);
+      setShareLink(nextLink);
+      setPublishOpen(true);
+      setNotice("Your COROS share link is ready.");
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setSharingThemeId(null);
+      setBusy(null);
+      void api.getCorosWatchfaceStatus().then(setStatus).catch(() => undefined);
+    }
+  }
+
   function openPublish(archive: CorosWatchfaceArchive, currentName: string) {
     setBuiltArchive(archive);
     if (archive.firmwareType) {
@@ -614,6 +661,7 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
           initialDesign={studioSession.initialDesign}
           initialProjectId={studioSession.project?.projectId}
           initialProjectName={studioSession.project?.name ?? studioSession.initialName}
+          showDevelopmentTools={IS_DEVELOPMENT_BUILD && showDevelopmentTools}
           onBack={returnToHub}
           onArchiveCreated={setBuiltArchive}
           onPublish={openPublish}
@@ -882,6 +930,7 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
               visibleThemes={visibleThemes}
               themesLoaded={themesLoaded}
               downloadingThemeUrl={downloadingThemeUrl}
+              sharingThemeId={sharingThemeId}
               onCatalogChange={(nextCatalog) => {
                 setThemeCatalog(nextCatalog);
                 setThemes([]);
@@ -895,6 +944,7 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
               onSearchChange={setThemeSearch}
               onSubmit={handleLoadThemes}
               onUseTheme={(theme) => void handleDownloadTheme(theme)}
+              onShareTheme={(theme) => void handleShareTheme(theme)}
             />
           )}
         </main>
@@ -916,6 +966,37 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
           onChooseArchive={() => void handleChooseArchive()}
           onSubmit={handleImportShareLink}
           onClose={() => setImportOpen(false)}
+        />
+      ) : null}
+      {publishOpen ? (
+        <PublishDialog
+          archive={builtArchive}
+          name={publishName}
+          firmwareType={firmwareType}
+          backgroundImageId={backgroundImageId}
+          language={language}
+          shareLink={shareLink}
+          connected={connected}
+          email={email}
+          password={password}
+          region={region}
+          secureStorageAvailable={status?.secureStorageAvailable ?? false}
+          busy={busy === "publish" || busy === "login"}
+          loginBusy={busy === "login"}
+          onNameChange={setPublishName}
+          onFirmwareTypeChange={setFirmwareType}
+          onBackgroundImageIdChange={setBackgroundImageId}
+          onLanguageChange={setLanguage}
+          onEmailChange={setEmail}
+          onPasswordChange={setPassword}
+          onRegionChange={(nextRegion) => {
+            setRegion(nextRegion);
+            setRegionTouched(true);
+          }}
+          onLogin={(event) => void handleLogin(event, "publish")}
+          onSubmit={handlePublish}
+          onCopy={() => void handleCopy()}
+          onClose={() => setPublishOpen(false)}
         />
       ) : null}
     </div>
@@ -1568,7 +1649,10 @@ function WatchFacePreview({
           previewDetails,
           watchResolution.directory
         ),
-        toStudioOptions(loadedProject.design),
+        {
+          ...toStudioOptions(loadedProject.design),
+          effectResolutionScale: watchResolution.width / resolution.width
+        },
         loadAssets
       );
       const weather = loadedProject.design.weatherIndicator;
@@ -1640,6 +1724,7 @@ interface TemplatesPanelProps {
   visibleThemes: CorosWatchfaceTheme[];
   themesLoaded: boolean;
   downloadingThemeUrl: string | null;
+  sharingThemeId: string | null;
   onCatalogChange: (catalog: CorosWatchfaceThemeCatalog) => void;
   onFirmwareTypeChange: (value: string) => void;
   onLanguageChange: (value: string) => void;
@@ -1649,6 +1734,7 @@ interface TemplatesPanelProps {
   onSearchChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onUseTheme: (theme: CorosWatchfaceTheme) => void;
+  onShareTheme: (theme: CorosWatchfaceTheme) => void;
 }
 
 function TemplatesPanel(props: TemplatesPanelProps) {
@@ -1801,23 +1887,40 @@ function TemplatesPanel(props: TemplatesPanelProps) {
                         <span>v{theme.watchFaceVersion}</span>
                       ) : null}
                     </div>
-                    {theme.packageUrl ? (
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        disabled={props.busy !== null || props.downloadingThemeUrl !== null}
-                        onClick={() => props.onUseTheme(theme)}
-                      >
-                        {props.downloadingThemeUrl === theme.packageUrl ? (
-                          <Loader2 className="spin" size={14} aria-hidden="true" />
-                        ) : (
-                          <Download size={14} aria-hidden="true" />
-                        )}
-                        {props.catalog === "editable" ? "Use template" : "Download"}
-                      </button>
-                    ) : (
-                      <span className="watchface-template-unavailable">Unavailable</span>
-                    )}
+                    <div className="watchface-template-actions">
+                      {theme.packageUrl ? (
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          disabled={props.busy !== null || props.downloadingThemeUrl !== null}
+                          onClick={() => props.onUseTheme(theme)}
+                        >
+                          {props.downloadingThemeUrl === theme.packageUrl ? (
+                            <Loader2 className="spin" size={14} aria-hidden="true" />
+                          ) : (
+                            <Download size={14} aria-hidden="true" />
+                          )}
+                          {props.catalog === "editable" ? "Use template" : "Download"}
+                        </button>
+                      ) : props.catalog !== "custom" ? (
+                        <span className="watchface-template-unavailable">Unavailable</span>
+                      ) : null}
+                      {props.catalog === "custom" ? (
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          disabled={props.busy !== null}
+                          onClick={() => props.onShareTheme(theme)}
+                        >
+                          {props.sharingThemeId === theme.id ? (
+                            <Loader2 className="spin" size={14} aria-hidden="true" />
+                          ) : (
+                            <Share2 size={14} aria-hidden="true" />
+                          )}
+                          Share
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </article>
               ))}

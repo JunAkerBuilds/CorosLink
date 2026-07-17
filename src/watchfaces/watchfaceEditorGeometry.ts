@@ -16,8 +16,36 @@ export function rotatedCenterBounds(
   y: number,
   width: number,
   height: number,
-  rotation: number
+  rotation: number,
+  skewX = 0,
+  skewY = 0
 ): WatchfaceEditorBounds {
+  if (Math.abs(skewX) > 0.001 || Math.abs(skewY) > 0.001) {
+    const radians = (rotation * Math.PI) / 180;
+    const cosine = Math.cos(radians);
+    const sine = Math.sin(radians);
+    const tangentX = Math.tan((Math.max(-80, Math.min(80, skewX)) * Math.PI) / 180);
+    const tangentY = Math.tan((Math.max(-80, Math.min(80, skewY)) * Math.PI) / 180);
+    const points = [
+      [-width / 2, -height / 2],
+      [width / 2, -height / 2],
+      [width / 2, height / 2],
+      [-width / 2, height / 2]
+    ].map(([localX, localY]) => {
+      const skewedX = localX! + localY! * tangentX;
+      const skewedY = localY! + localX! * tangentY;
+      return {
+        x: x + skewedX * cosine - skewedY * sine,
+        y: y + skewedX * sine + skewedY * cosine
+      };
+    });
+    return {
+      x0: Math.min(...points.map((point) => point.x)),
+      y0: Math.min(...points.map((point) => point.y)),
+      x1: Math.max(...points.map((point) => point.x)),
+      y1: Math.max(...points.map((point) => point.y))
+    };
+  }
   const radians = (rotation * Math.PI) / 180;
   const rotatedWidth =
     Math.abs(width * Math.cos(radians)) + Math.abs(height * Math.sin(radians));

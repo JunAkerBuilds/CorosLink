@@ -1702,6 +1702,12 @@
   white-space: nowrap;
 }
 
+.watchface-shell .watchface-template-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .watchface-shell .watchface-template-unavailable {
   display: inline-flex;
   align-items: center;
@@ -2459,6 +2465,40 @@
   grid-column: 1 / -1;
 }
 
+.watchface-shell .wf-editor-group-tree {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px 28px;
+  align-items: center;
+}
+
+.watchface-shell .wf-editor-group-tree > ul {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 1px;
+  margin: 0 0 3px 22px;
+  border-left: 1px solid var(--wf-border);
+  padding: 2px 0 2px 8px;
+  list-style: none;
+}
+
+.watchface-shell .wf-editor-group-tree > ul button {
+  width: 100%;
+  min-height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  padding: 0 7px;
+  text-align: left;
+  font: inherit;
+  font-size: 10px;
+}
+
+.watchface-shell .wf-editor-group-tree > ul button:hover {
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
+}
+
 .watchface-shell .wf-layer-group {
   margin: 12px 7px 4px;
   color: var(--text-secondary);
@@ -3025,6 +3065,29 @@
   cursor: nwse-resize;
 }
 
+.watchface-shell .wf-sprite-transform-handle[data-sprite-transform-control="n"],
+.watchface-shell .wf-sprite-transform-handle[data-sprite-transform-control="s"] {
+  cursor: ns-resize;
+}
+
+.watchface-shell .wf-sprite-transform-handle[data-sprite-transform-control="e"],
+.watchface-shell .wf-sprite-transform-handle[data-sprite-transform-control="w"] {
+  cursor: ew-resize;
+}
+
+.watchface-shell .wf-sprite-transform-handle[data-sprite-transform-control="ne"],
+.watchface-shell .wf-sprite-transform-handle[data-sprite-transform-control="sw"] {
+  cursor: nesw-resize;
+}
+
+.watchface-shell .wf-transform-origin-marker {
+  fill: var(--wf-surface-raised);
+  stroke: #ffce54;
+  stroke-width: 1.75;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
 .watchface-shell .wf-sprite-transform-handle:hover {
   fill: var(--accent-strong);
   stroke: var(--wf-surface-raised);
@@ -3049,6 +3112,109 @@
   z-index: 1;
   pointer-events: none;
   visibility: hidden;
+}
+
+.watchface-shell .wf-contextual-align-bar {
+  position: absolute;
+  z-index: 7;
+  top: 58px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 34px;
+  border: 1px solid var(--wf-border-strong);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--wf-surface-raised) 96%, transparent);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  padding: 3px;
+  transform: translateX(-50%);
+}
+
+.watchface-shell .wf-contextual-align-bar button {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0;
+  place-items: center;
+}
+
+.watchface-shell .wf-contextual-align-bar button:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.watchface-shell .wf-contextual-align-bar button:disabled {
+  opacity: 0.32;
+}
+
+.watchface-shell .wf-contextual-align-bar > span {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: var(--wf-border);
+}
+
+.watchface-shell .wf-stage-ruler {
+  position: absolute;
+  z-index: 6;
+  border: 0;
+  opacity: 0.82;
+  touch-action: none;
+}
+
+.watchface-shell .wf-stage-ruler.is-horizontal {
+  top: 9px;
+  right: 18px;
+  left: 18px;
+  height: 12px;
+  cursor: ns-resize;
+  background: repeating-linear-gradient(90deg, rgba(255,255,255,.45) 0 1px, transparent 1px 20px);
+}
+
+.watchface-shell .wf-stage-ruler.is-vertical {
+  top: 18px;
+  bottom: 18px;
+  left: 9px;
+  width: 12px;
+  cursor: ew-resize;
+  background: repeating-linear-gradient(180deg, rgba(255,255,255,.45) 0 1px, transparent 1px 20px);
+}
+
+.watchface-shell .wf-project-guide-layer {
+  position: absolute;
+  z-index: 5;
+  inset: 9px;
+  overflow: hidden;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.watchface-shell .wf-project-guide {
+  position: absolute;
+  border: 0;
+  border-radius: 0;
+  background: rgba(96, 176, 255, 0.92);
+  padding: 0;
+  pointer-events: auto;
+}
+
+.watchface-shell .wf-project-guide.is-x {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  cursor: ew-resize;
+}
+
+.watchface-shell .wf-project-guide.is-y {
+  right: 0;
+  left: 0;
+  height: 1px;
+  cursor: ns-resize;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-stage-status, .watchface-stage-status, .watchface-editor-hint) {
@@ -3416,6 +3582,129 @@
   min-width: 0;
   min-height: 40px;
   padding-inline: 5px;
+}
+
+.watchface-shell .wf-image-transform-actions,
+.watchface-shell .wf-crop-actions,
+.watchface-shell .wf-effect-style-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.watchface-shell .wf-image-transform-actions > button,
+.watchface-shell .wf-crop-actions > button,
+.watchface-shell .wf-effect-style-actions > button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  gap: 5px;
+  border: 1px solid var(--wf-border);
+  border-radius: 6px;
+  background: var(--wf-surface-raised);
+  color: var(--text-secondary);
+  padding: 0 8px;
+  font: inherit;
+  font-size: 11px;
+}
+
+.watchface-shell .wf-image-transform-actions > button[aria-pressed="true"] {
+  border-color: var(--wf-accent-border);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.watchface-shell .wf-transform-origin-controls,
+.watchface-shell .wf-crop-controls {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--wf-border);
+  padding-top: 10px;
+}
+
+.watchface-shell .wf-crop-controls.is-active {
+  border: 1px solid var(--wf-accent-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+  padding: 10px;
+}
+
+.watchface-shell .wf-crop-heading,
+.watchface-shell .wf-effects-heading,
+.watchface-shell .wf-shadow-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.watchface-shell .wf-crop-heading span,
+.watchface-shell .wf-effects-heading span {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.watchface-shell .wf-effects-inspector {
+  gap: 10px;
+  border-top: 1px solid var(--wf-border);
+  padding-top: 12px;
+}
+
+.watchface-shell .wf-effects-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.watchface-shell .wf-effects-heading .wf-inspector-heading {
+  margin: 0;
+}
+
+.watchface-shell .wf-shadow-card {
+  display: grid;
+  gap: 9px;
+  border: 1px solid var(--wf-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--wf-surface-raised) 84%, transparent);
+  padding: 9px;
+}
+
+.watchface-shell .wf-shadow-card-heading > div {
+  display: flex;
+  gap: 2px;
+}
+
+.watchface-shell .wf-shadow-card-heading > div button {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  padding: 0;
+  place-items: center;
+}
+
+.watchface-shell .wf-shadow-card-heading > div button:hover:not(:disabled) {
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-effect-warning {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, #ffce54 45%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, #ffce54 9%, transparent);
+  color: color-mix(in srgb, #ffce54 78%, white);
+  padding: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.watchface-shell .wf-locked-inspector {
+  justify-items: start;
+  color: var(--text-secondary);
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-font-picker-panel, .wf-font-picker-panel) {
@@ -5445,7 +5734,7 @@
   font-size: 9px;
 }
 
-.watchface-shell--hub .watchface-template-copy .secondary-button {
+.watchface-shell--hub .watchface-template-actions .secondary-button {
   justify-self: start;
 }
 

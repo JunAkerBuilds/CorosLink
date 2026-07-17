@@ -44,6 +44,7 @@ const FIXTURE_CONFIG = [
   "[english_date_week_font]=english_week",
   "[battery_icon_pos]={94,80}",
   "[battery_icon_dir]=battery",
+  "[control_battery_icon_dir]=battery",
   "[control_step_icon]=icon\\step.png",
   "[control_step_icon_pos]={526,536}",
   "[empty_value]="
@@ -128,7 +129,48 @@ async function main() {
       dateSlash: { enabled: false, x: 400, y: 240, size: 48, color: "#ffffff" }
     },
     layoutOffsets: { hours: { dx: 10, dy: 20 } },
-    designSprites: []
+    designSprites: [{
+      id: "sprite-1",
+      dataUrl: pngDataUrl(icon),
+      sourceWidth: 4,
+      sourceHeight: 4,
+      width: 40,
+      height: 40,
+      x: 200,
+      y: 220,
+      scale: 1,
+      rotation: 12,
+      opacity: 0.8,
+      flipX: true,
+      flipY: false,
+      skewX: 8,
+      skewY: -4,
+      aspectLocked: false,
+      crop: { x: 0.1, y: 0.2, width: 0.7, height: 0.6 },
+      origin: { x: 0.25, y: 0.75 }
+    }],
+    backgroundElements: [{
+      id: "shape-1",
+      kind: "ellipse",
+      x: 400,
+      y: 400,
+      rotation: 0,
+      visible: false,
+      opacity: 0.35,
+      width: 120,
+      height: 80,
+      fill: "#51e0b5"
+    }],
+    editorGroups: [{ id: "group-1", name: "Time artwork", layerIds: ["hours", "sprite:sprite-1"] }],
+    linkedLayerGroups: [["hours", "sprite:sprite-1"]],
+    editorGuides: [{ id: "guide-1", axis: "x", position: 400 }],
+    lockedLayerIds: ["sprite:sprite-1"],
+    effectStyles: [{
+      id: "effect-style-1",
+      name: "Soft lift",
+      effects: [{ id: "shadow-1", kind: "outer-shadow", enabled: true, color: "#000000", opacity: 0.45, blur: 12, spread: 2, distance: 8, angle: 45 }]
+    }],
+    layerEffects: { hours: { kind: "style", styleId: "effect-style-1" } }
   };
   const portableProjectPath = path.join(tempRoot, "editable-website-face.zip");
   await watchfaces.exportCorosWatchfaceProject(
@@ -535,6 +577,36 @@ async function main() {
     "new resource folders must precede their config for COROS's compiler"
   );
 
+  const regeneratedMetricDigit = solidPng(20, 32, 0x71);
+  const withRegeneratedSprite = await watchfaces.createCorosWatchfaceArchive({
+    sourceArchiveId: withGeneratedSprite.archiveId,
+    backgroundDataUrl: pngDataUrl(icon),
+    assetReplacements: [
+      {
+        path: "watchface_800x800/cl_hh/00.png",
+        dataUrl: pngDataUrl(regeneratedMetricDigit),
+        create: true
+      }
+    ]
+  });
+  const regeneratedSpriteOutput = await findCreatorOutput(withRegeneratedSprite);
+  assert.ok(regeneratedSpriteOutput, "regenerated-sprite output should be available");
+  const regeneratedSpriteZip = await unzipper.Open.file(regeneratedSpriteOutput.path);
+  const regeneratedSpriteEntries = regeneratedSpriteZip.files.filter(
+    (entry) =>
+      entry.type === "File" && entry.path === "watchface_800x800/cl_hh/00.png"
+  );
+  assert.equal(
+    regeneratedSpriteEntries.length,
+    1,
+    "regenerated studio sprites should overwrite instead of creating duplicate ZIP entries"
+  );
+  assert.deepEqual(
+    await regeneratedSpriteEntries[0].buffer(),
+    regeneratedMetricDigit,
+    "regenerated studio sprites should replace the previous bytes even when dimensions change"
+  );
+
   // --- Weather must be wired into normal and always-on configs ----------
   const withAodWeather = await watchfaces.createCorosWatchfaceArchive({
     sourceArchiveId: starter.archiveId,
@@ -750,6 +822,52 @@ async function main() {
     }),
     /not valid config syntax/,
     "multi-line values must be rejected"
+  );
+
+  // Removing Battery from the selectable control must not delete a state
+  // folder still referenced by the fixed battery icon.
+  const withoutSelectableBattery = await watchfaces.createCorosWatchfaceArchive({
+    sourceArchiveId: starter.archiveId,
+    backgroundDataUrl: pngDataUrl(icon),
+    configOverrides: [{
+      path: "watchface_800x800/config.txt",
+      values: {
+        control_battery_icon_dir: "__COROSLINK_DELETE_CONFIG_KEY__"
+      }
+    }]
+  });
+  const withoutSelectableBatteryOutput = await findCreatorOutput(
+    withoutSelectableBattery
+  );
+  const withoutSelectableBatteryZip = await unzipper.Open.file(
+    withoutSelectableBatteryOutput.path
+  );
+  const withoutSelectableBatteryConfigEntry =
+    withoutSelectableBatteryZip.files.find(
+      (entry) => entry.path === "watchface_800x800/config.txt"
+    );
+  assert.ok(
+    withoutSelectableBatteryConfigEntry,
+    "the shared-battery output should retain config.txt"
+  );
+  const withoutSelectableBatteryConfig = (
+    await withoutSelectableBatteryConfigEntry.buffer()
+  ).toString("utf8");
+  assert.doesNotMatch(
+    withoutSelectableBatteryConfig,
+    /\[control_battery_icon_dir\]/,
+    "the selectable Battery config should be removed"
+  );
+  assert.match(
+    withoutSelectableBatteryConfig,
+    /\[battery_icon_dir\]=battery/,
+    "the fixed battery icon should keep its folder reference"
+  );
+  assert.ok(
+    withoutSelectableBatteryZip.files.some(
+      (entry) => entry.path === "watchface_800x800/battery/00.png"
+    ),
+    "a state folder shared by the fixed battery icon must remain in the archive"
   );
 
   console.log("COROS watchface creator archive test passed");

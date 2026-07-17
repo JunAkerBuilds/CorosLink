@@ -5,12 +5,16 @@ import {
   buildAmPmOverrides,
   buildControlTemperatureOverrides,
   buildControlIconPositionOverrides,
+  buildControlBatteryVisibilityOverrides,
+  buildDateSpriteComposition,
   buildDateStyleOverrides,
   buildLayerVisibilityOverrides,
   buildLayerColorOverrides,
   buildLayoutOverrides,
   buildMetricOverrides,
   buildMetricStyleOverrides,
+  buildSelectableMetricSpriteReplacements,
+  buildSelectableMetricStyleOverrides,
   buildSeparateTimeOverrides,
   buildStaticSeparatorOverrides,
   buildTimeStyleOverrides,
@@ -26,6 +30,7 @@ import {
   getFixedMetricCapabilities,
   getTemplateBackgroundAssetPaths,
   getWatchfaceAnalogPreviewLayers,
+  hasControlBattery,
   hasAutoAlignedTime,
   hasWatchfaceAod,
   inferStaticSeparators,
@@ -37,12 +42,15 @@ import {
   pickWatchPreviewResolution,
   rasterFontSupportsText,
   rebaseNegativeControlChildren,
-  scaleConfigRectValue
+  resizeConfigRectToCanvas,
+  scaleConfigRectValue,
+  watchfaceEffectRenderScale
 } from "../src/watchfaces/watchfaceStudio.ts";
 
 assert.equal(corosWeekdayIndex(0), 6);
 assert.equal(corosWeekdayIndex(1), 0);
 assert.equal(corosWeekdayIndex(6), 5);
+assert.equal(watchfaceEffectRenderScale(520 / 416, 416 / 800), 0.65);
 
 assert.equal(normalizeRasterFontGlyphs("0 1 2 2 a"), "012A");
 const rasterFont = {
@@ -476,6 +484,198 @@ assert.equal(
   undefined,
   "Battery scaling must not alter the firmware position"
 );
+const detailsWithoutBatteryIcon = {
+  ...details,
+  resolutions: details.resolutions.map((candidate) => {
+    const config = { ...candidate.config };
+    delete config.battery_icon_pos;
+    delete config.battery_icon_dir;
+    return {
+      ...candidate,
+      config,
+      spriteFolders: candidate.spriteFolders.filter(
+        (folder) => folder.folder !== "battery"
+      )
+    };
+  })
+};
+for (const resolution of detailsWithoutBatteryIcon.resolutions) {
+  resolution.config.control_battery_icon_dir = "battery";
+}
+const createdBatteryIconOverrides = buildWatchfaceConfigAssetOverrides(
+  detailsWithoutBatteryIcon,
+  {
+    "config:battery_icon": {
+      stateReplacements: {
+        "0": { dataUrl: "data:image/png;base64,AA==", width: 48, height: 24 }
+      }
+    }
+  }
+);
+const createdFullBatteryIcon = createdBatteryIconOverrides.find(({ path }) =>
+  path.includes("800x800")
+);
+assert.equal(createdFullBatteryIcon?.values.battery_icon_dir, "cl_battery_icon");
+assert.equal(createdFullBatteryIcon?.values.battery_icon_pos, "{376,644}");
+assert.equal(
+  createdBatteryIconOverrides.find(({ path }) => path.includes("416x416"))
+    ?.values.battery_icon_pos,
+  "{196,335}"
+);
+const controlBatteryDetails = {
+  ...details,
+  resolutions: details.resolutions.map((resolution) => ({
+    ...resolution,
+    config: {
+      ...resolution.config,
+      control_battery_icon_dir: "battery",
+      control_battery_icon_pos: "{12,8}",
+      control_battery_level_rect: "{30,0,80,24,hcenter|vcenter}",
+      control_battery_level_font: "13x19"
+    },
+    aodConfig: {
+      ...resolution.aodConfig,
+      control_battery_icon_pos: "",
+      control_battery_icon_dir: "",
+      control_battery_level_rect: "",
+      control_battery_level_font: "",
+      control_battery_level_font_color: ""
+    }
+  }))
+};
+const hiddenControlBattery = buildControlBatteryVisibilityOverrides(
+  controlBatteryDetails,
+  false
+);
+assert.equal(hasControlBattery(controlBatteryDetails), true);
+assert.equal(hiddenControlBattery.length, details.resolutions.length * 2);
+for (const override of hiddenControlBattery) {
+  assert.equal(
+    override.values.control_battery_icon_dir,
+    "__COROSLINK_DELETE_CONFIG_KEY__"
+  );
+  assert.equal(
+    override.values.control_battery_icon_pos,
+    "__COROSLINK_DELETE_CONFIG_KEY__"
+  );
+  assert.equal(
+    override.values.control_battery_level_rect,
+    "__COROSLINK_DELETE_CONFIG_KEY__"
+  );
+  assert.equal(
+    override.values.control_battery_level_font,
+    "__COROSLINK_DELETE_CONFIG_KEY__"
+  );
+}
+assert.deepEqual(
+  hiddenControlBattery.map(({ path }) => path),
+  details.resolutions.flatMap(({ directory }) => [
+    `${directory}/config.txt`,
+    `${directory}/AODconfig.txt`
+  ]),
+  "disabling selectable Battery should remove its declarations from current and AOD configs"
+);
+assert.deepEqual(buildControlBatteryVisibilityOverrides(details, true), []);
+const reopenedDisabledBatteryDetails = {
+  ...details,
+  resolutions: details.resolutions.map((resolution) => ({
+    ...resolution,
+    aodConfig: {
+      ...resolution.aodConfig,
+      control_battery_icon_pos: "",
+      control_battery_icon_dir: "",
+      control_battery_level_rect: "",
+      control_battery_level_font: "",
+      control_battery_level_font_color: ""
+    }
+  }))
+};
+assert.equal(hasControlBattery(reopenedDisabledBatteryDetails), false);
+assert.equal(
+  buildControlBatteryVisibilityOverrides(
+    reopenedDisabledBatteryDetails,
+    undefined
+  ).length,
+  details.resolutions.length,
+  "a reopened template without current-face Battery should clean stale AOD declarations"
+);
+const baseComplicationBounds = computeLayoutGroupBounds(
+  details.resolutions.find(({ width }) => width === 800)
+).find(({ id }) => id === "complication");
+const scaledComplicationDetails = applyConfigOverridesToDetails(
+  details,
+  buildSelectableMetricStyleOverrides(
+    details,
+    { fontFamily: "Inter", scale: 2 },
+    false
+  )
+);
+const scaledComplicationBounds = computeLayoutGroupBounds(
+  scaledComplicationDetails.resolutions.find(({ width }) => width === 800)
+).find(({ id }) => id === "complication");
+assert.ok(baseComplicationBounds && scaledComplicationBounds);
+assert.ok(
+  scaledComplicationBounds.x1 - scaledComplicationBounds.x0 >
+    baseComplicationBounds.x1 - baseComplicationBounds.x0,
+  "selectable style overrides should expand the geometry used by editor layers"
+);
+const farControlBatteryDetails = {
+  ...controlBatteryDetails,
+  resolutions: controlBatteryDetails.resolutions.map((resolution) => ({
+    ...resolution,
+    config: {
+      ...resolution.config,
+      control_battery_icon_pos: `{${Math.round(resolution.width * 0.75)},0}`,
+      control_battery_level_rect: `{${Math.round(resolution.width * 0.75)},0,${Math.round(resolution.width * 0.9)},24,hcenter|vcenter}`
+    }
+  }))
+};
+const visibleControlBatteryBounds = computeLayoutGroupBounds(
+  farControlBatteryDetails.resolutions.find(({ width }) => width === 800)
+).find(({ id }) => id === "complication");
+const hiddenControlBatteryDetails = applyConfigOverridesToDetails(
+  farControlBatteryDetails,
+  buildControlBatteryVisibilityOverrides(farControlBatteryDetails, false)
+);
+const hiddenControlBatteryBounds = computeLayoutGroupBounds(
+  hiddenControlBatteryDetails.resolutions.find(({ width }) => width === 800)
+).find(({ id }) => id === "complication");
+assert.ok(visibleControlBatteryBounds && hiddenControlBatteryBounds);
+assert.ok(
+  visibleControlBatteryBounds.x1 > hiddenControlBatteryBounds.x1,
+  "deleted control-battery children should not remain in editor geometry"
+);
+const reopenedStudioBatteryDetails = {
+  ...detailsWithoutBatteryIcon,
+  resolutions: detailsWithoutBatteryIcon.resolutions.map((resolution) => ({
+    ...resolution,
+    config: {
+      ...resolution.config,
+      battery_icon_pos: "{20,30}",
+      battery_icon_dir: ""
+    },
+    spriteFolders: [
+      ...resolution.spriteFolders,
+      {
+        folder: "cl_battery_icon",
+        kind: "state",
+        aod: false,
+        files: [{
+          path: `${resolution.directory}/cl_battery_icon/00.png`,
+          width: 48,
+          height: 24
+        }]
+      }
+    ]
+  }))
+};
+const reopenedStudioBatteryOverrides = buildWatchfaceConfigAssetOverrides(
+  reopenedStudioBatteryDetails,
+  {}
+);
+for (const override of reopenedStudioBatteryOverrides) {
+  assert.equal(override.values.battery_icon_dir, "cl_battery_icon");
+}
 for (const override of configAssetOverrides.filter(({ path }) => /\/config\.txt$/i.test(path))) {
   assert.equal(override.values.colon_icon, "");
   assert.match(override.values.control_colon_icon, /^studio\\config-control_colon_icon-/);
@@ -531,6 +731,7 @@ assert.equal(
 assert.deepEqual(
   getFixedMetricCapabilities(details),
   [
+    { id: "battery", label: "Battery data", active: false },
     { id: "heartRate", label: "Heart rate", active: false },
     { id: "steps", label: "Steps", active: false },
     { id: "calories", label: "Calories", active: false },
@@ -541,6 +742,21 @@ assert.deepEqual(
 assert.deepEqual(
   getAvailableComplications(details).map(({ id }) => id),
   ["heartRate", "steps", "battery", "temperature"]
+);
+const selectableStyleOverrides = buildSelectableMetricStyleOverrides(
+  details,
+  { fontFamily: "Inter", color: "#12abef", scale: 1.25 },
+  true
+);
+const selectableFull = selectableStyleOverrides.find(({ path }) =>
+  path.includes("800x800")
+);
+assert.equal(selectableFull?.values.control_hr_font, "cl_control");
+assert.equal(selectableFull?.values.control_step_font, "cl_control");
+assert.equal(selectableFull?.values.control_hr_font_color, "0x12ABEF");
+assert.equal(
+  selectableFull?.values.control_hr_rect,
+  "{144,-8,304,72,hcenter|vcenter}"
 );
 
 const iconPositionDetails = applyConfigOverridesToDetails(details, [
@@ -645,6 +861,7 @@ assert.deepEqual(
 );
 
 const metricOverrides = buildMetricOverrides(details, {
+  battery: true,
   heartRate: true,
   steps: true,
   temperature: true,
@@ -653,6 +870,8 @@ const metricOverrides = buildMetricOverrides(details, {
 assert.equal(metricOverrides.length, 2);
 const full = metricOverrides.find((entry) => entry.path.includes("800x800"));
 assert.ok(full);
+assert.match(full.values.battery_level_rect, /^\{\d+,\d+,\d+,\d+,hcenter\|vcenter\}$/);
+assert.equal(full.values.battery_level_font, "13x19");
 assert.equal(
   full.values.heartreate_level_rect,
   "{134,576,266,640,hcenter|vcenter}"
@@ -897,6 +1116,40 @@ assert.equal(
   "{400,320,464,384,hcenter|vcenter}"
 );
 assert.equal(fullDateStyle?.values.english_date_day_font, "cl_date_day");
+const detailsWithoutDateDayColor = {
+  ...withMetrics,
+  resolutions: withMetrics.resolutions.map((candidate) => {
+    const config = { ...candidate.config };
+    delete config.english_date_day_font_color;
+    return { ...candidate, config };
+  })
+};
+const dateStyleWithoutUnsupportedColor = buildDateStyleOverrides(
+  detailsWithoutDateDayColor,
+  {
+    weekday: { scale: 1, color: "#aa44ee" },
+    dateDay: { scale: 1, color: "#22cc88" }
+  },
+  true
+);
+assert.equal(
+  dateStyleWithoutUnsupportedColor[0]?.values.english_date_week_font_color,
+  "0xAA44EE"
+);
+assert.equal(
+  dateStyleWithoutUnsupportedColor[0]?.values.english_date_day_font_color,
+  undefined,
+  "date styling should not add a font-color key missing from the starter"
+);
+assert.equal(
+  resizeConfigRectToCanvas(
+    "{100,40,180,84,hcenter|vcenter}",
+    132,
+    44
+  ),
+  "{74,40,206,84,hcenter|vcenter}",
+  "native weekday width should expand around the existing center without face clamping"
+);
 const layerColorOverrides = buildLayerColorOverrides(withMetrics, {
   seconds: "#22cc88",
   weekday: "#aa44ee",
@@ -994,6 +1247,180 @@ assert.equal(
   merged.find((entry) => entry.path.includes("800x800"))?.values.heartreate_level_rect,
   "{144,596,276,660,hcenter|vcenter}"
 );
+
+// Reopening a Studio-produced archive should replace its existing shared
+// selectable digit folder instead of attempting to create colliding entries.
+const existingControlDetails = {
+  ...details,
+  resolutions: details.resolutions.map((candidate) => ({
+    ...candidate,
+    spriteFolders: [
+      ...candidate.spriteFolders,
+      {
+        folder: "cl_control",
+        kind: "digits",
+        aod: false,
+        files: digitFiles(
+          candidate.width === 800 ? 44 : 23,
+          candidate.width === 800 ? 64 : 33,
+          candidate.directory,
+          "cl_control"
+        )
+      }
+    ]
+  }))
+};
+const nativeDocument = globalThis.document;
+const nativeDateImage = globalThis.Image;
+globalThis.document = {
+  createElement: () => {
+    let renderedText = "";
+    const context = {
+      fillStyle: "",
+      font: "",
+      textBaseline: "alphabetic",
+      measureText: (text) => ({
+        width: text.length * 8,
+        actualBoundingBoxAscent: 8,
+        actualBoundingBoxDescent: 2
+      }),
+      fillText: (text) => {
+        renderedText = text;
+      },
+      drawImage: () => {}
+    };
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: () => context,
+      toDataURL: () =>
+        `data:image/png;base64,W${canvas.width}H${canvas.height}T${renderedText}`
+    };
+    return canvas;
+  }
+};
+globalThis.Image = class FakeNativeDateImage {
+  naturalWidth = 1;
+  naturalHeight = 1;
+  onload = null;
+  onerror = null;
+  set src(value) {
+    const dimensions = /W(\d+)H(\d+)/.exec(value);
+    this.naturalWidth = Number(dimensions?.[1] ?? 1);
+    this.naturalHeight = Number(dimensions?.[2] ?? 1);
+    queueMicrotask(() => this.onload?.());
+  }
+};
+try {
+  const reopenedControlReplacements =
+    await buildSelectableMetricSpriteReplacements(
+      existingControlDetails,
+      { scale: 1, fontFamily: "Fixture Sans" },
+      "",
+      async () => {
+        throw new Error("local-font rendering should not load source sprites");
+      }
+    );
+  assert.ok(reopenedControlReplacements.length > 0);
+  assert.equal(
+    reopenedControlReplacements.every(({ create }) => create === false),
+    true,
+    "existing cl_control digits should be replaced in place on a round trip"
+  );
+
+  const existingDateDetails = {
+    ...details,
+    resolutions: details.resolutions.map((candidate) => ({
+      ...candidate,
+      spriteFolders: [
+        ...candidate.spriteFolders,
+        {
+          folder: "cl_weekday",
+          kind: "week",
+          aod: false,
+          files: weekFiles(
+            candidate.width === 800 ? 132 : 69,
+            candidate.width === 800 ? 64 : 33,
+            candidate.directory,
+            "cl_weekday"
+          )
+        },
+        {
+          folder: "cl_date_day",
+          kind: "digits",
+          aod: false,
+          files: digitFiles(
+            candidate.width === 800 ? 44 : 23,
+            candidate.width === 800 ? 64 : 33,
+            candidate.directory,
+            "cl_date_day"
+          )
+        }
+      ]
+    }))
+  };
+  const reopenedDateComposition = await buildDateSpriteComposition(
+    existingDateDetails,
+    {
+      weekday: {
+        scale: 1,
+        fontFamily: "Fixture Sans",
+        nativeSize: true
+      },
+      dateDay: {
+        scale: 1,
+        fontFamily: "Fixture Sans",
+        nativeSize: true
+      }
+    },
+    {
+      fontFamily: "",
+      digitColor: "#ffffff",
+      tintLabels: false
+    },
+    async (paths) => {
+      assert.deepEqual(
+        paths,
+        [],
+        "local date-font rendering should not request source sprites"
+      );
+      return [];
+    }
+  );
+  assert.ok(reopenedDateComposition.replacements.length > 0);
+  assert.equal(
+    reopenedDateComposition.replacements.every(
+      ({ create }) => create === false
+    ),
+    true,
+    "existing cl_weekday and cl_date_day sprites should be replaced in place"
+  );
+  assert.match(
+    reopenedDateComposition.replacements.find(({ path }) =>
+      path.endsWith("/cl_weekday/00.png")
+    )?.dataUrl ?? "",
+    /TMON$/,
+    "weekday sprite zero should render MON"
+  );
+  assert.match(
+    reopenedDateComposition.replacements.find(({ path }) =>
+      path.endsWith("/cl_date_day/00.png")
+    )?.dataUrl ?? "",
+    /T0$/,
+    "date-day sprite zero should render 0 rather than MON"
+  );
+} finally {
+  if (nativeDocument === undefined) {
+    delete globalThis.document;
+  } else {
+    globalThis.document = nativeDocument;
+  }
+  if (nativeDateImage === undefined) {
+    delete globalThis.Image;
+  } else {
+    globalThis.Image = nativeDateImage;
+  }
+}
 
 // Stable template assets reuse their decoded image, while dynamic background
 // frames can explicitly bypass the cache during drag rendering.

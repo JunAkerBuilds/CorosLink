@@ -17,6 +17,7 @@ import type {
   CorosWatchfaceAssetReplacement,
   CorosWatchfaceConfigOverride,
   CorosWatchfaceCreatorInput,
+  CorosWatchfaceExistingShareInput,
   CorosWatchfacePublishInput,
   CorosWatchfaceProject,
   CorosWatchfaceProjectExportInput,
@@ -59,6 +60,7 @@ const MOBILE_API_HOSTNAMES: Record<CorosWatchfaceRegion, string> = {
   cn: "apicn.coros.com"
 };
 const DEFAULT_WATCHFACE_REGION: CorosWatchfaceRegion = "us";
+const COROS_CONFIG_DELETE_VALUE = "__COROSLINK_DELETE_CONFIG_KEY__";
 
 function normalizeWatchfaceRegion(value: unknown): CorosWatchfaceRegion {
   return value === "eu" || value === "us" || value === "cn"
@@ -1330,6 +1332,26 @@ export async function createCorosWatchfaceArchive(
     input.watchFaceVersion,
     "Archive watch-face version"
   );
+  const templateIdOverride =
+    input.templateIdOverride === undefined
+      ? undefined
+      : String(input.templateIdOverride).trim();
+  const templateNameOverride =
+    input.templateNameOverride === undefined
+      ? undefined
+      : String(input.templateNameOverride).trim();
+  if (
+    templateIdOverride !== undefined &&
+    (!/^\d{1,20}$/.test(templateIdOverride) || /^0+$/.test(templateIdOverride))
+  ) {
+    throw new Error("Template ID overrides must contain 1–20 decimal digits.");
+  }
+  if (
+    templateNameOverride !== undefined &&
+    (templateNameOverride.length === 0 || templateNameOverride.length > 64)
+  ) {
+    throw new Error("Template name overrides must contain 1–64 characters.");
+  }
   if (
     watchFaceVersion !== undefined &&
     minimumWatchFaceVersion !== undefined &&
@@ -1347,7 +1369,9 @@ export async function createCorosWatchfaceArchive(
     sprites,
     configOverrides,
     minimumWatchFaceVersion,
-    watchFaceVersion
+    watchFaceVersion,
+    templateIdOverride,
+    templateNameOverride
   );
   const outputDirectory = path.join(app.getPath("userData"), "watchface-archives");
   await fs.promises.mkdir(outputDirectory, { recursive: true });
@@ -1362,6 +1386,20 @@ export async function createCorosWatchfaceArchive(
   };
   selectedArchives.set(selected.archiveId, selected);
   return toPublicArchive(selected);
+}
+
+/** Saves an already composed final watch-face archive without publishing it. */
+export async function exportCorosWatchfaceArchive(
+  archiveId: string,
+  destinationPath: string
+): Promise<void> {
+  const archive = requireSelectedArchive(archiveId);
+  const freshArchive = await inspectArchive(archive.path, archive.archiveId);
+  if (freshArchive.modifiedMs !== archive.modifiedMs) {
+    selectedArchives.set(freshArchive.archiveId, freshArchive);
+    throw new Error("The generated watch-face archive changed before export.");
+  }
+  await fs.promises.copyFile(archive.path, destinationPath);
 }
 
 /**
@@ -1479,18 +1517,25 @@ export function applyCorosWatchfaceConfigOverrides(
 ): string {
   const pending = new Map(Object.entries(overrides));
   const newline = text.includes("\r\n") ? "\r\n" : "\n";
-  const lines = text.split(/\r?\n/).map((line) => {
+  const lines = text.split(/\r?\n/).flatMap((line) => {
     const match = line.match(/^(\s*)\[([^\]]+)\]\s*=.*$/);
     if (!match || !pending.has(match[2]!)) {
-      return line;
+      return [line];
     }
     const value = pending.get(match[2]!)!;
     pending.delete(match[2]!);
-    return `${match[1]}[${match[2]}]=${value}`;
+    return value === COROS_CONFIG_DELETE_VALUE
+      ? []
+      : [`${match[1]}[${match[2]}]=${value}`];
   });
   const appendableKeys = new Set([
     "weather_icon_pos",
     "weather_icon_dir",
+    "battery_icon_pos",
+    "battery_icon_dir",
+    "battery_level_rect",
+    "battery_level_font",
+    "battery_level_font_color",
     "temperature_rect",
     "temperature_font",
     "temperature_font_color",
@@ -1502,6 +1547,16 @@ export function applyCorosWatchfaceConfigOverrides(
     "control_temperature_font_color",
     "control_temperature_negative_sign_icon",
     "control_negative_sign_icon",
+    "control_hr_font_color",
+    "control_step_font_color",
+    "control_kcal_font_color",
+    "control_floor_font_color",
+    "control_elevation_font_color",
+    "control_exercise_font_color",
+    "control_sunrise_font_color",
+    "control_sunset_font_color",
+    "control_battery_level_font",
+    "control_battery_level_font_color",
     "time_hour_high_pos",
     "time_hour_high_font",
     "time_hour_low_pos",
@@ -1514,6 +1569,11 @@ export function applyCorosWatchfaceConfigOverrides(
   ]);
   const appended: string[] = [];
   for (const [key, value] of pending) {
+    if (value === COROS_CONFIG_DELETE_VALUE) {
+      // Deleting an optional key that is already absent is idempotent.
+      pending.delete(key);
+      continue;
+    }
     if (appendableKeys.has(key)) {
       appended.push(`[${key}]=${value}`);
       pending.delete(key);
@@ -1529,6 +1589,21 @@ export function applyCorosWatchfaceConfigOverrides(
     lines.splice(insertionIndex, 0, ...appended);
   }
   return lines.join(newline);
+}
+
+/** Ensures a composed standalone battery folder is actually referenced. */
+export function repairStandaloneBatteryConfigOverrides(
+  text: string,
+  overrides: Record<string, string>,
+  hasStudioBatteryFolder: boolean
+): Record<string, string> {
+  if (!hasStudioBatteryFolder) return overrides;
+  const config = parseCorosWatchfaceConfig(text);
+  const position = overrides.battery_icon_pos ?? config.battery_icon_pos ?? "";
+  const folder = overrides.battery_icon_dir ?? config.battery_icon_dir ?? "";
+  return position.trim() && !folder.trim()
+    ? { ...overrides, battery_icon_dir: "cl_battery_icon" }
+    : overrides;
 }
 
 function validateConfigOverrides(
@@ -1641,7 +1716,7 @@ async function discoverSpriteAssets(
   for (const [folder, numbered] of folderFiles) {
     const plainFolder = folder.replace(/^a\//, "");
     const kind = stateFolders.has(folder) || stateFolders.has(plainFolder) ||
-      /^(?:battery|weather)$/i.test(plainFolder)
+      /^(?:battery|weather|cl_battery_icon)$/i.test(plainFolder)
       ? "state"
       : classifySpriteFolder(numbered);
     if (!kind) {
@@ -1862,13 +1937,54 @@ export async function publishCorosWatchface(
     throw new Error("COROS saved the template but did not return its ID.");
   }
 
-  const linkBody = buildCreateLinkBody({
+  return requestCorosWatchfaceShareLink(session, {
     backgroundImageId: input.backgroundImageId,
     firmwareType,
     sourceTemplateId: freshArchive.sourceTemplateId,
     templateId,
     name
   });
+}
+
+export async function createCorosWatchfaceShareLink(
+  input: CorosWatchfaceExistingShareInput
+): Promise<CorosWatchfaceShareLink> {
+  const session = requireSession();
+  const name = sanitizeTemplateName(input.name);
+  const firmwareType = normalizeOptionalFirmwareType(input.firmwareType);
+  if (!firmwareType) {
+    throw new Error("This custom face does not include a COROS firmware type.");
+  }
+  if (!Number.isSafeInteger(input.backgroundImageId) || input.backgroundImageId < 0) {
+    throw new Error("Background image ID must be a non-negative integer.");
+  }
+
+  const templateId = input.templateId.trim();
+  const sourceTemplateId = input.sourceTemplateId.trim();
+  if (!/^\d{1,20}$/.test(templateId) || !/^\d{1,20}$/.test(sourceTemplateId)) {
+    throw new Error("This custom face does not include valid COROS template IDs.");
+  }
+
+  return requestCorosWatchfaceShareLink(session, {
+    backgroundImageId: input.backgroundImageId,
+    firmwareType,
+    sourceTemplateId,
+    templateId,
+    name
+  });
+}
+
+async function requestCorosWatchfaceShareLink(
+  session: StoredMobileSession,
+  input: {
+    backgroundImageId: number;
+    firmwareType: string;
+    sourceTemplateId: string;
+    templateId: string;
+    name: string;
+  }
+): Promise<CorosWatchfaceShareLink> {
+  const linkBody = buildCreateLinkBody(input);
   const link = await mobileRequest<{
     url?: string;
     expireTimestamp?: number;
@@ -1924,6 +2040,18 @@ export function extractDecimalProperty(raw: string, property: string): string | 
 }
 
 /**
+ * Preserve COROS watch-face IDs as decimal text before JSON.parse can round
+ * values above Number.MAX_SAFE_INTEGER.
+ */
+export function parseCorosMobileJson(raw: string): unknown {
+  const losslessRaw = raw.replace(
+    /("(?:watchFaceThemeId|watchFaceTemplateId|srcWatchFaceTemplateId|watchfaceId)"\s*:\s*)(\d{16,})(?=\s*[,}])/g,
+    (_match, prefix: string, value: string) => `${prefix}"${value}"`
+  );
+  return JSON.parse(losslessRaw) as unknown;
+}
+
+/**
  * The mobile client has used a few response shapes for this endpoint. Keep
  * the renderer insulated from those server-side naming changes and expose a
  * small, safe read-only catalog shape instead.
@@ -1942,6 +2070,10 @@ export function normalizeCorosWatchfaceThemes(
       continue;
     }
     const id = readWatchfaceId(record);
+    const sourceTemplateId = readString(record, [
+      "srcWatchFaceTemplateId",
+      "sourceTemplateId"
+    ]);
     const name = readString(record, [
       "watchFaceThemeName",
       "watchFaceTemplateName",
@@ -1983,6 +2115,7 @@ export function normalizeCorosWatchfaceThemes(
     seen.add(key);
     themes.push({
       ...(id ? { id } : {}),
+      ...(sourceTemplateId ? { sourceTemplateId } : {}),
       name: name || (id ? `COROS theme ${id}` : "Untitled COROS theme"),
       ...(previewImageUrl ? { previewImageUrl } : {}),
       ...(packageUrl ? { packageUrl } : {}),
@@ -2376,6 +2509,42 @@ function setWatchFaceVersion(rawInfo: string, version: number): string {
   return rawInfo.replace(/^(\s*\{)/, `$1"o_wf_ver":${version},`);
 }
 
+/** Rewrites the lossless raw numeric template ID without JSON round-tripping. */
+export function setWatchfaceTemplateId(
+  rawInfo: string,
+  templateId: string
+): string {
+  if (!/^\d{1,20}$/.test(templateId) || /^0+$/.test(templateId)) {
+    throw new Error("Template ID overrides must contain 1–20 decimal digits.");
+  }
+  if (/"o_template_id"\s*:\s*(?:"\d+"|\d+)/.test(rawInfo)) {
+    return rawInfo.replace(
+      /"o_template_id"\s*:\s*(?:"\d+"|\d+)/,
+      `"o_template_id":${templateId}`
+    );
+  }
+  return rawInfo.replace(/^(\s*\{)/, `$1"o_template_id":${templateId},`);
+}
+
+/** Rewrites the manifest name while preserving all other raw fields. */
+export function setWatchfaceTemplateName(
+  rawInfo: string,
+  templateName: string
+): string {
+  const name = templateName.trim();
+  if (name.length === 0 || name.length > 64) {
+    throw new Error("Template name overrides must contain 1–64 characters.");
+  }
+  const encoded = JSON.stringify(name);
+  if (/"m_name"\s*:\s*"(?:\\.|[^"\\])*"/.test(rawInfo)) {
+    return rawInfo.replace(
+      /"m_name"\s*:\s*"(?:\\.|[^"\\])*"/,
+      `"m_name":${encoded}`
+    );
+  }
+  return rawInfo.replace(/^(\s*\{)/, `$1"m_name":${encoded},`);
+}
+
 async function rewriteTemplateArchive(
   sourcePath: string,
   replacements: Map<string, Buffer>,
@@ -2384,11 +2553,65 @@ async function rewriteTemplateArchive(
   spriteReplacements: Map<string, DecodedSpriteReplacement> = new Map(),
   configOverrides: Map<string, Record<string, string>> = new Map(),
   minWatchFaceVersion?: number,
-  watchFaceVersion?: number
+  watchFaceVersion?: number,
+  templateIdOverride?: string,
+  templateNameOverride?: string
 ): Promise<Buffer> {
   const directory = await openTemplateArchive(sourcePath);
-  const sourceFiles = directory.files.filter((entry) => entry.type === "File");
-  const sourcePaths = new Set(sourceFiles.map((entry) => entry.path));
+  const originalSourceFiles = directory.files.filter((entry) => entry.type === "File");
+  const sourcePaths = new Set(originalSourceFiles.map((entry) => entry.path));
+  const configEntries = originalSourceFiles.filter((entry) =>
+    /(^|\/)(?:AODconfig|config)\.txt$/i.test(entry.path)
+  );
+  const parsedConfigs = new Map<string, Record<string, string>>();
+  for (const entry of configEntries) {
+    parsedConfigs.set(
+      entry.path,
+      parseCorosWatchfaceConfig((await entry.buffer()).toString("utf8"))
+    );
+  }
+  const normalizeConfigFolder = (value: string | undefined) =>
+    value
+      ?.replace(/\\/g, "/")
+      .replace(/^\.\//, "")
+      .replace(/^\/+|\/+$/g, "") ?? "";
+  const removedControlBatteryPrefixes = new Set<string>();
+  for (const [configPath, overrides] of configOverrides) {
+    if (overrides.control_battery_icon_dir !== COROS_CONFIG_DELETE_VALUE) continue;
+    const config = parsedConfigs.get(configPath);
+    if (!config) continue;
+    const folder = normalizeConfigFolder(config.control_battery_icon_dir);
+    const resolutionDirectory = configPath.split("/", 1)[0]!;
+    const folderIsStillReferenced = configEntries.some((entry) => {
+      if (entry.path.split("/", 1)[0] !== resolutionDirectory) return false;
+      const effectiveConfig = {
+        ...(parsedConfigs.get(entry.path) ?? {}),
+        ...(configOverrides.get(entry.path) ?? {})
+      };
+      return Object.entries(effectiveConfig).some(
+        ([key, value]) =>
+          /_icon_dir$/i.test(key) &&
+          value !== COROS_CONFIG_DELETE_VALUE &&
+          normalizeConfigFolder(value) === folder
+      );
+    });
+    if (folder && !folderIsStillReferenced) {
+      removedControlBatteryPrefixes.add(
+        `${resolutionDirectory}/${folder}/`
+      );
+    }
+  }
+  const sourceFiles = originalSourceFiles.filter(
+    (entry) =>
+      ![...removedControlBatteryPrefixes].some((prefix) =>
+        entry.path.startsWith(prefix)
+      )
+  );
+  const studioBatteryResolutions = new Set<string>();
+  for (const spritePath of [...sourcePaths, ...spriteReplacements.keys()]) {
+    const match = spritePath.match(/^(watchface_\d+x\d+)\/cl_battery_icon\/\d{2}\.png$/i);
+    if (match) studioBatteryResolutions.add(match[1]!);
+  }
   for (const required of [
     "watchface_customize.png",
     "watchface_800x800/background.png",
@@ -2423,9 +2646,6 @@ async function rewriteTemplateArchive(
 
   for (const spritePath of spriteReplacements.keys()) {
     const sprite = spriteReplacements.get(spritePath)!;
-    if (sprite.create && sourcePaths.has(spritePath)) {
-      throw new Error("A new studio sprite collides with a starter template entry.");
-    }
     if (
       sprite.create &&
       !sourcePaths.has(`${spritePath.split("/", 1)[0]!}/config.txt`)
@@ -2469,16 +2689,31 @@ async function rewriteTemplateArchive(
   const entries = await Promise.all(
     sourceFiles.map(async (entry) => {
       if (
-        (minWatchFaceVersion !== undefined || watchFaceVersion !== undefined) &&
+        (
+          minWatchFaceVersion !== undefined ||
+          watchFaceVersion !== undefined ||
+          templateIdOverride !== undefined ||
+          templateNameOverride !== undefined
+        ) &&
         entry.path.replace(/^\.\//, "") === "info.json"
       ) {
         const rawInfo = (await entry.buffer()).toString("utf8");
+        const versionedInfo =
+          watchFaceVersion !== undefined
+            ? setWatchFaceVersion(rawInfo, watchFaceVersion)
+            : minWatchFaceVersion !== undefined
+              ? raiseWatchFaceVersion(rawInfo, minWatchFaceVersion)
+              : rawInfo;
+        const identifiedInfo =
+          templateIdOverride !== undefined
+            ? setWatchfaceTemplateId(versionedInfo, templateIdOverride)
+            : versionedInfo;
         return {
           name: entry.path,
           data: Buffer.from(
-            watchFaceVersion !== undefined
-              ? setWatchFaceVersion(rawInfo, watchFaceVersion)
-              : raiseWatchFaceVersion(rawInfo, minWatchFaceVersion!),
+            templateNameOverride !== undefined
+              ? setWatchfaceTemplateName(identifiedInfo, templateNameOverride)
+              : identifiedInfo,
             "utf8"
           )
         };
@@ -2488,13 +2723,30 @@ async function rewriteTemplateArchive(
         return { name: entry.path, data: backgroundData };
       }
       const overrides = configOverrides.get(entry.path);
-      if (overrides) {
+      const isNormalConfig = /(^|\/)config\.txt$/i.test(entry.path);
+      if (
+        overrides ||
+        (isNormalConfig &&
+          studioBatteryResolutions.has(entry.path.split("/", 1)[0]!))
+      ) {
+        const rawConfig = (await entry.buffer()).toString("utf8");
+        const resolutionDirectory = entry.path.split("/", 1)[0]!;
+        const effectiveOverrides = isNormalConfig
+          ? repairStandaloneBatteryConfigOverrides(
+              rawConfig,
+              overrides ?? {},
+              studioBatteryResolutions.has(resolutionDirectory)
+            )
+          : overrides!;
+        if (Object.keys(effectiveOverrides).length === 0) {
+          return { name: entry.path, data: Buffer.from(rawConfig, "utf8") };
+        }
         return {
           name: entry.path,
           data: Buffer.from(
             applyCorosWatchfaceConfigOverrides(
-              (await entry.buffer()).toString("utf8"),
-              overrides
+              rawConfig,
+              effectiveOverrides
             ),
             "utf8"
           )
@@ -2503,6 +2755,11 @@ async function rewriteTemplateArchive(
       const sprite = spriteReplacements.get(entry.path);
       if (!sprite) {
         return { name: entry.path, data: await entry.buffer() };
+      }
+      // Studio paths are upserts: rebuilding from a previously generated
+      // archive should replace the old sprite, even when its size changed.
+      if (sprite.create) {
+        return { name: entry.path, data: sprite.data };
       }
       // Sprites must keep the template's exact pixel size: the firmware lays
       // digits and icons out with the original bitmap dimensions.
@@ -2520,8 +2777,9 @@ async function rewriteTemplateArchive(
     })
   );
   const createdByResolution = new Map<string, { name: string; data: Buffer }[]>();
+  const retainedSourcePaths = new Set(sourceFiles.map((entry) => entry.path));
   for (const [spritePath, sprite] of spriteReplacements) {
-    if (!sprite.create) {
+    if (!sprite.create || retainedSourcePaths.has(spritePath)) {
       continue;
     }
     const resolutionDirectory = spritePath.split("/", 1)[0]!;
@@ -2772,7 +3030,7 @@ async function mobileRequest<T>(
 
   let payload: MobileApiEnvelope<T>;
   try {
-    payload = JSON.parse(raw) as MobileApiEnvelope<T>;
+    payload = parseCorosMobileJson(raw) as MobileApiEnvelope<T>;
   } catch {
     throw new Error("COROS returned an unreadable watchface response.");
   }
