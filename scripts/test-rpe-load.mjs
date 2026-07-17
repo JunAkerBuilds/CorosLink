@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const modUrl = pathToFileURL(path.join(repoRoot, "electron", "rpeLoad.ts"));
-const { feelTypeToCr10, sessionSrpe, dailyRpeLoad } = await import(
+const { feelTypeToCr10, sessionSrpe, dailyRpeLoad, buildRpeDistribution } = await import(
   `${modUrl.href}?c=${Date.now()}`
 );
 
@@ -49,5 +49,61 @@ const secLoad = dailyRpeLoad([
   { startTime: Math.floor(noonMs / 1000), duration: 45 * 60, feelType: 4 }
 ]);
 assert.equal(secLoad.get("20260714"), 360);
+
+// buildRpeDistribution: 5 buckets always, correct freq/sRPE/time sums + coverage.
+const emptyDist = buildRpeDistribution([], 0);
+assert.equal(emptyDist.buckets.length, 5);
+assert.deepEqual(
+  emptyDist.buckets.map((b) => b.level),
+  [1, 2, 3, 4, 5]
+);
+assert.ok(emptyDist.buckets.every((b) => b.frequency === 0 && b.srpe === 0 && b.timeSeconds === 0));
+assert.deepEqual(emptyDist.coverage, { rated: 0, total: 0 });
+
+const dist = buildRpeDistribution(
+  [
+    { startTime: noonMs, duration: 45 * 60, feelType: 4 }, // sRPE 360
+    { startTime: noonMs, duration: 30 * 60, feelType: 4 }, // sRPE 240 (same level)
+    { startTime: nextDay9, duration: 20 * 60, feelType: 1 }, // sRPE 40
+  ],
+  40
+);
+const level4 = dist.buckets.find((b) => b.level === 4);
+const level1 = dist.buckets.find((b) => b.level === 1);
+const level3 = dist.buckets.find((b) => b.level === 3);
+assert.equal(level4.frequency, 2);
+assert.equal(level4.srpe, 600); // 360 + 240
+assert.equal(level4.timeSeconds, 45 * 60 + 30 * 60);
+assert.equal(level1.frequency, 1);
+assert.equal(level1.srpe, 40);
+assert.equal(level3.frequency, 0); // untouched level stays zero
+assert.deepEqual(dist.coverage, { rated: 3, total: 40 });
+
+// Out-of-range / unrated feelType is ignored by the helper (guards the caller).
+const guarded = buildRpeDistribution(
+  [
+    { startTime: noonMs, duration: 60 * 60, feelType: 0 },
+    { startTime: noonMs, duration: 60 * 60, feelType: 6 },
+    { startTime: noonMs, duration: 60 * 60, feelType: null },
+  ],
+  10
+);
+assert.ok(guarded.buckets.every((b) => b.frequency === 0));
+assert.deepEqual(guarded.coverage, { rated: 0, total: 10 });
+
+// Rated but with an unusable duration: counts toward frequency/coverage, but
+// contributes to neither sRPE nor time (same rule as sessionSrpe).
+const noDuration = buildRpeDistribution(
+  [
+    { startTime: noonMs, feelType: 3 },
+    { startTime: noonMs, duration: -300, feelType: 3 },
+  ],
+  2
+);
+const noDurationLevel3 = noDuration.buckets.find((b) => b.level === 3);
+assert.equal(noDurationLevel3.frequency, 2);
+assert.equal(noDurationLevel3.srpe, 0);
+assert.equal(noDurationLevel3.timeSeconds, 0);
+assert.deepEqual(noDuration.coverage, { rated: 2, total: 2 });
 
 console.log("rpe-load tests passed");

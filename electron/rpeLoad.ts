@@ -3,6 +3,8 @@
 // strength work; sRPE = RPE × duration fixes that by using the subjective
 // effort instead.
 
+import type { RpeDistribution, RpeDistributionBucket } from "./types";
+
 export interface RpeActivityInput {
   /** Epoch in seconds or milliseconds. */
   startTime?: number;
@@ -74,4 +76,52 @@ export function dailyRpeLoad(
     byDay.set(happenDay, (byDay.get(happenDay) ?? 0) + load);
   }
   return byDay;
+}
+
+// Bucket rated activities by RPE level (1..5) over a window, summing frequency,
+// Foster sRPE, and time. COROS has no RPE distribution of its own, so this is
+// computed locally from the cached feelType. `totalActivityCount` is the total
+// number of activities in the window (rated + unrated) for the coverage ratio.
+export function buildRpeDistribution(
+  ratedInputs: RpeActivityInput[],
+  totalActivityCount: number
+): RpeDistribution {
+  const buckets: RpeDistributionBucket[] = [1, 2, 3, 4, 5].map((level) => ({
+    level,
+    frequency: 0,
+    srpe: 0,
+    timeSeconds: 0
+  }));
+
+  let rated = 0;
+  for (const activity of ratedInputs) {
+    const level = activity.feelType;
+    if (
+      level === undefined ||
+      level === null ||
+      !Number.isInteger(level) ||
+      level < 1 ||
+      level > 5
+    ) {
+      continue;
+    }
+    const bucket = buckets[level - 1];
+    bucket.frequency += 1;
+    bucket.srpe += sessionSrpe(level, activity.duration);
+    // Same usable-duration rule as sessionSrpe, so Time and sRPE agree on
+    // which sessions contribute.
+    if (
+      activity.duration !== undefined &&
+      Number.isFinite(activity.duration) &&
+      activity.duration > 0
+    ) {
+      bucket.timeSeconds += activity.duration;
+    }
+    rated += 1;
+  }
+
+  return {
+    buckets,
+    coverage: { rated, total: totalActivityCount }
+  };
 }

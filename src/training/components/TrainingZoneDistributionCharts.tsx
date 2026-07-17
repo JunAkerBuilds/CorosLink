@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
-import { Check, ChevronDown, Footprints, Heart } from "lucide-react";
+import { Check, ChevronDown, Footprints, Gauge, Heart } from "lucide-react";
 import {
   Cell,
   Pie,
@@ -10,6 +10,8 @@ import {
 } from "recharts";
 import type { TooltipContentProps } from "recharts";
 import type {
+  RpeDistribution,
+  RpeDistributionBucket,
   TrainingHubAnalytics,
   TrainingHubActivity,
   TrainingHubThresholdZone,
@@ -27,9 +29,10 @@ interface ZoneDistributionPanelProps {
   title: string;
   subtitle: string;
   emptyMessage: string;
-  variant: "heart" | "distance";
+  variant: "heart" | "distance" | "rpe";
   heroKicker: string;
   metricColumnLabel: string;
+  coverageNote?: string;
   data: ZoneDistributionDatum[];
   metricControl: ReactNode;
   getCaption: (datum: ZoneDistributionDatum) => string;
@@ -45,6 +48,7 @@ interface ZoneDistributionDatum {
 
 type ActivityMetric = "trainingLoad" | "distance" | "time";
 type DistanceMetric = "frequency" | "trainingLoad" | "time";
+type RpeMetric = "frequency" | "srpe" | "time";
 
 interface MetricDropdownOption<TValue extends string> {
   value: TValue;
@@ -119,6 +123,28 @@ const DISTANCE_METRIC_OPTIONS: MetricDropdownOption<DistanceMetric>[] = [
   { value: "frequency", label: DISTANCE_METRIC_LABELS.frequency },
   { value: "trainingLoad", label: DISTANCE_METRIC_LABELS.trainingLoad },
   { value: "time", label: DISTANCE_METRIC_LABELS.time }
+];
+
+const RPE_ZONE_COLORS = ["#8fd48f", "#c9d879", "#f2c14e", "#f08a4b", "#e5563f"];
+
+const RPE_LEVEL_LABELS: Record<number, string> = {
+  1: "RPE 1 · Very light",
+  2: "RPE 2 · Light",
+  3: "RPE 3 · Moderate",
+  4: "RPE 4 · Hard",
+  5: "RPE 5 · Very hard"
+};
+
+const RPE_METRIC_LABELS: Record<RpeMetric, string> = {
+  frequency: "Frequency",
+  srpe: "sRPE",
+  time: "Time"
+};
+
+const RPE_METRIC_OPTIONS: MetricDropdownOption<RpeMetric>[] = [
+  { value: "frequency", label: RPE_METRIC_LABELS.frequency },
+  { value: "srpe", label: RPE_METRIC_LABELS.srpe },
+  { value: "time", label: RPE_METRIC_LABELS.time }
 ];
 
 const FOUR_WEEKS_MS = 28 * 24 * 60 * 60 * 1000;
@@ -512,6 +538,75 @@ function buildDistanceData(
   });
 }
 
+function rpeMetricValue(
+  bucket: RpeDistributionBucket,
+  metric: RpeMetric
+): number {
+  if (metric === "srpe") {
+    return bucket.srpe;
+  }
+  if (metric === "time") {
+    return bucket.timeSeconds;
+  }
+  return bucket.frequency;
+}
+
+function formatRpeMetricValue(value: number, metric: RpeMetric): string {
+  if (metric === "srpe") {
+    return String(Math.round(value));
+  }
+  if (metric === "time") {
+    if (value >= 3600) {
+      return formatDurationSeconds(value);
+    }
+    return `${Math.round(value / 60)} min`;
+  }
+  const count = Math.round(value);
+  return count === 1 ? "1 session" : `${count} sessions`;
+}
+
+function rpeLevelCaption(level: number): string {
+  switch (level) {
+    case 1:
+      return "Recovery / very easy effort";
+    case 2:
+      return "Easy aerobic effort";
+    case 3:
+      return "Moderate, sustained effort";
+    case 4:
+      return "Hard, threshold effort";
+    case 5:
+      return "Maximal / very hard effort";
+    default:
+      return "Perceived effort level";
+  }
+}
+
+function buildRpeData(
+  distribution: RpeDistribution | null | undefined,
+  metric: RpeMetric
+): ZoneDistributionDatum[] {
+  const buckets = distribution?.buckets ?? [];
+  if (buckets.length === 0) {
+    return [];
+  }
+  const values = buckets.map((bucket) => rpeMetricValue(bucket, metric));
+  const total = values.reduce((sum, value) => sum + value, 0);
+  if (total <= 0) {
+    return [];
+  }
+  return buckets.map((bucket, index) => {
+    const value = values[index] ?? 0;
+    return {
+      label: RPE_LEVEL_LABELS[bucket.level] ?? `RPE ${bucket.level}`,
+      detail: formatRpeMetricValue(value, metric),
+      percent: (value / total) * 100,
+      color: RPE_ZONE_COLORS[(bucket.level - 1) % RPE_ZONE_COLORS.length],
+      zoneIndex: bucket.level
+    };
+  });
+}
+
 function ZoneDistributionTooltip({
   active,
   payload
@@ -542,6 +637,7 @@ function ZoneDistributionPanel({
   variant,
   heroKicker,
   metricColumnLabel,
+  coverageNote,
   data,
   metricControl,
   getCaption
@@ -566,6 +662,9 @@ function ZoneDistributionPanel({
           <h2>
             {subtitle} <span>(4 Weeks)</span>
           </h2>
+          {coverageNote ? (
+            <p className="training-zone-coverage">{coverageNote}</p>
+          ) : null}
         </div>
         <div className="training-zone-header-actions">{metricControl}</div>
       </div>
@@ -603,6 +702,8 @@ function ZoneDistributionPanel({
             <span className="training-zone-donut-icon">
               {variant === "heart" ? (
                 <Heart size={22} strokeWidth={2.2} aria-hidden="true" />
+              ) : variant === "rpe" ? (
+                <Gauge size={22} strokeWidth={2.2} aria-hidden="true" />
               ) : (
                 <Footprints size={22} strokeWidth={2.2} aria-hidden="true" />
               )}
@@ -625,7 +726,13 @@ function ZoneDistributionPanel({
 
           <div className="training-zone-table">
             <div className="training-zone-table-head">
-              <span>{variant === "heart" ? "Zone" : "Distance"}</span>
+              <span>
+                {variant === "heart"
+                  ? "Zone"
+                  : variant === "rpe"
+                    ? "RPE"
+                    : "Distance"}
+              </span>
               <span aria-hidden="true" />
               <span>%</span>
               <span>{metricColumnLabel}</span>
@@ -834,54 +941,90 @@ export function TrainingZoneDistributionCharts({
     useState<ActivityMetric>("trainingLoad");
   const [distanceMetric, setDistanceMetric] =
     useState<DistanceMetric>("frequency");
+  const [rpeMetric, setRpeMetric] = useState<RpeMetric>("frequency");
+
+  const rpeCoverage = analytics?.rpeDistribution?.coverage;
+  const rpeCoverageNote =
+    rpeCoverage && rpeCoverage.total > 0
+      ? `${rpeCoverage.rated} rated / ${rpeCoverage.total} sessions`
+      : undefined;
 
   return (
-    <div className="training-chart-grid training-zone-grid">
-      <ZoneDistributionPanel
-        title="Threshold Heart Rate"
-        subtitle="Training Load"
-        emptyMessage="No threshold heart rate zone distribution data loaded."
-        variant="heart"
-        heroKicker="Primary zone"
-        metricColumnLabel={HEART_RATE_METRIC_LABELS[heartRateMetric]}
-        data={buildHeartRateData(
-          lthrZones,
-          activities,
-          heartRateMetric,
-          analytics
-        )}
-        getCaption={(datum) => heartRateZoneCaption(datum.zoneIndex)}
-        metricControl={
-          <MetricDropdown
-            label="Heart rate distribution metric"
-            value={heartRateMetric}
-            options={HEART_RATE_METRIC_OPTIONS}
-            onChange={setHeartRateMetric}
-          />
-        }
-      />
-      <ZoneDistributionPanel
-        title="Distance Zones"
-        subtitle="Distribution"
-        emptyMessage="No distance zone distribution data loaded."
-        variant="distance"
-        heroKicker="Most runs"
-        metricColumnLabel={
-          distanceMetric === "frequency"
-            ? "Runs"
-            : DISTANCE_METRIC_LABELS[distanceMetric]
-        }
-        data={buildDistanceData(activities, distanceMetric, analytics)}
-        getCaption={(datum) => distanceZoneCaption(datum.label)}
-        metricControl={
-          <MetricDropdown
-            label="Distance distribution metric"
-            value={distanceMetric}
-            options={DISTANCE_METRIC_OPTIONS}
-            onChange={setDistanceMetric}
-          />
-        }
-      />
-    </div>
+    <section className="training-load-profile">
+      <div className="training-load-profile-header">
+        <p className="eyebrow">Load Profile</p>
+        <h2>
+          Distribution <span>(4 Weeks)</span>
+        </h2>
+      </div>
+      <div className="training-zone-grid">
+        <ZoneDistributionPanel
+          title="Threshold Heart Rate"
+          subtitle="Training Load"
+          emptyMessage="No threshold heart rate zone distribution data loaded."
+          variant="heart"
+          heroKicker="Primary zone"
+          metricColumnLabel={HEART_RATE_METRIC_LABELS[heartRateMetric]}
+          data={buildHeartRateData(
+            lthrZones,
+            activities,
+            heartRateMetric,
+            analytics
+          )}
+          getCaption={(datum) => heartRateZoneCaption(datum.zoneIndex)}
+          metricControl={
+            <MetricDropdown
+              label="Heart rate distribution metric"
+              value={heartRateMetric}
+              options={HEART_RATE_METRIC_OPTIONS}
+              onChange={setHeartRateMetric}
+            />
+          }
+        />
+        <ZoneDistributionPanel
+          title="Distance Zones"
+          subtitle="Distribution"
+          emptyMessage="No distance zone distribution data loaded."
+          variant="distance"
+          heroKicker="Most runs"
+          metricColumnLabel={
+            distanceMetric === "frequency"
+              ? "Runs"
+              : DISTANCE_METRIC_LABELS[distanceMetric]
+          }
+          data={buildDistanceData(activities, distanceMetric, analytics)}
+          getCaption={(datum) => distanceZoneCaption(datum.label)}
+          metricControl={
+            <MetricDropdown
+              label="Distance distribution metric"
+              value={distanceMetric}
+              options={DISTANCE_METRIC_OPTIONS}
+              onChange={setDistanceMetric}
+            />
+          }
+        />
+        <ZoneDistributionPanel
+          title="Perceived Effort"
+          subtitle="RPE"
+          emptyMessage="No RPE-rated sessions in the last 4 weeks."
+          variant="rpe"
+          heroKicker="Most sessions"
+          metricColumnLabel={
+            rpeMetric === "frequency" ? "Sessions" : RPE_METRIC_LABELS[rpeMetric]
+          }
+          coverageNote={rpeCoverageNote}
+          data={buildRpeData(analytics?.rpeDistribution, rpeMetric)}
+          getCaption={(datum) => rpeLevelCaption(datum.zoneIndex)}
+          metricControl={
+            <MetricDropdown
+              label="RPE distribution metric"
+              value={rpeMetric}
+              options={RPE_METRIC_OPTIONS}
+              onChange={setRpeMetric}
+            />
+          }
+        />
+      </div>
+    </section>
   );
 }

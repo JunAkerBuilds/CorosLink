@@ -1183,6 +1183,18 @@ export function countTrainingActivitiesMissingFeelType(
   return row.n;
 }
 
+/** Total count of training activities on/after `sinceEpochSeconds`. */
+export function countTrainingActivitiesSince(sinceEpochSeconds: number): number {
+  const row = requireDatabase()
+    .prepare(
+      `SELECT count(*) AS n
+       FROM training_activities
+       WHERE start_time >= ?`
+    )
+    .get(sinceEpochSeconds) as { n: number };
+  return row.n;
+}
+
 /** Rated activities on/after `sinceEpochSeconds`, for computing daily sRPE. */
 export function listTrainingActivityRpeInputs(
   sinceEpochSeconds: number
