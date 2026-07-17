@@ -1,16 +1,19 @@
 import { ImagePlus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   CorosWatchfaceRasterFont,
   CorosWatchfaceRasterFontFolder
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import {
-  corosMonthLabelForSpriteIndex,
   normalizeRasterFontGlyphs,
   rasterFontSupportsText,
   WATCHFACE_MONTH_LABELS
 } from "./watchfaceStudio";
+import {
+  createRasterFontFolderReplacement,
+  type RasterSpriteFolderComponentKind
+} from "./watchfaceRasterFolder";
 
 interface CustomPngFontPanelProps {
   api: CorosLinkApi;
@@ -22,16 +25,10 @@ interface CustomPngFontPanelProps {
   componentLabel?: string;
   onComponentRasterFontChange?: (font: CorosWatchfaceRasterFont | undefined) => void;
   onActivate?: () => void;
-}
-
-interface RasterSpriteFolderImport
-  extends Pick<
-    CorosWatchfaceRasterFont,
-    "dataUrl" | "glyphs" | "columns" | "labels" | "sprites" | "spriteSizes" | "atlasSize"
-  > {
-  importedDigitCount: number;
-  importedWeekdayCount: number;
-  importedMonthCount: number;
+  importDisabled?: boolean;
+  onImportStart?: (target: string) => number | null;
+  onImportFinish?: (importId: number) => void;
+  isImportCurrent?: (importId: number) => boolean;
 }
 
 const DEFAULT_RASTER_GLYPHS = "0123456789";
@@ -79,7 +76,9 @@ function monthLabelFor(fileName: string): string | null {
     return stem;
   }
   const index = numericSpriteIndex(fileName, 11);
-  return index === null ? null : corosMonthLabelForSpriteIndex(index);
+  return index === null
+    ? null
+    : WATCHFACE_MONTH_LABELS[(index + 11) % 12] ?? null;
 }
 
 function weekdayLabelFor(fileName: string): string | null {
@@ -130,93 +129,18 @@ async function createAtlasFromSprites(
 
 async function readRasterSpriteFolder(
   folder: CorosWatchfaceRasterFontFolder,
-  currentRasterFont?: CorosWatchfaceRasterFont,
-  componentKind?: "weekday" | "month"
-): Promise<RasterSpriteFolderImport> {
-  const digitSprites = new Map<string, string>();
-  const labelSprites = new Map<string, string>();
-  const folderIsWeekdays =
-    componentKind === "weekday" || /^weekdays?$/i.test(folder.label.trim());
-  const folderIsMonths =
-    componentKind === "month" || /months?$/i.test(folder.label.trim());
-  for (const file of folder.sprites) {
-    const relativePath = file.relativePath.replace(/\\/g, "/").toLowerCase();
-    if (folderIsMonths || /(^|\/)months?\//.test(relativePath)) {
-      const label = monthLabelFor(file.name);
-      if (label) {
-        labelSprites.set(label, file.dataUrl);
-      }
-      continue;
+  componentKind: RasterSpriteFolderComponentKind | undefined,
+  tint: boolean
+) {
+  return createRasterFontFolderReplacement(folder, {
+    componentKind,
+    tint,
+    createDigitAtlas: createAtlasFromSprites,
+    readSpriteSize: async (dataUrl) => {
+      const image = await loadImage(dataUrl);
+      return { width: image.naturalWidth, height: image.naturalHeight };
     }
-    if (folderIsWeekdays || /(^|\/)weekdays?\//.test(relativePath)) {
-      const label = weekdayLabelFor(file.name);
-      if (label) {
-        labelSprites.set(label, file.dataUrl);
-      }
-      continue;
-    }
-    const digit = numericSpriteIndex(file.name);
-    if (digit !== null) {
-      digitSprites.set(String(digit), file.dataUrl);
-    }
-  }
-  const atlas = digitSprites.size > 0
-    ? await createAtlasFromSprites(digitSprites)
-    : currentRasterFont?.dataUrl
-      ? {
-          dataUrl: currentRasterFont.dataUrl,
-          glyphs: normalizeRasterFontGlyphs(currentRasterFont.glyphs),
-          columns: currentRasterFont.columns,
-          atlasSize: currentRasterFont.atlasSize
-        }
-      : labelSprites.size > 0
-        ? {
-            dataUrl: labelSprites.values().next().value!,
-            glyphs: "",
-            columns: 1,
-            atlasSize: undefined
-          }
-        : (() => {
-            throw new Error(
-              "Choose a digits folder, a weekdays folder, or a parent folder containing PNG sprites."
-            );
-          })();
-  const sprites = {
-    ...currentRasterFont?.sprites,
-    ...Object.fromEntries(digitSprites),
-    ...Object.fromEntries(labelSprites)
-  };
-  const importedSpriteEntries = [
-    ...digitSprites.entries(),
-    ...labelSprites.entries()
-  ];
-  const importedSizes = Object.fromEntries(
-    await Promise.all(
-      importedSpriteEntries.map(async ([key, dataUrl]) => {
-        const image = await loadImage(dataUrl);
-        return [key, { width: image.naturalWidth, height: image.naturalHeight }] as const;
-      })
-    )
-  );
-  const labels = { ...currentRasterFont?.labels, ...Object.fromEntries(labelSprites) };
-  return {
-    ...atlas,
-    ...(Object.keys(labels).length > 0 ? { labels } : {}),
-    ...(Object.keys(sprites).length > 0 ? { sprites } : {}),
-    spriteSizes: { ...currentRasterFont?.spriteSizes, ...importedSizes },
-    atlasSize: atlas.atlasSize ?? currentRasterFont?.atlasSize,
-    importedDigitCount: digitSprites.size,
-    importedWeekdayCount: [...labelSprites.keys()].filter((label) =>
-      WEEKDAY_LABELS.includes(label)
-    ).length,
-    importedMonthCount: [...labelSprites.keys()].filter((label) =>
-      WATCHFACE_MONTH_LABELS.includes(label)
-    ).length
-  };
-}
-
-function labelFromSpriteFolder(folder: CorosWatchfaceRasterFontFolder): string {
-  return folder.label.replace(/[-_]+/g, " ").trim() || "Custom PNG sprites";
+  });
 }
 
 export function CustomPngFontPanel({
@@ -226,10 +150,24 @@ export function CustomPngFontPanel({
   componentRasterFont,
   componentLabel,
   onComponentRasterFontChange,
-  onActivate
+  onActivate,
+  importDisabled = false,
+  onImportStart,
+  onImportFinish,
+  isImportCurrent
 }: CustomPngFontPanelProps) {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const mountedRef = useRef(false);
+  const importRevisionRef = useRef(0);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      importRevisionRef.current += 1;
+    };
+  }, []);
   const supportsComponentScope = Boolean(onComponentRasterFontChange);
   const [scope, setScope] = useState<"component" | "all">(
     supportsComponentScope ? "component" : "all"
@@ -259,6 +197,34 @@ export function CustomPngFontPanel({
     }
   }
 
+  function beginImport(): { importId: number; revision: number } | null {
+    if (importDisabled || importing) return null;
+    const importId = onImportStart?.(
+      scope === "component"
+        ? `component:${componentLabel ?? "custom-png-font"}`
+        : "global-raster-font"
+    ) ?? Date.now();
+    if (importId === null) return null;
+    const revision = ++importRevisionRef.current;
+    setImporting(true);
+    return { importId, revision };
+  }
+
+  function importCanCommit(importId: number, revision: number): boolean {
+    return (
+      mountedRef.current &&
+      revision === importRevisionRef.current &&
+      (isImportCurrent?.(importId) ?? true)
+    );
+  }
+
+  function finishImport(importId: number, revision: number): void {
+    onImportFinish?.(importId);
+    if (mountedRef.current && revision === importRevisionRef.current) {
+      setImporting(false);
+    }
+  }
+
   async function chooseRasterFont(file: File | undefined) {
     if (!file) {
       return;
@@ -271,9 +237,12 @@ export function CustomPngFontPanel({
       setError("PNG font files must be 5 MB or smaller.");
       return;
     }
+    const request = beginImport();
+    if (!request) return;
     try {
       const dataUrl = await fileToDataUrl(file);
       const image = await loadImage(dataUrl);
+      if (!importCanCommit(request.importId, request.revision)) return;
       onActivate?.();
       setActiveRasterFont({
         label: activeRasterFont?.label || labelFromFileName(file.name),
@@ -286,65 +255,74 @@ export function CustomPngFontPanel({
       setStatus(`Loaded ${file.name}.`);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The PNG font could not be read.");
+      if (importCanCommit(request.importId, request.revision)) {
+        setError(caught instanceof Error ? caught.message : "The PNG font could not be read.");
+      }
+    } finally {
+      finishImport(request.importId, request.revision);
     }
   }
 
   async function chooseRasterSpriteFolder() {
+    const request = beginImport();
+    if (!request) return;
     try {
       setStatus("Reading PNG sprite folder…");
       setError(null);
       const folder = await api.chooseCorosWatchfaceRasterFontFolder();
       if (!folder) {
-        setStatus(null);
+        if (importCanCommit(request.importId, request.revision)) setStatus(null);
         return;
       }
-      const raster = await readRasterSpriteFolder(
+      const replacement = await readRasterSpriteFolder(
         folder,
-        activeRasterFont,
         scope === "component" && componentLabel === "Weekday"
           ? "weekday"
           : scope === "component" && componentLabel === "Date month"
             ? "month"
-            : undefined
+            : undefined,
+        activeRasterFont?.tint ?? false
       );
+      if (!importCanCommit(request.importId, request.revision)) return;
       onActivate?.();
-      setActiveRasterFont({
-        label: activeRasterFont?.label || labelFromSpriteFolder(folder),
-        ...raster,
-        tint: activeRasterFont?.tint ?? false
-      });
+      setActiveRasterFont(replacement.rasterFont);
       const importSummary = [
-        raster.importedDigitCount > 0
-          ? String(raster.importedDigitCount) +
+        replacement.importedDigitCount > 0
+          ? String(replacement.importedDigitCount) +
             " digit sprite" +
-            (raster.importedDigitCount === 1 ? "" : "s")
+            (replacement.importedDigitCount === 1 ? "" : "s")
           : null,
-        raster.importedWeekdayCount > 0
-          ? String(raster.importedWeekdayCount) +
+        replacement.importedWeekdayCount > 0
+          ? String(replacement.importedWeekdayCount) +
             " weekday label" +
-            (raster.importedWeekdayCount === 1 ? "" : "s")
+            (replacement.importedWeekdayCount === 1 ? "" : "s")
           : null,
-        raster.importedMonthCount > 0
-          ? String(raster.importedMonthCount) +
+        replacement.importedMonthCount > 0
+          ? String(replacement.importedMonthCount) +
             " month label" +
-            (raster.importedMonthCount === 1 ? "" : "s")
+            (replacement.importedMonthCount === 1 ? "" : "s")
           : null
       ].filter(Boolean).join(" and ");
       setStatus("Imported " + importSummary + ".");
       setError(null);
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "The PNG sprite folder could not be imported."
-      );
-      setStatus(null);
+      if (importCanCommit(request.importId, request.revision)) {
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "The PNG sprite folder could not be imported."
+        );
+        setStatus(null);
+      }
+    } finally {
+      finishImport(request.importId, request.revision);
     }
   }
 
   async function chooseIndividualSprites(files: FileList | null) {
     if (!files?.length) return;
+    const request = beginImport();
+    if (!request) return;
     const nextSprites: Record<string, string> = { ...(activeRasterFont?.sprites ?? {}) };
     const nextSpriteSizes = { ...(activeRasterFont?.spriteSizes ?? {}) };
     try {
@@ -375,6 +353,7 @@ export function CustomPngFontPanel({
           height: image.naturalHeight
         };
       }
+      if (!importCanCommit(request.importId, request.revision)) return;
       onActivate?.();
       setActiveRasterFont({
         label: activeRasterFont?.label || "Individual PNG sprites",
@@ -393,9 +372,15 @@ export function CustomPngFontPanel({
       setStatus(`Imported ${files.length} independent PNG sprite${files.length === 1 ? "" : "s"}.`);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The PNG sprites could not be imported.");
+      if (importCanCommit(request.importId, request.revision)) {
+        setError(caught instanceof Error ? caught.message : "The PNG sprites could not be imported.");
+      }
+    } finally {
+      finishImport(request.importId, request.revision);
     }
   }
+
+  const controlsDisabled = importDisabled || importing;
 
   return (
     <section className="watchface-raster-font-panel" aria-label="Custom PNG font">
@@ -406,7 +391,7 @@ export function CustomPngFontPanel({
       {supportsComponentScope ? (
         <label className="field">
           Apply PNG sprites to
-          <select value={scope} onChange={(event) => setScope(event.target.value as "component" | "all")}>
+          <select disabled={controlsDisabled} value={scope} onChange={(event) => setScope(event.target.value as "component" | "all")}>
             <option value="component">This component{componentLabel ? ` (${componentLabel})` : ""}</option>
             <option value="all">All text components</option>
           </select>
@@ -418,12 +403,14 @@ export function CustomPngFontPanel({
         <input
           type="file"
           accept="image/png"
+          disabled={controlsDisabled}
           onChange={(event) => void chooseRasterFont(event.currentTarget.files?.[0])}
         />
       </label>
       <button
         className="watchface-raster-font-upload"
         type="button"
+        disabled={controlsDisabled}
         onClick={() => void chooseRasterSpriteFolder()}
       >
         <ImagePlus size={15} aria-hidden="true" />
@@ -436,6 +423,7 @@ export function CustomPngFontPanel({
           type="file"
           accept="image/png"
           multiple
+          disabled={controlsDisabled}
           onChange={(event) => void chooseIndividualSprites(event.currentTarget.files)}
         />
       </label>
@@ -444,6 +432,7 @@ export function CustomPngFontPanel({
           <label>
             Font label
             <input
+              disabled={controlsDisabled}
               value={activeRasterFont.label}
               onChange={(event) => updateRasterFont({ label: event.target.value })}
               placeholder="My pixel font"
@@ -452,6 +441,7 @@ export function CustomPngFontPanel({
           <label>
             Columns
             <input
+              disabled={controlsDisabled}
               type="number"
               min="1"
               max="64"
@@ -466,6 +456,7 @@ export function CustomPngFontPanel({
           <label className="watchface-raster-font-glyphs">
             Glyph labels (left-to-right, then top-to-bottom)
             <input
+              disabled={controlsDisabled}
               value={activeRasterFont.glyphs}
               onChange={(event) =>
                 updateRasterFont({ glyphs: normalizeRasterFontGlyphs(event.target.value) })
@@ -476,6 +467,7 @@ export function CustomPngFontPanel({
           <label className="watchface-raster-font-tint">
             <input
               type="checkbox"
+              disabled={controlsDisabled}
               checked={activeRasterFont.tint}
               onChange={(event) => updateRasterFont({ tint: event.target.checked })}
             />
@@ -484,6 +476,7 @@ export function CustomPngFontPanel({
           <button
             className="secondary-button"
             type="button"
+            disabled={controlsDisabled}
             onClick={() => setActiveRasterFont(undefined)}
           >
             Remove PNG font
@@ -507,6 +500,9 @@ export function CustomPngFontPanel({
       ) : null}
       {error ? <p className="watchface-raster-font-warning">{error}</p> : null}
       {status ? <p className="watchface-raster-font-status">{status}</p> : null}
+      {importing ? (
+        <p className="watchface-raster-font-status">Importing sprites…</p>
+      ) : null}
       <p>
         PNG colors are preserved by default. Import individual sprites named 00.png–09.png or by label (for example MON.png or JAN.png); each is retained independently and takes priority over the atlas. Month components also accept 00.png–11.png for JAN–DEC.
       </p>

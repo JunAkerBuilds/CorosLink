@@ -347,7 +347,14 @@ async function loadRasterFontSpriteFolder(
   let totalBytes = 0;
 
   async function walk(directoryPath: string, relativeDirectory = ""): Promise<void> {
-    const entries = await fs.promises.readdir(directoryPath, { withFileTypes: true });
+    const entries = (await fs.promises.readdir(directoryPath, {
+      withFileTypes: true
+    })).sort((left, right) =>
+      left.name.localeCompare(right.name, "en", {
+        sensitivity: "base",
+        numeric: true
+      })
+    );
     for (const entry of entries) {
       const absolutePath = path.join(directoryPath, entry.name);
       const relativePath = path.join(relativeDirectory, entry.name);

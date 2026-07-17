@@ -1699,7 +1699,8 @@ function WatchFacePreview({
         ),
         {
           ...toStudioOptions(loadedProject.design),
-          effectResolutionScale: watchResolution.width / resolution.width
+          effectResolutionScale: watchResolution.width / resolution.width,
+          nativeSpriteResolutionScale: watchResolution.width / resolution.width
         },
         loadAssets
       );

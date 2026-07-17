@@ -240,6 +240,7 @@ import {
 } from "./weatherAssets";
 import { CustomPngFontPanel } from "./CustomPngFontPanel";
 import { LocalFontPicker } from "./LocalFontPicker";
+import { WatchfaceSpriteImportTracker } from "./watchfaceSpriteImportTracker";
 import {
   beginWatchfaceEditorHistoryTransaction,
   canRedoWatchfaceEditorHistory,
@@ -670,6 +671,8 @@ export function WatchfaceEditor({
   const [previewingExport, setPreviewingExport] = useState(false);
   const [exportPreviewDataUrl, setExportPreviewDataUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const spriteImportTrackerRef = useRef(new WatchfaceSpriteImportTracker());
+  const [pendingSpriteImportCount, setPendingSpriteImportCount] = useState(0);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
@@ -693,6 +696,38 @@ export function WatchfaceEditor({
   const isDirty = isWatchfaceEditorHistoryDirty(history, checkpoint, sessionId);
   const canUndo = canUndoWatchfaceEditorHistory(history);
   const canRedo = canRedoWatchfaceEditorHistory(history);
+  const spriteImportPending = pendingSpriteImportCount > 0;
+
+  const beginSpriteImport = useCallback((target: string): number | null => {
+    if (!mountedRef.current) return null;
+    const tracker = spriteImportTrackerRef.current;
+    const importId = tracker.begin(target, previewSessionRef.current);
+    setPendingSpriteImportCount(tracker.pendingCount);
+    return importId;
+  }, []);
+
+  const finishSpriteImport = useCallback((importId: number): void => {
+    const tracker = spriteImportTrackerRef.current;
+    tracker.finish(importId);
+    if (mountedRef.current) {
+      setPendingSpriteImportCount(tracker.pendingCount);
+    }
+  }, []);
+
+  const isSpriteImportCurrent = useCallback((importId: number): boolean => (
+    mountedRef.current &&
+    spriteImportTrackerRef.current.isCurrent(
+      importId,
+      previewSessionRef.current
+    )
+  ), []);
+
+  const rasterFolderImportProps = {
+    importDisabled: spriteImportPending,
+    onImportStart: beginSpriteImport,
+    onImportFinish: finishSpriteImport,
+    isImportCurrent: isSpriteImportCurrent
+  };
 
   function applyHistory(next: typeof history) {
     historyRef.current = next;
@@ -1184,6 +1219,7 @@ export function WatchfaceEditor({
         ...options,
         batteryIconResolutionScale: target.width / previewResolution.width,
         effectResolutionScale: target.width / previewResolution.width,
+        nativeSpriteResolutionScale: target.width / previewResolution.width,
         ...(options.ampmStyle
           ? {
               ampmStyle: scaleAmPmStyleForResolution(
@@ -1480,7 +1516,8 @@ export function WatchfaceEditor({
     const canvasSize = configAssetCanvasSize(
       configKey,
       design.configAssetOverrides?.[`config:${configKey}`],
-      { width: baseWidth, height: baseHeight }
+      { width: baseWidth, height: baseHeight },
+      previewResolution ? resolution.width / previewResolution.width : 1
     );
     // The preview frame is rendered from the selected watch's native tree,
     // while the interaction overlay uses the largest template coordinate
@@ -4161,6 +4198,10 @@ export function WatchfaceEditor({
       | "config:battery_icon"
       | "config:control_battery_icon" = "config:battery_icon"
   ) {
+    if (spriteImportTrackerRef.current.pendingCount > 0) return;
+    const importId = beginSpriteImport(`battery-folder:${overrideId}`);
+    if (importId === null) return;
+    const canCommit = () => isSpriteImportCurrent(importId);
     try {
       const folder = await api.chooseCorosWatchfaceRasterFontFolder();
       if (!folder) return;
@@ -4179,17 +4220,34 @@ export function WatchfaceEditor({
       }));
       const validSprites = decoded.filter(
         (entry): entry is NonNullable<typeof entry> => entry !== null
+      ).sort((left, right) =>
+        left.sprite.relativePath.localeCompare(
+          right.sprite.relativePath,
+          "en",
+          { sensitivity: "base", numeric: true }
+        )
       );
       if (validSprites.length === 0) {
         throw new Error("Name battery sprites 00.png, 01.png, and so on.");
       }
+      const uniqueSprites = new Map<string, (typeof validSprites)[number]>();
+      for (const entry of validSprites) {
+        const existing = uniqueSprites.get(entry.state);
+        if (existing) {
+          throw new Error(
+            `Duplicate battery sprite “${entry.state.padStart(2, "0")}” was found in “${existing.sprite.relativePath}” and “${entry.sprite.relativePath}”.`
+          );
+        }
+        uniqueSprites.set(entry.state, entry);
+      }
+      const replacementSprites = [...uniqueSprites.values()];
       const canvasWidth = Math.max(
-        ...validSprites.map(({ image }) => image.naturalWidth)
+        ...replacementSprites.map(({ image }) => image.naturalWidth)
       );
       const canvasHeight = Math.max(
-        ...validSprites.map(({ image }) => image.naturalHeight)
+        ...replacementSprites.map(({ image }) => image.naturalHeight)
       );
-      const entries = validSprites.map(({ state, sprite, image }) => {
+      const entries = replacementSprites.map(({ state, sprite, image }) => {
         const centeredDataUrl =
           centerSpriteArtwork(image, canvasWidth, canvasHeight) ?? sprite.dataUrl;
         return [state, {
@@ -4199,6 +4257,7 @@ export function WatchfaceEditor({
         }] as const;
       });
       const stateReplacements = Object.fromEntries(entries);
+      if (!canCommit()) return;
       setDesign((prev) => ({
         ...prev,
         configAssetOverrides: {
@@ -4226,7 +4285,11 @@ export function WatchfaceEditor({
         } sprite states on a shared ${canvasWidth}×${canvasHeight}px canvas.`
       );
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "Could not load the battery sprite folder.");
+      if (canCommit()) {
+        onError(caught instanceof Error ? caught.message : "Could not load the battery sprite folder.");
+      }
+    } finally {
+      finishSpriteImport(importId);
     }
   }
 
@@ -4727,7 +4790,9 @@ export function WatchfaceEditor({
     }
   }
 
-  async function renderExportPreview(): Promise<string> {
+  async function renderExportPreview(
+    designSnapshot: CorosWatchfaceDesignState
+  ): Promise<string> {
     if (!details || !backgroundDataUrl) {
       throw new Error("The editor is still loading. Try again in a moment.");
     }
@@ -4736,25 +4801,51 @@ export function WatchfaceEditor({
     archivePreview.height = 800;
     // The archive/phone thumbnail always represents the current face, even if
     // the editor happens to be displaying the Always-on tab when previewed.
-    const exportDetails = basePreviewDetails
+    const snapshotDetails = deriveDesignDetails(details, designSnapshot);
+    const snapshotPreviewDetails = snapshotDetails.previewDetails;
+    const exportDetails = snapshotPreviewDetails
       ? watchPreviewResolution
         ? detailsForPreviewResolution(
-            basePreviewDetails,
+            snapshotPreviewDetails,
             watchPreviewResolution.directory
           )
-        : basePreviewDetails
+        : snapshotPreviewDetails
       : details;
+    const snapshotOptions = toStudioOptions(designSnapshot);
+    const snapshotBaseResolution = pickPreviewResolution(snapshotPreviewDetails);
+    const snapshotTargetResolution = pickPreviewResolution(exportDetails);
+    const resolutionScale =
+      snapshotBaseResolution && snapshotTargetResolution
+        ? snapshotTargetResolution.width / snapshotBaseResolution.width
+        : 1;
+    const exportOptions: WatchfaceStudioOptions = {
+      ...snapshotOptions,
+      batteryIconResolutionScale: resolutionScale,
+      effectResolutionScale: resolutionScale,
+      nativeSpriteResolutionScale: resolutionScale,
+      ...(snapshotOptions.ampmStyle &&
+      snapshotBaseResolution &&
+      snapshotTargetResolution
+        ? {
+            ampmStyle: scaleAmPmStyleForResolution(
+              snapshotOptions.ampmStyle,
+              snapshotBaseResolution,
+              snapshotTargetResolution
+            )
+          }
+        : {})
+    };
     await drawStudioPreview(
       archivePreview,
       backgroundDataUrl,
       exportDetails,
-      studioOptionsForResolution(studioOptions, exportDetails),
+      exportOptions,
       loadAssets
     );
-    if (design.weatherIndicator?.enabled) {
+    if (designSnapshot.weatherIndicator?.enabled) {
       const url = await weatherPreviewDataUrl(
         previewWidth,
-        design.weatherIndicator.color
+        designSnapshot.weatherIndicator.color
       );
       if (url) {
         const image = await loadStudioImage(url);
@@ -4762,10 +4853,10 @@ export function WatchfaceEditor({
         const scale = archivePreview.width / previewWidth;
         context?.drawImage(
           image,
-          design.weatherIndicator.x * scale,
-          design.weatherIndicator.y * scale,
-          image.naturalWidth * design.weatherIndicator.scale * scale,
-          image.naturalHeight * design.weatherIndicator.scale * scale
+          designSnapshot.weatherIndicator.x * scale,
+          designSnapshot.weatherIndicator.y * scale,
+          image.naturalWidth * designSnapshot.weatherIndicator.scale * scale,
+          image.naturalHeight * designSnapshot.weatherIndicator.scale * scale
         );
       }
     }
@@ -4798,9 +4889,14 @@ export function WatchfaceEditor({
   }
 
   async function openExportPreview() {
+    if (spriteImportTrackerRef.current.pendingCount > 0) {
+      onError("Wait for the sprite import to finish before previewing.");
+      return;
+    }
+    const designSnapshot = historyRef.current.present.value.design;
     setPreviewingExport(true);
     try {
-      setExportPreviewDataUrl(await renderExportPreview());
+      setExportPreviewDataUrl(await renderExportPreview(designSnapshot));
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "Could not render the export preview.");
     } finally {
@@ -4809,19 +4905,25 @@ export function WatchfaceEditor({
   }
 
   async function exportEditableProject() {
+    if (spriteImportTrackerRef.current.pendingCount > 0) {
+      onError("Wait for the sprite import to finish before exporting.");
+      return;
+    }
     if (!details || !backgroundDataUrl) {
       onError("The editor is still loading. Try again in a moment.");
       return;
     }
+    const editorSnapshot = historyRef.current.present.value;
+    const designSnapshot = editorSnapshot.design;
     setExporting(true);
     try {
-      const name = projectName.trim() || "Custom watch face";
+      const name = editorSnapshot.projectName.trim() || "Custom watch face";
       const result = await api.exportCorosWatchfaceProject({
         sourceArchiveId: starterArchive.archiveId,
         name,
         ...(targetFirmwareType ? { firmwareType: targetFirmwareType } : {}),
-        design,
-        previewDataUrl: await renderExportPreview()
+        design: designSnapshot,
+        previewDataUrl: await renderExportPreview(designSnapshot)
       });
       if (result.saved) {
         onNotice(`Exported “${name}” as an editable website ZIP.`);
@@ -4838,10 +4940,16 @@ export function WatchfaceEditor({
   }
 
   async function createArchive(action: "publish" | "export" = "publish") {
+    if (spriteImportTrackerRef.current.pendingCount > 0) {
+      onError("Wait for the sprite import to finish before building.");
+      return;
+    }
     if (!details || !backgroundDataUrl) {
       onError("The editor is still loading. Try again in a moment.");
       return;
     }
+    const editorSnapshot = historyRef.current.present.value;
+    const designSnapshot = editorSnapshot.design;
     setCreating(true);
     try {
       const templateIdOverride = devTemplateIdOverride.trim();
@@ -4857,8 +4965,8 @@ export function WatchfaceEditor({
         throw new Error("Template name overrides must be 64 characters or fewer.");
       }
       const [composition, exportPreview, exportBackground] = await Promise.all([
-        composeWatchfaceReplacements(details, design, loadAssets),
-        renderExportPreview(),
+        composeWatchfaceReplacements(details, designSnapshot, loadAssets),
+        renderExportPreview(designSnapshot),
         renderExportBackground()
       ]);
       const { assetReplacements, configOverrides, minWatchFaceVersion } =
@@ -4869,8 +4977,8 @@ export function WatchfaceEditor({
         previewDataUrl: exportPreview,
         ...(targetFirmwareType ? { firmwareType: targetFirmwareType } : {}),
         ...(targetWatchModel ? { watchModel: targetWatchModel } : {}),
-        ...(design.archiveWatchFaceVersion !== undefined
-          ? { watchFaceVersion: design.archiveWatchFaceVersion }
+        ...(designSnapshot.archiveWatchFaceVersion !== undefined
+          ? { watchFaceVersion: designSnapshot.archiveWatchFaceVersion }
           : {}),
         ...(showDevelopmentTools && templateIdOverride
           ? { templateIdOverride }
@@ -4883,7 +4991,7 @@ export function WatchfaceEditor({
         ...(minWatchFaceVersion !== undefined ? { minWatchFaceVersion } : {})
       });
       onArchiveCreated?.(archive);
-      const name = projectName.trim() || "Custom watch face";
+      const name = editorSnapshot.projectName.trim() || "Custom watch face";
       if (action === "export") {
         const result = await api.exportCorosWatchfaceArchive({
           archiveId: archive.archiveId,
@@ -4902,7 +5010,13 @@ export function WatchfaceEditor({
   }
 
   async function saveProject(): Promise<boolean> {
-    const name = projectName.trim();
+    if (spriteImportTrackerRef.current.pendingCount > 0) {
+      onError("Wait for the sprite import to finish before saving.");
+      return false;
+    }
+    const editorSnapshot = historyRef.current.present.value;
+    const designSnapshot = editorSnapshot.design;
+    const name = editorSnapshot.projectName.trim();
     if (!name) {
       onError("Name your project before saving.");
       return false;
@@ -4918,18 +5032,28 @@ export function WatchfaceEditor({
         name,
         sourceArchiveId: starterArchive.archiveId,
         ...(targetFirmwareType ? { firmwareType: targetFirmwareType } : {}),
-        design
+        design: designSnapshot
       });
       setProjectId(saved.projectId);
-      const savedHistory = recordWatchfaceEditorHistory(historyRef.current, {
-        ...historyRef.current.present.value,
-        projectName: saved.name
-      });
-      applyHistory(savedHistory);
-      setCheckpoint(createWatchfaceEditorCheckpoint(savedHistory, sessionId));
+      const currentHistory = historyRef.current;
+      const snapshotIsStillCurrent =
+        currentHistory.present.value.design === designSnapshot &&
+        currentHistory.present.value.projectName === editorSnapshot.projectName;
+      if (snapshotIsStillCurrent) {
+        const savedHistory = recordWatchfaceEditorHistory(currentHistory, {
+          ...editorSnapshot,
+          projectName: saved.name
+        });
+        applyHistory(savedHistory);
+        setCheckpoint(createWatchfaceEditorCheckpoint(savedHistory, sessionId));
+      }
       onProjectSaved?.(saved);
-      onNotice(`Saved project “${saved.name}”.`);
-      return true;
+      onNotice(
+        snapshotIsStillCurrent
+          ? `Saved project “${saved.name}”.`
+          : `Saved project “${saved.name}”; newer edits remain unsaved.`
+      );
+      return snapshotIsStillCurrent;
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "Could not save the project.");
       return false;
@@ -5210,7 +5334,7 @@ export function WatchfaceEditor({
             onChange={(event) => setProjectName(event.target.value)}
           />
           <span className={`wf-save-state${isDirty ? " is-dirty" : ""}`} role="status">
-            {isDirty ? "Unsaved" : "Saved"}
+            {spriteImportPending ? "Importing sprites…" : isDirty ? "Unsaved" : "Saved"}
           </span>
         </div>
         <div className="watchface-editor-actions wf-command-actions">
@@ -5241,14 +5365,14 @@ export function WatchfaceEditor({
           <button className="wf-icon-button" type="button" disabled={!canRedo} aria-label="Redo" title="Redo" onClick={redo}>
             <Redo2 size={17} />
           </button>
-          <button className="secondary-button wf-save-button" type="button" disabled={saving || !isDirty} onClick={() => void saveProject()}>
+          <button className="secondary-button wf-save-button" type="button" disabled={saving || spriteImportPending || !isDirty} onClick={() => void saveProject()}>
             {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}
             Save
           </button>
           <button
             className="secondary-button wf-export-preview-button"
             type="button"
-            disabled={previewingExport || creating || exporting || !backgroundDataUrl}
+            disabled={spriteImportPending || previewingExport || creating || exporting || !backgroundDataUrl}
             onClick={() => void openExportPreview()}
           >
             {previewingExport ? <Loader2 className="spin" size={15} /> : <Eye size={15} />}
@@ -5257,7 +5381,7 @@ export function WatchfaceEditor({
           <button
             className="secondary-button wf-export-button"
             type="button"
-            disabled={creating || exporting || !backgroundDataUrl}
+            disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
             onClick={() => void exportEditableProject()}
           >
             {exporting ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
@@ -5267,14 +5391,14 @@ export function WatchfaceEditor({
             <button
               className="secondary-button wf-export-button"
               type="button"
-              disabled={creating || exporting || !backgroundDataUrl}
+              disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
               onClick={() => void createArchive("export")}
             >
               {creating ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
               Export final ZIP
             </button>
           ) : null}
-          <button className="primary-button wf-send-button" type="button" disabled={creating || exporting || !backgroundDataUrl} onClick={() => void createArchive()}>
+          <button className="primary-button wf-send-button" type="button" disabled={spriteImportPending || creating || exporting || !backgroundDataUrl} onClick={() => void createArchive()}>
             {creating ? <Loader2 className="spin" size={15} /> : <Send size={15} />}
             Send to COROS
           </button>
@@ -6033,7 +6157,7 @@ export function WatchfaceEditor({
               <button
                 type="button"
                 className="secondary-button"
-                disabled={exporting}
+                disabled={spriteImportPending || exporting}
                 onClick={() => {
                   setExportPreviewDataUrl(null);
                   void exportEditableProject();
@@ -6045,7 +6169,7 @@ export function WatchfaceEditor({
               <button
                 type="button"
                 className="primary-button"
-                disabled={creating}
+                disabled={spriteImportPending || creating}
                 onClick={() => {
                   setExportPreviewDataUrl(null);
                   void createArchive();
@@ -6067,7 +6191,7 @@ export function WatchfaceEditor({
             <div className="wf-modal-actions">
               <button className="secondary-button" type="button" onClick={() => setLeaveOpen(false)}>Cancel</button>
               <button className="secondary-button danger-button" type="button" onClick={onBack}>Discard</button>
-              <button className="primary-button" type="button" disabled={saving} onClick={() => void saveProject().then((saved) => { if (saved) onBack(); })}>
+              <button className="primary-button" type="button" disabled={saving || spriteImportPending} onClick={() => void saveProject().then((saved) => { if (saved) onBack(); })}>
                 {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />} Save
               </button>
             </div>
@@ -6664,6 +6788,7 @@ export function WatchfaceEditor({
           <button
             className="secondary-button"
             type="button"
+            disabled={spriteImportPending}
             onClick={() =>
               void chooseBatterySpriteFolder(
                 "config:control_battery_icon"
@@ -6679,6 +6804,7 @@ export function WatchfaceEditor({
             <button
               className="secondary-button"
               type="button"
+              disabled={spriteImportPending}
               onClick={() =>
                 restoreBatteryIcon("config:control_battery_icon")
               }
@@ -6910,11 +7036,11 @@ export function WatchfaceEditor({
           {renderLayerVisibilityToggle(layer)}
           <h3 className="wf-inspector-heading">Battery sprite folder</h3>
           <div className="wf-config-asset-actions">
-            <button className="secondary-button" type="button" onClick={() => void chooseBatterySpriteFolder()}>
+            <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => void chooseBatterySpriteFolder()}>
               <ImagePlus size={15} /> {stateCount > 0 ? "Replace sprite folder" : "Import sprite folder"}
             </button>
             {stateCount > 0 ? (
-              <button className="secondary-button" type="button" onClick={() => restoreBatteryIcon()}>
+              <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => restoreBatteryIcon()}>
                 <RotateCcw size={15} /> Restore template icon
               </button>
             ) : null}
@@ -6981,6 +7107,7 @@ export function WatchfaceEditor({
           />
           <CustomPngFontPanel
             api={api}
+            {...rasterFolderImportProps}
             rasterFont={design.rasterFont}
             componentRasterFont={style?.rasterFont}
             componentLabel="Battery data"
@@ -7070,6 +7197,7 @@ export function WatchfaceEditor({
           />
           <CustomPngFontPanel
             api={api}
+            {...rasterFolderImportProps}
             rasterFont={design.rasterFont}
             componentRasterFont={style?.rasterFont}
             componentLabel={layer.label}
@@ -7132,6 +7260,7 @@ export function WatchfaceEditor({
           />
           <CustomPngFontPanel
             api={api}
+            {...rasterFolderImportProps}
             rasterFont={design.rasterFont}
             componentRasterFont={style?.rasterFont}
             componentLabel={layer.label}
@@ -7175,9 +7304,9 @@ export function WatchfaceEditor({
       const supportsNativeSize =
         partId === "weekday" || partId === "dateDay";
       const usesNativeDimensions = partId === "dateMonth" || partId === "dateDay";
-      const sourceResolution = details?.resolutions.find(
-        (candidate) => candidate.directory === watchPreviewResolution?.directory
-      ) ?? (details ? pickPreviewResolution(details) : null);
+      // Native sizes are authored in master coordinates; export scales them
+      // per device tree, so the inspector reads master fallbacks only.
+      const sourceResolution = details ? pickPreviewResolution(details) : null;
       const monthFolderName = sourceResolution?.config.english_date_month_font
         ?.replace(/\\/g, "/");
       const starterUsesMonthLabels = partId === "dateMonth" &&
@@ -7233,6 +7362,7 @@ export function WatchfaceEditor({
           />
           <CustomPngFontPanel
             api={api}
+            {...rasterFolderImportProps}
             rasterFont={design.rasterFont}
             componentRasterFont={style?.rasterFont}
             componentLabel={layer.label}
@@ -7331,7 +7461,7 @@ export function WatchfaceEditor({
                 Use imported PNG size
               </button>
               <span className="watchface-studio-summary">
-                Exported PNGs keep these exact pixel dimensions and the COROS layout rectangle follows them.
+                Sizes use the {previewWidth}px canvas; exports scale them to each watch resolution and the COROS layout rectangle follows them.
               </span>
             </div>
           ) : (
@@ -7902,6 +8032,7 @@ export function WatchfaceEditor({
         />
         <CustomPngFontPanel
           api={api}
+          {...rasterFolderImportProps}
           rasterFont={design.rasterFont}
           componentRasterFont={design.selectableMetricStyle?.rasterFont}
           componentLabel="Selectable metric"

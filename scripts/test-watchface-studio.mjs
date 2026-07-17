@@ -56,6 +56,93 @@ import {
   scaleConfigRectValue,
   watchfaceEffectRenderScale
 } from "../src/watchfaces/watchfaceStudio.ts";
+import {
+  classifyRasterSpriteFolder,
+  createRasterFontFolderReplacement
+} from "../src/watchfaces/watchfaceRasterFolder.ts";
+import { WatchfaceSpriteImportTracker } from "../src/watchfaces/watchfaceSpriteImportTracker.ts";
+
+const rasterFolderSprite = (relativePath, dataUrl = relativePath) => ({
+  name: relativePath.split("/").at(-1),
+  relativePath,
+  dataUrl,
+  sizeBytes: dataUrl.length
+});
+
+const folderB = {
+  label: "folder_b",
+  sprites: [
+    rasterFolderSprite("digits/01.png", "b-one"),
+    rasterFolderSprite("digits/00.png", "b-zero"),
+    rasterFolderSprite("weekdays/MON.png", "b-mon"),
+    rasterFolderSprite("months/JAN.png", "b-jan")
+  ]
+};
+const classifiedFolderB = classifyRasterSpriteFolder(folderB);
+assert.deepEqual([...classifiedFolderB.digitSprites.keys()], ["0", "1"]);
+assert.deepEqual([...classifiedFolderB.labelSprites.keys()], ["JAN", "MON"]);
+const replacementFolderB = await createRasterFontFolderReplacement(folderB, {
+  tint: true,
+  createDigitAtlas: async (sprites) => ({
+    dataUrl: `atlas:${[...sprites.values()].join(",")}`,
+    glyphs: [...sprites.keys()].join(""),
+    columns: sprites.size,
+    atlasSize: { width: 20, height: 10 }
+  }),
+  readSpriteSize: async () => ({ width: 10, height: 10 })
+});
+assert.equal(replacementFolderB.rasterFont.label, "folder b");
+assert.equal(replacementFolderB.rasterFont.tint, true);
+assert.deepEqual(Object.keys(replacementFolderB.rasterFont.sprites), [
+  "0",
+  "1",
+  "JAN",
+  "MON"
+]);
+assert.equal(replacementFolderB.rasterFont.sprites["9"], undefined);
+assert.equal(replacementFolderB.rasterFont.labels.OLD, undefined);
+assert.deepEqual(replacementFolderB.rasterFont.atlasSize, {
+  width: 20,
+  height: 10
+});
+await assert.rejects(
+  createRasterFontFolderReplacement(
+    {
+      label: "duplicates",
+      sprites: [
+        rasterFolderSprite("second/0.png"),
+        rasterFolderSprite("first/00.png")
+      ]
+    },
+    {
+      tint: false,
+      createDigitAtlas: async () => {
+        throw new Error("duplicate validation must run before atlas creation");
+      },
+      readSpriteSize: async () => ({ width: 1, height: 1 })
+    }
+  ),
+  (error) =>
+    /Duplicate PNG sprite “00”/.test(error.message) &&
+    error.message.includes("first/00.png") &&
+    error.message.includes("second/0.png")
+);
+
+const importTracker = new WatchfaceSpriteImportTracker();
+const olderImport = importTracker.begin("component:Date month", "session-a");
+const newerImport = importTracker.begin("component:Date month", "session-a");
+const parallelImport = importTracker.begin("component:Weekday", "session-a");
+assert.equal(importTracker.pendingCount, 3);
+assert.equal(importTracker.isCurrent(olderImport, "session-a"), false);
+assert.equal(importTracker.isCurrent(newerImport, "session-a"), true);
+assert.equal(importTracker.isCurrent(parallelImport, "session-a"), true);
+assert.equal(importTracker.isCurrent(newerImport, "session-b"), false);
+importTracker.finish(olderImport);
+assert.equal(importTracker.pendingCount, 2);
+assert.equal(importTracker.isCurrent(newerImport, "session-a"), true);
+importTracker.finish(newerImport);
+importTracker.finish(parallelImport);
+assert.equal(importTracker.pendingCount, 0);
 
 assert.equal(corosWeekdayIndex(0), 6);
 assert.equal(corosWeekdayIndex(1), 0);
@@ -702,6 +789,24 @@ assert.deepEqual(
 );
 assert.deepEqual(
   configAssetCanvasSize(
+    "control_hr_icon",
+    {
+      nativeSize: true,
+      scale: 1.5,
+      replacement: {
+        dataUrl: "data:image/png;base64,AA==",
+        width: 96,
+        height: 48
+      }
+    },
+    { width: 37, height: 37 },
+    416 / 800
+  ),
+  { width: 75, height: 37, native: true },
+  "native control icons should scale master-authored dimensions per device tree"
+);
+assert.deepEqual(
+  configAssetCanvasSize(
     "control_colon_icon",
     {
       nativeSize: true,
@@ -1063,11 +1168,18 @@ const nativeSelectableStyle = buildSelectableMetricStyleOverrides(
     }
   },
   true
-).find(({ path }) => path.includes("800x800"));
+);
 assert.equal(
-  nativeSelectableStyle?.values.control_hr_rect,
+  nativeSelectableStyle.find(({ path }) => path.includes("800x800"))
+    ?.values.control_hr_rect,
   "{178,9,271,56,hcenter|vcenter}",
   "native selectable digits should expand each value rectangle around its existing center"
+);
+assert.equal(
+  nativeSelectableStyle.find(({ path }) => path.includes("416x416"))
+    ?.values.control_hr_rect,
+  "{93,5,141,29,hcenter|vcenter}",
+  "imported selectable digit sizes should scale from master into device trees"
 );
 
 const iconPositionDetails = applyConfigOverridesToDetails(details, [
@@ -1510,6 +1622,23 @@ assert.deepEqual(
   ),
   { width: 31, height: 47, native: true }
 );
+assert.deepEqual(
+  dateSpriteCanvasSize(
+    withMetrics.resolutions[0],
+    "dateMonth",
+    { scale: 1, width: 60, height: 60 },
+    0,
+    416 / 800
+  ),
+  { width: 31, height: 31, native: true },
+  "device trees should scale master-authored native PNG dimensions"
+);
+assert.equal(
+  nativeDateStyleOverrides.find((entry) => entry.path.includes("416x416"))
+    ?.values.english_date_month_rect,
+  "{167,171,199,195,hcenter|vcenter}",
+  "the 416px month rect should follow the scaled native size, not the 800px one"
+);
 const importedMonthLabelsOnDigitTemplate = {
   ...monthLabelStyle,
   monthFormat: "labels"
@@ -1523,6 +1652,17 @@ assert.deepEqual(
   ),
   { width: 73, height: 29, native: true },
   "importing JAN–DEC should switch a numeric-month template to label mode"
+);
+assert.deepEqual(
+  dateSpriteCanvasSize(
+    withMetrics.resolutions[0],
+    "dateMonth",
+    importedMonthLabelsOnDigitTemplate,
+    1,
+    416 / 800
+  ),
+  { width: 38, height: 15, native: true },
+  "imported PNG native sizes should also scale from master to device trees"
 );
 assert.equal(
   buildDateStyleOverrides(withMetrics, {

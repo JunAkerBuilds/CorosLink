@@ -570,6 +570,31 @@ try {
     "editable website ZIP should preserve the original starter archive exactly"
   );
   assert.deepEqual(editablePackage.preview, preview);
+
+  const finderWrappedPath = path.join(tempDirectory, "finder-wrapped-face.zip");
+  await fs.writeFile(
+    finderWrappedPath,
+    createStoreZip([
+      {
+        name: "Website face/coroslink-project.json",
+        data: Buffer.from(JSON.stringify(editablePackage.manifest), "utf8")
+      },
+      { name: "Website face/starter.dat", data: editablePackage.starterArchive },
+      { name: "Website face/preview.png", data: editablePackage.preview },
+      {
+        name: "__MACOSX/Website face/._coroslink-project.json",
+        data: Buffer.from("macOS metadata", "utf8")
+      }
+    ])
+  );
+  const wrappedPackage = await readCorosWatchfaceProjectPackage(finderWrappedPath);
+  assert.ok(
+    wrappedPackage,
+    "a project ZIP inside one Finder-created folder should be recognized"
+  );
+  assert.deepEqual(wrappedPackage.manifest, editablePackage.manifest);
+  assert.deepEqual(wrappedPackage.starterArchive, archive);
+  assert.deepEqual(wrappedPackage.preview, preview);
 } finally {
   await fs.rm(tempDirectory, { recursive: true, force: true });
 }

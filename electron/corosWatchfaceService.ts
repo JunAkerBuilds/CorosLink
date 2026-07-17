@@ -894,13 +894,37 @@ export async function readCorosWatchfaceProjectPackage(
   }
   const directory = await openTemplateArchive(packagePath);
   const files = directory.files.filter((entry) => entry.type === "File");
-  const manifestEntry = files.find(
+  const rootManifestEntry = files.find(
     (entry) => entry.path === "coroslink-project.json"
   );
+  const nestedManifestEntries = rootManifestEntry
+    ? []
+    : files.filter(
+        (entry) =>
+          /^[^/]+\/coroslink-project\.json$/.test(entry.path) &&
+          !entry.path.startsWith("__MACOSX/")
+      );
+  if (nestedManifestEntries.length > 1) {
+    throw new Error(
+      "The editable watch-face package contains multiple project folders."
+    );
+  }
+  const manifestEntry = rootManifestEntry ?? nestedManifestEntries[0];
   if (!manifestEntry) return null;
-  const starterEntry = files.find((entry) => entry.path === "starter.dat");
-  const previewEntry = files.find((entry) => entry.path === "preview.png");
-  if (!starterEntry || !previewEntry) {
+  // Finder's Compress action commonly wraps selected project files in one
+  // enclosing folder. Resolve the remaining required entries relative to the
+  // manifest so these otherwise valid packages import like root-level exports.
+  const packagePrefix = manifestEntry.path.slice(
+    0,
+    -"coroslink-project.json".length
+  );
+  const resolvedStarterEntry = files.find(
+    (entry) => entry.path === `${packagePrefix}starter.dat`
+  );
+  const previewEntry = files.find(
+    (entry) => entry.path === `${packagePrefix}preview.png`
+  );
+  if (!resolvedStarterEntry || !previewEntry) {
     throw new Error("The editable watch-face package is incomplete.");
   }
   assertPackageEntrySize(
@@ -908,7 +932,11 @@ export async function readCorosWatchfaceProjectPackage(
     MAX_PROJECT_MANIFEST_BYTES,
     "project manifest"
   );
-  assertPackageEntrySize(starterEntry, MAX_ARCHIVE_BYTES, "starter archive");
+  assertPackageEntrySize(
+    resolvedStarterEntry,
+    MAX_ARCHIVE_BYTES,
+    "starter archive"
+  );
   assertPackageEntrySize(previewEntry, MAX_ARTWORK_BYTES, "preview image");
 
   let manifest: CorosLinkWatchfaceProjectManifest;
@@ -938,7 +966,7 @@ export async function readCorosWatchfaceProjectPackage(
     ...(normalizedFirmwareType ? { firmwareType: normalizedFirmwareType } : {})
   };
   validateProjectDesign(manifest.design);
-  const starterArchive = await starterEntry.buffer();
+  const starterArchive = await resolvedStarterEntry.buffer();
   const preview = await previewEntry.buffer();
   if (starterArchive.byteLength > MAX_ARCHIVE_BYTES) {
     throw new Error("The editable watch-face starter archive is too large.");

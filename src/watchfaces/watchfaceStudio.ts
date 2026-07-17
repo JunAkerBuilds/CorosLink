@@ -67,6 +67,11 @@ export interface WatchfaceStudioOptions extends WatchfaceTypography {
   layerEffects?: Record<string, CorosWatchfaceEffectBinding>;
   /** Target-resolution/master-resolution ratio for 800px-authored effects. */
   effectResolutionScale?: number;
+  /**
+   * Target/master ratio applied to master-authored native PNG dimensions
+   * (date sizes, control icons, imported digit fonts) in a device preview.
+   */
+  nativeSpriteResolutionScale?: number;
 }
 
 /** Converts 800px-authored effect values into the active preview canvas. */
@@ -440,11 +445,16 @@ function normalizePositiveScale(scale: number | undefined): number {
   return Number.isFinite(candidate) ? Math.max(0.1, candidate) : 1;
 }
 
-/** Resolves a config asset's exported/preview canvas without mutating its position. */
+/**
+ * Resolves a config asset's exported/preview canvas without mutating its
+ * position. Imported replacement dimensions are authored in the master
+ * resolution; `nativeScale` converts them to the target tree.
+ */
 export function configAssetCanvasSize(
   configKey: string,
   override: CorosWatchfaceConfigAssetOverride | undefined,
-  fallback: { width: number; height: number }
+  fallback: { width: number; height: number },
+  nativeScale = 1
 ): { width: number; height: number; native: boolean } {
   if (
     !override?.nativeSize ||
@@ -453,7 +463,7 @@ export function configAssetCanvasSize(
   ) {
     return { ...fallback, native: false };
   }
-  const scale = normalizePositiveScale(override.scale);
+  const scale = normalizePositiveScale(override.scale) * nativeScale;
   return {
     width: Math.max(1, Math.round(override.replacement.width * scale)),
     height: Math.max(1, Math.round(override.replacement.height * scale)),
@@ -633,7 +643,9 @@ export async function buildWatchfaceConfigAssetReplacements(
   overrides: Record<string, CorosWatchfaceConfigAssetOverride> = {}
 ): Promise<CorosWatchfaceAssetReplacement[]> {
   const replacements: CorosWatchfaceAssetReplacement[] = [];
+  const masterWidth = pickPreviewResolution(details)?.width;
   for (const resolution of details.resolutions) {
+    const nativeScale = masterWidth ? resolution.width / masterWidth : 1;
     for (const scope of ["config", "aod"] as const) {
       for (const [configKey, rawPath] of pngConfigEntries(resolution, scope)) {
         const id = watchfaceConfigAssetId(scope, configKey);
@@ -644,10 +656,17 @@ export async function buildWatchfaceConfigAssetReplacements(
         const source = resolution.icons.find(
           (file) => file.path === `${resolution.directory}/${relativePath}`
         );
-        const canvasSize = configAssetCanvasSize(configKey, override, {
-          width: source?.width ?? override.replacement.width,
-          height: source?.height ?? override.replacement.height
-        });
+        const canvasSize = configAssetCanvasSize(
+          configKey,
+          override,
+          {
+            width: source?.width ??
+              Math.max(1, Math.round(override.replacement.width * nativeScale)),
+            height: source?.height ??
+              Math.max(1, Math.round(override.replacement.height * nativeScale))
+          },
+          nativeScale
+        );
         const replaceInPlace = Boolean(source) && replaceConfigAssetInPlace(configKey);
         replacements.push({
           path: replaceInPlace
@@ -2240,12 +2259,17 @@ function dateMonthUsesLabels(
     (style?.monthFormat !== "digits" && source?.kind === "month");
 }
 
-/** Resolves the actual exported canvas size for one month/day PNG. */
+/**
+ * Resolves the actual exported canvas size for one month/day PNG.
+ * Entered and imported dimensions are authored in the master resolution;
+ * `nativeScale` (target width / master width) converts them to this tree.
+ */
 export function dateSpriteCanvasSize(
   resolution: CorosWatchfaceResolutionDetails,
   partId: WatchfaceDatePartId,
   style: WatchfaceDateSpriteStyle | undefined,
-  value = 0
+  value = 0,
+  nativeScale = 1
 ): { width: number; height: number; native: boolean } | null {
   const part = WATCHFACE_DATE_PARTS.find((candidate) => candidate.id === partId);
   const source = part
@@ -2257,16 +2281,22 @@ export function dateSpriteCanvasSize(
     ? corosMonthLabelForSpriteIndex(value) ?? String(value)
     : String(value);
   const imported = rasterFontNativeSpriteSize(style?.rasterFont, spriteText);
+  const toTargetSize = (size: number) =>
+    Math.max(1, Math.round(size * nativeScale));
   const requestedWidth = style?.width;
   const requestedHeight = style?.height;
   const exactWidth = typeof requestedWidth === "number" &&
       Number.isFinite(requestedWidth) && requestedWidth > 0
-    ? Math.round(requestedWidth)
-    : imported?.width;
+    ? toTargetSize(requestedWidth)
+    : imported
+      ? toTargetSize(imported.width)
+      : undefined;
   const exactHeight = typeof requestedHeight === "number" &&
       Number.isFinite(requestedHeight) && requestedHeight > 0
-    ? Math.round(requestedHeight)
-    : imported?.height;
+    ? toTargetSize(requestedHeight)
+    : imported
+      ? toTargetSize(imported.height)
+      : undefined;
   return {
     width: exactWidth ?? file.width,
     height: exactHeight ?? file.height,
@@ -2914,7 +2944,9 @@ export function buildSelectableMetricStyleOverrides(
   style: WatchfaceMetricSpriteStyle,
   useStudioFolder = false
 ): CorosWatchfaceConfigOverride[] {
+  const masterWidth = pickPreviewResolution(details)?.width;
   return details.resolutions.flatMap((resolution) => {
+    const nativeScale = masterWidth ? resolution.width / masterWidth : 1;
     const values: Record<string, string> = {};
     for (const complication of WATCHFACE_COMPLICATIONS) {
       const rectKeys = complication.id === "battery"
@@ -2951,11 +2983,14 @@ export function buildSelectableMetricStyleOverrides(
             rasterFontNativeSpriteSize(style.rasterFont, String(digit))
           ).filter((size): size is NonNullable<typeof size> => Boolean(size));
           const scale = normalizeSpriteScale(style.scale);
+          // Imported glyph PNGs are master-authored; template folders are
+          // already sized for this tree.
           const nativeWidth = Math.max(
             1,
             Math.round(
               (importedSizes.length > 0
-                ? Math.max(...importedSizes.map((size) => size.width))
+                ? Math.max(...importedSizes.map((size) => size.width)) *
+                  nativeScale
                 : sourceWidth) * scale
             )
           );
@@ -2963,7 +2998,8 @@ export function buildSelectableMetricStyleOverrides(
             1,
             Math.round(
               (importedSizes.length > 0
-                ? Math.max(...importedSizes.map((size) => size.height))
+                ? Math.max(...importedSizes.map((size) => size.height)) *
+                  nativeScale
                 : sourceHeight) * scale
             )
           );
@@ -3017,9 +3053,11 @@ export async function buildSelectableMetricSpriteComposition(
     groupKey: string;
     create: boolean;
   }> = [];
+  const masterWidth = pickPreviewResolution(details)?.width;
   for (const resolution of details.resolutions) {
     const source = controlTemperatureFontFolder(resolution);
     if (!source) continue;
+    const nativeScale = masterWidth ? resolution.width / masterWidth : 1;
     const scale = normalizeSpriteScale(style.scale);
     source.files.slice(0, 10).forEach((file, digit) => {
       const path = `${resolution.directory}/cl_control/${String(digit).padStart(2, "0")}.png`;
@@ -3035,7 +3073,11 @@ export async function buildSelectableMetricSpriteComposition(
         height: Math.max(1, Math.round(file.height * scale)),
         targetHeight: Math.max(
           1,
-          Math.round((importedSize?.height ?? file.height) * scale)
+          Math.round(
+            (importedSize
+              ? importedSize.height * nativeScale
+              : file.height) * scale
+          )
         ),
         groupKey: resolution.directory,
         create: !resolution.spriteFolders.some((folder) =>
@@ -3704,7 +3746,9 @@ export function buildDateStyleOverrides(
   useStudioFolders = false
 ): CorosWatchfaceConfigOverride[] {
   const overrides: CorosWatchfaceConfigOverride[] = [];
+  const masterWidth = pickPreviewResolution(details)?.width;
   for (const resolution of details.resolutions) {
+    const nativeScale = masterWidth ? resolution.width / masterWidth : 1;
     const values: Record<string, string> = {};
     for (const part of WATCHFACE_DATE_PARTS) {
       const style = styles[part.id];
@@ -3715,7 +3759,7 @@ export function buildDateStyleOverrides(
       const monthLabels = part.id === "dateMonth" && dateMonthUsesLabels(source, style);
       const sizes = part.kind === "digits"
         ? Array.from({ length: monthLabels ? 12 : 10 }, (_, value) =>
-            dateSpriteCanvasSize(resolution, part.id, style, value)
+            dateSpriteCanvasSize(resolution, part.id, style, value, nativeScale)
           )
             .filter((size): size is NonNullable<typeof size> => Boolean(size))
         : [];
@@ -3807,7 +3851,9 @@ export async function buildDateSpriteComposition(
     rectGlyphCount: number;
     create: boolean;
   }[] = [];
+  const masterWidth = pickPreviewResolution(details)?.width;
   for (const resolution of details.resolutions) {
+    const nativeScale = masterWidth ? resolution.width / masterWidth : 1;
     for (const part of WATCHFACE_DATE_PARTS) {
       const style = styles[part.id];
       const source = style
@@ -3831,7 +3877,7 @@ export async function buildDateSpriteComposition(
           folder.files.some((candidate) => candidate.path === path)
         );
         const canvasSize = part.kind === "digits"
-          ? dateSpriteCanvasSize(resolution, part.id, style, value)
+          ? dateSpriteCanvasSize(resolution, part.id, style, value, nativeScale)
           : null;
         jobs.push({
           source: file,
@@ -5235,10 +5281,12 @@ export async function drawStudioPreview(
     ];
     const replacement = override?.replacement;
     const artworkZoom = replacement ? override?.scale ?? 1 : 1;
-    const canvasSize = configAssetCanvasSize(configKey, override, {
-      width: file.width,
-      height: file.height
-    });
+    const canvasSize = configAssetCanvasSize(
+      configKey,
+      override,
+      { width: file.width, height: file.height },
+      options.nativeSpriteResolutionScale ?? 1
+    );
     const cacheKey = `${configKey}|${color ?? "original"}|${artworkZoom}|${canvasSize.width}x${canvasSize.height}|${canvasSize.native}`;
     const cached = configuredAssetImages.get(cacheKey);
     if (cached) return cached;
@@ -5565,7 +5613,8 @@ export async function drawStudioPreview(
       resolution,
       "dateMonth",
       monthStyle,
-      monthSpriteIndex
+      monthSpriteIndex,
+      options.nativeSpriteResolutionScale ?? 1
     );
     const width = canvasSize?.width ?? monthFile.width;
     const height = canvasSize?.height ?? monthFile.height;
@@ -5771,7 +5820,8 @@ export async function drawStudioPreview(
             resolution,
             plan.datePartId,
             dateStyle,
-            Number(digit)
+            Number(digit),
+            options.nativeSpriteResolutionScale ?? 1
           )
         : null;
       const nativeDateDay =
@@ -5784,14 +5834,16 @@ export async function drawStudioPreview(
         );
       const nativeComplication = Boolean(complicationStyle?.nativeSize);
       const nativeGlyph = nativeDateDay || nativeComplication;
+      const importedComplicationHeight = nativeComplication
+        ? rasterFontNativeSpriteSize(complicationStyle?.rasterFont, digit)
+            ?.height
+        : undefined;
       const nativeTargetHeight = Math.max(
         1,
         Math.round(
-          (nativeComplication
-            ? rasterFontNativeSpriteSize(
-                complicationStyle?.rasterFont,
-                digit
-              )?.height ?? file.height
+          (importedComplicationHeight !== undefined
+            ? importedComplicationHeight *
+              (options.nativeSpriteResolutionScale ?? 1)
             : file.height) * glyphScale
         )
       );
