@@ -12677,8 +12677,12 @@ td span {
   font-weight: 500;
 }
 
+/* Standalone grid (not a .training-chart-grid) so the grouped max-width
+   collapse rules further down never override its own breakpoints. */
 .training-zone-grid {
+  display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
 }
 
 @media (max-width: 1100px) {

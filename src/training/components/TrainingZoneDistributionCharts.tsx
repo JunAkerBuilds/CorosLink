@@ -957,7 +957,7 @@ export function TrainingZoneDistributionCharts({
           Distribution <span>(4 Weeks)</span>
         </h2>
       </div>
-      <div className="training-chart-grid training-zone-grid">
+      <div className="training-zone-grid">
         <ZoneDistributionPanel
           title="Threshold Heart Rate"
           subtitle="Training Load"
