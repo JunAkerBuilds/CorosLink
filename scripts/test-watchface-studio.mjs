@@ -8,6 +8,7 @@ import {
   buildControlBatteryVisibilityOverrides,
   buildDateSpriteComposition,
   buildDateStyleOverrides,
+  dateSpriteCanvasSize,
   buildLayerVisibilityOverrides,
   buildLayerColorOverrides,
   buildLayoutOverrides,
@@ -41,6 +42,7 @@ import {
   normalizeRasterFontGlyphs,
   pickWatchPreviewResolution,
   rasterFontSupportsText,
+  rasterFontNativeSpriteSize,
   rebaseNegativeControlChildren,
   resizeConfigRectToCanvas,
   scaleConfigRectValue,
@@ -72,6 +74,21 @@ assert.equal(
   ),
   true,
   "an individually imported glyph should not require an atlas"
+);
+assert.deepEqual(
+  rasterFontNativeSpriteSize(
+    {
+      label: "Native digits",
+      dataUrl: "data:image/png;base64,AA==",
+      glyphs: "0",
+      columns: 1,
+      sprites: { "0": "data:image/png;base64,AA==" },
+      spriteSizes: { "0": { width: 31, height: 47 } },
+      tint: false
+    },
+    "0"
+  ),
+  { width: 31, height: 47 }
 );
 
 function digitFiles(width, height, directory, folder) {
@@ -265,6 +282,60 @@ const details = {
   archiveId: "fixture",
   resolutions: [resolution(416, 23, 33), resolution(800, 44, 64)]
 };
+
+const monthLabelResolution = resolution(800, 44, 64);
+monthLabelResolution.config.english_date_month_rect =
+  "{283,573,283,573,hcenter|vcenter}";
+monthLabelResolution.config.english_date_month_font = "english_month";
+monthLabelResolution.spriteFolders.push({
+  folder: "english_month",
+  kind: "month",
+  aod: false,
+  files: Array.from({ length: 12 }, (_, month) => ({
+    path: `${monthLabelResolution.directory}/english_month/${String(month).padStart(2, "0")}.png`,
+    width: 51,
+    height: 26
+  }))
+});
+const monthLabelStyle = {
+  scale: 1,
+  rasterFont: {
+    label: "Month labels",
+    dataUrl: "data:image/png;base64,AA==",
+    glyphs: "",
+    columns: 1,
+    sprites: { JAN: "data:image/png;base64,AA==" },
+    spriteSizes: { JAN: { width: 73, height: 29 } },
+    tint: false
+  }
+};
+assert.deepEqual(
+  dateSpriteCanvasSize(monthLabelResolution, "dateMonth", monthLabelStyle, 0),
+  { width: 73, height: 29, native: true },
+  "12-sprite month folders should resolve JAN instead of digit 0"
+);
+assert.equal(
+  buildDateStyleOverrides(
+    { archiveId: "month-labels", resolutions: [monthLabelResolution] },
+    { dateMonth: monthLabelStyle }
+  )[0]?.values.english_date_month_rect,
+  "{247,559,320,588,hcenter|vcenter}",
+  "single-image month rectangles should follow one native PNG, not two digits"
+);
+assert.deepEqual(
+  computeLayoutGroupBounds(monthLabelResolution).find(
+    (entry) => entry.id === "dateMonth"
+  ),
+  {
+    id: "dateMonth",
+    label: "Date month",
+    x0: 257.5,
+    y0: 560,
+    x1: 308.5,
+    y1: 586
+  },
+  "point month rects should expose the full JAN–DEC sprite bounds in Studio"
+);
 
 const autoTimeResolution = resolution(240, 12, 20);
 Object.assign(autoTimeResolution.config, {
@@ -1149,6 +1220,45 @@ assert.equal(
   ),
   "{74,40,206,84,hcenter|vcenter}",
   "native weekday width should expand around the existing center without face clamping"
+);
+const nativeDateStyleOverrides = buildDateStyleOverrides(withMetrics, {
+  dateMonth: { scale: 1, width: 31, height: 47 }
+});
+assert.equal(
+  nativeDateStyleOverrides.find((entry) => entry.path.includes("800x800"))
+    ?.values.english_date_month_rect,
+  "{321,329,383,376,hcenter|vcenter}"
+);
+assert.deepEqual(
+  dateSpriteCanvasSize(
+    withMetrics.resolutions[1],
+    "dateMonth",
+    { scale: 1, width: 31, height: 47 },
+    0
+  ),
+  { width: 31, height: 47, native: true }
+);
+const importedMonthLabelsOnDigitTemplate = {
+  ...monthLabelStyle,
+  monthFormat: "labels"
+};
+assert.deepEqual(
+  dateSpriteCanvasSize(
+    withMetrics.resolutions[1],
+    "dateMonth",
+    importedMonthLabelsOnDigitTemplate,
+    0
+  ),
+  { width: 73, height: 29, native: true },
+  "importing JAN–DEC should switch a numeric-month template to label mode"
+);
+assert.equal(
+  buildDateStyleOverrides(withMetrics, {
+    dateMonth: { scale: 1, width: 31, height: 47, monthFormat: "labels" }
+  }).find((entry) => entry.path.includes("800x800"))
+    ?.values.english_date_month_rect,
+  "{337,329,368,376,hcenter|vcenter}",
+  "label mode should size the month rect for one image rather than two digits"
 );
 const layerColorOverrides = buildLayerColorOverrides(withMetrics, {
   seconds: "#22cc88",

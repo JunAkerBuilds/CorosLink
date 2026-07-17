@@ -195,6 +195,7 @@ import {
   AOD_DIM_FACTOR,
   detailsForPreviewMode,
   detailsForPreviewResolution,
+  dateSpriteCanvasSize,
   dimHexColor,
   downscaleArtwork,
   drawStudioPreview,
@@ -210,6 +211,8 @@ import {
   parseConfigPos,
   pickPreviewResolution,
   pickWatchPreviewResolution,
+  rasterFontSupportsText,
+  WATCHFACE_MONTH_LABELS,
   type WatchfaceDatePartId,
   type WatchfaceAssetLoader,
   type WatchfaceConfigAssetReference,
@@ -4348,6 +4351,9 @@ export function WatchfaceEditor({
     partId: WatchfaceDatePartId,
     patch: {
       scale?: number;
+      width?: number;
+      height?: number;
+      monthFormat?: "digits" | "labels";
       fontFamily?: string;
       color?: string;
       letterSpacing?: number;
@@ -6638,6 +6644,30 @@ export function WatchfaceEditor({
       const scale = style?.scale ?? 1;
       const supportsNativeSize =
         partId === "weekday" || partId === "dateDay";
+      const usesNativeDimensions = partId === "dateMonth" || partId === "dateDay";
+      const sourceResolution = details?.resolutions.find(
+        (candidate) => candidate.directory === watchPreviewResolution?.directory
+      ) ?? (details ? pickPreviewResolution(details) : null);
+      const monthFolderName = sourceResolution?.config.english_date_month_font
+        ?.replace(/\\/g, "/");
+      const starterUsesMonthLabels = partId === "dateMonth" &&
+        sourceResolution?.spriteFolders.some(
+          (folder) => folder.folder === monthFolderName && folder.kind === "month"
+        );
+      const usesMonthLabels = partId === "dateMonth" &&
+        (style?.monthFormat === "labels" ||
+          (style?.monthFormat !== "digits" && starterUsesMonthLabels));
+      const sourceSizes = sourceResolution && usesNativeDimensions
+        ? Array.from({ length: usesMonthLabels ? 12 : 10 }, (_, value) =>
+            dateSpriteCanvasSize(sourceResolution, partId, style, value)
+          ).filter((size): size is NonNullable<typeof size> => Boolean(size))
+        : [];
+      const nativeWidth = sourceSizes.length > 0
+        ? Math.max(...sourceSizes.map((size) => size.width))
+        : 1;
+      const nativeHeight = sourceSizes.length > 0
+        ? Math.max(...sourceSizes.map((size) => size.height))
+        : 1;
       return (
         <div className="watchface-inspector-group">
           {renderLayerVisibilityToggle(layer)}
@@ -6655,7 +6685,11 @@ export function WatchfaceEditor({
               })
             }
             rasterFont={design.rasterFont}
-            rasterFontRequiredText={partId === "weekday" ? "MON" : undefined}
+            rasterFontRequiredText={partId === "weekday"
+              ? "MON"
+              : usesMonthLabels
+                ? "JAN"
+                : undefined}
             onRasterFontChange={setRasterFont}
             typography={{
               fontWeight: design.fontWeight ?? 400,
@@ -6682,7 +6716,16 @@ export function WatchfaceEditor({
             onComponentRasterFontChange={(rasterFont) =>
               setDateStyle(partId, {
                 rasterFont,
-                ...(supportsNativeSize ? { nativeSize: true } : {})
+                ...(supportsNativeSize ? { nativeSize: true } : {}),
+                ...(partId === "dateMonth"
+                  ? {
+                      monthFormat: rasterFont && WATCHFACE_MONTH_LABELS.every(
+                        (label) => rasterFontSupportsText(rasterFont, label)
+                      )
+                        ? "labels"
+                        : undefined
+                    }
+                  : {})
               })
             }
           />
@@ -6705,7 +6748,7 @@ export function WatchfaceEditor({
               </button>
             </span>
           </label>
-          {supportsNativeSize ? (
+          {supportsNativeSize && !usesNativeDimensions ? (
             <label className="watchface-studio-toggle">
               <input
                 type="checkbox"
@@ -6720,25 +6763,62 @@ export function WatchfaceEditor({
               Native width (no template bound)
             </label>
           ) : null}
-          <label className="field">
-            Artwork zoom
-            <EditableNumberInput
-              min="0.01"
-              step="0.01"
-              value={scale}
-              fallback={1}
-              onValueChange={(value) => setDateStyle(partId, { scale: Math.max(0.01, value) })}
-            />
-            <span className="watchface-studio-summary">
-              {supportsNativeSize &&
-              (style?.nativeSize ??
-                Boolean(style?.fontFamily || style?.rasterFont))
-                ? partId === "dateDay"
-                  ? "Changes digit height while preserving each digit's natural width."
-                  : "Changes label height while preserving its natural width."
-                : "Zooms and crops inside the component's fixed COROS canvas."}
-            </span>
-          </label>
+          {usesNativeDimensions ? (
+            <div className="field">
+              Native PNG size
+              <div className="watchface-sprite-transform-fields" aria-label="Native PNG size">
+                <label>
+                  Width
+                  <EditableNumberInput
+                    min="1"
+                    step="1"
+                    value={style?.width ?? nativeWidth}
+                    fallback={nativeWidth}
+                    onValueChange={(value) =>
+                      setDateStyle(partId, { width: Math.max(1, Math.round(value)) })
+                    }
+                  />
+                </label>
+                <label>
+                  Height
+                  <EditableNumberInput
+                    min="1"
+                    step="1"
+                    value={style?.height ?? nativeHeight}
+                    fallback={nativeHeight}
+                    onValueChange={(value) =>
+                      setDateStyle(partId, { height: Math.max(1, Math.round(value)) })
+                    }
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                className="watchface-color-none"
+                disabled={style?.width === undefined && style?.height === undefined}
+                onClick={() => setDateStyle(partId, { width: undefined, height: undefined })}
+              >
+                Use imported PNG size
+              </button>
+              <span className="watchface-studio-summary">
+                Exported PNGs keep these exact pixel dimensions and the COROS layout rectangle follows them.
+              </span>
+            </div>
+          ) : (
+            <label className="field">
+              Artwork zoom
+              <EditableNumberInput
+                min="0.01"
+                step="0.01"
+                value={scale}
+                fallback={1}
+                onValueChange={(value) => setDateStyle(partId, { scale: Math.max(0.01, value) })}
+              />
+              <span className="watchface-studio-summary">
+                Zooms and crops inside the component's fixed COROS canvas.
+              </span>
+            </label>
+          )}
           {renderPositionReadout(layer)}
           {renderEffectsInspector(layer.id)}
         </div>

@@ -7,6 +7,7 @@ import type {
   CorosWatchfaceEffectStyle,
   CorosWatchfaceRasterFont,
   CorosWatchfaceResolutionDetails,
+  CorosWatchfaceSpriteFolder,
   CorosWatchfaceSpriteFile,
   CorosWatchfaceTemplateAsset,
   CorosWatchfaceTemplateDetails
@@ -50,7 +51,7 @@ export interface WatchfaceStudioOptions extends WatchfaceTypography {
   batteryIconResolutionScale?: number;
   /** Independent hour/minute bitmap styles. */
   timeStyles?: WatchfaceTimeStyles;
-  /** Independent weekday/month/day bitmap scaling. */
+  /** Independent weekday/month/day bitmap sizing and styling. */
   dateStyles?: WatchfaceDateStyles;
   /** Colors for firmware layers without a specialized style object. */
   layerColors?: Record<string, string>;
@@ -1085,6 +1086,13 @@ async function renderRasterImageSprite(
   fitByHeight = false
 ): Promise<string> {
   const image = await loadStudioImage(dataUrl);
+  if (
+    !tint &&
+    image.naturalWidth === Math.round(width) &&
+    image.naturalHeight === Math.round(height)
+  ) {
+    return dataUrl;
+  }
   const source = document.createElement("canvas");
   source.width = image.naturalWidth;
   source.height = image.naturalHeight;
@@ -1800,6 +1808,28 @@ export async function buildStudioReplacements(
             tintJobs.push({ file, color });
           }
         }
+      } else if (folder.kind === "month") {
+        const color = folder.aod
+          ? dimHexColor(labelColor, AOD_DIM_FACTOR)
+          : labelColor;
+        for (const [index, file] of folder.files.entries()) {
+          const label = WATCHFACE_MONTH_LABELS[index] ?? String(index + 1);
+          if (shouldRenderWatchfaceText(label, options.fontFamily, options)) {
+            replacements.push({
+              path: file.path,
+              dataUrl: await renderWatchfaceTextSprite(
+                label,
+                file.width,
+                file.height,
+                options.fontFamily,
+                color,
+                options
+              )
+            });
+          } else if (options.tintLabels) {
+            tintJobs.push({ file, color });
+          }
+        }
       }
     }
     if (options.tintIcons) {
@@ -1857,6 +1887,15 @@ export function summarizeStudioReplacements(
             rasterFontSupportsText(options.rasterFont, WEEKDAY_LABELS[index] ?? "DAY") ||
             options.tintLabels
         ).length;
+      } else if (folder.kind === "month") {
+        labels += folder.files.filter(
+          (_, index) =>
+            shouldRenderWatchfaceText(
+              WATCHFACE_MONTH_LABELS[index] ?? String(index + 1),
+              options.fontFamily,
+              options
+            ) || options.tintLabels
+        ).length;
       }
     }
     if (options.tintIcons) {
@@ -1911,8 +1950,13 @@ export type WatchfaceTimeStyles = Partial<
 export type WatchfaceDatePartId = "weekday" | "dateMonth" | "dateDay";
 
 export interface WatchfaceDateSpriteStyle {
-  /** Scale relative to the source template sprites. */
+  /** Legacy artwork zoom used when exact dimensions are not set. */
   scale: number;
+  /** Exact PNG canvas dimensions; omitted to use an imported PNG's native size. */
+  width?: number;
+  height?: number;
+  /** Date-month rendering mode; absent preserves the starter's format. */
+  monthFormat?: "digits" | "labels";
   /** Optional per-layer font; falls back to the design font. */
   fontFamily?: string;
   color?: string;
@@ -1960,7 +2004,77 @@ export const WATCHFACE_DATE_PARTS: WatchfaceDatePartDefinition[] = [
   }
 ];
 
+/** Returns the stored native size of an imported PNG glyph or atlas cell. */
+export function rasterFontNativeSpriteSize(
+  rasterFont: CorosWatchfaceRasterFont | undefined,
+  text: string
+): { width: number; height: number } | null {
+  if (!rasterFont) return null;
+  const normalizedText = text.toUpperCase();
+  const direct = rasterFont.spriteSizes?.[normalizedText];
+  if (direct?.width && direct.height) {
+    return { width: direct.width, height: direct.height };
+  }
+  const atlas = rasterFont.atlasSize;
+  const glyphs = normalizeRasterFontGlyphs(rasterFont.glyphs);
+  if (!atlas || normalizedText.length !== 1 || !glyphs.includes(normalizedText)) {
+    return null;
+  }
+  const columns = Math.max(1, Math.min(glyphs.length, Math.round(rasterFont.columns)));
+  const rows = Math.max(1, Math.ceil(glyphs.length / columns));
+  return {
+    width: Math.max(1, Math.round(atlas.width / columns)),
+    height: Math.max(1, Math.round(atlas.height / rows))
+  };
+}
+
+function dateMonthUsesLabels(
+  source: Pick<CorosWatchfaceSpriteFolder, "kind"> | null | undefined,
+  style: WatchfaceDateSpriteStyle | undefined
+): boolean {
+  return style?.monthFormat === "labels" ||
+    (style?.monthFormat !== "digits" && source?.kind === "month");
+}
+
+/** Resolves the actual exported canvas size for one month/day PNG. */
+export function dateSpriteCanvasSize(
+  resolution: CorosWatchfaceResolutionDetails,
+  partId: WatchfaceDatePartId,
+  style: WatchfaceDateSpriteStyle | undefined,
+  value = 0
+): { width: number; height: number; native: boolean } | null {
+  const part = WATCHFACE_DATE_PARTS.find((candidate) => candidate.id === partId);
+  const source = part
+    ? findSpriteFolder(resolution, resolution.config[part.fontKey])
+    : null;
+  const file = source?.files[value] ?? source?.files[0];
+  if (!part || !file) return null;
+  const spriteText = partId === "dateMonth" && dateMonthUsesLabels(source, style)
+    ? WATCHFACE_MONTH_LABELS[value] ?? String(value)
+    : String(value);
+  const imported = rasterFontNativeSpriteSize(style?.rasterFont, spriteText);
+  const requestedWidth = style?.width;
+  const requestedHeight = style?.height;
+  const exactWidth = typeof requestedWidth === "number" &&
+      Number.isFinite(requestedWidth) && requestedWidth > 0
+    ? Math.round(requestedWidth)
+    : imported?.width;
+  const exactHeight = typeof requestedHeight === "number" &&
+      Number.isFinite(requestedHeight) && requestedHeight > 0
+    ? Math.round(requestedHeight)
+    : imported?.height;
+  return {
+    width: exactWidth ?? file.width,
+    height: exactHeight ?? file.height,
+    native: exactWidth !== undefined || exactHeight !== undefined
+  };
+}
+
 const WEEKDAY_LABELS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+export const WATCHFACE_MONTH_LABELS = [
+  "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+  "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"
+];
 
 /** COROS weekday sprites are indexed Monday=0 through Sunday=6. */
 export function corosWeekdayIndex(jsDay: number): number {
@@ -2363,7 +2477,9 @@ export function buildControlIconPositionOverrides(
       if (!position) {
         continue;
       }
-      values[key] = `{${Math.round(position.x + offset.dx * scale)},${Math.round(position.y + offset.dy * scale)}}`;
+      const dx = Math.round(offset.dx * scale);
+      const dy = Math.round(offset.dy * scale);
+      values[key] = `{${position.x + dx},${position.y + dy}}`;
     }
     return Object.keys(values).length > 0
       ? [{ path: `${resolution.directory}/config.txt`, values }]
@@ -2454,7 +2570,9 @@ function controlTemperatureFontFolder(
   const folder = resolution.spriteFolders.find(
     (candidate) => candidate.kind === "digits" && !candidate.aod
   );
-  return folder ? { folder: folder.folder, files: folder.files } : null;
+  return folder
+    ? { folder: folder.folder, kind: folder.kind, files: folder.files }
+    : null;
 }
 
 /** Configures temperature for the selectable control slot, not the fixed block. */
@@ -2692,7 +2810,9 @@ function metricFontFolder(
   const folder = resolution.spriteFolders.find(
     (candidate) => candidate.kind === "digits" && !candidate.aod
   );
-  return folder ? { folder: folder.folder, files: folder.files } : null;
+  return folder
+    ? { folder: folder.folder, kind: folder.kind, files: folder.files }
+    : null;
 }
 
 function configHexColor(color: string): string {
@@ -2809,6 +2929,25 @@ export function scaleConfigRectValue(value: string, scale: number): string | nul
   const nextX0 = Math.round(centerX - width / 2);
   const nextY0 = Math.round(centerY - height / 2);
   return `{${nextX0},${nextY0},${nextX0 + width},${nextY0 + height}${match[5]}}`;
+}
+
+/** Resizes a firmware rect around its center to exact native pixel dimensions. */
+export function resizeConfigRectValue(
+  value: string,
+  width: number,
+  height: number
+): string | null {
+  const match = value.match(
+    /^\{\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*((?:,[^}]*)?)\}$/
+  );
+  if (!match) return null;
+  const centerX = (Number(match[1]) + Number(match[3])) / 2;
+  const centerY = (Number(match[2]) + Number(match[4])) / 2;
+  const nextWidth = Math.max(1, Math.round(width));
+  const nextHeight = Math.max(1, Math.round(height));
+  const x0 = Math.round(centerX - nextWidth / 2);
+  const y0 = Math.round(centerY - nextHeight / 2);
+  return `{${x0},${y0},${x0 + nextWidth},${y0 + nextHeight}${match[5]}}`;
 }
 
 /**
@@ -3158,7 +3297,7 @@ export async function buildTimeSpriteReplacements(
   return replacements;
 }
 
-/** Isolates weekday/month/day sprite folders while preserving firmware-native rectangles. */
+/** Isolates date sprite folders and follows exact PNG dimensions when present. */
 export function buildDateStyleOverrides(
   details: CorosWatchfaceTemplateDetails,
   styles: WatchfaceDateStyles,
@@ -3169,11 +3308,26 @@ export function buildDateStyleOverrides(
     const values: Record<string, string> = {};
     for (const part of WATCHFACE_DATE_PARTS) {
       const style = styles[part.id];
-      const rect = resolution.config[part.rectKey];
       const source = findSpriteFolder(resolution, resolution.config[part.fontKey]);
-      if (!style || !rect || !source) {
+      if (!style || !source) {
         continue;
       }
+      const monthLabels = part.id === "dateMonth" && dateMonthUsesLabels(source, style);
+      const sizes = part.kind === "digits"
+        ? Array.from({ length: monthLabels ? 12 : 10 }, (_, value) =>
+            dateSpriteCanvasSize(resolution, part.id, style, value)
+          )
+            .filter((size): size is NonNullable<typeof size> => Boolean(size))
+        : [];
+      const followsNativeSize = sizes.some((size) => size.native);
+      const rect = followsNativeSize
+        ? resizeConfigRectValue(
+            resolution.config[part.rectKey] ?? "",
+            Math.max(...sizes.map((size) => size.width)) * (monthLabels ? 1 : 2),
+            Math.max(...sizes.map((size) => size.height))
+          )
+        : resolution.config[part.rectKey];
+      if (!rect) continue;
       values[part.rectKey] = rect;
       if (style.color) {
         const colorKey = part.fontKey.replace(/_font$/, "_font_color");
@@ -3221,7 +3375,7 @@ export function resizeConfigRectToCanvas(
   return `{${x0},${y0},${x0 + normalizedWidth},${y0 + normalizedHeight}${match[5]}}`;
 }
 
-/** Generates isolated date sprites and any native-size weekday rectangles. */
+/** Generates isolated date sprites and any native-size date rectangles. */
 export async function buildDateSpriteComposition(
   details: CorosWatchfaceTemplateDetails,
   styles: WatchfaceDateStyles,
@@ -3237,12 +3391,14 @@ export async function buildDateSpriteComposition(
     value: number;
     width: number;
     height: number;
-    kind: "digits" | "week";
+    kind: "digits" | "week" | "month";
+    text: string;
     fontFamily: string;
     typography: WatchfaceTypography;
     rasterized: boolean;
     color?: string;
     zoom: number;
+    exactCanvas: boolean;
     nativeSize: boolean;
     configPath: string;
     groupKey: string;
@@ -3262,31 +3418,49 @@ export async function buildDateSpriteComposition(
       }
       const partFontFamily = style.fontFamily ?? options.fontFamily;
       const partTypography = componentTypography(options, style);
-      const limit = part.kind === "week" ? 7 : 10;
-      source.files.slice(0, limit).forEach((file, value) => {
+      const normalizedScale = normalizeSpriteScale(style.scale);
+      const monthLabels = part.id === "dateMonth" && dateMonthUsesLabels(source, style);
+      const limit = part.kind === "week" ? 7 : monthLabels ? 12 : 10;
+      Array.from({ length: limit }, (_, value) => ({
+        value,
+        file: source.files[value] ?? source.files[0]
+      })).forEach(({ file, value }) => {
+        if (!file) return;
         const path = `${resolution.directory}/${part.studioFolder}/${String(value).padStart(2, "0")}.png`;
         const existsInTemplate = resolution.spriteFolders.some((folder) =>
           folder.files.some((candidate) => candidate.path === path)
         );
+        const canvasSize = part.kind === "digits"
+          ? dateSpriteCanvasSize(resolution, part.id, style, value)
+          : null;
         jobs.push({
           source: file,
           path,
           value,
-          width: file.width,
-          height: file.height,
-          kind: part.kind,
+          width: canvasSize?.width ?? file.width,
+          height: canvasSize?.height ?? file.height,
+          kind: monthLabels ? "month" : part.kind,
+          text: monthLabels
+            ? WATCHFACE_MONTH_LABELS[value] ?? String(value + 1)
+            : part.kind === "week"
+              ? WEEKDAY_LABELS[value] ?? String(value)
+              : String(value),
           fontFamily: partFontFamily,
           typography: partTypography,
           rasterized: shouldRenderWatchfaceText(
-            part.kind === "week"
-              ? WEEKDAY_LABELS[value] ?? String(value)
-              : String(value),
+            monthLabels
+              ? WATCHFACE_MONTH_LABELS[value] ?? String(value + 1)
+              : part.kind === "week"
+                ? WEEKDAY_LABELS[value] ?? String(value)
+                : String(value),
             partFontFamily,
             partTypography
           ),
           color: style.color,
-          zoom: normalizeSpriteScale(style.scale),
+          zoom: normalizedScale,
+          exactCanvas: canvasSize?.native ?? false,
           nativeSize:
+            !canvasSize?.native &&
             (part.id === "weekday" || part.id === "dateDay") &&
             (style.nativeSize ??
               Boolean(style.fontFamily || style.rasterFont)),
@@ -3358,9 +3532,7 @@ export async function buildDateSpriteComposition(
     }
     const baseDataUrl = job.rasterized
       ? await renderWatchfaceTextSprite(
-          job.kind === "week"
-            ? WEEKDAY_LABELS[job.value] ?? String(job.value)
-            : String(job.value),
+          job.text,
           job.width,
           job.height,
           job.fontFamily,
@@ -3372,17 +3544,24 @@ export async function buildDateSpriteComposition(
           job.width,
           job.height,
           job.color ??
-            (job.kind === "week" && options.tintLabels
+            (job.kind !== "digits" && options.tintLabels
               ? options.digitColor
               : undefined)
         );
-    const dataUrl = await fitVisibleSpriteToCanvas(
-      baseDataUrl,
-      job.width,
-      job.height,
-      job.zoom
-    );
-    replacements.push({ path: job.path, dataUrl, create: job.create });
+    const dataUrl = job.exactCanvas
+      ? baseDataUrl
+      : await fitVisibleSpriteToCanvas(
+          baseDataUrl,
+          job.width,
+          job.height,
+          job.zoom
+        );
+    replacements.push({
+      path: job.path,
+      dataUrl,
+      create: job.create,
+      ...(job.exactCanvas ? { allowDimensionOverride: true } : {})
+    });
   }
 
   const configOverrides: CorosWatchfaceConfigOverride[] = [];
@@ -3851,6 +4030,25 @@ export function computeLayoutGroupBounds(
       const value = resolution.config[key]!;
       const rect = parseConfigRect(value);
       if (rect) {
+        if (
+          group.id === "dateMonth" &&
+          rect.x0 === rect.x1 &&
+          rect.y0 === rect.y1
+        ) {
+          const source = findSpriteFolder(
+            resolution,
+            resolution.config.english_date_month_font
+          );
+          if (source?.kind === "month" && source.files.length > 0) {
+            const width = Math.max(...source.files.map((file) => file.width));
+            const height = Math.max(...source.files.map((file) => file.height));
+            x0 = Math.min(x0, rect.x0 - width / 2);
+            y0 = Math.min(y0, rect.y0 - height / 2);
+            x1 = Math.max(x1, rect.x0 + width / 2);
+            y1 = Math.max(y1, rect.y0 + height / 2);
+            continue;
+          }
+        }
         x0 = Math.min(x0, rect.x0);
         y0 = Math.min(y0, rect.y0);
         x1 = Math.max(x1, rect.x1);
@@ -4031,6 +4229,7 @@ export function getTemplateBackgroundAssetPaths(
 
 interface PreviewDigitSource {
   folder: string;
+  kind: CorosWatchfaceSpriteFolder["kind"];
   files: CorosWatchfaceSpriteFile[];
 }
 
@@ -4045,7 +4244,9 @@ function findSpriteFolder(
   const folder = resolution.spriteFolders.find(
     (candidate) => candidate.folder === normalized
   );
-  return folder ? { folder: folder.folder, files: folder.files } : null;
+  return folder
+    ? { folder: folder.folder, kind: folder.kind, files: folder.files }
+    : null;
 }
 
 function drawStudioLayerImage(
@@ -4227,6 +4428,31 @@ export async function drawStudioPreview(
     (options.tintLabels ? options.digitColor : null);
   if (weekFile) {
     wantedSprites.set(weekFile.path, { color: weekColor });
+  }
+
+  // COROS supports a second month format: one 00.png–11.png image per month.
+  const monthSource = findSpriteFolder(
+    resolution,
+    config["english_date_month_font"]
+  );
+  const monthUsesLabels = dateMonthUsesLabels(
+    monthSource,
+    options.dateStyles?.dateMonth
+  );
+  const monthIndex = now.getMonth();
+  const monthRect = monthUsesLabels
+    ? parseConfigRect(config["english_date_month_rect"])
+    : null;
+  const monthFile = monthUsesLabels
+    ? monthSource?.kind === "month"
+      ? monthSource.files[monthIndex] ?? monthSource.files[0]
+      : monthSource?.files[0]
+    : null;
+  const monthColor = options.dateStyles?.dateMonth?.color ??
+    options.layerColors?.dateMonth ??
+    (options.tintLabels ? options.digitColor : null);
+  if (monthFile) {
+    wantedSprites.set(monthFile.path, { color: monthColor });
   }
 
   const batteryOverride = options.configAssetOverrides?.["config:battery_icon"];
@@ -4443,6 +4669,12 @@ export async function drawStudioPreview(
   for (const [rectKey, fontKey, value, datePartId] of dateFields) {
     const rect = parseConfigRect(config[rectKey]);
     const source = findSpriteFolder(resolution, config[fontKey]);
+    if (
+      datePartId === "dateMonth" &&
+      dateMonthUsesLabels(source, options.dateStyles?.dateMonth)
+    ) {
+      continue;
+    }
     if (rect && source) {
       numberPlans.push({ rect, source, value, datePartId });
     }
@@ -4823,6 +5055,80 @@ export async function drawStudioPreview(
     }
   }
 
+  if (monthFile && monthRect) {
+    const monthStyle = options.dateStyles?.dateMonth;
+    const monthFontFamily = monthStyle?.fontFamily ?? options.fontFamily;
+    const monthTypography = {
+      ...options,
+      rasterFont: monthStyle?.rasterFont ?? options.rasterFont
+    };
+    const label = WATCHFACE_MONTH_LABELS[monthIndex] ?? String(monthIndex + 1);
+    const canvasSize = dateSpriteCanvasSize(
+      resolution,
+      "dateMonth",
+      monthStyle,
+      monthIndex
+    );
+    const width = canvasSize?.width ?? monthFile.width;
+    const height = canvasSize?.height ?? monthFile.height;
+    let image = loaded.get(monthFile.path);
+    if (shouldRenderWatchfaceText(label, monthFontFamily, monthTypography)) {
+      const rendered = await renderWatchfaceTextSprite(
+        label,
+        width,
+        height,
+        monthFontFamily,
+        monthColor ?? options.digitColor,
+        monthTypography
+      );
+      image = await loadStudioImage(
+        monthStyle && !canvasSize?.native
+          ? await fitVisibleSpriteToCanvas(
+              rendered,
+              width,
+              height,
+              monthStyle.scale
+            )
+          : rendered
+      );
+    } else if (monthStyle && loadedAssets.get(monthFile.path)?.dataUrl) {
+      const sourceDataUrl = loadedAssets.get(monthFile.path)!.dataUrl;
+      image = await loadStudioImage(
+        canvasSize?.native
+          ? await resizeAndTintSprite(
+              sourceDataUrl,
+              width,
+              height,
+              monthStyle.color ??
+                (options.tintLabels ? options.digitColor : undefined)
+            )
+          : await fitVisibleSpriteToCanvas(
+              await resizeAndTintSprite(
+                sourceDataUrl,
+                width,
+                height,
+                monthStyle.color ??
+                  (options.tintLabels ? options.digitColor : undefined)
+              ),
+              width,
+              height,
+              monthStyle.scale
+            )
+      );
+    }
+    if (image) {
+      const centerX = ((monthRect.x0 + monthRect.x1) / 2) * scale;
+      const centerY = ((monthRect.y0 + monthRect.y1) / 2) * scale;
+      context.drawImage(
+        image,
+        centerX - (width * scale) / 2,
+        centerY - (height * scale) / 2,
+        width * scale,
+        height * scale
+      );
+    }
+  }
+
   if (complicationIcon && complicationIconPos) {
     const complicationIconKey = complicationPrefix
       ? `control_${complicationPrefix}_icon`
@@ -4930,9 +5236,18 @@ export async function drawStudioPreview(
       }
       const glyphScale = Math.max(
         0.5,
-        Math.min(2, timeStyle?.scale ?? metricStyle?.scale ?? dateStyle?.scale ?? complicationStyle?.scale ?? 1)
+        Math.min(2, timeStyle?.scale ?? metricStyle?.scale ?? complicationStyle?.scale ?? 1)
       );
+      const dateCanvas = plan.datePartId
+        ? dateSpriteCanvasSize(
+            resolution,
+            plan.datePartId,
+            dateStyle,
+            Number(digit)
+          )
+        : null;
       const nativeDateDay =
+        !dateCanvas?.native &&
         plan.datePartId === "dateDay" &&
         Boolean(
           dateStyle &&
@@ -4941,8 +5256,8 @@ export async function drawStudioPreview(
         );
       let styledFile = {
         ...file,
-        width: dateStyle ? file.width : Math.max(1, Math.round(file.width * glyphScale)),
-        height: dateStyle ? file.height : Math.max(1, Math.round(file.height * glyphScale))
+        width: dateCanvas?.width ?? Math.max(1, Math.round(file.width * glyphScale)),
+        height: dateCanvas?.height ?? Math.max(1, Math.round(file.height * glyphScale))
       };
       const glyphColor =
         timeStyle?.color ??
@@ -4951,7 +5266,7 @@ export async function drawStudioPreview(
         complicationStyle?.color ??
         componentColor ??
         options.digitColor;
-      const cacheKey = `${file.path}|${glyphFontFamily}|${glyphColor}|${glyphScale}|${glyphTypography.letterSpacing ?? 0}|${nativeDateDay ? "native" : "bounded"}`;
+      const cacheKey = `${file.path}|${glyphFontFamily}|${glyphColor}|${styledFile.width}x${styledFile.height}|${glyphTypography.letterSpacing ?? 0}|${dateCanvas?.native ?? false}|${nativeDateDay ? "native" : "bounded"}`;
       let image = styledMetricGlyphs.get(cacheKey);
       if (!image) {
         if (
@@ -4989,12 +5304,12 @@ export async function drawStudioPreview(
             glyphTypography
           );
           image = await loadStudioImage(
-            dateStyle
+            dateStyle && !dateCanvas?.native
               ? await fitVisibleSpriteToCanvas(
                   rendered,
                   styledFile.width,
                   styledFile.height,
-                  glyphScale
+                  dateStyle.scale
                 )
               : rendered
           );
@@ -5006,23 +5321,30 @@ export async function drawStudioPreview(
               glyphColor
             );
           image = await loadStudioImage(
-            dateStyle
+            dateStyle && !dateCanvas?.native
               ? await fitVisibleSpriteToCanvas(
                   rendered,
                   styledFile.width,
                   styledFile.height,
-                  glyphScale
+                  dateStyle.scale
                 )
               : rendered
           );
         } else if (dateStyle && loadedAssets.get(file.path)?.dataUrl) {
+          const sourceDataUrl = loadedAssets.get(file.path)!.dataUrl;
           image = await loadStudioImage(
-            await fitVisibleSpriteToCanvas(
-              loadedAssets.get(file.path)!.dataUrl,
-              styledFile.width,
-              styledFile.height,
-              glyphScale
-            )
+            dateCanvas?.native
+              ? await resizeAndTintSprite(
+                  sourceDataUrl,
+                  styledFile.width,
+                  styledFile.height
+                )
+              : await fitVisibleSpriteToCanvas(
+                  sourceDataUrl,
+                  styledFile.width,
+                  styledFile.height,
+                  dateStyle.scale
+                )
           );
         } else {
           image = loaded.get(file.path);

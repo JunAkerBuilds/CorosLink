@@ -344,13 +344,14 @@ export interface CorosWatchfaceSpriteFile {
 }
 
 /**
- * A numbered sprite folder inside a resolution directory. `state` folders are
- * firmware-swapped icon sets such as battery and weather, never bitmap fonts.
+ * A numbered sprite folder inside a resolution directory. `month` folders
+ * contain one label image per month; `state` folders are firmware-swapped icon
+ * sets such as battery and weather, never bitmap fonts.
  */
 export interface CorosWatchfaceSpriteFolder {
   /** Folder path relative to the resolution directory, e.g. "01" or "a/01". */
   folder: string;
-  kind: "digits" | "week" | "state";
+  kind: "digits" | "week" | "month" | "state";
   /** True when the folder belongs to the always-on-display asset tree. */
   aod: boolean;
   files: CorosWatchfaceSpriteFile[];
@@ -446,6 +447,10 @@ export interface CorosWatchfaceRasterFont {
    * so a font does not have to reuse a uniformly gridded source image.
    */
   sprites?: Record<string, string>;
+  /** Native pixel dimensions for independently imported glyph/label PNGs. */
+  spriteSizes?: Record<string, { width: number; height: number }>;
+  /** Native pixel dimensions of the uploaded atlas image. */
+  atlasSize?: { width: number; height: number };
   /** When true, use the design's selected digit colour for the atlas alpha. */
   tint: boolean;
 }
@@ -649,11 +654,16 @@ export interface CorosWatchfaceDesignState {
   /** Converts firmware auto-aligned HH:MM into four independently positioned digits. */
   separateAutoTime?: boolean;
   timeStyles: Record<string, { color?: string; scale: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
-  /** Weekday/month/day scaling; absent in projects saved before resizing. */
+  /** Weekday/month/day sizing; absent in projects saved before resizing. */
   dateStyles?: Record<
     string,
     {
       scale: number;
+      /** Exact exported PNG dimensions when set. */
+      width?: number;
+      height?: number;
+      /** Date-month rendering mode; absent preserves the starter's format. */
+      monthFormat?: "digits" | "labels";
       fontFamily?: string;
       color?: string;
       letterSpacing?: number;

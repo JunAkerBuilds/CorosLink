@@ -1661,8 +1661,9 @@ async function readTemplateConfig(
 
 /**
  * Finds the bitmap-font folders inside one resolution directory. A folder of
- * 00.png–09.png is a digit font; 00.png–06.png is a weekday-label font. The
- * `a/` subtree holds the same structure for the always-on display.
+ * 00.png–09.png is a digit font; 00.png–06.png is a weekday-label font; and
+ * 00.png–11.png is a single-image-per-month label set. The `a/` subtree holds
+ * the same structures for the always-on display.
  */
 async function discoverSpriteAssets(
   files: UnzipperFile[],
@@ -1724,7 +1725,10 @@ async function discoverSpriteAssets(
     }
     const indices = kind === "state"
       ? [...numbered.keys()].sort((left, right) => left - right)
-      : Array.from({ length: kind === "digits" ? 10 : 7 }, (_, index) => index);
+      : Array.from(
+          { length: kind === "month" ? 12 : kind === "digits" ? 10 : 7 },
+          (_, index) => index
+        );
     const spriteFiles: CorosWatchfaceSpriteFile[] = [];
     for (const index of indices) {
       spriteFiles.push(await describeSpriteFile(numbered.get(index)!));
@@ -1754,6 +1758,9 @@ function classifySpriteFolder(
     Array.from({ length: count }, (_, index) => index).every((index) =>
       numbered.has(index)
     );
+  if (hasRange(12)) {
+    return "month";
+  }
   if (hasRange(10)) {
     return "digits";
   }
