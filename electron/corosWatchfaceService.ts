@@ -3363,7 +3363,7 @@ function assertFirmwareResolutionCompatibility(
 ): void {
   const normalizedFirmwareType = firmwareType?.trim().toUpperCase();
   const compatibility =
-    normalizedFirmwareType === "COROS W335" || watchModel === "pace-4"
+    normalizedFirmwareType === "COROS W336" || watchModel === "pace-4"
       ? {
           label: "PACE 4",
           required: ["watchface_390x390", "watchface_800x800"]

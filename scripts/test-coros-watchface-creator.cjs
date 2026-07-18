@@ -587,10 +587,10 @@ async function main() {
     watchfaces.createCorosWatchfaceArchive({
       sourceArchiveId: starter.archiveId,
       backgroundDataUrl: pngDataUrl(icon),
-      firmwareType: "COROS W335"
+      firmwareType: "COROS W336"
     }),
     /PACE 4.*requires 390×390 and 800×800 exports.*missing 390x390/,
-    "W335 exports must reject templates without the PACE 4 resolution tree"
+    "W336 exports must reject templates without the PACE 4 resolution tree"
   );
   const pace4Entries = [
     {

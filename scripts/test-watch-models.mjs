@@ -91,12 +91,12 @@ assert.deepEqual(getWatchfaceDeviceProfile("pace-pro"), {
   modelVersion: "W332-3.1708.0"
 });
 assert.deepEqual(getWatchfaceDeviceProfile("pace-4"), {
-  firmwareType: "COROS W335",
-  modelVersion: "W335-3.1709.0"
+  firmwareType: "COROS W336",
+  modelVersion: "W336-3.1709.0"
 });
-assert.deepEqual(getWatchfaceDeviceProfileByFirmware("coros w335"), {
-  firmwareType: "COROS W335",
-  modelVersion: "W335-3.1709.0"
+assert.deepEqual(getWatchfaceDeviceProfileByFirmware("coros w336"), {
+  firmwareType: "COROS W336",
+  modelVersion: "W336-3.1709.0"
 });
 assert.deepEqual(getWatchfaceDeviceProfileByFirmware("coros w541"), {
   firmwareType: "COROS W541"
