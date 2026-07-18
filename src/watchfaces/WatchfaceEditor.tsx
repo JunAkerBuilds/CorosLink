@@ -210,6 +210,8 @@ import {
   configAssetSupportsNativeSize,
   AOD_DIM_FACTOR,
   applyConfigTextEditsToDetails,
+  buildDisabledControlComplicationOverrides,
+  buildDisabledWatchfaceConfigAssetOverrides,
   buildWatchfaceConfigAssetOverrides,
   detailsForPreviewMode,
   detailsForPreviewResolution,
@@ -221,7 +223,7 @@ import {
   scaleAmPmStyleForResolution,
   getAvailableComplications,
   getTemplateBackgroundAssetPaths,
-  hasControlBattery,
+  hasControlComplication,
   hasWatchfaceAod,
   inferStaticSeparators,
   listWatchfaceConfigAssets,
@@ -232,10 +234,14 @@ import {
   pickWatchPreviewResolution,
   rasterFontSupportsText,
   supportsWatchfaceSpriteRotation,
+  virtualControlIconCanvasSize,
+  isControlComplicationEnabled,
+  WATCHFACE_COMPLICATIONS,
   WATCHFACE_MONTH_LABELS,
   type WatchfaceDatePartId,
   type WatchfaceAssetLoader,
   type WatchfaceConfigAssetReference,
+  type WatchfaceComplicationId,
   type WatchfaceMetricId,
   type WatchfacePreviewMode,
   type WatchfaceStudioOptions,
@@ -534,6 +540,7 @@ function normalizeEditorDesign(
     artworkVisible:
       design.artworkVisible ?? legacyBackgroundOverride?.enabled !== false,
     configAssetOverrides: design.configAssetOverrides ?? {},
+    controlComplicationEnabled: design.controlComplicationEnabled ?? {},
     editorGroups: normalizeWatchfaceEditorGroups(
       design.editorGroups,
       design.linkedLayerGroups
@@ -1154,7 +1161,9 @@ export function WatchfaceEditor({
       design.designSprites,
       design.configAssetOverrides,
       design.staticSeparators,
-      design.fontFamily
+      design.fontFamily,
+      design.effectStyles,
+      design.layerEffects
     ]
   );
   const supportsAod = useMemo(
@@ -1176,6 +1185,7 @@ export function WatchfaceEditor({
       design.previewComplication,
       design.metricStyles,
       design.selectableMetricStyle,
+      design.controlComplicationEnabled,
       design.controlBatteryEnabled,
       design.controlSunriseEnabled,
       design.controlSunsetEnabled,
@@ -1186,7 +1196,9 @@ export function WatchfaceEditor({
       design.dateStyles,
       design.layerColors,
       design.configAssetOverrides,
-      design.ampmIndicator
+      design.ampmIndicator,
+      design.effectStyles,
+      design.layerEffects
     ]
   );
   const previewStudioOptions = useMemo(
@@ -1224,7 +1236,12 @@ export function WatchfaceEditor({
       design.metricChanges,
       design.metricStyles,
       design.selectableMetricStyle,
+      design.controlComplicationEnabled,
       design.controlBatteryEnabled,
+      design.controlSunriseEnabled,
+      design.controlSunsetEnabled,
+      design.controlFloorEnabled,
+      design.controlTemperatureEnabled,
       design.separateAutoTime,
       design.timeStyles,
       design.dateStyles,
@@ -1346,12 +1363,32 @@ export function WatchfaceEditor({
     );
   }, [detailsWithConfigEdits, design, previewMode]);
   const configAssetReferences = useMemo(
-    () => (detailsWithConfigEdits
-      ? listWatchfaceConfigAssets(detailsWithConfigEdits).filter(
+    () => {
+      if (!detailsWithConfigEdits) return [];
+      const enabledControlIcons = previewMode === "current"
+        ? WATCHFACE_COMPLICATIONS
+            .filter(
+              (complication) =>
+                complication.id !== "battery" &&
+                isControlComplicationEnabled(
+                  detailsWithConfigEdits,
+                  design,
+                  complication.id
+                )
+            )
+            .map((complication) => complication.id)
+        : [];
+      return listWatchfaceConfigAssets(
+        previewMode === "current"
+          ? previewDetails ?? detailsWithConfigEdits
+          : detailsWithConfigEdits,
+        undefined,
+        enabledControlIcons
+      ).filter(
           (reference) => reference.scope === (previewMode === "aod" ? "aod" : "config")
-        )
-      : []),
-    [detailsWithConfigEdits, previewMode]
+        );
+    },
+    [detailsWithConfigEdits, design, previewDetails, previewMode]
   );
   const configAssetsById = useMemo(
     () => new Map(configAssetReferences.map((reference) => [reference.id, reference])),
@@ -1590,10 +1627,18 @@ export function WatchfaceEditor({
     const baseWidth = icon?.width ?? state?.width ?? Math.round(resolution.width * 0.05);
     const baseHeight = icon?.height ?? state?.height ?? Math.round(resolution.width * 0.04);
     const configKey = `control_${complication.controlPrefix}_icon`;
+    const configOverride =
+      design.configAssetOverrides?.[`config:${configKey}`];
+    const virtualIcon = !icon && !state && Boolean(configOverride?.replacement);
+    const virtualCanvas = virtualIcon
+      ? virtualControlIconCanvasSize(resolution)
+      : null;
     const canvasSize = configAssetCanvasSize(
       configKey,
-      design.configAssetOverrides?.[`config:${configKey}`],
-      { width: baseWidth, height: baseHeight },
+      virtualIcon && configOverride
+        ? { ...configOverride, nativeSize: false }
+        : configOverride,
+      virtualCanvas ?? { width: baseWidth, height: baseHeight },
       previewResolution ? resolution.width / previewResolution.width : 1
     );
     // The preview frame is rendered from the selected watch's native tree,
@@ -4264,7 +4309,7 @@ export function WatchfaceEditor({
         enabled: true,
         replacement: await downscaleArtwork(selected),
         ...(configAssetSupportsNativeSize(reference.configKey)
-          ? { nativeSize: true }
+          ? { nativeSize: Boolean(reference.source) }
           : {})
       });
       onNotice(`${reference.label} replaced for every supported resolution.`);
@@ -4404,45 +4449,38 @@ export function WatchfaceEditor({
     }));
   }
 
-  function setControlBatteryEnabled(enabled: boolean) {
-    const fallbackComplication = details
-      ? getAvailableComplications(details).find(
-          (complication) => complication.id !== "battery"
-        )?.id ?? ""
-      : "";
-    setDesign((current) => ({
-      ...current,
-      controlBatteryEnabled: enabled,
-      ...(!enabled && current.previewComplication === "battery"
-        ? { previewComplication: fallbackComplication }
-        : {})
-    }));
-  }
-
   function setControlComplicationEnabled(
-    id: "sunrise" | "sunset" | "floors" | "temperature",
+    id: WatchfaceComplicationId,
     enabled: boolean
   ) {
-    const flagKey =
-      id === "sunrise"
-        ? "controlSunriseEnabled"
-        : id === "sunset"
-          ? "controlSunsetEnabled"
-          : id === "floors"
-            ? "controlFloorEnabled"
-            : "controlTemperatureEnabled";
-    const fallbackComplication = details
-      ? getAvailableComplications(details).find(
-          (complication) => complication.id !== id
-        )?.id ?? ""
-      : "";
-    setDesign((current) => ({
-      ...current,
-      [flagKey]: enabled,
-      ...(!enabled && current.previewComplication === id
-        ? { previewComplication: fallbackComplication }
-        : {})
-    }));
+    if (!details) return;
+    setDesign((current) => {
+      const controlComplicationEnabled = {
+        ...(current.controlComplicationEnabled ?? {}),
+        [id]: enabled
+      };
+      const next = {
+        ...current,
+        controlComplicationEnabled
+      };
+      const fallbackComplication = WATCHFACE_COMPLICATIONS.find(
+        (complication) =>
+          complication.id !== id &&
+          isControlComplicationEnabled(details, next, complication.id)
+      )?.id ?? "";
+      return {
+        ...next,
+        ...(enabled
+          ? { previewComplication: id }
+          : current.previewComplication === id
+            ? { previewComplication: fallbackComplication }
+            : {})
+      };
+    });
+  }
+
+  function setControlBatteryEnabled(enabled: boolean) {
+    setControlComplicationEnabled("battery", enabled);
   }
 
   function updateAmPmIndicator(
@@ -4898,11 +4936,15 @@ export function WatchfaceEditor({
   }
 
   async function renderExportPreview(
-    designSnapshot: CorosWatchfaceDesignState
+    designSnapshot: CorosWatchfaceDesignState,
+    snapshotBackgroundDataUrl?: string
   ): Promise<string> {
-    if (!details || !backgroundDataUrl) {
+    if (!details) {
       throw new Error("The editor is still loading. Try again in a moment.");
     }
+    const renderedBackground =
+      snapshotBackgroundDataUrl ??
+      (await renderDesignBackground(designSnapshot, previewWidth));
     const archivePreview = document.createElement("canvas");
     archivePreview.width = 800;
     archivePreview.height = 800;
@@ -4947,7 +4989,7 @@ export function WatchfaceEditor({
     };
     await drawStudioPreview(
       archivePreview,
-      backgroundDataUrl,
+      renderedBackground,
       exportDetails,
       exportOptions,
       loadAssets
@@ -4974,10 +5016,9 @@ export function WatchfaceEditor({
     return archivePreview.toDataURL("image/png");
   }
 
-  async function renderExportBackground(): Promise<string> {
-    if (!backgroundDataUrl) {
-      throw new Error("The editor is still loading. Try again in a moment.");
-    }
+  async function renderExportBackground(
+    snapshotBackgroundDataUrl: string
+  ): Promise<string> {
     const exportBackground = document.createElement("canvas");
     exportBackground.width = 800;
     exportBackground.height = 800;
@@ -4988,7 +5029,7 @@ export function WatchfaceEditor({
       throw new Error("Could not render the circular watch background.");
     }
     context.drawImage(
-      await loadStudioImage(backgroundDataUrl, false),
+      await loadStudioImage(snapshotBackgroundDataUrl, false),
       0,
       0,
       exportBackground.width,
@@ -5096,14 +5137,17 @@ export function WatchfaceEditor({
         details,
         designSnapshot.configTextEdits
       );
-      const [composition, exportPreview, exportBackground] = await Promise.all([
+      const [composition, snapshotBackground] = await Promise.all([
         composeWatchfaceReplacements(
           exportSourceDetails,
           designSnapshot,
           loadAssets
         ),
-        renderExportPreview(designSnapshot),
-        renderExportBackground()
+        renderDesignBackground(designSnapshot, previewWidth)
+      ]);
+      const [exportPreview, exportBackground] = await Promise.all([
+        renderExportPreview(designSnapshot, snapshotBackground),
+        renderExportBackground(snapshotBackground)
       ]);
       const {
         assetReplacements,
@@ -5117,9 +5161,13 @@ export function WatchfaceEditor({
       // those deletion sentinels before the archive service receives them.
       const configOverrides = mergeConfigOverrides(
         composedConfigOverrides,
-        buildWatchfaceConfigAssetOverrides(
+        buildDisabledWatchfaceConfigAssetOverrides(
           exportSourceDetails,
           designSnapshot.configAssetOverrides ?? {}
+        ),
+        buildDisabledControlComplicationOverrides(
+          exportSourceDetails,
+          designSnapshot
         )
       );
       const archive = await api.createCorosWatchfaceArchive({
@@ -6986,6 +7034,7 @@ export function WatchfaceEditor({
     const enabled = override?.enabled !== false;
     const artworkZoom = override?.scale ?? 1;
     const supportsNativeSize =
+      Boolean(reference.source) &&
       configAssetSupportsNativeSize(reference.configKey);
     const nativeSize = supportsNativeSize && override?.nativeSize === true;
     const templatePreview = configAssetPreviews.get(reference.archivePath);
@@ -7127,18 +7176,38 @@ export function WatchfaceEditor({
   }
 
   function renderControlBatteryInspector(layer: EditorLayer) {
+    if (!layer.visible) {
+      return (
+        <div className="watchface-inspector-group">
+          <p className="watchface-studio-summary">
+            Battery is off. Turn it on in Selectable components to add its
+            configuration and show these settings.
+          </p>
+        </div>
+      );
+    }
     const override =
       design.configAssetOverrides?.["config:control_battery_icon"];
     const stateCount = Object.keys(
       override?.stateReplacements ?? {}
     ).length;
     const iconScale = override?.scale ?? 1;
-    const sourceResolution = details ? pickPreviewResolution(details) : null;
-    const baseIconPosition = parseConfigPos(
-      sourceResolution?.config.control_battery_icon_pos
-    );
+    const sourceResolution = previewDetails
+      ? pickPreviewResolution(previewDetails)
+      : details
+        ? pickPreviewResolution(details)
+        : null;
     const iconOffset =
       design.controlIconOffsets?.battery ?? { dx: 0, dy: 0 };
+    const configuredIconPosition = parseConfigPos(
+      sourceResolution?.config.control_battery_icon_pos
+    );
+    const baseIconPosition = configuredIconPosition
+      ? {
+          x: configuredIconPosition.x - iconOffset.dx,
+          y: configuredIconPosition.y - iconOffset.dy
+        }
+      : null;
     const controlOriginKey = sourceResolution
       ? Object.keys(sourceResolution.config).find((key) =>
           /^rect_control\d+_pos$/.test(key)
@@ -7180,16 +7249,6 @@ export function WatchfaceEditor({
 
     return (
       <div className="watchface-inspector-group">
-        <label className="watchface-studio-toggle">
-          <input
-            type="checkbox"
-            checked={layer.visible}
-            onChange={(event) =>
-              setControlBatteryEnabled(event.target.checked)
-            }
-          />
-          Include Battery in selectable metrics
-        </label>
         <h3 className="wf-inspector-heading">Control battery sprite folder</h3>
         <div className="wf-config-asset-actions">
           <button
@@ -8319,43 +8378,40 @@ export function WatchfaceEditor({
   }
 
   function renderComplicationPicker() {
-    const available = getAvailableComplications(previewDetails ?? details!);
-    if (available.length === 0) {
+    if (!details) {
       return null;
     }
-    const controlBatteryEnabled =
-      design.controlBatteryEnabled ?? hasControlBattery(details!);
-    const previewChoices = available.filter(
-      (complication) =>
-        (complication.id !== "battery" || controlBatteryEnabled) &&
-        (complication.id !== "sunrise" ||
-          design.controlSunriseEnabled !== false) &&
-        (complication.id !== "sunset" ||
-          design.controlSunsetEnabled !== false) &&
-        (complication.id !== "floors" ||
-          design.controlFloorEnabled !== false) &&
-        (complication.id !== "temperature" ||
-          design.controlTemperatureEnabled !== false)
+    const supported = WATCHFACE_COMPLICATIONS;
+    const previewChoices = supported.filter((complication) =>
+      isControlComplicationEnabled(details, design, complication.id)
     );
     const selected = previewChoices.some(
       (complication) => complication.id === design.previewComplication
     )
       ? design.previewComplication
       : previewChoices[0]?.id ?? "";
-    const selectedComplication = available.find(
+    const selectedComplication = supported.find(
       (complication) => complication.id === selected
     );
     const controlColonReference = configAssetsById.get("config:control_colon_icon");
     const controlColonEnabled =
       design.configAssetOverrides?.["config:control_colon_icon"]?.enabled !== false;
-    const sourceResolution = details ? pickPreviewResolution(details) : null;
+    const sourceResolution = previewDetails
+      ? pickPreviewResolution(previewDetails)
+      : pickPreviewResolution(details);
     const iconPositionKey = selectedComplication
       ? `control_${selectedComplication.controlPrefix}_icon_pos`
       : "";
-    const baseIconPosition = iconPositionKey
+    const iconOffset = design.controlIconOffsets?.[selected] ?? { dx: 0, dy: 0 };
+    const configuredIconPosition = iconPositionKey
       ? parseConfigPos(sourceResolution?.config[iconPositionKey])
       : null;
-    const iconOffset = design.controlIconOffsets?.[selected] ?? { dx: 0, dy: 0 };
+    const baseIconPosition = configuredIconPosition
+      ? {
+          x: configuredIconPosition.x - iconOffset.dx,
+          y: configuredIconPosition.y - iconOffset.dy
+        }
+      : null;
     const controlOriginKey = sourceResolution
       ? Object.keys(sourceResolution.config).find((key) =>
           /^rect_control\d+_pos$/.test(key)
@@ -8387,6 +8443,61 @@ export function WatchfaceEditor({
     };
     return (
       <>
+        <section
+          className="wf-selectable-components"
+          aria-labelledby="wf-selectable-components-title"
+        >
+          <div className="wf-selectable-components-heading">
+            <h3 id="wf-selectable-components-title">Selectable components</h3>
+            <span>
+              {previewChoices.length}/{supported.length} on
+            </span>
+          </div>
+          <div className="wf-selectable-component-list">
+            {supported.map((complication) => {
+              const enabled = isControlComplicationEnabled(
+                details,
+                design,
+                complication.id
+              );
+              const imported = hasControlComplication(
+                details,
+                complication.id
+              );
+              return (
+                <label
+                  key={complication.id}
+                  className={`wf-selectable-component${enabled ? " is-enabled" : ""}`}
+                >
+                  <span>
+                    <strong>{complication.label}</strong>
+                    <small>
+                      {enabled
+                        ? imported
+                          ? "Loaded from template"
+                          : "Added on export"
+                        : imported
+                          ? "Disabled"
+                          : "Not in template"}
+                    </small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={enabled}
+                    aria-label={`${enabled ? "Disable" : "Enable"} ${complication.label}`}
+                    onChange={(event) =>
+                      setControlComplicationEnabled(
+                        complication.id,
+                        event.target.checked
+                      )
+                    }
+                  />
+                </label>
+              );
+            })}
+          </div>
+        </section>
         <label className="field">
           Preview data
           <select
@@ -8408,6 +8519,9 @@ export function WatchfaceEditor({
               }));
             }}
           >
+            {previewChoices.length === 0 ? (
+              <option value="">No components enabled</option>
+            ) : null}
             {previewChoices.map((complication) => (
               <option key={complication.id} value={complication.id}>
                 {complication.label}
@@ -8415,32 +8529,8 @@ export function WatchfaceEditor({
             ))}
           </select>
         </label>
-        {(
-          [
-            ["sunrise", "Sunrise", design.controlSunriseEnabled],
-            ["sunset", "Sunset", design.controlSunsetEnabled],
-            ["floors", "Floors", design.controlFloorEnabled],
-            ["temperature", "Temperature", design.controlTemperatureEnabled]
-          ] as const
-        ).map(([complicationId, label, flag]) =>
-          available.some(
-            (complication) => complication.id === complicationId
-          ) ? (
-            <label key={complicationId} className="watchface-studio-toggle">
-              <input
-                type="checkbox"
-                checked={flag !== false}
-                onChange={(event) =>
-                  setControlComplicationEnabled(
-                    complicationId,
-                    event.target.checked
-                  )
-                }
-              />
-              Include {label} in selectable metrics
-            </label>
-          ) : null
-        )}
+        {selectedComplication ? (
+          <>
         {selectedComplication?.valueParts && controlColonReference ? (
           <div className="wf-inline-config-asset">
             <label className="watchface-studio-toggle">
@@ -8621,6 +8711,13 @@ export function WatchfaceEditor({
           control_negative_sign_icon. Move this Selectable metric layer to
           position the control slot on the face.
         </p>
+          </>
+        ) : (
+          <p className="watchface-studio-summary">
+            Turn on a selectable component to add its configuration and edit
+            its value, icon, and position settings.
+          </p>
+        )}
       </>
     );
   }

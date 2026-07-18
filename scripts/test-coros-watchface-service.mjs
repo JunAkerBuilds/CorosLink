@@ -245,6 +245,29 @@ assert.equal(
 );
 assert.equal(
   applyCorosWatchfaceConfigOverrides(configWithoutWeather, {
+    rect_control1_pos: "{0,0}",
+    control_exercise_icon_pos: "{139,349}",
+    control_exercise_icon: "studio\\exercise\\00.png",
+    control_exercise_hour_rect: "{166,349,199,375,hcenter|vcenter}",
+    control_exercise_minute_rect: "{216,349,248,375,hcenter|vcenter}",
+    control_exercise_font: "02",
+    control_exercise_font_color: ""
+  }),
+  [
+    "[time_hour_high_pos]={1,2}",
+    "[rect_control1_pos]={0,0}",
+    "[control_exercise_icon_pos]={139,349}",
+    "[control_exercise_icon]=studio\\exercise\\00.png",
+    "[control_exercise_hour_rect]={166,349,199,375,hcenter|vcenter}",
+    "[control_exercise_minute_rect]={216,349,248,375,hcenter|vcenter}",
+    "[control_exercise_font]=02",
+    "[control_exercise_font_color]=",
+    ""
+  ].join("\r\n"),
+  "enabled missing Exercise controls should be appendable during archive export"
+);
+assert.equal(
+  applyCorosWatchfaceConfigOverrides(configWithoutWeather, {
     temperature_rect: "{120,180,296,240,hcenter|vcenter}",
     temperature_font: "13x19",
     temperature_font_color: "0xFFFFFF",

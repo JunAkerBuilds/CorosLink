@@ -7,8 +7,6 @@ import {
   applyConfigOverridesToDetails,
   applyLayoutToDetails,
   batteryPreviewStateIndex,
-  buildControlBatteryVisibilityOverrides,
-  buildControlComplicationVisibilityOverrides,
   configAssetCanvasSize,
   controlStatusLayoutGroupId,
   scaledBatterySpriteCanvasSize,
@@ -18,8 +16,10 @@ import {
   getWatchfaceAnalogPreviewLayers,
   getWatchfaceControlStatusPreviewLayers,
   hasControlBattery,
+  isControlComplicationEnabled,
   listWatchfaceConfigAssets,
   pickPreviewResolution,
+  WATCHFACE_COMPLICATIONS,
   WATCHFACE_LAYOUT_GROUPS,
   type WatchfaceLayoutGroupBounds,
   type WatchfaceMetricId,
@@ -276,16 +276,7 @@ export function deriveEditorLayers(
     styledDetails,
     design.layoutOffsets ?? {}
   );
-  const offsetDetails = applyConfigOverridesToDetails(
-    laidOutDetails,
-    [
-      ...buildControlBatteryVisibilityOverrides(
-        laidOutDetails,
-        design.controlBatteryEnabled
-      ),
-      ...buildControlComplicationVisibilityOverrides(laidOutDetails, design)
-    ]
-  );
+  const offsetDetails = laidOutDetails;
   const resolution = pickPreviewResolution(offsetDetails);
   const boundsById = new Map<string, WatchfaceLayoutGroupBounds>();
   if (resolution) {
@@ -393,15 +384,17 @@ export function deriveEditorLayers(
     }
 
     if (groupId === "controlBatteryIcon") {
-      if (!hasControlBattery(details)) {
+      if (
+        !hasControlBattery(details) &&
+        !isControlComplicationEnabled(details, design, "battery")
+      ) {
         continue;
       }
       layers.push({
         id: groupId,
         kind: "controlBatteryIcon",
         label: "Control battery icon",
-        visible:
-          design.controlBatteryEnabled ?? hasControlBattery(details),
+        visible: isControlComplicationEnabled(details, design, "battery"),
         canHide: true,
         present: true,
         bounds: null,
@@ -555,7 +548,18 @@ export function deriveEditorLayers(
     });
   }
 
-  for (const reference of listWatchfaceConfigAssets(details)) {
+  const enabledControlIcons = WATCHFACE_COMPLICATIONS
+    .filter(
+      (complication) =>
+        complication.id !== "battery" &&
+        isControlComplicationEnabled(details, design, complication.id)
+    )
+    .map((complication) => complication.id);
+  for (const reference of listWatchfaceConfigAssets(
+    offsetDetails,
+    undefined,
+    enabledControlIcons
+  )) {
     // The current-face background_icon is the source behind the editable
     // Artwork → Background layer below. Exposing it again as a template asset
     // creates two controls for the same on-watch image. Keep AOD background

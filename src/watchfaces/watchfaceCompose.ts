@@ -11,8 +11,8 @@ import {
   buildAmPmSpriteReplacements,
   buildControlTemperatureOverrides,
   buildControlTemperatureSpriteReplacements,
-  buildControlBatteryVisibilityOverrides,
-  buildControlComplicationVisibilityOverrides,
+  buildControlComplicationConfigurationOverrides,
+  buildDisabledControlComplicationOverrides,
   buildSelectableMetricSpriteComposition,
   buildSelectableMetricStyleOverrides,
   buildControlIconPositionOverrides,
@@ -34,7 +34,7 @@ import {
   buildTimeTrackingOverrides,
   buildTimeStyleOverrides,
   getAmPmCapability,
-  getAvailableComplications,
+  isControlComplicationEnabled,
   mergeAssetReplacements,
   mergeConfigOverrides,
   pickPreviewResolution,
@@ -306,22 +306,38 @@ export function deriveDesignDetails(
     timeFormatDetails,
     metricOverrides
   );
+  const controlComplicationOverrides =
+    buildControlComplicationConfigurationOverrides(metricDetails, design);
+  const controlMetricDetails = applyConfigOverridesToDetails(
+    metricDetails,
+    controlComplicationOverrides
+  );
   const controlTemperatureStyle = metricStylesOf(design).temperature ?? {
     color: design.digitColor,
     scale: 1
   };
   const controlTemperatureOverrides =
-    design.controlTemperatureEnabled !== false &&
-    getAvailableComplications(metricDetails)
-      .some((item) => item.id === "temperature")
-      ? buildControlTemperatureOverrides(metricDetails, controlTemperatureStyle)
+    isControlComplicationEnabled(details, design, "temperature")
+      ? buildControlTemperatureOverrides(
+          controlMetricDetails,
+          controlTemperatureStyle
+        )
       : [];
   const selectableMetricDetails = applyConfigOverridesToDetails(
-    metricDetails,
+    controlMetricDetails,
     controlTemperatureOverrides
+  );
+  const selectableAssetOverrides = buildWatchfaceConfigAssetOverrides(
+    selectableMetricDetails,
+    design.configAssetOverrides ?? {}
+  );
+  const selectableAssetDetails = applyConfigOverridesToDetails(
+    selectableMetricDetails,
+    selectableAssetOverrides
   );
   const componentStyleOverrides = mergeConfigOverrides(
     buildMetricStyleOverrides(metricDetails, metricStylesOf(design)),
+    controlComplicationOverrides,
     controlTemperatureOverrides,
     design.selectableMetricStyle
       ? buildSelectableMetricStyleOverrides(
@@ -332,15 +348,19 @@ export function deriveDesignDetails(
     buildTimeStyleOverrides(metricDetails, timeStylesOf(design)),
     buildDateStyleOverrides(metricDetails, dateStylesOf(design)),
     buildLayerColorOverrides(metricDetails, design.layerColors ?? {}),
-    buildControlIconPositionOverrides(metricDetails, design.controlIconOffsets ?? {}),
+    // A synthesized icon must establish its base path/position before the
+    // user's per-component movement is applied. Reversing these two entries
+    // makes the generated fallback position overwrite every drag.
+    selectableAssetOverrides,
+    buildControlIconPositionOverrides(
+      selectableAssetDetails,
+      design.controlIconOffsets ?? {}
+    ),
     buildStaticSeparatorOverrides(details, design.staticSeparators),
-    buildWatchfaceConfigAssetOverrides(
-      details,
-      design.configAssetOverrides ?? {}
-    )
+    buildDisabledControlComplicationOverrides(details, design)
   );
   const styledMetricDetails = applyConfigOverridesToDetails(
-    metricDetails,
+    controlMetricDetails,
     componentStyleOverrides
   );
   const laidOutDetails = applyLayoutToDetails(
@@ -350,12 +370,7 @@ export function deriveDesignDetails(
   const previewDetails = applyConfigOverridesToDetails(
     laidOutDetails,
     mergeConfigOverrides(
-      buildLayerVisibilityOverrides(laidOutDetails, design.layerVisibility ?? {}),
-      buildControlBatteryVisibilityOverrides(
-        laidOutDetails,
-        design.controlBatteryEnabled
-      ),
-      buildControlComplicationVisibilityOverrides(laidOutDetails, design)
+      buildLayerVisibilityOverrides(laidOutDetails, design.layerVisibility ?? {})
     )
   );
   return {
@@ -449,11 +464,11 @@ export async function composeWatchfaceReplacements(
   const ampmSupported = Boolean(getAmPmCapability(details) && ampmStyle);
   const ampmActive = Boolean(ampmSupported && ampmStyle?.enabled);
   const weatherStyle = design.weatherIndicator;
-  const controlTemperatureActive =
-    design.controlTemperatureEnabled !== false &&
-    getAvailableComplications(details).some(
-      (item) => item.id === "temperature"
-    );
+  const controlTemperatureActive = isControlComplicationEnabled(
+    details,
+    design,
+    "temperature"
+  );
   const controlTemperatureStyle = metricStyles.temperature ?? {
     color: design.digitColor,
     scale: 1
@@ -465,16 +480,30 @@ export async function composeWatchfaceReplacements(
     rasterFontSupportsText(controlTemperatureStyle.rasterFont, "0123456789") ||
     controlTemperatureStyle.scale !== 1
   );
+  const controlComplicationOverrides =
+    buildControlComplicationConfigurationOverrides(metricDetails, design);
+  const controlMetricDetails = applyConfigOverridesToDetails(
+    metricDetails,
+    controlComplicationOverrides
+  );
   const exportedControlTemperatureOverrides = controlTemperatureActive
     ? buildControlTemperatureOverrides(
-        metricDetails,
+        controlMetricDetails,
         controlTemperatureStyle,
         controlTemperatureRasterActive
       )
     : [];
   const selectableConfigDetails = applyConfigOverridesToDetails(
-    metricDetails,
+    controlMetricDetails,
     exportedControlTemperatureOverrides
+  );
+  const selectableAssetOverrides = buildWatchfaceConfigAssetOverrides(
+    selectableConfigDetails,
+    design.configAssetOverrides ?? {}
+  );
+  const selectableAssetDetails = applyConfigOverridesToDetails(
+    selectableConfigDetails,
+    selectableAssetOverrides
   );
   const batteryIconEffectSources = await buildBatteryIconEffectSources(
     details,
@@ -517,7 +546,7 @@ export async function composeWatchfaceReplacements(
       : [],
     controlTemperatureActive && controlTemperatureRasterActive
       ? await buildControlTemperatureSpriteReplacements(
-          metricDetails,
+          controlMetricDetails,
           controlTemperatureStyle,
           design.fontFamily,
           loadAssets,
@@ -598,6 +627,7 @@ export async function composeWatchfaceReplacements(
     mergeConfigOverrides(
       metricOverrides,
       timeFormatOverrides,
+      controlComplicationOverrides,
       metricStyleActive ? buildMetricStyleOverrides(metricDetails, metricStyles, true) : [],
       exportedControlTemperatureOverrides,
       selectableMetricStyleActive
@@ -611,7 +641,13 @@ export async function composeWatchfaceReplacements(
       dateStyleActive ? buildDateStyleOverrides(details, dateStyles, true) : [],
       timeTrackingOverrides,
       buildLayerColorOverrides(details, design.layerColors ?? {}),
-      buildControlIconPositionOverrides(details, design.controlIconOffsets ?? {}),
+      // Preserve the generated path and base position for selectable icons
+      // that were not present in the imported template.
+      selectableAssetOverrides,
+      buildControlIconPositionOverrides(
+        selectableAssetDetails,
+        design.controlIconOffsets ?? {}
+      ),
       buildStaticSeparatorOverrides(details, design.staticSeparators),
       ampmSupported ? buildAmPmOverrides(details, ampmStyle!) : [],
       weatherStyle ? buildWeatherOverrides(details, weatherStyle) : [],
@@ -624,14 +660,13 @@ export async function composeWatchfaceReplacements(
       selectableMetricComposition.configOverrides,
       buildEffectPaddingOverrides(configAssetPositionDetails, effectedAssets.padding),
       buildLayerVisibilityOverrides(details, design.layerVisibility ?? {}),
-      buildControlBatteryVisibilityOverrides(details, design.controlBatteryEnabled),
-      buildControlComplicationVisibilityOverrides(details, design),
       batteryIconEffectSources.configOverrides,
       buildWatchfaceConfigAssetOverrides(
         configAssetPositionDetails,
         design.configAssetOverrides ?? {},
         true
-      )
+      ),
+      buildDisabledControlComplicationOverrides(details, design)
     )
   );
 

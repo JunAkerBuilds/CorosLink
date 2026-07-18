@@ -52,6 +52,7 @@ export function makeDefaultDesign(): CorosWatchfaceDesignState {
     previewComplication: "heartRate",
     metricChanges: {},
     metricStyles: {},
+    controlComplicationEnabled: {},
     controlIconOffsets: {},
     separateAutoTime: false,
     timeStyles: {},

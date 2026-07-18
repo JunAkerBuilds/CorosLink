@@ -694,6 +694,11 @@ export interface CorosWatchfaceDesignState {
     /** Preserve each selectable digit's natural width and expand value rectangles. */
     nativeSize?: boolean;
   };
+  /**
+   * Per-component selectable-control state. Missing entries inherit whether
+   * the imported template already declares that component.
+   */
+  controlComplicationEnabled?: Record<string, boolean>;
   /** False removes the Battery choice from the firmware-selectable control slot. */
   controlBatteryEnabled?: boolean;
   /** False removes the Sunrise choice from the firmware-selectable control slot. */

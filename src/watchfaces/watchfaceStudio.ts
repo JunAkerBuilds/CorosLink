@@ -288,7 +288,8 @@ function pngConfigEntries(
 /** Every direct PNG reference in config.txt and AODconfig.txt. */
 export function listWatchfaceConfigAssets(
   details: CorosWatchfaceTemplateDetails,
-  resolutionDirectory?: string
+  resolutionDirectory?: string,
+  virtualControlIcons: ReadonlyArray<WatchfaceComplicationId> = []
 ): WatchfaceConfigAssetReference[] {
   const selectedResolution = resolutionDirectory
     ? details.resolutions.find((candidate) => candidate.directory === resolutionDirectory)
@@ -324,6 +325,27 @@ export function listWatchfaceConfigAssets(
         });
       }
     }
+  }
+  for (const complicationId of virtualControlIcons) {
+    if (complicationId === "battery") continue;
+    const complication = WATCHFACE_COMPLICATIONS.find(
+      (candidate) => candidate.id === complicationId
+    );
+    if (!complication) continue;
+    const configKey = `control_${complication.controlPrefix}_icon`;
+    const id = watchfaceConfigAssetId("config", configKey);
+    if (byId.has(id)) continue;
+    const relativePath = configAssetCreatedRelativePath(id);
+    byId.set(id, {
+      id,
+      scope: "config",
+      configKey,
+      configPath: `${selectedResolution.directory}/config.txt`,
+      label: configAssetLabel(configKey, "config"),
+      relativePath,
+      archivePath: `${selectedResolution.directory}/${relativePath}`,
+      source: null
+    });
   }
   const references = [...byId.values()];
   return references.sort((left, right) =>
@@ -599,6 +621,39 @@ export function configAssetCanvasSize(
   };
 }
 
+/**
+ * A synthesized selectable has no source PNG to define its firmware canvas.
+ * Reuse the template's first positioned control icon so arbitrary imported
+ * artwork is fitted to the same predictable slot instead of being interpreted
+ * as full-size watch pixels.
+ */
+export function virtualControlIconCanvasSize(
+  resolution: CorosWatchfaceResolutionDetails
+): { width: number; height: number } {
+  for (const [configKey, rawPath] of Object.entries(resolution.config)) {
+    if (
+      !/^control_[a-z0-9_]+_icon$/.test(configKey) ||
+      !parseConfigPos(resolution.config[`${configKey}_pos`])
+    ) {
+      continue;
+    }
+    const path = `${resolution.directory}/${rawPath.replace(/\\/g, "/")}`;
+    const source = resolution.icons.find((icon) => icon.path === path);
+    if (source) {
+      return { width: source.width, height: source.height };
+    }
+  }
+  const rect = firstControlRect(resolution.config);
+  const parsed = rect ? parseConfigRect(rect) : null;
+  const size = Math.max(
+    1,
+    parsed
+      ? parsed.y1 - parsed.y0
+      : Math.round(Math.min(resolution.width, resolution.height) * 0.07)
+  );
+  return { width: size, height: size };
+}
+
 function replaceConfigAssetInPlace(configKey: string): boolean {
   return configAssetSupportsNativeSize(configKey);
 }
@@ -659,7 +714,24 @@ export function buildWatchfaceConfigAssetOverrides(
   for (const resolution of details.resolutions) {
     for (const scope of ["config", "aod"] as const) {
       const values: Record<string, string> = {};
-      for (const [configKey] of pngConfigEntries(resolution, scope)) {
+      const scopedConfig = scope === "aod"
+        ? resolution.aodConfig
+        : resolution.config;
+      const entries = pngConfigEntries(resolution, scope);
+      if (scope === "config") {
+        for (const complication of WATCHFACE_COMPLICATIONS) {
+          if (complication.id === "battery") continue;
+          const configKey = `control_${complication.controlPrefix}_icon`;
+          const id = watchfaceConfigAssetId(scope, configKey);
+          if (
+            overrides[id]?.replacement &&
+            !entries.some(([candidate]) => candidate === configKey)
+          ) {
+            entries.push([configKey, configAssetCreatedRelativePath(id)]);
+          }
+        }
+      }
+      for (const [configKey] of entries) {
         // The current background is always a composed Studio PNG written back
         // to the template's original path. Artwork visibility is handled while
         // composing that PNG, never by clearing or repointing this config key.
@@ -680,6 +752,8 @@ export function buildWatchfaceConfigAssetOverrides(
             ? currentAnalogOverride
             : undefined);
         if (!override) continue;
+        const virtual =
+          !Object.prototype.hasOwnProperty.call(scopedConfig, configKey);
         if (override.enabled === false) {
           // A disabled direct asset must not leave a blank declaration behind:
           // COROS can treat key presence itself as feature presence. Delete the
@@ -687,16 +761,23 @@ export function buildWatchfaceConfigAssetOverrides(
           // absent from the exported watch face.
           values[configKey] = COROS_CONFIG_DELETE_VALUE;
         } else if (
-          includeReplacementPaths &&
+          (includeReplacementPaths || virtual) &&
           override.replacement &&
-          !replaceConfigAssetInPlace(configKey)
+          (virtual || !replaceConfigAssetInPlace(configKey))
         ) {
           values[configKey] = configAssetCreatedRelativePath(id).replace(/\//g, "\\");
+          if (virtual && configKey.startsWith("control_")) {
+            const positionKey = `${configKey}_pos`;
+            if (!parseConfigPos(scopedConfig[positionKey])) {
+              values[positionKey] = fallbackControlIconPosition(
+                scopedConfig,
+                firstControlRect(scopedConfig) ??
+                  `{0,0,${Math.max(1, override.replacement.width)},${Math.max(1, override.replacement.height)},hcenter|vcenter}`
+              );
+            }
+          }
         }
       }
-      const scopedConfig = scope === "aod"
-        ? resolution.aodConfig
-        : resolution.config;
       if (
         hasCustomControlBattery &&
         controlBatteryOverride?.enabled !== false &&
@@ -782,6 +863,27 @@ export function buildWatchfaceConfigAssetOverrides(
   return result;
 }
 
+/**
+ * Final archive-boundary safeguard for direct asset visibility. This repeats
+ * only deletion sentinels; replaying enabled virtual assets here would restore
+ * their pre-layout fallback positions after movement/origin rebasing.
+ */
+export function buildDisabledWatchfaceConfigAssetOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  overrides: Record<string, CorosWatchfaceConfigAssetOverride> = {}
+): CorosWatchfaceConfigOverride[] {
+  return buildWatchfaceConfigAssetOverrides(details, overrides)
+    .map(({ path, values }) => ({
+      path,
+      values: Object.fromEntries(
+        Object.entries(values).filter(
+          ([, value]) => value === COROS_CONFIG_DELETE_VALUE
+        )
+      )
+    }))
+    .filter(({ values }) => Object.keys(values).length > 0);
+}
+
 /** Builds native-sized created PNGs for every customized config reference. */
 export async function buildWatchfaceConfigAssetReplacements(
   details: CorosWatchfaceTemplateDetails,
@@ -792,7 +894,21 @@ export async function buildWatchfaceConfigAssetReplacements(
   for (const resolution of details.resolutions) {
     const nativeScale = masterWidth ? resolution.width / masterWidth : 1;
     for (const scope of ["config", "aod"] as const) {
-      for (const [configKey, rawPath] of pngConfigEntries(resolution, scope)) {
+      const entries = pngConfigEntries(resolution, scope);
+      if (scope === "config") {
+        for (const complication of WATCHFACE_COMPLICATIONS) {
+          if (complication.id === "battery") continue;
+          const configKey = `control_${complication.controlPrefix}_icon`;
+          const id = watchfaceConfigAssetId(scope, configKey);
+          if (
+            overrides[id]?.replacement &&
+            !entries.some(([candidate]) => candidate === configKey)
+          ) {
+            entries.push([configKey, configAssetCreatedRelativePath(id)]);
+          }
+        }
+      }
+      for (const [configKey, rawPath] of entries) {
         const id = watchfaceConfigAssetId(scope, configKey);
         const override = overrides[id];
         if (!override?.replacement || override.enabled === false) continue;
@@ -801,13 +917,20 @@ export async function buildWatchfaceConfigAssetReplacements(
         const source = resolution.icons.find(
           (file) => file.path === `${resolution.directory}/${relativePath}`
         );
+        const virtual = !source && configKey.startsWith("control_");
+        const effectiveOverride = virtual
+          ? { ...override, nativeSize: false }
+          : override;
+        const virtualCanvas = virtual
+          ? virtualControlIconCanvasSize(resolution)
+          : null;
         const canvasSize = configAssetCanvasSize(
           configKey,
-          override,
+          effectiveOverride,
           {
-            width: source?.width ??
+            width: source?.width ?? virtualCanvas?.width ??
               Math.max(1, Math.round(override.replacement.width * nativeScale)),
-            height: source?.height ??
+            height: source?.height ?? virtualCanvas?.height ??
               Math.max(1, Math.round(override.replacement.height * nativeScale))
           },
           nativeScale
@@ -2576,7 +2699,7 @@ interface WatchfaceFixedMetricDefinition {
   center: { x: number; y: number };
 }
 
-interface WatchfaceComplicationDefinition {
+export interface WatchfaceComplicationDefinition {
   id: WatchfaceComplicationId;
   label: string;
   controlPrefix: string;
@@ -2821,7 +2944,44 @@ export function getFixedMetricCapabilities(
   });
 }
 
-/** Complication choices implemented by the template's control slot. */
+function complicationRectKeys(
+  complication: WatchfaceComplicationDefinition
+): string[] {
+  if (complication.id === "battery") {
+    return ["control_battery_level_rect"];
+  }
+  return complication.valueParts
+    ? complication.valueParts.map(
+        ({ rectSuffix }) =>
+          `control_${complication.controlPrefix}_${rectSuffix}_rect`
+      )
+    : [`control_${complication.controlPrefix}_rect`];
+}
+
+function complicationFontKey(
+  complication: WatchfaceComplicationDefinition
+): string {
+  return complication.id === "battery"
+    ? "control_battery_level_font"
+    : `control_${complication.controlPrefix}_font`;
+}
+
+function resolutionHasControlComplication(
+  resolution: CorosWatchfaceResolutionDetails,
+  complication: WatchfaceComplicationDefinition
+): boolean {
+  return (
+    Object.keys(resolution.config).some((key) =>
+      /^rect_control\d+_pos$/.test(key)
+    ) &&
+    complicationRectKeys(complication).every(
+      (key) => parseConfigRect(resolution.config[key]) !== null
+    ) &&
+    Boolean(resolution.config[complicationFontKey(complication)])
+  );
+}
+
+/** Complication choices currently implemented by the effective config. */
 export function getAvailableComplications(
   details: CorosWatchfaceTemplateDetails
 ): WatchfaceComplicationDefinition[] {
@@ -2829,41 +2989,86 @@ export function getAvailableComplications(
   if (!resolution) {
     return [];
   }
-  const hasControlSlot = Object.keys(resolution.config).some((key) =>
-    /^rect_control\d+_pos$/.test(key)
-  );
-  return WATCHFACE_COMPLICATIONS.filter((complication) =>
-    complication.id === "temperature" || complication.id === "battery"
-      ? hasControlSlot
-      : Boolean(
-          (complication.valueParts
-            ? complication.valueParts.every(({ rectSuffix }) =>
-                parseConfigRect(
-                  resolution.config[
-                    `control_${complication.controlPrefix}_${rectSuffix}_rect`
-                  ]
-                )
-              )
-            : parseConfigRect(
-                resolution.config[`control_${complication.controlPrefix}_rect`]
-              )) &&
-          findSpriteFolder(
-            resolution,
-            resolution.config[`control_${complication.controlPrefix}_font`]
-          )
+  return WATCHFACE_COMPLICATIONS.filter(
+    (complication) =>
+      resolutionHasControlComplication(resolution, complication) &&
+      Boolean(
+        findSpriteFolder(
+          resolution,
+          resolution.config[complicationFontKey(complication)]
         )
+      )
   );
+}
+
+/** Whether the imported current-face config already implements one choice. */
+export function hasControlComplication(
+  details: CorosWatchfaceTemplateDetails,
+  id: WatchfaceComplicationId
+): boolean {
+  const resolution = pickPreviewResolution(details);
+  const complication = WATCHFACE_COMPLICATIONS.find(
+    (candidate) => candidate.id === id
+  );
+  return Boolean(
+    resolution &&
+      complication &&
+      resolutionHasControlComplication(resolution, complication)
+  );
+}
+
+interface ControlComplicationSelection {
+  controlComplicationEnabled?: Record<string, boolean>;
+  controlBatteryEnabled?: boolean;
+  controlSunriseEnabled?: boolean;
+  controlSunsetEnabled?: boolean;
+  controlFloorEnabled?: boolean;
+  controlTemperatureEnabled?: boolean;
+}
+
+function legacyControlComplicationSetting(
+  design: ControlComplicationSelection,
+  id: WatchfaceComplicationId
+): boolean | undefined {
+  switch (id) {
+    case "battery":
+      return design.controlBatteryEnabled;
+    case "sunrise":
+      return design.controlSunriseEnabled;
+    case "sunset":
+      return design.controlSunsetEnabled;
+    case "floors":
+      return design.controlFloorEnabled;
+    case "temperature":
+      return design.controlTemperatureEnabled;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Resolves the primary selectable toggle. New per-component state wins, old
+ * saved-project flags remain compatible, and otherwise the imported config is
+ * the default: configured choices on, missing choices off.
+ */
+export function isControlComplicationEnabled(
+  details: CorosWatchfaceTemplateDetails,
+  design: ControlComplicationSelection,
+  id: WatchfaceComplicationId
+): boolean {
+  const configured = design.controlComplicationEnabled?.[id];
+  if (configured !== undefined) {
+    return configured;
+  }
+  const legacy = legacyControlComplicationSetting(design, id);
+  return legacy ?? hasControlComplication(details, id);
 }
 
 /** Whether the current-face config actually declares Battery as a selector choice. */
 export function hasControlBattery(
   details: CorosWatchfaceTemplateDetails
 ): boolean {
-  return details.resolutions.some((resolution) =>
-    Object.keys(resolution.config).some((key) =>
-      key.startsWith("control_battery_")
-    )
-  );
+  return hasControlComplication(details, "battery");
 }
 
 /**
@@ -2949,6 +3154,288 @@ export function buildControlComplicationVisibilityOverrides(
   );
 }
 
+const COMPLICATION_ICON_NAMES: Record<WatchfaceComplicationId, string[]> = {
+  heartRate: ["hr.png", "heart_rate.png", "heartrate.png"],
+  steps: ["step.png", "steps.png"],
+  calories: ["kcal.png", "calorie.png", "calories.png"],
+  floors: ["floor.png", "floors.png"],
+  elevation: ["elevation.png", "altitude.png"],
+  exercise: ["exercise.png", "workout.png", "sport.png"],
+  sunrise: ["sunrise.png"],
+  sunset: ["sunset.png"],
+  battery: ["battery.png"],
+  temperature: ["temperature.png", "temp.png"]
+};
+
+function firstControlRect(config: Record<string, string>): string | undefined {
+  return Object.entries(config).find(
+    ([key, value]) =>
+      /^control_[a-z0-9_]+_rect$/.test(key) &&
+      parseConfigRect(value) !== null
+  )?.[1];
+}
+
+function fallbackControlRect(
+  resolution: CorosWatchfaceResolutionDetails,
+  config: Record<string, string>,
+  aod: boolean
+): string {
+  const existing = firstControlRect(config);
+  if (existing) {
+    return existing;
+  }
+  const digitFolder = resolution.spriteFolders.find(
+    (folder) => folder.kind === "digits" && folder.aod === aod
+  ) ?? resolution.spriteFolders.find((folder) => folder.kind === "digits");
+  const height = Math.max(
+    1,
+    digitFolder?.files[0]?.height ?? Math.round(resolution.height * 0.07)
+  );
+  const width = Math.max(height * 4, Math.round(resolution.width * 0.25));
+  const x0 = Math.round((resolution.width - width) / 2);
+  const y0 = Math.round(resolution.height * 0.72);
+  return `{${x0},${y0},${x0 + width},${y0 + height},hcenter|vcenter}`;
+}
+
+function splitControlRect(
+  value: string
+): { hour: string; minute: string } | null {
+  const rect = parseConfigRect(value);
+  if (!rect) {
+    return null;
+  }
+  const gap = Math.max(1, Math.round((rect.x1 - rect.x0) * 0.04));
+  const middle = Math.round((rect.x0 + rect.x1) / 2);
+  const suffix =
+    value.match(
+      /^\{\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*((?:,[^}]*)?)\}$/
+    )?.[1] || ",hcenter|vcenter";
+  return {
+    hour: `{${rect.x0},${rect.y0},${middle - gap},${rect.y1}${suffix}}`,
+    minute: `{${middle + gap},${rect.y0},${rect.x1},${rect.y1}${suffix}}`
+  };
+}
+
+function fallbackControlFont(
+  resolution: CorosWatchfaceResolutionDetails,
+  config: Record<string, string>,
+  aod: boolean
+): string | undefined {
+  const configured = Object.entries(config).find(
+    ([key, value]) =>
+      /^control_[a-z0-9_]+_font$/.test(key) &&
+      Boolean(findSpriteFolder(resolution, value))
+  )?.[1];
+  if (configured) {
+    return configured;
+  }
+  return (
+    resolution.spriteFolders.find(
+      (folder) => folder.kind === "digits" && folder.aod === aod
+    ) ?? resolution.spriteFolders.find((folder) => folder.kind === "digits")
+  )?.folder.replace(/\//g, "\\");
+}
+
+function fallbackControlIconPosition(
+  config: Record<string, string>,
+  rectValue: string
+): string {
+  const existing = Object.entries(config).find(
+    ([key, value]) =>
+      /^control_[a-z0-9_]+_icon_pos$/.test(key) &&
+      parseConfigPos(value) !== null
+  )?.[1];
+  if (existing) {
+    return existing;
+  }
+  const rect = parseConfigRect(rectValue);
+  return rect ? `{${rect.x0},${rect.y0}}` : "{0,0}";
+}
+
+function complicationIconPath(
+  resolution: CorosWatchfaceResolutionDetails,
+  complication: WatchfaceComplicationDefinition
+): string | undefined {
+  const names = COMPLICATION_ICON_NAMES[complication.id];
+  const icon = resolution.icons.find((candidate) =>
+    names.includes(candidate.path.split("/").at(-1)?.toLowerCase() ?? "")
+  );
+  return icon?.path
+    .replace(`${resolution.directory}/`, "")
+    .replace(/\//g, "\\");
+}
+
+function addMissingControlComplication(
+  resolution: CorosWatchfaceResolutionDetails,
+  config: Record<string, string>,
+  complication: WatchfaceComplicationDefinition,
+  aod: boolean
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  if (
+    Object.keys(config).some((key) => /^rect_control\d+_pos$/.test(key)) &&
+    complicationRectKeys(complication).every(
+      (key) => parseConfigRect(config[key]) !== null
+    ) &&
+    Boolean(config[complicationFontKey(complication)])
+  ) {
+    return values;
+  }
+  if (
+    !Object.keys(config).some((key) => /^rect_control\d+_pos$/.test(key))
+  ) {
+    values.rect_control1_pos = "{0,0}";
+  }
+
+  const rectKeys = complicationRectKeys(complication);
+  const baseRect = fallbackControlRect(resolution, config, aod);
+  const splitRect = complication.valueParts
+    ? splitControlRect(baseRect)
+    : null;
+  for (const [index, key] of rectKeys.entries()) {
+    if (parseConfigRect(config[key])) {
+      continue;
+    }
+    values[key] =
+      splitRect && index === 0
+        ? splitRect.hour
+        : splitRect && index === 1
+          ? splitRect.minute
+          : baseRect;
+  }
+
+  const fontKey = complicationFontKey(complication);
+  if (!config[fontKey]) {
+    const font = fallbackControlFont(resolution, config, aod);
+    if (font) {
+      values[fontKey] = font;
+    }
+  }
+  const fontColorKey = `${fontKey}_color`;
+  if (!Object.prototype.hasOwnProperty.call(config, fontColorKey)) {
+    values[fontColorKey] = "";
+  }
+
+  const iconPositionKey = `control_${complication.controlPrefix}_icon_pos`;
+  const iconKey = `control_${complication.controlPrefix}_icon`;
+  const iconPath = complicationIconPath(resolution, complication);
+  if (complication.id === "battery") {
+    const directoryKey = "control_battery_icon_dir";
+    if (!config[directoryKey]) {
+      const batteryFolder = resolution.spriteFolders.find(
+        (folder) =>
+          folder.kind === "state" &&
+          /(^|\\)(control_)?battery$/i.test(
+            folder.folder.replace(/\//g, "\\")
+          )
+      );
+      if (batteryFolder) {
+        values[directoryKey] = batteryFolder.folder.replace(/\//g, "\\");
+      }
+    }
+  } else if (!config[iconKey] && iconPath) {
+    values[iconKey] = iconPath;
+  }
+  if (
+    (config[iconKey] || iconPath || complication.id === "battery") &&
+    !parseConfigPos(config[iconPositionKey])
+  ) {
+    values[iconPositionKey] = fallbackControlIconPosition(config, baseRect);
+  }
+
+  if (
+    complication.id === "temperature" &&
+    !config.control_temperature_negative_sign_icon &&
+    config.control_negative_sign_icon
+  ) {
+    values.control_temperature_negative_sign_icon =
+      config.control_negative_sign_icon;
+  }
+  return values;
+}
+
+/**
+ * Produces the complete selectable-control lifecycle for every supported
+ * component: missing enabled choices are synthesized, while disabled choices
+ * have every related declaration deleted from current and AOD configs.
+ */
+export function buildControlComplicationConfigurationOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  design: ControlComplicationSelection
+): CorosWatchfaceConfigOverride[] {
+  return details.resolutions.flatMap((resolution) =>
+    [
+      { fileName: "config.txt", config: resolution.config, aod: false },
+      { fileName: "AODconfig.txt", config: resolution.aodConfig, aod: true }
+    ].flatMap(({ fileName, config, aod }) => {
+      const canAdd =
+        !aod ||
+        Object.keys(config).some((key) => /^rect_control\d+_pos$/.test(key));
+      const values: Record<string, string> = {};
+      for (const complication of WATCHFACE_COMPLICATIONS) {
+        const enabled = isControlComplicationEnabled(
+          details,
+          design,
+          complication.id
+        );
+        if (enabled && canAdd) {
+          Object.assign(
+            values,
+            addMissingControlComplication(
+              resolution,
+              { ...config, ...values },
+              complication,
+              aod
+            )
+          );
+          continue;
+        }
+        if (enabled) {
+          continue;
+        }
+        const prefix = `control_${complication.controlPrefix}_`;
+        for (const key of Object.keys(config)) {
+          if (key.startsWith(prefix)) {
+            values[key] = COROS_CONFIG_DELETE_VALUE;
+          }
+        }
+        if (complication.id === "battery") {
+          for (const key of Object.keys(config)) {
+            if (
+              key.startsWith("control_bluetooth_") ||
+              key.startsWith("control_no_disturb_") ||
+              key === "battery_icon_lowpower" ||
+              (aod && key.startsWith("battery_"))
+            ) {
+              values[key] = COROS_CONFIG_DELETE_VALUE;
+            }
+          }
+        }
+      }
+      return Object.keys(values).length > 0
+        ? [{ path: `${resolution.directory}/${fileName}`, values }]
+        : [];
+    })
+  );
+}
+
+/** Reasserts disabled-component deletion after later asset/style overrides. */
+export function buildDisabledControlComplicationOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  design: ControlComplicationSelection
+): CorosWatchfaceConfigOverride[] {
+  return buildControlComplicationConfigurationOverrides(details, design)
+    .map(({ path, values }) => ({
+      path,
+      values: Object.fromEntries(
+        Object.entries(values).filter(
+          ([, value]) => value === COROS_CONFIG_DELETE_VALUE
+        )
+      )
+    }))
+    .filter(({ values }) => Object.keys(values).length > 0);
+}
+
 /** Moves selectable-control icons independently from their value rectangles. */
 export function buildControlIconPositionOverrides(
   details: CorosWatchfaceTemplateDetails,
@@ -2983,11 +3470,12 @@ export function buildControlIconPositionOverrides(
 
 /**
  * Every `control_*` child coordinate is relative to `rect_controlN_pos`, and
- * stock templates keep all children non-negative. Icon drags can push a child
- * above/left of the origin, and negative child values are unproven on-watch
- * (COROS's pipeline may clamp or drop them). This rewrites the merged export
- * overrides so the origin absorbs any negative child offsets: absolute screen
- * positions are unchanged, but every child coordinate stays non-negative.
+ * stock templates keep both the origin and children non-negative. Layout or
+ * icon drags can make either side negative, which is unproven on-watch (COROS's
+ * pipeline may clamp or drop the whole control). This rewrites the merged
+ * export overrides so the origin and children share the offset safely:
+ * absolute screen positions are unchanged while both stay non-negative
+ * whenever the control itself remains within the screen's positive space.
  */
 export function rebaseNegativeControlChildren(
   details: CorosWatchfaceTemplateDetails,
@@ -3013,8 +3501,8 @@ export function rebaseNegativeControlChildren(
         /^control_[a-z0-9_]+_(icon_pos|rect)$/.test(key) &&
         offsetConfigValue(effective[key]!, 0, 0) !== null
     );
-    let minX = 0;
-    let minY = 0;
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
     for (const key of childKeys) {
       const pos = parseConfigPos(effective[key]);
       const rect = pos ? null : parseConfigRect(effective[key]);
@@ -3026,13 +3514,29 @@ export function rebaseNegativeControlChildren(
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);
     }
-    if (minX === 0 && minY === 0) {
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) {
       continue;
     }
-    const shiftX = -minX;
-    const shiftY = -minY;
+
+    const safeOrigin = (originValue: number, minimumChild: number): number => {
+      const minimumAbsolute = originValue + minimumChild;
+      // When the absolute control is already partly off-screen, preserving its
+      // position and making both values non-negative is mathematically
+      // impossible. Preserve the position and retain the non-negative child.
+      if (minimumAbsolute < 0) {
+        return minimumAbsolute;
+      }
+      return Math.min(Math.max(originValue, 0), minimumAbsolute);
+    };
+    const originX = safeOrigin(origin.x, minX);
+    const originY = safeOrigin(origin.y, minY);
+    const shiftX = origin.x - originX;
+    const shiftY = origin.y - originY;
+    if (shiftX === 0 && shiftY === 0) {
+      continue;
+    }
     const values: Record<string, string> = {
-      [originKey]: `{${origin.x - shiftX},${origin.y - shiftY}}`
+      [originKey]: `{${originX},${originY}}`
     };
     for (const key of childKeys) {
       const shifted = offsetConfigValue(effective[key]!, shiftX, shiftY);
@@ -4653,6 +5157,7 @@ export function buildLayerVisibilityOverrides(
       if (group.id === "temperature") {
         for (const key of [
           "temperature_rect",
+          "temperature_font",
           "temperature_font_color",
           "temperature_negative_sign_icon"
         ]) {
@@ -5530,6 +6035,16 @@ export async function drawStudioPreview(
     : complication?.id === "battery"
       ? controlBatteryFile
       : null;
+  const complicationIconKey =
+    complicationPrefix && complication?.id !== "battery"
+      ? `control_${complicationPrefix}_icon`
+      : "";
+  const virtualComplicationIconOverride =
+    complicationIconKey && !complicationIcon
+      ? options.configAssetOverrides?.[
+          watchfaceConfigAssetId("config", complicationIconKey)
+        ]
+      : undefined;
   const configuredComplicationIconPos = complicationPrefix
     ? parseConfigPos(
         config[`control_${complicationPrefix}_icon_pos`]
@@ -6154,9 +6669,6 @@ export async function drawStudioPreview(
   }
 
   if (complicationIcon && complicationIconPos) {
-    const complicationIconKey = complicationPrefix
-      ? `control_${complicationPrefix}_icon`
-      : "";
     const image =
       complication?.id === "battery" && controlBatteryReplacement
         ? await loadStudioImage(
@@ -6189,6 +6701,44 @@ export async function drawStudioPreview(
         false
       );
     }
+  } else if (
+    virtualComplicationIconOverride?.replacement &&
+    virtualComplicationIconOverride.enabled !== false &&
+    complicationIconPos
+  ) {
+    const fallback = virtualControlIconCanvasSize(resolution);
+    const canvasSize = configAssetCanvasSize(
+      complicationIconKey,
+      { ...virtualComplicationIconOverride, nativeSize: false },
+      fallback,
+      options.nativeSpriteResolutionScale ?? 1
+    );
+    const image = await loadStudioImage(
+      canvasSize.native
+        ? await resizeAndTintSprite(
+            virtualComplicationIconOverride.replacement.dataUrl,
+            canvasSize.width,
+            canvasSize.height
+          )
+        : await fitVisibleSpriteToCanvas(
+            virtualComplicationIconOverride.replacement.dataUrl,
+            canvasSize.width,
+            canvasSize.height,
+            virtualComplicationIconOverride.scale ?? 1
+          )
+    );
+    drawStudioLayerImage(
+      context,
+      image,
+      complicationIconPos.x * scale,
+      complicationIconPos.y * scale,
+      image.naturalWidth * scale,
+      image.naturalHeight * scale,
+      scale,
+      options,
+      "complication",
+      false
+    );
   } else if (complication?.id === "battery" && complicationIconPos) {
     // Some watches offer Battery as a firmware control even though the source
     // template contains no battery control PNG. Draw a preview-only glyph so

@@ -4704,6 +4704,119 @@ td span {
   accent-color: var(--accent);
 }
 
+.wf-selectable-components {
+  display: grid;
+  gap: 9px;
+}
+
+.wf-selectable-components-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wf-selectable-components-heading h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.wf-selectable-components-heading span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-selectable-component-list {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.wf-selectable-component {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 12px;
+  padding: 9px 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.wf-selectable-component + .wf-selectable-component {
+  border-top: 1px solid var(--glass-border);
+}
+
+.wf-selectable-component.is-enabled {
+  background: rgba(45, 154, 116, 0.075);
+  color: var(--text-primary);
+}
+
+.wf-selectable-component > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.wf-selectable-component strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-selectable-component small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.wf-selectable-component input[role="switch"] {
+  appearance: none;
+  position: relative;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 17px;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.wf-selectable-component input[role="switch"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.wf-selectable-component input[role="switch"]:checked {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.wf-selectable-component input[role="switch"]:checked::after {
+  background: #ffffff;
+  transform: translateX(13px);
+}
+
+.wf-selectable-component input[role="switch"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .watchface-studio-summary {
   margin: 0;
   color: var(--text-muted);

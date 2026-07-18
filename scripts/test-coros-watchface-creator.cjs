@@ -574,6 +574,24 @@ async function main() {
   );
 
   // --- PACE 4 class AMOLED bundles (390px + 800px master) -----------------
+  await assert.rejects(
+    watchfaces.createCorosWatchfaceArchive({
+      sourceArchiveId: starter.archiveId,
+      backgroundDataUrl: pngDataUrl(icon),
+      watchModel: "pace-4"
+    }),
+    /PACE 4.*requires 390×390 and 800×800 exports.*missing 390x390/,
+    "PACE 4 exports must reject templates without the 390px device tree"
+  );
+  await assert.rejects(
+    watchfaces.createCorosWatchfaceArchive({
+      sourceArchiveId: starter.archiveId,
+      backgroundDataUrl: pngDataUrl(icon),
+      firmwareType: "COROS W335"
+    }),
+    /PACE 4.*requires 390×390 and 800×800 exports.*missing 390x390/,
+    "W335 exports must reject templates without the PACE 4 resolution tree"
+  );
   const pace4Entries = [
     {
       name: "info.json",
