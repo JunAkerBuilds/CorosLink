@@ -58,6 +58,8 @@ const ROUTE_CASING = "#ffffff";
 const SKETCH_GHOST_COLOR = "#7dd3fc";
 /** Ignore mousemove samples closer than this (px) to bound stroke size. */
 const SKETCH_SAMPLE_MIN_PX = 3;
+/** Keeps draggable handles above route paths regardless of redraw order. */
+const INTERACTIVE_MARKER_PANE = "route-interactive-markers";
 
 export function RouteMapCanvas({
   mode,
@@ -124,6 +126,8 @@ export function RouteMapCanvas({
       scrollWheelZoom: true
     });
     map.setView([39.5, -98.35], 4);
+    const markerPane = map.createPane(INTERACTIVE_MARKER_PANE);
+    markerPane.style.zIndex = "450";
     mapRef.current = map;
     routeLayerRef.current = L.layerGroup().addTo(map);
     sketchLayerRef.current = L.layerGroup().addTo(map);
@@ -239,6 +243,7 @@ export function RouteMapCanvas({
     }
     if ((sketchTool === "template" || sketchTool === "text") && sketchCenter) {
       const handle = L.circleMarker([sketchCenter.lat, sketchCenter.lon], {
+        pane: INTERACTIVE_MARKER_PANE,
         radius: 9,
         color: "#05080b",
         fillColor: SKETCH_GHOST_COLOR,
@@ -409,6 +414,7 @@ export function RouteMapCanvas({
       const isFirst = index === 0;
       const isLast = index === waypoints.length - 1;
       const marker = L.circleMarker([waypoint.lat, waypoint.lon], {
+        pane: INTERACTIVE_MARKER_PANE,
         radius: isFirst || isLast ? 7 : 5,
         color: "#05080b",
         fillColor: isFirst ? START_COLOR : isLast ? END_COLOR : "#f5f5f7",
