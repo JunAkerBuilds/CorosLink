@@ -25,9 +25,13 @@ const {
   parseCorosWatchfaceSharePage,
   readCorosWatchfaceProjectPackage,
   repairStandaloneBatteryConfigOverrides,
+  stripBlankCorosWatchfaceConfigKeys,
+  synthesizeScaledCorosAodConfig,
+  normalizeWatchfaceIdOverride,
   setWatchfaceTemplateId,
   setWatchfaceTemplateName,
-  selectCorosWatchfaceArchive
+  selectCorosWatchfaceArchive,
+  validateConfigTextReplacements
 } = await import(`${distUrl("corosWatchfaceService.js")}?cacheBust=${Date.now()}`);
 const { createStoreZip } = await import(
   `${distUrl("zipStore.js")}?cacheBust=${Date.now()}`
@@ -73,6 +77,72 @@ assert.throws(
   () => setWatchfaceTemplateId('{"o_template_id":251134}', "not-a-number"),
   /1–20 decimal digits/
 );
+assert.equal(normalizeWatchfaceIdOverride("54"), "54");
+assert.equal(normalizeWatchfaceIdOverride("0x3B9ACE60"), "0x3B9ACE60");
+assert.equal(
+  normalizeWatchfaceIdOverride("0x26"),
+  "0x00000026",
+  "short hex watch-face IDs are padded to 8 digits like AODconfig"
+);
+assert.throws(
+  () => normalizeWatchfaceIdOverride("not-an-id"),
+  /32-bit decimal or 0x hex/
+);
+assert.equal(
+  applyCorosWatchfaceConfigOverrides(
+    "[watchface_id]=0\r\n[time_hour_high_pos]={1,2}\r\n",
+    { watchface_id: "0x3B9ACE60" }
+  ),
+  "[watchface_id]=0x3B9ACE60\r\n[time_hour_high_pos]={1,2}\r\n",
+  "watch-face ID override must rewrite config.txt [watchface_id]"
+);
+assert.equal(
+  applyCorosWatchfaceConfigOverrides(
+    "[watchface_id]=0x00000026\r\n[background_icon]=background.png\r\n",
+    { watchface_id: "0x3B9ACE60" }
+  ),
+  "[watchface_id]=0x3B9ACE60\r\n[background_icon]=background.png\r\n",
+  "watch-face ID override must rewrite AODconfig.txt [watchface_id]"
+);
+assert.equal(
+  applyCorosWatchfaceConfigOverrides(
+    "[background_icon]=background.png\r\n",
+    { watchface_id: "0x3B9ACE60" }
+  ),
+  "[background_icon]=background.png\r\n[watchface_id]=0x3B9ACE60\r\n",
+  "watch-face ID override must append [watchface_id] when AOD omits it"
+);
+assert.deepEqual(
+  [...validateConfigTextReplacements([
+    {
+      path: "watchface_416x416/AODconfig.txt",
+      text: "[watchface_id]=0x3B9ACE60\r\n"
+    }
+  ])],
+  [["watchface_416x416/AODconfig.txt", "[watchface_id]=0x3B9ACE60\r\n"]],
+  "config text replacements must accept AODconfig paths"
+);
+assert.throws(
+  () =>
+    validateConfigTextReplacements([
+      { path: "watchface_416x416/missing.ini", text: "x" }
+    ]),
+  /existing template config file/
+);
+assert.throws(
+  () =>
+    validateConfigTextReplacements([
+      {
+        path: "watchface_416x416/config.txt",
+        text: "a"
+      },
+      {
+        path: "watchface_416x416/config.txt",
+        text: "b"
+      }
+    ]),
+  /duplicated config file/
+);
 
 assert.deepEqual(
   parseCorosMobileJson(
@@ -113,6 +183,14 @@ assert.equal(
   ),
   "[control_step_icon]=icon\\step.png\r\n",
   "disabled selectable metrics must be removed instead of exported as blank pages"
+);
+assert.equal(
+  applyCorosWatchfaceConfigOverrides(
+    "[time_hour_high_pos]={1,2}\n[time_hour_high_pos]={3,4}\n",
+    { time_hour_high_pos: "{5,6}" }
+  ),
+  "[time_hour_high_pos]={5,6}\n[time_hour_high_pos]={5,6}\n",
+  "structured overrides must rewrite every duplicate raw-config declaration"
 );
 assert.equal(
   applyCorosWatchfaceConfigOverrides(configWithoutWeather, {
@@ -174,6 +252,57 @@ assert.equal(
   }),
   "[time_hour_high_pos]={1,2}\r\n[temperature_rect]={120,180,296,240,hcenter|vcenter}\r\n[temperature_font]=13x19\r\n[temperature_font_color]=0xFFFFFF\r\n[temperature_negative_sign_icon]=icon\\negative.png\r\n",
   "confirmed fixed-temperature keys should be appendable"
+);
+
+assert.equal(
+  stripBlankCorosWatchfaceConfigKeys(
+    "//comment\r\n[control_step_rect]={1,2,3,4,hcenter|vcenter}\r\n[control_barometer_icon_pos]=\r\n[control_barometer_font]= \r\n\r\n[control_hr_font]=cl_control\r\n"
+  ),
+  "//comment\r\n[control_step_rect]={1,2,3,4,hcenter|vcenter}\r\n\r\n[control_hr_font]=cl_control\r\n",
+  "blank [key]= lines should be removed; values, comments and spacing kept"
+);
+assert.equal(
+  stripBlankCorosWatchfaceConfigKeys("[a]=1\n[b]=\n[c]=2\n"),
+  "[a]=1\n[c]=2\n",
+  "blank-key stripping should preserve LF newlines"
+);
+
+assert.equal(
+  synthesizeScaledCorosAodConfig(
+    [
+      "[bg_color]=0x000000",
+      "[watchface_id]=0x00000029",
+      "[arc_cut_icon_pos]={132,163}",
+      "[arc_cut_icon]=icon\\aod_cut.png",
+      "[control_english_date_week_font]=aod_",
+      "[time_hour_high_pos]={111,197}",
+      "[time_hour_high_font]=aod_32x45",
+      "[english_date_week_rect]={92,152,214,207,hcenter|vcenter}",
+      "[english_date_week_font]=aod_english_week",
+      "[empty_key]=",
+      ""
+    ].join("\r\n"),
+    800 / 416,
+    new Set([
+      "watchface_800x800/icon/aod_cut.png",
+      "watchface_800x800/32x45/00.png",
+      "watchface_800x800/english_week/00.png"
+    ]),
+    "watchface_800x800"
+  ),
+  [
+    "[bg_color]=0x000000",
+    "[watchface_id]=0x00000029",
+    "[arc_cut_icon_pos]={254,313}",
+    "[arc_cut_icon]=icon\\aod_cut.png",
+    "[time_hour_high_pos]={213,379}",
+    "[time_hour_high_font]=32x45",
+    "[english_date_week_rect]={177,292,412,398,hcenter|vcenter}",
+    "[english_date_week_font]=english_week",
+    "[empty_key]=",
+    ""
+  ].join("\r\n"),
+  "AOD synthesis should scale braces, remap aod_ assets and drop danglers"
 );
 
 assert.equal(

@@ -5,6 +5,7 @@ import type {
   CorosWatchfaceTemplateDetails
 } from "../../electron/types";
 import {
+  COROS_CONFIG_DELETE_VALUE,
   loadStudioImage,
   parseConfigPos,
   pickPreviewResolution,
@@ -96,12 +97,17 @@ export function buildWeatherOverrides(
   }
   return details.resolutions.flatMap((resolution) => {
     const scale = resolution.width / base.width;
+    // When weather is turned off the keys are deleted (not left blank) so the
+    // exported config omits them entirely, matching faces without weather.
     const values = style.enabled
       ? {
           weather_icon_pos: `{${Math.round(style.x * scale)},${Math.round(style.y * scale)}}`,
           weather_icon_dir: "weather"
         }
-      : { weather_icon_pos: "", weather_icon_dir: "" };
+      : {
+          weather_icon_pos: COROS_CONFIG_DELETE_VALUE,
+          weather_icon_dir: COROS_CONFIG_DELETE_VALUE
+        };
     const hasWeatherKeys = (config: Record<string, string>) =>
       Object.prototype.hasOwnProperty.call(config, "weather_icon_pos") ||
       Object.prototype.hasOwnProperty.call(config, "weather_icon_dir");

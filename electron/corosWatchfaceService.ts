@@ -16,6 +16,7 @@ import type {
   CorosWatchfaceArtwork,
   CorosWatchfaceAssetReplacement,
   CorosWatchfaceConfigOverride,
+  CorosWatchfaceConfigTextFile,
   CorosWatchfaceCreatorInput,
   CorosWatchfaceExistingShareInput,
   CorosWatchfacePublishInput,
@@ -114,6 +115,8 @@ const MAX_TOTAL_SPRITE_BYTES = 20 * 1024 * 1024;
 const MAX_TEMPLATE_ASSET_REQUESTS = 800;
 const MAX_CONFIG_OVERRIDE_FILES = 8;
 const MAX_CONFIG_OVERRIDE_KEYS = 200;
+const MAX_CONFIG_TEXT_REPLACEMENTS = 8;
+const CONFIG_TEXT_PATH_PATTERN = /^watchface_\d{3,4}x\d{3,4}\/(?:AOD)?config\.txt$/i;
 const CONFIG_KEY_PATTERN = /^[a-z0-9_]{1,64}$/i;
 const CREATED_STUDIO_SPRITE_PATTERN =
   /^watchface_(\d{3,4})x\1\/(?:studio\/[a-z0-9_-]{1,64}|cl_[a-z0-9_]{1,32}|weather)\/\d{2}\.png$/i;
@@ -1402,6 +1405,9 @@ export async function createCorosWatchfaceArchive(
   const replacements = new Map<string, Buffer>();
   const sprites = decodeSpriteReplacements(input.assetReplacements);
   const configOverrides = validateConfigOverrides(input.configOverrides);
+  const configTextReplacements = validateConfigTextReplacements(
+    input.configTextReplacements
+  );
   const minimumWatchFaceVersion = validateOptionalWatchFaceVersion(
     input.minWatchFaceVersion,
     "Minimum watch-face version"
@@ -1414,6 +1420,10 @@ export async function createCorosWatchfaceArchive(
     input.templateIdOverride === undefined
       ? undefined
       : String(input.templateIdOverride).trim();
+  const watchfaceIdOverride =
+    input.watchfaceIdOverride === undefined
+      ? undefined
+      : normalizeWatchfaceIdOverride(String(input.watchfaceIdOverride));
   const templateNameOverride =
     input.templateNameOverride === undefined
       ? undefined
@@ -1449,7 +1459,10 @@ export async function createCorosWatchfaceArchive(
     minimumWatchFaceVersion,
     watchFaceVersion,
     templateIdOverride,
-    templateNameOverride
+    templateNameOverride,
+    watchfaceIdOverride,
+    configTextReplacements,
+    input.stripBlankConfigKeys === true
   );
   const outputDirectory = path.join(app.getPath("userData"), "watchface-archives");
   await fs.promises.mkdir(outputDirectory, { recursive: true });
@@ -1520,6 +1533,36 @@ export async function describeCorosWatchfaceTemplate(
   }
 
   return { archiveId: source.archiveId, resolutions };
+}
+
+/**
+ * Returns the raw UTF-8 bodies of every config.txt / AODconfig.txt in the
+ * selected template so Studio can offer a direct text editor.
+ */
+export async function loadCorosWatchfaceTemplateConfigTexts(
+  archiveId: string
+): Promise<CorosWatchfaceConfigTextFile[]> {
+  const source = requireSelectedArchive(archiveId);
+  const directory = await openTemplateArchive(source.path);
+  const files = directory.files
+    .filter(
+      (entry) =>
+        entry.type === "File" &&
+        CONFIG_TEXT_PATH_PATTERN.test(entry.path.replace(/^\.\//, ""))
+    )
+    .sort((left, right) => left.path.localeCompare(right.path));
+  const texts: CorosWatchfaceConfigTextFile[] = [];
+  for (const entry of files) {
+    const size = entry.size ?? entry.uncompressedSize ?? 0;
+    if (size <= 0 || size > MAX_INFO_BYTES) {
+      throw new Error(`The template config at ${entry.path} is unreadable.`);
+    }
+    texts.push({
+      path: entry.path.replace(/^\.\//, ""),
+      text: (await entry.buffer()).toString("utf8")
+    });
+  }
+  return texts;
 }
 
 /**
@@ -1594,6 +1637,7 @@ export function applyCorosWatchfaceConfigOverrides(
   overrides: Record<string, string>
 ): string {
   const pending = new Map(Object.entries(overrides));
+  const matched = new Set<string>();
   const newline = text.includes("\r\n") ? "\r\n" : "\n";
   const lines = text.split(/\r?\n/).flatMap((line) => {
     const match = line.match(/^(\s*)\[([^\]]+)\]\s*=.*$/);
@@ -1601,12 +1645,18 @@ export function applyCorosWatchfaceConfigOverrides(
       return [line];
     }
     const value = pending.get(match[2]!)!;
-    pending.delete(match[2]!);
+    // Raw config editing can introduce duplicate declarations. Rewrite every
+    // occurrence so the last-value-wins parser and the exported file agree.
+    matched.add(match[2]!);
     return value === COROS_CONFIG_DELETE_VALUE
       ? []
       : [`${match[1]}[${match[2]}]=${value}`];
   });
+  for (const key of matched) {
+    pending.delete(key);
+  }
   const appendableKeys = new Set([
+    "watchface_id",
     "weather_icon_pos",
     "weather_icon_dir",
     "battery_icon_pos",
@@ -1669,6 +1719,100 @@ export function applyCorosWatchfaceConfigOverrides(
   return lines.join(newline);
 }
 
+/**
+ * Deletes every `[key]=` declaration whose value is blank. Firmware treats a
+ * declared key as feature-present even when its value is empty — a template
+ * shipping an empty `control_barometer_*` group still lists barometer in the
+ * on-watch selector and renders a blank slot. Removing the whole line is the
+ * same mechanism COROS_CONFIG_DELETE_VALUE uses to switch features off.
+ */
+export function stripBlankCorosWatchfaceConfigKeys(text: string): string {
+  const newline = text.includes("\r\n") ? "\r\n" : "\n";
+  return text
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*\[[^\]]+\]\s*=\s*$/.test(line))
+    .join(newline);
+}
+
+/**
+ * Builds an AODconfig for a resolution that lacks one by rescaling another
+ * resolution's file. Every integer inside `{...}` positions/rects is scaled;
+ * font-folder and PNG references are remapped to assets the target tree
+ * actually ships (official 800×800 templates reuse main-face assets for AOD
+ * instead of shipping `aod_*` copies), trying the literal name first, then
+ * with the `aod_`/`a/` prefix removed. Keys whose assets cannot be resolved
+ * are dropped rather than left dangling.
+ */
+export function synthesizeScaledCorosAodConfig(
+  sourceText: string,
+  scale: number,
+  archivePaths: Set<string>,
+  targetDirectory: string
+): string {
+  const normalize = (value: string) =>
+    value.replace(/\\/g, "/").replace(/^\.\//, "");
+  const hasFile = (relative: string) =>
+    archivePaths.has(`${targetDirectory}/${normalize(relative)}`);
+  const folders = new Set<string>();
+  for (const archivePath of archivePaths) {
+    if (!archivePath.startsWith(`${targetDirectory}/`)) continue;
+    const segments = archivePath.slice(targetDirectory.length + 1).split("/");
+    for (let depth = 1; depth < segments.length; depth += 1) {
+      folders.add(segments.slice(0, depth).join("/"));
+    }
+  }
+  const resolveFolder = (value: string) =>
+    [
+      value,
+      value.replace(/^aod_/i, ""),
+      value.replace(/^a[\\/]/i, "")
+    ].find((candidate) => candidate && folders.has(normalize(candidate)));
+  const resolveFile = (value: string) =>
+    [
+      value,
+      value.replace(/(^|[\\/])aod_([^\\/]+\.png)$/i, "$1$2"),
+      value.replace(/^a[\\/]/i, "")
+    ].find((candidate) => hasFile(candidate));
+  const newline = sourceText.includes("\r\n") ? "\r\n" : "\n";
+  const lines: string[] = [];
+  for (const line of sourceText.split(/\r?\n/)) {
+    const match = line.match(/^(\s*)\[([^\]]+)\]\s*=(.*)$/);
+    if (!match) {
+      lines.push(line);
+      continue;
+    }
+    const [, indent, key, rawValue] = match;
+    const value = rawValue!.trim();
+    if (!value) {
+      lines.push(`${indent}[${key}]=`);
+      continue;
+    }
+    const scaled = value.replace(/\{([^}]*)\}/g, (_group, inner: string) =>
+      `{${inner
+        .split(",")
+        .map((part) => {
+          const token = part.trim();
+          return /^-?\d+$/.test(token)
+            ? String(Math.round(Number(token) * scale))
+            : token;
+        })
+        .join(",")}}`
+    );
+    if (/\.png$/i.test(normalize(scaled))) {
+      const resolved = resolveFile(scaled);
+      if (resolved !== undefined) lines.push(`${indent}[${key}]=${resolved}`);
+      continue;
+    }
+    if (/_font$/i.test(key!) || /_icon_dir$/i.test(key!)) {
+      const resolved = resolveFolder(scaled);
+      if (resolved !== undefined) lines.push(`${indent}[${key}]=${resolved}`);
+      continue;
+    }
+    lines.push(`${indent}[${key}]=${scaled}`);
+  }
+  return lines.join(newline);
+}
+
 /** Ensures a composed standalone battery folder is actually referenced. */
 export function repairStandaloneBatteryConfigOverrides(
   text: string,
@@ -1722,6 +1866,41 @@ function validateConfigOverrides(
       }
     }
     validated.set(override.path, { ...override.values });
+  }
+  return validated;
+}
+
+export function validateConfigTextReplacements(
+  replacements: CorosWatchfaceConfigTextFile[] | undefined
+): Map<string, string> {
+  const validated = new Map<string, string>();
+  if (replacements === undefined) {
+    return validated;
+  }
+  if (
+    !Array.isArray(replacements) ||
+    replacements.length > MAX_CONFIG_TEXT_REPLACEMENTS
+  ) {
+    throw new Error("The creator sent an invalid config text replacement list.");
+  }
+  for (const replacement of replacements) {
+    if (
+      !replacement ||
+      typeof replacement.path !== "string" ||
+      !CONFIG_TEXT_PATH_PATTERN.test(replacement.path) ||
+      typeof replacement.text !== "string"
+    ) {
+      throw new Error(
+        "Config text replacements must target an existing template config file."
+      );
+    }
+    if (validated.has(replacement.path)) {
+      throw new Error("Config text replacements contain a duplicated config file.");
+    }
+    if (Buffer.byteLength(replacement.text, "utf8") > MAX_INFO_BYTES) {
+      throw new Error("A replaced config file is unexpectedly large.");
+    }
+    validated.set(replacement.path, replacement.text);
   }
   return validated;
 }
@@ -2611,6 +2790,29 @@ export function setWatchfaceTemplateId(
   return rawInfo.replace(/^(\s*\{)/, `$1"o_template_id":${templateId},`);
 }
 
+/**
+ * Normalizes a config `[watchface_id]` override. Decimal stays decimal; hex is
+ * uppercased and zero-padded to 8 digits (`0x26` → `0x00000026`).
+ */
+export function normalizeWatchfaceIdOverride(value: string): string {
+  const trimmed = value.trim();
+  if (/^0x[0-9a-fA-F]{1,8}$/i.test(trimmed)) {
+    return `0x${trimmed.slice(2).toUpperCase().padStart(8, "0")}`;
+  }
+  if (/^(?:0|[1-9]\d{0,9})$/.test(trimmed)) {
+    const parsed = Number(trimmed);
+    if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 0xffffffff) {
+      throw new Error(
+        "Watch-face ID overrides must be a 32-bit decimal or 0x hex value."
+      );
+    }
+    return trimmed;
+  }
+  throw new Error(
+    "Watch-face ID overrides must be a 32-bit decimal or 0x hex value."
+  );
+}
+
 /** Rewrites the manifest name while preserving all other raw fields. */
 export function setWatchfaceTemplateName(
   rawInfo: string,
@@ -2640,20 +2842,39 @@ async function rewriteTemplateArchive(
   minWatchFaceVersion?: number,
   watchFaceVersion?: number,
   templateIdOverride?: string,
-  templateNameOverride?: string
+  templateNameOverride?: string,
+  watchfaceIdOverride?: string,
+  configTextReplacements: Map<string, string> = new Map(),
+  stripBlankConfigKeys = false
 ): Promise<Buffer> {
   const directory = await openTemplateArchive(sourcePath);
   const originalSourceFiles = directory.files.filter((entry) => entry.type === "File");
   const sourcePaths = new Set(originalSourceFiles.map((entry) => entry.path));
+  for (const configPath of configTextReplacements.keys()) {
+    if (!sourcePaths.has(configPath)) {
+      throw new Error(
+        "A config text replacement targets a file the template does not have."
+      );
+    }
+  }
   const configEntries = originalSourceFiles.filter((entry) =>
     /(^|\/)(?:AODconfig|config)\.txt$/i.test(entry.path)
   );
+  if (watchfaceIdOverride !== undefined) {
+    for (const entry of configEntries) {
+      const existing = configOverrides.get(entry.path) ?? {};
+      configOverrides.set(entry.path, {
+        ...existing,
+        watchface_id: watchfaceIdOverride
+      });
+    }
+  }
   const parsedConfigs = new Map<string, Record<string, string>>();
   for (const entry of configEntries) {
-    parsedConfigs.set(
-      entry.path,
-      parseCorosWatchfaceConfig((await entry.buffer()).toString("utf8"))
-    );
+    const rawText =
+      configTextReplacements.get(entry.path) ??
+      (await entry.buffer()).toString("utf8");
+    parsedConfigs.set(entry.path, parseCorosWatchfaceConfig(rawText));
   }
   const normalizeConfigFolder = (value: string | undefined) =>
     value
@@ -2808,30 +3029,48 @@ async function rewriteTemplateArchive(
         return { name: entry.path, data: backgroundData };
       }
       const overrides = configOverrides.get(entry.path);
+      const textReplacement = configTextReplacements.get(entry.path);
+      const isConfigFile = /(^|\/)(?:AODconfig|config)\.txt$/i.test(entry.path);
       const isNormalConfig = /(^|\/)config\.txt$/i.test(entry.path);
       if (
         overrides ||
+        textReplacement !== undefined ||
         (isNormalConfig &&
-          studioBatteryResolutions.has(entry.path.split("/", 1)[0]!))
+          studioBatteryResolutions.has(entry.path.split("/", 1)[0]!)) ||
+        (isConfigFile && watchfaceIdOverride !== undefined) ||
+        (isConfigFile && stripBlankConfigKeys)
       ) {
-        const rawConfig = (await entry.buffer()).toString("utf8");
+        const rawConfig =
+          textReplacement ?? (await entry.buffer()).toString("utf8");
         const resolutionDirectory = entry.path.split("/", 1)[0]!;
+        const withWatchfaceId =
+          watchfaceIdOverride !== undefined
+            ? { ...(overrides ?? {}), watchface_id: watchfaceIdOverride }
+            : (overrides ?? {});
         const effectiveOverrides = isNormalConfig
           ? repairStandaloneBatteryConfigOverrides(
               rawConfig,
-              overrides ?? {},
+              withWatchfaceId,
               studioBatteryResolutions.has(resolutionDirectory)
             )
-          : overrides!;
+          : withWatchfaceId;
+        // Blank-key stripping runs after overrides so an override may first
+        // blank a key and then have the whole line dropped in one export.
+        const finalizeConfig = (configText: string) =>
+          isConfigFile && stripBlankConfigKeys
+            ? stripBlankCorosWatchfaceConfigKeys(configText)
+            : configText;
         if (Object.keys(effectiveOverrides).length === 0) {
-          return { name: entry.path, data: Buffer.from(rawConfig, "utf8") };
+          return {
+            name: entry.path,
+            data: Buffer.from(finalizeConfig(rawConfig), "utf8")
+          };
         }
         return {
           name: entry.path,
           data: Buffer.from(
-            applyCorosWatchfaceConfigOverrides(
-              rawConfig,
-              effectiveOverrides
+            finalizeConfig(
+              applyCorosWatchfaceConfigOverrides(rawConfig, effectiveOverrides)
             ),
             "utf8"
           )
@@ -2886,6 +3125,46 @@ async function rewriteTemplateArchive(
   }
   for (const created of createdByResolution.values()) {
     orderedEntries.push(...created);
+  }
+  // Some templates ship AODconfig.txt for only one resolution (the 250506
+  // "TOP PART" family has it at 416 only), leaving the other resolution with
+  // no always-on display. Synthesize the missing file from an existing one.
+  const finalPaths = new Set(orderedEntries.map((entry) => entry.name));
+  const aodSource = orderedEntries.find((entry) =>
+    /^watchface_\d+x\d+\/AODconfig\.txt$/i.test(entry.name)
+  );
+  if (aodSource) {
+    const sourceWidth = Number(
+      aodSource.name.match(/^watchface_(\d+)x/i)![1]
+    );
+    for (const entry of [...orderedEntries]) {
+      const match = entry.name.match(/^(watchface_(\d+)x\d+)\/config\.txt$/i);
+      if (!match) continue;
+      const targetDirectory = match[1]!;
+      const aodPath = `${targetDirectory}/AODconfig.txt`;
+      if (finalPaths.has(aodPath)) continue;
+      const synthesized = synthesizeScaledCorosAodConfig(
+        aodSource.data.toString("utf8"),
+        Number(match[2]!) / sourceWidth,
+        finalPaths,
+        targetDirectory
+      );
+      // The AOD id must pair with this resolution's current-face config, not
+      // with the resolution the source file came from.
+      const targetId = parseCorosWatchfaceConfig(
+        entry.data.toString("utf8")
+      ).watchface_id;
+      const paired = targetId
+        ? applyCorosWatchfaceConfigOverrides(synthesized, {
+            watchface_id: targetId
+          })
+        : synthesized;
+      orderedEntries.splice(orderedEntries.indexOf(entry) + 1, 0, {
+        name: aodPath,
+        data: Buffer.from(paired, "utf8")
+      });
+      finalPaths.add(aodPath);
+    }
   }
   return createStoreZip(orderedEntries);
 }
@@ -3074,6 +3353,13 @@ function detectWatchfaceResolutionProfile(
     resolutions.has("watchface_800x800")
   ) {
     return "amoled-416-800";
+  }
+  // PACE 4 class: 1.2" AMOLED trees ship as 390px plus the 800px master.
+  if (
+    resolutions.has("watchface_390x390") &&
+    resolutions.has("watchface_800x800")
+  ) {
+    return "amoled-390-800";
   }
   return "other";
 }

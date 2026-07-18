@@ -483,6 +483,12 @@ export function CustomPngFontPanel({
           </button>
         </div>
       ) : null}
+      {activeRasterFont && rasterFontHasDigits &&
+        scope === "component" && componentLabel === "Date month" ? (
+        <p className="watchface-raster-font-status">
+          This PNG set provides 0–9 digits. Date Month will export as a numeric month (1–12).
+        </p>
+      ) : null}
       {activeRasterFont && !rasterFontHasDigits ? (
         rasterFontHasMonth && componentLabel === "Date month" ? (
           <p className="watchface-raster-font-status">
@@ -504,7 +510,7 @@ export function CustomPngFontPanel({
         <p className="watchface-raster-font-status">Importing sprites…</p>
       ) : null}
       <p>
-        PNG colors are preserved by default. Import individual sprites named 00.png–09.png or by label (for example MON.png or JAN.png); each is retained independently and takes priority over the atlas. Month components also accept 00.png–11.png for JAN–DEC.
+        PNG colors are preserved by default. Import individual sprites named 00.png–09.png or by label (for example MON.png or JAN.png); each is retained independently and takes priority over the atlas. Month components accept either a 00.png–09.png digit folder (numeric month) or 00.png–11.png / JAN.png-style labels for JAN–DEC.
       </p>
     </section>
   );

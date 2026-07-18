@@ -109,6 +109,7 @@ import type {
   CorosWatchfaceShareImport,
   CorosWatchfaceShareLink,
   CorosWatchfaceStatus,
+  CorosWatchfaceConfigTextFile,
   CorosWatchfaceTemplateAsset,
   CorosWatchfaceTemplateDetails,
   CorosWatchfaceTheme,
@@ -190,6 +191,9 @@ export interface CorosLinkApi {
     archiveId: string,
     paths: string[]
   ) => Promise<CorosWatchfaceTemplateAsset[]>;
+  loadCorosWatchfaceTemplateConfigTexts: (
+    archiveId: string
+  ) => Promise<CorosWatchfaceConfigTextFile[]>;
   publishCorosWatchface: (
     input: CorosWatchfacePublishInput
   ) => Promise<CorosWatchfaceShareLink>;
