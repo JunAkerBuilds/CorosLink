@@ -18871,6 +18871,7 @@ tr.data-intervals-row-missing {
 .route-saved-toggle,
 .route-statsbar,
 .route-map-controls button,
+.route-map-legend,
 .route-basemap-menu,
 .route-basemap-toggle,
 .route-drawer {
@@ -19600,6 +19601,26 @@ tr.data-intervals-row-missing {
   border-color: var(--accent-soft);
   color: var(--accent-strong);
 }
+.route-map-legend {
+  position: absolute;
+  z-index: 1150;
+  top: 250px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  border-radius: var(--radius-md);
+  padding: 0 10px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
+.route-map-legend-swatch {
+  width: 28px;
+  border-top: 3px dashed #facc15;
+}
 
 /* Layer control — right side */
 .route-basemap {
@@ -20227,6 +20248,7 @@ tr.data-intervals-row-missing {
 :root[data-theme="paper"] .route-saved-toggle,
 :root[data-theme="paper"] .route-statsbar,
 :root[data-theme="paper"] .route-map-controls button,
+:root[data-theme="paper"] .route-map-legend,
 :root[data-theme="paper"] .route-basemap-menu,
 :root[data-theme="paper"] .route-basemap-toggle,
 :root[data-theme="paper"] .route-drawer {

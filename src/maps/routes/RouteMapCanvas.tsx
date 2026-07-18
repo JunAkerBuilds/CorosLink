@@ -1,7 +1,7 @@
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Maximize2, Minus, Plus } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type {
   GeneratedRoute,
   RouteGeometry,
@@ -93,6 +93,17 @@ export function RouteMapCanvas({
   const sketchLayerRef = useRef<L.LayerGroup | null>(null);
   const lastFitRef = useRef(fitRequestId);
   const fitSignatureRef = useRef<string>("");
+  const displayedLinePoints = useMemo(() => {
+    const editing = mode === "draw" || mode === "sketch";
+    const source = editing ? drawGeometry?.points : route?.points;
+    return (source ?? [])
+      .filter((point) => point.lat !== undefined && point.lon !== undefined)
+      .map((point) => [point.lat!, point.lon!] as [number, number]);
+  }, [mode, drawGeometry, route]);
+  const retracedSections = useMemo(
+    () => findRetracedRouteSections(displayedLinePoints),
+    [displayedLinePoints]
+  );
 
   // Keep interaction callbacks in refs so the map is built exactly once.
   const clickRef = useRef(onMapClick);
@@ -320,10 +331,7 @@ export function RouteMapCanvas({
     layer.clearLayers();
 
     const editing = mode === "draw" || mode === "sketch";
-    const source = editing ? drawGeometry?.points : route?.points;
-    const linePoints = (source ?? [])
-      .filter((point) => point.lat !== undefined && point.lon !== undefined)
-      .map((point) => [point.lat!, point.lon!] as [number, number]);
+    const linePoints = displayedLinePoints;
     const boundsPoints: Array<[number, number]> = [];
 
     if (linePoints.length >= 2) {
@@ -342,7 +350,7 @@ export function RouteMapCanvas({
         lineCap: "round",
         lineJoin: "round"
       }).addTo(layer);
-      for (const section of findRetracedRouteSections(linePoints)) {
+      for (const section of retracedSections) {
         L.polyline(section, {
           color: RETRACED_ROUTE_COLOR,
           weight: 3,
@@ -404,7 +412,8 @@ export function RouteMapCanvas({
   }, [
     mode,
     route,
-    drawGeometry,
+    displayedLinePoints,
+    retracedSections,
     startPin,
     destinationPin,
     currentLocation,
@@ -527,6 +536,15 @@ export function RouteMapCanvas({
           <Maximize2 size={15} aria-hidden="true" />
         </button>
       </div>
+      {retracedSections.length > 0 ? (
+        <div
+          className="route-map-legend"
+          aria-label="Yellow dashed line: retraced route section"
+        >
+          <span className="route-map-legend-swatch" aria-hidden="true" />
+          <span>Retraced section</span>
+        </div>
+      ) : null}
     </>
   );
 }
