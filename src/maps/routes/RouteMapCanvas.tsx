@@ -13,6 +13,7 @@ import {
   type RouteBaseLayer,
   type RouteOverlayId
 } from "./constants";
+import { findRetracedRouteSections } from "./routeOverlap";
 
 export type RouteStudioMode = "generate" | "draw" | "explore" | "sketch";
 export type SketchCanvasTool = "freehand" | "template" | "text";
@@ -54,6 +55,7 @@ const END_COLOR = "#d89b22";
 const ROUTE_COLOR = "#ff3b3b";
 const ROUTE_COLOR_DARK = "#2fbe91";
 const ROUTE_CASING = "#ffffff";
+const RETRACED_ROUTE_COLOR = "#facc15";
 // Dashed sky-blue guide so the original sketch reads apart from the route.
 const SKETCH_GHOST_COLOR = "#7dd3fc";
 /** Ignore mousemove samples closer than this (px) to bound stroke size. */
@@ -340,6 +342,17 @@ export function RouteMapCanvas({
         lineCap: "round",
         lineJoin: "round"
       }).addTo(layer);
+      for (const section of findRetracedRouteSections(linePoints)) {
+        L.polyline(section, {
+          color: RETRACED_ROUTE_COLOR,
+          weight: 3,
+          opacity: 1,
+          dashArray: "5 7",
+          lineCap: "round",
+          lineJoin: "round",
+          interactive: false
+        }).addTo(layer);
+      }
       if (!editing) {
         addEndpoint(layer, linePoints[0]!, START_COLOR);
         addEndpoint(layer, linePoints[linePoints.length - 1]!, END_COLOR);
