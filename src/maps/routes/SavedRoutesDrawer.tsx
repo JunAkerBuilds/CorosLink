@@ -6,9 +6,14 @@ import {
   Trash2,
   X
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { GeneratedRoute } from "../../../electron/types";
 import { formatDate } from "../../media/libraryUtils";
+import { ROUTE_ACTIVITY_OPTIONS } from "./constants";
 import { activityTypeLabel } from "./utils";
+
+/** Auto-dismiss window for the two-tap delete confirmation. */
+const DELETE_CONFIRM_MS = 3000;
 
 export function SavedRoutesDrawer({
   open,
@@ -31,6 +36,17 @@ export function SavedRoutesDrawer({
   onShare: (route: GeneratedRoute) => void;
   onDelete: (route: GeneratedRoute) => void;
 }) {
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // The delete confirmation arms briefly, then reverts on its own.
+  useEffect(() => {
+    if (!confirmDeleteId) {
+      return;
+    }
+    const timer = setTimeout(() => setConfirmDeleteId(null), DELETE_CONFIRM_MS);
+    return () => clearTimeout(timer);
+  }, [confirmDeleteId]);
+
   return (
     <aside className={`route-drawer${open ? " is-open" : ""}`} aria-hidden={!open}>
       <div className="route-drawer-head">
@@ -58,11 +74,19 @@ export function SavedRoutesDrawer({
         <ul className="route-drawer-list">
           {routes.map((route) => {
             const busy = busyId === route.id;
+            const confirming = confirmDeleteId === route.id;
+            const ActivityIcon =
+              ROUTE_ACTIVITY_OPTIONS.find(
+                (option) => option.value === route.activityType
+              )?.icon ?? RouteIcon;
             return (
               <li
                 key={route.id}
                 className={route.id === activeId ? "is-active" : ""}
               >
+                <span className="route-card-icon" aria-hidden="true">
+                  <ActivityIcon size={15} />
+                </span>
                 <button
                   type="button"
                   className="route-card-main"
@@ -83,6 +107,7 @@ export function SavedRoutesDrawer({
                     type="button"
                     className="icon-button"
                     title="Export GPX"
+                    aria-label={`Export ${route.name} as GPX`}
                     disabled={busy}
                     onClick={() => onExport(route)}
                   >
@@ -96,18 +121,33 @@ export function SavedRoutesDrawer({
                     type="button"
                     className="icon-button"
                     title="Share to phone"
+                    aria-label={`Share ${route.name} to phone`}
                     onClick={() => onShare(route)}
                   >
                     <QrCode size={15} aria-hidden="true" />
                   </button>
-                  <button
-                    type="button"
-                    className="icon-button danger"
-                    title="Delete route"
-                    onClick={() => onDelete(route)}
-                  >
-                    <Trash2 size={15} aria-hidden="true" />
-                  </button>
+                  {confirming ? (
+                    <button
+                      type="button"
+                      className="route-card-confirm-delete"
+                      onClick={() => {
+                        setConfirmDeleteId(null);
+                        onDelete(route);
+                      }}
+                    >
+                      Delete?
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="icon-button danger"
+                      title="Delete route"
+                      aria-label={`Delete ${route.name}`}
+                      onClick={() => setConfirmDeleteId(route.id)}
+                    >
+                      <Trash2 size={15} aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
               </li>
             );

@@ -1,5 +1,6 @@
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { Maximize2, Minus, Plus } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type {
   GeneratedRoute,
@@ -444,13 +445,70 @@ export function RouteMapCanvas({
     pinTarget !== null ||
     (mode === "sketch" && sketchTool !== "freehand");
   const sketching = mode === "sketch" && sketchTool === "freehand";
+
+  /** Fit the map around whatever content is currently on it. */
+  const fitToContent = () => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+    const points: Array<[number, number]> = [];
+    const source =
+      mode === "draw" || mode === "sketch" ? drawGeometry?.points : route?.points;
+    for (const point of source ?? []) {
+      if (point.lat !== undefined && point.lon !== undefined) {
+        points.push([point.lat, point.lon]);
+      }
+    }
+    for (const waypoint of waypoints) {
+      points.push([waypoint.lat, waypoint.lon]);
+    }
+    for (const pin of [startPin, destinationPin, currentLocation, sketchCenter]) {
+      if (pin) {
+        points.push([pin.lat, pin.lon]);
+      }
+    }
+    if (points.length === 0) {
+      return;
+    }
+    map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 15 });
+  };
+
   return (
-    <div
-      ref={containerRef}
-      className={`route-canvas${interactive ? " is-interactive" : ""}${
-        sketching ? " is-sketching" : ""
-      }`}
-    />
+    <>
+      <div
+        ref={containerRef}
+        className={`route-canvas${interactive ? " is-interactive" : ""}${
+          sketching ? " is-sketching" : ""
+        }`}
+      />
+      <div className="route-map-controls">
+        <button
+          type="button"
+          onClick={() => mapRef.current?.zoomIn()}
+          title="Zoom in"
+          aria-label="Zoom in"
+        >
+          <Plus size={16} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={() => mapRef.current?.zoomOut()}
+          title="Zoom out"
+          aria-label="Zoom out"
+        >
+          <Minus size={16} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={fitToContent}
+          title="Fit route to view"
+          aria-label="Fit route to view"
+        >
+          <Maximize2 size={15} aria-hidden="true" />
+        </button>
+      </div>
+    </>
   );
 }
 

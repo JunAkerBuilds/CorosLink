@@ -206,6 +206,35 @@ export function RouteStudio({
     [onError]
   );
 
+  const handleClearStart = useCallback(() => {
+    setStart(null);
+    setCurrentLocation(null);
+    setPreviewRoute(null);
+    setActiveSavedId(null);
+    setPinTarget(null);
+  }, []);
+
+  const handleClearDestination = useCallback(() => {
+    setDestination(null);
+    setPreviewRoute(null);
+    setActiveSavedId(null);
+    setPinTarget(null);
+  }, []);
+
+  // Escape cancels an armed map pin.
+  useEffect(() => {
+    if (!pinTarget) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPinTarget(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pinTarget]);
+
   async function runGenerate(regenerate: boolean) {
     if (!start) {
       return;
@@ -505,19 +534,19 @@ export function RouteStudio({
             {mode === "generate"
               ? "Generate a route"
               : mode === "draw"
-                ? "Draw your route"
+                ? "Draw a route"
                 : mode === "sketch"
                   ? "Sketch GPS art"
-                  : "Explore routes"}
+                  : "Explore trails"}
           </h2>
           <p>
             {mode === "generate"
-              ? "Pick a spot and let CorosLink build it — no account, no API key."
+              ? "Pick a start — CorosLink builds the rest."
               : mode === "draw"
-                ? "Craft a custom path point by point."
+                ? "Click the map to drop points; drag to refine."
                 : mode === "sketch"
-                  ? "Draw a shape, place a template, or write a word — then snap it to real streets."
-                  : "Browse real-world marked trails and cycle networks."}
+                  ? "Draw a shape or word, then snap it to streets."
+                  : "Real-world marked routes from OpenStreetMap."}
           </p>
         </header>
 
@@ -537,6 +566,8 @@ export function RouteStudio({
               destination={destination}
               onSelectStart={handleSelectStart}
               onSelectDestination={handleSelectDestination}
+              onClearStart={handleClearStart}
+              onClearDestination={handleClearDestination}
               pinTarget={pinTarget}
               onPinTargetChange={setPinTarget}
               onUseCurrent={handleUseCurrent}
@@ -580,12 +611,37 @@ export function RouteStudio({
         )}
       </section>
 
-      <MapLayerControl value={baseLayer} onChange={setBaseLayer} />
+      <MapLayerControl
+        value={baseLayer}
+        onChange={setBaseLayer}
+        overlays={overlays}
+        onToggleOverlay={(id) =>
+          setOverlays((current) =>
+            current.includes(id)
+              ? current.filter((value) => value !== id)
+              : [...current, id]
+          )
+        }
+      />
 
       <div className="route-statsbar-wrap">
         <RouteStatsBar
           summary={summary}
           paceBaselines={paceBaselines}
+          routeName={
+            mode === "generate" && previewRoute ? previewRoute.name : null
+          }
+          onExport={
+            mode === "generate" && previewRoute
+              ? () => void handleExport(previewRoute)
+              : undefined
+          }
+          onShare={
+            mode === "generate" && previewRoute
+              ? () => void handleShare(previewRoute)
+              : undefined
+          }
+          exporting={busyId !== null}
           busy={
             mode === "draw"
               ? draw.routing

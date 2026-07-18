@@ -1,8 +1,11 @@
 import {
   Activity,
   Clock,
+  Download,
   Gauge,
+  Loader2,
   Mountain,
+  QrCode,
   Route as RouteIcon,
   TrendingDown,
   TrendingUp
@@ -41,10 +44,20 @@ export interface RouteSummary {
 export function RouteStatsBar({
   summary,
   paceBaselines,
+  routeName,
+  onExport,
+  onShare,
+  exporting,
   busy
 }: {
   summary: RouteSummary | null;
   paceBaselines: ActivityPaceBaselines;
+  /** Name of the previewed saved/generated route, shown on the left. */
+  routeName?: string | null;
+  /** Quick actions for the previewed route (Generate mode only). */
+  onExport?: () => void;
+  onShare?: () => void;
+  exporting?: boolean;
   busy?: boolean;
 }) {
   const profile = useMemo(
@@ -56,7 +69,7 @@ export function RouteStatsBar({
     return (
       <div className="route-statsbar is-empty">
         <RouteIcon size={16} aria-hidden="true" />
-        <span>{busy ? "Building route…" : "No route yet — plan or draw one to see stats"}</span>
+        <span>{busy ? "Building route…" : "Pick a start point or draw a route to see live stats"}</span>
       </div>
     );
   }
@@ -69,6 +82,11 @@ export function RouteStatsBar({
 
   return (
     <div className="route-statsbar">
+      {routeName ? (
+        <div className="route-statsbar-name" title={routeName}>
+          {routeName}
+        </div>
+      ) : null}
       <div className="route-statsbar-metrics">
         <Metric
           icon={<RouteIcon size={15} aria-hidden="true" />}
@@ -120,6 +138,32 @@ export function RouteStatsBar({
             <polygon className="route-elevation-fill" points={profile.areaPoints} />
             <polyline className="route-elevation-line" points={profile.linePoints} />
           </svg>
+        </div>
+      ) : null}
+
+      {onExport || onShare ? (
+        <div className="route-statsbar-actions">
+          {onExport ? (
+            <button
+              type="button"
+              className="button ghost"
+              onClick={onExport}
+              disabled={exporting}
+            >
+              {exporting ? (
+                <Loader2 size={14} className="spin" aria-hidden="true" />
+              ) : (
+                <Download size={14} aria-hidden="true" />
+              )}
+              Export GPX
+            </button>
+          ) : null}
+          {onShare ? (
+            <button type="button" className="button ghost" onClick={onShare}>
+              <QrCode size={14} aria-hidden="true" />
+              Share
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

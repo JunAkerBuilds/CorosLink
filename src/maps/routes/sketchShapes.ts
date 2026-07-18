@@ -17,8 +17,6 @@ export type SketchTemplateId =
 export interface SketchTemplate {
   id: SketchTemplateId;
   label: string;
-  /** Emoji used on the template picker button. */
-  glyph: string;
   points: UnitPoint[];
 }
 
@@ -111,20 +109,18 @@ const LIGHTNING: UnitPoint[] = normalizeToUnit([
 ]);
 
 export const SKETCH_TEMPLATES: SketchTemplate[] = [
-  { id: "circle", label: "Circle", glyph: "⭕", points: closed(circlePoints()) },
-  { id: "heart", label: "Heart", glyph: "❤️", points: closed(heartPoints()) },
-  { id: "star", label: "Star", glyph: "⭐", points: closed(starPoints()) },
-  { id: "square", label: "Square", glyph: "⬜", points: closed(SQUARE) },
+  { id: "circle", label: "Circle", points: closed(circlePoints()) },
+  { id: "heart", label: "Heart", points: closed(heartPoints()) },
+  { id: "star", label: "Star", points: closed(starPoints()) },
+  { id: "square", label: "Square", points: closed(SQUARE) },
   {
     id: "triangle",
     label: "Triangle",
-    glyph: "🔺",
     points: closed(TRIANGLE)
   },
   {
     id: "lightning",
     label: "Bolt",
-    glyph: "⚡",
     points: closed(LIGHTNING)
   }
 ];
