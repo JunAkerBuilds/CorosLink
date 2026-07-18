@@ -12,6 +12,7 @@ import {
   buildControlTemperatureOverrides,
   buildControlTemperatureSpriteReplacements,
   buildControlBatteryVisibilityOverrides,
+  buildControlComplicationVisibilityOverrides,
   buildSelectableMetricSpriteComposition,
   buildSelectableMetricStyleOverrides,
   buildControlIconPositionOverrides,
@@ -309,8 +310,10 @@ export function deriveDesignDetails(
     color: design.digitColor,
     scale: 1
   };
-  const controlTemperatureOverrides = getAvailableComplications(metricDetails)
-    .some((item) => item.id === "temperature")
+  const controlTemperatureOverrides =
+    design.controlTemperatureEnabled !== false &&
+    getAvailableComplications(metricDetails)
+      .some((item) => item.id === "temperature")
       ? buildControlTemperatureOverrides(metricDetails, controlTemperatureStyle)
       : [];
   const selectableMetricDetails = applyConfigOverridesToDetails(
@@ -351,7 +354,8 @@ export function deriveDesignDetails(
       buildControlBatteryVisibilityOverrides(
         laidOutDetails,
         design.controlBatteryEnabled
-      )
+      ),
+      buildControlComplicationVisibilityOverrides(laidOutDetails, design)
     )
   );
   return {
@@ -445,8 +449,11 @@ export async function composeWatchfaceReplacements(
   const ampmSupported = Boolean(getAmPmCapability(details) && ampmStyle);
   const ampmActive = Boolean(ampmSupported && ampmStyle?.enabled);
   const weatherStyle = design.weatherIndicator;
-  const controlTemperatureActive = getAvailableComplications(details)
-    .some((item) => item.id === "temperature");
+  const controlTemperatureActive =
+    design.controlTemperatureEnabled !== false &&
+    getAvailableComplications(details).some(
+      (item) => item.id === "temperature"
+    );
   const controlTemperatureStyle = metricStyles.temperature ?? {
     color: design.digitColor,
     scale: 1
@@ -618,6 +625,7 @@ export async function composeWatchfaceReplacements(
       buildEffectPaddingOverrides(configAssetPositionDetails, effectedAssets.padding),
       buildLayerVisibilityOverrides(details, design.layerVisibility ?? {}),
       buildControlBatteryVisibilityOverrides(details, design.controlBatteryEnabled),
+      buildControlComplicationVisibilityOverrides(details, design),
       batteryIconEffectSources.configOverrides,
       buildWatchfaceConfigAssetOverrides(
         configAssetPositionDetails,

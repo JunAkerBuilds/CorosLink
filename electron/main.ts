@@ -74,6 +74,7 @@ import {
   listCorosWatchfaceThemes,
   loadCorosWatchfaceArtwork,
   loadCorosWatchfaceTemplateAssets,
+  loadCorosWatchfaceTemplateConfigTexts,
   loadCorosWatchfaceProject,
   loginCorosWatchfaces,
   loginCorosWatchfacesWithSavedCredentials,
@@ -958,6 +959,12 @@ function registerIpcHandlers(): void {
     "watchfaces:loadTemplateAssets",
     (_event, archiveId: string, paths: string[]) =>
       loadCorosWatchfaceTemplateAssets(archiveId, paths)
+  );
+
+  ipcMain.handle(
+    "watchfaces:loadTemplateConfigTexts",
+    (_event, archiveId: string) =>
+      loadCorosWatchfaceTemplateConfigTexts(archiveId)
   );
 
   ipcMain.handle(

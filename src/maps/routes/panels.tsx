@@ -34,7 +34,7 @@ import {
   type RouteOverlayId
 } from "./constants";
 import type { RouteDraw } from "./useRouteDraw";
-import { maxDistanceForActivity, toErrorMessage } from "./utils";
+import { isCyclingActivity, maxDistanceForActivity, toErrorMessage } from "./utils";
 
 export interface ResolvedPoint extends RouteWaypoint {
   label: string;
@@ -52,6 +52,7 @@ export function LocationSearchField({
   pinActive,
   onTogglePin,
   onUseCurrent,
+  onClear,
   accent
 }: {
   api: CorosLinkApi;
@@ -62,6 +63,7 @@ export function LocationSearchField({
   pinActive: boolean;
   onTogglePin: () => void;
   onUseCurrent?: () => void;
+  onClear?: () => void;
   accent: "start" | "end";
 }) {
   const [query, setQuery] = useState("");
@@ -70,12 +72,11 @@ export function LocationSearchField({
   const [searching, setSearching] = useState(false);
   const seq = useRef(0);
 
-  // Reflect an externally resolved point (e.g. dropped as a pin) in the input.
+  // Reflect an externally resolved point (e.g. dropped as a pin) in the input,
+  // and blank the input again when the point is cleared.
   useEffect(() => {
-    if (value) {
-      setQuery(value.label);
-      setOpen(false);
-    }
+    setQuery(value ? value.label : "");
+    setOpen(false);
   }, [value]);
 
   useEffect(() => {
@@ -120,11 +121,23 @@ export function LocationSearchField({
           onFocus={() => results.length > 0 && setOpen(true)}
         />
         {searching ? <Loader2 size={14} className="spin" aria-hidden="true" /> : null}
+        {value && onClear ? (
+          <button
+            type="button"
+            className="route-search-icon route-search-clear"
+            title={`Clear ${accent === "start" ? "start point" : "destination"}`}
+            aria-label={`Clear ${accent === "start" ? "start point" : "destination"}`}
+            onClick={onClear}
+          >
+            <X size={14} aria-hidden="true" />
+          </button>
+        ) : null}
         {onUseCurrent ? (
           <button
             type="button"
             className="route-search-icon"
             title="Use my location"
+            aria-label="Use my location"
             onClick={onUseCurrent}
           >
             <LocateFixed size={15} aria-hidden="true" />
@@ -133,7 +146,9 @@ export function LocationSearchField({
         <button
           type="button"
           className={`route-search-icon${pinActive ? " is-active" : ""}`}
-          title={pinActive ? "Click the map to place" : "Pick on map"}
+          title={pinActive ? "Click the map to place (Esc to cancel)" : "Pick on map"}
+          aria-label={pinActive ? "Cancel map pin" : "Pick on map"}
+          aria-pressed={pinActive}
           onClick={onTogglePin}
         >
           <MapPin size={15} aria-hidden="true" />
@@ -179,19 +194,53 @@ export function SportPicker({
 }) {
   return (
     <div className="route-sport-picker" role="group" aria-label="Activity">
-      {ROUTE_ACTIVITY_OPTIONS.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          className={option.value === value ? "is-active" : ""}
-          onClick={() => onChange(option.value)}
-          title={option.label}
-        >
-          <span aria-hidden="true">{option.glyph}</span>
-          <em>{option.label}</em>
-        </button>
-      ))}
+      {ROUTE_ACTIVITY_OPTIONS.map((option) => {
+        const Icon = option.icon;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            className={option.value === value ? "is-active" : ""}
+            onClick={() => onChange(option.value)}
+            title={option.label}
+            aria-pressed={option.value === value}
+          >
+            <Icon size={16} aria-hidden="true" />
+            <em>{option.shortLabel}</em>
+          </button>
+        );
+      })}
     </div>
+  );
+}
+
+/** One-tap distance shortcuts, filtered to the activity's range. */
+const DISTANCE_PRESETS: Record<
+  "foot" | "bike",
+  Array<{ value: number; label: string }>
+> = {
+  foot: [
+    { value: 5, label: "5K" },
+    { value: 10, label: "10K" },
+    { value: 21.1, label: "21K" },
+    { value: 42.2, label: "42K" }
+  ],
+  bike: [
+    { value: 20, label: "20K" },
+    { value: 50, label: "50K" },
+    { value: 80, label: "80K" },
+    { value: 100, label: "100K" }
+  ]
+};
+
+function StepTitle({ index, children }: { index: number; children: string }) {
+  return (
+    <h3 className="route-step-title">
+      <span className="route-step-num" aria-hidden="true">
+        {index}
+      </span>
+      {children}
+    </h3>
   );
 }
 
@@ -209,6 +258,8 @@ export function GeneratePanel({
   destination,
   onSelectStart,
   onSelectDestination,
+  onClearStart,
+  onClearDestination,
   pinTarget,
   onPinTargetChange,
   onUseCurrent,
@@ -231,6 +282,8 @@ export function GeneratePanel({
   destination: ResolvedPoint | null;
   onSelectStart: (point: ResolvedPoint) => void;
   onSelectDestination: (point: ResolvedPoint) => void;
+  onClearStart: () => void;
+  onClearDestination: () => void;
   pinTarget: "start" | "destination" | null;
   onPinTargetChange: (target: "start" | "destination" | null) => void;
   onUseCurrent: () => void;
@@ -245,96 +298,141 @@ export function GeneratePanel({
     Boolean(start) &&
     (mode === "loop" || Boolean(destination)) &&
     distanceKm > 0;
+  const presets = (
+    isCyclingActivity(activityType)
+      ? DISTANCE_PRESETS.bike
+      : DISTANCE_PRESETS.foot
+  ).filter((preset) => preset.value <= maxDistance);
+  const ctaHint = !start
+    ? "Pick a start point — search above, use your location, or drop a pin on the map."
+    : mode === "point-to-point" && !destination
+      ? "Add a destination to route from A to B."
+      : null;
 
   return (
     <div className="route-panel-body">
-      <SportPicker value={activityType} onChange={onActivityChange} />
+      <section className="route-step">
+        <StepTitle index={1}>Sport &amp; route type</StepTitle>
+        <SportPicker value={activityType} onChange={onActivityChange} />
 
-      <div className="route-mode-switch" role="group" aria-label="Route type">
-        <button
-          type="button"
-          className={mode === "loop" ? "is-active" : ""}
-          onClick={() => onModeChange("loop")}
-        >
-          Loop
-        </button>
-        <button
-          type="button"
-          className={mode === "point-to-point" ? "is-active" : ""}
-          onClick={() => onModeChange("point-to-point")}
-        >
-          A → B
-        </button>
-      </div>
+        <div className="route-mode-switch" role="group" aria-label="Route type">
+          <button
+            type="button"
+            className={mode === "loop" ? "is-active" : ""}
+            aria-pressed={mode === "loop"}
+            onClick={() => onModeChange("loop")}
+          >
+            Loop
+          </button>
+          <button
+            type="button"
+            className={mode === "point-to-point" ? "is-active" : ""}
+            aria-pressed={mode === "point-to-point"}
+            onClick={() => onModeChange("point-to-point")}
+          >
+            A → B
+          </button>
+        </div>
+      </section>
 
-      <div className="route-search-stack">
-        <LocationSearchField
-          api={api}
-          value={start}
-          placeholder="Start location"
-          onSelect={onSelectStart}
-          onError={onError}
-          pinActive={pinTarget === "start"}
-          onTogglePin={() =>
-            onPinTargetChange(pinTarget === "start" ? null : "start")
-          }
-          onUseCurrent={onUseCurrent}
-          accent="start"
-        />
-        {mode === "point-to-point" ? (
+      <section className="route-step">
+        <StepTitle index={2}>
+          {mode === "loop" ? "Where to start?" : "Start & destination"}
+        </StepTitle>
+        <div className="route-search-stack">
           <LocationSearchField
             api={api}
-            value={destination}
-            placeholder="Destination"
-            onSelect={onSelectDestination}
+            value={start}
+            placeholder="Start location"
+            onSelect={onSelectStart}
             onError={onError}
-            pinActive={pinTarget === "destination"}
+            pinActive={pinTarget === "start"}
             onTogglePin={() =>
-              onPinTargetChange(
-                pinTarget === "destination" ? null : "destination"
-              )
+              onPinTargetChange(pinTarget === "start" ? null : "start")
             }
-            accent="end"
+            onUseCurrent={onUseCurrent}
+            onClear={onClearStart}
+            accent="start"
           />
-        ) : null}
-      </div>
-
-      {mode === "loop" ? (
-        <div className="route-distance">
-          <div className="route-distance-head">
-            <span>Distance</span>
-            <strong>{distanceKm.toFixed(1)} km</strong>
-          </div>
-          <input
-            type="range"
-            min={1}
-            max={maxDistance}
-            step={0.5}
-            value={Math.min(distanceKm, maxDistance)}
-            onChange={(event) => onDistanceChange(Number(event.target.value))}
-          />
-          <div className="route-distance-scale">
-            <span>1</span>
-            <span>{maxDistance} km</span>
-          </div>
+          {mode === "point-to-point" ? (
+            <LocationSearchField
+              api={api}
+              value={destination}
+              placeholder="Destination"
+              onSelect={onSelectDestination}
+              onError={onError}
+              pinActive={pinTarget === "destination"}
+              onTogglePin={() =>
+                onPinTargetChange(
+                  pinTarget === "destination" ? null : "destination"
+                )
+              }
+              onClear={onClearDestination}
+              accent="end"
+            />
+          ) : null}
         </div>
-      ) : null}
+      </section>
 
-      <div className="route-field-inline">
-        <label>Elevation</label>
-        <div className="route-chip-group" role="group" aria-label="Elevation preference">
-          {ROUTE_ELEVATION_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={option.value === elevationPreference ? "is-active" : ""}
-              onClick={() => onElevationChange(option.value)}
+      <section className="route-step">
+        <StepTitle index={3}>
+          {mode === "loop" ? "Distance & terrain" : "Terrain"}
+        </StepTitle>
+        {mode === "loop" ? (
+          <div className="route-distance">
+            <div className="route-distance-head">
+              <span>Distance</span>
+              <strong>{distanceKm.toFixed(1)} km</strong>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={maxDistance}
+              step={0.5}
+              value={Math.min(distanceKm, maxDistance)}
+              aria-label="Distance in kilometres"
+              onChange={(event) => onDistanceChange(Number(event.target.value))}
+            />
+            <div
+              className="route-distance-presets"
+              role="group"
+              aria-label="Distance presets"
             >
-              {option.label}
-            </button>
-          ))}
+              {presets.map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  className={
+                    Math.abs(distanceKm - preset.value) < 0.05
+                      ? "is-active"
+                      : ""
+                  }
+                  onClick={() => onDistanceChange(preset.value)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="route-field-inline">
+          <label>Elevation</label>
+          <div className="route-chip-group" role="group" aria-label="Elevation preference">
+            {ROUTE_ELEVATION_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={option.value === elevationPreference ? "is-active" : ""}
+                aria-pressed={option.value === elevationPreference}
+                onClick={() => onElevationChange(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      </section>
 
       <div className="route-panel-actions">
         <button
@@ -353,15 +451,17 @@ export function GeneratePanel({
         {mode === "loop" && hasResult ? (
           <button
             type="button"
-            className="button ghost route-regenerate"
+            className="button ghost route-variation"
             disabled={busy}
             onClick={onRegenerate}
-            title="Try a different loop"
+            title="Try a different loop with the same settings"
           >
-            <RefreshCw size={15} aria-hidden="true" />
+            <RefreshCw size={14} aria-hidden="true" />
+            New variation
           </button>
         ) : null}
       </div>
+      {ctaHint && !busy ? <p className="route-cta-hint">{ctaHint}</p> : null}
     </div>
   );
 }
@@ -399,6 +499,7 @@ export function DrawPanel({
           <button
             type="button"
             className={draw.snap ? "is-active" : ""}
+            aria-pressed={draw.snap}
             onClick={() => draw.setSnap(true)}
           >
             Snap to roads
@@ -406,6 +507,7 @@ export function DrawPanel({
           <button
             type="button"
             className={!draw.snap ? "is-active" : ""}
+            aria-pressed={!draw.snap}
             onClick={() => draw.setSnap(false)}
           >
             Freehand
@@ -484,6 +586,7 @@ export function ExplorePanel({
               key={id}
               type="button"
               className={`route-overlay-item${active ? " is-active" : ""}`}
+              aria-pressed={active}
               onClick={() => onToggleOverlay(id)}
             >
               <span
@@ -567,6 +670,7 @@ export function MapLayerControl({
                     key={id}
                     type="button"
                     className={`route-basemap-option${active ? " is-active" : ""}`}
+                    aria-pressed={active}
                     onClick={() => onToggleOverlay(id)}
                   >
                     <strong>
@@ -590,6 +694,7 @@ export function MapLayerControl({
           className="route-basemap-toggle"
           onClick={() => setOpen(true)}
           title="Change base map"
+          aria-label="Change base map"
         >
           <Layers size={18} aria-hidden="true" />
         </button>

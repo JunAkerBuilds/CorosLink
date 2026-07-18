@@ -110,6 +110,7 @@ import type {
   CorosWatchfaceShareImport,
   CorosWatchfaceShareLink,
   CorosWatchfaceStatus,
+  CorosWatchfaceConfigTextFile,
   CorosWatchfaceTemplateAsset,
   CorosWatchfaceTemplateDetails,
   CorosWatchfaceTheme,
@@ -222,6 +223,10 @@ const api = {
     paths: string[]
   ): Promise<CorosWatchfaceTemplateAsset[]> =>
     ipcRenderer.invoke("watchfaces:loadTemplateAssets", archiveId, paths),
+  loadCorosWatchfaceTemplateConfigTexts: (
+    archiveId: string
+  ): Promise<CorosWatchfaceConfigTextFile[]> =>
+    ipcRenderer.invoke("watchfaces:loadTemplateConfigTexts", archiveId),
   publishCorosWatchface: (
     input: CorosWatchfacePublishInput
   ): Promise<CorosWatchfaceShareLink> =>

@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
+  analogCenterLayoutGroupId,
   applyConfigOverridesToDetails,
+  applyConfigTextEditsToDetails,
   buildAmPmOverrides,
   buildControlTemperatureOverrides,
   buildControlIconPositionOverrides,
   buildControlBatteryVisibilityOverrides,
+  buildControlComplicationVisibilityOverrides,
   buildDateSpriteComposition,
   buildDateStyleOverrides,
   dateSpriteCanvasSize,
@@ -47,13 +50,17 @@ import {
   mergeAssetReplacements,
   mergeConfigOverrides,
   normalizeRasterFontGlyphs,
+  parseWatchfaceConfigText,
   pickWatchPreviewResolution,
   rasterFontSupportsText,
   rasterFontNativeSpriteSize,
   rebaseNegativeControlChildren,
   resizeConfigRectToCanvas,
+  resolveWatchfaceSpriteRotation,
+  rotateSpriteInCanvas,
   scaledBatterySpriteCanvasSize,
   scaleConfigRectValue,
+  supportsWatchfaceSpriteRotation,
   watchfaceEffectRenderScale
 } from "../src/watchfaces/watchfaceStudio.ts";
 import {
@@ -81,6 +88,37 @@ const folderB = {
 const classifiedFolderB = classifyRasterSpriteFolder(folderB);
 assert.deepEqual([...classifiedFolderB.digitSprites.keys()], ["0", "1"]);
 assert.deepEqual([...classifiedFolderB.labelSprites.keys()], ["JAN", "MON"]);
+
+// A pure 00–09 set on a month component is a digit font (firmware composes
+// 1–12 numerically), while a 00–11 set fills the twelve JAN–DEC label slots.
+const monthDigitsFolder = {
+  label: "month_digits",
+  sprites: Array.from({ length: 10 }, (_, digit) =>
+    rasterFolderSprite(`month_digits/${String(digit).padStart(2, "0")}.png`)
+  )
+};
+const classifiedMonthDigits = classifyRasterSpriteFolder(
+  monthDigitsFolder,
+  "month"
+);
+assert.equal(classifiedMonthDigits.importedDigitCount, 10);
+assert.equal(classifiedMonthDigits.importedMonthCount, 0);
+assert.deepEqual(
+  [...classifiedMonthDigits.digitSprites.keys()],
+  ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+);
+const monthLabelsFolder = {
+  label: "month_labels",
+  sprites: Array.from({ length: 12 }, (_, index) =>
+    rasterFolderSprite(`month_labels/${String(index).padStart(2, "0")}.png`)
+  )
+};
+const classifiedMonthLabels = classifyRasterSpriteFolder(
+  monthLabelsFolder,
+  "month"
+);
+assert.equal(classifiedMonthLabels.importedDigitCount, 0);
+assert.equal(classifiedMonthLabels.importedMonthCount, 12);
 const replacementFolderB = await createRasterFontFolderReplacement(folderB, {
   tint: true,
   createDigitAtlas: async (sprites) => ({
@@ -382,6 +420,31 @@ const details = {
   archiveId: "fixture",
   resolutions: [resolution(416, 23, 33), resolution(800, 44, 64)]
 };
+
+assert.deepEqual(
+  parseWatchfaceConfigText(
+    "// note\r\n[watchface_id]=0x26\r\n[background_icon]=background.png\r\n"
+  ),
+  {
+    watchface_id: "0x26",
+    background_icon: "background.png"
+  },
+  "raw config text parsing should ignore comments and keep key values"
+);
+const editedDetails = applyConfigTextEditsToDetails(details, {
+  "watchface_416x416/AODconfig.txt":
+    "[watchface_id]=0x3B9ACE60\r\n[background_icon]=a\\icon\\aod-background.png\r\n"
+});
+assert.equal(
+  editedDetails.resolutions[0]?.aodConfig.watchface_id,
+  "0x3B9ACE60",
+  "raw AOD text edits should update aodConfig maps used by preview"
+);
+assert.equal(
+  editedDetails.resolutions[0]?.config.background_icon,
+  details.resolutions[0]?.config.background_icon,
+  "AOD text edits must not rewrite the current config map"
+);
 
 const monthLabelResolution = resolution(800, 44, 64);
 monthLabelResolution.config.english_date_month_rect =
@@ -690,6 +753,41 @@ assert.deepEqual(
   },
   "status-icon movement should persist through the exported config position"
 );
+const standaloneStatusResolution = {
+  ...statusPreviewResolution,
+  config: {
+    ...statusPreviewResolution.config,
+    bluetooth_icon_pos: "{69,68}",
+    bluetooth_off_icon: "icon\\nobt.png",
+    no_disturb_icon_pos: "{313,68}",
+    no_disturb_on_icon: "icon\\noxx.png"
+  }
+};
+assert.deepEqual(
+  getWatchfaceControlStatusPreviewLayers(standaloneStatusResolution)
+    .filter(({ controlRelative }) => !controlRelative)
+    .map(({ configKey, position }) => ({ configKey, position })),
+  [
+    { configKey: "bluetooth_off_icon", position: { x: 69, y: 68 } },
+    { configKey: "no_disturb_on_icon", position: { x: 313, y: 68 } }
+  ],
+  "standalone status icons should preview at absolute screen positions"
+);
+assert.deepEqual(
+  buildLayoutOverrides(
+    {
+      archiveId: "standalone-status",
+      resolutions: [standaloneStatusResolution]
+    },
+    {
+      bluetoothStatus: { dx: -9, dy: 12 }
+    }
+  )[0]?.values,
+  {
+    bluetooth_icon_pos: "{60,80}"
+  },
+  "standalone status movement should shift the absolute position key"
+);
 const hiddenBluetoothStatusDetails = applyConfigOverridesToDetails(
   {
     archiveId: "control-status",
@@ -711,6 +809,64 @@ assert.deepEqual(
   ).map(({ configKey }) => configKey),
   ["control_no_disturb_on_icon"],
   "the existing config-asset visibility toggle should hide a status preview"
+);
+assert.equal(
+  buildWatchfaceConfigAssetOverrides(
+    {
+      archiveId: "control-status",
+      resolutions: [statusPreviewResolution]
+    },
+    {
+      "config:control_bluetooth_off_icon": { enabled: false }
+    }
+  )[0]?.values.control_bluetooth_off_icon,
+  "__COROSLINK_DELETE_CONFIG_KEY__",
+  "disabling a direct config asset should delete its declaration"
+);
+const completeControlStatusResolution = {
+  ...statusPreviewResolution,
+  config: {
+    ...statusPreviewResolution.config,
+    control_bluetooth_on_icon: "icon\\bton.png",
+    control_no_disturb_off_icon: "icon\\dndoff.png"
+  },
+  icons: [
+    ...statusPreviewResolution.icons,
+    {
+      path: "watchface_800x800/icon/bton.png",
+      width: 42,
+      height: 42
+    },
+    {
+      path: "watchface_800x800/icon/dndoff.png",
+      width: 42,
+      height: 42
+    }
+  ]
+};
+assert.deepEqual(
+  getWatchfaceControlStatusPreviewLayers(completeControlStatusResolution).map(
+    ({ layoutGroupId, configKey }) => ({ layoutGroupId, configKey })
+  ),
+  [
+    {
+      layoutGroupId: "bluetoothOff",
+      configKey: "control_bluetooth_off_icon"
+    },
+    {
+      layoutGroupId: "bluetoothOff",
+      configKey: "control_bluetooth_on_icon"
+    },
+    {
+      layoutGroupId: "doNotDisturbOn",
+      configKey: "control_no_disturb_on_icon"
+    },
+    {
+      layoutGroupId: "doNotDisturbOn",
+      configKey: "control_no_disturb_off_icon"
+    }
+  ],
+  "all configured Bluetooth and Do Not Disturb control-slot states should be detected"
 );
 const replacement = {
   dataUrl: "data:image/png;base64,AA==",
@@ -877,7 +1033,11 @@ const controlBatteryDetails = {
       control_battery_icon_dir: "battery",
       control_battery_icon_pos: "{12,8}",
       control_battery_level_rect: "{30,0,80,24,hcenter|vcenter}",
-      control_battery_level_font: "13x19"
+      control_battery_level_font: "13x19",
+      control_bluetooth_icon_pos: "{3,0}",
+      control_bluetooth_off_icon: "icon\\nobt.png",
+      control_no_disturb_icon_pos: "{67,0}",
+      control_no_disturb_on_icon: "icon\\noxx.png"
     },
     aodConfig: {
       ...resolution.aodConfig,
@@ -885,7 +1045,11 @@ const controlBatteryDetails = {
       control_battery_icon_dir: "",
       control_battery_level_rect: "",
       control_battery_level_font: "",
-      control_battery_level_font_color: ""
+      control_battery_level_font_color: "",
+      control_bluetooth_icon_pos: "",
+      control_bluetooth_off_icon: "",
+      control_no_disturb_icon_pos: "",
+      control_no_disturb_on_icon: ""
     }
   }))
 };
@@ -950,6 +1114,22 @@ for (const override of hiddenControlBattery) {
     override.values.control_battery_level_font,
     "__COROSLINK_DELETE_CONFIG_KEY__"
   );
+  assert.equal(
+    override.values.control_bluetooth_icon_pos,
+    "__COROSLINK_DELETE_CONFIG_KEY__"
+  );
+  assert.equal(
+    override.values.control_bluetooth_off_icon,
+    "__COROSLINK_DELETE_CONFIG_KEY__"
+  );
+  assert.equal(
+    override.values.control_no_disturb_icon_pos,
+    "__COROSLINK_DELETE_CONFIG_KEY__"
+  );
+  assert.equal(
+    override.values.control_no_disturb_on_icon,
+    "__COROSLINK_DELETE_CONFIG_KEY__"
+  );
 }
 assert.deepEqual(
   hiddenControlBattery.map(({ path }) => path),
@@ -957,9 +1137,60 @@ assert.deepEqual(
     `${directory}/config.txt`,
     `${directory}/AODconfig.txt`
   ]),
-  "disabling selectable Battery should remove its declarations from current and AOD configs"
+  "disabling selectable Battery should remove its declarations and coupled control-status keys from current and AOD configs"
 );
 assert.deepEqual(buildControlBatteryVisibilityOverrides(details, true), []);
+const lowPowerBatteryDetails = {
+  ...controlBatteryDetails,
+  resolutions: controlBatteryDetails.resolutions.map((resolution) => ({
+    ...resolution,
+    config: {
+      ...resolution.config,
+      battery_icon_lowpower: "a\\battery_low"
+    }
+  }))
+};
+for (const override of buildControlBatteryVisibilityOverrides(
+  lowPowerBatteryDetails,
+  false
+).filter(({ path }) => path.endsWith("/config.txt"))) {
+  assert.equal(
+    override.values.battery_icon_lowpower,
+    "__COROSLINK_DELETE_CONFIG_KEY__",
+    "disabling selectable Battery should drop the low-power battery icon from the current face"
+  );
+}
+const aodBatteryDetails = {
+  ...controlBatteryDetails,
+  resolutions: controlBatteryDetails.resolutions.map((resolution) => ({
+    ...resolution,
+    aodConfig: {
+      ...resolution.aodConfig,
+      battery_icon_pos: "{20,30}",
+      battery_icon_dir: "a\\battery",
+      battery_level_rect: "{40,30,90,54,hcenter|vcenter}",
+      battery_level_font: "a\\13x19"
+    }
+  }))
+};
+for (const override of buildControlBatteryVisibilityOverrides(
+  aodBatteryDetails,
+  false
+)) {
+  const isAod = override.path.endsWith("AODconfig.txt");
+  for (const key of [
+    "battery_icon_pos",
+    "battery_icon_dir",
+    "battery_level_rect",
+    "battery_level_font"
+  ]) {
+    assert.equal(
+      override.values[key],
+      isAod ? "__COROSLINK_DELETE_CONFIG_KEY__" : undefined,
+      "hiding selectable Battery should drop fixed battery keys from the AOD only"
+    );
+  }
+}
 const reopenedDisabledBatteryDetails = {
   ...details,
   resolutions: details.resolutions.map((resolution) => ({
@@ -983,6 +1214,104 @@ assert.equal(
   details.resolutions.length,
   "a reopened template without current-face Battery should clean stale AOD declarations"
 );
+const sunControlDetails = {
+  ...details,
+  resolutions: details.resolutions.map((resolution) => ({
+    ...resolution,
+    config: {
+      ...resolution.config,
+      control_sunrise_icon: "icon\\sunrise.png",
+      control_sunrise_hour_rect: "{30,0,60,24,hcenter|vcenter}",
+      control_sunrise_minute_rect: "{70,0,100,24,hcenter|vcenter}",
+      control_sunrise_font: "13x19",
+      control_sunset_icon: "icon\\sunset.png",
+      control_sunset_hour_rect: "{30,0,60,24,hcenter|vcenter}",
+      control_sunset_minute_rect: "{70,0,100,24,hcenter|vcenter}",
+      control_sunset_font: "13x19",
+      control_floor_icon: "icon\\floor.png",
+      control_floor_rect: "{30,0,80,24,hcenter|vcenter}",
+      control_floor_font: "13x19",
+      control_temperature_rect: "{30,0,80,24,hcenter|vcenter}",
+      control_temperature_font: "13x19",
+      control_temperature_negative_sign_icon: "icon\\negative.png"
+    },
+    aodConfig: {
+      ...resolution.aodConfig,
+      control_sunrise_hour_rect: "",
+      control_sunset_hour_rect: ""
+    }
+  }))
+};
+assert.deepEqual(
+  buildControlComplicationVisibilityOverrides(sunControlDetails, {}),
+  [],
+  "sun complications stay untouched unless explicitly excluded"
+);
+const hiddenSunset = buildControlComplicationVisibilityOverrides(sunControlDetails, {
+  controlSunsetEnabled: false
+});
+assert.deepEqual(
+  hiddenSunset.map(({ path }) => path),
+  sunControlDetails.resolutions.flatMap(({ directory }) => [
+    `${directory}/config.txt`,
+    `${directory}/AODconfig.txt`
+  ]),
+  "excluding Sunset should clean both current and AOD configs"
+);
+for (const override of hiddenSunset) {
+  for (const key of Object.keys(override.values)) {
+    assert.ok(
+      key.startsWith("control_sunset_"),
+      `only sunset keys may be deleted, saw ${key}`
+    );
+    assert.equal(override.values[key], "__COROSLINK_DELETE_CONFIG_KEY__");
+  }
+  if (override.path.endsWith("/config.txt")) {
+    assert.equal(Object.keys(override.values).length, 4);
+  }
+}
+const hiddenBothSuns = buildControlComplicationVisibilityOverrides(sunControlDetails, {
+  controlSunriseEnabled: false,
+  controlSunsetEnabled: false
+});
+for (const override of hiddenBothSuns) {
+  if (!override.path.endsWith("/config.txt")) continue;
+  assert.equal(
+    Object.keys(override.values).length,
+    8,
+    "excluding both sun complications should delete every sunrise and sunset key"
+  );
+}
+const hiddenFloor = buildControlComplicationVisibilityOverrides(
+  sunControlDetails,
+  { controlFloorEnabled: false }
+);
+for (const override of hiddenFloor) {
+  assert.ok(
+    override.path.endsWith("/config.txt"),
+    "the fixture AOD has no floor keys, so only current configs are touched"
+  );
+  assert.deepEqual(
+    Object.keys(override.values).sort(),
+    ["control_floor_font", "control_floor_icon", "control_floor_rect"],
+    "excluding Floors should delete exactly the floor keys"
+  );
+}
+assert.equal(hiddenFloor.length, sunControlDetails.resolutions.length);
+const hiddenTemperature = buildControlComplicationVisibilityOverrides(
+  sunControlDetails,
+  { controlTemperatureEnabled: false }
+);
+assert.equal(hiddenTemperature.length, sunControlDetails.resolutions.length);
+for (const override of hiddenTemperature) {
+  assert.ok(
+    Object.keys(override.values).length >= 3 &&
+      Object.keys(override.values).every((key) =>
+        key.startsWith("control_temperature_")
+      ),
+    "excluding Temperature should delete exactly the control-temperature keys"
+  );
+}
 const baseComplicationBounds = computeLayoutGroupBounds(
   details.resolutions.find(({ width }) => width === 800)
 ).find(({ id }) => id === "complication");
@@ -1061,7 +1390,10 @@ for (const override of reopenedStudioBatteryOverrides) {
   assert.equal(override.values.battery_icon_dir, "cl_battery_icon");
 }
 for (const override of configAssetOverrides.filter(({ path }) => /\/config\.txt$/i.test(path))) {
-  assert.equal(override.values.colon_icon, "");
+  assert.equal(
+    override.values.colon_icon,
+    "__COROSLINK_DELETE_CONFIG_KEY__"
+  );
   assert.match(override.values.control_colon_icon, /^studio\\config-control_colon_icon-/);
   assert.equal(
     Object.prototype.hasOwnProperty.call(override.values, "control_hr_icon"),
@@ -1075,7 +1407,10 @@ for (const override of configAssetOverrides.filter(({ path }) => /\/config\.txt$
   );
 }
 for (const override of configAssetOverrides.filter(({ path }) => /AODconfig\.txt$/i.test(path))) {
-  assert.equal(override.values.background_icon, "");
+  assert.equal(
+    override.values.background_icon,
+    "__COROSLINK_DELETE_CONFIG_KEY__"
+  );
 }
 
 assert.deepEqual(getAmPmCapability(details), {
@@ -1180,6 +1515,266 @@ assert.equal(
     ?.values.control_hr_rect,
   "{93,5,141,29,hcenter|vcenter}",
   "imported selectable digit sizes should scale from master into device trees"
+);
+
+// A 390px AMOLED tree (PACE 4 class) must scale master-authored values by
+// 390/800 exactly like the 416px tree scales by 416/800.
+const pace4Details = {
+  archiveId: "pace4-fixture",
+  resolutions: [resolution(390, 21, 31), resolution(800, 44, 64)]
+};
+const pace4StatusDetails = {
+  ...pace4Details,
+  resolutions: pace4Details.resolutions.map((candidate) => {
+    const compact = candidate.width === 390;
+    return {
+      ...candidate,
+      config: {
+        ...candidate.config,
+        bluetooth_icon_pos: "",
+        bluetooth_on_icon: "",
+        bluetooth_off_icon: "",
+        no_disturb_icon_pos: "",
+        no_disturb_on_icon: "",
+        no_disturb_off_icon: "",
+        rect_control1_pos: compact ? "{117,346}" : "{241,709}",
+        control_bluetooth_icon_pos: compact ? "{1,0}" : "{3,0}",
+        control_bluetooth_off_icon: "icon\\nobt.png",
+        control_no_disturb_icon_pos: compact ? "{33,0}" : "{67,0}",
+        control_no_disturb_on_icon: "icon\\noxx.png"
+      },
+      icons: [
+        ...candidate.icons,
+        {
+          path: `${candidate.directory}/icon/nobt.png`,
+          width: compact ? 20 : 42,
+          height: compact ? 20 : 42
+        },
+        {
+          path: `${candidate.directory}/icon/noxx.png`,
+          width: compact ? 20 : 42,
+          height: compact ? 20 : 42
+        }
+      ]
+    };
+  })
+};
+assert.deepEqual(
+  getWatchfaceControlStatusPreviewLayers(
+    pace4StatusDetails.resolutions[1]
+  ).map(({ configKey, position }) => ({ configKey, position })),
+  [
+    {
+      configKey: "control_bluetooth_off_icon",
+      position: { x: 244, y: 709 }
+    },
+    {
+      configKey: "control_no_disturb_on_icon",
+      position: { x: 308, y: 709 }
+    }
+  ],
+  "PACE 4 control-slot Bluetooth and Do Not Disturb icons should use the template's control origin"
+);
+assert.deepEqual(
+  listWatchfaceConfigAssets(pace4StatusDetails)
+    .filter(({ configKey }) =>
+      configKey.includes("bluetooth") || configKey.includes("no_disturb")
+    )
+    .map(({ id }) => id)
+    .sort(),
+  [
+    "config:control_bluetooth_off_icon",
+    "config:control_no_disturb_on_icon"
+  ],
+  "PACE 4 should detect only status assets whose config paths are populated"
+);
+const pace4BluetoothOnlyDetails = applyConfigTextEditsToDetails(
+  pace4StatusDetails,
+  {
+    "watchface_390x390/config.txt": [
+      "[rect_control1_pos]={117,346}",
+      "[control_bluetooth_icon_pos]={1,0}",
+      "[control_bluetooth_off_icon]=icon\\nobt.png"
+    ].join("\r\n"),
+    "watchface_800x800/config.txt": [
+      "[rect_control1_pos]={241,709}",
+      "[control_bluetooth_icon_pos]={3,0}",
+      "[control_bluetooth_off_icon]=icon\\nobt.png"
+    ].join("\r\n")
+  }
+);
+assert.deepEqual(
+  listWatchfaceConfigAssets(pace4BluetoothOnlyDetails)
+    .filter(({ configKey }) =>
+      configKey.includes("bluetooth") || configKey.includes("no_disturb")
+    )
+    .map(({ id }) => id),
+  ["config:control_bluetooth_off_icon"],
+  "status detection should follow manually edited PACE 4 config text"
+);
+assert.equal(
+  pickWatchPreviewResolution(pace4Details)?.width,
+  390,
+  "390/800 AMOLED bundles should preview the physical 390px tree"
+);
+const pace4AmPm = buildAmPmOverrides(pace4Details, {
+  enabled: true,
+  x: 240,
+  y: 50,
+  scale: 1,
+  color: "#ffffff"
+});
+assert.equal(
+  pace4AmPm.find((entry) => entry.path.includes("390x390"))?.values
+    .am_pm_icon_pos,
+  "{117,24}",
+  "master AM/PM positions should scale by 390/800 into the 390px tree"
+);
+const pace4NativeStyle = buildSelectableMetricStyleOverrides(
+  pace4Details,
+  {
+    scale: 1,
+    nativeSize: true,
+    rasterFont: {
+      label: "Native selectable digits",
+      dataUrl: "",
+      glyphs: "",
+      columns: 1,
+      sprites: Object.fromEntries(
+        Array.from({ length: 10 }, (_, digit) => [
+          String(digit),
+          "data:image/png;base64,AA=="
+        ])
+      ),
+      spriteSizes: Object.fromEntries(
+        Array.from({ length: 10 }, (_, digit) => [
+          String(digit),
+          { width: 31, height: 47 }
+        ])
+      ),
+      tint: false
+    }
+  },
+  true
+);
+assert.equal(
+  pace4NativeStyle.find(({ path }) => path.includes("390x390"))?.values
+    .control_hr_rect,
+  "{87,4,132,27,hcenter|vcenter}",
+  "master-authored digit sizes should scale by 390/800 around the tree's rect center"
+);
+const pace4IconDetails = applyConfigOverridesToDetails(pace4Details, [
+  {
+    path: "watchface_390x390/config.txt",
+    values: { control_step_icon_pos: "{12,8}" }
+  },
+  {
+    path: "watchface_800x800/config.txt",
+    values: { control_step_icon_pos: "{24,16}" }
+  }
+]);
+assert.deepEqual(
+  buildControlIconPositionOverrides(pace4IconDetails, {
+    steps: { dx: 10, dy: -6 }
+  }).find((entry) => entry.path.includes("390x390"))?.values,
+  { control_step_icon_pos: "{17,5}" },
+  "master icon drags should scale by 390/800 into the 390px tree"
+);
+const pace4AnalogDetails = {
+  ...pace4Details,
+  resolutions: pace4Details.resolutions.map((candidate) => ({
+    ...candidate,
+    config: {
+      ...candidate.config,
+      time_center_polygon_icon1: "1.png",
+      time_center_pos: `{${candidate.width / 2},${candidate.height / 2}}`
+    },
+    aodConfig: {
+      ...candidate.aodConfig,
+      time_center_polygon_icon1: "1.png",
+      time_center_pos: `{${candidate.width / 2},${candidate.height / 2}}`
+    },
+    icons: [
+      ...candidate.icons,
+      {
+        path: `${candidate.directory}/1.png`,
+        width: Math.round(candidate.width * 0.28),
+        height: candidate.height
+      }
+    ]
+  }))
+};
+assert.equal(
+  analogCenterLayoutGroupId("time_center_polygon_icon1"),
+  "analogCenter"
+);
+assert.equal(analogCenterLayoutGroupId("arc_cut_icon"), null);
+assert.deepEqual(
+  computeLayoutGroupBounds(pace4AnalogDetails.resolutions[1]).find(
+    ({ id }) => id === "analogCenter"
+  ),
+  {
+    id: "analogCenter",
+    label: "Analog center",
+    x0: 288,
+    y0: 0,
+    x1: 512,
+    y1: 800
+  },
+  "a centered 224x800 analog overlay should expose its complete canvas for selection"
+);
+assert.deepEqual(
+  computeLayoutOffsetLimits(pace4AnalogDetails.resolutions[1]).analogCenter,
+  {
+    minDx: -400,
+    maxDx: 400,
+    minDy: -400,
+    maxDy: 400
+  },
+  "analog movement should clamp its pivot, allowing full-height artwork to clip"
+);
+const pace4AnalogOverrides = buildLayoutOverrides(pace4AnalogDetails, {
+  analogCenter: { dx: 20, dy: -30 }
+});
+assert.deepEqual(
+  pace4AnalogOverrides.find(({ path }) => path.includes("800x800"))?.values,
+  { time_center_pos: "{420,370}" }
+);
+assert.deepEqual(
+  pace4AnalogOverrides.find(({ path }) => path.includes("390x390"))?.values,
+  { time_center_pos: "{205,180}" },
+  "analog-center drags should scale from the 800px master into the PACE 4 tree"
+);
+const hiddenPace4Analog = buildWatchfaceConfigAssetOverrides(
+  pace4AnalogDetails,
+  {
+    "config:time_center_polygon_icon1": { enabled: false }
+  }
+);
+assert.deepEqual(
+  hiddenPace4Analog.map(({ path, values }) => ({
+    path,
+    value: values.time_center_polygon_icon1
+  })),
+  [
+    {
+      path: "watchface_390x390/config.txt",
+      value: "__COROSLINK_DELETE_CONFIG_KEY__"
+    },
+    {
+      path: "watchface_390x390/AODconfig.txt",
+      value: "__COROSLINK_DELETE_CONFIG_KEY__"
+    },
+    {
+      path: "watchface_800x800/config.txt",
+      value: "__COROSLINK_DELETE_CONFIG_KEY__"
+    },
+    {
+      path: "watchface_800x800/AODconfig.txt",
+      value: "__COROSLINK_DELETE_CONFIG_KEY__"
+    }
+  ],
+  "hiding the PACE 4 analog center overlay should delete its key from current and AOD configs in both resolution trees"
 );
 
 const iconPositionDetails = applyConfigOverridesToDetails(details, [
@@ -1753,7 +2348,8 @@ assert.equal(shiftedCompact?.values.rect_control1_pos, "{62,120}");
 const visibilityOverrides = buildLayerVisibilityOverrides(withMetrics, {
   hours: false,
   weekday: false,
-  complication: false
+  complication: false,
+  batteryIcon: false
 });
 const hiddenFull = visibilityOverrides.find((entry) =>
   entry.path.includes("800x800")
@@ -1762,6 +2358,48 @@ assert.equal(hiddenFull?.values.time_hour_high_pos, "");
 assert.equal(hiddenFull?.values.time_hour_low_pos, "");
 assert.equal(hiddenFull?.values.english_date_week_rect, "");
 assert.equal(hiddenFull?.values.rect_control1_pos, "");
+assert.equal(
+  hiddenFull?.values.battery_icon_pos,
+  "__COROSLINK_DELETE_CONFIG_KEY__",
+  "hiding the battery icon should delete its position key"
+);
+assert.equal(
+  hiddenFull?.values.battery_icon_dir,
+  "__COROSLINK_DELETE_CONFIG_KEY__",
+  "hiding the battery icon should delete its folder-path key"
+);
+
+const temperatureLayerDetails = {
+  ...withMetrics,
+  resolutions: withMetrics.resolutions.map((resolution) => ({
+    ...resolution,
+    config: {
+      ...resolution.config,
+      temperature_rect: "{120,180,296,240,hcenter|vcenter}",
+      temperature_font_color: "0xFFFFFF",
+      temperature_negative_sign_icon: "icon\\negative.png"
+    }
+  }))
+};
+const hiddenStaticTemperature = buildLayerVisibilityOverrides(
+  temperatureLayerDetails,
+  { temperature: false }
+).find((entry) => entry.path.includes("800x800"));
+assert.equal(
+  hiddenStaticTemperature?.values.temperature_rect,
+  "__COROSLINK_DELETE_CONFIG_KEY__",
+  "hiding static temperature should delete its rect key"
+);
+assert.equal(
+  hiddenStaticTemperature?.values.temperature_font_color,
+  "__COROSLINK_DELETE_CONFIG_KEY__",
+  "hiding static temperature should delete its font-color key"
+);
+assert.equal(
+  hiddenStaticTemperature?.values.temperature_negative_sign_icon,
+  "__COROSLINK_DELETE_CONFIG_KEY__",
+  "hiding static temperature should delete its negative-sign icon key"
+);
 
 const merged = mergeConfigOverrides(metricOverrides, layoutOverrides);
 assert.equal(merged.length, 2);
@@ -2069,6 +2707,87 @@ try {
   } else {
     globalThis.Image = nativeDateImage;
   }
+}
+
+// Firmware-backed dynamic layers rotate their artwork without changing the
+// fixed PNG canvas dimensions expected by COROS.
+const rotationOptions = {
+  timeStyles: { hours: { scale: 1, rotation: 30 } },
+  metricStyles: {
+    heartRate: { scale: 1, rotation: 45 },
+    temperature: { scale: 1, rotation: 90 }
+  },
+  complicationStyle: { scale: 1, rotation: 60 }
+};
+assert.equal(
+  resolveWatchfaceSpriteRotation(rotationOptions, "complication"),
+  60,
+  "selectable value glyphs should use their configured rotation"
+);
+assert.equal(
+  resolveWatchfaceSpriteRotation(rotationOptions, "complication", false),
+  0,
+  "non-font complication icons must not inherit value-glyph rotation"
+);
+assert.equal(
+  resolveWatchfaceSpriteRotation(rotationOptions, "heartRate"),
+  45,
+  "supported fixed metrics should rotate in preview and export"
+);
+assert.equal(supportsWatchfaceSpriteRotation("temperature"), false);
+assert.equal(
+  resolveWatchfaceSpriteRotation(rotationOptions, "temperature"),
+  0,
+  "compatibility-mode temperature must not preview an unsupported rotation"
+);
+const rotationDocument = globalThis.document;
+const rotationImage = globalThis.Image;
+const rotationCalls = [];
+globalThis.document = {
+  createElement: () => {
+    const context = {
+      imageSmoothingEnabled: false,
+      imageSmoothingQuality: "low",
+      save: () => rotationCalls.push(["save"]),
+      translate: (x, y) => rotationCalls.push(["translate", x, y]),
+      rotate: (radians) => rotationCalls.push(["rotate", radians]),
+      drawImage: (...args) => rotationCalls.push(["drawImage", ...args.slice(1)]),
+      restore: () => rotationCalls.push(["restore"])
+    };
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: () => context,
+      toDataURL: () => `rotated:${canvas.width}x${canvas.height}`
+    };
+    return canvas;
+  }
+};
+globalThis.Image = class FakeRotationImage {
+  naturalWidth = 20;
+  naturalHeight = 40;
+  onload = null;
+  onerror = null;
+  set src(_value) {
+    queueMicrotask(() => this.onload?.());
+  }
+};
+try {
+  assert.equal(
+    await rotateSpriteInCanvas("sprite", 20, 40, 90),
+    "rotated:20x40"
+  );
+  assert.deepEqual(rotationCalls[1], ["translate", 10, 20]);
+  assert.ok(Math.abs(rotationCalls[2][1] - Math.PI / 2) < 0.000001);
+  assert.equal(
+    await rotateSpriteInCanvas("unchanged", 20, 40, 360),
+    "unchanged"
+  );
+} finally {
+  if (rotationDocument === undefined) delete globalThis.document;
+  else globalThis.document = rotationDocument;
+  if (rotationImage === undefined) delete globalThis.Image;
+  else globalThis.Image = rotationImage;
 }
 
 // Stable template assets reuse their decoded image, while dynamic background

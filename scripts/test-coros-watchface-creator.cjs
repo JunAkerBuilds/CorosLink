@@ -35,6 +35,7 @@ async function findCreatorOutput(created) {
 
 const FIXTURE_CONFIG = [
   "//表盘背景：",
+  "[watchface_id]=0",
   "[background_icon]=background.png",
   "[time_hour_high_pos]={524,234}",
   "[time_hour_high_font]=01",
@@ -51,6 +52,7 @@ const FIXTURE_CONFIG = [
 ].join("\r\n");
 
 const FIXTURE_AOD_CONFIG = [
+  "[watchface_id]=0x00000026",
   "[background_icon]=background.png",
   "[weather_icon_pos]=",
   "[weather_icon_dir]=",
@@ -378,6 +380,74 @@ async function main() {
     "the active custom background should be replaced"
   );
 
+  // --- Watch-face ID override rewrites current + AOD configs --------------
+  const withWatchfaceId = await watchfaces.createCorosWatchfaceArchive({
+    sourceArchiveId: starter.archiveId,
+    backgroundDataUrl: pngDataUrl(icon),
+    watchfaceIdOverride: "0x3B9ACE60"
+  });
+  const withWatchfaceIdOutput = await findCreatorOutput(withWatchfaceId);
+  assert.ok(withWatchfaceIdOutput, "watch-face ID override output should exist");
+  const withWatchfaceIdZip = await unzipper.Open.file(withWatchfaceIdOutput.path);
+  for (const configPath of [
+    "watchface_800x800/config.txt",
+    "watchface_800x800/AODconfig.txt"
+  ]) {
+    const entry = withWatchfaceIdZip.files.find(
+      (file) => file.type === "File" && file.path === configPath
+    );
+    assert.ok(entry, `${configPath} should remain after watch-face ID override`);
+    const text = (await entry.buffer()).toString("utf8");
+    assert.match(
+      text,
+      /^\[watchface_id\]=0x3B9ACE60\r?$/m,
+      `${configPath} must receive the watch-face ID override`
+    );
+  }
+
+  // --- Full-file config text replacements (Studio raw editor) -------------
+  const editedAodText = [
+    "[watchface_id]=0x11111111",
+    "[background_icon]=background.png",
+    "// studio edited aod",
+    "[empty_value]="
+  ].join("\r\n");
+  const withConfigText = await watchfaces.createCorosWatchfaceArchive({
+    sourceArchiveId: starter.archiveId,
+    backgroundDataUrl: pngDataUrl(icon),
+    configTextReplacements: [
+      {
+        path: "watchface_800x800/AODconfig.txt",
+        text: editedAodText
+      }
+    ],
+    configOverrides: [
+      {
+        path: "watchface_800x800/AODconfig.txt",
+        values: { watchface_id: "0x22222222" }
+      }
+    ]
+  });
+  const withConfigTextOutput = await findCreatorOutput(withConfigText);
+  assert.ok(withConfigTextOutput, "config text replacement output should exist");
+  const withConfigTextZip = await unzipper.Open.file(withConfigTextOutput.path);
+  const editedAodEntry = withConfigTextZip.files.find(
+    (file) =>
+      file.type === "File" && file.path === "watchface_800x800/AODconfig.txt"
+  );
+  assert.ok(editedAodEntry, "AODconfig.txt should remain after text replacement");
+  const exportedAodText = (await editedAodEntry.buffer()).toString("utf8");
+  assert.match(
+    exportedAodText,
+    /studio edited aod/,
+    "full-file AODconfig replacement must preserve comments from the edited text"
+  );
+  assert.match(
+    exportedAodText,
+    /^\[watchface_id\]=0x22222222\r?$/m,
+    "structured overrides must still apply on top of replaced AODconfig text"
+  );
+
   // --- APEX 4 / W541 multi-resolution export -----------------------------
   await assert.rejects(
     watchfaces.createCorosWatchfaceArchive({
@@ -502,6 +572,117 @@ async function main() {
     ),
     "generated Studio sprites should support APEX 4 resolution trees"
   );
+
+  // --- PACE 4 class AMOLED bundles (390px + 800px master) -----------------
+  const pace4Entries = [
+    {
+      name: "info.json",
+      data: Buffer.from(
+        JSON.stringify({
+          o_template_id: 130061,
+          o_diy_version: 1,
+          o_wf_ver: 0
+        })
+      )
+    },
+    { name: "watchface_customize.png", data: solidPng(800, 800, 0x11) }
+  ];
+  for (const size of [390, 800]) {
+    const thumbnailSize = size === 390 ? 300 : 800;
+    pace4Entries.push(
+      {
+        name: `watchface_${size}x${size}/config.txt`,
+        data: Buffer.from(
+          `${FIXTURE_CONFIG}\r\n[time_center_polygon_icon1]=1.png\r\n`
+        )
+      },
+      {
+        name: `watchface_${size}x${size}/AODconfig.txt`,
+        data: Buffer.from(
+          `${FIXTURE_AOD_CONFIG}\r\n[time_center_polygon_icon1]=1.png\r\n`
+        )
+      },
+      {
+        name: `watchface_${size}x${size}/background.png`,
+        data: solidPng(size, size, 0x22)
+      },
+      {
+        name: `watchface_${size}x${size}/thmb.png`,
+        data: solidPng(thumbnailSize, thumbnailSize, 0x33)
+      },
+      {
+        name: `watchface_${size}x${size}/watchface_customize.png`,
+        data: solidPng(800, 800, 0x44)
+      }
+    );
+  }
+  const pace4SourcePath = path.join(tempRoot, "pace-4-starter.dat");
+  await fs.writeFile(pace4SourcePath, createStoreZip(pace4Entries));
+  const pace4Starter = await watchfaces.selectCorosWatchfaceArchive(pace4SourcePath);
+  const pace4Created = await watchfaces.createCorosWatchfaceArchive({
+    sourceArchiveId: pace4Starter.archiveId,
+    backgroundDataUrl: pngDataUrl(icon),
+    previewDataUrl: pngDataUrl(solidPng(800, 800, 0xff)),
+    firmwareType: "COROS W998",
+    watchModel: "pace-4",
+    assetReplacements: [
+      {
+        path: "watchface_390x390/cl_hh/00.png",
+        dataUrl: pngDataUrl(solidPng(8, 12, 0x55)),
+        create: true
+      }
+    ],
+    configOverrides: [390, 800].flatMap((size) =>
+      ["config.txt", "AODconfig.txt"].map((fileName) => ({
+        path: `watchface_${size}x${size}/${fileName}`,
+        values: {
+          time_center_polygon_icon1: "__COROSLINK_DELETE_CONFIG_KEY__"
+        }
+      }))
+    )
+  });
+  assert.equal(pace4Created.resolutionProfile, "amoled-390-800");
+  const pace4Output = await findCreatorOutput(pace4Created);
+  assert.ok(pace4Output, "PACE 4 output should be available for verification");
+  const pace4Zip = await unzipper.Open.file(pace4Output.path);
+  for (const [entryPath, width, height] of [
+    ["watchface_390x390/background.png", 390, 390],
+    ["watchface_390x390/thmb.png", 300, 300],
+    ["watchface_800x800/background.png", 800, 800]
+  ]) {
+    const entry = pace4Zip.files.find(
+      (candidate) => candidate.type === "File" && candidate.path === entryPath
+    );
+    assert.ok(entry, `${entryPath} should exist in the PACE 4 export`);
+    const image = nativeImage.createFromBuffer(await entry.buffer());
+    assert.deepEqual(image.getSize(), { width, height });
+  }
+  assert.ok(
+    pace4Zip.files.some(
+      (entry) =>
+        entry.type === "File" &&
+        entry.path === "watchface_390x390/cl_hh/00.png"
+    ),
+    "generated Studio sprites should support the 390px AMOLED tree"
+  );
+  for (const size of [390, 800]) {
+    for (const fileName of ["config.txt", "AODconfig.txt"]) {
+      const configEntry = pace4Zip.files.find(
+        (entry) =>
+          entry.type === "File" &&
+          entry.path === `watchface_${size}x${size}/${fileName}`
+      );
+      assert.ok(
+        configEntry,
+        `PACE 4 ${size}px ${fileName} should remain in the export`
+      );
+      assert.doesNotMatch(
+        (await configEntry.buffer()).toString("utf8"),
+        /^\[time_center_polygon_icon1\]=/m,
+        `hidden analog center overlay must be deleted from the PACE 4 ${size}px ${fileName}`
+      );
+    }
+  }
 
   // --- Full studio creation with sprite replacements ----------------------
   const replacementDigit = solidPng(12, 20, 0xff);

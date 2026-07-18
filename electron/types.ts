@@ -52,6 +52,7 @@ export type WatchModelId =
 export type CorosWatchfaceResolutionProfile =
   | "mip-240-260-800"
   | "amoled-416-800"
+  | "amoled-390-800"
   | "other";
 
 export type WatchConnectionSmokeOptionId =
@@ -293,12 +294,25 @@ export interface CorosWatchfaceCreatorInput {
   /** Exact `o_wf_ver` to write. Omit to preserve/auto-raise the template value. */
   watchFaceVersion?: number;
   /**
-   * Experimental export-only `o_template_id` override. Decimal text is used
-   * because official COROS template IDs can exceed Number.MAX_SAFE_INTEGER.
+   * Experimental export-only `o_template_id` override in info.json. Decimal
+   * text is used because official COROS template IDs can exceed
+   * Number.MAX_SAFE_INTEGER.
    */
   templateIdOverride?: string;
+  /**
+   * Experimental export-only `[watchface_id]` override written to every
+   * `config.txt` / `AODconfig.txt`. Accepts decimal or `0x` hex (32-bit).
+   */
+  watchfaceIdOverride?: string;
   /** Experimental export-only `m_name` override for template-identity tests. */
   templateNameOverride?: string;
+  /**
+   * Deletes every `[key]=` line whose value is blank from each `config.txt` /
+   * `AODconfig.txt`. Firmware treats a declared key as feature-present even
+   * when empty (an empty `control_*` group still adds a blank entry to the
+   * on-watch selector), so absent lines are the only reliable "off".
+   */
+  stripBlankConfigKeys?: boolean;
   /**
    * Renderer-generated PNG sprites (bitmap-font digits, tinted icons and
    * weekday labels) that replace template assets of identical size.
@@ -310,6 +324,11 @@ export interface CorosWatchfaceCreatorInput {
    * the original file are rejected rather than appended.
    */
   configOverrides?: CorosWatchfaceConfigOverride[];
+  /**
+   * Full-file replacements for existing `config.txt` / `AODconfig.txt` entries.
+   * Applied as the new base text before structured `configOverrides`.
+   */
+  configTextReplacements?: CorosWatchfaceConfigTextFile[];
   /**
    * Raises info.json's `o_wf_ver` to at least this value. The phone-app
    * compiler only bakes weather/temperature elements into the on-watch binary
@@ -324,6 +343,13 @@ export interface CorosWatchfaceConfigOverride {
   /** A config file entry of the archive, e.g. "watchface_800x800/config.txt". */
   path: string;
   values: Record<string, string>;
+}
+
+/** Raw UTF-8 body for an existing template config file path. */
+export interface CorosWatchfaceConfigTextFile {
+  /** Archive entry such as "watchface_416x416/AODconfig.txt". */
+  path: string;
+  text: string;
 }
 
 export interface CorosWatchfaceAssetReplacement {
@@ -628,6 +654,13 @@ export interface CorosWatchfaceDesignState {
   version: 1;
   /** Exact archive `o_wf_ver`; absent keeps automatic compatibility behavior. */
   archiveWatchFaceVersion?: number;
+  /** Deletes blank `[key]=` config lines from built archives (see creator input). */
+  stripBlankConfigKeys?: boolean;
+  /**
+   * Studio raw-text edits for template `config.txt` / `AODconfig.txt` paths.
+   * Keys are archive-relative paths; values are full UTF-8 file bodies.
+   */
+  configTextEdits?: Record<string, string>;
   /** Solid base colour painted behind artwork and freeform background elements. */
   backgroundColor?: string;
   accentColor: string;
@@ -648,11 +681,13 @@ export interface CorosWatchfaceDesignState {
   tintIcons: boolean;
   previewComplication: string;
   metricChanges: Record<string, boolean>;
-  metricStyles: Record<string, { color?: string; scale: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
+  metricStyles: Record<string, { color?: string; scale: number; rotation?: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Shared digit style for every value shown in the selectable control slot. */
   selectableMetricStyle?: {
     color?: string;
     scale: number;
+    /** Clockwise rotation applied inside each firmware sprite canvas. */
+    rotation?: number;
     fontFamily?: string;
     letterSpacing?: number;
     rasterFont?: CorosWatchfaceRasterFont;
@@ -661,16 +696,26 @@ export interface CorosWatchfaceDesignState {
   };
   /** False removes the Battery choice from the firmware-selectable control slot. */
   controlBatteryEnabled?: boolean;
+  /** False removes the Sunrise choice from the firmware-selectable control slot. */
+  controlSunriseEnabled?: boolean;
+  /** False removes the Sunset choice from the firmware-selectable control slot. */
+  controlSunsetEnabled?: boolean;
+  /** False removes the Floors choice from the firmware-selectable control slot. */
+  controlFloorEnabled?: boolean;
+  /** False removes the Temperature choice from the firmware-selectable control slot. */
+  controlTemperatureEnabled?: boolean;
   /** Per selectable-control icon offsets, independent from the slot origin/value. */
   controlIconOffsets?: Record<string, { dx: number; dy: number }>;
   /** Converts firmware auto-aligned HH:MM into four independently positioned digits. */
   separateAutoTime?: boolean;
-  timeStyles: Record<string, { color?: string; scale: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
+  timeStyles: Record<string, { color?: string; scale: number; rotation?: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Weekday/month/day sizing; absent in projects saved before resizing. */
   dateStyles?: Record<
     string,
     {
       scale: number;
+      /** Clockwise rotation applied inside each firmware sprite canvas. */
+      rotation?: number;
       /** Exact exported PNG dimensions when set. */
       width?: number;
       height?: number;

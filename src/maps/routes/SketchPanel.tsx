@@ -117,8 +117,19 @@ export function SketchPanel({
                 }
                 onClick={() => sketch.setTemplateId(template.id)}
                 title={template.label}
+                aria-pressed={template.id === sketch.templateId}
               >
-                <span aria-hidden="true">{template.glyph}</span>
+                <svg
+                  className="route-template-preview"
+                  viewBox="-1.15 -1.15 2.3 2.3"
+                  aria-hidden="true"
+                >
+                  <polyline
+                    points={template.points
+                      .map((point) => `${point.x},${-point.y}`)
+                      .join(" ")}
+                  />
+                </svg>
                 <em>{template.label}</em>
               </button>
             ))}

@@ -118,10 +118,21 @@ export function classifyRasterSpriteFolder(
       { sensitivity: "base", numeric: true }
     )
   );
+  // Month components accept two firmware formats: a 0–9 digit font the watch
+  // composes into 1–12, or one label sprite per month (00=DEC, 01–11=JAN–NOV).
+  // A set consisting solely of 00.png–09.png (no 10/11, no JAN-style names)
+  // can only be a digit font, so it must not be coerced into label slots.
+  const monthDigitFont =
+    folderIsMonths &&
+    sprites.length > 0 &&
+    sprites.every((sprite) => numericSpriteIndex(sprite.name) !== null);
 
   for (const sprite of sprites) {
     const relativePath = normalizedRelativePath(sprite).toLowerCase();
-    if (folderIsMonths || /(^|\/)months?\//.test(relativePath)) {
+    if (
+      !monthDigitFont &&
+      (folderIsMonths || /(^|\/)months?\//.test(relativePath))
+    ) {
       const label = monthLabelFor(sprite.name);
       if (label) addUniqueSprite(labelSprites, label, sprite);
       continue;

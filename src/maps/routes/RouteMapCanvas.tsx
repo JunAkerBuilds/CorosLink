@@ -1,6 +1,7 @@
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { useEffect, useRef } from "react";
+import { Maximize2, Minus, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef } from "react";
 import type {
   GeneratedRoute,
   RouteGeometry,
@@ -12,6 +13,7 @@ import {
   type RouteBaseLayer,
   type RouteOverlayId
 } from "./constants";
+import { findRetracedRouteSections } from "./routeOverlap";
 
 export type RouteStudioMode = "generate" | "draw" | "explore" | "sketch";
 export type SketchCanvasTool = "freehand" | "template" | "text";
@@ -53,10 +55,13 @@ const END_COLOR = "#d89b22";
 const ROUTE_COLOR = "#ff3b3b";
 const ROUTE_COLOR_DARK = "#2fbe91";
 const ROUTE_CASING = "#ffffff";
+const RETRACED_ROUTE_COLOR = "#facc15";
 // Dashed sky-blue guide so the original sketch reads apart from the route.
 const SKETCH_GHOST_COLOR = "#7dd3fc";
 /** Ignore mousemove samples closer than this (px) to bound stroke size. */
 const SKETCH_SAMPLE_MIN_PX = 3;
+/** Keeps draggable handles above route paths regardless of redraw order. */
+const INTERACTIVE_MARKER_PANE = "route-interactive-markers";
 
 export function RouteMapCanvas({
   mode,
@@ -88,6 +93,17 @@ export function RouteMapCanvas({
   const sketchLayerRef = useRef<L.LayerGroup | null>(null);
   const lastFitRef = useRef(fitRequestId);
   const fitSignatureRef = useRef<string>("");
+  const displayedLinePoints = useMemo(() => {
+    const editing = mode === "draw" || mode === "sketch";
+    const source = editing ? drawGeometry?.points : route?.points;
+    return (source ?? [])
+      .filter((point) => point.lat !== undefined && point.lon !== undefined)
+      .map((point) => [point.lat!, point.lon!] as [number, number]);
+  }, [mode, drawGeometry, route]);
+  const retracedSections = useMemo(
+    () => findRetracedRouteSections(displayedLinePoints),
+    [displayedLinePoints]
+  );
 
   // Keep interaction callbacks in refs so the map is built exactly once.
   const clickRef = useRef(onMapClick);
@@ -123,6 +139,8 @@ export function RouteMapCanvas({
       scrollWheelZoom: true
     });
     map.setView([39.5, -98.35], 4);
+    const markerPane = map.createPane(INTERACTIVE_MARKER_PANE);
+    markerPane.style.zIndex = "450";
     mapRef.current = map;
     routeLayerRef.current = L.layerGroup().addTo(map);
     sketchLayerRef.current = L.layerGroup().addTo(map);
@@ -238,6 +256,7 @@ export function RouteMapCanvas({
     }
     if ((sketchTool === "template" || sketchTool === "text") && sketchCenter) {
       const handle = L.circleMarker([sketchCenter.lat, sketchCenter.lon], {
+        pane: INTERACTIVE_MARKER_PANE,
         radius: 9,
         color: "#05080b",
         fillColor: SKETCH_GHOST_COLOR,
@@ -312,10 +331,7 @@ export function RouteMapCanvas({
     layer.clearLayers();
 
     const editing = mode === "draw" || mode === "sketch";
-    const source = editing ? drawGeometry?.points : route?.points;
-    const linePoints = (source ?? [])
-      .filter((point) => point.lat !== undefined && point.lon !== undefined)
-      .map((point) => [point.lat!, point.lon!] as [number, number]);
+    const linePoints = displayedLinePoints;
     const boundsPoints: Array<[number, number]> = [];
 
     if (linePoints.length >= 2) {
@@ -334,6 +350,17 @@ export function RouteMapCanvas({
         lineCap: "round",
         lineJoin: "round"
       }).addTo(layer);
+      for (const section of retracedSections) {
+        L.polyline(section, {
+          color: RETRACED_ROUTE_COLOR,
+          weight: 3,
+          opacity: 1,
+          dashArray: "5 7",
+          lineCap: "round",
+          lineJoin: "round",
+          interactive: false
+        }).addTo(layer);
+      }
       if (!editing) {
         addEndpoint(layer, linePoints[0]!, START_COLOR);
         addEndpoint(layer, linePoints[linePoints.length - 1]!, END_COLOR);
@@ -385,7 +412,8 @@ export function RouteMapCanvas({
   }, [
     mode,
     route,
-    drawGeometry,
+    displayedLinePoints,
+    retracedSections,
     startPin,
     destinationPin,
     currentLocation,
@@ -408,6 +436,7 @@ export function RouteMapCanvas({
       const isFirst = index === 0;
       const isLast = index === waypoints.length - 1;
       const marker = L.circleMarker([waypoint.lat, waypoint.lon], {
+        pane: INTERACTIVE_MARKER_PANE,
         radius: isFirst || isLast ? 7 : 5,
         color: "#05080b",
         fillColor: isFirst ? START_COLOR : isLast ? END_COLOR : "#f5f5f7",
@@ -444,13 +473,79 @@ export function RouteMapCanvas({
     pinTarget !== null ||
     (mode === "sketch" && sketchTool !== "freehand");
   const sketching = mode === "sketch" && sketchTool === "freehand";
+
+  /** Fit the map around whatever content is currently on it. */
+  const fitToContent = () => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+    const points: Array<[number, number]> = [];
+    const source =
+      mode === "draw" || mode === "sketch" ? drawGeometry?.points : route?.points;
+    for (const point of source ?? []) {
+      if (point.lat !== undefined && point.lon !== undefined) {
+        points.push([point.lat, point.lon]);
+      }
+    }
+    for (const waypoint of waypoints) {
+      points.push([waypoint.lat, waypoint.lon]);
+    }
+    for (const pin of [startPin, destinationPin, currentLocation, sketchCenter]) {
+      if (pin) {
+        points.push([pin.lat, pin.lon]);
+      }
+    }
+    if (points.length === 0) {
+      return;
+    }
+    map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 15 });
+  };
+
   return (
-    <div
-      ref={containerRef}
-      className={`route-canvas${interactive ? " is-interactive" : ""}${
-        sketching ? " is-sketching" : ""
-      }`}
-    />
+    <>
+      <div
+        ref={containerRef}
+        className={`route-canvas${interactive ? " is-interactive" : ""}${
+          sketching ? " is-sketching" : ""
+        }`}
+      />
+      <div className="route-map-controls">
+        <button
+          type="button"
+          onClick={() => mapRef.current?.zoomIn()}
+          title="Zoom in"
+          aria-label="Zoom in"
+        >
+          <Plus size={16} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={() => mapRef.current?.zoomOut()}
+          title="Zoom out"
+          aria-label="Zoom out"
+        >
+          <Minus size={16} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={fitToContent}
+          title="Fit route to view"
+          aria-label="Fit route to view"
+        >
+          <Maximize2 size={15} aria-hidden="true" />
+        </button>
+      </div>
+      {retracedSections.length > 0 ? (
+        <div
+          className="route-map-legend"
+          aria-label="Yellow dashed line: retraced route section"
+        >
+          <span className="route-map-legend-swatch" aria-hidden="true" />
+          <span>Retraced section</span>
+        </div>
+      ) : null}
+    </>
   );
 }
 

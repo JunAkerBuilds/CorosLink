@@ -2,6 +2,14 @@ import type {
   RouteActivityType,
   RouteElevationPreference
 } from "../../../electron/types";
+import type { LucideIcon } from "lucide-react";
+import {
+  Bike,
+  Footprints,
+  Mountain,
+  MountainSnow,
+  PersonStanding
+} from "lucide-react";
 
 /** A selectable base map style. */
 export type RouteBaseLayer =
@@ -142,16 +150,33 @@ export const ROUTE_OVERLAY_ORDER: RouteOverlayId[] = ["hiking", "cycling", "mtb"
 export interface ActivityOption {
   value: RouteActivityType;
   label: string;
-  /** Short glyph shown in the sport picker. */
-  glyph: string;
+  /** Compact label shown in the sport picker cells. */
+  shortLabel: string;
+  /** Icon shown in the sport picker. */
+  icon: LucideIcon;
 }
 
 export const ROUTE_ACTIVITY_OPTIONS: ActivityOption[] = [
-  { value: "running", label: "Running", glyph: "🏃" },
-  { value: "walking", label: "Walking", glyph: "🚶" },
-  { value: "hiking", label: "Hiking", glyph: "🥾" },
-  { value: "cycling-road", label: "Road cycling", glyph: "🚴" },
-  { value: "cycling-mountain", label: "Mountain biking", glyph: "🚵" }
+  { value: "running", label: "Running", shortLabel: "Run", icon: Footprints },
+  {
+    value: "walking",
+    label: "Walking",
+    shortLabel: "Walk",
+    icon: PersonStanding
+  },
+  { value: "hiking", label: "Hiking", shortLabel: "Hike", icon: Mountain },
+  {
+    value: "cycling-road",
+    label: "Road cycling",
+    shortLabel: "Road",
+    icon: Bike
+  },
+  {
+    value: "cycling-mountain",
+    label: "Mountain biking",
+    shortLabel: "MTB",
+    icon: MountainSnow
+  }
 ];
 
 export const ROUTE_ELEVATION_OPTIONS: Array<{

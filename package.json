@@ -21,6 +21,7 @@
     "test:maps": "npm run build:electron && node scripts/test-maps.mjs",
     "test:apple-podcasts": "npm run build:electron && node scripts/test-apple-podcasts.mjs",
     "test:route-location": "node --experimental-strip-types scripts/test-route-location.mjs",
+    "test:route-overlap": "node --experimental-strip-types scripts/test-route-overlap.mjs",
     "test:sketch": "npm run build:electron && node scripts/test-sketch-geometry.mjs",
     "test:greetings": "node --experimental-strip-types scripts/test-greetings.mjs",
     "test:sport-colors": "node --experimental-strip-types scripts/test-sport-colors.mjs",

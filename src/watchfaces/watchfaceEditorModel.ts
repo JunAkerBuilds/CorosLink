@@ -3,16 +3,19 @@ import type {
   CorosWatchfaceTemplateDetails
 } from "../../electron/types";
 import {
+  analogCenterLayoutGroupId,
   applyConfigOverridesToDetails,
   applyLayoutToDetails,
   batteryPreviewStateIndex,
   buildControlBatteryVisibilityOverrides,
+  buildControlComplicationVisibilityOverrides,
   configAssetCanvasSize,
   controlStatusLayoutGroupId,
   scaledBatterySpriteCanvasSize,
   computeLayoutGroupBounds,
   getFixedMetricCapabilities,
   getAmPmCapability,
+  getWatchfaceAnalogPreviewLayers,
   getWatchfaceControlStatusPreviewLayers,
   hasControlBattery,
   listWatchfaceConfigAssets,
@@ -161,6 +164,7 @@ function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
       color: true,
       scale: true,
       font: true,
+      rotate: true,
       grouping: true,
       effects: true
     };
@@ -171,6 +175,7 @@ function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
       color: true,
       scale: true,
       font: false,
+      rotate: true,
       grouping: true,
       effects: true
     };
@@ -181,6 +186,7 @@ function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
       color: true,
       scale: true,
       font: true,
+      rotate: true,
       grouping: true,
       effects: true
     };
@@ -191,6 +197,7 @@ function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
       color: true,
       scale: true,
       font: false,
+      rotate: true,
       grouping: true,
       effects: true
     };
@@ -271,10 +278,13 @@ export function deriveEditorLayers(
   );
   const offsetDetails = applyConfigOverridesToDetails(
     laidOutDetails,
-    buildControlBatteryVisibilityOverrides(
-      laidOutDetails,
-      design.controlBatteryEnabled
-    )
+    [
+      ...buildControlBatteryVisibilityOverrides(
+        laidOutDetails,
+        design.controlBatteryEnabled
+      ),
+      ...buildControlComplicationVisibilityOverrides(laidOutDetails, design)
+    ]
   );
   const resolution = pickPreviewResolution(offsetDetails);
   const boundsById = new Map<string, WatchfaceLayoutGroupBounds>();
@@ -558,10 +568,20 @@ export function deriveEditorLayers(
       reference.scope === "config"
         ? controlStatusLayoutGroupId(reference.configKey)
         : null;
+    const analogLayoutGroupId =
+      reference.scope === "config"
+        ? analogCenterLayoutGroupId(reference.configKey)
+        : null;
     const statusPreviewLayer =
       statusLayoutGroupId && resolution
         ? getWatchfaceControlStatusPreviewLayers(resolution).find(
-            (layer) => layer.layoutGroupId === statusLayoutGroupId
+            (layer) => layer.configKey === reference.configKey
+          ) ?? null
+        : null;
+    const analogPreviewLayer =
+      analogLayoutGroupId && resolution
+        ? getWatchfaceAnalogPreviewLayers(resolution, new Date()).find(
+            (layer) => layer.configKey === reference.configKey
           ) ?? null
         : null;
     const statusCanvas =
@@ -586,20 +606,41 @@ export function deriveEditorLayers(
             y1: statusPreviewLayer.position.y + statusCanvas.height
           }
         : null;
+    const analogBounds =
+      analogPreviewLayer && override?.enabled !== false
+        ? {
+            id: `configAsset:${reference.id}`,
+            label: reference.label,
+            ...rotatedCenterBounds(
+              analogPreviewLayer.center.x,
+              analogPreviewLayer.center.y,
+              analogPreviewLayer.source.width,
+              analogPreviewLayer.source.height,
+              analogPreviewLayer.rotationDegrees ?? 0,
+              0,
+              0
+            )
+          }
+        : null;
+    const movableLayoutGroupId =
+      statusLayoutGroupId ?? analogLayoutGroupId;
     layers.push({
       id: `configAsset:${reference.id}`,
       kind: "configAsset",
       label: reference.label,
-      ...(statusLayoutGroupId
-        ? { layoutGroupId: statusLayoutGroupId }
+      ...(movableLayoutGroupId
+        ? { layoutGroupId: movableLayoutGroupId }
         : {}),
       configAssetId: reference.id,
       configAssetReplaced: Boolean(override?.replacement),
       visible: override?.enabled !== false,
       canHide: true,
-      present: statusLayoutGroupId ? reference.source !== null : true,
-      bounds: statusBounds,
-      capabilities: statusLayoutGroupId
+      present:
+        statusLayoutGroupId || analogLayoutGroupId
+          ? reference.source !== null
+          : true,
+      bounds: statusBounds ?? analogBounds,
+      capabilities: movableLayoutGroupId
         ? {
             position: true,
             color: false,
