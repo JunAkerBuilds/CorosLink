@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.19] - 2026-07-19
+
+### Added
+
+- **Configurable MCP server registry** — add, edit, and connect multiple MCP servers for in-app Coach chat, with a Settings panel, per-server secret keys, built-in COROS seed, Freddy/Strava presets, and chat tools aggregated/routed across all connected servers ([#56](https://github.com/JunAkerBuilds/CorosLink/pull/56))
+- **RPE Load Profile** — RPE (Foster session-RPE) load distribution shown in a dedicated Load Profile section of Training Hub ([#58](https://github.com/JunAkerBuilds/CorosLink/pull/58))
+- **Watch Face editor groups, effects & transform tools** — group layers, apply effects, and use transform tools in the watchface editor ([#60](https://github.com/JunAkerBuilds/CorosLink/pull/60))
+- **Watch Face stroke & inspector controls** — per-layer strokes, an inspector panel, and layer opacity ([#65](https://github.com/JunAkerBuilds/CorosLink/pull/65))
+- **PACE 4 watchface exports & always-on editing** — full always-on (AOD) watchface editing, PACE 4 export support, month-label sprites, native-size date sprites, and template overrides ([#64](https://github.com/JunAkerBuilds/CorosLink/pull/64))
+- **Retraced route sections** — highlight and label retraced sections in Route Studio ([#38](https://github.com/JunAkerBuilds/CorosLink/pull/38), [#63](https://github.com/JunAkerBuilds/CorosLink/pull/63))
+- **Remember COROS credentials across services** — persist sign-in across connected services
+
+### Changed
+
+- Watch Face editor polish — redesigned panel headers and editor chrome, reorganized artwork layers (background first), authored layer controls, and removal of the watchface scale limit ([#61](https://github.com/JunAkerBuilds/CorosLink/pull/61))
+- Route Studio interface refinements
+- README updated with the new domain and documentation link ([#54](https://github.com/JunAkerBuilds/CorosLink/pull/54))
+
+### Fixed
+
+- Always-on (AOD) outlines are now watch-safe
+- Watchface font spacing, text bounds, font resets, and sprite bounds/imports/scaling
+- Background no longer shifts during layer drag; selector drag layering
+- Watchface panels render correctly in light mode
+- PACE 4 firmware profile and export finalization
+- Route waypoint layering ([#37](https://github.com/JunAkerBuilds/CorosLink/pull/37))
+- MCP registry lifecycle/settings hardening; reconnect all authorized MCP servers (not just COROS) on startup
+- A bad dock icon no longer aborts app startup
+
 ## [0.1.18] - 2026-07-15
 
 ### Added
@@ -285,6 +314,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - GitHub Actions release workflow and installer build documentation
 
+[0.1.19]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.18...v0.1.19
 [0.1.18]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.15...v0.1.16
