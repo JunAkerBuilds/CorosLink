@@ -820,6 +820,8 @@ export interface CorosWatchfaceDesignState {
   layerStrokes?: Record<string, CorosWatchfaceStroke[]>;
   /** Visibility overrides for firmware-backed editor layers. */
   layerVisibility?: Record<string, boolean>;
+  /** Normalized 0..1 opacity keyed by editor layer id. */
+  layerOpacities?: Record<string, number>;
   /** Per-layer colors for firmware components without specialized styles. */
   layerColors?: Record<string, string>;
   /** Per-config PNG visibility and isolated replacement choices. */
@@ -878,6 +880,7 @@ export type CorosWatchfaceModeDesignState = Partial<
     | "layerEffects"
     | "layerStrokes"
     | "layerVisibility"
+    | "layerOpacities"
     | "layerColors"
     | "configAssetOverrides"
     | "designSprites"

@@ -999,11 +999,21 @@ assert.deepEqual(
   { dx: 5, dy: 7 }
 );
 assert.equal(movedAodRoot.modeDesigns.aod.backgroundEdited, undefined);
-const strokedAodRoot = writeWatchfaceModeDesign(
+const fadedAodRoot = writeWatchfaceModeDesign(
   movedAodRoot,
   "aod",
   {
     ...resolveWatchfaceModeDesign(movedAodRoot, "aod"),
+    layerOpacities: { hours: 0.35 }
+  }
+);
+assert.equal(fadedAodRoot.layerOpacities, undefined);
+assert.equal(fadedAodRoot.modeDesigns.aod.layerOpacities.hours, 0.35);
+const strokedAodRoot = writeWatchfaceModeDesign(
+  fadedAodRoot,
+  "aod",
+  {
+    ...resolveWatchfaceModeDesign(fadedAodRoot, "aod"),
     layerStrokes: {
       hours: [{
         id: "aod-stroke",

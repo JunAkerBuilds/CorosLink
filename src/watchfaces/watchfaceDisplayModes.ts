@@ -57,6 +57,7 @@ function makeModeDefaultDesign(): CorosWatchfaceDesignState {
     layerEffects: {},
     layerStrokes: {},
     layerVisibility: {},
+    layerOpacities: {},
     layerColors: {},
     configAssetOverrides: {},
     designSprites: [],
@@ -100,6 +101,7 @@ const MODE_DESIGN_KEYS = [
   "layerEffects",
   "layerStrokes",
   "layerVisibility",
+  "layerOpacities",
   "layerColors",
   "configAssetOverrides",
   "designSprites",
@@ -183,6 +185,7 @@ export function materializeLegacyAodDesign(
     layerEffects,
     layerStrokes: {},
     layerVisibility: {},
+    layerOpacities: {},
     layerColors: Object.fromEntries(
       Object.entries(design.layerColors ?? {}).map(([key, color]) => [
         key,

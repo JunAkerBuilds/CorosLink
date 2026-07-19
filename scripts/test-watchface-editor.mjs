@@ -84,8 +84,25 @@ import {
   normalizeWatchfaceStroke,
   watchfaceStrokePadding
 } from "../src/watchfaces/watchfaceEditorStrokes.ts";
+import {
+  hasWatchfaceLayerOpacity,
+  normalizeWatchfaceLayerOpacity,
+  resolveWatchfaceLayerOpacity
+} from "../src/watchfaces/watchfaceLayerOpacity.ts";
 
 assert.equal(WATCHFACE_EDITOR_HISTORY_LIMIT, 50);
+assert.equal(normalizeWatchfaceLayerOpacity(-0.2), 0);
+assert.equal(normalizeWatchfaceLayerOpacity(1.4), 1);
+assert.equal(normalizeWatchfaceLayerOpacity(Number.NaN), 1);
+assert.equal(resolveWatchfaceLayerOpacity({}, "hours"), 1);
+assert.equal(
+  resolveWatchfaceLayerOpacity({ layerOpacities: { hours: 0.42 } }, "hours"),
+  0.42
+);
+assert.equal(
+  hasWatchfaceLayerOpacity({ layerOpacities: { hours: 0.42 } }, "hours"),
+  true
+);
 
 const inspectorSectionFixtures = [
   ["background", {}, false, true, true, false, false],

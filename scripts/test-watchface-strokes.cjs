@@ -55,8 +55,13 @@ async function main() {
     const results = await window.webContents.executeJavaScript(`
       (async () => {
         const {
+          renderWatchfaceCanvasDecorationsWithOpacity,
           renderWatchfaceCanvasStrokes
         } = await import("/src/watchfaces/watchfaceEditorStrokes.ts");
+        const {
+          applyWatchfaceDataUrlOpacity,
+          loadStudioImage
+        } = await import("/src/watchfaces/watchfaceStudio.ts");
 
         const makeSource = () => {
           const canvas = document.createElement("canvas");
@@ -134,6 +139,31 @@ async function main() {
           1,
           true
         );
+        const fadedWithStroke = renderWatchfaceCanvasDecorationsWithOpacity(
+          makeSource(),
+          [stroke()],
+          [],
+          0.2,
+          1,
+          true
+        );
+        const opacitySource = document.createElement("canvas");
+        opacitySource.width = 2;
+        opacitySource.height = 2;
+        const opacitySourceContext = opacitySource.getContext("2d");
+        opacitySourceContext.fillStyle = "#ff0000";
+        opacitySourceContext.fillRect(0, 0, 2, 2);
+        const opacityImage = await loadStudioImage(
+          await applyWatchfaceDataUrlOpacity(
+            opacitySource.toDataURL("image/png"),
+            0.35
+          ),
+          false
+        );
+        const opacityResult = document.createElement("canvas");
+        opacityResult.width = 2;
+        opacityResult.height = 2;
+        opacityResult.getContext("2d").drawImage(opacityImage, 0, 0);
 
         return {
           outside: {
@@ -161,7 +191,12 @@ async function main() {
           disabled: {
             padding: disabled.padding,
             size: [disabled.canvas.width, disabled.canvas.height]
-          }
+          },
+          fadedWithStroke: {
+            stroke: pixel(fadedWithStroke.canvas, 7, 14),
+            source: pixel(fadedWithStroke.canvas, 12, 12)
+          },
+          layerOpacity: pixel(opacityResult, 0, 0)
         };
       })()
     `);
@@ -205,6 +240,19 @@ async function main() {
       bottom: 0
     });
     assert.deepEqual(results.disabled.size, [20, 20]);
+    assert.ok(
+      results.fadedWithStroke.stroke[3] > 200,
+      "sprite opacity does not fade the independent stroke"
+    );
+    assert.ok(
+      results.fadedWithStroke.source[3] >= 50 &&
+        results.fadedWithStroke.source[3] <= 52,
+      "sprite source opacity remains independently adjustable"
+    );
+    assert.ok(
+      results.layerOpacity[3] >= 88 && results.layerOpacity[3] <= 90,
+      "layer opacity multiplies exported PNG alpha"
+    );
     window.destroy();
     console.log("watchface stroke renderer tests passed");
   } finally {

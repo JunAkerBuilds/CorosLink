@@ -17,9 +17,12 @@ import {
   resolveWatchfaceLayerEffects
 } from "./watchfaceEditorEffects.ts";
 import {
-  renderWatchfaceCanvasDecorations,
+  renderWatchfaceCanvasDecorationsWithOpacity,
   resolveWatchfaceLayerStrokes
 } from "./watchfaceEditorStrokes.ts";
+import {
+  resolveWatchfaceLayerOpacity
+} from "./watchfaceLayerOpacity.ts";
 
 export const COROS_CONFIG_DELETE_VALUE = "__COROSLINK_DELETE_CONFIG_KEY__";
 
@@ -64,6 +67,8 @@ export interface WatchfaceStudioOptions extends WatchfaceTypography {
   dateStyles?: WatchfaceDateStyles;
   /** Colors for firmware layers without a specialized style object. */
   layerColors?: Record<string, string>;
+  /** Normalized opacity keyed by editor layer id. */
+  layerOpacities?: Record<string, number>;
   /** Preview-time config PNG replacements, keyed by config/aod scope. */
   configAssetOverrides?: Record<string, CorosWatchfaceConfigAssetOverride>;
   /** Selects which config tree owns direct PNG references in this preview. */
@@ -1083,7 +1088,11 @@ export function buildDisabledWatchfaceConfigAssetOverrides(
 /** Builds native-sized created PNGs for every customized config reference. */
 export async function buildWatchfaceConfigAssetReplacements(
   details: CorosWatchfaceTemplateDetails,
-  overrides: Record<string, CorosWatchfaceConfigAssetOverride> = {}
+  overrides: Record<string, CorosWatchfaceConfigAssetOverride> = {},
+  options: {
+    loadAssets?: WatchfaceAssetLoader;
+    layerOpacities?: Record<string, number>;
+  } = {}
 ): Promise<CorosWatchfaceAssetReplacement[]> {
   const replacements: CorosWatchfaceAssetReplacement[] = [];
   const masterWidth = pickPreviewResolution(details)?.width;
@@ -1107,13 +1116,51 @@ export async function buildWatchfaceConfigAssetReplacements(
       for (const [configKey, rawPath] of entries) {
         const id = watchfaceConfigAssetId(scope, configKey);
         const override = overrides[id];
-        if (!override?.replacement || override.enabled === false) continue;
+        const componentLayerId =
+          configKey === "battery_icon"
+            ? "batteryIcon"
+            : configKey === "control_battery_icon"
+              ? "controlBatteryIcon"
+              : /^control_[a-z_]+_icon$/.test(configKey) ||
+                  configKey === "control_colon_icon"
+                ? "complication"
+                : /^(?:colon_icon|autoalign_time_colon_icon|arc_cut_icon)$/.test(
+                    configKey
+                  )
+                  ? "separators"
+                  : undefined;
+        const opacity =
+          resolveWatchfaceLayerOpacity(
+            options,
+            `configAsset:${id}`
+          ) *
+          resolveWatchfaceLayerOpacity(options, componentLayerId);
+        if (
+          (!override?.replacement && opacity === 1) ||
+          override?.enabled === false
+        ) {
+          continue;
+        }
         if (scope === "config" && configKey === "background_icon") continue;
         const relativePath = rawPath.replace(/\\/g, "/").replace(/^\.\//, "");
         const source = resolution.icons.find(
           (file) => file.path === `${resolution.directory}/${relativePath}`
         );
         const virtual = !source && configKey.startsWith("control_");
+        const sourceAsset = !override?.replacement && source && options.loadAssets
+          ? (await options.loadAssets([source.path]))[0]
+          : undefined;
+        if (!override?.replacement && !sourceAsset) continue;
+        if (!override?.replacement && source && sourceAsset) {
+          replacements.push({
+            path: source.path,
+            dataUrl: await applyWatchfaceDataUrlOpacity(
+              sourceAsset.dataUrl,
+              opacity
+            )
+          });
+          continue;
+        }
         const effectiveOverride = virtual
           ? { ...override, nativeSize: false }
           : override;
@@ -1125,29 +1172,39 @@ export async function buildWatchfaceConfigAssetReplacements(
           effectiveOverride,
           {
             width: source?.width ?? virtualCanvas?.width ??
-              Math.max(1, Math.round(override.replacement.width * nativeScale)),
+              Math.max(
+                1,
+                Math.round(override!.replacement!.width * nativeScale)
+              ),
             height: source?.height ?? virtualCanvas?.height ??
-              Math.max(1, Math.round(override.replacement.height * nativeScale))
+              Math.max(
+                1,
+                Math.round(override!.replacement!.height * nativeScale)
+              )
           },
           nativeScale
         );
         const replaceInPlace = Boolean(source) && replaceConfigAssetInPlace(configKey);
+        const renderedDataUrl = canvasSize.native
+          ? await resizeAndTintSprite(
+              override!.replacement!.dataUrl,
+              canvasSize.width,
+              canvasSize.height
+            )
+          : await fitVisibleSpriteToCanvas(
+              override!.replacement!.dataUrl,
+              canvasSize.width,
+              canvasSize.height,
+              override!.scale ?? 1
+            );
         replacements.push({
           path: replaceInPlace
             ? source!.path
             : `${resolution.directory}/${configAssetCreatedRelativePath(id)}`,
-          dataUrl: canvasSize.native
-            ? await resizeAndTintSprite(
-                override.replacement.dataUrl,
-                canvasSize.width,
-                canvasSize.height
-              )
-            : await fitVisibleSpriteToCanvas(
-                override.replacement.dataUrl,
-                canvasSize.width,
-                canvasSize.height,
-                override.scale ?? 1
-              ),
+          dataUrl: await applyWatchfaceDataUrlOpacity(
+            renderedDataUrl,
+            opacity
+          ),
           create: !replaceInPlace,
           ...(canvasSize.native ? { allowDimensionOverride: true } : {})
         });
@@ -1228,6 +1285,40 @@ export async function buildWatchfaceConfigAssetReplacements(
     }
     const controlBatteryOverride =
       overrides["config:control_battery_icon"];
+    const controlBatteryOpacity = resolveWatchfaceLayerOpacity(
+      options,
+      "controlBatteryIcon"
+    );
+    if (
+      !controlBatteryOverride?.replacement &&
+      Object.keys(controlBatteryOverride?.stateReplacements ?? {}).length === 0 &&
+      controlBatteryOpacity < 1 &&
+      options.loadAssets
+    ) {
+      const configuredControlFolder =
+        resolution.config.control_battery_icon_dir?.replace(/\\/g, "/");
+      const controlBatteryFolder = configuredControlFolder
+        ? resolution.spriteFolders.find(
+            (folder) =>
+              folder.kind === "state" &&
+              folder.folder === configuredControlFolder
+          )
+        : undefined;
+      if (controlBatteryFolder) {
+        const assets = await options.loadAssets(
+          controlBatteryFolder.files.map((file) => file.path)
+        );
+        for (const asset of assets) {
+          replacements.push({
+            path: asset.path,
+            dataUrl: await applyWatchfaceDataUrlOpacity(
+              asset.dataUrl,
+              controlBatteryOpacity
+            )
+          });
+        }
+      }
+    }
     if (
       (controlBatteryOverride?.replacement ||
         controlBatteryOverride?.stateReplacements) &&
@@ -2430,6 +2521,24 @@ export function loadStudioImage(
     });
   }
   return pending;
+}
+
+/** Multiplies every PNG pixel's alpha while preserving its native dimensions. */
+export async function applyWatchfaceDataUrlOpacity(
+  dataUrl: string,
+  opacity: number
+): Promise<string> {
+  const normalizedOpacity = Math.max(0, Math.min(1, opacity));
+  if (normalizedOpacity === 1) return dataUrl;
+  const image = await loadStudioImage(dataUrl, false);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, image.naturalWidth);
+  canvas.height = Math.max(1, image.naturalHeight);
+  const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+  if (!context) return dataUrl;
+  context.globalAlpha = normalizedOpacity;
+  context.drawImage(image, 0, 0);
+  return canvas.toDataURL("image/png");
 }
 
 const MAX_ARTWORK_DIMENSION = 1400;
@@ -5437,27 +5546,46 @@ export function buildLayerColorOverrides(
 export async function buildLayerColorSpriteReplacements(
   details: CorosWatchfaceTemplateDetails,
   colors: Record<string, string>,
-  loadAssets: WatchfaceAssetLoader
+  loadAssets: WatchfaceAssetLoader,
+  layerOpacities: Record<string, number> = {}
 ): Promise<CorosWatchfaceAssetReplacement[]> {
-  const jobs = new Map<string, { file: CorosWatchfaceSpriteFile; color: string }>();
+  const opacitySource = { layerOpacities };
+  const jobs = new Map<
+    string,
+    { file: CorosWatchfaceSpriteFile; color?: string; layerId: string }
+  >();
   for (const resolution of details.resolutions) {
-    const addIcon = (value: string | undefined, color: string | undefined) => {
-      if (!value || !color) {
+    const addIcon = (
+      layerId: string,
+      value: string | undefined,
+      color: string | undefined
+    ) => {
+      if (
+        !value ||
+        (!color && resolveWatchfaceLayerOpacity(opacitySource, layerId) === 1)
+      ) {
         return;
       }
       const path = `${resolution.directory}/${value.replace(/\\/g, "/")}`;
       const file = resolution.icons.find((entry) => entry.path === path);
       if (file) {
-        jobs.set(file.path, { file, color });
+        jobs.set(file.path, { file, color, layerId });
       }
     };
-    addIcon(resolution.config["colon_icon"], colors.separators);
-    addIcon(resolution.config["autoalign_time_colon_icon"], colors.separators);
-    addIcon(resolution.config["arc_cut_icon"], colors.separators);
-    if (colors.complication) {
+    addIcon("separators", resolution.config["colon_icon"], colors.separators);
+    addIcon(
+      "separators",
+      resolution.config["autoalign_time_colon_icon"],
+      colors.separators
+    );
+    addIcon("separators", resolution.config["arc_cut_icon"], colors.separators);
+    if (
+      colors.complication ||
+      resolveWatchfaceLayerOpacity(opacitySource, "complication") < 1
+    ) {
       for (const [key, value] of Object.entries(resolution.config)) {
         if (/^control_[a-z_]+_icon$/.test(key)) {
-          addIcon(value, colors.complication);
+          addIcon("complication", value, colors.complication);
         }
       }
     }
@@ -5470,13 +5598,19 @@ export async function buildLayerColorSpriteReplacements(
     if (!asset) {
       continue;
     }
+    const renderedDataUrl = job.color
+      ? await tintSprite(
+          asset.dataUrl,
+          job.file.width,
+          job.file.height,
+          job.color
+        )
+      : asset.dataUrl;
     replacements.push({
       path,
-      dataUrl: await tintSprite(
-        asset.dataUrl,
-        job.file.width,
-        job.file.height,
-        job.color
+      dataUrl: await applyWatchfaceDataUrlOpacity(
+        renderedDataUrl,
+        resolveWatchfaceLayerOpacity(opacitySource, job.layerId)
       )
     });
   }
@@ -5928,8 +6062,29 @@ function drawStudioLayerImage(
   previewScale: number,
   options: WatchfaceStudioOptions,
   layerId?: string,
-  rotateSprite = true
+  rotateSprite = true,
+  additionalOpacityLayerId?: string
 ): void {
+  const opacity =
+    resolveWatchfaceLayerOpacity(options, layerId) *
+    resolveWatchfaceLayerOpacity(options, additionalOpacityLayerId);
+  const drawLayer = (
+    source: CanvasImageSource,
+    drawX: number,
+    drawY: number,
+    drawWidth?: number,
+    drawHeight?: number,
+    alpha = 1
+  ) => {
+    context.save();
+    context.globalAlpha *= alpha;
+    if (drawWidth === undefined || drawHeight === undefined) {
+      context.drawImage(source, drawX, drawY);
+    } else {
+      context.drawImage(source, drawX, drawY, drawWidth, drawHeight);
+    }
+    context.restore();
+  };
   const rotation = resolveWatchfaceSpriteRotation(
     options,
     layerId,
@@ -5942,7 +6097,7 @@ function drawStudioLayerImage(
     ? resolveWatchfaceLayerStrokes(options, layerId)
     : [];
   if (effects.length === 0 && strokes.length === 0 && !rotation) {
-    context.drawImage(image, x, y, width, height);
+    drawLayer(image, x, y, width, height, opacity);
     return;
   }
   const source = document.createElement("canvas");
@@ -5950,7 +6105,7 @@ function drawStudioLayerImage(
   source.height = Math.max(1, Math.ceil(height));
   const sourceContext = source.getContext("2d", { colorSpace: "display-p3" });
   if (!sourceContext) {
-    context.drawImage(image, x, y, width, height);
+    drawLayer(image, x, y, width, height, opacity);
     return;
   }
   sourceContext.imageSmoothingEnabled = true;
@@ -5971,20 +6126,21 @@ function drawStudioLayerImage(
     sourceContext.drawImage(image, 0, 0, width, height);
   }
   if (effects.length === 0 && strokes.length === 0) {
-    context.drawImage(source, x, y, width, height);
+    drawLayer(source, x, y, width, height, opacity);
     return;
   }
-  const rendered = renderWatchfaceCanvasDecorations(
+  const rendered = renderWatchfaceCanvasDecorationsWithOpacity(
     source,
     strokes,
     effects,
+    opacity,
     watchfaceEffectRenderScale(
       previewScale,
       options.effectResolutionScale ?? 1
     ),
     true
   );
-  context.drawImage(
+  drawLayer(
     rendered.canvas,
     x - rendered.padding.left,
     y - rendered.padding.top
@@ -6514,9 +6670,15 @@ export async function drawStudioPreview(
     file: CorosWatchfaceSpriteFile,
     color: string | null = null
   ): Promise<HTMLImageElement | undefined> => {
-    const override = options.configAssetOverrides?.[
-      watchfaceConfigAssetId(options.configAssetScope ?? "config", configKey)
-    ];
+    const scopedAssetId = watchfaceConfigAssetId(
+      options.configAssetScope ?? "config",
+      configKey
+    );
+    const override = options.configAssetOverrides?.[scopedAssetId];
+    const assetOpacity = resolveWatchfaceLayerOpacity(
+      options,
+      `configAsset:${scopedAssetId}`
+    );
     const replacement = override?.replacement;
     const artworkZoom = replacement ? override?.scale ?? 1 : 1;
     const canvasSize = configAssetCanvasSize(
@@ -6525,12 +6687,12 @@ export async function drawStudioPreview(
       { width: file.width, height: file.height },
       options.nativeSpriteResolutionScale ?? 1
     );
-    const cacheKey = `${configKey}|${color ?? "original"}|${artworkZoom}|${canvasSize.width}x${canvasSize.height}|${canvasSize.native}`;
+    const cacheKey = `${configKey}|${color ?? "original"}|${artworkZoom}|${canvasSize.width}x${canvasSize.height}|${canvasSize.native}|${assetOpacity}`;
     const cached = configuredAssetImages.get(cacheKey);
     if (cached) return cached;
     const sourceDataUrl = replacement?.dataUrl ?? loadedAssets.get(file.path)?.dataUrl;
     if (!sourceDataUrl) return loaded.get(file.path);
-    const renderedDataUrl = replacement
+    const opaqueDataUrl = replacement
       ? canvasSize.native
         ? await resizeAndTintSprite(
             sourceDataUrl,
@@ -6549,6 +6711,10 @@ export async function drawStudioPreview(
           file.height,
           color ?? undefined
         );
+    const renderedDataUrl = await applyWatchfaceDataUrlOpacity(
+      opaqueDataUrl,
+      assetOpacity
+    );
     const image = await loadStudioImage(renderedDataUrl);
     configuredAssetImages.set(cacheKey, image);
     return image;
@@ -6688,12 +6854,17 @@ export async function drawStudioPreview(
       const gapCenterX =
         (hourLow.pos.x + hourWidth + minuteHigh.pos.x) / 2;
       const gapCenterY = (hourCenterY + minuteCenterY) / 2;
-      context.drawImage(
+      drawStudioLayerImage(
+        context,
         image,
         (gapCenterX - image.naturalWidth / 2) * scale,
         (gapCenterY - image.naturalHeight / 2) * scale,
         image.naturalWidth * scale,
-        image.naturalHeight * scale
+        image.naturalHeight * scale,
+        scale,
+        options,
+        "separators",
+        false
       );
     }
   }
@@ -6701,12 +6872,17 @@ export async function drawStudioPreview(
   if (arcCutFile && arcCutPos) {
     const image = await configuredAssetImage("arc_cut_icon", arcCutFile, separatorIconColor);
     if (image) {
-      context.drawImage(
+      drawStudioLayerImage(
+        context,
         image,
         arcCutPos.x * scale,
         arcCutPos.y * scale,
         image.naturalWidth * scale,
-        image.naturalHeight * scale
+        image.naturalHeight * scale,
+        scale,
+        options,
+        "separators",
+        false
       );
     }
   }
@@ -6977,7 +7153,8 @@ export async function drawStudioPreview(
         scale,
         options,
         "complication",
-        false
+        false,
+        complication?.id === "battery" ? "controlBatteryIcon" : undefined
       );
     }
   } else if (
@@ -7016,7 +7193,8 @@ export async function drawStudioPreview(
       scale,
       options,
       "complication",
-      false
+      false,
+      complication?.id === "battery" ? "controlBatteryIcon" : undefined
     );
   } else if (complication?.id === "battery" && complicationIconPos) {
     // Some watches offer Battery as a firmware control even though the source
@@ -7040,6 +7218,9 @@ export async function drawStudioPreview(
     const stroke = Math.max(1.5, h * 0.1);
     const color = options.layerColors?.complication ?? options.digitColor;
     context.save();
+    context.globalAlpha *=
+      resolveWatchfaceLayerOpacity(options, "complication") *
+      resolveWatchfaceLayerOpacity(options, "controlBatteryIcon");
     context.strokeStyle = color;
     context.fillStyle = color;
     context.lineWidth = stroke;
@@ -7374,6 +7555,13 @@ export async function drawStudioPreview(
     const width = image.naturalWidth * scale;
     const height = image.naturalHeight * scale;
     context.save();
+    context.globalAlpha *= resolveWatchfaceLayerOpacity(
+      options,
+      `configAsset:${watchfaceConfigAssetId(
+        options.configAssetScope ?? "config",
+        layer.configKey
+      )}`
+    );
     context.translate(layer.center.x * scale, layer.center.y * scale);
     if (layer.rotationDegrees !== null) {
       context.rotate((layer.rotationDegrees * Math.PI) / 180);

@@ -4,7 +4,9 @@ import type {
   CorosWatchfaceShadowEffect,
   CorosWatchfaceStroke
 } from "../../electron/types";
-import { renderWatchfaceCanvasDecorations } from "./watchfaceEditorStrokes";
+import {
+  renderWatchfaceCanvasDecorationsWithOpacity
+} from "./watchfaceEditorStrokes";
 
 /** All background shapes are authored in the 800×800 background pixel space. */
 export const BACKGROUND_SPACE = 800;
@@ -146,10 +148,11 @@ function applyFill(
 
 function drawBackgroundElement(
   context: CanvasRenderingContext2D,
-  element: CorosWatchfaceBackgroundElement
+  element: CorosWatchfaceBackgroundElement,
+  opacity = Math.max(0, Math.min(1, element.opacity ?? 1))
 ): void {
   context.save();
-  context.globalAlpha = Math.max(0, Math.min(1, element.opacity ?? 1));
+  context.globalAlpha = opacity;
   context.translate(element.x, element.y);
   context.rotate((element.rotation * Math.PI) / 180);
 
@@ -227,9 +230,14 @@ export function drawBackgroundElements(
     if (!layerContext) continue;
     layerContext.imageSmoothingEnabled = true;
     layerContext.imageSmoothingQuality = "high";
-    drawBackgroundElement(layerContext, element);
+    drawBackgroundElement(layerContext, element, 1);
     context.drawImage(
-      renderWatchfaceCanvasDecorations(layer, strokes, effects).canvas,
+      renderWatchfaceCanvasDecorationsWithOpacity(
+        layer,
+        strokes,
+        effects,
+        Math.max(0, Math.min(1, element.opacity ?? 1))
+      ).canvas,
       0,
       0
     );

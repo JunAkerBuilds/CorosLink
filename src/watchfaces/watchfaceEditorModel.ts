@@ -753,5 +753,11 @@ export function deriveEditorLayers(
     }
   });
 
-  return layers;
+  return layers.map((layer) => ({
+    ...layer,
+    capabilities: {
+      ...layer.capabilities,
+      opacity: true
+    }
+  }));
 }

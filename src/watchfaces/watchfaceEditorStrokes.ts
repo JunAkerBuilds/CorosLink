@@ -300,7 +300,8 @@ export function renderWatchfaceCanvasStrokes(
   source: HTMLCanvasElement,
   strokes: CorosWatchfaceStroke[],
   scale = 1,
-  includePadding = false
+  includePadding = false,
+  includeSource = true
 ): { canvas: HTMLCanvasElement; padding: WatchfaceEffectPadding } {
   const active = strokes
     .map(normalizeWatchfaceStroke)
@@ -308,7 +309,10 @@ export function renderWatchfaceCanvasStrokes(
   const padding = includePadding
     ? watchfaceStrokePadding(active, scale)
     : { left: 0, top: 0, right: 0, bottom: 0 };
-  if (active.length === 0) return { canvas: source, padding };
+  if (active.length === 0) {
+    if (includeSource) return { canvas: source, padding };
+    return { canvas: canvas(source.width, source.height), padding };
+  }
 
   const base = canvas(
     source.width + padding.left + padding.right,
@@ -319,7 +323,7 @@ export function renderWatchfaceCanvasStrokes(
   const bounds = alphaBounds(base);
   const result = canvas(base.width, base.height);
   const resultContext = context2d(result);
-  resultContext.drawImage(base, 0, 0);
+  if (includeSource) resultContext.drawImage(base, 0, 0);
 
   for (const stroke of [...active].reverse()) {
     const mask = strokeMask(base, stroke, scale);
@@ -377,6 +381,63 @@ export function renderWatchfaceCanvasDecorations(
   };
 }
 
+/**
+ * Applies opacity to the source bitmap without fading strokes or effects.
+ * This mirrors design tools where fill opacity and decoration opacity are
+ * independent controls.
+ */
+export function renderWatchfaceCanvasDecorationsWithOpacity(
+  source: HTMLCanvasElement,
+  strokes: CorosWatchfaceStroke[],
+  effects: CorosWatchfaceShadowEffect[],
+  sourceOpacity: number,
+  scale = 1,
+  includePadding = false
+): { canvas: HTMLCanvasElement; padding: WatchfaceEffectPadding } {
+  const opacity = Math.max(0, Math.min(1, sourceOpacity));
+  if (opacity === 1) {
+    return renderWatchfaceCanvasDecorations(
+      source,
+      strokes,
+      effects,
+      scale,
+      includePadding
+    );
+  }
+  const strokeOnly = renderWatchfaceCanvasStrokes(
+    source,
+    strokes,
+    scale,
+    includePadding,
+    false
+  );
+  const combined = canvas(strokeOnly.canvas.width, strokeOnly.canvas.height);
+  const combinedContext = context2d(combined);
+  combinedContext.globalAlpha = opacity;
+  combinedContext.drawImage(
+    source,
+    strokeOnly.padding.left,
+    strokeOnly.padding.top
+  );
+  combinedContext.globalAlpha = 1;
+  combinedContext.drawImage(strokeOnly.canvas, 0, 0);
+  const effected = renderWatchfaceCanvasEffects(
+    combined,
+    effects,
+    scale,
+    includePadding
+  );
+  return {
+    canvas: effected.canvas,
+    padding: {
+      left: strokeOnly.padding.left + effected.padding.left,
+      top: strokeOnly.padding.top + effected.padding.top,
+      right: strokeOnly.padding.right + effected.padding.right,
+      bottom: strokeOnly.padding.bottom + effected.padding.bottom
+    }
+  };
+}
+
 type DataUrlDecorationResult = {
   dataUrl: string;
   padding: WatchfaceEffectPadding;
@@ -400,13 +461,15 @@ export function renderWatchfaceDataUrlDecorations(
   dataUrl: string,
   strokes: CorosWatchfaceStroke[],
   effects: CorosWatchfaceShadowEffect[],
-  scale = 1
+  scale = 1,
+  sourceOpacity = 1
 ): Promise<DataUrlDecorationResult> {
   const normalizedStrokes = strokes.map(normalizeWatchfaceStroke);
   const key = [
     compactHash(dataUrl),
     dataUrl.length,
     scale,
+    sourceOpacity,
     compactHash(JSON.stringify(normalizedStrokes)),
     compactHash(JSON.stringify(effects))
   ].join(":");
@@ -422,10 +485,11 @@ export function renderWatchfaceDataUrlDecorations(
       try {
         const source = canvas(image.naturalWidth, image.naturalHeight);
         context2d(source).drawImage(image, 0, 0);
-        const decorated = renderWatchfaceCanvasDecorations(
+        const decorated = renderWatchfaceCanvasDecorationsWithOpacity(
           source,
           normalizedStrokes,
           effects,
+          sourceOpacity,
           scale,
           true
         );

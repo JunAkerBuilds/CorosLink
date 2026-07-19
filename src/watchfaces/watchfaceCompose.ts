@@ -48,6 +48,10 @@ import {
   type WatchfaceTimeStyles
 } from "./watchfaceStudio.ts";
 import {
+  hasWatchfaceLayerOpacity,
+  resolveWatchfaceLayerOpacity
+} from "./watchfaceLayerOpacity.ts";
+import {
   resolveWatchfaceLayerEffects,
   type WatchfaceEffectPadding
 } from "./watchfaceEditorEffects.ts";
@@ -126,6 +130,7 @@ const WEATHER_WATCHFACE_VERSION = 4;
 const EFFECT_FOLDER_LAYER: Array<[RegExp, string]> = [
   [/\/cl_battery\//, "battery"],
   [/\/cl_battery_icon\//, "batteryIcon"],
+  [/\/cl_control_battery_icon\//, "controlBatteryIcon"],
   [/\/cl_hr\//, "heartRate"],
   [/\/cl_steps\//, "steps"],
   [/\/cl_kcal\//, "calories"],
@@ -161,7 +166,7 @@ async function buildBatteryIconEffectSources(
   configOverrides: CorosWatchfaceConfigOverride[];
 }> {
   const batteryOverride = design.configAssetOverrides?.["config:battery_icon"];
-  if (!hasLayerDecorations(design, "batteryIcon")) {
+  if (!hasLayerBitmapTransform(design, "batteryIcon")) {
     return { replacements: [], configOverrides: [] };
   }
   if (
@@ -209,7 +214,7 @@ function isolateBatteryIconEffectPaths(
   design: CorosWatchfaceDesignState,
   replacements: CorosWatchfaceAssetReplacement[]
 ): CorosWatchfaceAssetReplacement[] {
-  if (!hasLayerDecorations(design, "batteryIcon")) return replacements;
+  if (!hasLayerBitmapTransform(design, "batteryIcon")) return replacements;
   return replacements.map((replacement) => {
     const resolution = details.resolutions.find((candidate) =>
       replacement.path.startsWith(`${candidate.directory}/`)
@@ -247,7 +252,11 @@ async function applyFirmwareEffects(
           (stroke) => stroke.enabled && stroke.opacity > 0
         )
       : [];
-    if (!layerId || (effects.length === 0 && strokes.length === 0)) {
+    const opacity = resolveWatchfaceLayerOpacity(design, layerId ?? undefined);
+    if (
+      !layerId ||
+      (effects.length === 0 && strokes.length === 0 && opacity === 1)
+    ) {
       effected.push(replacement);
       continue;
     }
@@ -260,7 +269,8 @@ async function applyFirmwareEffects(
       replacement.dataUrl,
       strokes,
       effects,
-      scale
+      scale,
+      opacity
     );
     const byLayer = padding.get(directory) ?? new Map<string, WatchfaceEffectPadding>();
     const existing = byLayer.get(layerId);
@@ -325,6 +335,7 @@ export function toStudioOptions(
     timeStyles: timeStylesOf(design),
     dateStyles: dateStylesOf(design),
     layerColors: design.layerColors ?? {},
+    layerOpacities: design.layerOpacities ?? {},
     effectStyles: design.effectStyles ?? [],
     layerEffects: design.layerEffects ?? {},
     layerStrokes: design.layerStrokes ?? {},
@@ -457,6 +468,16 @@ function hasLayerDecorations(
   );
 }
 
+function hasLayerBitmapTransform(
+  design: CorosWatchfaceDesignState,
+  layerId: string
+): boolean {
+  return (
+    hasLayerDecorations(design, layerId) ||
+    hasWatchfaceLayerOpacity(design, layerId)
+  );
+}
+
 /**
  * Builds the exact sprite-replacement and config-override sets that
  * Studio sends to createCorosWatchfaceArchive, driven purely by a
@@ -483,19 +504,19 @@ export async function composeWatchfaceReplacements(
     "elevation",
     "temperature"
   ] as const) {
-    if (!metricStyles[layerId] && hasLayerDecorations(design, layerId)) {
+    if (!metricStyles[layerId] && hasLayerBitmapTransform(design, layerId)) {
       metricStyles[layerId] = { scale: 1 };
     }
   }
   const timeStyles = { ...timeStylesOf(design) };
   for (const layerId of ["hours", "minutes", "seconds", "autoTime"] as const) {
-    if (!timeStyles[layerId] && hasLayerDecorations(design, layerId)) {
+    if (!timeStyles[layerId] && hasLayerBitmapTransform(design, layerId)) {
       timeStyles[layerId] = { scale: 1 };
     }
   }
   const dateStyles = { ...dateStylesOf(design) };
   for (const layerId of ["weekday", "dateMonth", "dateDay"] as const) {
-    if (!dateStyles[layerId] && hasLayerDecorations(design, layerId)) {
+    if (!dateStyles[layerId] && hasLayerBitmapTransform(design, layerId)) {
       dateStyles[layerId] = { scale: 1 };
     }
   }
@@ -505,7 +526,7 @@ export async function composeWatchfaceReplacements(
     Boolean(design.fontFamily) || rasterFontActive || design.tintLabels || design.tintIcons;
   const metricStyleActive = hasEntries(metricStyles);
   const selectableMetricStyle = design.selectableMetricStyle ??
-    (hasLayerDecorations(design, "complication") ? { scale: 1 } : undefined);
+    (hasLayerBitmapTransform(design, "complication") ? { scale: 1 } : undefined);
   const selectableMetricStyleActive = Boolean(selectableMetricStyle);
   const timeStyleActive = hasEntries(timeStyles);
   const dateStyleActive = hasEntries(dateStyles);
@@ -624,12 +645,25 @@ export async function composeWatchfaceReplacements(
       ? await buildLayerColorSpriteReplacements(
           details,
           design.layerColors ?? {},
-          loadAssets
+          loadAssets,
+          design.layerOpacities ?? {}
         )
+      : hasWatchfaceLayerOpacity(design, "separators") ||
+          hasWatchfaceLayerOpacity(design, "complication")
+        ? await buildLayerColorSpriteReplacements(
+            details,
+            {},
+            loadAssets,
+            design.layerOpacities ?? {}
+          )
       : [],
     await buildWatchfaceConfigAssetReplacements(
       details,
-      design.configAssetOverrides ?? {}
+      design.configAssetOverrides ?? {},
+      {
+        loadAssets,
+        layerOpacities: design.layerOpacities ?? {}
+      }
     ),
     batteryIconEffectSources.replacements,
     ampmActive ? await buildAmPmSpriteReplacements(details, ampmStyle!, loadAssets) : [],

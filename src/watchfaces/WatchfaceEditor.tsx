@@ -2,6 +2,7 @@ import {
   Fragment,
   type ComponentProps,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -16,6 +17,17 @@ function EditableNumberInput({
   fallback = 0,
   onValueChange,
   onBlur,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+  onDoubleClick,
+  className,
+  title,
+  min,
+  max,
+  step,
+  disabled,
   ...props
 }: Omit<ComponentProps<"input">, "type" | "value" | "defaultValue" | "onChange"> & {
   value: number;
@@ -24,19 +36,111 @@ function EditableNumberInput({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(String(value));
+  const [scrubbing, setScrubbing] = useState(false);
+  const scrubRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startValue: number;
+    moved: boolean;
+  } | null>(null);
   useEffect(() => {
     if (document.activeElement !== inputRef.current) setDraft(String(value));
   }, [value]);
+  useEffect(
+    () => () => {
+      document.body.classList.remove("wf-value-scrubbing");
+    },
+    []
+  );
+  const finishScrub = (event: ReactPointerEvent<HTMLInputElement>) => {
+    const scrub = scrubRef.current;
+    if (!scrub || scrub.pointerId !== event.pointerId) return;
+    if (inputRef.current?.hasPointerCapture(event.pointerId)) {
+      inputRef.current.releasePointerCapture(event.pointerId);
+    }
+    scrubRef.current = null;
+    setScrubbing(false);
+    document.body.classList.remove("wf-value-scrubbing");
+  };
   return (
     <input
       {...props}
       ref={inputRef}
       type="number"
+      min={min}
+      max={max}
+      step={step}
+      disabled={disabled}
       value={draft}
+      className={`${className ?? ""} wf-scrubbable-number${
+        scrubbing ? " is-scrubbing" : ""
+      }`.trim()}
+      title={title ?? "Drag left or right to adjust. Click to type."}
       onChange={(event) => {
         const next = event.target.value;
         setDraft(next);
         if (next !== "" && Number.isFinite(Number(next))) onValueChange(Number(next));
+      }}
+      onPointerDown={(event) => {
+        onPointerDown?.(event);
+        if (
+          event.defaultPrevented ||
+          disabled ||
+          event.button !== 0
+        ) {
+          return;
+        }
+        scrubRef.current = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startValue: Number.isFinite(value) ? value : fallback,
+          moved: false
+        };
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        onPointerMove?.(event);
+        const scrub = scrubRef.current;
+        if (!scrub || scrub.pointerId !== event.pointerId) return;
+        const delta = event.clientX - scrub.startX;
+        if (!scrub.moved && Math.abs(delta) < 3) return;
+        scrub.moved = true;
+        if (!scrubbing) {
+          setScrubbing(true);
+          document.body.classList.add("wf-value-scrubbing");
+        }
+        event.preventDefault();
+        const numericStep = Math.abs(Number(step)) || 1;
+        const multiplier = event.shiftKey ? 10 : 1;
+        const stepCount = Math.round(delta / 4);
+        const lower = min === undefined ? -Infinity : Number(min);
+        const upper = max === undefined ? Infinity : Number(max);
+        const precision = Math.min(
+          8,
+          Math.max(0, (String(numericStep).split(".")[1] ?? "").length)
+        );
+        const next = Math.min(
+          Number.isFinite(upper) ? upper : Infinity,
+          Math.max(
+            Number.isFinite(lower) ? lower : -Infinity,
+            scrub.startValue + stepCount * numericStep * multiplier
+          )
+        );
+        const rounded = Number(next.toFixed(precision));
+        setDraft(String(rounded));
+        onValueChange(rounded);
+      }}
+      onPointerUp={(event) => {
+        onPointerUp?.(event);
+        finishScrub(event);
+      }}
+      onPointerCancel={(event) => {
+        onPointerCancel?.(event);
+        finishScrub(event);
+      }}
+      onDoubleClick={(event) => {
+        onDoubleClick?.(event);
+        if (!event.defaultPrevented) event.currentTarget.select();
       }}
       onBlur={(event) => {
         if (draft.trim() === "") {
@@ -48,11 +152,52 @@ function EditableNumberInput({
     />
   );
 }
+
+/** A six-digit color field that stays editable while the user is typing. */
+function EditableHexColorInput({
+  value,
+  onValueChange,
+  onBlur,
+  ...props
+}: Omit<ComponentProps<"input">, "type" | "value" | "defaultValue" | "onChange"> & {
+  value: string;
+  onValueChange: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const normalizedValue = value.replace(/^#/, "").toUpperCase();
+  const [draft, setDraft] = useState(normalizedValue);
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) setDraft(normalizedValue);
+  }, [normalizedValue]);
+  return (
+    <input
+      {...props}
+      ref={inputRef}
+      type="text"
+      value={draft}
+      maxLength={6}
+      spellCheck={false}
+      onChange={(event) => {
+        const next = event.target.value
+          .replace(/[^0-9a-f]/gi, "")
+          .slice(0, 6)
+          .toUpperCase();
+        setDraft(next);
+        if (/^[0-9A-F]{6}$/.test(next)) onValueChange(`#${next}`);
+      }}
+      onBlur={(event) => {
+        if (!/^[0-9A-F]{6}$/.test(draft)) setDraft(normalizedValue);
+        onBlur?.(event);
+      }}
+    />
+  );
+}
 import {
   AlignHorizontalJustifyCenter,
   AlignHorizontalJustifyEnd,
   AlignHorizontalJustifyStart,
   AlignHorizontalSpaceBetween,
+  AlignJustify,
   AlignVerticalJustifyCenter,
   AlignVerticalJustifyEnd,
   AlignVerticalJustifyStart,
@@ -62,6 +207,7 @@ import {
   ArrowRight,
   ArrowUp,
   Battery,
+  CalendarDays,
   ChevronDown,
   Circle,
   Copy,
@@ -75,6 +221,7 @@ import {
   Group,
   GripVertical,
   ImagePlus,
+  Info,
   Layers,
   Link2,
   Lock,
@@ -97,6 +244,7 @@ import {
   Ungroup,
   Unlock,
   Undo2,
+  XCircle,
   MoonStar
 } from "lucide-react";
 import type {
@@ -321,6 +469,10 @@ import {
   type WatchfaceSpriteResizeHandle,
   type WatchfaceSpriteTransform
 } from "./watchfaceSpriteTransform";
+import {
+  normalizeWatchfaceLayerOpacity,
+  resolveWatchfaceLayerOpacity
+} from "./watchfaceLayerOpacity";
 import {
   alignWatchfaceItems,
   distributeWatchfaceItems,
@@ -609,6 +761,15 @@ function normalizeEditorDesign(
       visible: element.visible !== false,
       opacity: normalizeWatchfaceOpacity(element.opacity)
     }));
+  const normalizeLayerOpacities = (
+    opacities: Record<string, number> | undefined
+  ) =>
+    Object.fromEntries(
+      Object.entries(opacities ?? {}).map(([layerId, opacity]) => [
+        layerId,
+        normalizeWatchfaceLayerOpacity(opacity)
+      ])
+    );
   const normalizedBackgroundElements = normalizeBackgroundElements(
     design.backgroundElements
   );
@@ -630,6 +791,7 @@ function normalizeEditorDesign(
           aod: {
             ...aodMode,
             backgroundElements: migratedAodStrokes.elements,
+            layerOpacities: normalizeLayerOpacities(aodMode.layerOpacities),
             layerStrokes: migratedAodStrokes.layerStrokes
           }
         }
@@ -649,6 +811,7 @@ function normalizeEditorDesign(
     ),
     effectStyles: design.effectStyles ?? [],
     layerEffects: design.layerEffects ?? {},
+    layerOpacities: normalizeLayerOpacities(design.layerOpacities),
     layerStrokes: migratedStrokes.layerStrokes,
     designSprites: (design.designSprites ?? []).map((sprite) => ({
       ...sprite,
@@ -818,6 +981,9 @@ export function WatchfaceEditor({
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<
     Record<string, string>
   >({});
+  const [advancedStrokeLayers, setAdvancedStrokeLayers] = useState(
+    () => new Set<string>()
+  );
   const [stageZoom, setStageZoom] = useState<"fit" | number>("fit");
   const [watchPreviewDirectory, setWatchPreviewDirectory] = useState("");
   const [placementMenuOpen, setPlacementMenuOpen] = useState(false);
@@ -1365,6 +1531,7 @@ export function WatchfaceEditor({
       design.fontFamily,
       design.effectStyles,
       design.layerEffects,
+      design.layerOpacities,
       design.layerStrokes
     ]
   );
@@ -1398,6 +1565,7 @@ export function WatchfaceEditor({
       design.timeStyles,
       design.dateStyles,
       design.layerColors,
+      design.layerOpacities,
       design.configAssetOverrides,
       design.ampmIndicator,
       design.effectStyles,
@@ -5395,7 +5563,7 @@ export function WatchfaceEditor({
         templateIdOverride &&
         (!/^\d{1,20}$/.test(templateIdOverride) || /^0+$/.test(templateIdOverride))
       ) {
-        throw new Error("Template ID overrides must contain 1–20 decimal digits.");
+        throw new Error("Template ID overrides must contain 1-20 decimal digits.");
       }
       if (
         watchfaceIdOverride &&
@@ -6762,7 +6930,7 @@ export function WatchfaceEditor({
                   </button>
                 </div>
                 <p className="wf-archive-note">
-                  <code>{activePath || "—"}</code>
+                  <code>{activePath || "Not selected"}</code>
                   {activeIsDirty ? " · edited" : ""}
                 </p>
                 {activePath &&
@@ -6879,7 +7047,7 @@ export function WatchfaceEditor({
               Deletes every empty <code>[key]=</code> line from{" "}
               <code>config.txt</code> and <code>AODconfig.txt</code> in the
               built archive. The watch treats declared-but-empty keys as
-              enabled features — an empty <code>control_*</code> group still
+              enabled features. An empty <code>control_*</code> group still
               adds a blank entry to the on-watch data selector.
             </p>
             <label className="field">
@@ -7292,7 +7460,7 @@ export function WatchfaceEditor({
       <WatchfaceInspectorSection
         sectionId={sectionId}
         title={title}
-        open={!collapsedInspectorSections.has(sectionId)}
+        open={sectionId === "layer" || !collapsedInspectorSections.has(sectionId)}
         onOpenChange={(open) => setInspectorSectionOpen(sectionId, open)}
         actions={options?.actions}
         status={options?.status}
@@ -7350,63 +7518,117 @@ export function WatchfaceEditor({
       : null;
     const locked = isPositionLocked(layer.id);
     const canLock = isMovableSelectionId(layer.id);
-    const actions = (
-      <>
-        {layer.canHide ? (
-          <button
-            type="button"
-            className="wf-property-icon-button"
-            disabled={locked}
-            aria-label={`${layer.visible ? "Hide" : "Show"} ${layer.label}`}
-            aria-pressed={!layer.visible}
-            title={layer.visible ? "Hide layer" : "Show layer"}
-            onClick={() => toggleLayerVisibility(layer)}
-          >
-            {layer.visible ? <Eye size={14} /> : <EyeOff size={14} />}
-          </button>
-        ) : null}
-        {canLock ? renderLayerPositionLockButton(layer.id, layer.label) : null}
-      </>
-    );
+    const element = layer.backgroundElementId
+      ? backgroundElements.find(
+          (candidate) => candidate.id === layer.backgroundElementId
+        )
+      : null;
+    const opacity = sprite
+      ? normalizeWatchfaceOpacity(sprite.opacity)
+      : element
+        ? normalizeWatchfaceOpacity(element.opacity)
+        : resolveWatchfaceLayerOpacity(design, layer.id);
+    const setOpacity = (value: number) => {
+      const normalizedOpacity = normalizeWatchfaceLayerOpacity(value);
+      if (sprite) {
+        updateSprite(sprite.id, { opacity: normalizedOpacity });
+        return;
+      }
+      if (element) {
+        updateElement(element.id, { opacity: normalizedOpacity });
+        return;
+      }
+      setDesign((current) => {
+        const layerOpacities = { ...(current.layerOpacities ?? {}) };
+        if (normalizedOpacity === 1) delete layerOpacities[layer.id];
+        else layerOpacities[layer.id] = normalizedOpacity;
+        return { ...current, layerOpacities };
+      });
+    };
+    const typeIcon =
+      layer.kind === "date" || layer.kind === "weekday" ? (
+        <CalendarDays size={12} />
+      ) : (
+        layerIcon(layer)
+      );
     return renderPropertySection(
       "layer",
       "Layer",
-      <div className="wf-layer-property">
-        <div className="wf-layer-property-icon" aria-hidden="true">
-          {layerIcon(layer)}
-        </div>
-        <div className="wf-layer-property-main">
-          {sprite ? (
-            <label className="wf-layer-name-field">
-              <span>Name</span>
-              <input
-                type="text"
-                value={sprite.name ?? ""}
-                maxLength={60}
-                placeholder={watchfaceDesignSpriteName(sprite)}
+      <div className="wf-property-stack">
+        <div className="wf-layer-summary">
+          <div className="wf-layer-property-icon" aria-hidden="true">
+            {layerIcon(layer)}
+          </div>
+          <div className="wf-layer-property-main">
+            {sprite ? (
+              <label className="wf-layer-title-field">
+                <span className="sr-only">Layer name</span>
+                <input
+                  type="text"
+                  value={sprite.name ?? ""}
+                  maxLength={60}
+                  placeholder={watchfaceDesignSpriteName(sprite)}
+                  disabled={locked}
+                  onChange={(event) =>
+                    updateSprite(sprite.id, { name: event.target.value })
+                  }
+                  onBlur={() => {
+                    const name = sprite.name?.trim() || undefined;
+                    if (name !== sprite.name) updateSprite(sprite.id, { name });
+                  }}
+                />
+              </label>
+            ) : (
+              <strong className="wf-layer-title" title={layer.label}>
+                {layer.label}
+              </strong>
+            )}
+            <span className="wf-layer-type-badge">
+              {typeIcon}
+              {editorLayerTypeLabel(layer)}
+            </span>
+          </div>
+          <div className="wf-layer-summary-actions">
+            {layer.canHide ? (
+              <button
+                type="button"
+                className="wf-property-icon-button"
                 disabled={locked}
-                onChange={(event) =>
-                  updateSprite(sprite.id, { name: event.target.value })
-                }
-                onBlur={() => {
-                  const name = sprite.name?.trim() || undefined;
-                  if (name !== sprite.name) updateSprite(sprite.id, { name });
-                }}
-              />
-            </label>
-          ) : (
-            <div className="wf-layer-name-readout">
-              <span>Name</span>
-              <strong title={layer.label}>{layer.label}</strong>
-            </div>
-          )}
-          <div className="wf-layer-type-readout">
-            <span>Type</span>
-            <strong>{editorLayerTypeLabel(layer)}</strong>
+                aria-label={`${layer.visible ? "Hide" : "Show"} ${layer.label}`}
+                aria-pressed={!layer.visible}
+                title={layer.visible ? "Hide layer" : "Show layer"}
+                onClick={() => toggleLayerVisibility(layer)}
+              >
+                {layer.visible ? <Eye size={16} /> : <EyeOff size={16} />}
+              </button>
+            ) : null}
+            {canLock ? renderLayerPositionLockButton(layer.id, layer.label) : null}
           </div>
         </div>
-      </div>,
-      { actions }
+        <label className="wf-layer-opacity-control">
+          <span>Opacity</span>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value={Math.round(opacity * 100)}
+            aria-label={`${layer.label} opacity`}
+            onChange={(event) => setOpacity(Number(event.target.value) / 100)}
+          />
+          <span className="wf-input-with-unit">
+            <EditableNumberInput
+              min="0"
+              max="100"
+              step="1"
+              value={Math.round(opacity * 100)}
+              fallback={100}
+              onValueChange={(nextOpacity) => setOpacity(nextOpacity / 100)}
+            />
+            <span>%</span>
+          </span>
+        </label>
+      </div>
     );
   }
 
@@ -7480,6 +7702,24 @@ export function WatchfaceEditor({
       [next[index], next[target]] = [next[target]!, next[index]!];
       writeLayerStrokes(layerId, next);
     };
+    const moveStrokeTo = (strokeId: string, targetId: string) => {
+      if (strokeId === targetId) return;
+      const sourceIndex = strokes.findIndex((stroke) => stroke.id === strokeId);
+      const targetIndex = strokes.findIndex((stroke) => stroke.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return;
+      const next = [...strokes];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved!);
+      writeLayerStrokes(layerId, next);
+    };
+    const advancedOpen = advancedStrokeLayers.has(layerId);
+    const toggleAdvanced = () =>
+      setAdvancedStrokeLayers((current) => {
+        const next = new Set(current);
+        if (next.has(layerId)) next.delete(layerId);
+        else next.add(layerId);
+        return next;
+      });
     const paintPreview = (
       stroke: CorosWatchfaceStroke
     ): CSSProperties => ({
@@ -7488,20 +7728,23 @@ export function WatchfaceEditor({
           ? stroke.paint.color
           : `linear-gradient(${stroke.paint.angle + 90}deg, ${stroke.paint.from}, ${stroke.paint.to})`
     });
-    const paintLabel = (stroke: CorosWatchfaceStroke) =>
-      stroke.paint.kind === "solid"
-        ? stroke.paint.color.replace(/^#/, "").toUpperCase()
-        : "Linear gradient";
+    const primaryColor = (stroke: CorosWatchfaceStroke) =>
+      stroke.paint.kind === "solid" ? stroke.paint.color : stroke.paint.from;
+    const patchPrimaryColor = (
+      stroke: CorosWatchfaceStroke,
+      color: string
+    ) =>
+      patchStroke(stroke.id, {
+        paint:
+          stroke.paint.kind === "solid"
+            ? { kind: "solid", color }
+            : { ...stroke.paint, from: color }
+      });
 
     return renderPropertySection(
       "stroke",
       "Stroke",
       <div className="wf-stroke-inspector">
-        <span className="wf-effect-scope">
-          {previewMode === "aod"
-            ? "Always-on display only"
-            : "Current display only"}
-        </span>
         {strokes.length > 0 ? (
           <div className="wf-stroke-stack">
             {strokes.map((stroke, index) => (
@@ -7510,185 +7753,132 @@ export function WatchfaceEditor({
                   stroke.id === selectedStrokeId ? " is-selected" : ""
                 }${stroke.enabled ? "" : " is-disabled"}`}
                 key={stroke.id}
+                draggable={strokes.length > 1}
+                title={
+                  strokes.length > 1
+                    ? "Drag to reorder. Use Alt+Arrow Up or Alt+Arrow Down from a control."
+                    : undefined
+                }
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData(
+                    "application/x-watchface-stroke",
+                    stroke.id
+                  );
+                }}
+                onDragOver={(event) => {
+                  if (
+                    event.dataTransfer.types.includes(
+                      "application/x-watchface-stroke"
+                    )
+                  ) {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }
+                }}
+                onDrop={(event) => {
+                  const movedId = event.dataTransfer.getData(
+                    "application/x-watchface-stroke"
+                  );
+                  if (!movedId) return;
+                  event.preventDefault();
+                  moveStrokeTo(movedId, stroke.id);
+                }}
+                onFocusCapture={() => selectStroke(stroke.id)}
+                onKeyDown={(event) => {
+                  if (!event.altKey) return;
+                  if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    moveStroke(index, -1);
+                  } else if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    moveStroke(index, 1);
+                  }
+                }}
               >
-                <span className="wf-stroke-grip" aria-hidden="true">
-                  <GripVertical size={13} />
-                </span>
-                <button
-                  type="button"
-                  className="wf-stroke-row-main"
-                  aria-pressed={stroke.id === selectedStrokeId}
+                <div
+                  className="wf-stroke-color-field"
                   onClick={() => selectStroke(stroke.id)}
                 >
                   <span
                     className="wf-stroke-swatch"
                     style={paintPreview(stroke)}
-                    aria-hidden="true"
+                  >
+                    <input
+                      type="color"
+                      value={primaryColor(stroke)}
+                      aria-label="Stroke color"
+                      onChange={(event) =>
+                        patchPrimaryColor(stroke, event.target.value)
+                      }
+                    />
+                  </span>
+                  <EditableHexColorInput
+                    className="wf-stroke-hex-input"
+                    value={primaryColor(stroke)}
+                    aria-label="Stroke hex color"
+                    onValueChange={(color) => patchPrimaryColor(stroke, color)}
                   />
-                  <span className="wf-stroke-paint-label">
-                    {paintLabel(stroke)}
-                  </span>
-                  <span className="wf-stroke-opacity">
-                    {Math.round(stroke.opacity * 100)}%
-                  </span>
-                </button>
-                <div className="wf-stroke-row-actions">
-                  <button
-                    type="button"
-                    disabled={index === 0}
-                    aria-label="Move stroke forward"
-                    title="Move forward"
-                    onClick={() => moveStroke(index, -1)}
-                  >
-                    <ArrowUp size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={index === strokes.length - 1}
-                    aria-label="Move stroke backward"
-                    title="Move backward"
-                    onClick={() => moveStroke(index, 1)}
-                  >
-                    <ArrowDown size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={stroke.enabled ? "Hide stroke" : "Show stroke"}
-                    aria-pressed={!stroke.enabled}
-                    title={stroke.enabled ? "Hide stroke" : "Show stroke"}
-                    onClick={() =>
-                      patchStroke(stroke.id, { enabled: !stroke.enabled })
-                    }
-                  >
-                    {stroke.enabled ? <Eye size={13} /> : <EyeOff size={13} />}
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Remove stroke"
-                    title="Remove stroke"
-                    onClick={() => removeStroke(stroke.id)}
-                  >
-                    <Minus size={13} />
-                  </button>
                 </div>
+                <label className="wf-stroke-opacity-field">
+                  <EditableNumberInput
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={Math.round(stroke.opacity * 100)}
+                    fallback={100}
+                    aria-label="Stroke opacity"
+                    onValueChange={(opacity) =>
+                      patchStroke(stroke.id, { opacity: opacity / 100 })
+                    }
+                  />
+                  <span aria-hidden="true">%</span>
+                </label>
+                <button
+                  type="button"
+                  className="wf-stroke-row-action"
+                  aria-label={stroke.enabled ? "Hide stroke" : "Show stroke"}
+                  aria-pressed={!stroke.enabled}
+                  title={stroke.enabled ? "Hide stroke" : "Show stroke"}
+                  onClick={() =>
+                    patchStroke(stroke.id, { enabled: !stroke.enabled })
+                  }
+                >
+                  {stroke.enabled ? <Eye size={15} /> : <EyeOff size={15} />}
+                </button>
+                <button
+                  type="button"
+                  className="wf-stroke-row-action"
+                  aria-label="Remove stroke"
+                  title="Remove stroke"
+                  onClick={() => removeStroke(stroke.id)}
+                >
+                  <Minus size={16} />
+                </button>
               </div>
             ))}
           </div>
         ) : (
-          <p className="watchface-studio-summary">
-            No strokes. Add one to outline this layer’s visible pixels.
-          </p>
+          <div className="wf-stroke-empty">
+            <div>
+              <strong>No stroke applied</strong>
+              <p>Add a stroke to outline this layer&apos;s visible pixels.</p>
+            </div>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={addStroke}
+            >
+              <Plus size={15} aria-hidden="true" />
+              Add stroke
+            </button>
+          </div>
         )}
         {selectedStroke ? (
           <div className="wf-stroke-details">
-            <label className="field">
-              Paint
-              <select
-                value={selectedStroke.paint.kind}
-                onChange={(event) => {
-                  if (event.target.value === "linear-gradient") {
-                    const baseColor =
-                      selectedStroke.paint.kind === "solid"
-                        ? selectedStroke.paint.color
-                        : selectedStroke.paint.from;
-                    patchStroke(selectedStroke.id, {
-                      paint: {
-                        kind: "linear-gradient",
-                        from: baseColor,
-                        to: "#000000",
-                        angle: 90
-                      }
-                    });
-                  } else {
-                    patchStroke(selectedStroke.id, {
-                      paint: {
-                        kind: "solid",
-                        color:
-                          selectedStroke.paint.kind === "linear-gradient"
-                            ? selectedStroke.paint.from
-                            : selectedStroke.paint.color
-                      }
-                    });
-                  }
-                }}
-              >
-                <option value="solid">Solid color</option>
-                <option value="linear-gradient">Linear gradient</option>
-              </select>
-            </label>
-            {selectedStroke.paint.kind === "solid" ? (
-              <label className="field">
-                Color
-                <span className="watchface-color-control">
-                  <input
-                    type="color"
-                    value={selectedStroke.paint.color}
-                    onChange={(event) =>
-                      patchStroke(selectedStroke.id, {
-                        paint: {
-                          kind: "solid",
-                          color: event.target.value
-                        }
-                      })
-                    }
-                  />
-                  <code>{selectedStroke.paint.color.toUpperCase()}</code>
-                </span>
-              </label>
-            ) : selectedGradient ? (
-              <>
-                <div className="wf-inline-property-grid">
-                  {(["from", "to"] as const).map((stop) => (
-                    <label className="field" key={stop}>
-                      {stop === "from" ? "From" : "To"}
-                      <span className="watchface-color-control">
-                        <input
-                          type="color"
-                          value={selectedGradient[stop]}
-                          onChange={(event) =>
-                            patchStroke(selectedStroke.id, {
-                              paint: {
-                                ...selectedGradient,
-                                [stop]: event.target.value
-                              }
-                            })
-                          }
-                        />
-                        <code>
-                          {selectedGradient[stop]
-                            .replace(/^#/, "")
-                            .toUpperCase()}
-                        </code>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-                <label className="watchface-inspector-field">
-                  <span>Angle</span>
-                  <span className="wf-input-with-unit">
-                    <EditableNumberInput
-                      min="0"
-                      max="359"
-                      step="1"
-                      value={selectedGradient.angle}
-                      fallback={90}
-                      onValueChange={(angle) =>
-                        patchStroke(selectedStroke.id, {
-                          paint: {
-                            ...selectedGradient,
-                            angle
-                          }
-                        })
-                      }
-                    />
-                    <span>°</span>
-                  </span>
-                </label>
-              </>
-            ) : null}
-            <div className="wf-inline-property-grid">
-              <label className="field">
-                Position
+            <div className="wf-stroke-geometry">
+              <label className="wf-stroke-control">
+                <span>Position</span>
                 <select
                   value={selectedStroke.position}
                   onChange={(event) =>
@@ -7703,9 +7893,10 @@ export function WatchfaceEditor({
                   <option value="outside">Outside</option>
                 </select>
               </label>
-              <label className="watchface-inspector-field">
+              <label className="wf-stroke-control">
                 <span>Weight</span>
-                <span className="wf-input-with-unit">
+                <span className="wf-stroke-weight-field">
+                  <AlignJustify size={14} aria-hidden="true" />
                   <EditableNumberInput
                     min="1"
                     max="64"
@@ -7716,45 +7907,138 @@ export function WatchfaceEditor({
                       patchStroke(selectedStroke.id, { weight })
                     }
                   />
-                  <span>px</span>
                 </span>
               </label>
+              <button
+                type="button"
+                className={`wf-stroke-advanced-toggle${
+                  advancedOpen ? " is-active" : ""
+                }`}
+                aria-label="Stroke paint settings"
+                aria-expanded={advancedOpen}
+                title="Stroke paint settings"
+                onClick={toggleAdvanced}
+              >
+                <SlidersHorizontal size={16} />
+              </button>
             </div>
-            <label className="watchface-inspector-field">
-              <span>Opacity</span>
-              <span className="wf-input-with-unit">
-                <EditableNumberInput
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={Math.round(selectedStroke.opacity * 100)}
-                  fallback={100}
-                  onValueChange={(opacity) =>
-                    patchStroke(selectedStroke.id, {
-                      opacity: opacity / 100
-                    })
-                  }
-                />
-                <span>%</span>
-              </span>
-            </label>
+            {advancedOpen ? (
+              <div className="wf-stroke-advanced">
+                <label className="field">
+                  Paint
+                  <select
+                    value={selectedStroke.paint.kind}
+                    onChange={(event) => {
+                      if (event.target.value === "linear-gradient") {
+                        const baseColor =
+                          selectedStroke.paint.kind === "solid"
+                            ? selectedStroke.paint.color
+                            : selectedStroke.paint.from;
+                        patchStroke(selectedStroke.id, {
+                          paint: {
+                            kind: "linear-gradient",
+                            from: baseColor,
+                            to: "#000000",
+                            angle: 90
+                          }
+                        });
+                      } else {
+                        patchStroke(selectedStroke.id, {
+                          paint: {
+                            kind: "solid",
+                            color:
+                              selectedStroke.paint.kind === "linear-gradient"
+                                ? selectedStroke.paint.from
+                                : selectedStroke.paint.color
+                          }
+                        });
+                      }
+                    }}
+                  >
+                    <option value="solid">Solid color</option>
+                    <option value="linear-gradient">Linear gradient</option>
+                  </select>
+                </label>
+                {selectedGradient ? (
+                  <>
+                    <div className="wf-inline-property-grid">
+                      {(["from", "to"] as const).map((stop) => (
+                        <label className="field" key={stop}>
+                          {stop === "from" ? "From" : "To"}
+                          <span className="watchface-color-control">
+                            <input
+                              type="color"
+                              value={selectedGradient[stop]}
+                              onChange={(event) =>
+                                patchStroke(selectedStroke.id, {
+                                  paint: {
+                                    ...selectedGradient,
+                                    [stop]: event.target.value
+                                  }
+                                })
+                              }
+                            />
+                            <code>
+                              {selectedGradient[stop]
+                                .replace(/^#/, "")
+                                .toUpperCase()}
+                            </code>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                    <label className="watchface-inspector-field">
+                      <span>Angle</span>
+                      <span className="wf-input-with-unit">
+                        <EditableNumberInput
+                          min="0"
+                          max="359"
+                          step="1"
+                          value={selectedGradient.angle}
+                          fallback={90}
+                          onValueChange={(angle) =>
+                            patchStroke(selectedStroke.id, {
+                              paint: {
+                                ...selectedGradient,
+                                angle
+                              }
+                            })
+                          }
+                        />
+                        <span>°</span>
+                      </span>
+                    </label>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>,
       {
-        status: strokes.length > 0 ? String(strokes.length) : undefined,
         className: "wf-stroke-section",
-        actions: (
-          <button
-            type="button"
-            className="wf-property-icon-button"
-            aria-label="Add stroke"
-            title="Add stroke"
-            onClick={addStroke}
-          >
-            <Plus size={15} />
-          </button>
-        )
+        actions: strokes.length > 0 ? (
+          <>
+            {strokes.length > 1 ? (
+              <span
+                className="wf-stroke-order-hint"
+                title="Drag stroke rows to reorder"
+                aria-label="Stroke rows can be dragged to reorder"
+              >
+                <GripVertical size={16} />
+              </span>
+            ) : null}
+            <button
+              type="button"
+              className="wf-property-icon-button"
+              aria-label="Add stroke"
+              title="Add stroke"
+              onClick={addStroke}
+            >
+              <Plus size={17} />
+            </button>
+          </>
+        ) : undefined
       }
     );
   }
@@ -8177,7 +8461,7 @@ export function WatchfaceEditor({
     return (
       <>
         {baseIconPosition
-          ? renderPositionPanel("complication", "Control icon position", <>
+          ? renderPositionPanel("complication", "Watch screen position", <>
               <div className="watchface-position-inputs">
                 <label>
                   X
@@ -8220,7 +8504,7 @@ export function WatchfaceEditor({
                   />
                 </label>
               </div>
-              <span>Fine tune (1 px)</span>
+              <span>Nudge</span>
               <div className="watchface-nudge-pad wf-position-nudge-only">
                 <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy - fromWatchCoordinate(1))} aria-label="Nudge control battery icon up"><ArrowUp size={13} aria-hidden="true" /></button>
                 <button type="button" onClick={() => setIconOffset(iconOffset.dx - fromWatchCoordinate(1), iconOffset.dy)} aria-label="Nudge control battery icon left"><ArrowLeft size={13} aria-hidden="true" /></button>
@@ -8344,7 +8628,7 @@ export function WatchfaceEditor({
                 </span>
               </label>
               <label className="watchface-inspector-field">
-                <span>Opacity</span>
+                <span>Fill opacity</span>
                 <span className="wf-input-with-unit">
                   <EditableNumberInput min="0" max="100" step="1" disabled={backgroundColor.isTransparent} value={Math.round(backgroundColor.alpha * 100)} fallback={100} onValueChange={(opacity) => patchDesign({ backgroundColor: toRgbaColor(backgroundColor.hex, opacity / 100) })} />
                   <span>%</span>
@@ -8411,7 +8695,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">Tint<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setMetricStyle("battery", { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} onClick={() => clearMetricColor("battery")}>Remove tint</button></span></label>,
+            <label className="field">Tint color<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setMetricStyle("battery", { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearMetricColor("battery")}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -8419,7 +8703,7 @@ export function WatchfaceEditor({
             "specific",
             "Typography",
             <div className="wf-property-stack">
-              <LocalFontPicker api={api} label="Digit font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template digits" onChange={(fontFamily) => setMetricStyle("battery", { fontFamily, rasterFont: undefined })} rasterFont={design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: design.fontWeight ?? 400, fontStyle: design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => patchDesign(typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle("battery", { letterSpacing })} />
+              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setMetricStyle("battery", { fontFamily, rasterFont: undefined })} rasterFont={design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: design.fontWeight ?? 400, fontStyle: design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => patchDesign(typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle("battery", { letterSpacing })} />
               <div className="watchface-position-inputs">
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle("battery", { scale: Math.max(0.01, scale) })} /></label>
                 <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle("battery", { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
@@ -8441,7 +8725,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">Digit tint<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setTimeStyle(layer.timePartId!, { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} onClick={() => clearTimeColor(layer.timePartId!)}>Remove tint</button></span></label>,
+            <label className="field">Tint color<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setTimeStyle(layer.timePartId!, { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearTimeColor(layer.timePartId!)}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -8450,7 +8734,7 @@ export function WatchfaceEditor({
             "Typography",
             <div className="wf-property-stack">
               {layer.timePartId === "autoTime" ? <button type="button" className="secondary-button" onClick={convertAutoTimeToSeparate}>Separate hours and minutes</button> : null}
-              <LocalFontPicker api={api} label="Digit font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template digits" onChange={(fontFamily) => setTimeStyle(layer.timePartId!, { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: design.fontWeight ?? 400, fontStyle: design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => patchDesign(typography)} onLetterSpacingChange={(letterSpacing) => setTimeStyle(layer.timePartId!, { letterSpacing })} />
+              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setTimeStyle(layer.timePartId!, { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: design.fontWeight ?? 400, fontStyle: design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => patchDesign(typography)} onLetterSpacingChange={(letterSpacing) => setTimeStyle(layer.timePartId!, { letterSpacing })} />
               <div className="watchface-position-inputs">
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setTimeStyle(layer.timePartId!, { scale: Math.max(0.01, scale) })} /></label>
                 <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setTimeStyle(layer.timePartId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
@@ -8472,7 +8756,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">Tint<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setMetricStyle(layer.metricId!, { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} onClick={() => clearMetricColor(layer.metricId!)}>Remove tint</button></span></label>,
+            <label className="field">Tint color<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setMetricStyle(layer.metricId!, { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearMetricColor(layer.metricId!)}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -8480,7 +8764,7 @@ export function WatchfaceEditor({
             "specific",
             "Typography",
             <div className="wf-property-stack">
-              <LocalFontPicker api={api} label="Digit font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template digits" onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: design.fontWeight ?? 400, fontStyle: design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => patchDesign(typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
+              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: design.fontWeight ?? 400, fontStyle: design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => patchDesign(typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
               <div className="watchface-position-inputs">
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, scale) })} /></label>
                 {supportsWatchfaceSpriteRotation(layer.metricId) ? <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle(layer.metricId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label> : null}
@@ -8534,7 +8818,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">Tint<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setDateStyle(partId, { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} onClick={() => clearDateColor(partId)}>Remove tint</button></span></label>,
+            <label className="field">Tint color<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setDateStyle(partId, { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearDateColor(partId)}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -8636,9 +8920,8 @@ export function WatchfaceEditor({
             "appearance",
             "Appearance",
             <div className="wf-property-stack">
-              <label className="watchface-inspector-field"><span>Opacity</span><span className="wf-input-with-unit"><EditableNumberInput min="0" max="100" step="1" value={Math.round(normalizeWatchfaceOpacity(sprite.opacity) * 100)} fallback={100} onValueChange={(opacity) => updateSprite(sprite.id, { opacity: normalizeWatchfaceOpacity(opacity / 100) })} /><span>%</span></span></label>
               <label className="watchface-studio-toggle"><input type="checkbox" checked={Boolean(sprite.tintColor)} onChange={(event) => updateSprite(sprite.id, { tintColor: event.target.checked ? design.accentColor : null })} />Tint image</label>
-              {sprite.tintColor ? <label className="field">Tint color<span className="watchface-color-control"><input type="color" value={sprite.tintColor} onChange={(event) => updateSprite(sprite.id, { tintColor: event.target.value })} /><code>{sprite.tintColor}</code><button type="button" className="watchface-color-none" onClick={() => updateSprite(sprite.id, { tintColor: null })}>Remove tint</button></span></label> : null}
+              {sprite.tintColor ? <label className="field">Tint color<span className="watchface-color-control"><input type="color" value={sprite.tintColor} onChange={(event) => updateSprite(sprite.id, { tintColor: event.target.value })} /><code>{sprite.tintColor}</code><button type="button" className="watchface-color-none" aria-label="Remove tint" title="Remove tint" onClick={() => updateSprite(sprite.id, { tintColor: null })}><XCircle size={14} /></button></span></label> : null}
             </div>,
             { disabled: locked }
           )}
@@ -8673,7 +8956,7 @@ export function WatchfaceEditor({
                   </>
                 ) : <div className="wf-crop-actions"><button type="button" className="secondary-button" onClick={() => enterSpriteCrop(sprite)}><Crop size={14} /> Crop image</button><button type="button" disabled={JSON.stringify(normalizeWatchfaceCrop(sprite.crop)) === fullCrop} onClick={() => updateSprite(sprite.id, { crop: { x: 0, y: 0, width: 1, height: 1 } })}>Reset crop</button></div>}
               </div>
-              <div className="wf-control-label">Fine tune (1 px)</div>
+              <div className="wf-control-label">Nudge</div>
               <div className="watchface-nudge-pad">
                 <button type="button" aria-label="Nudge image up" onClick={() => updateSprite(sprite.id, { y: sprite.y - fromWatchCoordinate(1) })}><ArrowUp size={13} /></button>
                 <button type="button" aria-label="Nudge image left" onClick={() => updateSprite(sprite.id, { x: sprite.x - fromWatchCoordinate(1) })}><ArrowLeft size={13} /></button>
@@ -8699,7 +8982,7 @@ export function WatchfaceEditor({
               "appearance",
               "Appearance",
               <label className="field">
-                Tint
+                Tint color
                 <span className="watchface-color-control">
                   <input
                     type="color"
@@ -8723,9 +9006,11 @@ export function WatchfaceEditor({
                     type="button"
                     className="watchface-color-none"
                     disabled={!design.layerColors?.[layer.layoutGroupId]}
+                    aria-label="Remove tint"
+                    title="Remove tint"
                     onClick={() => clearLayerColor(layer.layoutGroupId!)}
                   >
-                    Remove tint
+                    <XCircle size={14} />
                   </button>
                 </span>
               </label>,
@@ -8944,9 +9229,9 @@ export function WatchfaceEditor({
         ) : null}
         <LocalFontPicker
           api={api}
-          label="Selectable value font"
+          label="Font"
           value={design.selectableMetricStyle?.fontFamily ?? design.fontFamily}
-          emptyLabel="Keep template digits"
+          emptyLabel="Keep template font"
           onChange={(fontFamily) =>
             setSelectableMetricStyle({
               fontFamily,
@@ -9001,9 +9286,11 @@ export function WatchfaceEditor({
               type="button"
               className="watchface-color-none"
               disabled={!design.selectableMetricStyle?.color}
+              aria-label="Remove tint"
+              title="Remove tint"
               onClick={clearSelectableMetricColor}
             >
-              Remove tint
+              <XCircle size={14} />
             </button>
           </span>
         </label>
@@ -9077,7 +9364,7 @@ export function WatchfaceEditor({
                 />
               </label>
             </div>
-            <span>Fine tune (1 px)</span>
+            <span>Nudge</span>
             <div className="watchface-nudge-pad wf-position-nudge-only">
               <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy - fromWatchCoordinate(1))} aria-label="Nudge selector icon up"><ArrowUp size={13} aria-hidden="true" /></button>
               <button type="button" onClick={() => setIconOffset(iconOffset.dx - fromWatchCoordinate(1), iconOffset.dy)} aria-label="Nudge selector icon left"><ArrowLeft size={13} aria-hidden="true" /></button>
@@ -9136,6 +9423,10 @@ export function WatchfaceEditor({
       <div className="watchface-inspector-position">
         <div className="wf-position-heading">
           <span>{title}</span>
+          <Info
+            size={13}
+            aria-label="Coordinates use the selected watch display"
+          />
         </div>
         <fieldset
           className="wf-position-controls"
@@ -9143,7 +9434,12 @@ export function WatchfaceEditor({
         >
           {children}
         </fieldset>
-        {helper ? <div className="wf-position-help">{helper}</div> : null}
+        {helper ? (
+          <div className="wf-position-help">
+            <Info size={15} aria-hidden="true" />
+            <div>{helper}</div>
+          </div>
+        ) : null}
       </div>,
       { disabled: isMovementLockedForId(id) }
     );
@@ -9241,15 +9537,13 @@ export function WatchfaceEditor({
           <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
           <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
         </div>
-        <span>Fine tune (1 px)</span>
+        <span>Nudge</span>
         <div className="watchface-nudge-pad">
-          <button type="button" onClick={() => setOffset(offset.dx, offset.dy - fromWatchCoordinate(1))} aria-label="Nudge up"><ArrowUp size={13} aria-hidden="true" /></button>
           <button type="button" onClick={() => setOffset(offset.dx - fromWatchCoordinate(1), offset.dy)} aria-label="Nudge left"><ArrowLeft size={13} aria-hidden="true" /></button>
           <button type="button" onClick={() => setOffset(offset.dx + fromWatchCoordinate(1), offset.dy)} aria-label="Nudge right"><ArrowRight size={13} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setOffset(offset.dx, offset.dy - fromWatchCoordinate(1))} aria-label="Nudge up"><ArrowUp size={13} aria-hidden="true" /></button>
           <button type="button" onClick={() => setOffset(offset.dx, offset.dy + fromWatchCoordinate(1))} aria-label="Nudge down"><ArrowDown size={13} aria-hidden="true" /></button>
-          {(offset.dx !== 0 || offset.dy !== 0) ? (
-            <button type="button" className="watchface-nudge-reset" onClick={() => setOffset(0, 0)}>Reset</button>
-          ) : null}
+          <button type="button" className="watchface-nudge-reset" disabled={offset.dx === 0 && offset.dy === 0} onClick={() => setOffset(0, 0)}><RotateCcw size={13} aria-hidden="true" />Reset</button>
         </div>
       </>,
       <p className="watchface-studio-summary">
@@ -9333,7 +9627,7 @@ export function WatchfaceEditor({
             <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
             <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
           </div>
-          <span>Fine tune (1 px)</span>
+          <span>Nudge</span>
           <div className="watchface-nudge-pad">
             <button type="button" onClick={() => setPosition(separator.x, separator.y - fromWatchCoordinate(1))} aria-label="Nudge up"><ArrowUp size={13} aria-hidden="true" /></button>
             <button type="button" onClick={() => setPosition(separator.x - fromWatchCoordinate(1), separator.y)} aria-label="Nudge left"><ArrowLeft size={13} aria-hidden="true" /></button>
@@ -9346,7 +9640,7 @@ export function WatchfaceEditor({
           "appearance",
           "Appearance",
           <label className="field">
-            Tint
+            Tint color
             <span className="watchface-color-control">
               <input
                 type="color"
@@ -9358,9 +9652,11 @@ export function WatchfaceEditor({
                 type="button"
                 className="watchface-color-none"
                 disabled={separator.color === design.digitColor}
+                aria-label="Remove tint"
+                title="Remove tint"
                 onClick={() => updateStaticSeparator(separatorId, { color: design.digitColor })}
               >
-                Remove tint
+                <XCircle size={14} />
               </button>
             </span>
           </label>,
@@ -9490,7 +9786,7 @@ export function WatchfaceEditor({
             <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
             <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
           </div>
-          <span>Fine tune (1 px)</span>
+          <span>Nudge</span>
           <div className="watchface-nudge-pad">
             <button type="button" onClick={() => setPosition(indicator.x, indicator.y - fromWatchCoordinate(1))} aria-label="Nudge up"><ArrowUp size={13} aria-hidden="true" /></button>
             <button type="button" onClick={() => setPosition(indicator.x - fromWatchCoordinate(1), indicator.y)} aria-label="Nudge left"><ArrowLeft size={13} aria-hidden="true" /></button>
@@ -9502,7 +9798,7 @@ export function WatchfaceEditor({
           "appearance",
           "Appearance",
           <label className="field">
-            Tint
+            Tint color
             <span className="watchface-color-control">
               <input
                 type="color"
@@ -9514,9 +9810,11 @@ export function WatchfaceEditor({
                 type="button"
                 className="watchface-color-none"
                 disabled={!indicator.color}
+                aria-label="Remove tint"
+                title="Remove tint"
                 onClick={() => updateAmPmIndicator({ color: undefined })}
               >
-                Remove tint
+                <XCircle size={14} />
               </button>
             </span>
           </label>,
@@ -9650,7 +9948,7 @@ export function WatchfaceEditor({
             <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
             <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
           </div>
-          <span>Fine tune (1 px)</span>
+          <span>Nudge</span>
           <div className="watchface-nudge-pad">
             <button type="button" onClick={() => setPosition(indicator.x, indicator.y - fromWatchCoordinate(1))} aria-label="Nudge up"><ArrowUp size={13} aria-hidden="true" /></button>
             <button type="button" onClick={() => setPosition(indicator.x - fromWatchCoordinate(1), indicator.y)} aria-label="Nudge left"><ArrowLeft size={13} aria-hidden="true" /></button>
@@ -9662,7 +9960,7 @@ export function WatchfaceEditor({
           "appearance",
           "Appearance",
           <label className="field">
-            Tint
+            Tint color
             <span className="watchface-color-control">
               <input
                 type="color"
@@ -9674,9 +9972,11 @@ export function WatchfaceEditor({
                 type="button"
                 className="watchface-color-none"
                 disabled={!indicator.color}
+                aria-label="Remove tint"
+                title="Remove tint"
                 onClick={() => updateWeatherIndicator({ color: undefined })}
               >
-                Remove tint
+                <XCircle size={14} />
               </button>
             </span>
           </label>,
@@ -9820,7 +10120,6 @@ export function WatchfaceEditor({
             {element.kind === "text" ? (
               <label className="field">Color<span className="watchface-color-control"><input type="color" value={element.color} onChange={(event) => set({ color: event.target.value })} /><code>{element.color}</code></span></label>
             ) : null}
-            <label className="watchface-inspector-field"><span>Opacity</span><span className="wf-input-with-unit"><EditableNumberInput min="0" max="100" step="1" value={Math.round(normalizeWatchfaceOpacity(element.opacity) * 100)} fallback={100} onValueChange={(opacity) => set({ opacity: normalizeWatchfaceOpacity(opacity / 100) })} /><span>%</span></span></label>
           </div>,
           { disabled: locked }
         )}
@@ -9846,7 +10145,7 @@ export function WatchfaceEditor({
           "advanced",
           "Advanced",
           <div className="wf-property-stack">
-            <div className="wf-control-label">Fine tune (1 px)</div>
+            <div className="wf-control-label">Nudge</div>
             <div className="watchface-nudge-pad">
               <button type="button" aria-label="Nudge object up" onClick={() => set({ y: element.y - 1 })}><ArrowUp size={13} /></button>
               <button type="button" aria-label="Nudge object left" onClick={() => set({ x: element.x - 1 })}><ArrowLeft size={13} /></button>
