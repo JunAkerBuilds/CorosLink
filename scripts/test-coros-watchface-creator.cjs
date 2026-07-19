@@ -172,7 +172,22 @@ async function main() {
       name: "Soft lift",
       effects: [{ id: "shadow-1", kind: "outer-shadow", enabled: true, color: "#000000", opacity: 0.45, blur: 12, spread: 2, distance: 8, angle: 45 }]
     }],
-    layerEffects: { hours: { kind: "style", styleId: "effect-style-1" } }
+    layerEffects: { hours: { kind: "style", styleId: "effect-style-1" } },
+    layerStrokes: {
+      hours: [{
+        id: "stroke-1",
+        enabled: true,
+        paint: {
+          kind: "linear-gradient",
+          from: "#2e05ff",
+          to: "#51e0b5",
+          angle: 90
+        },
+        opacity: 0.8,
+        position: "outside",
+        weight: 3
+      }]
+    }
   };
   const portableProjectPath = path.join(tempRoot, "editable-website-face.zip");
   await watchfaces.exportCorosWatchfaceProject(

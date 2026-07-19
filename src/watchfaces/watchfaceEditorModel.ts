@@ -76,6 +76,7 @@ export interface EditorLayerCapabilities {
   opacity?: boolean;
   grouping?: boolean;
   effects?: boolean;
+  stroke?: boolean;
 }
 
 export interface EditorLayer {
@@ -169,7 +170,8 @@ function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
       font: true,
       rotate: true,
       grouping: true,
-      effects: true
+      effects: true,
+      stroke: true
     };
   }
   if (METRIC_IDS.has(groupId as WatchfaceMetricId)) {
@@ -180,7 +182,8 @@ function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
       font: false,
       rotate: true,
       grouping: true,
-      effects: true
+      effects: true,
+      stroke: true
     };
   }
   if (groupId === "battery") {
@@ -191,7 +194,8 @@ function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
       font: true,
       rotate: true,
       grouping: true,
-      effects: true
+      effects: true,
+      stroke: true
     };
   }
   if (groupId === "weekday" || groupId === "dateMonth" || groupId === "dateDay") {
@@ -202,7 +206,8 @@ function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
       font: false,
       rotate: true,
       grouping: true,
-      effects: true
+      effects: true,
+      stroke: true
     };
   }
   if (groupId === "batteryIcon") {
@@ -212,7 +217,8 @@ function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
       scale: true,
       font: false,
       grouping: true,
-      effects: true
+      effects: true,
+      stroke: true
     };
   }
   if (groupId === "controlBatteryIcon") {
@@ -229,7 +235,8 @@ function capabilitiesForGroup(groupId: string): EditorLayerCapabilities {
     scale: false,
     font: false,
     grouping: true,
-    effects: true
+    effects: true,
+    stroke: groupId === "complication"
   };
 }
 
@@ -482,7 +489,13 @@ export function deriveEditorLayers(
             y1: separator.y + height / 2
           }
         : null,
-      capabilities: { position: true, color: true, scale: true, font: true }
+      capabilities: {
+        position: true,
+        color: true,
+        scale: true,
+        font: true,
+        stroke: true
+      }
     });
   }
   const separatorIndex = layers.findIndex((layer) => layer.id === "separators");
@@ -519,7 +532,13 @@ export function deriveEditorLayers(
             y1: style.y + height
           }
         : null,
-      capabilities: { position: true, color: true, scale: true, font: false }
+      capabilities: {
+        position: true,
+        color: true,
+        scale: true,
+        font: false,
+        stroke: true
+      }
     };
     const dateSlashIndex = layers.findIndex((layer) => layer.id === "staticDateSlash");
     layers.splice(dateSlashIndex >= 0 ? dateSlashIndex + 1 : 2, 0, ampmLayer);
@@ -552,7 +571,13 @@ export function deriveEditorLayers(
             y1: style.y + height
           }
         : null,
-      capabilities: { position: true, color: false, scale: true, font: false }
+      capabilities: {
+        position: true,
+        color: false,
+        scale: true,
+        font: false,
+        stroke: true
+      }
     });
   }
 
@@ -703,7 +728,8 @@ export function deriveEditorLayers(
         skew: true,
         opacity: true,
         grouping: true,
-        effects: true
+        effects: true,
+        stroke: true
       }
     });
   }
@@ -718,7 +744,13 @@ export function deriveEditorLayers(
     bounds: resolution
       ? { id: "background", label: "Background", x0: 0, y0: 0, x1: resolution.width, y1: resolution.height }
       : null,
-    capabilities: NO_CAPABILITIES
+    capabilities: {
+      ...NO_CAPABILITIES,
+      stroke: Boolean(
+        design.configAssetOverrides?.["config:background_icon"]?.replacement ??
+          design.artwork
+      )
+    }
   });
 
   return layers;

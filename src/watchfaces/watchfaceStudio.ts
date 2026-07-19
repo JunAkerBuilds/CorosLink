@@ -5,6 +5,7 @@ import type {
   CorosWatchfaceConfigOverride,
   CorosWatchfaceEffectBinding,
   CorosWatchfaceEffectStyle,
+  CorosWatchfaceStroke,
   CorosWatchfaceRasterFont,
   CorosWatchfaceResolutionDetails,
   CorosWatchfaceSpriteFolder,
@@ -13,9 +14,12 @@ import type {
   CorosWatchfaceTemplateDetails
 } from "../../electron/types";
 import {
-  renderWatchfaceCanvasEffects,
   resolveWatchfaceLayerEffects
 } from "./watchfaceEditorEffects.ts";
+import {
+  renderWatchfaceCanvasDecorations,
+  resolveWatchfaceLayerStrokes
+} from "./watchfaceEditorStrokes.ts";
 
 export const COROS_CONFIG_DELETE_VALUE = "__COROSLINK_DELETE_CONFIG_KEY__";
 
@@ -70,6 +74,8 @@ export interface WatchfaceStudioOptions extends WatchfaceTypography {
   effectStyles?: CorosWatchfaceEffectStyle[];
   /** Local or live-linked effects keyed by editor layer id. */
   layerEffects?: Record<string, CorosWatchfaceEffectBinding>;
+  /** Ordered front-to-back stroke stacks keyed by editor layer id. */
+  layerStrokes?: Record<string, CorosWatchfaceStroke[]>;
   /** Target-resolution/master-resolution ratio for 800px-authored effects. */
   effectResolutionScale?: number;
   /**
@@ -5932,7 +5938,10 @@ function drawStudioLayerImage(
   const effects = layerId
     ? resolveWatchfaceLayerEffects(options, layerId)
     : [];
-  if (effects.length === 0 && !rotation) {
+  const strokes = layerId
+    ? resolveWatchfaceLayerStrokes(options, layerId)
+    : [];
+  if (effects.length === 0 && strokes.length === 0 && !rotation) {
     context.drawImage(image, x, y, width, height);
     return;
   }
@@ -5961,12 +5970,13 @@ function drawStudioLayerImage(
   } else {
     sourceContext.drawImage(image, 0, 0, width, height);
   }
-  if (effects.length === 0) {
+  if (effects.length === 0 && strokes.length === 0) {
     context.drawImage(source, x, y, width, height);
     return;
   }
-  const rendered = renderWatchfaceCanvasEffects(
+  const rendered = renderWatchfaceCanvasDecorations(
     source,
+    strokes,
     effects,
     watchfaceEffectRenderScale(
       previewScale,
@@ -7336,12 +7346,17 @@ export async function drawStudioPreview(
             height,
             ampmStyle.color
           );
-      context.drawImage(
+      drawStudioLayerImage(
+        context,
         await loadStudioImage(dataUrl),
         ampmStyle.x * scale,
         ampmStyle.y * scale,
         width * scale,
-        height * scale
+        height * scale,
+        scale,
+        options,
+        "ampm",
+        false
       );
     }
   }

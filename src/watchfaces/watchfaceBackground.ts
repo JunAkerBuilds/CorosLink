@@ -7,9 +7,12 @@ import {
 } from "./watchfaceStudio";
 import { drawBackgroundElements } from "./watchfaceBackgroundElements";
 import {
-  renderWatchfaceCanvasEffects,
   resolveWatchfaceLayerEffects
 } from "./watchfaceEditorEffects";
+import {
+  renderWatchfaceCanvasDecorations,
+  resolveWatchfaceLayerStrokes
+} from "./watchfaceEditorStrokes";
 import { watchfaceBitmapCache } from "./watchfaceBitmapCache";
 import {
   normalizeWatchfaceCrop,
@@ -70,6 +73,7 @@ export function makeDefaultDesign(): CorosWatchfaceDesignState {
     lockedLayerIds: [],
     effectStyles: [],
     layerEffects: {},
+    layerStrokes: {},
     layerVisibility: {},
     layerColors: {},
     configAssetOverrides: {},
@@ -141,9 +145,10 @@ async function drawDesignSprite(
   );
   layerContext.restore();
   const effects = resolveWatchfaceLayerEffects(design, `sprite:${sprite.id}`);
+  const strokes = resolveWatchfaceLayerStrokes(design, `sprite:${sprite.id}`);
   context.drawImage(
-    effects.length > 0
-      ? renderWatchfaceCanvasEffects(layer, effects).canvas
+    effects.length > 0 || strokes.length > 0
+      ? renderWatchfaceCanvasDecorations(layer, strokes, effects).canvas
       : layer,
     0,
     0
@@ -188,7 +193,8 @@ export async function renderDesignBackground(
       const width = image.naturalWidth * scale;
       const height = image.naturalHeight * scale;
       const effects = resolveWatchfaceLayerEffects(design, "background");
-      if (effects.length === 0) {
+      const strokes = resolveWatchfaceLayerStrokes(design, "background");
+      if (effects.length === 0 && strokes.length === 0) {
         context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
       } else {
         const layer = document.createElement("canvas");
@@ -205,7 +211,11 @@ export async function renderDesignBackground(
             width,
             height
           );
-          context.drawImage(renderWatchfaceCanvasEffects(layer, effects).canvas, 0, 0);
+          context.drawImage(
+            renderWatchfaceCanvasDecorations(layer, strokes, effects).canvas,
+            0,
+            0
+          );
         }
       }
     }
@@ -230,7 +240,8 @@ export async function renderDesignBackground(
       drawBackgroundElements(
         context,
         [element],
-        (layerId) => resolveWatchfaceLayerEffects(design, layerId)
+        (layerId) => resolveWatchfaceLayerEffects(design, layerId),
+        (layerId) => resolveWatchfaceLayerStrokes(design, layerId)
       );
       continue;
     }
@@ -266,7 +277,11 @@ export async function renderDesignBackground(
       design,
       separatorId === "colon" ? "staticColon" : "staticDateSlash"
     );
-    if (effects.length === 0) {
+    const strokes = resolveWatchfaceLayerStrokes(
+      design,
+      separatorId === "colon" ? "staticColon" : "staticDateSlash"
+    );
+    if (effects.length === 0 && strokes.length === 0) {
       context.fillText(text, separator.x * separatorScale, separator.y * separatorScale);
     } else {
       const layer = document.createElement("canvas");
@@ -283,7 +298,11 @@ export async function renderDesignBackground(
         separator.x * separatorScale,
         separator.y * separatorScale
       );
-      context.drawImage(renderWatchfaceCanvasEffects(layer, effects).canvas, 0, 0);
+      context.drawImage(
+        renderWatchfaceCanvasDecorations(layer, strokes, effects).canvas,
+        0,
+        0
+      );
     }
   }
   context.textAlign = "start";

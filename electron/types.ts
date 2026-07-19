@@ -539,6 +539,30 @@ export type CorosWatchfaceEffectBinding =
   | { kind: "local"; effects: CorosWatchfaceShadowEffect[] }
   | { kind: "style"; styleId: string };
 
+export type CorosWatchfaceStrokePaint =
+  | {
+      kind: "solid";
+      color: string;
+    }
+  | {
+      kind: "linear-gradient";
+      from: string;
+      to: string;
+      /** Clockwise degrees from the positive X axis. */
+      angle: number;
+    };
+
+export interface CorosWatchfaceStroke {
+  id: string;
+  enabled: boolean;
+  paint: CorosWatchfaceStrokePaint;
+  /** Normalized 0..1 alpha applied to the stroke paint. */
+  opacity: number;
+  position: "inside" | "center" | "outside";
+  /** Width in the Studio's 800px master watch-face space. */
+  weight: number;
+}
+
 export interface CorosWatchfaceEditorGroup {
   id: string;
   name: string;
@@ -792,6 +816,8 @@ export interface CorosWatchfaceDesignState {
   effectStyles?: CorosWatchfaceEffectStyle[];
   /** Effects keyed by editor layer id, or by `aod:<id>` for always-on assets. */
   layerEffects?: Record<string, CorosWatchfaceEffectBinding>;
+  /** Ordered front-to-back stroke stacks keyed by editor layer id. */
+  layerStrokes?: Record<string, CorosWatchfaceStroke[]>;
   /** Visibility overrides for firmware-backed editor layers. */
   layerVisibility?: Record<string, boolean>;
   /** Per-layer colors for firmware components without specialized styles. */
@@ -850,6 +876,7 @@ export type CorosWatchfaceModeDesignState = Partial<
     | "lockedLayerIds"
     | "effectStyles"
     | "layerEffects"
+    | "layerStrokes"
     | "layerVisibility"
     | "layerColors"
     | "configAssetOverrides"

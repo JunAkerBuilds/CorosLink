@@ -84,6 +84,22 @@ export function buildWatchfaceEffectPaddingOverrides(
         if (rect) values[key] = rect;
       }
     }
+    const ampmPadding = padding.get("ampm");
+    if (ampmPadding) {
+      const pos = shiftConfigPos(
+        resolution.config.am_pm_icon_pos,
+        ampmPadding
+      );
+      if (pos) values.am_pm_icon_pos = pos;
+    }
+    const weatherPadding = padding.get("weather");
+    if (weatherPadding) {
+      const pos = shiftConfigPos(
+        resolution.config.weather_icon_pos,
+        weatherPadding
+      );
+      if (pos) values.weather_icon_pos = pos;
+    }
     return Object.keys(values).length > 0
       ? [{ path: `${resolution.directory}/config.txt`, values }]
       : [];

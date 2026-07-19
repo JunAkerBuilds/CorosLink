@@ -73,6 +73,7 @@ import {
   FlipHorizontal2,
   FlipVertical2,
   Group,
+  GripVertical,
   ImagePlus,
   Layers,
   Link2,
@@ -109,6 +110,7 @@ import type {
   CorosWatchfaceDesignSprite,
   CorosWatchfaceEditorGuide,
   CorosWatchfaceShadowEffect,
+  CorosWatchfaceStroke,
   CorosWatchfaceProject,
   CorosWatchfaceTemplateAsset,
   CorosWatchfaceTemplateDetails,
@@ -177,6 +179,11 @@ import {
   editorLayerAtPoint,
   type EditorLayer
 } from "./watchfaceEditorModel";
+import { WatchfaceInspectorSection } from "./WatchfaceInspectorSection";
+import {
+  watchfaceInspectorSpecificTitle,
+  type WatchfaceInspectorSectionId
+} from "./watchfaceInspectorSections";
 import {
   listWatchfaceEditorConfigAssets,
   watchfaceEditorLayerIsListed
@@ -333,10 +340,70 @@ import {
   resolveWatchfaceLayerEffects
 } from "./watchfaceEditorEffects";
 import {
+  createWatchfaceStroke,
+  migrateLegacyBackgroundElementStrokes,
+  normalizeWatchfaceStroke,
+  renderWatchfaceCanvasDecorations,
+  resolveWatchfaceLayerStrokes,
+  watchfaceStrokePadding
+} from "./watchfaceEditorStrokes";
+import {
   paintWatchfaceMeasurements,
   resizeWatchfaceCanvasBackings
 } from "./watchfaceInteractiveRenderer";
 import { WatchfacePointerController } from "./watchfacePointerController";
+
+function drawWeatherPreviewLayer(
+  canvas: HTMLCanvasElement,
+  image: HTMLImageElement,
+  design: Pick<
+    CorosWatchfaceDesignState,
+    "weatherIndicator" | "layerStrokes" | "layerEffects" | "effectStyles"
+  >,
+  previewWidth: number
+): void {
+  const indicator = design.weatherIndicator;
+  if (!indicator?.enabled) return;
+  const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+  if (!context) return;
+  const previewScale = canvas.width / previewWidth;
+  const width = Math.max(
+    1,
+    Math.round(image.naturalWidth * indicator.scale * previewScale)
+  );
+  const height = Math.max(
+    1,
+    Math.round(image.naturalHeight * indicator.scale * previewScale)
+  );
+  const strokes = resolveWatchfaceLayerStrokes(design, "weather");
+  const effects = resolveWatchfaceLayerEffects(design, "weather");
+  if (strokes.length === 0 && effects.length === 0) {
+    context.drawImage(
+      image,
+      indicator.x * previewScale,
+      indicator.y * previewScale,
+      width,
+      height
+    );
+    return;
+  }
+  const source = document.createElement("canvas");
+  source.width = width;
+  source.height = height;
+  source.getContext("2d")?.drawImage(image, 0, 0, width, height);
+  const rendered = renderWatchfaceCanvasDecorations(
+    source,
+    strokes,
+    effects,
+    canvas.width / 800,
+    true
+  );
+  context.drawImage(
+    rendered.canvas,
+    indicator.x * previewScale - rendered.padding.left,
+    indicator.y * previewScale - rendered.padding.top
+  );
+}
 
 interface WatchfaceEditorProps {
   api: CorosLinkApi;
@@ -534,7 +601,40 @@ function normalizeEditorDesign(
 ): CorosWatchfaceDesignState {
   const legacyBackgroundOverride =
     design.configAssetOverrides?.["config:background_icon"];
-  const normalized = {
+  const normalizeBackgroundElements = (
+    elements: CorosWatchfaceBackgroundElement[] | undefined
+  ) =>
+    (elements ?? []).map((element) => ({
+      ...element,
+      visible: element.visible !== false,
+      opacity: normalizeWatchfaceOpacity(element.opacity)
+    }));
+  const normalizedBackgroundElements = normalizeBackgroundElements(
+    design.backgroundElements
+  );
+  const migratedStrokes = migrateLegacyBackgroundElementStrokes(
+    normalizedBackgroundElements,
+    design.layerStrokes
+  );
+  const aodMode = design.modeDesigns?.aod;
+  const migratedAodStrokes = aodMode
+    ? migrateLegacyBackgroundElementStrokes(
+        normalizeBackgroundElements(aodMode.backgroundElements),
+        aodMode.layerStrokes
+      )
+    : null;
+  const normalizedModeDesigns: CorosWatchfaceDesignState["modeDesigns"] =
+    aodMode && migratedAodStrokes
+      ? {
+          ...design.modeDesigns,
+          aod: {
+            ...aodMode,
+            backgroundElements: migratedAodStrokes.elements,
+            layerStrokes: migratedAodStrokes.layerStrokes
+          }
+        }
+      : design.modeDesigns;
+  const normalized: CorosWatchfaceDesignState = {
     ...design,
     artworkVisible:
       design.artworkVisible ?? legacyBackgroundOverride?.enabled !== false,
@@ -549,6 +649,7 @@ function normalizeEditorDesign(
     ),
     effectStyles: design.effectStyles ?? [],
     layerEffects: design.layerEffects ?? {},
+    layerStrokes: migratedStrokes.layerStrokes,
     designSprites: (design.designSprites ?? []).map((sprite) => ({
       ...sprite,
       opacity: normalizeWatchfaceOpacity(sprite.opacity),
@@ -561,12 +662,9 @@ function normalizeEditorDesign(
       origin: normalizeWatchfaceTransformOrigin(sprite.origin)
     })),
     artworkLayerOrder: resolveWatchfaceArtworkLayerOrder(design),
-    backgroundElements: (design.backgroundElements ?? []).map((element) => ({
-      ...element,
-      visible: element.visible !== false,
-      opacity: normalizeWatchfaceOpacity(element.opacity)
-    })),
+    backgroundElements: migratedStrokes.elements,
     lockedLayerIds: [...new Set((design.lockedLayerIds ?? []).filter(Boolean))],
+    modeDesigns: normalizedModeDesigns,
     // Global tinting has been replaced by explicit controls in each layer.
     tintLabels: false,
     tintIcons: false
@@ -714,6 +812,12 @@ export function WatchfaceEditor({
     () => new Set<string>(["Template assets", "Always-on assets"])
   );
   const [propertiesOpen, setPropertiesOpen] = useState(false);
+  const [collapsedInspectorSections, setCollapsedInspectorSections] = useState(
+    () => new Set<WatchfaceInspectorSectionId>(["effects", "advanced"])
+  );
+  const [selectedStrokeIds, setSelectedStrokeIds] = useState<
+    Record<string, string>
+  >({});
   const [stageZoom, setStageZoom] = useState<"fit" | number>("fit");
   const [watchPreviewDirectory, setWatchPreviewDirectory] = useState("");
   const [placementMenuOpen, setPlacementMenuOpen] = useState(false);
@@ -1197,6 +1301,11 @@ export function WatchfaceEditor({
                 ([key]) => !key.startsWith("aod:")
               )
             ),
+            layerStrokes: Object.fromEntries(
+              Object.entries(nextDesign.layerStrokes ?? {}).filter(
+                ([key]) => !key.startsWith("aod:")
+              )
+            ),
             modeDesigns: {
               ...(nextDesign.modeDesigns ?? {}),
               aod: materializeLegacyAodDesign(
@@ -1255,7 +1364,8 @@ export function WatchfaceEditor({
       design.staticSeparators,
       design.fontFamily,
       design.effectStyles,
-      design.layerEffects
+      design.layerEffects,
+      design.layerStrokes
     ]
   );
   const supportsAod = useMemo(
@@ -1291,7 +1401,8 @@ export function WatchfaceEditor({
       design.configAssetOverrides,
       design.ampmIndicator,
       design.effectStyles,
-      design.layerEffects
+      design.layerEffects,
+      design.layerStrokes
     ]
   );
   const previewStudioOptions = studioOptions;
@@ -2260,7 +2371,15 @@ export function WatchfaceEditor({
           y1: Math.max(result.y1, box.y1)
         }))
       : drag.baseBounds;
-    const clipPadding = 2;
+    const clipPadding = Math.max(
+      2,
+      ...movingIds.map((layerId) =>
+        watchfaceStrokePadding(
+          resolveWatchfaceLayerStrokes(design, layerId),
+          previewWidth / 800
+        ).left
+      )
+    );
     return {
       base,
       moving,
@@ -2317,14 +2436,11 @@ export function WatchfaceEditor({
       );
       if (url) {
         const image = await loadStudioImage(url);
-        const context = frame.getContext("2d");
-        const scale = frame.width / previewWidth;
-        context?.drawImage(
+        drawWeatherPreviewLayer(
+          frame,
           image,
-          frameDesign.weatherIndicator.x * scale,
-          frameDesign.weatherIndicator.y * scale,
-          image.naturalWidth * frameDesign.weatherIndicator.scale * scale,
-          image.naturalHeight * frameDesign.weatherIndicator.scale * scale
+          frameDesign,
+          previewWidth
         );
       }
     }
@@ -2820,6 +2936,16 @@ export function WatchfaceEditor({
         .filter((group) => group.layerIds.length >= 2),
       lockedLayerIds: (prev.lockedLayerIds ?? []).filter(
         (candidate) => candidate !== editorId
+      ),
+      layerEffects: Object.fromEntries(
+        Object.entries(prev.layerEffects ?? {}).filter(
+          ([candidate]) => candidate !== editorId
+        )
+      ),
+      layerStrokes: Object.fromEntries(
+        Object.entries(prev.layerStrokes ?? {}).filter(
+          ([candidate]) => candidate !== editorId
+        )
       )
     }));
     setSelectedId("background");
@@ -2900,14 +3026,16 @@ export function WatchfaceEditor({
               );
               if (url) {
                 const image = await loadStudioImage(url);
-                const frameContext = frame.getContext("2d");
-                const scale = frame.width / next.previewWidth;
-                frameContext?.drawImage(
+                drawWeatherPreviewLayer(
+                  frame,
                   image,
-                  next.weather.x * scale,
-                  next.weather.y * scale,
-                  image.naturalWidth * next.weather.scale * scale,
-                  image.naturalHeight * next.weather.scale * scale
+                  {
+                    weatherIndicator: next.weather,
+                    layerStrokes: next.options.layerStrokes,
+                    layerEffects: next.options.layerEffects,
+                    effectStyles: next.options.effectStyles
+                  },
+                  next.previewWidth
                 );
               }
             }
@@ -4820,6 +4948,10 @@ export function WatchfaceEditor({
       Math.max(8, Math.round(previewWidth * 0.02))
     );
     const sourceEffect = design.layerEffects?.[`sprite:${spriteId}`];
+    const sourceStrokes = resolveWatchfaceLayerStrokes(
+      design,
+      `sprite:${spriteId}`
+    );
     setDesign((current) => ({
       ...current,
       designSprites: [...(current.designSprites ?? []), duplicate],
@@ -4832,6 +4964,17 @@ export function WatchfaceEditor({
             layerEffects: {
               ...(current.layerEffects ?? {}),
               [`sprite:${duplicateId}`]: structuredClone(sourceEffect)
+            }
+        }
+        : {}),
+      ...(sourceStrokes.length > 0
+        ? {
+            layerStrokes: {
+              ...(current.layerStrokes ?? {}),
+              [`sprite:${duplicateId}`]: sourceStrokes.map((stroke) => ({
+                ...structuredClone(stroke),
+                id: createWatchfaceStroke().id
+              }))
             }
           }
         : {})
@@ -4861,6 +5004,16 @@ export function WatchfaceEditor({
         .filter((group) => group.layerIds.length >= 2),
       lockedLayerIds: (prev.lockedLayerIds ?? []).filter(
         (candidate) => candidate !== editorId
+      ),
+      layerEffects: Object.fromEntries(
+        Object.entries(prev.layerEffects ?? {}).filter(
+          ([candidate]) => candidate !== editorId
+        )
+      ),
+      layerStrokes: Object.fromEntries(
+        Object.entries(prev.layerStrokes ?? {}).filter(
+          ([candidate]) => candidate !== editorId
+        )
       )
     }));
     setSelectedId("background");
@@ -5132,16 +5285,11 @@ export function WatchfaceEditor({
       );
       if (url) {
         const image = await loadStudioImage(url);
-        const context = archivePreview.getContext("2d");
-        const scale =
-          archivePreview.width /
-          (snapshotBaseResolution?.width ?? previewWidth);
-        context?.drawImage(
+        drawWeatherPreviewLayer(
+          archivePreview,
           image,
-          designSnapshot.weatherIndicator.x * scale,
-          designSnapshot.weatherIndicator.y * scale,
-          image.naturalWidth * designSnapshot.weatherIndicator.scale * scale,
-          image.naturalHeight * designSnapshot.weatherIndicator.scale * scale
+          designSnapshot,
+          snapshotBaseResolution?.width ?? previewWidth
         );
       }
     }
@@ -5513,6 +5661,11 @@ export function WatchfaceEditor({
       ),
       layerEffects: Object.fromEntries(
         Object.entries(current.layerEffects ?? {}).filter(
+          ([id]) => !removedEditorIds.has(id)
+        )
+      ),
+      layerStrokes: Object.fromEntries(
+        Object.entries(current.layerStrokes ?? {}).filter(
           ([id]) => !removedEditorIds.has(id)
         )
       )
@@ -6502,12 +6655,6 @@ export function WatchfaceEditor({
               </span>
               <p className="watchface-editor-pane-title">Properties</p>
             </div>
-            <strong
-              className="wf-pane-context"
-              title={selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? "Inspector"}
-            >
-              {selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? "Inspector"}
-            </strong>
           </div>
           {selectedElement ? renderElementInspector(selectedElement) : selectedLayer ? renderInspector(selectedLayer) : previewMode === "aod" ? (
             <div className="watchface-inspector-group wf-aod-empty-inspector">
@@ -7032,7 +7179,8 @@ export function WatchfaceEditor({
               rotate: true,
               opacity: true,
               grouping: true,
-              effects: true
+              effects: true,
+              stroke: true
             }
           }))
       ];
@@ -7115,6 +7263,500 @@ export function WatchfaceEditor({
       return <Battery size={14} />;
     }
     return <Layers size={14} />;
+  }
+
+  function setInspectorSectionOpen(
+    sectionId: WatchfaceInspectorSectionId,
+    open: boolean
+  ) {
+    setCollapsedInspectorSections((current) => {
+      const next = new Set(current);
+      if (open) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  }
+
+  function renderPropertySection(
+    sectionId: WatchfaceInspectorSectionId,
+    title: string,
+    children: ReactNode,
+    options?: {
+      actions?: ReactNode;
+      status?: ReactNode;
+      disabled?: boolean;
+      className?: string;
+    }
+  ) {
+    return (
+      <WatchfaceInspectorSection
+        sectionId={sectionId}
+        title={title}
+        open={!collapsedInspectorSections.has(sectionId)}
+        onOpenChange={(open) => setInspectorSectionOpen(sectionId, open)}
+        actions={options?.actions}
+        status={options?.status}
+        disabled={options?.disabled}
+        className={options?.className}
+      >
+        {children}
+      </WatchfaceInspectorSection>
+    );
+  }
+
+  function editorLayerTypeLabel(layer: EditorLayer): string {
+    if (layer.backgroundElementId) {
+      const element = backgroundElements.find(
+        (candidate) => candidate.id === layer.backgroundElementId
+      );
+      if (element) {
+        return {
+          rect: "Rectangle",
+          ellipse: "Ellipse",
+          line: "Line",
+          text: "Text"
+        }[element.kind];
+      }
+    }
+    if (layer.timePartId) return "Dynamic time";
+    if (layer.metricId) return "Dynamic metric";
+    if (layer.weatherIndicator) return "Dynamic weather";
+    if (layer.ampmIndicator) return "Dynamic indicator";
+    if (layer.staticSeparatorId) return "Text separator";
+    return {
+      background: "Background",
+      backgroundElement: "Artwork object",
+      time: "Dynamic time",
+      date: "Dynamic date",
+      weekday: "Dynamic date",
+      seconds: "Dynamic time",
+      separators: "Template separator",
+      battery: "Dynamic metric",
+      batteryIcon: "Battery sprite",
+      controlBatteryIcon: "Selectable sprite",
+      complication: "Selectable data",
+      metric: "Dynamic metric",
+      weather: "Dynamic weather",
+      configAsset: "Template asset",
+      customSprite: "Image"
+    }[layer.kind];
+  }
+
+  function renderLayerSection(layer: EditorLayer) {
+    const sprite = layer.spriteId
+      ? (design.designSprites ?? []).find(
+          (candidate) => candidate.id === layer.spriteId
+        )
+      : null;
+    const locked = isPositionLocked(layer.id);
+    const canLock = isMovableSelectionId(layer.id);
+    const actions = (
+      <>
+        {layer.canHide ? (
+          <button
+            type="button"
+            className="wf-property-icon-button"
+            disabled={locked}
+            aria-label={`${layer.visible ? "Hide" : "Show"} ${layer.label}`}
+            aria-pressed={!layer.visible}
+            title={layer.visible ? "Hide layer" : "Show layer"}
+            onClick={() => toggleLayerVisibility(layer)}
+          >
+            {layer.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+          </button>
+        ) : null}
+        {canLock ? renderLayerPositionLockButton(layer.id, layer.label) : null}
+      </>
+    );
+    return renderPropertySection(
+      "layer",
+      "Layer",
+      <div className="wf-layer-property">
+        <div className="wf-layer-property-icon" aria-hidden="true">
+          {layerIcon(layer)}
+        </div>
+        <div className="wf-layer-property-main">
+          {sprite ? (
+            <label className="wf-layer-name-field">
+              <span>Name</span>
+              <input
+                type="text"
+                value={sprite.name ?? ""}
+                maxLength={60}
+                placeholder={watchfaceDesignSpriteName(sprite)}
+                disabled={locked}
+                onChange={(event) =>
+                  updateSprite(sprite.id, { name: event.target.value })
+                }
+                onBlur={() => {
+                  const name = sprite.name?.trim() || undefined;
+                  if (name !== sprite.name) updateSprite(sprite.id, { name });
+                }}
+              />
+            </label>
+          ) : (
+            <div className="wf-layer-name-readout">
+              <span>Name</span>
+              <strong title={layer.label}>{layer.label}</strong>
+            </div>
+          )}
+          <div className="wf-layer-type-readout">
+            <span>Type</span>
+            <strong>{editorLayerTypeLabel(layer)}</strong>
+          </div>
+        </div>
+      </div>,
+      { actions }
+    );
+  }
+
+  function writeLayerStrokes(
+    layerId: string,
+    strokes: CorosWatchfaceStroke[]
+  ) {
+    setDesign((current) => {
+      const layerStrokes = { ...(current.layerStrokes ?? {}) };
+      if (strokes.length > 0) {
+        layerStrokes[layerId] = strokes.map(normalizeWatchfaceStroke);
+      } else {
+        delete layerStrokes[layerId];
+      }
+      return { ...current, layerStrokes };
+    });
+  }
+
+  function renderStrokeInspector(layerId: string) {
+    const strokes = resolveWatchfaceLayerStrokes(design, layerId);
+    const selectedStrokeId =
+      selectedStrokeIds[layerId] &&
+      strokes.some((stroke) => stroke.id === selectedStrokeIds[layerId])
+        ? selectedStrokeIds[layerId]
+        : strokes[0]?.id;
+    const selectedStroke = strokes.find(
+      (stroke) => stroke.id === selectedStrokeId
+    );
+    const selectedGradient =
+      selectedStroke?.paint.kind === "linear-gradient"
+        ? selectedStroke.paint
+        : null;
+    const selectStroke = (strokeId: string) =>
+      setSelectedStrokeIds((current) => ({
+        ...current,
+        [layerId]: strokeId
+      }));
+    const patchStroke = (
+      strokeId: string,
+      patch: Partial<CorosWatchfaceStroke>
+    ) =>
+      writeLayerStrokes(
+        layerId,
+        strokes.map((stroke) =>
+          stroke.id === strokeId
+            ? normalizeWatchfaceStroke({ ...stroke, ...patch })
+            : stroke
+        )
+      );
+    const addStroke = () => {
+      const stroke = createWatchfaceStroke(design.accentColor);
+      writeLayerStrokes(layerId, [stroke, ...strokes]);
+      selectStroke(stroke.id);
+    };
+    const removeStroke = (strokeId: string) => {
+      const index = strokes.findIndex((stroke) => stroke.id === strokeId);
+      const remaining = strokes.filter((stroke) => stroke.id !== strokeId);
+      writeLayerStrokes(layerId, remaining);
+      const next = remaining[Math.min(index, remaining.length - 1)];
+      setSelectedStrokeIds((current) => {
+        const selected = { ...current };
+        if (next) selected[layerId] = next.id;
+        else delete selected[layerId];
+        return selected;
+      });
+    };
+    const moveStroke = (index: number, direction: -1 | 1) => {
+      const target = index + direction;
+      if (target < 0 || target >= strokes.length) return;
+      const next = [...strokes];
+      [next[index], next[target]] = [next[target]!, next[index]!];
+      writeLayerStrokes(layerId, next);
+    };
+    const paintPreview = (
+      stroke: CorosWatchfaceStroke
+    ): CSSProperties => ({
+      background:
+        stroke.paint.kind === "solid"
+          ? stroke.paint.color
+          : `linear-gradient(${stroke.paint.angle + 90}deg, ${stroke.paint.from}, ${stroke.paint.to})`
+    });
+    const paintLabel = (stroke: CorosWatchfaceStroke) =>
+      stroke.paint.kind === "solid"
+        ? stroke.paint.color.replace(/^#/, "").toUpperCase()
+        : "Linear gradient";
+
+    return renderPropertySection(
+      "stroke",
+      "Stroke",
+      <div className="wf-stroke-inspector">
+        <span className="wf-effect-scope">
+          {previewMode === "aod"
+            ? "Always-on display only"
+            : "Current display only"}
+        </span>
+        {strokes.length > 0 ? (
+          <div className="wf-stroke-stack">
+            {strokes.map((stroke, index) => (
+              <div
+                className={`wf-stroke-row${
+                  stroke.id === selectedStrokeId ? " is-selected" : ""
+                }${stroke.enabled ? "" : " is-disabled"}`}
+                key={stroke.id}
+              >
+                <span className="wf-stroke-grip" aria-hidden="true">
+                  <GripVertical size={13} />
+                </span>
+                <button
+                  type="button"
+                  className="wf-stroke-row-main"
+                  aria-pressed={stroke.id === selectedStrokeId}
+                  onClick={() => selectStroke(stroke.id)}
+                >
+                  <span
+                    className="wf-stroke-swatch"
+                    style={paintPreview(stroke)}
+                    aria-hidden="true"
+                  />
+                  <span className="wf-stroke-paint-label">
+                    {paintLabel(stroke)}
+                  </span>
+                  <span className="wf-stroke-opacity">
+                    {Math.round(stroke.opacity * 100)}%
+                  </span>
+                </button>
+                <div className="wf-stroke-row-actions">
+                  <button
+                    type="button"
+                    disabled={index === 0}
+                    aria-label="Move stroke forward"
+                    title="Move forward"
+                    onClick={() => moveStroke(index, -1)}
+                  >
+                    <ArrowUp size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={index === strokes.length - 1}
+                    aria-label="Move stroke backward"
+                    title="Move backward"
+                    onClick={() => moveStroke(index, 1)}
+                  >
+                    <ArrowDown size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={stroke.enabled ? "Hide stroke" : "Show stroke"}
+                    aria-pressed={!stroke.enabled}
+                    title={stroke.enabled ? "Hide stroke" : "Show stroke"}
+                    onClick={() =>
+                      patchStroke(stroke.id, { enabled: !stroke.enabled })
+                    }
+                  >
+                    {stroke.enabled ? <Eye size={13} /> : <EyeOff size={13} />}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Remove stroke"
+                    title="Remove stroke"
+                    onClick={() => removeStroke(stroke.id)}
+                  >
+                    <Minus size={13} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="watchface-studio-summary">
+            No strokes. Add one to outline this layer’s visible pixels.
+          </p>
+        )}
+        {selectedStroke ? (
+          <div className="wf-stroke-details">
+            <label className="field">
+              Paint
+              <select
+                value={selectedStroke.paint.kind}
+                onChange={(event) => {
+                  if (event.target.value === "linear-gradient") {
+                    const baseColor =
+                      selectedStroke.paint.kind === "solid"
+                        ? selectedStroke.paint.color
+                        : selectedStroke.paint.from;
+                    patchStroke(selectedStroke.id, {
+                      paint: {
+                        kind: "linear-gradient",
+                        from: baseColor,
+                        to: "#000000",
+                        angle: 90
+                      }
+                    });
+                  } else {
+                    patchStroke(selectedStroke.id, {
+                      paint: {
+                        kind: "solid",
+                        color:
+                          selectedStroke.paint.kind === "linear-gradient"
+                            ? selectedStroke.paint.from
+                            : selectedStroke.paint.color
+                      }
+                    });
+                  }
+                }}
+              >
+                <option value="solid">Solid color</option>
+                <option value="linear-gradient">Linear gradient</option>
+              </select>
+            </label>
+            {selectedStroke.paint.kind === "solid" ? (
+              <label className="field">
+                Color
+                <span className="watchface-color-control">
+                  <input
+                    type="color"
+                    value={selectedStroke.paint.color}
+                    onChange={(event) =>
+                      patchStroke(selectedStroke.id, {
+                        paint: {
+                          kind: "solid",
+                          color: event.target.value
+                        }
+                      })
+                    }
+                  />
+                  <code>{selectedStroke.paint.color.toUpperCase()}</code>
+                </span>
+              </label>
+            ) : selectedGradient ? (
+              <>
+                <div className="wf-inline-property-grid">
+                  {(["from", "to"] as const).map((stop) => (
+                    <label className="field" key={stop}>
+                      {stop === "from" ? "From" : "To"}
+                      <span className="watchface-color-control">
+                        <input
+                          type="color"
+                          value={selectedGradient[stop]}
+                          onChange={(event) =>
+                            patchStroke(selectedStroke.id, {
+                              paint: {
+                                ...selectedGradient,
+                                [stop]: event.target.value
+                              }
+                            })
+                          }
+                        />
+                        <code>
+                          {selectedGradient[stop]
+                            .replace(/^#/, "")
+                            .toUpperCase()}
+                        </code>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <label className="watchface-inspector-field">
+                  <span>Angle</span>
+                  <span className="wf-input-with-unit">
+                    <EditableNumberInput
+                      min="0"
+                      max="359"
+                      step="1"
+                      value={selectedGradient.angle}
+                      fallback={90}
+                      onValueChange={(angle) =>
+                        patchStroke(selectedStroke.id, {
+                          paint: {
+                            ...selectedGradient,
+                            angle
+                          }
+                        })
+                      }
+                    />
+                    <span>°</span>
+                  </span>
+                </label>
+              </>
+            ) : null}
+            <div className="wf-inline-property-grid">
+              <label className="field">
+                Position
+                <select
+                  value={selectedStroke.position}
+                  onChange={(event) =>
+                    patchStroke(selectedStroke.id, {
+                      position: event.target
+                        .value as CorosWatchfaceStroke["position"]
+                    })
+                  }
+                >
+                  <option value="inside">Inside</option>
+                  <option value="center">Center</option>
+                  <option value="outside">Outside</option>
+                </select>
+              </label>
+              <label className="watchface-inspector-field">
+                <span>Weight</span>
+                <span className="wf-input-with-unit">
+                  <EditableNumberInput
+                    min="1"
+                    max="64"
+                    step="1"
+                    value={selectedStroke.weight}
+                    fallback={1}
+                    onValueChange={(weight) =>
+                      patchStroke(selectedStroke.id, { weight })
+                    }
+                  />
+                  <span>px</span>
+                </span>
+              </label>
+            </div>
+            <label className="watchface-inspector-field">
+              <span>Opacity</span>
+              <span className="wf-input-with-unit">
+                <EditableNumberInput
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={Math.round(selectedStroke.opacity * 100)}
+                  fallback={100}
+                  onValueChange={(opacity) =>
+                    patchStroke(selectedStroke.id, {
+                      opacity: opacity / 100
+                    })
+                  }
+                />
+                <span>%</span>
+              </span>
+            </label>
+          </div>
+        ) : null}
+      </div>,
+      {
+        status: strokes.length > 0 ? String(strokes.length) : undefined,
+        className: "wf-stroke-section",
+        actions: (
+          <button
+            type="button"
+            className="wf-property-icon-button"
+            aria-label="Add stroke"
+            title="Add stroke"
+            onClick={addStroke}
+          >
+            <Plus size={15} />
+          </button>
+        )
+      }
+    );
   }
 
   function layerEffectKey(layerId: string): string {
@@ -7223,26 +7865,13 @@ export function WatchfaceEditor({
       writeLayerEffects(layerId, effects.map((effect) =>
         effect.id === id ? normalizeWatchfaceShadowEffect({ ...effect, ...patch }) : effect
       ));
-    return (
-      <div className="watchface-inspector-group wf-effects-inspector">
-        <div className="wf-effects-heading">
-          <div>
-            <h3 className="wf-inspector-heading">Effects</h3>
-            <span>{scope === "aod" ? "Always-on only" : "Current display only"}</span>
-          </div>
-          <button
-            type="button"
-            className="wf-icon-button"
-            aria-label="Add outer shadow"
-            title="Add outer shadow"
-            onClick={() => writeLayerEffects(layerId, [
-              ...effects,
-              createWatchfaceShadowEffect()
-            ])}
-          >
-            <Plus size={15} />
-          </button>
-        </div>
+    return renderPropertySection(
+      "effects",
+      "Effects",
+      <div className="wf-effects-inspector">
+        <span className="wf-effect-scope">
+          {scope === "aod" ? "Always-on display only" : "Current display only"}
+        </span>
         <label className="field wf-effect-style-select">
           Effect style
           <select
@@ -7331,7 +7960,29 @@ export function WatchfaceEditor({
           <p className="watchface-studio-summary">No effects. Add a shadow to build an ordered effect stack.</p>
         ) : null}
         {warning ? <p className="wf-effect-warning">{warning}</p> : null}
-      </div>
+      </div>,
+      {
+        status: effects.length > 0 ? String(effects.length) : undefined,
+        disabled: isPositionLocked(layerId),
+        className: "wf-effects-section",
+        actions: (
+          <button
+            type="button"
+            className="wf-property-icon-button"
+            disabled={isPositionLocked(layerId)}
+            aria-label="Add outer shadow"
+            title="Add outer shadow"
+            onClick={() =>
+              writeLayerEffects(layerId, [
+                ...effects,
+                createWatchfaceShadowEffect()
+              ])
+            }
+          >
+            <Plus size={15} />
+          </button>
+        )
+      }
     );
   }
 
@@ -7414,113 +8065,52 @@ export function WatchfaceEditor({
       }
     })();
     return (
-      <div className="watchface-inspector-group wf-config-asset-inspector">
-        <div className={`wf-config-asset-preview${enabled ? "" : " is-disabled"}`}>
-          {previewDataUrl ? (
-            <img src={previewDataUrl} alt={`${reference.label} preview`} />
-          ) : (
-            <Image size={24} aria-hidden="true" />
-          )}
-        </div>
-        <div className="wf-config-asset-meta">
-          <strong>{reference.label}</strong>
-          <span>{dimensions}</span>
-          <code>{reference.relativePath}</code>
-          <code>[{reference.configKey}]</code>
-        </div>
-        {onWatchBehavior ? (
-          <p className="watchface-studio-summary">{onWatchBehavior}</p>
-        ) : null}
-        <label className="watchface-studio-toggle">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(event) =>
-              updateConfigAsset(reference, { enabled: event.target.checked })
-            }
-          />
-          Use this config asset
-        </label>
-        <div className="wf-config-asset-actions">
-          <button type="button" className="secondary-button" onClick={() => void chooseConfigAsset(reference)}>
-            <ImagePlus size={15} /> {override?.replacement ? "Replace again" : "Replace image"}
-          </button>
-          {override?.replacement ? (
-            <button type="button" className="secondary-button" onClick={() => restoreConfigAsset(reference)}>
-              <RotateCcw size={15} /> Restore original
-            </button>
-          ) : null}
-        </div>
+      <>
         {renderPositionReadout(layer)}
-        {override?.replacement ? (
-          <>
-            {supportsNativeSize ? (
-              <label className="watchface-studio-toggle">
-                <input
-                  type="checkbox"
-                  checked={nativeSize}
-                  onChange={(event) =>
-                    updateConfigAsset(reference, {
-                      nativeSize: event.target.checked
-                    })
-                  }
-                />
-                Native PNG size (no template bound)
-              </label>
+        {renderPropertySection(
+          "specific",
+          "Asset",
+          <div className="wf-property-stack wf-config-asset-inspector">
+            <div className={`wf-config-asset-preview${enabled ? "" : " is-disabled"}`}>{previewDataUrl ? <img src={previewDataUrl} alt={`${reference.label} preview`} /> : <Image size={24} aria-hidden="true" />}</div>
+            <div className="wf-config-asset-actions">
+              <button type="button" className="secondary-button" onClick={() => void chooseConfigAsset(reference)}><ImagePlus size={15} /> {override?.replacement ? "Replace again" : "Replace image"}</button>
+              {override?.replacement ? <button type="button" className="secondary-button" onClick={() => restoreConfigAsset(reference)}><RotateCcw size={15} /> Restore original</button> : null}
+            </div>
+            {override?.replacement ? (
+              <>
+                {supportsNativeSize ? <label className="watchface-studio-toggle"><input type="checkbox" checked={nativeSize} onChange={(event) => updateConfigAsset(reference, { nativeSize: event.target.checked })} />Native PNG size</label> : null}
+                <label className="watchface-inspector-field"><span>{nativeSize ? "Native size scale" : "Artwork zoom"}</span><span className="wf-input-with-unit"><EditableNumberInput min="0.1" step="0.01" value={artworkZoom} fallback={1} onValueChange={(scale) => updateConfigAsset(reference, { scale: Math.max(0.1, scale) })} /><span>×</span></span></label>
+              </>
             ) : null}
-            <label className="field watchface-zoom-control">
-              {nativeSize ? "Native size scale" : "Artwork zoom"}{" "}
-              <span>{artworkZoom.toFixed(2)}×</span>
-              <input
-                type="range"
-                min="0.1"
-                max={Math.max(10, Math.ceil(artworkZoom * 2))}
-                step="0.01"
-                value={artworkZoom}
-                onChange={(event) =>
-                  updateConfigAsset(reference, {
-                    scale: Number(event.target.value)
-                  })
-                }
-              />
-            </label>
-            <label className="watchface-inspector-field">
-              <span>Precise zoom</span>
-              <EditableNumberInput
-                min="0.1"
-                step="0.01"
-                value={artworkZoom}
-                fallback={1}
-                onValueChange={(value) =>
-                  updateConfigAsset(reference, {
-                    scale: Math.max(0.1, value)
-                  })
-                }
-              />
-            </label>
-          </>
-        ) : null}
-        <p className="watchface-studio-summary">
-          Parsed from {reference.scope === "aod" ? "AODconfig.txt" : "config.txt"}.
-          Visibility changes only this key.{" "}
-          {nativeSize
-            ? "The selectable icon exports at the imported PNG dimensions; scale changes the canvas itself instead of cropping it."
-            : "Transparent padding is removed automatically. Artwork zoom enlarges and crops the image inside the firmware-required canvas without changing its PNG dimensions."}{" "}
-          Other keys that share the original file are not altered.
-        </p>
-      </div>
+          </div>,
+          { disabled: isPositionLocked(layer.id) }
+        )}
+        {renderPropertySection(
+          "advanced",
+          "Advanced",
+          <div className="wf-property-stack">
+            <div className="wf-config-asset-meta"><strong>{reference.label}</strong><span>{dimensions}</span><code>{reference.relativePath}</code><code>[{reference.configKey}]</code></div>
+            {onWatchBehavior ? <p className="watchface-studio-summary">{onWatchBehavior}</p> : null}
+            <p className="watchface-studio-summary">Parsed from {reference.scope === "aod" ? "AODconfig.txt" : "config.txt"}. Visibility changes only this key. Other keys that share the original file are not altered.</p>
+          </div>,
+          { disabled: isPositionLocked(layer.id) }
+        )}
+      </>
     );
   }
 
   function renderControlBatteryInspector(layer: EditorLayer) {
     if (!layer.visible) {
-      return (
-        <div className="watchface-inspector-group">
+      return renderPropertySection(
+        "specific",
+        "Sprite",
+        <div className="wf-property-stack">
           <p className="watchface-studio-summary">
             Battery is off. Turn it on in Selectable components to add its
             configuration and show these settings.
           </p>
-        </div>
+        </div>,
+        { disabled: isPositionLocked(layer.id) }
       );
     }
     const override =
@@ -7585,52 +8175,7 @@ export function WatchfaceEditor({
     };
 
     return (
-      <div className="watchface-inspector-group">
-        <h3 className="wf-inspector-heading">Control battery sprite folder</h3>
-        <div className="wf-config-asset-actions">
-          <button
-            className="secondary-button"
-            type="button"
-            disabled={spriteImportPending}
-            onClick={() =>
-              void chooseBatterySpriteFolder(
-                "config:control_battery_icon"
-              )
-            }
-          >
-            <ImagePlus size={15} />{" "}
-            {stateCount > 0
-              ? "Replace control sprite folder"
-              : "Import control sprite folder"}
-          </button>
-          {stateCount > 0 ? (
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={spriteImportPending}
-              onClick={() =>
-                restoreBatteryIcon("config:control_battery_icon")
-              }
-            >
-              <RotateCcw size={15} /> Restore control icon
-            </button>
-          ) : null}
-        </div>
-        <label className="watchface-inspector-field">
-          <span>Control icon scale</span>
-          <EditableNumberInput
-            min="0.1"
-            step="0.01"
-            value={iconScale}
-            fallback={1}
-            onValueChange={(scale) =>
-              setBatteryIconScale(
-                scale,
-                "config:control_battery_icon"
-              )
-            }
-          />
-        </label>
+      <>
         {baseIconPosition
           ? renderPositionPanel("complication", "Control icon position", <>
               <div className="watchface-position-inputs">
@@ -7685,34 +8230,73 @@ export function WatchfaceEditor({
               </div>
             </>)
           : null}
-        <p className="watchface-studio-summary">
-          This icon is used only for the Battery choice in the selectable data
-          slot. Its sprite folder, scale, and position are managed here
-          independently from the Selectable metric layer.
-        </p>
-      </div>
+        {renderPropertySection(
+          "specific",
+          "Sprite",
+          <div className="wf-property-stack">
+            <div className="wf-config-asset-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={spriteImportPending}
+                onClick={() => void chooseBatterySpriteFolder("config:control_battery_icon")}
+              >
+                <ImagePlus size={15} />
+                {stateCount > 0 ? "Replace sprite folder" : "Import sprite folder"}
+              </button>
+              {stateCount > 0 ? (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={spriteImportPending}
+                  onClick={() => restoreBatteryIcon("config:control_battery_icon")}
+                >
+                  <RotateCcw size={15} /> Restore
+                </button>
+              ) : null}
+            </div>
+            <label className="watchface-inspector-field">
+              <span>Scale</span>
+              <span className="wf-input-with-unit">
+                <EditableNumberInput
+                  min="0.1"
+                  step="0.01"
+                  value={iconScale}
+                  fallback={1}
+                  onValueChange={(scale) => setBatteryIconScale(scale, "config:control_battery_icon")}
+                />
+                <span>×</span>
+              </span>
+            </label>
+            <div className="wf-asset-dimensions">
+              <span>Imported states</span>
+              <strong>{stateCount || "Template"}</strong>
+            </div>
+          </div>,
+          { disabled: isPositionLocked(layer.id) }
+        )}
+        {renderPropertySection(
+          "advanced",
+          "Advanced",
+          <p className="watchface-studio-summary">
+            This sprite is used only for the Battery choice in the selectable data slot. Its source, scale, and position are independent from the Selectable metric layer.
+          </p>,
+          { disabled: isPositionLocked(layer.id) }
+        )}
+      </>
     );
   }
 
   function renderInspector(layer: EditorLayer) {
-    if (isPositionLocked(layer.id)) {
-      return (
-        <div className="watchface-inspector-group wf-locked-inspector">
-          <Lock size={20} aria-hidden="true" />
-          <strong>Layer locked</strong>
-          <p className="watchface-studio-summary">
-            Position, transforms, alignment, and appearance are protected.
-          </p>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => setLayerPositionLocked(layer.id, false)}
-          >
-            <Unlock size={15} /> Unlock layer
-          </button>
-        </div>
-      );
-    }
+    return (
+      <>
+        {renderLayerSection(layer)}
+        {renderInspectorBody(layer)}
+      </>
+    );
+  }
+
+  function renderInspectorBody(layer: EditorLayer) {
     if (layer.configAssetId) {
       const reference = configAssetsById.get(layer.configAssetId);
       return reference ? renderConfigAssetInspector(reference, layer) : null;
@@ -7727,7 +8311,12 @@ export function WatchfaceEditor({
     }
 
     if (layer.staticSeparatorId) {
-      return <>{renderStaticSeparatorInspector(layer.staticSeparatorId)}{renderEffectsInspector(layer.id)}</>;
+      return (
+        <>
+          {renderStaticSeparatorInspector(layer.staticSeparatorId)}
+          {renderEffectsInspector(layer.id)}
+        </>
+      );
     }
 
     if (layer.kind === "controlBatteryIcon") {
@@ -7741,92 +8330,47 @@ export function WatchfaceEditor({
       const backgroundVisible = design.artworkVisible !== false;
       const backgroundColor = parseBackgroundColor(design.backgroundColor);
       return (
-        <div className="watchface-inspector-group">
-          <h3 className="wf-inspector-heading">Color</h3>
-          <label className="field">
-            Background color
-            <span className="watchface-color-control">
-              <input
-                type="color"
-                value={backgroundColor.hex}
-                onChange={(event) =>
-                  patchDesign({
-                    backgroundColor: toRgbaColor(
-                      event.target.value,
-                      backgroundColor.isTransparent ? 1 : backgroundColor.alpha
-                    )
-                  })
-                }
-              />
-              <code>{backgroundColor.isTransparent ? "none" : design.backgroundColor}</code>
-            </span>
-          </label>
-          <label className="field watchface-zoom-control">
-            Opacity <span>{Math.round(backgroundColor.alpha * 100)}%</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              disabled={backgroundColor.isTransparent}
-              value={Math.round(backgroundColor.alpha * 100)}
-              onChange={(event) =>
-                patchDesign({
-                  backgroundColor: toRgbaColor(
-                    backgroundColor.hex,
-                    Number(event.target.value) / 100
-                  )
-                })
-              }
-            />
-          </label>
-          <button
-            className="watchface-color-none"
-            type="button"
-            disabled={backgroundColor.isTransparent}
-            onClick={() => patchDesign({ backgroundColor: "transparent" })}
-          >
-            No background color
-          </button>
-          <h3 className="wf-inspector-heading">Artwork</h3>
-          <div
-            className={`wf-config-asset-preview wf-background-asset-preview${
-              backgroundVisible ? "" : " is-disabled"
-            }`}
-          >
-            {backgroundArtwork ? (
-              <img src={backgroundArtwork.dataUrl} alt="Background artwork preview" />
-            ) : (
-              <Image size={28} aria-hidden="true" />
-            )}
-          </div>
-          <label className="watchface-studio-toggle">
-            <input
-              type="checkbox"
-              checked={backgroundVisible}
-              disabled={!backgroundArtwork}
-              onChange={(event) =>
-                patchDesign({ artworkVisible: event.target.checked })
-              }
-            />
-            Show background artwork
-          </label>
-          <button className="secondary-button" type="button" onClick={() => void chooseArtwork()}>
-            <ImagePlus size={15} /> {backgroundArtwork ? "Replace artwork" : "Add artwork"}
-          </button>
-          {backgroundArtwork ? (
-            <>
-              <label className="field watchface-zoom-control">
-                Artwork scale <span>{design.zoom.toFixed(2)}×</span>
-                <input type="range" min="1" max="2.25" step="0.01" value={design.zoom} onChange={(e) => patchDesign({ zoom: Number(e.target.value) })} />
+        <>
+          {renderPropertySection(
+            "appearance",
+            "Appearance",
+            <div className="wf-property-stack">
+              <label className="field">
+                Background color
+                <span className="watchface-color-control">
+                  <input type="color" value={backgroundColor.hex} onChange={(event) => patchDesign({ backgroundColor: toRgbaColor(event.target.value, backgroundColor.isTransparent ? 1 : backgroundColor.alpha) })} />
+                  <code>{backgroundColor.isTransparent ? "none" : design.backgroundColor}</code>
+                  <button className="watchface-color-none" type="button" disabled={backgroundColor.isTransparent} onClick={() => patchDesign({ backgroundColor: "transparent" })}>None</button>
+                </span>
               </label>
-              <button className="secondary-button" type="button" onClick={() => setBackgroundArtwork(null)}>
-                <Trash2 size={15} /> Remove artwork
-              </button>
-            </>
-          ) : null}
+              <label className="watchface-inspector-field">
+                <span>Opacity</span>
+                <span className="wf-input-with-unit">
+                  <EditableNumberInput min="0" max="100" step="1" disabled={backgroundColor.isTransparent} value={Math.round(backgroundColor.alpha * 100)} fallback={100} onValueChange={(opacity) => patchDesign({ backgroundColor: toRgbaColor(backgroundColor.hex, opacity / 100) })} />
+                  <span>%</span>
+                </span>
+              </label>
+            </div>
+          )}
+          {backgroundArtwork ? renderStrokeInspector("background") : null}
+          {renderPropertySection(
+            "specific",
+            "Background",
+            <div className="wf-property-stack">
+              <div className={`wf-config-asset-preview wf-background-asset-preview${backgroundVisible ? "" : " is-disabled"}`}>
+                {backgroundArtwork ? <img src={backgroundArtwork.dataUrl} alt="Background artwork preview" /> : <Image size={28} aria-hidden="true" />}
+              </div>
+              <button className="secondary-button" type="button" onClick={() => void chooseArtwork()}><ImagePlus size={15} /> {backgroundArtwork ? "Replace artwork" : "Add artwork"}</button>
+              {backgroundArtwork ? (
+                <>
+                  <label className="watchface-inspector-field"><span>Artwork scale</span><span className="wf-input-with-unit"><EditableNumberInput min="1" max="2.25" step="0.01" value={design.zoom} fallback={1} onValueChange={(zoom) => patchDesign({ zoom: Math.max(1, Math.min(2.25, zoom)) })} /><span>×</span></span></label>
+                  <button className="secondary-button wf-danger-action" type="button" onClick={() => setBackgroundArtwork(null)}><Trash2 size={15} /> Remove artwork</button>
+                </>
+              ) : <p className="watchface-studio-summary">Add artwork to place an image behind the live watch elements.</p>}
+            </div>
+          )}
           {backgroundArtwork ? renderEffectsInspector("background") : null}
-        </div>
+        </>
       );
     }
 
@@ -7835,278 +8379,118 @@ export function WatchfaceEditor({
       const stateCount = Object.keys(stateReplacements ?? {}).length;
       const iconScale = design.configAssetOverrides?.["config:battery_icon"]?.scale ?? 1;
       return (
-        <div className="watchface-inspector-group">
-          {renderLayerVisibilityToggle(layer)}
-          <h3 className="wf-inspector-heading">Battery sprite folder</h3>
-          <div className="wf-config-asset-actions">
-            <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => void chooseBatterySpriteFolder()}>
-              <ImagePlus size={15} /> {stateCount > 0 ? "Replace sprite folder" : "Import sprite folder"}
-            </button>
-            {stateCount > 0 ? (
-              <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => restoreBatteryIcon()}>
-                <RotateCcw size={15} /> Restore template icon
-              </button>
-            ) : null}
-          </div>
-          <p className="watchface-studio-summary">
-            Import PNGs named 00.png, 01.png, and so on. Each file replaces its matching battery charge state. Icon scale resizes every state bitmap; X and Y are exported directly as the bitmap position.
-          </p>
-          <label className="watchface-inspector-field">
-            <span>Icon scale</span>
-            <EditableNumberInput
-              min="0.1"
-              step="0.01"
-              value={iconScale}
-              fallback={1}
-              onValueChange={setBatteryIconScale}
-            />
-          </label>
+        <>
           {renderPositionReadout(layer)}
+          {renderStrokeInspector(layer.id)}
+          {renderPropertySection(
+            "specific",
+            "Sprite",
+            <div className="wf-property-stack">
+              <div className="wf-config-asset-actions">
+                <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => void chooseBatterySpriteFolder()}><ImagePlus size={15} /> {stateCount > 0 ? "Replace sprite folder" : "Import sprite folder"}</button>
+                {stateCount > 0 ? <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => restoreBatteryIcon()}><RotateCcw size={15} /> Restore template</button> : null}
+              </div>
+              <label className="watchface-inspector-field"><span>Icon scale</span><EditableNumberInput min="0.1" step="0.01" value={iconScale} fallback={1} onValueChange={setBatteryIconScale} /></label>
+              <p className="watchface-studio-summary">Import PNGs named 00.png, 01.png, and so on. Each file replaces its matching charge state.</p>
+            </div>,
+            { disabled: isPositionLocked(layer.id) }
+          )}
           {renderEffectsInspector(
             layer.id,
             "Native battery states keep their firmware slot dimensions. Shadows are clipped unless the artwork is a Studio-owned sprite folder."
           )}
-        </div>
+        </>
       );
     }
 
     if (layer.kind === "battery") {
       const style = design.metricStyles?.battery;
       return (
-        <div className="watchface-inspector-group">
-          <h3 className="wf-inspector-heading">Battery</h3>
-          <label className="watchface-studio-toggle">
-            <input
-              type="checkbox"
-              checked={layer.visible}
-              onChange={(event) =>
-                setMetricVisible("battery", event.target.checked)
-              }
-            />
-            Show this metric
-          </label>
-          <h3 className="wf-inspector-heading">Battery digit sprites</h3>
-          <LocalFontPicker
-            api={api}
-            label="Digit font"
-            value={style?.fontFamily ?? design.fontFamily}
-            emptyLabel="Keep template digits"
-            onChange={(fontFamily) =>
-              setMetricStyle("battery", {
-                fontFamily,
-                rasterFont: undefined
-              })
-            }
-            rasterFont={design.rasterFont}
-            onRasterFontChange={setRasterFont}
-            typography={{
-              fontWeight: design.fontWeight ?? 400,
-              fontStyle: design.fontStyle ?? "normal",
-              letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0
-            }}
-            onTypographyChange={(typography) => patchDesign(typography)}
-            onLetterSpacingChange={(letterSpacing) =>
-              setMetricStyle("battery", { letterSpacing })
-            }
-          />
-          <CustomPngFontPanel
-            api={api}
-            {...rasterFolderImportProps}
-            rasterFont={design.rasterFont}
-            componentRasterFont={style?.rasterFont}
-            componentLabel="Battery data"
-            onActivate={() => setMetricStyle("battery", { fontFamily: "" })}
-            onRasterFontChange={setRasterFont}
-            onComponentRasterFontChange={(rasterFont) =>
-              setMetricStyle("battery", { rasterFont })
-            }
-          />
-          <label className="field">
-            Tint
-            <span className="watchface-color-control">
-              <input
-                type="color"
-                value={style?.color ?? design.digitColor}
-                onChange={(event) =>
-                  setMetricStyle("battery", { color: event.target.value })
-                }
-              />
-              <code>{style?.color ?? design.digitColor}</code>
-              <button
-                type="button"
-                className="watchface-color-none"
-                disabled={!style?.color}
-                onClick={() => clearMetricColor("battery")}
-              >
-                Remove tint
-              </button>
-            </span>
-          </label>
-          <label className="field">
-            Sprite scale
-            <EditableNumberInput
-              min="0.01"
-              step="0.01"
-              value={style?.scale ?? 1}
-              fallback={1}
-              onValueChange={(value) =>
-                setMetricStyle("battery", {
-                  scale: Math.max(0.01, value)
-                })
-              }
-            />
-          </label>
-          {renderFirmwareSpriteRotation(style?.rotation, (rotation) =>
-            setMetricStyle("battery", { rotation })
-          )}
+        <>
           {renderPositionReadout(layer)}
+          {renderPropertySection(
+            "appearance",
+            "Appearance",
+            <label className="field">Tint<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setMetricStyle("battery", { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} onClick={() => clearMetricColor("battery")}>Remove tint</button></span></label>,
+            { disabled: isPositionLocked(layer.id) }
+          )}
+          {renderStrokeInspector(layer.id)}
+          {renderPropertySection(
+            "specific",
+            "Typography",
+            <div className="wf-property-stack">
+              <LocalFontPicker api={api} label="Digit font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template digits" onChange={(fontFamily) => setMetricStyle("battery", { fontFamily, rasterFont: undefined })} rasterFont={design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: design.fontWeight ?? 400, fontStyle: design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => patchDesign(typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle("battery", { letterSpacing })} />
+              <div className="watchface-position-inputs">
+                <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle("battery", { scale: Math.max(0.01, scale) })} /></label>
+                <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle("battery", { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
+              </div>
+              <details className="wf-nested-disclosure"><summary>Custom PNG font</summary><CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} componentLabel="Battery data" onActivate={() => setMetricStyle("battery", { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont })} /></details>
+            </div>,
+            { disabled: isPositionLocked(layer.id) }
+          )}
           {renderEffectsInspector(layer.id)}
-        </div>
+        </>
       );
     }
 
     if (layer.timePartId) {
       const style = design.timeStyles?.[layer.timePartId];
       return (
-        <div className="watchface-inspector-group">
-          <h3 className="wf-inspector-heading">Time</h3>
-          {renderLayerVisibilityToggle(layer)}
-          {layer.timePartId === "autoTime" ? (
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={convertAutoTimeToSeparate}
-            >
-              Separate hours and minutes
-            </button>
-          ) : null}
-          <LocalFontPicker
-            api={api}
-            label="Digit font"
-            value={style?.fontFamily ?? design.fontFamily}
-            emptyLabel="Keep template digits"
-            onChange={(fontFamily) =>
-              setTimeStyle(layer.timePartId!, {
-                fontFamily,
-                rasterFont: undefined
-              })
-            }
-            rasterFont={style?.rasterFont ?? design.rasterFont}
-            onRasterFontChange={setRasterFont}
-            typography={{
-              fontWeight: design.fontWeight ?? 400,
-              fontStyle: design.fontStyle ?? "normal",
-              letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0
-            }}
-            onTypographyChange={(typography) => patchDesign(typography)}
-            onLetterSpacingChange={(letterSpacing) =>
-              setTimeStyle(layer.timePartId!, { letterSpacing })
-            }
-          />
-          <CustomPngFontPanel
-            api={api}
-            {...rasterFolderImportProps}
-            rasterFont={design.rasterFont}
-            componentRasterFont={style?.rasterFont}
-            componentLabel={layer.label}
-            onActivate={() => setTimeStyle(layer.timePartId!, { fontFamily: "" })}
-            onRasterFontChange={setRasterFont}
-            onComponentRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont })}
-          />
-          <label className="field">
-            Digit tint
-            <span className="watchface-color-control">
-              <input type="color" value={style?.color ?? design.digitColor} onChange={(e) => setTimeStyle(layer.timePartId!, { color: e.target.value })} />
-              <code>{style?.color ?? design.digitColor}</code>
-              <button
-                type="button"
-                className="watchface-color-none"
-                disabled={!style?.color}
-                onClick={() => clearTimeColor(layer.timePartId!)}
-              >
-                Remove tint
-              </button>
-            </span>
-          </label>
-          <label className="field">
-            Sprite scale
-            <EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(value) => setTimeStyle(layer.timePartId!, { scale: Math.max(0.01, value) })} />
-          </label>
-          {renderFirmwareSpriteRotation(style?.rotation, (rotation) =>
-            setTimeStyle(layer.timePartId!, { rotation })
-          )}
+        <>
           {renderPositionReadout(layer)}
+          {renderPropertySection(
+            "appearance",
+            "Appearance",
+            <label className="field">Digit tint<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setTimeStyle(layer.timePartId!, { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} onClick={() => clearTimeColor(layer.timePartId!)}>Remove tint</button></span></label>,
+            { disabled: isPositionLocked(layer.id) }
+          )}
+          {renderStrokeInspector(layer.id)}
+          {renderPropertySection(
+            "specific",
+            "Typography",
+            <div className="wf-property-stack">
+              {layer.timePartId === "autoTime" ? <button type="button" className="secondary-button" onClick={convertAutoTimeToSeparate}>Separate hours and minutes</button> : null}
+              <LocalFontPicker api={api} label="Digit font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template digits" onChange={(fontFamily) => setTimeStyle(layer.timePartId!, { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: design.fontWeight ?? 400, fontStyle: design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => patchDesign(typography)} onLetterSpacingChange={(letterSpacing) => setTimeStyle(layer.timePartId!, { letterSpacing })} />
+              <div className="watchface-position-inputs">
+                <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setTimeStyle(layer.timePartId!, { scale: Math.max(0.01, scale) })} /></label>
+                <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setTimeStyle(layer.timePartId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
+              </div>
+              <details className="wf-nested-disclosure"><summary>Custom PNG font</summary><CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} componentLabel={layer.label} onActivate={() => setTimeStyle(layer.timePartId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont })} /></details>
+            </div>,
+            { disabled: isPositionLocked(layer.id) }
+          )}
           {renderEffectsInspector(layer.id)}
-        </div>
+        </>
       );
     }
 
     if (layer.kind === "metric" && layer.metricId) {
       const style = design.metricStyles?.[layer.metricId];
       return (
-        <div className="watchface-inspector-group">
-          <h3 className="wf-inspector-heading">Metric</h3>
-          <label className="watchface-studio-toggle">
-            <input type="checkbox" checked={layer.visible} onChange={(e) => setMetricVisible(layer.metricId!, e.target.checked)} />
-            Show this metric
-          </label>
-          <LocalFontPicker
-            api={api}
-            label="Digit font"
-            value={style?.fontFamily ?? design.fontFamily}
-            emptyLabel="Keep template digits"
-            onChange={(fontFamily) =>
-              setMetricStyle(layer.metricId!, { fontFamily })
-            }
-            rasterFont={design.rasterFont}
-            onRasterFontChange={setRasterFont}
-            typography={{
-              fontWeight: design.fontWeight ?? 400,
-              fontStyle: design.fontStyle ?? "normal",
-              letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0
-            }}
-            onTypographyChange={(typography) => patchDesign(typography)}
-            onLetterSpacingChange={(letterSpacing) =>
-              setMetricStyle(layer.metricId!, { letterSpacing })
-            }
-          />
-          <CustomPngFontPanel
-            api={api}
-            {...rasterFolderImportProps}
-            rasterFont={design.rasterFont}
-            componentRasterFont={style?.rasterFont}
-            componentLabel={layer.label}
-            onActivate={() => setMetricStyle(layer.metricId!, { fontFamily: "" })}
-            onRasterFontChange={setRasterFont}
-            onComponentRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont })}
-          />
-          <label className="field">
-            Tint
-            <span className="watchface-color-control">
-              <input type="color" value={style?.color ?? design.digitColor} onChange={(e) => setMetricStyle(layer.metricId!, { color: e.target.value })} />
-              <code>{style?.color ?? design.digitColor}</code>
-              <button
-                type="button"
-                className="watchface-color-none"
-                disabled={!style?.color}
-                onClick={() => clearMetricColor(layer.metricId!)}
-              >
-                Remove tint
-              </button>
-            </span>
-          </label>
-          <label className="field">
-            Sprite scale
-            <EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(value) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, value) })} />
-          </label>
-          {supportsWatchfaceSpriteRotation(layer.metricId)
-            ? renderFirmwareSpriteRotation(style?.rotation, (rotation) =>
-                setMetricStyle(layer.metricId!, { rotation })
-              )
-            : null}
+        <>
           {renderPositionReadout(layer)}
+          {renderPropertySection(
+            "appearance",
+            "Appearance",
+            <label className="field">Tint<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setMetricStyle(layer.metricId!, { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} onClick={() => clearMetricColor(layer.metricId!)}>Remove tint</button></span></label>,
+            { disabled: isPositionLocked(layer.id) }
+          )}
+          {renderStrokeInspector(layer.id)}
+          {renderPropertySection(
+            "specific",
+            "Typography",
+            <div className="wf-property-stack">
+              <LocalFontPicker api={api} label="Digit font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template digits" onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: design.fontWeight ?? 400, fontStyle: design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => patchDesign(typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
+              <div className="watchface-position-inputs">
+                <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, scale) })} /></label>
+                {supportsWatchfaceSpriteRotation(layer.metricId) ? <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle(layer.metricId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label> : null}
+              </div>
+              <details className="wf-nested-disclosure"><summary>Custom PNG font</summary><CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} componentLabel={layer.label} onActivate={() => setMetricStyle(layer.metricId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont })} /></details>
+            </div>,
+            { disabled: isPositionLocked(layer.id) }
+          )}
           {renderEffectsInspector(layer.id)}
-        </div>
+        </>
       );
     }
 
@@ -8145,175 +8529,67 @@ export function WatchfaceEditor({
         ? Math.max(...sourceSizes.map((size) => size.height))
         : 1;
       return (
-        <div className="watchface-inspector-group">
-          <h3 className="wf-inspector-heading">Date</h3>
-          {renderLayerVisibilityToggle(layer)}
-          <LocalFontPicker
-            api={api}
-            label="Font"
-            value={style?.fontFamily ?? design.fontFamily}
-            emptyLabel="Keep template font"
-            onChange={(fontFamily) => {
-              if (!fontFamily) {
-                restoreDateTemplateFont(partId);
-                return;
-              }
-              setDateStyle(partId, {
-                fontFamily,
-                rasterFont: undefined,
-                ...(supportsNativeSize ? { nativeSize: true } : {}),
-                ...(partId === "dateMonth"
-                  ? { monthFormat: undefined }
-                  : {})
-              });
-            }}
-            rasterFont={design.rasterFont}
-            rasterFontRequiredText={partId === "weekday"
-              ? "MON"
-              : usesMonthLabels
-                ? "JAN"
-                : undefined}
-            onRasterFontChange={setRasterFont}
-            typography={{
-              fontWeight: design.fontWeight ?? 400,
-              fontStyle: design.fontStyle ?? "normal",
-              letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0
-            }}
-            onTypographyChange={(typography) => patchDesign(typography)}
-            onLetterSpacingChange={(letterSpacing) =>
-              setDateStyle(partId, { letterSpacing })
-            }
-          />
-          <CustomPngFontPanel
-            api={api}
-            {...rasterFolderImportProps}
-            rasterFont={design.rasterFont}
-            componentRasterFont={style?.rasterFont}
-            componentLabel={layer.label}
-            onActivate={() =>
-              setDateStyle(partId, {
-                fontFamily: ""
-              })
-            }
-            onRasterFontChange={setRasterFont}
-            onComponentRasterFontChange={(rasterFont) => {
-              if (!rasterFont) {
-                restoreDateTemplateFont(partId);
-                return;
-              }
-              setDateStyle(partId, {
-                rasterFont,
-                ...(supportsNativeSize ? { nativeSize: true } : {}),
-                ...(partId === "dateMonth"
-                  ? {
-                      monthFormat: WATCHFACE_MONTH_LABELS.every(
-                        (label) => rasterFontSupportsText(rasterFont, label)
-                      )
-                        ? "labels"
-                        : rasterFontSupportsText(rasterFont, "0123456789")
-                          ? "digits"
-                          : undefined
-                    }
-                  : {})
-              });
-            }}
-          />
-          <label className="field">
-            Tint
-            <span className="watchface-color-control">
-              <input
-                type="color"
-                value={style?.color ?? design.digitColor}
-                onChange={(e) => setDateStyle(partId, { color: e.target.value })}
-              />
-              <code>{style?.color ?? design.digitColor}</code>
-              <button
-                type="button"
-                className="watchface-color-none"
-                disabled={!style?.color}
-                onClick={() => clearDateColor(partId)}
-              >
-                Remove tint
-              </button>
-            </span>
-          </label>
-          {supportsNativeSize && !usesNativeDimensions ? (
-            <label className="watchface-studio-toggle">
-              <input
-                type="checkbox"
-                checked={
-                  style?.nativeSize ??
-                  Boolean(style?.fontFamily || style?.rasterFont)
-                }
-                onChange={(event) =>
-                  setDateStyle(partId, { nativeSize: event.target.checked })
-                }
-              />
-              Native width (no template bound)
-            </label>
-          ) : null}
-          {usesNativeDimensions ? (
-            <div className="field">
-              Native PNG size
-              <div className="watchface-sprite-transform-fields" aria-label="Native PNG size">
-                <label>
-                  Width
-                  <EditableNumberInput
-                    min="1"
-                    step="1"
-                    value={style?.width ?? nativeWidth}
-                    fallback={nativeWidth}
-                    onValueChange={(value) =>
-                      setDateStyle(partId, { width: Math.max(1, Math.round(value)) })
-                    }
-                  />
-                </label>
-                <label>
-                  Height
-                  <EditableNumberInput
-                    min="1"
-                    step="1"
-                    value={style?.height ?? nativeHeight}
-                    fallback={nativeHeight}
-                    onValueChange={(value) =>
-                      setDateStyle(partId, { height: Math.max(1, Math.round(value)) })
-                    }
-                  />
-                </label>
-              </div>
-              <button
-                type="button"
-                className="watchface-color-none"
-                disabled={style?.width === undefined && style?.height === undefined}
-                onClick={() => setDateStyle(partId, { width: undefined, height: undefined })}
-              >
-                Use imported PNG size
-              </button>
-              <span className="watchface-studio-summary">
-                Sizes use the {previewWidth}px canvas; exports scale them to each watch resolution and the COROS layout rectangle follows them.
-              </span>
-            </div>
-          ) : (
-            <label className="field">
-              Artwork zoom
-              <EditableNumberInput
-                min="0.01"
-                step="0.01"
-                value={scale}
-                fallback={1}
-                onValueChange={(value) => setDateStyle(partId, { scale: Math.max(0.01, value) })}
-              />
-              <span className="watchface-studio-summary">
-                Zooms and crops inside the component's fixed COROS canvas.
-              </span>
-            </label>
-          )}
-          {renderFirmwareSpriteRotation(style?.rotation, (rotation) =>
-            setDateStyle(partId, { rotation })
-          )}
+        <>
           {renderPositionReadout(layer)}
+          {renderPropertySection(
+            "appearance",
+            "Appearance",
+            <label className="field">Tint<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setDateStyle(partId, { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} onClick={() => clearDateColor(partId)}>Remove tint</button></span></label>,
+            { disabled: isPositionLocked(layer.id) }
+          )}
+          {renderStrokeInspector(layer.id)}
+          {renderPropertySection(
+            "specific",
+            "Typography",
+            <div className="wf-property-stack">
+              <LocalFontPicker
+                api={api}
+                label="Font"
+                value={style?.fontFamily ?? design.fontFamily}
+                emptyLabel="Keep template font"
+                onChange={(fontFamily) => {
+                  if (!fontFamily) {
+                    restoreDateTemplateFont(partId);
+                    return;
+                  }
+                  setDateStyle(partId, { fontFamily, rasterFont: undefined, ...(supportsNativeSize ? { nativeSize: true } : {}), ...(partId === "dateMonth" ? { monthFormat: undefined } : {}) });
+                }}
+                rasterFont={design.rasterFont}
+                rasterFontRequiredText={partId === "weekday" ? "MON" : usesMonthLabels ? "JAN" : undefined}
+                onRasterFontChange={setRasterFont}
+                typography={{ fontWeight: design.fontWeight ?? 400, fontStyle: design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }}
+                onTypographyChange={(typography) => patchDesign(typography)}
+                onLetterSpacingChange={(letterSpacing) => setDateStyle(partId, { letterSpacing })}
+              />
+              {supportsNativeSize && !usesNativeDimensions ? <label className="watchface-studio-toggle"><input type="checkbox" checked={style?.nativeSize ?? Boolean(style?.fontFamily || style?.rasterFont)} onChange={(event) => setDateStyle(partId, { nativeSize: event.target.checked })} />Native width</label> : null}
+              {usesNativeDimensions ? (
+                <div className="field">Native PNG size<div className="watchface-position-inputs"><label>W<EditableNumberInput min="1" step="1" value={style?.width ?? nativeWidth} fallback={nativeWidth} onValueChange={(width) => setDateStyle(partId, { width: Math.max(1, Math.round(width)) })} /></label><label>H<EditableNumberInput min="1" step="1" value={style?.height ?? nativeHeight} fallback={nativeHeight} onValueChange={(height) => setDateStyle(partId, { height: Math.max(1, Math.round(height)) })} /></label></div><button type="button" className="watchface-color-none" disabled={style?.width === undefined && style?.height === undefined} onClick={() => setDateStyle(partId, { width: undefined, height: undefined })}>Use imported size</button></div>
+              ) : <label className="watchface-inspector-field"><span>Artwork zoom</span><EditableNumberInput min="0.01" step="0.01" value={scale} fallback={1} onValueChange={(nextScale) => setDateStyle(partId, { scale: Math.max(0.01, nextScale) })} /></label>}
+              <label className="watchface-inspector-field"><span>Rotation</span><EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setDateStyle(partId, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
+              <details className="wf-nested-disclosure">
+                <summary>Custom PNG font</summary>
+                <CustomPngFontPanel
+                  api={api}
+                  {...rasterFolderImportProps}
+                  rasterFont={design.rasterFont}
+                  componentRasterFont={style?.rasterFont}
+                  componentLabel={layer.label}
+                  onActivate={() => setDateStyle(partId, { fontFamily: "" })}
+                  onRasterFontChange={setRasterFont}
+                  onComponentRasterFontChange={(rasterFont) => {
+                    if (!rasterFont) {
+                      restoreDateTemplateFont(partId);
+                      return;
+                    }
+                    setDateStyle(partId, { rasterFont, ...(supportsNativeSize ? { nativeSize: true } : {}), ...(partId === "dateMonth" ? { monthFormat: WATCHFACE_MONTH_LABELS.every((label) => rasterFontSupportsText(rasterFont, label)) ? "labels" : rasterFontSupportsText(rasterFont, "0123456789") ? "digits" : undefined } : {}) });
+                  }}
+                />
+              </details>
+            </div>,
+            { disabled: isPositionLocked(layer.id) }
+          )}
           {renderEffectsInspector(layer.id)}
-        </div>
+        </>
       );
     }
 
@@ -8322,394 +8598,155 @@ export function WatchfaceEditor({
       if (!sprite) {
         return null;
       }
+      const locked = isPositionLocked(layer.id);
+      const faceHeight = previewResolution?.height ?? previewWidth;
+      const fullCrop = JSON.stringify({ x: 0, y: 0, width: 1, height: 1 });
       return (
-        <div className="watchface-inspector-group">
-          <h3 className="wf-inspector-heading">Image</h3>
-          <label className="field">
-            Layer name
-            <input
-              type="text"
-              value={sprite.name ?? ""}
-              maxLength={60}
-              placeholder={watchfaceDesignSpriteName(sprite)}
-              onChange={(event) =>
-                updateSprite(sprite.id, { name: event.target.value })
-              }
-              onBlur={() => {
-                const name = sprite.name?.trim() || undefined;
-                if (name !== sprite.name) updateSprite(sprite.id, { name });
-              }}
-              aria-label="Imported sprite layer name"
-            />
-          </label>
-          {renderLayerVisibilityToggle(layer)}
-          <label className="field watchface-zoom-control">
-            Scale <span>{(sprite.scale * 100).toFixed(0)}%</span>
-            <input
-              type="range"
-              min="0.2"
-              max="3"
-              step="0.02"
-              value={sprite.scale}
-              onChange={(e) => updateSprite(sprite.id, { scale: Number(e.target.value) })}
-            />
-          </label>
-          <label className="field watchface-zoom-control">
-            Rotation <span>{sprite.rotation}°</span>
-            <input
-              type="range"
-              min="0"
-              max="360"
-              step="5"
-              value={sprite.rotation}
-              onChange={(e) => updateSprite(sprite.id, { rotation: Number(e.target.value) })}
-            />
-          </label>
-          <div className="watchface-sprite-transform-fields" aria-label="Image transform">
-            <label>
-              Width
-              <EditableNumberInput
-                min="1"
-                step="1"
-                value={toWatchCoordinate(sprite.width * sprite.scale)}
-                fallback={1}
-                onValueChange={(value) =>
-                  updateSprite(sprite.id, {
-                    width: fromWatchCoordinate(Math.max(1, value)) / sprite.scale,
-                    ...(sprite.aspectLocked !== false
-                      ? {
-                          height: (fromWatchCoordinate(Math.max(1, value)) / sprite.scale) *
-                            (sprite.height / sprite.width)
-                        }
-                      : {})
-                  })
-                }
-              />
-            </label>
-            <label>
-              Height
-              <EditableNumberInput
-                min="1"
-                step="1"
-                value={toWatchCoordinate(sprite.height * sprite.scale)}
-                fallback={1}
-                onValueChange={(value) =>
-                  updateSprite(sprite.id, {
-                    height: fromWatchCoordinate(Math.max(1, value)) / sprite.scale,
-                    ...(sprite.aspectLocked !== false
-                      ? {
-                          width: (fromWatchCoordinate(Math.max(1, value)) / sprite.scale) *
-                            (sprite.width / sprite.height)
-                        }
-                      : {})
-                  })
-                }
-              />
-            </label>
-            <label>
-              Rotation
-              <EditableNumberInput
-                min="0"
-                max="360"
-                step="1"
-                value={Math.round(sprite.rotation)}
-                fallback={0}
-                onValueChange={(value) =>
-                  updateSprite(sprite.id, { rotation: normalizeWatchfaceRotation(value) })
-                }
-              />
-            </label>
-            <label>
-              Skew X
-              <EditableNumberInput
-                min="-80"
-                max="80"
-                step="1"
-                value={normalizeWatchfaceSkew(sprite.skewX)}
-                fallback={0}
-                onValueChange={(value) => updateSprite(sprite.id, { skewX: normalizeWatchfaceSkew(value) })}
-              />
-            </label>
-            <label>
-              Skew Y
-              <EditableNumberInput
-                min="-80"
-                max="80"
-                step="1"
-                value={normalizeWatchfaceSkew(sprite.skewY)}
-                fallback={0}
-                onValueChange={(value) => updateSprite(sprite.id, { skewY: normalizeWatchfaceSkew(value) })}
-              />
-            </label>
-          </div>
-          <label className="field watchface-zoom-control">
-            Opacity <span>{Math.round(normalizeWatchfaceOpacity(sprite.opacity) * 100)}%</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value={Math.round(normalizeWatchfaceOpacity(sprite.opacity) * 100)}
-              onChange={(event) => updateSprite(sprite.id, {
-                opacity: normalizeWatchfaceOpacity(Number(event.target.value) / 100)
-              })}
-            />
-          </label>
-          <div className="wf-image-transform-actions" role="group" aria-label="Image transform options">
-            <button type="button" aria-pressed={sprite.flipX === true} onClick={() => updateSprite(sprite.id, { flipX: !sprite.flipX })}>
-              <FlipHorizontal2 size={14} /> Flip X
-            </button>
-            <button type="button" aria-pressed={sprite.flipY === true} onClick={() => updateSprite(sprite.id, { flipY: !sprite.flipY })}>
-              <FlipVertical2 size={14} /> Flip Y
-            </button>
-            <label className="watchface-studio-toggle">
-              <input type="checkbox" checked={sprite.aspectLocked !== false} onChange={(event) => updateSprite(sprite.id, { aspectLocked: event.target.checked })} />
-              Lock ratio
-            </label>
-          </div>
-          <div className="wf-transform-origin-controls">
-            <label className="field">
-              Transform origin
-              <select
-                value={(() => {
-                  const origin = normalizeWatchfaceTransformOrigin(sprite.origin);
-                  return `${origin.x},${origin.y}`;
-                })()}
-                onChange={(event) => {
-                  const [x, y] = event.target.value.split(",").map(Number);
-                  updateSprite(sprite.id, { origin: normalizeWatchfaceTransformOrigin({ x, y }) });
-                }}
-              >
-                <option value="0,0">Top left</option>
-                <option value="0.5,0">Top center</option>
-                <option value="1,0">Top right</option>
-                <option value="0,0.5">Center left</option>
-                <option value="0.5,0.5">Center</option>
-                <option value="1,0.5">Center right</option>
-                <option value="0,1">Bottom left</option>
-                <option value="0.5,1">Bottom center</option>
-                <option value="1,1">Bottom right</option>
-              </select>
-            </label>
-            <div className="watchface-sprite-transform-fields">
-              <label>
-                Origin X %
-                <EditableNumberInput
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={Math.round(normalizeWatchfaceTransformOrigin(sprite.origin).x * 100)}
-                  fallback={50}
-                  onValueChange={(value) => updateSprite(sprite.id, {
-                    origin: normalizeWatchfaceTransformOrigin({
-                      ...normalizeWatchfaceTransformOrigin(sprite.origin),
-                      x: value / 100
-                    })
-                  })}
-                />
-              </label>
-              <label>
-                Origin Y %
-                <EditableNumberInput
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={Math.round(normalizeWatchfaceTransformOrigin(sprite.origin).y * 100)}
-                  fallback={50}
-                  onValueChange={(value) => updateSprite(sprite.id, {
-                    origin: normalizeWatchfaceTransformOrigin({
-                      ...normalizeWatchfaceTransformOrigin(sprite.origin),
-                      y: value / 100
-                    })
-                  })}
-                />
-              </label>
-            </div>
-          </div>
-          <div className={`wf-crop-controls${cropSpriteId === sprite.id ? " is-active" : ""}`}>
-            <div className="wf-crop-heading">
-              <strong>Crop</strong>
-              {cropSpriteId === sprite.id ? <span>Enter applies · Esc cancels</span> : null}
-            </div>
-            {cropSpriteId === sprite.id ? (
-              <>
-                <div className="watchface-sprite-transform-fields">
-                  {(["x", "y", "width", "height"] as const).map((key) => (
-                    <label key={key}>
-                      {key[0]!.toUpperCase() + key.slice(1)} %
-                      <EditableNumberInput
-                        min="0"
-                        max="100"
-                        step="1"
-                        value={Math.round(normalizeWatchfaceCrop(sprite.crop)[key] * 100)}
-                        fallback={key === "width" || key === "height" ? 100 : 0}
-                        onValueChange={(value) => updateSprite(sprite.id, {
-                          crop: normalizeWatchfaceCrop({
-                            ...normalizeWatchfaceCrop(sprite.crop),
-                            [key]: value / 100
-                          })
-                        })}
-                      />
-                    </label>
-                  ))}
-                </div>
-                <div className="wf-crop-actions">
-                  <button type="button" className="primary-button" onClick={applySpriteCrop}>Apply crop</button>
-                  <button type="button" className="secondary-button" onClick={cancelSpriteCrop}>Cancel</button>
-                  <button type="button" onClick={() => updateSprite(sprite.id, { crop: { x: 0, y: 0, width: 1, height: 1 } })}>Reset crop</button>
-                </div>
-              </>
-            ) : (
-              <div className="wf-crop-actions">
-                <button type="button" className="secondary-button" onClick={() => enterSpriteCrop(sprite)}><Crop size={14} /> Crop image</button>
-                <button type="button" disabled={JSON.stringify(normalizeWatchfaceCrop(sprite.crop)) === JSON.stringify({ x: 0, y: 0, width: 1, height: 1 })} onClick={() => updateSprite(sprite.id, { crop: { x: 0, y: 0, width: 1, height: 1 } })}>Reset crop</button>
+        <>
+          {renderPropertySection(
+            "transform",
+            "Transform",
+            <div className="wf-transform-stack">
+              <div className="watchface-position-inputs">
+                <label>X<EditableNumberInput min="0" max={watchCoordinateWidth} step="1" value={toWatchCoordinate(sprite.x)} fallback={0} onValueChange={(x) => updateSprite(sprite.id, { x: fromWatchCoordinate(x) })} /></label>
+                <label>Y<EditableNumberInput min="0" max={watchCoordinateHeight} step="1" value={toWatchCoordinate(sprite.y)} fallback={0} onValueChange={(y) => updateSprite(sprite.id, { y: fromWatchCoordinate(y) })} /></label>
+                <label>W<EditableNumberInput min="1" step="1" value={toWatchCoordinate(sprite.width * sprite.scale)} fallback={1} onValueChange={(value) => updateSprite(sprite.id, { width: fromWatchCoordinate(Math.max(1, value)) / sprite.scale, ...(sprite.aspectLocked !== false ? { height: (fromWatchCoordinate(Math.max(1, value)) / sprite.scale) * (sprite.height / sprite.width) } : {}) })} /></label>
+                <label>H<EditableNumberInput min="1" step="1" value={toWatchCoordinate(sprite.height * sprite.scale)} fallback={1} onValueChange={(value) => updateSprite(sprite.id, { height: fromWatchCoordinate(Math.max(1, value)) / sprite.scale, ...(sprite.aspectLocked !== false ? { width: (fromWatchCoordinate(Math.max(1, value)) / sprite.scale) * (sprite.width / sprite.height) } : {}) })} /></label>
+                <label>Scale %<EditableNumberInput min="20" max="300" step="1" value={Math.round(sprite.scale * 100)} fallback={100} onValueChange={(scale) => updateSprite(sprite.id, { scale: Math.max(0.2, Math.min(3, scale / 100)) })} /></label>
+                <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={Math.round(sprite.rotation)} fallback={0} onValueChange={(rotation) => updateSprite(sprite.id, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               </div>
-            )}
-          </div>
-          <p className="watchface-studio-summary">
-            Drag any edge or corner to resize. Shift inverts ratio locking, Option resizes from center, and Shift snaps rotation to 15°.
-          </p>
-          {renderPositionPanel(layer.id, "Watch screen position", <>
-            <div className="watchface-position-inputs">
-              <label>
-                X
-                <input
-                  type="number"
-                  min="0"
-                  max={watchCoordinateWidth}
-                  value={toWatchCoordinate(sprite.x)}
-                  onChange={(event) =>
-                    updateSprite(sprite.id, {
-                      x: fromWatchCoordinate(Number(event.target.value) || 0)
-                    })
-                  }
-                />
-              </label>
-              <label>
-                Y
-                <input
-                  type="number"
-                  min="0"
-                  max={watchCoordinateHeight}
-                  value={toWatchCoordinate(sprite.y)}
-                  onChange={(event) =>
-                    updateSprite(sprite.id, {
-                      y: fromWatchCoordinate(Number(event.target.value) || 0)
-                    })
-                  }
-                />
-              </label>
-            </div>
-            <span>Align to face</span>
-            <div className="watchface-align-grid">
-              <button type="button" onClick={() => updateSprite(sprite.id, { x: (sprite.width * sprite.scale) / 2 })}>Left</button>
-              <button type="button" onClick={() => updateSprite(sprite.id, { x: previewWidth / 2 })}>Center</button>
-              <button type="button" onClick={() => updateSprite(sprite.id, { x: previewWidth - (sprite.width * sprite.scale) / 2 })}>Right</button>
-              <button type="button" onClick={() => updateSprite(sprite.id, { y: (sprite.height * sprite.scale) / 2 })}>Top</button>
-              <button type="button" onClick={() => updateSprite(sprite.id, { y: (previewResolution?.height ?? previewWidth) / 2 })}>Middle</button>
-              <button type="button" onClick={() => updateSprite(sprite.id, { y: (previewResolution?.height ?? previewWidth) - (sprite.height * sprite.scale) / 2 })}>Bottom</button>
-            </div>
-            <span>Fine tune (1 px)</span>
-            <div className="watchface-nudge-pad">
-              <button type="button" aria-label="Nudge image up" onClick={() => updateSprite(sprite.id, { y: sprite.y - fromWatchCoordinate(1) })}><ArrowUp size={13} aria-hidden="true" /></button>
-              <button type="button" aria-label="Nudge image left" onClick={() => updateSprite(sprite.id, { x: sprite.x - fromWatchCoordinate(1) })}><ArrowLeft size={13} aria-hidden="true" /></button>
-              <button type="button" aria-label="Nudge image right" onClick={() => updateSprite(sprite.id, { x: sprite.x + fromWatchCoordinate(1) })}><ArrowRight size={13} aria-hidden="true" /></button>
-              <button type="button" aria-label="Nudge image down" onClick={() => updateSprite(sprite.id, { y: sprite.y + fromWatchCoordinate(1) })}><ArrowDown size={13} aria-hidden="true" /></button>
-              <button type="button" className="watchface-nudge-reset" onClick={() => updateSprite(sprite.id, { x: previewWidth / 2, y: (previewResolution?.height ?? previewWidth) / 2 })}>Reset</button>
-            </div>
-          </>)}
-          <label className="watchface-studio-toggle">
-            <input
-              type="checkbox"
-              checked={Boolean(sprite.tintColor)}
-              onChange={(e) =>
-                updateSprite(sprite.id, {
-                  tintColor: e.target.checked ? design.accentColor : null
-                })
-              }
-            />
-            Tint this sprite
-          </label>
-          {sprite.tintColor ? (
-            <label className="field">
-              Tint color
-              <span className="watchface-color-control">
-                <input
-                  type="color"
-                  value={sprite.tintColor}
-                  onChange={(e) =>
-                    updateSprite(sprite.id, { tintColor: e.target.value })
-                  }
-                />
-                <code>{sprite.tintColor}</code>
-                <button
-                  type="button"
-                  className="watchface-color-none"
-                  onClick={() => updateSprite(sprite.id, { tintColor: null })}
-                >
-                  Remove tint
-                </button>
-              </span>
-            </label>
-          ) : null}
-          {renderArtworkLayerOrderControls(watchfaceSpriteLayerId(sprite.id))}
+              <div className="wf-transform-action-row" role="group" aria-label="Image transform options">
+                <button type="button" aria-pressed={sprite.aspectLocked !== false} title="Lock aspect ratio" onClick={() => updateSprite(sprite.id, { aspectLocked: sprite.aspectLocked === false })}><Link2 size={14} /><span>Ratio</span></button>
+                <button type="button" aria-pressed={sprite.flipX === true} onClick={() => updateSprite(sprite.id, { flipX: !sprite.flipX })}><FlipHorizontal2 size={14} /><span>Flip X</span></button>
+                <button type="button" aria-pressed={sprite.flipY === true} onClick={() => updateSprite(sprite.id, { flipY: !sprite.flipY })}><FlipVertical2 size={14} /><span>Flip Y</span></button>
+              </div>
+              <div className="wf-control-label">Align to face</div>
+              <div className="wf-align-icon-grid" role="group" aria-label="Align image to face">
+                <button type="button" title="Align left" aria-label="Align left" onClick={() => updateSprite(sprite.id, { x: (sprite.width * sprite.scale) / 2 })}><AlignHorizontalJustifyStart size={14} /></button>
+                <button type="button" title="Align horizontal center" aria-label="Align horizontal center" onClick={() => updateSprite(sprite.id, { x: previewWidth / 2 })}><AlignHorizontalJustifyCenter size={14} /></button>
+                <button type="button" title="Align right" aria-label="Align right" onClick={() => updateSprite(sprite.id, { x: previewWidth - (sprite.width * sprite.scale) / 2 })}><AlignHorizontalJustifyEnd size={14} /></button>
+                <button type="button" title="Align top" aria-label="Align top" onClick={() => updateSprite(sprite.id, { y: (sprite.height * sprite.scale) / 2 })}><AlignVerticalJustifyStart size={14} /></button>
+                <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => updateSprite(sprite.id, { y: faceHeight / 2 })}><AlignVerticalJustifyCenter size={14} /></button>
+                <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => updateSprite(sprite.id, { y: faceHeight - (sprite.height * sprite.scale) / 2 })}><AlignVerticalJustifyEnd size={14} /></button>
+              </div>
+            </div>,
+            { disabled: locked }
+          )}
+          {renderPropertySection(
+            "appearance",
+            "Appearance",
+            <div className="wf-property-stack">
+              <label className="watchface-inspector-field"><span>Opacity</span><span className="wf-input-with-unit"><EditableNumberInput min="0" max="100" step="1" value={Math.round(normalizeWatchfaceOpacity(sprite.opacity) * 100)} fallback={100} onValueChange={(opacity) => updateSprite(sprite.id, { opacity: normalizeWatchfaceOpacity(opacity / 100) })} /><span>%</span></span></label>
+              <label className="watchface-studio-toggle"><input type="checkbox" checked={Boolean(sprite.tintColor)} onChange={(event) => updateSprite(sprite.id, { tintColor: event.target.checked ? design.accentColor : null })} />Tint image</label>
+              {sprite.tintColor ? <label className="field">Tint color<span className="watchface-color-control"><input type="color" value={sprite.tintColor} onChange={(event) => updateSprite(sprite.id, { tintColor: event.target.value })} /><code>{sprite.tintColor}</code><button type="button" className="watchface-color-none" onClick={() => updateSprite(sprite.id, { tintColor: null })}>Remove tint</button></span></label> : null}
+            </div>,
+            { disabled: locked }
+          )}
+          {renderStrokeInspector(layer.id)}
+          {renderPropertySection(
+            "specific",
+            "Image",
+            <div className="wf-property-stack">
+              <div className="wf-config-asset-preview wf-image-property-preview"><img src={sprite.dataUrl} alt="" /></div>
+              <div className="wf-asset-dimensions"><span>Source</span><strong>{sprite.sourceWidth} × {sprite.sourceHeight} px</strong></div>
+            </div>,
+            { disabled: locked }
+          )}
           {renderEffectsInspector(layer.id)}
-          <div className="wf-config-asset-actions">
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={(design.designSprites ?? []).length >= MAX_DESIGN_SPRITES}
-              onClick={() => duplicateSprite(sprite.id)}
-            >
-              <Copy size={15} /> Duplicate image
-            </button>
-            <button className="secondary-button" type="button" onClick={() => removeSprite(layer.spriteId!)}>
-              <Trash2 size={15} /> Remove image
-            </button>
-          </div>
-        </div>
+          {renderPropertySection(
+            "advanced",
+            "Advanced",
+            <div className="wf-property-stack">
+              <div className="watchface-position-inputs">
+                <label>Skew X<EditableNumberInput min="-80" max="80" step="1" value={normalizeWatchfaceSkew(sprite.skewX)} fallback={0} onValueChange={(skewX) => updateSprite(sprite.id, { skewX: normalizeWatchfaceSkew(skewX) })} /></label>
+                <label>Skew Y<EditableNumberInput min="-80" max="80" step="1" value={normalizeWatchfaceSkew(sprite.skewY)} fallback={0} onValueChange={(skewY) => updateSprite(sprite.id, { skewY: normalizeWatchfaceSkew(skewY) })} /></label>
+              </div>
+              <label className="field">Transform origin<select value={(() => { const origin = normalizeWatchfaceTransformOrigin(sprite.origin); return `${origin.x},${origin.y}`; })()} onChange={(event) => { const [x, y] = event.target.value.split(",").map(Number); updateSprite(sprite.id, { origin: normalizeWatchfaceTransformOrigin({ x, y }) }); }}><option value="0,0">Top left</option><option value="0.5,0">Top center</option><option value="1,0">Top right</option><option value="0,0.5">Center left</option><option value="0.5,0.5">Center</option><option value="1,0.5">Center right</option><option value="0,1">Bottom left</option><option value="0.5,1">Bottom center</option><option value="1,1">Bottom right</option></select></label>
+              <div className={`wf-crop-controls${cropSpriteId === sprite.id ? " is-active" : ""}`}>
+                <div className="wf-crop-heading"><strong>Crop</strong>{cropSpriteId === sprite.id ? <span>Enter applies, Esc cancels</span> : null}</div>
+                {cropSpriteId === sprite.id ? (
+                  <>
+                    <div className="watchface-sprite-transform-fields">
+                      {(["x", "y", "width", "height"] as const).map((key) => <label key={key}>{key[0]!.toUpperCase() + key.slice(1)} %<EditableNumberInput min="0" max="100" step="1" value={Math.round(normalizeWatchfaceCrop(sprite.crop)[key] * 100)} fallback={key === "width" || key === "height" ? 100 : 0} onValueChange={(value) => updateSprite(sprite.id, { crop: normalizeWatchfaceCrop({ ...normalizeWatchfaceCrop(sprite.crop), [key]: value / 100 }) })} /></label>)}
+                    </div>
+                    <div className="wf-crop-actions"><button type="button" className="primary-button" onClick={applySpriteCrop}>Apply crop</button><button type="button" className="secondary-button" onClick={cancelSpriteCrop}>Cancel</button><button type="button" onClick={() => updateSprite(sprite.id, { crop: { x: 0, y: 0, width: 1, height: 1 } })}>Reset</button></div>
+                  </>
+                ) : <div className="wf-crop-actions"><button type="button" className="secondary-button" onClick={() => enterSpriteCrop(sprite)}><Crop size={14} /> Crop image</button><button type="button" disabled={JSON.stringify(normalizeWatchfaceCrop(sprite.crop)) === fullCrop} onClick={() => updateSprite(sprite.id, { crop: { x: 0, y: 0, width: 1, height: 1 } })}>Reset crop</button></div>}
+              </div>
+              <div className="wf-control-label">Fine tune (1 px)</div>
+              <div className="watchface-nudge-pad">
+                <button type="button" aria-label="Nudge image up" onClick={() => updateSprite(sprite.id, { y: sprite.y - fromWatchCoordinate(1) })}><ArrowUp size={13} /></button>
+                <button type="button" aria-label="Nudge image left" onClick={() => updateSprite(sprite.id, { x: sprite.x - fromWatchCoordinate(1) })}><ArrowLeft size={13} /></button>
+                <button type="button" aria-label="Nudge image right" onClick={() => updateSprite(sprite.id, { x: sprite.x + fromWatchCoordinate(1) })}><ArrowRight size={13} /></button>
+                <button type="button" aria-label="Nudge image down" onClick={() => updateSprite(sprite.id, { y: sprite.y + fromWatchCoordinate(1) })}><ArrowDown size={13} /></button>
+                <button type="button" className="watchface-nudge-reset" onClick={() => updateSprite(sprite.id, { x: previewWidth / 2, y: faceHeight / 2 })}>Reset</button>
+              </div>
+              {renderArtworkLayerOrderControls(watchfaceSpriteLayerId(sprite.id))}
+              <p className="watchface-studio-summary">Drag an edge or corner to resize. Shift changes ratio locking, Option resizes from center, and Shift snaps rotation to 15°.</p>
+              <div className="wf-config-asset-actions"><button className="secondary-button" type="button" disabled={(design.designSprites ?? []).length >= MAX_DESIGN_SPRITES} onClick={() => duplicateSprite(sprite.id)}><Copy size={15} /> Duplicate image</button><button className="secondary-button wf-danger-action" type="button" onClick={() => removeSprite(sprite.id)}><Trash2 size={15} /> Remove image</button></div>
+            </div>,
+            { disabled: locked }
+          )}
+        </>
       );
     }
 
     return (
-      <div className="watchface-inspector-group">
-        <h3 className="wf-inspector-heading">Data</h3>
-        {renderLayerVisibilityToggle(layer)}
-        {layer.layoutGroupId === "complication" ? renderComplicationPicker() : null}
-        {layer.capabilities.color && layer.layoutGroupId ? (
-          <label className="field">
-            Tint
-            <span className="watchface-color-control">
-              <input
-                type="color"
-                value={
-                  design.layerColors?.[layer.layoutGroupId] ??
-                  (layer.kind === "separators"
-                    ? design.accentColor
-                    : design.digitColor)
-                }
-                onChange={(e) =>
-                  setLayerColor(layer.layoutGroupId!, e.target.value)
-                }
-              />
-              <code>
-                {design.layerColors?.[layer.layoutGroupId] ??
-                  (layer.kind === "separators"
-                    ? design.accentColor
-                    : design.digitColor)}
-              </code>
-              <button
-                type="button"
-                className="watchface-color-none"
-                disabled={!design.layerColors?.[layer.layoutGroupId]}
-                onClick={() => clearLayerColor(layer.layoutGroupId!)}
-              >
-                Remove tint
-              </button>
-            </span>
-          </label>
-        ) : null}
+      <>
         {renderPositionReadout(layer)}
+        {layer.capabilities.color && layer.layoutGroupId
+          ? renderPropertySection(
+              "appearance",
+              "Appearance",
+              <label className="field">
+                Tint
+                <span className="watchface-color-control">
+                  <input
+                    type="color"
+                    value={
+                      design.layerColors?.[layer.layoutGroupId] ??
+                      (layer.kind === "separators"
+                        ? design.accentColor
+                        : design.digitColor)
+                    }
+                    onChange={(event) =>
+                      setLayerColor(layer.layoutGroupId!, event.target.value)
+                    }
+                  />
+                  <code>
+                    {design.layerColors?.[layer.layoutGroupId] ??
+                      (layer.kind === "separators"
+                        ? design.accentColor
+                        : design.digitColor)}
+                  </code>
+                  <button
+                    type="button"
+                    className="watchface-color-none"
+                    disabled={!design.layerColors?.[layer.layoutGroupId]}
+                    onClick={() => clearLayerColor(layer.layoutGroupId!)}
+                  >
+                    Remove tint
+                  </button>
+                </span>
+              </label>,
+              { disabled: isPositionLocked(layer.id) }
+            )
+          : null}
+        {layer.capabilities.stroke
+          ? renderStrokeInspector(layer.id)
+          : null}
+        {renderPropertySection(
+          "specific",
+          watchfaceInspectorSpecificTitle({ kind: layer.kind }),
+          layer.layoutGroupId === "complication" ? (
+            renderComplicationPicker()
+          ) : (
+            <p className="watchface-studio-summary">
+              This component is rendered live by the watch firmware.
+            </p>
+          ),
+          { disabled: isPositionLocked(layer.id) }
+        )}
         {layer.capabilities.effects
           ? renderEffectsInspector(
               layer.id,
@@ -8718,7 +8755,7 @@ export function WatchfaceEditor({
                 : undefined
             )
           : null}
-      </div>
+      </>
     );
   }
 
@@ -9004,7 +9041,8 @@ export function WatchfaceEditor({
           (rotation) => setSelectableMetricStyle({ rotation })
         )}
         {baseIconPosition && selectedComplication?.id !== "battery" ? (
-          renderPositionPanel("complication", "Selector icon position", <>
+          <div className="wf-inline-position-controls">
+            <strong>Selector icon offset</strong>
             <div className="watchface-position-inputs">
               <label>
                 X
@@ -9051,7 +9089,7 @@ export function WatchfaceEditor({
               This moves only the {selectedComplication?.label.toLowerCase()} icon.
               Move the Selectable metric layer to reposition its icon and value together.
             </p>
-          </>)
+          </div>
         ) : null}
         <p className="watchface-studio-summary">
           Temperature exports only through control_temperature_* and
@@ -9066,39 +9104,6 @@ export function WatchfaceEditor({
           </p>
         )}
       </>
-    );
-  }
-
-  function renderLayerVisibilityToggle(layer: EditorLayer) {
-    if (
-      !layer.canHide ||
-      layer.weatherIndicator ||
-      layer.ampmIndicator ||
-      layer.staticSeparatorId ||
-      layer.metricId
-    ) {
-      return null;
-    }
-    const setVisible = (visible: boolean) => {
-      if (layer.spriteId) {
-        updateSprite(layer.spriteId, { visible });
-      } else if (layer.kind === "batteryIcon") {
-        setBatteryIconVisible(visible);
-      } else if (layer.kind === "controlBatteryIcon") {
-        setControlBatteryEnabled(visible);
-      } else if (layer.layoutGroupId) {
-        setFirmwareLayerVisible(layer.layoutGroupId, visible);
-      }
-    };
-    return (
-      <label className="watchface-studio-toggle">
-        <input
-          type="checkbox"
-          checked={layer.visible}
-          onChange={(e) => setVisible(e.target.checked)}
-        />
-        Show this layer
-      </label>
     );
   }
 
@@ -9125,7 +9130,9 @@ export function WatchfaceEditor({
     children: ReactNode,
     helper?: ReactNode
   ) {
-    return (
+    return renderPropertySection(
+      "transform",
+      "Transform",
       <div className="watchface-inspector-position">
         <div className="wf-position-heading">
           <span>{title}</span>
@@ -9137,7 +9144,8 @@ export function WatchfaceEditor({
           {children}
         </fieldset>
         {helper ? <div className="wf-position-help">{helper}</div> : null}
-      </div>
+      </div>,
+      { disabled: isMovementLockedForId(id) }
     );
   }
 
@@ -9225,13 +9233,13 @@ export function WatchfaceEditor({
           </label>
         </div>
         <span>Align to face</span>
-        <div className="watchface-align-grid">
-          <button type="button" onClick={() => alignX("start")}>Left</button>
-          <button type="button" onClick={() => alignX("center")}>Center</button>
-          <button type="button" onClick={() => alignX("end")}>Right</button>
-          <button type="button" onClick={() => alignY("start")}>Top</button>
-          <button type="button" onClick={() => alignY("center")}>Middle</button>
-          <button type="button" onClick={() => alignY("end")}>Bottom</button>
+        <div className="wf-align-icon-grid" role="group" aria-label="Align layer to face">
+          <button type="button" title="Align left" aria-label="Align left" onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
+          <button type="button" title="Align horizontal center" aria-label="Align horizontal center" onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
+          <button type="button" title="Align right" aria-label="Align right" onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
+          <button type="button" title="Align top" aria-label="Align top" onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
+          <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
+          <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
         </div>
         <span>Fine tune (1 px)</span>
         <div className="watchface-nudge-pad">
@@ -9289,61 +9297,7 @@ export function WatchfaceEditor({
       );
     };
     return (
-      <div className="watchface-inspector-group">
-        <h3 className="wf-inspector-heading">Separator</h3>
-        <label className="watchface-studio-toggle">
-          <input
-            type="checkbox"
-            checked={separator.enabled}
-            onChange={(e) => updateStaticSeparator(separatorId, { enabled: e.target.checked })}
-          />
-          Show {separatorId === "colon" ? "time colon" : "date slash"}
-        </label>
-        <LocalFontPicker
-          api={api}
-          label="Font"
-          value={separator.fontFamily ?? design.fontFamily}
-          emptyLabel="System font"
-          onChange={(fontFamily) =>
-            updateStaticSeparator(separatorId, { fontFamily })
-          }
-        />
-        <label className="field watchface-zoom-control">
-          Size <span>{separator.size}px</span>
-          <input
-            type="range"
-            min="12"
-            max="200"
-            step="1"
-            value={separator.size}
-            onChange={(e) => {
-              const size = Number(e.target.value);
-              updateStaticSeparator(separatorId, { size });
-              setPosition(separator.x, separator.y, size);
-            }}
-          />
-        </label>
-        <label className="field">
-          Tint
-          <span className="watchface-color-control">
-            <input
-              type="color"
-              value={separator.color}
-              onChange={(e) => updateStaticSeparator(separatorId, { color: e.target.value })}
-            />
-            <code>{separator.color}</code>
-            <button
-              type="button"
-              className="watchface-color-none"
-              disabled={separator.color === design.digitColor}
-              onClick={() =>
-                updateStaticSeparator(separatorId, { color: design.digitColor })
-              }
-            >
-              Remove tint
-            </button>
-          </span>
-        </label>
+      <>
         {renderPositionPanel(
           separatorId === "colon" ? "staticColon" : "staticDateSlash",
           "Watch screen position",
@@ -9371,13 +9325,13 @@ export function WatchfaceEditor({
             </label>
           </div>
           <span>Align to face</span>
-          <div className="watchface-align-grid">
-            <button type="button" onClick={() => alignX("start")}>Left</button>
-            <button type="button" onClick={() => alignX("center")}>Center</button>
-            <button type="button" onClick={() => alignX("end")}>Right</button>
-            <button type="button" onClick={() => alignY("start")}>Top</button>
-            <button type="button" onClick={() => alignY("center")}>Middle</button>
-            <button type="button" onClick={() => alignY("end")}>Bottom</button>
+          <div className="wf-align-icon-grid" role="group" aria-label="Align separator to face">
+            <button type="button" title="Align left" aria-label="Align left" onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
+            <button type="button" title="Align horizontal center" aria-label="Align horizontal center" onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
+            <button type="button" title="Align right" aria-label="Align right" onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
+            <button type="button" title="Align top" aria-label="Align top" onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
+            <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
+            <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
           </div>
           <span>Fine tune (1 px)</span>
           <div className="watchface-nudge-pad">
@@ -9388,10 +9342,71 @@ export function WatchfaceEditor({
           </div>
           </>
         )}
-        <p className="watchface-studio-summary">
-          Enable it, then drag its outline on the face or use the exact controls.
-        </p>
-      </div>
+        {renderPropertySection(
+          "appearance",
+          "Appearance",
+          <label className="field">
+            Tint
+            <span className="watchface-color-control">
+              <input
+                type="color"
+                value={separator.color}
+                onChange={(event) => updateStaticSeparator(separatorId, { color: event.target.value })}
+              />
+              <code>{separator.color}</code>
+              <button
+                type="button"
+                className="watchface-color-none"
+                disabled={separator.color === design.digitColor}
+                onClick={() => updateStaticSeparator(separatorId, { color: design.digitColor })}
+              >
+                Remove tint
+              </button>
+            </span>
+          </label>,
+          { disabled: isPositionLocked(separatorId === "colon" ? "staticColon" : "staticDateSlash") }
+        )}
+        {renderStrokeInspector(
+          separatorId === "colon" ? "staticColon" : "staticDateSlash"
+        )}
+        {renderPropertySection(
+          "specific",
+          "Separator",
+          <div className="wf-property-stack">
+            <LocalFontPicker
+              api={api}
+              label="Font"
+              value={separator.fontFamily ?? design.fontFamily}
+              emptyLabel="System font"
+              onChange={(fontFamily) => updateStaticSeparator(separatorId, { fontFamily })}
+            />
+            <label className="field watchface-zoom-control">
+              Size <span>{separator.size}px</span>
+              <input
+                type="range"
+                min="12"
+                max="200"
+                step="1"
+                value={separator.size}
+                onChange={(event) => {
+                  const size = Number(event.target.value);
+                  updateStaticSeparator(separatorId, { size });
+                  setPosition(separator.x, separator.y, size);
+                }}
+              />
+            </label>
+          </div>,
+          { disabled: isPositionLocked(separatorId === "colon" ? "staticColon" : "staticDateSlash") }
+        )}
+        {renderPropertySection(
+          "advanced",
+          "Advanced",
+          <p className="watchface-studio-summary">
+            Drag the outline on the face for coarse placement, or use the exact transform controls.
+          </p>,
+          { disabled: isPositionLocked(separatorId === "colon" ? "staticColon" : "staticDateSlash") }
+        )}
+      </>
     );
   }
 
@@ -9438,61 +9453,7 @@ export function WatchfaceEditor({
       );
     };
     return (
-      <div className="watchface-inspector-group">
-        <h3 className="wf-inspector-heading">AM/PM</h3>
-        <label className="watchface-studio-toggle">
-          <input
-            type="checkbox"
-            checked={indicator.enabled}
-            onChange={(event) =>
-              updateAmPmIndicator({ enabled: event.target.checked })
-            }
-          />
-          Show AM/PM indicator
-        </label>
-        <LocalFontPicker
-          api={api}
-          label="Font"
-          value={indicator.fontFamily ?? ""}
-          emptyLabel="Keep template lettering"
-          onChange={(fontFamily) => updateAmPmIndicator({ fontFamily })}
-        />
-        <label className="field">
-          Tint
-          <span className="watchface-color-control">
-            <input
-              type="color"
-              value={indicator.color ?? design.digitColor}
-              onChange={(event) =>
-                updateAmPmIndicator({ color: event.target.value })
-              }
-            />
-            <code>{indicator.color ?? "Template colors"}</code>
-            <button
-              type="button"
-              className="watchface-color-none"
-              disabled={!indicator.color}
-              onClick={() => updateAmPmIndicator({ color: undefined })}
-            >
-              Remove tint
-            </button>
-          </span>
-        </label>
-        <label className="field watchface-zoom-control">
-          Size <span>{indicator.scale.toFixed(2)}×</span>
-          <input
-            type="range"
-            min="0.5"
-            max="2"
-            step="0.02"
-            value={indicator.scale}
-            onChange={(event) => {
-              const scale = Number(event.target.value);
-              updateAmPmIndicator({ scale });
-              setPosition(indicator.x, indicator.y, scale);
-            }}
-          />
-        </label>
+      <>
         {renderPositionPanel("ampm", "Watch screen position", <>
           <div className="watchface-position-inputs">
             <label>
@@ -9521,13 +9482,13 @@ export function WatchfaceEditor({
             </label>
           </div>
           <span>Align to face</span>
-          <div className="watchface-align-grid">
-            <button type="button" onClick={() => alignX("start")}>Left</button>
-            <button type="button" onClick={() => alignX("center")}>Center</button>
-            <button type="button" onClick={() => alignX("end")}>Right</button>
-            <button type="button" onClick={() => alignY("start")}>Top</button>
-            <button type="button" onClick={() => alignY("center")}>Middle</button>
-            <button type="button" onClick={() => alignY("end")}>Bottom</button>
+          <div className="wf-align-icon-grid" role="group" aria-label="Align AM/PM indicator to face">
+            <button type="button" title="Align left" aria-label="Align left" onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
+            <button type="button" title="Align horizontal center" aria-label="Align horizontal center" onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
+            <button type="button" title="Align right" aria-label="Align right" onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
+            <button type="button" title="Align top" aria-label="Align top" onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
+            <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
+            <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
           </div>
           <span>Fine tune (1 px)</span>
           <div className="watchface-nudge-pad">
@@ -9537,10 +9498,69 @@ export function WatchfaceEditor({
             <button type="button" onClick={() => setPosition(indicator.x, indicator.y + fromWatchCoordinate(1))} aria-label="Nudge down"><ArrowDown size={13} aria-hidden="true" /></button>
           </div>
         </>)}
-        <p className="watchface-studio-summary">
-          The watch automatically swaps this sprite between AM and PM in 12-hour mode.
-        </p>
-      </div>
+        {renderPropertySection(
+          "appearance",
+          "Appearance",
+          <label className="field">
+            Tint
+            <span className="watchface-color-control">
+              <input
+                type="color"
+                value={indicator.color ?? design.digitColor}
+                onChange={(event) => updateAmPmIndicator({ color: event.target.value })}
+              />
+              <code>{indicator.color ?? "Template colors"}</code>
+              <button
+                type="button"
+                className="watchface-color-none"
+                disabled={!indicator.color}
+                onClick={() => updateAmPmIndicator({ color: undefined })}
+              >
+                Remove tint
+              </button>
+            </span>
+          </label>,
+          { disabled: isPositionLocked("ampm") }
+        )}
+        {renderStrokeInspector("ampm")}
+        {renderPropertySection(
+          "specific",
+          "Indicator",
+          <div className="wf-property-stack">
+            <LocalFontPicker
+              api={api}
+              label="Font"
+              value={indicator.fontFamily ?? ""}
+              emptyLabel="Keep template lettering"
+              onChange={(fontFamily) => updateAmPmIndicator({ fontFamily })}
+            />
+            <label className="field watchface-zoom-control">
+              Size <span>{indicator.scale.toFixed(2)}×</span>
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.02"
+                value={indicator.scale}
+                onChange={(event) => {
+                  const scale = Number(event.target.value);
+                  updateAmPmIndicator({ scale });
+                  setPosition(indicator.x, indicator.y, scale);
+                }}
+              />
+            </label>
+          </div>,
+          { disabled: isPositionLocked("ampm") }
+        )}
+        {renderPropertySection(
+          "advanced",
+          "Advanced",
+          <p className="watchface-studio-summary">
+            The watch swaps this sprite between AM and PM in 12-hour mode.
+          </p>,
+          { disabled: isPositionLocked("ampm") }
+        )}
+      </>
     );
   }
 
@@ -9587,54 +9607,7 @@ export function WatchfaceEditor({
       );
     };
     return (
-      <div className="watchface-inspector-group">
-        <h3 className="wf-inspector-heading">Weather</h3>
-        <label className="watchface-studio-toggle">
-          <input
-            type="checkbox"
-            checked={indicator.enabled}
-            onChange={(event) =>
-              updateWeatherIndicator({ enabled: event.target.checked })
-            }
-          />
-          Show weather icon
-        </label>
-        <label className="field">
-          Tint
-          <span className="watchface-color-control">
-            <input
-              type="color"
-              value={indicator.color ?? design.accentColor}
-              onChange={(event) =>
-                updateWeatherIndicator({ color: event.target.value })
-              }
-            />
-            <code>{indicator.color ?? "Template colors"}</code>
-            <button
-              type="button"
-              className="watchface-color-none"
-              disabled={!indicator.color}
-              onClick={() => updateWeatherIndicator({ color: undefined })}
-            >
-              Remove tint
-            </button>
-          </span>
-        </label>
-        <label className="field watchface-zoom-control">
-          Size <span>{indicator.scale.toFixed(2)}×</span>
-          <input
-            type="range"
-            min="0.5"
-            max="2"
-            step="0.02"
-            value={indicator.scale}
-            onChange={(event) => {
-              const scale = Number(event.target.value);
-              updateWeatherIndicator({ scale });
-              setPosition(indicator.x, indicator.y, scale);
-            }}
-          />
-        </label>
+      <>
         {renderPositionPanel("weather", "Watch screen position", <>
           <div className="watchface-position-inputs">
             <label>
@@ -9669,13 +9642,13 @@ export function WatchfaceEditor({
             </label>
           </div>
           <span>Align to face</span>
-          <div className="watchface-align-grid">
-            <button type="button" onClick={() => alignX("start")}>Left</button>
-            <button type="button" onClick={() => alignX("center")}>Center</button>
-            <button type="button" onClick={() => alignX("end")}>Right</button>
-            <button type="button" onClick={() => alignY("start")}>Top</button>
-            <button type="button" onClick={() => alignY("center")}>Middle</button>
-            <button type="button" onClick={() => alignY("end")}>Bottom</button>
+          <div className="wf-align-icon-grid" role="group" aria-label="Align weather indicator to face">
+            <button type="button" title="Align left" aria-label="Align left" onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
+            <button type="button" title="Align horizontal center" aria-label="Align horizontal center" onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
+            <button type="button" title="Align right" aria-label="Align right" onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
+            <button type="button" title="Align top" aria-label="Align top" onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
+            <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
+            <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
           </div>
           <span>Fine tune (1 px)</span>
           <div className="watchface-nudge-pad">
@@ -9685,230 +9658,212 @@ export function WatchfaceEditor({
             <button type="button" onClick={() => setPosition(indicator.x, indicator.y + fromWatchCoordinate(1))} aria-label="Nudge down"><ArrowDown size={13} aria-hidden="true" /></button>
           </div>
         </>)}
-        <p className="watchface-studio-summary">
-          The editor previews the sunny state. The watch automatically swaps among all 41 weather states.
-        </p>
-      </div>
+        {renderPropertySection(
+          "appearance",
+          "Appearance",
+          <label className="field">
+            Tint
+            <span className="watchface-color-control">
+              <input
+                type="color"
+                value={indicator.color ?? design.accentColor}
+                onChange={(event) => updateWeatherIndicator({ color: event.target.value })}
+              />
+              <code>{indicator.color ?? "Template colors"}</code>
+              <button
+                type="button"
+                className="watchface-color-none"
+                disabled={!indicator.color}
+                onClick={() => updateWeatherIndicator({ color: undefined })}
+              >
+                Remove tint
+              </button>
+            </span>
+          </label>,
+          { disabled: isPositionLocked("weather") }
+        )}
+        {renderStrokeInspector("weather")}
+        {renderPropertySection(
+          "specific",
+          "Indicator",
+          <label className="field watchface-zoom-control">
+            Size <span>{indicator.scale.toFixed(2)}×</span>
+            <input
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.02"
+              value={indicator.scale}
+              onChange={(event) => {
+                const scale = Number(event.target.value);
+                updateWeatherIndicator({ scale });
+                setPosition(indicator.x, indicator.y, scale);
+              }}
+            />
+          </label>,
+          { disabled: isPositionLocked("weather") }
+        )}
+        {renderPropertySection(
+          "advanced",
+          "Advanced",
+          <p className="watchface-studio-summary">
+            The editor previews the sunny state. The watch swaps among all 41 weather states.
+          </p>,
+          { disabled: isPositionLocked("weather") }
+        )}
+      </>
     );
   }
 
   function renderElementInspector(element: CorosWatchfaceBackgroundElement) {
-    if (isPositionLocked(`bgel:${element.id}`)) {
-      return (
-        <div className="watchface-inspector-group wf-locked-inspector">
-          <Lock size={20} aria-hidden="true" />
-          <strong>Object locked</strong>
-          <p className="watchface-studio-summary">
-            Unlock it here or from Layers before editing its appearance.
-          </p>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => setLayerPositionLocked(`bgel:${element.id}`, false)}
-          >
-            <Unlock size={15} /> Unlock object
-          </button>
-        </div>
-      );
-    }
     const set = (patch: BackgroundElementPatch) => updateElement(element.id, patch);
     const hasFill = element.kind === "rect" || element.kind === "ellipse";
-    return (
-      <div className="watchface-inspector-group">
-        <h3 className="wf-inspector-heading">Appearance</h3>
-        <label className="watchface-studio-toggle">
-          <input
-            type="checkbox"
-            checked={element.visible !== false}
-            onChange={(event) => set({ visible: event.target.checked })}
-          />
-          Show object
-        </label>
-        {hasFill ? (
-          <>
-            <label className="watchface-studio-toggle">
-              <input
-                type="checkbox"
-                checked={Boolean(element.gradient)}
-                onChange={(e) =>
-                  set(
-                    e.target.checked
-                      ? { gradient: { from: element.fill, to: "#04140f", angle: 90 } }
-                      : { gradient: undefined }
-                  )
-                }
-              />
-              Gradient fill
-            </label>
-            {element.gradient ? (
-              <>
-                <label className="field">
-                  From
-                  <span className="watchface-color-control">
-                    <input type="color" value={element.gradient.from} onChange={(e) => set({ gradient: { ...element.gradient!, from: e.target.value } })} />
-                    <code>{element.gradient.from}</code>
-                  </span>
-                </label>
-                <label className="field">
-                  To
-                  <span className="watchface-color-control">
-                    <input type="color" value={element.gradient.to} onChange={(e) => set({ gradient: { ...element.gradient!, to: e.target.value } })} />
-                    <code>{element.gradient.to}</code>
-                  </span>
-                </label>
-                <label className="field watchface-zoom-control">
-                  Angle <span>{element.gradient.angle}°</span>
-                  <input type="range" min="0" max="360" step="5" value={element.gradient.angle} onChange={(e) => set({ gradient: { ...element.gradient!, angle: Number(e.target.value) } })} />
-                </label>
-              </>
-            ) : (
-              <label className="field">
-                Fill
-                <span className="watchface-color-control">
-                  <input type="color" value={element.fill} onChange={(e) => set({ fill: e.target.value })} />
-                  <code>{element.fill}</code>
-                </span>
-              </label>
-            )}
-            <label className="field watchface-zoom-control">
-              Width <span>{element.width}px</span>
-              <input type="range" min="8" max="800" step="2" value={element.width} onChange={(e) => set({ width: Number(e.target.value) })} />
-            </label>
-            <label className="field watchface-zoom-control">
-              Height <span>{element.height}px</span>
-              <input type="range" min="8" max="800" step="2" value={element.height} onChange={(e) => set({ height: Number(e.target.value) })} />
-            </label>
-            {element.kind === "rect" ? (
-              <label className="field watchface-zoom-control">
-                Corner radius <span>{element.cornerRadius}px</span>
-                <input type="range" min="0" max="200" step="2" value={element.cornerRadius} onChange={(e) => set({ cornerRadius: Number(e.target.value) })} />
-              </label>
-            ) : null}
-          </>
-        ) : null}
-
-        {element.kind === "line" ? (
-          <>
-            <label className="field">
-              Color
-              <span className="watchface-color-control">
-                <input type="color" value={element.color} onChange={(e) => set({ color: e.target.value })} />
-                <code>{element.color}</code>
-              </span>
-            </label>
-            <label className="field watchface-zoom-control">
-              Length <span>{element.dx}px</span>
-              <input type="range" min="10" max="800" step="2" value={element.dx} onChange={(e) => set({ dx: Number(e.target.value) })} />
-            </label>
-            <label className="field watchface-zoom-control">
-              Thickness <span>{element.strokeWidth}px</span>
-              <input type="range" min="1" max="60" step="1" value={element.strokeWidth} onChange={(e) => set({ strokeWidth: Number(e.target.value) })} />
-            </label>
-          </>
-        ) : null}
-
-        {element.kind === "text" ? (
-          <>
-            <label className="field">
-              Text
-              <input value={element.text} maxLength={40} onChange={(e) => set({ text: e.target.value })} />
-            </label>
-            <label className="field">
-              Color
-              <span className="watchface-color-control">
-                <input type="color" value={element.color} onChange={(e) => set({ color: e.target.value })} />
-                <code>{element.color}</code>
-              </span>
-            </label>
-            <LocalFontPicker
-              api={api}
-              label="Font"
-              value={element.fontFamily}
-              emptyLabel="System font"
-              onChange={(fontFamily) => set({ fontFamily })}
-            />
-            <label className="field watchface-zoom-control">
-              Size <span>{element.fontSize}px</span>
-              <input type="range" min="12" max="200" step="2" value={element.fontSize} onChange={(e) => set({ fontSize: Number(e.target.value) })} />
-            </label>
-            <label className="field">
-              Align
-              <select value={element.align} onChange={(e) => set({ align: e.target.value as CorosWatchfaceBackgroundText["align"] })}>
-                <option value="left">Left</option>
-                <option value="center">Center</option>
-                <option value="right">Right</option>
-              </select>
-            </label>
-          </>
-        ) : null}
-
-        {renderPositionPanel(`bgel:${element.id}`, "Background position", <>
-          <div className="watchface-position-inputs">
-            <label>
-              X
-              <input
-                type="number"
-                min="0"
-                max={BACKGROUND_SPACE}
-                value={Math.round(element.x)}
-                onChange={(event) => set({ x: Number(event.target.value) || 0 })}
-              />
-            </label>
-            <label>
-              Y
-              <input
-                type="number"
-                min="0"
-                max={BACKGROUND_SPACE}
-                value={Math.round(element.y)}
-                onChange={(event) => set({ y: Number(event.target.value) || 0 })}
-              />
-            </label>
-          </div>
-          <span>Align to face</span>
-          <div className="watchface-align-grid">
-            <button type="button" onClick={() => set({ x: 0 })}>Left</button>
-            <button type="button" onClick={() => set({ x: BACKGROUND_SPACE / 2 })}>Center</button>
-            <button type="button" onClick={() => set({ x: BACKGROUND_SPACE })}>Right</button>
-            <button type="button" onClick={() => set({ y: 0 })}>Top</button>
-            <button type="button" onClick={() => set({ y: BACKGROUND_SPACE / 2 })}>Middle</button>
-            <button type="button" onClick={() => set({ y: BACKGROUND_SPACE })}>Bottom</button>
-          </div>
-          <span>Fine tune (1 px)</span>
-          <div className="watchface-nudge-pad">
-            <button type="button" aria-label="Nudge shape up" onClick={() => set({ y: element.y - 1 })}><ArrowUp size={13} aria-hidden="true" /></button>
-            <button type="button" aria-label="Nudge shape left" onClick={() => set({ x: element.x - 1 })}><ArrowLeft size={13} aria-hidden="true" /></button>
-            <button type="button" aria-label="Nudge shape right" onClick={() => set({ x: element.x + 1 })}><ArrowRight size={13} aria-hidden="true" /></button>
-            <button type="button" aria-label="Nudge shape down" onClick={() => set({ y: element.y + 1 })}><ArrowDown size={13} aria-hidden="true" /></button>
-            <button type="button" className="watchface-nudge-reset" onClick={() => set({ x: BACKGROUND_SPACE / 2, y: BACKGROUND_SPACE / 2 })}>Reset</button>
-          </div>
-        </>)}
-
-        <label className="field watchface-zoom-control">
-          Opacity <span>{Math.round(normalizeWatchfaceOpacity(element.opacity) * 100)}%</span>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            value={Math.round(normalizeWatchfaceOpacity(element.opacity) * 100)}
-            onChange={(event) => set({
-              opacity: normalizeWatchfaceOpacity(Number(event.target.value) / 100)
-            })}
-          />
-        </label>
-        <label className="field watchface-zoom-control">
-          Rotation <span>{element.rotation}°</span>
-          <input type="range" min="0" max="360" step="5" value={element.rotation} onChange={(e) => set({ rotation: Number(e.target.value) })} />
-        </label>
-        {renderArtworkLayerOrderControls(
-          watchfaceBackgroundElementLayerId(element.id)
-        )}
-        {renderEffectsInspector(`bgel:${element.id}`)}
-        <button className="secondary-button" type="button" onClick={() => removeElement(element.id)}>
-          <Trash2 size={15} /> Remove shape
-        </button>
+    const layerId = `bgel:${element.id}`;
+    const locked = isPositionLocked(layerId);
+    const layer: EditorLayer = {
+      id: layerId,
+      kind: "backgroundElement",
+      label: backgroundElementLabel(element),
+      backgroundElementId: element.id,
+      visible: element.visible !== false,
+      canHide: true,
+      present: true,
+      bounds: null,
+      capabilities: {
+        position: true,
+        color: false,
+        scale: false,
+        font: element.kind === "text",
+        resize: element.kind === "rect" || element.kind === "ellipse",
+        rotate: true,
+        opacity: true,
+        grouping: true,
+        effects: true,
+        stroke: true
+      }
+    };
+    const alignButtons = (
+      <div className="wf-align-icon-grid" role="group" aria-label="Align to face">
+        <button type="button" title="Align left" aria-label="Align left" onClick={() => set({ x: 0 })}><AlignHorizontalJustifyStart size={14} /></button>
+        <button type="button" title="Align horizontal center" aria-label="Align horizontal center" onClick={() => set({ x: BACKGROUND_SPACE / 2 })}><AlignHorizontalJustifyCenter size={14} /></button>
+        <button type="button" title="Align right" aria-label="Align right" onClick={() => set({ x: BACKGROUND_SPACE })}><AlignHorizontalJustifyEnd size={14} /></button>
+        <button type="button" title="Align top" aria-label="Align top" onClick={() => set({ y: 0 })}><AlignVerticalJustifyStart size={14} /></button>
+        <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => set({ y: BACKGROUND_SPACE / 2 })}><AlignVerticalJustifyCenter size={14} /></button>
+        <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => set({ y: BACKGROUND_SPACE })}><AlignVerticalJustifyEnd size={14} /></button>
       </div>
+    );
+    return (
+      <>
+        {renderLayerSection(layer)}
+        {renderPropertySection(
+          "transform",
+          "Transform",
+          <div className="wf-transform-stack">
+            <div className="watchface-position-inputs">
+              <label>X<EditableNumberInput min="0" max={BACKGROUND_SPACE} step="1" value={Math.round(element.x)} fallback={0} onValueChange={(x) => set({ x })} /></label>
+              <label>Y<EditableNumberInput min="0" max={BACKGROUND_SPACE} step="1" value={Math.round(element.y)} fallback={0} onValueChange={(y) => set({ y })} /></label>
+              {element.kind === "rect" || element.kind === "ellipse" ? (
+                <>
+                  <label>W<EditableNumberInput min="8" max="800" step="1" value={element.width} fallback={8} onValueChange={(width) => set({ width: Math.max(8, width) })} /></label>
+                  <label>H<EditableNumberInput min="8" max="800" step="1" value={element.height} fallback={8} onValueChange={(height) => set({ height: Math.max(8, height) })} /></label>
+                </>
+              ) : element.kind === "line" ? (
+                <label>Length<EditableNumberInput min="10" max="800" step="1" value={element.dx} fallback={10} onValueChange={(dx) => set({ dx: Math.max(10, dx) })} /></label>
+              ) : null}
+              <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={element.rotation} fallback={0} onValueChange={(rotation) => set({ rotation: normalizeWatchfaceRotation(rotation) })} /></label>
+            </div>
+            <div className="wf-control-label">Align to face</div>
+            {alignButtons}
+          </div>,
+          { disabled: locked }
+        )}
+        {renderPropertySection(
+          "appearance",
+          "Appearance",
+          <div className="wf-property-stack">
+            {hasFill ? (
+              <>
+                <label className="watchface-studio-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(element.gradient)}
+                    onChange={(event) =>
+                      set(
+                        event.target.checked
+                          ? { gradient: { from: element.fill, to: "#04140f", angle: 90 } }
+                          : { gradient: undefined }
+                      )
+                    }
+                  />
+                  Gradient fill
+                </label>
+                {element.gradient ? (
+                  <>
+                    <label className="field">From<span className="watchface-color-control"><input type="color" value={element.gradient.from} onChange={(event) => set({ gradient: { ...element.gradient!, from: event.target.value } })} /><code>{element.gradient.from}</code></span></label>
+                    <label className="field">To<span className="watchface-color-control"><input type="color" value={element.gradient.to} onChange={(event) => set({ gradient: { ...element.gradient!, to: event.target.value } })} /><code>{element.gradient.to}</code></span></label>
+                    <label className="watchface-inspector-field"><span>Gradient angle</span><EditableNumberInput min="0" max="360" step="1" value={element.gradient.angle} fallback={0} onValueChange={(angle) => set({ gradient: { ...element.gradient!, angle: normalizeWatchfaceRotation(angle) } })} /></label>
+                  </>
+                ) : (
+                  <label className="field">Fill<span className="watchface-color-control"><input type="color" value={element.fill} onChange={(event) => set({ fill: event.target.value })} /><code>{element.fill}</code></span></label>
+                )}
+                {element.kind === "rect" ? (
+                  <label className="watchface-inspector-field"><span>Corner radius</span><EditableNumberInput min="0" max="200" step="1" value={element.cornerRadius} fallback={0} onValueChange={(cornerRadius) => set({ cornerRadius: Math.max(0, cornerRadius) })} /></label>
+                ) : null}
+              </>
+            ) : null}
+            {element.kind === "line" ? (
+              <>
+                <label className="field">Color<span className="watchface-color-control"><input type="color" value={element.color} onChange={(event) => set({ color: event.target.value })} /><code>{element.color}</code></span></label>
+                <label className="watchface-inspector-field"><span>Thickness</span><EditableNumberInput min="1" max="60" step="1" value={element.strokeWidth} fallback={1} onValueChange={(strokeWidth) => set({ strokeWidth: Math.max(1, strokeWidth) })} /></label>
+              </>
+            ) : null}
+            {element.kind === "text" ? (
+              <label className="field">Color<span className="watchface-color-control"><input type="color" value={element.color} onChange={(event) => set({ color: event.target.value })} /><code>{element.color}</code></span></label>
+            ) : null}
+            <label className="watchface-inspector-field"><span>Opacity</span><span className="wf-input-with-unit"><EditableNumberInput min="0" max="100" step="1" value={Math.round(normalizeWatchfaceOpacity(element.opacity) * 100)} fallback={100} onValueChange={(opacity) => set({ opacity: normalizeWatchfaceOpacity(opacity / 100) })} /><span>%</span></span></label>
+          </div>,
+          { disabled: locked }
+        )}
+        {renderStrokeInspector(layerId)}
+        {element.kind === "text"
+          ? renderPropertySection(
+              "specific",
+              "Text",
+              <div className="wf-property-stack">
+                <label className="field">Text<input value={element.text} maxLength={40} onChange={(event) => set({ text: event.target.value })} /></label>
+                <LocalFontPicker api={api} label="Font" value={element.fontFamily} emptyLabel="System font" onChange={(fontFamily) => set({ fontFamily })} />
+                <div className="watchface-position-inputs">
+                  <label>Size<EditableNumberInput min="12" max="200" step="1" value={element.fontSize} fallback={12} onValueChange={(fontSize) => set({ fontSize: Math.max(12, fontSize) })} /></label>
+                  <label>Weight<EditableNumberInput min="100" max="900" step="100" value={element.weight} fallback={400} onValueChange={(weight) => set({ weight: Math.max(100, Math.min(900, Math.round(weight / 100) * 100)) })} /></label>
+                </div>
+                <label className="field">Text align<select value={element.align} onChange={(event) => set({ align: event.target.value as CorosWatchfaceBackgroundText["align"] })}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
+              </div>,
+              { disabled: locked }
+            )
+          : null}
+        {renderEffectsInspector(layerId)}
+        {renderPropertySection(
+          "advanced",
+          "Advanced",
+          <div className="wf-property-stack">
+            <div className="wf-control-label">Fine tune (1 px)</div>
+            <div className="watchface-nudge-pad">
+              <button type="button" aria-label="Nudge object up" onClick={() => set({ y: element.y - 1 })}><ArrowUp size={13} /></button>
+              <button type="button" aria-label="Nudge object left" onClick={() => set({ x: element.x - 1 })}><ArrowLeft size={13} /></button>
+              <button type="button" aria-label="Nudge object right" onClick={() => set({ x: element.x + 1 })}><ArrowRight size={13} /></button>
+              <button type="button" aria-label="Nudge object down" onClick={() => set({ y: element.y + 1 })}><ArrowDown size={13} /></button>
+              <button type="button" className="watchface-nudge-reset" onClick={() => set({ x: BACKGROUND_SPACE / 2, y: BACKGROUND_SPACE / 2 })}>Reset</button>
+            </div>
+            {renderArtworkLayerOrderControls(
+              watchfaceBackgroundElementLayerId(element.id)
+            )}
+            <button className="secondary-button wf-danger-action" type="button" onClick={() => removeElement(element.id)}>
+              <Trash2 size={15} /> Remove {element.kind === "text" ? "text" : "shape"}
+            </button>
+          </div>,
+          { disabled: locked }
+        )}
+      </>
     );
   }
 }
