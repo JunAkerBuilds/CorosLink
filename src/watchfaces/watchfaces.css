@@ -4623,11 +4623,135 @@
   color: var(--text-secondary);
 }
 
-:is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-font-picker-panel, .wf-font-picker-panel) {
-  z-index: 12;
+/*
+ * The font picker is portalled to document.body, so it carries the editor's
+ * surface tokens directly instead of relying on a .watchface-shell ancestor.
+ */
+.watchface-font-picker-panel.wf-font-picker-panel {
+  --wf-surface: rgba(38, 45, 50, 0.98);
+  --wf-surface-raised: rgba(50, 57, 62, 0.99);
+  --wf-surface-hover: rgba(63, 71, 76, 0.98);
+  --wf-border: rgba(226, 239, 234, 0.14);
+  --wf-border-strong: rgba(226, 239, 234, 0.24);
+  --wf-accent-border: color-mix(in srgb, var(--accent) 48%, var(--wf-border));
+  --text-tertiary: var(--text-secondary);
+  z-index: 100;
   border-color: var(--wf-border-strong);
+  border-radius: var(--wf-control-radius, 8px);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.055), transparent 34%),
+    var(--wf-surface-raised);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 18px 42px rgba(2, 7, 10, 0.34);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+:root[data-theme="paper"] .watchface-font-picker-panel.wf-font-picker-panel {
+  --wf-surface: #f7f8f6;
+  --wf-surface-raised: #ffffff;
+  --wf-surface-hover: #eef4f0;
+  --wf-border: rgba(43, 58, 50, 0.13);
+  --wf-border-strong: rgba(43, 58, 50, 0.22);
   background: var(--wf-surface-raised);
-  box-shadow: var(--wf-shadow);
+  box-shadow: 0 18px 42px rgba(56, 49, 39, 0.14);
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-panel-header {
+  border-color: var(--wf-border);
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-panel-icon {
+  border-color: var(--wf-accent-border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--wf-surface-raised));
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-panel-header strong {
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-panel-header span,
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-meta,
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-status {
+  color: var(--text-tertiary);
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-search-overlay {
+  border-color: var(--wf-border-strong);
+  background: color-mix(in srgb, var(--wf-surface-raised) 94%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 10px 24px rgba(2, 7, 10, 0.26);
+  -webkit-backdrop-filter: blur(14px) saturate(118%);
+  backdrop-filter: blur(14px) saturate(118%);
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-actions {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-search {
+  min-height: 36px;
+  background: color-mix(in srgb, var(--wf-surface) 78%, transparent);
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-search:focus-within {
+  border-color: var(--wf-accent-border);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-search input {
+  min-height: 34px;
+  font-size: 12px;
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-results {
+  background: transparent;
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-results button:hover,
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-custom-option:hover,
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-close:hover,
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-search > button:hover {
+  background: var(--wf-surface-hover);
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-results button.is-selected {
+  border-color: var(--wf-accent-border);
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--wf-surface));
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-custom-option {
+  border-color: var(--wf-accent-border);
+  background: color-mix(in srgb, var(--accent-soft) 38%, transparent);
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-actions :is(.secondary-button, .primary-button) {
+  min-height: 46px;
+  border-radius: 7px;
+  padding-inline: 16px;
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-actions .secondary-button {
+  border-color: var(--wf-border);
+  background: color-mix(in srgb, var(--wf-surface-raised) 72%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-actions .primary-button {
+  border-color: color-mix(in srgb, var(--accent) 68%, transparent);
+  background: var(--accent);
+  color: #071510;
+  box-shadow: none;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-studio-toggle, .wf-toggle-row) {
@@ -6036,6 +6160,12 @@ body.wf-value-scrubbing * {
       .watchface-stage-zoom,
       .watchface-modal-backdrop
     ) {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .watchface-font-picker-panel.wf-font-picker-panel .watchface-font-picker-search-overlay {
+    background: var(--wf-surface-raised);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }

@@ -308,7 +308,23 @@ function metricStylesOf(design: CorosWatchfaceDesignState): WatchfaceMetricStyle
 }
 
 function timeStylesOf(design: CorosWatchfaceDesignState): WatchfaceTimeStyles {
-  return (design.timeStyles ?? {}) as WatchfaceTimeStyles;
+  const styles = {
+    ...((design.timeStyles ?? {}) as WatchfaceTimeStyles)
+  };
+  if (rasterFontSupportsText(design.rasterFont, "0123456789")) {
+    for (const partId of [
+      "hours",
+      "minutes",
+      "seconds",
+      "autoTime"
+    ] as const) {
+      styles[partId] ??= {
+        scale: 1,
+        rasterFont: design.rasterFont
+      };
+    }
+  }
+  return styles;
 }
 
 function dateStylesOf(design: CorosWatchfaceDesignState): WatchfaceDateStyles {
@@ -407,7 +423,12 @@ export function deriveDesignDetails(
           design.selectableMetricStyle
         )
       : [],
-    buildTimeStyleOverrides(metricDetails, timeStylesOf(design)),
+    buildTimeStyleOverrides(
+      metricDetails,
+      timeStylesOf(design),
+      false,
+      toStudioOptions(design)
+    ),
     buildDateStyleOverrides(metricDetails, dateStylesOf(design)),
     buildLayerColorOverrides(metricDetails, design.layerColors ?? {}),
     // A synthesized icon must establish its base path/position before the
@@ -673,11 +694,23 @@ export async function composeWatchfaceReplacements(
   );
 
   const timeStyleOverrides = timeStyleActive
-    ? buildTimeStyleOverrides(metricDetails, timeStyles, true)
+    ? buildTimeStyleOverrides(
+        metricDetails,
+        timeStyles,
+        true,
+        toStudioOptions(design)
+      )
     : [];
   const timePositionDetails = applyConfigOverridesToDetails(
     styledMetricDetails,
-    timeStyleActive ? buildTimeStyleOverrides(details, timeStyles) : []
+    timeStyleActive
+      ? buildTimeStyleOverrides(
+          details,
+          timeStyles,
+          false,
+          toStudioOptions(design)
+        )
+      : []
   );
   const timeTrackingOverrides = typographyActive
     ? buildTimeTrackingOverrides(

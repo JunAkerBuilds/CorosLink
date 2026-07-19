@@ -70,6 +70,7 @@ import {
   scaledBatterySpriteCanvasSize,
   scaleConfigRectValue,
   supportsWatchfaceSpriteRotation,
+  timeSpriteCanvasSize,
   WATCHFACE_COMPLICATIONS,
   watchfaceEffectRenderScale
 } from "../src/watchfaces/watchfaceStudio.ts";
@@ -2562,6 +2563,67 @@ assert.equal(fullTimeStyle?.values.time_second_high_pos, "{398,68}");
 assert.equal(fullTimeStyle?.values.time_second_low_pos, "{478,68}");
 assert.equal(fullTimeStyle?.values.time_second_high_font, "cl_sh");
 assert.equal(fullTimeStyle?.values.time_second_low_font, "cl_sl");
+const wideDigitRasterFont = {
+  label: "Wide digits",
+  dataUrl: "data:image/png;base64,wide",
+  glyphs: "",
+  columns: 1,
+  sprites: Object.fromEntries(
+    Array.from({ length: 10 }, (_, digit) => [String(digit), `digit:${digit}`])
+  ),
+  spriteSizes: Object.fromEntries(
+    Array.from({ length: 10 }, (_, digit) => [
+      String(digit),
+      { width: 120, height: 80 }
+    ])
+  ),
+  tint: false
+};
+assert.deepEqual(
+  timeSpriteCanvasSize(
+    { width: 60, height: 64 },
+    { scale: 1.5, rasterFont: wideDigitRasterFont }
+  ),
+  { width: 144, height: 96 },
+  "wide PNG digits should expand the time canvas at the selected height"
+);
+const wideTimeStyle = {
+  hours: {
+    scale: 1.5,
+    rasterFont: wideDigitRasterFont
+  }
+};
+const wideTimeDetails = applyConfigOverridesToDetails(
+  withMetrics,
+  buildTimeStyleOverrides(withMetrics, wideTimeStyle)
+);
+const wideTimeResolution = wideTimeDetails.resolutions.find(
+  ({ directory }) => directory.includes("800x800")
+);
+assert.equal(
+  wideTimeResolution?.config.time_hour_high_pos,
+  "{-4,84}",
+  "the high hour slot should move left when its PNG canvas widens"
+);
+assert.equal(
+  wideTimeResolution?.config.time_hour_low_pos,
+  "{164,84}",
+  "the low hour slot should follow the widened high slot without overlap"
+);
+assert.deepEqual(
+  computeLayoutGroupBounds(wideTimeResolution, {
+    timeStyles: wideTimeStyle
+  }).find(({ id }) => id === "hours"),
+  {
+    id: "hours",
+    label: "Hour digits",
+    x0: -4,
+    y0: 84,
+    x1: 308,
+    y1: 180
+  },
+  "hour selection bounds should include the complete wide PNG canvases"
+);
 const previewTimeStyles = {
   hours: { color: "#33ddff", scale: 1.5 },
   minutes: { scale: 1.25 },

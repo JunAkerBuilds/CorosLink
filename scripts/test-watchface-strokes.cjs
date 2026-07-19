@@ -60,7 +60,8 @@ async function main() {
         } = await import("/src/watchfaces/watchfaceEditorStrokes.ts");
         const {
           applyWatchfaceDataUrlOpacity,
-          loadStudioImage
+          loadStudioImage,
+          renderNativeRasterImageSprite
         } = await import("/src/watchfaces/watchfaceStudio.ts");
 
         const makeSource = () => {
@@ -165,6 +166,38 @@ async function main() {
         opacityResult.height = 2;
         opacityResult.getContext("2d").drawImage(opacityImage, 0, 0);
 
+        const weekdaySource = document.createElement("canvas");
+        weekdaySource.width = 30;
+        weekdaySource.height = 10;
+        const weekdayContext = weekdaySource.getContext("2d");
+        weekdayContext.fillStyle = "#ffffff";
+        weekdayContext.fillRect(2, 1, 4, 8);
+        weekdayContext.fillRect(12, 1, 4, 8);
+        weekdayContext.fillRect(22, 1, 4, 8);
+        const weekdayDataUrl = weekdaySource.toDataURL("image/png");
+        const weekdayDefault = await loadStudioImage(
+          await renderNativeRasterImageSprite(
+            weekdayDataUrl,
+            20,
+            undefined,
+            false,
+            0,
+            3
+          ),
+          false
+        );
+        const weekdaySpaced = await loadStudioImage(
+          await renderNativeRasterImageSprite(
+            weekdayDataUrl,
+            20,
+            undefined,
+            false,
+            0.2,
+            3
+          ),
+          false
+        );
+
         return {
           outside: {
             padding: outside.padding,
@@ -196,7 +229,11 @@ async function main() {
             stroke: pixel(fadedWithStroke.canvas, 7, 14),
             source: pixel(fadedWithStroke.canvas, 12, 12)
           },
-          layerOpacity: pixel(opacityResult, 0, 0)
+          layerOpacity: pixel(opacityResult, 0, 0),
+          spriteSpacing: {
+            defaultWidth: weekdayDefault.naturalWidth,
+            spacedWidth: weekdaySpaced.naturalWidth
+          }
         };
       })()
     `);
@@ -252,6 +289,10 @@ async function main() {
     assert.ok(
       results.layerOpacity[3] >= 88 && results.layerOpacity[3] <= 90,
       "layer opacity multiplies exported PNG alpha"
+    );
+    assert.ok(
+      results.spriteSpacing.spacedWidth > results.spriteSpacing.defaultWidth,
+      "weekday sprite spacing separates glyphs in an imported bitmap"
     );
     window.destroy();
     console.log("watchface stroke renderer tests passed");

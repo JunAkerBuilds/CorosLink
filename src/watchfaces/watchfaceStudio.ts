@@ -125,7 +125,7 @@ function normalizeSpriteScale(scale: number | undefined): number {
   return Number.isFinite(scale) && scale! > 0 ? scale! : 1;
 }
 
-/** Component styles override the face-wide raster font and digit spacing. */
+/** Component styles override the face-wide raster font and sprite spacing. */
 function componentTypography(
   typography: WatchfaceTypography,
   style:
@@ -1894,9 +1894,14 @@ async function renderRasterImageSprite(
   const sourceY = bottom >= top ? top : 0;
   const sourceWidth = right >= left ? right - left + 1 : source.width;
   const sourceHeight = bottom >= top ? bottom - top + 1 : source.height;
+  const heightScale = (height * 0.98) / sourceHeight;
+  // A height-fitted direct PNG may be wider than the starter template's
+  // digit cell. Time components normally expand that cell from the imported
+  // glyph aspect ratio, but this width constraint remains the final guard
+  // against clipping for every other caller and for unusually padded PNGs.
   const scale = fitByHeight
-    ? (height * 0.98) / sourceHeight
-    : Math.min((width * 0.98) / sourceWidth, (height * 0.98) / sourceHeight);
+    ? Math.min(heightScale, (width * 0.98) / sourceWidth)
+    : Math.min((width * 0.98) / sourceWidth, heightScale);
   const drawWidth = Math.max(1, sourceWidth * scale);
   const drawHeight = Math.max(1, sourceHeight * scale);
   const canvas = document.createElement("canvas");
@@ -1988,7 +1993,8 @@ export async function renderNativeWatchfaceTextSprite(
   setCanvasLetterSpacing(measureContext, fontSize * letterSpacing);
   const metrics = measureContext.measureText(text);
   const padding = Math.max(1, Math.ceil(targetHeight * 0.03));
-  const width = Math.max(1, Math.ceil(metrics.width + padding * 2));
+  const ink = textInkMetrics(metrics);
+  const width = Math.max(1, Math.ceil(ink.width + padding * 2));
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = targetHeight;
@@ -2005,7 +2011,7 @@ export async function renderNativeWatchfaceTextSprite(
     metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
   context.fillText(
     text,
-    (width - metrics.width) / 2,
+    (width - ink.width) / 2 + ink.left,
     (targetHeight - glyphHeight) / 2 + metrics.actualBoundingBoxAscent
   );
   return canvas.toDataURL("image/png");
@@ -2027,7 +2033,9 @@ async function renderNativeRasterFontSprite(
       directSprite,
       height,
       color,
-      rasterFont.tint
+      rasterFont.tint,
+      typography.letterSpacing,
+      normalizedText.length
     );
   }
 
@@ -2131,11 +2139,13 @@ async function renderNativeRasterFontSprite(
   return canvas.toDataURL("image/png");
 }
 
-async function renderNativeRasterImageSprite(
+export async function renderNativeRasterImageSprite(
   dataUrl: string,
   height: number,
   color?: string,
-  tint = false
+  tint = false,
+  letterSpacing = 0,
+  expectedGlyphCount = 0
 ): Promise<string> {
   const image = await loadStudioImage(dataUrl);
   const source = document.createElement("canvas");
@@ -2171,9 +2181,52 @@ async function renderNativeRasterImageSprite(
   const sourceHeight = bottom >= top ? bottom - top + 1 : source.height;
   const padding = Math.max(1, Math.ceil(height * 0.03));
   const drawHeight = Math.max(1, height - padding * 2);
+  const scale = drawHeight / sourceHeight;
+  const occupiedColumns = Array.from({ length: sourceWidth }, (_, offset) => {
+    const x = sourceX + offset;
+    for (let y = sourceY; y < sourceY + sourceHeight; y += 1) {
+      if (pixels[(y * source.width + x) * 4 + 3]! >= 8) return true;
+    }
+    return false;
+  });
+  const glyphRuns: Array<{ x: number; width: number }> = [];
+  for (let offset = 0; offset < occupiedColumns.length; offset += 1) {
+    if (!occupiedColumns[offset]) continue;
+    const start = offset;
+    while (
+      offset + 1 < occupiedColumns.length &&
+      occupiedColumns[offset + 1]
+    ) {
+      offset += 1;
+    }
+    glyphRuns.push({
+      x: sourceX + start,
+      width: offset - start + 1
+    });
+  }
+  const tracking = Math.max(-0.35, Math.min(0.25, letterSpacing));
+  const tracksSeparateGlyphs =
+    expectedGlyphCount > 1 &&
+    glyphRuns.length === expectedGlyphCount &&
+    Math.abs(tracking) >= 0.001;
+  const scaledGlyphWidths = glyphRuns.map((run) => run.width * scale);
+  const trackedGaps = glyphRuns.slice(0, -1).map((run, index) => {
+    const next = glyphRuns[index + 1]!;
+    const originalGap = (next.x - (run.x + run.width)) * scale;
+    const minimumGap = -Math.min(
+      scaledGlyphWidths[index]!,
+      scaledGlyphWidths[index + 1]!
+    ) * 0.7;
+    return Math.max(minimumGap, originalGap + drawHeight * tracking);
+  });
   const drawWidth = Math.max(
     1,
-    Math.round(sourceWidth * (drawHeight / sourceHeight))
+    Math.round(
+      tracksSeparateGlyphs
+        ? scaledGlyphWidths.reduce((total, width) => total + width, 0) +
+            trackedGaps.reduce((total, gap) => total + gap, 0)
+        : sourceWidth * scale
+    )
   );
   const canvas = document.createElement("canvas");
   canvas.width = drawWidth + padding * 2;
@@ -2184,17 +2237,36 @@ async function renderNativeRasterImageSprite(
   }
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
-  context.drawImage(
-    image,
-    sourceX,
-    sourceY,
-    sourceWidth,
-    sourceHeight,
-    padding,
-    padding,
-    drawWidth,
-    drawHeight
-  );
+  if (tracksSeparateGlyphs) {
+    let drawX = padding;
+    glyphRuns.forEach((run, index) => {
+      const glyphWidth = scaledGlyphWidths[index]!;
+      context.drawImage(
+        image,
+        run.x,
+        sourceY,
+        run.width,
+        sourceHeight,
+        drawX,
+        padding,
+        glyphWidth,
+        drawHeight
+      );
+      drawX += glyphWidth + (trackedGaps[index] ?? 0);
+    });
+  } else {
+    context.drawImage(
+      image,
+      sourceX,
+      sourceY,
+      sourceWidth,
+      sourceHeight,
+      padding,
+      padding,
+      drawWidth,
+      drawHeight
+    );
+  }
   if (tint && color) {
     context.globalCompositeOperation = "source-in";
     context.fillStyle = color;
@@ -2259,21 +2331,49 @@ export function renderDigitSprite(
     context.font = `${fontStyle} ${fontWeight} ${fontSize}px ${quoteFontFamily(fontFamily)}`;
     setCanvasLetterSpacing(context, fontSize * letterSpacing);
     const metrics = context.measureText(text);
+    const ink = textInkMetrics(metrics);
     const glyphHeight =
       metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-    if (metrics.width <= width * 0.96 && glyphHeight <= height * 0.96) {
+    if (ink.width <= width * 0.96 && glyphHeight <= height * 0.96) {
       break;
     }
   }
   const metrics = context.measureText(text);
+  const ink = textInkMetrics(metrics);
   const glyphHeight =
     metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
   context.fillText(
     text,
-    (width - metrics.width) / 2,
+    (width - ink.width) / 2 + ink.left,
     (height - glyphHeight) / 2 + metrics.actualBoundingBoxAscent
   );
   return canvas.toDataURL("image/png");
+}
+
+/**
+ * Canvas `width` is the cursor advance, not the painted glyph bounds. Italic
+ * and decorative faces can overhang that advance on either side, so using it
+ * to size or center a sprite clips otherwise valid pixels.
+ */
+function textInkMetrics(metrics: TextMetrics): {
+  left: number;
+  right: number;
+  width: number;
+} {
+  const left = Number.isFinite(metrics.actualBoundingBoxLeft)
+    ? metrics.actualBoundingBoxLeft
+    : 0;
+  const right = Number.isFinite(metrics.actualBoundingBoxRight)
+    ? metrics.actualBoundingBoxRight
+    : metrics.width;
+  const inkWidth = left + right;
+  return {
+    left,
+    right,
+    width: Number.isFinite(inkWidth) && inkWidth > 0
+      ? inkWidth
+      : metrics.width
+  };
 }
 
 function normalizeFontWeight(weight: number | undefined): number {
@@ -2762,7 +2862,7 @@ export interface WatchfaceMetricSpriteStyle {
   rotation?: number;
   /** Optional per-layer font; falls back to the design font. */
   fontFamily?: string;
-  /** Digit spacing for this component only; falls back to the design value. */
+  /** Sprite spacing for this component only; falls back to the design value. */
   letterSpacing?: number;
   /** A PNG set scoped to this component rather than the shared face font. */
   rasterFont?: CorosWatchfaceRasterFont;
@@ -2795,7 +2895,7 @@ export interface WatchfaceDateSpriteStyle {
   /** Optional per-layer font; falls back to the design font. */
   fontFamily?: string;
   color?: string;
-  /** Digit spacing for this component only; falls back to the design value. */
+  /** Sprite spacing for this component only; falls back to the design value. */
   letterSpacing?: number;
   /** A PNG set scoped to this date layer rather than the shared face font. */
   rasterFont?: CorosWatchfaceRasterFont;
@@ -2886,6 +2986,43 @@ export function rasterFontNativeSpriteSize(
   return {
     width: Math.max(1, Math.round(atlas.width / columns)),
     height: Math.max(1, Math.round(atlas.height / rows))
+  };
+}
+
+/**
+ * Resolves a time digit's firmware PNG canvas. Direct PNG fonts retain their
+ * authored aspect ratio at the selected height, widening narrow starter
+ * cells instead of cropping or vertically shrinking wide numerals.
+ *
+ * All ten digits share the widest imported aspect so the high/low slot
+ * geometry remains stable as the displayed time changes.
+ */
+export function timeSpriteCanvasSize(
+  file: Pick<CorosWatchfaceSpriteFile, "width" | "height">,
+  style: WatchfaceMetricSpriteStyle | undefined,
+  typography: WatchfaceTypography = {}
+): { width: number; height: number } {
+  const scale = normalizeSpriteScale(style?.scale);
+  const width = Math.max(1, Math.round(file.width * scale));
+  const height = Math.max(1, Math.round(file.height * scale));
+  const rasterFont = style?.rasterFont ?? typography.rasterFont;
+  if (!rasterFont) {
+    return { width, height };
+  }
+  const importedSizes = Array.from({ length: 10 }, (_, digit) =>
+    rasterFontNativeSpriteSize(rasterFont, String(digit))
+  ).filter((size): size is NonNullable<typeof size> =>
+    Boolean(size?.width && size.height)
+  );
+  if (importedSizes.length === 0) {
+    return { width, height };
+  }
+  const widestAspect = Math.max(
+    ...importedSizes.map((size) => size.width / size.height)
+  );
+  return {
+    width: Math.max(width, Math.ceil(height * widestAspect)),
+    height
   };
 }
 
@@ -4642,7 +4779,8 @@ export async function buildMetricSpriteReplacements(
 export function buildTimeStyleOverrides(
   details: CorosWatchfaceTemplateDetails,
   styles: WatchfaceTimeStyles,
-  useStudioFolders = false
+  useStudioFolders = false,
+  typography: WatchfaceTypography = {}
 ): CorosWatchfaceConfigOverride[] {
   const overrides: CorosWatchfaceConfigOverride[] = [];
   for (const resolution of details.resolutions) {
@@ -4667,7 +4805,15 @@ export function buildTimeStyleOverrides(
         const pos = parseConfigPos(resolution.config[digit.posKey]);
         const source = findSpriteFolder(resolution, resolution.config[digit.fontKey]);
         const sample = source?.files[0];
-        return pos && source && sample ? [{ digit, pos, source, sample }] : [];
+        return pos && source && sample
+          ? [{
+              digit,
+              pos,
+              source,
+              sample,
+              size: timeSpriteCanvasSize(sample, style, typography)
+            }]
+          : [];
       });
       if (planned.length !== part.digits.length) {
         continue;
@@ -4679,10 +4825,23 @@ export function buildTimeStyleOverrides(
       const centerX = (x0 + x1) / 2;
       const centerY = (y0 + y1) / 2;
       const normalizedScale = normalizeSpriteScale(style.scale);
+      const baseGap =
+        planned[1]!.pos.x -
+        (planned[0]!.pos.x + planned[0]!.sample.width);
+      const targetGap = baseGap * normalizedScale;
+      const targetWidth =
+        planned[0]!.size.width + targetGap + planned[1]!.size.width;
+      let targetX = centerX - targetWidth / 2;
       for (const item of planned) {
-        const x = Math.round(centerX + (item.pos.x - centerX) * normalizedScale);
-        const y = Math.round(centerY + (item.pos.y - centerY) * normalizedScale);
+        const x = Math.round(targetX);
+        const y = Math.round(
+          centerY +
+            (item.pos.y + item.sample.height / 2 - centerY) *
+              normalizedScale -
+            item.size.height / 2
+        );
         values[item.digit.posKey] = `{${x},${y}}`;
+        targetX += item.size.width + targetGap;
         if (useStudioFolders) {
           values[item.digit.fontKey] = timeStudioFolder(
             part.id,
@@ -4756,6 +4915,8 @@ export async function buildTimeSpriteReplacements(
     digit: number;
     width: number;
     height: number;
+    contentWidth: number;
+    contentHeight: number;
     color?: string;
     rotation?: number;
     fontFamily: string;
@@ -4768,16 +4929,28 @@ export async function buildTimeSpriteReplacements(
       ? findSpriteFolder(resolution, resolution.config.autoalign_time_font)
       : null;
     if (autoStyle && autoSource) {
-      const normalizedScale = normalizeSpriteScale(autoStyle.scale);
       const partFontFamily = autoStyle.fontFamily ?? fontFamily;
       const partTypography = componentTypography(typography, autoStyle);
       autoSource.files.slice(0, 10).forEach((file, value) => {
+        const canvasSize = timeSpriteCanvasSize(
+          file,
+          autoStyle,
+          partTypography
+        );
         jobs.push({
           source: file,
           path: `${resolution.directory}/${timeStudioFolder("autoTime", "high")}/${String(value).padStart(2, "0")}.png`,
           digit: value,
-          width: Math.max(1, Math.round(file.width * normalizedScale)),
-          height: Math.max(1, Math.round(file.height * normalizedScale)),
+          width: canvasSize.width,
+          height: canvasSize.height,
+          contentWidth: Math.max(
+            1,
+            Math.round(file.width * normalizeSpriteScale(autoStyle.scale))
+          ),
+          contentHeight: Math.max(
+            1,
+            Math.round(file.height * normalizeSpriteScale(autoStyle.scale))
+          ),
           color: autoStyle.color,
           rotation: autoStyle.rotation,
           fontFamily: partFontFamily,
@@ -4795,7 +4968,6 @@ export async function buildTimeSpriteReplacements(
       if (!style) {
         continue;
       }
-      const normalizedScale = normalizeSpriteScale(style.scale);
       const partFontFamily = style.fontFamily ?? fontFamily;
       const partTypography = componentTypography(typography, style);
       for (const digit of part.digits) {
@@ -4804,12 +4976,25 @@ export async function buildTimeSpriteReplacements(
           continue;
         }
         source.files.slice(0, 10).forEach((file, value) => {
+          const canvasSize = timeSpriteCanvasSize(
+            file,
+            style,
+            partTypography
+          );
           jobs.push({
             source: file,
             path: `${resolution.directory}/${timeStudioFolder(part.id, digit.slot)}/${String(value).padStart(2, "0")}.png`,
             digit: value,
-            width: Math.max(1, Math.round(file.width * normalizedScale)),
-            height: Math.max(1, Math.round(file.height * normalizedScale)),
+            width: canvasSize.width,
+            height: canvasSize.height,
+            contentWidth: Math.max(
+              1,
+              Math.round(file.width * normalizeSpriteScale(style.scale))
+            ),
+            contentHeight: Math.max(
+              1,
+              Math.round(file.height * normalizeSpriteScale(style.scale))
+            ),
             color: style.color,
             rotation: style.rotation,
             fontFamily: partFontFamily,
@@ -4844,11 +5029,15 @@ export async function buildTimeSpriteReplacements(
               : "#ffffff"),
           job.typography
         )
-      : await resizeAndTintSprite(
-          assetsByPath.get(job.source.path)?.dataUrl ?? "",
+      : await centerSpriteOnCanvas(
+          await resizeAndTintSprite(
+            assetsByPath.get(job.source.path)?.dataUrl ?? "",
+            job.contentWidth,
+            job.contentHeight,
+            job.color
+          ),
           job.width,
-          job.height,
-          job.color
+          job.height
         );
     const dataUrl = await rotateSpriteInCanvas(
       rendered,
@@ -5087,7 +5276,9 @@ export async function buildDateSpriteComposition(
             Boolean(
               job.color ||
                 (job.kind === "week" && options.tintLabels)
-            )
+            ),
+            job.kind === "week" ? job.typography.letterSpacing : 0,
+            job.kind === "week" ? job.text.length : 0
           );
       const image = await loadStudioImage(dataUrl);
       const group = nativeGroups.get(job.groupKey) ?? [];
@@ -5109,15 +5300,26 @@ export async function buildDateSpriteComposition(
           job.color ?? options.digitColor,
           job.typography
         )
-      : await resizeAndTintSprite(
-          asset!.dataUrl,
-          job.width,
-          job.height,
-          job.color ??
-            (job.kind !== "digits" && options.tintLabels
-              ? options.digitColor
-              : undefined)
-        );
+      : job.kind === "week" &&
+          Math.abs(job.typography.letterSpacing ?? 0) >= 0.001
+        ? await renderNativeRasterImageSprite(
+            asset!.dataUrl,
+            job.height,
+            job.color ??
+              (options.tintLabels ? options.digitColor : undefined),
+            Boolean(job.color || options.tintLabels),
+            job.typography.letterSpacing,
+            job.text.length
+          )
+        : await resizeAndTintSprite(
+            asset!.dataUrl,
+            job.width,
+            job.height,
+            job.color ??
+              (job.kind !== "digits" && options.tintLabels
+                ? options.digitColor
+                : undefined)
+          );
     const fittedDataUrl = job.exactCanvas
       ? baseDataUrl
       : await fitVisibleSpriteToCanvas(
@@ -5634,6 +5836,8 @@ export interface WatchfaceLayoutGeometryOptions {
   timeStyles?: WatchfaceTimeStyles;
   /** Face-wide tracking used when a time part has no component override. */
   letterSpacing?: number;
+  /** Face-wide PNG font used when a time part has no component override. */
+  rasterFont?: CorosWatchfaceRasterFont;
 }
 
 export interface WatchfaceLayoutOffsetLimits {
@@ -5787,13 +5991,19 @@ export function computeLayoutGroupBounds(
           group.id === "seconds"
             ? geometry.timeStyles?.[group.id]
             : undefined;
+        const effectiveTimeStyle = timeStyle ??
+          (geometry.rasterFont
+            ? { scale: 1, rasterFont: geometry.rasterFont }
+            : undefined);
         const timeScale = timeStyle
           ? normalizeSpriteScale(timeStyle.scale)
           : 1;
-        const size = {
-          width: Math.max(1, Math.round(sourceSize.width * timeScale)),
-          height: Math.max(1, Math.round(sourceSize.height * timeScale))
-        };
+        const size = effectiveTimeStyle
+          ? timeSpriteCanvasSize(sourceSize, effectiveTimeStyle, geometry)
+          : {
+              width: Math.max(1, Math.round(sourceSize.width * timeScale)),
+              height: Math.max(1, Math.round(sourceSize.height * timeScale))
+            };
         // Preview tracking is applied at draw time rather than written into the
         // live config. Mirror that horizontal offset here so hit testing,
         // selection outlines, snapping, and edge limits follow the glyphs.
@@ -6767,9 +6977,13 @@ export async function drawStudioPreview(
     const timeFontFamily = timeStyle?.fontFamily ?? options.fontFamily;
     const timeTypography = componentTypography(options, timeStyle);
     const timeColor = timeStyle?.color ?? componentColor ?? options.digitColor;
-    const timeScale = timeStyle ? normalizeSpriteScale(timeStyle.scale) : 1;
-    const width = Math.max(1, Math.round(file.width * timeScale));
-    const height = Math.max(1, Math.round(file.height * timeScale));
+    const canvasSize = timeSpriteCanvasSize(
+      file,
+      timeStyle,
+      timeTypography
+    );
+    const width = canvasSize.width;
+    const height = canvasSize.height;
     const tracking = Math.max(
       -0.35,
       Math.min(0.25, timeTypography.letterSpacing ?? 0)
@@ -6777,12 +6991,17 @@ export async function drawStudioPreview(
     const trackingOffset = planned.slot
       ? Math.round((height * tracking) / 2) * (planned.slot === "high" ? -1 : 1)
       : 0;
+    const rasterizedTime = shouldRenderWatchfaceText(
+      String(planned.digit),
+      timeFontFamily,
+      timeTypography
+    );
     let image = digitSprites.get(file.path) ?? loaded.get(file.path);
-    if (timeStyle || componentColor) {
-      const cacheKey = `${file.path}|${timeFontFamily}|${timeColor}|${timeScale}|${timeTypography.letterSpacing ?? 0}`;
+    if (timeStyle || componentColor || rasterizedTime) {
+      const cacheKey = `${file.path}|${timeFontFamily}|${timeColor}|${width}x${height}|${timeTypography.letterSpacing ?? 0}`;
       image = styledTimeGlyphs.get(cacheKey);
       if (!image) {
-        if (shouldRenderWatchfaceText(String(planned.digit), timeFontFamily, timeTypography)) {
+        if (rasterizedTime) {
           image = await loadStudioImage(
             await renderWatchfaceTextSprite(
               String(planned.digit),
@@ -6793,13 +7012,20 @@ export async function drawStudioPreview(
               timeTypography
             )
           );
-        } else if (timeStyle?.color || componentColor) {
+        } else if (loadedAssets.get(file.path)?.dataUrl) {
+          const contentScale = normalizeSpriteScale(timeStyle?.scale);
           image = await loadStudioImage(
-            await resizeAndTintSprite(
-              loadedAssets.get(file.path)?.dataUrl ?? "",
+            await centerSpriteOnCanvas(
+              await resizeAndTintSprite(
+                loadedAssets.get(file.path)!.dataUrl,
+                Math.max(1, Math.round(file.width * contentScale)),
+                Math.max(1, Math.round(file.height * contentScale)),
+                timeStyle?.color || componentColor
+                  ? timeColor
+                  : undefined
+              ),
               width,
-              height,
-              timeColor
+              height
             )
           );
         } else {
@@ -6838,17 +7064,21 @@ export async function drawStudioPreview(
       hourLowFile &&
       minuteHighFile
     ) {
-      const hourScale = Math.max(
-        0.5,
-        Math.min(2, options.timeStyles?.hours?.scale ?? 1)
+      const hourStyle = options.timeStyles?.hours;
+      const minuteStyle = options.timeStyles?.minutes;
+      const hourSize = timeSpriteCanvasSize(
+        hourLowFile,
+        hourStyle,
+        componentTypography(options, hourStyle)
       );
-      const minuteScale = Math.max(
-        0.5,
-        Math.min(2, options.timeStyles?.minutes?.scale ?? 1)
+      const minuteSize = timeSpriteCanvasSize(
+        minuteHighFile,
+        minuteStyle,
+        componentTypography(options, minuteStyle)
       );
-      const hourWidth = hourLowFile.width * hourScale;
-      const hourHeight = hourLowFile.height * hourScale;
-      const minuteHeight = minuteHighFile.height * minuteScale;
+      const hourWidth = hourSize.width;
+      const hourHeight = hourSize.height;
+      const minuteHeight = minuteSize.height;
       const hourCenterY = hourLow.pos.y + hourHeight / 2;
       const minuteCenterY = minuteHigh.pos.y + minuteHeight / 2;
       const gapCenterX =
@@ -6961,7 +7191,9 @@ export async function drawStudioPreview(
           weekHeight * weekScale,
           weekStyle?.color ??
             (options.tintLabels ? options.digitColor : undefined),
-          Boolean(weekStyle?.color || options.tintLabels)
+          Boolean(weekStyle?.color || options.tintLabels),
+          weekTypography.letterSpacing,
+          (WEEKDAY_LABELS[weekdayIndex] ?? "DAY").length
         )
       );
       renderedWeekWidth = image.naturalWidth;
@@ -6983,15 +7215,27 @@ export async function drawStudioPreview(
         )
       );
     } else if (weekStyle && loadedAssets.get(weekFile.path)?.dataUrl) {
-      image = await loadStudioImage(
-        await fitVisibleSpriteToCanvas(
-          await resizeAndTintSprite(
-            loadedAssets.get(weekFile.path)!.dataUrl,
+      const sourceDataUrl = loadedAssets.get(weekFile.path)!.dataUrl;
+      const spacedDataUrl = Math.abs(weekTypography.letterSpacing ?? 0) >= 0.001
+        ? await renderNativeRasterImageSprite(
+            sourceDataUrl,
+            weekHeight,
+            weekStyle.color ??
+              (options.tintLabels ? options.digitColor : undefined),
+            Boolean(weekStyle.color || options.tintLabels),
+            weekTypography.letterSpacing,
+            (WEEKDAY_LABELS[weekdayIndex] ?? "DAY").length
+          )
+        : await resizeAndTintSprite(
+            sourceDataUrl,
             weekWidth,
             weekHeight,
             weekStyle.color ??
               (options.tintLabels ? options.digitColor : undefined)
-          ),
+          );
+      image = await loadStudioImage(
+        await fitVisibleSpriteToCanvas(
+          spacedDataUrl,
           weekWidth,
           weekHeight,
           weekScale
@@ -7315,10 +7559,19 @@ export async function drawStudioPreview(
             : file.height) * glyphScale
         )
       );
+      const timeCanvas = timeStyle
+        ? timeSpriteCanvasSize(file, timeStyle, glyphTypography)
+        : null;
       let styledFile = {
         ...file,
-        width: dateCanvas?.width ?? Math.max(1, Math.round(file.width * glyphScale)),
-        height: dateCanvas?.height ?? Math.max(1, Math.round(file.height * glyphScale))
+        width:
+          dateCanvas?.width ??
+          timeCanvas?.width ??
+          Math.max(1, Math.round(file.width * glyphScale)),
+        height:
+          dateCanvas?.height ??
+          timeCanvas?.height ??
+          Math.max(1, Math.round(file.height * glyphScale))
       };
       const glyphColor =
         timeStyle?.color ??

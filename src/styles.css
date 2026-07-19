@@ -4926,26 +4926,104 @@ td span {
   z-index: 100;
   max-width: calc(100vw - 24px);
   display: grid;
-  gap: 9px;
-  overflow-x: hidden;
-  overflow-y: auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0;
+  overflow: hidden;
   overscroll-behavior: contain;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-base) 92%, #000);
   box-shadow: 0 20px 42px rgba(0, 0, 0, 0.42);
-  padding: 11px;
+}
+
+.watchface-font-picker-panel-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 52px;
+  border-bottom: 1px solid var(--glass-border);
+  padding: 8px 10px 8px 12px;
+}
+
+.watchface-font-picker-panel-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--glass-border);
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  place-items: center;
+}
+
+.watchface-font-picker-panel-header > div:nth-child(2) {
+  display: grid;
+  gap: 1px;
+}
+
+.watchface-font-picker-panel-header strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.watchface-font-picker-panel-header span {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.watchface-font-picker-close {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0;
+  cursor: pointer;
+  place-items: center;
+}
+
+.watchface-font-picker-close:hover,
+.watchface-font-picker-close:focus-visible {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.watchface-font-picker-browser {
+  position: relative;
+  height: min(470px, calc(100vh - 104px));
+  min-height: 340px;
+  overflow: hidden;
+}
+
+.watchface-font-picker-search-overlay {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  right: 10px;
+  left: 10px;
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg-elevated);
+  box-shadow: var(--shadow-soft);
+  padding: 6px;
 }
 
 .watchface-font-picker-search {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   min-height: 40px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.04);
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
   color: var(--accent-strong);
   padding: 0 10px;
 }
@@ -4961,6 +5039,32 @@ td span {
   padding: 0;
 }
 
+.watchface-font-picker-search > button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0;
+  cursor: pointer;
+  place-items: center;
+}
+
+.watchface-font-picker-search > button:hover {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.watchface-font-picker-close:focus-visible,
+.watchface-font-picker-search > button:focus-visible,
+.watchface-font-picker-results button:focus-visible,
+.watchface-font-custom-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .watchface-font-picker-status,
 .watchface-font-picker-note {
   margin: 0;
@@ -4974,6 +5078,7 @@ td span {
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 5px 2px 8px;
 }
 
 .watchface-raster-font-panel {
@@ -5096,73 +5201,161 @@ td span {
 
 .watchface-font-picker-results {
   display: grid;
-  max-height: 248px;
-  overflow: auto;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-sm);
+  gap: 1px;
 }
 
 .watchface-font-picker-results button,
 .watchface-font-custom-option {
-  width: 100%;
-  border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  width: auto;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--text-primary);
-  padding: 8px 10px;
+  padding: 7px 9px;
   text-align: left;
   cursor: pointer;
 }
 
-.watchface-font-picker-results button:last-child {
-  border-bottom: 0;
+.watchface-font-picker-results button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-radius: 6px;
 }
 
 .watchface-font-picker-results button:hover,
-.watchface-font-picker-results button.is-selected,
 .watchface-font-custom-option:hover {
+  background: var(--glass-bg-hover);
+}
+
+.watchface-font-picker-results button.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
   background: var(--accent-soft);
 }
 
-.watchface-font-picker-results strong,
-.watchface-font-picker-results span {
+.watchface-font-picker-result-copy,
+.watchface-font-picker-result-copy strong,
+.watchface-font-picker-result-copy span {
   display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.watchface-font-picker-results strong {
+.watchface-font-picker-result-copy strong {
   font-size: 13px;
   font-weight: 400;
 }
 
-.watchface-font-picker-results span {
+.watchface-font-picker-result-copy > span {
   margin-top: 2px;
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 400;
 }
 
+.watchface-font-picker-result-check {
+  margin-left: 8px;
+  color: var(--accent-strong);
+  opacity: 0;
+}
+
+.watchface-font-picker-results button.is-selected .watchface-font-picker-result-check {
+  opacity: 1;
+}
+
 .watchface-font-custom-option {
-  border: 1px dashed var(--glass-border);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 7px;
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   color: var(--accent-strong);
   font-size: 12px;
   font-weight: 700;
 }
 
+.watchface-font-custom-option span {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.watchface-font-custom-option strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-font-custom-option small {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.watchface-font-picker-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 20px;
+  padding: 0 5px 1px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.watchface-font-picker-empty {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 24px 16px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.watchface-font-picker-empty strong {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.watchface-font-picker-empty span {
+  max-width: 26ch;
+  font-size: 11px;
+}
+
+.watchface-font-picker-browser-scroll {
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 87px 10px 80px;
+  scrollbar-color: color-mix(in srgb, var(--text-secondary) 42%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
 .watchface-font-picker-actions {
+  position: absolute;
+  z-index: 2;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
 }
 
 .watchface-font-picker-actions .secondary-button,
 .watchface-font-picker-actions .primary-button {
-  min-height: 36px;
-  padding: 0 11px;
-  font-size: 12px;
+  flex: 1 1 0;
+  min-height: 46px;
+  padding: 0 16px;
+  font-size: 13px;
 }
 
 .watchface-metric-heading {

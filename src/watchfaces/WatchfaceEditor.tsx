@@ -1708,10 +1708,16 @@ export function WatchfaceEditor({
     return base
       ? computeLayoutOffsetLimits(base, {
           timeStyles: design.timeStyles,
-          letterSpacing: design.letterSpacing
+          letterSpacing: design.letterSpacing,
+          rasterFont: design.rasterFont
         })
       : {};
-  }, [designDetails, design.timeStyles, design.letterSpacing]);
+  }, [
+    designDetails,
+    design.timeStyles,
+    design.letterSpacing,
+    design.rasterFont
+  ]);
   const baseLayoutBounds = useMemo(() => {
     const base = designDetails
       ? pickPreviewResolution(designDetails.styledMetricDetails)
@@ -1719,10 +1725,16 @@ export function WatchfaceEditor({
     return base
       ? computeLayoutGroupBounds(base, {
           timeStyles: design.timeStyles,
-          letterSpacing: design.letterSpacing
+          letterSpacing: design.letterSpacing,
+          rasterFont: design.rasterFont
         })
       : [];
-  }, [designDetails, design.timeStyles, design.letterSpacing]);
+  }, [
+    designDetails,
+    design.timeStyles,
+    design.letterSpacing,
+    design.rasterFont
+  ]);
   const layers = useMemo(() => {
     if (!modeSourceDetails) return [];
     return deriveEditorLayers(modeSourceDetails, design).filter((layer) => {
@@ -8844,7 +8856,14 @@ export function WatchfaceEditor({
                 onRasterFontChange={setRasterFont}
                 typography={{ fontWeight: design.fontWeight ?? 400, fontStyle: design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }}
                 onTypographyChange={(typography) => patchDesign(typography)}
-                onLetterSpacingChange={(letterSpacing) => setDateStyle(partId, { letterSpacing })}
+                onLetterSpacingChange={(letterSpacing) =>
+                  setDateStyle(partId, {
+                    letterSpacing,
+                    ...(partId === "weekday" && Math.abs(letterSpacing) >= 0.001
+                      ? { nativeSize: true }
+                      : {})
+                  })
+                }
               />
               {supportsNativeSize && !usesNativeDimensions ? <label className="watchface-studio-toggle"><input type="checkbox" checked={style?.nativeSize ?? Boolean(style?.fontFamily || style?.rasterFont)} onChange={(event) => setDateStyle(partId, { nativeSize: event.target.checked })} />Native width</label> : null}
               {usesNativeDimensions ? (
