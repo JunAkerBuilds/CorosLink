@@ -88,6 +88,7 @@ import {
   RotateCcw,
   Save,
   Send,
+  SlidersHorizontal,
   SunMedium,
   Square,
   Trash2,
@@ -5829,14 +5830,26 @@ export function WatchfaceEditor({
       <div className="watchface-editor-grid wf-studio-grid">
         <aside className={`watchface-editor-layers wf-pane wf-layers-pane${layersOpen ? " is-open" : ""}`} aria-label="Layers">
           <div className="watchface-editor-pane-heading wf-pane-heading">
-            <div>
+            <div className="wf-pane-heading-main">
+              <span className="wf-pane-heading-icon" aria-hidden="true">
+                <Layers size={14} />
+              </span>
               <p className="watchface-editor-pane-title">Layers</p>
-              <span>
+              <span
+                className="wf-pane-count"
+                aria-label={
+                  previewMode === "aod"
+                    ? supportsAod
+                      ? `${layers.length} always-on assets`
+                      : "Uses the current face"
+                    : `${layers.length + activeBackgroundElements.length} items`
+                }
+              >
                 {previewMode === "aod"
                   ? supportsAod
-                    ? `${layers.length} always-on assets`
-                    : "Uses the current face"
-                  : `${layers.length + activeBackgroundElements.length} items`}
+                    ? layers.length
+                    : "Current"
+                  : layers.length + activeBackgroundElements.length}
               </span>
             </div>
             {canEditActiveMode ? <div className="wf-add-menu">
@@ -6483,10 +6496,18 @@ export function WatchfaceEditor({
           onPointerCancel={endDesignTransaction}
         >
           <div className="wf-pane-heading">
-            <div>
+            <div className="wf-pane-heading-main">
+              <span className="wf-pane-heading-icon" aria-hidden="true">
+                <SlidersHorizontal size={14} />
+              </span>
               <p className="watchface-editor-pane-title">Properties</p>
-              <strong>{selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? "Inspector"}</strong>
             </div>
+            <strong
+              className="wf-pane-context"
+              title={selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? "Inspector"}
+            >
+              {selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? "Inspector"}
+            </strong>
           </div>
           {selectedElement ? renderElementInspector(selectedElement) : selectedLayer ? renderInspector(selectedLayer) : previewMode === "aod" ? (
             <div className="watchface-inspector-group wf-aod-empty-inspector">

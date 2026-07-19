@@ -2393,19 +2393,91 @@
   top: -12px;
   align-items: center;
   justify-content: space-between;
-  min-height: 44px;
+  min-height: 46px;
   gap: 8px;
   border-bottom: 1px solid var(--wf-border);
-  background: color-mix(in srgb, var(--wf-surface) 94%, transparent);
-  padding: 5px 2px 6px;
+  background: color-mix(in srgb, var(--wf-surface-raised) 96%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 4%, transparent);
+  padding: 0 10px;
+}
+
+.watchface-shell .wf-layers-pane > .wf-pane-heading {
+  margin: -12px -10px 8px;
+}
+
+.watchface-shell .wf-properties-pane > .wf-pane-heading {
+  margin: -12px -12px 10px;
+}
+
+.watchface-shell .wf-pane-heading::after {
+  position: absolute;
+  bottom: -1px;
+  left: 10px;
+  width: 32px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  content: "";
 }
 
 .watchface-shell .wf-pane-heading > div:first-child {
   min-width: 0;
 }
 
-.watchface-shell .wf-pane-heading > div:first-child > span,
-.watchface-shell .wf-pane-heading > div:first-child > strong {
+.watchface-shell .wf-pane-heading-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.watchface-shell .wf-pane-heading-icon {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--wf-border);
+  border-radius: 6px;
+  background: var(--wf-surface-hover);
+  color: var(--text-secondary);
+}
+
+.watchface-shell .wf-pane-count {
+  display: inline-flex;
+  min-width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--wf-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wf-surface-hover) 82%, transparent);
+  color: var(--text-secondary);
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.watchface-shell .wf-pane-context {
+  display: block;
+  overflow: hidden;
+  max-width: min(150px, 48%);
+  min-width: 0;
+  border: 1px solid var(--wf-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wf-surface-hover) 76%, transparent);
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  font-size: var(--wf-text-xs);
+  font-weight: 650;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-pane-heading > div:first-child > span:not(.wf-pane-heading-icon, .wf-pane-count),
+.watchface-shell .wf-pane-heading > div:first-child > strong:not(.wf-pane-context) {
   display: block;
   overflow: hidden;
   margin-top: 1px;
@@ -2430,9 +2502,10 @@
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-pane-title, .watchface-editor-pane-title) {
   margin: 0;
   color: var(--text-primary);
-  font-size: var(--wf-text-sm);
+  font-size: var(--wf-text-xs);
   font-weight: 800;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-add-menu, .watchface-add-menu, .wf-export-menu) {
@@ -2443,13 +2516,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 32px;
+  min-height: 30px;
   gap: 6px;
   border: 1px solid var(--wf-border);
   border-radius: var(--wf-control-radius);
   background: color-mix(in srgb, var(--wf-surface-raised) 76%, transparent);
   color: var(--text-secondary);
-  padding: 0 9px;
+  padding: 0 8px;
   font-size: var(--wf-text-xs);
   font-weight: 700;
 }
