@@ -5763,12 +5763,14 @@ export function WatchfaceEditor({
             <PanelRight size={17} />
           </button>
           <span className="wf-command-separator" aria-hidden="true" />
-          <button className="wf-icon-button" type="button" disabled={!canUndo} aria-label="Undo" title="Undo" onClick={undo}>
-            <Undo2 size={17} />
-          </button>
-          <button className="wf-icon-button" type="button" disabled={!canRedo} aria-label="Redo" title="Redo" onClick={redo}>
-            <Redo2 size={17} />
-          </button>
+          <div className="wf-history-controls" role="group" aria-label="Edit history">
+            <button className="wf-icon-button" type="button" disabled={!canUndo} aria-label="Undo" title="Undo" onClick={undo}>
+              <Undo2 size={17} />
+            </button>
+            <button className="wf-icon-button" type="button" disabled={!canRedo} aria-label="Redo" title="Redo" onClick={redo}>
+              <Redo2 size={17} />
+            </button>
+          </div>
           <button className="secondary-button wf-save-button" type="button" disabled={saving || spriteImportPending || !isDirty} onClick={() => void saveProject()}>
             {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}
             Save
