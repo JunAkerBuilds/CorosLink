@@ -1830,7 +1830,7 @@
 }
 
 .watchface-shell .wf-export-preview-modal {
-  width: min(760px, 100%);
+  width: min(1080px, 100%);
 }
 
 .watchface-shell .wf-export-preview-header,
@@ -1867,7 +1867,7 @@
 
 .watchface-shell .wf-export-preview-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
 }
 
@@ -1916,6 +1916,12 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+@media (max-width: 900px) {
+  .watchface-shell .wf-export-preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 680px) {

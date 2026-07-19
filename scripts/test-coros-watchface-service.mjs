@@ -112,6 +112,14 @@ assert.equal(
   "[background_icon]=background.png\r\n[watchface_id]=0x3B9ACE60\r\n",
   "watch-face ID override must append [watchface_id] when AOD omits it"
 );
+assert.equal(
+  applyCorosWatchfaceConfigOverrides(
+    "[bg_color]=0x000000\r\n",
+    { background_icon: "studio\\aod_background\\00.png" }
+  ),
+  "[bg_color]=0x000000\r\n[background_icon]=studio\\aod_background\\00.png\r\n",
+  "independent AOD artwork may add a background to a color-only config"
+);
 assert.deepEqual(
   [...validateConfigTextReplacements([
     {

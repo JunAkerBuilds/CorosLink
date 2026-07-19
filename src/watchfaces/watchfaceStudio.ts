@@ -244,6 +244,191 @@ export function detailsForPreviewMode(
   };
 }
 
+/**
+ * Narrows a template to the assets referenced by one display configuration.
+ * Composition uses this view so styling Current cannot overwrite a sprite
+ * shared with AOD (and vice versa).
+ */
+export function detailsForCompositionMode(
+  details: CorosWatchfaceTemplateDetails,
+  mode: WatchfacePreviewMode
+): CorosWatchfaceTemplateDetails {
+  const projected = detailsForPreviewMode(details, mode);
+  return {
+    ...projected,
+    resolutions: projected.resolutions.map((resolution) => {
+      const references = new Set(
+        Object.values(resolution.config)
+          .map((value) => value?.trim().replace(/\\/g, "/").replace(/^\.\//, ""))
+          .filter((value): value is string => Boolean(value))
+      );
+      return {
+        ...resolution,
+        spriteFolders: resolution.spriteFolders
+          .filter((folder) =>
+            references.has(folder.folder.replace(/\\/g, "/"))
+          )
+          .map((folder) =>
+            mode === "aod" ? { ...folder, aod: false } : folder
+          ),
+        icons: resolution.icons.filter((icon) =>
+          references.has(
+            icon.path.slice(resolution.directory.length + 1).replace(/\\/g, "/")
+          )
+        ),
+        // The selected configuration is exposed through `config`; clearing the
+        // secondary map prevents generic builders from processing both modes.
+        aodConfig: {}
+      };
+    })
+  };
+}
+
+function normalizedConfigAsset(value: string | undefined): string {
+  return value?.trim().replace(/\\/g, "/").replace(/^\.\//, "") ?? "";
+}
+
+function stableFolderSuffix(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36).slice(0, 6);
+}
+
+export interface WatchfaceModeComposition {
+  assetReplacements: CorosWatchfaceAssetReplacement[];
+  configOverrides: CorosWatchfaceConfigOverride[];
+  minWatchFaceVersion?: number;
+}
+
+/**
+ * Retargets a composition built against the virtual AOD `config` map to real
+ * AODconfig.txt paths and clones every referenced bitmap into an AOD-owned
+ * Studio folder. This is the isolation boundary for shared template assets.
+ */
+function retargetWatchfaceCompositionToOwnedMode<
+  T extends WatchfaceModeComposition
+>(
+  modeDetails: CorosWatchfaceTemplateDetails,
+  composition: T,
+  mode: WatchfacePreviewMode
+): T {
+  const effective = applyConfigOverridesToDetails(
+    modeDetails,
+    composition.configOverrides
+  );
+  const pathOverrides: CorosWatchfaceConfigOverride[] = [];
+  const replacements: CorosWatchfaceAssetReplacement[] = [];
+  const folderNames = new Map<string, string>();
+
+  for (const replacement of composition.assetReplacements) {
+    const separator = replacement.path.indexOf("/");
+    if (separator < 0) continue;
+    const directory = replacement.path.slice(0, separator);
+    const relativePath = replacement.path.slice(separator + 1);
+    const resolution = effective.resolutions.find(
+      (candidate) => candidate.directory === directory
+    );
+    if (!resolution) continue;
+    const slash = relativePath.lastIndexOf("/");
+    const sourceFolder = slash >= 0 ? relativePath.slice(0, slash) : "";
+    const sourceFile = slash >= 0 ? relativePath.slice(slash + 1) : relativePath;
+    const matchedKeys = Object.entries(resolution.config).flatMap(
+      ([key, value]) => {
+        const normalized = normalizedConfigAsset(value);
+        return normalized === sourceFolder || normalized === relativePath
+          ? [{ key, direct: normalized === relativePath }]
+          : [];
+      }
+    );
+    if (matchedKeys.length === 0) continue;
+
+    const directOnly = matchedKeys.every(({ direct }) => direct);
+    const folderKey = `${directory}/${
+      directOnly ? relativePath : sourceFolder || relativePath
+    }`;
+    let targetFolder = folderNames.get(folderKey);
+    if (!targetFolder) {
+      const basename = (
+        (directOnly ? sourceFile.replace(/\.png$/i, "") : sourceFolder.split("/").at(-1)) ||
+        "asset"
+      )
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, "_")
+        .slice(0, 42);
+      targetFolder = `studio/${mode}_${basename}_${stableFolderSuffix(folderKey)}`;
+      folderNames.set(folderKey, targetFolder);
+    }
+    const targetFile = /^\d{2}\.png$/i.test(sourceFile)
+      ? sourceFile.toLowerCase()
+      : "00.png";
+    replacements.push({
+      ...replacement,
+      path: `${directory}/${targetFolder}/${targetFile}`,
+      create: true,
+      allowDimensionOverride: true
+    });
+    pathOverrides.push({
+      path: `${directory}/${mode === "aod" ? "AODconfig" : "config"}.txt`,
+      values: Object.fromEntries(
+        matchedKeys.map(({ key, direct }) => [
+          key,
+          (direct ? `${targetFolder}/${targetFile}` : targetFolder).replace(
+            /\//g,
+            "\\"
+          )
+        ])
+      )
+    });
+  }
+
+  return {
+    ...composition,
+    assetReplacements: mergeAssetReplacements(replacements),
+    configOverrides: mergeConfigOverrides(
+      composition.configOverrides.map((override) => ({
+        ...override,
+        path: mode === "aod"
+          ? override.path.replace(/\/config\.txt$/i, "/AODconfig.txt")
+          : override.path
+      })),
+      pathOverrides
+    )
+  };
+}
+
+export function retargetWatchfaceCompositionToAod<
+  T extends WatchfaceModeComposition
+>(
+  aodDetails: CorosWatchfaceTemplateDetails,
+  composition: T
+): T {
+  return retargetWatchfaceCompositionToOwnedMode(
+    aodDetails,
+    composition,
+    "aod"
+  );
+}
+
+/**
+ * Current assets are also cloned when a separate AOD exists, ensuring a
+ * Current edit cannot alter an original sprite still referenced by AOD.
+ */
+export function retargetWatchfaceCompositionToCurrent<
+  T extends WatchfaceModeComposition
+>(
+  currentDetails: CorosWatchfaceTemplateDetails,
+  composition: T
+): T {
+  return retargetWatchfaceCompositionToOwnedMode(
+    currentDetails,
+    composition,
+    "current"
+  );
+}
+
 function configAssetLabel(configKey: string, _scope: WatchfaceConfigAssetScope): string {
   const special: Record<string, string> = {
     background_icon: "Background image",

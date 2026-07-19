@@ -36,6 +36,7 @@ import {
   corosMonthLabelForSpriteIndex,
   corosMonthSpriteIndex,
   corosWeekdayIndex,
+  detailsForCompositionMode,
   detailsForPreviewMode,
   detailsForPreviewResolution,
   getAvailableComplications,
@@ -60,6 +61,8 @@ import {
   rasterFontSupportsText,
   rasterFontNativeSpriteSize,
   rebaseNegativeControlChildren,
+  retargetWatchfaceCompositionToAod,
+  retargetWatchfaceCompositionToCurrent,
   resizeConfigRectToCanvas,
   resolveWatchfaceSpriteRotation,
   rotateSpriteInCanvas,
@@ -69,6 +72,11 @@ import {
   WATCHFACE_COMPLICATIONS,
   watchfaceEffectRenderScale
 } from "../src/watchfaces/watchfaceStudio.ts";
+import {
+  materializeLegacyAodDesign,
+  resolveWatchfaceModeDesign,
+  writeWatchfaceModeDesign
+} from "../src/watchfaces/watchfaceDisplayModes.ts";
 import {
   classifyRasterSpriteFolder,
   createRasterFontFolderReplacement
@@ -835,6 +843,142 @@ assert.equal(
   details,
   "The current preview should retain the original details object"
 );
+
+const sharedModeResolution = resolution(260, 8, 12);
+sharedModeResolution.config.time_hour_high_font = "shared_digits";
+sharedModeResolution.aodConfig = {
+  time_hour_high_pos: "{20,30}",
+  time_hour_high_font: "shared_digits"
+};
+sharedModeResolution.spriteFolders = [{
+  folder: "shared_digits",
+  kind: "digits",
+  aod: false,
+  files: digitFiles(8, 12, sharedModeResolution.directory, "shared_digits")
+}];
+const sharedModeDetails = {
+  archiveId: "shared-mode-assets",
+  resolutions: [sharedModeResolution]
+};
+const isolatedAodDetails = detailsForCompositionMode(
+  sharedModeDetails,
+  "aod"
+);
+assert.equal(
+  isolatedAodDetails.resolutions[0].config.time_hour_high_font,
+  "shared_digits"
+);
+assert.deepEqual(isolatedAodDetails.resolutions[0].aodConfig, {});
+assert.equal(isolatedAodDetails.resolutions[0].spriteFolders.length, 1);
+assert.equal(
+  isolatedAodDetails.resolutions[0].spriteFolders[0].aod,
+  false,
+  "independent AOD colors must not be dimmed a second time"
+);
+const isolatedAodComposition = retargetWatchfaceCompositionToAod(
+  isolatedAodDetails,
+  {
+    assetReplacements: [{
+      path: `${sharedModeResolution.directory}/shared_digits/00.png`,
+      dataUrl: "aod-zero"
+    }],
+    configOverrides: [{
+      path: `${sharedModeResolution.directory}/config.txt`,
+      values: { time_hour_high_pos: "{24,34}" }
+    }]
+  }
+);
+assert.match(
+  isolatedAodComposition.assetReplacements[0].path,
+  /\/studio\/aod_shared_digits_[a-z0-9]+\/00\.png$/
+);
+assert.equal(
+  isolatedAodComposition.assetReplacements[0].create,
+  true
+);
+assert.ok(
+  isolatedAodComposition.configOverrides.every((override) =>
+    override.path.endsWith("/AODconfig.txt")
+  )
+);
+assert.match(
+  isolatedAodComposition.configOverrides
+    .flatMap((override) => Object.values(override.values))
+    .find((value) => value.includes("aod_shared_digits")),
+  /^studio\\aod_shared_digits_[a-z0-9]+$/
+);
+const isolatedCurrentComposition = retargetWatchfaceCompositionToCurrent(
+  detailsForCompositionMode(sharedModeDetails, "current"),
+  {
+    assetReplacements: [{
+      path: `${sharedModeResolution.directory}/shared_digits/00.png`,
+      dataUrl: "current-zero"
+    }],
+    configOverrides: []
+  }
+);
+assert.match(
+  isolatedCurrentComposition.assetReplacements[0].path,
+  /\/studio\/current_shared_digits_[a-z0-9]+\/00\.png$/
+);
+assert.ok(
+  isolatedCurrentComposition.configOverrides.every((override) =>
+    override.path.endsWith("/config.txt")
+  )
+);
+
+const legacyModeRoot = {
+  version: 1,
+  accentColor: "#51e0b5",
+  digitColor: "#ffffff",
+  fontFamily: "",
+  tintLabels: false,
+  tintIcons: false,
+  metricStyles: {},
+  timeStyles: {},
+  dateStyles: {},
+  layerColors: {},
+  effectStyles: [],
+  layerEffects: {},
+  configAssetOverrides: {
+    "aod:background_icon": { enabled: false }
+  },
+  layoutOffsets: {}
+};
+const materializedAod = materializeLegacyAodDesign(
+  legacyModeRoot,
+  null
+);
+assert.equal(materializedAod.digitColor, "#8c8c8c");
+assert.equal(
+  materializedAod.configAssetOverrides["config:background_icon"].enabled,
+  false
+);
+const independentModeRoot = {
+  ...legacyModeRoot,
+  modeDesigns: { aod: materializedAod }
+};
+const activeAod = resolveWatchfaceModeDesign(independentModeRoot, "aod");
+const movedAodRoot = writeWatchfaceModeDesign(
+  independentModeRoot,
+  "aod",
+  {
+    ...activeAod,
+    layoutOffsets: { hours: { dx: 5, dy: 7 } }
+  }
+);
+assert.deepEqual(movedAodRoot.layoutOffsets, {});
+assert.deepEqual(
+  movedAodRoot.modeDesigns.aod.layoutOffsets.hours,
+  { dx: 5, dy: 7 }
+);
+assert.equal(movedAodRoot.modeDesigns.aod.backgroundEdited, undefined);
+const repaintedAodRoot = writeWatchfaceModeDesign(
+  movedAodRoot,
+  "aod",
+  { ...resolveWatchfaceModeDesign(movedAodRoot, "aod"), backgroundColor: "#112233" }
+);
+assert.equal(repaintedAodRoot.modeDesigns.aod.backgroundEdited, true);
 
 const analogResolution = resolution(260, 8, 12);
 analogResolution.config.time_center_pos = "{130,130}";

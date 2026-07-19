@@ -35,6 +35,7 @@ import {
   buildTimeStyleOverrides,
   getAmPmCapability,
   isControlComplicationEnabled,
+  loadStudioImage,
   mergeAssetReplacements,
   mergeConfigOverrides,
   pickPreviewResolution,
@@ -79,6 +80,41 @@ export interface WatchfaceComposeResult {
    * template announces a high-enough version, so those features raise it to 4.
    */
   minWatchFaceVersion?: number;
+}
+
+/** Builds the flattened authored AOD background at every native resolution. */
+export async function buildAodBackgroundComposition(
+  aodDetails: CorosWatchfaceTemplateDetails,
+  backgroundDataUrl: string
+): Promise<Pick<WatchfaceComposeResult, "assetReplacements" | "configOverrides">> {
+  const image = await loadStudioImage(backgroundDataUrl, false);
+  const assetReplacements: CorosWatchfaceAssetReplacement[] = [];
+  const configOverrides: CorosWatchfaceConfigOverride[] = [];
+  for (const resolution of aodDetails.resolutions) {
+    const canvas = document.createElement("canvas");
+    canvas.width = resolution.width;
+    canvas.height = resolution.height;
+    const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+    if (!context) {
+      throw new Error("Could not render the always-on background.");
+    }
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    assetReplacements.push({
+      path: `${resolution.directory}/studio/aod_background/00.png`,
+      dataUrl: canvas.toDataURL("image/png"),
+      create: true,
+      allowDimensionOverride: true
+    });
+    configOverrides.push({
+      path: `${resolution.directory}/AODconfig.txt`,
+      values: {
+        background_icon: "studio\\aod_background\\00.png"
+      }
+    });
+  }
+  return { assetReplacements, configOverrides };
 }
 
 /** Official weather-bearing COROS faces ship this watchface version. */
