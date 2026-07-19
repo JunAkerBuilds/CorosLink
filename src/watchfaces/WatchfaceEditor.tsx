@@ -342,6 +342,7 @@ import {
 } from "./watchfaceEditorGeometry";
 import {
   buildAodBackgroundComposition,
+  buildAodSafeSpriteReplacements,
   composeWatchfaceReplacements,
   deriveDesignDetails,
   toStudioOptions
@@ -1576,7 +1577,10 @@ export function WatchfaceEditor({
       design.layerStrokes
     ]
   );
-  const previewStudioOptions = studioOptions;
+  const previewStudioOptions = useMemo(
+    () => ({ ...studioOptions, previewMode }),
+    [studioOptions, previewMode]
+  );
   const detailsWithConfigEdits = useMemo(
     () =>
       details
@@ -2604,6 +2608,7 @@ export function WatchfaceEditor({
       studioOptionsForResolution(
         {
           ...toStudioOptions(frameDesign),
+          previewMode,
           previewComplicationContent
         },
         frameDetails
@@ -5437,6 +5442,7 @@ export function WatchfaceEditor({
         : 1;
     const exportOptions: WatchfaceStudioOptions = {
       ...snapshotOptions,
+      previewMode: mode,
       batteryIconResolutionScale: resolutionScale,
       effectResolutionScale: resolutionScale,
       nativeSpriteResolutionScale: resolutionScale,
@@ -5637,10 +5643,16 @@ export function WatchfaceEditor({
           "aod"
         );
         const aodDesign = resolveWatchfaceModeDesign(designSnapshot, "aod");
-        aodComposition = retargetWatchfaceCompositionToAod(
+        const retargetedAodComposition = retargetWatchfaceCompositionToAod(
           aodDetails,
           await composeWatchfaceReplacements(aodDetails, aodDesign, loadAssets)
         );
+        aodComposition = {
+          ...retargetedAodComposition,
+          assetReplacements: await buildAodSafeSpriteReplacements(
+            retargetedAodComposition.assetReplacements
+          )
+        };
         if (designSnapshot.modeDesigns.aod.backgroundEdited) {
           const aodBackground = await renderDesignBackground(
             aodDesign,

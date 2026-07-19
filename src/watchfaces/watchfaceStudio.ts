@@ -42,6 +42,8 @@ export interface WatchfaceTypography {
 }
 
 export interface WatchfaceStudioOptions extends WatchfaceTypography {
+  /** Enables firmware-faithful rendering rules for the selected display mode. */
+  previewMode?: WatchfacePreviewMode;
   /** Empty string keeps the template's original digit bitmaps. */
   fontFamily: string;
   digitColor: string;
@@ -104,6 +106,85 @@ export type WatchfaceAssetLoader = (
 
 /** Always-on-display sprites are dimmed to limit OLED burn-in and drain. */
 export const AOD_DIM_FACTOR = 0.55;
+
+/** Minimum authored alpha retained by the AOD-safe sprite cleanup. */
+export const AOD_SAFE_ALPHA_CUTOFF = 250;
+/** Lowest edge coverage eligible for one-pixel AOD smoothing. */
+export const AOD_SAFE_EDGE_ALPHA_FLOOR = 8;
+
+const AOD_EDGE_DITHER_4X4 = [
+  0, 8, 2, 10,
+  12, 4, 14, 6,
+  3, 11, 1, 9,
+  15, 7, 13, 5
+] as const;
+
+/**
+ * Removes faint compositing residue before converting the remaining AOD
+ * artwork to the binary alpha that COROS firmware renders on the watch.
+ * Partially covered pixels can only survive when they directly touch the
+ * opaque core; ordered dithering there softens curves without reviving fills.
+ */
+export function sanitizeWatchfaceAodAlpha(
+  pixels: Uint8ClampedArray,
+  width = 0,
+  height = 0,
+  cutoff = AOD_SAFE_ALPHA_CUTOFF
+): Uint8ClampedArray {
+  const normalizedCutoff = Math.max(1, Math.min(255, Math.round(cutoff)));
+  const pixelCount = Math.floor(pixels.length / 4);
+  const sourceAlpha = new Uint8Array(pixelCount);
+  const core = new Uint8Array(pixelCount);
+  for (let index = 0; index < pixelCount; index += 1) {
+    const alpha = pixels[index * 4 + 3]!;
+    sourceAlpha[index] = alpha;
+    core[index] = alpha >= normalizedCutoff ? 1 : 0;
+    pixels[index * 4 + 3] = core[index] ? 255 : 0;
+  }
+  if (
+    width <= 0 ||
+    height <= 0 ||
+    width * height !== pixelCount
+  ) {
+    return pixels;
+  }
+  const touchesCore = (x: number, y: number): boolean => {
+    for (let dy = -1; dy <= 1; dy += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        if (dx === 0 && dy === 0) continue;
+        const neighborX = x + dx;
+        const neighborY = y + dy;
+        if (
+          neighborX >= 0 &&
+          neighborX < width &&
+          neighborY >= 0 &&
+          neighborY < height &&
+          core[neighborY * width + neighborX]
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      const alpha = sourceAlpha[index]!;
+      if (
+        core[index] ||
+        alpha < AOD_SAFE_EDGE_ALPHA_FLOOR ||
+        !touchesCore(x, y)
+      ) {
+        continue;
+      }
+      const ditherIndex = (y % 4) * 4 + (x % 4);
+      const threshold = (AOD_EDGE_DITHER_4X4[ditherIndex]! + 0.5) * 16;
+      if (alpha >= threshold) pixels[index * 4 + 3] = 255;
+    }
+  }
+  return pixels;
+}
 
 export function dimHexColor(hex: string, factor: number): string {
   const normalized = hex.replace("#", "");
@@ -2638,6 +2719,26 @@ export async function applyWatchfaceDataUrlOpacity(
   if (!context) return dataUrl;
   context.globalAlpha = normalizedOpacity;
   context.drawImage(image, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
+/** Produces the exact binary-alpha PNG used by AOD preview and export. */
+export async function renderWatchfaceAodSafeSprite(
+  dataUrl: string
+): Promise<string> {
+  const image = await loadStudioImage(dataUrl, false);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, image.naturalWidth);
+  canvas.height = Math.max(1, image.naturalHeight);
+  const context = canvas.getContext("2d", {
+    colorSpace: "display-p3",
+    willReadFrequently: true
+  });
+  if (!context) return dataUrl;
+  context.drawImage(image, 0, 0);
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  sanitizeWatchfaceAodAlpha(imageData.data, canvas.width, canvas.height);
+  context.putImageData(imageData, 0, 0);
   return canvas.toDataURL("image/png");
 }
 
@@ -6275,6 +6376,56 @@ function drawStudioLayerImage(
   rotateSprite = true,
   additionalOpacityLayerId?: string
 ): void {
+  const renderAodSafeAlpha = (
+    source: CanvasImageSource,
+    alpha = 1
+  ): CanvasImageSource => {
+    if (options.previewMode !== "aod") return source;
+    const sized = source as {
+      naturalWidth?: number;
+      naturalHeight?: number;
+      videoWidth?: number;
+      videoHeight?: number;
+      width?: number;
+      height?: number;
+    };
+    const sourceWidth =
+      sized.naturalWidth ?? sized.videoWidth ?? sized.width;
+    const sourceHeight =
+      sized.naturalHeight ?? sized.videoHeight ?? sized.height;
+    if (
+      typeof sourceWidth !== "number" ||
+      typeof sourceHeight !== "number" ||
+      sourceWidth <= 0 ||
+      sourceHeight <= 0
+    ) {
+      return source;
+    }
+    const mask = document.createElement("canvas");
+    mask.width = Math.max(1, Math.round(sourceWidth));
+    mask.height = Math.max(1, Math.round(sourceHeight));
+    const maskContext = mask.getContext("2d", {
+      colorSpace: "display-p3",
+      willReadFrequently: true
+    });
+    if (!maskContext) return source;
+    try {
+      maskContext.globalAlpha = Math.max(0, Math.min(1, alpha));
+      maskContext.drawImage(source, 0, 0, mask.width, mask.height);
+      maskContext.globalAlpha = 1;
+      const imageData = maskContext.getImageData(
+        0,
+        0,
+        mask.width,
+        mask.height
+      );
+      sanitizeWatchfaceAodAlpha(imageData.data, mask.width, mask.height);
+      maskContext.putImageData(imageData, 0, 0);
+      return mask;
+    } catch {
+      return source;
+    }
+  };
   const opacity =
     resolveWatchfaceLayerOpacity(options, layerId) *
     resolveWatchfaceLayerOpacity(options, additionalOpacityLayerId);
@@ -6307,7 +6458,11 @@ function drawStudioLayerImage(
     ? resolveWatchfaceLayerStrokes(options, layerId)
     : [];
   if (effects.length === 0 && strokes.length === 0 && !rotation) {
-    drawLayer(image, x, y, width, height, opacity);
+    if (options.previewMode === "aod") {
+      drawLayer(renderAodSafeAlpha(image, opacity), x, y, width, height);
+    } else {
+      drawLayer(image, x, y, width, height, opacity);
+    }
     return;
   }
   const source = document.createElement("canvas");
@@ -6315,7 +6470,11 @@ function drawStudioLayerImage(
   source.height = Math.max(1, Math.ceil(height));
   const sourceContext = source.getContext("2d", { colorSpace: "display-p3" });
   if (!sourceContext) {
-    drawLayer(image, x, y, width, height, opacity);
+    if (options.previewMode === "aod") {
+      drawLayer(renderAodSafeAlpha(image, opacity), x, y, width, height);
+    } else {
+      drawLayer(image, x, y, width, height, opacity);
+    }
     return;
   }
   sourceContext.imageSmoothingEnabled = true;
@@ -6336,7 +6495,11 @@ function drawStudioLayerImage(
     sourceContext.drawImage(image, 0, 0, width, height);
   }
   if (effects.length === 0 && strokes.length === 0) {
-    drawLayer(source, x, y, width, height, opacity);
+    if (options.previewMode === "aod") {
+      drawLayer(renderAodSafeAlpha(source, opacity), x, y, width, height);
+    } else {
+      drawLayer(source, x, y, width, height, opacity);
+    }
     return;
   }
   const rendered = renderWatchfaceCanvasDecorationsWithOpacity(
@@ -6351,7 +6514,7 @@ function drawStudioLayerImage(
     true
   );
   drawLayer(
-    rendered.canvas,
+    renderAodSafeAlpha(rendered.canvas),
     x - rendered.padding.left,
     y - rendered.padding.top
   );

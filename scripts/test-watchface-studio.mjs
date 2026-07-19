@@ -4,6 +4,7 @@ import {
   analogCenterLayoutGroupId,
   applyConfigOverridesToDetails,
   applyConfigTextEditsToDetails,
+  sanitizeWatchfaceAodAlpha,
   buildAmPmOverrides,
   buildControlTemperatureOverrides,
   buildControlIconPositionOverrides,
@@ -207,6 +208,59 @@ assert.equal(corosMonthSpriteIndex(11), 0);
 assert.equal(corosMonthLabelForSpriteIndex(0), "DEC");
 assert.equal(corosMonthLabelForSpriteIndex(7), "JUL");
 assert.equal(watchfaceEffectRenderScale(520 / 416, 416 / 800), 0.65);
+assert.deepEqual(
+  [...sanitizeWatchfaceAodAlpha(
+    new Uint8ClampedArray([
+      10, 20, 30, 0,
+      40, 50, 60, 1,
+      70, 80, 90, 4,
+      95, 100, 105, 249,
+      96, 101, 106, 250,
+      100, 110, 120, 255
+    ])
+  )],
+  [
+    10, 20, 30, 0,
+    40, 50, 60, 0,
+    70, 80, 90, 0,
+    95, 100, 105, 0,
+    96, 101, 106, 255,
+    100, 110, 120, 255
+  ],
+  "AOD cleanup should discard faint residue and retain a binary outline"
+);
+const smoothedAodEdge = new Uint8ClampedArray(5 * 5 * 4);
+const setAodAlpha = (x, y, alpha) => {
+  smoothedAodEdge[(y * 5 + x) * 4 + 3] = alpha;
+};
+setAodAlpha(2, 2, 255);
+setAodAlpha(1, 1, 80);
+setAodAlpha(2, 1, 200);
+setAodAlpha(3, 2, 249);
+setAodAlpha(4, 4, 249);
+sanitizeWatchfaceAodAlpha(smoothedAodEdge, 5, 5);
+const aodAlphaAt = (x, y) => smoothedAodEdge[(y * 5 + x) * 4 + 3];
+assert.equal(aodAlphaAt(2, 2), 255, "opaque outline core should remain on");
+assert.equal(
+  aodAlphaAt(1, 1),
+  255,
+  "ordered dithering should retain eligible coverage beside the outline"
+);
+assert.equal(
+  aodAlphaAt(2, 1),
+  0,
+  "ordered dithering should omit edge coverage below its pixel threshold"
+);
+assert.equal(
+  aodAlphaAt(3, 2),
+  255,
+  "strong adjacent coverage should smooth the binary outline"
+);
+assert.equal(
+  aodAlphaAt(4, 4),
+  0,
+  "partial-alpha fill away from the outline must remain transparent"
+);
 
 assert.equal(normalizeRasterFontGlyphs("0 1 2 2 a"), "012A");
 const rasterFont = {

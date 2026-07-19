@@ -41,6 +41,7 @@ import {
   pickPreviewResolution,
   rasterFontSupportsText,
   rebaseNegativeControlChildren,
+  renderWatchfaceAodSafeSprite,
   type WatchfaceAssetLoader,
   type WatchfaceDateStyles,
   type WatchfaceMetricStyles,
@@ -87,6 +88,26 @@ export interface WatchfaceComposeResult {
    * template announces a high-enough version, so those features raise it to 4.
    */
   minWatchFaceVersion?: number;
+}
+
+/**
+ * Cleans dynamic AOD sprites after every style/effect pass. Background art is
+ * intentionally excluded because it is a flattened canvas rather than a
+ * firmware-tinted glyph mask.
+ */
+export async function buildAodSafeSpriteReplacements(
+  replacements: CorosWatchfaceAssetReplacement[]
+): Promise<CorosWatchfaceAssetReplacement[]> {
+  return Promise.all(
+    replacements.map(async (replacement) =>
+      /\/studio\/aod_background(?:[\/_])/i.test(replacement.path)
+        ? replacement
+        : {
+            ...replacement,
+            dataUrl: await renderWatchfaceAodSafeSprite(replacement.dataUrl)
+          }
+    )
+  );
 }
 
 /** Builds the flattened authored AOD background at every native resolution. */
