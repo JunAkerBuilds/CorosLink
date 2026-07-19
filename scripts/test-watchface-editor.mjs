@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import {
+  makeWatchfaceDragForegroundDesign
+} from "../src/watchfaces/watchfaceDragIsolation.ts";
+import {
   WATCHFACE_EDITOR_HISTORY_LIMIT,
   beginWatchfaceEditorHistoryTransaction,
   cancelWatchfaceEditorHistoryTransaction,
@@ -89,6 +92,23 @@ import {
   normalizeWatchfaceLayerOpacity,
   resolveWatchfaceLayerOpacity
 } from "../src/watchfaces/watchfaceLayerOpacity.ts";
+
+const dragBackgroundSource = {
+  backgroundColor: "#123456",
+  artwork: { dataUrl: "data:image/png;base64,source" },
+  artworkVisible: true,
+  foregroundMarker: "preserved"
+};
+const dragForeground = makeWatchfaceDragForegroundDesign(dragBackgroundSource);
+assert.equal(dragForeground.backgroundColor, "transparent");
+assert.equal(dragForeground.artwork, null);
+assert.equal(dragForeground.artworkVisible, false);
+assert.equal(dragForeground.foregroundMarker, "preserved");
+assert.equal(
+  dragBackgroundSource.backgroundColor,
+  "#123456",
+  "drag isolation does not mutate the saved design"
+);
 
 assert.equal(WATCHFACE_EDITOR_HISTORY_LIMIT, 50);
 assert.equal(normalizeWatchfaceLayerOpacity(-0.2), 0);

@@ -352,6 +352,9 @@ import {
   renderDesignBackground
 } from "./watchfaceBackground";
 import {
+  makeWatchfaceDragForegroundDesign
+} from "./watchfaceDragIsolation";
+import {
   materializeLegacyAodDesign,
   resolveWatchfaceModeDesign,
   writeWatchfaceModeDesign
@@ -2495,12 +2498,10 @@ export function WatchfaceEditor({
     };
 
     const moving: CorosWatchfaceDesignState = {
-      ...design,
-      artwork: null,
+      ...makeWatchfaceDragForegroundDesign(design),
       // The moving frame is composited over the stationary base frame. Keep
-      // its background transparent so a clipped piece of project artwork does
-      // not travel with the selected components while dragging.
-      artworkVisible: false,
+      // its full-face background transparent so only selected foreground
+      // components travel while dragging.
       backgroundElements: (design.backgroundElements ?? []).filter(
         (element) => movingElementIds.has(element.id)
       ),
