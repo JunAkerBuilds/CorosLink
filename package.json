@@ -57,6 +57,7 @@
     "legacy614a:slender": "npm run build:electron && node scripts/build-slender-multidata-legacy.mjs",
     "test:watchface-studio": "node --experimental-strip-types scripts/test-watchface-studio.mjs",
     "test:watchface-editor": "node --experimental-strip-types scripts/test-watchface-editor.mjs",
+    "test:watchface-strokes": "electron scripts/test-watchface-strokes.cjs",
     "test:coros-watchface-creator": "npm run build:electron && electron scripts/test-coros-watchface-creator.cjs",
     "test:intervals-service": "npm run build:electron && node scripts/test-intervals-service.mjs",
     "test:intervals-imported-store": "npm run build:electron && node scripts/test-intervals-imported-store.mjs",

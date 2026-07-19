@@ -999,10 +999,42 @@ assert.deepEqual(
   { dx: 5, dy: 7 }
 );
 assert.equal(movedAodRoot.modeDesigns.aod.backgroundEdited, undefined);
-const repaintedAodRoot = writeWatchfaceModeDesign(
+const fadedAodRoot = writeWatchfaceModeDesign(
   movedAodRoot,
   "aod",
-  { ...resolveWatchfaceModeDesign(movedAodRoot, "aod"), backgroundColor: "#112233" }
+  {
+    ...resolveWatchfaceModeDesign(movedAodRoot, "aod"),
+    layerOpacities: { hours: 0.35 }
+  }
+);
+assert.equal(fadedAodRoot.layerOpacities, undefined);
+assert.equal(fadedAodRoot.modeDesigns.aod.layerOpacities.hours, 0.35);
+const strokedAodRoot = writeWatchfaceModeDesign(
+  fadedAodRoot,
+  "aod",
+  {
+    ...resolveWatchfaceModeDesign(fadedAodRoot, "aod"),
+    layerStrokes: {
+      hours: [{
+        id: "aod-stroke",
+        enabled: true,
+        paint: { kind: "solid", color: "#ff0000" },
+        opacity: 1,
+        position: "outside",
+        weight: 2
+      }]
+    }
+  }
+);
+assert.equal(strokedAodRoot.layerStrokes, undefined);
+assert.equal(
+  strokedAodRoot.modeDesigns.aod.layerStrokes.hours[0].id,
+  "aod-stroke"
+);
+const repaintedAodRoot = writeWatchfaceModeDesign(
+  strokedAodRoot,
+  "aod",
+  { ...resolveWatchfaceModeDesign(strokedAodRoot, "aod"), backgroundColor: "#112233" }
 );
 assert.equal(repaintedAodRoot.modeDesigns.aod.backgroundEdited, true);
 

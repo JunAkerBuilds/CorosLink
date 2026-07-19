@@ -1,4 +1,4 @@
-import { ChevronDown, Loader2, Type } from "lucide-react";
+import { ChevronDown, Info, Loader2, Type } from "lucide-react";
 import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CorosWatchfaceRasterFont } from "../../electron/types";
@@ -339,7 +339,7 @@ export function LocalFontPicker({
               ))}
             </div>
             {matchingFamilies.length > 100 ? (
-              <p className="watchface-font-picker-status">Showing the first 100 matches—keep typing to narrow the list.</p>
+              <p className="watchface-font-picker-status">Showing the first 100 matches. Keep typing to narrow the list.</p>
             ) : null}
 
             <div className="watchface-font-picker-actions">
@@ -406,7 +406,8 @@ export function LocalFontPicker({
       ) : null}
       {typography && !value && !rasterFontIsActive ? (
         <p className="watchface-typography-hint">
-          Choose a local font and rasterize it into the preview before adjusting its weight or spacing.
+          <Info size={13} aria-hidden="true" />
+          Inherited from template
         </p>
       ) : null}
       {typography && rasterFontIsActive ? (

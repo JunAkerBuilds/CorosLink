@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import {
+  makeWatchfaceDragForegroundDesign
+} from "../src/watchfaces/watchfaceDragIsolation.ts";
+import {
   WATCHFACE_EDITOR_HISTORY_LIMIT,
   beginWatchfaceEditorHistoryTransaction,
   cancelWatchfaceEditorHistoryTransaction,
@@ -74,8 +77,204 @@ import {
   watchfaceSafeAreaBounds,
   writeWatchfacePlacementPreferences
 } from "../src/watchfaces/watchfaceEditorSnapping.ts";
+import {
+  WATCHFACE_INSPECTOR_DEFAULT_OPEN,
+  watchfaceInspectorSectionPlan
+} from "../src/watchfaces/watchfaceInspectorSections.ts";
+import {
+  createWatchfaceStroke,
+  migrateLegacyBackgroundElementStrokes,
+  normalizeWatchfaceStroke,
+  watchfaceStrokePadding
+} from "../src/watchfaces/watchfaceEditorStrokes.ts";
+import {
+  hasWatchfaceLayerOpacity,
+  normalizeWatchfaceLayerOpacity,
+  resolveWatchfaceLayerOpacity
+} from "../src/watchfaces/watchfaceLayerOpacity.ts";
+
+const dragBackgroundSource = {
+  backgroundColor: "#123456",
+  artwork: { dataUrl: "data:image/png;base64,source" },
+  artworkVisible: true,
+  foregroundMarker: "preserved"
+};
+const dragForeground = makeWatchfaceDragForegroundDesign(dragBackgroundSource);
+assert.equal(dragForeground.backgroundColor, "transparent");
+assert.equal(dragForeground.artwork, null);
+assert.equal(dragForeground.artworkVisible, false);
+assert.equal(dragForeground.foregroundMarker, "preserved");
+assert.equal(
+  dragBackgroundSource.backgroundColor,
+  "#123456",
+  "drag isolation does not mutate the saved design"
+);
 
 assert.equal(WATCHFACE_EDITOR_HISTORY_LIMIT, 50);
+assert.equal(normalizeWatchfaceLayerOpacity(-0.2), 0);
+assert.equal(normalizeWatchfaceLayerOpacity(1.4), 1);
+assert.equal(normalizeWatchfaceLayerOpacity(Number.NaN), 1);
+assert.equal(resolveWatchfaceLayerOpacity({}, "hours"), 1);
+assert.equal(
+  resolveWatchfaceLayerOpacity({ layerOpacities: { hours: 0.42 } }, "hours"),
+  0.42
+);
+assert.equal(
+  hasWatchfaceLayerOpacity({ layerOpacities: { hours: 0.42 } }, "hours"),
+  true
+);
+
+const inspectorSectionFixtures = [
+  ["background", {}, false, true, true, false, false],
+  ["background", {}, false, true, true, true, false],
+  ["time", {}, true, true, true, true, false],
+  ["date", {}, true, true, true, true, false],
+  ["weekday", {}, true, true, true, true, false],
+  ["seconds", {}, true, true, true, true, false],
+  ["separators", {}, true, true, false, true, true],
+  ["battery", {}, true, true, true, true, false],
+  ["batteryIcon", {}, true, false, true, true, false],
+  ["controlBatteryIcon", {}, true, false, false, false, true],
+  ["complication", {}, true, true, true, true, false],
+  ["metric", {}, true, true, true, true, false],
+  ["weather", {}, true, true, true, false, true],
+  ["configAsset", {}, true, false, false, false, true],
+  ["customSprite", {}, true, true, true, true, true],
+  ["backgroundElement", { backgroundKind: "rect" }, true, true, true, true, true],
+  ["backgroundElement", { backgroundKind: "ellipse" }, true, true, true, true, true],
+  ["backgroundElement", { backgroundKind: "line" }, true, true, true, true, true],
+  ["backgroundElement", { backgroundKind: "text" }, true, true, true, true, true]
+];
+
+for (const [
+  kind,
+  metadata,
+  hasTransform,
+  hasAppearance,
+  hasStroke,
+  hasEffects,
+  hasAdvanced
+] of inspectorSectionFixtures) {
+  const plan = watchfaceInspectorSectionPlan({
+    kind,
+    ...metadata,
+    hasTransform,
+    hasAppearance,
+    hasStroke,
+    hasEffects,
+    hasAdvanced
+  });
+  const expectedIds = [
+    "layer",
+    ...(hasTransform ? ["transform"] : []),
+    ...(hasAppearance ? ["appearance"] : []),
+    ...(hasStroke ? ["stroke"] : []),
+    "specific",
+    ...(hasEffects ? ["effects"] : []),
+    ...(hasAdvanced ? ["advanced"] : [])
+  ];
+  assert.deepEqual(
+    plan.map((section) => section.id),
+    expectedIds,
+    `${kind}${metadata.backgroundKind ? `:${metadata.backgroundKind}` : ""} uses the inspector section order`
+  );
+  assert.equal(
+    plan.find((section) => section.id === "effects")?.defaultOpen,
+    hasEffects ? false : undefined,
+    "Effects starts collapsed and is absent when irrelevant"
+  );
+  assert.equal(
+    plan.find((section) => section.id === "advanced")?.defaultOpen,
+    hasAdvanced ? false : undefined,
+    "Advanced starts collapsed and is absent when irrelevant"
+  );
+  for (const section of plan.filter(
+    (candidate) => candidate.id !== "effects" && candidate.id !== "advanced"
+  )) {
+    assert.equal(section.defaultOpen, true, `${section.id} starts expanded`);
+  }
+}
+
+assert.deepEqual(WATCHFACE_INSPECTOR_DEFAULT_OPEN, {
+  layer: true,
+  transform: true,
+  appearance: true,
+  stroke: true,
+  specific: true,
+  effects: false,
+  advanced: false
+});
+
+const defaultStroke = createWatchfaceStroke("#2e05ff");
+assert.equal(defaultStroke.paint.kind, "solid");
+assert.equal(defaultStroke.paint.color, "#2e05ff");
+assert.equal(defaultStroke.position, "outside");
+assert.equal(defaultStroke.weight, 1);
+assert.equal(defaultStroke.opacity, 1);
+assert.equal(defaultStroke.enabled, true);
+
+const normalizedGradientStroke = normalizeWatchfaceStroke({
+  id: "",
+  enabled: true,
+  paint: {
+    kind: "linear-gradient",
+    from: "invalid",
+    to: "#123456",
+    angle: -90
+  },
+  opacity: 2,
+  position: "center",
+  weight: 500
+});
+assert.match(normalizedGradientStroke.id, /^stroke-/);
+assert.deepEqual(normalizedGradientStroke.paint, {
+  kind: "linear-gradient",
+  from: "#51e0b5",
+  to: "#123456",
+  angle: 270
+});
+assert.equal(normalizedGradientStroke.opacity, 1);
+assert.equal(normalizedGradientStroke.position, "center");
+assert.equal(normalizedGradientStroke.weight, 64);
+
+assert.deepEqual(
+  watchfaceStrokePadding([
+    { ...defaultStroke, weight: 10, position: "inside" },
+    { ...defaultStroke, id: "center", weight: 9, position: "center" },
+    { ...defaultStroke, id: "outside", weight: 7, position: "outside" }
+  ], 0.5),
+  { left: 4, top: 4, right: 4, bottom: 4 }
+);
+
+const legacyStrokeMigration = migrateLegacyBackgroundElementStrokes(
+  [
+    {
+      id: "legacy",
+      kind: "rect",
+      x: 10,
+      y: 20,
+      rotation: 0,
+      width: 100,
+      height: 80,
+      cornerRadius: 8,
+      fill: "#000000",
+      strokeColor: "#abcdef",
+      strokeWidth: 6
+    }
+  ],
+  undefined
+);
+assert.equal(legacyStrokeMigration.layerStrokes["bgel:legacy"].length, 1);
+assert.equal(
+  legacyStrokeMigration.layerStrokes["bgel:legacy"][0].position,
+  "center"
+);
+assert.equal(
+  legacyStrokeMigration.layerStrokes["bgel:legacy"][0].paint.color,
+  "#abcdef"
+);
+assert.equal("strokeColor" in legacyStrokeMigration.elements[0], false);
+assert.equal("strokeWidth" in legacyStrokeMigration.elements[0], false);
 
 const importedImage = {
   id: "original",
@@ -540,12 +739,14 @@ const paddingDetails = {
       time_hour_high_pos: "{200,80}",
       time_hour_low_pos: "{230,80}",
       battery_icon_pos: "{50,60}",
-      control_step_rect: "{10,20,40,50}"
+      control_step_rect: "{10,20,40,50}",
+      am_pm_icon_pos: "{300,120}",
+      weather_icon_pos: "{500,160}"
     }
   }))
 };
 const paddingByResolution = new Map([
-  ["800", new Map([["steps", { left: 16, top: 12, right: 20, bottom: 24 }], ["hours", { left: 16, top: 12, right: 20, bottom: 24 }], ["batteryIcon", { left: 16, top: 12, right: 20, bottom: 24 }], ["complication", { left: 16, top: 12, right: 20, bottom: 24 }]])],
+  ["800", new Map([["steps", { left: 16, top: 12, right: 20, bottom: 24 }], ["hours", { left: 16, top: 12, right: 20, bottom: 24 }], ["batteryIcon", { left: 16, top: 12, right: 20, bottom: 24 }], ["complication", { left: 16, top: 12, right: 20, bottom: 24 }], ["ampm", { left: 16, top: 12, right: 20, bottom: 24 }], ["weather", { left: 16, top: 12, right: 20, bottom: 24 }]])],
   ["416", new Map([["steps", { left: 8, top: 6, right: 10, bottom: 12 }]])],
   ["260", new Map([["steps", { left: 5, top: 4, right: 7, bottom: 8 }]])],
   ["240", new Map([["steps", { left: 5, top: 4, right: 6, bottom: 7 }]])]
@@ -559,6 +760,8 @@ assert.equal(paddingOverrides[0].values.steps_rect, "{84,88,160,144}");
 assert.equal(paddingOverrides[0].values.time_hour_high_pos, "{184,68}");
 assert.equal(paddingOverrides[0].values.battery_icon_pos, "{34,48}");
 assert.equal(paddingOverrides[0].values.control_step_rect, "{-6,8,60,74}");
+assert.equal(paddingOverrides[0].values.am_pm_icon_pos, "{284,108}");
+assert.equal(paddingOverrides[0].values.weather_icon_pos, "{484,148}");
 assert.equal(paddingOverrides[1].values.steps_rect, "{92,94,150,132}");
 assert.equal(paddingOverrides[2].values.steps_rect, "{95,96,147,128}");
 assert.equal(paddingOverrides[3].values.steps_rect, "{95,96,146,127}");

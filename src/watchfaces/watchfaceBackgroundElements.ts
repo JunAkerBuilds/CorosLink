@@ -1,9 +1,12 @@
 import type {
   CorosWatchfaceBackgroundElement,
   CorosWatchfaceGradientFill,
-  CorosWatchfaceShadowEffect
+  CorosWatchfaceShadowEffect,
+  CorosWatchfaceStroke
 } from "../../electron/types";
-import { renderWatchfaceCanvasEffects } from "./watchfaceEditorEffects";
+import {
+  renderWatchfaceCanvasDecorationsWithOpacity
+} from "./watchfaceEditorStrokes";
 
 /** All background shapes are authored in the 800×800 background pixel space. */
 export const BACKGROUND_SPACE = 800;
@@ -145,10 +148,11 @@ function applyFill(
 
 function drawBackgroundElement(
   context: CanvasRenderingContext2D,
-  element: CorosWatchfaceBackgroundElement
+  element: CorosWatchfaceBackgroundElement,
+  opacity = Math.max(0, Math.min(1, element.opacity ?? 1))
 ): void {
   context.save();
-  context.globalAlpha = Math.max(0, Math.min(1, element.opacity ?? 1));
+  context.globalAlpha = opacity;
   context.translate(element.x, element.y);
   context.rotate((element.rotation * Math.PI) / 180);
 
@@ -208,12 +212,14 @@ function drawBackgroundElement(
 export function drawBackgroundElements(
   context: CanvasRenderingContext2D,
   elements: CorosWatchfaceBackgroundElement[],
-  effectsForId?: (id: string) => CorosWatchfaceShadowEffect[]
+  effectsForId?: (id: string) => CorosWatchfaceShadowEffect[],
+  strokesForId?: (id: string) => CorosWatchfaceStroke[]
 ): void {
   for (const element of elements) {
     if (element.visible === false) continue;
     const effects = effectsForId?.(`bgel:${element.id}`) ?? [];
-    if (effects.length === 0) {
+    const strokes = strokesForId?.(`bgel:${element.id}`) ?? [];
+    if (effects.length === 0 && strokes.length === 0) {
       drawBackgroundElement(context, element);
       continue;
     }
@@ -224,7 +230,16 @@ export function drawBackgroundElements(
     if (!layerContext) continue;
     layerContext.imageSmoothingEnabled = true;
     layerContext.imageSmoothingQuality = "high";
-    drawBackgroundElement(layerContext, element);
-    context.drawImage(renderWatchfaceCanvasEffects(layer, effects).canvas, 0, 0);
+    drawBackgroundElement(layerContext, element, 1);
+    context.drawImage(
+      renderWatchfaceCanvasDecorationsWithOpacity(
+        layer,
+        strokes,
+        effects,
+        Math.max(0, Math.min(1, element.opacity ?? 1))
+      ).canvas,
+      0,
+      0
+    );
   }
 }

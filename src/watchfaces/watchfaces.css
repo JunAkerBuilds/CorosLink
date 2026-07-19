@@ -3527,6 +3527,609 @@
 
 /* Properties */
 
+.watchface-shell .wf-property-section {
+  border-bottom: 1px solid var(--wf-border);
+}
+
+.watchface-shell .wf-property-section:last-child {
+  border-bottom: 0;
+}
+
+.watchface-shell .wf-property-section-header {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 4px;
+}
+
+.watchface-shell .wf-property-section-trigger {
+  display: flex;
+  min-width: 0;
+  min-height: 36px;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0 4px;
+  font: inherit;
+  font-size: var(--wf-text-sm);
+  font-weight: 760;
+  text-align: left;
+}
+
+.watchface-shell .wf-property-section-trigger:hover {
+  background: color-mix(in srgb, var(--wf-surface-hover) 62%, transparent);
+}
+
+.watchface-shell .wf-property-section-trigger:focus-visible,
+.watchface-shell .wf-property-section-actions button:focus-visible,
+.watchface-shell .wf-property-icon-button:focus-visible,
+.watchface-shell .wf-align-icon-grid button:focus-visible,
+.watchface-shell .wf-transform-action-row button:focus-visible,
+.watchface-shell .wf-stroke-row-action:focus-visible,
+.watchface-shell .wf-stroke-advanced-toggle:focus-visible,
+.watchface-shell .wf-nested-disclosure > summary:focus-visible {
+  outline: 2px solid var(--wf-focus);
+  outline-offset: 1px;
+}
+
+.watchface-shell .wf-property-section-chevron {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  transition: transform 120ms ease;
+}
+
+.watchface-shell .wf-property-section.is-open .wf-property-section-chevron {
+  transform: rotate(90deg);
+}
+
+.watchface-shell .wf-property-section-status {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  border: 1px solid var(--wf-border);
+  border-radius: 999px;
+  background: var(--wf-surface-hover);
+  color: var(--text-secondary);
+  padding: 0 5px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  place-items: center;
+}
+
+.watchface-shell .wf-property-section-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  padding-right: 3px;
+}
+
+.watchface-shell .wf-property-section-content {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  padding: 3px 4px 12px 20px;
+}
+
+.watchface-shell .wf-property-section-content > fieldset {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.watchface-shell .wf-property-section.is-disabled .wf-property-section-content {
+  opacity: 0.48;
+}
+
+.watchface-shell .wf-property-section.is-disabled[data-section="layer"] .wf-property-section-content {
+  opacity: 1;
+}
+
+.watchface-shell :is(.wf-property-stack, .wf-transform-stack, .wf-effects-inspector) {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+}
+
+.watchface-shell .wf-layer-property {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+}
+
+.watchface-shell .wf-layer-property-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--wf-border);
+  border-radius: var(--wf-control-radius);
+  background: var(--wf-surface-raised);
+  color: var(--text-secondary);
+  place-items: center;
+}
+
+.watchface-shell .wf-layer-property-main {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.watchface-shell :is(.wf-layer-name-field, .wf-layer-name-readout, .wf-layer-type-readout) {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+}
+
+.watchface-shell :is(.wf-layer-name-field, .wf-layer-name-readout, .wf-layer-type-readout) > span {
+  color: var(--text-tertiary);
+  font-size: var(--wf-text-xs);
+}
+
+.watchface-shell :is(.wf-layer-name-readout, .wf-layer-type-readout) > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--wf-text-sm);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-layer-type-readout > strong {
+  color: var(--text-secondary);
+  font-weight: 560;
+}
+
+.watchface-shell .wf-layer-name-field input,
+.watchface-shell .wf-property-section :is(input[type="number"], input[type="text"], select) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  border: 1px solid var(--wf-border);
+  border-radius: var(--wf-control-radius);
+  background: var(--wf-surface-raised);
+  color: var(--text-primary);
+  padding: 0 8px;
+  font: inherit;
+  font-size: var(--wf-text-sm);
+}
+
+.watchface-shell .wf-property-section :is(input[type="number"], input[type="text"]) {
+  font-variant-numeric: tabular-nums;
+}
+
+.watchface-shell .wf-property-section :is(input, select):focus-visible {
+  border-color: var(--wf-accent-border);
+  outline: 2px solid color-mix(in srgb, var(--wf-focus) 52%, transparent);
+  outline-offset: 0;
+}
+
+.watchface-shell .wf-property-icon-button,
+.watchface-shell .wf-property-section-actions .watchface-layer-lock {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0;
+  place-items: center;
+}
+
+.watchface-shell .wf-property-icon-button:hover:not(:disabled),
+.watchface-shell .wf-property-section-actions .watchface-layer-lock:hover:not(:disabled) {
+  border-color: var(--wf-border);
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-property-icon-button[aria-pressed="true"],
+.watchface-shell .wf-property-section-actions .watchface-layer-lock.is-locked {
+  border-color: var(--wf-accent-border);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.watchface-shell .wf-inline-property-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.watchface-shell .wf-input-with-unit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.watchface-shell .wf-input-with-unit > span:last-child {
+  min-width: 14px;
+  color: var(--text-tertiary);
+  font-size: var(--wf-text-xs);
+  text-align: center;
+}
+
+.watchface-shell .wf-control-label {
+  color: var(--text-tertiary);
+  font-size: var(--wf-text-xs);
+  font-weight: 650;
+}
+
+.watchface-shell :is(.wf-transform-action-row, .wf-align-icon-grid) {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.watchface-shell .wf-transform-action-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.watchface-shell :is(.wf-transform-action-row, .wf-align-icon-grid) button {
+  display: inline-grid;
+  min-width: 0;
+  min-height: 30px;
+  border: 1px solid var(--wf-border);
+  border-radius: 6px;
+  background: var(--wf-surface-raised);
+  color: var(--text-secondary);
+  padding: 0;
+  place-items: center;
+}
+
+.watchface-shell :is(.wf-transform-action-row, .wf-align-icon-grid) button:hover:not(:disabled) {
+  border-color: var(--wf-accent-border);
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-transform-action-row button[aria-pressed="true"] {
+  border-color: var(--wf-accent-border);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.watchface-shell .wf-property-section :is(.field, .watchface-inspector-field) {
+  gap: 5px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--wf-text-xs);
+}
+
+.watchface-shell .wf-property-section :is(.watchface-color-control, .wf-color-control) {
+  min-height: 34px;
+  gap: 7px;
+  padding: 2px 4px;
+}
+
+.watchface-shell .wf-property-section :is(.watchface-color-none, .wf-use-default) {
+  min-height: 28px;
+}
+
+.watchface-shell .wf-property-section :is(.watchface-position-inputs, .wf-position-inputs) input {
+  min-height: 32px;
+  font-size: var(--wf-text-sm);
+}
+
+.watchface-shell .wf-nested-disclosure {
+  border-top: 1px solid var(--wf-border);
+  padding-top: 7px;
+}
+
+.watchface-shell .wf-nested-disclosure > summary {
+  cursor: pointer;
+  border-radius: 5px;
+  color: var(--text-secondary);
+  padding: 4px 2px;
+  font-size: var(--wf-text-xs);
+  font-weight: 650;
+}
+
+.watchface-shell .wf-nested-disclosure[open] > summary {
+  margin-bottom: 9px;
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-asset-dimensions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: var(--wf-text-xs);
+}
+
+.watchface-shell .wf-asset-dimensions strong {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-image-property-preview {
+  min-height: 88px;
+}
+
+.watchface-shell .wf-image-property-preview img {
+  height: 88px;
+}
+
+.watchface-shell .wf-effect-scope {
+  color: var(--text-tertiary);
+  font-size: var(--wf-text-xs);
+}
+
+.watchface-shell .wf-effects-inspector {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.watchface-shell :is(.wf-stroke-inspector, .wf-stroke-details) {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+
+.watchface-shell .wf-stroke-stack {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.watchface-shell .wf-stroke-row {
+  display: grid;
+  position: relative;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 70px 28px 28px;
+  align-items: center;
+  gap: 5px;
+  border-radius: 5px;
+  cursor: grab;
+}
+
+.watchface-shell .wf-stroke-row.is-selected {
+  outline: 1px solid color-mix(in srgb, var(--accent) 52%, transparent);
+  outline-offset: 3px;
+}
+
+.watchface-shell .wf-stroke-row:active {
+  cursor: grabbing;
+}
+
+.watchface-shell .wf-stroke-row.is-disabled
+  :is(.wf-stroke-color-field, .wf-stroke-opacity-field) {
+  opacity: 0.48;
+}
+
+.watchface-shell .wf-stroke-color-field {
+  display: grid;
+  min-width: 0;
+  min-height: 32px;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: color-mix(
+    in srgb,
+    var(--wf-surface-raised) 92%,
+    var(--wf-surface)
+  );
+  padding: 3px 4px;
+}
+
+.watchface-shell .wf-stroke-swatch {
+  display: block;
+  position: relative;
+  width: 24px;
+  height: 24px;
+  overflow: hidden;
+  border: 1px solid var(--wf-border-strong);
+  border-radius: 4px;
+}
+
+.watchface-shell .wf-stroke-swatch input[type="color"] {
+  position: absolute;
+  inset: -6px;
+  width: calc(100% + 12px);
+  height: calc(100% + 12px);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.watchface-shell .wf-property-section .wf-stroke-hex-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 26px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0 3px;
+  font-family: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.015em;
+  text-transform: uppercase;
+}
+
+.watchface-shell .wf-stroke-opacity-field {
+  display: grid;
+  min-width: 0;
+  min-height: 32px;
+  grid-template-columns: minmax(0, 1fr) 14px;
+  align-items: center;
+  overflow: hidden;
+  border-radius: 5px;
+  background: color-mix(
+    in srgb,
+    var(--wf-surface-raised) 92%,
+    var(--wf-surface)
+  );
+  color: var(--text-secondary);
+  padding-right: 6px;
+}
+
+.watchface-shell .wf-property-section .wf-stroke-opacity-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0 2px 0 9px;
+  font-size: 12px;
+  text-align: right;
+}
+
+.watchface-shell .wf-stroke-opacity-field > span {
+  font-size: 11px;
+  text-align: right;
+}
+
+.watchface-shell .wf-stroke-row-action {
+  display: inline-grid;
+  width: 28px;
+  height: 32px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0;
+  place-items: center;
+}
+
+.watchface-shell .wf-stroke-row-action:hover {
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-stroke-row-action[aria-pressed="true"] {
+  color: var(--text-tertiary);
+}
+
+.watchface-shell .wf-stroke-details {
+  gap: 10px;
+}
+
+.watchface-shell .wf-stroke-geometry {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(82px, 1fr) 28px;
+  align-items: end;
+  gap: 8px;
+}
+
+.watchface-shell .wf-stroke-control {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 560;
+}
+
+.watchface-shell .wf-stroke-control > select {
+  width: 100%;
+}
+
+.watchface-shell .wf-stroke-weight-field {
+  display: grid;
+  min-width: 0;
+  min-height: 30px;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  overflow: hidden;
+  border-radius: 5px;
+  background: color-mix(
+    in srgb,
+    var(--wf-surface-raised) 92%,
+    var(--wf-surface)
+  );
+  color: var(--text-tertiary);
+  padding-left: 6px;
+}
+
+.watchface-shell .wf-property-section .wf-stroke-weight-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  border: 0;
+  background: transparent;
+  padding: 0 8px 0 2px;
+}
+
+.watchface-shell .wf-stroke-advanced-toggle {
+  display: inline-grid;
+  width: 28px;
+  height: 30px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0;
+  place-items: center;
+}
+
+.watchface-shell .wf-stroke-advanced-toggle:hover,
+.watchface-shell .wf-stroke-advanced-toggle.is-active {
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-stroke-advanced {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  border-top: 1px solid var(--wf-border);
+  padding-top: 12px;
+}
+
+.watchface-shell .wf-stroke-order-hint {
+  display: inline-grid;
+  width: 30px;
+  height: 34px;
+  color: var(--text-secondary);
+  cursor: grab;
+  place-items: center;
+}
+
+.watchface-shell .wf-danger-action {
+  color: var(--wf-danger);
+}
+
+.watchface-shell .wf-danger-action:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--wf-danger) 42%, var(--wf-border));
+  background: color-mix(in srgb, var(--wf-danger) 10%, transparent);
+  color: var(--wf-danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .watchface-shell .wf-property-section-chevron {
+    transition: none;
+  }
+}
+
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-inspector-section, .watchface-inspector-group) {
   display: grid;
   gap: 11px;
@@ -4073,6 +4676,913 @@
   color: var(--text-secondary);
   font-size: var(--wf-text-xs);
   line-height: 1.5;
+}
+
+/* Figma-inspired inspector rhythm: flat groups, dense fields, segmented tools. */
+
+.watchface-shell .wf-properties-pane {
+  padding: 0;
+}
+
+.watchface-shell .wf-properties-pane > .wf-pane-heading {
+  top: 0;
+  min-height: 40px;
+  margin: 0;
+  border-bottom-color: var(--wf-border-strong);
+  padding: 0 12px;
+}
+
+.watchface-shell .wf-properties-pane > .wf-pane-heading::after {
+  display: none;
+}
+
+.watchface-shell .wf-properties-pane .wf-pane-heading-main {
+  gap: 7px;
+}
+
+.watchface-shell .wf-properties-pane .wf-pane-heading-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  background: color-mix(
+    in srgb,
+    var(--wf-surface-hover) 70%,
+    transparent
+  );
+}
+
+.watchface-shell .wf-properties-pane .watchface-editor-pane-title {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: 0.085em;
+}
+
+.watchface-shell .wf-property-section {
+  border-bottom-color: color-mix(
+    in srgb,
+    var(--wf-border-strong) 76%,
+    transparent
+  );
+}
+
+.watchface-shell .wf-property-section-header {
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+.watchface-shell .wf-property-section-trigger {
+  min-height: 36px;
+  gap: 6px;
+  padding: 0 2px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 620;
+  letter-spacing: -0.006em;
+}
+
+.watchface-shell .wf-property-section-trigger:hover {
+  background: color-mix(in srgb, var(--wf-surface-hover) 48%, transparent);
+}
+
+.watchface-shell .wf-property-section-trigger > span:not(.wf-property-section-status) {
+  order: 1;
+}
+
+.watchface-shell .wf-property-section-status {
+  order: 2;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--wf-text-xs);
+}
+
+.watchface-shell .wf-property-section-chevron {
+  order: 3;
+  margin-left: auto;
+  opacity: 0.54;
+}
+
+.watchface-shell .wf-property-section.is-open .wf-property-section-chevron {
+  opacity: 0.54;
+}
+
+.watchface-shell .wf-effects-section .wf-property-section-chevron {
+  display: none;
+}
+
+.watchface-shell .wf-property-section.is-collapsed .wf-property-section-trigger {
+  color: var(--text-secondary);
+}
+
+.watchface-shell .wf-property-section-actions {
+  gap: 1px;
+  padding-right: 0;
+}
+
+.watchface-shell .wf-property-section-content {
+  gap: 10px;
+  padding: 0 12px 14px;
+}
+
+.watchface-shell .wf-property-section-content > fieldset,
+.watchface-shell :is(.wf-property-stack, .wf-transform-stack, .wf-effects-inspector) {
+  gap: 10px;
+}
+
+.watchface-shell .wf-property-section.is-disabled .wf-property-section-content {
+  opacity: 0.58;
+}
+
+.watchface-shell .wf-layer-property {
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 9px;
+}
+
+.watchface-shell .wf-layer-property-icon {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--wf-surface-raised) 88%, var(--wf-surface));
+}
+
+.watchface-shell .wf-layer-property-main {
+  gap: 5px;
+}
+
+.watchface-shell :is(.wf-layer-name-field, .wf-layer-name-readout, .wf-layer-type-readout) {
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 7px;
+}
+
+.watchface-shell :is(.wf-layer-name-field, .wf-layer-name-readout, .wf-layer-type-readout) > span {
+  font-size: 11px;
+  font-weight: 520;
+}
+
+.watchface-shell :is(.wf-layer-name-readout, .wf-layer-type-readout) > strong {
+  font-size: 12px;
+}
+
+.watchface-shell .wf-property-section :is(.field, .watchface-inspector-field) {
+  gap: 5px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 560;
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.watchface-shell .wf-property-section :is(input[type="number"], input[type="text"], select),
+.watchface-shell .wf-property-section :is(.watchface-position-inputs, .wf-position-inputs) input {
+  min-height: 30px;
+  border-color: transparent;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--wf-surface-raised) 88%, var(--wf-surface));
+  padding: 0 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.watchface-shell .wf-property-section :is(input[type="number"], input[type="text"], select):hover:not(:disabled),
+.watchface-shell .wf-property-section :is(.watchface-position-inputs, .wf-position-inputs) input:hover:not(:disabled) {
+  background: var(--wf-surface-hover);
+}
+
+.watchface-shell .wf-property-section :is(input, select):focus-visible {
+  border-color: var(--wf-focus);
+  outline: 1px solid var(--wf-focus);
+  outline-offset: -1px;
+}
+
+.watchface-shell input.wf-scrubbable-number {
+  cursor: ew-resize;
+}
+
+.watchface-shell input.wf-scrubbable-number:hover {
+  color: var(--text-primary);
+}
+
+.watchface-shell input.wf-scrubbable-number.is-scrubbing {
+  cursor: ew-resize;
+  user-select: none;
+}
+
+body.wf-value-scrubbing,
+body.wf-value-scrubbing * {
+  cursor: ew-resize !important;
+  user-select: none !important;
+}
+
+.watchface-shell .wf-property-section :is(.watchface-position-inputs, .wf-position-inputs) {
+  gap: 8px;
+}
+
+.watchface-shell .wf-property-section :is(.watchface-position-inputs, .wf-position-inputs) label {
+  gap: 5px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 560;
+  letter-spacing: 0;
+  line-height: 1.3;
+  text-transform: none;
+}
+
+.watchface-shell .wf-input-with-unit {
+  min-height: 30px;
+  gap: 2px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--wf-surface-raised) 88%, var(--wf-surface));
+  padding-right: 7px;
+}
+
+.watchface-shell .wf-input-with-unit > input {
+  min-height: 30px;
+  border: 0;
+  background: transparent;
+}
+
+.watchface-shell .wf-input-with-unit > span:last-child {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.watchface-shell .wf-property-section :is(.watchface-color-control, .wf-color-control) {
+  min-height: 32px;
+  border-color: transparent;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--wf-surface-raised) 88%, var(--wf-surface));
+  padding: 2px 4px;
+}
+
+.watchface-shell .wf-property-section :is(.watchface-color-control, .wf-color-control) input[type="color"] {
+  width: 24px;
+  height: 24px;
+}
+
+.watchface-shell .wf-property-section :is(.watchface-color-control, .wf-color-control) code {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+}
+
+.watchface-shell .wf-property-section :is(.watchface-color-none, .wf-use-default) {
+  min-height: 26px;
+  border-color: transparent;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.watchface-shell .wf-control-label,
+.watchface-shell .wf-position-controls > span {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 560;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.watchface-shell .wf-position-controls {
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 8px;
+}
+
+.watchface-shell .wf-position-heading {
+  min-height: 18px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 560;
+  letter-spacing: 0;
+}
+
+.watchface-shell
+  .wf-position-controls
+  > .watchface-position-inputs
+  > label {
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.watchface-shell .wf-position-help {
+  border-top-color: color-mix(in srgb, var(--wf-border) 76%, transparent);
+  color: var(--text-tertiary);
+  padding-top: 9px;
+}
+
+.watchface-shell .wf-position-help .watchface-studio-summary {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.watchface-shell .wf-position-controls > :is(
+  .watchface-position-inputs,
+  .wf-position-inputs,
+  span,
+  .watchface-align-grid,
+  .wf-align-icon-grid,
+  .watchface-nudge-pad,
+  .wf-position-nudge-only,
+  .watchface-studio-summary
+) {
+  grid-column: 1;
+  grid-row: auto;
+}
+
+.watchface-shell .wf-align-icon-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) 10px repeat(3, minmax(0, 1fr));
+  gap: 0;
+}
+
+.watchface-shell .wf-align-icon-grid > :nth-child(1) { grid-column: 1; }
+.watchface-shell .wf-align-icon-grid > :nth-child(2) { grid-column: 2; }
+.watchface-shell .wf-align-icon-grid > :nth-child(3) { grid-column: 3; }
+.watchface-shell .wf-align-icon-grid > :nth-child(4) { grid-column: 5; }
+.watchface-shell .wf-align-icon-grid > :nth-child(5) { grid-column: 6; }
+.watchface-shell .wf-align-icon-grid > :nth-child(6) { grid-column: 7; }
+
+.watchface-shell .wf-transform-action-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+}
+
+.watchface-shell :is(.wf-transform-action-row, .wf-align-icon-grid) button {
+  min-height: 30px;
+  border-color: color-mix(in srgb, var(--wf-border) 76%, transparent);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--wf-surface-raised) 88%, var(--wf-surface));
+}
+
+.watchface-shell :is(.wf-transform-action-row, .wf-align-icon-grid) button + button {
+  border-left-color: transparent;
+}
+
+.watchface-shell .wf-transform-action-row button:first-child,
+.watchface-shell .wf-align-icon-grid button:nth-child(1),
+.watchface-shell .wf-align-icon-grid button:nth-child(4) {
+  border-radius: 5px 0 0 5px;
+}
+
+.watchface-shell .wf-transform-action-row button:last-child,
+.watchface-shell .wf-align-icon-grid button:nth-child(3),
+.watchface-shell .wf-align-icon-grid button:nth-child(6) {
+  border-radius: 0 5px 5px 0;
+}
+
+.watchface-shell .wf-transform-action-row button[aria-pressed="true"] {
+  border-color: var(--wf-accent-border);
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--wf-surface-raised));
+}
+
+.watchface-shell .wf-property-section :is(.watchface-nudge-pad, .wf-nudge-pad) {
+  display: grid;
+  grid-template-columns: repeat(5, 30px);
+  grid-template-rows: 30px;
+  justify-content: start;
+  gap: 0;
+}
+
+.watchface-shell .wf-property-section :is(.watchface-nudge-pad, .wf-nudge-pad) > button {
+  grid-column: auto;
+  grid-row: auto;
+  border-radius: 0;
+}
+
+.watchface-shell .wf-property-section :is(.watchface-nudge-pad, .wf-nudge-pad) > button:first-child {
+  border-radius: 5px 0 0 5px;
+}
+
+.watchface-shell .wf-property-section :is(.watchface-nudge-pad, .wf-nudge-pad) > button:last-child {
+  border-radius: 0 5px 5px 0;
+}
+
+.watchface-shell .wf-property-section :is(.watchface-nudge-pad, .wf-nudge-pad) > button + button {
+  border-left-color: transparent;
+}
+
+.watchface-shell .wf-inline-position-controls {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--wf-border);
+  padding-top: 10px;
+}
+
+.watchface-shell .wf-inline-position-controls > strong {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 560;
+}
+
+.watchface-shell .wf-inline-position-controls > span {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.watchface-shell .wf-property-icon-button,
+.watchface-shell .wf-property-section-actions .watchface-layer-lock {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  border-radius: 5px;
+}
+
+.watchface-shell .wf-config-asset-preview {
+  border-color: color-mix(in srgb, var(--wf-border) 74%, transparent);
+  border-radius: 6px;
+}
+
+.watchface-shell .wf-config-asset-actions {
+  gap: 8px;
+}
+
+.watchface-shell .wf-config-asset-actions :is(.secondary-button, .primary-button) {
+  min-height: 34px;
+  border-radius: 6px;
+}
+
+.watchface-shell .wf-nested-disclosure {
+  margin-inline: -14px;
+  border-top-color: var(--wf-border-strong);
+  padding: 5px 14px 0;
+}
+
+.watchface-shell .wf-nested-disclosure > summary {
+  min-height: 34px;
+  padding: 7px 0;
+  font-size: 12px;
+}
+
+.watchface-shell .wf-effects-inspector {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.watchface-shell .wf-shadow-card {
+  border-radius: 6px;
+  background: transparent;
+  padding: 10px;
+}
+
+.watchface-shell .watchface-font-picker {
+  display: grid;
+  gap: 5px;
+}
+
+.watchface-shell .watchface-font-picker-label,
+.watchface-shell .watchface-typography-controls label {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 560;
+  line-height: 1.3;
+}
+
+.watchface-shell .watchface-font-picker-trigger {
+  min-height: 32px;
+  border-color: transparent;
+  border-radius: 5px;
+  background: color-mix(
+    in srgb,
+    var(--wf-surface-raised) 88%,
+    var(--wf-surface)
+  );
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.watchface-shell .watchface-font-picker-trigger:hover:not(:disabled),
+.watchface-shell .watchface-font-picker-trigger:focus-visible {
+  border-color: var(--wf-border-strong);
+  box-shadow: none;
+}
+
+.watchface-shell .watchface-typography-controls {
+  gap: 8px;
+}
+
+.watchface-shell .watchface-typography-controls select {
+  min-height: 30px;
+  border-color: transparent;
+  border-radius: 5px;
+  background: color-mix(
+    in srgb,
+    var(--wf-surface-raised) 88%,
+    var(--wf-surface)
+  );
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.watchface-shell .watchface-typography-hint {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 450;
+  line-height: 1.4;
+}
+
+.watchface-shell .wf-property-section .watchface-studio-summary {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* Card-based inspector hierarchy used across every editable layer. */
+
+.watchface-shell .watchface-editor-grid {
+  grid-template-columns:
+    minmax(224px, 248px)
+    minmax(360px, 1fr)
+    minmax(350px, 380px);
+}
+
+.watchface-shell .wf-properties-pane {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--wf-surface-raised) 20%, transparent),
+      transparent 180px
+    ),
+    var(--wf-surface);
+  padding-bottom: 10px;
+}
+
+.watchface-shell .wf-properties-pane > .wf-pane-heading {
+  min-height: 50px;
+  padding: 0 14px;
+}
+
+.watchface-shell .wf-properties-pane .wf-pane-heading-icon {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--wf-border);
+}
+
+.watchface-shell .wf-properties-pane .watchface-editor-pane-title {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.watchface-shell .wf-property-section {
+  overflow: hidden;
+  margin: 8px 10px 0;
+  border: 1px solid var(--wf-border);
+  border-radius: 8px;
+  background: color-mix(
+    in srgb,
+    var(--wf-surface-raised) 34%,
+    transparent
+  );
+}
+
+.watchface-shell .wf-property-section:last-child {
+  border-bottom: 1px solid var(--wf-border);
+}
+
+.watchface-shell .wf-property-section-header {
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.watchface-shell .wf-property-section-trigger {
+  min-height: 38px;
+  font-size: 11px;
+  font-weight: 720;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.watchface-shell .wf-property-section-chevron {
+  width: 15px;
+  height: 15px;
+}
+
+.watchface-shell .wf-property-section-content {
+  gap: 12px;
+  padding: 0 14px 14px;
+}
+
+.watchface-shell .wf-property-section[data-section="layer"] {
+  margin-top: 10px;
+}
+
+.watchface-shell
+  .wf-property-section[data-section="layer"]
+  > .wf-property-section-header {
+  display: none;
+}
+
+.watchface-shell
+  .wf-property-section[data-section="layer"]
+  > .wf-property-section-content {
+  padding: 14px;
+}
+
+.watchface-shell .wf-layer-summary {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--wf-border);
+  padding-bottom: 12px;
+}
+
+.watchface-shell .wf-layer-summary .wf-layer-property-icon {
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--wf-border);
+  border-radius: 7px;
+  background: color-mix(
+    in srgb,
+    var(--wf-surface-raised) 78%,
+    transparent
+  );
+}
+
+.watchface-shell .wf-layer-summary .wf-layer-property-main {
+  align-content: center;
+  gap: 6px;
+}
+
+.watchface-shell .wf-layer-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 680;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-layer-title-field {
+  display: block;
+  min-width: 0;
+}
+
+.watchface-shell .wf-property-section .wf-layer-title-field input {
+  min-height: 26px;
+  border-color: transparent;
+  background: transparent;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.watchface-shell .wf-layer-type-badge {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent-soft) 46%, transparent);
+  color: color-mix(in srgb, var(--accent-strong) 82%, var(--text-secondary));
+  padding: 3px 6px;
+  font-size: 10px;
+  font-weight: 620;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-layer-type-badge svg {
+  flex: 0 0 auto;
+}
+
+.watchface-shell .wf-layer-summary-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.watchface-shell
+  .wf-layer-summary-actions
+  :is(.wf-property-icon-button, .watchface-layer-lock) {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--wf-border);
+  border-radius: 6px;
+  background: color-mix(
+    in srgb,
+    var(--wf-surface-raised) 58%,
+    transparent
+  );
+}
+
+.watchface-shell
+  .wf-layer-summary-actions
+  .wf-property-icon-button:not([aria-pressed="true"]) {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--wf-border));
+  background: color-mix(in srgb, var(--accent-soft) 38%, transparent);
+  color: var(--accent-strong);
+}
+
+.watchface-shell .wf-layer-opacity-control {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(72px, 1fr) 88px;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 560;
+}
+
+.watchface-shell .wf-layer-opacity-control > input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  min-height: auto;
+  accent-color: var(--accent);
+}
+
+.watchface-shell .wf-layer-opacity-control .wf-input-with-unit {
+  border: 1px solid var(--wf-border);
+  background: color-mix(
+    in srgb,
+    var(--wf-surface-raised) 60%,
+    transparent
+  );
+}
+
+.watchface-shell .wf-position-heading {
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.watchface-shell .wf-position-heading svg {
+  color: var(--text-tertiary);
+}
+
+.watchface-shell .wf-position-help {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--wf-border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent-soft) 22%, transparent);
+  padding: 8px 10px;
+}
+
+.watchface-shell .wf-position-help > svg {
+  margin-top: 1px;
+  color: var(--accent-strong);
+}
+
+.watchface-shell .wf-align-icon-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0;
+}
+
+.watchface-shell .wf-align-icon-grid > :nth-child(n) {
+  grid-column: auto;
+}
+
+.watchface-shell .wf-align-icon-grid button:nth-child(1) {
+  border-radius: 6px 0 0 6px;
+}
+
+.watchface-shell .wf-align-icon-grid button:nth-child(3),
+.watchface-shell .wf-align-icon-grid button:nth-child(4) {
+  border-radius: 0;
+}
+
+.watchface-shell .wf-align-icon-grid button:nth-child(6) {
+  border-radius: 0 6px 6px 0;
+}
+
+.watchface-shell .wf-property-section :is(.watchface-nudge-pad, .wf-nudge-pad) {
+  width: 100%;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(70px, auto);
+}
+
+.watchface-shell
+  .wf-property-section
+  :is(.watchface-nudge-pad, .wf-nudge-pad)
+  > button {
+  min-height: 32px;
+}
+
+.watchface-shell
+  .wf-property-section
+  :is(.watchface-nudge-reset, .wf-nudge-reset) {
+  display: inline-flex;
+  grid-column: auto;
+  grid-row: auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding-inline: 9px;
+}
+
+.watchface-shell .wf-property-section :is(.field, .watchface-inspector-field),
+.watchface-shell .watchface-font-picker-label,
+.watchface-shell .watchface-typography-controls label {
+  color: var(--text-secondary);
+}
+
+.watchface-shell .wf-property-section :is(.watchface-color-control, .wf-color-control) {
+  min-height: 38px;
+  border: 1px solid var(--wf-border);
+  background: color-mix(
+    in srgb,
+    var(--wf-surface-raised) 52%,
+    transparent
+  );
+  padding: 3px 5px;
+}
+
+.watchface-shell
+  .wf-property-section
+  :is(.watchface-color-control, .wf-color-control)
+  input[type="color"] {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+}
+
+.watchface-shell
+  .wf-property-section
+  :is(.watchface-color-control, .wf-color-control)
+  code {
+  flex: 1 1 auto;
+}
+
+.watchface-shell
+  .wf-property-section
+  .watchface-color-none[aria-label="Remove tint"] {
+  display: inline-grid;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  place-items: center;
+}
+
+.watchface-shell .wf-stroke-empty {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.watchface-shell .wf-stroke-empty > div {
+  display: grid;
+  gap: 4px;
+}
+
+.watchface-shell .wf-stroke-empty strong {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.watchface-shell .wf-stroke-empty p {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.watchface-shell .wf-stroke-empty .secondary-button {
+  min-height: 32px;
+  gap: 5px;
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--wf-border));
+  background: color-mix(in srgb, var(--accent-soft) 38%, transparent);
+  color: var(--accent-strong);
+  padding-inline: 9px;
+  font-size: 11px;
+}
+
+.watchface-shell .watchface-font-picker-trigger,
+.watchface-shell .watchface-typography-controls select {
+  min-height: 34px;
+  border: 1px solid var(--wf-border);
+  background: color-mix(
+    in srgb,
+    var(--wf-surface-raised) 52%,
+    transparent
+  );
+}
+
+.watchface-shell .watchface-typography-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.watchface-shell > .watchface-editor-inspector > :is(.watchface-inspector-group, .wf-archive-settings),
+.watchface-shell .wf-properties-pane > :is(.watchface-inspector-group, .wf-archive-settings) {
+  padding-inline: 14px;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-sheet-scrim, .watchface-sheet-scrim) {
