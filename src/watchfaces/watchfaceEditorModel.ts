@@ -17,7 +17,6 @@ import {
   getWatchfaceControlStatusPreviewLayers,
   hasControlBattery,
   isControlComplicationEnabled,
-  listWatchfaceConfigAssets,
   pickPreviewResolution,
   WATCHFACE_COMPLICATIONS,
   WATCHFACE_LAYOUT_GROUPS,
@@ -30,6 +29,10 @@ import { deriveDesignDetails } from "./watchfaceCompose";
 import { getWeatherCapability } from "./weatherAssets";
 import { rotatedCenterBounds } from "./watchfaceEditorGeometry";
 import { watchfaceDesignSpriteName } from "./watchfaceSpriteTransform";
+import {
+  listWatchfaceEditorConfigAssets,
+  watchfaceEditorControlBatteryIsListed
+} from "./watchfaceEditorVisibility";
 
 export { editorLayerAtPoint } from "./watchfaceEditorGeometry";
 
@@ -387,10 +390,12 @@ export function deriveEditorLayers(
     }
 
     if (groupId === "controlBatteryIcon") {
-      if (
-        !hasControlBattery(details) &&
-        !isControlComplicationEnabled(details, design, "battery")
-      ) {
+      if (!watchfaceEditorControlBatteryIsListed(
+        hasControlBattery(details),
+        isControlComplicationEnabled(details, design, "battery"),
+        design.controlComplicationEnabled?.battery,
+        design.controlBatteryEnabled
+      )) {
         continue;
       }
       layers.push({
@@ -558,9 +563,9 @@ export function deriveEditorLayers(
         isControlComplicationEnabled(details, design, complication.id)
     )
     .map((complication) => complication.id);
-  for (const reference of listWatchfaceConfigAssets(
+  for (const reference of listWatchfaceEditorConfigAssets(
+    details,
     offsetDetails,
-    undefined,
     enabledControlIcons
   )) {
     // The current-face background_icon is the source behind the editable

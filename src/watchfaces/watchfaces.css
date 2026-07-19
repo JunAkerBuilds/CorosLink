@@ -2475,7 +2475,7 @@
 
 .watchface-shell .wf-layer-list {
   display: grid;
-  gap: 3px;
+  gap: 1px;
   margin: 8px 0 0;
   padding: 0;
   list-style: none;
@@ -2495,7 +2495,7 @@
 
 .watchface-shell .wf-editor-group-tree {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px 28px;
+  grid-template-columns: minmax(0, 1fr) 32px 32px;
   align-items: center;
 }
 
@@ -2528,12 +2528,49 @@
 }
 
 .watchface-shell .wf-layer-group {
-  margin: 12px 7px 4px;
+  margin: 10px 0 2px;
+}
+
+.watchface-shell .wf-layer-group:first-child {
+  margin-top: 2px;
+}
+
+.watchface-shell .wf-layer-section-toggle {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  min-height: 28px;
+  gap: 3px;
+  border: 0;
+  border-radius: var(--wf-control-radius);
+  background: transparent;
   color: var(--text-secondary);
+  padding: 0 7px 0 4px;
+  text-align: left;
+  font: inherit;
   font-size: var(--wf-text-xs);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 750;
+}
+
+.watchface-shell .wf-layer-section-toggle:hover {
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-layer-section-toggle > svg {
+  transition: transform 140ms ease;
+}
+
+.watchface-shell .wf-layer-section-toggle > svg.is-collapsed {
+  transform: rotate(-90deg);
+}
+
+.watchface-shell .wf-layer-section-count {
+  color: var(--text-tertiary);
+  font-size: var(--wf-text-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
 }
 
 .watchface-shell .wf-layer-icon {
@@ -2588,8 +2625,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 40px;
   align-items: center;
-  min-height: 40px;
-  gap: 5px;
+  min-height: 36px;
+  gap: 3px;
   border: 1px solid transparent;
   border-radius: var(--wf-control-radius);
   background: transparent;
@@ -2628,8 +2665,8 @@
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-layer-visibility, .watchface-layer-visibility) {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border: 0;
   border-radius: var(--wf-control-radius);
   background: transparent;
@@ -2645,8 +2682,8 @@
 
 .watchface-shell .watchface-layer-lock {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border: 0;
   border-radius: var(--wf-control-radius);
   background: transparent;

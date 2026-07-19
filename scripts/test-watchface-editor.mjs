@@ -22,6 +22,11 @@ import {
   watchfaceEditorSelectionExists
 } from "../src/watchfaces/watchfaceEditorGeometry.ts";
 import {
+  listWatchfaceEditorConfigAssets,
+  watchfaceEditorControlBatteryIsListed,
+  watchfaceEditorLayerIsListed
+} from "../src/watchfaces/watchfaceEditorVisibility.ts";
+import {
   duplicateWatchfaceDesignSprite,
   normalizeWatchfaceCrop,
   normalizeWatchfaceOpacity,
@@ -299,6 +304,66 @@ assert.equal(
   watchfaceEditorSelectionExists("bgel:removed", editorLayers, [{ id: "text-1" }]),
   false,
   "removed background elements should fall back to a live editor layer"
+);
+
+const configAssetDetails = {
+  archiveId: "editor-layer-fixture",
+  resolutions: [{
+    directory: "800",
+    width: 800,
+    height: 800,
+    config: {
+      bluetooth_on_icon: "bluetooth-on.png"
+    },
+    aodConfig: {},
+    icons: [{
+      path: "800/bluetooth-on.png",
+      width: 24,
+      height: 24
+    }],
+    spriteFolders: []
+  }]
+};
+const hiddenConfigAssetDetails = {
+  ...configAssetDetails,
+  resolutions: configAssetDetails.resolutions.map((resolution) => ({
+    ...resolution,
+    config: {}
+  }))
+};
+assert.deepEqual(
+  listWatchfaceEditorConfigAssets(
+    configAssetDetails,
+    hiddenConfigAssetDetails
+  ).map((reference) => reference.id),
+  ["config:bluetooth_on_icon"],
+  "hidden config assets must retain their source reference in the layer panel"
+);
+
+const explicitlyHiddenAodMetric = {
+  id: "steps",
+  kind: "metric",
+  label: "Steps",
+  layoutGroupId: "steps",
+  metricId: "steps",
+  visible: false,
+  canHide: true,
+  present: false,
+  bounds: null,
+  capabilities: {}
+};
+assert.equal(
+  watchfaceEditorLayerIsListed(explicitlyHiddenAodMetric, "aod", {
+    metricChanges: { steps: false }
+  }),
+  true,
+  "an explicitly hidden AOD component must remain available to show again"
+);
+
+assert.equal(
+  watchfaceEditorControlBatteryIsListed(false, false, false, undefined),
+  true,
+  "a selectable battery added by the editor must stay in the panel when hidden"
 );
 
 // Image transform handles preserve the opposite corner, work in local rotated

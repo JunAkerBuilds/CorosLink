@@ -177,6 +177,10 @@ import {
   type EditorLayer
 } from "./watchfaceEditorModel";
 import {
+  listWatchfaceEditorConfigAssets,
+  watchfaceEditorLayerIsListed
+} from "./watchfaceEditorVisibility";
+import {
   watchfaceEditorSelectionExists,
   type WatchfaceEditorBounds
 } from "./watchfaceEditorGeometry";
@@ -230,7 +234,6 @@ import {
   hasControlComplication,
   hasWatchfaceAod,
   inferStaticSeparators,
-  listWatchfaceConfigAssets,
   loadStudioImage,
   mergeAssetReplacements,
   mergeConfigOverrides,
@@ -706,6 +709,9 @@ export function WatchfaceEditor({
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [collapsedLayerSections, setCollapsedLayerSections] = useState(
+    () => new Set<string>(["Template assets", "Always-on assets"])
+  );
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [stageZoom, setStageZoom] = useState<"fit" | number>("fit");
   const [watchPreviewDirectory, setWatchPreviewDirectory] = useState("");
@@ -1438,12 +1444,12 @@ export function WatchfaceEditor({
     if (!modeSourceDetails) return [];
     return deriveEditorLayers(modeSourceDetails, design).filter((layer) => {
       if (layer.configAssetId) {
-        return layer.configAssetId.startsWith("config:");
+        return (
+          layer.configAssetId.startsWith("config:") &&
+          watchfaceEditorLayerIsListed(layer, previewMode, design)
+        );
       }
-      return previewMode === "current" || layer.present ||
-        layer.kind === "background" ||
-        layer.kind === "backgroundElement" ||
-        layer.kind === "customSprite";
+      return watchfaceEditorLayerIsListed(layer, previewMode, design);
     });
   }, [modeSourceDetails, design, previewMode]);
   const configAssetReferences = useMemo(
@@ -1462,9 +1468,9 @@ export function WatchfaceEditor({
             )
             .map((complication) => complication.id)
         : [];
-      return listWatchfaceConfigAssets(
+      return listWatchfaceEditorConfigAssets(
+        modeSourceDetails,
         previewDetails ?? modeSourceDetails,
-        undefined,
         enabledControlIcons
       ).filter(
           (reference) => reference.scope === "config"
@@ -1766,6 +1772,15 @@ export function WatchfaceEditor({
     }
     const primaryId = drag.kind === "selectorIcon" ? "complication" : drag.snapId;
     return drag.selectionIds?.length ? drag.selectionIds : linkedIdsFor(primaryId);
+  }
+
+  function dragBoundsForId(
+    drag: WatchfaceDragState,
+    id: string
+  ): WatchfaceEditorBounds | null {
+    return drag.kind === "selectorIcon" && id === "complication"
+      ? drag.baseBounds
+      : selectionBoundsForId(id);
   }
 
   function selectEditorItem(id: string, additive = false) {
@@ -2081,12 +2096,9 @@ export function WatchfaceEditor({
     }
     context.restore();
 
-    const primaryId = visual.drag.kind === "selectorIcon"
-      ? "complication"
-      : visual.drag.snapId;
     const movedIds = dragMovementIds(visual.drag);
     const linkedBounds = movedIds
-      .map(selectionBoundsForId)
+      .map((id) => dragBoundsForId(visual.drag, id))
       .filter((box): box is WatchfaceEditorBounds => Boolean(box));
     const baseBounds = linkedBounds.length > 1
       ? linkedBounds.reduce((result, box) => ({
@@ -2120,7 +2132,6 @@ export function WatchfaceEditor({
     moving: CorosWatchfaceDesignState;
     clipBounds: WatchfaceEditorBounds;
   } {
-    const primaryId = drag.kind === "selectorIcon" ? "complication" : drag.snapId;
     const movingIds = dragMovementIds(drag);
     const movingIdSet = new Set(movingIds);
     const movingElementIds = new Set(
@@ -2129,6 +2140,9 @@ export function WatchfaceEditor({
         .map((id) => id.slice("bgel:".length))
     );
     const movingLayers = layers.filter((layer) => movingIdSet.has(layer.id));
+    const baseMovingLayers = drag.kind === "selectorIcon"
+      ? movingLayers.filter((layer) => layer.id !== "complication")
+      : movingLayers;
     const movingSpriteIds = new Set(
       movingLayers
         .map((layer) => layer.spriteId)
@@ -2181,7 +2195,7 @@ export function WatchfaceEditor({
       layerVisibility: {
         ...design.layerVisibility,
         ...Object.fromEntries(
-          movingLayers
+          baseMovingLayers
             .map((layer) => layer.layoutGroupId)
             .filter((id): id is string => Boolean(id))
             .map((id) => [id, false])
@@ -2235,7 +2249,7 @@ export function WatchfaceEditor({
     };
 
     const linkedBounds = movingIds
-      .map(selectionBoundsForId)
+      .map((id) => dragBoundsForId(drag, id))
       .filter((box): box is WatchfaceEditorBounds => Boolean(box));
     const movingBounds = linkedBounds.length > 0
       ? linkedBounds.reduce((result, box) => ({
@@ -2259,7 +2273,8 @@ export function WatchfaceEditor({
   }
 
   async function renderDragFrame(
-    frameDesign: CorosWatchfaceDesignState
+    frameDesign: CorosWatchfaceDesignState,
+    previewComplicationContent: WatchfaceStudioOptions["previewComplicationContent"] = "all"
   ): Promise<HTMLCanvasElement> {
     if (!details) {
       throw new Error("Watch face details are not ready.");
@@ -2285,7 +2300,13 @@ export function WatchfaceEditor({
       frame,
       frameBackground,
       frameDetails,
-      studioOptionsForResolution(toStudioOptions(frameDesign), frameDetails),
+      studioOptionsForResolution(
+        {
+          ...toStudioOptions(frameDesign),
+          previewComplicationContent
+        },
+        frameDetails
+      ),
       loadAssets
     );
     if (frameDesign.weatherIndicator?.enabled) {
@@ -2316,6 +2337,7 @@ export function WatchfaceEditor({
     const selectionKey = dragMovementIds(drag).slice().sort().join("|");
     const cached = precomposedDragRef.current;
     const cacheMatches = Boolean(
+      drag.kind !== "selectorIcon" &&
       cached &&
       cached.design === design &&
       cached.selectionKey === selectionKey &&
@@ -2335,7 +2357,34 @@ export function WatchfaceEditor({
       canvas.style.visibility = "hidden";
     }
     setDragVisualActive(true);
-    if (cacheMatches) drawDragVisual();
+    if (cacheMatches) {
+      drawDragVisual();
+      return;
+    }
+    if (drag.kind !== "selectorIcon") {
+      return;
+    }
+    void Promise.all([
+      renderDragFrame(isolated.base),
+      renderDragFrame(isolated.moving, "icon")
+    ]).then(([baseFrame, movingFrame]) => {
+      const active = dragVisualRef.current;
+      if (
+        !mountedRef.current ||
+        previewSessionRef.current !== sessionId ||
+        dragRef.current !== drag ||
+        active?.drag !== drag ||
+        active.preparationId !== preparationId
+      ) {
+        return;
+      }
+      active.baseFrame = baseFrame;
+      active.movingFrame = movingFrame;
+      active.clipBounds = isolated.clipBounds;
+      drawDragVisual();
+    }).catch(() => {
+      // Keep the accurate main preview visible if drag isolation fails.
+    });
   }
 
   useEffect(() => {
@@ -2396,6 +2445,8 @@ export function WatchfaceEditor({
       const active = dragVisualRef.current;
       if (
         active &&
+        active.drag.kind !== "selectorIcon" &&
+        dragRef.current === active.drag &&
         active.baseFrame === null &&
         dragMovementIds(active.drag).slice().sort().join("|") === selectionKey
       ) {
@@ -3392,10 +3443,9 @@ export function WatchfaceEditor({
       previewWidth,
       renderedWidth
     );
-    const primaryId = drag.kind === "selectorIcon" ? "complication" : drag.snapId;
     const linkedIds = dragMovementIds(drag);
     const linkedBounds = linkedIds
-      .map(selectionBoundsForId)
+      .map((id) => dragBoundsForId(drag, id))
       .filter((box): box is WatchfaceEditorBounds => Boolean(box));
     const baseBounds = linkedBounds.length > 1
       ? linkedBounds.reduce((result, box) => ({
@@ -5812,9 +5862,27 @@ export function WatchfaceEditor({
           {details ? (
             <ul className="wf-layer-list">
               {visibleEditorGroups.length > 0 ? (
-                <li className="wf-layer-group">Groups</li>
+                <li className="wf-layer-group">
+                  <button
+                    type="button"
+                    className="wf-layer-section-toggle"
+                    aria-expanded={!collapsedLayerSections.has("Groups")}
+                    onClick={() => toggleLayerSection("Groups")}
+                  >
+                    <ChevronDown
+                      className={collapsedLayerSections.has("Groups") ? "is-collapsed" : ""}
+                      size={13}
+                      aria-hidden="true"
+                    />
+                    <span>Groups</span>
+                    <span className="wf-layer-section-count">
+                      {visibleEditorGroups.length}
+                    </span>
+                  </button>
+                </li>
               ) : null}
-              {visibleEditorGroups.map((group) => {
+              {!collapsedLayerSections.has("Groups")
+                ? visibleEditorGroups.map((group) => {
                 const locked = group.layerIds.some(isPositionLocked);
                 const visible = editorGroupVisible(group.id);
                 return (
@@ -5878,13 +5946,33 @@ export function WatchfaceEditor({
                     </ul>
                   </li>
                 );
-              })}
+                })
+                : null}
               {groupLayersForDisplay(
                 layers.filter((layer) => !groupedEditorLayerIds.has(layer.id))
-              ).map(({ label: group, layers: groupedLayers }) => (
-                <Fragment key={group}>
-                  <li className="wf-layer-group">{group}</li>
-                  {groupedLayers.map((layer) => {
+              ).map(({ label: group, layers: groupedLayers }) => {
+                const collapsed = collapsedLayerSections.has(group);
+                return (
+                  <Fragment key={group}>
+                    <li className="wf-layer-group">
+                      <button
+                        type="button"
+                        className="wf-layer-section-toggle"
+                        aria-expanded={!collapsed}
+                        onClick={() => toggleLayerSection(group)}
+                      >
+                        <ChevronDown
+                          className={collapsed ? "is-collapsed" : ""}
+                          size={13}
+                          aria-hidden="true"
+                        />
+                        <span>{group}</span>
+                        <span className="wf-layer-section-count">
+                          {groupedLayers.length}
+                        </span>
+                      </button>
+                    </li>
+                    {collapsed ? null : groupedLayers.map((layer) => {
                     const authoredLayer =
                       layer.kind === "customSprite" ||
                       layer.kind === "backgroundElement";
@@ -5997,9 +6085,10 @@ export function WatchfaceEditor({
                       ) : null}
                     </li>
                     );
-                  })}
-                </Fragment>
-              ))}
+                    })}
+                  </Fragment>
+                );
+              })}
             </ul>
           ) : (
             <div className="wf-pane-loading" role="status"><Loader2 className="spin" size={16} /> Reading template</div>
@@ -6803,22 +6892,31 @@ export function WatchfaceEditor({
       layer.kind === "backgroundElement" ||
       layer.kind === "customSprite"
     ) return "Artwork";
-    if (
-      layer.kind === "configAsset" ||
-      layer.kind === "controlBatteryIcon"
-    ) {
+    if (layer.kind === "configAsset") {
       return previewMode === "aod" ? "Always-on assets" : "Template assets";
+    }
+    if (
+      layer.kind === "date" ||
+      layer.kind === "weekday" ||
+      layer.id === "staticDateSlash"
+    ) {
+      return "Date";
     }
     if (
       layer.kind === "time" ||
       layer.kind === "seconds" ||
-      layer.kind === "date" ||
-      layer.kind === "weekday" ||
       layer.kind === "separators"
     ) {
-      return "Time and date";
+      return "Time";
     }
-    return "Data";
+    if (
+      layer.kind === "batteryIcon" ||
+      layer.kind === "controlBatteryIcon" ||
+      layer.kind === "weather"
+    ) {
+      return "Indicators";
+    }
+    return "Metrics";
   }
 
   function groupLayersForDisplay(
@@ -6834,7 +6932,7 @@ export function WatchfaceEditor({
         groups.set(label, [layer]);
       }
     }
-    return [...groups].map(([label, groupLayers]) => {
+    const sections = [...groups].map(([label, groupLayers]) => {
       if (label === "Template assets" || label === "Always-on assets") {
         return {
           label,
@@ -6843,7 +6941,47 @@ export function WatchfaceEditor({
           )
         };
       }
-      if (label !== "Artwork") return { label, layers: groupLayers };
+      if (label !== "Artwork") {
+        const layerOrder: Record<string, string[]> = {
+          Time: [
+            "autoTime",
+            "hours",
+            "minutes",
+            "seconds",
+            "ampm",
+            "separators",
+            "staticColon"
+          ],
+          Date: ["weekday", "dateMonth", "dateDay", "staticDateSlash"],
+          Metrics: [
+            "complication",
+            "battery",
+            "heartRate",
+            "steps",
+            "calories",
+            "elevation",
+            "temperature"
+          ],
+          Indicators: ["weather", "batteryIcon", "controlBatteryIcon"]
+        };
+        const order = layerOrder[label] ?? [];
+        return {
+          label,
+          layers: groupLayers
+            .map((layer, sourceIndex) => ({ layer, sourceIndex }))
+            .sort((left, right) => {
+              const leftIndex = order.indexOf(left.layer.id);
+              const rightIndex = order.indexOf(right.layer.id);
+              if (leftIndex < 0 && rightIndex < 0) {
+                return left.sourceIndex - right.sourceIndex;
+              }
+              if (leftIndex < 0) return 1;
+              if (rightIndex < 0) return -1;
+              return leftIndex - rightIndex;
+            })
+            .map(({ layer }) => layer)
+        };
+      }
       const authoredLayers = [
         ...groupLayers.filter((layer) => layer.kind === "customSprite"),
         ...backgroundElements
@@ -6896,6 +7034,28 @@ export function WatchfaceEditor({
           )
         ]
       };
+    });
+    const sectionOrder = [
+      "Time",
+      "Date",
+      "Metrics",
+      "Indicators",
+      "Artwork",
+      "Template assets",
+      "Always-on assets"
+    ];
+    return sections.sort(
+      (left, right) =>
+        sectionOrder.indexOf(left.label) - sectionOrder.indexOf(right.label)
+    );
+  }
+
+  function toggleLayerSection(section: string) {
+    setCollapsedLayerSections((current) => {
+      const next = new Set(current);
+      if (next.has(section)) next.delete(section);
+      else next.add(section);
+      return next;
     });
   }
 

@@ -43,6 +43,11 @@ export interface WatchfaceStudioOptions extends WatchfaceTypography {
   tintIcons: boolean;
   /** Changes only the studio preview; the watch rotates the control slot. */
   previewComplication?: WatchfaceComplicationId;
+  /**
+   * Editor-only isolation used while independently dragging a selectable
+   * control icon. Normal previews render both the icon and its value.
+   */
+  previewComplicationContent?: "all" | "icon";
   /** Per-fixed-metric bitmap styles, isolated into their own sprite folders. */
   metricStyles?: WatchfaceMetricStyles;
   /** Shared bitmap style for values shown in the selectable control slot. */
@@ -6377,7 +6382,11 @@ export async function drawStudioPreview(
       }
     }
   }
-  if (complication && complicationSource) {
+  if (
+    complication &&
+    complicationSource &&
+    options.previewComplicationContent !== "icon"
+  ) {
     for (const part of relativeComplicationRects) {
       numberPlans.push({
         rect: {
@@ -6900,6 +6909,12 @@ export async function drawStudioPreview(
   }
 
   for (const layer of controlStatusLayers) {
+    if (
+      options.previewComplicationContent === "icon" &&
+      layer.controlRelative
+    ) {
+      continue;
+    }
     const image = await configuredAssetImage(
       layer.configKey,
       layer.source,
@@ -7266,7 +7281,11 @@ export async function drawStudioPreview(
     }
   }
 
-  if (controlColonFile && relativeComplicationRects.length > 1) {
+  if (
+    options.previewComplicationContent !== "icon" &&
+    controlColonFile &&
+    relativeComplicationRects.length > 1
+  ) {
     const first = relativeComplicationRects[0]!.rect;
     const second = relativeComplicationRects[1]!.rect;
     const image = await configuredAssetImage(
