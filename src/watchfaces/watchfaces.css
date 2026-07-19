@@ -51,16 +51,59 @@
 
 :root[data-theme="paper"] :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) {
   --wf-canvas: color-mix(in srgb, var(--bg-base) 88%, #dce3df);
-  --wf-surface: color-mix(in srgb, var(--surface) 92%, var(--bg-base));
+  --wf-surface: #f7f8f6;
   --wf-surface-raised: #ffffff;
-  --wf-surface-hover: color-mix(in srgb, var(--accent-soft) 32%, #ffffff);
-  --wf-border: color-mix(in srgb, var(--glass-border) 90%, #6d716e 10%);
-  --wf-border-strong: color-mix(in srgb, var(--text-secondary) 32%, transparent);
+  --wf-surface-hover: #eef4f0;
+  --wf-border: rgba(43, 58, 50, 0.13);
+  --wf-border-strong: rgba(43, 58, 50, 0.22);
   --wf-accent-ink: #06150f;
   --wf-primary-bg: color-mix(in srgb, var(--accent) 68%, #9de8cf);
   --wf-primary-bg-hover: color-mix(in srgb, var(--accent-hover) 70%, #8cdfc3);
   --wf-shadow: 0 18px 42px rgba(56, 49, 39, 0.12);
   --wf-workspace-bg: transparent;
+}
+
+:root[data-theme="paper"] .watchface-shell :where(
+    .watchface-editor-layers,
+    .watchface-editor-inspector
+  ) {
+  background: var(--wf-surface);
+  box-shadow: none;
+}
+
+:root[data-theme="paper"] .watchface-shell .wf-pane-heading {
+  background: var(--wf-surface-raised);
+  box-shadow: 0 1px 3px rgba(43, 58, 50, 0.045);
+}
+
+:root[data-theme="paper"] .watchface-shell :where(
+    .wf-layer-row,
+    .watchface-layer-row
+  ):hover {
+  border-color: color-mix(in srgb, var(--wf-border) 76%, transparent);
+  background: var(--wf-surface-hover);
+}
+
+:root[data-theme="paper"] .watchface-shell :where(
+    .wf-layer-row,
+    .watchface-layer-row
+  ).is-selected,
+:root[data-theme="paper"] .watchface-shell :where(
+    .wf-layer-row,
+    .watchface-layer-row
+  )[aria-selected="true"] {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--wf-border));
+  background: color-mix(in srgb, var(--accent) 11%, #ffffff);
+}
+
+:root[data-theme="paper"] .watchface-shell :where(
+    .watchface-color-control,
+    .wf-color-control,
+    .wf-inline-config-asset,
+    .watchface-position-inputs input,
+    .wf-position-inputs input
+  ) {
+  box-shadow: 0 1px 2px rgba(43, 58, 50, 0.035);
 }
 
 /* Dark workspace glass is intentionally neutral charcoal. Emerald stays an accent. */
@@ -1830,7 +1873,7 @@
 }
 
 .watchface-shell .wf-export-preview-modal {
-  width: min(760px, 100%);
+  width: min(1080px, 100%);
 }
 
 .watchface-shell .wf-export-preview-header,
@@ -1867,7 +1910,7 @@
 
 .watchface-shell .wf-export-preview-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
 }
 
@@ -1916,6 +1959,12 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+@media (max-width: 900px) {
+  .watchface-shell .wf-export-preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 680px) {
@@ -2202,8 +2251,8 @@
 
 .watchface-shell .wf-command-bar {
   grid-template-columns: max-content minmax(0, 1fr) max-content;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 7px 12px;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-command-start, .watchface-editor-title) {
@@ -2237,13 +2286,13 @@
   display: inline-flex;
   width: auto;
   min-width: 0;
-  height: 40px;
-  min-height: 40px;
-  border: 1px solid var(--wf-border-strong);
-  background: var(--wf-surface-hover);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 8%, transparent);
-  color: var(--text-primary);
-  padding: 0 10px;
+  height: 34px;
+  min-height: 34px;
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+  padding: 0 8px 0 6px;
   gap: 6px;
   font-size: var(--wf-text-sm);
   font-weight: 700;
@@ -2251,8 +2300,8 @@
 }
 
 .watchface-shell .wf-back-button:hover {
-  border-color: var(--wf-accent-border);
-  background: color-mix(in srgb, var(--wf-surface-hover) 74%, var(--accent-soft));
+  border-color: var(--wf-border);
+  background: var(--wf-surface-hover);
   color: var(--text-primary);
 }
 
@@ -2263,23 +2312,23 @@
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-project-name, .watchface-editor-name) {
   flex: 0 1 min(320px, 32vw);
   width: min(320px, 32vw);
-  min-height: 40px;
-  border-color: var(--wf-border-strong);
-  background: color-mix(in srgb, var(--wf-surface-raised) 76%, transparent);
-  padding-inline: 11px;
+  min-height: 34px;
+  border-color: transparent;
+  background: transparent;
+  padding-inline: 8px;
   font-family: var(--font-display);
   font-size: var(--wf-text-lg);
   font-weight: 700;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-project-name, .watchface-editor-name):hover {
-  border-color: var(--wf-border-strong);
-  background: var(--wf-surface-raised);
+  border-color: var(--wf-border);
+  background: var(--wf-surface-hover);
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-project-name, .watchface-editor-name):focus {
   border-color: var(--accent-strong);
-  background: var(--wf-surface-raised);
+  background: var(--wf-surface-hover);
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-save-state, .watchface-save-state) {
@@ -2316,9 +2365,41 @@
 }
 
 .watchface-shell .wf-command-actions > .wf-icon-button {
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+}
+
+.watchface-shell .wf-history-controls {
+  display: inline-flex;
+  overflow: hidden;
+  height: 34px;
+  flex: 0 0 auto;
+  align-items: stretch;
+  border: 1px solid var(--wf-border);
+  border-radius: var(--wf-control-radius);
+  background: color-mix(in srgb, var(--wf-surface-raised) 72%, transparent);
+}
+
+.watchface-shell .wf-history-controls > .wf-icon-button {
+  width: 33px;
+  min-width: 33px;
+  height: 32px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+
+.watchface-shell .wf-history-controls > .wf-icon-button + .wf-icon-button {
+  border-left: 1px solid var(--wf-border);
+}
+
+.watchface-shell .wf-history-controls > .wf-icon-button:hover:not(:disabled) {
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-studio-grid, .watchface-editor-grid) {
@@ -2355,22 +2436,94 @@
   top: -12px;
   align-items: center;
   justify-content: space-between;
-  min-height: 48px;
+  min-height: 46px;
   gap: 8px;
   border-bottom: 1px solid var(--wf-border);
-  background: color-mix(in srgb, var(--wf-surface) 94%, transparent);
-  padding: 8px 2px;
+  background: color-mix(in srgb, var(--wf-surface-raised) 96%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 4%, transparent);
+  padding: 0 10px;
+}
+
+.watchface-shell .wf-layers-pane > .wf-pane-heading {
+  margin: -12px -10px 8px;
+}
+
+.watchface-shell .wf-properties-pane > .wf-pane-heading {
+  margin: -12px -12px 10px;
+}
+
+.watchface-shell .wf-pane-heading::after {
+  position: absolute;
+  bottom: -1px;
+  left: 10px;
+  width: 32px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  content: "";
 }
 
 .watchface-shell .wf-pane-heading > div:first-child {
   min-width: 0;
 }
 
-.watchface-shell .wf-pane-heading > div:first-child > span,
-.watchface-shell .wf-pane-heading > div:first-child > strong {
+.watchface-shell .wf-pane-heading-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.watchface-shell .wf-pane-heading-icon {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--wf-border);
+  border-radius: 6px;
+  background: var(--wf-surface-hover);
+  color: var(--text-secondary);
+}
+
+.watchface-shell .wf-pane-count {
+  display: inline-flex;
+  min-width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--wf-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wf-surface-hover) 82%, transparent);
+  color: var(--text-secondary);
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.watchface-shell .wf-pane-context {
   display: block;
   overflow: hidden;
-  margin-top: 2px;
+  max-width: min(150px, 48%);
+  min-width: 0;
+  border: 1px solid var(--wf-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wf-surface-hover) 76%, transparent);
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  font-size: var(--wf-text-xs);
+  font-weight: 650;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-pane-heading > div:first-child > span:not(.wf-pane-heading-icon, .wf-pane-count),
+.watchface-shell .wf-pane-heading > div:first-child > strong:not(.wf-pane-context) {
+  display: block;
+  overflow: hidden;
+  margin-top: 1px;
   color: var(--text-secondary);
   font-size: var(--wf-text-xs);
   font-weight: 600;
@@ -2392,9 +2545,10 @@
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-pane-title, .watchface-editor-pane-title) {
   margin: 0;
   color: var(--text-primary);
-  font-size: var(--wf-text-sm);
+  font-size: var(--wf-text-xs);
   font-weight: 800;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-add-menu, .watchface-add-menu, .wf-export-menu) {
@@ -2405,14 +2559,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 40px;
-  gap: 7px;
+  min-height: 30px;
+  gap: 6px;
   border: 1px solid var(--wf-border);
   border-radius: var(--wf-control-radius);
-  background: var(--wf-surface-raised);
+  background: color-mix(in srgb, var(--wf-surface-raised) 76%, transparent);
   color: var(--text-secondary);
-  padding: 0 10px;
-  font-size: var(--wf-text-sm);
+  padding: 0 8px;
+  font-size: var(--wf-text-xs);
   font-weight: 700;
 }
 
@@ -2469,7 +2623,7 @@
 
 .watchface-shell .wf-layer-list {
   display: grid;
-  gap: 3px;
+  gap: 1px;
   margin: 8px 0 0;
   padding: 0;
   list-style: none;
@@ -2489,7 +2643,7 @@
 
 .watchface-shell .wf-editor-group-tree {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px 28px;
+  grid-template-columns: minmax(0, 1fr) 32px 32px;
   align-items: center;
 }
 
@@ -2522,12 +2676,49 @@
 }
 
 .watchface-shell .wf-layer-group {
-  margin: 12px 7px 4px;
+  margin: 10px 0 2px;
+}
+
+.watchface-shell .wf-layer-group:first-child {
+  margin-top: 2px;
+}
+
+.watchface-shell .wf-layer-section-toggle {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  min-height: 28px;
+  gap: 3px;
+  border: 0;
+  border-radius: var(--wf-control-radius);
+  background: transparent;
   color: var(--text-secondary);
+  padding: 0 7px 0 4px;
+  text-align: left;
+  font: inherit;
   font-size: var(--wf-text-xs);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 750;
+}
+
+.watchface-shell .wf-layer-section-toggle:hover {
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-layer-section-toggle > svg {
+  transition: transform 140ms ease;
+}
+
+.watchface-shell .wf-layer-section-toggle > svg.is-collapsed {
+  transform: rotate(-90deg);
+}
+
+.watchface-shell .wf-layer-section-count {
+  color: var(--text-tertiary);
+  font-size: var(--wf-text-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
 }
 
 .watchface-shell .wf-layer-icon {
@@ -2582,8 +2773,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 40px;
   align-items: center;
-  min-height: 40px;
-  gap: 5px;
+  min-height: 36px;
+  gap: 3px;
   border: 1px solid transparent;
   border-radius: var(--wf-control-radius);
   background: transparent;
@@ -2622,8 +2813,8 @@
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-layer-visibility, .watchface-layer-visibility) {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border: 0;
   border-radius: var(--wf-control-radius);
   background: transparent;
@@ -2639,8 +2830,8 @@
 
 .watchface-shell .watchface-layer-lock {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border: 0;
   border-radius: var(--wf-control-radius);
   background: transparent;

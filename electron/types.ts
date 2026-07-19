@@ -652,6 +652,13 @@ export type CorosWatchfaceBackgroundElement =
 
 export interface CorosWatchfaceDesignState {
   version: 1;
+  /**
+   * Independent visual state for alternate firmware display modes. Current
+   * display fields remain at the top level for backwards compatibility.
+   */
+  modeDesigns?: {
+    aod?: CorosWatchfaceModeDesignState;
+  };
   /** Exact archive `o_wf_ver`; absent keeps automatic compatibility behavior. */
   archiveWatchFaceVersion?: number;
   /** Deletes blank `[key]=` config lines from built archives (see creator input). */
@@ -694,6 +701,11 @@ export interface CorosWatchfaceDesignState {
     /** Preserve each selectable digit's natural width and expand value rectangles. */
     nativeSize?: boolean;
   };
+  /**
+   * Per-component selectable-control state. Missing entries inherit whether
+   * the imported template already declares that component.
+   */
+  controlComplicationEnabled?: Record<string, boolean>;
   /** False removes the Battery choice from the firmware-selectable control slot. */
   controlBatteryEnabled?: boolean;
   /** False removes the Sunrise choice from the firmware-selectable control slot. */
@@ -798,6 +810,57 @@ export interface CorosWatchfaceDesignState {
    */
   backgroundElements?: CorosWatchfaceBackgroundElement[];
 }
+
+/**
+ * Visual/editor state that can diverge between Current and Always-on without
+ * duplicating archive-wide settings or raw config text.
+ */
+export type CorosWatchfaceModeDesignState = Partial<
+  Pick<
+    CorosWatchfaceDesignState,
+    | "backgroundColor"
+    | "accentColor"
+    | "artwork"
+    | "artworkVisible"
+    | "zoom"
+    | "fontFamily"
+    | "rasterFont"
+    | "fontWeight"
+    | "fontStyle"
+    | "letterSpacing"
+    | "digitColor"
+    | "tintLabels"
+    | "tintIcons"
+    | "previewComplication"
+    | "metricChanges"
+    | "metricStyles"
+    | "selectableMetricStyle"
+    | "controlComplicationEnabled"
+    | "controlIconOffsets"
+    | "separateAutoTime"
+    | "timeStyles"
+    | "dateStyles"
+    | "staticSeparators"
+    | "ampmIndicator"
+    | "weatherIndicator"
+    | "layoutOffsets"
+    | "linkedLayerGroups"
+    | "editorGroups"
+    | "editorGuides"
+    | "lockedLayerIds"
+    | "effectStyles"
+    | "layerEffects"
+    | "layerVisibility"
+    | "layerColors"
+    | "configAssetOverrides"
+    | "designSprites"
+    | "artworkLayerOrder"
+    | "backgroundElements"
+  >
+> & {
+  /** Whether Studio must emit a flattened background for this mode. */
+  backgroundEdited?: boolean;
+};
 
 export interface CorosWatchfaceProjectSummary {
   projectId: string;

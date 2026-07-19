@@ -8,7 +8,10 @@ import {
   buildControlTemperatureOverrides,
   buildControlIconPositionOverrides,
   buildControlBatteryVisibilityOverrides,
+  buildControlComplicationConfigurationOverrides,
   buildControlComplicationVisibilityOverrides,
+  buildDisabledControlComplicationOverrides,
+  buildDisabledWatchfaceConfigAssetOverrides,
   buildDateSpriteComposition,
   buildDateStyleOverrides,
   dateSpriteCanvasSize,
@@ -33,6 +36,7 @@ import {
   corosMonthLabelForSpriteIndex,
   corosMonthSpriteIndex,
   corosWeekdayIndex,
+  detailsForCompositionMode,
   detailsForPreviewMode,
   detailsForPreviewResolution,
   getAvailableComplications,
@@ -42,9 +46,11 @@ import {
   getWatchfaceAnalogPreviewLayers,
   getWatchfaceControlStatusPreviewLayers,
   hasControlBattery,
+  hasControlComplication,
   hasAutoAlignedTime,
   hasWatchfaceAod,
   inferStaticSeparators,
+  isControlComplicationEnabled,
   listWatchfaceConfigAssets,
   loadStudioImage,
   mergeAssetReplacements,
@@ -54,15 +60,24 @@ import {
   pickWatchPreviewResolution,
   rasterFontSupportsText,
   rasterFontNativeSpriteSize,
+  removeWatchfaceDateFontOverride,
   rebaseNegativeControlChildren,
+  retargetWatchfaceCompositionToAod,
+  retargetWatchfaceCompositionToCurrent,
   resizeConfigRectToCanvas,
   resolveWatchfaceSpriteRotation,
   rotateSpriteInCanvas,
   scaledBatterySpriteCanvasSize,
   scaleConfigRectValue,
   supportsWatchfaceSpriteRotation,
+  WATCHFACE_COMPLICATIONS,
   watchfaceEffectRenderScale
 } from "../src/watchfaces/watchfaceStudio.ts";
+import {
+  materializeLegacyAodDesign,
+  resolveWatchfaceModeDesign,
+  writeWatchfaceModeDesign
+} from "../src/watchfaces/watchfaceDisplayModes.ts";
 import {
   classifyRasterSpriteFolder,
   createRasterFontFolderReplacement
@@ -421,6 +436,226 @@ const details = {
   resolutions: [resolution(416, 23, 33), resolution(800, 44, 64)]
 };
 
+assert.equal(WATCHFACE_COMPLICATIONS.length, 10);
+assert.equal(
+  isControlComplicationEnabled(details, {}, "heartRate"),
+  true,
+  "a selectable declared by the imported template should default on"
+);
+assert.equal(
+  isControlComplicationEnabled(details, {}, "calories"),
+  false,
+  "a selectable missing from the imported template should default off"
+);
+assert.equal(hasControlComplication(details, "steps"), true);
+assert.equal(hasControlComplication(details, "calories"), false);
+
+const noControlDetails = {
+  ...details,
+  resolutions: details.resolutions.map((candidate) => ({
+    ...candidate,
+    config: Object.fromEntries(
+      Object.entries(candidate.config).filter(
+        ([key]) =>
+          !key.startsWith("control_") &&
+          !/^rect_control\d+_pos$/.test(key)
+      )
+    )
+  }))
+};
+const enabledMissingCalories =
+  buildControlComplicationConfigurationOverrides(noControlDetails, {
+    controlComplicationEnabled: { calories: true }
+  });
+for (const candidate of noControlDetails.resolutions) {
+  const override = enabledMissingCalories.find(
+    ({ path }) => path === `${candidate.directory}/config.txt`
+  );
+  assert.equal(override?.values.rect_control1_pos, "{0,0}");
+  assert.match(
+    override?.values.control_kcal_rect ?? "",
+    /^\{\d+,\d+,\d+,\d+,hcenter\|vcenter\}$/
+  );
+  assert.ok(
+    override?.values.control_kcal_font,
+    "enabling a missing selectable should inject a usable digit font"
+  );
+}
+const configuredCalories = applyConfigOverridesToDetails(
+  noControlDetails,
+  enabledMissingCalories
+);
+assert.equal(
+  hasControlComplication(configuredCalories, "calories"),
+  true,
+  "the synthesized configuration should be recognized when the project reloads"
+);
+
+const virtualExerciseAsset = listWatchfaceConfigAssets(
+  details,
+  undefined,
+  ["exercise"]
+).find(({ id }) => id === "config:control_exercise_icon");
+assert.equal(virtualExerciseAsset?.label, "Control Exercise");
+assert.equal(virtualExerciseAsset?.source, null);
+assert.match(
+  virtualExerciseAsset?.relativePath ?? "",
+  /^studio\/.+\/00\.png$/,
+  "an enabled injected selectable should expose an editable virtual icon row"
+);
+const exerciseDetails = applyConfigOverridesToDetails(
+  details,
+  buildControlComplicationConfigurationOverrides(details, {
+    controlComplicationEnabled: { exercise: true }
+  })
+);
+const exerciseIconOverrides = buildWatchfaceConfigAssetOverrides(
+  exerciseDetails,
+  {
+    "config:control_exercise_icon": {
+      enabled: true,
+      nativeSize: true,
+      replacement: {
+        dataUrl: "data:image/png;base64,AA==",
+        width: 32,
+        height: 32
+      }
+    }
+  }
+);
+for (const candidate of details.resolutions) {
+  const override = exerciseIconOverrides.find(
+    ({ path }) => path === `${candidate.directory}/config.txt`
+  );
+  assert.match(
+    override?.values.control_exercise_icon ?? "",
+    /^studio\\.+\\00\.png$/,
+    "a custom icon for an injected selectable should add its config path"
+  );
+  assert.match(
+    override?.values.control_exercise_icon_pos ?? "",
+    /^\{\d+,\d+\}$/,
+    "a custom icon for an injected selectable should receive an editable position"
+  );
+}
+const positionedVirtualExercise = buildControlIconPositionOverrides(
+  applyConfigOverridesToDetails(exerciseDetails, exerciseIconOverrides),
+  { exercise: { dx: 10, dy: -6 } }
+);
+assert.deepEqual(
+  positionedVirtualExercise.map(({ values }) => values.control_exercise_icon_pos),
+  ["{88,-3}", "{170,-6}"],
+  "an imported virtual selectable icon should participate in position editing"
+);
+const finalVirtualExerciseVisibility =
+  buildDisabledWatchfaceConfigAssetOverrides(exerciseDetails, {
+    "config:control_exercise_icon": {
+      enabled: true,
+      nativeSize: true,
+      replacement: {
+        dataUrl: "data:image/png;base64,AA==",
+        width: 32,
+        height: 32
+      }
+    }
+  });
+assert.deepEqual(
+  finalVirtualExerciseVisibility,
+  [],
+  "the final visibility safeguard must not restore a virtual icon's fallback position"
+);
+const pace4ExerciseExportDetails = {
+  archiveId: "pace4-exercise-export",
+  resolutions: [
+    {
+      directory: "watchface_390x390",
+      width: 390,
+      height: 390,
+      config: { rect_control1_pos: "{140,-246}" },
+      aodConfig: {},
+      spriteFolders: [],
+      icons: []
+    },
+    {
+      directory: "watchface_800x800",
+      width: 800,
+      height: 800,
+      config: { rect_control1_pos: "{286,-504}" },
+      aodConfig: {},
+      spriteFolders: [],
+      icons: []
+    }
+  ]
+};
+const pace4MovedExerciseOverrides = rebaseNegativeControlChildren(
+  pace4ExerciseExportDetails,
+  [
+    {
+      path: "watchface_390x390/config.txt",
+      values: {
+        rect_control1_pos: "{120,-231}",
+        control_step_icon_pos: "{153,300}",
+        control_step_rect: "{166,349,248,375,hcenter|vcenter}",
+        control_exercise_hour_rect: "{166,349,204,375,hcenter|vcenter}",
+        control_exercise_minute_rect: "{210,349,248,375,hcenter|vcenter}",
+        control_exercise_icon_pos: "{135,351}"
+      }
+    },
+    {
+      path: "watchface_800x800/config.txt",
+      values: {
+        rect_control1_pos: "{246,-473}",
+        control_step_icon_pos: "{313,615}",
+        control_step_rect: "{340,716,510,770,hcenter|vcenter}",
+        control_exercise_hour_rect: "{340,716,418,770,hcenter|vcenter}",
+        control_exercise_minute_rect: "{432,716,510,770,hcenter|vcenter}",
+        control_exercise_icon_pos: "{276,720}"
+      }
+    }
+  ]
+);
+assert.equal(
+  pace4MovedExerciseOverrides.find(({ path }) =>
+    path === "watchface_390x390/config.txt"
+  )?.values.control_exercise_icon_pos,
+  "{135,120}"
+);
+assert.equal(
+  pace4MovedExerciseOverrides.find(({ path }) =>
+    path === "watchface_800x800/config.txt"
+  )?.values.control_exercise_icon_pos,
+  "{276,247}",
+  "PACE 4 Exercise movement must survive shared-origin rebasing at every resolution"
+);
+
+const disabledSteps = buildControlComplicationConfigurationOverrides(details, {
+  controlComplicationEnabled: { steps: false }
+});
+for (const candidate of details.resolutions) {
+  const override = disabledSteps.find(
+    ({ path }) => path === `${candidate.directory}/config.txt`
+  );
+  for (const key of Object.keys(candidate.config).filter((key) =>
+    key.startsWith("control_step_")
+  )) {
+    assert.equal(
+      override?.values[key],
+      "__COROSLINK_DELETE_CONFIG_KEY__",
+      "turning off a selectable should delete every related config field"
+    );
+  }
+}
+for (const override of buildDisabledControlComplicationOverrides(details, {
+  controlComplicationEnabled: { steps: false }
+})) {
+  assert.ok(
+    Object.values(override.values).every(
+      (value) => value === "__COROSLINK_DELETE_CONFIG_KEY__"
+    ),
+    "the final cleanup pass must contain deletions only"
+  );
+}
+
 assert.deepEqual(
   parseWatchfaceConfigText(
     "// note\r\n[watchface_id]=0x26\r\n[background_icon]=background.png\r\n"
@@ -476,6 +711,31 @@ assert.deepEqual(
   dateSpriteCanvasSize(monthLabelResolution, "dateMonth", monthLabelStyle, 1),
   { width: 73, height: 29, native: true },
   "12-sprite month folders should resolve JAN from firmware slot 01"
+);
+assert.equal(
+  removeWatchfaceDateFontOverride({
+    scale: 1,
+    fontFamily: "Fixture Sans",
+    letterSpacing: 0.08,
+    nativeSize: true
+  }),
+  undefined,
+  "restoring a rasterized weekday font should remove its inert style entry"
+);
+assert.deepEqual(
+  removeWatchfaceDateFontOverride({
+    scale: 1.25,
+    color: "#44ccaa",
+    fontFamily: "Fixture Sans",
+    rasterFont: monthLabelStyle.rasterFont,
+    nativeSize: true,
+    monthFormat: "labels"
+  }),
+  {
+    scale: 1.25,
+    color: "#44ccaa"
+  },
+  "font reset should preserve independent artwork edits while clearing raster sizing"
 );
 assert.equal(
   buildDateStyleOverrides(
@@ -609,6 +869,142 @@ assert.equal(
   details,
   "The current preview should retain the original details object"
 );
+
+const sharedModeResolution = resolution(260, 8, 12);
+sharedModeResolution.config.time_hour_high_font = "shared_digits";
+sharedModeResolution.aodConfig = {
+  time_hour_high_pos: "{20,30}",
+  time_hour_high_font: "shared_digits"
+};
+sharedModeResolution.spriteFolders = [{
+  folder: "shared_digits",
+  kind: "digits",
+  aod: false,
+  files: digitFiles(8, 12, sharedModeResolution.directory, "shared_digits")
+}];
+const sharedModeDetails = {
+  archiveId: "shared-mode-assets",
+  resolutions: [sharedModeResolution]
+};
+const isolatedAodDetails = detailsForCompositionMode(
+  sharedModeDetails,
+  "aod"
+);
+assert.equal(
+  isolatedAodDetails.resolutions[0].config.time_hour_high_font,
+  "shared_digits"
+);
+assert.deepEqual(isolatedAodDetails.resolutions[0].aodConfig, {});
+assert.equal(isolatedAodDetails.resolutions[0].spriteFolders.length, 1);
+assert.equal(
+  isolatedAodDetails.resolutions[0].spriteFolders[0].aod,
+  false,
+  "independent AOD colors must not be dimmed a second time"
+);
+const isolatedAodComposition = retargetWatchfaceCompositionToAod(
+  isolatedAodDetails,
+  {
+    assetReplacements: [{
+      path: `${sharedModeResolution.directory}/shared_digits/00.png`,
+      dataUrl: "aod-zero"
+    }],
+    configOverrides: [{
+      path: `${sharedModeResolution.directory}/config.txt`,
+      values: { time_hour_high_pos: "{24,34}" }
+    }]
+  }
+);
+assert.match(
+  isolatedAodComposition.assetReplacements[0].path,
+  /\/studio\/aod_shared_digits_[a-z0-9]+\/00\.png$/
+);
+assert.equal(
+  isolatedAodComposition.assetReplacements[0].create,
+  true
+);
+assert.ok(
+  isolatedAodComposition.configOverrides.every((override) =>
+    override.path.endsWith("/AODconfig.txt")
+  )
+);
+assert.match(
+  isolatedAodComposition.configOverrides
+    .flatMap((override) => Object.values(override.values))
+    .find((value) => value.includes("aod_shared_digits")),
+  /^studio\\aod_shared_digits_[a-z0-9]+$/
+);
+const isolatedCurrentComposition = retargetWatchfaceCompositionToCurrent(
+  detailsForCompositionMode(sharedModeDetails, "current"),
+  {
+    assetReplacements: [{
+      path: `${sharedModeResolution.directory}/shared_digits/00.png`,
+      dataUrl: "current-zero"
+    }],
+    configOverrides: []
+  }
+);
+assert.match(
+  isolatedCurrentComposition.assetReplacements[0].path,
+  /\/studio\/current_shared_digits_[a-z0-9]+\/00\.png$/
+);
+assert.ok(
+  isolatedCurrentComposition.configOverrides.every((override) =>
+    override.path.endsWith("/config.txt")
+  )
+);
+
+const legacyModeRoot = {
+  version: 1,
+  accentColor: "#51e0b5",
+  digitColor: "#ffffff",
+  fontFamily: "",
+  tintLabels: false,
+  tintIcons: false,
+  metricStyles: {},
+  timeStyles: {},
+  dateStyles: {},
+  layerColors: {},
+  effectStyles: [],
+  layerEffects: {},
+  configAssetOverrides: {
+    "aod:background_icon": { enabled: false }
+  },
+  layoutOffsets: {}
+};
+const materializedAod = materializeLegacyAodDesign(
+  legacyModeRoot,
+  null
+);
+assert.equal(materializedAod.digitColor, "#8c8c8c");
+assert.equal(
+  materializedAod.configAssetOverrides["config:background_icon"].enabled,
+  false
+);
+const independentModeRoot = {
+  ...legacyModeRoot,
+  modeDesigns: { aod: materializedAod }
+};
+const activeAod = resolveWatchfaceModeDesign(independentModeRoot, "aod");
+const movedAodRoot = writeWatchfaceModeDesign(
+  independentModeRoot,
+  "aod",
+  {
+    ...activeAod,
+    layoutOffsets: { hours: { dx: 5, dy: 7 } }
+  }
+);
+assert.deepEqual(movedAodRoot.layoutOffsets, {});
+assert.deepEqual(
+  movedAodRoot.modeDesigns.aod.layoutOffsets.hours,
+  { dx: 5, dy: 7 }
+);
+assert.equal(movedAodRoot.modeDesigns.aod.backgroundEdited, undefined);
+const repaintedAodRoot = writeWatchfaceModeDesign(
+  movedAodRoot,
+  "aod",
+  { ...resolveWatchfaceModeDesign(movedAodRoot, "aod"), backgroundColor: "#112233" }
+);
+assert.equal(repaintedAodRoot.modeDesigns.aod.backgroundEdited, true);
 
 const analogResolution = resolution(260, 8, 12);
 analogResolution.config.time_center_pos = "{130,130}";
@@ -1460,7 +1856,8 @@ assert.deepEqual(
 );
 assert.deepEqual(
   getAvailableComplications(details).map(({ id }) => id),
-  ["heartRate", "steps", "battery", "temperature"]
+  ["heartRate", "steps"],
+  "the effective selector should contain only components with complete config"
 );
 const selectableStyleOverrides = buildSelectableMetricStyleOverrides(
   details,
@@ -1816,9 +2213,7 @@ assert.deepEqual(
     "steps",
     "exercise",
     "sunrise",
-    "sunset",
-    "battery",
-    "temperature"
+    "sunset"
   ]
 );
 const controlIconOverrides = buildControlIconPositionOverrides(iconPositionDetails, {
@@ -1875,6 +2270,42 @@ assert.deepEqual(
     control_battery_icon_pos: "{21,12}",
     control_hr_rect: "{87,2,154,35,hcenter|vcenter}",
     control_step_rect: "{46,2,162,35,hcenter|vcenter}"
+  }
+);
+
+// A moved PACE 4 / 416 control can have positive absolute positions despite a
+// negative container origin. Fold the negative axis into every relative child
+// so the firmware receives the same positions with a non-negative origin.
+const pace416NegativeOriginDetails = {
+  resolutions: [
+    {
+      directory: "watchface_416x416",
+      config: {
+        rect_control1_pos: "{140,-246}",
+        control_step_icon_pos: "{186,328}",
+        control_step_rect: "{177,372,265,400,hcenter|vcenter}",
+        control_kcal_icon_pos: "{148,372}",
+        control_kcal_rect: "{177,372,265,400,hcenter|vcenter}",
+        control_hr_icon_pos: "{184,334}",
+        control_hr_rect: "{177,372,265,400,hcenter|vcenter}",
+        control_elevation_icon_pos: "{182,328}",
+        control_elevation_rect: "{177,372,265,400,hcenter|vcenter}"
+      }
+    }
+  ]
+};
+assert.deepEqual(
+  rebaseNegativeControlChildren(pace416NegativeOriginDetails, [])[0]?.values,
+  {
+    rect_control1_pos: "{140,0}",
+    control_step_icon_pos: "{186,82}",
+    control_step_rect: "{177,126,265,154,hcenter|vcenter}",
+    control_kcal_icon_pos: "{148,126}",
+    control_kcal_rect: "{177,126,265,154,hcenter|vcenter}",
+    control_hr_icon_pos: "{184,88}",
+    control_hr_rect: "{177,126,265,154,hcenter|vcenter}",
+    control_elevation_icon_pos: "{182,82}",
+    control_elevation_rect: "{177,126,265,154,hcenter|vcenter}"
   }
 );
 
@@ -2099,6 +2530,58 @@ assert.equal(fullTimeStyle?.values.time_second_high_pos, "{398,68}");
 assert.equal(fullTimeStyle?.values.time_second_low_pos, "{478,68}");
 assert.equal(fullTimeStyle?.values.time_second_high_font, "cl_sh");
 assert.equal(fullTimeStyle?.values.time_second_low_font, "cl_sl");
+const previewTimeStyles = {
+  hours: { color: "#33ddff", scale: 1.5 },
+  minutes: { scale: 1.25 },
+  seconds: { color: "#ffcc22", scale: 2 }
+};
+const styledTimeDetails = applyConfigOverridesToDetails(
+  withMetrics,
+  buildTimeStyleOverrides(withMetrics, previewTimeStyles)
+);
+const styledTimeBounds = computeLayoutGroupBounds(
+  styledTimeDetails.resolutions[1],
+  {
+    timeStyles: previewTimeStyles,
+    letterSpacing: 0.2
+  }
+);
+assert.deepEqual(
+  styledTimeBounds.find(({ id }) => id === "hours"),
+  {
+    id: "hours",
+    label: "Hour digits",
+    x0: 64,
+    y0: 84,
+    x1: 240,
+    y1: 180
+  },
+  "scaled hour bounds should use rendered glyph dimensions and tracking"
+);
+assert.deepEqual(
+  styledTimeBounds.find(({ id }) => id === "minutes"),
+  {
+    id: "minutes",
+    label: "Minute digits",
+    x0: 259,
+    y0: 92,
+    x1: 405,
+    y1: 172
+  },
+  "scaled minute bounds should follow both enlarged glyphs"
+);
+assert.deepEqual(
+  styledTimeBounds.find(({ id }) => id === "seconds"),
+  {
+    id: "seconds",
+    label: "Seconds",
+    x0: 385,
+    y0: 68,
+    x1: 579,
+    y1: 196
+  },
+  "seconds should share the same scale-aware selection geometry"
+);
 const timeTrackingOverrides = buildTimeTrackingOverrides(withMetrics, 0.2);
 const fullTimeTracking = timeTrackingOverrides.find((entry) =>
   entry.path.includes("800x800")
@@ -2376,6 +2859,7 @@ const temperatureLayerDetails = {
     config: {
       ...resolution.config,
       temperature_rect: "{120,180,296,240,hcenter|vcenter}",
+      temperature_font: "13x19",
       temperature_font_color: "0xFFFFFF",
       temperature_negative_sign_icon: "icon\\negative.png"
     }
@@ -2389,6 +2873,11 @@ assert.equal(
   hiddenStaticTemperature?.values.temperature_rect,
   "__COROSLINK_DELETE_CONFIG_KEY__",
   "hiding static temperature should delete its rect key"
+);
+assert.equal(
+  hiddenStaticTemperature?.values.temperature_font,
+  "__COROSLINK_DELETE_CONFIG_KEY__",
+  "hiding static temperature should delete its font key"
 );
 assert.equal(
   hiddenStaticTemperature?.values.temperature_font_color,

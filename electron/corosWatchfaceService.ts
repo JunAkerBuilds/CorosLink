@@ -1657,6 +1657,13 @@ export function applyCorosWatchfaceConfigOverrides(
   }
   const appendableKeys = new Set([
     "watchface_id",
+    // Independent AOD artwork may add a flattened background to a valid
+    // color-only AODconfig that did not originally declare a PNG.
+    "background_icon",
+    // Studio can expose selectable components that the imported template did
+    // not originally declare. The renderer only emits this fixed allow-list;
+    // arbitrary missing keys remain rejected below.
+    "rect_control1_pos",
     "weather_icon_pos",
     "weather_icon_dir",
     "battery_icon_pos",
@@ -1695,6 +1702,45 @@ export function applyCorosWatchfaceConfigOverrides(
     "time_minute_low_font",
     "colon_icon"
   ]);
+  for (const prefix of [
+    "hr",
+    "step",
+    "kcal",
+    "floor",
+    "elevation",
+    "temperature"
+  ]) {
+    for (const suffix of [
+      "icon_pos",
+      "icon",
+      "rect",
+      "font",
+      "font_color"
+    ]) {
+      appendableKeys.add(`control_${prefix}_${suffix}`);
+    }
+  }
+  appendableKeys.add("control_temperature_negative_sign_icon");
+  for (const prefix of ["exercise", "sunrise", "sunset"]) {
+    for (const suffix of [
+      "icon_pos",
+      "icon",
+      "hour_rect",
+      "minute_rect",
+      "font",
+      "font_color"
+    ]) {
+      appendableKeys.add(`control_${prefix}_${suffix}`);
+    }
+  }
+  for (const suffix of [
+    "icon_dir",
+    "level_rect",
+    "level_font",
+    "level_font_color"
+  ]) {
+    appendableKeys.add(`control_battery_${suffix}`);
+  }
   const appended: string[] = [];
   for (const [key, value] of pending) {
     if (value === COROS_CONFIG_DELETE_VALUE) {
@@ -3318,21 +3364,32 @@ function assertFirmwareResolutionCompatibility(
   firmwareType: string | undefined,
   watchModel?: WatchModelId
 ): void {
-  if (
-    firmwareType?.trim().toUpperCase() !== "COROS W541" &&
-    watchModel !== "apex-4"
-  ) {
+  const normalizedFirmwareType = firmwareType?.trim().toUpperCase();
+  const compatibility =
+    normalizedFirmwareType === "COROS W336" || watchModel === "pace-4"
+      ? {
+          label: "PACE 4",
+          required: ["watchface_390x390", "watchface_800x800"]
+        }
+      : normalizedFirmwareType === "COROS W541" || watchModel === "apex-4"
+        ? {
+            label: "APEX 4",
+            required: ["watchface_240x240", "watchface_260x260"]
+          }
+        : null;
+  if (!compatibility) {
     return;
   }
-  const required = ["watchface_240x240", "watchface_260x260"];
-  const missing = required.filter(
+  const missing = compatibility.required.filter(
     (directory) => !resolutionDirectories.includes(directory)
   );
   if (missing.length > 0) {
     throw new Error(
-      `APEX 4 (${firmwareType}) requires 240×240 and 260×260 exports. This template is missing ${missing
+      `${compatibility.label}${firmwareType ? ` (${firmwareType})` : ""} requires ${compatibility.required
+        .map((directory) => directory.replace("watchface_", "").replace("x", "×"))
+        .join(" and ")} exports. This template is missing ${missing
         .map((directory) => directory.replace("watchface_", ""))
-        .join(" and ")}. Browse and choose an APEX 4 template before exporting.`
+        .join(" and ")}. Browse and choose a ${compatibility.label} template before exporting.`
     );
   }
 }

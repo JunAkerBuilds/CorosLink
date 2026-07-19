@@ -112,6 +112,14 @@ assert.equal(
   "[background_icon]=background.png\r\n[watchface_id]=0x3B9ACE60\r\n",
   "watch-face ID override must append [watchface_id] when AOD omits it"
 );
+assert.equal(
+  applyCorosWatchfaceConfigOverrides(
+    "[bg_color]=0x000000\r\n",
+    { background_icon: "studio\\aod_background\\00.png" }
+  ),
+  "[bg_color]=0x000000\r\n[background_icon]=studio\\aod_background\\00.png\r\n",
+  "independent AOD artwork may add a background to a color-only config"
+);
 assert.deepEqual(
   [...validateConfigTextReplacements([
     {
@@ -242,6 +250,29 @@ assert.equal(
   }),
   "[time_hour_high_pos]={1,2}\r\n[control_temperature_rect]={35,0,145,35,hcenter|vcenter}\r\n[control_temperature_font]=cl_ctemp\r\n[control_temperature_font_color]=0xFFFFFF\r\n[control_negative_sign_icon]=icon\\negative.png\r\n",
   "confirmed control-temperature keys should be appendable"
+);
+assert.equal(
+  applyCorosWatchfaceConfigOverrides(configWithoutWeather, {
+    rect_control1_pos: "{0,0}",
+    control_exercise_icon_pos: "{139,349}",
+    control_exercise_icon: "studio\\exercise\\00.png",
+    control_exercise_hour_rect: "{166,349,199,375,hcenter|vcenter}",
+    control_exercise_minute_rect: "{216,349,248,375,hcenter|vcenter}",
+    control_exercise_font: "02",
+    control_exercise_font_color: ""
+  }),
+  [
+    "[time_hour_high_pos]={1,2}",
+    "[rect_control1_pos]={0,0}",
+    "[control_exercise_icon_pos]={139,349}",
+    "[control_exercise_icon]=studio\\exercise\\00.png",
+    "[control_exercise_hour_rect]={166,349,199,375,hcenter|vcenter}",
+    "[control_exercise_minute_rect]={216,349,248,375,hcenter|vcenter}",
+    "[control_exercise_font]=02",
+    "[control_exercise_font_color]=",
+    ""
+  ].join("\r\n"),
+  "enabled missing Exercise controls should be appendable during archive export"
 );
 assert.equal(
   applyCorosWatchfaceConfigOverrides(configWithoutWeather, {

@@ -212,8 +212,11 @@ then claim it through COROS's official share page on iPhone.
   CorosLink generates an isolated ten-digit folder for each customized metric
 - **Drag-to-move layout (experimental)** — position hours, minutes, weekday,
   month, day, battery, and metric elements independently; CorosLink rewrites the matching
-  `config.txt` position keys for every resolution (scaled automatically),
-  leaving the always-on-display layout untouched
+  `config.txt` position keys for every resolution (scaled automatically)
+- **Independent always-on studio** — switch to `AODconfig.txt` and edit its
+  existing firmware layers, artwork, styles, effects, visibility, and placement
+  without changing the current display; shared template sprites are isolated
+  into AOD-owned folders during export
 - **Live metric studio (experimental)** — activate fixed heart rate, steps,
   calories, and elevation fields when the source template exposes them; preview
   the selectable metric slot and drag every enabled field into place
