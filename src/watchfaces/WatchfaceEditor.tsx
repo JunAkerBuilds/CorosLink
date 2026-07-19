@@ -7026,12 +7026,12 @@ export function WatchfaceEditor({
       return {
         label,
         layers: [
-          ...orderedAuthoredLayers,
           ...groupLayers.filter(
             (layer) =>
               layer.kind !== "customSprite" &&
               layer.kind !== "backgroundElement"
-          )
+          ),
+          ...orderedAuthoredLayers
         ]
       };
     });
