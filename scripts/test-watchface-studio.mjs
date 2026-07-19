@@ -60,6 +60,7 @@ import {
   pickWatchPreviewResolution,
   rasterFontSupportsText,
   rasterFontNativeSpriteSize,
+  removeWatchfaceDateFontOverride,
   rebaseNegativeControlChildren,
   retargetWatchfaceCompositionToAod,
   retargetWatchfaceCompositionToCurrent,
@@ -710,6 +711,31 @@ assert.deepEqual(
   dateSpriteCanvasSize(monthLabelResolution, "dateMonth", monthLabelStyle, 1),
   { width: 73, height: 29, native: true },
   "12-sprite month folders should resolve JAN from firmware slot 01"
+);
+assert.equal(
+  removeWatchfaceDateFontOverride({
+    scale: 1,
+    fontFamily: "Fixture Sans",
+    letterSpacing: 0.08,
+    nativeSize: true
+  }),
+  undefined,
+  "restoring a rasterized weekday font should remove its inert style entry"
+);
+assert.deepEqual(
+  removeWatchfaceDateFontOverride({
+    scale: 1.25,
+    color: "#44ccaa",
+    fontFamily: "Fixture Sans",
+    rasterFont: monthLabelStyle.rasterFont,
+    nativeSize: true,
+    monthFormat: "labels"
+  }),
+  {
+    scale: 1.25,
+    color: "#44ccaa"
+  },
+  "font reset should preserve independent artwork edits while clearing raster sizing"
 );
 assert.equal(
   buildDateStyleOverrides(
@@ -2504,6 +2530,58 @@ assert.equal(fullTimeStyle?.values.time_second_high_pos, "{398,68}");
 assert.equal(fullTimeStyle?.values.time_second_low_pos, "{478,68}");
 assert.equal(fullTimeStyle?.values.time_second_high_font, "cl_sh");
 assert.equal(fullTimeStyle?.values.time_second_low_font, "cl_sl");
+const previewTimeStyles = {
+  hours: { color: "#33ddff", scale: 1.5 },
+  minutes: { scale: 1.25 },
+  seconds: { color: "#ffcc22", scale: 2 }
+};
+const styledTimeDetails = applyConfigOverridesToDetails(
+  withMetrics,
+  buildTimeStyleOverrides(withMetrics, previewTimeStyles)
+);
+const styledTimeBounds = computeLayoutGroupBounds(
+  styledTimeDetails.resolutions[1],
+  {
+    timeStyles: previewTimeStyles,
+    letterSpacing: 0.2
+  }
+);
+assert.deepEqual(
+  styledTimeBounds.find(({ id }) => id === "hours"),
+  {
+    id: "hours",
+    label: "Hour digits",
+    x0: 64,
+    y0: 84,
+    x1: 240,
+    y1: 180
+  },
+  "scaled hour bounds should use rendered glyph dimensions and tracking"
+);
+assert.deepEqual(
+  styledTimeBounds.find(({ id }) => id === "minutes"),
+  {
+    id: "minutes",
+    label: "Minute digits",
+    x0: 259,
+    y0: 92,
+    x1: 405,
+    y1: 172
+  },
+  "scaled minute bounds should follow both enlarged glyphs"
+);
+assert.deepEqual(
+  styledTimeBounds.find(({ id }) => id === "seconds"),
+  {
+    id: "seconds",
+    label: "Seconds",
+    x0: 385,
+    y0: 68,
+    x1: 579,
+    y1: 196
+  },
+  "seconds should share the same scale-aware selection geometry"
+);
 const timeTrackingOverrides = buildTimeTrackingOverrides(withMetrics, 0.2);
 const fullTimeTracking = timeTrackingOverrides.find((entry) =>
   entry.path.includes("800x800")

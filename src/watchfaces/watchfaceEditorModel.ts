@@ -280,7 +280,10 @@ export function deriveEditorLayers(
   const resolution = pickPreviewResolution(offsetDetails);
   const boundsById = new Map<string, WatchfaceLayoutGroupBounds>();
   if (resolution) {
-    for (const box of computeLayoutGroupBounds(resolution)) {
+    for (const box of computeLayoutGroupBounds(resolution, {
+      timeStyles: design.timeStyles,
+      letterSpacing: design.letterSpacing
+    })) {
       if (box.id === "batteryIcon") {
         const batteryOverride = design.configAssetOverrides?.["config:battery_icon"];
         const batteryScale = batteryOverride?.scale ?? 1;

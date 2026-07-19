@@ -238,6 +238,7 @@ import {
   pickPreviewResolution,
   pickWatchPreviewResolution,
   rasterFontSupportsText,
+  removeWatchfaceDateFontOverride,
   retargetWatchfaceCompositionToAod,
   retargetWatchfaceCompositionToCurrent,
   supportsWatchfaceSpriteRotation,
@@ -1415,14 +1416,24 @@ export function WatchfaceEditor({
     const base = designDetails
       ? pickPreviewResolution(designDetails.styledMetricDetails)
       : null;
-    return base ? computeLayoutOffsetLimits(base) : {};
-  }, [designDetails]);
+    return base
+      ? computeLayoutOffsetLimits(base, {
+          timeStyles: design.timeStyles,
+          letterSpacing: design.letterSpacing
+        })
+      : {};
+  }, [designDetails, design.timeStyles, design.letterSpacing]);
   const baseLayoutBounds = useMemo(() => {
     const base = designDetails
       ? pickPreviewResolution(designDetails.styledMetricDetails)
       : null;
-    return base ? computeLayoutGroupBounds(base) : [];
-  }, [designDetails]);
+    return base
+      ? computeLayoutGroupBounds(base, {
+          timeStyles: design.timeStyles,
+          letterSpacing: design.letterSpacing
+        })
+      : [];
+  }, [designDetails, design.timeStyles, design.letterSpacing]);
   const layers = useMemo(() => {
     if (!modeSourceDetails) return [];
     return deriveEditorLayers(modeSourceDetails, design).filter((layer) => {
@@ -4696,6 +4707,26 @@ export function WatchfaceEditor({
     });
   }
 
+  /**
+   * Returning a date component to its template font must also remove the
+   * natural-size mode that was coupled to rasterization. If no independent
+   * visual edits remain, drop the style entry completely so the original PNG
+   * bypasses the trim-and-fit sprite pipeline.
+   */
+  function restoreDateTemplateFont(partId: WatchfaceDatePartId) {
+    setDesign((prev) => {
+      const dateStyles = { ...prev.dateStyles };
+      if (!dateStyles[partId]) return prev;
+      const restored = removeWatchfaceDateFontOverride(dateStyles[partId]);
+      if (restored) {
+        dateStyles[partId] = restored;
+      } else {
+        delete dateStyles[partId];
+      }
+      return { ...prev, dateStyles };
+    });
+  }
+
   function clearDateColor(partId: WatchfaceDatePartId) {
     setDesign((prev) => {
       const current = prev.dateStyles?.[partId] ?? { scale: 1 };
@@ -7939,14 +7970,20 @@ export function WatchfaceEditor({
             label="Font"
             value={style?.fontFamily ?? design.fontFamily}
             emptyLabel="Keep template font"
-            onChange={(fontFamily) =>
+            onChange={(fontFamily) => {
+              if (!fontFamily) {
+                restoreDateTemplateFont(partId);
+                return;
+              }
               setDateStyle(partId, {
                 fontFamily,
-                ...(supportsNativeSize && fontFamily
-                  ? { nativeSize: true }
+                rasterFont: undefined,
+                ...(supportsNativeSize ? { nativeSize: true } : {}),
+                ...(partId === "dateMonth"
+                  ? { monthFormat: undefined }
                   : {})
-              })
-            }
+              });
+            }}
             rasterFont={design.rasterFont}
             rasterFontRequiredText={partId === "weekday"
               ? "MON"
@@ -7972,29 +8009,31 @@ export function WatchfaceEditor({
             componentLabel={layer.label}
             onActivate={() =>
               setDateStyle(partId, {
-                fontFamily: "",
-                ...(supportsNativeSize ? { nativeSize: true } : {})
+                fontFamily: ""
               })
             }
             onRasterFontChange={setRasterFont}
-            onComponentRasterFontChange={(rasterFont) =>
+            onComponentRasterFontChange={(rasterFont) => {
+              if (!rasterFont) {
+                restoreDateTemplateFont(partId);
+                return;
+              }
               setDateStyle(partId, {
                 rasterFont,
                 ...(supportsNativeSize ? { nativeSize: true } : {}),
                 ...(partId === "dateMonth"
                   ? {
-                      monthFormat: rasterFont && WATCHFACE_MONTH_LABELS.every(
+                      monthFormat: WATCHFACE_MONTH_LABELS.every(
                         (label) => rasterFontSupportsText(rasterFont, label)
                       )
                         ? "labels"
-                        : rasterFont &&
-                            rasterFontSupportsText(rasterFont, "0123456789")
+                        : rasterFontSupportsText(rasterFont, "0123456789")
                           ? "digits"
                           : undefined
                     }
                   : {})
-              })
-            }
+              });
+            }}
           />
           <label className="field">
             Tint
@@ -8692,7 +8731,7 @@ export function WatchfaceEditor({
             setSelectableMetricStyle({
               fontFamily,
               rasterFont: undefined,
-              ...(fontFamily ? { nativeSize: true } : {})
+              nativeSize: Boolean(fontFamily)
             })
           }
           rasterFont={design.rasterFont}
@@ -8717,13 +8756,13 @@ export function WatchfaceEditor({
           componentRasterFont={design.selectableMetricStyle?.rasterFont}
           componentLabel="Selectable metric"
           onActivate={() =>
-            setSelectableMetricStyle({ fontFamily: "", nativeSize: true })
+            setSelectableMetricStyle({ fontFamily: "" })
           }
           onRasterFontChange={setRasterFont}
           onComponentRasterFontChange={(rasterFont) =>
             setSelectableMetricStyle({
               rasterFont,
-              ...(rasterFont ? { nativeSize: true } : {})
+              nativeSize: Boolean(rasterFont)
             })
           }
         />

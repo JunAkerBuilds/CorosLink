@@ -2687,6 +2687,32 @@ export type WatchfaceDateStyles = Partial<
   Record<WatchfaceDatePartId, WatchfaceDateSpriteStyle>
 >;
 
+/**
+ * Removes state introduced by choosing a rasterized date font. Returning
+ * `undefined` is significant: an absent style lets the original template PNG
+ * bypass resizing and transparent-padding normalization entirely.
+ */
+export function removeWatchfaceDateFontOverride(
+  style: WatchfaceDateSpriteStyle | undefined
+): WatchfaceDateSpriteStyle | undefined {
+  if (!style) return undefined;
+  const {
+    fontFamily: _fontFamily,
+    rasterFont: _rasterFont,
+    nativeSize: _nativeSize,
+    letterSpacing: _letterSpacing,
+    monthFormat: _monthFormat,
+    ...remaining
+  } = style;
+  const hasIndependentEdits =
+    remaining.scale !== 1 ||
+    remaining.color !== undefined ||
+    remaining.rotation !== undefined ||
+    remaining.width !== undefined ||
+    remaining.height !== undefined;
+  return hasIndependentEdits ? remaining : undefined;
+}
+
 interface WatchfaceDatePartDefinition {
   id: WatchfaceDatePartId;
   rectKey: string;
@@ -5455,6 +5481,16 @@ export interface WatchfaceLayoutGroupBounds {
   y1: number;
 }
 
+/**
+ * Visual styling that changes position-backed layout geometry without changing
+ * the source folder metadata stored on the imported template.
+ */
+export interface WatchfaceLayoutGeometryOptions {
+  timeStyles?: WatchfaceTimeStyles;
+  /** Face-wide tracking used when a time part has no component override. */
+  letterSpacing?: number;
+}
+
 export interface WatchfaceLayoutOffsetLimits {
   minDx: number;
   maxDx: number;
@@ -5468,7 +5504,8 @@ export interface WatchfaceLayoutOffsetLimits {
  * size they reference (digit font folder or icon file).
  */
 export function computeLayoutGroupBounds(
-  resolution: CorosWatchfaceResolutionDetails
+  resolution: CorosWatchfaceResolutionDetails,
+  geometry: WatchfaceLayoutGeometryOptions = {}
 ): WatchfaceLayoutGroupBounds[] {
   const bounds: WatchfaceLayoutGroupBounds[] = [];
   for (const group of WATCHFACE_LAYOUT_GROUPS) {
@@ -5598,10 +5635,41 @@ export function computeLayoutGroupBounds(
       }
       const pos = parseConfigPos(value);
       if (pos) {
-        const size = spriteSizeForPosKey(resolution, key);
-        x0 = Math.min(x0, pos.x);
+        const sourceSize = spriteSizeForPosKey(resolution, key);
+        const timeStyle =
+          group.id === "hours" ||
+          group.id === "minutes" ||
+          group.id === "seconds"
+            ? geometry.timeStyles?.[group.id]
+            : undefined;
+        const timeScale = timeStyle
+          ? normalizeSpriteScale(timeStyle.scale)
+          : 1;
+        const size = {
+          width: Math.max(1, Math.round(sourceSize.width * timeScale)),
+          height: Math.max(1, Math.round(sourceSize.height * timeScale))
+        };
+        // Preview tracking is applied at draw time rather than written into the
+        // live config. Mirror that horizontal offset here so hit testing,
+        // selection outlines, snapping, and edge limits follow the glyphs.
+        const tracking = Math.max(
+          -0.35,
+          Math.min(
+            0.25,
+            timeStyle?.letterSpacing ?? geometry.letterSpacing ?? 0
+          )
+        );
+        const slotDirection = key.includes("_high_")
+          ? -1
+          : key.includes("_low_")
+            ? 1
+            : 0;
+        const trackingOffset =
+          Math.round((size.height * tracking) / 2) * slotDirection;
+        const drawX = pos.x + trackingOffset;
+        x0 = Math.min(x0, drawX);
         y0 = Math.min(y0, pos.y);
-        x1 = Math.max(x1, pos.x + size.width);
+        x1 = Math.max(x1, drawX + size.width);
         y1 = Math.max(y1, pos.y + size.height);
       }
     }
@@ -5617,10 +5685,11 @@ export function computeLayoutGroupBounds(
  * while keeping its complete bounding box on the face.
  */
 export function computeLayoutOffsetLimits(
-  resolution: CorosWatchfaceResolutionDetails
+  resolution: CorosWatchfaceResolutionDetails,
+  geometry: WatchfaceLayoutGeometryOptions = {}
 ): Record<string, WatchfaceLayoutOffsetLimits> {
   return Object.fromEntries(
-    computeLayoutGroupBounds(resolution).map((box) => [
+    computeLayoutGroupBounds(resolution, geometry).map((box) => [
       box.id,
       box.id === "analogCenter"
         ? (() => {
