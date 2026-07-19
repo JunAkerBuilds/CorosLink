@@ -49,6 +49,7 @@
     "test:zip-store": "npm run build:electron && node scripts/test-zip-store.mjs",
     "test:coros-upload-config": "npm run build:electron && node scripts/test-coros-upload-config.mjs",
     "test:coros-watchfaces": "npm run build:electron && node scripts/test-coros-watchface-service.mjs",
+    "test:community-watchfaces": "npm run build:electron && node scripts/test-community-watchfaces.mjs",
     "test:legacy614a": "npm run build:electron && node scripts/test-legacy614a.mjs",
     "test:coros-raw-watchface-transfer": "node --experimental-strip-types scripts/test-coros-raw-watchface-transfer.mjs",
     "test:coros-device-info": "node --experimental-strip-types scripts/test-coros-bluetooth-device-info.mjs",
@@ -80,6 +81,14 @@
   "build": {
     "appId": "app.coroslink",
     "productName": "CorosLink",
+    "protocols": [
+      {
+        "name": "CorosLink Watch Faces",
+        "schemes": [
+          "coroslink"
+        ]
+      }
+    ],
     "publish": {
       "provider": "github",
       "owner": "JunAkerBuilds",

@@ -40,6 +40,10 @@ import type {
   CorosWatchfaceTheme,
   CorosWatchfaceThemeCatalog,
   CorosWatchfaceTemplateAsset,
+  CommunityWatchface,
+  CommunityWatchfaceCatalogPage,
+  CommunityWatchfaceDownloadProgress,
+  CommunityWatchfaceOpenRequest,
   WatchModelId,
   WatchStatus
 } from "../../electron/types";
@@ -106,10 +110,14 @@ interface WatchfacesViewProps {
   api: CorosLinkApi;
   showDevelopmentTools: boolean;
   watchStatus: WatchStatus | null;
+  communityOpenRequest:
+    | (CommunityWatchfaceOpenRequest & { requestId: number })
+    | null;
+  onCommunityOpenRequestHandled: () => void;
 }
 
 type WatchfaceSurface = "sign-in" | "hub" | "studio";
-type HubTab = "projects" | "templates";
+type HubTab = "browse" | "projects" | "templates";
 
 interface StudioSession {
   id: string;
@@ -124,6 +132,14 @@ interface StudioSession {
 const DEFAULT_FIRMWARE_TYPE = "COROS W332";
 const DEFAULT_MODEL_VERSION = "W332-3.1708.0";
 const IS_DEVELOPMENT_BUILD = import.meta.env.DEV;
+const COMMUNITY_MODEL_BY_WATCH: Partial<Record<WatchModelId, string>> = {
+  "pace-pro": "PACE Pro",
+  "pace-3": "PACE 3",
+  "apex-2": "APEX 2",
+  "apex-2-pro": "APEX 2 Pro",
+  "vertix-2": "VERTIX 2",
+  "vertix-2s": "VERTIX 2S"
+};
 
 const REGION_OPTIONS: { value: CorosWatchfaceRegion; label: string }[] = [
   { value: "eu", label: "Europe" },
@@ -131,11 +147,23 @@ const REGION_OPTIONS: { value: CorosWatchfaceRegion; label: string }[] = [
   { value: "cn", label: "China / Asia-Pacific" }
 ];
 
-export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: WatchfacesViewProps) {
+export function WatchfacesView({
+  api,
+  showDevelopmentTools,
+  watchStatus,
+  communityOpenRequest,
+  onCommunityOpenRequestHandled
+}: WatchfacesViewProps) {
   const [status, setStatus] = useState<CorosWatchfaceStatus | null>(null);
-  const [surface, setSurface] = useState<WatchfaceSurface>("sign-in");
-  const [hubTab, setHubTab] = useState<HubTab>("projects");
+  const [surface, setSurface] = useState<WatchfaceSurface>("hub");
+  const [hubTab, setHubTab] = useState<HubTab>("browse");
   const [studioSession, setStudioSession] = useState<StudioSession | null>(null);
+  const [communityProgress, setCommunityProgress] =
+    useState<CommunityWatchfaceDownloadProgress | null>(null);
+  const [communityConfirmFace, setCommunityConfirmFace] =
+    useState<CommunityWatchface | null>(null);
+  const [queuedCommunitySlug, setQueuedCommunitySlug] = useState<string | null>(null);
+  const handledCommunityRequestRef = useRef(0);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -173,7 +201,7 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
   const [shareLink, setShareLink] = useState<CorosWatchfaceShareLink | null>(null);
 
   const [busy, setBusy] = useState<
-    "login" | "themes" | "archive" | "publish" | "project" | null
+    "login" | "themes" | "archive" | "publish" | "project" | "community" | null
   >(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -220,7 +248,6 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
         setStatus(nextStatus);
         setSurface((current) => {
           if (nextStatus.authenticated && current === "sign-in") return "hub";
-          if (!nextStatus.authenticated && current === "sign-in") return "sign-in";
           return current;
         });
         if (!regionTouched) {
@@ -238,7 +265,6 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
             savedCredentialsAvailable: false,
             suggestedRegion: "us"
           });
-          setSurface("sign-in");
           setError(toErrorMessage(caught));
         }
       });
@@ -246,6 +272,39 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
       cancelled = true;
     };
   }, [api, regionTouched]);
+
+  useEffect(
+    () =>
+      api.onCommunityWatchfaceDownloadProgress((progress) => {
+        setCommunityProgress(progress);
+      }),
+    [api]
+  );
+
+  useEffect(() => {
+    if (
+      !communityOpenRequest ||
+      handledCommunityRequestRef.current === communityOpenRequest.requestId
+    ) {
+      return;
+    }
+    handledCommunityRequestRef.current = communityOpenRequest.requestId;
+    onCommunityOpenRequestHandled();
+    setHubTab("browse");
+    if (surface === "studio") {
+      setQueuedCommunitySlug(communityOpenRequest.slug);
+      setNotice(
+        "A website watch face is waiting. Save or discard your current work, then return to Browse to open it."
+      );
+      return;
+    }
+    setSurface("hub");
+    void prepareCommunityImport(communityOpenRequest.slug);
+  }, [
+    communityOpenRequest,
+    onCommunityOpenRequestHandled,
+    surface
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -402,6 +461,45 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
     setPublishOpen(false);
     setShareLink(null);
     clearMessages();
+    if (queuedCommunitySlug) {
+      const slug = queuedCommunitySlug;
+      setQueuedCommunitySlug(null);
+      setHubTab("browse");
+      queueMicrotask(() => void prepareCommunityImport(slug));
+    }
+  }
+
+  async function prepareCommunityImport(
+    slug: string,
+    compatibilityConfirmed = false
+  ) {
+    setBusy("community");
+    setCommunityProgress(null);
+    clearMessages();
+    try {
+      const face = await api.getCommunityWatchface(slug);
+      const connectedModel = watchStatus?.model
+        ? COMMUNITY_MODEL_BY_WATCH[watchStatus.model]
+        : undefined;
+      if (
+        connectedModel &&
+        !compatibilityConfirmed &&
+        !face.models.some(
+          (model) => model.toUpperCase() === connectedModel.toUpperCase()
+        )
+      ) {
+        setCommunityConfirmFace(face);
+        return;
+      }
+      const imported = await api.importCommunityWatchface(face.slug);
+      setCommunityConfirmFace(null);
+      openStudio(imported.archive, imported.face.title);
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+      setCommunityProgress(null);
+    }
   }
 
   async function handleChooseArchive() {
@@ -666,6 +764,12 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
   if (surface === "studio" && studioSession) {
     return (
       <div className="watchfaces-view wf-watchfaces watchface-shell watchface-shell--studio">
+        {queuedCommunitySlug ? (
+          <div className="watchface-community-queued" role="status">
+            A website watch face is waiting. Return to Browse when you are ready
+            to open it.
+          </div>
+        ) : null}
         <WatchfaceEditor
           key={studioSession.id}
           api={api}
@@ -916,7 +1020,19 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
             onChange={setHubTab}
           />
 
-          {hubTab === "projects" ? (
+          {hubTab === "browse" ? (
+            <CommunityWatchfaceBrowser
+              api={api}
+              connectedModel={
+                watchStatus?.model
+                  ? COMMUNITY_MODEL_BY_WATCH[watchStatus.model]
+                  : undefined
+              }
+              disabled={busy !== null}
+              progress={communityProgress}
+              onOpen={(face) => void prepareCommunityImport(face.slug)}
+            />
+          ) : hubTab === "projects" ? (
             <ProjectsDashboard
               api={api}
               projects={projects}
@@ -974,6 +1090,21 @@ export function WatchfacesView({ api, showDevelopmentTools, watchStatus }: Watch
           busy={busy === "project"}
           onCancel={() => setDeleteTarget(null)}
           onConfirm={() => void handleDeleteProject()}
+        />
+      ) : null}
+      {communityConfirmFace ? (
+        <CommunityCompatibilityDialog
+          face={communityConfirmFace}
+          connectedModel={
+            watchStatus?.model
+              ? COMMUNITY_MODEL_BY_WATCH[watchStatus.model]
+              : undefined
+          }
+          busy={busy === "community"}
+          onCancel={() => setCommunityConfirmFace(null)}
+          onConfirm={() =>
+            void prepareCommunityImport(communityConfirmFace.slug, true)
+          }
         />
       ) : null}
       {importOpen ? (
@@ -1250,13 +1381,29 @@ function WatchFacesTabs({
       onKeyDown={(event) => {
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
         event.preventDefault();
-        const nextTab = activeTab === "projects" ? "templates" : "projects";
+        const tabs: HubTab[] = ["browse", "projects", "templates"];
+        const currentIndex = tabs.indexOf(activeTab);
+        const direction = event.key === "ArrowRight" ? 1 : -1;
+        const nextTab =
+          tabs[(currentIndex + direction + tabs.length) % tabs.length]!;
         onChange(nextTab);
         window.requestAnimationFrame(() => {
           document.getElementById(`watchface-${nextTab}-tab`)?.focus();
         });
       }}
     >
+      <button
+        id="watchface-browse-tab"
+        type="button"
+        role="tab"
+        aria-selected={activeTab === "browse"}
+        aria-controls="watchface-browse-panel"
+        tabIndex={activeTab === "browse" ? 0 : -1}
+        className={activeTab === "browse" ? "is-active" : ""}
+        onClick={() => onChange("browse")}
+      >
+        Browse
+      </button>
       <button
         id="watchface-projects-tab"
         type="button"
@@ -1279,10 +1426,377 @@ function WatchFacesTabs({
         className={activeTab === "templates" ? "is-active" : ""}
         onClick={() => onChange("templates")}
       >
-        Templates
+        COROS Templates
       </button>
     </div>
   );
+}
+
+function CommunityWatchfaceBrowser({
+  api,
+  connectedModel,
+  disabled,
+  progress,
+  onOpen
+}: {
+  api: CorosLinkApi;
+  connectedModel?: string;
+  disabled: boolean;
+  progress: CommunityWatchfaceDownloadProgress | null;
+  onOpen: (face: CommunityWatchface) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [model, setModel] = useState(connectedModel ?? "");
+  const [style, setStyle] = useState("");
+  const [sort, setSort] = useState<"newest" | "title">("newest");
+  const [page, setPage] = useState(1);
+  const [catalog, setCatalog] =
+    useState<CommunityWatchfaceCatalogPage | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  const [selected, setSelected] = useState<CommunityWatchface | null>(null);
+  const modelTouchedRef = useRef(false);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(timeout);
+  }, [search]);
+
+  useEffect(() => {
+    if (!modelTouchedRef.current && connectedModel) {
+      setModel(connectedModel);
+      setPage(1);
+    }
+  }, [connectedModel]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    void api
+      .listCommunityWatchfaces({
+        ...(debouncedSearch ? { q: debouncedSearch } : {}),
+        ...(model ? { model } : {}),
+        ...(style ? { style } : {}),
+        sort,
+        page,
+        pageSize: 12
+      })
+      .then((nextCatalog) => {
+        if (cancelled) return;
+        setCatalog(nextCatalog);
+        if (nextCatalog.pagination.page !== page) {
+          setPage(nextCatalog.pagination.page);
+        }
+      })
+      .catch((caught) => {
+        if (!cancelled) setLoadError(toErrorMessage(caught));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, debouncedSearch, model, page, retry, sort, style]);
+
+  const percent =
+    progress?.totalBytes && progress.totalBytes > 0
+      ? Math.min(100, Math.round((progress.receivedBytes / progress.totalBytes) * 100))
+      : null;
+
+  return (
+    <div
+      id="watchface-browse-panel"
+      className="watchface-community"
+      role="tabpanel"
+      aria-labelledby="watchface-browse-tab"
+    >
+      <section className="watchface-community-hero">
+        <div>
+          <span className="watchface-section-kicker">CorosLink Faces</span>
+          <h2>Find your next watch face</h2>
+          <p>
+            Browse reviewed community projects and open them directly in Studio.
+          </p>
+        </div>
+        <a
+          className="secondary-button"
+          href="https://watchfaces.coroslink.com/gallery"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Website <ExternalLink size={15} aria-hidden="true" />
+        </a>
+      </section>
+
+      <div className="watchface-community-tools">
+        <label className="watchface-community-search">
+          <span>Search faces</span>
+          <span>
+            <Search size={17} aria-hidden="true" />
+            <input
+              type="search"
+              value={search}
+              placeholder="Face, creator, tag…"
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </span>
+        </label>
+        <label>
+          <span>Watch model</span>
+          <select
+            value={model}
+            onChange={(event) => {
+              modelTouchedRef.current = true;
+              setModel(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">All watches</option>
+            {(catalog?.facets.models ?? (connectedModel ? [connectedModel] : []))
+              .map((item) => <option key={item}>{item}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Style</span>
+          <select
+            value={style}
+            onChange={(event) => {
+              setStyle(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">All styles</option>
+            {(catalog?.facets.styles ?? []).map((item) => (
+              <option key={item.value} value={item.value}>{item.label}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Sort</span>
+          <select
+            value={sort}
+            onChange={(event) => {
+              setSort(event.target.value === "title" ? "title" : "newest");
+              setPage(1);
+            }}
+          >
+            <option value="newest">Newest first</option>
+            <option value="title">Name A–Z</option>
+          </select>
+        </label>
+      </div>
+
+      {progress ? (
+        <div className="watchface-community-progress" role="status">
+          <div>
+            <Loader2 className="spin" size={16} aria-hidden="true" />
+            <span>
+              {progress.stage === "downloading"
+                ? `Downloading${percent === null ? "…" : ` ${percent}%`}`
+                : progress.stage === "verifying"
+                  ? "Verifying reviewed package…"
+                  : "Opening in Studio…"}
+            </span>
+          </div>
+          <span className="watchface-community-progress-track" aria-hidden="true">
+            <i style={{ width: `${percent ?? (progress.stage === "opening" ? 100 : 65)}%` }} />
+          </span>
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div className="watchface-community-grid" aria-label="Loading community watch faces">
+          {Array.from({ length: 6 }, (_, index) => (
+            <div className="watchface-community-card is-loading" key={index} />
+          ))}
+        </div>
+      ) : loadError ? (
+        <section className="watchface-community-empty" role="alert">
+          <h3>Community faces are unavailable</h3>
+          <p>{loadError}</p>
+          <button className="primary-button" type="button" onClick={() => setRetry((value) => value + 1)}>
+            Try again
+          </button>
+        </section>
+      ) : catalog?.items.length ? (
+        <>
+          <div className="watchface-community-results">
+            <span>{catalog.pagination.total} {catalog.pagination.total === 1 ? "face" : "faces"}</span>
+            <span>Page {catalog.pagination.page} of {catalog.pagination.pageCount}</span>
+          </div>
+          <div className="watchface-community-grid">
+            {catalog.items.map((face) => (
+              <article className="watchface-community-card" key={face.id}>
+                <button
+                  className="watchface-community-preview"
+                  type="button"
+                  onClick={() => setSelected(face)}
+                  aria-label={`View ${face.title}`}
+                >
+                  <img src={face.previewUrl} alt={`Preview of ${face.title}`} />
+                </button>
+                <div className="watchface-community-card-body">
+                  <button type="button" className="watchface-community-title" onClick={() => setSelected(face)}>
+                    {face.title}
+                  </button>
+                  <span>by {face.creatorName}</span>
+                  <div className="watchface-community-tags">
+                    {face.tags.slice(0, 2).map((tag) => <span key={tag}>{tag}</span>)}
+                  </div>
+                  <p>{face.models.slice(0, 2).join(" · ")}</p>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onOpen(face)}
+                  >
+                    {progress?.slug === face.slug ? (
+                      <Loader2 className="spin" size={15} aria-hidden="true" />
+                    ) : (
+                      <Download size={15} aria-hidden="true" />
+                    )}
+                    Open in Studio
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="watchface-community-pagination">
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((value) => Math.max(1, value - 1))}
+            >
+              Previous
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={page >= catalog.pagination.pageCount}
+              onClick={() => setPage((value) => value + 1)}
+            >
+              Next
+            </button>
+          </div>
+        </>
+      ) : (
+        <section className="watchface-community-empty">
+          <Watch size={28} aria-hidden="true" />
+          <h3>No faces match these filters</h3>
+          <p>Try another watch model, style, or search.</p>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => {
+              modelTouchedRef.current = true;
+              setSearch("");
+              setModel("");
+              setStyle("");
+              setSort("newest");
+              setPage(1);
+            }}
+          >
+            Clear filters
+          </button>
+        </section>
+      )}
+
+      {selected ? (
+        <div className="watchface-modal-backdrop" role="presentation">
+          <section
+            className="watchface-modal watchface-community-detail"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="community-face-title"
+          >
+            <button
+              className="icon-button watchface-modal-close"
+              type="button"
+              aria-label="Close watch-face details"
+              onClick={() => setSelected(null)}
+            >
+              <X size={17} aria-hidden="true" />
+            </button>
+            <img src={selected.previewUrl} alt={`Preview of ${selected.title}`} />
+            <div>
+              <span className="watchface-section-kicker">{selected.tags.join(" / ")}</span>
+              <h2 id="community-face-title">{selected.title}</h2>
+              <p>by {selected.creatorName}</p>
+              <p>{selected.description}</p>
+              <div className="watchface-community-tags">
+                {selected.models.map((item) => <span key={item}>{item}</span>)}
+              </div>
+              <small>{formatCommunityBytes(selected.packageBytes)} reviewed package</small>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={disabled}
+                onClick={() => onOpen(selected)}
+              >
+                <Download size={16} aria-hidden="true" /> Open in Studio
+              </button>
+              <a href={selected.detailUrl} target="_blank" rel="noreferrer">
+                View on website <ExternalLink size={14} aria-hidden="true" />
+              </a>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CommunityCompatibilityDialog({
+  face,
+  connectedModel,
+  busy,
+  onCancel,
+  onConfirm
+}: {
+  face: CommunityWatchface;
+  connectedModel?: string;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="watchface-modal-backdrop" role="presentation">
+      <section
+        className="watchface-modal watchface-community-confirm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="community-compatibility-title"
+      >
+        <h2 id="community-compatibility-title">Compatibility not listed</h2>
+        <p>
+          “{face.title}” lists {face.models.join(", ")}, not {connectedModel ?? "your connected watch"}.
+          You can still inspect and edit it in Studio, but it may not work on this watch.
+        </p>
+        <div className="watchface-modal-actions">
+          <button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>
+            Cancel
+          </button>
+          <button className="primary-button" type="button" disabled={busy} onClick={onConfirm}>
+            {busy ? <Loader2 className="spin" size={16} aria-hidden="true" /> : null}
+            Open anyway
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function formatCommunityBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
 }
 
 interface ProjectsDashboardProps {
@@ -1761,7 +2275,7 @@ function WatchFacePreview({
 }
 
 interface TemplatesPanelProps {
-  busy: "login" | "themes" | "archive" | "publish" | "project" | null;
+  busy: "login" | "themes" | "archive" | "publish" | "project" | "community" | null;
   catalog: CorosWatchfaceThemeCatalog;
   firmwareType: string;
   language: string;

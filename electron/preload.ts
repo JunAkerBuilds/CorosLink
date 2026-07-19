@@ -120,7 +120,13 @@ import type {
   CorosBatteryQueryInput,
   CorosBatteryReport,
   CorosPairedDevice,
-  CorosBluetoothDeviceChoice
+  CorosBluetoothDeviceChoice,
+  CommunityWatchface,
+  CommunityWatchfaceCatalogPage,
+  CommunityWatchfaceCatalogQuery,
+  CommunityWatchfaceDownloadProgress,
+  CommunityWatchfaceImport,
+  CommunityWatchfaceOpenRequest
 } from "./types";
 
 const api = {
@@ -173,6 +179,39 @@ const api = {
     shareUrl: string
   ): Promise<CorosWatchfaceShareImport> =>
     ipcRenderer.invoke("watchfaces:importShareLink", shareUrl),
+  listCommunityWatchfaces: (
+    input: CommunityWatchfaceCatalogQuery
+  ): Promise<CommunityWatchfaceCatalogPage> =>
+    ipcRenderer.invoke("watchfaces:listCommunity", input),
+  getCommunityWatchface: (slug: string): Promise<CommunityWatchface> =>
+    ipcRenderer.invoke("watchfaces:getCommunity", slug),
+  importCommunityWatchface: (slug: string): Promise<CommunityWatchfaceImport> =>
+    ipcRenderer.invoke("watchfaces:importCommunity", slug),
+  consumeCommunityWatchfaceOpenRequest:
+    (): Promise<CommunityWatchfaceOpenRequest | null> =>
+      ipcRenderer.invoke("watchfaces:consumeCommunityOpenRequest"),
+  onCommunityWatchfaceOpenRequest: (
+    callback: (request: CommunityWatchfaceOpenRequest) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      request: CommunityWatchfaceOpenRequest
+    ) => callback(request);
+    ipcRenderer.on("watchfaces:communityOpenRequested", listener);
+    return () =>
+      ipcRenderer.removeListener("watchfaces:communityOpenRequested", listener);
+  },
+  onCommunityWatchfaceDownloadProgress: (
+    callback: (progress: CommunityWatchfaceDownloadProgress) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      progress: CommunityWatchfaceDownloadProgress
+    ) => callback(progress);
+    ipcRenderer.on("watchfaces:communityDownloadProgress", listener);
+    return () =>
+      ipcRenderer.removeListener("watchfaces:communityDownloadProgress", listener);
+  },
   chooseCorosWatchfaceArchive: (): Promise<CorosWatchfaceArchive | null> =>
     ipcRenderer.invoke("watchfaces:chooseArchive"),
   chooseLegacy614aCarrier: (): Promise<CorosLegacy614aCarrierSelection | null> =>

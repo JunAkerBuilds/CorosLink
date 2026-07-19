@@ -755,6 +755,26 @@ try {
   assert.deepEqual(wrappedPackage.manifest, editablePackage.manifest);
   assert.deepEqual(wrappedPackage.starterArchive, archive);
   assert.deepEqual(wrappedPackage.preview, preview);
+
+  const flexibleWebsitePath = path.join(tempDirectory, "flexible-website-face.zip");
+  await fs.writeFile(
+    flexibleWebsitePath,
+    createStoreZip([
+      {
+        name: "project.json",
+        data: Buffer.from(JSON.stringify(editablePackage.manifest), "utf8")
+      },
+      { name: "A reviewed community face.dat", data: archive }
+    ])
+  );
+  const flexiblePackage = await readCorosWatchfaceProjectPackage(flexibleWebsitePath);
+  assert.ok(flexiblePackage, "the website's alternate manifest name should be supported");
+  assert.deepEqual(flexiblePackage.starterArchive, archive);
+  assert.equal(
+    flexiblePackage.preview,
+    undefined,
+    "website packages may omit their outer preview"
+  );
 } finally {
   await fs.rm(tempDirectory, { recursive: true, force: true });
 }

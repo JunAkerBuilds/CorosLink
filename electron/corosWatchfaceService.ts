@@ -101,16 +101,23 @@ const MOBILE_VERSION_CODE = "407081000";
 const MOBILE_APP_VERSION = 1125929972137984;
 const MOBILE_USER_SETTING_SCOPE = "CAEQARgBIAEoATABOAFAAQ==";
 const API_SUCCESS = "0000";
-const MAX_ARCHIVE_BYTES = 25 * 1024 * 1024;
+const MAX_OFFICIAL_ARCHIVE_BYTES = 25 * 1024 * 1024;
+const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
 const MAX_INFO_BYTES = 1024 * 1024;
 const MAX_SHARE_PAGE_BYTES = 1024 * 1024;
 const MAX_ARTWORK_BYTES = 10 * 1024 * 1024;
 const MAX_PROJECT_BYTES = 60 * 1024 * 1024;
 const MAX_PROJECT_MANIFEST_BYTES = MAX_PROJECT_BYTES + 64 * 1024;
 const MAX_PROJECT_PACKAGE_BYTES = 100 * 1024 * 1024;
+const MAX_PROJECT_PACKAGE_EXPANDED_BYTES = 130 * 1024 * 1024;
+const MAX_PROJECT_PACKAGE_FILES = 100;
+const MAX_ARCHIVE_EXPANDED_BYTES = 200 * 1024 * 1024;
+const MAX_ARCHIVE_FILES = 1_000;
+const MAX_ARCHIVE_ENTRY_BYTES = 5 * 1024 * 1024;
 const CREATOR_CANVAS_SIZE = 800;
 const MAX_SPRITE_REPLACEMENTS = 800;
 const MAX_SPRITE_BYTES = 2 * 1024 * 1024;
+const MAX_TEMPLATE_ASSET_BYTES = 5 * 1024 * 1024;
 const MAX_TOTAL_SPRITE_BYTES = 20 * 1024 * 1024;
 const MAX_TEMPLATE_ASSET_REQUESTS = 800;
 const MAX_CONFIG_OVERRIDE_FILES = 8;
@@ -187,7 +194,7 @@ interface CorosLinkWatchfaceProjectManifest {
 interface CorosLinkWatchfaceProjectPackage {
   manifest: CorosLinkWatchfaceProjectManifest;
   starterArchive: Buffer;
-  preview: Buffer;
+  preview?: Buffer;
 }
 
 interface UnzipperFile {
@@ -533,7 +540,7 @@ async function fetchThemeResource(
     throw new Error(`The template package request failed (HTTP ${response.status}).`);
   }
   const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length === 0 || bytes.length > MAX_ARCHIVE_BYTES) {
+  if (bytes.length === 0 || bytes.length > MAX_OFFICIAL_ARCHIVE_BYTES) {
     throw new Error("The template package must be between 1 byte and 25 MB.");
   }
   return {
@@ -726,7 +733,7 @@ export async function importCorosWatchfaceShareLink(
     throw new Error(`The COROS watch-face download failed (HTTP ${packageResponse.status}).`);
   }
   const bytes = Buffer.from(await packageResponse.arrayBuffer());
-  if (bytes.length === 0 || bytes.length > MAX_ARCHIVE_BYTES) {
+  if (bytes.length === 0 || bytes.length > MAX_OFFICIAL_ARCHIVE_BYTES) {
     throw new Error("The COROS watch-face archive must be between 1 byte and 25 MB.");
   }
   if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
@@ -896,23 +903,26 @@ export async function readCorosWatchfaceProjectPackage(
     throw new Error("The editable watch-face package must be smaller than 100 MB.");
   }
   const directory = await openTemplateArchive(packagePath);
-  const files = directory.files.filter((entry) => entry.type === "File");
-  const rootManifestEntry = files.find(
-    (entry) => entry.path === "coroslink-project.json"
+  validateArchiveInventory(
+    directory.files,
+    MAX_PROJECT_PACKAGE_FILES,
+    MAX_PROJECT_PACKAGE_EXPANDED_BYTES,
+    MAX_PROJECT_PACKAGE_BYTES,
+    8,
+    "editable watch-face package"
   );
-  const nestedManifestEntries = rootManifestEntry
-    ? []
-    : files.filter(
-        (entry) =>
-          /^[^/]+\/coroslink-project\.json$/.test(entry.path) &&
-          !entry.path.startsWith("__MACOSX/")
-      );
-  if (nestedManifestEntries.length > 1) {
+  const files = directory.files.filter(
+    (entry) => entry.type === "File" && !entry.path.startsWith("__MACOSX/")
+  );
+  const manifestEntries = files.filter((entry) =>
+    /^(?:[^/]+\/)?(?:coroslink-project|project)\.json$/i.test(entry.path)
+  );
+  if (manifestEntries.length > 1) {
     throw new Error(
-      "The editable watch-face package contains multiple project folders."
+      "The editable watch-face package contains multiple project manifests."
     );
   }
-  const manifestEntry = rootManifestEntry ?? nestedManifestEntries[0];
+  const manifestEntry = manifestEntries[0];
   if (!manifestEntry) return null;
   // Finder's Compress action commonly wraps selected project files in one
   // enclosing folder. Resolve the remaining required entries relative to the
@@ -921,15 +931,21 @@ export async function readCorosWatchfaceProjectPackage(
     0,
     -"coroslink-project.json".length
   );
-  const resolvedStarterEntry = files.find(
-    (entry) => entry.path === `${packagePrefix}starter.dat`
-  );
+  const datEntries = files.filter((entry) => {
+    const relativePath = entry.path.slice(packagePrefix.length);
+    return (
+      entry.path.startsWith(packagePrefix) &&
+      !relativePath.includes("/") &&
+      /^[^/\\\u0000-\u001f\u007f]{1,100}\.dat$/i.test(relativePath)
+    );
+  });
+  if (datEntries.length !== 1) {
+    throw new Error("The editable watch-face package must contain exactly one DAT archive.");
+  }
+  const resolvedStarterEntry = datEntries[0]!;
   const previewEntry = files.find(
     (entry) => entry.path === `${packagePrefix}preview.png`
   );
-  if (!resolvedStarterEntry || !previewEntry) {
-    throw new Error("The editable watch-face package is incomplete.");
-  }
   assertPackageEntrySize(
     manifestEntry,
     MAX_PROJECT_MANIFEST_BYTES,
@@ -940,7 +956,9 @@ export async function readCorosWatchfaceProjectPackage(
     MAX_ARCHIVE_BYTES,
     "starter archive"
   );
-  assertPackageEntrySize(previewEntry, MAX_ARTWORK_BYTES, "preview image");
+  if (previewEntry) {
+    assertPackageEntrySize(previewEntry, MAX_ARTWORK_BYTES, "preview image");
+  }
 
   let manifest: CorosLinkWatchfaceProjectManifest;
   try {
@@ -970,15 +988,17 @@ export async function readCorosWatchfaceProjectPackage(
   };
   validateProjectDesign(manifest.design);
   const starterArchive = await resolvedStarterEntry.buffer();
-  const preview = await previewEntry.buffer();
+  const preview = previewEntry ? await previewEntry.buffer() : undefined;
   if (starterArchive.byteLength > MAX_ARCHIVE_BYTES) {
     throw new Error("The editable watch-face starter archive is too large.");
   }
-  if (preview.byteLength > MAX_ARTWORK_BYTES) {
+  if (preview && preview.byteLength > MAX_ARTWORK_BYTES) {
     throw new Error("The editable watch-face preview is too large.");
   }
-  assertPngBytes(preview, "The editable watch-face preview is not a PNG image.");
-  return { manifest, starterArchive, preview };
+  if (preview) {
+    assertPngBytes(preview, "The editable watch-face preview is not a PNG image.");
+  }
+  return { manifest, starterArchive, ...(preview ? { preview } : {}) };
 }
 
 function assertPackageEntrySize(
@@ -1598,7 +1618,7 @@ export async function loadCorosWatchfaceTemplateAssets(
       throw new Error("The template does not contain one of the requested images.");
     }
     const data = await entry.buffer();
-    if (data.length > MAX_SPRITE_BYTES) {
+    if (data.length > MAX_TEMPLATE_ASSET_BYTES) {
       throw new Error("A requested template image is unexpectedly large.");
     }
     const image = nativeImage.createFromBuffer(data);
@@ -3229,6 +3249,14 @@ async function inspectArchive(
   }
 
   const directory = await openTemplateArchive(normalizedPath);
+  validateArchiveInventory(
+    directory.files,
+    MAX_ARCHIVE_FILES,
+    MAX_ARCHIVE_EXPANDED_BYTES,
+    MAX_ARCHIVE_ENTRY_BYTES,
+    7,
+    "watch-face archive"
+  );
   const resolutionDirectories = [
     ...new Set(
       directory.files.flatMap((entry) => {
@@ -3300,6 +3328,48 @@ async function inspectArchive(
     resolutionDirectories,
     resolutionProfile
   };
+}
+
+function validateArchiveInventory(
+  entries: UnzipperFile[],
+  maxFiles: number,
+  maxExpandedBytes: number,
+  maxEntryBytes: number,
+  maxDepth: number,
+  label: string
+): void {
+  const files = entries.filter((entry) => entry.type === "File");
+  if (files.length > maxFiles) {
+    throw new Error(`The ${label} contains too many files.`);
+  }
+  let expandedBytes = 0;
+  for (const entry of entries) {
+    const normalized = entry.path.normalize("NFC");
+    const contentPath = normalized.endsWith("/")
+      ? normalized.slice(0, -1)
+      : normalized;
+    const parts = contentPath.split("/");
+    if (
+      !contentPath ||
+      normalized.length > 900 ||
+      /[\u0000-\u001f\u007f\\]/.test(normalized) ||
+      normalized.startsWith("/") ||
+      /^[a-z]:\//i.test(normalized) ||
+      parts.some((part) => !part || part === "." || part === "..") ||
+      parts.length > maxDepth
+    ) {
+      throw new Error(`The ${label} contains an unsafe path.`);
+    }
+    if (entry.type !== "File") continue;
+    const size = entry.uncompressedSize ?? entry.size ?? 0;
+    if (!Number.isFinite(size) || size < 0 || size > maxEntryBytes) {
+      throw new Error(`The ${label} contains an invalid or oversized file.`);
+    }
+    expandedBytes += size;
+    if (expandedBytes > maxExpandedBytes) {
+      throw new Error(`The ${label} expands beyond its safe size limit.`);
+    }
+  }
 }
 
 function toPublicArchive(archive: SelectedArchive): CorosWatchfaceArchive {

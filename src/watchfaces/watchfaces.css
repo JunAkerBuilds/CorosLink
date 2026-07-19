@@ -7908,3 +7908,313 @@ body.wf-value-scrubbing * {
     transition: none;
   }
 }
+.watchface-community {
+  display: grid;
+  gap: 22px;
+}
+
+.watchface-community-hero {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  border: 1px solid var(--wf-border);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 88% 14%, rgba(50, 218, 159, 0.16), transparent 34%),
+    var(--wf-surface);
+  padding: 26px;
+}
+
+.watchface-community-hero h2 {
+  margin: 5px 0 7px;
+  font-size: clamp(24px, 3vw, 34px);
+}
+
+.watchface-community-hero p,
+.watchface-community-card-body > span,
+.watchface-community-card-body > p,
+.watchface-community-detail small {
+  color: var(--text-muted);
+}
+
+.watchface-community-hero .secondary-button {
+  width: auto;
+  flex: 0 0 auto;
+  padding-inline: 16px;
+}
+
+.watchface-community-tools {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(145px, 0.7fr));
+  gap: 12px;
+}
+
+.watchface-community-tools label {
+  display: grid;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.watchface-community-tools input,
+.watchface-community-tools select {
+  width: 100%;
+  height: 44px;
+  border: 1px solid var(--wf-border);
+  border-radius: 12px;
+  background: var(--wf-surface);
+  color: var(--text-primary);
+  padding: 0 12px;
+}
+
+.watchface-community-search > span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--wf-border);
+  border-radius: 12px;
+  background: var(--wf-surface);
+  padding-left: 12px;
+}
+
+.watchface-community-search input {
+  border: 0;
+  background: transparent;
+  padding-left: 0;
+}
+
+.watchface-community-results,
+.watchface-community-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.watchface-community-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.watchface-community-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--wf-border);
+  border-radius: 18px;
+  background: var(--wf-surface);
+}
+
+.watchface-community-card.is-loading {
+  min-height: 390px;
+  background: linear-gradient(110deg, var(--wf-surface) 20%, var(--wf-surface-raised) 45%, var(--wf-surface) 70%);
+  background-size: 240% 100%;
+  animation: watchface-community-shimmer 1.5s linear infinite;
+}
+
+@keyframes watchface-community-shimmer {
+  to { background-position: -240% 0; }
+}
+
+.watchface-community-preview {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1.32;
+  place-items: center;
+  border: 0;
+  border-bottom: 1px solid var(--wf-border);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.08), transparent 62%);
+  cursor: pointer;
+}
+
+.watchface-community-preview img {
+  width: min(76%, 220px);
+  height: min(76%, 220px);
+  object-fit: contain;
+  border-radius: 50%;
+  filter: drop-shadow(0 18px 25px rgba(0, 0, 0, 0.28));
+}
+
+.watchface-community-card-body {
+  display: grid;
+  gap: 9px;
+  padding: 16px;
+}
+
+.watchface-community-title {
+  width: fit-content;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0;
+  cursor: pointer;
+  font-size: 17px;
+  font-weight: 720;
+  text-align: left;
+}
+
+.watchface-community-card-body > span,
+.watchface-community-card-body > p {
+  margin: 0;
+  font-size: 11px;
+}
+
+.watchface-community-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.watchface-community-tags span {
+  border: 1px solid var(--wf-border);
+  border-radius: 999px;
+  background: var(--wf-surface-raised);
+  padding: 4px 8px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.watchface-community-card .primary-button {
+  width: 100%;
+  margin-top: 3px;
+}
+
+.watchface-community-empty {
+  display: grid;
+  min-height: 280px;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  border: 1px dashed var(--wf-border-strong);
+  border-radius: 18px;
+  background: var(--wf-surface);
+  padding: 28px;
+  text-align: center;
+}
+
+.watchface-community-empty h3,
+.watchface-community-empty p {
+  margin: 0;
+}
+
+.watchface-community-empty p {
+  max-width: 50ch;
+  color: var(--text-muted);
+}
+
+.watchface-community-empty .secondary-button,
+.watchface-community-pagination .secondary-button {
+  width: auto;
+  padding-inline: 18px;
+}
+
+.watchface-community-progress {
+  display: grid;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--wf-border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--wf-surface));
+  padding: 12px 14px;
+}
+
+.watchface-community-progress > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.watchface-community-progress-track {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--wf-surface-raised);
+}
+
+.watchface-community-progress-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 160ms ease;
+}
+
+.watchface-community-detail {
+  display: grid;
+  width: min(820px, calc(100vw - 36px));
+  grid-template-columns: minmax(260px, 0.9fr) minmax(280px, 1.1fr);
+  gap: 28px;
+}
+
+.watchface-community-detail > img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: 18px;
+  background: var(--wf-surface-raised);
+  padding: 18px;
+}
+
+.watchface-community-detail > div {
+  display: grid;
+  align-content: center;
+  gap: 13px;
+}
+
+.watchface-community-detail h2,
+.watchface-community-detail p {
+  margin: 0;
+}
+
+.watchface-community-detail > div > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.watchface-community-confirm {
+  max-width: 500px;
+}
+
+.watchface-community-confirm p {
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.watchface-community-queued {
+  position: fixed;
+  z-index: 40;
+  top: 68px;
+  left: 50%;
+  max-width: min(620px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--wf-border));
+  border-radius: 12px;
+  background: var(--wf-surface);
+  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.28);
+  padding: 11px 15px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+@media (max-width: 980px) {
+  .watchface-community-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .watchface-community-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 680px) {
+  .watchface-community-hero { align-items: stretch; flex-direction: column; }
+  .watchface-community-hero .secondary-button { width: 100%; }
+  .watchface-community-tools,
+  .watchface-community-grid,
+  .watchface-community-detail { grid-template-columns: 1fr; }
+}

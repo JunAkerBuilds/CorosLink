@@ -119,7 +119,13 @@ import type {
   CorosBatteryQueryInput,
   CorosBatteryReport,
   CorosPairedDevice,
-  CorosBluetoothDeviceChoice
+  CorosBluetoothDeviceChoice,
+  CommunityWatchface,
+  CommunityWatchfaceCatalogPage,
+  CommunityWatchfaceCatalogQuery,
+  CommunityWatchfaceDownloadProgress,
+  CommunityWatchfaceImport,
+  CommunityWatchfaceOpenRequest
 } from "../electron/types";
 
 export interface CorosLinkApi {
@@ -156,6 +162,19 @@ export interface CorosLinkApi {
   importCorosWatchfaceShareLink: (
     shareUrl: string
   ) => Promise<CorosWatchfaceShareImport>;
+  listCommunityWatchfaces: (
+    input: CommunityWatchfaceCatalogQuery
+  ) => Promise<CommunityWatchfaceCatalogPage>;
+  getCommunityWatchface: (slug: string) => Promise<CommunityWatchface>;
+  importCommunityWatchface: (slug: string) => Promise<CommunityWatchfaceImport>;
+  consumeCommunityWatchfaceOpenRequest: () =>
+    Promise<CommunityWatchfaceOpenRequest | null>;
+  onCommunityWatchfaceOpenRequest: (
+    callback: (request: CommunityWatchfaceOpenRequest) => void
+  ) => () => void;
+  onCommunityWatchfaceDownloadProgress: (
+    callback: (progress: CommunityWatchfaceDownloadProgress) => void
+  ) => () => void;
   chooseCorosWatchfaceArchive: () => Promise<CorosWatchfaceArchive | null>;
   chooseLegacy614aCarrier: () => Promise<CorosLegacy614aCarrierSelection | null>;
   exportLegacy614aCarrier: (

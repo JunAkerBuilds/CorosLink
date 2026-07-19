@@ -67,6 +67,7 @@ import type {
   ApplePodcastEpisode,
   ApplePodcastShow,
   ApplePodcastShowDetail,
+  CommunityWatchfaceOpenRequest,
 } from "../electron/types";
 import { TRAINING_HUB_EXPORT_FORMATS } from "../electron/types";
 import { buildTrainingHubSnapshot } from "./training/parsers";
@@ -201,6 +202,9 @@ export default function App() {
   const [calendarRefreshToken, setCalendarRefreshToken] = useState(0);
   const [activeMediaTab, setActiveMediaTab] = useState<MediaTab>("library");
   const [watchStatus, setWatchStatus] = useState<WatchStatus | null>(null);
+  const [communityWatchfaceOpenRequest, setCommunityWatchfaceOpenRequest] =
+    useState<(CommunityWatchfaceOpenRequest & { requestId: number }) | null>(null);
+  const communityWatchfaceRequestSequence = useRef(0);
   const [downloads, setDownloads] = useState<LocalTrack[]>([]);
   const [spotifyConfig, setSpotifyConfig] = useState<SpotifyConfig>({
     clientId: "",
@@ -291,6 +295,31 @@ export default function App() {
 
     void api.getAppUpdateStatus().then(setAppUpdateSnapshot);
     return api.onAppUpdateStatus(setAppUpdateSnapshot);
+  }, [api]);
+
+  useEffect(() => {
+    if (!api) return;
+    let active = true;
+    const openCommunityWatchface = (request: CommunityWatchfaceOpenRequest) => {
+      if (!active) return;
+      communityWatchfaceRequestSequence.current += 1;
+      setCommunityWatchfaceOpenRequest({
+        ...request,
+        requestId: communityWatchfaceRequestSequence.current,
+      });
+      setActiveView("watchfaces");
+    };
+    const unsubscribe = api.onCommunityWatchfaceOpenRequest(openCommunityWatchface);
+    void api
+      .consumeCommunityWatchfaceOpenRequest()
+      .then((request) => {
+        if (request) openCommunityWatchface(request);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [api]);
 
   useEffect(() => {
@@ -1926,6 +1955,10 @@ export default function App() {
                 api={api}
                 showDevelopmentTools={showDevelopmentTools}
                 watchStatus={watchStatus}
+                communityOpenRequest={communityWatchfaceOpenRequest}
+                onCommunityOpenRequestHandled={() =>
+                  setCommunityWatchfaceOpenRequest(null)
+                }
               />
             ) : null}
             {activeView === "training" ? (

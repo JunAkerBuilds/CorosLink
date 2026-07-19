@@ -264,6 +264,64 @@ export interface CorosWatchfaceShareImport {
   firmwareType?: string;
 }
 
+export interface CommunityWatchface {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  creatorName: string;
+  creatorHandle: string | null;
+  models: string[];
+  tags: string[];
+  publishedAt: string | null;
+  previewUrl: string;
+  detailUrl: string;
+  downloadUrl: string;
+  packageBytes: number;
+  packageSha256: string;
+  validatorVersion: string | null;
+}
+
+export interface CommunityWatchfaceCatalogQuery {
+  q?: string;
+  model?: string;
+  style?: string;
+  sort?: "newest" | "title";
+  page?: number;
+  pageSize?: number;
+}
+
+export interface CommunityWatchfaceCatalogPage {
+  schemaVersion: 1;
+  items: CommunityWatchface[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    pageCount: number;
+  };
+  facets: {
+    models: string[];
+    styles: Array<{ value: string; label: string }>;
+  };
+}
+
+export interface CommunityWatchfaceImport {
+  face: CommunityWatchface;
+  archive: CorosWatchfaceArchive;
+}
+
+export interface CommunityWatchfaceDownloadProgress {
+  slug: string;
+  stage: "downloading" | "verifying" | "opening";
+  receivedBytes: number;
+  totalBytes?: number;
+}
+
+export interface CommunityWatchfaceOpenRequest {
+  slug: string;
+}
+
 export interface CorosWatchfacePublishInput {
   archiveId: string;
   name: string;

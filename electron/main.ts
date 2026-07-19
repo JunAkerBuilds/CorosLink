@@ -86,6 +86,14 @@ import {
   selectCorosWatchfaceArchive
 } from "./corosWatchfaceService";
 import {
+  cleanupCommunityWatchfaceImports,
+  getCommunityWatchface,
+  importCommunityWatchface,
+  listCommunityWatchfaces,
+  parseCommunityWatchfaceDeepLink,
+  setCommunityWatchfaceProgressListener
+} from "./communityWatchfaceService";
+import {
   getIntervalsStatus,
   connectIntervals,
   disconnectIntervals,
@@ -162,6 +170,7 @@ import type {
   CorosBatteryQueryInput,
   CorosBluetoothDeviceChoice
 } from "./types";
+import type { CommunityWatchfaceOpenRequest } from "./types";
 import {
   MULTIDATA_ELEV_416_PROFILE,
   inspectLegacy614aCarrier,
@@ -284,6 +293,8 @@ import type {
 } from "./types";
 
 let mainWindow: BrowserWindow | undefined;
+let rendererReady = false;
+let pendingCommunityWatchfaceOpen: CommunityWatchfaceOpenRequest | undefined;
 let pendingCorosBluetoothSelection:
   | {
       callback: (deviceId: string) => void;
@@ -567,6 +578,13 @@ function createWindow(): void {
     shell.openExternal(url);
     return { action: "deny" };
   });
+  mainWindow.webContents.on("did-start-loading", () => {
+    rendererReady = false;
+  });
+  mainWindow.on("closed", () => {
+    rendererReady = false;
+    mainWindow = undefined;
+  });
   configureCorosBluetoothSelection(mainWindow);
 
   // macOS fullscreen exposes the window background in the title-bar inset;
@@ -592,7 +610,58 @@ function createWindow(): void {
   initializeAppUpdater(mainWindow);
 }
 
+function deepLinkFromArguments(argumentsList: string[]): CommunityWatchfaceOpenRequest | null {
+  for (const argument of argumentsList) {
+    const request = parseCommunityWatchfaceDeepLink(argument);
+    if (request) return request;
+  }
+  return null;
+}
+
+function handleCommunityWatchfaceOpen(request: CommunityWatchfaceOpenRequest): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    if (rendererReady) {
+      mainWindow.webContents.send("watchfaces:communityOpenRequested", request);
+      return;
+    }
+  }
+  pendingCommunityWatchfaceOpen = request;
+}
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  const initialDeepLink = deepLinkFromArguments(process.argv);
+  if (initialDeepLink) pendingCommunityWatchfaceOpen = initialDeepLink;
+  app.on("second-instance", (_event, commandLine) => {
+    const request = deepLinkFromArguments(commandLine);
+    if (request) handleCommunityWatchfaceOpen(request);
+    else if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    const request = parseCommunityWatchfaceDeepLink(url);
+    if (request) handleCommunityWatchfaceOpen(request);
+  });
+}
+
 app.whenReady().then(() => {
+  if (!hasSingleInstanceLock) return;
+  if (process.defaultApp && process.argv[1]) {
+    app.setAsDefaultProtocolClient("coroslink", process.execPath, [
+      path.resolve(process.argv[1])
+    ]);
+  } else {
+    app.setAsDefaultProtocolClient("coroslink");
+  }
   configureAppPermissions();
   configureYouTubeBrowserSession();
   registerYouTubeBrowserHandlers();
@@ -656,6 +725,12 @@ app.whenReady().then(() => {
       mainWindow.webContents.send("trainingHub:backupProgress", progress);
     }
   });
+  setCommunityWatchfaceProgressListener((progress) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("watchfaces:communityDownloadProgress", progress);
+    }
+  });
+  void cleanupCommunityWatchfaceImports();
   createWindow();
   applyAppIcon();
 
@@ -755,6 +830,22 @@ function registerIpcHandlers(): void {
   ipcMain.handle("watchfaces:importShareLink", (_event, shareUrl: string) =>
     importCorosWatchfaceShareLink(shareUrl)
   );
+
+  ipcMain.handle("watchfaces:listCommunity", (_event, input) =>
+    listCommunityWatchfaces(input)
+  );
+  ipcMain.handle("watchfaces:getCommunity", (_event, slug: string) =>
+    getCommunityWatchface(slug)
+  );
+  ipcMain.handle("watchfaces:importCommunity", (_event, slug: string) =>
+    importCommunityWatchface(slug)
+  );
+  ipcMain.handle("watchfaces:consumeCommunityOpenRequest", () => {
+    rendererReady = true;
+    const request = pendingCommunityWatchfaceOpen ?? null;
+    pendingCommunityWatchfaceOpen = undefined;
+    return request;
+  });
 
   ipcMain.handle("watchfaces:chooseArchive", async () => {
     const options: OpenDialogOptions = {
