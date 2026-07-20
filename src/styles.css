@@ -2810,7 +2810,7 @@ input::placeholder {
   stroke: var(--accent);
   stroke-width: 8;
   stroke-linecap: round;
-  transition: stroke-dashoffset 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: stroke-dashoffset 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .storage-ring-label {
@@ -9891,8 +9891,7 @@ td span {
 .training-scores-panel,
 .training-race-panel,
 .training-backup-panel,
-.training-chart-panel,
-.training-ring-panel {
+.training-chart-panel {
   animation: training-card-enter 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
@@ -10388,7 +10387,8 @@ td span {
     rgba(255, 255, 255, 0.026);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 18px 42px rgba(0, 0, 0, 0.2);
+    0 18px 42px rgba(0, 0, 0, 0.2),
+    0 0 24px color-mix(in srgb, var(--vo2-tone) 10%, transparent);
   min-width: 0;
   min-height: clamp(282px, 31vh, 392px);
   padding: clamp(16px, 1.55vw, 21px);
@@ -10409,7 +10409,7 @@ td span {
   content: "";
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.75s ease;
+  transition: opacity 0.75s ease 0.22s;
 }
 
 .vo2-widget-panel::after {
@@ -10420,7 +10420,7 @@ td span {
   content: "";
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.75s ease;
+  transition: opacity 0.75s ease 0.22s;
 }
 
 .vo2-widget-panel.is-ready::before {
@@ -10429,10 +10429,6 @@ td span {
 
 .vo2-widget-panel.is-ready::after {
   opacity: 0.62;
-}
-
-.vo2-widget-panel.is-ready {
-  animation: vo2-panel-arrive 1s ease both;
 }
 
 .vo2-widget-panel > * {
@@ -10484,17 +10480,8 @@ td span {
   border: 1px solid color-mix(in srgb, var(--vo2-tone) 28%, transparent);
   border-radius: 50%;
   background: color-mix(in srgb, var(--vo2-tone) 14%, transparent);
-  box-shadow: 0 0 22px color-mix(in srgb, var(--vo2-tone) 18%, transparent);
+  box-shadow: 0 0 28px color-mix(in srgb, var(--vo2-tone) 26%, transparent);
   color: var(--vo2-tone);
-  transform: scale(0.92);
-  transition:
-    box-shadow 0.5s ease,
-    transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.vo2-widget-panel.is-ready .vo2-widget-icon {
-  box-shadow: 0 0 32px color-mix(in srgb, var(--vo2-tone) 34%, transparent);
-  transform: scale(1);
 }
 
 .vo2-gauge {
@@ -10519,8 +10506,8 @@ td span {
   opacity: 0;
   transform: translateY(10px) scale(0.88);
   transition:
-    opacity 0.8s ease,
-    transform 0.85s cubic-bezier(0.2, 0.8, 0.2, 1);
+    opacity 0.8s ease 0.22s,
+    transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.22s;
 }
 
 .vo2-widget-panel.is-ready .vo2-gauge::before {
@@ -10546,25 +10533,22 @@ td span {
 }
 
 .vo2-gauge-band {
-  --vo2-band-color: var(--vo2-tone);
   opacity: 0;
   stroke-dasharray: 100;
   stroke-dashoffset: 100;
-  filter: drop-shadow(0 0 0 transparent);
+  filter: none;
 }
 
 .vo2-widget-panel.is-ready .vo2-gauge-band {
-  animation: vo2-band-reveal 0.95s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-  filter: drop-shadow(0 0 9px color-mix(in srgb, var(--vo2-band-color) 38%, transparent));
+  animation: vo2-band-reveal 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation-delay: 0.22s;
+  filter: none;
 }
 
 .vo2-widget-panel.is-ready .vo2-gauge-band.is-focused {
-  animation:
-    vo2-band-reveal 0.95s cubic-bezier(0.2, 0.8, 0.2, 1) forwards,
-    vo2-band-focus-pop 0.82s cubic-bezier(0.2, 0.8, 0.2, 1.16) both;
-  filter:
-    drop-shadow(0 0 12px color-mix(in srgb, var(--vo2-band-color) 62%, transparent))
-    drop-shadow(0 0 24px color-mix(in srgb, var(--vo2-band-color) 38%, transparent));
+  animation: vo2-band-reveal 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation-delay: 0.22s;
+  filter: none;
   stroke-linecap: butt;
   stroke-width: 21;
 }
@@ -10580,8 +10564,8 @@ td span {
   transform: scale(0.28);
   transform-origin: 120px 118px;
   transition:
-    opacity 0.36s ease 0.54s,
-    transform 0.75s cubic-bezier(0.2, 0.8, 0.2, 1) 0.54s,
+    opacity 0.36s ease 0.22s,
+    transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.22s,
     stroke 0.2s ease;
 }
 
@@ -10595,17 +10579,9 @@ td span {
   stroke: rgba(255, 255, 255, 0.82);
   stroke-width: 2;
   filter: drop-shadow(0 0 14px color-mix(in srgb, var(--vo2-tone) 56%, transparent));
-  opacity: 0;
-  transform: scale(0.5);
-  transform-origin: 120px 118px;
-  transition:
-    opacity 0.28s ease 0.68s,
-    transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1.35) 0.68s;
-}
-
-.vo2-widget-panel.is-ready .vo2-gauge-pin {
   opacity: 1;
   transform: scale(1);
+  transform-origin: 120px 118px;
 }
 
 .vo2-gauge-value {
@@ -10614,14 +10590,6 @@ td span {
   left: 50%;
   display: grid;
   justify-items: center;
-  opacity: 0;
-  transform: translate(-50%, -42%) scale(0.96);
-  transition:
-    opacity 0.45s ease 0.68s,
-    transform 0.58s cubic-bezier(0.2, 0.8, 0.2, 1) 0.68s;
-}
-
-.vo2-widget-panel.is-ready .vo2-gauge-value {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1);
 }
@@ -10642,10 +10610,6 @@ td span {
     0 2px 18px rgba(0, 0, 0, 0.34);
 }
 
-.vo2-widget-panel.is-ready .vo2-gauge-value.has-value strong {
-  animation: vo2-score-pop 0.72s cubic-bezier(0.2, 0.8, 0.2, 1.2) 0.72s both;
-}
-
 .vo2-gauge-value span {
   color: var(--text-muted);
   font-size: 12px;
@@ -10657,16 +10621,8 @@ td span {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
-  opacity: 0;
-  padding-top: 12px;
-  transform: translateY(8px);
-  transition:
-    opacity 0.45s ease 0.76s,
-    transform 0.52s ease 0.76s;
-}
-
-.vo2-widget-panel.is-ready .vo2-widget-footer {
   opacity: 1;
+  padding-top: 12px;
   transform: translateY(0);
 }
 
@@ -11079,64 +11035,6 @@ td span {
   100% {
     opacity: 1;
     stroke-dashoffset: 0;
-  }
-}
-
-@keyframes vo2-band-focus-pop {
-  0% {
-    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--vo2-band-color) 32%, transparent));
-    stroke-width: 18;
-  }
-
-  52% {
-    filter:
-      drop-shadow(0 0 18px color-mix(in srgb, var(--vo2-band-color) 74%, transparent))
-      drop-shadow(0 0 34px color-mix(in srgb, var(--vo2-band-color) 46%, transparent));
-    stroke-width: 24;
-  }
-
-  100% {
-    filter:
-      drop-shadow(0 0 12px color-mix(in srgb, var(--vo2-band-color) 62%, transparent))
-      drop-shadow(0 0 24px color-mix(in srgb, var(--vo2-band-color) 38%, transparent));
-    stroke-width: 21;
-  }
-}
-
-@keyframes vo2-panel-arrive {
-  0% {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 18px 42px rgba(0, 0, 0, 0.2),
-      0 0 0 color-mix(in srgb, var(--vo2-tone) 0%, transparent);
-  }
-
-  46% {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      0 18px 42px rgba(0, 0, 0, 0.2),
-      0 0 38px color-mix(in srgb, var(--vo2-tone) 18%, transparent);
-  }
-
-  100% {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 18px 42px rgba(0, 0, 0, 0.2),
-      0 0 24px color-mix(in srgb, var(--vo2-tone) 10%, transparent);
-  }
-}
-
-@keyframes vo2-score-pop {
-  0% {
-    transform: scale(0.92);
-  }
-
-  54% {
-    transform: scale(1.08);
-  }
-
-  100% {
-    transform: scale(1);
   }
 }
 
@@ -11736,13 +11634,12 @@ td span {
   border-radius: clamp(3px, 0.4vw, 5px);
   background: rgba(255, 255, 255, 0.06);
   outline: none;
-  opacity: 0;
-  transform: scale(0.35);
+  opacity: 1;
+  transform: none;
   scale: 1;
   filter: brightness(var(--heatmap-brightness, 1));
   z-index: 0;
   transition:
-    transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1),
     scale 0.2s cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 0.22s ease,
     filter 0.2s ease;
@@ -11762,17 +11659,25 @@ td span {
   z-index: -1;
 }
 
-.training-heatmap-grid.is-ready .training-heatmap-cell:not(.is-empty) {
-  animation: heatmap-cell-pop 0.6s cubic-bezier(0.34, 1.45, 0.64, 1) both;
+.training-heatmap-grid.is-wave-loading
+  .training-heatmap-cell:not(.is-empty) {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.35);
 }
 
-.training-heatmap-grid.is-ready .training-heatmap-cell.is-peak {
-  animation: heatmap-cell-pop 0.6s cubic-bezier(0.34, 1.45, 0.64, 1) both;
+.training-heatmap-wave-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
-/* Peak glow pulses via opacity on a pseudo-element with a static box-shadow,
-   keeping the animation on the compositor instead of repainting each frame. */
-.training-heatmap-grid.is-ready .training-heatmap-cell.is-peak::after {
+/* A static halo keeps peak days prominent without running an animation on
+   every peak cell while the rest of the Training Hub is entering. */
+.training-heatmap-grid .training-heatmap-cell.is-peak::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -11780,9 +11685,9 @@ td span {
   box-shadow:
     0 0 22px color-mix(in srgb, var(--cell-color) 55%, transparent),
     0 0 36px color-mix(in srgb, var(--cell-color) 20%, transparent);
-  opacity: 0;
+  opacity: 0.34;
   pointer-events: none;
-  animation: heatmap-peak-glow 2.8s ease-in-out 1.1s infinite;
+  animation: none;
 }
 
 .training-heatmap-cell.is-empty {
@@ -11992,33 +11897,6 @@ td span {
   font-size: 15px;
 }
 
-@keyframes heatmap-cell-pop {
-  from {
-    opacity: 0;
-    transform: scale(0.35);
-  }
-
-  70% {
-    transform: scale(1.06);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes heatmap-peak-glow {
-  0%,
-  100% {
-    opacity: 0;
-  }
-
-  50% {
-    opacity: 1;
-  }
-}
-
 .training-ring-panel {
   position: relative;
   display: grid;
@@ -12094,21 +11972,29 @@ td span {
   overflow: visible;
 }
 
-.training-recovery-ring svg {
-  overflow: visible;
-}
-
-.training-recovery-ring-ambient {
-  fill: none;
-  stroke: var(--ring-color);
-  stroke-width: 18;
+.training-recovery-ring::before {
+  position: absolute;
+  inset: 8%;
+  border: 1px solid var(--ring-color);
+  border-radius: 50%;
+  box-shadow: 0 0 28px 8px var(--ring-glow);
+  content: "";
   opacity: 0;
   pointer-events: none;
-  transition: opacity 1.1s ease 0.15s;
+  transform: scale(0.94);
+  transition:
+    opacity 0.8s ease 0.22s,
+    transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.22s;
 }
 
-.training-recovery-ring.is-ready .training-recovery-ring-ambient {
-  opacity: 0.22;
+.training-recovery-ring.is-ready::before {
+  opacity: 0.32;
+  transform: scale(1);
+}
+
+.training-recovery-ring svg {
+  position: relative;
+  overflow: visible;
 }
 
 .training-recovery-ring .storage-ring-track {
@@ -12117,6 +12003,7 @@ td span {
 
 .training-recovery-ring-progress {
   stroke: var(--ring-color);
+  transition-delay: 0.22s;
 }
 
 .training-recovery-ring .storage-ring-label strong {
@@ -12148,6 +12035,10 @@ td span {
   width: 100%;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   min-width: 0;
+}
+
+.training-ring-metrics .training-stat-card {
+  animation: none;
 }
 
 .training-ring-metrics .training-stat-card.is-widget {
@@ -15615,7 +15506,7 @@ tr.data-intervals-row-missing {
     transition: none;
   }
 
-  .training-recovery-ring-ambient,
+  .training-recovery-ring::before,
   .training-fitness-bar,
   .training-heatmap-panel,
   .training-heatmap-cell,
@@ -15635,7 +15526,7 @@ tr.data-intervals-row-missing {
     animation: none;
   }
 
-  .training-heatmap-grid.is-ready .training-heatmap-cell:not(.is-empty) {
+  .training-heatmap-grid.is-wave-loading .training-heatmap-cell:not(.is-empty) {
     opacity: 1;
     transform: scale(1);
     animation: none;
@@ -15679,15 +15570,13 @@ tr.data-intervals-row-missing {
   }
 
   .vo2-gauge-band {
-    filter: drop-shadow(0 0 9px color-mix(in srgb, var(--vo2-band-color) 38%, transparent));
+    filter: none;
     opacity: 1;
     stroke-dashoffset: 0;
   }
 
   .vo2-gauge-band.is-focused {
-    filter:
-      drop-shadow(0 0 12px color-mix(in srgb, var(--vo2-band-color) 62%, transparent))
-      drop-shadow(0 0 24px color-mix(in srgb, var(--vo2-band-color) 38%, transparent));
+    filter: none;
     stroke-linecap: butt;
     stroke-width: 21;
   }
@@ -21160,7 +21049,7 @@ tr.data-intervals-row-missing {
   stroke-linecap: round;
 }
 
-:root[data-theme="paper"] .training-recovery-ring.is-ready .training-recovery-ring-ambient {
+:root[data-theme="paper"] .training-recovery-ring.is-ready::before {
   opacity: 0;
 }
 
