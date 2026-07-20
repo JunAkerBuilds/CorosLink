@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.20] - 2026-07-20
+
+### Added
+
+- **Community watch face browsing** — Browse tab backed by the CorosLink Watchfaces catalog API, secure download/verify/import of reviewed packages, and `coroslink://watchfaces/<slug>` deep links ([#66](https://github.com/JunAkerBuilds/CorosLink/pull/66))
+- **Proportional dimension resizing** — resize watchface layers while preserving aspect ratio in the Watch Face editor
+
+### Changed
+
+- Watchface Studio and app loading polish
+- Standalone Bluetooth and Do Not Disturb status assets available even when a template omits them
+- Release notes render supported HTML safely
+
+### Fixed
+
+- Watchface exports no longer leave blank Battery selector control declarations
+- COROS sport-type mappings and mixed-unit activity timestamps
+
 ## [0.1.19] - 2026-07-19
 
 ### Added
@@ -314,6 +332,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - GitHub Actions release workflow and installer build documentation
 
+[0.1.20]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.18...v0.1.19
 [0.1.18]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.16...v0.1.17
