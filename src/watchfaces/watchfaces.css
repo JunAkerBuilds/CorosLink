@@ -5051,6 +5051,42 @@ body.wf-value-scrubbing * {
   gap: 8px;
 }
 
+.watchface-shell .wf-property-section .wf-linked-dimension-inputs {
+  grid-template-columns: minmax(0, 1fr) 30px minmax(0, 1fr);
+  align-items: end;
+}
+
+.watchface-shell .wf-linked-dimension-toggle {
+  display: inline-grid;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--wf-surface-raised) 88%, var(--wf-surface));
+  color: var(--text-tertiary);
+  padding: 0;
+  place-items: center;
+}
+
+.watchface-shell .wf-linked-dimension-toggle:hover:not(:disabled) {
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-linked-dimension-toggle[aria-pressed="true"] {
+  border-color: var(--wf-accent-border);
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--wf-surface-raised));
+  color: var(--accent-strong);
+}
+
+.watchface-shell .wf-linked-dimension-toggle:focus-visible {
+  border-color: var(--wf-focus);
+  outline: 1px solid var(--wf-focus);
+  outline-offset: -1px;
+}
+
 .watchface-shell .wf-property-section :is(.watchface-position-inputs, .wf-position-inputs) label {
   gap: 5px;
   color: var(--text-tertiary);
@@ -5179,6 +5215,10 @@ body.wf-value-scrubbing * {
 .watchface-shell .wf-transform-action-row {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
+}
+
+.watchface-shell .wf-transform-action-row.wf-flip-action-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .watchface-shell :is(.wf-transform-action-row, .wf-align-icon-grid) button {

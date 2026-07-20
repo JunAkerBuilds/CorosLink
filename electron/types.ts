@@ -690,6 +690,8 @@ export interface CorosWatchfaceBackgroundRect extends CorosWatchfaceBackgroundEl
   kind: "rect";
   width: number;
   height: number;
+  /** When true, editing width or height preserves the shape's proportions. */
+  aspectLocked?: boolean;
   cornerRadius: number;
   fill: string;
   gradient?: CorosWatchfaceGradientFill;
@@ -701,6 +703,8 @@ export interface CorosWatchfaceBackgroundEllipse extends CorosWatchfaceBackgroun
   kind: "ellipse";
   width: number;
   height: number;
+  /** When true, editing width or height preserves the shape's proportions. */
+  aspectLocked?: boolean;
   fill: string;
   gradient?: CorosWatchfaceGradientFill;
   strokeColor?: string;
@@ -813,6 +817,8 @@ export interface CorosWatchfaceDesignState {
       /** Exact exported PNG dimensions when set. */
       width?: number;
       height?: number;
+      /** Imported PNG dimensions preserve their proportions unless unlocked. */
+      aspectLocked?: boolean;
       /** Date-month rendering mode; absent preserves the starter's format. */
       monthFormat?: "digits" | "labels";
       fontFamily?: string;

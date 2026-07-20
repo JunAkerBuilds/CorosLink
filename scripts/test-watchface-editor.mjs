@@ -96,6 +96,9 @@ import {
 import {
   WATCHFACE_COMPLICATIONS
 } from "../src/watchfaces/watchfaceStudio.ts";
+import {
+  resizeWatchfaceDimensions
+} from "../src/watchfaces/watchfaceDimensions.ts";
 
 const dragBackgroundSource = {
   backgroundColor: "#123456",
@@ -112,6 +115,43 @@ assert.equal(
   dragBackgroundSource.backgroundColor,
   "#123456",
   "drag isolation does not mutate the saved design"
+);
+
+assert.deepEqual(
+  resizeWatchfaceDimensions(
+    { width: 200, height: 100 },
+    "width",
+    300,
+    true,
+    8,
+    800
+  ),
+  { width: 300, height: 150 },
+  "linked width edits preserve the current aspect ratio"
+);
+assert.deepEqual(
+  resizeWatchfaceDimensions(
+    { width: 200, height: 100 },
+    "height",
+    250,
+    false,
+    8,
+    800
+  ),
+  { width: 200, height: 250 },
+  "unlinked height edits leave width unchanged"
+);
+assert.deepEqual(
+  resizeWatchfaceDimensions(
+    { width: 100, height: 400 },
+    "width",
+    400,
+    true,
+    8,
+    800
+  ),
+  { width: 200, height: 800 },
+  "linked resizing constrains both dimensions to the maximum"
 );
 
 assert.equal(WATCHFACE_EDITOR_HISTORY_LIMIT, 50);

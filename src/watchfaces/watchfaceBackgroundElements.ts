@@ -49,9 +49,24 @@ export function createBackgroundElement(
   };
   switch (kind) {
     case "rect":
-      return { ...base, kind, width: 200, height: 120, cornerRadius: 12, fill: "#51e0b5" };
+      return {
+        ...base,
+        kind,
+        width: 200,
+        height: 120,
+        aspectLocked: false,
+        cornerRadius: 12,
+        fill: "#51e0b5"
+      };
     case "ellipse":
-      return { ...base, kind, width: 180, height: 180, fill: "#51e0b5" };
+      return {
+        ...base,
+        kind,
+        width: 180,
+        height: 180,
+        aspectLocked: false,
+        fill: "#51e0b5"
+      };
     case "line":
       return { ...base, kind, dx: 180, dy: 0, color: "#ffffff", strokeWidth: 6 };
     case "text":

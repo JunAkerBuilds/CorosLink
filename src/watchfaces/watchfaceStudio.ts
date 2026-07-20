@@ -3106,6 +3106,8 @@ export interface WatchfaceDateSpriteStyle {
   /** Exact PNG canvas dimensions; omitted to use an imported PNG's native size. */
   width?: number;
   height?: number;
+  /** Imported PNG dimensions preserve their proportions unless unlocked. */
+  aspectLocked?: boolean;
   /** Date-month rendering mode; absent preserves the starter's format. */
   monthFormat?: "digits" | "labels";
   /** Optional per-layer font; falls back to the design font. */

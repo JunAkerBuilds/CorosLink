@@ -247,6 +247,11 @@ import {
   XCircle,
   MoonStar
 } from "lucide-react";
+import {
+  resizeWatchfaceDimensions,
+  type WatchfaceDimensionAxis,
+  type WatchfaceDimensions
+} from "./watchfaceDimensions";
 import type {
   CorosWatchfaceArchive,
   CorosWatchfaceBackgroundElement,
@@ -509,6 +514,84 @@ import {
   resizeWatchfaceCanvasBackings
 } from "./watchfaceInteractiveRenderer";
 import { WatchfacePointerController } from "./watchfacePointerController";
+
+function LinkedDimensionInputs({
+  width,
+  height,
+  linked,
+  minimum = 1,
+  maximum = Number.POSITIVE_INFINITY,
+  onDimensionsChange,
+  onLinkedChange
+}: {
+  width: number;
+  height: number;
+  linked: boolean;
+  minimum?: number;
+  maximum?: number;
+  onDimensionsChange: (dimensions: WatchfaceDimensions) => void;
+  onLinkedChange: (linked: boolean) => void;
+}) {
+  const updateDimension = (axis: WatchfaceDimensionAxis, value: number) => {
+    onDimensionsChange(
+      resizeWatchfaceDimensions(
+        { width, height },
+        axis,
+        value,
+        linked,
+        minimum,
+        maximum
+      )
+    );
+  };
+  const toggleLabel = linked
+    ? "Unlink width and height"
+    : "Link width and height";
+  const finiteMaximum = Number.isFinite(maximum) ? maximum : undefined;
+
+  return (
+    <div
+      className="watchface-position-inputs wf-linked-dimension-inputs"
+      role="group"
+      aria-label="Dimensions"
+    >
+      <label>
+        W
+        <EditableNumberInput
+          aria-label="Width"
+          min={minimum}
+          max={finiteMaximum}
+          step="1"
+          value={width}
+          fallback={minimum}
+          onValueChange={(value) => updateDimension("width", value)}
+        />
+      </label>
+      <button
+        type="button"
+        className="wf-linked-dimension-toggle"
+        aria-label={toggleLabel}
+        aria-pressed={linked}
+        title={toggleLabel}
+        onClick={() => onLinkedChange(!linked)}
+      >
+        <Link2 size={14} aria-hidden="true" />
+      </button>
+      <label>
+        H
+        <EditableNumberInput
+          aria-label="Height"
+          min={minimum}
+          max={finiteMaximum}
+          step="1"
+          value={height}
+          fallback={minimum}
+          onValueChange={(value) => updateDimension("height", value)}
+        />
+      </label>
+    </div>
+  );
+}
 
 function drawWeatherPreviewLayer(
   canvas: HTMLCanvasElement,
@@ -5089,6 +5172,7 @@ export function WatchfaceEditor({
       rotation?: number;
       width?: number;
       height?: number;
+      aspectLocked?: boolean;
       monthFormat?: "digits" | "labels";
       fontFamily?: string;
       color?: string;
@@ -8984,7 +9068,24 @@ export function WatchfaceEditor({
                   })
                 }
               />
-              <div className="field">Native PNG size<div className="watchface-position-inputs"><label>W<EditableNumberInput min="1" step="1" value={style?.width ?? nativeWidth} fallback={nativeWidth} onValueChange={(width) => setDateStyle(partId, { width: Math.max(1, Math.round(width)) })} /></label><label>H<EditableNumberInput min="1" step="1" value={style?.height ?? nativeHeight} fallback={nativeHeight} onValueChange={(height) => setDateStyle(partId, { height: Math.max(1, Math.round(height)) })} /></label></div><button type="button" className="watchface-color-none" disabled={style?.width === undefined && style?.height === undefined} onClick={() => setDateStyle(partId, { width: undefined, height: undefined })}>Use imported size</button></div>
+              <div className="field">
+                Native PNG size
+                <LinkedDimensionInputs
+                  width={style?.width ?? nativeWidth}
+                  height={style?.height ?? nativeHeight}
+                  linked={style?.aspectLocked !== false}
+                  onDimensionsChange={({ width, height }) =>
+                    setDateStyle(partId, {
+                      width: Math.max(1, Math.round(width)),
+                      height: Math.max(1, Math.round(height))
+                    })
+                  }
+                  onLinkedChange={(aspectLocked) =>
+                    setDateStyle(partId, { aspectLocked })
+                  }
+                />
+                <button type="button" className="watchface-color-none" disabled={style?.width === undefined && style?.height === undefined} onClick={() => setDateStyle(partId, { width: undefined, height: undefined })}>Use imported size</button>
+              </div>
               <label className="watchface-inspector-field"><span>Rotation</span><EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setDateStyle(partId, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               <details className="wf-nested-disclosure">
                 <summary>Custom PNG font</summary>
@@ -9030,13 +9131,24 @@ export function WatchfaceEditor({
               <div className="watchface-position-inputs">
                 <label>X<EditableNumberInput min="0" max={watchCoordinateWidth} step="1" value={toWatchCoordinate(sprite.x)} fallback={0} onValueChange={(x) => updateSprite(sprite.id, { x: fromWatchCoordinate(x) })} /></label>
                 <label>Y<EditableNumberInput min="0" max={watchCoordinateHeight} step="1" value={toWatchCoordinate(sprite.y)} fallback={0} onValueChange={(y) => updateSprite(sprite.id, { y: fromWatchCoordinate(y) })} /></label>
-                <label>W<EditableNumberInput min="1" step="1" value={toWatchCoordinate(sprite.width * sprite.scale)} fallback={1} onValueChange={(value) => updateSprite(sprite.id, { width: fromWatchCoordinate(Math.max(1, value)) / sprite.scale, ...(sprite.aspectLocked !== false ? { height: (fromWatchCoordinate(Math.max(1, value)) / sprite.scale) * (sprite.height / sprite.width) } : {}) })} /></label>
-                <label>H<EditableNumberInput min="1" step="1" value={toWatchCoordinate(sprite.height * sprite.scale)} fallback={1} onValueChange={(value) => updateSprite(sprite.id, { height: fromWatchCoordinate(Math.max(1, value)) / sprite.scale, ...(sprite.aspectLocked !== false ? { width: (fromWatchCoordinate(Math.max(1, value)) / sprite.scale) * (sprite.width / sprite.height) } : {}) })} /></label>
                 <label>Scale %<EditableNumberInput min="20" max="300" step="1" value={Math.round(sprite.scale * 100)} fallback={100} onValueChange={(scale) => updateSprite(sprite.id, { scale: Math.max(0.2, Math.min(3, scale / 100)) })} /></label>
                 <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={Math.round(sprite.rotation)} fallback={0} onValueChange={(rotation) => updateSprite(sprite.id, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               </div>
-              <div className="wf-transform-action-row" role="group" aria-label="Image transform options">
-                <button type="button" aria-pressed={sprite.aspectLocked !== false} title="Lock aspect ratio" onClick={() => updateSprite(sprite.id, { aspectLocked: sprite.aspectLocked === false })}><Link2 size={14} /><span>Ratio</span></button>
+              <LinkedDimensionInputs
+                width={toWatchCoordinate(sprite.width * sprite.scale)}
+                height={toWatchCoordinate(sprite.height * sprite.scale)}
+                linked={sprite.aspectLocked !== false}
+                onDimensionsChange={({ width, height }) =>
+                  updateSprite(sprite.id, {
+                    width: fromWatchCoordinate(width) / sprite.scale,
+                    height: fromWatchCoordinate(height) / sprite.scale
+                  })
+                }
+                onLinkedChange={(aspectLocked) =>
+                  updateSprite(sprite.id, { aspectLocked })
+                }
+              />
+              <div className="wf-transform-action-row wf-flip-action-row" role="group" aria-label="Image transform options">
                 <button type="button" aria-pressed={sprite.flipX === true} onClick={() => updateSprite(sprite.id, { flipX: !sprite.flipX })}><FlipHorizontal2 size={14} /><span>Flip X</span></button>
                 <button type="button" aria-pressed={sprite.flipY === true} onClick={() => updateSprite(sprite.id, { flipY: !sprite.flipY })}><FlipVertical2 size={14} /><span>Flip Y</span></button>
               </div>
@@ -10199,15 +10311,23 @@ export function WatchfaceEditor({
               <label>X<EditableNumberInput min="0" max={BACKGROUND_SPACE} step="1" value={Math.round(element.x)} fallback={0} onValueChange={(x) => set({ x })} /></label>
               <label>Y<EditableNumberInput min="0" max={BACKGROUND_SPACE} step="1" value={Math.round(element.y)} fallback={0} onValueChange={(y) => set({ y })} /></label>
               {element.kind === "rect" || element.kind === "ellipse" ? (
-                <>
-                  <label>W<EditableNumberInput min="8" max="800" step="1" value={element.width} fallback={8} onValueChange={(width) => set({ width: Math.max(8, width) })} /></label>
-                  <label>H<EditableNumberInput min="8" max="800" step="1" value={element.height} fallback={8} onValueChange={(height) => set({ height: Math.max(8, height) })} /></label>
-                </>
+                null
               ) : element.kind === "line" ? (
                 <label>Length<EditableNumberInput min="10" max="800" step="1" value={element.dx} fallback={10} onValueChange={(dx) => set({ dx: Math.max(10, dx) })} /></label>
               ) : null}
               <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={element.rotation} fallback={0} onValueChange={(rotation) => set({ rotation: normalizeWatchfaceRotation(rotation) })} /></label>
             </div>
+            {element.kind === "rect" || element.kind === "ellipse" ? (
+              <LinkedDimensionInputs
+                width={element.width}
+                height={element.height}
+                minimum={8}
+                maximum={800}
+                linked={element.aspectLocked === true}
+                onDimensionsChange={(dimensions) => set(dimensions)}
+                onLinkedChange={(aspectLocked) => set({ aspectLocked })}
+              />
+            ) : null}
             <div className="wf-control-label">Align to face</div>
             {alignButtons}
           </div>,
