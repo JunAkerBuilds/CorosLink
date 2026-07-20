@@ -27,7 +27,8 @@ import {
 import {
   listWatchfaceEditorConfigAssets,
   watchfaceEditorControlBatteryIsListed,
-  watchfaceEditorLayerIsListed
+  watchfaceEditorLayerIsListed,
+  watchfaceEditorSelectableParentState
 } from "../src/watchfaces/watchfaceEditorVisibility.ts";
 import {
   duplicateWatchfaceDesignSprite,
@@ -92,6 +93,9 @@ import {
   normalizeWatchfaceLayerOpacity,
   resolveWatchfaceLayerOpacity
 } from "../src/watchfaces/watchfaceLayerOpacity.ts";
+import {
+  WATCHFACE_COMPLICATIONS
+} from "../src/watchfaces/watchfaceStudio.ts";
 
 const dragBackgroundSource = {
   backgroundColor: "#123456",
@@ -578,6 +582,42 @@ assert.equal(
   "a selectable battery added by the editor must stay in the panel when hidden"
 );
 
+const emptySelectableDetails = {
+  archiveId: "all-selectable-components-off",
+  resolutions: [{
+    directory: "800",
+    width: 800,
+    height: 800,
+    config: {},
+    aodConfig: {},
+    icons: [],
+    spriteFolders: []
+  }]
+};
+const allSelectableComponentsOff = Object.fromEntries(
+  WATCHFACE_COMPLICATIONS.map(({ id }) => [id, false])
+);
+const disabledSelectableParent = watchfaceEditorSelectableParentState(
+  emptySelectableDetails,
+  { controlComplicationEnabled: allSelectableComponentsOff },
+  false
+);
+assert.equal(disabledSelectableParent.visible, false);
+assert.equal(disabledSelectableParent.present, false);
+assert.equal(
+  watchfaceEditorLayerIsListed(
+    {
+      kind: "complication",
+      layoutGroupId: "complication",
+      ...disabledSelectableParent
+    },
+    "current",
+    { controlComplicationEnabled: allSelectableComponentsOff }
+  ),
+  true,
+  "turning off every selectable choice must retain the parent layer"
+);
+
 // Image transform handles preserve the opposite corner, work in local rotated
 // axes, and leave aspect-ratio locking to the caller's modifier key.
 assert.deepEqual(
@@ -702,6 +742,14 @@ const legacyDesign = syncLegacyWatchfaceGroups({
 });
 assert.deepEqual(legacyDesign.linkedLayerGroups, [["a", "b"]]);
 assert.equal(normalizeWatchfaceEditorGroups(undefined, [["a", "b"]])[0]?.name, "Group 1");
+assert.deepEqual(normalizeWatchfaceEditorGroups([], [["a", "b"]]), []);
+const ungroupedDesign = syncLegacyWatchfaceGroups({
+  version: 1,
+  editorGroups: [],
+  linkedLayerGroups: [["a", "b"]]
+});
+assert.deepEqual(ungroupedDesign.editorGroups, []);
+assert.deepEqual(ungroupedDesign.linkedLayerGroups, []);
 const atomicGroups = [{ id: "group-a", name: "A", layerIds: ["a", "b"] }];
 assert.deepEqual(expandWatchfaceGroupSelection(atomicGroups, ["a", "c"]), ["a", "b", "c"]);
 assert.deepEqual(watchfaceSelectionUnits(atomicGroups, ["b", "c"]), [

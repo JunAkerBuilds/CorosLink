@@ -18,6 +18,25 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    emptyOutDir: true
-  }
+    emptyOutDir: true,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: "three-vendor",
+              test: /node_modules[\\/]three[\\/]/,
+              priority: 20,
+              maxSize: 450 * 1024,
+            },
+            {
+              name: "map-vendor",
+              test: /node_modules[\\/]leaflet[\\/]/,
+              priority: 20,
+            },
+          ],
+        },
+      },
+    },
+  },
 });

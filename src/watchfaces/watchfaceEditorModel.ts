@@ -32,7 +32,8 @@ import { rotatedCenterBounds } from "./watchfaceEditorGeometry";
 import { watchfaceDesignSpriteName } from "./watchfaceSpriteTransform";
 import {
   listWatchfaceEditorConfigAssets,
-  watchfaceEditorControlBatteryIsListed
+  watchfaceEditorControlBatteryIsListed,
+  watchfaceEditorSelectableParentState
 } from "./watchfaceEditorVisibility";
 
 export { editorLayerAtPoint } from "./watchfaceEditorGeometry";
@@ -414,6 +415,29 @@ export function deriveEditorLayers(
         canHide: true,
         present: true,
         bounds: null,
+        capabilities: capabilitiesForGroup(groupId)
+      });
+      continue;
+    }
+
+    if (groupId === "complication") {
+      const selectableState = watchfaceEditorSelectableParentState(
+        details,
+        design,
+        bounds !== null
+      );
+      // The selector's geometry disappears when its last choice is disabled.
+      // Keep the parent layer addressable so users can reopen its inspector and
+      // turn choices back on instead of losing the only recovery path.
+      layers.push({
+        id: groupId,
+        kind: "complication",
+        label: labelForGroup(groupId),
+        layoutGroupId: groupId,
+        visible: selectableState.visible,
+        canHide: true,
+        present: selectableState.present,
+        bounds,
         capabilities: capabilitiesForGroup(groupId)
       });
       continue;

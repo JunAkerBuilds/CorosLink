@@ -223,21 +223,40 @@ async function main() {
   const savedProject = await watchfaces.saveCorosWatchfaceProject({
     name: "Saved creator fixture",
     sourceArchiveId: starter.archiveId,
-    design: projectDesign
+    design: projectDesign,
+    previewDataUrl: pngDataUrl(icon)
   });
   assert.equal(savedProject.name, "Saved creator fixture");
   assert.equal(savedProject.archive.sourceTemplateId, "250601");
+  assert.equal(savedProject.previewDataUrl, pngDataUrl(icon));
   assert.deepEqual(savedProject.design.layoutOffsets.hours, { dx: 10, dy: 20 });
+  const updatedPreview = solidPng(32, 32, 0x77);
   const updatedProject = await watchfaces.saveCorosWatchfaceProject({
     projectId: savedProject.projectId,
     name: "Updated creator fixture",
     sourceArchiveId: starter.archiveId,
-    design: { ...projectDesign, backgroundColor: "#123456" }
+    design: { ...projectDesign, backgroundColor: "#123456" },
+    previewDataUrl: pngDataUrl(updatedPreview)
   });
   assert.equal(updatedProject.projectId, savedProject.projectId);
   assert.equal(updatedProject.name, "Updated creator fixture");
   const projectList = await watchfaces.listCorosWatchfaceProjects();
-  assert.equal(projectList.some((project) => project.projectId === savedProject.projectId), true);
+  const projectSummary = projectList.find(
+    (project) => project.projectId === savedProject.projectId
+  );
+  assert.ok(projectSummary);
+  assert.equal(projectSummary.previewDataUrl, pngDataUrl(updatedPreview));
+  await watchfaces.cacheCorosWatchfaceProjectPreview(
+    savedProject.projectId,
+    pngDataUrl(icon)
+  );
+  assert.equal(
+    (
+      await watchfaces.listCorosWatchfaceProjects()
+    ).find((project) => project.projectId === savedProject.projectId)?.previewDataUrl,
+    pngDataUrl(icon),
+    "a rebuilt dashboard thumbnail should persist without rewriting the project"
+  );
   const nestedProjectStarter = path.join(
     app.getPath("userData"),
     "watchface-projects",

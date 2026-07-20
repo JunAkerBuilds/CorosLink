@@ -199,6 +199,10 @@ export interface CorosLinkApi {
   loadCorosWatchfaceProject: (
     projectId: string
   ) => Promise<CorosWatchfaceProject>;
+  cacheCorosWatchfaceProjectPreview: (
+    projectId: string,
+    previewDataUrl: string
+  ) => Promise<void>;
   duplicateCorosWatchfaceProject: (
     projectId: string
   ) => Promise<CorosWatchfaceProject>;

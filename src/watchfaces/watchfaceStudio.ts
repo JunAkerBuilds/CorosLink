@@ -341,6 +341,15 @@ export function detailsForPreviewMode(
   };
 }
 
+const AMPM_CONFIG_KEYS = ["am_icon", "pm_icon", "am_pm_icon_pos"] as const;
+const AMPM_ICON_RELATIVE_PATHS = new Set(["icon/am.png", "icon/pm.png"]);
+
+function configDeclaresAmPm(config: Record<string, string>): boolean {
+  return AMPM_CONFIG_KEYS.every((key) =>
+    Object.prototype.hasOwnProperty.call(config, key)
+  );
+}
+
 /**
  * Narrows a template to the assets referenced by one display configuration.
  * Composition uses this view so styling Current cannot overwrite a sprite
@@ -359,6 +368,7 @@ export function detailsForCompositionMode(
           .map((value) => value?.trim().replace(/\\/g, "/").replace(/^\.\//, ""))
           .filter((value): value is string => Boolean(value))
       );
+      const preservesDormantAmPmIcons = configDeclaresAmPm(resolution.config);
       return {
         ...resolution,
         spriteFolders: resolution.spriteFolders
@@ -368,11 +378,18 @@ export function detailsForCompositionMode(
           .map((folder) =>
             mode === "aod" ? { ...folder, aod: false } : folder
           ),
-        icons: resolution.icons.filter((icon) =>
-          references.has(
-            icon.path.slice(resolution.directory.length + 1).replace(/\\/g, "/")
-          )
-        ),
+        icons: resolution.icons.filter((icon) => {
+          const relativePath = icon.path
+            .slice(resolution.directory.length + 1)
+            .replace(/\\/g, "/");
+          return (
+            references.has(relativePath) ||
+            (
+              preservesDormantAmPmIcons &&
+              AMPM_ICON_RELATIVE_PATHS.has(relativePath.toLowerCase())
+            )
+          );
+        }),
         // The selected configuration is exposed through `config`; clearing the
         // secondary map prevents generic builders from processing both modes.
         aodConfig: {}
@@ -895,7 +912,9 @@ function configAssetCreatedRelativePath(id: string): string {
   return `studio/${configAssetFolder(id)}/00.png`;
 }
 
-const NATIVE_CONTROL_ICON_KEYS = new Set([
+const NATIVE_CONFIG_ICON_KEYS = new Set([
+  "bluetooth_off_icon",
+  "bluetooth_on_icon",
   "control_barometer_icon",
   "control_bluetooth_off_icon",
   "control_bluetooth_on_icon",
@@ -909,12 +928,32 @@ const NATIVE_CONTROL_ICON_KEYS = new Set([
   "control_step_icon",
   "control_sunrise_icon",
   "control_sunset_icon",
-  "control_temperature_icon"
+  "control_temperature_icon",
+  "no_disturb_off_icon",
+  "no_disturb_on_icon"
 ]);
 
-/** Direct selectable-control icons whose firmware entries accept a resized PNG. */
+/** Direct status/control icons whose firmware entries accept a resized PNG. */
 export function configAssetSupportsNativeSize(configKey: string): boolean {
-  return NATIVE_CONTROL_ICON_KEYS.has(configKey);
+  return NATIVE_CONFIG_ICON_KEYS.has(configKey);
+}
+
+/**
+ * Existing direct icons can replace their template canvas. Standalone status
+ * icons can also use native sizing when Studio creates their missing config
+ * entry and PNG, while virtual selectable-control icons remain slot-sized.
+ */
+export function configAssetCanUseNativeSize(
+  configKey: string,
+  hasTemplateSource: boolean
+): boolean {
+  return (
+    configAssetSupportsNativeSize(configKey) &&
+    (hasTemplateSource ||
+      VIRTUAL_STANDALONE_STATUS_ICON_KEYS.includes(
+        configKey as (typeof VIRTUAL_STANDALONE_STATUS_ICON_KEYS)[number]
+      ))
+  );
 }
 
 function normalizePositiveScale(scale: number | undefined): number {
@@ -1674,7 +1713,6 @@ export function scaleAmPmStyleForResolution(
   };
 }
 
-const AMPM_CONFIG_KEYS = ["am_icon", "pm_icon", "am_pm_icon_pos"] as const;
 // The main process only accepts created sprites under studio/<name>/NN.png,
 // so the AM icon becomes 00.png and the PM icon 01.png of one studio folder.
 const AMPM_SPRITE_FILES = { am: "studio/ampm/00.png", pm: "studio/ampm/01.png" };
@@ -1698,9 +1736,7 @@ function resolutionSupportsAmPm(
   resolution: CorosWatchfaceResolutionDetails
 ): boolean {
   return (
-    AMPM_CONFIG_KEYS.every((key) =>
-      Object.prototype.hasOwnProperty.call(resolution.config, key)
-    ) && findAmPmIcons(resolution) !== null
+    configDeclaresAmPm(resolution.config) && findAmPmIcons(resolution) !== null
   );
 }
 
@@ -3063,7 +3099,7 @@ export type WatchfaceTimeStyles = Partial<
 export type WatchfaceDatePartId = "weekday" | "dateMonth" | "dateDay";
 
 export interface WatchfaceDateSpriteStyle {
-  /** Legacy artwork zoom used when exact dimensions are not set. */
+  /** Legacy artwork zoom used by projects saved before exact dimensions. */
   scale: number;
   /** Clockwise rotation applied inside each firmware sprite canvas. */
   rotation?: number;
@@ -3079,7 +3115,7 @@ export interface WatchfaceDateSpriteStyle {
   letterSpacing?: number;
   /** A PNG set scoped to this date layer rather than the shared face font. */
   rasterFont?: CorosWatchfaceRasterFont;
-  /** Weekday/date-day: use natural glyph width instead of the template canvas. */
+  /** Legacy weekday/date-day natural-width mode. */
   nativeSize?: boolean;
 }
 
@@ -3215,7 +3251,7 @@ function dateMonthUsesLabels(
 }
 
 /**
- * Resolves the actual exported canvas size for one month/day PNG.
+ * Resolves the actual exported canvas size for one weekday/month/day PNG.
  * Entered and imported dimensions are authored in the master resolution;
  * `nativeScale` (target width / master width) converts them to this tree.
  */
@@ -3232,9 +3268,11 @@ export function dateSpriteCanvasSize(
     : null;
   const file = source?.files[value] ?? source?.files[0];
   if (!part || !file) return null;
-  const spriteText = partId === "dateMonth" && dateMonthUsesLabels(source, style)
-    ? corosMonthLabelForSpriteIndex(value) ?? String(value)
-    : String(value);
+  const spriteText = partId === "weekday"
+    ? WEEKDAY_LABELS[value] ?? String(value)
+    : partId === "dateMonth" && dateMonthUsesLabels(source, style)
+      ? corosMonthLabelForSpriteIndex(value) ?? String(value)
+      : String(value);
   const imported = rasterFontNativeSpriteSize(style?.rasterFont, spriteText);
   const toTargetSize = (size: number) =>
     Math.max(1, Math.round(size * nativeScale));
@@ -5265,17 +5303,20 @@ export function buildDateStyleOverrides(
         continue;
       }
       const monthLabels = part.id === "dateMonth" && dateMonthUsesLabels(source, style);
-      const sizes = part.kind === "digits"
-        ? Array.from({ length: monthLabels ? 12 : 10 }, (_, value) =>
-            dateSpriteCanvasSize(resolution, part.id, style, value, nativeScale)
-          )
-            .filter((size): size is NonNullable<typeof size> => Boolean(size))
-        : [];
+      const sizes = Array.from(
+        { length: part.kind === "week" ? 7 : monthLabels ? 12 : 10 },
+        (_, value) =>
+          dateSpriteCanvasSize(resolution, part.id, style, value, nativeScale)
+      ).filter((size): size is NonNullable<typeof size> => Boolean(size));
       const followsNativeSize = sizes.some((size) => size.native);
+      const rectGlyphCount =
+        part.id === "dateDay" || (part.id === "dateMonth" && !monthLabels)
+          ? 2
+          : 1;
       const rect = followsNativeSize
         ? resizeConfigRectValue(
             resolution.config[part.rectKey] ?? "",
-            Math.max(...sizes.map((size) => size.width)) * (monthLabels ? 1 : 2),
+            Math.max(...sizes.map((size) => size.width)) * rectGlyphCount,
             Math.max(...sizes.map((size) => size.height))
           )
         : resolution.config[part.rectKey];
@@ -5302,7 +5343,7 @@ export function buildDateStyleOverrides(
 
 export interface WatchfaceDateSpriteComposition {
   replacements: CorosWatchfaceAssetReplacement[];
-  /** Native-size weekday rectangles, centered on the template position. */
+  /** Native-size date rectangles, centered on the template position. */
   configOverrides: CorosWatchfaceConfigOverride[];
 }
 
@@ -5385,9 +5426,13 @@ export async function buildDateSpriteComposition(
         const existsInTemplate = resolution.spriteFolders.some((folder) =>
           folder.files.some((candidate) => candidate.path === path)
         );
-        const canvasSize = part.kind === "digits"
-          ? dateSpriteCanvasSize(resolution, part.id, style, value, nativeScale)
-          : null;
+        const canvasSize = dateSpriteCanvasSize(
+          resolution,
+          part.id,
+          style,
+          value,
+          nativeScale
+        );
         jobs.push({
           source: file,
           path,
@@ -5518,7 +5563,15 @@ export async function buildDateSpriteComposition(
                 : undefined)
           );
     const fittedDataUrl = job.exactCanvas
-      ? baseDataUrl
+      ? job.kind === "week" &&
+          Math.abs(job.typography.letterSpacing ?? 0) >= 0.001
+        ? await fitVisibleSpriteToCanvas(
+            baseDataUrl,
+            job.width,
+            job.height,
+            1
+          )
+        : baseDataUrl
       : await fitVisibleSpriteToCanvas(
           baseDataUrl,
           job.width,
@@ -7412,9 +7465,17 @@ export async function drawStudioPreview(
     const weekTypography = componentTypography(options, weekStyle);
     let image = loaded.get(weekFile.path);
     const weekScale = normalizeSpriteScale(weekStyle?.scale);
-    const weekWidth = weekFile.width;
-    const weekHeight = weekFile.height;
+    const weekCanvas = dateSpriteCanvasSize(
+      resolution,
+      "weekday",
+      weekStyle,
+      weekdayIndex,
+      options.nativeSpriteResolutionScale ?? 1
+    );
+    const weekWidth = weekCanvas?.width ?? weekFile.width;
+    const weekHeight = weekCanvas?.height ?? weekFile.height;
     const nativeWeekday = Boolean(
+      !weekCanvas?.native &&
       weekStyle &&
         (weekStyle.nativeSize ??
           Boolean(weekStyle.fontFamily || weekStyle.rasterFont))
@@ -7458,20 +7519,23 @@ export async function drawStudioPreview(
       renderedWeekWidth = image.naturalWidth;
       renderedWeekHeight = image.naturalHeight;
     } else if (shouldRenderWatchfaceText(WEEKDAY_LABELS[weekdayIndex] ?? "DAY", weekFontFamily, weekTypography)) {
+      const rendered = await renderWatchfaceTextSprite(
+        WEEKDAY_LABELS[weekdayIndex] ?? "DAY",
+        weekWidth,
+        weekHeight,
+        weekFontFamily,
+        weekColor ?? options.digitColor,
+        weekTypography
+      );
       image = await loadStudioImage(
-        await fitVisibleSpriteToCanvas(
-          await renderWatchfaceTextSprite(
-            WEEKDAY_LABELS[weekdayIndex] ?? "DAY",
-            weekWidth,
-            weekHeight,
-            weekFontFamily,
-            weekColor ?? options.digitColor,
-            weekTypography
-          ),
-          weekWidth,
-          weekHeight,
-          weekScale
-        )
+        weekCanvas?.native
+          ? rendered
+          : await fitVisibleSpriteToCanvas(
+              rendered,
+              weekWidth,
+              weekHeight,
+              weekScale
+            )
       );
     } else if (weekStyle && loadedAssets.get(weekFile.path)?.dataUrl) {
       const sourceDataUrl = loadedAssets.get(weekFile.path)!.dataUrl;
@@ -7493,12 +7557,19 @@ export async function drawStudioPreview(
               (options.tintLabels ? options.digitColor : undefined)
           );
       image = await loadStudioImage(
-        await fitVisibleSpriteToCanvas(
-          spacedDataUrl,
-          weekWidth,
-          weekHeight,
-          weekScale
-        )
+        weekCanvas?.native
+          ? await fitVisibleSpriteToCanvas(
+              spacedDataUrl,
+              weekWidth,
+              weekHeight,
+              1
+            )
+          : await fitVisibleSpriteToCanvas(
+              spacedDataUrl,
+              weekWidth,
+              weekHeight,
+              weekScale
+            )
       );
     }
     if (image) {

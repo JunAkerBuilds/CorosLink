@@ -11708,6 +11708,8 @@ td span {
 }
 
 .training-heatmap-grid {
+  position: relative;
+  isolation: isolate;
   grid-column: 2;
   grid-row: 2;
   display: grid;
@@ -11736,10 +11738,28 @@ td span {
   outline: none;
   opacity: 0;
   transform: scale(0.35);
+  scale: 1;
+  filter: brightness(var(--heatmap-brightness, 1));
+  z-index: 0;
   transition:
     transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1),
+    scale 0.2s cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 0.22s ease,
-    filter 0.22s ease;
+    filter 0.2s ease;
+}
+
+.training-heatmap-cell:not(.is-empty)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    0 0 10px 2px color-mix(in srgb, var(--cell-color) 54%, transparent),
+    0 0 18px 4px color-mix(in srgb, var(--cell-color) 20%, transparent);
+  opacity: var(--heatmap-glow-opacity, 0);
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: -1;
 }
 
 .training-heatmap-grid.is-ready .training-heatmap-cell:not(.is-empty) {
@@ -11800,12 +11820,15 @@ td span {
 
 .training-heatmap-cell:not(.is-empty):hover,
 .training-heatmap-cell:not(.is-empty):focus-visible {
-  transform: scale(1.18);
-  filter: brightness(1.12);
-  box-shadow:
-    0 0 0 2px rgba(255, 255, 255, 0.2),
-    0 0 20px color-mix(in srgb, var(--cell-color) 45%, transparent);
+  scale: 1.1;
+  filter: brightness(1.2);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
   z-index: 2;
+}
+
+.training-heatmap-cell:not(.is-empty):hover::before,
+.training-heatmap-cell:not(.is-empty):focus-visible::before {
+  opacity: 1;
 }
 
 .training-heatmap-tooltip {
@@ -15596,6 +15619,7 @@ tr.data-intervals-row-missing {
   .training-fitness-bar,
   .training-heatmap-panel,
   .training-heatmap-cell,
+  .training-heatmap-cell::before,
   .vo2-widget-panel::before,
   .vo2-widget-panel::after,
   .vo2-widget-icon,
@@ -15624,6 +15648,11 @@ tr.data-intervals-row-missing {
   .secondary-button:hover:not(:disabled),
   .icon-button:hover:not(:disabled) {
     transform: none;
+  }
+
+  .training-heatmap-cell:not(.is-empty):hover,
+  .training-heatmap-cell:not(.is-empty):focus-visible {
+    scale: 1;
   }
 
   .score-bar-fill {

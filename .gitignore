@@ -12,3 +12,5 @@ release/
 .env.local
 bin/*/
 /tmp
+/output
+/.work

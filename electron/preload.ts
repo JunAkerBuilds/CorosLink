@@ -247,6 +247,11 @@ const api = {
     projectId: string
   ): Promise<CorosWatchfaceProject> =>
     ipcRenderer.invoke("watchfaces:loadProject", projectId),
+  cacheCorosWatchfaceProjectPreview: (
+    projectId: string,
+    previewDataUrl: string
+  ): Promise<void> =>
+    ipcRenderer.invoke("watchfaces:cacheProjectPreview", projectId, previewDataUrl),
   duplicateCorosWatchfaceProject: (
     projectId: string
   ): Promise<CorosWatchfaceProject> =>

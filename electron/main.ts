@@ -60,6 +60,7 @@ import {
   uploadTrainingPlan
 } from "./trainingHubService";
 import {
+  cacheCorosWatchfaceProjectPreview,
   createCorosWatchfaceArchive,
   createCorosWatchfaceShareLink,
   duplicateCorosWatchfaceProject,
@@ -1033,6 +1034,11 @@ function registerIpcHandlers(): void {
   );
   ipcMain.handle("watchfaces:loadProject", (_event, projectId: string) =>
     loadCorosWatchfaceProject(projectId)
+  );
+  ipcMain.handle(
+    "watchfaces:cacheProjectPreview",
+    (_event, projectId: string, previewDataUrl: string) =>
+      cacheCorosWatchfaceProjectPreview(projectId, previewDataUrl)
   );
   ipcMain.handle("watchfaces:duplicateProject", (_event, projectId: string) =>
     duplicateCorosWatchfaceProject(projectId)

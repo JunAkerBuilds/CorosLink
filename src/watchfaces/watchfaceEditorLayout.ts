@@ -116,7 +116,7 @@ export function normalizeWatchfaceEditorGroups(
   groups: CorosWatchfaceEditorGroup[] | undefined,
   legacyGroups: string[][] | undefined
 ): CorosWatchfaceEditorGroup[] {
-  const source = groups?.length
+  const source = groups !== undefined
     ? groups
     : (legacyGroups ?? []).map((layerIds, index) => ({
         id: stableGroupId(layerIds, index),

@@ -592,7 +592,8 @@ export function WatchfacesView({
       name: saved.name,
       updatedAt: saved.updatedAt,
       sourceTemplateId: saved.sourceTemplateId,
-      ...(saved.firmwareType ? { firmwareType: saved.firmwareType } : {})
+      ...(saved.firmwareType ? { firmwareType: saved.firmwareType } : {}),
+      ...(saved.previewDataUrl ? { previewDataUrl: saved.previewDataUrl } : {})
     };
     setProjects((current) => [
       summary,
@@ -2132,9 +2133,18 @@ interface ProjectPreviewCacheEntry {
   promise: Promise<CorosWatchfaceProject>;
 }
 
+interface RenderedProjectPreviewCacheEntry {
+  updatedAt: string;
+  promise: Promise<string>;
+}
+
 const projectPreviewCache = new WeakMap<
   CorosLinkApi,
   Map<string, ProjectPreviewCacheEntry>
+>();
+const renderedProjectPreviewCache = new WeakMap<
+  CorosLinkApi,
+  Map<string, RenderedProjectPreviewCacheEntry>
 >();
 
 function loadProjectPreview(
@@ -2150,6 +2160,104 @@ function loadProjectPreview(
   if (cached?.updatedAt === project.updatedAt) return cached.promise;
   const promise = api.loadCorosWatchfaceProject(project.projectId);
   cache.set(project.projectId, { updatedAt: project.updatedAt, promise });
+  void promise.catch(() => {
+    if (cache.get(project.projectId)?.promise === promise) {
+      cache.delete(project.projectId);
+    }
+  });
+  return promise;
+}
+
+function renderProjectPreview(
+  api: CorosLinkApi,
+  project: CorosWatchfaceProjectSummary
+): Promise<string> {
+  let cache = renderedProjectPreviewCache.get(api);
+  if (!cache) {
+    cache = new Map();
+    renderedProjectPreviewCache.set(api, cache);
+  }
+  const cached = cache.get(project.projectId);
+  if (cached?.updatedAt === project.updatedAt) return cached.promise;
+
+  const promise = (async () => {
+    const assetCache = new Map<string, CorosWatchfaceTemplateAsset>();
+    const loadedProject = await loadProjectPreview(api, project);
+    const details = await api.describeCorosWatchfaceTemplate(
+      loadedProject.archive.archiveId
+    );
+    const previewDetails = deriveDesignDetails(
+      details,
+      loadedProject.design
+    ).previewDetails;
+    const resolution = pickPreviewResolution(previewDetails);
+    const watchResolution = pickWatchPreviewResolution(previewDetails);
+    if (!resolution || !watchResolution) {
+      throw new Error("This project has no preview resolution.");
+    }
+    const backgroundDataUrl = await renderDesignBackground(
+      loadedProject.design,
+      resolution.width
+    );
+    const canvas = document.createElement("canvas");
+    canvas.width = 416;
+    canvas.height = 416;
+    const loadAssets = async (paths: string[]) => {
+      const missing = paths.filter((path) => !assetCache.has(path));
+      if (missing.length > 0) {
+        const assets = await api.loadCorosWatchfaceTemplateAssets(
+          loadedProject.archive.archiveId,
+          missing
+        );
+        for (const asset of assets) assetCache.set(asset.path, asset);
+      }
+      return paths
+        .map((path) => assetCache.get(path))
+        .filter((asset): asset is CorosWatchfaceTemplateAsset => Boolean(asset));
+    };
+    await drawStudioPreview(
+      canvas,
+      backgroundDataUrl,
+      detailsForPreviewResolution(
+        previewDetails,
+        watchResolution.directory
+      ),
+      {
+        ...toStudioOptions(loadedProject.design),
+        effectResolutionScale: watchResolution.width / resolution.width,
+        nativeSpriteResolutionScale: watchResolution.width / resolution.width
+      },
+      loadAssets
+    );
+    const weather = loadedProject.design.weatherIndicator;
+    if (weather?.enabled) {
+      const url = weatherPreviewUrl(resolution.width);
+      if (url) {
+        const image = await loadStudioImage(url);
+        const context = canvas.getContext("2d");
+        const scale = canvas.width / resolution.width;
+        context?.drawImage(
+          image,
+          weather.x * scale,
+          weather.y * scale,
+          image.naturalWidth * weather.scale * scale,
+          image.naturalHeight * weather.scale * scale
+        );
+      }
+    }
+    const previewDataUrl = canvas.toDataURL("image/png");
+    void api
+      .cacheCorosWatchfaceProjectPreview(project.projectId, previewDataUrl)
+      .catch(() => undefined);
+    return previewDataUrl;
+  })();
+
+  cache.set(project.projectId, { updatedAt: project.updatedAt, promise });
+  void promise.catch(() => {
+    if (cache.get(project.projectId)?.promise === promise) {
+      cache.delete(project.projectId);
+    }
+  });
   return promise;
 }
 
@@ -2160,101 +2268,52 @@ function WatchFacePreview({
   api: CorosLinkApi;
   project: CorosWatchfaceProjectSummary;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [previewState, setPreviewState] = useState<ProjectPreviewState>("loading");
+  const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(
+    project.previewDataUrl ?? null
+  );
+  const [previewState, setPreviewState] = useState<ProjectPreviewState>(
+    project.previewDataUrl ? "ready" : "loading"
+  );
 
   useEffect(() => {
     let cancelled = false;
-    const assetCache = new Map<string, CorosWatchfaceTemplateAsset>();
-
-    void (async () => {
-      setPreviewState("loading");
-      const loadedProject = await loadProjectPreview(api, project);
-      const details = await api.describeCorosWatchfaceTemplate(
-        loadedProject.archive.archiveId
-      );
-      const previewDetails = deriveDesignDetails(
-        details,
-        loadedProject.design
-      ).previewDetails;
-      const resolution = pickPreviewResolution(previewDetails);
-      const watchResolution = pickWatchPreviewResolution(previewDetails);
-      if (!resolution || !watchResolution) {
-        throw new Error("This project has no preview resolution.");
-      }
-      const backgroundDataUrl = await renderDesignBackground(
-        loadedProject.design,
-        resolution.width
-      );
-      if (cancelled) return;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const loadAssets = async (paths: string[]) => {
-        const missing = paths.filter((path) => !assetCache.has(path));
-        if (missing.length > 0) {
-          const assets = await api.loadCorosWatchfaceTemplateAssets(
-            loadedProject.archive.archiveId,
-            missing
-          );
-          for (const asset of assets) assetCache.set(asset.path, asset);
-        }
-        return paths
-          .map((path) => assetCache.get(path))
-          .filter((asset): asset is CorosWatchfaceTemplateAsset => Boolean(asset));
+    if (project.previewDataUrl) {
+      setPreviewDataUrl(project.previewDataUrl);
+      setPreviewState("ready");
+      return () => {
+        cancelled = true;
       };
-      canvas.width = 416;
-      canvas.height = 416;
-      await drawStudioPreview(
-        canvas,
-        backgroundDataUrl,
-        detailsForPreviewResolution(
-          previewDetails,
-          watchResolution.directory
-        ),
-        {
-          ...toStudioOptions(loadedProject.design),
-          effectResolutionScale: watchResolution.width / resolution.width,
-          nativeSpriteResolutionScale: watchResolution.width / resolution.width
-        },
-        loadAssets
-      );
-      const weather = loadedProject.design.weatherIndicator;
-      if (weather?.enabled) {
-        const url = weatherPreviewUrl(resolution.width);
-        if (url) {
-          const image = await loadStudioImage(url);
-          const context = canvas.getContext("2d");
-          const scale = canvas.width / resolution.width;
-          context?.drawImage(
-            image,
-            weather.x * scale,
-            weather.y * scale,
-            image.naturalWidth * weather.scale * scale,
-            image.naturalHeight * weather.scale * scale
-          );
-        }
-      }
-      if (!cancelled) setPreviewState("ready");
-    })().catch(() => {
-      if (!cancelled) setPreviewState("error");
-    });
+    }
+
+    setPreviewDataUrl(null);
+    setPreviewState("loading");
+    void renderProjectPreview(api, project)
+      .then((renderedPreview) => {
+        if (cancelled) return;
+        setPreviewDataUrl(renderedPreview);
+        setPreviewState("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewState("error");
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [api, project.projectId, project.updatedAt]);
+  }, [api, project.projectId, project.previewDataUrl, project.updatedAt]);
 
   return (
     <span
       className={`watchface-project-preview is-${previewState}`}
       aria-busy={previewState === "loading"}
     >
-      <canvas
-        ref={canvasRef}
-        role={previewState === "ready" ? "img" : undefined}
-        aria-hidden={previewState !== "ready"}
-        aria-label={`${project.name} watch-face preview`}
-      />
+      {previewDataUrl ? (
+        <img
+          src={previewDataUrl}
+          alt={`${project.name} watch-face preview`}
+          draggable={false}
+        />
+      ) : null}
       {previewState !== "ready" ? (
         <span
           className="watchface-project-preview-fallback"

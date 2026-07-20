@@ -123,6 +123,7 @@ const MAX_TEMPLATE_ASSET_REQUESTS = 800;
 const MAX_CONFIG_OVERRIDE_FILES = 8;
 const MAX_CONFIG_OVERRIDE_KEYS = 200;
 const MAX_CONFIG_TEXT_REPLACEMENTS = 8;
+const PROJECT_PREVIEW_FILE_NAME = "preview.png";
 const CONFIG_TEXT_PATH_PATTERN = /^watchface_\d{3,4}x\d{3,4}\/(?:AOD)?config\.txt$/i;
 const CONFIG_KEY_PATTERN = /^[a-z0-9_]{1,64}$/i;
 const CREATED_STUDIO_SPRITE_PATTERN =
@@ -1050,6 +1051,43 @@ function watchfaceProjectsDirectory(): string {
   return path.join(app.getPath("userData"), "watchface-projects");
 }
 
+function encodeProjectPreviewDataUrl(preview: Buffer): string {
+  return `data:image/png;base64,${preview.toString("base64")}`;
+}
+
+async function readStoredProjectPreview(
+  projectDirectory: string
+): Promise<string | undefined> {
+  try {
+    const previewPath = path.join(projectDirectory, PROJECT_PREVIEW_FILE_NAME);
+    const stat = await fs.promises.stat(previewPath);
+    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_ARTWORK_BYTES) {
+      return undefined;
+    }
+    const preview = await fs.promises.readFile(previewPath);
+    assertPngBytes(preview, "The saved watchface preview is not a PNG image.");
+    return encodeProjectPreviewDataUrl(preview);
+  } catch {
+    // A missing or damaged thumbnail must never make the underlying project
+    // unavailable. The renderer can rebuild and replace it on demand.
+    return undefined;
+  }
+}
+
+async function writeStoredProjectPreview(
+  projectDirectory: string,
+  preview: Buffer
+): Promise<void> {
+  const previewPath = path.join(projectDirectory, PROJECT_PREVIEW_FILE_NAME);
+  const temporaryPreview = `${previewPath}.${crypto.randomUUID()}.tmp`;
+  try {
+    await fs.promises.writeFile(temporaryPreview, preview);
+    await fs.promises.rename(temporaryPreview, previewPath);
+  } finally {
+    await fs.promises.rm(temporaryPreview, { force: true }).catch(() => undefined);
+  }
+}
+
 function validateProjectId(value: string | undefined): string {
   if (value === undefined) {
     return crypto.randomUUID();
@@ -1162,6 +1200,9 @@ export async function saveCorosWatchfaceProject(
   const projectId = validateProjectId(input.projectId);
   const name = sanitizeProjectName(input.name);
   validateProjectDesign(input.design);
+  const preview = input.previewDataUrl
+    ? decodePortableProjectPreview(input.previewDataUrl)
+    : undefined;
   const projectDirectory = path.join(watchfaceProjectsDirectory(), projectId);
   const templatePath = path.join(projectDirectory, "starter.dat");
   const manifestPath = path.join(projectDirectory, "project.json");
@@ -1183,14 +1224,27 @@ export async function saveCorosWatchfaceProject(
     design: input.design
   };
   const temporaryManifest = `${manifestPath}.tmp`;
+  if (preview) {
+    await writeStoredProjectPreview(projectDirectory, preview);
+  }
   await fs.promises.writeFile(temporaryManifest, JSON.stringify(stored), "utf8");
   await fs.promises.rename(temporaryManifest, manifestPath);
+  if (!preview) {
+    await fs.promises.rm(
+      path.join(projectDirectory, PROJECT_PREVIEW_FILE_NAME),
+      { force: true }
+    );
+  }
   const selected = {
     ...(await inspectArchive(templatePath)),
     ...(stored.firmwareType ? { firmwareType: stored.firmwareType } : {})
   };
   selectedArchives.set(selected.archiveId, selected);
-  return { ...stored, archive: toPublicArchive(selected) };
+  return {
+    ...stored,
+    ...(preview ? { previewDataUrl: encodeProjectPreviewDataUrl(preview) } : {}),
+    archive: toPublicArchive(selected)
+  };
 }
 
 export async function listCorosWatchfaceProjects(): Promise<
@@ -1205,8 +1259,14 @@ export async function listCorosWatchfaceProjects(): Promise<
       .map(async (entry) => {
         try {
           const stored = await readStoredWatchfaceProject(entry.name);
+          const previewDataUrl = await readStoredProjectPreview(
+            path.join(directory, stored.projectId)
+          );
           const { design: _design, ...summary } = stored;
-          return summary;
+          return {
+            ...summary,
+            ...(previewDataUrl ? { previewDataUrl } : {})
+          };
         } catch {
           return null;
         }
@@ -1225,6 +1285,7 @@ export async function loadCorosWatchfaceProject(
     watchfaceProjectsDirectory(),
     stored.projectId
   );
+  const previewDataUrlPromise = readStoredProjectPreview(projectDirectory);
   const primaryTemplatePath = path.join(projectDirectory, "starter.dat");
   const legacyTemplatePath = path.join(projectDirectory, "starter.zip");
   const templatePath = (await pathIsFile(primaryTemplatePath))
@@ -1238,7 +1299,27 @@ export async function loadCorosWatchfaceProject(
     ...(stored.firmwareType ? { firmwareType: stored.firmwareType } : {})
   };
   selectedArchives.set(selected.archiveId, selected);
-  return { ...stored, archive: toPublicArchive(selected) };
+  const previewDataUrl = await previewDataUrlPromise;
+  return {
+    ...stored,
+    ...(previewDataUrl ? { previewDataUrl } : {}),
+    archive: toPublicArchive(selected)
+  };
+}
+
+export async function cacheCorosWatchfaceProjectPreview(
+  projectId: string,
+  previewDataUrl: string
+): Promise<void> {
+  const id = validateProjectId(projectId);
+  const projectDirectory = path.join(watchfaceProjectsDirectory(), id);
+  if (!(await pathIsFile(path.join(projectDirectory, "project.json")))) {
+    throw new Error("The saved watchface project does not exist.");
+  }
+  await writeStoredProjectPreview(
+    projectDirectory,
+    decodePortableProjectPreview(previewDataUrl)
+  );
 }
 
 export async function duplicateCorosWatchfaceProject(
@@ -1255,7 +1336,10 @@ export async function duplicateCorosWatchfaceProject(
     ...(sourceProject.firmwareType
       ? { firmwareType: sourceProject.firmwareType }
       : {}),
-    design: structuredClone(sourceProject.design)
+    design: structuredClone(sourceProject.design),
+    ...(sourceProject.previewDataUrl
+      ? { previewDataUrl: sourceProject.previewDataUrl }
+      : {})
   });
 }
 

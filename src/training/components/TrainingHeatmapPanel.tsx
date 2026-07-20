@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent
+} from "react";
 import { CalendarDays, Loader2 } from "lucide-react";
 import type { TrainingHubActivity } from "../../../electron/types";
 import {
@@ -37,6 +44,21 @@ interface TrainingHeatmapPanelProps {
 
 const WEEKDAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 const LEGEND_LEVELS = [0, 1, 2, 3, 4] as const;
+const HEATMAP_PROXIMITY_RADIUS = 120;
+
+interface ProximityCell {
+  element: HTMLSpanElement;
+  centerX: number;
+  centerY: number;
+}
+
+function resetProximityCells(cells: Set<HTMLSpanElement>) {
+  for (const cell of cells) {
+    cell.style.removeProperty("--heatmap-brightness");
+    cell.style.removeProperty("--heatmap-glow-opacity");
+  }
+  cells.clear();
+}
 
 // Opacity per intensity level, mirroring the single-sport CSS levels so a
 // multi-sport pie reads at the same darkness as a solid cell of the same load.
@@ -96,6 +118,11 @@ export function TrainingHeatmapPanel({
   const reducedMotion = usePrefersReducedMotion();
   const [isReady, setIsReady] = useState(false);
   const [metric, setMetric] = useState<HeatmapMetric>("trainingLoad");
+  const gridRef = useRef<HTMLDivElement>(null);
+  const pointerFrameRef = useRef<number | null>(null);
+  const pointerClientRef = useRef({ x: 0, y: 0 });
+  const proximityCellsRef = useRef<ProximityCell[]>([]);
+  const activeProximityCellsRef = useRef<Set<HTMLSpanElement>>(new Set());
   const isRpe = metric === "rpeLoad";
 
   const dayList = useMemo(
@@ -150,6 +177,108 @@ export function TrainingHeatmapPanel({
     const frame = requestAnimationFrame(() => setIsReady(true));
     return () => cancelAnimationFrame(frame);
   }, [cells.length, reducedMotion]);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      if (pointerFrameRef.current !== null) {
+        cancelAnimationFrame(pointerFrameRef.current);
+        pointerFrameRef.current = null;
+      }
+      resetProximityCells(activeProximityCellsRef.current);
+    }
+
+    return () => {
+      if (pointerFrameRef.current !== null) {
+        cancelAnimationFrame(pointerFrameRef.current);
+      }
+      resetProximityCells(activeProximityCellsRef.current);
+    };
+  }, [reducedMotion]);
+
+  const handleGridPointerMove = (
+    event: ReactPointerEvent<HTMLDivElement>
+  ) => {
+    if (reducedMotion) {
+      return;
+    }
+
+    pointerClientRef.current = { x: event.clientX, y: event.clientY };
+    if (pointerFrameRef.current !== null) {
+      return;
+    }
+
+    pointerFrameRef.current = requestAnimationFrame(() => {
+      pointerFrameRef.current = null;
+      const gridElement = gridRef.current;
+      if (!gridElement) {
+        return;
+      }
+
+      const bounds = gridElement.getBoundingClientRect();
+      const pointerX = pointerClientRef.current.x - bounds.left;
+      const pointerY = pointerClientRef.current.y - bounds.top;
+      const nextActiveCells = new Set<HTMLSpanElement>();
+
+      for (const cell of proximityCellsRef.current) {
+        const distance = Math.hypot(
+          pointerX - cell.centerX,
+          pointerY - cell.centerY
+        );
+        if (distance >= HEATMAP_PROXIMITY_RADIUS) {
+          continue;
+        }
+
+        const linearStrength = 1 - distance / HEATMAP_PROXIMITY_RADIUS;
+        const strength =
+          linearStrength * linearStrength * (3 - 2 * linearStrength);
+        cell.element.style.setProperty(
+          "--heatmap-brightness",
+          (1 + strength * 0.2).toFixed(3)
+        );
+        cell.element.style.setProperty(
+          "--heatmap-glow-opacity",
+          (strength * 0.68).toFixed(3)
+        );
+        nextActiveCells.add(cell.element);
+      }
+
+      for (const cell of activeProximityCellsRef.current) {
+        if (!nextActiveCells.has(cell)) {
+          cell.style.removeProperty("--heatmap-brightness");
+          cell.style.removeProperty("--heatmap-glow-opacity");
+        }
+      }
+      activeProximityCellsRef.current = nextActiveCells;
+    });
+  };
+
+  const handleGridPointerEnter = (
+    event: ReactPointerEvent<HTMLDivElement>
+  ) => {
+    if (reducedMotion) {
+      return;
+    }
+
+    proximityCellsRef.current = Array.from(
+      event.currentTarget.querySelectorAll<HTMLSpanElement>(
+        ".training-heatmap-cell:not(.is-empty)"
+      )
+    ).map((element) => ({
+      element,
+      centerX: element.offsetLeft + element.offsetWidth / 2,
+      centerY: element.offsetTop + element.offsetHeight / 2
+    }));
+    handleGridPointerMove(event);
+  };
+
+  const handleGridPointerLeave = () => {
+    if (pointerFrameRef.current !== null) {
+      cancelAnimationFrame(pointerFrameRef.current);
+      pointerFrameRef.current = null;
+    }
+    proximityCellsRef.current = [];
+    resetProximityCells(activeProximityCellsRef.current);
+  };
 
   return (
     <section className="panel training-heatmap-panel">
@@ -231,8 +360,12 @@ export function TrainingHeatmapPanel({
               </div>
 
               <div
+                ref={gridRef}
                 className={`training-heatmap-grid${isReady ? " is-ready" : ""}`}
                 role="grid"
+                onPointerEnter={handleGridPointerEnter}
+                onPointerMove={handleGridPointerMove}
+                onPointerLeave={handleGridPointerLeave}
                 aria-label={`${
                   isRpe ? "RPE load" : "Training load"
                 } over the last ${TRAINING_HEATMAP_DAYS} days`}

@@ -279,7 +279,7 @@ Month and week views for planned workouts and completed activities on one grid.
 
 ---
 
-### Coach — training chatbot (BETA)
+### Coach — training chatbot
 
 Ask training questions with answers grounded in your COROS data.
 

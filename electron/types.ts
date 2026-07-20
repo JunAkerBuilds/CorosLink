@@ -819,7 +819,7 @@ export interface CorosWatchfaceDesignState {
       color?: string;
       letterSpacing?: number;
       rasterFont?: CorosWatchfaceRasterFont;
-      /** Weekday/date-day: preserve natural glyph width instead of fitting the template canvas. */
+      /** Legacy weekday/date-day natural-width mode. */
       nativeSize?: boolean;
     }
   >;
@@ -958,6 +958,8 @@ export interface CorosWatchfaceProjectSummary {
   sourceTemplateId: string;
   /** Firmware family the project's starter template was selected for. */
   firmwareType?: string;
+  /** Cached dashboard thumbnail, generated when the project was last saved. */
+  previewDataUrl?: string;
 }
 
 export interface CorosWatchfaceProjectSaveInput {
@@ -966,6 +968,8 @@ export interface CorosWatchfaceProjectSaveInput {
   sourceArchiveId: string;
   firmwareType?: string;
   design: CorosWatchfaceDesignState;
+  /** Small rendered preview used by the projects dashboard. */
+  previewDataUrl?: string;
 }
 
 export interface CorosWatchfaceEditableProject {

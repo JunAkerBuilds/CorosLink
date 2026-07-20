@@ -3,6 +3,7 @@ import type {
   CorosWatchfaceTemplateDetails
 } from "../../electron/types";
 import {
+  isControlComplicationEnabled,
   listWatchfaceConfigAssets,
   WATCHFACE_COMPLICATIONS,
   type WatchfaceConfigAssetReference,
@@ -101,4 +102,24 @@ export function watchfaceEditorControlBatteryIsListed(
     configured !== undefined ||
     legacyConfigured !== undefined
   );
+}
+
+/**
+ * Keeps the parent selector recoverable after its last enabled choice removes
+ * all firmware geometry. The current-mode layer panel lists this state even
+ * when `present` and `visible` are both false.
+ */
+export function watchfaceEditorSelectableParentState(
+  details: CorosWatchfaceTemplateDetails,
+  design: CorosWatchfaceDesignState,
+  present: boolean
+): { visible: boolean; present: boolean } {
+  const enabled = WATCHFACE_COMPLICATIONS.some((complication) =>
+    isControlComplicationEnabled(details, design, complication.id)
+  );
+  return {
+    visible:
+      enabled && design.layerVisibility?.complication !== false,
+    present
+  };
 }

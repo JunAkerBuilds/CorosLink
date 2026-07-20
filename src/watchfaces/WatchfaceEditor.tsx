@@ -376,6 +376,7 @@ import {
 import {
   computeLayoutGroupBounds,
   computeLayoutOffsetLimits,
+  configAssetCanUseNativeSize,
   configAssetCanvasSize,
   configAssetSupportsNativeSize,
   applyConfigTextEditsToDetails,
@@ -687,6 +688,7 @@ function isSpriteTransformDrag(
 }
 
 const PREVIEW_SIZE = 520;
+const PROJECT_THUMBNAIL_SIZE = 416;
 
 function maskCanvasToCircle(canvas: HTMLCanvasElement): void {
   const context = canvas.getContext("2d");
@@ -874,6 +876,7 @@ export function WatchfaceEditor({
   const dragPreviewCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewStackRef = useRef<HTMLDivElement>(null);
+  const componentDragBoundsRef = useRef<SVGRectElement>(null);
   const transformGroupRef = useRef<SVGGElement>(null);
   const marqueeRef = useRef<WatchfaceMarqueeState | null>(null);
   const dragOverlaySnapshotRef = useRef<ImageData | null>(null);
@@ -1331,6 +1334,7 @@ export function WatchfaceEditor({
     dragPreparationIdRef.current += 1;
     dragVisualRef.current = null;
     setDragVisualActive(false);
+    paintComponentDragBounds(null);
     if (dragPreviewCanvasRef.current) {
       dragPreviewCanvasRef.current.style.visibility = "hidden";
     }
@@ -2323,6 +2327,7 @@ export function WatchfaceEditor({
   function hideDragVisual() {
     dragPreparationIdRef.current += 1;
     dragVisualRef.current = null;
+    paintComponentDragBounds(null);
     const canvas = dragPreviewCanvasRef.current;
     if (canvas) {
       canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
@@ -2330,6 +2335,20 @@ export function WatchfaceEditor({
     }
     setDragVisualActive(false);
     setSpriteTransformDraft(null);
+  }
+
+  function paintComponentDragBounds(bounds: WatchfaceEditorBounds | null) {
+    const box = componentDragBoundsRef.current;
+    if (!box) return;
+    if (!bounds) {
+      box.style.display = "none";
+      return;
+    }
+    box.setAttribute("x", String(bounds.x0));
+    box.setAttribute("y", String(bounds.y0));
+    box.setAttribute("width", String(Math.max(1, bounds.x1 - bounds.x0)));
+    box.setAttribute("height", String(Math.max(1, bounds.y1 - bounds.y0)));
+    box.style.display = "block";
   }
 
   function drawDragVisual() {
@@ -2413,6 +2432,7 @@ export function WatchfaceEditor({
         visual.movement.dx,
         visual.movement.dy
       );
+      paintComponentDragBounds(bounds);
       context.strokeStyle = "rgba(81, 224, 181, 0.95)";
       context.lineWidth = 2;
       context.setLineDash([]);
@@ -2422,6 +2442,8 @@ export function WatchfaceEditor({
         (bounds.x1 - bounds.x0) * scaleX,
         (bounds.y1 - bounds.y0) * scaleY
       );
+    } else {
+      paintComponentDragBounds(null);
     }
     canvas.style.visibility = "visible";
   }
@@ -2581,14 +2603,18 @@ export function WatchfaceEditor({
     frameDesign: CorosWatchfaceDesignState,
     previewComplicationContent: WatchfaceStudioOptions["previewComplicationContent"] = "all"
   ): Promise<HTMLCanvasElement> {
-    if (!details) {
+    if (!modeSourceDetails) {
       throw new Error("Watch face details are not ready.");
     }
     const frame = document.createElement("canvas");
     frame.width = dragPreviewCanvasRef.current?.width ?? PREVIEW_SIZE;
     frame.height = dragPreviewCanvasRef.current?.height ?? PREVIEW_SIZE;
     const allFrameDetails = deriveDesignDetails(
-      applyConfigTextEditsToDetails(details, frameDesign.configTextEdits),
+      // Use the same display-mode projection as the settled preview. In AOD
+      // mode this exposes AODconfig.txt through `config`; starting again from
+      // the archive details would briefly render the current-face layout and
+      // make every stationary component jump during a drag.
+      modeSourceDetails,
       frameDesign
     ).previewDetails;
     const frameDetails = watchPreviewResolution
@@ -2655,6 +2681,9 @@ export function WatchfaceEditor({
       preparationId,
       awaitingCommitId: null
     };
+    paintComponentDragBounds(
+      isSpriteTransformDrag(drag) ? null : drag.baseBounds
+    );
     const canvas = dragPreviewCanvasRef.current;
     if (canvas) {
       canvas.style.visibility = "hidden";
@@ -3263,6 +3292,7 @@ export function WatchfaceEditor({
                   dragCanvas.style.visibility = "hidden";
                 }
                 setDragVisualActive(false);
+                paintComponentDragBounds(null);
               }
             }
           } catch {
@@ -3305,7 +3335,7 @@ export function WatchfaceEditor({
     canvasBackingRevision
   ]);
 
-  // Draw placement aids and selection outlines on the interaction overlay.
+  // Draw placement aids on the circular interaction overlay.
   useEffect(() => {
     const canvas = overlayCanvasRef.current;
     if (!canvas) return;
@@ -3313,13 +3343,7 @@ export function WatchfaceEditor({
     if (!context) return;
     const scaleX = canvas.width / previewWidth;
     const scaleY = canvas.height / previewHeight;
-    const bgScaleX = canvas.width / BACKGROUND_SPACE;
-    const bgScaleY = canvas.height / BACKGROUND_SPACE;
     const activeDrag = dragVisualActive ? dragVisualRef.current?.drag : null;
-    const activeDragId = activeDrag?.kind === "selectorIcon"
-      ? "complication"
-      : activeDrag?.snapId;
-    const activeDragIds = activeDrag ? dragMovementIds(activeDrag) : [];
     context.clearRect(0, 0, canvas.width, canvas.height);
 
     context.save();
@@ -3397,66 +3421,6 @@ export function WatchfaceEditor({
 
     context.restore();
 
-    // Keep the stage quiet: only the selected or hovered object gets an outline.
-    for (const element of activeBackgroundElements) {
-      const box = backgroundElementSnapBounds(element);
-      const active = selectedIds.includes(`bgel:${element.id}`);
-      const hovered = hoveredId === `bgel:${element.id}`;
-      if (!active && !hovered) continue;
-      if (selectedSpriteCanTransform && active) continue;
-      if (activeDragIds.includes(`bgel:${element.id}`)) continue;
-      context.strokeStyle = active
-        ? "rgba(81, 224, 181, 0.95)"
-        : "rgba(255, 255, 255, 0.55)";
-      context.lineWidth = active ? 2 : 1;
-      context.setLineDash(active ? [] : [4, 4]);
-      context.strokeRect(
-        box.x0 * bgScaleX,
-        box.y0 * bgScaleY,
-        (box.x1 - box.x0) * bgScaleX,
-        (box.y1 - box.y0) * bgScaleY
-      );
-    }
-
-    for (const layer of layers) {
-      if (!layer.bounds || layer.kind === "background" || !layer.visible) {
-        continue;
-      }
-      if (selectedSpriteCanTransform && selectedIds.includes(layer.id)) {
-        continue;
-      }
-      const active = selectedIds.includes(layer.id);
-      const hovered = layer.id === hoveredId;
-      if (!active && !hovered) continue;
-      if (activeDragIds.includes(layer.id)) continue;
-      context.strokeStyle = active
-        ? "rgba(81, 224, 181, 0.95)"
-        : "rgba(255, 255, 255, 0.55)";
-      context.lineWidth = active ? 2 : 1;
-      context.setLineDash(active ? [] : [4, 4]);
-      context.strokeRect(
-        layer.bounds.x0 * scaleX,
-        layer.bounds.y0 * scaleY,
-        (layer.bounds.x1 - layer.bounds.x0) * scaleX,
-        (layer.bounds.y1 - layer.bounds.y0) * scaleY
-      );
-    }
-    if (
-      selectorIconTarget &&
-      !isMovementLockedForId("complication") &&
-      selectedIds.includes("complication") &&
-      activeDrag?.kind !== "selectorIcon"
-    ) {
-      context.strokeStyle = "rgba(255, 206, 84, 0.98)";
-      context.lineWidth = 2;
-      context.setLineDash([]);
-      context.strokeRect(
-        selectorIconTarget.x0 * scaleX,
-        selectorIconTarget.y0 * scaleY,
-        (selectorIconTarget.x1 - selectorIconTarget.x0) * scaleX,
-        (selectorIconTarget.y1 - selectorIconTarget.y0) * scaleY
-      );
-    }
     context.setLineDash([]);
     dragOverlaySnapshotRef.current = context.getImageData(
       0,
@@ -3484,6 +3448,79 @@ export function WatchfaceEditor({
     selectedSpriteCanTransform,
     canvasBackingRevision
   ]);
+
+  const outlineDrag = dragVisualActive ? dragVisualRef.current?.drag : null;
+  const outlineDragIds = new Set(
+    outlineDrag ? dragMovementIds(outlineDrag) : []
+  );
+  const componentBoundsOutlines: Array<{
+    id: string;
+    bounds: WatchfaceEditorBounds;
+    active: boolean;
+    draggable: boolean;
+    selector?: boolean;
+  }> = [];
+  for (const element of activeBackgroundElements) {
+    const id = `bgel:${element.id}`;
+    const active = selectedIds.includes(id);
+    const hovered = hoveredId === id;
+    if (
+      (!active && !hovered) ||
+      (selectedSpriteCanTransform && active) ||
+      outlineDragIds.has(id)
+    ) {
+      continue;
+    }
+    const box = backgroundElementSnapBounds(element);
+    componentBoundsOutlines.push({
+      id,
+      active,
+      draggable:
+        isMovableSelectionId(id) && !isMovementLockedForId(id),
+      bounds: {
+        x0: box.x0 * (previewWidth / BACKGROUND_SPACE),
+        y0: box.y0 * (previewHeight / BACKGROUND_SPACE),
+        x1: box.x1 * (previewWidth / BACKGROUND_SPACE),
+        y1: box.y1 * (previewHeight / BACKGROUND_SPACE)
+      }
+    });
+  }
+  for (const layer of layers) {
+    const active = selectedIds.includes(layer.id);
+    const hovered = hoveredId === layer.id;
+    if (
+      !layer.bounds ||
+      layer.kind === "background" ||
+      !layer.visible ||
+      (!active && !hovered) ||
+      (selectedSpriteCanTransform && active) ||
+      outlineDragIds.has(layer.id)
+    ) {
+      continue;
+    }
+    componentBoundsOutlines.push({
+      id: layer.id,
+      bounds: layer.bounds,
+      active,
+      draggable:
+        isMovableSelectionId(layer.id) &&
+        !isMovementLockedForId(layer.id)
+    });
+  }
+  if (
+    selectorIconTarget &&
+    !isMovementLockedForId("complication") &&
+    selectedIds.includes("complication") &&
+    outlineDrag?.kind !== "selectorIcon"
+  ) {
+    componentBoundsOutlines.push({
+      id: `selectorIcon:${selectorIconTarget.complicationId}`,
+      bounds: selectorIconTarget,
+      active: true,
+      draggable: true,
+      selector: true
+    });
+  }
 
   const toResolutionPoint = useCallback(
     (event: { clientX: number; clientY: number }) => {
@@ -3592,7 +3629,7 @@ export function WatchfaceEditor({
   }
 
   function startMarqueeSelection(
-    event: React.PointerEvent<HTMLCanvasElement>,
+    event: React.PointerEvent<Element>,
     point: { x: number; y: number },
     additive: boolean
   ) {
@@ -3803,7 +3840,7 @@ export function WatchfaceEditor({
     return { dx: rawDx + result.dx, dy: rawDy + result.dy };
   }
 
-  function handlePointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
+  function handlePointerDown(event: React.PointerEvent<Element>) {
     if (!canEditActiveMode || event.button !== 0) return;
     const point = toResolutionPoint(event);
     if (!point) {
@@ -5393,7 +5430,8 @@ export function WatchfaceEditor({
   async function renderExportPreview(
     rootDesignSnapshot: CorosWatchfaceDesignState,
     mode: WatchfacePreviewMode = "current",
-    snapshotBackgroundDataUrl?: string
+    snapshotBackgroundDataUrl?: string,
+    outputSize = 800
   ): Promise<string> {
     if (!details) {
       throw new Error("The editor is still loading. Try again in a moment.");
@@ -5433,8 +5471,8 @@ export function WatchfaceEditor({
         snapshotBaseResolution?.width ?? previewWidth
       ));
     const archivePreview = document.createElement("canvas");
-    archivePreview.width = 800;
-    archivePreview.height = 800;
+    archivePreview.width = outputSize;
+    archivePreview.height = outputSize;
     const snapshotOptions = toStudioOptions(designSnapshot);
     const resolutionScale =
       snapshotBaseResolution && snapshotTargetResolution
@@ -5773,12 +5811,25 @@ export function WatchfaceEditor({
     }
     setSaving(true);
     try {
+      let previewDataUrl: string | undefined;
+      try {
+        previewDataUrl = await renderExportPreview(
+          designSnapshot,
+          "current",
+          undefined,
+          PROJECT_THUMBNAIL_SIZE
+        );
+      } catch {
+        // Saving the editable project remains more important than its cache.
+        // The projects dashboard can rebuild a missing preview once.
+      }
       const saved = await api.saveCorosWatchfaceProject({
         ...(projectId ? { projectId } : {}),
         name,
         sourceArchiveId: starterArchive.archiveId,
         ...(targetFirmwareType ? { firmwareType: targetFirmwareType } : {}),
-        design: designSnapshot
+        design: designSnapshot,
+        ...(previewDataUrl ? { previewDataUrl } : {})
       });
       setProjectId(saved.projectId);
       const currentHistory = historyRef.current;
@@ -6255,6 +6306,9 @@ export function WatchfaceEditor({
                         setSelectedIds(group.layerIds);
                         setSelectedId(group.layerIds.at(-1) ?? "");
                       }}
+                      onContextMenu={(event) =>
+                        openLayerContextMenu(event, group.layerIds.at(-1) ?? "")
+                      }
                     >
                       <span className="wf-layer-icon"><Group size={14} /></span>
                       <span className="watchface-layer-name">{group.name}</span>
@@ -6699,6 +6753,54 @@ export function WatchfaceEditor({
               onDoubleClick={handleCanvasDoubleClick}
               onContextMenu={handleCanvasContextMenu}
             />
+            <svg
+              className="wf-component-bounds-overlay"
+              viewBox={`0 0 ${previewWidth} ${previewHeight}`}
+              aria-hidden="true"
+              focusable="false"
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerEnd}
+              onPointerCancel={handlePointerEnd}
+              onLostPointerCapture={handlePointerEnd}
+            >
+              {componentBoundsOutlines.map(
+                ({ id, bounds, active, draggable, selector }) => (
+                  <Fragment key={id}>
+                    <rect
+                      className={`wf-component-bounds-box${
+                        selector
+                          ? " is-selector"
+                          : active
+                            ? " is-selected"
+                            : " is-hovered"
+                      }`}
+                      x={bounds.x0}
+                      y={bounds.y0}
+                      width={Math.max(1, bounds.x1 - bounds.x0)}
+                      height={Math.max(1, bounds.y1 - bounds.y0)}
+                    />
+                    {active && draggable ? (
+                      <rect
+                        className="wf-component-bounds-hitbox"
+                        x={bounds.x0}
+                        y={bounds.y0}
+                        width={Math.max(1, bounds.x1 - bounds.x0)}
+                        height={Math.max(1, bounds.y1 - bounds.y0)}
+                      />
+                    ) : null}
+                  </Fragment>
+                )
+              )}
+              <rect
+                ref={componentDragBoundsRef}
+                className="wf-component-bounds-box is-selected wf-component-drag-bounds"
+                x="0"
+                y="0"
+                width="1"
+                height="1"
+              />
+            </svg>
             {spriteTransform && selectedSpriteCanTransform && canEditActiveMode ? (
               <svg
                 className={`wf-sprite-transform${selectedSpriteCanTransform ? "" : " is-locked"}`}
@@ -8330,9 +8432,10 @@ export function WatchfaceEditor({
     const override = design.configAssetOverrides?.[reference.id];
     const enabled = override?.enabled !== false;
     const artworkZoom = override?.scale ?? 1;
-    const supportsNativeSize =
-      Boolean(reference.source) &&
-      configAssetSupportsNativeSize(reference.configKey);
+    const supportsNativeSize = configAssetCanUseNativeSize(
+      reference.configKey,
+      Boolean(reference.source)
+    );
     const nativeSize = supportsNativeSize && override?.nativeSize === true;
     const templatePreview = configAssetPreviews.get(reference.archivePath);
     const previewDataUrl = override?.replacement?.dataUrl ?? templatePreview?.dataUrl;
@@ -8814,10 +8917,8 @@ export function WatchfaceEditor({
     ) {
       const partId = layer.layoutGroupId as WatchfaceDatePartId;
       const style = design.dateStyles?.[partId];
-      const scale = style?.scale ?? 1;
       const supportsNativeSize =
         partId === "weekday" || partId === "dateDay";
-      const usesNativeDimensions = partId === "dateMonth" || partId === "dateDay";
       // Native sizes are authored in master coordinates; export scales them
       // per device tree, so the inspector reads master fallbacks only.
       const sourceResolution = details ? pickPreviewResolution(details) : null;
@@ -8830,8 +8931,10 @@ export function WatchfaceEditor({
       const usesMonthLabels = partId === "dateMonth" &&
         (style?.monthFormat === "labels" ||
           (style?.monthFormat !== "digits" && starterUsesMonthLabels));
-      const sourceSizes = sourceResolution && usesNativeDimensions
-        ? Array.from({ length: usesMonthLabels ? 12 : 10 }, (_, value) =>
+      const sourceSizes = sourceResolution
+        ? Array.from({
+            length: partId === "weekday" ? 7 : usesMonthLabels ? 12 : 10
+          }, (_, value) =>
             dateSpriteCanvasSize(sourceResolution, partId, style, value)
           ).filter((size): size is NonNullable<typeof size> => Boolean(size))
         : [];
@@ -8881,10 +8984,7 @@ export function WatchfaceEditor({
                   })
                 }
               />
-              {supportsNativeSize && !usesNativeDimensions ? <label className="watchface-studio-toggle"><input type="checkbox" checked={style?.nativeSize ?? Boolean(style?.fontFamily || style?.rasterFont)} onChange={(event) => setDateStyle(partId, { nativeSize: event.target.checked })} />Native width</label> : null}
-              {usesNativeDimensions ? (
-                <div className="field">Native PNG size<div className="watchface-position-inputs"><label>W<EditableNumberInput min="1" step="1" value={style?.width ?? nativeWidth} fallback={nativeWidth} onValueChange={(width) => setDateStyle(partId, { width: Math.max(1, Math.round(width)) })} /></label><label>H<EditableNumberInput min="1" step="1" value={style?.height ?? nativeHeight} fallback={nativeHeight} onValueChange={(height) => setDateStyle(partId, { height: Math.max(1, Math.round(height)) })} /></label></div><button type="button" className="watchface-color-none" disabled={style?.width === undefined && style?.height === undefined} onClick={() => setDateStyle(partId, { width: undefined, height: undefined })}>Use imported size</button></div>
-              ) : <label className="watchface-inspector-field"><span>Artwork zoom</span><EditableNumberInput min="0.01" step="0.01" value={scale} fallback={1} onValueChange={(nextScale) => setDateStyle(partId, { scale: Math.max(0.01, nextScale) })} /></label>}
+              <div className="field">Native PNG size<div className="watchface-position-inputs"><label>W<EditableNumberInput min="1" step="1" value={style?.width ?? nativeWidth} fallback={nativeWidth} onValueChange={(width) => setDateStyle(partId, { width: Math.max(1, Math.round(width)) })} /></label><label>H<EditableNumberInput min="1" step="1" value={style?.height ?? nativeHeight} fallback={nativeHeight} onValueChange={(height) => setDateStyle(partId, { height: Math.max(1, Math.round(height)) })} /></label></div><button type="button" className="watchface-color-none" disabled={style?.width === undefined && style?.height === undefined} onClick={() => setDateStyle(partId, { width: undefined, height: undefined })}>Use imported size</button></div>
               <label className="watchface-inspector-field"><span>Rotation</span><EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setDateStyle(partId, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               <details className="wf-nested-disclosure">
                 <summary>Custom PNG font</summary>

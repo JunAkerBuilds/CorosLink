@@ -32,6 +32,7 @@ import {
   buildWatchfaceConfigAssetReplacements,
   computeLayoutGroupBounds,
   computeLayoutOffsetLimits,
+  configAssetCanUseNativeSize,
   configAssetCanvasSize,
   configAssetSupportsNativeSize,
   corosMonthLabelForSpriteIndex,
@@ -1008,6 +1009,45 @@ assert.ok(
   )
 );
 
+const dormantMasterAmPmDetails = {
+  ...details,
+  resolutions: details.resolutions.map((candidate) =>
+    candidate.width === 800
+      ? {
+          ...candidate,
+          config: {
+            ...candidate.config,
+            am_icon: "",
+            pm_icon: "",
+            am_pm_icon_pos: ""
+          }
+        }
+      : candidate
+  )
+};
+const isolatedDormantAmPmDetails = detailsForCompositionMode(
+  dormantMasterAmPmDetails,
+  "current"
+);
+const dormantMasterAmPmResolution =
+  isolatedDormantAmPmDetails.resolutions.find(({ width }) => width === 800);
+assert.ok(
+  dormantMasterAmPmResolution?.icons.some(({ path }) =>
+    path.endsWith("/icon/am.png")
+  )
+);
+assert.ok(
+  dormantMasterAmPmResolution?.icons.some(({ path }) =>
+    path.endsWith("/icon/pm.png")
+  ),
+  "composition isolation must retain dormant AM/PM sprites declared by the master config"
+);
+assert.equal(
+  getAmPmCapability(isolatedDormantAmPmDetails)?.active,
+  false,
+  "a dormant master AM/PM config must remain available to the Layers panel"
+);
+
 const legacyModeRoot = {
   version: 1,
   accentColor: "#51e0b5",
@@ -1460,7 +1500,60 @@ const configAssetOverrides = buildWatchfaceConfigAssetOverrides(
   true
 );
 assert.equal(configAssetSupportsNativeSize("control_hr_icon"), true);
+assert.equal(configAssetSupportsNativeSize("bluetooth_off_icon"), true);
+assert.equal(configAssetSupportsNativeSize("bluetooth_on_icon"), true);
+assert.equal(configAssetSupportsNativeSize("no_disturb_on_icon"), true);
+assert.equal(configAssetSupportsNativeSize("no_disturb_off_icon"), true);
 assert.equal(configAssetSupportsNativeSize("control_colon_icon"), false);
+assert.equal(
+  configAssetCanUseNativeSize("bluetooth_off_icon", false),
+  true,
+  "a Studio-created Bluetooth indicator should expose native sizing"
+);
+assert.equal(
+  configAssetCanUseNativeSize("no_disturb_on_icon", false),
+  true,
+  "a Studio-created Do Not Disturb indicator should expose native sizing"
+);
+assert.equal(
+  configAssetCanUseNativeSize("control_hr_icon", false),
+  false,
+  "a virtual selectable control should remain constrained to its firmware slot"
+);
+assert.deepEqual(
+  configAssetCanvasSize(
+    "bluetooth_off_icon",
+    {
+      nativeSize: true,
+      scale: 1.5,
+      replacement: {
+        dataUrl: "data:image/png;base64,AA==",
+        width: 32,
+        height: 48
+      }
+    },
+    { width: 42, height: 42 }
+  ),
+  { width: 48, height: 72, native: true },
+  "standalone Bluetooth indicators should be able to use their imported PNG size"
+);
+assert.deepEqual(
+  configAssetCanvasSize(
+    "no_disturb_on_icon",
+    {
+      nativeSize: true,
+      scale: 2,
+      replacement: {
+        dataUrl: "data:image/png;base64,AA==",
+        width: 40,
+        height: 24
+      }
+    },
+    { width: 42, height: 42 }
+  ),
+  { width: 80, height: 48, native: true },
+  "standalone Do Not Disturb indicators should be able to use their imported PNG size"
+);
 assert.deepEqual(
   configAssetCanvasSize(
     "control_hr_icon",
@@ -2939,6 +3032,25 @@ assert.equal(
   "{167,171,199,195,hcenter|vcenter}",
   "the 416px month rect should follow the scaled native size, not the 800px one"
 );
+const weekdaySizeStyle = { scale: 1, width: 90, height: 36 };
+assert.deepEqual(
+  dateSpriteCanvasSize(
+    withMetrics.resolutions[1],
+    "weekday",
+    weekdaySizeStyle,
+    0
+  ),
+  { width: 90, height: 36, native: true },
+  "weekday should use the same exact PNG dimensions as month and day"
+);
+assert.equal(
+  buildDateStyleOverrides(withMetrics, {
+    weekday: weekdaySizeStyle
+  }).find((entry) => entry.path.includes("800x800"))
+    ?.values.english_date_week_rect,
+  "{115,334,205,370,hcenter|vcenter}",
+  "weekday dimensions should resize its firmware rectangle around the existing center"
+);
 const importedMonthLabelsOnDigitTemplate = {
   ...monthLabelStyle,
   monthFormat: "labels"
@@ -3215,6 +3327,32 @@ try {
     /TJUL/,
     "firmware month slot 07 should contain July, not August"
   );
+  const sizedWeekdayComposition = await buildDateSpriteComposition(
+    { archiveId: "sized-weekdays", resolutions: [withMetrics.resolutions[1]] },
+    {
+      weekday: {
+        scale: 1,
+        width: 90,
+        height: 36,
+        fontFamily: "Fixture Sans"
+      }
+    },
+    {
+      fontFamily: "",
+      digitColor: "#ffffff",
+      tintLabels: false
+    },
+    async () => []
+  );
+  const sizedMonday = sizedWeekdayComposition.replacements.find(({ path }) =>
+    path.endsWith("/cl_weekday/00.png")
+  );
+  assert.equal(sizedMonday?.allowDimensionOverride, true);
+  assert.match(
+    sizedMonday?.dataUrl ?? "",
+    /W90H36TMON/,
+    "weekday export should render into the exact inspector W/H canvas"
+  );
 
   const nativeControlIconReplacements =
     await buildWatchfaceConfigAssetReplacements(
@@ -3239,6 +3377,46 @@ try {
     nativeFullControlIcon?.dataUrl ?? "",
     /W96H48/,
     "native selectable icons should export their imported canvas instead of the template slot"
+  );
+
+  const nativeStatusIconReplacements =
+    await buildWatchfaceConfigAssetReplacements(
+      {
+        archiveId: "standalone-status-native-size",
+        resolutions: [standaloneStatusResolution]
+      },
+      {
+        "config:bluetooth_off_icon": {
+          nativeSize: true,
+          replacement: {
+            dataUrl: "data:image/png;base64,W96H48",
+            width: 96,
+            height: 48
+          }
+        },
+        "config:no_disturb_on_icon": {
+          nativeSize: true,
+          replacement: {
+            dataUrl: "data:image/png;base64,W60H30",
+            width: 60,
+            height: 30
+          }
+        }
+      }
+    );
+  const nativeBluetoothOff = nativeStatusIconReplacements.find(({ path }) =>
+    path === "watchface_800x800/icon/nobt.png"
+  );
+  const nativeDoNotDisturb = nativeStatusIconReplacements.find(({ path }) =>
+    path === "watchface_800x800/icon/noxx.png"
+  );
+  assert.equal(nativeBluetoothOff?.allowDimensionOverride, true);
+  assert.match(nativeBluetoothOff?.dataUrl ?? "", /W96H48/);
+  assert.equal(nativeDoNotDisturb?.allowDimensionOverride, true);
+  assert.match(
+    nativeDoNotDisturb?.dataUrl ?? "",
+    /W60H30/,
+    "standalone status icons should export at their native replacement dimensions"
   );
 
   const separateBatteryReplacements =

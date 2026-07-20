@@ -43,7 +43,6 @@ export const PRIMARY_NAV_ITEMS: PrimaryNavItem[] = [
     id: "coach",
     label: "Coach",
     icon: MessageCircle,
-    beta: true,
     showActivity: true,
   },
   { id: "data", label: "Data", icon: Database },

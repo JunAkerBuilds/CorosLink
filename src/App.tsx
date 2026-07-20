@@ -30,6 +30,8 @@ import {
 import {
   type FormEvent,
   type ReactNode,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -74,7 +76,6 @@ import { buildTrainingHubSnapshot } from "./training/parsers";
 import { fetchTrainingDashboard, fetchUpcomingWorkouts } from "./training/api";
 import { TRAINING_HEATMAP_DAYS } from "./training/chartConfig";
 import { recentTrainingHubDateList } from "./training/formatters";
-import { TrainingHubView } from "./training/TrainingHubView";
 import type { TrainingHubSnapshot } from "./training/types";
 import type { CorosLinkApi } from "./coroslink-api";
 import { AppUpdateControls } from "./components/AppUpdateControls";
@@ -93,12 +94,8 @@ import {
   readStartupView,
   saveStartupView,
 } from "./navigation/startupView";
-import { MapsView } from "./maps/MapsView";
-import { WatchfacesView } from "./watchfaces/WatchfacesView";
 import { SettingsView } from "./settings/SettingsView";
-import { CalendarView } from "./calendar/CalendarView";
 import { DataView } from "./data/DataView";
-import { ChatView } from "./chat/ChatView";
 import {
   LibrarySyncLayout,
   LocalLibraryPanel,
@@ -110,13 +107,13 @@ import {
 } from "./media/libraryUtils";
 import { trackAvatarColor, trackInitial } from "./media/trackAvatar";
 import { useTimeOfDayGreeting } from "./hooks/useTimeOfDayGreeting";
-import { ActivityGlobeCard } from "./overview/ActivityGlobeCard";
 import {
   getWatchPresentation,
   type WatchFeatureIcon,
   type WatchPresentation,
 } from "./watchModels";
 import appLogo from "../build/icon.png";
+import changelogMarkdown from "../CHANGELOG.md?raw";
 
 type View = PrimaryView;
 type MediaTab =
@@ -132,22 +129,81 @@ const YOUTUBE_DOWNLOAD_CONSOLE_PREFIX = "__COROSLINK_YOUTUBE_DOWNLOAD__";
 const APPLE_MUSIC_SELECTED_PLAYLIST_STORAGE_KEY =
   "coroslink.appleMusic.selectedPlaylistId";
 const IS_DEVELOPMENT_BUILD = import.meta.env.DEV;
-const DEV_UPDATE_PREVIEW_VERSION = "0.1.18-dev-preview";
-const DEV_UPDATE_PREVIEW_NOTES = `## Version 0.1.18
 
-### Added
+const LazyMapsView = lazy(() =>
+  import("./maps/MapsView").then(({ MapsView }) => ({ default: MapsView })),
+);
+const LazyWatchfacesView = lazy(() =>
+  import("./watchfaces/WatchfacesView").then(({ WatchfacesView }) => ({
+    default: WatchfacesView,
+  })),
+);
+const LazyTrainingHubView = lazy(() =>
+  import("./training/TrainingHubView").then(({ TrainingHubView }) => ({
+    default: TrainingHubView,
+  })),
+);
+const LazyCalendarView = lazy(() =>
+  import("./calendar/CalendarView").then(({ CalendarView }) => ({
+    default: CalendarView,
+  })),
+);
+const LazyChatView = lazy(() =>
+  import("./chat/ChatView").then(({ ChatView }) => ({ default: ChatView })),
+);
+const LazyActivityGlobeCard = lazy(() =>
+  import("./overview/ActivityGlobeCard").then(({ ActivityGlobeCard }) => ({
+    default: ActivityGlobeCard,
+  })),
+);
 
-- A one-time update window with the complete release changelog
-- An explicit choice to update now or dismiss this version
-- A development preview so the update experience can be reviewed before release
+function DeferredSurfaceFallback({ label }: { label: string }) {
+  return (
+    <div className="empty-state" role="status" aria-live="polite">
+      <Loader2 className="spin" size={24} aria-hidden="true" />
+      <span>Loading {label}…</span>
+    </div>
+  );
+}
 
-### Improved
+function getLatestReleasePreview(changelog: string): {
+  version: string;
+  previousVersion: string;
+  releaseNotes: string;
+} {
+  const sections = changelog
+    .split(/^## /m)
+    .slice(1)
+    .map((part) => {
+      const newline = part.indexOf("\n");
+      const header = (newline === -1 ? part : part.slice(0, newline)).trim();
+      const body = (newline === -1 ? "" : part.slice(newline + 1)).trim();
+      const version = header.match(/^\[([^\]]+)\]/)?.[1]?.trim() ?? "";
+      return { version, body };
+    })
+    .filter(
+      (section) =>
+        section.version.length > 0 &&
+        section.version.toLowerCase() !== "unreleased",
+    );
 
-- Update notes now include every missed version when upgrading across multiple releases
+  const latest = sections[0];
+  if (!latest) {
+    return {
+      version: "0.0.0-dev-preview",
+      previousVersion: "0.0.0",
+      releaseNotes: "No released changelog entries found.",
+    };
+  }
 
-### Fixed
+  return {
+    version: `${latest.version}-dev-preview`,
+    previousVersion: sections[1]?.version ?? latest.version,
+    releaseNotes: `## Version ${latest.version}\n\n${latest.body}`,
+  };
+}
 
-- Choosing **Not now** no longer allows the downloaded update to install silently when CorosLink quits`;
+const DEV_UPDATE_PREVIEW = getLatestReleasePreview(changelogMarkdown);
 const TRAINING_HISTORY_PAGE_SIZE = 100;
 const TRAINING_HISTORY_MAX_PAGES = 100;
 
@@ -198,6 +254,7 @@ export default function App() {
     return window.matchMedia("(max-width: 720px)").matches;
   });
   const [coachBusy, setCoachBusy] = useState(false);
+  const [coachMounted, setCoachMounted] = useState(activeView === "coach");
   const [coachPrefill, setCoachPrefill] = useState<string | null>(null);
   const [calendarRefreshToken, setCalendarRefreshToken] = useState(0);
   const [activeMediaTab, setActiveMediaTab] = useState<MediaTab>("library");
@@ -237,6 +294,8 @@ export default function App() {
   const [youtubeMusicHeadersRaw, setYoutubeMusicHeadersRaw] = useState("");
   const completedJobIdsRef = useRef<Set<string>>(new Set());
   const mcpAutoConnectAttemptedRef = useRef(false);
+  const trainingCoreLoadSequenceRef = useRef(0);
+  const trainingWellnessLoadSequenceRef = useRef(0);
   const [trainingHubStatus, setTrainingHubStatus] =
     useState<TrainingHubStatus | null>(null);
   const [trainingHubEmail, setTrainingHubEmail] = useState("");
@@ -377,6 +436,12 @@ export default function App() {
   }, [autoTransfer]);
 
   useEffect(() => {
+    if (activeView === "coach") {
+      setCoachMounted(true);
+    }
+  }, [activeView]);
+
+  useEffect(() => {
     watchConnectedRef.current = Boolean(watchStatus?.connected);
   }, [watchStatus?.connected]);
 
@@ -439,6 +504,8 @@ export default function App() {
   }, [api]);
 
   const clearTrainingHubData = useCallback(() => {
+    trainingCoreLoadSequenceRef.current += 1;
+    trainingWellnessLoadSequenceRef.current += 1;
     setTrainingHubActivities([]);
     setTrainingHubAnalytics(null);
     setTrainingHubDashboard(null);
@@ -449,6 +516,7 @@ export default function App() {
     setSelectedTrainingHubActivity(null);
     setTrainingHubSleepData(null);
     setTrainingHubDailyHealthData(null);
+    setSleepConnecting(false);
   }, []);
 
   const applyTrainingHubStatus = useCallback((status: TrainingHubStatus) => {
@@ -464,76 +532,65 @@ export default function App() {
       return;
     }
 
+    const loadSequence = ++trainingCoreLoadSequenceRef.current;
+    const publish = <T,>(
+      request: Promise<T>,
+      onFulfilled: (value: T) => void,
+      onRejected: () => void,
+    ): Promise<void> =>
+      request.then(
+        (value) => {
+          if (trainingCoreLoadSequenceRef.current === loadSequence) {
+            onFulfilled(value);
+          }
+        },
+        (error: unknown) => {
+          if (trainingCoreLoadSequenceRef.current === loadSequence) {
+            onRejected();
+          }
+          throw error;
+        },
+      );
+
     const dateList = recentTrainingHubDateList(TRAINING_HEATMAP_DAYS);
-    const [
-      activitiesResult,
-      analyticsResult,
-      dashboardResult,
-      dailyResult,
-      sportTypesResult,
-      upcomingResult,
-      sleepResult,
-      dailyHealthResult,
-    ] = await Promise.allSettled([
-      listAllTrainingHubActivities(api),
-      api.getTrainingAnalytics(),
-      fetchTrainingDashboard(api),
-      api.getDailyMetrics(dateList),
-      api.getSportTypeMap(),
-      fetchUpcomingWorkouts(api, 14),
-      api.getTrainingSleepData(14),
-      api.getTrainingDailyHealthData(1),
+    const results = await Promise.allSettled([
+      publish(
+        listAllTrainingHubActivities(api),
+        setTrainingHubActivities,
+        () => setTrainingHubActivities([]),
+      ),
+      publish(
+        api.getTrainingAnalytics(),
+        setTrainingHubAnalytics,
+        () => setTrainingHubAnalytics(null),
+      ),
+      publish(
+        fetchTrainingDashboard(api),
+        setTrainingHubDashboard,
+        () => setTrainingHubDashboard(null),
+      ),
+      publish(
+        api.getDailyMetrics(dateList),
+        setTrainingHubDailyMetrics,
+        () => setTrainingHubDailyMetrics(null),
+      ),
+      publish(
+        api.getSportTypeMap(),
+        setTrainingHubSportTypes,
+        () => setTrainingHubSportTypes([]),
+      ),
+      publish(
+        fetchUpcomingWorkouts(api, 14),
+        setTrainingHubUpcomingWorkouts,
+        () => setTrainingHubUpcomingWorkouts([]),
+      ),
     ]);
 
-    if (activitiesResult.status === "fulfilled") {
-      setTrainingHubActivities(activitiesResult.value);
-    } else {
-      setTrainingHubActivities([]);
-    }
-
-    setTrainingHubAnalytics(
-      analyticsResult.status === "fulfilled" ? analyticsResult.value : null,
-    );
-    setTrainingHubDashboard(
-      dashboardResult.status === "fulfilled" ? dashboardResult.value : null,
-    );
-    setTrainingHubDailyMetrics(
-      dailyResult.status === "fulfilled" ? dailyResult.value : null,
-    );
-    setTrainingHubSportTypes(
-      sportTypesResult.status === "fulfilled" ? sportTypesResult.value : [],
-    );
-    setTrainingHubUpcomingWorkouts(
-      upcomingResult.status === "fulfilled" ? upcomingResult.value : [],
-    );
-    setTrainingHubSleepData(
-      sleepResult.status === "fulfilled" ? sleepResult.value : null,
-    );
-    setTrainingHubDailyHealthData(
-      dailyHealthResult.status === "fulfilled" ? dailyHealthResult.value : null,
-    );
-
-    const failures = [
-      activitiesResult,
-      analyticsResult,
-      dashboardResult,
-      dailyResult,
-      sportTypesResult,
-      upcomingResult,
-    ]
+    const failures = results
       .filter((result) => result.status === "rejected")
       .map((result) => toErrorMessage(result.reason));
 
-    const allFailed = [
-      activitiesResult,
-      analyticsResult,
-      dashboardResult,
-      dailyResult,
-      sportTypesResult,
-      upcomingResult,
-    ].every((result) => result.status === "rejected");
-
-    if (allFailed) {
+    if (results.every((result) => result.status === "rejected")) {
       throw new Error(failures[0] ?? "Training Hub data could not be loaded.");
     }
   }, [api]);
@@ -549,16 +606,51 @@ export default function App() {
     }
 
     mcpAutoConnectAttemptedRef.current = true;
-    setSleepConnecting(true);
 
     try {
       await api.connectCorosMcp();
     } catch {
       // Sleep panel degrades gracefully when MCP is unavailable.
-    } finally {
-      setSleepConnecting(false);
     }
   }, [api]);
+
+  const loadTrainingHubWellnessData = useCallback(async () => {
+    if (!api) {
+      return;
+    }
+
+    const loadSequence = ++trainingWellnessLoadSequenceRef.current;
+    setSleepConnecting(true);
+
+    try {
+      await ensureTrainingHubMcp();
+      if (trainingWellnessLoadSequenceRef.current !== loadSequence) {
+        return;
+      }
+
+      const [sleepResult, dailyHealthResult] = await Promise.allSettled([
+        api.getTrainingSleepData(14),
+        api.getTrainingDailyHealthData(1),
+      ]);
+
+      if (trainingWellnessLoadSequenceRef.current !== loadSequence) {
+        return;
+      }
+
+      setTrainingHubSleepData(
+        sleepResult.status === "fulfilled" ? sleepResult.value : null,
+      );
+      setTrainingHubDailyHealthData(
+        dailyHealthResult.status === "fulfilled"
+          ? dailyHealthResult.value
+          : null,
+      );
+    } finally {
+      if (trainingWellnessLoadSequenceRef.current === loadSequence) {
+        setSleepConnecting(false);
+      }
+    }
+  }, [api, ensureTrainingHubMcp]);
 
   const refreshTrainingHub = useCallback(async () => {
     if (!api) {
@@ -569,7 +661,7 @@ export default function App() {
     applyTrainingHubStatus(status);
 
     if (status.authenticated) {
-      await ensureTrainingHubMcp();
+      void loadTrainingHubWellnessData();
       await loadTrainingHubData();
     } else {
       clearTrainingHubData();
@@ -578,8 +670,8 @@ export default function App() {
     api,
     applyTrainingHubStatus,
     clearTrainingHubData,
-    ensureTrainingHubMcp,
     loadTrainingHubData,
+    loadTrainingHubWellnessData,
   ]);
 
   useEffect(() => {
@@ -922,10 +1014,12 @@ export default function App() {
     setAppUpdateSnapshot((current) => ({
       supported: true,
       currentVersion:
-        current.currentVersion === "0.0.0" ? "0.1.17" : current.currentVersion,
+        current.currentVersion === "0.0.0"
+          ? DEV_UPDATE_PREVIEW.previousVersion
+          : current.currentVersion,
       status: "available",
-      availableVersion: DEV_UPDATE_PREVIEW_VERSION,
-      releaseNotes: DEV_UPDATE_PREVIEW_NOTES,
+      availableVersion: DEV_UPDATE_PREVIEW.version,
+      releaseNotes: DEV_UPDATE_PREVIEW.releaseNotes,
       autoCheck: current.autoCheck,
       autoDownload: false,
     }));
@@ -1193,6 +1287,7 @@ export default function App() {
       setTrainingHubStatus(status);
       setTrainingHubPassword("");
       setMessage("COROS Training Hub connected.");
+      void loadTrainingHubWellnessData();
       await loadTrainingHubData();
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -1215,6 +1310,7 @@ export default function App() {
       const status = await api.reconnectTrainingHub();
       setTrainingHubStatus(status);
       setMessage("COROS Training Hub connected with your saved account.");
+      void loadTrainingHubWellnessData();
       await loadTrainingHubData();
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -1250,7 +1346,7 @@ export default function App() {
 
     try {
       await refreshTrainingHub();
-      setMessage("COROS Training Hub data refreshed.");
+      setMessage("COROS Training Hub analytics refreshed.");
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -1942,51 +2038,59 @@ export default function App() {
               </MediaView>
             ) : null}
             {activeView === "maps" ? (
-              <MapsView
-                api={api}
-                watchStatus={watchStatus}
-                onWatchStatusChange={setWatchStatus}
-                onMessage={setMessage}
-                onError={setError}
-              />
+              <Suspense fallback={<DeferredSurfaceFallback label="maps" />}>
+                <LazyMapsView
+                  api={api}
+                  watchStatus={watchStatus}
+                  onWatchStatusChange={setWatchStatus}
+                  onMessage={setMessage}
+                  onError={setError}
+                />
+              </Suspense>
             ) : null}
             {activeView === "watchfaces" ? (
-              <WatchfacesView
-                api={api}
-                showDevelopmentTools={showDevelopmentTools}
-                watchStatus={watchStatus}
-                communityOpenRequest={communityWatchfaceOpenRequest}
-                onCommunityOpenRequestHandled={() =>
-                  setCommunityWatchfaceOpenRequest(null)
-                }
-              />
+              <Suspense
+                fallback={<DeferredSurfaceFallback label="Watch Studio" />}
+              >
+                <LazyWatchfacesView
+                  api={api}
+                  showDevelopmentTools={showDevelopmentTools}
+                  watchStatus={watchStatus}
+                  communityOpenRequest={communityWatchfaceOpenRequest}
+                  onCommunityOpenRequestHandled={() =>
+                    setCommunityWatchfaceOpenRequest(null)
+                  }
+                />
+              </Suspense>
             ) : null}
             {activeView === "training" ? (
-              <TrainingHubView
-                api={api}
-                status={trainingHubStatus}
-                email={trainingHubEmail}
-                password={trainingHubPassword}
-                remember={trainingHubRemember}
-                activities={trainingHubActivities}
-                upcomingWorkouts={trainingHubUpcomingWorkouts}
-                snapshot={trainingHubSnapshot}
-                sportTypes={trainingHubSportTypes}
-                rpeBackfill={rpeBackfill}
-                activityDetail={trainingHubActivityDetail}
-                selectedActivity={selectedTrainingHubActivity}
-                busy={busy}
-                sleepConnecting={sleepConnecting}
-                onEmailChange={setTrainingHubEmail}
-                onPasswordChange={setTrainingHubPassword}
-                onRememberChange={setTrainingHubRemember}
-                onLogin={handleTrainingHubLogin}
-                onReconnect={handleTrainingHubReconnect}
-                onLogout={handleTrainingHubLogout}
-                onRefresh={handleTrainingHubRefresh}
-                onLoadDetail={handleTrainingHubActivityDetail}
-                onExportFile={handleTrainingHubExport}
-              />
+              <Suspense fallback={<DeferredSurfaceFallback label="training" />}>
+                <LazyTrainingHubView
+                  api={api}
+                  status={trainingHubStatus}
+                  email={trainingHubEmail}
+                  password={trainingHubPassword}
+                  remember={trainingHubRemember}
+                  activities={trainingHubActivities}
+                  upcomingWorkouts={trainingHubUpcomingWorkouts}
+                  snapshot={trainingHubSnapshot}
+                  sportTypes={trainingHubSportTypes}
+                  rpeBackfill={rpeBackfill}
+                  activityDetail={trainingHubActivityDetail}
+                  selectedActivity={selectedTrainingHubActivity}
+                  busy={busy}
+                  sleepConnecting={sleepConnecting}
+                  onEmailChange={setTrainingHubEmail}
+                  onPasswordChange={setTrainingHubPassword}
+                  onRememberChange={setTrainingHubRemember}
+                  onLogin={handleTrainingHubLogin}
+                  onReconnect={handleTrainingHubReconnect}
+                  onLogout={handleTrainingHubLogout}
+                  onRefresh={handleTrainingHubRefresh}
+                  onLoadDetail={handleTrainingHubActivityDetail}
+                  onExportFile={handleTrainingHubExport}
+                />
+              </Suspense>
             ) : null}
             {activeView === "data" ? (
               <DataView
@@ -2005,41 +2109,49 @@ export default function App() {
               />
             ) : null}
             {activeView === "calendar" ? (
-              <CalendarView
-                api={api}
-                status={trainingHubStatus}
-                sportTypes={trainingHubSportTypes}
-                refreshToken={calendarRefreshToken}
-                onMessage={setMessage}
-                onError={setError}
-                onOpenTraining={() => setActiveView("training")}
-                onOpenCoach={(prompt) => {
-                  setCoachPrefill(prompt);
-                  setActiveView("coach");
-                }}
-              />
+              <Suspense fallback={<DeferredSurfaceFallback label="calendar" />}>
+                <LazyCalendarView
+                  api={api}
+                  status={trainingHubStatus}
+                  sportTypes={trainingHubSportTypes}
+                  refreshToken={calendarRefreshToken}
+                  onMessage={setMessage}
+                  onError={setError}
+                  onOpenTraining={() => setActiveView("training")}
+                  onOpenCoach={(prompt) => {
+                    setCoachPrefill(prompt);
+                    setActiveView("coach");
+                  }}
+                />
+              </Suspense>
             ) : null}
-            <div
-              className={[
-                "content-coach-panel",
-                activeView !== "coach" && "view-panel-hidden",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              aria-hidden={activeView !== "coach"}
-            >
-              <ChatView
-                api={api}
-                onError={setError}
-                onPlanUploaded={() => {
-                  void loadTrainingHubData();
-                  setCalendarRefreshToken((token) => token + 1);
-                }}
-                onActivityChange={setCoachBusy}
-                pendingPrompt={coachPrefill}
-                onPendingPromptConsumed={() => setCoachPrefill(null)}
-              />
-            </div>
+            {coachMounted || activeView === "coach" ? (
+              <div
+                className={[
+                  "content-coach-panel",
+                  activeView !== "coach" && "view-panel-hidden",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                aria-hidden={activeView !== "coach"}
+              >
+                <Suspense
+                  fallback={<DeferredSurfaceFallback label="Coach" />}
+                >
+                  <LazyChatView
+                    api={api}
+                    onError={setError}
+                    onPlanUploaded={() => {
+                      void loadTrainingHubData();
+                      setCalendarRefreshToken((token) => token + 1);
+                    }}
+                    onActivityChange={setCoachBusy}
+                    pendingPrompt={coachPrefill}
+                    onPendingPromptConsumed={() => setCoachPrefill(null)}
+                  />
+                </Suspense>
+              </div>
+            ) : null}
           </>
         )}
       </main>
@@ -2522,14 +2634,16 @@ function MediaOverviewTab({
       ) : null}
 
       <div className="overview-globe-section dashboard-block">
-        <ActivityGlobeCard
-          activities={trainingActivities}
-          connected={trainingConnected}
-          detail={trainingActivityDetail}
-          loading={busy?.startsWith("training-detail:") ?? false}
-          onOpenTraining={onOpenTraining}
-          onSelectActivity={onSelectTrainingActivity}
-        />
+        <Suspense fallback={<DeferredSurfaceFallback label="activity globe" />}>
+          <LazyActivityGlobeCard
+            activities={trainingActivities}
+            connected={trainingConnected}
+            detail={trainingActivityDetail}
+            loading={busy?.startsWith("training-detail:") ?? false}
+            onOpenTraining={onOpenTraining}
+            onSelectActivity={onSelectTrainingActivity}
+          />
+        </Suspense>
       </div>
     </div>
   );
