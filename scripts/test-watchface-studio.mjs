@@ -1271,6 +1271,80 @@ assert.deepEqual(
   },
   "standalone status movement should shift the absolute position key"
 );
+const emptyStandaloneStatusDetails = {
+  archiveId: "empty-standalone-status",
+  resolutions: [{
+    ...resolution(800, 24, 38),
+    config: {
+      ...resolution(800, 24, 38).config,
+      bluetooth_icon_pos: "",
+      bluetooth_on_icon: "",
+      bluetooth_off_icon: "",
+      no_disturb_icon_pos: "",
+      no_disturb_on_icon: "",
+      no_disturb_off_icon: ""
+    }
+  }]
+};
+assert.deepEqual(
+  listWatchfaceConfigAssets(
+    emptyStandaloneStatusDetails,
+    undefined,
+    [],
+    true
+  )
+    .filter(({ configKey }) =>
+      configKey.startsWith("bluetooth_") ||
+      configKey.startsWith("no_disturb_")
+    )
+    .map(({ id }) => id),
+  [
+    "config:bluetooth_off_icon",
+    "config:bluetooth_on_icon",
+    "config:no_disturb_on_icon",
+    "config:no_disturb_off_icon"
+  ],
+  "Studio should offer every standalone Bluetooth and Do Not Disturb state even when the template leaves those keys empty"
+);
+const virtualStandaloneStatusOverrides = buildWatchfaceConfigAssetOverrides(
+  emptyStandaloneStatusDetails,
+  {
+    "config:bluetooth_on_icon": {
+      replacement: {
+        dataUrl: "data:image/png;base64,AA==",
+        width: 24,
+        height: 24
+      }
+    },
+    "config:no_disturb_off_icon": {
+      replacement: {
+        dataUrl: "data:image/png;base64,AA==",
+        width: 24,
+        height: 24
+      }
+    }
+  }
+)[0]?.values;
+assert.match(
+  virtualStandaloneStatusOverrides?.bluetooth_on_icon ?? "",
+  /^studio\\.+\\00\.png$/,
+  "an added Bluetooth state should receive a Studio-owned PNG path"
+);
+assert.equal(
+  virtualStandaloneStatusOverrides?.bluetooth_icon_pos,
+  "{64,64}",
+  "an added Bluetooth state should receive an editable on-screen position"
+);
+assert.match(
+  virtualStandaloneStatusOverrides?.no_disturb_off_icon ?? "",
+  /^studio\\.+\\00\.png$/,
+  "an added Do Not Disturb state should receive a Studio-owned PNG path"
+);
+assert.equal(
+  virtualStandaloneStatusOverrides?.no_disturb_icon_pos,
+  "{712,64}",
+  "an added Do Not Disturb state should receive an editable on-screen position"
+);
 const hiddenBluetoothStatusDetails = applyConfigOverridesToDetails(
   {
     archiveId: "control-status",

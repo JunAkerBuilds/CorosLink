@@ -39,15 +39,17 @@ const SPORT_TYPE_CATEGORY: Record<number, SportColorCategory> = {
   101: "run", //      Indoor Run
   102: "trail", //    Trail Run
   103: "run", //      Track Run
-  104: "run", //      Treadmill Run
-  200: "bike", //     Road Bike
+  104: "trail", //    Hike
+  105: "trail", //    Mountain Climb
+  200: "bike", //     Bike
   201: "bike", //     Indoor Bike
-  202: "bike", //     E-Bike
-  203: "bike", //     Gravel Bike
+  202: "bike", //     Road E-Bike
+  203: "bike", //     Gravel Road Bike
   204: "bike", //     Mountain Bike
-  402: "strength", // Strength
-  403: "strength", // Cardio (gym)
-  700: "trail" //     Hiking
+  205: "bike", //     Mountain E-Bike
+  299: "bike", //     Helmet Bike
+  400: "strength", // Gym Cardio
+  402: "strength" //  Strength
 };
 
 /**

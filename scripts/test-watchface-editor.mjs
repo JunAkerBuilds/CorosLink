@@ -535,8 +535,21 @@ assert.deepEqual(
     configAssetDetails,
     hiddenConfigAssetDetails
   ).map((reference) => reference.id),
-  ["config:bluetooth_on_icon"],
-  "hidden config assets must retain their source reference in the layer panel"
+  [
+    "config:bluetooth_off_icon",
+    "config:bluetooth_on_icon",
+    "config:no_disturb_on_icon",
+    "config:no_disturb_off_icon"
+  ],
+  "hidden config assets and addable standalone status states must remain in the layer panel"
+);
+assert.equal(
+  listWatchfaceEditorConfigAssets(
+    configAssetDetails,
+    hiddenConfigAssetDetails
+  ).find(({ id }) => id === "config:bluetooth_on_icon")?.source?.path,
+  "800/bluetooth-on.png",
+  "a virtual status option must not replace an imported source reference"
 );
 
 const explicitlyHiddenAodMetric = {

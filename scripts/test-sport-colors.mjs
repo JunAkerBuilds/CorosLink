@@ -22,14 +22,15 @@ assert.equal(sportColorCategory(100), "run"); //      Run
 assert.equal(sportColorCategory(101), "run"); //      Indoor Run
 assert.equal(sportColorCategory(102), "trail"); //    Trail Run
 assert.equal(sportColorCategory(103), "run"); //      Track Run
-assert.equal(sportColorCategory(104), "run"); //      Treadmill Run
-assert.equal(sportColorCategory(200), "bike"); //     Road Bike
+assert.equal(sportColorCategory(104), "trail"); //    Hike
+assert.equal(sportColorCategory(105), "trail"); //    Mountain Climb
+assert.equal(sportColorCategory(200), "bike"); //     Bike
 assert.equal(sportColorCategory(204), "bike"); //     Mountain Bike
+assert.equal(sportColorCategory(400), "strength"); // Gym Cardio
 assert.equal(sportColorCategory(402), "strength"); // Strength
-assert.equal(sportColorCategory(403), "strength"); // Cardio (gym)
-assert.equal(sportColorCategory(700), "trail"); //    Hiking
 assert.equal(sportColorCategory(300), "other"); //    Pool Swim
-assert.equal(sportColorCategory(400), "other"); //    Triathlon
+assert.equal(sportColorCategory(700), "other"); //    Rowing
+assert.equal(sportColorCategory(10000), "other"); //  Triathlon
 assert.equal(sportColorCategory(999), "other"); //    unknown code
 assert.equal(sportColorCategory(undefined), "other");
 

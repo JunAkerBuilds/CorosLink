@@ -3295,6 +3295,32 @@ function normalizeActivityDuration(value?: number): number | undefined {
   return normalized === undefined ? undefined : Math.round(normalized);
 }
 
+// Epoch-second bounds for a sane activity date (2001-01-01 .. 2100-01-01).
+const MIN_ACTIVITY_EPOCH_SECONDS = 978_307_200;
+const MAX_ACTIVITY_EPOCH_SECONDS = 4_102_444_800;
+
+function normalizeActivityStartTimeSeconds(value?: number): number | undefined {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) {
+    return undefined;
+  }
+
+  // COROS mixes units per endpoint: the list API sends epoch seconds while
+  // detail payloads store startTimestamp at 0.01 s precision (same x100
+  // convention as distance/totalTime). Scale by whichever divisor lands in a
+  // sane date range; anything else is garbage and the list value wins.
+  for (const divisor of [1, 100, 1000]) {
+    const seconds = value / divisor;
+    if (
+      seconds >= MIN_ACTIVITY_EPOCH_SECONDS &&
+      seconds < MAX_ACTIVITY_EPOCH_SECONDS
+    ) {
+      return Math.round(seconds);
+    }
+  }
+
+  return undefined;
+}
+
 function normalizeCorosDetailDistanceMeters(value?: number): number | undefined {
   if (value === undefined || !Number.isFinite(value) || value <= 0) {
     return undefined;
@@ -4383,10 +4409,11 @@ export function parseActivityDetail(raw: Record<string, unknown>): TrainingHubAc
     sportName:
       pickString(raw, ["sportName", "sport_name"]) ??
       pickString(summary, ["sportName", "sport_name", "modeName"]),
-    startTime:
+    startTime: normalizeActivityStartTimeSeconds(
       toOptionalNumber(raw.startTime) ??
-      toOptionalNumber(summary.startTime) ??
-      toOptionalNumber(summary.startTimestamp),
+        toOptionalNumber(summary.startTime) ??
+        toOptionalNumber(summary.startTimestamp)
+    ),
     duration: normalizeActivityDuration(durationRaw),
     distance: normalizeActivityDistanceMeters(distanceRaw),
     avgHr:

@@ -571,7 +571,8 @@ function pngConfigEntries(
 export function listWatchfaceConfigAssets(
   details: CorosWatchfaceTemplateDetails,
   resolutionDirectory?: string,
-  virtualControlIcons: ReadonlyArray<WatchfaceComplicationId> = []
+  virtualControlIcons: ReadonlyArray<WatchfaceComplicationId> = [],
+  includeVirtualStandaloneStatusIcons = false
 ): WatchfaceConfigAssetReference[] {
   const selectedResolution = resolutionDirectory
     ? details.resolutions.find((candidate) => candidate.directory === resolutionDirectory)
@@ -628,6 +629,23 @@ export function listWatchfaceConfigAssets(
       archivePath: `${selectedResolution.directory}/${relativePath}`,
       source: null
     });
+  }
+  if (includeVirtualStandaloneStatusIcons) {
+    for (const configKey of VIRTUAL_STANDALONE_STATUS_ICON_KEYS) {
+      const id = watchfaceConfigAssetId("config", configKey);
+      if (byId.has(id)) continue;
+      const relativePath = configAssetCreatedRelativePath(id);
+      byId.set(id, {
+        id,
+        scope: "config",
+        configKey,
+        configPath: `${selectedResolution.directory}/config.txt`,
+        label: configAssetLabel(configKey, "config"),
+        relativePath,
+        archivePath: `${selectedResolution.directory}/${relativePath}`,
+        source: null
+      });
+    }
   }
   const references = [...byId.values()];
   return references.sort((left, right) =>
@@ -758,6 +776,13 @@ const CONTROL_STATUS_PREVIEW_DEFINITIONS = [
   }
 ] as const;
 
+const VIRTUAL_STANDALONE_STATUS_ICON_KEYS = [
+  "bluetooth_off_icon",
+  "bluetooth_on_icon",
+  "no_disturb_on_icon",
+  "no_disturb_off_icon"
+] as const;
+
 export type WatchfaceControlStatusLayoutGroupId =
   (typeof CONTROL_STATUS_PREVIEW_DEFINITIONS)[number]["layoutGroupId"];
 
@@ -769,6 +794,31 @@ export function controlStatusLayoutGroupId(
   )?.layoutGroupId ?? null;
 }
 
+export function watchfaceControlStatusPosition(
+  resolution: CorosWatchfaceResolutionDetails,
+  configKey: string
+): { position: { x: number; y: number }; controlRelative: boolean } | null {
+  const definition = CONTROL_STATUS_PREVIEW_DEFINITIONS.find(
+    (candidate) => candidate.configKey === configKey
+  );
+  if (!definition) return null;
+  const configured = parseConfigPos(resolution.config[definition.positionKey]);
+  if (!configured) return null;
+  if (!definition.controlRelative) {
+    return { position: configured, controlRelative: false };
+  }
+  const originKey = Object.keys(resolution.config).find((key) =>
+    /^rect_control\d+_pos$/.test(key)
+  );
+  const origin = parseConfigPos(
+    originKey ? resolution.config[originKey] : undefined
+  ) ?? { x: 0, y: 0 };
+  return {
+    position: { x: origin.x + configured.x, y: origin.y + configured.y },
+    controlRelative: true
+  };
+}
+
 /**
  * Resolves condition-driven status icons. Selectable-control variants use the
  * shared control origin; standalone variants use absolute screen positions.
@@ -778,24 +828,19 @@ export function controlStatusLayoutGroupId(
 export function getWatchfaceControlStatusPreviewLayers(
   resolution: CorosWatchfaceResolutionDetails
 ): WatchfaceControlStatusPreviewLayer[] {
-  const originKey = Object.keys(resolution.config).find((key) =>
-    /^rect_control\d+_pos$/.test(key)
-  );
-  const origin = parseConfigPos(
-    originKey ? resolution.config[originKey] : undefined
-  ) ?? { x: 0, y: 0 };
   return CONTROL_STATUS_PREVIEW_DEFINITIONS.flatMap(
-    ({ layoutGroupId, configKey, positionKey, controlRelative }) => {
+    ({ layoutGroupId, configKey, controlRelative }) => {
       const source = directConfigSprite(resolution, configKey);
-      const position = parseConfigPos(resolution.config[positionKey]);
-      return source && position
+      const statusPosition = watchfaceControlStatusPosition(
+        resolution,
+        configKey
+      );
+      return source && statusPosition
         ? [{
             layoutGroupId,
             configKey,
             source,
-            position: controlRelative
-              ? { x: origin.x + position.x, y: origin.y + position.y }
-              : position,
+            position: statusPosition.position,
             controlRelative
           }]
         : [];
@@ -1012,6 +1057,15 @@ export function buildWatchfaceConfigAssetOverrides(
             entries.push([configKey, configAssetCreatedRelativePath(id)]);
           }
         }
+        for (const configKey of VIRTUAL_STANDALONE_STATUS_ICON_KEYS) {
+          const id = watchfaceConfigAssetId(scope, configKey);
+          if (
+            overrides[id]?.replacement &&
+            !entries.some(([candidate]) => candidate === configKey)
+          ) {
+            entries.push([configKey, configAssetCreatedRelativePath(id)]);
+          }
+        }
       }
       for (const [configKey] of entries) {
         // The current background is always a composed Studio PNG written back
@@ -1034,8 +1088,7 @@ export function buildWatchfaceConfigAssetOverrides(
             ? currentAnalogOverride
             : undefined);
         if (!override) continue;
-        const virtual =
-          !Object.prototype.hasOwnProperty.call(scopedConfig, configKey);
+        const virtual = !scopedConfig[configKey]?.trim();
         if (override.enabled === false) {
           // A disabled direct asset must not leave a blank declaration behind:
           // COROS can treat key presence itself as feature presence. Delete the
@@ -1048,14 +1101,31 @@ export function buildWatchfaceConfigAssetOverrides(
           (virtual || !replaceConfigAssetInPlace(configKey))
         ) {
           values[configKey] = configAssetCreatedRelativePath(id).replace(/\//g, "\\");
-          if (virtual && configKey.startsWith("control_")) {
-            const positionKey = `${configKey}_pos`;
+          if (virtual) {
+            const statusDefinition = CONTROL_STATUS_PREVIEW_DEFINITIONS.find(
+              (definition) => definition.configKey === configKey
+            );
+            const positionKey =
+              statusDefinition?.positionKey ??
+              (configKey.startsWith("control_")
+                ? `${configKey}_pos`
+                : undefined);
+            if (!positionKey) continue;
             if (!parseConfigPos(scopedConfig[positionKey])) {
-              values[positionKey] = fallbackControlIconPosition(
-                scopedConfig,
-                firstControlRect(scopedConfig) ??
-                  `{0,0,${Math.max(1, override.replacement.width)},${Math.max(1, override.replacement.height)},hcenter|vcenter}`
-              );
+              values[positionKey] = statusDefinition?.controlRelative === false
+                ? fallbackStandaloneStatusIconPosition(
+                    resolution,
+                    configKey,
+                    override.replacement,
+                    baseResolution
+                      ? resolution.width / baseResolution.width
+                      : 1
+                  )
+                : fallbackControlIconPosition(
+                    scopedConfig,
+                    firstControlRect(scopedConfig) ??
+                      `{0,0,${Math.max(1, override.replacement.width)},${Math.max(1, override.replacement.height)},hcenter|vcenter}`
+                  );
             }
           }
         }
@@ -1185,6 +1255,15 @@ export async function buildWatchfaceConfigAssetReplacements(
         for (const complication of WATCHFACE_COMPLICATIONS) {
           if (complication.id === "battery") continue;
           const configKey = `control_${complication.controlPrefix}_icon`;
+          const id = watchfaceConfigAssetId(scope, configKey);
+          if (
+            overrides[id]?.replacement &&
+            !entries.some(([candidate]) => candidate === configKey)
+          ) {
+            entries.push([configKey, configAssetCreatedRelativePath(id)]);
+          }
+        }
+        for (const configKey of VIRTUAL_STANDALONE_STATUS_ICON_KEYS) {
           const id = watchfaceConfigAssetId(scope, configKey);
           if (
             overrides[id]?.replacement &&
@@ -3819,6 +3898,23 @@ function fallbackControlIconPosition(
   }
   const rect = parseConfigRect(rectValue);
   return rect ? `{${rect.x0},${rect.y0}}` : "{0,0}";
+}
+
+function fallbackStandaloneStatusIconPosition(
+  resolution: CorosWatchfaceResolutionDetails,
+  configKey: string,
+  replacement: { width: number; height: number },
+  nativeScale: number
+): string {
+  const width = Math.max(1, Math.round(replacement.width * nativeScale));
+  const margin = Math.max(0, Math.round(Math.min(
+    resolution.width,
+    resolution.height
+  ) * 0.08));
+  const x = configKey.startsWith("no_disturb_")
+    ? Math.max(0, resolution.width - margin - width)
+    : margin;
+  return `{${x},${margin}}`;
 }
 
 function complicationIconPath(
@@ -7526,6 +7622,87 @@ export async function drawStudioPreview(
       // Control-slot icons follow the complication's effects; standalone
       // status icons carry their own layout-group identity.
       layer.controlRelative ? "complication" : layer.layoutGroupId,
+      false
+    );
+  }
+  for (const definition of CONTROL_STATUS_PREVIEW_DEFINITIONS) {
+    if (
+      controlStatusLayers.some(
+        (layer) => layer.configKey === definition.configKey
+      )
+    ) {
+      continue;
+    }
+    const id = watchfaceConfigAssetId("config", definition.configKey);
+    const override = options.configAssetOverrides?.[id];
+    const replacement = override?.replacement;
+    const statusPosition = watchfaceControlStatusPosition(
+      resolution,
+      definition.configKey
+    );
+    if (
+      !replacement ||
+      override.enabled === false ||
+      !statusPosition ||
+      (options.previewComplicationContent === "icon" &&
+        statusPosition.controlRelative)
+    ) {
+      continue;
+    }
+    const fallback = statusPosition.controlRelative
+      ? virtualControlIconCanvasSize(resolution)
+      : {
+          width: Math.max(
+            1,
+            Math.round(
+              replacement.width *
+                (options.nativeSpriteResolutionScale ?? 1)
+            )
+          ),
+          height: Math.max(
+            1,
+            Math.round(
+              replacement.height *
+                (options.nativeSpriteResolutionScale ?? 1)
+            )
+          )
+        };
+    const canvasSize = configAssetCanvasSize(
+      definition.configKey,
+      override,
+      fallback,
+      options.nativeSpriteResolutionScale ?? 1
+    );
+    const rendered = canvasSize.native
+      ? await resizeAndTintSprite(
+          replacement.dataUrl,
+          canvasSize.width,
+          canvasSize.height
+        )
+      : await fitVisibleSpriteToCanvas(
+          replacement.dataUrl,
+          canvasSize.width,
+          canvasSize.height,
+          override.scale ?? 1
+        );
+    const image = await loadStudioImage(
+      await applyWatchfaceDataUrlOpacity(
+        rendered,
+        resolveWatchfaceLayerOpacity(options, `configAsset:${id}`)
+      )
+    );
+    drawStudioLayerImage(
+      context,
+      image,
+      statusPosition.position.x * scale,
+      statusPosition.position.y * scale,
+      image.naturalWidth * scale,
+      image.naturalHeight * scale,
+      scale,
+      options,
+      statusPosition.controlRelative
+        ? "complication"
+        : definition.layoutGroupId,
       false
     );
   }

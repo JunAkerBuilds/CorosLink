@@ -30,15 +30,27 @@ export function listWatchfaceEditorConfigAssets(
   > = []
 ): WatchfaceConfigAssetReference[] {
   const byId = new Map(
-    listWatchfaceConfigAssets(sourceDetails, undefined, virtualControlIcons)
+    listWatchfaceConfigAssets(
+      sourceDetails,
+      undefined,
+      virtualControlIcons,
+      true
+    )
       .map((reference) => [reference.id, reference])
   );
   for (const reference of listWatchfaceConfigAssets(
     renderedDetails,
     undefined,
-    virtualControlIcons
+    virtualControlIcons,
+    true
   )) {
-    byId.set(reference.id, reference);
+    const sourceReference = byId.get(reference.id);
+    byId.set(
+      reference.id,
+      reference.source === null && sourceReference?.source
+        ? sourceReference
+        : reference
+    );
   }
   return [...byId.values()];
 }

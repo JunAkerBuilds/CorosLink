@@ -8400,7 +8400,11 @@ export function WatchfaceEditor({
           <div className="wf-property-stack">
             <div className="wf-config-asset-meta"><strong>{reference.label}</strong><span>{dimensions}</span><code>{reference.relativePath}</code><code>[{reference.configKey}]</code></div>
             {onWatchBehavior ? <p className="watchface-studio-summary">{onWatchBehavior}</p> : null}
-            <p className="watchface-studio-summary">Parsed from {reference.scope === "aod" ? "AODconfig.txt" : "config.txt"}. Visibility changes only this key. Other keys that share the original file are not altered.</p>
+            <p className="watchface-studio-summary">
+              {reference.source
+                ? `Parsed from ${reference.scope === "aod" ? "AODconfig.txt" : "config.txt"}.`
+                : `Not supplied by the template. Importing an image adds [${reference.configKey}] to config.txt.`} Visibility changes only this key. Other keys that share the original file are not altered.
+            </p>
           </div>,
           { disabled: isPositionLocked(layer.id) }
         )}

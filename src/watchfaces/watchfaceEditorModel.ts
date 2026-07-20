@@ -18,6 +18,7 @@ import {
   hasControlBattery,
   isControlComplicationEnabled,
   pickPreviewResolution,
+  watchfaceControlStatusPosition,
   WATCHFACE_COMPLICATIONS,
   WATCHFACE_LAYOUT_GROUPS,
   type WatchfaceLayoutGroupBounds,
@@ -615,32 +616,45 @@ export function deriveEditorLayers(
             (layer) => layer.configKey === reference.configKey
           ) ?? null
         : null;
+    const statusPosition =
+      statusPreviewLayer
+        ? {
+            position: statusPreviewLayer.position,
+            controlRelative: statusPreviewLayer.controlRelative
+          }
+        : statusLayoutGroupId && resolution
+          ? watchfaceControlStatusPosition(resolution, reference.configKey)
+          : null;
     const analogPreviewLayer =
       analogLayoutGroupId && resolution
         ? getWatchfaceAnalogPreviewLayers(resolution, new Date()).find(
             (layer) => layer.configKey === reference.configKey
           ) ?? null
         : null;
+    const statusFallback =
+      statusPreviewLayer?.source ??
+      override?.replacement ??
+      null;
     const statusCanvas =
-      statusPreviewLayer
+      statusPosition && statusFallback
         ? configAssetCanvasSize(
             reference.configKey,
             override,
             {
-              width: statusPreviewLayer.source.width,
-              height: statusPreviewLayer.source.height
+              width: statusFallback.width,
+              height: statusFallback.height
             }
           )
         : null;
     const statusBounds =
-      statusPreviewLayer && statusCanvas && override?.enabled !== false
+      statusPosition && statusCanvas && override?.enabled !== false
         ? {
             id: `configAsset:${reference.id}`,
             label: reference.label,
-            x0: statusPreviewLayer.position.x,
-            y0: statusPreviewLayer.position.y,
-            x1: statusPreviewLayer.position.x + statusCanvas.width,
-            y1: statusPreviewLayer.position.y + statusCanvas.height
+            x0: statusPosition.position.x,
+            y0: statusPosition.position.y,
+            x1: statusPosition.position.x + statusCanvas.width,
+            y1: statusPosition.position.y + statusCanvas.height
           }
         : null;
     const analogBounds =
@@ -661,6 +675,8 @@ export function deriveEditorLayers(
         : null;
     const movableLayoutGroupId =
       statusLayoutGroupId ?? analogLayoutGroupId;
+    const assetAvailable =
+      reference.source !== null || Boolean(override?.replacement);
     layers.push({
       id: `configAsset:${reference.id}`,
       kind: "configAsset",
@@ -670,11 +686,11 @@ export function deriveEditorLayers(
         : {}),
       configAssetId: reference.id,
       configAssetReplaced: Boolean(override?.replacement),
-      visible: override?.enabled !== false,
+      visible: assetAvailable && override?.enabled !== false,
       canHide: true,
       present:
         statusLayoutGroupId || analogLayoutGroupId
-          ? reference.source !== null
+          ? assetAvailable
           : true,
       bounds: statusBounds ?? analogBounds,
       capabilities: movableLayoutGroupId

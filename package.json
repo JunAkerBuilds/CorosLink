@@ -189,6 +189,8 @@
     "react-globe.gl": "^2.38.0",
     "react-markdown": "^10.1.0",
     "recharts": "^3.9.0",
+    "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "spotify-web-api-node": "^5.0.2",
     "three": "^0.185.1",
