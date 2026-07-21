@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import bcrypt from "bcryptjs";
 import {
   corosSportName,
   enrichActivitiesWithSportNames,
@@ -43,6 +44,7 @@ import type {
   TrainingHubSleepHrvReading,
   TrainingHubSleepHrvSummary,
   TrainingHubStatus,
+  TrainingHubLoginResult,
   TrainingHubThresholdZone,
   TrainingHubUpcomingWorkout,
   TrainingHubScheduledExercise,
@@ -90,6 +92,13 @@ const LOGIN_URL = `${GLOBAL_BASE_URL}/account/login`;
 const RESULT_SUCCESS = "0000";
 const AUTH_ERROR_CODES = new Set(["0101", "0102", "1006"]);
 
+// Email verification code for the 2FA login challenge: codeType 20, 6 digits.
+const TWO_FACTOR_CODE_TYPE = 20;
+const TWO_FACTOR_CODE_LENGTH = 2;
+const COROS_LOGIN_LANGUAGE = "en-US";
+const COROS_DEV_PREVIEW_COOKIE =
+  "x-app-req-env=202607/; x-app-req-dev=feature-202607-dev; CPL-coros-region=1";
+
 const REGION_BASE_URLS: Record<string, string> = {
   "0": "https://teamapi.coros.com",
   "1": "https://teamapi.coros.com",
@@ -133,7 +142,36 @@ interface TrainingHubLoginData {
   accessToken?: string;
   userId?: string | number;
   regionId?: string | number;
+  twoFactorRequired?: boolean;
+  // Present instead of accessToken when the account has 2FA enabled: the ticket
+  // that must be echoed back to /account/2fa/login/verify along with the code.
+  loginTicket?: string;
+  appKey?: string;
+  account?: string;
+  accountType2fa?: string | number;
 }
+
+// A login that stopped at the 2FA challenge. Held in memory between the
+// password step and the code-verify step (never persisted to disk).
+interface PendingTwoFactorLogin {
+  account: string;
+  pwdHash: string;
+  loginBaseUrl: string;
+  loginTicket: string;
+  appKey: string;
+  accountType: string;
+  regionId: string;
+  userId?: string;
+  remember: boolean;
+}
+
+// Discriminated result of the password step: either a fully-authenticated
+// session, or a 2FA challenge whose pending state is stashed in `pendingTwoFactor`.
+type BeginLoginOutcome =
+  | { kind: "authenticated"; session: TrainingHubAuthState }
+  | { kind: "twoFactor"; account: string };
+
+let pendingTwoFactor: PendingTwoFactorLogin | null = null;
 
 interface TrainingHubAccountData {
   userId?: string | number;
@@ -241,24 +279,91 @@ export async function loginTrainingHub(
   email: string,
   password: string,
   remember = false
-): Promise<TrainingHubStatus> {
+): Promise<TrainingHubLoginResult> {
   const account = email.trim();
   if (!account || !password) {
     throw new Error("Enter your COROS email and password.");
   }
 
   const pwdHash = hashCorosPassword(password);
-  const session = await establishTrainingHubSession(account, pwdHash);
+  const outcome = await beginTrainingHubLogin(account, pwdHash, {
+    remember,
+    interactive: true
+  });
 
+  if (outcome.kind === "twoFactor") {
+    return {
+      twoFactorRequired: true,
+      status: getTrainingHubStatus(),
+      email: outcome.account
+    };
+  }
+
+  finalizeTrainingHubLogin(outcome.session, account, pwdHash, remember);
+  return { twoFactorRequired: false, status: getTrainingHubStatus() };
+}
+
+// Complete the second half of a 2FA login by submitting the emailed code.
+export async function verifyTrainingHubTwoFactor(
+  code: string
+): Promise<TrainingHubStatus> {
+  const pending = pendingTwoFactor;
+  if (!pending) {
+    throw new Error("No COROS verification is in progress. Start again.");
+  }
+
+  const trimmed = code.trim();
+  if (!/^\d{6}$/.test(trimmed)) {
+    throw new Error("Enter the 6-digit verification code sent to your email.");
+  }
+
+  const loginData = await verifyTwoFactorCode(pending, trimmed);
+  const session = await completeSessionFromLogin(
+    loginData,
+    pending.loginBaseUrl,
+    String(loginData.regionId ?? pending.regionId),
+    pending.userId
+  );
+
+  finalizeTrainingHubLogin(
+    session,
+    pending.account,
+    pending.pwdHash,
+    pending.remember
+  );
+  pendingTwoFactor = null;
+  return getTrainingHubStatus();
+}
+
+// Re-send the emailed 2FA code for the login currently awaiting verification.
+export async function resendTrainingHubTwoFactorCode(): Promise<void> {
+  const pending = pendingTwoFactor;
+  if (!pending) {
+    throw new Error("No COROS verification is in progress. Start again.");
+  }
+  await requestTwoFactorCode(
+    pending.loginBaseUrl,
+    pending.account,
+    pending.accountType
+  );
+}
+
+export function cancelTrainingHubTwoFactor(): void {
+  pendingTwoFactor = null;
+}
+
+function finalizeTrainingHubLogin(
+  session: TrainingHubAuthState,
+  account: string,
+  pwdHash: string,
+  remember: boolean
+): void {
   persistTrainingHubSession(session);
-
   if (remember) {
     storeCorosCredentials(account, pwdHash);
   } else {
     clearStoredCorosCredentials();
   }
-
-  return getTrainingHubStatus();
 }
 
 function persistTrainingHubSession(session: TrainingHubAuthState): void {
@@ -268,22 +373,79 @@ function persistTrainingHubSession(session: TrainingHubAuthState): void {
   setSetting(SETTINGS.baseUrl, session.baseUrl);
 }
 
-async function establishTrainingHubSession(
+// Perform the password step. Returns a completed session, or — when the account
+// has 2FA enabled — stashes a pending challenge (after emailing the code, in
+// interactive mode) and reports that verification is required.
+async function beginTrainingHubLogin(
   account: string,
-  pwdHash: string
-): Promise<TrainingHubAuthState> {
-  const { loginData, loginBaseUrl } = await loginViaAnyBase(account, pwdHash);
-  const accessToken = loginData.accessToken;
+  pwdHash: string,
+  options: { remember: boolean; interactive: boolean }
+): Promise<BeginLoginOutcome> {
+  pendingTwoFactor = null;
 
+  const { loginData, loginBaseUrl } = await loginViaAnyBase(
+    account,
+    pwdHash,
+    options.remember
+  );
+  const regionId =
+    loginData.regionId === undefined ? "1" : String(loginData.regionId);
+
+  if (loginData.accessToken) {
+    const session = await completeSessionFromLogin(
+      loginData,
+      loginBaseUrl,
+      regionId
+    );
+    return { kind: "authenticated", session };
+  }
+
+  const loginTicket = String(loginData.loginTicket ?? "").trim();
+  const appKey = String(loginData.appKey ?? "").trim();
+  if (!loginTicket || !appKey) {
+    throw new Error("COROS returned an incomplete two-factor login challenge.");
+  }
+
+  if (!options.interactive) {
+    throw new Error("COROS_TWO_FACTOR_REQUIRED");
+  }
+
+  const challengeAccount = String(loginData.account ?? "").trim() || account;
+  const accountType = String(loginData.accountType2fa ?? "").trim() || "2";
+  await requestTwoFactorCode(loginBaseUrl, challengeAccount, accountType);
+  pendingTwoFactor = {
+    account: challengeAccount,
+    pwdHash,
+    loginBaseUrl,
+    loginTicket,
+    appKey,
+    accountType,
+    regionId,
+    userId:
+      loginData.userId === undefined
+        ? undefined
+        : String(loginData.userId).trim(),
+    remember: options.remember
+  };
+  return { kind: "twoFactor", account: challengeAccount };
+}
+
+// Turn a login/verify response that carries an accessToken into a full session
+// (resolving the region base URL and user id).
+async function completeSessionFromLogin(
+  loginData: TrainingHubLoginData,
+  loginBaseUrl: string,
+  regionId: string,
+  fallbackUserId = ""
+): Promise<TrainingHubAuthState> {
+  const accessToken = loginData.accessToken;
   if (!accessToken) {
     throw new Error("COROS login response did not include a usable token.");
   }
 
-  const regionId =
-    loginData.regionId === undefined ? "1" : String(loginData.regionId);
   const baseUrl = await resolveTrainingHubBaseUrl(accessToken, loginBaseUrl);
 
-  let userId = String(loginData.userId ?? "").trim();
+  let userId = String(loginData.userId ?? fallbackUserId).trim();
   const accountData = await queryTrainingHubAccount(accessToken, baseUrl);
   if (accountData?.userId !== undefined) {
     userId = String(accountData.userId).trim();
@@ -293,18 +455,31 @@ async function establishTrainingHubSession(
     throw new Error("COROS login response did not include a user ID.");
   }
 
-  return {
-    accessToken,
-    userId,
-    regionId,
-    baseUrl
-  };
+  return { accessToken, userId, regionId, baseUrl };
+}
+
+// Silent re-authentication path (token refresh from stored credentials). Cannot
+// prompt for a 2FA code, so a 2FA challenge here surfaces as a login failure.
+async function establishTrainingHubSession(
+  account: string,
+  pwdHash: string
+): Promise<TrainingHubAuthState> {
+  const outcome = await beginTrainingHubLogin(account, pwdHash, {
+    remember: true,
+    interactive: false
+  });
+  if (outcome.kind !== "authenticated") {
+    throw new Error("COROS_TWO_FACTOR_REQUIRED");
+  }
+  return outcome.session;
 }
 
 async function loginViaAnyBase(
   account: string,
-  pwdHash: string
+  pwdHash: string,
+  remember: boolean
 ): Promise<LoginResult> {
+  const secret = buildCorosLoginSecret(pwdHash);
   const loginTargets = REGION_PROBE_URLS.map(
     (baseUrl) => [baseUrl, `${baseUrl}/account/login`] as const
   );
@@ -313,7 +488,12 @@ async function loginViaAnyBase(
 
   for (const [loginBaseUrl, loginUrl] of loginTargets) {
     try {
-      const loginData = await loginAtBase(loginUrl, account, pwdHash);
+      const loginData = await loginAtBase(
+        loginUrl,
+        account,
+        secret,
+        remember
+      );
       return { loginData, loginBaseUrl };
     } catch (error) {
       lastError = error;
@@ -329,22 +509,86 @@ async function loginViaAnyBase(
   );
 }
 
+// COROS's web login no longer accepts the raw MD5 digest. Instead it sends a
+// bcrypt hash of that digest (p1) plus the salt used (p2); the server re-derives
+// bcrypt(storedMd5, p2) and compares. Mirror that exactly.
+export function buildCorosLoginSecret(
+  pwdHash: string
+): { p1: string; p2: string } {
+  const salt = bcrypt.genSaltSync(10);
+  const hash = bcrypt.hashSync(pwdHash, salt);
+  return { p1: hash, p2: salt };
+}
+
+export function buildCorosPasswordLoginPayload(
+  account: string,
+  secret: { p1: string; p2: string },
+  remember: boolean
+): Record<string, string | number> {
+  const payload: Record<string, string | number> = {
+    account,
+    accountType: 2,
+    p1: secret.p1,
+    p2: secret.p2
+  };
+  if (remember) {
+    payload.rmbm = 1;
+  }
+  return payload;
+}
+
+export function buildCorosTwoFactorCodePayload(
+  account: string,
+  accountType: string
+): Record<string, string | number> {
+  return {
+    account,
+    codeType: TWO_FACTOR_CODE_TYPE,
+    lengthType: TWO_FACTOR_CODE_LENGTH,
+    accountType
+  };
+}
+
+export function buildCorosTwoFactorVerifyPayload(
+  loginTicket: string,
+  appKey: string,
+  code: string
+): Record<string, string> {
+  return { loginTicket, appKey, code };
+}
+
+export function buildCorosLoginHeaders(options?: {
+  suppressApiWarning?: boolean;
+}): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json, text/plain, */*",
+    YFHeader: JSON.stringify({ language: COROS_LOGIN_LANGUAGE })
+  };
+  if (options?.suppressApiWarning) {
+    headers["X-No-Warnning"] = "1";
+  }
+  // COROS currently gates the new 2FA API response behind its 202607 preview
+  // environment. Only opt into that routing while running `npm run dev`;
+  // packaged builds must follow COROS's normal production rollout.
+  if (process.env.VITE_DEV_SERVER_URL) {
+    headers.Cookie = COROS_DEV_PREVIEW_COOKIE;
+  }
+  return headers;
+}
+
 async function loginAtBase(
   url: string,
   account: string,
-  pwdHash: string
+  secret: { p1: string; p2: string },
+  remember: boolean
 ): Promise<TrainingHubLoginData> {
   const response = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json, text/plain, */*"
-    },
-    body: JSON.stringify({
-      account,
-      accountType: 2,
-      pwd: pwdHash
-    })
+    headers: buildCorosLoginHeaders(),
+    body: JSON.stringify(
+      buildCorosPasswordLoginPayload(account, secret, remember)
+    )
   });
 
   if (!response.ok) {
@@ -360,10 +604,75 @@ async function loginAtBase(
     throw new Error(payload.message || "COROS login failed.");
   }
 
-  if (!payload.data?.accessToken) {
+  // Success may carry an accessToken (no 2FA) or a loginTicket (2FA required).
+  if (!payload.data?.accessToken && !payload.data?.loginTicket) {
     throw new Error("COROS login response did not include a usable token.");
   }
 
+  return payload.data;
+}
+
+// Ask COROS to email the 6-digit two-factor login code.
+async function requestTwoFactorCode(
+  loginBaseUrl: string,
+  account: string,
+  accountType: string
+): Promise<void> {
+  const response = await fetch(`${loginBaseUrl}/account/captcha`, {
+    method: "POST",
+    headers: buildCorosLoginHeaders(),
+    body: JSON.stringify(buildCorosTwoFactorCodePayload(account, accountType))
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `COROS failed to send a verification code: ${response.status} ${response.statusText}`
+    );
+  }
+
+  const payload = (await response.json()) as TrainingHubApiResponse<unknown>;
+  const result = String(payload.result ?? payload.apiCode ?? "");
+  if (result !== RESULT_SUCCESS) {
+    throw new Error(
+      payload.message || "COROS could not send a verification code."
+    );
+  }
+}
+
+// Exchange the emailed code + login ticket for a real access token.
+async function verifyTwoFactorCode(
+  pending: PendingTwoFactorLogin,
+  code: string
+): Promise<TrainingHubLoginData> {
+  const response = await fetch(
+    `${pending.loginBaseUrl}/account/2fa/login/verify`,
+    {
+      method: "POST",
+      headers: buildCorosLoginHeaders({ suppressApiWarning: true }),
+      body: JSON.stringify(
+        buildCorosTwoFactorVerifyPayload(
+          pending.loginTicket,
+          pending.appKey,
+          code
+        )
+      )
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `COROS verification failed: ${response.status} ${response.statusText}`
+    );
+  }
+
+  const payload = (await response.json()) as TrainingHubApiResponse<TrainingHubLoginData>;
+  const result = String(payload.result ?? payload.apiCode ?? "");
+  if (result !== RESULT_SUCCESS) {
+    throw new Error(payload.message || "That verification code didn't work.");
+  }
+  if (!payload.data?.accessToken) {
+    throw new Error("COROS verification did not return an access token.");
+  }
   return payload.data;
 }
 
@@ -395,6 +704,7 @@ async function queryTrainingHubAccount(
 }
 
 export function logoutTrainingHub(): TrainingHubStatus {
+  pendingTwoFactor = null;
   clearTrainingHubAuth();
   clearStoredCorosCredentials();
   return getTrainingHubStatus();
@@ -404,15 +714,39 @@ export function logoutTrainingHub(): TrainingHubStatus {
  * Re-establish a COROS session from the stored (encrypted) credentials without
  * asking the user to re-enter their password. Used by the "Reconnect" action
  * when the access token has expired but remembered credentials are available.
+ *
+ * When the account has 2FA enabled the saved password alone is not enough, so
+ * this surfaces the same emailed-code challenge as a fresh login.
  */
-export async function reconnectTrainingHub(): Promise<TrainingHubStatus> {
-  const session = await reauthenticateFromStoredCredentials();
-  if (!session) {
+export async function reconnectTrainingHub(): Promise<TrainingHubLoginResult> {
+  const credentials = getStoredCorosCredentials();
+  if (!credentials) {
     throw new Error(
       "Couldn't reconnect with saved credentials. Please log in again."
     );
   }
-  return getTrainingHubStatus();
+
+  const outcome = await beginTrainingHubLogin(
+    credentials.account,
+    credentials.pwdHash,
+    { remember: true, interactive: true }
+  );
+
+  if (outcome.kind === "twoFactor") {
+    return {
+      twoFactorRequired: true,
+      status: getTrainingHubStatus(),
+      email: outcome.account
+    };
+  }
+
+  finalizeTrainingHubLogin(
+    outcome.session,
+    credentials.account,
+    credentials.pwdHash,
+    true
+  );
+  return { twoFactorRequired: false, status: getTrainingHubStatus() };
 }
 
 export async function listTrainingHubActivities(

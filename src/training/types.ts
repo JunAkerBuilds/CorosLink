@@ -99,10 +99,17 @@ export interface TrainingHubViewProps {
   selectedActivity: TrainingHubActivity | null;
   busy: string | null;
   sleepConnecting?: boolean;
+  // Two-factor: non-null email means a verification code is being awaited.
+  twoFactorEmail: string | null;
+  twoFactorCode: string;
   onEmailChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
   onRememberChange: (value: boolean) => void;
   onLogin: (event: FormEvent<HTMLFormElement>) => void;
+  onTwoFactorCodeChange: (value: string) => void;
+  onVerifyTwoFactor: (event: FormEvent<HTMLFormElement>) => void;
+  onResendTwoFactor: () => void;
+  onCancelTwoFactor: () => void;
   onReconnect: () => void;
   onLogout: () => void;
   onRefresh: () => void;

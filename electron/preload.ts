@@ -43,6 +43,7 @@ import type {
   TrainingHubRacePredictor,
   TrainingHubSportType,
   TrainingHubStatus,
+  TrainingHubLoginResult,
   TrainingHubUpcomingWorkout,
   TrainingHubScheduledWorkoutEntry,
   TrainingHubLibraryWorkout,
@@ -441,11 +442,17 @@ const api = {
     email: string,
     password: string,
     remember: boolean
-  ): Promise<TrainingHubStatus> =>
+  ): Promise<TrainingHubLoginResult> =>
     ipcRenderer.invoke("trainingHub:login", email, password, remember),
+  verifyTrainingHubTwoFactor: (code: string): Promise<TrainingHubStatus> =>
+    ipcRenderer.invoke("trainingHub:verify2fa", code),
+  resendTrainingHubTwoFactorCode: (): Promise<void> =>
+    ipcRenderer.invoke("trainingHub:resend2fa"),
+  cancelTrainingHubTwoFactor: (): Promise<void> =>
+    ipcRenderer.invoke("trainingHub:cancel2fa"),
   logoutTrainingHub: (): Promise<TrainingHubStatus> =>
     ipcRenderer.invoke("trainingHub:logout"),
-  reconnectTrainingHub: (): Promise<TrainingHubStatus> =>
+  reconnectTrainingHub: (): Promise<TrainingHubLoginResult> =>
     ipcRenderer.invoke("trainingHub:reconnect"),
   listTrainingHubActivities: (
     page: number,

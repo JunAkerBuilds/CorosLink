@@ -42,6 +42,7 @@ import type {
   TrainingHubRacePredictor,
   TrainingHubSportType,
   TrainingHubStatus,
+  TrainingHubLoginResult,
   TrainingHubUpcomingWorkout,
   TrainingHubScheduledWorkoutEntry,
   TrainingHubLibraryWorkout,
@@ -306,9 +307,12 @@ export interface CorosLinkApi {
     email: string,
     password: string,
     remember: boolean
-  ) => Promise<TrainingHubStatus>;
+  ) => Promise<TrainingHubLoginResult>;
+  verifyTrainingHubTwoFactor: (code: string) => Promise<TrainingHubStatus>;
+  resendTrainingHubTwoFactorCode: () => Promise<void>;
+  cancelTrainingHubTwoFactor: () => Promise<void>;
   logoutTrainingHub: () => Promise<TrainingHubStatus>;
-  reconnectTrainingHub: () => Promise<TrainingHubStatus>;
+  reconnectTrainingHub: () => Promise<TrainingHubLoginResult>;
   listTrainingHubActivities: (
     page: number,
     size: number,

@@ -54,6 +54,9 @@ import {
   rescheduleScheduledWorkout,
   removeScheduledWorkout,
   loginTrainingHub,
+  verifyTrainingHubTwoFactor,
+  resendTrainingHubTwoFactorCode,
+  cancelTrainingHubTwoFactor,
   logoutTrainingHub,
   reconnectTrainingHub,
   uploadActivityFitToCoros,
@@ -1383,6 +1386,18 @@ function registerIpcHandlers(): void {
     "trainingHub:login",
     (_event, email: string, password: string, remember?: boolean) =>
       loginTrainingHub(email, password, remember)
+  );
+
+  ipcMain.handle("trainingHub:verify2fa", (_event, code: string) =>
+    verifyTrainingHubTwoFactor(code)
+  );
+
+  ipcMain.handle("trainingHub:resend2fa", () =>
+    resendTrainingHubTwoFactorCode()
+  );
+
+  ipcMain.handle("trainingHub:cancel2fa", () =>
+    cancelTrainingHubTwoFactor()
   );
 
   ipcMain.handle("trainingHub:logout", () => logoutTrainingHub());

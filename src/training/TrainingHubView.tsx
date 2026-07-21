@@ -7,7 +7,9 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
+  ArrowLeft,
   Globe2,
+  KeyRound,
   LockKeyhole,
   Loader2,
   LogOut,
@@ -40,6 +42,8 @@ export function TrainingHubView({
   email,
   password,
   remember,
+  twoFactorEmail,
+  twoFactorCode,
   activities,
   upcomingWorkouts,
   snapshot,
@@ -53,6 +57,10 @@ export function TrainingHubView({
   onPasswordChange,
   onRememberChange,
   onLogin,
+  onTwoFactorCodeChange,
+  onVerifyTwoFactor,
+  onResendTwoFactor,
+  onCancelTwoFactor,
   onReconnect,
   onLogout,
   onRefresh,
@@ -63,6 +71,9 @@ export function TrainingHubView({
   const canReconnect =
     !connected && Boolean(status?.rememberCredentials) && Boolean(status?.email);
   const reconnecting = busy === "training-reconnect";
+  const awaitingTwoFactor = Boolean(twoFactorEmail);
+  const verifying = busy === "training-verify";
+  const resending = busy === "training-resend";
   const [showConnectionDetails, setShowConnectionDetails] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const signInBackgroundStyle = connected
@@ -228,6 +239,87 @@ export function TrainingHubView({
               </div>
             </div>
 
+            {awaitingTwoFactor ? (
+              <form
+                className="training-login-panel"
+                onSubmit={onVerifyTwoFactor}
+              >
+                <div className="training-login-panel-header">
+                  <strong>Verify it's you</strong>
+                  <p>
+                    Enter the 6-digit code we emailed to{" "}
+                    <strong>{twoFactorEmail}</strong>.
+                  </p>
+                </div>
+
+                <div className="training-login-fields">
+                  <label className="field training-login-field">
+                    <span>Verification code</span>
+                    <div className="training-login-input">
+                      <KeyRound size={18} aria-hidden="true" />
+                      <input
+                        value={twoFactorCode}
+                        onChange={(event) =>
+                          onTwoFactorCodeChange(
+                            event.target.value.replace(/\D/g, "").slice(0, 6),
+                          )
+                        }
+                        placeholder="123456"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        autoFocus
+                        disabled={verifying}
+                      />
+                    </div>
+                  </label>
+                </div>
+
+                <div className="settings-actions training-login-actions">
+                  <button
+                    className="primary-button"
+                    type="submit"
+                    disabled={twoFactorCode.trim().length < 6 || verifying}
+                  >
+                    {verifying ? (
+                      <Loader2 className="spin" size={17} aria-hidden="true" />
+                    ) : (
+                      <ArrowRightFromLine size={17} aria-hidden="true" />
+                    )}
+                    Verify and sign in
+                  </button>
+                </div>
+
+                <div className="training-login-2fa-actions">
+                  <button
+                    className="training-login-text-button"
+                    type="button"
+                    onClick={onResendTwoFactor}
+                    disabled={resending || verifying}
+                  >
+                    {resending ? (
+                      <Loader2 className="spin" size={15} aria-hidden="true" />
+                    ) : (
+                      <RefreshCw size={15} aria-hidden="true" />
+                    )}
+                    Resend code
+                  </button>
+                  <button
+                    className="training-login-text-button"
+                    type="button"
+                    onClick={onCancelTwoFactor}
+                    disabled={verifying}
+                  >
+                    <ArrowLeft size={15} aria-hidden="true" />
+                    Use a different account
+                  </button>
+                </div>
+
+                <p className="training-login-footer">
+                  <ShieldCheck size={16} aria-hidden="true" />
+                  Your credentials are encrypted and never shared.
+                </p>
+              </form>
+            ) : (
             <form className="training-login-panel" onSubmit={onLogin}>
               <div className="training-login-panel-header">
                 <strong>Welcome back</strong>
@@ -353,6 +445,7 @@ export function TrainingHubView({
                 Your credentials are encrypted and never shared.
               </p>
             </form>
+            )}
           </>
         )}
       </section>

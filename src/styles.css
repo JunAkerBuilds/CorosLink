@@ -7458,6 +7458,38 @@ td span {
   text-align: center;
 }
 
+.training-login-2fa-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.training-login-text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  background: none;
+  border: none;
+  color: rgba(245, 245, 247, 0.72);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.training-login-text-button:hover:not(:disabled),
+.training-login-text-button:focus-visible {
+  color: rgba(245, 245, 247, 0.95);
+}
+
+.training-login-text-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

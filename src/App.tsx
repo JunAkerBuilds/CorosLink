@@ -301,6 +301,11 @@ export default function App() {
   const [trainingHubEmail, setTrainingHubEmail] = useState("");
   const [trainingHubPassword, setTrainingHubPassword] = useState("");
   const [trainingHubRemember, setTrainingHubRemember] = useState(true);
+  // When the COROS account has 2FA enabled, holds the email awaiting a code.
+  const [trainingHub2faEmail, setTrainingHub2faEmail] = useState<string | null>(
+    null,
+  );
+  const [trainingHub2faCode, setTrainingHub2faCode] = useState("");
   const [trainingHubActivities, setTrainingHubActivities] = useState<
     TrainingHubActivity[]
   >([]);
@@ -1268,6 +1273,18 @@ export default function App() {
     openMediaTab("youtube");
   }
 
+  async function finishTrainingHubConnect(
+    status: TrainingHubStatus,
+    successMessage: string,
+  ) {
+    setTrainingHubStatus(status);
+    setTrainingHub2faEmail(null);
+    setTrainingHub2faCode("");
+    setMessage(successMessage);
+    void loadTrainingHubWellnessData();
+    await loadTrainingHubData();
+  }
+
   async function handleTrainingHubLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!api) {
@@ -1279,22 +1296,75 @@ export default function App() {
     setMessage(null);
 
     try {
-      const status = await api.loginTrainingHub(
+      const result = await api.loginTrainingHub(
         trainingHubEmail,
         trainingHubPassword,
         trainingHubRemember,
       );
-      setTrainingHubStatus(status);
-      setTrainingHubPassword("");
-      setMessage("COROS Training Hub connected.");
-      void loadTrainingHubWellnessData();
-      await loadTrainingHubData();
+      if (result.twoFactorRequired) {
+        setTrainingHub2faEmail(result.email ?? trainingHubEmail);
+        setTrainingHub2faCode("");
+        setMessage("Enter the verification code we emailed you.");
+      } else {
+        await finishTrainingHubConnect(
+          result.status,
+          "COROS Training Hub connected.",
+        );
+      }
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
       setTrainingHubPassword("");
       setBusy(null);
     }
+  }
+
+  async function handleTrainingHubVerify2fa(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!api) {
+      return;
+    }
+
+    setBusy("training-verify");
+    setError(null);
+    setMessage(null);
+
+    try {
+      const status = await api.verifyTrainingHubTwoFactor(trainingHub2faCode);
+      await finishTrainingHubConnect(status, "COROS Training Hub connected.");
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleTrainingHubResend2fa() {
+    if (!api) {
+      return;
+    }
+
+    setBusy("training-resend");
+    setError(null);
+
+    try {
+      await api.resendTrainingHubTwoFactorCode();
+      setMessage("We sent a new verification code to your email.");
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function handleTrainingHubCancel2fa() {
+    void api?.cancelTrainingHubTwoFactor().catch((caught) => {
+      setError(toErrorMessage(caught));
+    });
+    setTrainingHub2faEmail(null);
+    setTrainingHub2faCode("");
+    setError(null);
+    setMessage(null);
   }
 
   async function handleTrainingHubReconnect() {
@@ -1307,11 +1377,17 @@ export default function App() {
     setMessage(null);
 
     try {
-      const status = await api.reconnectTrainingHub();
-      setTrainingHubStatus(status);
-      setMessage("COROS Training Hub connected with your saved account.");
-      void loadTrainingHubWellnessData();
-      await loadTrainingHubData();
+      const result = await api.reconnectTrainingHub();
+      if (result.twoFactorRequired) {
+        setTrainingHub2faEmail(result.email ?? trainingHubStatus?.email ?? null);
+        setTrainingHub2faCode("");
+        setMessage("Enter the verification code we emailed you.");
+      } else {
+        await finishTrainingHubConnect(
+          result.status,
+          "COROS Training Hub connected with your saved account.",
+        );
+      }
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -2071,6 +2147,12 @@ export default function App() {
                   email={trainingHubEmail}
                   password={trainingHubPassword}
                   remember={trainingHubRemember}
+                  twoFactorEmail={trainingHub2faEmail}
+                  twoFactorCode={trainingHub2faCode}
+                  onTwoFactorCodeChange={setTrainingHub2faCode}
+                  onVerifyTwoFactor={handleTrainingHubVerify2fa}
+                  onResendTwoFactor={handleTrainingHubResend2fa}
+                  onCancelTwoFactor={handleTrainingHubCancel2fa}
                   activities={trainingHubActivities}
                   upcomingWorkouts={trainingHubUpcomingWorkouts}
                   snapshot={trainingHubSnapshot}
