@@ -10,7 +10,6 @@ import {
   deleteWorkout,
   formatScheduledExercisesForChat,
   getTrainingHubStatus,
-  getUpcomingWorkouts,
   listScheduledWorkoutEntries,
   uploadTrainingPlan
 } from "./trainingHubService";
@@ -152,6 +151,7 @@ export function getChatWorkoutTools(): CorosMcpTool[] {
           name: { type: "string", description: "Plan name, e.g. '4-Week 10K Build'" },
           workouts: {
             type: "array",
+            minItems: 1,
             description: "Workouts in the plan",
             items: {
               type: "object",
@@ -160,14 +160,17 @@ export function getChatWorkoutTools(): CorosMcpTool[] {
                 name: { type: "string", description: "Workout display name" },
                 distance_km: {
                   type: "number",
+                  exclusiveMinimum: 0,
                   description: "Simple easy run distance in km (omit if using steps)"
                 },
                 schedule_date: {
                   type: "string",
+                  pattern: "^\\d{8}$",
                   description: "YYYYMMDD calendar date to schedule this workout"
                 },
                 sort_no: {
-                  type: "number",
+                  type: "integer",
+                  minimum: 1,
                   description: "Order on the day (default 1)"
                 },
                 save_to_library: {
@@ -176,13 +179,95 @@ export function getChatWorkoutTools(): CorosMcpTool[] {
                 },
                 steps: {
                   type: "array",
+                  minItems: 1,
                   description:
                     "Structured run steps. Plain step: kind (warmup|training|rest|cooldown), " +
                     "target_type (distance|time|load|open) with its value — " +
                     "distance→target_distance_meters, time→target_duration_seconds, " +
                     "load→target_load (raw training-load integer 0–999), open→no value " +
                     "(run until lap press). Optional pace string (single '5:30/km' or range " +
-                    "'4:05-4:15/km', /km or /mi). Repeat group: { repeat, steps: [...] }."
+                    "'4:05-4:15/km', /km or /mi). Repeat group: { repeat, steps: [...] }.",
+                  items: {
+                    oneOf: [
+                      {
+                        type: "object",
+                        properties: {
+                          kind: {
+                            type: "string",
+                            enum: ["warmup", "training", "interval", "rest", "cooldown"]
+                          },
+                          name: { type: "string" },
+                          target_type: {
+                            type: "string",
+                            enum: ["distance", "time", "load", "open"]
+                          },
+                          target_distance_meters: {
+                            type: "number",
+                            exclusiveMinimum: 0
+                          },
+                          target_duration_seconds: {
+                            type: "number",
+                            exclusiveMinimum: 0
+                          },
+                          target_load: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: 999
+                          },
+                          pace: {
+                            type: "string",
+                            description: "Pace such as 5:30/km or 4:05-4:15/km"
+                          }
+                        },
+                        required: ["kind", "target_type"]
+                      },
+                      {
+                        type: "object",
+                        properties: {
+                          repeat: {
+                            type: "integer",
+                            minimum: 1,
+                            maximum: 99
+                          },
+                          name: { type: "string" },
+                          steps: {
+                            type: "array",
+                            minItems: 1,
+                            items: {
+                              type: "object",
+                              properties: {
+                                kind: {
+                                  type: "string",
+                                  enum: ["warmup", "training", "interval", "rest", "cooldown"]
+                                },
+                                name: { type: "string" },
+                                target_type: {
+                                  type: "string",
+                                  enum: ["distance", "time", "load", "open"]
+                                },
+                                target_distance_meters: {
+                                  type: "number",
+                                  exclusiveMinimum: 0
+                                },
+                                target_duration_seconds: {
+                                  type: "number",
+                                  exclusiveMinimum: 0
+                                },
+                                target_load: {
+                                  type: "integer",
+                                  minimum: 0,
+                                  maximum: 999
+                                },
+                                pace: { type: "string" }
+                              },
+                              required: ["kind", "target_type"]
+                            }
+                          }
+                        },
+                        required: ["repeat", "steps"]
+                      }
+                    ]
+                  }
                 }
               },
               required: ["key", "name"]
@@ -335,7 +420,11 @@ async function detectScheduleConflicts(
     return [];
   }
 
-  const upcoming = await getUpcomingWorkouts(28);
+  scheduledDates.sort();
+  const upcoming = await listScheduledWorkoutEntries(
+    scheduledDates[0]!,
+    scheduledDates[scheduledDates.length - 1]!
+  );
   const conflicts: string[] = [];
 
   for (const entry of draft.workouts) {

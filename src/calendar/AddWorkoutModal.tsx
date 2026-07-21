@@ -5,6 +5,7 @@ import {
   Dumbbell,
   Footprints,
   Mountain,
+  Pencil,
   PersonStanding,
   Search,
   Waves,
@@ -15,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import type {
   ManualActivityInput,
   PlanWorkoutEntryInput,
+  RunWorkoutStepInput,
   TrainingHubLibraryWorkout,
   TrainingHubSportType
 } from "../../electron/types";
@@ -187,6 +189,7 @@ interface AddWorkoutModalProps {
   onClose: () => void;
   onScheduled: (message: string) => void;
   onError: (message: string | null) => void;
+  onEditLibrary: (programId: string) => void;
 }
 
 let builderRowId = 0;
@@ -205,7 +208,7 @@ function emptyRow(kind: BuilderKind): BuilderRow {
   };
 }
 
-function rowToSteps(row: BuilderRow): unknown[] {
+function rowToSteps(row: BuilderRow): RunWorkoutStepInput[] {
   const target =
     row.targetType === "distance"
       ? { target_distance_meters: Math.round(Number(row.distanceKm) * 1000) }
@@ -250,7 +253,8 @@ export function AddWorkoutModal({
   sportTypes,
   onClose,
   onScheduled,
-  onError
+  onError,
+  onEditLibrary
 }: AddWorkoutModalProps) {
   const todayKey = getLocalHappenDayKey();
   // Logging makes no sense for a day that hasn't happened yet, and COROS
@@ -590,19 +594,27 @@ export function AddWorkoutModal({
                   <p className="calendar-detail-empty">No workouts in your library.</p>
                 ) : (
                   filteredLibrary.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`calendar-library-item ${selectedProgramId === item.id ? "is-selected" : ""}`}
-                      onClick={() => setSelectedProgramId(item.id)}
-                    >
-                      <span className="calendar-chip-name">{item.name}</span>
-                      <span className="calendar-chip-meta">
-                        {[item.volume, item.trainingLoad !== undefined ? `${Math.round(item.trainingLoad)} TL` : null]
-                          .filter(Boolean)
-                          .join(" · ") || "—"}
-                      </span>
-                    </button>
+                    <div key={item.id} className={`calendar-library-item-row ${selectedProgramId === item.id ? "is-selected" : ""}`}>
+                      <button
+                        type="button"
+                        className="calendar-library-item"
+                        onClick={() => setSelectedProgramId(item.id)}
+                      >
+                        <span className="calendar-chip-name">{item.name}</span>
+                        <span className="calendar-chip-meta">
+                          {[item.volume, item.trainingLoad !== undefined ? `${Math.round(item.trainingLoad)} TL` : null]
+                            .filter(Boolean)
+                            .join(" · ") || "No calculated totals"}
+                        </span>
+                      </button>
+                      {item.sportType === 1 ? (
+                        <button type="button" className="ghost-button calendar-library-edit" onClick={() => onEditLibrary(item.id)}>
+                          <Pencil size={13} aria-hidden="true" /> Edit
+                        </button>
+                      ) : (
+                        <span className="calendar-library-readonly">View only</span>
+                      )}
+                    </div>
                   ))
                 )}
               </div>

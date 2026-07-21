@@ -12,7 +12,12 @@ export type RunStepKind =
 
 // Mirrors COROS's targetType enum (from the traininghub web-app bundle):
 // 1=manualEnd ("Open"), 2=time, 5=distance, 6=load ("Training Load").
-export type RunTargetType = "time" | "distance" | "load" | "open";
+export type RunTargetType =
+  | "time"
+  | "distance"
+  | "load"
+  | "hrRecovery"
+  | "open";
 
 export interface RunWorkoutStep {
   kind: RunStepKind;
@@ -22,12 +27,16 @@ export interface RunWorkoutStep {
   target_duration_seconds?: number;
   /** Training-load target (COROS targetType 6): a raw integer 0–999. */
   target_load?: number;
+  /** Rest-only target: finish when heart rate falls to this absolute bpm. */
+  target_hr_recovery_bpm?: number;
   /** e.g. "5:30/km", "4:05-4:15/km", "8:00/mi" */
   pace?: string;
   intensity_type?: number;
   intensity_value?: number;
   intensity_value_extend?: number;
   intensity_display_unit?: number;
+  /** COROS stores pace values as seconds/km multiplied by this value (1000). */
+  intensity_multiplier?: number;
   hr_type?: number;
   is_intensity_percent?: boolean;
   intensity_percent?: number;
@@ -102,8 +111,27 @@ export interface PlanValidationResult {
   draft?: CorosTrainingPlanDraft;
 }
 
+/** Data returned by COROS /training/program/calculate before a program is saved. */
+export interface CorosWorkoutCalculation {
+  planDistance?: string | number;
+  planDuration?: number;
+  planTrainingLoad?: number;
+  planSets?: number;
+  planPitch?: number;
+  distanceDisplayUnit?: number;
+  exerciseBarChart?: Record<string, unknown>[];
+}
+
 const DISTANCE_TARGET_TYPES = new Set([5]);
 const TIME_TARGET_TYPES = new Set([2]);
+
+// COROS targetDisplayUnit: 1=km, 2=m, 3=mi, 4=yd, 5=ft.
+const COROS_DISTANCE_UNIT_KILOMETERS = 1;
+const COROS_DISTANCE_UNIT_METERS = 2;
+// COROS intensityDisplayUnit: 1=min/km, 2=min/mi.
+const COROS_PACE_UNIT_PER_KILOMETER = 1;
+const COROS_PACE_UNIT_PER_MILE = 2;
+const COROS_PACE_MULTIPLIER = 1000;
 
 const RUN_STEP_KIND_TO_EXERCISE_TYPE: Record<RunStepKind, number> = {
   warmup: 1,
@@ -133,6 +161,9 @@ const RUN_TARGET_ALIASES: Record<string, RunTargetType> = {
   "training load": "load",
   training_load: "load",
   trainingload: "load",
+  hrrecovery: "hrRecovery",
+  "hr recovery": "hrRecovery",
+  hr_recovery: "hrRecovery",
   open: "open",
   "manual end": "open",
   manual_end: "open",
@@ -152,49 +183,64 @@ export function parsePace(pace: string): {
   intensity_value: number;
   intensity_value_extend: number;
   intensity_display_unit: number;
+  intensity_multiplier: number;
 } {
-  const trimmed = pace.trim();
-  const isMiles = /\/mi\b/i.test(trimmed);
-  const rangeMatch = trimmed.match(
-    /(\d+):(\d{2})(?::(\d{2}))?\s*-\s*(\d+):(\d{2})(?::(\d{2}))?\s*\/\s*(km|mi)/i
+  const compact = pace.trim().replace(/\s+/g, "");
+  const rangeMatch = compact.match(
+    /^(\d+):([0-5]\d)(?:\/(km|mi))?-(\d+):([0-5]\d)\/(km|mi)$/i
   );
-  const singleMatch = trimmed.match(
-    /(\d+):(\d{2})(?::(\d{2}))?\s*\/\s*(km|mi)/i
-  );
+  const singleMatch = compact.match(/^(\d+):([0-5]\d)\/(km|mi)$/i);
 
-  const toSecondsPerKm = (min: number, sec: number, hr?: number): number => {
-    let total = min * 60 + sec + (hr ?? 0);
-    if (isMiles || (singleMatch && singleMatch[4]?.toLowerCase() === "mi")) {
-      total = Math.round(total / 1.609344);
-    }
-    return total;
+  const toSecondsPerKm = (
+    min: number,
+    sec: number,
+    unit: string
+  ): number => {
+    const total = min * 60 + sec;
+    return unit.toLowerCase() === "mi" ? total / 1.609344 : total;
   };
 
   if (rangeMatch) {
-    const lowMin = Number(rangeMatch[1]);
-    const lowSec = Number(rangeMatch[2]);
-    const lowHr = rangeMatch[3] ? Number(rangeMatch[3]) : undefined;
-    const highMin = Number(rangeMatch[4]);
-    const highSec = Number(rangeMatch[5]);
-    const highHr = rangeMatch[6] ? Number(rangeMatch[6]) : undefined;
+    const firstUnit = rangeMatch[3]?.toLowerCase();
+    const unit = rangeMatch[6]!.toLowerCase();
+    if (firstUnit && firstUnit !== unit) {
+      throw new Error(`Pace range must use one unit: ${pace}`);
+    }
+    const first = Math.round(
+      toSecondsPerKm(Number(rangeMatch[1]), Number(rangeMatch[2]), unit) *
+        COROS_PACE_MULTIPLIER
+    );
+    const second = Math.round(
+      toSecondsPerKm(Number(rangeMatch[4]), Number(rangeMatch[5]), unit) *
+        COROS_PACE_MULTIPLIER
+    );
     return {
       intensity_type: 3,
-      intensity_value: toSecondsPerKm(highMin, highSec, highHr),
-      intensity_value_extend: toSecondsPerKm(lowMin, lowSec, lowHr),
-      intensity_display_unit: 2
+      intensity_value: Math.min(first, second),
+      intensity_value_extend: Math.max(first, second),
+      intensity_display_unit:
+        unit === "mi"
+          ? COROS_PACE_UNIT_PER_MILE
+          : COROS_PACE_UNIT_PER_KILOMETER,
+      intensity_multiplier: COROS_PACE_MULTIPLIER
     };
   }
 
   if (singleMatch) {
-    const min = Number(singleMatch[1]);
-    const sec = Number(singleMatch[2]);
-    const hr = singleMatch[3] ? Number(singleMatch[3]) : undefined;
-    const value = toSecondsPerKm(min, sec, hr);
+    const unit = singleMatch[3]!.toLowerCase();
+    const value = Math.round(
+      toSecondsPerKm(Number(singleMatch[1]), Number(singleMatch[2]), unit) *
+        COROS_PACE_MULTIPLIER
+    );
     return {
       intensity_type: 3,
       intensity_value: value,
       intensity_value_extend: value,
-      intensity_display_unit: 2
+      intensity_display_unit:
+        unit === "mi"
+          ? COROS_PACE_UNIT_PER_MILE
+          : COROS_PACE_UNIT_PER_KILOMETER,
+      intensity_multiplier: COROS_PACE_MULTIPLIER
     };
   }
 
@@ -225,6 +271,7 @@ function normalizeRunStep(step: RunWorkoutStep): RunWorkoutStep {
     normalized.intensity_value ??= paceFields.intensity_value;
     normalized.intensity_value_extend ??= paceFields.intensity_value_extend;
     normalized.intensity_display_unit ??= paceFields.intensity_display_unit;
+    normalized.intensity_multiplier ??= paceFields.intensity_multiplier;
   }
 
   return normalized;
@@ -248,13 +295,18 @@ function resolveRunTarget(step: RunWorkoutStep): {
 
   if (targetType === "distance") {
     const meters = step.target_distance_meters ?? step.target_value;
-    if (meters === undefined) {
+    if (
+      meters === undefined ||
+      !Number.isFinite(Number(meters)) ||
+      Number(meters) <= 0
+    ) {
       throw new Error("Distance steps require target_distance_meters.");
     }
     return {
       targetType: 5,
       targetValue: metersToCorosDistance(Number(meters)),
-      targetDisplayUnit: step.target_display_unit ?? 3
+      targetDisplayUnit:
+        step.target_display_unit ?? COROS_DISTANCE_UNIT_METERS
     };
   }
 
@@ -272,8 +324,13 @@ function resolveRunTarget(step: RunWorkoutStep): {
   // scaling — verified in the web-app bundle: targetValue = input, 0–999).
   if (targetType === "load") {
     const load = step.target_load ?? step.target_value;
-    if (load === undefined) {
-      throw new Error("Load steps require target_load.");
+    if (
+      load === undefined ||
+      !Number.isFinite(Number(load)) ||
+      Number(load) < 0 ||
+      Number(load) > 999
+    ) {
+      throw new Error("Load steps require target_load between 0 and 999.");
     }
     return {
       targetType: 6,
@@ -282,8 +339,32 @@ function resolveRunTarget(step: RunWorkoutStep): {
     };
   }
 
+  if (targetType === "hrRecovery") {
+    if (step.kind !== "rest") {
+      throw new Error("HR Recovery is only supported on Rest steps.");
+    }
+    const bpm = step.target_hr_recovery_bpm ?? step.target_value;
+    if (
+      bpm === undefined ||
+      !Number.isFinite(Number(bpm)) ||
+      Number(bpm) < 30 ||
+      Number(bpm) > 250
+    ) {
+      throw new Error("HR Recovery steps require a target bpm from 30 to 250.");
+    }
+    return {
+      targetType: 7,
+      targetValue: Math.round(Number(bpm)),
+      targetDisplayUnit: step.target_display_unit ?? 0
+    };
+  }
+
   const seconds = step.target_duration_seconds ?? step.target_value;
-  if (seconds === undefined) {
+  if (
+    seconds === undefined ||
+    !Number.isFinite(Number(seconds)) ||
+    Number(seconds) <= 0
+  ) {
     throw new Error("Time steps require target_duration_seconds.");
   }
   return {
@@ -333,6 +414,7 @@ function buildRunExercise(
     intensityType: normalized.intensity_type ?? 0,
     intensityValue: normalized.intensity_value ?? 0,
     intensityValueExtend: normalized.intensity_value_extend ?? 0,
+    intensityMultiplier: normalized.intensity_multiplier ?? 0,
     targetType,
     targetValue,
     targetDisplayUnit,
@@ -489,6 +571,12 @@ export function buildRunWorkoutPayload(
       const groupId = exId;
       const repeatCount = step.repeat;
       const subSteps = step.steps ?? [];
+      if (!Number.isInteger(repeatCount) || repeatCount < 1 || repeatCount > 99) {
+        throw new Error("Repeat groups require repeat between 1 and 99.");
+      }
+      if (subSteps.length === 0) {
+        throw new Error("Repeat groups require at least one step.");
+      }
       let groupDistance = 0;
       let groupTime = 0;
       const builtSubSteps: Record<string, unknown>[] = [];
@@ -518,7 +606,8 @@ export function buildRunWorkoutPayload(
         intensityValue: 0,
         targetType: groupTargetType,
         targetValue: groupTargetValue,
-        targetDisplayUnit: groupTargetType === 5 ? 3 : 0,
+        targetDisplayUnit:
+          groupTargetType === 5 ? COROS_DISTANCE_UNIT_METERS : 0,
         sets: repeatCount,
         sortNo: groupSort,
         restType: step.rest_type ?? 3,
@@ -546,7 +635,7 @@ export function buildRunWorkoutPayload(
     sportType: 1,
     estimatedTime: totalTime,
     estimatedDistance: totalDistance,
-    distanceDisplayUnit: 3,
+    distanceDisplayUnit: COROS_DISTANCE_UNIT_KILOMETERS,
     estimatedType: totalDistance > 0 ? 6 : 0,
     targetType: totalDistance > 0 ? 5 : 2,
     targetValue: totalDistance > 0 ? totalDistance : totalTime,
@@ -605,6 +694,21 @@ function formatScheduleDate(day: string): string {
   return `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6, 8)}`;
 }
 
+function isValidScheduleDay(day: string): boolean {
+  if (!/^\d{8}$/.test(day)) {
+    return false;
+  }
+  const year = Number(day.slice(0, 4));
+  const month = Number(day.slice(4, 6));
+  const date = Number(day.slice(6, 8));
+  const parsed = new Date(year, month - 1, date);
+  return (
+    parsed.getFullYear() === year &&
+    parsed.getMonth() === month - 1 &&
+    parsed.getDate() === date
+  );
+}
+
 function formatEntryVolume(entry: PlanWorkoutEntry): string | undefined {
   if (entry.distance_km !== undefined && entry.distance_km > 0) {
     return `${entry.distance_km.toFixed(2)} km`;
@@ -628,11 +732,11 @@ function formatEntryVolume(entry: PlanWorkoutEntry): string | undefined {
     }
   }
 
-  if (repeatSets > 0) {
-    return `${repeatSets} set(s)`;
-  }
   if (totalMeters > 0) {
     return `${(totalMeters / 1000).toFixed(2)} km`;
+  }
+  if (repeatSets > 0) {
+    return `${repeatSets} set(s)`;
   }
   return undefined;
 }
@@ -670,12 +774,23 @@ export function formatEntryStepsSummary(entry: PlanWorkoutEntry): string | undef
 
 function formatRunStepSummary(step: RunWorkoutStep): string | undefined {
   const kind = step.kind ?? "training";
+  const targetType =
+    step.target_type ??
+    (step.target_distance_meters !== undefined
+      ? "distance"
+      : step.target_load !== undefined
+        ? "load"
+        : "time");
   const target =
-    step.target_distance_meters !== undefined
-      ? `${(step.target_distance_meters / 1000).toFixed(1)} km`
-      : step.target_duration_seconds !== undefined
-        ? `${Math.round(step.target_duration_seconds / 60)} min`
-        : undefined;
+    targetType === "open"
+      ? "open"
+      : targetType === "load" && step.target_load !== undefined
+        ? `load ${step.target_load}`
+        : step.target_distance_meters !== undefined
+          ? `${(step.target_distance_meters / 1000).toFixed(1)} km`
+          : step.target_duration_seconds !== undefined
+            ? `${Math.round(step.target_duration_seconds / 60)} min`
+            : undefined;
   const pace = step.pace ? `@ ${step.pace}` : undefined;
   return [kind, target, pace].filter(Boolean).join(" ");
 }
@@ -717,11 +832,27 @@ export function validatePlanDraft(
         `Workout "${entry.name || entry.key}" needs steps or distance_km.`
       );
     }
+    if (hasSteps && hasDistance) {
+      errors.push(
+        `Workout "${entry.name || entry.key}" must use steps or distance_km, not both.`
+      );
+    }
+    if (!entry.schedule_date && entry.save_to_library === false) {
+      errors.push(
+        `Workout "${entry.name || entry.key}" must be scheduled or saved to the library.`
+      );
+    }
+    if (
+      entry.sort_no !== undefined &&
+      (!Number.isInteger(entry.sort_no) || entry.sort_no < 1)
+    ) {
+      errors.push(`Workout "${entry.name}" sort_no must be a positive integer.`);
+    }
 
     if (entry.schedule_date) {
-      if (!/^\d{8}$/.test(entry.schedule_date)) {
+      if (!isValidScheduleDay(entry.schedule_date)) {
         errors.push(
-          `Workout "${entry.name}" schedule_date must be YYYYMMDD.`
+          `Workout "${entry.name}" schedule_date must be a valid YYYYMMDD date.`
         );
       } else if (entry.schedule_date < todayDay) {
         errors.push(
@@ -805,6 +936,42 @@ export function buildPlanPreview(
     conflicts: options?.scheduleConflicts ?? [],
     warnings
   };
+}
+
+/**
+ * Apply the server-computed fields that the official Training Hub writes back
+ * into a program before calling /training/program/add or /schedule/update.
+ */
+export function applyWorkoutCalculation(
+  workout: Record<string, unknown>,
+  calculation: CorosWorkoutCalculation
+): Record<string, unknown> {
+  const payload = structuredClone(workout);
+
+  if (calculation.planDistance !== undefined) {
+    payload.distance = calculation.planDistance;
+  }
+  if (calculation.planDuration !== undefined) {
+    payload.duration = calculation.planDuration;
+  }
+  if (calculation.planTrainingLoad !== undefined) {
+    payload.trainingLoad = calculation.planTrainingLoad;
+  }
+  if (calculation.planSets !== undefined) {
+    payload.sets = calculation.planSets;
+    payload.totalSets = calculation.planSets;
+  }
+  if (calculation.planPitch !== undefined) {
+    payload.pitch = calculation.planPitch;
+  }
+  if (calculation.distanceDisplayUnit !== undefined) {
+    payload.distanceDisplayUnit = calculation.distanceDisplayUnit;
+  }
+  if (Array.isArray(calculation.exerciseBarChart)) {
+    payload.exerciseBarChart = structuredClone(calculation.exerciseBarChart);
+  }
+
+  return payload;
 }
 
 export function resetProgramForCreate(

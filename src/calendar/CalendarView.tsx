@@ -1,10 +1,11 @@
-import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import type {
   TrainingHubActivity,
   TrainingHubScheduledWorkoutEntry,
   TrainingHubSportType,
-  TrainingHubStatus
+  TrainingHubStatus,
+  WorkoutEditRef
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import {
@@ -33,6 +34,8 @@ import {
   weekRow
 } from "./dateUtils";
 import { useCalendarData } from "./useCalendarData";
+import { WorkoutEditorModal } from "./WorkoutEditorModal";
+import { WorkoutLibraryModal } from "./WorkoutLibraryModal";
 
 interface CalendarViewProps {
   api: CorosLinkApi;
@@ -85,6 +88,8 @@ export function CalendarView({
   const [selection, setSelection] = useState<CalendarSelection | null>(null);
   const [addTarget, setAddTarget] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [editRef, setEditRef] = useState<WorkoutEditRef | null>(null);
 
   const anchorYear = anchor.getFullYear();
   const anchorMonth = anchor.getMonth();
@@ -294,6 +299,14 @@ export function CalendarView({
         <div className="calendar-header-actions">
           <button
             type="button"
+            className="calendar-nav-button calendar-library-button"
+            onClick={() => setLibraryOpen(true)}
+          >
+            <BookOpen size={14} aria-hidden="true" />
+            Workout Library
+          </button>
+          <button
+            type="button"
             className="calendar-nav-button calendar-nav-arrow"
             onClick={reload}
             title="Refresh"
@@ -347,6 +360,16 @@ export function CalendarView({
         onClose={() => setSelection(null)}
         onDelete={handleDelete}
         onAskCoach={handleAskCoachSelection}
+        onEdit={(target) => {
+          setSelection(null);
+          setEditRef({
+            kind: "scheduled",
+            happenDay: target.entry.happenDay,
+            planId: target.entry.planId,
+            idInPlan: target.entry.idInPlan,
+            planProgramId: target.entry.planProgramId
+          });
+        }}
         onError={onError}
       />
 
@@ -359,6 +382,42 @@ export function CalendarView({
           onScheduled={(message) => {
             onMessage(message);
             setAddTarget(null);
+            reload();
+          }}
+          onError={onError}
+          onEditLibrary={(programId) => {
+            setAddTarget(null);
+            setEditRef({ kind: "library", programId });
+          }}
+        />
+      ) : null}
+
+      {libraryOpen ? (
+        <WorkoutLibraryModal
+          api={api}
+          onClose={() => setLibraryOpen(false)}
+          onEdit={(ref) => {
+            setLibraryOpen(false);
+            setEditRef(ref);
+          }}
+          onScheduled={(message) => {
+            onMessage(message);
+            setLibraryOpen(false);
+            reload();
+          }}
+          onError={onError}
+        />
+      ) : null}
+
+      {editRef ? (
+        <WorkoutEditorModal
+          api={api}
+          editRef={editRef}
+          onClose={() => setEditRef(null)}
+          onSaved={(result) => {
+            const scope = editRef.kind === "scheduled" ? "scheduled occurrence" : "library workout";
+            onMessage(result.verified ? `Updated ${scope} in COROS.` : result.warning ?? `Updated ${scope}, but verification is still pending.`);
+            setEditRef(null);
             reload();
           }}
           onError={onError}

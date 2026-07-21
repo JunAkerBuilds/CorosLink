@@ -47,6 +47,11 @@ import type {
   TrainingHubScheduledWorkoutEntry,
   TrainingHubLibraryWorkout,
   PlanWorkoutEntryInput,
+  RunWorkoutEditorDraft,
+  WorkoutEditPreview,
+  WorkoutEditRef,
+  WorkoutEditSaveResult,
+  WorkoutEditorDocument,
   TransferResult,
   AppInfo,
   AppUpdateSnapshot,
@@ -324,6 +329,17 @@ export interface CorosLinkApi {
     endDay: string
   ) => Promise<TrainingHubScheduledWorkoutEntry[]>;
   listLibraryWorkouts: () => Promise<TrainingHubLibraryWorkout[]>;
+  getWorkoutForEdit: (ref: WorkoutEditRef) => Promise<WorkoutEditorDocument>;
+  previewWorkoutEdit: (
+    ref: WorkoutEditRef,
+    revision: string,
+    draft: RunWorkoutEditorDraft
+  ) => Promise<WorkoutEditPreview>;
+  saveWorkoutEdit: (
+    ref: WorkoutEditRef,
+    revision: string,
+    draft: RunWorkoutEditorDraft
+  ) => Promise<WorkoutEditSaveResult>;
   scheduleLibraryWorkout: (
     programId: string,
     happenDay: string
