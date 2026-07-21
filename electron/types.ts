@@ -736,6 +736,68 @@ export type CorosWatchfaceBackgroundElement =
   | CorosWatchfaceBackgroundLine
   | CorosWatchfaceBackgroundText;
 
+/** Firmware-drawn calorie goal progress. */
+export interface CorosWatchfaceKcalProgressStyle {
+  /** Resolution whose pixel coordinate system the stored geometry uses. */
+  referenceWidth?: number;
+  referenceHeight?: number;
+  arcEnabled: boolean;
+  rectEnabled: boolean;
+  arcColor: string;
+  rectColor: string;
+  /** Editor-only sample used by the live preview; the watch supplies the real percentage. */
+  previewPercent: number;
+  arc: {
+    centerX: number;
+    centerY: number;
+    radiusX: number;
+    radiusY: number;
+    startAngle: number;
+    endAngle: number;
+    strokeWidth: number;
+    /** COROS flag: draw the uncompleted portion instead of the completed portion. */
+    background: boolean;
+  };
+  rect: {
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+    direction: "left" | "right" | "top" | "bottom";
+  };
+}
+
+/** Firmware-drawn exercise-goal progress arc/bar. */
+export interface CorosWatchfaceExerciseProgressStyle {
+  /** Resolution whose pixel coordinate system the stored geometry uses. */
+  referenceWidth?: number;
+  referenceHeight?: number;
+  /** Keeps the legacy serialized name for the rectangular progress bar. */
+  enabled: boolean;
+  arcEnabled: boolean;
+  color: string;
+  /** Editor-only sample used by the live preview; the watch supplies the real percentage. */
+  previewPercent: number;
+  arc: {
+    centerX: number;
+    centerY: number;
+    radiusX: number;
+    radiusY: number;
+    startAngle: number;
+    endAngle: number;
+    strokeWidth: number;
+    /** COROS flag: draw the uncompleted portion instead of the completed portion. */
+    background: boolean;
+  };
+  rect: {
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+    direction: "left" | "right" | "top" | "bottom";
+  };
+}
+
 export interface CorosWatchfaceDesignState {
   version: 1;
   /**
@@ -775,6 +837,10 @@ export interface CorosWatchfaceDesignState {
   previewComplication: string;
   metricChanges: Record<string, boolean>;
   metricStyles: Record<string, { color?: string; scale: number; rotation?: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
+  /** Optional native calorie goal arc/bar configuration. */
+  kcalProgress?: CorosWatchfaceKcalProgressStyle;
+  /** Optional native exercise-goal bar configuration. */
+  exerciseProgress?: CorosWatchfaceExerciseProgressStyle;
   /** Shared digit style for every value shown in the selectable control slot. */
   selectableMetricStyle?: {
     color?: string;
@@ -792,6 +858,8 @@ export interface CorosWatchfaceDesignState {
    * the imported template already declares that component.
    */
   controlComplicationEnabled?: Record<string, boolean>;
+  /** Selects one mutually exclusive native barometer parser branch. */
+  controlBarometerMode?: "static" | "directional";
   /** False removes the Battery choice from the firmware-selectable control slot. */
   controlBatteryEnabled?: boolean;
   /** False removes the Sunrise choice from the firmware-selectable control slot. */
@@ -926,8 +994,11 @@ export type CorosWatchfaceModeDesignState = Partial<
     | "previewComplication"
     | "metricChanges"
     | "metricStyles"
+    | "kcalProgress"
+    | "exerciseProgress"
     | "selectableMetricStyle"
     | "controlComplicationEnabled"
+    | "controlBarometerMode"
     | "controlIconOffsets"
     | "separateAutoTime"
     | "timeStyles"
@@ -1252,6 +1323,22 @@ export interface TransferResult {
   watch: WatchStatus;
 }
 
+/**
+ * Streamed progress for a single track being copied to the watch. Emitted from
+ * the main process while `watch:transferLocalTrack` runs so the renderer can
+ * show live progress instead of freezing on a synchronous copy.
+ */
+export interface WatchTransferProgress {
+  /** Download id of the track currently transferring. */
+  id: string;
+  /** File name of the track currently transferring. */
+  name: string;
+  copiedBytes: number;
+  totalBytes: number;
+  /** 0..1 progress of the current file. */
+  progress: number;
+}
+
 export type CorosMapType = "landscape" | "topo";
 
 export interface CorosMapPackage {
@@ -1567,6 +1654,17 @@ export interface TrainingHubStatus {
   regionId?: string;
   baseUrl?: string;
   rememberCredentials?: boolean;
+  email?: string;
+}
+
+// Result of a login/reconnect attempt. When the COROS account has two-factor
+// authentication enabled, the first step returns `twoFactorRequired: true`
+// (with the code already emailed) and the caller must complete the flow via
+// `verifyTrainingHubTwoFactor(code)`.
+export interface TrainingHubLoginResult {
+  twoFactorRequired: boolean;
+  status: TrainingHubStatus;
+  // Account (email) awaiting a 2FA code — used by the UI copy while verifying.
   email?: string;
 }
 

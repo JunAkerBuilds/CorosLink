@@ -1779,12 +1779,30 @@ export function applyCorosWatchfaceConfigOverrides(
     "temperature_font",
     "temperature_font_color",
     "temperature_negative_sign_icon",
+    "kcal_progress_arc",
+    "kcal_progress_arc_color",
+    "kcal_progress_rect",
+    "kcal_progress_color",
+    "exercise_progress_arc",
+    "exercise_progress_rect",
+    "exercise_progress_color",
     "control_temperature_icon_pos",
     "control_temperature_icon",
     "control_temperature_rect",
     "control_temperature_font",
     "control_temperature_font_color",
     "control_temperature_negative_sign_icon",
+    "control_barometer_icon_pos",
+    "control_barometer_icon",
+    "control_barometer_down_icon",
+    "control_barometer_flat_icon",
+    "control_barometer_up_icon",
+    "control_barometer_integer_rect",
+    "control_barometer_decimal_rect",
+    "control_barometer_rect",
+    "control_barometer_font",
+    "control_barometer_font_color",
+    "control_point_icon",
     "control_negative_sign_icon",
     "control_hr_font_color",
     "control_step_font_color",
@@ -1884,9 +1902,102 @@ export function stripBlankCorosWatchfaceConfigKeys(text: string): string {
     .join(newline);
 }
 
+const BAROMETER_DIRECTIONAL_REQUIRED_KEYS = [
+  "control_barometer_icon_pos",
+  "control_barometer_down_icon",
+  "control_barometer_flat_icon",
+  "control_barometer_up_icon",
+  "control_barometer_integer_rect",
+  "control_barometer_decimal_rect",
+  "control_barometer_font",
+  "control_barometer_font_color",
+  "control_point_icon"
+] as const;
+const BAROMETER_STATIC_REQUIRED_KEYS = [
+  "control_barometer_icon_pos",
+  "control_barometer_icon",
+  "control_barometer_rect",
+  "control_barometer_font",
+  "control_barometer_font_color",
+  "control_point_icon"
+] as const;
+const BAROMETER_DIRECTIONAL_BRANCH_KEYS = [
+  "control_barometer_down_icon",
+  "control_barometer_flat_icon",
+  "control_barometer_up_icon",
+  "control_barometer_integer_rect",
+  "control_barometer_decimal_rect"
+] as const;
+
+/**
+ * Enforces exactly one complete barometer parser branch. Static remains an
+ * experimental v4 path because an earlier archive crashed on-watch.
+ */
+export function finalizeCorosWatchfaceBarometerConfig(text: string): string {
+  const config = parseCorosWatchfaceConfig(text);
+  const hasValue = (key: string) => Boolean(config[key]?.trim());
+  const hasDeclaration = (key: string) =>
+    Object.prototype.hasOwnProperty.call(config, key);
+  const hasStaticBranch =
+    hasValue("control_barometer_icon") ||
+    hasValue("control_barometer_rect");
+  const hasDirectionalBranch = BAROMETER_DIRECTIONAL_BRANCH_KEYS.some(
+    (key) => hasValue(key)
+  );
+  if (hasStaticBranch && hasDirectionalBranch) {
+    throw new Error(
+      "The barometer config mixes Static and Directional parser branches. Select exactly one format."
+    );
+  }
+
+  const hasBarometer = Object.keys(config).some(
+    (key) => key.startsWith("control_barometer_") && hasValue(key)
+  );
+  if (hasBarometer) {
+    const requiredKeys = hasStaticBranch
+      ? BAROMETER_STATIC_REQUIRED_KEYS
+      : BAROMETER_DIRECTIONAL_REQUIRED_KEYS;
+    const missing: string[] = requiredKeys.filter(
+      (key) => key === "control_barometer_font_color"
+        ? !hasDeclaration(key)
+        : !hasValue(key)
+    );
+    if (!hasStaticBranch && !hasDirectionalBranch) {
+      missing.push("a Static or Directional barometer branch");
+    }
+    const hasControlSlot = Object.entries(config).some(
+      ([key, value]) =>
+        /^rect_control\d+_pos$/.test(key) &&
+        /^\{\s*-?\d+\s*,\s*-?\d+\s*\}$/.test(value.trim())
+    );
+    if (!hasControlSlot) missing.push("rect_controlN_pos");
+    if (missing.length > 0) {
+      throw new Error(
+        `The ${hasStaticBranch ? "static" : "directional"} barometer config is incomplete: ${missing.join(", ")}.`
+      );
+    }
+  }
+
+  const newline = text.includes("\r\n") ? "\r\n" : "\n";
+  return text
+    .split(/\r?\n/)
+    .filter((line) => {
+      const match = line.match(/^\s*\[([^\]]+)\]\s*=\s*$/);
+      return !match || (
+        match[1] === "control_barometer_font_color" ||
+        (
+          !match[1]!.startsWith("control_barometer_") &&
+          match[1] !== "control_point_icon"
+        )
+      );
+    })
+    .join(newline);
+}
+
 /**
  * Builds an AODconfig for a resolution that lacks one by rescaling another
- * resolution's file. Every integer inside `{...}` positions/rects is scaled;
+ * resolution's file. Coordinate fields inside `{...}` tuples are scaled;
+ * WFArc angles and flags remain unchanged;
  * font-folder and PNG references are remapped to assets the target tree
  * actually ships (official 800×800 templates reuse main-face assets for AOD
  * instead of shipping `aod_*` copies), trying the literal name first, then
@@ -1932,17 +2043,22 @@ export function synthesizeScaledCorosAodConfig(
       continue;
     }
     const [, indent, key, rawValue] = match;
+    const configKey = key!;
     const value = rawValue!.trim();
     if (!value) {
-      lines.push(`${indent}[${key}]=`);
+      lines.push(`${indent}[${configKey}]=`);
       continue;
     }
     const scaled = value.replace(/\{([^}]*)\}/g, (_group, inner: string) =>
       `{${inner
         .split(",")
-        .map((part) => {
+        .map((part, index) => {
           const token = part.trim();
-          return /^-?\d+$/.test(token)
+          const isProgressArcCoordinate =
+            !/_progress_arc$/i.test(configKey) ||
+            index < 4 ||
+            index === 6;
+          return /^-?\d+$/.test(token) && isProgressArcCoordinate
             ? String(Math.round(Number(token) * scale))
             : token;
         })
@@ -1950,15 +2066,15 @@ export function synthesizeScaledCorosAodConfig(
     );
     if (/\.png$/i.test(normalize(scaled))) {
       const resolved = resolveFile(scaled);
-      if (resolved !== undefined) lines.push(`${indent}[${key}]=${resolved}`);
+      if (resolved !== undefined) lines.push(`${indent}[${configKey}]=${resolved}`);
       continue;
     }
-    if (/_font$/i.test(key!) || /_icon_dir$/i.test(key!)) {
+    if (/_font$/i.test(configKey) || /_icon_dir$/i.test(configKey)) {
       const resolved = resolveFolder(scaled);
-      if (resolved !== undefined) lines.push(`${indent}[${key}]=${resolved}`);
+      if (resolved !== undefined) lines.push(`${indent}[${configKey}]=${resolved}`);
       continue;
     }
-    lines.push(`${indent}[${key}]=${scaled}`);
+    lines.push(`${indent}[${configKey}]=${scaled}`);
   }
   return lines.join(newline);
 }
@@ -3183,6 +3299,7 @@ async function rewriteTemplateArchive(
       const isConfigFile = /(^|\/)(?:AODconfig|config)\.txt$/i.test(entry.path);
       const isNormalConfig = /(^|\/)config\.txt$/i.test(entry.path);
       if (
+        isConfigFile ||
         overrides ||
         textReplacement !== undefined ||
         (isNormalConfig &&
@@ -3204,12 +3321,16 @@ async function rewriteTemplateArchive(
               studioBatteryResolutions.has(resolutionDirectory)
             )
           : withWatchfaceId;
-        // Blank-key stripping runs after overrides so an override may first
-        // blank a key and then have the whole line dropped in one export.
-        const finalizeConfig = (configText: string) =>
-          isConfigFile && stripBlankConfigKeys
-            ? stripBlankCorosWatchfaceConfigKeys(configText)
+        // Barometer validation and blank-key stripping run after overrides so
+        // old static projects can first be normalized to Directional.
+        const finalizeConfig = (configText: string) => {
+          const safeBarometerConfig = isConfigFile
+            ? finalizeCorosWatchfaceBarometerConfig(configText)
             : configText;
+          return isConfigFile && stripBlankConfigKeys
+            ? stripBlankCorosWatchfaceConfigKeys(safeBarometerConfig)
+            : safeBarometerConfig;
+        };
         if (Object.keys(effectiveOverrides).length === 0) {
           return {
             name: entry.path,

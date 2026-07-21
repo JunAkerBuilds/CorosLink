@@ -17,6 +17,7 @@ const {
   encryptMobileLoginField,
   exportCorosWatchfaceProject,
   extractDecimalProperty,
+  finalizeCorosWatchfaceBarometerConfig,
   findHttpsUrlInJson,
   normalizeCorosBatteryReport,
   normalizeCorosPairedDevices,
@@ -119,6 +120,22 @@ assert.equal(
   ),
   "[bg_color]=0x000000\r\n[background_icon]=studio\\aod_background\\00.png\r\n",
   "independent AOD artwork may add a background to a color-only config"
+);
+assert.equal(
+  applyCorosWatchfaceConfigOverrides(
+    "[bg_color]=0x000000\r\n",
+    {
+      kcal_progress_arc: "{208,208,185,185,-135,135,10,0}",
+      kcal_progress_arc_color: "0xFF8800",
+      kcal_progress_rect: "{108,382,308,394,left|vcenter}",
+      kcal_progress_color: "0xFF8800",
+      exercise_progress_arc: "{208,208,166,166,-135,135,10,0}",
+      exercise_progress_rect: "{108,364,308,376,left|vcenter}",
+      exercise_progress_color: "0x00CCFF"
+    }
+  ),
+  "[bg_color]=0x000000\r\n[kcal_progress_arc]={208,208,185,185,-135,135,10,0}\r\n[kcal_progress_arc_color]=0xFF8800\r\n[kcal_progress_rect]={108,382,308,394,left|vcenter}\r\n[kcal_progress_color]=0xFF8800\r\n[exercise_progress_arc]={208,208,166,166,-135,135,10,0}\r\n[exercise_progress_rect]={108,364,308,376,left|vcenter}\r\n[exercise_progress_color]=0x00CCFF\r\n",
+  "native calorie and exercise progress keys must be appendable to sparse current and AOD configs"
 );
 assert.deepEqual(
   [...validateConfigTextReplacements([
@@ -276,6 +293,58 @@ assert.equal(
 );
 assert.equal(
   applyCorosWatchfaceConfigOverrides(configWithoutWeather, {
+    rect_control1_pos: "{0,0}",
+    control_barometer_icon_pos: "{8,4}",
+    control_barometer_down_icon: "icon\\coroslink_barometer_down.png",
+    control_barometer_flat_icon: "icon\\coroslink_barometer_flat.png",
+    control_barometer_up_icon: "icon\\coroslink_barometer_up.png",
+    control_barometer_integer_rect: "{30,0,88,24,hcenter|vcenter}",
+    control_barometer_decimal_rect: "{90,0,108,24,hcenter|vcenter}",
+    control_barometer_font: "13x19",
+    control_barometer_font_color: "",
+    control_point_icon: "icon\\coroslink_control_point.png"
+  }),
+  [
+    "[time_hour_high_pos]={1,2}",
+    "[rect_control1_pos]={0,0}",
+    "[control_barometer_icon_pos]={8,4}",
+    "[control_barometer_down_icon]=icon\\coroslink_barometer_down.png",
+    "[control_barometer_flat_icon]=icon\\coroslink_barometer_flat.png",
+    "[control_barometer_up_icon]=icon\\coroslink_barometer_up.png",
+    "[control_barometer_integer_rect]={30,0,88,24,hcenter|vcenter}",
+    "[control_barometer_decimal_rect]={90,0,108,24,hcenter|vcenter}",
+    "[control_barometer_font]=13x19",
+    "[control_barometer_font_color]=",
+    "[control_point_icon]=icon\\coroslink_control_point.png",
+    ""
+  ].join("\r\n"),
+  "canonical barometer trend icons and split value rectangles should be appendable"
+);
+assert.equal(
+  applyCorosWatchfaceConfigOverrides(configWithoutWeather, {
+    rect_control1_pos: "{0,0}",
+    control_barometer_icon_pos: "{8,4}",
+    control_barometer_icon: "icon\\coroslink_barometer.png",
+    control_barometer_rect: "{30,0,108,24,hcenter|vcenter}",
+    control_barometer_font: "13x19",
+    control_barometer_font_color: "",
+    control_point_icon: "icon\\coroslink_control_point.png"
+  }),
+  [
+    "[time_hour_high_pos]={1,2}",
+    "[rect_control1_pos]={0,0}",
+    "[control_barometer_icon_pos]={8,4}",
+    "[control_barometer_icon]=icon\\coroslink_barometer.png",
+    "[control_barometer_rect]={30,0,108,24,hcenter|vcenter}",
+    "[control_barometer_font]=13x19",
+    "[control_barometer_font_color]=",
+    "[control_point_icon]=icon\\coroslink_control_point.png",
+    ""
+  ].join("\r\n"),
+  "the experimental v4 static barometer branch should be appendable"
+);
+assert.equal(
+  applyCorosWatchfaceConfigOverrides(configWithoutWeather, {
     temperature_rect: "{120,180,296,240,hcenter|vcenter}",
     temperature_font: "13x19",
     temperature_font_color: "0xFFFFFF",
@@ -298,6 +367,58 @@ assert.equal(
   "blank-key stripping should preserve LF newlines"
 );
 
+const completeDirectionalBarometer = [
+  "[rect_control1_pos]={0,0}",
+  "[control_barometer_icon_pos]={8,4}",
+  "[control_barometer_down_icon]=icon\\down.png",
+  "[control_barometer_flat_icon]=icon\\flat.png",
+  "[control_barometer_up_icon]=icon\\up.png",
+  "[control_barometer_integer_rect]={0,0,92,24,hcenter|vcenter}",
+  "[control_barometer_decimal_rect]={96,0,119,24,hcenter|vcenter}",
+  "[control_barometer_font]=13x19",
+  "[control_barometer_font_color]=",
+  "[control_point_icon]=icon\\point.png",
+  ""
+].join("\r\n");
+assert.equal(
+  finalizeCorosWatchfaceBarometerConfig(
+    `${completeDirectionalBarometer}[control_barometer_icon]=\r\n[control_barometer_rect]=\r\n`
+  ),
+  completeDirectionalBarometer,
+  "a complete directional branch should survive while blank static keys are removed"
+);
+assert.throws(
+  () => finalizeCorosWatchfaceBarometerConfig(
+    "[control_barometer_icon_pos]={8,4}\n[control_barometer_down_icon]=icon/down.png\n"
+  ),
+  /directional barometer config is incomplete/,
+  "partial directional configs should be blocked before archive creation"
+);
+const completeStaticBarometer = [
+  "[rect_control1_pos]={0,0}",
+  "[control_barometer_icon_pos]={8,4}",
+  "[control_barometer_icon]=icon\\static.png",
+  "[control_barometer_rect]={0,0,119,24,hcenter|vcenter}",
+  "[control_barometer_font]=13x19",
+  "[control_barometer_font_color]=",
+  "[control_point_icon]=icon\\point.png",
+  ""
+].join("\r\n");
+assert.equal(
+  finalizeCorosWatchfaceBarometerConfig(
+    `${completeStaticBarometer}[control_barometer_down_icon]=\r\n[control_barometer_integer_rect]=\r\n`
+  ),
+  completeStaticBarometer,
+  "a complete static branch should survive while blank directional keys are removed"
+);
+assert.throws(
+  () => finalizeCorosWatchfaceBarometerConfig(
+    `${completeStaticBarometer}[control_barometer_down_icon]=icon/down.png\n`
+  ),
+  /mixes Static and Directional parser branches/,
+  "mixed barometer parser branches should be blocked before archive creation"
+);
+
 assert.equal(
   synthesizeScaledCorosAodConfig(
     [
@@ -310,6 +431,8 @@ assert.equal(
       "[time_hour_high_font]=aod_32x45",
       "[english_date_week_rect]={92,152,214,207,hcenter|vcenter}",
       "[english_date_week_font]=aod_english_week",
+      "[kcal_progress_arc]={208,208,185,185,-135,135,10,0}",
+      "[exercise_progress_arc]={208,208,166,166,-135,135,10,0}",
       "[empty_key]=",
       ""
     ].join("\r\n"),
@@ -330,10 +453,12 @@ assert.equal(
     "[time_hour_high_font]=32x45",
     "[english_date_week_rect]={177,292,412,398,hcenter|vcenter}",
     "[english_date_week_font]=english_week",
+    "[kcal_progress_arc]={400,400,356,356,-135,135,19,0}",
+    "[exercise_progress_arc]={400,400,319,319,-135,135,19,0}",
     "[empty_key]=",
     ""
   ].join("\r\n"),
-  "AOD synthesis should scale braces, remap aod_ assets and drop danglers"
+  "AOD synthesis should scale coordinates, preserve arc angles/flags, remap aod_ assets and drop danglers"
 );
 
 assert.equal(

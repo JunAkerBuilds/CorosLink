@@ -8,6 +8,7 @@ import {
   COROS_CONFIG_DELETE_VALUE,
   loadStudioImage,
   parseConfigPos,
+  parseConfigRect,
   pickPreviewResolution,
   resizeAndTintSprite
 } from "./watchfaceStudio";
@@ -132,6 +133,65 @@ export function buildWeatherOverrides(
     }
     return overrides;
   });
+}
+
+/**
+ * Auto-places the fixed temperature element beside the weather icon when both
+ * are enabled. `buildMetricOverrides` emits `temperature_rect` at a default
+ * spot; this reads that existing rect (for its size and alignment) and moves it
+ * to sit just right of the weather icon, vertically centered on it. It targets
+ * only resolutions where the fixed temperature is active, and no-ops otherwise,
+ * so it never invents a temperature element the design did not ask for.
+ */
+export function buildWeatherTemperaturePlacementOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  style: WatchfaceWeatherStyle
+): CorosWatchfaceConfigOverride[] {
+  if (!style.enabled) {
+    return [];
+  }
+  const base = pickPreviewResolution(details);
+  if (!base) {
+    return [];
+  }
+  const overrides: CorosWatchfaceConfigOverride[] = [];
+  for (const resolution of details.resolutions) {
+    const rawValue = resolution.config.temperature_rect;
+    const rect = parseConfigRect(rawValue);
+    if (!rect) {
+      // Temperature is not active on this resolution; leave it untouched.
+      continue;
+    }
+    const resScale = resolution.width / base.width;
+    const iconSize = weatherSpriteSize(resolution) * style.scale;
+    const iconX = style.x * resScale;
+    const iconY = style.y * resScale;
+    const width = rect.x1 - rect.x0;
+    const height = rect.y1 - rect.y0;
+    const gap = Math.max(2, Math.round(iconSize * 0.12));
+    const x0 = Math.max(
+      0,
+      Math.min(Math.round(iconX + iconSize + gap), resolution.width - width)
+    );
+    const y0 = Math.max(
+      0,
+      Math.min(
+        Math.round(iconY + iconSize / 2 - height / 2),
+        resolution.height - height
+      )
+    );
+    const suffix =
+      rawValue?.match(
+        /^\{\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*((?:,[^}]*)?)\}$/
+      )?.[1] || ",hcenter|vcenter";
+    overrides.push({
+      path: `${resolution.directory}/config.txt`,
+      values: {
+        temperature_rect: `{${x0},${y0},${x0 + width},${y0 + height}${suffix}}`
+      }
+    });
+  }
+  return overrides;
 }
 
 async function imageUrlToDataUrl(url: string, edge: number): Promise<string> {
