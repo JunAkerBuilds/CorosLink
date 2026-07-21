@@ -3432,6 +3432,19 @@
   visibility: hidden;
 }
 
+/* Transparent layer that paints only the progress arcs over the composed face,
+   so color/geometry edits refresh without recompositing. Sits above the face
+   but below the interactive selection overlay. */
+.watchface-shell .watchface-preview-arc {
+  position: absolute;
+  inset: 9px;
+  width: calc(100% - 18px);
+  height: calc(100% - 18px);
+  border-radius: 50%;
+  z-index: 1;
+  pointer-events: none;
+}
+
 .watchface-shell .wf-contextual-align-bar {
   position: absolute;
   z-index: 7;

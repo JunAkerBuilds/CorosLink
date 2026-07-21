@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { TrainingSummaryTiles } from "./TrainingSummaryTiles";
 import { recoveryTone } from "../parsers";
 import type { TrainingSummaryMetrics } from "../types";
@@ -38,7 +38,6 @@ function readinessCopy(
 
 export function RecoveryRing({ summary }: RecoveryRingProps) {
   const [isReady, setIsReady] = useState(false);
-  const ambientFilterId = useId();
   const recovery = summary.recoveryPct ?? 0;
   const percent = Math.max(0, Math.min(100, recovery));
   const hasData = percent > 0;
@@ -51,7 +50,7 @@ export function RecoveryRing({ summary }: RecoveryRingProps) {
   useEffect(() => {
     const frame = requestAnimationFrame(() => setIsReady(true));
     return () => cancelAnimationFrame(frame);
-  }, [percent]);
+  }, []);
 
   return (
     <section className={`panel training-ring-panel tone-${tone}`}>
@@ -67,25 +66,6 @@ export function RecoveryRing({ summary }: RecoveryRingProps) {
           aria-label={`${Math.round(percent)}% recovery`}
         >
           <svg viewBox="0 0 128 128" aria-hidden="true">
-            <defs>
-              <filter
-                id={ambientFilterId}
-                x="-120%"
-                y="-120%"
-                width="340%"
-                height="340%"
-                colorInterpolationFilters="sRGB"
-              >
-                <feGaussianBlur stdDeviation="10" />
-              </filter>
-            </defs>
-            <circle
-              className="training-recovery-ring-ambient"
-              cx="64"
-              cy="64"
-              r={radius}
-              filter={`url(#${ambientFilterId})`}
-            />
             <circle className="storage-ring-track" cx="64" cy="64" r={radius} />
             <circle
               className="storage-ring-progress training-recovery-ring-progress"

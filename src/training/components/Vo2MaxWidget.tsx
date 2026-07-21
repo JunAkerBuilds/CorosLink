@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Activity } from "lucide-react";
 import { formatHappenDayLabel, formatSignedDelta } from "../formatters";
 import { mergeTrainingDayLists } from "../parsers";
@@ -122,11 +122,10 @@ export function Vo2MaxWidget({ snapshot }: Vo2MaxWidgetProps) {
       : undefined;
 
   useEffect(() => {
-    setIsReady(false);
     const frame = window.requestAnimationFrame(() => setIsReady(true));
 
     return () => window.cancelAnimationFrame(frame);
-  }, [displayValue]);
+  }, []);
 
   return (
     <section
@@ -148,15 +147,8 @@ export function Vo2MaxWidget({ snapshot }: Vo2MaxWidgetProps) {
             className="vo2-gauge-track"
             d={describeArc(VO2_MIN, VO2_MAX)}
           />
-          {VO2_BANDS.map((band, index) => {
+          {VO2_BANDS.map((band) => {
             const isFocused = isFocusedBand(displayValue, band);
-            const revealDelay = index * 110;
-            const bandStyle = {
-              "--vo2-band-color": band.color,
-              animationDelay: isFocused
-                ? `${revealDelay}ms, ${revealDelay + 560}ms`
-                : `${revealDelay}ms`
-            } as CSSProperties;
 
             return (
               <path
@@ -165,7 +157,6 @@ export function Vo2MaxWidget({ snapshot }: Vo2MaxWidgetProps) {
                 d={describeArc(band.min, band.max)}
                 pathLength={100}
                 stroke={band.color}
-                style={bandStyle}
               />
             );
           })}

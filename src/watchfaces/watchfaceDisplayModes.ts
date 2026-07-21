@@ -83,8 +83,11 @@ const MODE_DESIGN_KEYS = [
   "previewComplication",
   "metricChanges",
   "metricStyles",
+  "kcalProgress",
+  "exerciseProgress",
   "selectableMetricStyle",
   "controlComplicationEnabled",
+  "controlBarometerMode",
   "controlIconOffsets",
   "separateAutoTime",
   "timeStyles",
@@ -133,6 +136,33 @@ function dimStyleRecord<T extends { color?: string }>(
   );
 }
 
+function dimKcalProgress(
+  style: CorosWatchfaceDesignState["kcalProgress"]
+): CorosWatchfaceDesignState["kcalProgress"] {
+  return style
+    ? {
+        ...style,
+        arcColor: dimHexColor(style.arcColor, AOD_DIM_FACTOR),
+        rectColor: dimHexColor(style.rectColor, AOD_DIM_FACTOR),
+        arc: { ...style.arc },
+        rect: { ...style.rect }
+      }
+    : undefined;
+}
+
+function dimExerciseProgress(
+  style: CorosWatchfaceDesignState["exerciseProgress"]
+): CorosWatchfaceDesignState["exerciseProgress"] {
+  return style
+    ? {
+        ...style,
+        color: dimHexColor(style.color, AOD_DIM_FACTOR),
+        arc: { ...style.arc },
+        rect: { ...style.rect }
+      }
+    : undefined;
+}
+
 /** Produces the legacy auto-dimmed AOD appearance as independent mode state. */
 export function materializeLegacyAodDesign(
   design: CorosWatchfaceDesignState,
@@ -165,7 +195,10 @@ export function materializeLegacyAodDesign(
     previewComplication: "",
     metricChanges: {},
     metricStyles: dimStyleRecord(design.metricStyles),
+    kcalProgress: dimKcalProgress(design.kcalProgress),
+    exerciseProgress: dimExerciseProgress(design.exerciseProgress),
     controlComplicationEnabled: {},
+    controlBarometerMode: design.controlBarometerMode,
     controlIconOffsets: {},
     separateAutoTime: false,
     timeStyles: dimStyleRecord(design.timeStyles),
@@ -231,10 +264,44 @@ export function writeWatchfaceModeDesign(
     configTextEdits: active.configTextEdits
   };
   if (mode === "current") {
+    const previousDimmedKcalProgress = dimKcalProgress(root.kcalProgress);
+    const aodKcalProgress = root.modeDesigns?.aod?.kcalProgress;
+    const kcalProgressStillLinked =
+      aodKcalProgress === undefined ||
+      JSON.stringify(aodKcalProgress) ===
+        JSON.stringify(previousDimmedKcalProgress);
+    const previousDimmedExerciseProgress = dimExerciseProgress(
+      root.exerciseProgress
+    );
+    const aodExerciseProgress = root.modeDesigns?.aod?.exerciseProgress;
+    const exerciseProgressStillLinked =
+      aodExerciseProgress === undefined ||
+      JSON.stringify(aodExerciseProgress) ===
+        JSON.stringify(previousDimmedExerciseProgress);
+    const modeDesigns =
+      root.modeDesigns?.aod &&
+      (kcalProgressStillLinked || exerciseProgressStillLinked)
+        ? {
+            ...root.modeDesigns,
+            aod: {
+              ...root.modeDesigns.aod,
+              ...(kcalProgressStillLinked
+                ? { kcalProgress: dimKcalProgress(active.kcalProgress) }
+                : {}),
+              ...(exerciseProgressStillLinked
+                ? {
+                    exerciseProgress: dimExerciseProgress(
+                      active.exerciseProgress
+                    )
+                  }
+                : {})
+            }
+          }
+        : root.modeDesigns;
     return {
       ...active,
       ...global,
-      modeDesigns: root.modeDesigns
+      modeDesigns
     };
   }
   const previous = resolveWatchfaceModeDesign(root, "aod");

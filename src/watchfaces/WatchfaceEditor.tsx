@@ -192,6 +192,73 @@ function EditableHexColorInput({
     />
   );
 }
+
+/**
+ * Native color swatch tuned for a live overlay preview. The browser fires
+ * `onChange` continuously while dragging in the picker. Each event repaints the
+ * lightweight preview via `onPreview` (imperative, no React state), and the
+ * expensive design-state commit (`onValueChange`, which re-renders the editor)
+ * runs only once the drag settles — after `COLOR_COMMIT_SETTLE_MS` of quiet or
+ * on blur. That keeps a fast smooth drag entirely off the React render path.
+ */
+const COLOR_COMMIT_SETTLE_MS = 140;
+function ThrottledColorInput({
+  value,
+  onValueChange,
+  onPreview,
+  onBlur,
+  ...props
+}: Omit<ComponentProps<"input">, "type" | "value" | "defaultValue" | "onChange"> & {
+  value: string;
+  onValueChange: (value: string) => void;
+  /** Called on every drag event for cheap, state-free live feedback. */
+  onPreview?: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const editingRef = useRef(false);
+  const latestRef = useRef(value);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!editingRef.current) setDraft(value);
+  }, [value]);
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    },
+    []
+  );
+
+  const commit = () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    editingRef.current = false;
+    onValueChange(latestRef.current);
+  };
+
+  return (
+    <input
+      {...props}
+      type="color"
+      value={draft}
+      onChange={(event) => {
+        const next = event.target.value;
+        editingRef.current = true;
+        latestRef.current = next;
+        setDraft(next);
+        onPreview?.(next);
+        if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+        timerRef.current = window.setTimeout(commit, COLOR_COMMIT_SETTLE_MS);
+      }}
+      onBlur={(event) => {
+        commit();
+        onBlur?.(event);
+      }}
+    />
+  );
+}
 import {
   AlignHorizontalJustifyCenter,
   AlignHorizontalJustifyEnd,
@@ -262,6 +329,8 @@ import type {
   CorosWatchfaceDesignState,
   CorosWatchfaceDesignSprite,
   CorosWatchfaceEditorGuide,
+  CorosWatchfaceExerciseProgressStyle,
+  CorosWatchfaceKcalProgressStyle,
   CorosWatchfaceShadowEffect,
   CorosWatchfaceStroke,
   CorosWatchfaceProject,
@@ -393,6 +462,7 @@ import {
   dateSpriteCanvasSize,
   downscaleArtwork,
   drawStudioPreview,
+  renderWatchfaceProgressLayers,
   getAmPmCapability,
   scaleAmPmStyleForResolution,
   getAvailableComplications,
@@ -400,6 +470,8 @@ import {
   hasControlComplication,
   hasWatchfaceAod,
   inferStaticSeparators,
+  exerciseProgressStyleForResolution,
+  kcalProgressStyleForResolution,
   loadStudioImage,
   mergeAssetReplacements,
   mergeConfigOverrides,
@@ -957,6 +1029,7 @@ export function WatchfaceEditor({
 }: WatchfaceEditorProps) {
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const dragPreviewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const arcOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewStackRef = useRef<HTMLDivElement>(null);
   const componentDragBoundsRef = useRef<SVGRectElement>(null);
@@ -1645,8 +1718,12 @@ export function WatchfaceEditor({
       design.tintIcons,
       design.previewComplication,
       design.metricStyles,
+      // Calorie/exercise progress is intentionally omitted: it is painted on the
+      // dedicated arc overlay canvas (see the effect below), so tweaking it must
+      // NOT invalidate these options and recomposite the whole face.
       design.selectableMetricStyle,
       design.controlComplicationEnabled,
+      design.controlBarometerMode,
       design.controlBatteryEnabled,
       design.controlSunriseEnabled,
       design.controlSunsetEnabled,
@@ -1665,7 +1742,7 @@ export function WatchfaceEditor({
     ]
   );
   const previewStudioOptions = useMemo(
-    () => ({ ...studioOptions, previewMode }),
+    () => ({ ...studioOptions, previewMode, deferProgressArcs: true }),
     [studioOptions, previewMode]
   );
   const detailsWithConfigEdits = useMemo(
@@ -1690,8 +1767,12 @@ export function WatchfaceEditor({
       modeSourceDetails,
       design.metricChanges,
       design.metricStyles,
+      // Calorie/exercise progress no longer rebuilds the details chain; the
+      // preview draws it straight from studioOptions (see toStudioOptions), so
+      // color/geometry edits stay responsive. Export still derives it directly.
       design.selectableMetricStyle,
       design.controlComplicationEnabled,
+      design.controlBarometerMode,
       design.controlBatteryEnabled,
       design.controlSunriseEnabled,
       design.controlSunsetEnabled,
@@ -1718,6 +1799,51 @@ export function WatchfaceEditor({
   );
   const previewWidth = previewResolution?.width ?? 800;
   const previewHeight = previewResolution?.height ?? previewWidth;
+  // Paint the calorie/exercise progress arcs on their own overlay canvas. This
+  // keeps color/geometry edits off the expensive face-composite path — only
+  // these few strokes redraw, synchronously — while matching exactly what the
+  // main composite drew for these layers before they were deferred. The optional
+  // overrides let a color drag repaint live without touching React state.
+  const paintArcOverlay = useCallback(
+    (overrides?: {
+      kcalArcColor?: string;
+      kcalRectColor?: string;
+      exerciseColor?: string;
+    }) => {
+      const canvas = arcOverlayCanvasRef.current;
+      if (!canvas) return;
+      const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+      if (!context) return;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      if (!previewResolution) return;
+      const kcalProgressStyle = design.kcalProgress
+        ? {
+            ...design.kcalProgress,
+            ...(overrides?.kcalArcColor ? { arcColor: overrides.kcalArcColor } : {}),
+            ...(overrides?.kcalRectColor
+              ? { rectColor: overrides.kcalRectColor }
+              : {})
+          }
+        : undefined;
+      const exerciseProgressStyle = design.exerciseProgress
+        ? {
+            ...design.exerciseProgress,
+            ...(overrides?.exerciseColor ? { color: overrides.exerciseColor } : {})
+          }
+        : undefined;
+      renderWatchfaceProgressLayers(context, canvas.width, previewResolution, {
+        kcalProgressStyle,
+        exerciseProgressStyle,
+        kcalProgressPreviewPercent: design.kcalProgress?.previewPercent,
+        exerciseProgressPreviewPercent: design.exerciseProgress?.previewPercent,
+        accentColor: design.accentColor
+      });
+    },
+    [previewResolution, design.kcalProgress, design.exerciseProgress, design.accentColor]
+  );
+  useEffect(() => {
+    paintArcOverlay();
+  }, [paintArcOverlay]);
   const watchPreviewResolution = useMemo(
     () => previewDetails?.resolutions.find(
       (resolution) => resolution.directory === watchPreviewDirectory
@@ -1846,6 +1972,7 @@ export function WatchfaceEditor({
             .filter(
               (complication) =>
                 complication.id !== "battery" &&
+                complication.id !== "barometer" &&
                 isControlComplicationEnabled(
                   modeSourceDetails,
                   design,
@@ -5073,6 +5200,64 @@ export function WatchfaceEditor({
     });
   }
 
+  function updateKcalProgress(
+    patch: Partial<Omit<CorosWatchfaceKcalProgressStyle, "arc" | "rect">> & {
+      arc?: Partial<CorosWatchfaceKcalProgressStyle["arc"]>;
+      rect?: Partial<CorosWatchfaceKcalProgressStyle["rect"]>;
+    }
+  ) {
+    setDesign((prev) => {
+      const sourceResolution = modeSourceDetails
+        ? pickPreviewResolution(modeSourceDetails)
+        : null;
+      if (!sourceResolution) return prev;
+      const current = kcalProgressStyleForResolution(
+        sourceResolution,
+        prev.kcalProgress
+      );
+      return {
+        ...prev,
+        kcalProgress: {
+          ...current,
+          referenceWidth: current.referenceWidth ?? sourceResolution.width,
+          referenceHeight: current.referenceHeight ?? sourceResolution.height,
+          ...patch,
+          arc: { ...current.arc, ...(patch.arc ?? {}) },
+          rect: { ...current.rect, ...(patch.rect ?? {}) }
+        }
+      };
+    });
+  }
+
+  function updateExerciseProgress(
+    patch: Partial<Omit<CorosWatchfaceExerciseProgressStyle, "arc" | "rect">> & {
+      arc?: Partial<CorosWatchfaceExerciseProgressStyle["arc"]>;
+      rect?: Partial<CorosWatchfaceExerciseProgressStyle["rect"]>;
+    }
+  ) {
+    setDesign((prev) => {
+      const sourceResolution = modeSourceDetails
+        ? pickPreviewResolution(modeSourceDetails)
+        : null;
+      if (!sourceResolution) return prev;
+      const current = exerciseProgressStyleForResolution(
+        sourceResolution,
+        prev.exerciseProgress
+      );
+      return {
+        ...prev,
+        exerciseProgress: {
+          ...current,
+          referenceWidth: current.referenceWidth ?? sourceResolution.width,
+          referenceHeight: current.referenceHeight ?? sourceResolution.height,
+          ...patch,
+          arc: { ...current.arc, ...(patch.arc ?? {}) },
+          rect: { ...current.rect, ...(patch.rect ?? {}) }
+        }
+      };
+    });
+  }
+
   function clearMetricColor(metricId: WatchfaceMetricId) {
     setDesign((prev) => {
       const current = prev.metricStyles?.[metricId] ?? { scale: 1 };
@@ -6805,6 +6990,13 @@ export function WatchfaceEditor({
               </>
             ) : null}
             <canvas ref={previewCanvasRef} className="watchface-studio-preview" width={PREVIEW_SIZE} height={PREVIEW_SIZE} />
+            <canvas
+              ref={arcOverlayCanvasRef}
+              className="watchface-preview-arc"
+              width={PREVIEW_SIZE}
+              height={PREVIEW_SIZE}
+              aria-hidden="true"
+            />
             <canvas
               ref={dragPreviewCanvasRef}
               className="watchface-preview-drag"
@@ -8966,6 +9158,13 @@ export function WatchfaceEditor({
 
     if (layer.kind === "metric" && layer.metricId) {
       const style = design.metricStyles?.[layer.metricId];
+      const progress =
+        layer.metricId === "calories" && previewResolution
+          ? kcalProgressStyleForResolution(
+              previewResolution,
+              design.kcalProgress
+            )
+          : null;
       return (
         <>
           {renderPositionReadout(layer)}
@@ -8989,6 +9188,122 @@ export function WatchfaceEditor({
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
+          {progress
+            ? renderPropertySection(
+                "advanced",
+                "Goal progress",
+                <div className="wf-property-stack">
+                  <label className="watchface-inspector-field">
+                    <span>Progress arc</span>
+                    <input
+                      type="checkbox"
+                      checked={progress.arcEnabled}
+                      onChange={(event) =>
+                        updateKcalProgress({ arcEnabled: event.target.checked })
+                      }
+                    />
+                  </label>
+                  <label className="watchface-inspector-field">
+                    <span>Progress bar</span>
+                    <input
+                      type="checkbox"
+                      checked={progress.rectEnabled}
+                      onChange={(event) =>
+                        updateKcalProgress({ rectEnabled: event.target.checked })
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    Arc color
+                    <span className="watchface-color-control">
+                      <ThrottledColorInput
+                        value={progress.arcColor}
+                        onPreview={(arcColor) =>
+                          paintArcOverlay({ kcalArcColor: arcColor })
+                        }
+                        onValueChange={(arcColor) =>
+                          updateKcalProgress({ arcColor })
+                        }
+                      />
+                      <code>{progress.arcColor}</code>
+                    </span>
+                  </label>
+                  <label className="field">
+                    Bar color
+                    <span className="watchface-color-control">
+                      <ThrottledColorInput
+                        value={progress.rectColor}
+                        onPreview={(rectColor) =>
+                          paintArcOverlay({ kcalRectColor: rectColor })
+                        }
+                        onValueChange={(rectColor) =>
+                          updateKcalProgress({ rectColor })
+                        }
+                      />
+                      <code>{progress.rectColor}</code>
+                    </span>
+                  </label>
+                  <label className="watchface-inspector-field">
+                    <span>Preview completion</span>
+                    <span className="wf-input-with-unit">
+                      <EditableNumberInput
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={progress.previewPercent}
+                        fallback={63}
+                        onValueChange={(previewPercent) =>
+                          updateKcalProgress({
+                            previewPercent: Math.max(
+                              0,
+                              Math.min(100, previewPercent)
+                            )
+                          })
+                        }
+                      />
+                      <span>%</span>
+                    </span>
+                  </label>
+                  <details className="wf-nested-disclosure">
+                    <summary>Arc geometry</summary>
+                    <div className="watchface-position-inputs">
+                      <label>Center X<EditableNumberInput step="1" value={progress.arc.centerX} fallback={previewWidth / 2} onValueChange={(centerX) => updateKcalProgress({ arc: { centerX } })} /></label>
+                      <label>Center Y<EditableNumberInput step="1" value={progress.arc.centerY} fallback={previewHeight / 2} onValueChange={(centerY) => updateKcalProgress({ arc: { centerY } })} /></label>
+                      <label>Radius X<EditableNumberInput min="1" step="1" value={progress.arc.radiusX} fallback={1} onValueChange={(radiusX) => updateKcalProgress({ arc: { radiusX: Math.max(1, radiusX) } })} /></label>
+                      <label>Radius Y<EditableNumberInput min="1" step="1" value={progress.arc.radiusY} fallback={1} onValueChange={(radiusY) => updateKcalProgress({ arc: { radiusY: Math.max(1, radiusY) } })} /></label>
+                      <label>Start °<EditableNumberInput min="-360" max="360" step="1" value={progress.arc.startAngle} fallback={-135} onValueChange={(startAngle) => updateKcalProgress({ arc: { startAngle } })} /></label>
+                      <label>End °<EditableNumberInput min="-360" max="360" step="1" value={progress.arc.endAngle} fallback={135} onValueChange={(endAngle) => updateKcalProgress({ arc: { endAngle } })} /></label>
+                      <label>Thickness<EditableNumberInput min="1" step="1" value={progress.arc.strokeWidth} fallback={1} onValueChange={(strokeWidth) => updateKcalProgress({ arc: { strokeWidth: Math.max(1, strokeWidth) } })} /></label>
+                    </div>
+                    <label className="watchface-inspector-field">
+                      <span>Draw remaining portion</span>
+                      <input type="checkbox" checked={progress.arc.background} onChange={(event) => updateKcalProgress({ arc: { background: event.target.checked } })} />
+                    </label>
+                  </details>
+                  <details className="wf-nested-disclosure">
+                    <summary>Bar geometry</summary>
+                    <div className="watchface-position-inputs">
+                      <label>Left<EditableNumberInput step="1" value={progress.rect.x0} fallback={0} onValueChange={(x0) => updateKcalProgress({ rect: { x0 } })} /></label>
+                      <label>Top<EditableNumberInput step="1" value={progress.rect.y0} fallback={0} onValueChange={(y0) => updateKcalProgress({ rect: { y0 } })} /></label>
+                      <label>Right<EditableNumberInput step="1" value={progress.rect.x1} fallback={previewWidth} onValueChange={(x1) => updateKcalProgress({ rect: { x1 } })} /></label>
+                      <label>Bottom<EditableNumberInput step="1" value={progress.rect.y1} fallback={previewHeight} onValueChange={(y1) => updateKcalProgress({ rect: { y1 } })} /></label>
+                    </div>
+                    <label className="watchface-inspector-field">
+                      <span>Fill direction</span>
+                      <select value={progress.rect.direction} onChange={(event) => updateKcalProgress({ rect: { direction: event.target.value as CorosWatchfaceKcalProgressStyle["rect"]["direction"] } })}>
+                        <option value="left">Left to right</option>
+                        <option value="right">Right to left</option>
+                        <option value="top">Top to bottom</option>
+                        <option value="bottom">Bottom to top</option>
+                      </select>
+                    </label>
+                  </details>
+                  <p className="muted">
+                    COROS supplies the live goal percentage on the watch. Current settings mirror to Always-on until you customize that mode.
+                  </p>
+                </div>
+              )
+            : null}
           {renderEffectsInspector(layer.id)}
         </>
       );
@@ -9296,9 +9611,10 @@ export function WatchfaceEditor({
     if (!details || !modeSourceDetails) {
       return null;
     }
-    const supported = previewMode === "aod"
+    const supported = (previewMode === "aod"
       ? getAvailableComplications(modeSourceDetails)
-      : WATCHFACE_COMPLICATIONS;
+      : WATCHFACE_COMPLICATIONS
+    ).filter((complication) => complication.id !== "barometer");
     const previewChoices = supported.filter((complication) =>
       isControlComplicationEnabled(modeSourceDetails, design, complication.id)
     );
@@ -9316,6 +9632,12 @@ export function WatchfaceEditor({
     const sourceResolution = previewDetails
       ? pickPreviewResolution(previewDetails)
       : pickPreviewResolution(details);
+    const exerciseProgress = sourceResolution
+      ? exerciseProgressStyleForResolution(
+          sourceResolution,
+          design.exerciseProgress
+        )
+      : null;
     const iconPositionKey = selectedComplication
       ? `control_${selectedComplication.controlPrefix}_icon_pos`
       : "";
@@ -9448,7 +9770,9 @@ export function WatchfaceEditor({
         </label>
         {selectedComplication ? (
           <>
-        {selectedComplication?.valueParts && controlColonReference ? (
+        {selectedComplication?.valueParts &&
+        selectedComplication.id !== "barometer" &&
+        controlColonReference ? (
           <div className="wf-inline-config-asset">
             <label className="watchface-studio-toggle">
               <input
@@ -9638,6 +9962,114 @@ export function WatchfaceEditor({
             its value, icon, and position settings.
           </p>
         )}
+        {exerciseProgress ? (
+          <details className="wf-nested-disclosure">
+            <summary>Exercise progress</summary>
+            <div className="wf-property-stack">
+              <label className="watchface-inspector-field">
+                <span>Show progress arc</span>
+                <input
+                  type="checkbox"
+                  checked={exerciseProgress.arcEnabled}
+                  onChange={(event) =>
+                    updateExerciseProgress({ arcEnabled: event.target.checked })
+                  }
+                />
+              </label>
+              <label className="watchface-inspector-field">
+                <span>Show progress bar</span>
+                <input
+                  type="checkbox"
+                  checked={exerciseProgress.enabled}
+                  onChange={(event) =>
+                    updateExerciseProgress({ enabled: event.target.checked })
+                  }
+                />
+              </label>
+              <label className="field">
+                Progress color
+                <span className="watchface-color-control">
+                  <input
+                    type="color"
+                    value={exerciseProgress.color}
+                    onChange={(event) =>
+                      updateExerciseProgress({ color: event.target.value })
+                    }
+                  />
+                  <code>{exerciseProgress.color}</code>
+                </span>
+              </label>
+              <label className="watchface-inspector-field">
+                <span>Preview completion</span>
+                <span className="wf-input-with-unit">
+                  <EditableNumberInput
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={exerciseProgress.previewPercent}
+                    fallback={63}
+                    onValueChange={(previewPercent) =>
+                      updateExerciseProgress({
+                        previewPercent: Math.max(
+                          0,
+                          Math.min(100, previewPercent)
+                        )
+                      })
+                    }
+                  />
+                  <span>%</span>
+                </span>
+              </label>
+              <details className="wf-nested-disclosure">
+                <summary>Arc geometry</summary>
+                <div className="watchface-position-inputs">
+                  <label>Center X<EditableNumberInput step="1" value={exerciseProgress.arc.centerX} fallback={previewWidth / 2} onValueChange={(centerX) => updateExerciseProgress({ arc: { centerX } })} /></label>
+                  <label>Center Y<EditableNumberInput step="1" value={exerciseProgress.arc.centerY} fallback={previewHeight / 2} onValueChange={(centerY) => updateExerciseProgress({ arc: { centerY } })} /></label>
+                  <label>Radius X<EditableNumberInput min="1" step="1" value={exerciseProgress.arc.radiusX} fallback={1} onValueChange={(radiusX) => updateExerciseProgress({ arc: { radiusX: Math.max(1, radiusX) } })} /></label>
+                  <label>Radius Y<EditableNumberInput min="1" step="1" value={exerciseProgress.arc.radiusY} fallback={1} onValueChange={(radiusY) => updateExerciseProgress({ arc: { radiusY: Math.max(1, radiusY) } })} /></label>
+                  <label>Start °<EditableNumberInput min="-360" max="360" step="1" value={exerciseProgress.arc.startAngle} fallback={-135} onValueChange={(startAngle) => updateExerciseProgress({ arc: { startAngle } })} /></label>
+                  <label>End °<EditableNumberInput min="-360" max="360" step="1" value={exerciseProgress.arc.endAngle} fallback={135} onValueChange={(endAngle) => updateExerciseProgress({ arc: { endAngle } })} /></label>
+                  <label>Thickness<EditableNumberInput min="1" step="1" value={exerciseProgress.arc.strokeWidth} fallback={1} onValueChange={(strokeWidth) => updateExerciseProgress({ arc: { strokeWidth: Math.max(1, strokeWidth) } })} /></label>
+                </div>
+                <label className="watchface-inspector-field">
+                  <span>Draw remaining portion</span>
+                  <input type="checkbox" checked={exerciseProgress.arc.background} onChange={(event) => updateExerciseProgress({ arc: { background: event.target.checked } })} />
+                </label>
+              </details>
+              <details className="wf-nested-disclosure">
+                <summary>Bar geometry</summary>
+              <div className="watchface-position-inputs">
+                <label>Left<EditableNumberInput step="1" value={exerciseProgress.rect.x0} fallback={0} onValueChange={(x0) => updateExerciseProgress({ rect: { x0 } })} /></label>
+                <label>Top<EditableNumberInput step="1" value={exerciseProgress.rect.y0} fallback={0} onValueChange={(y0) => updateExerciseProgress({ rect: { y0 } })} /></label>
+                <label>Right<EditableNumberInput step="1" value={exerciseProgress.rect.x1} fallback={previewWidth} onValueChange={(x1) => updateExerciseProgress({ rect: { x1 } })} /></label>
+                <label>Bottom<EditableNumberInput step="1" value={exerciseProgress.rect.y1} fallback={previewHeight} onValueChange={(y1) => updateExerciseProgress({ rect: { y1 } })} /></label>
+              </div>
+              <label className="watchface-inspector-field">
+                <span>Fill direction</span>
+                <select
+                  value={exerciseProgress.rect.direction}
+                  onChange={(event) =>
+                    updateExerciseProgress({
+                      rect: {
+                        direction: event.target.value as CorosWatchfaceExerciseProgressStyle["rect"]["direction"]
+                      }
+                    })
+                  }
+                >
+                  <option value="left">Left to right</option>
+                  <option value="right">Right to left</option>
+                  <option value="top">Top to bottom</option>
+                  <option value="bottom">Bottom to top</option>
+                </select>
+              </label>
+              </details>
+              <p className="watchface-studio-summary">
+                COROS supplies the live exercise-goal percentage. Current
+                settings mirror to Always-on until that mode is customized.
+              </p>
+            </div>
+          </details>
+        ) : null}
       </>
     );
   }

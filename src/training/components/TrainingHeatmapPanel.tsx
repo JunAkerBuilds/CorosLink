@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -45,6 +46,10 @@ interface TrainingHeatmapPanelProps {
 const WEEKDAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 const LEGEND_LEVELS = [0, 1, 2, 3, 4] as const;
 const HEATMAP_PROXIMITY_RADIUS = 120;
+const HEATMAP_WAVE_SETTLE_MS = 220;
+const HEATMAP_WAVE_COLUMN_MS = 16;
+const HEATMAP_WAVE_ROW_MS = 5;
+const HEATMAP_WAVE_CELL_DURATION_MS = 600;
 
 interface ProximityCell {
   element: HTMLSpanElement;
@@ -116,13 +121,13 @@ export function TrainingHeatmapPanel({
   rpeBackfill = null
 }: TrainingHeatmapPanelProps) {
   const reducedMotion = usePrefersReducedMotion();
-  const [isReady, setIsReady] = useState(false);
   const [metric, setMetric] = useState<HeatmapMetric>("trainingLoad");
   const gridRef = useRef<HTMLDivElement>(null);
   const pointerFrameRef = useRef<number | null>(null);
   const pointerClientRef = useRef({ x: 0, y: 0 });
   const proximityCellsRef = useRef<ProximityCell[]>([]);
   const activeProximityCellsRef = useRef<Set<HTMLSpanElement>>(new Set());
+  const heatmapWaveHasPlayedRef = useRef(false);
   const isRpe = metric === "rpeLoad";
 
   const dayList = useMemo(
@@ -168,15 +173,187 @@ export function TrainingHeatmapPanel({
   }, [sportsByDay]);
   const hasData = cells.some((cell) => cell.level > 0);
 
-  useEffect(() => {
-    if (reducedMotion) {
-      setIsReady(true);
+  useLayoutEffect(() => {
+    const gridElement = gridRef.current;
+    if (!hasData || !gridElement) {
       return;
     }
 
-    const frame = requestAnimationFrame(() => setIsReady(true));
-    return () => cancelAnimationFrame(frame);
-  }, [cells.length, reducedMotion]);
+    if (reducedMotion) {
+      heatmapWaveHasPlayedRef.current = true;
+      gridElement.classList.remove("is-wave-loading");
+      return;
+    }
+
+    if (heatmapWaveHasPlayedRef.current) {
+      return;
+    }
+
+    const cellElements = Array.from(
+      gridElement.querySelectorAll<HTMLSpanElement>(".training-heatmap-cell")
+    )
+      .map((element, index) => ({
+        element,
+        delay:
+          HEATMAP_WAVE_SETTLE_MS +
+          Math.floor(index / 7) * HEATMAP_WAVE_COLUMN_MS +
+          (index % 7) * HEATMAP_WAVE_ROW_MS
+      }))
+      .filter(({ element }) => !element.classList.contains("is-empty"))
+      .sort((left, right) => left.delay - right.delay);
+
+    if (cellElements.length === 0) {
+      heatmapWaveHasPlayedRef.current = true;
+      return;
+    }
+
+    gridElement.classList.add("is-wave-loading");
+
+    const bounds = gridElement.getBoundingClientRect();
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    const canvas = document.createElement("canvas");
+    canvas.className = "training-heatmap-wave-canvas";
+    canvas.setAttribute("aria-hidden", "true");
+    canvas.width = Math.max(1, Math.round(bounds.width * pixelRatio));
+    canvas.height = Math.max(1, Math.round(bounds.height * pixelRatio));
+    gridElement.append(canvas);
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      canvas.remove();
+      gridElement.classList.remove("is-wave-loading");
+      heatmapWaveHasPlayedRef.current = true;
+      return;
+    }
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+
+    const waveCells = cellElements.map(({ element, delay }) => {
+      const computedStyle = window.getComputedStyle(element);
+      const level = Number(element.dataset.level ?? 0);
+      const baseColor =
+        computedStyle.getPropertyValue("--cell-color").trim() || "#2d9a74";
+      const backgroundColor = computedStyle.backgroundColor;
+      const sportColors = (element.dataset.waveSports ?? "")
+        .split(",")
+        .filter(Boolean)
+        .map((sport) =>
+          computedStyle.getPropertyValue(`--sport-${sport}`).trim()
+        )
+        .filter(Boolean);
+      const hasImage = computedStyle.backgroundImage !== "none";
+
+      return {
+        x: element.offsetLeft,
+        y: element.offsetTop,
+        width: element.offsetWidth,
+        height: element.offsetHeight,
+        radius: Math.min(element.offsetWidth, element.offsetHeight) * 0.24,
+        delay,
+        fill: hasImage ? baseColor : backgroundColor,
+        fillAlpha: hasImage ? (LEVEL_ALPHA[level] ?? 100) / 100 : 1,
+        sportColors,
+        level
+      };
+    });
+
+    let frame: number | null = null;
+    const startedAt = performance.now();
+    const finalDelay = waveCells.at(-1)?.delay ?? 0;
+
+    const drawRoundedCell = (
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+      radius: number
+    ) => {
+      context.beginPath();
+      context.roundRect(x, y, width, height, radius);
+    };
+
+    const advanceWave = (now: number) => {
+      const elapsed = now - startedAt;
+      context.clearRect(0, 0, bounds.width, bounds.height);
+
+      if (elapsed >= HEATMAP_WAVE_SETTLE_MS) {
+        heatmapWaveHasPlayedRef.current = true;
+      }
+
+      for (const cell of waveCells) {
+        const progress = Math.max(
+          0,
+          Math.min(1, (elapsed - cell.delay) / HEATMAP_WAVE_CELL_DURATION_MS)
+        );
+        if (progress <= 0) {
+          continue;
+        }
+
+        let scale: number;
+        if (progress < 0.7) {
+          const localProgress = progress / 0.7;
+          const shifted = localProgress - 1;
+          const eased = 1 + 2.70158 * shifted ** 3 + 1.70158 * shifted ** 2;
+          scale = 0.35 + (1.06 - 0.35) * eased;
+        } else {
+          const localProgress = (progress - 0.7) / 0.3;
+          const eased = 1 - (1 - localProgress) ** 3;
+          scale = 1.06 + (1 - 1.06) * eased;
+        }
+
+        const opacity = Math.min(1, progress / 0.7);
+        const width = cell.width * scale;
+        const height = cell.height * scale;
+        const x = cell.x + (cell.width - width) / 2;
+        const y = cell.y + (cell.height - height) / 2;
+        const radius = cell.radius * scale;
+
+        context.save();
+        context.globalAlpha = opacity * cell.fillAlpha;
+        drawRoundedCell(x, y, width, height, radius);
+
+        if (cell.sportColors.length >= 2) {
+          context.clip();
+          const centerX = x + width / 2;
+          const centerY = y + height / 2;
+          const sweepRadius = Math.hypot(width, height);
+          cell.sportColors.forEach((color, index) => {
+            const startAngle = -Math.PI / 2 +
+              (index / cell.sportColors.length) * Math.PI * 2;
+            const endAngle = -Math.PI / 2 +
+              ((index + 1) / cell.sportColors.length) * Math.PI * 2;
+            context.beginPath();
+            context.moveTo(centerX, centerY);
+            context.arc(centerX, centerY, sweepRadius, startAngle, endAngle);
+            context.closePath();
+            context.fillStyle = color;
+            context.fill();
+          });
+        } else {
+          context.fillStyle = cell.fill;
+          context.fill();
+        }
+        context.restore();
+      }
+
+      if (elapsed < finalDelay + HEATMAP_WAVE_CELL_DURATION_MS) {
+        frame = requestAnimationFrame(advanceWave);
+      } else {
+        frame = null;
+        canvas.remove();
+        gridElement.classList.remove("is-wave-loading");
+      }
+    };
+
+    frame = requestAnimationFrame(advanceWave);
+
+    return () => {
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+      }
+      canvas.remove();
+      gridElement.classList.remove("is-wave-loading");
+    };
+  }, [hasData, reducedMotion]);
 
   useEffect(() => {
     if (reducedMotion) {
@@ -361,7 +538,7 @@ export function TrainingHeatmapPanel({
 
               <div
                 ref={gridRef}
-                className={`training-heatmap-grid${isReady ? " is-ready" : ""}`}
+                className="training-heatmap-grid"
                 role="grid"
                 onPointerEnter={handleGridPointerEnter}
                 onPointerMove={handleGridPointerMove}
@@ -371,10 +548,6 @@ export function TrainingHeatmapPanel({
                 } over the last ${TRAINING_HEATMAP_DAYS} days`}
               >
                 {grid.cells.map((cell, index) => {
-                  const row = index % 7;
-                  const column = Math.floor(index / 7);
-                  const staggerDelay = Math.min(column * 16 + row * 5, 900);
-
                   if (!cell) {
                     return (
                       <span
@@ -398,9 +571,6 @@ export function TrainingHeatmapPanel({
                       ? [...(sportsByDay.get(cell.happenDay) ?? [])]
                       : [];
                   const cellStyle: Record<string, string> = {};
-                  if (!reducedMotion) {
-                    cellStyle.animationDelay = `${staggerDelay}ms`;
-                  }
                   // Dominant sport sets the hue for glow/hover and the single-
                   // sport fill; 2+ sports split the cell into equal pie slices.
                   if (dominantSport) {
@@ -417,6 +587,9 @@ export function TrainingHeatmapPanel({
                         cell.level === 4 ? " is-peak" : ""
                       }`}
                       data-level={cell.level}
+                      data-wave-sports={
+                        daySports.length >= 2 ? daySports.join(",") : undefined
+                      }
                       role="gridcell"
                       tabIndex={0}
                       aria-label={formatCellAriaLabel(cell, metric)}

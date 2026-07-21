@@ -19,6 +19,8 @@ import {
   buildLayerVisibilityOverrides,
   buildLayerColorOverrides,
   buildLayoutOverrides,
+  buildExerciseProgressOverrides,
+  buildKcalProgressOverrides,
   buildMetricOverrides,
   buildMetricStyleOverrides,
   buildSelectableMetricSpriteComposition,
@@ -41,6 +43,7 @@ import {
   detailsForCompositionMode,
   detailsForPreviewMode,
   detailsForPreviewResolution,
+  exerciseProgressStyleForResolution,
   getAvailableComplications,
   getAmPmCapability,
   getFixedMetricCapabilities,
@@ -58,6 +61,7 @@ import {
   mergeAssetReplacements,
   mergeConfigOverrides,
   normalizeRasterFontGlyphs,
+  parseKcalProgressArc,
   parseWatchfaceConfigText,
   pickWatchPreviewResolution,
   rasterFontSupportsText,
@@ -492,7 +496,239 @@ const details = {
   resolutions: [resolution(416, 23, 33), resolution(800, 44, 64)]
 };
 
-assert.equal(WATCHFACE_COMPLICATIONS.length, 10);
+assert.deepEqual(
+  parseKcalProgressArc("{400,400,356,352,-135,135,18,1}"),
+  {
+    centerX: 400,
+    centerY: 400,
+    radiusX: 356,
+    radiusY: 352,
+    startAngle: -135,
+    endAngle: 135,
+    strokeWidth: 18,
+    background: true
+  },
+  "the native eight-field calorie arc should be parsed without treating its radii as rect corners"
+);
+assert.equal(parseKcalProgressArc("{1,2,3,4}"), null);
+const kcalProgressStyle = {
+  referenceWidth: 800,
+  referenceHeight: 800,
+  arcEnabled: true,
+  rectEnabled: true,
+  arcColor: "#ff8800",
+  rectColor: "#00ccff",
+  previewPercent: 63,
+  arc: {
+    centerX: 400,
+    centerY: 400,
+    radiusX: 360,
+    radiusY: 350,
+    startAngle: -135,
+    endAngle: 135,
+    strokeWidth: 20,
+    background: false
+  },
+  rect: {
+    x0: 200,
+    y0: 720,
+    x1: 600,
+    y1: 744,
+    direction: "right"
+  }
+};
+const kcalProgressOverrides = buildKcalProgressOverrides(
+  details,
+  kcalProgressStyle
+);
+assert.deepEqual(
+  kcalProgressOverrides.find(
+    ({ path }) => path === "watchface_800x800/config.txt"
+  )?.values,
+  {
+    kcal_progress_arc: "{400,400,360,350,-135,135,20,0}",
+    kcal_progress_arc_color: "0xFF8800",
+    kcal_progress_rect: "{200,720,600,744,right|vcenter}",
+    kcal_progress_color: "0x00CCFF"
+  }
+);
+assert.deepEqual(
+  kcalProgressOverrides.find(
+    ({ path }) => path === "watchface_416x416/config.txt"
+  )?.values,
+  {
+    kcal_progress_arc: "{208,208,187,182,-135,135,10,0}",
+    kcal_progress_arc_color: "0xFF8800",
+    kcal_progress_rect: "{104,374,312,387,right|vcenter}",
+    kcal_progress_color: "0x00CCFF"
+  },
+  "master calorie progress geometry should scale into every physical watch tree"
+);
+const kcalAodDetails = detailsForCompositionMode(details, "aod");
+const kcalAodComposition = retargetWatchfaceCompositionToAod(
+  kcalAodDetails,
+  {
+    assetReplacements: [],
+    configOverrides: buildKcalProgressOverrides(
+      kcalAodDetails,
+      kcalProgressStyle
+    )
+  }
+);
+assert.ok(
+  kcalAodComposition.configOverrides.every(({ path, values }) =>
+    path.endsWith("/AODconfig.txt") &&
+    values.kcal_progress_arc_color === "0xFF8800" &&
+    values.kcal_progress_color === "0x00CCFF"
+  ),
+  "the AOD composition must retarget calorie progress primitives and both colors into AODconfig.txt"
+);
+const sparseAodDetails = detailsForCompositionMode(
+  {
+    ...details,
+    resolutions: details.resolutions.map((candidate) => ({
+      ...candidate,
+      aodConfig: candidate.width === 416 ? candidate.aodConfig : {}
+    }))
+  },
+  "aod"
+);
+assert.deepEqual(
+  buildKcalProgressOverrides(sparseAodDetails, kcalProgressStyle)[0]?.values,
+  {
+    kcal_progress_arc: "{208,208,187,182,-135,135,10,0}",
+    kcal_progress_arc_color: "0xFF8800",
+    kcal_progress_rect: "{104,374,312,387,right|vcenter}",
+    kcal_progress_color: "0x00CCFF"
+  },
+  "a 416-only AOD must scale geometry from its stored 800px authoring resolution"
+);
+const exerciseProgressStyle = {
+  referenceWidth: 800,
+  referenceHeight: 800,
+  enabled: true,
+  arcEnabled: true,
+  color: "#aa44ff",
+  previewPercent: 71,
+  arc: {
+    centerX: 400,
+    centerY: 400,
+    radiusX: 320,
+    radiusY: 310,
+    startAngle: -120,
+    endAngle: 120,
+    strokeWidth: 16,
+    background: false
+  },
+  rect: {
+    x0: 200,
+    y0: 680,
+    x1: 600,
+    y1: 704,
+    direction: "bottom"
+  }
+};
+assert.deepEqual(
+  buildExerciseProgressOverrides(details, exerciseProgressStyle).find(
+    ({ path }) => path === "watchface_800x800/config.txt"
+  )?.values,
+  {
+    exercise_progress_arc: "{400,400,320,310,-120,120,16,0}",
+    exercise_progress_rect: "{200,680,600,704,hcenter|bottom}",
+    exercise_progress_color: "0xAA44FF"
+  }
+);
+assert.deepEqual(
+  buildExerciseProgressOverrides(
+    sparseAodDetails,
+    exerciseProgressStyle
+  )[0]?.values,
+  {
+    exercise_progress_arc: "{208,208,166,161,-120,120,8,0}",
+    exercise_progress_rect: "{104,354,312,366,hcenter|bottom}",
+    exercise_progress_color: "0xAA44FF"
+  },
+  "a 416-only AOD must scale exercise progress from its stored 800px authoring resolution"
+);
+assert.deepEqual(
+  exerciseProgressStyleForResolution(
+    {
+      ...details.resolutions[0],
+      config: {
+        ...details.resolutions[0].config,
+        exercise_progress_arc: "{208,208,166,161,-120,120,8,1}",
+        exercise_progress_rect: "{104,354,312,366,right|vcenter}",
+        exercise_progress_color: "0xAA44FF"
+      }
+    }
+  ),
+  {
+    referenceWidth: 416,
+    referenceHeight: 416,
+    enabled: true,
+    arcEnabled: true,
+    color: "#aa44ff",
+    previewPercent: 63,
+    arc: {
+      centerX: 208,
+      centerY: 208,
+      radiusX: 166,
+      radiusY: 161,
+      startAngle: -120,
+      endAngle: 120,
+      strokeWidth: 8,
+      background: true
+    },
+    rect: {
+      x0: 104,
+      y0: 354,
+      x1: 312,
+      y1: 366,
+      direction: "right"
+    }
+  },
+  "imported native exercise progress should populate the editor"
+);
+const disabledKcalProgress = buildKcalProgressOverrides(details, {
+  ...kcalProgressStyle,
+  arcEnabled: false,
+  rectEnabled: false
+});
+assert.ok(
+  disabledKcalProgress.every(({ values }) =>
+    Object.values(values).every(
+      (value) => value === "__COROSLINK_DELETE_CONFIG_KEY__"
+    )
+  ),
+  "disabling a progress primitive must remove its declaration and color together"
+);
+assert.ok(
+  buildExerciseProgressOverrides(details, {
+    ...exerciseProgressStyle,
+    enabled: false,
+    arcEnabled: false
+  }).every(({ values }) =>
+    Object.values(values).every(
+      (value) => value === "__COROSLINK_DELETE_CONFIG_KEY__"
+    )
+  ),
+  "disabling exercise progress must remove its arc, rectangle, and shared color together"
+);
+
+assert.equal(WATCHFACE_COMPLICATIONS.length, 11);
+assert.deepEqual(
+  WATCHFACE_COMPLICATIONS.find(({ id }) => id === "barometer"),
+  {
+    id: "barometer",
+    label: "Barometer",
+    controlPrefix: "barometer",
+    sampleValue: "1013.2",
+    valueParts: [
+      { rectSuffix: "integer", sampleValue: "1013" },
+      { rectSuffix: "decimal", sampleValue: "2" }
+    ]
+  }
+);
 assert.equal(
   isControlComplicationEnabled(details, {}, "heartRate"),
   true,
@@ -505,6 +741,7 @@ assert.equal(
 );
 assert.equal(hasControlComplication(details, "steps"), true);
 assert.equal(hasControlComplication(details, "calories"), false);
+assert.equal(hasControlComplication(details, "barometer"), false);
 
 const noControlDetails = {
   ...details,
@@ -546,6 +783,98 @@ assert.equal(
   true,
   "the synthesized configuration should be recognized when the project reloads"
 );
+
+// Barometer is permanently disabled: the static branch aborts the COROS phone
+// app during sync (a protobuf CHECK) and the directional value never binds to a
+// display slot, so it can never be a usable selectable. Enabling it in a design
+// must synthesize nothing, and any barometer keys already in a template must be
+// deleted. See memory: coros-watchface-barometer-unusable.
+assert.equal(
+  isControlComplicationEnabled(
+    details,
+    { controlComplicationEnabled: { barometer: true } },
+    "barometer"
+  ),
+  false,
+  "barometer must report disabled even when the design flag is on"
+);
+assert.ok(
+  getAvailableComplications(details).every(({ id }) => id !== "barometer"),
+  "barometer must never be offered as an available complication"
+);
+
+const forcedOffBarometer =
+  buildControlComplicationConfigurationOverrides(noControlDetails, {
+    controlComplicationEnabled: { barometer: true }
+  });
+for (const candidate of noControlDetails.resolutions) {
+  const override = forcedOffBarometer.find(
+    ({ path }) => path === `${candidate.directory}/config.txt`
+  );
+  for (const key of [
+    "control_barometer_down_icon",
+    "control_barometer_flat_icon",
+    "control_barometer_up_icon",
+    "control_barometer_integer_rect",
+    "control_barometer_decimal_rect",
+    "control_barometer_icon",
+    "control_barometer_rect",
+    "control_barometer_font"
+  ]) {
+    assert.equal(
+      override?.values?.[key],
+      undefined,
+      `enabling barometer must not synthesize ${key}`
+    );
+  }
+}
+assert.equal(
+  hasControlComplication(
+    applyConfigOverridesToDetails(noControlDetails, forcedOffBarometer),
+    "barometer"
+  ),
+  false,
+  "barometer must never become selectable, even when enabled in the design"
+);
+
+// A template that already ships barometer keys must have them stripped, since
+// the complication is permanently disabled.
+const templateWithBarometer = {
+  ...noControlDetails,
+  resolutions: noControlDetails.resolutions.map((candidate) => ({
+    ...candidate,
+    config: {
+      ...candidate.config,
+      rect_control1_pos: "{0,0}",
+      control_barometer_integer_rect: "{10,10,120,50,hcenter|vcenter}",
+      control_barometer_decimal_rect: "{124,10,160,50,hcenter|vcenter}",
+      control_barometer_down_icon: "icon\\coroslink_barometer_down.png",
+      control_barometer_font: "13x19",
+      control_barometer_font_color: ""
+    }
+  }))
+};
+const strippedBarometer =
+  buildControlComplicationConfigurationOverrides(templateWithBarometer, {
+    controlComplicationEnabled: { barometer: true }
+  });
+for (const candidate of templateWithBarometer.resolutions) {
+  const override = strippedBarometer.find(
+    ({ path }) => path === `${candidate.directory}/config.txt`
+  );
+  for (const key of [
+    "control_barometer_integer_rect",
+    "control_barometer_decimal_rect",
+    "control_barometer_down_icon",
+    "control_barometer_font"
+  ]) {
+    assert.equal(
+      override?.values?.[key],
+      "__COROSLINK_DELETE_CONFIG_KEY__",
+      `disabled barometer must delete existing ${key}`
+    );
+  }
+}
 
 const virtualExerciseAsset = listWatchfaceConfigAssets(
   details,
@@ -1079,6 +1408,99 @@ const independentModeRoot = {
   ...legacyModeRoot,
   modeDesigns: { aod: materializedAod }
 };
+const linkedProgressRoot = writeWatchfaceModeDesign(
+  independentModeRoot,
+  "current",
+  {
+    ...resolveWatchfaceModeDesign(independentModeRoot, "current"),
+    kcalProgress: kcalProgressStyle
+  }
+);
+assert.equal(linkedProgressRoot.kcalProgress.arcEnabled, true);
+assert.equal(linkedProgressRoot.modeDesigns.aod.kcalProgress.arcEnabled, true);
+assert.equal(linkedProgressRoot.modeDesigns.aod.kcalProgress.rectEnabled, true);
+assert.equal(
+  linkedProgressRoot.modeDesigns.aod.kcalProgress.arcColor,
+  "#8c4b00",
+  "new current-face calorie progress should be copied into AOD with the normal dim factor"
+);
+const linkedProgressUpdate = writeWatchfaceModeDesign(
+  linkedProgressRoot,
+  "current",
+  {
+    ...resolveWatchfaceModeDesign(linkedProgressRoot, "current"),
+    kcalProgress: {
+      ...kcalProgressStyle,
+      rectEnabled: false
+    }
+  }
+);
+assert.equal(
+  linkedProgressUpdate.modeDesigns.aod.kcalProgress.rectEnabled,
+  false,
+  "AOD calorie progress should continue following Current until it is customized"
+);
+const customizedAodProgress = writeWatchfaceModeDesign(
+  linkedProgressUpdate,
+  "aod",
+  {
+    ...resolveWatchfaceModeDesign(linkedProgressUpdate, "aod"),
+    kcalProgress: {
+      ...linkedProgressUpdate.modeDesigns.aod.kcalProgress,
+      arcColor: "#123456"
+    }
+  }
+);
+const currentAfterAodCustomization = writeWatchfaceModeDesign(
+  customizedAodProgress,
+  "current",
+  {
+    ...resolveWatchfaceModeDesign(customizedAodProgress, "current"),
+    kcalProgress: {
+      ...kcalProgressStyle,
+      arcColor: "#abcdef"
+    }
+  }
+);
+assert.equal(
+  currentAfterAodCustomization.modeDesigns.aod.kcalProgress.arcColor,
+  "#123456",
+  "editing Current must not overwrite an independently customized AOD progress style"
+);
+const linkedExerciseProgressRoot = writeWatchfaceModeDesign(
+  independentModeRoot,
+  "current",
+  {
+    ...resolveWatchfaceModeDesign(independentModeRoot, "current"),
+    exerciseProgress: exerciseProgressStyle
+  }
+);
+assert.equal(linkedExerciseProgressRoot.exerciseProgress.enabled, true);
+assert.equal(
+  linkedExerciseProgressRoot.modeDesigns.aod.exerciseProgress.enabled,
+  true
+);
+assert.equal(
+  linkedExerciseProgressRoot.modeDesigns.aod.exerciseProgress.color,
+  "#5e258c",
+  "new current-face exercise progress should be copied into AOD with the normal dim factor"
+);
+const linkedExerciseProgressUpdate = writeWatchfaceModeDesign(
+  linkedExerciseProgressRoot,
+  "current",
+  {
+    ...resolveWatchfaceModeDesign(linkedExerciseProgressRoot, "current"),
+    exerciseProgress: {
+      ...exerciseProgressStyle,
+      enabled: false
+    }
+  }
+);
+assert.equal(
+  linkedExerciseProgressUpdate.modeDesigns.aod.exerciseProgress.enabled,
+  false,
+  "AOD exercise progress should continue following Current until it is customized"
+);
 const activeAod = resolveWatchfaceModeDesign(independentModeRoot, "aod");
 const movedAodRoot = writeWatchfaceModeDesign(
   independentModeRoot,

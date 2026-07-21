@@ -5,6 +5,8 @@ import type {
   CorosWatchfaceConfigOverride,
   CorosWatchfaceEffectBinding,
   CorosWatchfaceEffectStyle,
+  CorosWatchfaceExerciseProgressStyle,
+  CorosWatchfaceKcalProgressStyle,
   CorosWatchfaceStroke,
   CorosWatchfaceRasterFont,
   CorosWatchfaceResolutionDetails,
@@ -59,6 +61,26 @@ export interface WatchfaceStudioOptions extends WatchfaceTypography {
   previewComplicationContent?: "all" | "icon";
   /** Per-fixed-metric bitmap styles, isolated into their own sprite folders. */
   metricStyles?: WatchfaceMetricStyles;
+  /** Representative goal completion shown for native calorie progress layers. */
+  kcalProgressPreviewPercent?: number;
+  /** Representative goal completion shown for the native exercise progress bar. */
+  exerciseProgressPreviewPercent?: number;
+  /**
+   * Live calorie arc/bar styling. When present it fully drives the preview,
+   * bypassing the derived config so editor tweaks (color, geometry) render
+   * without rebuilding the whole details chain. Falls back to config when
+   * absent (e.g. an imported face with no design state yet).
+   */
+  kcalProgressStyle?: CorosWatchfaceKcalProgressStyle;
+  /** Live exercise arc/bar styling; see {@link kcalProgressStyle}. */
+  exerciseProgressStyle?: CorosWatchfaceExerciseProgressStyle;
+  /**
+   * Skips drawing the progress arcs/bars in the main composite. The live editor
+   * paints them on a dedicated overlay canvas instead, so color/geometry edits
+   * refresh without recompositing the whole face. Export previews leave this
+   * off so the arcs are baked into the final image.
+   */
+  deferProgressArcs?: boolean;
   /** Shared bitmap style for values shown in the selectable control slot. */
   complicationStyle?: WatchfaceMetricSpriteStyle;
   /** Scales a Studio-created standalone battery folder from authoring size. */
@@ -627,7 +649,9 @@ export function listWatchfaceConfigAssets(
     }
   }
   for (const complicationId of virtualControlIcons) {
-    if (complicationId === "battery") continue;
+    if (complicationId === "battery" || complicationId === "barometer") {
+      continue;
+    }
     const complication = WATCHFACE_COMPLICATIONS.find(
       (candidate) => candidate.id === complicationId
     );
@@ -916,6 +940,9 @@ const NATIVE_CONFIG_ICON_KEYS = new Set([
   "bluetooth_off_icon",
   "bluetooth_on_icon",
   "control_barometer_icon",
+  "control_barometer_down_icon",
+  "control_barometer_flat_icon",
+  "control_barometer_up_icon",
   "control_bluetooth_off_icon",
   "control_bluetooth_on_icon",
   "control_elevation_icon",
@@ -925,6 +952,7 @@ const NATIVE_CONFIG_ICON_KEYS = new Set([
   "control_kcal_icon",
   "control_no_disturb_off_icon",
   "control_no_disturb_on_icon",
+  "control_point_icon",
   "control_step_icon",
   "control_sunrise_icon",
   "control_sunset_icon",
@@ -1020,6 +1048,205 @@ export function virtualControlIconCanvasSize(
   return { width: size, height: size };
 }
 
+function renderBarometerTrendIcon(
+  width: number,
+  height: number,
+  trend: BarometerTrend,
+  color: string
+): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, width);
+  canvas.height = Math.max(1, height);
+  const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+  if (!context) return canvas.toDataURL("image/png");
+  const unit = Math.min(canvas.width, canvas.height);
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height / 2;
+  context.strokeStyle = color;
+  context.fillStyle = color;
+  context.lineWidth = Math.max(1, unit * 0.055);
+  context.lineCap = "round";
+  context.lineJoin = "round";
+
+  // Match the supplied glyphs: circular gauge, upper dial, needle, and a
+  // small state marker at the bottom.
+  context.beginPath();
+  context.arc(centerX, centerY, unit * 0.445, 0, Math.PI * 2);
+  context.stroke();
+  context.beginPath();
+  context.arc(centerX, centerY, unit * 0.285, Math.PI, 0);
+  context.stroke();
+
+  const needleAngle = trend === "up"
+    ? -Math.PI * 0.25
+    : trend === "down"
+      ? -Math.PI * 0.75
+      : 0;
+  const needleLength = unit * 0.31;
+  context.beginPath();
+  context.moveTo(centerX, centerY);
+  context.lineTo(
+    centerX + Math.cos(needleAngle) * needleLength,
+    centerY + Math.sin(needleAngle) * needleLength
+  );
+  context.stroke();
+  context.beginPath();
+  context.arc(centerX, centerY, Math.max(1, unit * 0.055), 0, Math.PI * 2);
+  context.fill();
+
+  const markerY = canvas.height * 0.735;
+  const markerHalf = unit * 0.08;
+  context.lineWidth = Math.max(1, unit * 0.06);
+  context.beginPath();
+  if (trend === "flat") {
+    context.moveTo(centerX - markerHalf, markerY);
+    context.lineTo(centerX + markerHalf, markerY);
+  } else {
+    const direction = trend === "up" ? -1 : 1;
+    context.moveTo(centerX, markerY + direction * markerHalf);
+    context.lineTo(centerX, markerY - direction * markerHalf);
+    context.moveTo(centerX, markerY + direction * markerHalf);
+    context.lineTo(centerX - markerHalf, markerY);
+    context.moveTo(centerX, markerY + direction * markerHalf);
+    context.lineTo(centerX + markerHalf, markerY);
+  }
+  context.stroke();
+  return canvas.toDataURL("image/png");
+}
+
+function renderBarometerIcon(
+  width: number,
+  height: number,
+  color: string
+): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, width);
+  canvas.height = Math.max(1, height);
+  const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+  if (!context) return canvas.toDataURL("image/png");
+  const unit = Math.min(canvas.width, canvas.height);
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height * 0.56;
+  const radius = unit * 0.31;
+  context.strokeStyle = color;
+  context.lineWidth = Math.max(2, unit * 0.11);
+  context.lineCap = "round";
+  context.beginPath();
+  context.arc(centerX, centerY, radius, Math.PI * 0.85, Math.PI * 2.15);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(centerX, centerY);
+  context.lineTo(centerX + radius * 0.62, centerY - radius * 0.52);
+  context.stroke();
+  return canvas.toDataURL("image/png");
+}
+
+function controlPointCanvasSize(
+  resolution: CorosWatchfaceResolutionDetails
+): { width: number; height: number } {
+  const colonValue = resolution.config.control_colon_icon
+    ?.trim()
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "");
+  const colon = colonValue
+    ? resolution.icons.find(
+        (icon) => icon.path === `${resolution.directory}/${colonValue}`
+      )
+    : undefined;
+  if (colon) return { width: colon.width, height: colon.height };
+  const font = findSpriteFolder(
+    resolution,
+    resolution.config.control_barometer_font
+  );
+  const digit = font?.files[0];
+  return digit
+    ? { width: Math.max(3, Math.round(digit.width * 0.5)), height: digit.height }
+    : virtualControlIconCanvasSize(resolution);
+}
+
+function renderControlPointIcon(
+  width: number,
+  height: number,
+  color: string
+): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, width);
+  canvas.height = Math.max(1, height);
+  const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+  if (!context) return canvas.toDataURL("image/png");
+  const radius = Math.max(1, Math.min(canvas.width * 0.24, canvas.height * 0.08));
+  context.fillStyle = color;
+  context.beginPath();
+  context.arc(canvas.width / 2, canvas.height * 0.78, radius, 0, Math.PI * 2);
+  context.fill();
+  return canvas.toDataURL("image/png");
+}
+
+/** Creates assets for exactly the selected parser branch plus its decimal point. */
+export function buildBarometerIconReplacements(
+  details: CorosWatchfaceTemplateDetails,
+  color: string
+): CorosWatchfaceAssetReplacement[] {
+  const replacements: CorosWatchfaceAssetReplacement[] = [];
+  for (const resolution of details.resolutions) {
+    const size = virtualControlIconCanvasSize(resolution);
+    const iconPath = resolution.config.control_barometer_icon
+      ?.trim()
+      .replace(/\\/g, "/")
+      .replace(/^\.\//, "");
+    if (iconPath === BAROMETER_ICON_RELATIVE_PATH) {
+      const path = `${resolution.directory}/${iconPath}`;
+      if (!resolution.icons.some((icon) => icon.path === path)) {
+        replacements.push({
+          path,
+          dataUrl: renderBarometerIcon(size.width, size.height, color),
+          create: true
+        });
+      }
+    }
+    for (const trend of BAROMETER_TRENDS) {
+      const configKey = `control_barometer_${trend}_icon`;
+      const relativePath = resolution.config[configKey]
+        ?.trim()
+        .replace(/\\/g, "/")
+        .replace(/^\.\//, "");
+      if (relativePath !== barometerTrendIconRelativePath(trend)) continue;
+      const path = `${resolution.directory}/${relativePath}`;
+      if (resolution.icons.some((icon) => icon.path === path)) continue;
+      replacements.push({
+        path,
+        dataUrl: renderBarometerTrendIcon(
+          size.width,
+          size.height,
+          trend,
+          color
+        ),
+        create: true
+      });
+    }
+    const pointPath = resolution.config.control_point_icon
+      ?.trim()
+      .replace(/\\/g, "/")
+      .replace(/^\.\//, "");
+    if (pointPath === BAROMETER_POINT_ICON_RELATIVE_PATH) {
+      const path = `${resolution.directory}/${pointPath}`;
+      if (!resolution.icons.some((icon) => icon.path === path)) {
+        const pointSize = controlPointCanvasSize(resolution);
+        replacements.push({
+          path,
+          dataUrl: renderControlPointIcon(
+            pointSize.width,
+            pointSize.height,
+            color
+          ),
+          create: true
+        });
+      }
+    }
+  }
+  return replacements;
+}
+
 function replaceConfigAssetInPlace(configKey: string): boolean {
   return configAssetSupportsNativeSize(configKey);
 }
@@ -1086,7 +1313,12 @@ export function buildWatchfaceConfigAssetOverrides(
       const entries = pngConfigEntries(resolution, scope);
       if (scope === "config") {
         for (const complication of WATCHFACE_COMPLICATIONS) {
-          if (complication.id === "battery") continue;
+          if (
+            complication.id === "battery" ||
+            complication.id === "barometer"
+          ) {
+            continue;
+          }
           const configKey = `control_${complication.controlPrefix}_icon`;
           const id = watchfaceConfigAssetId(scope, configKey);
           if (
@@ -1292,7 +1524,12 @@ export async function buildWatchfaceConfigAssetReplacements(
       const entries = pngConfigEntries(resolution, scope);
       if (scope === "config") {
         for (const complication of WATCHFACE_COMPLICATIONS) {
-          if (complication.id === "battery") continue;
+          if (
+            complication.id === "battery" ||
+            complication.id === "barometer"
+          ) {
+            continue;
+          }
           const configKey = `control_${complication.controlPrefix}_icon`;
           const id = watchfaceConfigAssetId(scope, configKey);
           if (
@@ -2785,6 +3022,28 @@ const STUDIO_IMAGE_CACHE_LIMIT = 96;
 const STUDIO_IMAGE_CACHE_MAX_SOURCE_LENGTH = 256_000;
 const studioImageCache = new Map<string, Promise<HTMLImageElement>>();
 
+/**
+ * The composited background is a full-face PNG that overflows the shared LRU's
+ * size cap, so it would otherwise be decoded from scratch on every preview pass.
+ * A single-slot cache reuses the decoded bitmap while the source is unchanged
+ * (e.g. every frame of a color-picker drag), where only overlays are moving.
+ */
+let lastPreviewBackground: {
+  dataUrl: string;
+  image: Promise<HTMLImageElement>;
+} | null = null;
+function loadPreviewBackground(dataUrl: string): Promise<HTMLImageElement> {
+  if (lastPreviewBackground?.dataUrl === dataUrl) {
+    return lastPreviewBackground.image;
+  }
+  const image = loadStudioImage(dataUrl, false);
+  lastPreviewBackground = { dataUrl, image };
+  void image.catch(() => {
+    if (lastPreviewBackground?.image === image) lastPreviewBackground = null;
+  });
+  return image;
+}
+
 export function loadStudioImage(
   dataUrl: string,
   cache = true
@@ -3369,6 +3628,7 @@ export type WatchfaceComplicationId =
   | "calories"
   | "floors"
   | "elevation"
+  | "barometer"
   | "exercise"
   | "sunrise"
   | "sunset"
@@ -3394,7 +3654,7 @@ export interface WatchfaceComplicationDefinition {
   sampleValue: string;
   /** Controls such as sunrise use separate hour and minute rectangles. */
   valueParts?: ReadonlyArray<{
-    rectSuffix: "hour" | "minute";
+    rectSuffix: "hour" | "minute" | "integer" | "decimal";
     sampleValue: string;
   }>;
 }
@@ -3561,6 +3821,16 @@ export const WATCHFACE_COMPLICATIONS: WatchfaceComplicationDefinition[] = [
   { id: "floors", label: "Floors", controlPrefix: "floor", sampleValue: "12" },
   { id: "elevation", label: "Elevation", controlPrefix: "elevation", sampleValue: "1284" },
   {
+    id: "barometer",
+    label: "Barometer",
+    controlPrefix: "barometer",
+    sampleValue: "1013.2",
+    valueParts: [
+      { rectSuffix: "integer", sampleValue: "1013" },
+      { rectSuffix: "decimal", sampleValue: "2" }
+    ]
+  },
+  {
     id: "exercise",
     label: "Exercise",
     controlPrefix: "exercise",
@@ -3654,14 +3924,66 @@ function complicationFontKey(
     : `control_${complication.controlPrefix}_font`;
 }
 
+function hasUsableControlSlot(config: Record<string, string>): boolean {
+  return Object.entries(config).some(
+    ([key, value]) =>
+      /^rect_control\d+_pos$/.test(key) && parseConfigPos(value) !== null
+  );
+}
+
+export type WatchfaceBarometerMode = "static" | "directional";
+
+const BAROMETER_TRENDS = ["down", "flat", "up"] as const;
+type BarometerTrend = (typeof BAROMETER_TRENDS)[number];
+const BAROMETER_STATIC_KEYS = [
+  "control_barometer_icon",
+  "control_barometer_rect"
+] as const;
+const BAROMETER_DIRECTIONAL_KEYS = [
+  "control_barometer_down_icon",
+  "control_barometer_flat_icon",
+  "control_barometer_up_icon",
+  "control_barometer_integer_rect",
+  "control_barometer_decimal_rect"
+] as const;
+/** Mirrors the parser's mutually exclusive static vs directional branches. */
+export function barometerDisplayModeForConfig(
+  config: Record<string, string>
+): WatchfaceBarometerMode {
+  return Boolean(config.control_barometer_icon?.trim()) ||
+    parseConfigRect(config.control_barometer_rect) !== null
+    ? "static"
+    : "directional";
+}
+
+function hasBarometerConfiguration(
+  config: Record<string, string>,
+  mode = barometerDisplayModeForConfig(config)
+): boolean {
+  const common =
+    parseConfigPos(config.control_barometer_icon_pos) !== null &&
+    Boolean(config.control_barometer_font?.trim()) &&
+    Boolean(config.control_point_icon?.trim());
+  return common && (mode === "static"
+    ? Boolean(config.control_barometer_icon?.trim()) &&
+      parseConfigRect(config.control_barometer_rect) !== null
+    : BAROMETER_TRENDS.every((trend) =>
+        Boolean(config[`control_barometer_${trend}_icon`]?.trim())
+      ) &&
+      parseConfigRect(config.control_barometer_integer_rect) !== null &&
+      parseConfigRect(config.control_barometer_decimal_rect) !== null);
+}
+
 function resolutionHasControlComplication(
   resolution: CorosWatchfaceResolutionDetails,
   complication: WatchfaceComplicationDefinition
 ): boolean {
+  if (complication.id === "barometer") {
+    return hasUsableControlSlot(resolution.config) &&
+      hasBarometerConfiguration(resolution.config);
+  }
   return (
-    Object.keys(resolution.config).some((key) =>
-      /^rect_control\d+_pos$/.test(key)
-    ) &&
+    hasUsableControlSlot(resolution.config) &&
     complicationRectKeys(complication).every(
       (key) => parseConfigRect(resolution.config[key]) !== null
     ) &&
@@ -3679,6 +4001,9 @@ export function getAvailableComplications(
   }
   return WATCHFACE_COMPLICATIONS.filter(
     (complication) =>
+      // Barometer is not a usable selectable complication (see
+      // isControlComplicationEnabled); never offer it as a choice.
+      complication.id !== "barometer" &&
       resolutionHasControlComplication(resolution, complication) &&
       Boolean(
         findSpriteFolder(
@@ -3707,6 +4032,7 @@ export function hasControlComplication(
 
 interface ControlComplicationSelection {
   controlComplicationEnabled?: Record<string, boolean>;
+  controlBarometerMode?: WatchfaceBarometerMode;
   controlBatteryEnabled?: boolean;
   controlSunriseEnabled?: boolean;
   controlSunsetEnabled?: boolean;
@@ -3744,6 +4070,12 @@ export function isControlComplicationEnabled(
   design: ControlComplicationSelection,
   id: WatchfaceComplicationId
 ): boolean {
+  // Barometer is unusable on COROS firmware: the static branch aborts the
+  // phone app during sync (protobuf CHECK) and no shipping face binds the
+  // directional value to a slot, so it never renders. Force it off so the
+  // compose pipeline deletes any control_barometer_* keys instead of
+  // synthesizing them, and never reaches the crashing static branch.
+  if (id === "barometer") return false;
   const configured = design.controlComplicationEnabled?.[id];
   if (configured !== undefined) {
     return configured;
@@ -3848,6 +4180,7 @@ const COMPLICATION_ICON_NAMES: Record<WatchfaceComplicationId, string[]> = {
   calories: ["kcal.png", "calorie.png", "calories.png"],
   floors: ["floor.png", "floors.png"],
   elevation: ["elevation.png", "altitude.png"],
+  barometer: [],
   exercise: ["exercise.png", "workout.png", "sport.png"],
   sunrise: ["sunrise.png"],
   sunset: ["sunset.png"],
@@ -3855,12 +4188,42 @@ const COMPLICATION_ICON_NAMES: Record<WatchfaceComplicationId, string[]> = {
   temperature: ["temperature.png", "temp.png"]
 };
 
+function barometerTrendIconRelativePath(trend: BarometerTrend): string {
+  return `icon/coroslink_barometer_${trend}.png`;
+}
+
+const BAROMETER_ICON_RELATIVE_PATH = "icon/coroslink_barometer.png";
+const BAROMETER_POINT_ICON_RELATIVE_PATH =
+  "icon/coroslink_control_point.png";
+
 function firstControlRect(config: Record<string, string>): string | undefined {
   return Object.entries(config).find(
     ([key, value]) =>
       /^control_[a-z0-9_]+_rect$/.test(key) &&
       parseConfigRect(value) !== null
   )?.[1];
+}
+
+/**
+ * Pressure needs four integer digits plus a decimal digit. Prefer the widest
+ * existing selectable value slot and ignore stale barometer rectangles from
+ * earlier experiments, which may be too narrow to fit even one glyph.
+ */
+function widestNonBarometerControlRect(
+  config: Record<string, string>
+): string | undefined {
+  return Object.entries(config)
+    .filter(
+      ([key, value]) =>
+        /^control_[a-z0-9_]+_rect$/.test(key) &&
+        !key.startsWith("control_barometer_") &&
+        parseConfigRect(value) !== null
+    )
+    .sort((left, right) => {
+      const leftRect = parseConfigRect(left[1])!;
+      const rightRect = parseConfigRect(right[1])!;
+      return (rightRect.x1 - rightRect.x0) - (leftRect.x1 - leftRect.x0);
+    })[0]?.[1];
 }
 
 function fallbackControlRect(
@@ -3886,14 +4249,17 @@ function fallbackControlRect(
 }
 
 function splitControlRect(
-  value: string
+  value: string,
+  leadingRatio = 0.5
 ): { hour: string; minute: string } | null {
   const rect = parseConfigRect(value);
   if (!rect) {
     return null;
   }
   const gap = Math.max(1, Math.round((rect.x1 - rect.x0) * 0.04));
-  const middle = Math.round((rect.x0 + rect.x1) / 2);
+  const middle = Math.round(
+    rect.x0 + (rect.x1 - rect.x0) * leadingRatio
+  );
   const suffix =
     value.match(
       /^\{\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*((?:,[^}]*)?)\}$/
@@ -3922,6 +4288,35 @@ function fallbackControlFont(
       (folder) => folder.kind === "digits" && folder.aod === aod
     ) ?? resolution.spriteFolders.find((folder) => folder.kind === "digits")
   )?.folder.replace(/\//g, "\\");
+}
+
+function fallbackBarometerControlRect(
+  resolution: CorosWatchfaceResolutionDetails,
+  config: Record<string, string>,
+  aod: boolean
+): string {
+  const candidate = widestNonBarometerControlRect(config) ??
+    fallbackControlRect(resolution, config, aod);
+  const rect = parseConfigRect(candidate);
+  if (!rect) return candidate;
+  const fontPath = config.control_barometer_font ||
+    fallbackControlFont(resolution, config, aod);
+  const digit = findSpriteFolder(resolution, fontPath)?.files[0];
+  if (!digit) return candidate;
+
+  // 1013.2 needs five digits and a point-sized gap. Expanding around the
+  // imported slot center avoids emitting rectangles narrower than the glyphs.
+  const minimumWidth = digit.width * 5 +
+    Math.max(1, Math.round(digit.width * 0.45));
+  const currentWidth = rect.x1 - rect.x0;
+  if (currentWidth >= minimumWidth) return candidate;
+  const center = (rect.x0 + rect.x1) / 2;
+  const x0 = Math.round(center - minimumWidth / 2);
+  const suffix =
+    candidate.match(
+      /^\{\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*((?:,[^}]*)?)\}$/
+    )?.[1] || ",hcenter|vcenter";
+  return `{${x0},${rect.y0},${x0 + minimumWidth},${rect.y1}${suffix}}`;
 }
 
 function fallbackControlIconPosition(
@@ -3974,41 +4369,30 @@ function addMissingControlComplication(
   resolution: CorosWatchfaceResolutionDetails,
   config: Record<string, string>,
   complication: WatchfaceComplicationDefinition,
+  barometerMode: WatchfaceBarometerMode | undefined,
   aod: boolean
 ): Record<string, string> {
   const values: Record<string, string> = {};
+  const resolvedBarometerMode = complication.id === "barometer"
+    ? barometerMode ?? barometerDisplayModeForConfig(config)
+    : undefined;
   if (
-    Object.keys(config).some((key) => /^rect_control\d+_pos$/.test(key)) &&
+    complication.id !== "barometer" &&
+    hasUsableControlSlot(config) &&
+    Boolean(config[complicationFontKey(complication)]) &&
     complicationRectKeys(complication).every(
       (key) => parseConfigRect(config[key]) !== null
-    ) &&
-    Boolean(config[complicationFontKey(complication)])
+    )
   ) {
     return values;
   }
-  if (
-    !Object.keys(config).some((key) => /^rect_control\d+_pos$/.test(key))
-  ) {
+  if (!hasUsableControlSlot(config)) {
     values.rect_control1_pos = "{0,0}";
   }
 
-  const rectKeys = complicationRectKeys(complication);
-  const baseRect = fallbackControlRect(resolution, config, aod);
-  const splitRect = complication.valueParts
-    ? splitControlRect(baseRect)
-    : null;
-  for (const [index, key] of rectKeys.entries()) {
-    if (parseConfigRect(config[key])) {
-      continue;
-    }
-    values[key] =
-      splitRect && index === 0
-        ? splitRect.hour
-        : splitRect && index === 1
-          ? splitRect.minute
-          : baseRect;
-  }
-
+  const baseRect = complication.id === "barometer"
+    ? fallbackBarometerControlRect(resolution, config, aod)
+    : fallbackControlRect(resolution, config, aod);
   const fontKey = complicationFontKey(complication);
   if (!config[fontKey]) {
     const font = fallbackControlFont(resolution, config, aod);
@@ -4023,6 +4407,70 @@ function addMissingControlComplication(
 
   const iconPositionKey = `control_${complication.controlPrefix}_icon_pos`;
   const iconKey = `control_${complication.controlPrefix}_icon`;
+  if (complication.id === "barometer") {
+    if (resolvedBarometerMode === "static") {
+      for (const key of BAROMETER_DIRECTIONAL_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(config, key)) {
+          values[key] = COROS_CONFIG_DELETE_VALUE;
+        }
+      }
+      if (!config.control_barometer_icon?.trim()) {
+        values.control_barometer_icon = BAROMETER_ICON_RELATIVE_PATH.replace(
+          /\//g,
+          "\\"
+        );
+      }
+      values.control_barometer_rect = baseRect;
+    } else {
+      for (const key of BAROMETER_STATIC_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(config, key)) {
+          values[key] = COROS_CONFIG_DELETE_VALUE;
+        }
+      }
+      const splitRect = splitControlRect(baseRect, 0.78) ?? {
+        hour: baseRect,
+        minute: baseRect
+      };
+      values.control_barometer_integer_rect = splitRect.hour;
+      values.control_barometer_decimal_rect = splitRect.minute;
+      for (const trend of BAROMETER_TRENDS) {
+        const trendKey = `control_barometer_${trend}_icon`;
+        if (!config[trendKey]) {
+          values[trendKey] = barometerTrendIconRelativePath(trend).replace(
+            /\//g,
+            "\\"
+          );
+        }
+      }
+    }
+    if (!config.control_point_icon?.trim()) {
+      values.control_point_icon = BAROMETER_POINT_ICON_RELATIVE_PATH.replace(
+        /\//g,
+        "\\"
+      );
+    }
+    if (!parseConfigPos(config[iconPositionKey])) {
+      values[iconPositionKey] = fallbackControlIconPosition(config, baseRect);
+    }
+    return values;
+  }
+
+  const rectKeys = complicationRectKeys(complication);
+  const splitRect = complication.valueParts
+    ? splitControlRect(baseRect, 0.5)
+    : null;
+  for (const [index, key] of rectKeys.entries()) {
+    if (parseConfigRect(config[key])) {
+      continue;
+    }
+    values[key] =
+      splitRect && index === 0
+        ? splitRect.hour
+        : splitRect && index === 1
+          ? splitRect.minute
+          : baseRect;
+  }
+
   const iconPath = complicationIconPath(resolution, complication);
   if (complication.id === "battery") {
     const directoryKey = "control_battery_icon_dir";
@@ -4075,7 +4523,7 @@ export function buildControlComplicationConfigurationOverrides(
     ].flatMap(({ fileName, config, aod }) => {
       const canAdd =
         !aod ||
-        Object.keys(config).some((key) => /^rect_control\d+_pos$/.test(key));
+        hasUsableControlSlot(config);
       const values: Record<string, string> = {};
       for (const complication of WATCHFACE_COMPLICATIONS) {
         const enabled = isControlComplicationEnabled(
@@ -4090,6 +4538,7 @@ export function buildControlComplicationConfigurationOverrides(
               resolution,
               { ...config, ...values },
               complication,
+              design.controlBarometerMode,
               aod
             )
           );
@@ -4103,6 +4552,15 @@ export function buildControlComplicationConfigurationOverrides(
           if (key.startsWith(prefix)) {
             values[key] = COROS_CONFIG_DELETE_VALUE;
           }
+        }
+        if (
+          complication.id === "barometer" &&
+          config.control_point_icon
+            ?.trim()
+            .replace(/\\/g, "/")
+            .replace(/^\.\//, "") === BAROMETER_POINT_ICON_RELATIVE_PATH
+        ) {
+          values.control_point_icon = COROS_CONFIG_DELETE_VALUE;
         }
         if (complication.id === "battery") {
           for (const key of Object.keys(config)) {
@@ -4285,9 +4743,7 @@ export function buildControlTemperatureOverrides(
   useStudioFolder = false
 ): CorosWatchfaceConfigOverride[] {
   return details.resolutions.flatMap((resolution) => {
-    const hasControlSlot = Object.keys(resolution.config).some((key) =>
-      /^rect_control\d+_pos$/.test(key)
-    );
+    const hasControlSlot = hasUsableControlSlot(resolution.config);
     const source = controlTemperatureFontFolder(resolution);
     if (!hasControlSlot || !source) {
       return [];
@@ -4738,6 +5194,296 @@ function metricFontFolder(
 
 function configHexColor(color: string): string {
   return `0x${color.replace(/^#/, "").toUpperCase()}`;
+}
+
+export interface ParsedKcalProgressArc {
+  centerX: number;
+  centerY: number;
+  radiusX: number;
+  radiusY: number;
+  startAngle: number;
+  endAngle: number;
+  strokeWidth: number;
+  background: boolean;
+}
+
+/** Parses COROS's eight-field WFArc primitive. */
+export function parseKcalProgressArc(
+  value: string | undefined
+): ParsedKcalProgressArc | null {
+  const match = value?.match(
+    /^\{\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*\}$/
+  );
+  return match
+    ? {
+        centerX: Number(match[1]),
+        centerY: Number(match[2]),
+        radiusX: Number(match[3]),
+        radiusY: Number(match[4]),
+        startAngle: Number(match[5]),
+        endAngle: Number(match[6]),
+        strokeWidth: Number(match[7]),
+        background: Number(match[8]) === 1
+      }
+    : null;
+}
+
+function configColor(value: string | undefined, fallback: string): string {
+  const match = value?.trim().match(/^0x([0-9a-f]{6})$/i);
+  return match ? `#${match[1]!.toLowerCase()}` : fallback;
+}
+
+function rectProgressDirection(value: string | undefined): CorosWatchfaceKcalProgressStyle["rect"]["direction"] {
+  const alignment = value?.slice(value.lastIndexOf(",") + 1).toLowerCase() ?? "";
+  if (alignment.includes("bottom")) return "bottom";
+  if (alignment.includes("top")) return "top";
+  if (alignment.includes("right")) return "right";
+  return "left";
+}
+
+/** Sensible full-face defaults, expressed in the selected resolution's pixels. */
+export function defaultKcalProgressStyle(
+  width: number,
+  height: number,
+  color = "#51e0b5"
+): CorosWatchfaceKcalProgressStyle {
+  const unit = Math.min(width, height);
+  return {
+    referenceWidth: width,
+    referenceHeight: height,
+    arcEnabled: false,
+    rectEnabled: false,
+    arcColor: color,
+    rectColor: color,
+    previewPercent: 63,
+    arc: {
+      centerX: Math.round(width / 2),
+      centerY: Math.round(height / 2),
+      radiusX: Math.round(unit * 0.445),
+      radiusY: Math.round(unit * 0.445),
+      startAngle: -135,
+      endAngle: 135,
+      strokeWidth: Math.max(1, Math.round(unit * 0.024)),
+      background: false
+    },
+    rect: {
+      x0: Math.round(width * 0.26),
+      y0: Math.round(height * 0.918),
+      x1: Math.round(width * 0.74),
+      y1: Math.round(height * 0.947),
+      direction: "left"
+    }
+  };
+}
+
+/** Uses imported native values when present, otherwise returns inactive defaults. */
+export function kcalProgressStyleForResolution(
+  resolution: CorosWatchfaceResolutionDetails,
+  style?: CorosWatchfaceKcalProgressStyle
+): CorosWatchfaceKcalProgressStyle {
+  if (style) {
+    return {
+      ...style,
+      referenceWidth: style.referenceWidth ?? resolution.width,
+      referenceHeight: style.referenceHeight ?? resolution.height
+    };
+  }
+  const arc = parseKcalProgressArc(resolution.config.kcal_progress_arc);
+  const rect = parseConfigRect(resolution.config.kcal_progress_rect);
+  const fallback = defaultKcalProgressStyle(
+    resolution.width,
+    resolution.height,
+    "#51e0b5"
+  );
+  return {
+    ...fallback,
+    arcEnabled: Boolean(arc),
+    rectEnabled: Boolean(rect),
+    arcColor: configColor(
+      resolution.config.kcal_progress_arc_color,
+      fallback.arcColor
+    ),
+    rectColor: configColor(
+      resolution.config.kcal_progress_color,
+      fallback.rectColor
+    ),
+    ...(arc ? { arc } : {}),
+    ...(rect
+      ? {
+          rect: {
+            ...rect,
+            direction: rectProgressDirection(resolution.config.kcal_progress_rect)
+          }
+        }
+      : {})
+  };
+}
+
+function rectProgressAlignment(
+  direction: CorosWatchfaceKcalProgressStyle["rect"]["direction"]
+): string {
+  if (direction === "right") return "right|vcenter";
+  if (direction === "top") return "hcenter|top";
+  if (direction === "bottom") return "hcenter|bottom";
+  return "left|vcenter";
+}
+
+/** Emits native calorie arc/bar keys for every resolution in the active mode. */
+export function buildKcalProgressOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  style: CorosWatchfaceKcalProgressStyle | undefined
+): CorosWatchfaceConfigOverride[] {
+  if (!style) return [];
+  const source = pickPreviewResolution(details);
+  if (!source) return [];
+  return details.resolutions.map((resolution) => {
+    const referenceWidth = Math.max(1, style.referenceWidth ?? source.width);
+    const referenceHeight = Math.max(1, style.referenceHeight ?? source.height);
+    const scaleX = resolution.width / referenceWidth;
+    const scaleY = resolution.height / referenceHeight;
+    const strokeScale = Math.min(scaleX, scaleY);
+    const arc = style.arc;
+    const rect = style.rect;
+    const values: Record<string, string> = style.arcEnabled
+      ? {
+          kcal_progress_arc: `{${Math.round(arc.centerX * scaleX)},${Math.round(arc.centerY * scaleY)},${Math.max(1, Math.round(arc.radiusX * scaleX))},${Math.max(1, Math.round(arc.radiusY * scaleY))},${Math.round(arc.startAngle)},${Math.round(arc.endAngle)},${Math.max(1, Math.round(arc.strokeWidth * strokeScale))},${arc.background ? 1 : 0}}`,
+          kcal_progress_arc_color: configHexColor(style.arcColor)
+        }
+      : {
+          kcal_progress_arc: COROS_CONFIG_DELETE_VALUE,
+          kcal_progress_arc_color: COROS_CONFIG_DELETE_VALUE
+        };
+    Object.assign(
+      values,
+      style.rectEnabled
+        ? {
+            kcal_progress_rect: `{${Math.round(rect.x0 * scaleX)},${Math.round(rect.y0 * scaleY)},${Math.round(rect.x1 * scaleX)},${Math.round(rect.y1 * scaleY)},${rectProgressAlignment(rect.direction)}}`,
+            kcal_progress_color: configHexColor(style.rectColor)
+          }
+        : {
+            kcal_progress_rect: COROS_CONFIG_DELETE_VALUE,
+            kcal_progress_color: COROS_CONFIG_DELETE_VALUE
+          }
+    );
+    return { path: `${resolution.directory}/config.txt`, values };
+  });
+}
+
+/** Sensible exercise-goal defaults, expressed in the selected resolution's pixels. */
+export function defaultExerciseProgressStyle(
+  width: number,
+  height: number,
+  color = "#51e0b5"
+): CorosWatchfaceExerciseProgressStyle {
+  const unit = Math.min(width, height);
+  return {
+    referenceWidth: width,
+    referenceHeight: height,
+    enabled: false,
+    arcEnabled: false,
+    color,
+    previewPercent: 63,
+    arc: {
+      centerX: Math.round(width / 2),
+      centerY: Math.round(height / 2),
+      radiusX: Math.round(unit * 0.4),
+      radiusY: Math.round(unit * 0.4),
+      startAngle: -135,
+      endAngle: 135,
+      strokeWidth: Math.max(1, Math.round(unit * 0.024)),
+      background: false
+    },
+    rect: {
+      x0: Math.round(width * 0.26),
+      y0: Math.round(height * 0.875),
+      x1: Math.round(width * 0.74),
+      y1: Math.round(height * 0.904),
+      direction: "left"
+    }
+  };
+}
+
+/** Uses an imported native exercise bar when present, otherwise inactive defaults. */
+export function exerciseProgressStyleForResolution(
+  resolution: CorosWatchfaceResolutionDetails,
+  style?: CorosWatchfaceExerciseProgressStyle
+): CorosWatchfaceExerciseProgressStyle {
+  const fallback = defaultExerciseProgressStyle(
+    resolution.width,
+    resolution.height
+  );
+  if (style) {
+    return {
+      ...fallback,
+      ...style,
+      referenceWidth: style.referenceWidth ?? resolution.width,
+      referenceHeight: style.referenceHeight ?? resolution.height,
+      arcEnabled: style.arcEnabled ?? false,
+      arc: { ...fallback.arc, ...(style.arc ?? {}) },
+      rect: { ...fallback.rect, ...style.rect }
+    };
+  }
+  const arc = parseKcalProgressArc(resolution.config.exercise_progress_arc);
+  const rect = parseConfigRect(resolution.config.exercise_progress_rect);
+  return {
+    ...fallback,
+    arcEnabled: Boolean(arc),
+    enabled: Boolean(rect),
+    color: configColor(
+      resolution.config.exercise_progress_color,
+      fallback.color
+    ),
+    ...(arc ? { arc } : {}),
+    ...(rect
+      ? {
+          rect: {
+            ...rect,
+            direction: rectProgressDirection(
+              resolution.config.exercise_progress_rect
+            )
+          }
+        }
+      : {})
+  };
+}
+
+/** Emits native exercise progress keys for every resolution in the active mode. */
+export function buildExerciseProgressOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  style: CorosWatchfaceExerciseProgressStyle | undefined
+): CorosWatchfaceConfigOverride[] {
+  if (!style) return [];
+  const source = pickPreviewResolution(details);
+  if (!source) return [];
+  const normalized = exerciseProgressStyleForResolution(source, style);
+  const referenceWidth = Math.max(1, normalized.referenceWidth ?? source.width);
+  const referenceHeight = Math.max(1, normalized.referenceHeight ?? source.height);
+  return details.resolutions.map((resolution) => {
+    const scaleX = resolution.width / referenceWidth;
+    const scaleY = resolution.height / referenceHeight;
+    const strokeScale = Math.min(scaleX, scaleY);
+    const arc = normalized.arc;
+    const rect = normalized.rect;
+    const values: Record<string, string> = normalized.arcEnabled
+      ? {
+          exercise_progress_arc: `{${Math.round(arc.centerX * scaleX)},${Math.round(arc.centerY * scaleY)},${Math.max(1, Math.round(arc.radiusX * scaleX))},${Math.max(1, Math.round(arc.radiusY * scaleY))},${Math.round(arc.startAngle)},${Math.round(arc.endAngle)},${Math.max(1, Math.round(arc.strokeWidth * strokeScale))},${arc.background ? 1 : 0}}`
+        }
+      : {
+          exercise_progress_arc: COROS_CONFIG_DELETE_VALUE
+        };
+    Object.assign(values, normalized.enabled
+      ? {
+          exercise_progress_rect: `{${Math.round(rect.x0 * scaleX)},${Math.round(rect.y0 * scaleY)},${Math.round(rect.x1 * scaleX)},${Math.round(rect.y1 * scaleY)},${rectProgressAlignment(rect.direction)}}`,
+          exercise_progress_color: configHexColor(normalized.color)
+        }
+      : {
+          exercise_progress_rect: COROS_CONFIG_DELETE_VALUE
+        });
+    values.exercise_progress_color = normalized.arcEnabled || normalized.enabled
+      ? configHexColor(normalized.color)
+      : COROS_CONFIG_DELETE_VALUE;
+    return { path: `${resolution.directory}/config.txt`, values };
+  });
 }
 
 /** Activates or removes fixed live metrics in every template resolution. */
@@ -6672,6 +7418,198 @@ function drawStudioLayerImage(
 }
 
 /**
+ * Scales an authored arc into a target resolution's config string, mirroring
+ * {@link buildKcalProgressOverrides} so the live preview matches the export.
+ */
+function scaleArcConfigValue(
+  arc: ParsedKcalProgressArc,
+  referenceWidth: number,
+  referenceHeight: number,
+  targetWidth: number,
+  targetHeight: number
+): string {
+  const scaleX = targetWidth / Math.max(1, referenceWidth);
+  const scaleY = targetHeight / Math.max(1, referenceHeight);
+  const strokeScale = Math.min(scaleX, scaleY);
+  return `{${Math.round(arc.centerX * scaleX)},${Math.round(arc.centerY * scaleY)},${Math.max(1, Math.round(arc.radiusX * scaleX))},${Math.max(1, Math.round(arc.radiusY * scaleY))},${Math.round(arc.startAngle)},${Math.round(arc.endAngle)},${Math.max(1, Math.round(arc.strokeWidth * strokeScale))},${arc.background ? 1 : 0}}`;
+}
+
+/** Scales an authored progress bar into a target resolution's config string. */
+function scaleRectConfigValue(
+  rect: CorosWatchfaceKcalProgressStyle["rect"],
+  referenceWidth: number,
+  referenceHeight: number,
+  targetWidth: number,
+  targetHeight: number
+): string {
+  const scaleX = targetWidth / Math.max(1, referenceWidth);
+  const scaleY = targetHeight / Math.max(1, referenceHeight);
+  return `{${Math.round(rect.x0 * scaleX)},${Math.round(rect.y0 * scaleY)},${Math.round(rect.x1 * scaleX)},${Math.round(rect.y1 * scaleY)},${rectProgressAlignment(rect.direction)}}`;
+}
+
+/**
+ * Draws the calorie/exercise progress arcs and bars onto a context. Shared by
+ * the main composite and the editor's live overlay so both stay pixel-identical.
+ * When a resolved design style is present it fully owns the layer (scaled here,
+ * not through the details rebuild); imported faces fall back to derived config.
+ */
+export function renderWatchfaceProgressLayers(
+  context: CanvasRenderingContext2D,
+  canvasWidth: number,
+  resolution: CorosWatchfaceResolutionDetails,
+  options: Pick<
+    WatchfaceStudioOptions,
+    | "kcalProgressStyle"
+    | "exerciseProgressStyle"
+    | "kcalProgressPreviewPercent"
+    | "exerciseProgressPreviewPercent"
+    | "accentColor"
+  >
+): void {
+  const scale = canvasWidth / resolution.width;
+  const config = resolution.config;
+  const percent = Math.max(
+    0,
+    Math.min(100, options.kcalProgressPreviewPercent ?? 63)
+  );
+  const kcalStyle = options.kcalProgressStyle
+    ? kcalProgressStyleForResolution(resolution, options.kcalProgressStyle)
+    : undefined;
+  const exerciseStyle = options.exerciseProgressStyle
+    ? exerciseProgressStyleForResolution(resolution, options.exerciseProgressStyle)
+    : undefined;
+  const styleRefWidth = (style: { referenceWidth?: number }) =>
+    style.referenceWidth ?? resolution.width;
+  const styleRefHeight = (style: { referenceHeight?: number }) =>
+    style.referenceHeight ?? resolution.height;
+  const drawProgressArc = (
+    arcValue: string | undefined,
+    colorValue: string | undefined,
+    previewPercent: number
+  ) => {
+    const arc = parseKcalProgressArc(arcValue);
+    if (!arc || arc.radiusX <= 0 || arc.radiusY <= 0 || arc.strokeWidth <= 0) {
+      return;
+    }
+    const span = Math.max(-360, Math.min(360, arc.endAngle - arc.startAngle));
+    const fraction = Math.max(0, Math.min(100, previewPercent)) / 100;
+    const current = arc.startAngle + span * fraction;
+    // COROS WFArc angles use the clock convention (0° = 12 o'clock, clockwise
+    // positive). Canvas 0° sits at 3 o'clock, so shift by -90° to place the
+    // arc's opening where the watch renders it (bottom for the -135..135 default).
+    const start = (arc.background ? current : arc.startAngle) - 90;
+    const end = (arc.background ? arc.endAngle : current) - 90;
+    context.save();
+    context.strokeStyle = configColor(colorValue, options.accentColor);
+    context.lineWidth = Math.max(1, arc.strokeWidth * scale);
+    context.beginPath();
+    context.ellipse(
+      arc.centerX * scale,
+      arc.centerY * scale,
+      arc.radiusX * scale,
+      arc.radiusY * scale,
+      0,
+      (start * Math.PI) / 180,
+      (end * Math.PI) / 180,
+      span < 0
+    );
+    context.stroke();
+    context.restore();
+  };
+  drawProgressArc(
+    kcalStyle
+      ? kcalStyle.arcEnabled
+        ? scaleArcConfigValue(
+            kcalStyle.arc,
+            styleRefWidth(kcalStyle),
+            styleRefHeight(kcalStyle),
+            resolution.width,
+            resolution.height
+          )
+        : undefined
+      : config.kcal_progress_arc,
+    kcalStyle ? configHexColor(kcalStyle.arcColor) : config.kcal_progress_arc_color,
+    percent
+  );
+  drawProgressArc(
+    exerciseStyle
+      ? exerciseStyle.arcEnabled
+        ? scaleArcConfigValue(
+            exerciseStyle.arc,
+            styleRefWidth(exerciseStyle),
+            styleRefHeight(exerciseStyle),
+            resolution.width,
+            resolution.height
+          )
+        : undefined
+      : config.exercise_progress_arc,
+    exerciseStyle ? configHexColor(exerciseStyle.color) : config.exercise_progress_color,
+    options.exerciseProgressPreviewPercent ?? 63
+  );
+  const drawProgressRect = (
+    rectValue: string | undefined,
+    colorValue: string | undefined,
+    previewPercent: number
+  ) => {
+    const progressRect = parseConfigRect(rectValue);
+    if (!progressRect) return;
+    const fraction = Math.max(0, Math.min(100, previewPercent)) / 100;
+    const width = Math.max(0, progressRect.x1 - progressRect.x0);
+    const height = Math.max(0, progressRect.y1 - progressRect.y0);
+    const direction = rectProgressDirection(rectValue);
+    let x = progressRect.x0;
+    let y = progressRect.y0;
+    let fillWidth = width;
+    let fillHeight = height;
+    if (direction === "right") {
+      fillWidth = width * fraction;
+      x = progressRect.x1 - fillWidth;
+    } else if (direction === "top") {
+      fillHeight = height * fraction;
+    } else if (direction === "bottom") {
+      fillHeight = height * fraction;
+      y = progressRect.y1 - fillHeight;
+    } else {
+      fillWidth = width * fraction;
+    }
+    context.save();
+    context.fillStyle = configColor(colorValue, options.accentColor);
+    context.fillRect(x * scale, y * scale, fillWidth * scale, fillHeight * scale);
+    context.restore();
+  };
+  drawProgressRect(
+    kcalStyle
+      ? kcalStyle.rectEnabled
+        ? scaleRectConfigValue(
+            kcalStyle.rect,
+            styleRefWidth(kcalStyle),
+            styleRefHeight(kcalStyle),
+            resolution.width,
+            resolution.height
+          )
+        : undefined
+      : config.kcal_progress_rect,
+    kcalStyle ? configHexColor(kcalStyle.rectColor) : config.kcal_progress_color,
+    percent
+  );
+  drawProgressRect(
+    exerciseStyle
+      ? exerciseStyle.enabled
+        ? scaleRectConfigValue(
+            exerciseStyle.rect,
+            styleRefWidth(exerciseStyle),
+            styleRefHeight(exerciseStyle),
+            resolution.width,
+            resolution.height
+          )
+        : undefined
+      : config.exercise_progress_rect,
+    exerciseStyle ? configHexColor(exerciseStyle.color) : config.exercise_progress_color,
+    options.exerciseProgressPreviewPercent ?? 63
+  );
+}
+
+/**
  * Draws a live preview of the face: the canvas background plus the actual
  * sprites the watch will render, placed with the template's own layout keys.
  */
@@ -6692,7 +7630,7 @@ export async function drawStudioPreview(
   const scale = canvas.width / resolution.width;
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.drawImage(
-    await loadStudioImage(backgroundDataUrl, false),
+    await loadPreviewBackground(backgroundDataUrl),
     0,
     0,
     canvas.width,
@@ -6700,6 +7638,9 @@ export async function drawStudioPreview(
   );
 
   const config = resolution.config;
+  if (!options.deferProgressArcs) {
+    renderWatchfaceProgressLayers(context, canvas.width, resolution, options);
+  }
   const now = new Date();
   const weekdayIndex = corosWeekdayIndex(now.getDay());
   const hour = String(now.getHours()).padStart(2, "0");
@@ -6950,8 +7891,12 @@ export async function drawStudioPreview(
   const controlOrigin = parseConfigPos(
     controlOriginKey ? config[controlOriginKey] : undefined
   ) ?? { x: 0, y: 0 };
+  const usesStaticBarometer = complication?.id === "barometer" &&
+    parseConfigRect(config.control_barometer_rect) !== null;
   const relativeComplicationRects = complicationPrefix && complication
-    ? (complication.valueParts ?? [{ rectSuffix: null, sampleValue: complication.sampleValue }])
+    ? (usesStaticBarometer
+        ? [{ rectSuffix: null, sampleValue: complication.sampleValue }]
+        : complication.valueParts ?? [{ rectSuffix: null, sampleValue: complication.sampleValue }])
         .flatMap(({ rectSuffix, sampleValue }) => {
           const key = complication.id === "battery"
             ? "control_battery_level_rect"
@@ -6974,7 +7919,10 @@ export async function drawStudioPreview(
   const complicationIconValue = complicationPrefix
     ? complication?.id === "battery"
       ? undefined
-      : config[`control_${complicationPrefix}_icon`]?.replace(/\\/g, "/")
+      : complication?.id === "barometer"
+        ? (config.control_barometer_icon || config.control_barometer_flat_icon)
+            ?.replace(/\\/g, "/")
+        : config[`control_${complicationPrefix}_icon`]?.replace(/\\/g, "/")
     : undefined;
   const complicationIconPath = complicationIconValue
     ? `${resolution.directory}/${complicationIconValue}`
@@ -6986,7 +7934,11 @@ export async function drawStudioPreview(
       : null;
   const complicationIconKey =
     complicationPrefix && complication?.id !== "battery"
-      ? `control_${complicationPrefix}_icon`
+      ? complication?.id === "barometer"
+        ? config.control_barometer_icon
+          ? "control_barometer_icon"
+          : "control_barometer_flat_icon"
+        : `control_${complicationPrefix}_icon`
       : "";
   const virtualComplicationIconOverride =
     complicationIconKey && !complicationIcon
@@ -7026,8 +7978,21 @@ export async function drawStudioPreview(
   const controlColonFile = controlColonPath
     ? resolution.icons.find((icon) => icon.path === controlColonPath) ?? null
     : null;
-  if (controlColonFile && relativeComplicationRects.length > 1) {
-    wantedSprites.set(controlColonFile.path, {
+  const controlPointValue = config.control_point_icon?.replace(/\\/g, "/");
+  const controlPointPath = controlPointValue
+    ? `${resolution.directory}/${controlPointValue}`
+    : null;
+  const controlPointFile = controlPointPath
+    ? resolution.icons.find((icon) => icon.path === controlPointPath) ?? null
+    : null;
+  const controlValueSeparatorFile = complication?.id === "barometer"
+    ? controlPointFile
+    : controlColonFile;
+  if (
+    controlValueSeparatorFile &&
+    (relativeComplicationRects.length > 1 || usesStaticBarometer)
+  ) {
+    wantedSprites.set(controlValueSeparatorFile.path, {
       color: options.layerColors?.complication ??
         (options.tintIcons ? options.accentColor : null)
     });
@@ -7044,6 +8009,7 @@ export async function drawStudioPreview(
     separator?: {
       configKey: string;
       file: CorosWatchfaceSpriteFile;
+      index?: number;
     };
   }[] = [];
   if (autoAlignedTime) {
@@ -7086,8 +8052,19 @@ export async function drawStudioPreview(
           y1: part.rect.y1 + controlOrigin.y
         },
         source: complicationSource,
-        value: part.sampleValue,
-        componentId: "complication"
+        value: usesStaticBarometer
+          ? part.sampleValue.replace(/\D/g, "")
+          : part.sampleValue,
+        componentId: "complication",
+        ...(usesStaticBarometer && controlPointFile
+          ? {
+              separator: {
+                configKey: "control_point_icon",
+                file: controlPointFile,
+                index: 4
+              }
+            }
+          : {})
       });
     }
   }
@@ -7853,6 +8830,34 @@ export async function drawStudioPreview(
       false,
       complication?.id === "battery" ? "controlBatteryIcon" : undefined
     );
+  } else if (complication?.id === "barometer" && complicationIconPos) {
+    const fallback = virtualControlIconCanvasSize(resolution);
+    const image = await loadStudioImage(
+      config.control_barometer_icon
+        ? renderBarometerIcon(
+            fallback.width,
+            fallback.height,
+            options.layerColors?.complication ?? options.digitColor
+          )
+        : renderBarometerTrendIcon(
+            fallback.width,
+            fallback.height,
+            "flat",
+            options.layerColors?.complication ?? options.digitColor
+          )
+    );
+    drawStudioLayerImage(
+      context,
+      image,
+      complicationIconPos.x * scale,
+      complicationIconPos.y * scale,
+      image.naturalWidth * scale,
+      image.naturalHeight * scale,
+      scale,
+      options,
+      "complication",
+      false
+    );
   } else if (complication?.id === "battery" && complicationIconPos) {
     // Some watches offer Battery as a firmware control even though the source
     // template contains no battery control PNG. Draw a preview-only glyph so
@@ -8108,7 +9113,11 @@ export async function drawStudioPreview(
     let x = centerX - totalWidth / 2;
     const layerId = plan.timePartId ?? plan.metricId ?? plan.datePartId ?? plan.componentId;
     for (const [index, glyph] of glyphs.entries()) {
-      if (index === 2 && separatorImage && plan.separator) {
+      if (
+        index === (plan.separator?.index ?? 2) &&
+        separatorImage &&
+        plan.separator
+      ) {
         drawStudioLayerImage(
           context,
           separatorImage,
@@ -8140,17 +9149,29 @@ export async function drawStudioPreview(
 
   if (
     options.previewComplicationContent !== "icon" &&
-    controlColonFile &&
     relativeComplicationRects.length > 1
   ) {
     const first = relativeComplicationRects[0]!.rect;
     const second = relativeComplicationRects[1]!.rect;
-    const image = await configuredAssetImage(
-      "control_colon_icon",
-      controlColonFile,
-      options.layerColors?.complication ??
-        (options.tintIcons ? options.accentColor : null)
-    );
+    const separatorColor = options.layerColors?.complication ??
+      (options.tintIcons ? options.accentColor : options.digitColor);
+    const image = controlValueSeparatorFile
+      ? await configuredAssetImage(
+          complication?.id === "barometer"
+            ? "control_point_icon"
+            : "control_colon_icon",
+          controlValueSeparatorFile,
+          separatorColor
+        )
+      : complication?.id === "barometer" && config.control_point_icon
+        ? await loadStudioImage(
+            renderControlPointIcon(
+              controlPointCanvasSize(resolution).width,
+              controlPointCanvasSize(resolution).height,
+              separatorColor
+            )
+          )
+        : null;
     if (image) {
       const centerX = controlOrigin.x + (first.x1 + second.x0) / 2;
       const centerY = controlOrigin.y +

@@ -7,8 +7,10 @@ import type {
 import {
   applyConfigOverridesToDetails,
   applyLayoutToDetails,
+  barometerDisplayModeForConfig,
   buildAmPmOverrides,
   buildAmPmSpriteReplacements,
+  buildBarometerIconReplacements,
   buildControlTemperatureOverrides,
   buildControlTemperatureSpriteReplacements,
   buildControlComplicationConfigurationOverrides,
@@ -24,6 +26,8 @@ import {
   buildLayerColorOverrides,
   buildLayerColorSpriteReplacements,
   buildLayoutOverrides,
+  buildExerciseProgressOverrides,
+  buildKcalProgressOverrides,
   buildMetricOverrides,
   buildMetricSpriteReplacements,
   buildMetricStyleOverrides,
@@ -63,7 +67,8 @@ import {
 import { buildWatchfaceEffectPaddingOverrides } from "./watchfaceEffectPadding.ts";
 import {
   buildWeatherOverrides,
-  buildWeatherSpriteReplacements
+  buildWeatherSpriteReplacements,
+  buildWeatherTemperaturePlacementOverrides
 } from "./weatherAssets.ts";
 
 /**
@@ -146,7 +151,7 @@ export async function buildAodBackgroundComposition(
 }
 
 /** Official weather-bearing COROS faces ship this watchface version. */
-const WEATHER_WATCHFACE_VERSION = 4;
+const MODERN_CONTROL_WATCHFACE_VERSION = 4;
 
 const EFFECT_FOLDER_LAYER: Array<[RegExp, string]> = [
   [/\/cl_battery\//, "battery"],
@@ -368,6 +373,10 @@ export function toStudioOptions(
     tintIcons: design.tintIcons,
     previewComplication: design.previewComplication as WatchfaceStudioOptions["previewComplication"],
     metricStyles: metricStylesOf(design),
+    kcalProgressPreviewPercent: design.kcalProgress?.previewPercent,
+    exerciseProgressPreviewPercent: design.exerciseProgress?.previewPercent,
+    kcalProgressStyle: design.kcalProgress,
+    exerciseProgressStyle: design.exerciseProgress,
     complicationStyle: design.selectableMetricStyle,
     timeStyles: timeStylesOf(design),
     dateStyles: dateStylesOf(design),
@@ -397,9 +406,10 @@ export function deriveDesignDetails(
     details,
     timeFormatOverrides
   );
-  const metricOverrides = buildMetricOverrides(
-    timeFormatDetails,
-    design.metricChanges ?? {}
+  const metricOverrides = mergeConfigOverrides(
+    buildMetricOverrides(timeFormatDetails, design.metricChanges ?? {}),
+    buildKcalProgressOverrides(timeFormatDetails, design.kcalProgress),
+    buildExerciseProgressOverrides(timeFormatDetails, design.exerciseProgress)
   );
   const metricDetails = applyConfigOverridesToDetails(
     timeFormatDetails,
@@ -474,7 +484,13 @@ export function deriveDesignDetails(
   const previewDetails = applyConfigOverridesToDetails(
     laidOutDetails,
     mergeConfigOverrides(
-      buildLayerVisibilityOverrides(laidOutDetails, design.layerVisibility ?? {})
+      buildLayerVisibilityOverrides(laidOutDetails, design.layerVisibility ?? {}),
+      design.weatherIndicator
+        ? buildWeatherTemperaturePlacementOverrides(
+            laidOutDetails,
+            design.weatherIndicator
+          )
+        : []
     )
   );
   return {
@@ -588,6 +604,15 @@ export async function composeWatchfaceReplacements(
     design,
     "temperature"
   );
+  const controlBarometerActive = isControlComplicationEnabled(
+    details,
+    design,
+    "barometer"
+  );
+  const controlBarometerMode = design.controlBarometerMode ??
+    barometerDisplayModeForConfig(
+      pickPreviewResolution(details)?.config ?? {}
+    );
   const controlTemperatureStyle = metricStyles.temperature ?? {
     color: design.digitColor,
     scale: 1
@@ -673,6 +698,10 @@ export async function composeWatchfaceReplacements(
         )
       : [],
     selectableMetricComposition.replacements,
+    buildBarometerIconReplacements(
+      selectableConfigDetails,
+      design.layerColors?.complication ?? design.digitColor
+    ),
     timeStyleActive
       ? await buildTimeSpriteReplacements(
           metricDetails,
@@ -802,6 +831,12 @@ export async function composeWatchfaceReplacements(
       buildStaticSeparatorOverrides(details, design.staticSeparators),
       ampmSupported ? buildAmPmOverrides(details, ampmStyle!) : [],
       weatherStyle ? buildWeatherOverrides(details, weatherStyle) : [],
+      // Snap the fixed temperature element beside the weather icon. Reads the
+      // rect size from metricDetails (post buildMetricOverrides) and repositions
+      // it, so it must merge after metricOverrides to win.
+      weatherStyle
+        ? buildWeatherTemperaturePlacementOverrides(metricDetails, weatherStyle)
+        : [],
       // Retain synthesized fixed-asset keys (notably battery_icon_dir/pos).
       // The final positioned pass sees those keys in its intermediate details
       // and therefore correctly avoids emitting them a second time.
@@ -824,14 +859,22 @@ export async function composeWatchfaceReplacements(
     )
   );
 
-  const requiresWeatherVersion =
-    Boolean(weatherStyle?.enabled) || controlTemperatureActive;
+  const requiresModernControlVersion =
+    Boolean(weatherStyle?.enabled) ||
+    controlTemperatureActive ||
+    controlBarometerActive;
+  const minimumWatchFaceVersion =
+    controlBarometerActive && controlBarometerMode === "static"
+      ? MODERN_CONTROL_WATCHFACE_VERSION
+      : requiresModernControlVersion
+        ? MODERN_CONTROL_WATCHFACE_VERSION
+        : undefined;
 
   return {
     assetReplacements: effectedAssets.replacements,
     configOverrides,
-    ...(requiresWeatherVersion
-      ? { minWatchFaceVersion: WEATHER_WATCHFACE_VERSION }
+    ...(minimumWatchFaceVersion !== undefined
+      ? { minWatchFaceVersion: minimumWatchFaceVersion }
       : {})
   };
 }
