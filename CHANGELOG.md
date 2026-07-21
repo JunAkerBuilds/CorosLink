@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.21] - 2026-07-21
+
+### Added
+
+- **End-to-end COROS workout editing** — edit scheduled/library workouts in Training Hub ([#75](https://github.com/JunAkerBuilds/CorosLink/pull/75))
+- **COROS two-factor login** — 2FA support for COROS sign-in
+- **Native calorie/exercise progress arcs** — parse, edit, preview, and export kcal & exercise progress arcs/bars in Watch Face Studio ([#74](https://github.com/JunAkerBuilds/CorosLink/pull/74))
+- **Coach load & open workout targets** — targetType load (6) and open/manual-end (1) ([#73](https://github.com/JunAkerBuilds/CorosLink/pull/73))
+- **Combined downloads** — unified download flow plus Watch Studio improvements
+
+### Changed
+
+- Smoother Training Hub animations (heatmap / recovery / VO2 widgets)
+- Progress-arc editing uses overlay rendering (no full recomposite on every edit)
+
+### Fixed
+
+- Coach-created run distance showing as Volume `--` on calendar ([#73](https://github.com/JunAkerBuilds/CorosLink/pull/73))
+- Watchface progress-arc preview orientation (canvas vs COROS clock convention) ([#74](https://github.com/JunAkerBuilds/CorosLink/pull/74))
+
 ## [0.1.20] - 2026-07-20
 
 ### Added
@@ -332,6 +352,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - GitHub Actions release workflow and installer build documentation
 
+[0.1.21]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.20...v0.1.21
 [0.1.20]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.18...v0.1.19
 [0.1.18]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.17...v0.1.18
