@@ -194,26 +194,29 @@ function EditableHexColorInput({
 }
 
 /**
- * Native color swatch that stays responsive while dragging. The browser fires
- * `onChange` continuously as the cursor moves through the picker, and each event
- * triggers a full design-state update plus preview recomposition. We show the
- * new color locally on every event but throttle the expensive commit to at most
- * once per `COLOR_COMMIT_INTERVAL_MS`, always flushing the final value.
+ * Native color swatch tuned for a live overlay preview. The browser fires
+ * `onChange` continuously while dragging in the picker. Each event repaints the
+ * lightweight preview via `onPreview` (imperative, no React state), and the
+ * expensive design-state commit (`onValueChange`, which re-renders the editor)
+ * runs only once the drag settles — after `COLOR_COMMIT_SETTLE_MS` of quiet or
+ * on blur. That keeps a fast smooth drag entirely off the React render path.
  */
-const COLOR_COMMIT_INTERVAL_MS = 90;
+const COLOR_COMMIT_SETTLE_MS = 140;
 function ThrottledColorInput({
   value,
   onValueChange,
+  onPreview,
   onBlur,
   ...props
 }: Omit<ComponentProps<"input">, "type" | "value" | "defaultValue" | "onChange"> & {
   value: string;
   onValueChange: (value: string) => void;
+  /** Called on every drag event for cheap, state-free live feedback. */
+  onPreview?: (value: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
   const editingRef = useRef(false);
   const latestRef = useRef(value);
-  const lastCommitRef = useRef(0);
   const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -226,12 +229,12 @@ function ThrottledColorInput({
     []
   );
 
-  const flush = () => {
+  const commit = () => {
     if (timerRef.current !== null) {
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    lastCommitRef.current = Date.now();
+    editingRef.current = false;
     onValueChange(latestRef.current);
   };
 
@@ -245,19 +248,12 @@ function ThrottledColorInput({
         editingRef.current = true;
         latestRef.current = next;
         setDraft(next);
-        const elapsed = Date.now() - lastCommitRef.current;
-        if (elapsed >= COLOR_COMMIT_INTERVAL_MS) {
-          flush();
-        } else if (timerRef.current === null) {
-          timerRef.current = window.setTimeout(
-            flush,
-            COLOR_COMMIT_INTERVAL_MS - elapsed
-          );
-        }
+        onPreview?.(next);
+        if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+        timerRef.current = window.setTimeout(commit, COLOR_COMMIT_SETTLE_MS);
       }}
       onBlur={(event) => {
-        editingRef.current = false;
-        flush();
+        commit();
         onBlur?.(event);
       }}
     />
@@ -466,6 +462,7 @@ import {
   dateSpriteCanvasSize,
   downscaleArtwork,
   drawStudioPreview,
+  renderWatchfaceProgressLayers,
   getAmPmCapability,
   scaleAmPmStyleForResolution,
   getAvailableComplications,
@@ -1032,6 +1029,7 @@ export function WatchfaceEditor({
 }: WatchfaceEditorProps) {
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const dragPreviewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const arcOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewStackRef = useRef<HTMLDivElement>(null);
   const componentDragBoundsRef = useRef<SVGRectElement>(null);
@@ -1720,8 +1718,9 @@ export function WatchfaceEditor({
       design.tintIcons,
       design.previewComplication,
       design.metricStyles,
-      design.kcalProgress,
-      design.exerciseProgress,
+      // Calorie/exercise progress is intentionally omitted: it is painted on the
+      // dedicated arc overlay canvas (see the effect below), so tweaking it must
+      // NOT invalidate these options and recomposite the whole face.
       design.selectableMetricStyle,
       design.controlComplicationEnabled,
       design.controlBarometerMode,
@@ -1743,7 +1742,7 @@ export function WatchfaceEditor({
     ]
   );
   const previewStudioOptions = useMemo(
-    () => ({ ...studioOptions, previewMode }),
+    () => ({ ...studioOptions, previewMode, deferProgressArcs: true }),
     [studioOptions, previewMode]
   );
   const detailsWithConfigEdits = useMemo(
@@ -1800,6 +1799,51 @@ export function WatchfaceEditor({
   );
   const previewWidth = previewResolution?.width ?? 800;
   const previewHeight = previewResolution?.height ?? previewWidth;
+  // Paint the calorie/exercise progress arcs on their own overlay canvas. This
+  // keeps color/geometry edits off the expensive face-composite path — only
+  // these few strokes redraw, synchronously — while matching exactly what the
+  // main composite drew for these layers before they were deferred. The optional
+  // overrides let a color drag repaint live without touching React state.
+  const paintArcOverlay = useCallback(
+    (overrides?: {
+      kcalArcColor?: string;
+      kcalRectColor?: string;
+      exerciseColor?: string;
+    }) => {
+      const canvas = arcOverlayCanvasRef.current;
+      if (!canvas) return;
+      const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+      if (!context) return;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      if (!previewResolution) return;
+      const kcalProgressStyle = design.kcalProgress
+        ? {
+            ...design.kcalProgress,
+            ...(overrides?.kcalArcColor ? { arcColor: overrides.kcalArcColor } : {}),
+            ...(overrides?.kcalRectColor
+              ? { rectColor: overrides.kcalRectColor }
+              : {})
+          }
+        : undefined;
+      const exerciseProgressStyle = design.exerciseProgress
+        ? {
+            ...design.exerciseProgress,
+            ...(overrides?.exerciseColor ? { color: overrides.exerciseColor } : {})
+          }
+        : undefined;
+      renderWatchfaceProgressLayers(context, canvas.width, previewResolution, {
+        kcalProgressStyle,
+        exerciseProgressStyle,
+        kcalProgressPreviewPercent: design.kcalProgress?.previewPercent,
+        exerciseProgressPreviewPercent: design.exerciseProgress?.previewPercent,
+        accentColor: design.accentColor
+      });
+    },
+    [previewResolution, design.kcalProgress, design.exerciseProgress, design.accentColor]
+  );
+  useEffect(() => {
+    paintArcOverlay();
+  }, [paintArcOverlay]);
   const watchPreviewResolution = useMemo(
     () => previewDetails?.resolutions.find(
       (resolution) => resolution.directory === watchPreviewDirectory
@@ -6947,6 +6991,13 @@ export function WatchfaceEditor({
             ) : null}
             <canvas ref={previewCanvasRef} className="watchface-studio-preview" width={PREVIEW_SIZE} height={PREVIEW_SIZE} />
             <canvas
+              ref={arcOverlayCanvasRef}
+              className="watchface-preview-arc"
+              width={PREVIEW_SIZE}
+              height={PREVIEW_SIZE}
+              aria-hidden="true"
+            />
+            <canvas
               ref={dragPreviewCanvasRef}
               className="watchface-preview-drag"
               width={PREVIEW_SIZE}
@@ -9167,6 +9218,9 @@ export function WatchfaceEditor({
                     <span className="watchface-color-control">
                       <ThrottledColorInput
                         value={progress.arcColor}
+                        onPreview={(arcColor) =>
+                          paintArcOverlay({ kcalArcColor: arcColor })
+                        }
                         onValueChange={(arcColor) =>
                           updateKcalProgress({ arcColor })
                         }
@@ -9179,6 +9233,9 @@ export function WatchfaceEditor({
                     <span className="watchface-color-control">
                       <ThrottledColorInput
                         value={progress.rectColor}
+                        onPreview={(rectColor) =>
+                          paintArcOverlay({ kcalRectColor: rectColor })
+                        }
                         onValueChange={(rectColor) =>
                           updateKcalProgress({ rectColor })
                         }

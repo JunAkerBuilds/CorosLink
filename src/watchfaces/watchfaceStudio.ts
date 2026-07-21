@@ -74,6 +74,13 @@ export interface WatchfaceStudioOptions extends WatchfaceTypography {
   kcalProgressStyle?: CorosWatchfaceKcalProgressStyle;
   /** Live exercise arc/bar styling; see {@link kcalProgressStyle}. */
   exerciseProgressStyle?: CorosWatchfaceExerciseProgressStyle;
+  /**
+   * Skips drawing the progress arcs/bars in the main composite. The live editor
+   * paints them on a dedicated overlay canvas instead, so color/geometry edits
+   * refresh without recompositing the whole face. Export previews leave this
+   * off so the arcs are baked into the final image.
+   */
+  deferProgressArcs?: boolean;
   /** Shared bitmap style for values shown in the selectable control slot. */
   complicationStyle?: WatchfaceMetricSpriteStyle;
   /** Scales a Studio-created standalone battery folder from authoring size. */
@@ -3014,6 +3021,28 @@ export async function renderScaledSpriteInSlot(
 const STUDIO_IMAGE_CACHE_LIMIT = 96;
 const STUDIO_IMAGE_CACHE_MAX_SOURCE_LENGTH = 256_000;
 const studioImageCache = new Map<string, Promise<HTMLImageElement>>();
+
+/**
+ * The composited background is a full-face PNG that overflows the shared LRU's
+ * size cap, so it would otherwise be decoded from scratch on every preview pass.
+ * A single-slot cache reuses the decoded bitmap while the source is unchanged
+ * (e.g. every frame of a color-picker drag), where only overlays are moving.
+ */
+let lastPreviewBackground: {
+  dataUrl: string;
+  image: Promise<HTMLImageElement>;
+} | null = null;
+function loadPreviewBackground(dataUrl: string): Promise<HTMLImageElement> {
+  if (lastPreviewBackground?.dataUrl === dataUrl) {
+    return lastPreviewBackground.image;
+  }
+  const image = loadStudioImage(dataUrl, false);
+  lastPreviewBackground = { dataUrl, image };
+  void image.catch(() => {
+    if (lastPreviewBackground?.image === image) lastPreviewBackground = null;
+  });
+  return image;
+}
 
 export function loadStudioImage(
   dataUrl: string,
@@ -7419,41 +7448,30 @@ function scaleRectConfigValue(
 }
 
 /**
- * Draws a live preview of the face: the canvas background plus the actual
- * sprites the watch will render, placed with the template's own layout keys.
+ * Draws the calorie/exercise progress arcs and bars onto a context. Shared by
+ * the main composite and the editor's live overlay so both stay pixel-identical.
+ * When a resolved design style is present it fully owns the layer (scaled here,
+ * not through the details rebuild); imported faces fall back to derived config.
  */
-export async function drawStudioPreview(
-  canvas: HTMLCanvasElement,
-  backgroundDataUrl: string,
-  details: CorosWatchfaceTemplateDetails,
-  options: WatchfaceStudioOptions,
-  loadAssets: WatchfaceAssetLoader
-): Promise<void> {
-  const resolution = pickPreviewResolution(details);
-  // Match the wide-gamut background canvas; an sRGB preview canvas would
-  // clamp P3 artwork colors and render them darker than the source image.
-  const context = canvas.getContext("2d", { colorSpace: "display-p3" });
-  if (!resolution || !context) {
-    return;
-  }
-  const scale = canvas.width / resolution.width;
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  context.drawImage(
-    await loadStudioImage(backgroundDataUrl, false),
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-
+export function renderWatchfaceProgressLayers(
+  context: CanvasRenderingContext2D,
+  canvasWidth: number,
+  resolution: CorosWatchfaceResolutionDetails,
+  options: Pick<
+    WatchfaceStudioOptions,
+    | "kcalProgressStyle"
+    | "exerciseProgressStyle"
+    | "kcalProgressPreviewPercent"
+    | "exerciseProgressPreviewPercent"
+    | "accentColor"
+  >
+): void {
+  const scale = canvasWidth / resolution.width;
   const config = resolution.config;
   const percent = Math.max(
     0,
     Math.min(100, options.kcalProgressPreviewPercent ?? 63)
   );
-  // When live design styles are supplied they fully own the progress preview,
-  // scaled here (not through the details rebuild) so color/geometry tweaks stay
-  // snappy. Imported faces without design state fall back to derived config.
   const kcalStyle = options.kcalProgressStyle
     ? kcalProgressStyleForResolution(resolution, options.kcalProgressStyle)
     : undefined;
@@ -7589,6 +7607,40 @@ export async function drawStudioPreview(
     exerciseStyle ? configHexColor(exerciseStyle.color) : config.exercise_progress_color,
     options.exerciseProgressPreviewPercent ?? 63
   );
+}
+
+/**
+ * Draws a live preview of the face: the canvas background plus the actual
+ * sprites the watch will render, placed with the template's own layout keys.
+ */
+export async function drawStudioPreview(
+  canvas: HTMLCanvasElement,
+  backgroundDataUrl: string,
+  details: CorosWatchfaceTemplateDetails,
+  options: WatchfaceStudioOptions,
+  loadAssets: WatchfaceAssetLoader
+): Promise<void> {
+  const resolution = pickPreviewResolution(details);
+  // Match the wide-gamut background canvas; an sRGB preview canvas would
+  // clamp P3 artwork colors and render them darker than the source image.
+  const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+  if (!resolution || !context) {
+    return;
+  }
+  const scale = canvas.width / resolution.width;
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(
+    await loadPreviewBackground(backgroundDataUrl),
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  const config = resolution.config;
+  if (!options.deferProgressArcs) {
+    renderWatchfaceProgressLayers(context, canvas.width, resolution, options);
+  }
   const now = new Date();
   const weekdayIndex = corosWeekdayIndex(now.getDay());
   const hour = String(now.getHours()).padStart(2, "0");
