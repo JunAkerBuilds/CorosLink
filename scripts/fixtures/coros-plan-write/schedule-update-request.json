@@ -3,7 +3,17 @@
     {
       "happenDay": "20260707",
       "idInPlan": 101,
-      "sortNoInSchedule": 1
+      "sortNoInSchedule": 1,
+      "exerciseBarChart": [
+        {
+          "exerciseId": "1",
+          "exerciseType": 2,
+          "name": "T3001",
+          "targetType": 5,
+          "targetValue": 700000,
+          "value": 700000
+        }
+      ]
     }
   ],
   "programs": [
@@ -12,13 +22,40 @@
       "idInPlan": 101,
       "name": "7km Easy Run",
       "sportType": 1,
-      "exerciseNum": 1,
-      "distance": 700000,
-      "targetType": 5,
-      "targetValue": 700000,
+      "exerciseNum": "",
+      "distance": "700000.00",
+      "targetType": "",
+      "targetValue": "",
       "simple": true,
       "access": 1,
-      "exercises": []
+      "distanceDisplayUnit": 1,
+      "exercises": [
+        {
+          "id": "1",
+          "exerciseType": 2,
+          "name": "T3001",
+          "targetType": 5,
+          "targetValue": 700000,
+          "targetDisplayUnit": 1,
+          "intensityType": 0,
+          "intensityValue": 0,
+          "intensityValueExtend": 0,
+          "intensityMultiplier": 0,
+          "sets": 1,
+          "groupId": "",
+          "isGroup": false
+        }
+      ],
+      "exerciseBarChart": [
+        {
+          "exerciseId": "1",
+          "exerciseType": 2,
+          "name": "T3001",
+          "targetType": 5,
+          "targetValue": 700000,
+          "value": 700000
+        }
+      ]
     }
   ],
   "versionObjects": [{ "id": 101, "status": 1 }],

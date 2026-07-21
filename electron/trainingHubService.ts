@@ -55,15 +55,33 @@ import type {
   PlanWorkoutEntryInput,
   DeleteWorkoutResult,
   TrainingHubScheduledWorkoutEntry,
-  TrainingHubLibraryWorkout
+  TrainingHubLibraryWorkout,
+  RunWorkoutEditorDraft,
+  WorkoutEditPreview,
+  WorkoutEditRef,
+  WorkoutEditSaveResult,
+  WorkoutEditorDocument
 } from "./types";
 import {
+  applyWorkoutCalculation,
   buildWorkoutPayloadFromEntry,
   resetProgramForCreate,
   validatePlanDraft,
+  type CorosWorkoutCalculation,
   type CorosTrainingPlanDraft,
   type PlanWorkoutEntry
 } from "./corosWorkoutBuilder";
+import {
+  corosProgramToWorkoutDraft,
+  parseWorkoutEditorContext,
+  runWorkoutEditPreview,
+  runWorkoutEditWrite,
+  validateWorkoutDraft,
+  workoutDraftsMatch,
+  workoutDraftToCorosProgram,
+  workoutEditRevision,
+  type WorkoutEditSource
+} from "./corosWorkoutEditor";
 import { TRAINING_HUB_EXPORT_FORMATS } from "./types";
 import { signRequest, sha256Hex } from "./awsSigV4";
 import { createStoreZip } from "./zipStore";
@@ -1087,7 +1105,7 @@ export async function uploadActivityFitToCoros(
 export async function createWorkoutProgram(
   program: Record<string, unknown>
 ): Promise<{ programId: string; program: Record<string, unknown> }> {
-  const payload = resetProgramForCreate(program);
+  const payload = await calculateWorkoutProgram(program);
   const name = String(payload.name ?? "").trim();
   const rawId = await trainingHubPost<string | number>(
     "/training/program/add",
@@ -1113,11 +1131,28 @@ export async function createWorkoutProgram(
     );
   }
 
-  const fullProgram =
-    (await findLibraryWorkoutById(programId)) ??
-    ({ ...payload, id: programId } as Record<string, unknown>);
+  // Return the full payload we just wrote. /training/program/query is only a
+  // library summary and can omit structured fields needed for scheduling.
+  const fullProgram = {
+    ...payload,
+    id: programId
+  } as Record<string, unknown>;
 
   return { programId, program: fullProgram };
+}
+
+export async function calculateWorkoutProgram(
+  program: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const payload = resetProgramForCreate(program);
+  const calculation = await trainingHubPost<CorosWorkoutCalculation>(
+    "/training/program/calculate",
+    payload
+  );
+  if (!calculation) {
+    throw new Error("COROS did not return calculated workout metrics.");
+  }
+  return applyWorkoutCalculation(payload, calculation);
 }
 
 export async function scheduleWorkoutOnDate(
@@ -1144,14 +1179,17 @@ export async function scheduleWorkoutOnDate(
   const programPayload = structuredClone(program);
   programPayload.idInPlan = idInPlan;
 
+  const entity: Record<string, unknown> = {
+    happenDay,
+    idInPlan,
+    sortNoInSchedule: sortNo
+  };
+  if (Array.isArray(programPayload.exerciseBarChart)) {
+    entity.exerciseBarChart = structuredClone(programPayload.exerciseBarChart);
+  }
+
   await trainingHubPostVoid("/training/schedule/update", {
-    entities: [
-      {
-        happenDay,
-        idInPlan,
-        sortNoInSchedule: sortNo
-      }
-    ],
+    entities: [entity],
     programs: [programPayload],
     versionObjects: [{ id: idInPlan, status: 1 }],
     pbVersion: 2
@@ -1219,11 +1257,308 @@ export async function listLibraryWorkouts(): Promise<TrainingHubLibraryWorkout[]
     .sort((left, right) => (right.createTimestamp ?? 0) - (left.createTimestamp ?? 0));
 }
 
+async function resolveWorkoutEditSource(ref: WorkoutEditRef): Promise<WorkoutEditSource> {
+  if (ref.kind === "library") {
+    const program = await trainingHubGet<Record<string, unknown>>(
+      "/training/program/detail",
+      { id: ref.programId, supportRestExercise: 1 }
+    );
+    return { ref, program };
+  }
+
+  if (!/^\d{8}$/.test(ref.happenDay)) {
+    throw new Error("Scheduled workout date must be YYYYMMDD.");
+  }
+  const raw = await trainingHubGet<Record<string, unknown>>(
+    "/training/schedule/query",
+    {
+      startDate: ref.happenDay,
+      endDate: ref.happenDay,
+      supportRestExercise: 1
+    }
+  );
+  const entities = extractArray(raw, ["entities"]) ?? [];
+  const programs = extractArray(raw, ["programs"]) ?? [];
+  const entityIndex = entities.findIndex((candidate) => {
+    if (!candidate || typeof candidate !== "object") {
+      return false;
+    }
+    const item = candidate as Record<string, unknown>;
+    return (
+      String(item.planId ?? "") === ref.planId &&
+      String(item.idInPlan ?? "") === ref.idInPlan &&
+      String(item.happenDay ?? "") === ref.happenDay &&
+      toOptionalNumber(item.status) !== 3
+    );
+  });
+  if (entityIndex < 0) {
+    throw new Error("Scheduled workout was not found on its original date.");
+  }
+  const entity = entities[entityIndex] as Record<string, unknown>;
+  const maps = buildScheduledProgramMaps(programs);
+  const program = resolveScheduledProgram(
+    entity,
+    entityIndex,
+    maps.programsByIdInPlan,
+    maps.programsById,
+    programs
+  );
+  if (!program) {
+    throw new Error("COROS did not return the scheduled workout program.");
+  }
+  return { ref, entity, program };
+}
+
+async function loadWorkoutEditorAccount(): Promise<Record<string, unknown>> {
+  try {
+    return await trainingHubGet<Record<string, unknown>>("/account/query");
+  } catch {
+    return {};
+  }
+}
+
+async function documentFromWorkoutEditSource(
+  source: WorkoutEditSource
+): Promise<WorkoutEditorDocument> {
+  const account = await loadWorkoutEditorAccount();
+  const sportType = toOptionalNumber(source.program.sportType);
+  const isPastOccurrence =
+    source.ref.kind === "scheduled" &&
+    source.ref.happenDay < formatScheduleDay(new Date());
+  const canEdit = sportType === 1 && !isPastOccurrence;
+  return {
+    ref: source.ref,
+    revision: workoutEditRevision(source),
+    draft: corosProgramToWorkoutDraft(source.program),
+    context: parseWorkoutEditorContext(account),
+    canEdit,
+    ...(canEdit
+      ? {}
+      : {
+          unsupportedReason: isPastOccurrence
+            ? "Past scheduled workouts are read-only."
+            : "Only COROS Run workouts can be edited in this release."
+        })
+  };
+}
+
+export async function getWorkoutForEdit(
+  ref: WorkoutEditRef
+): Promise<WorkoutEditorDocument> {
+  return documentFromWorkoutEditSource(await resolveWorkoutEditSource(ref));
+}
+
+export async function calculateExistingWorkoutProgram(
+  program: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const payload = structuredClone(program);
+  const calculation = await trainingHubPost<CorosWorkoutCalculation>(
+    "/training/program/calculate",
+    payload
+  );
+  if (!calculation) {
+    throw new Error("COROS did not return calculated workout metrics.");
+  }
+  return applyWorkoutCalculation(payload, calculation);
+}
+
+function workoutEditEndpointAdapter() {
+  return {
+    calculate: calculateExistingWorkoutProgram,
+    updateLibrary: (program: Record<string, unknown>) =>
+      trainingHubPostVoid("/training/program/update", program),
+    updateScheduled: (request: Record<string, unknown>) =>
+      trainingHubPostVoid("/training/schedule/update", request),
+    estimateScheduled: async (request: {
+      entity: Record<string, unknown>;
+      program: Record<string, unknown>;
+    }) => {
+      const estimate = await trainingHubPost<Record<string, unknown>>(
+        "/training/program/estimate",
+        request
+      );
+      if (!estimate) {
+        throw new Error("COROS did not return a scheduled workout estimate.");
+      }
+      return estimate;
+    }
+  };
+}
+
+function previewFromProgram(program: Record<string, unknown>): WorkoutEditPreview {
+  const durationSeconds =
+    toOptionalNumber(program.planDuration) ??
+    toOptionalNumber(program.duration) ??
+    toOptionalNumber(program.estimatedTime);
+  const distanceRaw =
+    toOptionalNumber(program.planDistance) ??
+    toOptionalNumber(program.distance) ??
+    toOptionalNumber(program.estimatedDistance);
+  const trainingLoad =
+    toOptionalNumber(program.planTrainingLoad) ??
+    toOptionalNumber(program.trainingLoad) ??
+    toOptionalNumber(program.essence);
+  return {
+    ...(durationSeconds !== undefined ? { durationSeconds } : {}),
+    ...(distanceRaw !== undefined ? { distanceMeters: distanceRaw / 100 } : {}),
+    ...(trainingLoad !== undefined ? { trainingLoad } : {})
+  };
+}
+
+function previewFromEstimate(raw: Record<string, unknown>): WorkoutEditPreview {
+  const programPreview = previewFromProgram(raw);
+  const currentDaySum = pickObject(raw, ["currentDaySum"]) ?? {};
+  return {
+    ...programPreview,
+    ...(toOptionalNumber(currentDaySum.planCti) !== undefined
+      ? { baseFitness: toOptionalNumber(currentDaySum.planCti) }
+      : {}),
+    ...(toOptionalNumber(currentDaySum.planAti) !== undefined
+      ? { loadImpact: toOptionalNumber(currentDaySum.planAti) }
+      : {}),
+    ...(toOptionalNumber(currentDaySum.planTrainingLoadRatio) !== undefined
+      ? {
+          intensityTrendPercent:
+            (toOptionalNumber(currentDaySum.planTrainingLoadRatio) ?? 0) *
+            (Math.abs(toOptionalNumber(currentDaySum.planTrainingLoadRatio) ?? 0) <= 2
+              ? 100
+              : 1)
+        }
+      : {})
+  };
+}
+
+export async function previewWorkoutEdit(
+  ref: WorkoutEditRef,
+  revision: string,
+  draft: RunWorkoutEditorDraft
+): Promise<WorkoutEditPreview> {
+  const validation = validateWorkoutDraft(draft);
+  if (!validation.valid) {
+    throw new Error(Object.values(validation.errors)[0] ?? "Workout is invalid.");
+  }
+  const source = await resolveWorkoutEditSource(ref);
+  if (ref.kind === "scheduled" && ref.happenDay < formatScheduleDay(new Date())) {
+    throw new Error("Past scheduled workouts are read-only.");
+  }
+  if (workoutEditRevision(source) !== revision) {
+    throw new Error("This workout changed in COROS. Reload it before continuing.");
+  }
+  const context = parseWorkoutEditorContext(await loadWorkoutEditorAccount());
+  const program = workoutDraftToCorosProgram(source.program, draft, context);
+
+  const result = await runWorkoutEditPreview(
+    ref,
+    source.entity,
+    program,
+    workoutEditEndpointAdapter()
+  );
+  return ref.kind === "scheduled"
+    ? previewFromEstimate(result as Record<string, unknown>)
+    : previewFromProgram(result as Record<string, unknown>);
+}
+
+async function verifyWorkoutEdit(
+  ref: WorkoutEditRef,
+  expected: RunWorkoutEditorDraft,
+  calculated: Record<string, unknown>
+): Promise<WorkoutEditSource | undefined> {
+  const totalsMatch = (actual: Record<string, unknown>): boolean => {
+    const fieldPairs: Array<[unknown, unknown]> = [
+      [calculated.distance, actual.distance],
+      [calculated.duration, actual.duration],
+      [calculated.trainingLoad, actual.trainingLoad],
+      [calculated.sets ?? calculated.totalSets, actual.sets ?? actual.totalSets]
+    ];
+    return fieldPairs.every(([expectedValue, actualValue]) => {
+      const expectedNumber = toOptionalNumber(expectedValue);
+      if (expectedNumber === undefined) {
+        return true;
+      }
+      const actualNumber = toOptionalNumber(actualValue);
+      return actualNumber !== undefined && Math.abs(expectedNumber - actualNumber) < 0.01;
+    });
+  };
+  const delays = [0, 250, 600, 1_200];
+  for (const waitMs of delays) {
+    if (waitMs > 0) {
+      await delay(waitMs);
+    }
+    try {
+      const source = await resolveWorkoutEditSource(ref);
+      if (workoutDraftsMatch(expected, source.program) && totalsMatch(source.program)) {
+        return source;
+      }
+    } catch {
+      // COROS is eventually consistent after updates; retry the read only.
+    }
+  }
+  return undefined;
+}
+
+export async function saveWorkoutEdit(
+  ref: WorkoutEditRef,
+  revision: string,
+  draft: RunWorkoutEditorDraft
+): Promise<WorkoutEditSaveResult> {
+  const validation = validateWorkoutDraft(draft);
+  if (!validation.valid) {
+    throw new Error(Object.values(validation.errors)[0] ?? "Workout is invalid.");
+  }
+
+  const source = await resolveWorkoutEditSource(ref);
+  if (ref.kind === "scheduled" && ref.happenDay < formatScheduleDay(new Date())) {
+    throw new Error("Past scheduled workouts are read-only.");
+  }
+  if (toOptionalNumber(source.program.sportType) !== 1) {
+    throw new Error("Only COROS Run workouts can be edited in this release.");
+  }
+  if (workoutEditRevision(source) !== revision) {
+    throw new Error("This workout changed in COROS. Reload it before saving.");
+  }
+
+  const context = parseWorkoutEditorContext(await loadWorkoutEditorAccount());
+  const edited = workoutDraftToCorosProgram(source.program, draft, context);
+  const calculated = await runWorkoutEditWrite(
+    ref,
+    source.entity,
+    edited,
+    workoutEditEndpointAdapter()
+  );
+
+  const verifiedSource = await verifyWorkoutEdit(ref, draft, calculated);
+  let latestSource = verifiedSource;
+  if (!latestSource) {
+    try {
+      latestSource = await resolveWorkoutEditSource(ref);
+    } catch {
+      latestSource = {
+        ref,
+        ...(source.entity ? { entity: source.entity } : {}),
+        program: calculated
+      };
+    }
+  }
+  return {
+    verified: Boolean(verifiedSource),
+    ...(!verifiedSource
+      ? {
+          warning:
+            "COROS accepted the save, but the updated workout could not be verified yet. The view was refreshed."
+        }
+      : {}),
+    document: await documentFromWorkoutEditSource(latestSource)
+  };
+}
+
 export async function scheduleLibraryWorkout(
   programId: string,
   happenDay: string
 ): Promise<void> {
-  const program = await findLibraryWorkoutById(String(programId));
+  const id = String(programId);
+  const program =
+    (await getWorkoutProgramDetail(id)) ??
+    (await findLibraryWorkoutById(id));
   if (!program) {
     throw new Error("Library workout not found.");
   }
@@ -1237,16 +1572,17 @@ export async function createAndScheduleWorkout(
 ): Promise<{ programId?: string }> {
   const entry = toPlanWorkoutEntry(entryInput);
   const payload = buildWorkoutPayloadFromEntry(entry);
-  // Schedule the freshly-built payload, not the library read-back. The library
-  // list endpoint returns a summary that omits distance/simple/exerciseNum for a
-  // simple distance run, so scheduling it drops the distance target (Volume "--").
-  const program = structuredClone(payload) as Record<string, unknown>;
+  // Schedule a calculated full payload, not the library query summary. The
+  // summary omits fields needed by simple and structured workouts.
+  let program: Record<string, unknown>;
   let programId: string | undefined;
 
   if (saveToLibrary) {
     const created = await createWorkoutProgram(payload);
     programId = created.programId;
-    program.id = programId;
+    program = created.program;
+  } else {
+    program = await calculateWorkoutProgram(payload);
   }
 
   await scheduleWorkoutOnDate(program, happenDay, entryInput.sort_no ?? 1);
@@ -1509,21 +1845,37 @@ export async function uploadTrainingPlan(
   const entries: UploadPlanResultEntry[] = [];
   let workoutsCreated = 0;
   let workoutsScheduled = 0;
+  const libraryPrograms = new Map<
+    string,
+    { programId: string; program: Record<string, unknown> }
+  >();
+  const calculatedPrograms = new Map<string, Record<string, unknown>>();
 
   for (const entry of draft.workouts) {
     const payload = buildWorkoutPayloadFromEntry(entry);
+    const workoutSignature = JSON.stringify(payload);
     const saveToLibrary = entry.save_to_library !== false;
-    // Schedule the freshly-built payload, not the library read-back. The library
-    // list endpoint returns a summary that omits distance/simple/exerciseNum for a
-    // simple distance run, so scheduling it drops the distance target (Volume "--").
-    const program = structuredClone(payload) as Record<string, unknown>;
+    // Schedule a calculated full payload, not the library query summary. The
+    // summary omits fields needed by simple and structured workouts.
+    let program: Record<string, unknown>;
     let programId: string | undefined;
 
     if (saveToLibrary) {
-      const created = await createWorkoutProgram(payload);
+      let created = libraryPrograms.get(workoutSignature);
+      if (!created) {
+        created = await createWorkoutProgram(payload);
+        libraryPrograms.set(workoutSignature, created);
+        workoutsCreated += 1;
+      }
       programId = created.programId;
-      program.id = programId;
-      workoutsCreated += 1;
+      program = structuredClone(created.program);
+    } else {
+      let calculated = calculatedPrograms.get(workoutSignature);
+      if (!calculated) {
+        calculated = await calculateWorkoutProgram(payload);
+        calculatedPrograms.set(workoutSignature, calculated);
+      }
+      program = structuredClone(calculated);
     }
 
     if (entry.schedule_date) {
@@ -1624,6 +1976,19 @@ async function findLibraryWorkoutById(
 ): Promise<Record<string, unknown> | undefined> {
   const programs = await listLibraryWorkoutPrograms();
   return programs.find((program) => String(program.id ?? "") === programId);
+}
+
+async function getWorkoutProgramDetail(
+  programId: string
+): Promise<Record<string, unknown> | undefined> {
+  try {
+    return await trainingHubGet<Record<string, unknown>>(
+      "/training/program/detail",
+      { id: programId, supportRestExercise: 1 }
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 async function findLibraryWorkoutByName(

@@ -7,6 +7,7 @@ const distUrl = (file) =>
   pathToFileURL(path.join(repoRoot, "dist-electron", file)).href;
 
 const {
+  applyWorkoutCalculation,
   buildEasyRun,
   buildIntervalWorkout,
   buildRunWorkoutPayload,
@@ -21,8 +22,19 @@ assert.equal(metersToCorosDistance(7000), 700000);
 
 const pace = parsePace("5:00/km");
 assert.equal(pace.intensity_type, 3);
-assert.equal(pace.intensity_value, 300);
-assert.equal(pace.intensity_display_unit, 2);
+assert.equal(pace.intensity_value, 300000);
+assert.equal(pace.intensity_value_extend, 300000);
+assert.equal(pace.intensity_display_unit, 1);
+assert.equal(pace.intensity_multiplier, 1000);
+
+const milePace = parsePace("8:00/mi");
+assert.equal(milePace.intensity_value, 298258);
+assert.equal(milePace.intensity_display_unit, 2);
+
+const paceRange = parsePace("4:05-4:15/km");
+assert.equal(paceRange.intensity_value, 245000);
+assert.equal(paceRange.intensity_value_extend, 255000);
+assert.equal(paceRange.intensity_display_unit, 1);
 
 const easy = buildEasyRun({ name: "7km Easy", distanceKm: 7 });
 assert.equal(easy.name, "7km Easy");
@@ -37,6 +49,7 @@ const easyExercise = easy.exercises[0];
 assert.equal(easyExercise.exerciseType, 2);
 assert.equal(easyExercise.targetType, 5);
 assert.equal(easyExercise.targetValue, 700000);
+assert.equal(easyExercise.targetDisplayUnit, 1);
 // Program-level target fields are empty strings; the target lives on the exercise.
 assert.equal(easy.targetType, "");
 assert.equal(easy.targetValue, "");
@@ -72,6 +85,13 @@ assert.equal(intervals.name, "Rolling 400s");
 assert.equal(intervals.sportType, 1);
 assert.ok(Array.isArray(intervals.exercises));
 assert.ok((intervals.exercises).length > 2);
+const intervalWork = intervals.exercises.find(
+  (exercise) => exercise.exerciseType === 2 && exercise.targetValue === 40000
+);
+assert.equal(intervalWork.targetDisplayUnit, 2);
+assert.equal(intervalWork.intensityValue, 270000);
+assert.equal(intervalWork.intensityDisplayUnit, 1);
+assert.equal(intervalWork.intensityMultiplier, 1000);
 
 const payload = buildRunWorkoutPayload("Tempo 5k", [
   {
@@ -81,6 +101,8 @@ const payload = buildRunWorkoutPayload("Tempo 5k", [
   }
 ]);
 assert.equal(payload.estimatedDistance, 500000);
+assert.equal(payload.distanceDisplayUnit, 1);
+assert.equal(payload.exercises[0].targetDisplayUnit, 2);
 
 // Load target (COROS targetType 6): raw integer, no unit scaling.
 const loadPayload = buildRunWorkoutPayload("Load Block", [
@@ -100,6 +122,43 @@ const openPayload = buildRunWorkoutPayload("Open Warmup", [
 const openExercise = openPayload.exercises[0];
 assert.equal(openExercise.targetType, 1);
 assert.equal(openExercise.targetValue, 0);
+
+const recoveryPayload = buildRunWorkoutPayload("HR Recovery", [
+  {
+    kind: "rest",
+    target_type: "hrRecovery",
+    target_hr_recovery_bpm: 118
+  }
+]);
+assert.equal(recoveryPayload.exercises[0].targetType, 7);
+assert.equal(recoveryPayload.exercises[0].targetValue, 118);
+assert.throws(
+  () => buildRunWorkoutPayload("Invalid HR Recovery", [
+    {
+      kind: "training",
+      target_type: "hrRecovery",
+      target_hr_recovery_bpm: 118
+    }
+  ]),
+  /only supported on Rest/
+);
+
+const calculated = applyWorkoutCalculation(payload, {
+  planDistance: "500000.00",
+  planDuration: 1500,
+  planTrainingLoad: 42,
+  planSets: 1,
+  planPitch: 0,
+  distanceDisplayUnit: 1,
+  exerciseBarChart: [{ exerciseId: "1", targetValue: 500000 }]
+});
+assert.equal(calculated.distance, "500000.00");
+assert.equal(calculated.duration, 1500);
+assert.equal(calculated.trainingLoad, 42);
+assert.equal(calculated.sets, 1);
+assert.equal(calculated.totalSets, 1);
+assert.equal(calculated.distanceDisplayUnit, 1);
+assert.equal(calculated.exerciseBarChart[0].targetValue, 500000);
 
 const valid = validatePlanDraft({
   name: "Test Week",
@@ -142,6 +201,60 @@ const invalid = validatePlanDraft({
 });
 assert.equal(invalid.ok, false);
 assert.ok(invalid.errors.length > 0);
+
+const invalidDestination = validatePlanDraft({
+  name: "No-op plan",
+  workouts: [
+    {
+      key: "no-op",
+      name: "Nowhere",
+      distance_km: 5,
+      save_to_library: false
+    }
+  ]
+});
+assert.equal(invalidDestination.ok, false);
+assert.match(invalidDestination.errors.join(" "), /scheduled or saved/);
+
+const invalidDate = validatePlanDraft({
+  name: "Bad date",
+  workouts: [
+    {
+      key: "bad-date",
+      name: "Impossible day",
+      distance_km: 5,
+      schedule_date: "20990231"
+    }
+  ]
+});
+assert.equal(invalidDate.ok, false);
+assert.match(invalidDate.errors.join(" "), /valid YYYYMMDD/);
+
+const invalidRepeat = validatePlanDraft({
+  name: "Bad repeat",
+  workouts: [
+    {
+      key: "bad-repeat",
+      name: "Zero repeats",
+      steps: [
+        {
+          repeat: 0,
+          steps: [
+            {
+              kind: "training",
+              target_type: "distance",
+              target_distance_meters: 400
+            }
+          ]
+        }
+      ]
+    }
+  ]
+});
+assert.equal(invalidRepeat.ok, false);
+assert.match(invalidRepeat.errors.join(" "), /repeat between 1 and 99/);
+
+assert.throws(() => parsePace("4:70/km"), /Could not parse pace/);
 
 const preview = buildPlanPreview("draft-1", {
   name: "Test Week",

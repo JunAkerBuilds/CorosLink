@@ -53,6 +53,9 @@ import {
   createAndScheduleWorkout,
   rescheduleScheduledWorkout,
   removeScheduledWorkout,
+  getWorkoutForEdit,
+  previewWorkoutEdit,
+  saveWorkoutEdit,
   loginTrainingHub,
   logoutTrainingHub,
   reconnectTrainingHub,
@@ -290,7 +293,9 @@ import type {
   CorosTrainingPlanDraftInput,
   LocalChatConfig,
   PersistedChatEntry,
-  PlanWorkoutEntryInput
+  PlanWorkoutEntryInput,
+  RunWorkoutEditorDraft,
+  WorkoutEditRef
 } from "./types";
 
 let mainWindow: BrowserWindow | undefined;
@@ -1403,6 +1408,31 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("trainingHub:listLibraryWorkouts", () =>
     listLibraryWorkouts()
+  );
+
+  ipcMain.handle(
+    "trainingHub:getWorkoutForEdit",
+    (_event, ref: WorkoutEditRef) => getWorkoutForEdit(ref)
+  );
+
+  ipcMain.handle(
+    "trainingHub:previewWorkoutEdit",
+    (
+      _event,
+      ref: WorkoutEditRef,
+      revision: string,
+      draft: RunWorkoutEditorDraft
+    ) => previewWorkoutEdit(ref, revision, draft)
+  );
+
+  ipcMain.handle(
+    "trainingHub:saveWorkoutEdit",
+    (
+      _event,
+      ref: WorkoutEditRef,
+      revision: string,
+      draft: RunWorkoutEditorDraft
+    ) => saveWorkoutEdit(ref, revision, draft)
   );
 
   ipcMain.handle(

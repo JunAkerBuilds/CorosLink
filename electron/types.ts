@@ -2524,12 +2524,65 @@ export interface PlanDraftPreview {
 export interface PlanWorkoutEntryInput {
   key: string;
   name: string;
-  steps?: unknown[];
+  steps?: RunWorkoutStepInput[];
   distance_km?: number;
   schedule_date?: string;
   sort_no?: number;
   save_to_library?: boolean;
 }
+
+export type RunWorkoutCreateStepKind =
+  | "warmup"
+  | "training"
+  | "rest"
+  | "cooldown"
+  | "interval";
+
+export type RunWorkoutCreateTargetType =
+  | "time"
+  | "distance"
+  | "load"
+  | "hrRecovery"
+  | "open";
+
+export interface RunWorkoutCreateStep {
+  kind: RunWorkoutCreateStepKind;
+  name?: string;
+  target_type?: RunWorkoutCreateTargetType;
+  target_distance_meters?: number;
+  target_duration_seconds?: number;
+  target_load?: number;
+  target_hr_recovery_bpm?: number;
+  pace?: string;
+  intensity_type?: number;
+  intensity_value?: number;
+  intensity_value_extend?: number;
+  intensity_display_unit?: number;
+  intensity_multiplier?: number;
+  hr_type?: number;
+  is_intensity_percent?: boolean;
+  intensity_percent?: number;
+  intensity_percent_extend?: number;
+  rest_type?: number;
+  rest_value?: number;
+  sets?: number;
+  overview?: string;
+  target_value?: number;
+  target_display_unit?: number;
+}
+
+export interface RunWorkoutCreateRepeatGroup {
+  repeat: number;
+  name?: string;
+  steps: RunWorkoutCreateStep[];
+  rest_type?: number;
+  rest_value?: number;
+  overview?: string;
+}
+
+export type RunWorkoutStepInput =
+  | RunWorkoutCreateStep
+  | RunWorkoutCreateRepeatGroup;
 
 export interface CorosTrainingPlanDraftInput {
   name: string;
@@ -2575,6 +2628,119 @@ export interface TrainingHubLibraryWorkout {
   volume?: string;
   trainingLoad?: number;
   createTimestamp?: number;
+}
+
+export type WorkoutEditRef =
+  | {
+      kind: "scheduled";
+      happenDay: string;
+      planId: string;
+      idInPlan: string;
+      planProgramId: string;
+    }
+  | { kind: "library"; programId: string };
+
+export type RunWorkoutEditorStepKind =
+  | "warmup"
+  | "training"
+  | "rest"
+  | "cooldown";
+
+export type RunWorkoutEditorTarget =
+  | { type: "time"; seconds: number }
+  | { type: "distance"; meters: number }
+  | { type: "load"; load: number }
+  | { type: "hrRecovery"; bpm: number }
+  | { type: "open" };
+
+export type RunWorkoutEditorIntensity =
+  | { type: "none" }
+  | {
+      type: "pace";
+      lowSecondsPerKm: number;
+      highSecondsPerKm: number;
+      displayUnit: "km" | "mi";
+    }
+  | { type: "heartRate"; lowBpm: number; highBpm: number }
+  | {
+      type: "lthrPercent";
+      lowPercent: number;
+      highPercent: number;
+      zoneId?: number;
+    };
+
+export interface RunWorkoutEditorStep {
+  id: string;
+  sourceExerciseId?: string;
+  nodeType: "step";
+  kind: RunWorkoutEditorStepKind;
+  name: string;
+  target: RunWorkoutEditorTarget;
+  intensity: RunWorkoutEditorIntensity;
+  editable: boolean;
+  unsupportedReason?: string;
+}
+
+export interface RunWorkoutEditorRepeatGroup {
+  id: string;
+  sourceExerciseId?: string;
+  nodeType: "repeat";
+  name: string;
+  repeat: number;
+  steps: RunWorkoutEditorStep[];
+  editable: boolean;
+  unsupportedReason?: string;
+}
+
+export type RunWorkoutEditorNode =
+  | RunWorkoutEditorStep
+  | RunWorkoutEditorRepeatGroup;
+
+export interface RunWorkoutEditorDraft {
+  name: string;
+  overview: string;
+  sportType: 1;
+  nodes: RunWorkoutEditorNode[];
+}
+
+export interface WorkoutLthrZone {
+  index: number;
+  label: string;
+  lowPercent: number;
+  highPercent: number;
+  lowBpm?: number;
+  highBpm?: number;
+}
+
+export interface WorkoutEditorContext {
+  distanceUnit: "metric" | "imperial";
+  paceUnit: "km" | "mi";
+  lthrBpm?: number;
+  lthrZones: WorkoutLthrZone[];
+}
+
+export interface WorkoutEditorDocument {
+  ref: WorkoutEditRef;
+  revision: string;
+  draft: RunWorkoutEditorDraft;
+  context: WorkoutEditorContext;
+  canEdit: boolean;
+  unsupportedReason?: string;
+}
+
+export interface WorkoutEditPreview {
+  durationSeconds?: number;
+  distanceMeters?: number;
+  trainingLoad?: number;
+  baseFitness?: number;
+  loadImpact?: number;
+  intensityTrendPercent?: number;
+}
+
+export interface WorkoutEditSaveResult {
+  verified: boolean;
+  warning?: string;
+  document: WorkoutEditorDocument;
 }
 
 export interface DeleteWorkoutResult {

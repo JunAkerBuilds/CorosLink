@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { MessageCircle, Trash2, X } from "lucide-react";
+import { MessageCircle, Pencil, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type {
   TrainingHubActivityDetail,
@@ -23,6 +23,7 @@ interface DayDetailPanelProps {
   onClose: () => void;
   onDelete: (selection: Extract<CalendarSelection, { kind: "scheduled" }>) => void;
   onAskCoach: (selection: CalendarSelection) => void;
+  onEdit: (selection: Extract<CalendarSelection, { kind: "scheduled" }>) => void;
   onError: (message: string | null) => void;
 }
 
@@ -34,6 +35,7 @@ export function DayDetailPanel({
   onClose,
   onDelete,
   onAskCoach,
+  onEdit,
   onError
 }: DayDetailPanelProps) {
   const [detail, setDetail] = useState<TrainingHubActivityDetail | null>(null);
@@ -118,6 +120,18 @@ export function DayDetailPanel({
                   <MessageCircle size={15} aria-hidden="true" />
                   Ask Coach
                 </button>
+                {selection.kind === "scheduled" && !selection.day.isPast ? (
+                  <button
+                    type="button"
+                    className="ghost-button calendar-detail-action"
+                    disabled={selection.entry.sportType !== 1}
+                    onClick={() => onEdit(selection)}
+                    title={selection.entry.sportType === 1 ? "Edit this scheduled occurrence" : "Editing is available for Run workouts only"}
+                  >
+                    <Pencil size={15} aria-hidden="true" />
+                    Edit
+                  </button>
+                ) : null}
                 {selection.kind === "scheduled" && !selection.day.isPast ? (
                   <button
                     type="button"
