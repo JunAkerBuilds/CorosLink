@@ -64,7 +64,10 @@ import {
   renderWatchfaceDataUrlDecorations,
   resolveWatchfaceLayerStrokes
 } from "./watchfaceEditorStrokes.ts";
-import { buildWatchfaceEffectPaddingOverrides } from "./watchfaceEffectPadding.ts";
+import {
+  buildWatchfaceEffectPaddingOverrides,
+  watchfaceLayerRequiresFixedSpriteBounds
+} from "./watchfaceEffectPadding.ts";
 import {
   buildWeatherOverrides,
   buildWeatherSpriteReplacements,
@@ -160,6 +163,7 @@ const EFFECT_FOLDER_LAYER: Array<[RegExp, string]> = [
   [/\/cl_hr\//, "heartRate"],
   [/\/cl_steps\//, "steps"],
   [/\/cl_kcal\//, "calories"],
+  [/\/cl_exercise\//, "exercise"],
   [/\/cl_elev\//, "elevation"],
   [/\/cl_ftemp\//, "temperature"],
   [/\/cl_(?:hh|hl)\//, "hours"],
@@ -296,7 +300,8 @@ async function applyFirmwareEffects(
       strokes,
       effects,
       scale,
-      opacity
+      opacity,
+      !watchfaceLayerRequiresFixedSpriteBounds(layerId)
     );
     const byLayer = padding.get(directory) ?? new Map<string, WatchfaceEffectPadding>();
     const existing = byLayer.get(layerId);
@@ -559,6 +564,7 @@ export async function composeWatchfaceReplacements(
     "heartRate",
     "steps",
     "calories",
+    "exercise",
     "elevation",
     "temperature"
   ] as const) {
@@ -733,7 +739,10 @@ export async function composeWatchfaceReplacements(
       design.configAssetOverrides ?? {},
       {
         loadAssets,
-        layerOpacities: design.layerOpacities ?? {}
+        layerOpacities: design.layerOpacities ?? {},
+        effectStyles: design.effectStyles ?? [],
+        layerEffects: design.layerEffects ?? {},
+        layerStrokes: design.layerStrokes ?? {}
       }
     ),
     batteryIconEffectSources.replacements,

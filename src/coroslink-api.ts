@@ -2,6 +2,8 @@ import type {
   ActivityBackupProgress,
   BinaryStatus,
   CachedCorosMapPackage,
+  CombinedDownloadProgressEvent,
+  CombinedDownloadResult,
   CorosMapDownloadJob,
   CorosMapInstallResult,
   CorosMapInstallProgress,
@@ -57,6 +59,7 @@ import type {
   AppUpdateSnapshot,
   WatchConnectionSmokeOptionId,
   WatchStatus,
+  WatchTransferProgress,
   YouTubeHistoryEntry,
   YouTubeMusicAuthCapture,
   YouTubeMusicConfig,
@@ -235,6 +238,9 @@ export interface CorosLinkApi {
   ) => Promise<WatchStatus>;
   deleteWatchTrack: (relativePath: string) => Promise<WatchStatus>;
   transferLocalTrack: (id: string) => Promise<TransferResult>;
+  onWatchTransferProgress: (
+    callback: (progress: WatchTransferProgress) => void
+  ) => () => void;
   listDownloads: () => Promise<LocalTrack[]>;
   downloadAudio: (url: string) => Promise<DownloadAudioResult>;
   deleteDownload: (id: string, removeFile: boolean) => Promise<LocalTrack[]>;
@@ -254,6 +260,14 @@ export interface CorosLinkApi {
   enqueueYouTubeDownloads: (
     items: DownloadQueueItem[]
   ) => Promise<DownloadJob[]>;
+  downloadCombinedPlaylist: (
+    id: string,
+    name: string,
+    items: DownloadQueueItem[]
+  ) => Promise<CombinedDownloadResult>;
+  onCombinedDownloadProgress: (
+    callback: (update: CombinedDownloadProgressEvent) => void
+  ) => () => void;
   listYouTubeJobs: () => Promise<DownloadJob[]>;
   clearYouTubeJob: (id: string) => Promise<DownloadJob[]>;
   cancelYouTubeJob: (id: string) => Promise<DownloadJob[]>;

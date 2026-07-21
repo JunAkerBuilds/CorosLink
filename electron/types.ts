@@ -798,6 +798,20 @@ export interface CorosWatchfaceExerciseProgressStyle {
   };
 }
 
+/** Studio-owned fixed-Exercise separator baked into the background artwork. */
+export interface CorosWatchfaceExerciseSeparatorStyle {
+  enabled: boolean;
+  /** Base center in the active mode's authoring resolution. */
+  x: number;
+  y: number;
+  /** Authored glyph/PNG height before applying scale. */
+  size: number;
+  scale: number;
+  color: string;
+  /** Optional independent PNG; absent renders a generated colon glyph. */
+  artwork?: CorosWatchfaceArtwork | null;
+}
+
 export interface CorosWatchfaceDesignState {
   version: 1;
   /**
@@ -841,6 +855,8 @@ export interface CorosWatchfaceDesignState {
   kcalProgress?: CorosWatchfaceKcalProgressStyle;
   /** Optional native exercise-goal bar configuration. */
   exerciseProgress?: CorosWatchfaceExerciseProgressStyle;
+  /** Independent fixed-Exercise colon flattened into Current/AOD artwork. */
+  exerciseSeparator?: CorosWatchfaceExerciseSeparatorStyle;
   /** Shared digit style for every value shown in the selectable control slot. */
   selectableMetricStyle?: {
     color?: string;
@@ -996,6 +1012,7 @@ export type CorosWatchfaceModeDesignState = Partial<
     | "metricStyles"
     | "kcalProgress"
     | "exerciseProgress"
+    | "exerciseSeparator"
     | "selectableMetricStyle"
     | "controlComplicationEnabled"
     | "controlBarometerMode"
@@ -1158,6 +1175,38 @@ export type DownloadQueueItem =
       title: string;
       fileBaseName?: string;
     };
+
+/** Live progress for a combined playlist download (many tracks → one MP3). */
+export interface CombinedDownloadProgress {
+  /** What the operation is currently doing. */
+  phase: "downloading" | "merging" | "completed";
+  /** 1-based index of the track currently downloading. */
+  index: number;
+  /** Total tracks being combined. */
+  total: number;
+  /** Display title of the track currently downloading. */
+  title: string;
+  /** 0..1 progress of the current track download. */
+  trackProgress: number;
+}
+
+/**
+ * A progress update tagged with the id of the combined download it belongs to,
+ * so concurrent combines (e.g. one per service) stay isolated in the UI.
+ */
+export interface CombinedDownloadProgressEvent extends CombinedDownloadProgress {
+  id: string;
+}
+
+export interface CombinedDownloadResult {
+  /** The merged MP3, registered in the local cache. */
+  track: LocalTrack;
+  /** Number of source tracks that were successfully downloaded and merged. */
+  downloadedCount: number;
+  /** Number of source tracks requested. */
+  totalCount: number;
+  warnings?: string[];
+}
 
 export type YouTubeHistoryEntryType =
   | "video"

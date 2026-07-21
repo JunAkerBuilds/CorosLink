@@ -462,7 +462,8 @@ export function renderWatchfaceDataUrlDecorations(
   strokes: CorosWatchfaceStroke[],
   effects: CorosWatchfaceShadowEffect[],
   scale = 1,
-  sourceOpacity = 1
+  sourceOpacity = 1,
+  includePadding = true
 ): Promise<DataUrlDecorationResult> {
   const normalizedStrokes = strokes.map(normalizeWatchfaceStroke);
   const key = [
@@ -470,6 +471,7 @@ export function renderWatchfaceDataUrlDecorations(
     dataUrl.length,
     scale,
     sourceOpacity,
+    includePadding,
     compactHash(JSON.stringify(normalizedStrokes)),
     compactHash(JSON.stringify(effects))
   ].join(":");
@@ -491,7 +493,7 @@ export function renderWatchfaceDataUrlDecorations(
           effects,
           sourceOpacity,
           scale,
-          true
+          includePadding
         );
         resolve({
           dataUrl: decorated.canvas.toDataURL("image/png"),

@@ -3155,6 +3155,43 @@ input::placeholder {
   color: var(--success-text);
 }
 
+.library-transfer-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.library-transfer-progress-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.library-transfer-progress-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-transfer-progress-track {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted, rgba(148, 163, 184, 0.25));
+  overflow: hidden;
+}
+
+.library-transfer-progress-bar {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent, #3b82f6);
+  transition: width 0.15s ease-out;
+}
+
 .library-panel-tools {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -9542,6 +9579,78 @@ td span {
     rgba(255, 255, 255, 0.08);
   color: #fff;
   margin-left: auto;
+}
+
+/* Wraps the "Download all" + "Combined download" controls in a playlist
+   header so they stack neatly at the top-right of the banner. */
+.playlist-header-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  margin-left: auto;
+  align-self: flex-start;
+  flex-shrink: 0;
+}
+
+.combined-download {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.combined-download-trigger {
+  white-space: nowrap;
+}
+
+.combined-download-form {
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.combined-download-input {
+  min-width: 180px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+  font-size: 0.85rem;
+}
+
+.combined-download-input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.combined-download-confirm:not(:disabled) {
+  color: #4ade80;
+}
+
+.combined-download--busy {
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.82rem;
+}
+
+.combined-download-status {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.combined-download-status small {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.7;
 }
 
 .spotify-detail-panel .table-shell {

@@ -5,6 +5,7 @@ import type {
   CorosWatchfaceConfigOverride,
   CorosWatchfaceEffectBinding,
   CorosWatchfaceEffectStyle,
+  CorosWatchfaceExerciseSeparatorStyle,
   CorosWatchfaceExerciseProgressStyle,
   CorosWatchfaceKcalProgressStyle,
   CorosWatchfaceStroke,
@@ -20,8 +21,10 @@ import {
 } from "./watchfaceEditorEffects.ts";
 import {
   renderWatchfaceCanvasDecorationsWithOpacity,
+  renderWatchfaceDataUrlDecorations,
   resolveWatchfaceLayerStrokes
 } from "./watchfaceEditorStrokes.ts";
+import { watchfaceLayerRequiresFixedSpriteBounds } from "./watchfaceEffectPadding.ts";
 import {
   resolveWatchfaceLayerOpacity
 } from "./watchfaceLayerOpacity.ts";
@@ -1514,6 +1517,9 @@ export async function buildWatchfaceConfigAssetReplacements(
   options: {
     loadAssets?: WatchfaceAssetLoader;
     layerOpacities?: Record<string, number>;
+    effectStyles?: WatchfaceStudioOptions["effectStyles"];
+    layerEffects?: WatchfaceStudioOptions["layerEffects"];
+    layerStrokes?: WatchfaceStudioOptions["layerStrokes"];
   } = {}
 ): Promise<CorosWatchfaceAssetReplacement[]> {
   const replacements: CorosWatchfaceAssetReplacement[] = [];
@@ -1551,7 +1557,13 @@ export async function buildWatchfaceConfigAssetReplacements(
       }
       for (const [configKey, rawPath] of entries) {
         const id = watchfaceConfigAssetId(scope, configKey);
+        const assetLayerId = `configAsset:${id}`;
         const override = overrides[id];
+        const effects = resolveWatchfaceLayerEffects(options, assetLayerId);
+        const strokes = resolveWatchfaceLayerStrokes(options, assetLayerId);
+        const hasDecorations =
+          effects.some((effect) => effect.enabled && effect.opacity > 0) ||
+          strokes.some((stroke) => stroke.enabled && stroke.opacity > 0);
         const componentLayerId =
           configKey === "battery_icon"
             ? "batteryIcon"
@@ -1568,11 +1580,11 @@ export async function buildWatchfaceConfigAssetReplacements(
         const opacity =
           resolveWatchfaceLayerOpacity(
             options,
-            `configAsset:${id}`
+            assetLayerId
           ) *
           resolveWatchfaceLayerOpacity(options, componentLayerId);
         if (
-          (!override?.replacement && opacity === 1) ||
+          (!override?.replacement && opacity === 1 && !hasDecorations) ||
           override?.enabled === false
         ) {
           continue;
@@ -1588,12 +1600,21 @@ export async function buildWatchfaceConfigAssetReplacements(
           : undefined;
         if (!override?.replacement && !sourceAsset) continue;
         if (!override?.replacement && source && sourceAsset) {
+          const dataUrl = hasDecorations
+            ? (
+                await renderWatchfaceDataUrlDecorations(
+                  sourceAsset.dataUrl,
+                  strokes,
+                  effects,
+                  nativeScale,
+                  opacity,
+                  false
+                )
+              ).dataUrl
+            : await applyWatchfaceDataUrlOpacity(sourceAsset.dataUrl, opacity);
           replacements.push({
             path: source.path,
-            dataUrl: await applyWatchfaceDataUrlOpacity(
-              sourceAsset.dataUrl,
-              opacity
-            )
+            dataUrl
           });
           continue;
         }
@@ -1633,14 +1654,23 @@ export async function buildWatchfaceConfigAssetReplacements(
               canvasSize.height,
               override!.scale ?? 1
             );
+        const dataUrl = hasDecorations
+          ? (
+              await renderWatchfaceDataUrlDecorations(
+                renderedDataUrl,
+                strokes,
+                effects,
+                nativeScale,
+                opacity,
+                false
+              )
+            ).dataUrl
+          : await applyWatchfaceDataUrlOpacity(renderedDataUrl, opacity);
         replacements.push({
           path: replaceInPlace
             ? source!.path
             : `${resolution.directory}/${configAssetCreatedRelativePath(id)}`,
-          dataUrl: await applyWatchfaceDataUrlOpacity(
-            renderedDataUrl,
-            opacity
-          ),
+          dataUrl,
           create: !replaceInPlace,
           ...(canvasSize.native ? { allowDimensionOverride: true } : {})
         });
@@ -3325,6 +3355,7 @@ export type WatchfaceMetricId =
   | "heartRate"
   | "steps"
   | "calories"
+  | "exercise"
   | "elevation"
   | "temperature";
 
@@ -3639,6 +3670,12 @@ interface WatchfaceFixedMetricDefinition {
   id: WatchfaceMetricId;
   label: string;
   rectKey: string;
+  /** Metrics such as Exercise split their value across multiple rectangles. */
+  valueParts?: ReadonlyArray<{
+    rectKey: string;
+    sampleValue: string;
+    maxDigits: number;
+  }>;
   fontKey?: string;
   fontColorKey?: string;
   controlPrefix: string;
@@ -3703,6 +3740,20 @@ export const WATCHFACE_FIXED_METRICS: WatchfaceFixedMetricDefinition[] = [
     center: { x: 0.25, y: 0.86 }
   },
   {
+    id: "exercise",
+    label: "Exercise",
+    rectKey: "exercise_hour_rect",
+    valueParts: [
+      { rectKey: "exercise_hour_rect", sampleValue: "1", maxDigits: 2 },
+      { rectKey: "exercise_minute_rect", sampleValue: "24", maxDigits: 2 }
+    ],
+    fontKey: "exercise_font",
+    controlPrefix: "exercise",
+    sampleValue: "1:24",
+    maxDigits: 4,
+    center: { x: 0.5, y: 0.8 }
+  },
+  {
     id: "elevation",
     label: "Elevation",
     rectKey: "elevation_rect",
@@ -3730,6 +3781,7 @@ const METRIC_STUDIO_FOLDERS: Record<WatchfaceMetricId, string> = {
   heartRate: "cl_hr",
   steps: "cl_steps",
   calories: "cl_kcal",
+  exercise: "cl_exercise",
   elevation: "cl_elev",
   temperature: "cl_ftemp"
 };
@@ -3872,6 +3924,16 @@ export interface WatchfaceMetricCapability {
   active: boolean;
 }
 
+function fixedMetricValueParts(
+  metric: WatchfaceFixedMetricDefinition
+): ReadonlyArray<{ rectKey: string; sampleValue: string; maxDigits: number }> {
+  return metric.valueParts ?? [{
+    rectKey: metric.rectKey,
+    sampleValue: metric.sampleValue,
+    maxDigits: metric.maxDigits
+  }];
+}
+
 /** Fixed metrics available to the editor and whether they are already active. */
 export function getFixedMetricCapabilities(
   details: CorosWatchfaceTemplateDetails
@@ -3881,12 +3943,12 @@ export function getFixedMetricCapabilities(
     return [];
   }
   return WATCHFACE_FIXED_METRICS.flatMap((metric) => {
-    // Battery can be added to templates that did not originally declare it;
-    // buildMetricOverrides supplies both missing config entries when enabled.
-    const canAdd = metric.id === "battery";
-    const hasRect = Object.prototype.hasOwnProperty.call(
-      resolution.config,
-      metric.rectKey
+    // Battery and Exercise can be added to templates that did not originally
+    // declare them; buildMetricOverrides supplies their missing config entries.
+    const canAdd = metric.id === "battery" || metric.id === "exercise";
+    const parts = fixedMetricValueParts(metric);
+    const hasRect = parts.every((part) =>
+      Object.prototype.hasOwnProperty.call(resolution.config, part.rectKey)
     );
     const hasFont =
       !metric.fontKey ||
@@ -3896,10 +3958,59 @@ export function getFixedMetricCapabilities(
       ? [{
           id: metric.id,
           label: metric.label,
-          active: parseConfigRect(resolution.config[metric.rectKey]) !== null
+          active: parts.every(
+            (part) => parseConfigRect(resolution.config[part.rectKey]) !== null
+          )
         }]
       : [];
   });
+}
+
+/**
+ * Places Studio's independent Exercise separator between the fixed hour and
+ * minute rectangles. Templates without Exercise receive the same center and
+ * glyph height that buildMetricOverrides uses when the metric is enabled.
+ */
+export function inferExerciseSeparatorStyle(
+  details: CorosWatchfaceTemplateDetails,
+  color = "#ffffff"
+): CorosWatchfaceExerciseSeparatorStyle {
+  const resolution = pickPreviewResolution(details);
+  if (!resolution) {
+    return {
+      enabled: true,
+      x: 400,
+      y: 640,
+      size: 64,
+      scale: 1,
+      color,
+      artwork: null
+    };
+  }
+  const hourRect = parseConfigRect(resolution.config.exercise_hour_rect);
+  const minuteRect = parseConfigRect(resolution.config.exercise_minute_rect);
+  const exerciseMetric = WATCHFACE_FIXED_METRICS.find(
+    (metric) => metric.id === "exercise"
+  )!;
+  const sample = metricFontFolder(resolution, exerciseMetric)?.files[0];
+  return {
+    enabled: true,
+    x: hourRect && minuteRect
+      ? (hourRect.x1 + minuteRect.x0) / 2
+      : Math.round(resolution.width * exerciseMetric.center.x),
+    y: hourRect && minuteRect
+      ? (hourRect.y0 + hourRect.y1 + minuteRect.y0 + minuteRect.y1) / 4
+      : Math.round(resolution.height * exerciseMetric.center.y),
+    size: Math.max(
+      1,
+      hourRect && minuteRect
+        ? Math.max(hourRect.y1 - hourRect.y0, minuteRect.y1 - minuteRect.y0)
+        : sample?.height ?? Math.round(Math.min(resolution.width, resolution.height) * 0.08)
+    ),
+    scale: 1,
+    color,
+    artwork: null
+  };
 }
 
 function complicationRectKeys(
@@ -5430,7 +5541,8 @@ export function exerciseProgressStyleForResolution(
     arcEnabled: Boolean(arc),
     enabled: Boolean(rect),
     color: configColor(
-      resolution.config.exercise_progress_color,
+      resolution.config.exercise_progress_arc_color ??
+        resolution.config.exercise_progress_color,
       fallback.color
     ),
     ...(arc ? { arc } : {}),
@@ -5466,10 +5578,12 @@ export function buildExerciseProgressOverrides(
     const rect = normalized.rect;
     const values: Record<string, string> = normalized.arcEnabled
       ? {
-          exercise_progress_arc: `{${Math.round(arc.centerX * scaleX)},${Math.round(arc.centerY * scaleY)},${Math.max(1, Math.round(arc.radiusX * scaleX))},${Math.max(1, Math.round(arc.radiusY * scaleY))},${Math.round(arc.startAngle)},${Math.round(arc.endAngle)},${Math.max(1, Math.round(arc.strokeWidth * strokeScale))},${arc.background ? 1 : 0}}`
+          exercise_progress_arc: `{${Math.round(arc.centerX * scaleX)},${Math.round(arc.centerY * scaleY)},${Math.max(1, Math.round(arc.radiusX * scaleX))},${Math.max(1, Math.round(arc.radiusY * scaleY))},${Math.round(arc.startAngle)},${Math.round(arc.endAngle)},${Math.max(1, Math.round(arc.strokeWidth * strokeScale))},${arc.background ? 1 : 0}}`,
+          exercise_progress_arc_color: configHexColor(normalized.color)
         }
       : {
-          exercise_progress_arc: COROS_CONFIG_DELETE_VALUE
+          exercise_progress_arc: COROS_CONFIG_DELETE_VALUE,
+          exercise_progress_arc_color: COROS_CONFIG_DELETE_VALUE
         };
     Object.assign(values, normalized.enabled
       ? {
@@ -5477,11 +5591,9 @@ export function buildExerciseProgressOverrides(
           exercise_progress_color: configHexColor(normalized.color)
         }
       : {
-          exercise_progress_rect: COROS_CONFIG_DELETE_VALUE
+          exercise_progress_rect: COROS_CONFIG_DELETE_VALUE,
+          exercise_progress_color: COROS_CONFIG_DELETE_VALUE
         });
-    values.exercise_progress_color = normalized.arcEnabled || normalized.enabled
-      ? configHexColor(normalized.color)
-      : COROS_CONFIG_DELETE_VALUE;
     return { path: `${resolution.directory}/config.txt`, values };
   });
 }
@@ -5496,6 +5608,7 @@ export function buildMetricOverrides(
     const values: Record<string, string> = {};
     for (const metric of WATCHFACE_FIXED_METRICS) {
       const enabled = changes[metric.id];
+      const parts = fixedMetricValueParts(metric);
       if (
         metric.id === "temperature" &&
         enabled === undefined &&
@@ -5521,17 +5634,33 @@ export function buildMetricOverrides(
       }
       if (
         enabled === undefined ||
-        (metric.id !== "battery" &&
-          !Object.prototype.hasOwnProperty.call(resolution.config, metric.rectKey)) ||
+        (metric.id !== "battery" && metric.id !== "exercise" &&
+          !parts.every((part) =>
+            Object.prototype.hasOwnProperty.call(
+              resolution.config,
+              part.rectKey
+            )
+          )) ||
         (metric.fontKey &&
           metric.id !== "battery" &&
+          metric.id !== "exercise" &&
           metric.id !== "temperature" &&
           !Object.prototype.hasOwnProperty.call(resolution.config, metric.fontKey))
       ) {
         continue;
       }
       if (!enabled) {
-        values[metric.rectKey] = "";
+        for (const part of parts) {
+          if (
+            metric.id !== "exercise" ||
+            Object.prototype.hasOwnProperty.call(
+              resolution.config,
+              part.rectKey
+            )
+          ) {
+            values[part.rectKey] = "";
+          }
+        }
         if (
           metric.fontKey &&
           Object.prototype.hasOwnProperty.call(resolution.config, metric.fontKey)
@@ -5556,15 +5685,22 @@ export function buildMetricOverrides(
       if (!font || !sample) {
         continue;
       }
-      const rectWidth = sample.width * metric.maxDigits;
+      const gap = parts.length > 1 ? Math.max(1, Math.round(sample.width / 2)) : 0;
+      const rectWidths = parts.map((part) => sample.width * part.maxDigits);
+      const totalWidth =
+        rectWidths.reduce((sum, width) => sum + width, 0) +
+        gap * (parts.length - 1);
       const rectHeight = sample.height;
       const centerX = Math.round(resolution.width * metric.center.x);
       const centerY = Math.round(resolution.height * metric.center.y);
-      const x0 = Math.max(0, Math.round(centerX - rectWidth / 2));
+      let x0 = Math.max(0, Math.round(centerX - totalWidth / 2));
       const y0 = Math.max(0, Math.round(centerY - rectHeight / 2));
-      const x1 = Math.min(resolution.width, x0 + rectWidth);
       const y1 = Math.min(resolution.height, y0 + rectHeight);
-      values[metric.rectKey] = `{${x0},${y0},${x1},${y1},hcenter|vcenter}`;
+      for (const [index, part] of parts.entries()) {
+        const x1 = Math.min(resolution.width, x0 + rectWidths[index]!);
+        values[part.rectKey] = `{${x0},${y0},${x1},${y1},hcenter|vcenter}`;
+        x0 = x1 + gap;
+      }
       if (metric.fontKey) {
         values[metric.fontKey] = font.folder;
       }
@@ -5631,13 +5767,25 @@ export function buildMetricStyleOverrides(
     const values: Record<string, string> = {};
     for (const metric of WATCHFACE_FIXED_METRICS) {
       const style = styles[metric.id];
-      const rect = style
-        ? scaleConfigRectValue(resolution.config[metric.rectKey] ?? "", style.scale)
-        : null;
-      if (!style || !rect || !metricFontFolder(resolution, metric)) {
+      const parts = fixedMetricValueParts(metric);
+      const rects = style
+        ? parts.map((part) =>
+            scaleConfigRectValue(
+              resolution.config[part.rectKey] ?? "",
+              style.scale
+            )
+          )
+        : [];
+      if (
+        !style ||
+        rects.some((rect) => !rect) ||
+        !metricFontFolder(resolution, metric)
+      ) {
         continue;
       }
-      values[metric.rectKey] = rect;
+      for (const [index, part] of parts.entries()) {
+        values[part.rectKey] = rects[index]!;
+      }
       if (useStudioFolders && metric.fontKey) {
         values[metric.fontKey] =
           metric.id === "temperature" && TEMPERATURE_FONT_COMPAT
@@ -5688,7 +5836,9 @@ export async function buildMetricSpriteReplacements(
         continue;
       }
       const style = styles[metric.id];
-      const rect = parseConfigRect(resolution.config[metric.rectKey]);
+      const rect = fixedMetricValueParts(metric)
+        .map((part) => parseConfigRect(resolution.config[part.rectKey]))
+        .find((candidate) => candidate !== null);
       const source = style ? metricFontFolder(resolution, metric) : null;
       if (!style || !rect || !source) {
         continue;
@@ -6562,6 +6712,11 @@ export const WATCHFACE_LAYOUT_GROUPS: WatchfaceLayoutGroup[] = [
     patterns: [/^kcal_rect$/]
   },
   {
+    id: "exercise",
+    label: "Exercise",
+    patterns: [/^exercise_(hour|minute)_rect$/]
+  },
+  {
     id: "elevation",
     label: "Elevation",
     patterns: [/^elevation_rect$/]
@@ -7408,7 +7563,7 @@ function drawStudioLayerImage(
       previewScale,
       options.effectResolutionScale ?? 1
     ),
-    true
+    !watchfaceLayerRequiresFixedSpriteBounds(layerId)
   );
   drawLayer(
     renderAodSafeAlpha(rendered.canvas),
@@ -7544,7 +7699,9 @@ export function renderWatchfaceProgressLayers(
           )
         : undefined
       : config.exercise_progress_arc,
-    exerciseStyle ? configHexColor(exerciseStyle.color) : config.exercise_progress_color,
+    exerciseStyle
+      ? configHexColor(exerciseStyle.color)
+      : config.exercise_progress_arc_color ?? config.exercise_progress_color,
     options.exerciseProgressPreviewPercent ?? 63
   );
   const drawProgressRect = (
@@ -8110,15 +8267,18 @@ export async function drawStudioPreview(
     }
   }
   for (const metric of WATCHFACE_FIXED_METRICS) {
-    const rect = parseConfigRect(config[metric.rectKey]);
     const source = metricFontFolder(resolution, metric);
-    if (rect && source) {
-      numberPlans.push({
-        rect,
-        source,
-        value: metric.sampleValue,
-        metricId: metric.id
-      });
+    if (!source) continue;
+    for (const part of fixedMetricValueParts(metric)) {
+      const rect = parseConfigRect(config[part.rectKey]);
+      if (rect) {
+        numberPlans.push({
+          rect,
+          source,
+          value: part.sampleValue,
+          metricId: metric.id
+        });
+      }
     }
   }
 
@@ -8181,6 +8341,9 @@ export async function drawStudioPreview(
       options,
       `configAsset:${scopedAssetId}`
     );
+    const assetLayerId = `configAsset:${scopedAssetId}`;
+    const assetEffects = resolveWatchfaceLayerEffects(options, assetLayerId);
+    const assetStrokes = resolveWatchfaceLayerStrokes(options, assetLayerId);
     const replacement = override?.replacement;
     const artworkZoom = replacement ? override?.scale ?? 1 : 1;
     const canvasSize = configAssetCanvasSize(
@@ -8213,10 +8376,21 @@ export async function drawStudioPreview(
           file.height,
           color ?? undefined
         );
-    const renderedDataUrl = await applyWatchfaceDataUrlOpacity(
-      opaqueDataUrl,
-      assetOpacity
-    );
+    const hasAssetDecorations =
+      assetEffects.some((effect) => effect.enabled && effect.opacity > 0) ||
+      assetStrokes.some((stroke) => stroke.enabled && stroke.opacity > 0);
+    const renderedDataUrl = hasAssetDecorations
+      ? (
+          await renderWatchfaceDataUrlDecorations(
+            opaqueDataUrl,
+            assetStrokes,
+            assetEffects,
+            options.nativeSpriteResolutionScale ?? 1,
+            assetOpacity,
+            false
+          )
+        ).dataUrl
+      : await applyWatchfaceDataUrlOpacity(opaqueDataUrl, assetOpacity);
     const image = await loadStudioImage(renderedDataUrl);
     configuredAssetImages.set(cacheKey, image);
     return image;
@@ -8343,7 +8517,7 @@ export async function drawStudioPreview(
     }
   }
 
-  if (colonFile) {
+  if (colonFile && !autoAlignedTime) {
     const hourLow = digitPlan[1];
     const minuteHigh = digitPlan[2];
     const hourLowFile = hourLow?.source?.files[hourLow.digit];

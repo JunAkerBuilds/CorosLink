@@ -3,6 +3,8 @@ import type {
   ActivityBackupProgress,
   BinaryStatus,
   CachedCorosMapPackage,
+  CombinedDownloadProgressEvent,
+  CombinedDownloadResult,
   CorosMapDownloadJob,
   CorosMapInstallResult,
   CorosMapInstallProgress,
@@ -58,6 +60,7 @@ import type {
   AppUpdateSnapshot,
   WatchConnectionSmokeOptionId,
   WatchStatus,
+  WatchTransferProgress,
   YouTubeHistoryEntry,
   YouTubeMusicAuthCapture,
   YouTubeMusicConfig,
@@ -295,6 +298,19 @@ const api = {
     ipcRenderer.invoke("watch:deleteTrack", relativePath),
   transferLocalTrack: (id: string): Promise<TransferResult> =>
     ipcRenderer.invoke("watch:transferLocalTrack", id),
+  onWatchTransferProgress: (
+    callback: (progress: WatchTransferProgress) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      progress: WatchTransferProgress
+    ) => {
+      callback(progress);
+    };
+    ipcRenderer.on("watch:transferProgress", listener);
+    return () =>
+      ipcRenderer.removeListener("watch:transferProgress", listener);
+  },
   listDownloads: (): Promise<LocalTrack[]> =>
     ipcRenderer.invoke("downloads:list"),
   downloadAudio: (url: string): Promise<DownloadAudioResult> =>
@@ -323,6 +339,25 @@ const api = {
     items: DownloadQueueItem[]
   ): Promise<DownloadJob[]> =>
     ipcRenderer.invoke("youtube:enqueueDownload", items),
+  downloadCombinedPlaylist: (
+    id: string,
+    name: string,
+    items: DownloadQueueItem[]
+  ): Promise<CombinedDownloadResult> =>
+    ipcRenderer.invoke("music:downloadCombined", id, name, items),
+  onCombinedDownloadProgress: (
+    callback: (update: CombinedDownloadProgressEvent) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      update: CombinedDownloadProgressEvent
+    ) => {
+      callback(update);
+    };
+    ipcRenderer.on("music:combinedProgress", listener);
+    return () =>
+      ipcRenderer.removeListener("music:combinedProgress", listener);
+  },
   listYouTubeJobs: (): Promise<DownloadJob[]> =>
     ipcRenderer.invoke("youtube:listJobs"),
   clearYouTubeJob: (id: string): Promise<DownloadJob[]> =>

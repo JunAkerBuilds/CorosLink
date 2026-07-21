@@ -193,6 +193,10 @@ let pendingTwoFactor: PendingTwoFactorLogin | null = null;
 
 interface TrainingHubAccountData {
   userId?: string | number;
+  unit?: number;
+  zoneData?: unknown;
+  lthr?: number;
+  lthrZone?: unknown[];
 }
 
 interface TrainingHubActivityListData {

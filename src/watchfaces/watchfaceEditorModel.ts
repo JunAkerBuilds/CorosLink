@@ -87,7 +87,7 @@ export interface EditorLayer {
   label: string;
   /** The layout-group id used for canvas drag + position offsets, when movable. */
   layoutGroupId?: string;
-  /** Set for the four fixed metrics, for style + visibility controls. */
+  /** Set for fixed metrics, for style + visibility controls. */
   metricId?: WatchfaceMetricId;
   /** Set for hour/minute digit layers, for independent style controls. */
   timePartId?: WatchfaceTimePartId;
@@ -138,6 +138,7 @@ const LAYER_ORDER: string[] = [
   "heartRate",
   "steps",
   "calories",
+  "exercise",
   "elevation",
   "temperature"
 ];
@@ -146,6 +147,7 @@ const METRIC_IDS = new Set<WatchfaceMetricId>([
   "heartRate",
   "steps",
   "calories",
+  "exercise",
   "elevation",
   "temperature"
 ]);
@@ -723,9 +725,15 @@ export function deriveEditorLayers(
             color: false,
             scale: true,
             font: false,
-            grouping: true
+            grouping: true,
+            effects: true,
+            stroke: true
           }
-        : NO_CAPABILITIES
+        : {
+            ...NO_CAPABILITIES,
+            effects: true,
+            stroke: true
+          }
     });
   }
 

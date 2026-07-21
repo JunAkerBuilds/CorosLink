@@ -1,6 +1,7 @@
 import { app } from "electron";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { addDownloads } from "./database";
@@ -17,8 +18,11 @@ import type {
   BinaryCheck,
   BinaryName,
   BinaryStatus,
+  CombinedDownloadProgress,
+  CombinedDownloadResult,
   DownloadAudioResult,
-  DownloadProgressUpdate
+  DownloadProgressUpdate,
+  DownloadQueueItem
 } from "./types";
 import {
   isPlaylistDownloadUrl,
@@ -166,6 +170,314 @@ export async function downloadAudioSearch(
     onProgress,
     runtime
   });
+}
+
+interface ResolvedCombinedItem {
+  input: string;
+  title: string;
+}
+
+/**
+ * Downloads every track in a playlist and stitches them into a single MP3 that
+ * lands in the local cache (so it can be transferred to the watch like any
+ * other download). Individual track failures are skipped and reported as
+ * warnings rather than aborting the whole combine.
+ */
+export async function downloadCombinedTrack(
+  name: string,
+  items: DownloadQueueItem[],
+  onProgress?: (update: CombinedDownloadProgress) => void,
+  runtime?: DownloadRuntimeOptions
+): Promise<CombinedDownloadResult> {
+  const resolved = items
+    .map(resolveCombinedItem)
+    .filter((item): item is ResolvedCombinedItem => item !== null);
+
+  if (resolved.length === 0) {
+    throw new Error(
+      "No downloadable tracks were provided for the combined MP3."
+    );
+  }
+
+  if (runtime?.isCancelled?.()) {
+    throw new DownloadCancelledError();
+  }
+
+  await assertBinariesAvailable();
+
+  const ytDlp = resolveBinary("yt-dlp");
+  const ffmpeg = resolveBinary("ffmpeg");
+  const workDir = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), "coroslink-combined-")
+  );
+
+  const downloadedFiles: string[] = [];
+  const warnings: string[] = [];
+  const total = resolved.length;
+
+  try {
+    for (let index = 0; index < resolved.length; index += 1) {
+      if (runtime?.isCancelled?.()) {
+        throw new DownloadCancelledError();
+      }
+
+      const item = resolved[index];
+      const outputTemplate = path.join(
+        workDir,
+        `${String(index).padStart(4, "0")}.%(ext)s`
+      );
+
+      onProgress?.({
+        phase: "downloading",
+        index: index + 1,
+        total,
+        title: item.title,
+        trackProgress: 0
+      });
+
+      try {
+        const filePath = await downloadSingleTrackFile(
+          item.input,
+          outputTemplate,
+          ytDlp,
+          ffmpeg,
+          (fraction) =>
+            onProgress?.({
+              phase: "downloading",
+              index: index + 1,
+              total,
+              title: item.title,
+              trackProgress: fraction
+            }),
+          runtime
+        );
+
+        if (filePath) {
+          downloadedFiles.push(filePath);
+        } else {
+          warnings.push(`Skipped "${item.title}" — no audio was produced.`);
+        }
+      } catch (error) {
+        if (error instanceof DownloadCancelledError) {
+          throw error;
+        }
+        warnings.push(
+          `Skipped "${item.title}" — ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+
+    if (downloadedFiles.length === 0) {
+      throw new Error(
+        "None of the playlist tracks could be downloaded, so there was nothing to combine."
+      );
+    }
+
+    onProgress?.({
+      phase: "merging",
+      index: total,
+      total,
+      title: name,
+      trackProgress: 1
+    });
+
+    const outputDirectory = getDownloadDirectory();
+    const baseName = nextAvailableBaseName(
+      outputDirectory,
+      sanitizeFileBaseName(name || "Combined Playlist")
+    );
+    const finalPath = path.join(outputDirectory, `${baseName}.mp3`);
+
+    await mergeMp3Files(downloadedFiles, finalPath, workDir, ffmpeg, runtime);
+
+    const tracks = addDownloads([finalPath], `combined:${baseName}`);
+    const track = tracks[0];
+    if (!track) {
+      throw new Error(
+        "The combined MP3 could not be registered in the library."
+      );
+    }
+
+    onProgress?.({
+      phase: "completed",
+      index: total,
+      total,
+      title: track.title,
+      trackProgress: 1
+    });
+
+    return {
+      track,
+      downloadedCount: downloadedFiles.length,
+      totalCount: total,
+      ...(warnings.length ? { warnings } : {})
+    };
+  } finally {
+    await fs.promises
+      .rm(workDir, { recursive: true, force: true })
+      .catch(() => {});
+  }
+}
+
+function resolveCombinedItem(
+  item: DownloadQueueItem
+): ResolvedCombinedItem | null {
+  if ("source" in item && item.source === "search") {
+    const query = item.query.trim();
+    if (!query) {
+      return null;
+    }
+    return { input: `ytsearch1:${query}`, title: item.title.trim() || query };
+  }
+
+  if ("source" in item && item.source === "audio") {
+    const audioUrl = item.audioUrl.trim();
+    if (!/^https?:\/\//i.test(audioUrl)) {
+      return null;
+    }
+    return { input: audioUrl, title: item.title.trim() || "Audio track" };
+  }
+
+  const rawUrl = "url" in item ? item.url?.trim() : "";
+  if (!rawUrl) {
+    return null;
+  }
+
+  let normalizedUrl: string;
+  try {
+    normalizedUrl = normalizeYouTubeDownloadUrl(rawUrl);
+  } catch {
+    return null;
+  }
+
+  const title =
+    ("title" in item && item.title?.trim()) || normalizedUrl;
+  return { input: normalizedUrl, title };
+}
+
+/**
+ * Downloads a single track as an MP3 into the directory implied by
+ * `outputTemplate` and returns the resulting file path, or null if nothing was
+ * produced. Unlike {@link runAudioDownload} this does not touch the database —
+ * the caller merges the temp files and registers the final artifact.
+ */
+async function downloadSingleTrackFile(
+  input: string,
+  outputTemplate: string,
+  ytDlp: ResolvedBinary,
+  ffmpeg: ResolvedBinary,
+  onFraction: (fraction: number) => void,
+  runtime?: DownloadRuntimeOptions
+): Promise<string | null> {
+  const args = [
+    "--no-playlist",
+    "--no-mtime",
+    "--newline",
+    "--remote-components",
+    "ejs:github",
+    "--js-runtimes",
+    `node:${process.execPath}`,
+    "--print",
+    "after_move:%(filepath)s",
+    "-x",
+    "--audio-format",
+    "mp3",
+    "--audio-quality",
+    "0",
+    "-o",
+    outputTemplate
+  ];
+
+  if (ffmpeg.source === "bundled") {
+    args.push("--ffmpeg-location", path.dirname(ffmpeg.command));
+  }
+
+  args.push(input);
+
+  const targetDir = path.dirname(outputTemplate);
+  const printedPaths: string[] = [];
+
+  const onLine = (line: string) => {
+    const resolvedPath = resolvePrintedPath(line, targetDir);
+    if (resolvedPath) {
+      printedPaths.push(resolvedPath);
+    }
+
+    const parsed = parseYtDlpProgressLine(line);
+    if (parsed?.trackProgress !== undefined) {
+      onFraction(parsed.trackProgress);
+    }
+  };
+
+  await runProcess(ytDlp.command, args, onLine, runtime);
+
+  if (runtime?.isCancelled?.()) {
+    throw new DownloadCancelledError();
+  }
+
+  const expected = outputTemplate.replace(/\.%\(ext\)s$/, ".mp3");
+  const produced =
+    printedPaths.find((filePath) => filePath.toLowerCase().endsWith(".mp3")) ??
+    (fs.existsSync(expected) ? expected : null);
+
+  return produced && fs.existsSync(produced) ? produced : null;
+}
+
+/**
+ * Concatenates the downloaded MP3s into a single file. Re-encodes with
+ * libmp3lame so tracks with differing bitrates/sample rates stitch cleanly
+ * instead of glitching on a raw stream copy.
+ */
+async function mergeMp3Files(
+  files: string[],
+  outputPath: string,
+  workDir: string,
+  ffmpeg: ResolvedBinary,
+  runtime?: DownloadRuntimeOptions
+): Promise<void> {
+  if (files.length === 1) {
+    await fs.promises.copyFile(files[0], outputPath);
+    return;
+  }
+
+  const listPath = path.join(workDir, "concat.txt");
+  const listBody = files
+    .map((filePath) => `file '${filePath.replace(/'/g, "'\\''")}'`)
+    .join("\n");
+  await fs.promises.writeFile(listPath, `${listBody}\n`, "utf8");
+
+  const args = [
+    "-y",
+    "-f",
+    "concat",
+    "-safe",
+    "0",
+    "-i",
+    listPath,
+    "-c:a",
+    "libmp3lame",
+    "-q:a",
+    "2",
+    outputPath
+  ];
+
+  const { exitCode, lines } = await runProcess(
+    ffmpeg.command,
+    args,
+    undefined,
+    runtime
+  );
+
+  if (runtime?.isCancelled?.()) {
+    await fs.promises.rm(outputPath, { force: true }).catch(() => {});
+    throw new DownloadCancelledError();
+  }
+
+  if (exitCode !== 0 || !fs.existsSync(outputPath)) {
+    throw buildProcessError(path.basename(ffmpeg.command), exitCode, lines);
+  }
 }
 
 async function runAudioDownload(

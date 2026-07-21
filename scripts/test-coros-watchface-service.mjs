@@ -130,11 +130,12 @@ assert.equal(
       kcal_progress_rect: "{108,382,308,394,left|vcenter}",
       kcal_progress_color: "0xFF8800",
       exercise_progress_arc: "{208,208,166,166,-135,135,10,0}",
+      exercise_progress_arc_color: "0x00CCFF",
       exercise_progress_rect: "{108,364,308,376,left|vcenter}",
       exercise_progress_color: "0x00CCFF"
     }
   ),
-  "[bg_color]=0x000000\r\n[kcal_progress_arc]={208,208,185,185,-135,135,10,0}\r\n[kcal_progress_arc_color]=0xFF8800\r\n[kcal_progress_rect]={108,382,308,394,left|vcenter}\r\n[kcal_progress_color]=0xFF8800\r\n[exercise_progress_arc]={208,208,166,166,-135,135,10,0}\r\n[exercise_progress_rect]={108,364,308,376,left|vcenter}\r\n[exercise_progress_color]=0x00CCFF\r\n",
+  "[bg_color]=0x000000\r\n[kcal_progress_arc]={208,208,185,185,-135,135,10,0}\r\n[kcal_progress_arc_color]=0xFF8800\r\n[kcal_progress_rect]={108,382,308,394,left|vcenter}\r\n[kcal_progress_color]=0xFF8800\r\n[exercise_progress_arc]={208,208,166,166,-135,135,10,0}\r\n[exercise_progress_arc_color]=0x00CCFF\r\n[exercise_progress_rect]={108,364,308,376,left|vcenter}\r\n[exercise_progress_color]=0x00CCFF\r\n",
   "native calorie and exercise progress keys must be appendable to sparse current and AOD configs"
 );
 assert.deepEqual(
@@ -290,6 +291,21 @@ assert.equal(
     ""
   ].join("\r\n"),
   "enabled missing Exercise controls should be appendable during archive export"
+);
+assert.equal(
+  applyCorosWatchfaceConfigOverrides(configWithoutWeather, {
+    exercise_hour_rect: "{140,300,205,340,hcenter|vcenter}",
+    exercise_minute_rect: "{220,300,285,340,hcenter|vcenter}",
+    exercise_font: "cl_exercise"
+  }),
+  [
+    "[time_hour_high_pos]={1,2}",
+    "[exercise_hour_rect]={140,300,205,340,hcenter|vcenter}",
+    "[exercise_minute_rect]={220,300,285,340,hcenter|vcenter}",
+    "[exercise_font]=cl_exercise",
+    ""
+  ].join("\r\n"),
+  "fixed Exercise fields should be appendable during archive export"
 );
 assert.equal(
   applyCorosWatchfaceConfigOverrides(configWithoutWeather, {

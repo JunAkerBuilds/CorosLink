@@ -220,11 +220,27 @@ function LibraryConnector({
   );
 }
 
+/**
+ * Live progress of a track transfer batch, shown while tracks stream to the
+ * watch so the UI stays responsive instead of freezing on a blocking copy.
+ */
+export interface TrackTransferProgress {
+  /** 1-based index of the track currently transferring. */
+  index: number;
+  /** Total tracks in the current batch. */
+  total: number;
+  /** Display name of the track currently transferring. */
+  name: string;
+  /** 0..1 progress of the current file. */
+  fileProgress: number;
+}
+
 interface LocalLibraryPanelProps {
   downloads: LocalTrack[];
   watchTracks: WatchTrack[];
   watchConnected: boolean;
   busy: string | null;
+  transferProgress: TrackTransferProgress | null;
   selectedIds: Set<string>;
   canTransferAll: boolean;
   onToggleSelect: (id: string) => void;
@@ -242,6 +258,7 @@ export function LocalLibraryPanel({
   watchTracks,
   watchConnected,
   busy,
+  transferProgress,
   selectedIds,
   canTransferAll,
   onToggleSelect,
@@ -466,6 +483,38 @@ export function LocalLibraryPanel({
           </span>
         )}
       </div>
+
+      {transferProgress ? (
+        <div
+          className="library-transfer-progress"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="library-transfer-progress-label">
+            <span className="library-transfer-progress-name">
+              {transferProgress.total > 1
+                ? `Transferring ${transferProgress.index} of ${transferProgress.total}`
+                : "Transferring"}
+              {transferProgress.name ? ` · ${transferProgress.name}` : ""}
+            </span>
+            <span>{Math.round(transferProgress.fileProgress * 100)}%</span>
+          </div>
+          <div
+            className="library-transfer-progress-track"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(transferProgress.fileProgress * 100)}
+          >
+            <div
+              className="library-transfer-progress-bar"
+              style={{
+                width: `${Math.round(transferProgress.fileProgress * 100)}%`,
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
 
       {downloads.length > 0 ? (
         <div className="library-panel-tools">

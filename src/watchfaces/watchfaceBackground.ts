@@ -1,4 +1,7 @@
-import type { CorosWatchfaceDesignState } from "../../electron/types";
+import type {
+  CorosWatchfaceDesignState,
+  CorosWatchfaceExerciseSeparatorStyle
+} from "../../electron/types";
 import {
   loadStudioImage,
   resizeAndTintSprite,
@@ -36,6 +39,85 @@ export const DEFAULT_AMPM_STYLE: WatchfaceAmPmStyle = {
   y: 360,
   scale: 1
 };
+
+async function drawExerciseSeparator(
+  context: CanvasRenderingContext2D,
+  design: CorosWatchfaceDesignState,
+  separator: CorosWatchfaceExerciseSeparatorStyle,
+  canvasSize: number,
+  coordinateScale: number
+): Promise<void> {
+  if (
+    !separator.enabled ||
+    design.metricChanges?.exercise === false ||
+    design.layerVisibility?.exercise === false
+  ) {
+    return;
+  }
+  const offset = design.layoutOffsets?.exercise ?? { dx: 0, dy: 0 };
+  const centerX = (separator.x + offset.dx) * coordinateScale;
+  const centerY = (separator.y + offset.dy) * coordinateScale;
+  const height = Math.max(1, separator.size * separator.scale * coordinateScale);
+  const layer = document.createElement("canvas");
+  layer.width = canvasSize;
+  layer.height = canvasSize;
+  const layerContext = layer.getContext("2d", { colorSpace: "display-p3" });
+  if (!layerContext) return;
+  layerContext.imageSmoothingEnabled = true;
+  layerContext.imageSmoothingQuality = "high";
+
+  if (separator.artwork) {
+    const image = await watchfaceBitmapCache.decode(
+      `exercise-separator:${separator.artwork.dataUrl.length}:${separator.artwork.dataUrl.slice(-32)}`,
+      separator.artwork.dataUrl
+    ) ?? await loadStudioImage(separator.artwork.dataUrl).catch(() => undefined);
+    if (!image) return;
+    const sourceWidth = "naturalWidth" in image ? image.naturalWidth : image.width;
+    const sourceHeight = "naturalHeight" in image ? image.naturalHeight : image.height;
+    const width = height * (sourceWidth / Math.max(1, sourceHeight));
+    layerContext.drawImage(
+      image,
+      centerX - width / 2,
+      centerY - height / 2,
+      width,
+      height
+    );
+    layerContext.globalCompositeOperation = "source-in";
+    layerContext.fillStyle = separator.color;
+    layerContext.fillRect(0, 0, canvasSize, canvasSize);
+  } else {
+    const separatorFont = design.metricStyles?.exercise?.fontFamily || design.fontFamily;
+    const family = separatorFont
+      ? `"${separatorFont.replace(/["\\]/g, "")}"`
+      : "system-ui, sans-serif";
+    layerContext.textAlign = "center";
+    layerContext.textBaseline = "middle";
+    layerContext.font = `700 ${Math.round(height)}px ${family}`;
+    layerContext.fillStyle = separator.color;
+    layerContext.fillText(":", centerX, centerY);
+  }
+
+  const effects = resolveWatchfaceLayerEffects(design, "exercise");
+  const strokes = resolveWatchfaceLayerStrokes(design, "exercise");
+  const opacity = resolveWatchfaceLayerOpacity(design, "exercise");
+  if (effects.length > 0 || strokes.length > 0) {
+    context.drawImage(
+      renderWatchfaceCanvasDecorationsWithOpacity(
+        layer,
+        strokes,
+        effects,
+        opacity
+      ).canvas,
+      0,
+      0
+    );
+  } else {
+    context.save();
+    context.globalAlpha = opacity;
+    context.drawImage(layer, 0, 0);
+    context.restore();
+  }
+}
 
 /** A blank design used when the editor opens without a saved project. */
 export function makeDefaultDesign(): CorosWatchfaceDesignState {
@@ -276,6 +358,16 @@ export async function renderDesignBackground(
         separatorScale
       );
     }
+  }
+
+  if (design.exerciseSeparator) {
+    await drawExerciseSeparator(
+      context,
+      design,
+      design.exerciseSeparator,
+      size,
+      separatorScale
+    );
   }
 
   context.textAlign = "center";

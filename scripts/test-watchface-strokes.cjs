@@ -60,9 +60,14 @@ async function main() {
         } = await import("/src/watchfaces/watchfaceEditorStrokes.ts");
         const {
           applyWatchfaceDataUrlOpacity,
+          buildWatchfaceConfigAssetReplacements,
           loadStudioImage,
           renderNativeRasterImageSprite
         } = await import("/src/watchfaces/watchfaceStudio.ts");
+        const {
+          makeDefaultDesign,
+          renderDesignBackground
+        } = await import("/src/watchfaces/watchfaceBackground.ts");
 
         const makeSource = () => {
           const canvas = document.createElement("canvas");
@@ -148,6 +153,67 @@ async function main() {
           1,
           true
         );
+        const shadow = {
+          id: "shadow",
+          kind: "outer-shadow",
+          enabled: true,
+          color: "#000000",
+          opacity: 0.6,
+          blur: 4,
+          spread: 0,
+          distance: 3,
+          angle: 0
+        };
+        const boundedShadow = renderWatchfaceCanvasDecorationsWithOpacity(
+          makeSource(),
+          [],
+          [shadow],
+          1,
+          1,
+          false
+        );
+        const paddedShadow = renderWatchfaceCanvasDecorationsWithOpacity(
+          makeSource(),
+          [],
+          [shadow],
+          1,
+          1,
+          true
+        );
+        const assetPath = "watchface_20x20/icon/off.png";
+        const configAssetReplacements = await buildWatchfaceConfigAssetReplacements(
+          {
+            archiveId: "config-asset-effects",
+            resolutions: [{
+              directory: "watchface_20x20",
+              width: 20,
+              height: 20,
+              config: { bluetooth_off_icon: "icon/off.png" },
+              aodConfig: {},
+              icons: [{ path: assetPath, width: 20, height: 20 }],
+              spriteFolders: []
+            }]
+          },
+          {},
+          {
+            loadAssets: async () => [{
+              path: assetPath,
+              dataUrl: makeSource().toDataURL("image/png"),
+              width: 20,
+              height: 20
+            }],
+            layerEffects: {
+              "configAsset:config:bluetooth_off_icon": {
+                kind: "local",
+                effects: [shadow]
+              }
+            }
+          }
+        );
+        const configAssetImage = await loadStudioImage(
+          configAssetReplacements[0].dataUrl,
+          false
+        );
         const opacitySource = document.createElement("canvas");
         opacitySource.width = 2;
         opacitySource.height = 2;
@@ -198,6 +264,61 @@ async function main() {
           false
         );
 
+        const exerciseSeparatorSource = document.createElement("canvas");
+        exerciseSeparatorSource.width = 2;
+        exerciseSeparatorSource.height = 4;
+        exerciseSeparatorSource.getContext("2d").fillRect(0, 0, 2, 4);
+        const exerciseSeparator = {
+          enabled: true,
+          x: 10,
+          y: 10,
+          size: 4,
+          scale: 1,
+          color: "#ff0000",
+          artwork: {
+            dataUrl: exerciseSeparatorSource.toDataURL("image/png"),
+            width: 2,
+            height: 4
+          }
+        };
+        const exerciseBackgroundDesign = {
+          ...makeDefaultDesign(),
+          backgroundColor: "#000000",
+          metricChanges: { exercise: true },
+          exerciseSeparator,
+          layoutOffsets: { exercise: { dx: 2, dy: 0 } }
+        };
+        const exerciseBackgroundImage = await loadStudioImage(
+          await renderDesignBackground(exerciseBackgroundDesign, 20),
+          false
+        );
+        const exerciseBackgroundCanvas = document.createElement("canvas");
+        exerciseBackgroundCanvas.width = 800;
+        exerciseBackgroundCanvas.height = 800;
+        exerciseBackgroundCanvas.getContext("2d").drawImage(
+          exerciseBackgroundImage,
+          0,
+          0
+        );
+        const hiddenExerciseBackgroundImage = await loadStudioImage(
+          await renderDesignBackground(
+            {
+              ...exerciseBackgroundDesign,
+              layerVisibility: { exercise: false }
+            },
+            20
+          ),
+          false
+        );
+        const hiddenExerciseBackgroundCanvas = document.createElement("canvas");
+        hiddenExerciseBackgroundCanvas.width = 800;
+        hiddenExerciseBackgroundCanvas.height = 800;
+        hiddenExerciseBackgroundCanvas.getContext("2d").drawImage(
+          hiddenExerciseBackgroundImage,
+          0,
+          0
+        );
+
         return {
           outside: {
             padding: outside.padding,
@@ -229,10 +350,28 @@ async function main() {
             stroke: pixel(fadedWithStroke.canvas, 7, 14),
             source: pixel(fadedWithStroke.canvas, 12, 12)
           },
+          boundedShadow: {
+            padding: boundedShadow.padding,
+            size: [boundedShadow.canvas.width, boundedShadow.canvas.height]
+          },
+          paddedShadow: {
+            padding: paddedShadow.padding,
+            size: [paddedShadow.canvas.width, paddedShadow.canvas.height]
+          },
+          configAssetShadow: {
+            count: configAssetReplacements.length,
+            path: configAssetReplacements[0].path,
+            size: [configAssetImage.naturalWidth, configAssetImage.naturalHeight]
+          },
           layerOpacity: pixel(opacityResult, 0, 0),
           spriteSpacing: {
             defaultWidth: weekdayDefault.naturalWidth,
             spacedWidth: weekdaySpaced.naturalWidth
+          },
+          exerciseSeparator: {
+            movedCenter: pixel(exerciseBackgroundCanvas, 480, 400),
+            originalCenter: pixel(exerciseBackgroundCanvas, 400, 400),
+            hiddenCenter: pixel(hiddenExerciseBackgroundCanvas, 480, 400)
           }
         };
       })()
@@ -286,6 +425,28 @@ async function main() {
         results.fadedWithStroke.source[3] <= 52,
       "sprite source opacity remains independently adjustable"
     );
+    assert.deepEqual(results.boundedShadow.padding, {
+      left: 0,
+      top: 0,
+      right: 0,
+      bottom: 0
+    });
+    assert.deepEqual(
+      results.boundedShadow.size,
+      [20, 20],
+      "bounded digit shadows preserve the firmware sprite dimensions"
+    );
+    assert.ok(
+      results.paddedShadow.size[0] > 20 && results.paddedShadow.size[1] > 20,
+      "standalone sprite shadows retain transparent overflow padding"
+    );
+    assert.equal(results.configAssetShadow.count, 1);
+    assert.equal(results.configAssetShadow.path, "watchface_20x20/icon/off.png");
+    assert.deepEqual(
+      results.configAssetShadow.size,
+      [20, 20],
+      "config image asset shadows preserve firmware anchor dimensions"
+    );
     assert.ok(
       results.layerOpacity[3] >= 88 && results.layerOpacity[3] <= 90,
       "layer opacity multiplies exported PNG alpha"
@@ -293,6 +454,19 @@ async function main() {
     assert.ok(
       results.spriteSpacing.spacedWidth > results.spriteSpacing.defaultWidth,
       "weekday sprite spacing separates glyphs in an imported bitmap"
+    );
+    assert.ok(
+      results.exerciseSeparator.movedCenter[0] > 240 &&
+        results.exerciseSeparator.movedCenter[1] < 10,
+      "Exercise's independent PNG is tinted and baked at its moved position"
+    );
+    assert.ok(
+      results.exerciseSeparator.originalCenter[0] < 10,
+      "the baked separator follows the Exercise layout offset"
+    );
+    assert.ok(
+      results.exerciseSeparator.hiddenCenter[0] < 10,
+      "hiding Exercise also hides its baked separator"
     );
     window.destroy();
     console.log("watchface stroke renderer tests passed");

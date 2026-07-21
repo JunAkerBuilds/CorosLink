@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { once } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,6 +15,14 @@ import { fallbackBytesForModel, resolveWatchModel } from "./watchModels";
 const execFileAsync = promisify(execFile);
 const INSTALLER_VOLUME_PATTERN = /desktop|setup|installer|\.dmg/i;
 const ORIGINAL_COROS_WATCH_PATH = process.env.COROS_WATCH_PATH;
+// Throttle progress callbacks so a fast local copy doesn't flood IPC, while a
+// slow copy to the watch still ticks often enough to look responsive.
+const TRANSFER_PROGRESS_MIN_INTERVAL_MS = 150;
+
+export interface WatchTransferFileProgress {
+  copiedBytes: number;
+  totalBytes: number;
+}
 
 interface WatchConnectionSmokeFixture {
   volumeName: string;
@@ -306,7 +315,10 @@ export async function deleteWatchTrack(relativePath: string): Promise<void> {
   invalidateWatchStatusCache();
 }
 
-export async function transferFileToWatch(filePath: string): Promise<WatchTrack> {
+export async function transferFileToWatch(
+  filePath: string,
+  onProgress?: (progress: WatchTransferFileProgress) => void
+): Promise<WatchTrack> {
   if (!filePath.toLowerCase().endsWith(".mp3")) {
     throw new Error("COROS watches only support MP3 files.");
   }
@@ -328,7 +340,7 @@ export async function transferFileToWatch(filePath: string): Promise<WatchTrack>
     musicPath,
     sanitizeFileName(path.basename(filePath))
   );
-  fs.copyFileSync(filePath, destination);
+  await copyFileToWatch(filePath, destination, onProgress);
   invalidateWatchStatusCache();
 
   const stats = fs.statSync(destination);
@@ -339,6 +351,53 @@ export async function transferFileToWatch(filePath: string): Promise<WatchTrack>
     sizeBytes: stats.size,
     modifiedAt: stats.mtime.toISOString()
   };
+}
+
+// Copy to the watch with a streamed, backpressure-aware loop so the main
+// process event loop stays responsive (a synchronous copy of a multi-megabyte
+// file to slow watch storage blocks IPC for tens of seconds and freezes the
+// UI). Emits byte-level progress so the renderer can show a live indicator.
+async function copyFileToWatch(
+  source: string,
+  destination: string,
+  onProgress?: (progress: WatchTransferFileProgress) => void
+): Promise<void> {
+  const totalBytes = (await fs.promises.stat(source)).size;
+
+  if (!onProgress) {
+    await fs.promises.copyFile(source, destination);
+    return;
+  }
+
+  const readStream = fs.createReadStream(source);
+  const writeStream = fs.createWriteStream(destination);
+  let copiedBytes = 0;
+  let lastEmitAt = 0;
+
+  try {
+    for await (const chunk of readStream) {
+      const buffer = chunk as Buffer;
+      if (!writeStream.write(buffer)) {
+        await once(writeStream, "drain");
+      }
+      copiedBytes += buffer.length;
+
+      const now = Date.now();
+      if (now - lastEmitAt >= TRANSFER_PROGRESS_MIN_INTERVAL_MS) {
+        lastEmitAt = now;
+        onProgress({ copiedBytes, totalBytes });
+      }
+    }
+
+    writeStream.end();
+    await once(writeStream, "finish");
+  } catch (caught) {
+    writeStream.destroy();
+    await fs.promises.rm(destination, { force: true });
+    throw caught;
+  }
+
+  onProgress({ copiedBytes: totalBytes, totalBytes });
 }
 
 async function findDriveCandidates(

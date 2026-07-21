@@ -85,6 +85,7 @@ const MODE_DESIGN_KEYS = [
   "metricStyles",
   "kcalProgress",
   "exerciseProgress",
+  "exerciseSeparator",
   "selectableMetricStyle",
   "controlComplicationEnabled",
   "controlBarometerMode",
@@ -163,6 +164,18 @@ function dimExerciseProgress(
     : undefined;
 }
 
+export function dimExerciseSeparator(
+  style: CorosWatchfaceDesignState["exerciseSeparator"]
+): CorosWatchfaceDesignState["exerciseSeparator"] {
+  return style
+    ? {
+        ...style,
+        color: dimHexColor(style.color, AOD_DIM_FACTOR),
+        artwork: style.artwork ? { ...style.artwork } : style.artwork
+      }
+    : undefined;
+}
+
 /** Produces the legacy auto-dimmed AOD appearance as independent mode state. */
 export function materializeLegacyAodDesign(
   design: CorosWatchfaceDesignState,
@@ -197,6 +210,7 @@ export function materializeLegacyAodDesign(
     metricStyles: dimStyleRecord(design.metricStyles),
     kcalProgress: dimKcalProgress(design.kcalProgress),
     exerciseProgress: dimExerciseProgress(design.exerciseProgress),
+    exerciseSeparator: dimExerciseSeparator(design.exerciseSeparator),
     controlComplicationEnabled: {},
     controlBarometerMode: design.controlBarometerMode,
     controlIconOffsets: {},
@@ -278,9 +292,23 @@ export function writeWatchfaceModeDesign(
       aodExerciseProgress === undefined ||
       JSON.stringify(aodExerciseProgress) ===
         JSON.stringify(previousDimmedExerciseProgress);
+    const previousDimmedExerciseSeparator = dimExerciseSeparator(
+      root.exerciseSeparator
+    );
+    const aodExerciseSeparator = root.modeDesigns?.aod?.exerciseSeparator;
+    const aodExerciseSeparatorIsAvailable =
+      aodExerciseSeparator !== undefined ||
+      root.modeDesigns?.aod?.metricChanges?.exercise === true;
+    const exerciseSeparatorStillLinked =
+      aodExerciseSeparatorIsAvailable &&
+      (aodExerciseSeparator === undefined ||
+        JSON.stringify(aodExerciseSeparator) ===
+          JSON.stringify(previousDimmedExerciseSeparator));
     const modeDesigns =
       root.modeDesigns?.aod &&
-      (kcalProgressStillLinked || exerciseProgressStillLinked)
+      (kcalProgressStillLinked ||
+        exerciseProgressStillLinked ||
+        exerciseSeparatorStillLinked)
         ? {
             ...root.modeDesigns,
             aod: {
@@ -292,6 +320,13 @@ export function writeWatchfaceModeDesign(
                 ? {
                     exerciseProgress: dimExerciseProgress(
                       active.exerciseProgress
+                    )
+                  }
+                : {}),
+              ...(exerciseSeparatorStillLinked
+                ? {
+                    exerciseSeparator: dimExerciseSeparator(
+                      active.exerciseSeparator
                     )
                   }
                 : {})
@@ -311,13 +346,23 @@ export function writeWatchfaceModeDesign(
     "artworkVisible",
     "zoom",
     "staticSeparators",
+    "exerciseSeparator",
     "designSprites",
     "artworkLayerOrder",
     "backgroundElements",
     "layerStrokes"
   ] as const;
+  const exerciseSeparatorBackgroundEdited = Boolean(
+    previous.exerciseSeparator || active.exerciseSeparator
+  ) && (
+    JSON.stringify(previous.layoutOffsets?.exercise) !==
+      JSON.stringify(active.layoutOffsets?.exercise) ||
+    previous.metricChanges?.exercise !== active.metricChanges?.exercise ||
+    previous.layerVisibility?.exercise !== active.layerVisibility?.exercise
+  );
   const backgroundEdited =
     root.modeDesigns?.aod?.backgroundEdited === true ||
+    exerciseSeparatorBackgroundEdited ||
     backgroundKeys.some(
       (key) =>
         JSON.stringify(previous[key]) !== JSON.stringify(active[key])

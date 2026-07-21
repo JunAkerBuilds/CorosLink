@@ -54,6 +54,7 @@ import {
   hasControlComplication,
   hasAutoAlignedTime,
   hasWatchfaceAod,
+  inferExerciseSeparatorStyle,
   inferStaticSeparators,
   isControlComplicationEnabled,
   listWatchfaceConfigAssets,
@@ -90,6 +91,13 @@ import {
   createRasterFontFolderReplacement
 } from "../src/watchfaces/watchfaceRasterFolder.ts";
 import { WatchfaceSpriteImportTracker } from "../src/watchfaces/watchfaceSpriteImportTracker.ts";
+import { watchfaceLayerRequiresFixedSpriteBounds } from "../src/watchfaces/watchfaceEffectPadding.ts";
+
+assert.equal(watchfaceLayerRequiresFixedSpriteBounds("calories"), true);
+assert.equal(watchfaceLayerRequiresFixedSpriteBounds("exercise"), true);
+assert.equal(watchfaceLayerRequiresFixedSpriteBounds("hours"), true);
+assert.equal(watchfaceLayerRequiresFixedSpriteBounds("weather"), false);
+assert.equal(watchfaceLayerRequiresFixedSpriteBounds("sprite:custom"), false);
 
 const rasterFolderSprite = (relativePath, dataUrl = relativePath) => ({
   name: relativePath.split("/").at(-1),
@@ -634,6 +642,7 @@ assert.deepEqual(
   )?.values,
   {
     exercise_progress_arc: "{400,400,320,310,-120,120,16,0}",
+    exercise_progress_arc_color: "0xAA44FF",
     exercise_progress_rect: "{200,680,600,704,hcenter|bottom}",
     exercise_progress_color: "0xAA44FF"
   }
@@ -645,6 +654,7 @@ assert.deepEqual(
   )[0]?.values,
   {
     exercise_progress_arc: "{208,208,166,161,-120,120,8,0}",
+    exercise_progress_arc_color: "0xAA44FF",
     exercise_progress_rect: "{104,354,312,366,hcenter|bottom}",
     exercise_progress_color: "0xAA44FF"
   },
@@ -657,8 +667,9 @@ assert.deepEqual(
       config: {
         ...details.resolutions[0].config,
         exercise_progress_arc: "{208,208,166,161,-120,120,8,1}",
+        exercise_progress_arc_color: "0xAA44FF",
         exercise_progress_rect: "{104,354,312,366,right|vcenter}",
-        exercise_progress_color: "0xAA44FF"
+        exercise_progress_color: "0x00CC88"
       }
     }
   ),
@@ -1501,6 +1512,62 @@ assert.equal(
   false,
   "AOD exercise progress should continue following Current until it is customized"
 );
+const exerciseSeparatorStyle = {
+  enabled: true,
+  x: 400,
+  y: 640,
+  size: 64,
+  scale: 1,
+  color: "#aa44ff",
+  artwork: null
+};
+const currentOnlyExerciseSeparatorRoot = writeWatchfaceModeDesign(
+  independentModeRoot,
+  "current",
+  {
+    ...resolveWatchfaceModeDesign(independentModeRoot, "current"),
+    exerciseSeparator: exerciseSeparatorStyle
+  }
+);
+assert.equal(
+  currentOnlyExerciseSeparatorRoot.modeDesigns.aod.exerciseSeparator,
+  undefined,
+  "Current must not add an orphan separator to AOD when AOD Exercise is disabled"
+);
+const linkedExerciseSeparatorRoot = writeWatchfaceModeDesign(
+  {
+    ...independentModeRoot,
+    modeDesigns: {
+      aod: {
+        ...independentModeRoot.modeDesigns.aod,
+        metricChanges: { exercise: true }
+      }
+    }
+  },
+  "current",
+  {
+    ...resolveWatchfaceModeDesign(independentModeRoot, "current"),
+    exerciseSeparator: exerciseSeparatorStyle
+  }
+);
+assert.equal(
+  linkedExerciseSeparatorRoot.modeDesigns.aod.exerciseSeparator.color,
+  "#5e258c",
+  "a Current Exercise separator should be copied into AOD with the normal dim factor"
+);
+const linkedExerciseSeparatorUpdate = writeWatchfaceModeDesign(
+  linkedExerciseSeparatorRoot,
+  "current",
+  {
+    ...resolveWatchfaceModeDesign(linkedExerciseSeparatorRoot, "current"),
+    exerciseSeparator: { ...exerciseSeparatorStyle, scale: 1.25 }
+  }
+);
+assert.equal(
+  linkedExerciseSeparatorUpdate.modeDesigns.aod.exerciseSeparator.scale,
+  1.25,
+  "AOD Exercise separator styling should follow Current until customized"
+);
 const activeAod = resolveWatchfaceModeDesign(independentModeRoot, "aod");
 const movedAodRoot = writeWatchfaceModeDesign(
   independentModeRoot,
@@ -1516,6 +1583,19 @@ assert.deepEqual(
   { dx: 5, dy: 7 }
 );
 assert.equal(movedAodRoot.modeDesigns.aod.backgroundEdited, undefined);
+const movedAodExerciseRoot = writeWatchfaceModeDesign(
+  linkedExerciseSeparatorRoot,
+  "aod",
+  {
+    ...resolveWatchfaceModeDesign(linkedExerciseSeparatorRoot, "aod"),
+    layoutOffsets: { exercise: { dx: 5, dy: 7 } }
+  }
+);
+assert.equal(
+  movedAodExerciseRoot.modeDesigns.aod.backgroundEdited,
+  true,
+  "moving AOD Exercise must rebuild the flattened separator artwork"
+);
 const fadedAodRoot = writeWatchfaceModeDesign(
   movedAodRoot,
   "aod",
@@ -2526,9 +2606,15 @@ assert.deepEqual(
     { id: "heartRate", label: "Heart rate", active: false },
     { id: "steps", label: "Steps", active: false },
     { id: "calories", label: "Calories", active: false },
+    { id: "exercise", label: "Exercise", active: false },
     { id: "elevation", label: "Elevation", active: false },
     { id: "temperature", label: "Temperature", active: false }
   ]
+);
+assert.deepEqual(
+  buildMetricOverrides(details, { exercise: false }),
+  [],
+  "an unavailable Exercise metric should stay undeclared until it is enabled"
 );
 assert.deepEqual(
   getAvailableComplications(details).map(({ id }) => id),
@@ -2989,6 +3075,7 @@ const metricOverrides = buildMetricOverrides(details, {
   battery: true,
   heartRate: true,
   steps: true,
+  exercise: true,
   temperature: true,
   calories: false
 });
@@ -3003,6 +3090,33 @@ assert.equal(
 );
 assert.equal(full.values.heartreate_level_font, "13x19");
 assert.equal(full.values.step_rect, "{474,576,694,640,hcenter|vcenter}");
+assert.equal(
+  full.values.exercise_hour_rect,
+  "{301,608,389,672,hcenter|vcenter}"
+);
+assert.equal(
+  full.values.exercise_minute_rect,
+  "{411,608,499,672,hcenter|vcenter}"
+);
+assert.equal(full.values.exercise_font, "13x19");
+assert.equal(
+  full.values.colon_icon,
+  undefined,
+  "fixed Exercise must not depend on the firmware time colon"
+);
+assert.deepEqual(
+  inferExerciseSeparatorStyle(details, "#abcdef"),
+  {
+    enabled: true,
+    x: 400,
+    y: 640,
+    size: 64,
+    scale: 1,
+    color: "#abcdef",
+    artwork: null
+  },
+  "a new fixed Exercise separator should use the generated metric's gap and digit height"
+);
 assert.equal(
   full.values.temperature_rect,
   "{65,600,315,685,hcenter|vcenter}"

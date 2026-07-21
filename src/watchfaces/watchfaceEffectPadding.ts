@@ -4,6 +4,40 @@ import type {
 } from "../../electron/types";
 import type { WatchfaceEffectPadding } from "./watchfaceEditorEffects.ts";
 
+/**
+ * Firmware lays these layers out from the dimensions of each state/glyph PNG.
+ * Growing a bitmap to hold a shadow therefore changes digit advance and can
+ * corrupt multi-glyph layout. Decorations for these layers must stay inside
+ * the original sprite canvas.
+ */
+const FIXED_BOUNDS_SPRITE_LAYERS = new Set([
+  "battery",
+  "heartRate",
+  "steps",
+  "calories",
+  "exercise",
+  "elevation",
+  "temperature",
+  "hours",
+  "minutes",
+  "seconds",
+  "autoTime",
+  "weekday",
+  "dateMonth",
+  "dateDay",
+  "complication"
+]);
+
+export function watchfaceLayerRequiresFixedSpriteBounds(
+  layerId: string | null | undefined
+): boolean {
+  return Boolean(
+    layerId &&
+      (FIXED_BOUNDS_SPRITE_LAYERS.has(layerId) ||
+        layerId.startsWith("configAsset:"))
+  );
+}
+
 function expandConfigRect(
   value: string | undefined,
   padding: WatchfaceEffectPadding
@@ -39,6 +73,7 @@ export function buildWatchfaceEffectPaddingOverrides(
       heartRate: ["heart_rate_rect"],
       steps: ["steps_rect"],
       calories: ["calories_rect"],
+      exercise: ["exercise_hour_rect", "exercise_minute_rect"],
       elevation: ["elevation_rect"],
       temperature: ["temperature_rect"],
       weekday: ["english_date_week_rect"],

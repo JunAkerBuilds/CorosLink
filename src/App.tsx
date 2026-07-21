@@ -4,6 +4,7 @@ import {
   ArrowRight,
   BatteryFull,
   CheckCircle2,
+  Combine,
   Copy,
   Download,
   ExternalLink,
@@ -39,6 +40,8 @@ import {
   useState,
 } from "react";
 import type {
+  CombinedDownloadProgress,
+  CombinedDownloadProgressEvent,
   DownloadJob,
   DownloadQueueItem,
   LocalTrack,
@@ -59,6 +62,7 @@ import type {
   TrainingHubUpcomingWorkout,
   WatchStatus,
   WatchTrack,
+  WatchTransferProgress,
   AppUpdateSnapshot,
   YouTubeMusicPlaylist,
   YouTubeMusicSong,
@@ -100,6 +104,7 @@ import {
   LibrarySyncLayout,
   LocalLibraryPanel,
   WatchLibraryPanel,
+  type TrackTransferProgress,
 } from "./media/LibraryPanels";
 import {
   countPendingTransfers,
@@ -259,6 +264,8 @@ export default function App() {
   const [calendarRefreshToken, setCalendarRefreshToken] = useState(0);
   const [activeMediaTab, setActiveMediaTab] = useState<MediaTab>("library");
   const [watchStatus, setWatchStatus] = useState<WatchStatus | null>(null);
+  const [transferProgress, setTransferProgress] =
+    useState<TrackTransferProgress | null>(null);
   const [communityWatchfaceOpenRequest, setCommunityWatchfaceOpenRequest] =
     useState<(CommunityWatchfaceOpenRequest & { requestId: number }) | null>(null);
   const communityWatchfaceRequestSequence = useRef(0);
@@ -284,6 +291,10 @@ export default function App() {
   const [youtubeCurrentUrl, setYoutubeCurrentUrl] = useState(YOUTUBE_HOME_URL);
   const [youtubeTitle, setYoutubeTitle] = useState("YouTube");
   const [youtubeJobs, setYoutubeJobs] = useState<DownloadJob[]>([]);
+  // Combined downloads are keyed by playlist id so concurrent combines from
+  // different services stay isolated and never show each other's progress.
+  const [combinedDownloads, setCombinedDownloads] =
+    useState<Record<string, CombinedDownloadState>>({});
   const [youtubeMusicStatus, setYoutubeMusicStatus] =
     useState<YouTubeMusicStatus | null>(null);
   const [youtubeMusicPlaylists, setYoutubeMusicPlaylists] = useState<
@@ -465,6 +476,24 @@ export default function App() {
     } catch (caught) {
       setError(toErrorMessage(caught));
     }
+  }, [api]);
+
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
+
+    return api.onWatchTransferProgress((progress: WatchTransferProgress) => {
+      setTransferProgress((current) =>
+        current
+          ? {
+              ...current,
+              name: progress.name || current.name,
+              fileProgress: progress.progress,
+            }
+          : current,
+      );
+    });
   }, [api]);
 
   const refreshSpotify = useCallback(async () => {
@@ -810,6 +839,23 @@ export default function App() {
       );
     });
   }, [api, refreshYouTubeMusic]);
+
+  useEffect(() => {
+    if (!api?.onCombinedDownloadProgress) {
+      return;
+    }
+    return api.onCombinedDownloadProgress(
+      ({ id, ...progress }: CombinedDownloadProgressEvent) => {
+        setCombinedDownloads((current) => {
+          // Ignore late events for combines that already finished.
+          if (!current[id]?.busy) {
+            return current;
+          }
+          return { ...current, [id]: { busy: true, progress } };
+        });
+      },
+    );
+  }, [api]);
 
   useEffect(() => {
     if (!api) {
@@ -1244,6 +1290,62 @@ export default function App() {
     await handleQueueYouTubeMusicSong(song);
   }
 
+  async function handleCombinedDownload(
+    id: string,
+    name: string,
+    items: DownloadQueueItem[],
+  ) {
+    if (!api) {
+      return;
+    }
+
+    if (typeof api.downloadCombinedPlaylist !== "function") {
+      setError(
+        "Combined downloads aren't loaded yet. Fully quit and restart the app so the Electron process picks up the new feature.",
+      );
+      return;
+    }
+
+    if (combinedDownloads[id]?.busy) {
+      return;
+    }
+
+    if (items.length === 0) {
+      setError("This playlist has no downloadable tracks to combine.");
+      return;
+    }
+
+    setCombinedDownloads((current) => ({
+      ...current,
+      [id]: { busy: true, progress: null },
+    }));
+    setError(null);
+    setMessage(null);
+
+    try {
+      const result = await api.downloadCombinedPlaylist(id, name, items);
+      const skipped = result.totalCount - result.downloadedCount;
+      setMessage(
+        `Combined ${result.downloadedCount} track${
+          result.downloadedCount === 1 ? "" : "s"
+        } into “${result.track.title}”.${
+          skipped > 0
+            ? ` ${skipped} track${skipped === 1 ? "" : "s"} could not be downloaded.`
+            : ""
+        }`,
+      );
+      await refreshAll();
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setCombinedDownloads((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+    }
+  }
+
   async function handleQueueYouTubeMusicPlaylist(
     playlist: YouTubeMusicPlaylist,
   ) {
@@ -1597,14 +1699,22 @@ export default function App() {
     setBusy(`transfer:${id}`);
     setError(null);
     setMessage(null);
+    setTransferProgress({
+      index: 1,
+      total: 1,
+      name: downloads.find((track) => track.id === id)?.title ?? "",
+      fileProgress: 0,
+    });
 
     try {
-      await api.transferLocalTrack(id);
+      const result = await api.transferLocalTrack(id);
+      setWatchStatus(result.watch);
       setMessage("Track transferred to the watch.");
       await refreshAll();
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
+      setTransferProgress(null);
       setBusy(null);
     }
   }
@@ -1628,8 +1738,17 @@ export default function App() {
     setMessage(null);
 
     try {
+      let index = 0;
       for (const track of pending) {
-        await api.transferLocalTrack(track.id);
+        index += 1;
+        setTransferProgress({
+          index,
+          total: pending.length,
+          name: track.title,
+          fileProgress: 0,
+        });
+        const result = await api.transferLocalTrack(track.id);
+        setWatchStatus(result.watch);
       }
       setMessage(`${pending.length} track(s) transferred to the watch.`);
       await refreshAll();
@@ -1637,6 +1756,7 @@ export default function App() {
       setError(toErrorMessage(caught));
       await refreshAll();
     } finally {
+      setTransferProgress(null);
       setBusy(null);
     }
   }
@@ -1664,8 +1784,17 @@ export default function App() {
     setMessage(null);
 
     try {
+      let index = 0;
       for (const track of pending) {
-        await api.transferLocalTrack(track.id);
+        index += 1;
+        setTransferProgress({
+          index,
+          total: pending.length,
+          name: track.title,
+          fileProgress: 0,
+        });
+        const result = await api.transferLocalTrack(track.id);
+        setWatchStatus(result.watch);
       }
       setMessage(
         pending.length === 1
@@ -1677,6 +1806,7 @@ export default function App() {
       setError(toErrorMessage(caught));
       await refreshAll();
     } finally {
+      setTransferProgress(null);
       setBusy(null);
     }
   }
@@ -2035,6 +2165,7 @@ export default function App() {
                     watchStatus={watchStatus}
                     watchConnected={Boolean(watchStatus?.connected)}
                     busy={busy}
+                    transferProgress={transferProgress}
                     lastOutput={lastOutput}
                     onTransfer={handleTransfer}
                     onTransferAll={handleTransferAll}
@@ -2079,6 +2210,8 @@ export default function App() {
                     onQueueSong={handleQueueYouTubeMusicSong}
                     onRetrySong={handleRetryYouTubeMusicSong}
                     onOpenSong={handleOpenYouTubeMusicSong}
+                    onCombinedDownload={handleCombinedDownload}
+                    combinedDownloads={combinedDownloads}
                   />
                 ) : activeMediaTab === "spotify" ? (
                   <SpotifySyncView
@@ -2097,12 +2230,16 @@ export default function App() {
                     onRefresh={refreshSpotify}
                     onMessage={setMessage}
                     onError={setError}
+                    onCombinedDownload={handleCombinedDownload}
+                    combinedDownloads={combinedDownloads}
                   />
                 ) : activeMediaTab === "apple-music" ? (
                   <AppleMusicView
                     downloads={downloads}
                     onMessage={setMessage}
                     onError={setError}
+                    onCombinedDownload={handleCombinedDownload}
+                    combinedDownloads={combinedDownloads}
                   />
                 ) : (
                   <ApplePodcastsView
@@ -2736,6 +2873,7 @@ interface MediaLibraryTabProps {
   watchStatus: WatchStatus | null;
   watchConnected: boolean;
   busy: string | null;
+  transferProgress: TrackTransferProgress | null;
   lastOutput: string[];
   onTransfer: (id: string) => void;
   onTransferAll: () => void;
@@ -2751,6 +2889,7 @@ function MediaLibraryTab({
   watchStatus,
   watchConnected,
   busy,
+  transferProgress,
   lastOutput,
   onTransfer,
   onTransferAll,
@@ -2879,6 +3018,7 @@ function MediaLibraryTab({
               watchTracks={watchTracks}
               watchConnected={watchConnected}
               busy={busy}
+              transferProgress={transferProgress}
               selectedIds={selectedIds}
               canTransferAll={canTransferAll}
               onToggleSelect={toggleSelect}
@@ -3583,6 +3723,147 @@ interface SpotifySyncViewProps {
   onRefresh: () => void | Promise<void>;
   onMessage: (message: string) => void;
   onError: (message: string) => void;
+  onCombinedDownload: (
+    id: string,
+    name: string,
+    items: DownloadQueueItem[],
+  ) => void;
+  combinedDownloads: CombinedDownloadMap;
+}
+
+interface CombinedDownloadState {
+  busy: boolean;
+  progress: CombinedDownloadProgress | null;
+}
+
+/** Per-playlist combined-download state, keyed by a service-scoped playlist id. */
+type CombinedDownloadMap = Record<string, CombinedDownloadState>;
+
+interface CombinedDownloadButtonProps {
+  defaultName: string;
+  items: DownloadQueueItem[];
+  busy: boolean;
+  progress: CombinedDownloadProgress | null;
+  onDownload: (name: string, items: DownloadQueueItem[]) => void;
+}
+
+/**
+ * "Combined download" control for a playlist. Collapsed it's a single button;
+ * clicking expands it into a name field plus a download-to-confirm icon that
+ * kicks off downloading every track and merging them into one MP3. While a
+ * combine is running it shows live per-track progress.
+ */
+function CombinedDownloadButton({
+  defaultName,
+  items,
+  busy,
+  progress,
+  onDownload,
+}: CombinedDownloadButtonProps) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(defaultName);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!editing) {
+      return;
+    }
+    setName(defaultName);
+    const frame = requestAnimationFrame(() => inputRef.current?.select());
+    return () => cancelAnimationFrame(frame);
+  }, [editing, defaultName]);
+
+  if (busy) {
+    const label =
+      progress?.phase === "merging"
+        ? "Merging tracks…"
+        : progress?.phase === "completed"
+          ? "Finishing…"
+          : progress
+            ? `Downloading ${progress.index}/${progress.total}`
+            : "Preparing…";
+    return (
+      <div
+        className="combined-download combined-download--busy"
+        role="status"
+        aria-live="polite"
+      >
+        <Loader2 className="spin" size={16} aria-hidden="true" />
+        <span className="combined-download-status">
+          <span>{label}</span>
+          {progress?.title && progress.phase === "downloading" ? (
+            <small>{progress.title}</small>
+          ) : null}
+        </span>
+      </div>
+    );
+  }
+
+  if (!editing) {
+    return (
+      <button
+        className="secondary-button combined-download-trigger"
+        type="button"
+        disabled={items.length === 0}
+        onClick={() => setEditing(true)}
+        title="Download every track and merge into one MP3"
+      >
+        <Combine size={16} aria-hidden="true" />
+        Combined download
+      </button>
+    );
+  }
+
+  const trimmed = name.trim();
+
+  function confirm() {
+    if (!trimmed) {
+      return;
+    }
+    onDownload(trimmed, items);
+    setEditing(false);
+  }
+
+  return (
+    <form
+      className="combined-download combined-download-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        confirm();
+      }}
+    >
+      <input
+        ref={inputRef}
+        className="combined-download-input"
+        type="text"
+        value={name}
+        placeholder="Name your MP3"
+        aria-label="Combined MP3 name"
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setEditing(false);
+          }
+        }}
+      />
+      <button
+        className="icon-button combined-download-confirm"
+        type="submit"
+        title="Download combined MP3"
+        disabled={!trimmed}
+      >
+        <Download size={16} aria-hidden="true" />
+      </button>
+      <button
+        className="icon-button combined-download-cancel"
+        type="button"
+        title="Cancel"
+        onClick={() => setEditing(false)}
+      >
+        <X size={16} aria-hidden="true" />
+      </button>
+    </form>
+  );
 }
 
 interface YouTubeMusicViewProps {
@@ -3602,6 +3883,12 @@ interface YouTubeMusicViewProps {
   onQueueSong: (song: YouTubeMusicSong) => void;
   onRetrySong: (song: YouTubeMusicSong, jobId: string) => void;
   onOpenSong: (song: YouTubeMusicSong) => void;
+  onCombinedDownload: (
+    id: string,
+    name: string,
+    items: DownloadQueueItem[],
+  ) => void;
+  combinedDownloads: CombinedDownloadMap;
 }
 
 const YOUTUBE_MUSIC_URL = "https://music.youtube.com/";
@@ -3738,6 +4025,8 @@ function YouTubeMusicView({
   onQueueSong,
   onRetrySong,
   onOpenSong,
+  onCombinedDownload,
+  combinedDownloads,
 }: YouTubeMusicViewProps) {
   // Default to the in-app browser sign-in; the manual header paste stays as a
   // fallback for anyone whose login the embedded browser can't complete.
@@ -4072,6 +4361,8 @@ function YouTubeMusicView({
                 onQueueSong={onQueueSong}
                 onRetrySong={onRetrySong}
                 onOpenSong={onOpenSong}
+                onCombinedDownload={onCombinedDownload}
+                combinedDownloads={combinedDownloads}
               />
             ) : (
               <EmptyState title="Select a playlist to load its songs" />
@@ -4092,6 +4383,12 @@ interface YouTubeMusicPlaylistDetailProps {
   onQueueSong: (song: YouTubeMusicSong) => void;
   onRetrySong: (song: YouTubeMusicSong, jobId: string) => void;
   onOpenSong: (song: YouTubeMusicSong) => void;
+  onCombinedDownload: (
+    id: string,
+    name: string,
+    items: DownloadQueueItem[],
+  ) => void;
+  combinedDownloads: CombinedDownloadMap;
 }
 
 function YouTubeMusicPlaylistDetail({
@@ -4103,7 +4400,18 @@ function YouTubeMusicPlaylistDetail({
   onQueueSong,
   onRetrySong,
   onOpenSong,
+  onCombinedDownload,
+  combinedDownloads,
 }: YouTubeMusicPlaylistDetailProps) {
+  const combinedItems: DownloadQueueItem[] = playlist.songs
+    .filter((song) => song.videoUrl)
+    .map((song) => ({
+      url: song.videoUrl as string,
+      title: [song.artistName, song.songTitle].filter(Boolean).join(" - "),
+    }));
+  const combinedId = `youtube-music:${playlist.id}`;
+  const combinedState = combinedDownloads[combinedId];
+
   return (
     <>
       <div className="youtube-music-playlist-header">
@@ -4140,14 +4448,25 @@ function YouTubeMusicPlaylistDetail({
           ) : null}
         </div>
         {playlist.songs.length > 0 ? (
-          <button
-            className="primary-button youtube-music-queue-all"
-            type="button"
-            onClick={() => onQueuePlaylist(playlist)}
-          >
-            <Download size={17} aria-hidden="true" />
-            Download all
-          </button>
+          <div className="playlist-header-actions">
+            <button
+              className="primary-button youtube-music-queue-all"
+              type="button"
+              onClick={() => onQueuePlaylist(playlist)}
+            >
+              <Download size={17} aria-hidden="true" />
+              Download all
+            </button>
+            <CombinedDownloadButton
+              defaultName={playlist.title}
+              items={combinedItems}
+              busy={combinedState?.busy ?? false}
+              progress={combinedState?.progress ?? null}
+              onDownload={(name, items) =>
+                onCombinedDownload(combinedId, name, items)
+              }
+            />
+          </div>
         ) : null}
       </div>
 
@@ -4408,6 +4727,8 @@ function SpotifySyncView({
   onRefresh,
   onMessage,
   onError,
+  onCombinedDownload,
+  combinedDownloads,
 }: SpotifySyncViewProps) {
   const api = window.corosLink;
   const [jobs, setJobs] = useState<DownloadJob[]>([]);
@@ -4765,6 +5086,8 @@ function SpotifySyncView({
                 onRetryTrack={(track, jobId) =>
                   void handleRetryTrack(track, jobId)
                 }
+                onCombinedDownload={onCombinedDownload}
+                combinedDownloads={combinedDownloads}
               />
             ) : (
               <EmptyState title="Select a playlist to load its tracks" />
@@ -4786,6 +5109,12 @@ interface SpotifyPlaylistDetailProps {
   onQueueAll: () => void;
   onQueueTrack: (track: SpotifyPlaylistTrack) => void;
   onRetryTrack: (track: SpotifyPlaylistTrack, jobId: string) => void;
+  onCombinedDownload: (
+    id: string,
+    name: string,
+    items: DownloadQueueItem[],
+  ) => void;
+  combinedDownloads: CombinedDownloadMap;
 }
 
 function SpotifyPlaylistDetail({
@@ -4798,7 +5127,13 @@ function SpotifyPlaylistDetail({
   onQueueAll,
   onQueueTrack,
   onRetryTrack,
+  onCombinedDownload,
+  combinedDownloads,
 }: SpotifyPlaylistDetailProps) {
+  const combinedItems: DownloadQueueItem[] = tracks.map(spotifyDownloadTarget);
+  const combinedId = `spotify:${playlist.id}`;
+  const combinedState = combinedDownloads[combinedId];
+
   return (
     <>
       <div className="spotify-playlist-header">
@@ -4836,14 +5171,25 @@ function SpotifyPlaylistDetail({
           ) : null}
         </div>
         {tracks.length > 0 ? (
-          <button
-            className="primary-button spotify-download-all"
-            type="button"
-            onClick={onQueueAll}
-          >
-            <Download size={17} aria-hidden="true" />
-            Download all
-          </button>
+          <div className="playlist-header-actions">
+            <button
+              className="primary-button spotify-download-all"
+              type="button"
+              onClick={onQueueAll}
+            >
+              <Download size={17} aria-hidden="true" />
+              Download all
+            </button>
+            <CombinedDownloadButton
+              defaultName={playlist.name}
+              items={combinedItems}
+              busy={combinedState?.busy ?? false}
+              progress={combinedState?.progress ?? null}
+              onDownload={(name, items) =>
+                onCombinedDownload(combinedId, name, items)
+              }
+            />
+          </div>
         ) : null}
       </div>
 
@@ -5904,10 +6250,18 @@ function AppleMusicView({
   downloads,
   onMessage,
   onError,
+  onCombinedDownload,
+  combinedDownloads,
 }: {
   downloads: LocalTrack[];
   onMessage: (message: string) => void;
   onError: (message: string) => void;
+  onCombinedDownload: (
+    id: string,
+    name: string,
+    items: DownloadQueueItem[],
+  ) => void;
+  combinedDownloads: CombinedDownloadMap;
 }) {
   const api = window.corosLink;
   const [status, setStatus] = useState<AppleMusicStatus | null>(null);
@@ -6467,6 +6821,8 @@ function AppleMusicView({
                   onRetryTrack={(track, jobId) =>
                     void handleRetryTrack(track, jobId)
                   }
+                  onCombinedDownload={onCombinedDownload}
+                  combinedDownloads={combinedDownloads}
                 />
               ) : (
                 <EmptyState title="Select a playlist to load its tracks" />
@@ -6488,6 +6844,12 @@ interface AppleMusicPlaylistDetailProps {
   onQueueAll: () => void;
   onQueueTrack: (track: AppleMusicTrack) => void;
   onRetryTrack: (track: AppleMusicTrack, jobId: string) => void;
+  onCombinedDownload: (
+    id: string,
+    name: string,
+    items: DownloadQueueItem[],
+  ) => void;
+  combinedDownloads: CombinedDownloadMap;
 }
 
 function AppleMusicPlaylistDetail({
@@ -6499,7 +6861,15 @@ function AppleMusicPlaylistDetail({
   onQueueAll,
   onQueueTrack,
   onRetryTrack,
+  onCombinedDownload,
+  combinedDownloads,
 }: AppleMusicPlaylistDetailProps) {
+  const combinedItems: DownloadQueueItem[] = playlist.tracks.map(
+    appleMusicDownloadTarget,
+  );
+  const combinedId = `apple-music:${playlist.id}`;
+  const combinedState = combinedDownloads[combinedId];
+
   return (
     <>
       <div className="apple-music-playlist-header">
@@ -6540,14 +6910,25 @@ function AppleMusicPlaylistDetail({
           ) : null}
         </div>
         {playlist.tracks.length > 0 ? (
-          <button
-            className="primary-button apple-music-download-all"
-            type="button"
-            onClick={onQueueAll}
-          >
-            <Download size={17} aria-hidden="true" />
-            Download all
-          </button>
+          <div className="playlist-header-actions">
+            <button
+              className="primary-button apple-music-download-all"
+              type="button"
+              onClick={onQueueAll}
+            >
+              <Download size={17} aria-hidden="true" />
+              Download all
+            </button>
+            <CombinedDownloadButton
+              defaultName={playlist.name}
+              items={combinedItems}
+              busy={combinedState?.busy ?? false}
+              progress={combinedState?.progress ?? null}
+              onDownload={(name, items) =>
+                onCombinedDownload(combinedId, name, items)
+              }
+            />
+          </div>
         ) : null}
       </div>
 

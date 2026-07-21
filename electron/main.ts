@@ -5,7 +5,11 @@ import os from "node:os";
 import path from "node:path";
 import { listLocalFontFamilies } from "./fontService";
 import { deleteDownload, getDownloadById, initializeDatabase, listDownloads, markDownloadTransferred, clearDownloadTransferredByFileName } from "./database";
-import { downloadAudio, getBinaryStatus } from "./downloadService";
+import {
+  downloadAudio,
+  downloadCombinedTrack,
+  getBinaryStatus
+} from "./downloadService";
 import {
   cancelJob,
   clearCompletedJobs,
@@ -146,6 +150,7 @@ import {
 } from "./mapService";
 import { startRouteShare, stopRouteShare } from "./routeShareServer";
 import type {
+  CombinedDownloadResult,
   CorosMapPackage,
   DownloadJob,
   DownloadQueueItem,
@@ -175,7 +180,8 @@ import type {
   CorosWatchfaceThemeDownloadInput,
   CorosWatchfaceThemeListInput,
   CorosBatteryQueryInput,
-  CorosBluetoothDeviceChoice
+  CorosBluetoothDeviceChoice,
+  WatchTransferProgress
 } from "./types";
 import type { CommunityWatchfaceOpenRequest } from "./types";
 import {
@@ -1105,7 +1111,22 @@ function registerIpcHandlers(): void {
       throw new Error("Local track was not found.");
     }
 
-    const copiedTrack = await transferFileToWatch(download.filePath);
+    const trackName = path.basename(download.filePath);
+    const copiedTrack = await transferFileToWatch(
+      download.filePath,
+      ({ copiedBytes, totalBytes }) => {
+        if (!mainWindow || mainWindow.isDestroyed()) {
+          return;
+        }
+        mainWindow.webContents.send("watch:transferProgress", {
+          id,
+          name: trackName,
+          copiedBytes,
+          totalBytes,
+          progress: totalBytes > 0 ? Math.min(copiedBytes / totalBytes, 1) : 0
+        } satisfies WatchTransferProgress);
+      }
+    );
     markDownloadTransferred(id);
 
     return {
@@ -1151,6 +1172,19 @@ function registerIpcHandlers(): void {
     "youtube:enqueueDownload",
     (_event, items: DownloadQueueItem[]): DownloadJob[] =>
       enqueueDownloads(items)
+  );
+
+  ipcMain.handle(
+    "music:downloadCombined",
+    (
+      event,
+      id: string,
+      name: string,
+      items: DownloadQueueItem[]
+    ): Promise<CombinedDownloadResult> =>
+      downloadCombinedTrack(name, items, (update) => {
+        event.sender.send("music:combinedProgress", { id, ...update });
+      })
   );
 
   ipcMain.handle("youtube:listJobs", (): DownloadJob[] => listJobs());

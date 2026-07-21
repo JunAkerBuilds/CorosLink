@@ -330,6 +330,7 @@ import type {
   CorosWatchfaceDesignSprite,
   CorosWatchfaceEditorGuide,
   CorosWatchfaceExerciseProgressStyle,
+  CorosWatchfaceExerciseSeparatorStyle,
   CorosWatchfaceKcalProgressStyle,
   CorosWatchfaceShadowEffect,
   CorosWatchfaceStroke,
@@ -430,6 +431,7 @@ import {
   makeWatchfaceDragForegroundDesign
 } from "./watchfaceDragIsolation";
 import {
+  dimExerciseSeparator,
   materializeLegacyAodDesign,
   resolveWatchfaceModeDesign,
   writeWatchfaceModeDesign
@@ -466,10 +468,12 @@ import {
   getAmPmCapability,
   scaleAmPmStyleForResolution,
   getAvailableComplications,
+  getFixedMetricCapabilities,
   getTemplateBackgroundAssetPaths,
   hasControlComplication,
   hasWatchfaceAod,
   inferStaticSeparators,
+  inferExerciseSeparatorStyle,
   exerciseProgressStyleForResolution,
   kcalProgressStyleForResolution,
   loadStudioImage,
@@ -573,6 +577,7 @@ import {
   normalizeWatchfaceShadowEffect,
   resolveWatchfaceLayerEffects
 } from "./watchfaceEditorEffects";
+import { watchfaceLayerRequiresFixedSpriteBounds } from "./watchfaceEffectPadding";
 import {
   createWatchfaceStroke,
   migrateLegacyBackgroundElementStrokes,
@@ -931,6 +936,22 @@ function normalizeEditorDesign(
         normalizeWatchfaceLayerOpacity(opacity)
       ])
     );
+  const normalizeExerciseSeparator = (
+    separator: CorosWatchfaceExerciseSeparatorStyle | undefined
+  ): CorosWatchfaceExerciseSeparatorStyle | undefined => separator
+    ? {
+        ...separator,
+        enabled: separator.enabled !== false,
+        x: Number.isFinite(separator.x) ? separator.x : 400,
+        y: Number.isFinite(separator.y) ? separator.y : 640,
+        size: Math.max(1, Number.isFinite(separator.size) ? separator.size : 64),
+        scale: Math.max(0.01, Number.isFinite(separator.scale) ? separator.scale : 1),
+        color: /^#[0-9a-f]{6}$/i.test(separator.color)
+          ? separator.color
+          : design.digitColor,
+        artwork: separator.artwork ?? null
+      }
+    : undefined;
   const normalizedBackgroundElements = normalizeBackgroundElements(
     design.backgroundElements
   );
@@ -951,6 +972,9 @@ function normalizeEditorDesign(
           ...design.modeDesigns,
           aod: {
             ...aodMode,
+            exerciseSeparator: normalizeExerciseSeparator(
+              aodMode.exerciseSeparator
+            ),
             backgroundElements: migratedAodStrokes.elements,
             layerOpacities: normalizeLayerOpacities(aodMode.layerOpacities),
             layerStrokes: migratedAodStrokes.layerStrokes
@@ -961,6 +985,7 @@ function normalizeEditorDesign(
     ...design,
     artworkVisible:
       design.artworkVisible ?? legacyBackgroundOverride?.enabled !== false,
+    exerciseSeparator: normalizeExerciseSeparator(design.exerciseSeparator),
     configAssetOverrides: design.configAssetOverrides ?? {},
     controlComplicationEnabled: design.controlComplicationEnabled ?? {},
     editorGroups: normalizeWatchfaceEditorGroups(
@@ -1613,6 +1638,47 @@ export function WatchfaceEditor({
             };
           }
         }
+        const exerciseCapability = getFixedMetricCapabilities(described).find(
+          (capability) => capability.id === "exercise"
+        );
+        const aodExerciseActive = hasWatchfaceAod(described) &&
+          getFixedMetricCapabilities(
+            detailsForCompositionMode(described, "aod")
+          ).find((capability) => capability.id === "exercise")?.active === true;
+        if (
+          !nextDesign.exerciseSeparator &&
+          (nextDesign.metricChanges?.exercise === true ||
+            (nextDesign.metricChanges?.exercise !== false &&
+              exerciseCapability?.active === true))
+        ) {
+          nextDesign = {
+            ...nextDesign,
+            exerciseSeparator: inferExerciseSeparatorStyle(
+              described,
+              nextDesign.metricStyles?.exercise?.color ?? nextDesign.digitColor
+            )
+          };
+        }
+        if (
+          nextDesign.exerciseSeparator &&
+          nextDesign.modeDesigns?.aod &&
+          !nextDesign.modeDesigns.aod.exerciseSeparator &&
+          (aodExerciseActive ||
+            nextDesign.modeDesigns.aod.metricChanges?.exercise === true)
+        ) {
+          nextDesign = {
+            ...nextDesign,
+            modeDesigns: {
+              ...nextDesign.modeDesigns,
+              aod: {
+                ...nextDesign.modeDesigns.aod,
+                exerciseSeparator: dimExerciseSeparator(
+                  nextDesign.exerciseSeparator
+                )
+              }
+            }
+          };
+        }
         if (hasWatchfaceAod(described) && !nextDesign.modeDesigns?.aod) {
           const sourceResolution =
             pickWatchPreviewResolution(described) ??
@@ -1639,7 +1705,9 @@ export function WatchfaceEditor({
             modeDesigns: {
               ...(nextDesign.modeDesigns ?? {}),
               aod: materializeLegacyAodDesign(
-                nextDesign,
+                aodExerciseActive
+                  ? nextDesign
+                  : { ...nextDesign, exerciseSeparator: undefined },
                 aodArtwork
                   ? {
                       dataUrl: aodArtwork.dataUrl,
@@ -1692,6 +1760,10 @@ export function WatchfaceEditor({
       design.designSprites,
       design.configAssetOverrides,
       design.staticSeparators,
+      design.exerciseSeparator,
+      design.metricChanges,
+      design.layoutOffsets,
+      design.layerVisibility,
       design.fontFamily,
       design.effectStyles,
       design.layerEffects,
@@ -2686,6 +2758,7 @@ export function WatchfaceEditor({
     );
     const movesAmPm = movingLayers.some((layer) => layer.ampmIndicator);
     const movesWeather = movingLayers.some((layer) => layer.weatherIndicator);
+    const movesExercise = movingIdSet.has("exercise");
     const hiddenLayerVisibility = { ...design.layerVisibility };
     for (const layer of layers) {
       if (layer.layoutGroupId) {
@@ -2715,6 +2788,10 @@ export function WatchfaceEditor({
         (sprite) => !movingSpriteIds.has(sprite.id)
       ),
       staticSeparators: baseSeparators,
+      exerciseSeparator:
+        movesExercise && design.exerciseSeparator
+          ? { ...design.exerciseSeparator, enabled: false }
+          : design.exerciseSeparator,
       ampmIndicator:
         movesAmPm && design.ampmIndicator
           ? { ...design.ampmIndicator, enabled: false }
@@ -2768,6 +2845,9 @@ export function WatchfaceEditor({
             movingSeparatorIds.has("dateSlash")
         }
       },
+      exerciseSeparator: design.exerciseSeparator
+        ? { ...design.exerciseSeparator, enabled: movesExercise }
+        : undefined,
       ampmIndicator: design.ampmIndicator
         ? { ...design.ampmIndicator, enabled: movesAmPm }
         : undefined,
@@ -4819,10 +4899,18 @@ export function WatchfaceEditor({
           scale: 1
         };
       }
+      const exerciseSeparator =
+        metricId === "exercise" && visible && !prev.exerciseSeparator && modeSourceDetails
+          ? inferExerciseSeparatorStyle(
+              modeSourceDetails,
+              metricStyles.exercise?.color ?? prev.digitColor
+            )
+          : prev.exerciseSeparator;
       return {
         ...prev,
         metricChanges: { ...prev.metricChanges, [metricId]: visible },
-        metricStyles
+        metricStyles,
+        exerciseSeparator
       };
     });
   }
@@ -5256,6 +5344,58 @@ export function WatchfaceEditor({
         }
       };
     });
+  }
+
+  function updateExerciseSeparator(
+    patch: Partial<CorosWatchfaceExerciseSeparatorStyle>
+  ) {
+    const { x, y, ...otherPatch } = patch;
+    const safePatch = isPositionLocked("exercise")
+      ? otherPatch
+      : {
+          ...otherPatch,
+          ...(x !== undefined ? { x } : {}),
+          ...(y !== undefined ? { y } : {})
+        };
+    setDesign((prev) => {
+      const sourceDetails = modeSourceDetails ?? details;
+      const current = prev.exerciseSeparator ?? (sourceDetails
+        ? inferExerciseSeparatorStyle(
+            sourceDetails,
+            prev.metricStyles?.exercise?.color ?? prev.digitColor
+          )
+        : {
+            enabled: true,
+            x: previewWidth / 2,
+            y: previewHeight * 0.8,
+            size: Math.max(1, previewHeight * 0.08),
+            scale: 1,
+            color: prev.metricStyles?.exercise?.color ?? prev.digitColor,
+            artwork: null
+          });
+      return {
+        ...prev,
+        exerciseSeparator: { ...current, ...safePatch }
+      };
+    });
+  }
+
+  async function chooseExerciseSeparatorArtwork() {
+    try {
+      const selected = await api.chooseCorosWatchfaceArtwork();
+      if (!selected) return;
+      updateExerciseSeparator({
+        enabled: true,
+        artwork: await downscaleArtwork(selected)
+      });
+      onNotice("Exercise separator PNG added to this display mode.");
+    } catch (caught) {
+      onError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not load the Exercise separator PNG."
+      );
+    }
   }
 
   function clearMetricColor(metricId: WatchfaceMetricId) {
@@ -5960,7 +6100,15 @@ export function WatchfaceEditor({
             retargetedAodComposition.assetReplacements
           )
         };
-        if (designSnapshot.modeDesigns.aod.backgroundEdited) {
+        const aodHasVisibleExerciseSeparator = Boolean(
+          aodDesign.exerciseSeparator?.enabled &&
+          aodDesign.metricChanges?.exercise !== false &&
+          aodDesign.layerVisibility?.exercise !== false
+        );
+        if (
+          designSnapshot.modeDesigns.aod.backgroundEdited ||
+          aodHasVisibleExerciseSeparator
+        ) {
           const aodBackground = await renderDesignBackground(
             aodDesign,
             pickPreviewResolution(aodDetails)?.width ?? previewWidth
@@ -7700,6 +7848,7 @@ export function WatchfaceEditor({
             "heartRate",
             "steps",
             "calories",
+            "exercise",
             "elevation",
             "temperature"
           ],
@@ -7911,6 +8060,113 @@ export function WatchfaceEditor({
       configAsset: "Template asset",
       customSprite: "Image"
     }[layer.kind];
+  }
+
+  function renderExerciseProgressControls(
+    exerciseProgress: CorosWatchfaceExerciseProgressStyle
+  ) {
+    return (
+      <div className="wf-property-stack">
+        <label className="watchface-inspector-field">
+          <span>Progress arc</span>
+          <input
+            type="checkbox"
+            checked={exerciseProgress.arcEnabled}
+            onChange={(event) =>
+              updateExerciseProgress({ arcEnabled: event.target.checked })
+            }
+          />
+        </label>
+        <label className="watchface-inspector-field">
+          <span>Progress bar</span>
+          <input
+            type="checkbox"
+            checked={exerciseProgress.enabled}
+            onChange={(event) =>
+              updateExerciseProgress({ enabled: event.target.checked })
+            }
+          />
+        </label>
+        <label className="field">
+          Progress color
+          <span className="watchface-color-control">
+            <ThrottledColorInput
+              value={exerciseProgress.color}
+              onPreview={(exerciseColor) =>
+                paintArcOverlay({ exerciseColor })
+              }
+              onValueChange={(color) => updateExerciseProgress({ color })}
+            />
+            <code>{exerciseProgress.color}</code>
+          </span>
+        </label>
+        <label className="watchface-inspector-field">
+          <span>Preview completion</span>
+          <span className="wf-input-with-unit">
+            <EditableNumberInput
+              min="0"
+              max="100"
+              step="1"
+              value={exerciseProgress.previewPercent}
+              fallback={63}
+              onValueChange={(previewPercent) =>
+                updateExerciseProgress({
+                  previewPercent: Math.max(0, Math.min(100, previewPercent))
+                })
+              }
+            />
+            <span>%</span>
+          </span>
+        </label>
+        <details className="wf-nested-disclosure">
+          <summary>Arc geometry</summary>
+          <div className="watchface-position-inputs">
+            <label>Center X<EditableNumberInput step="1" value={exerciseProgress.arc.centerX} fallback={previewWidth / 2} onValueChange={(centerX) => updateExerciseProgress({ arc: { centerX } })} /></label>
+            <label>Center Y<EditableNumberInput step="1" value={exerciseProgress.arc.centerY} fallback={previewHeight / 2} onValueChange={(centerY) => updateExerciseProgress({ arc: { centerY } })} /></label>
+            <label>Radius X<EditableNumberInput min="1" step="1" value={exerciseProgress.arc.radiusX} fallback={1} onValueChange={(radiusX) => updateExerciseProgress({ arc: { radiusX: Math.max(1, radiusX) } })} /></label>
+            <label>Radius Y<EditableNumberInput min="1" step="1" value={exerciseProgress.arc.radiusY} fallback={1} onValueChange={(radiusY) => updateExerciseProgress({ arc: { radiusY: Math.max(1, radiusY) } })} /></label>
+            <label>Start °<EditableNumberInput min="-360" max="360" step="1" value={exerciseProgress.arc.startAngle} fallback={-135} onValueChange={(startAngle) => updateExerciseProgress({ arc: { startAngle } })} /></label>
+            <label>End °<EditableNumberInput min="-360" max="360" step="1" value={exerciseProgress.arc.endAngle} fallback={135} onValueChange={(endAngle) => updateExerciseProgress({ arc: { endAngle } })} /></label>
+            <label>Thickness<EditableNumberInput min="1" step="1" value={exerciseProgress.arc.strokeWidth} fallback={1} onValueChange={(strokeWidth) => updateExerciseProgress({ arc: { strokeWidth: Math.max(1, strokeWidth) } })} /></label>
+          </div>
+          <label className="watchface-inspector-field">
+            <span>Draw remaining portion</span>
+            <input type="checkbox" checked={exerciseProgress.arc.background} onChange={(event) => updateExerciseProgress({ arc: { background: event.target.checked } })} />
+          </label>
+        </details>
+        <details className="wf-nested-disclosure">
+          <summary>Bar geometry</summary>
+          <div className="watchface-position-inputs">
+            <label>Left<EditableNumberInput step="1" value={exerciseProgress.rect.x0} fallback={0} onValueChange={(x0) => updateExerciseProgress({ rect: { x0 } })} /></label>
+            <label>Top<EditableNumberInput step="1" value={exerciseProgress.rect.y0} fallback={0} onValueChange={(y0) => updateExerciseProgress({ rect: { y0 } })} /></label>
+            <label>Right<EditableNumberInput step="1" value={exerciseProgress.rect.x1} fallback={previewWidth} onValueChange={(x1) => updateExerciseProgress({ rect: { x1 } })} /></label>
+            <label>Bottom<EditableNumberInput step="1" value={exerciseProgress.rect.y1} fallback={previewHeight} onValueChange={(y1) => updateExerciseProgress({ rect: { y1 } })} /></label>
+          </div>
+          <label className="watchface-inspector-field">
+            <span>Fill direction</span>
+            <select
+              value={exerciseProgress.rect.direction}
+              onChange={(event) =>
+                updateExerciseProgress({
+                  rect: {
+                    direction: event.target.value as CorosWatchfaceExerciseProgressStyle["rect"]["direction"]
+                  }
+                })
+              }
+            >
+              <option value="left">Left to right</option>
+              <option value="right">Right to left</option>
+              <option value="top">Top to bottom</option>
+              <option value="bottom">Bottom to top</option>
+            </select>
+          </label>
+        </details>
+        <p className="muted">
+          COROS supplies the live exercise-goal percentage. Current settings
+          mirror to Always-on until you customize that mode.
+        </p>
+      </div>
+    );
   }
 
   function renderLayerSection(layer: EditorLayer) {
@@ -8646,6 +8902,11 @@ export function WatchfaceEditor({
         {effects.length === 0 ? (
           <p className="watchface-studio-summary">No effects. Add a shadow to build an ordered effect stack.</p>
         ) : null}
+        {effects.length > 0 && watchfaceLayerRequiresFixedSpriteBounds(layerId) ? (
+          <p className="watchface-studio-summary">
+            Shadows stay inside each firmware sprite so digit size and spacing remain intact. Large blur or distance values may be clipped.
+          </p>
+        ) : null}
         {warning ? <p className="wf-effect-warning">{warning}</p> : null}
       </div>,
       {
@@ -8773,6 +9034,8 @@ export function WatchfaceEditor({
           </div>,
           { disabled: isPositionLocked(layer.id) }
         )}
+        {renderStrokeInspector(layer.id)}
+        {renderEffectsInspector(layer.id)}
         {renderPropertySection(
           "advanced",
           "Advanced",
@@ -9165,13 +9428,99 @@ export function WatchfaceEditor({
               design.kcalProgress
             )
           : null;
+      const exerciseProgress =
+        layer.metricId === "exercise" && previewResolution
+          ? exerciseProgressStyleForResolution(
+              previewResolution,
+              design.exerciseProgress
+            )
+          : null;
+      const exerciseSeparator =
+        layer.metricId === "exercise"
+          ? design.exerciseSeparator ?? (modeSourceDetails
+              ? inferExerciseSeparatorStyle(
+                  modeSourceDetails,
+                  style?.color ?? design.digitColor
+                )
+              : null)
+          : null;
       return (
         <>
           {renderPositionReadout(layer)}
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">Tint color<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setMetricStyle(layer.metricId!, { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearMetricColor(layer.metricId!)}><XCircle size={14} /></button></span></label>,
+            <div className="wf-property-stack">
+              <label className="field">Tint color<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setMetricStyle(layer.metricId!, { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearMetricColor(layer.metricId!)}><XCircle size={14} /></button></span></label>
+              {exerciseSeparator ? (
+                <details className="wf-nested-disclosure" open>
+                  <summary>Exercise separator</summary>
+                  <div className="wf-property-stack">
+                    <label className="watchface-inspector-field">
+                      <span>Show separator</span>
+                      <input
+                        type="checkbox"
+                        checked={exerciseSeparator.enabled}
+                        onChange={(event) =>
+                          updateExerciseSeparator({ enabled: event.target.checked })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      Separator color
+                      <span className="watchface-color-control">
+                        <input
+                          type="color"
+                          value={exerciseSeparator.color}
+                          onChange={(event) =>
+                            updateExerciseSeparator({ color: event.target.value })
+                          }
+                        />
+                        <code>{exerciseSeparator.color}</code>
+                      </span>
+                    </label>
+                    <div className="watchface-position-inputs">
+                      <label>Center X<EditableNumberInput step="1" value={exerciseSeparator.x} fallback={previewWidth / 2} disabled={isPositionLocked(layer.id)} onValueChange={(x) => updateExerciseSeparator({ x })} /></label>
+                      <label>Center Y<EditableNumberInput step="1" value={exerciseSeparator.y} fallback={previewHeight * 0.8} disabled={isPositionLocked(layer.id)} onValueChange={(y) => updateExerciseSeparator({ y })} /></label>
+                      <label>Size<EditableNumberInput min="1" step="1" value={exerciseSeparator.size} fallback={1} onValueChange={(size) => updateExerciseSeparator({ size: Math.max(1, size) })} /></label>
+                      <label>Scale<EditableNumberInput min="0.01" step="0.01" value={exerciseSeparator.scale} fallback={1} onValueChange={(scale) => updateExerciseSeparator({ scale: Math.max(0.01, scale) })} /></label>
+                    </div>
+                    {exerciseSeparator.artwork ? (
+                      <div className="wf-config-asset-preview">
+                        <img
+                          src={exerciseSeparator.artwork.dataUrl}
+                          alt="Exercise separator PNG"
+                        />
+                      </div>
+                    ) : (
+                      <p className="muted">Using a generated colon glyph.</p>
+                    )}
+                    <div className="wf-config-asset-actions">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={chooseExerciseSeparatorArtwork}
+                      >
+                        <ImagePlus size={14} />
+                        {exerciseSeparator.artwork ? "Replace PNG" : "Choose PNG"}
+                      </button>
+                      {exerciseSeparator.artwork ? (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => updateExerciseSeparator({ artwork: null })}
+                        >
+                          Use text colon
+                        </button>
+                      ) : null}
+                    </div>
+                    <p className="muted">
+                      This separator is flattened into the face artwork and follows Exercise when the metric moves.
+                    </p>
+                  </div>
+                </details>
+              ) : null}
+            </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -9303,7 +9652,13 @@ export function WatchfaceEditor({
                   </p>
                 </div>
               )
-            : null}
+            : exerciseProgress
+              ? renderPropertySection(
+                  "advanced",
+                  "Goal progress",
+                  renderExerciseProgressControls(exerciseProgress)
+                )
+              : null}
           {renderEffectsInspector(layer.id)}
         </>
       );
@@ -9632,12 +9987,6 @@ export function WatchfaceEditor({
     const sourceResolution = previewDetails
       ? pickPreviewResolution(previewDetails)
       : pickPreviewResolution(details);
-    const exerciseProgress = sourceResolution
-      ? exerciseProgressStyleForResolution(
-          sourceResolution,
-          design.exerciseProgress
-        )
-      : null;
     const iconPositionKey = selectedComplication
       ? `control_${selectedComplication.controlPrefix}_icon_pos`
       : "";
@@ -9962,114 +10311,6 @@ export function WatchfaceEditor({
             its value, icon, and position settings.
           </p>
         )}
-        {exerciseProgress ? (
-          <details className="wf-nested-disclosure">
-            <summary>Exercise progress</summary>
-            <div className="wf-property-stack">
-              <label className="watchface-inspector-field">
-                <span>Show progress arc</span>
-                <input
-                  type="checkbox"
-                  checked={exerciseProgress.arcEnabled}
-                  onChange={(event) =>
-                    updateExerciseProgress({ arcEnabled: event.target.checked })
-                  }
-                />
-              </label>
-              <label className="watchface-inspector-field">
-                <span>Show progress bar</span>
-                <input
-                  type="checkbox"
-                  checked={exerciseProgress.enabled}
-                  onChange={(event) =>
-                    updateExerciseProgress({ enabled: event.target.checked })
-                  }
-                />
-              </label>
-              <label className="field">
-                Progress color
-                <span className="watchface-color-control">
-                  <input
-                    type="color"
-                    value={exerciseProgress.color}
-                    onChange={(event) =>
-                      updateExerciseProgress({ color: event.target.value })
-                    }
-                  />
-                  <code>{exerciseProgress.color}</code>
-                </span>
-              </label>
-              <label className="watchface-inspector-field">
-                <span>Preview completion</span>
-                <span className="wf-input-with-unit">
-                  <EditableNumberInput
-                    min="0"
-                    max="100"
-                    step="1"
-                    value={exerciseProgress.previewPercent}
-                    fallback={63}
-                    onValueChange={(previewPercent) =>
-                      updateExerciseProgress({
-                        previewPercent: Math.max(
-                          0,
-                          Math.min(100, previewPercent)
-                        )
-                      })
-                    }
-                  />
-                  <span>%</span>
-                </span>
-              </label>
-              <details className="wf-nested-disclosure">
-                <summary>Arc geometry</summary>
-                <div className="watchface-position-inputs">
-                  <label>Center X<EditableNumberInput step="1" value={exerciseProgress.arc.centerX} fallback={previewWidth / 2} onValueChange={(centerX) => updateExerciseProgress({ arc: { centerX } })} /></label>
-                  <label>Center Y<EditableNumberInput step="1" value={exerciseProgress.arc.centerY} fallback={previewHeight / 2} onValueChange={(centerY) => updateExerciseProgress({ arc: { centerY } })} /></label>
-                  <label>Radius X<EditableNumberInput min="1" step="1" value={exerciseProgress.arc.radiusX} fallback={1} onValueChange={(radiusX) => updateExerciseProgress({ arc: { radiusX: Math.max(1, radiusX) } })} /></label>
-                  <label>Radius Y<EditableNumberInput min="1" step="1" value={exerciseProgress.arc.radiusY} fallback={1} onValueChange={(radiusY) => updateExerciseProgress({ arc: { radiusY: Math.max(1, radiusY) } })} /></label>
-                  <label>Start °<EditableNumberInput min="-360" max="360" step="1" value={exerciseProgress.arc.startAngle} fallback={-135} onValueChange={(startAngle) => updateExerciseProgress({ arc: { startAngle } })} /></label>
-                  <label>End °<EditableNumberInput min="-360" max="360" step="1" value={exerciseProgress.arc.endAngle} fallback={135} onValueChange={(endAngle) => updateExerciseProgress({ arc: { endAngle } })} /></label>
-                  <label>Thickness<EditableNumberInput min="1" step="1" value={exerciseProgress.arc.strokeWidth} fallback={1} onValueChange={(strokeWidth) => updateExerciseProgress({ arc: { strokeWidth: Math.max(1, strokeWidth) } })} /></label>
-                </div>
-                <label className="watchface-inspector-field">
-                  <span>Draw remaining portion</span>
-                  <input type="checkbox" checked={exerciseProgress.arc.background} onChange={(event) => updateExerciseProgress({ arc: { background: event.target.checked } })} />
-                </label>
-              </details>
-              <details className="wf-nested-disclosure">
-                <summary>Bar geometry</summary>
-              <div className="watchface-position-inputs">
-                <label>Left<EditableNumberInput step="1" value={exerciseProgress.rect.x0} fallback={0} onValueChange={(x0) => updateExerciseProgress({ rect: { x0 } })} /></label>
-                <label>Top<EditableNumberInput step="1" value={exerciseProgress.rect.y0} fallback={0} onValueChange={(y0) => updateExerciseProgress({ rect: { y0 } })} /></label>
-                <label>Right<EditableNumberInput step="1" value={exerciseProgress.rect.x1} fallback={previewWidth} onValueChange={(x1) => updateExerciseProgress({ rect: { x1 } })} /></label>
-                <label>Bottom<EditableNumberInput step="1" value={exerciseProgress.rect.y1} fallback={previewHeight} onValueChange={(y1) => updateExerciseProgress({ rect: { y1 } })} /></label>
-              </div>
-              <label className="watchface-inspector-field">
-                <span>Fill direction</span>
-                <select
-                  value={exerciseProgress.rect.direction}
-                  onChange={(event) =>
-                    updateExerciseProgress({
-                      rect: {
-                        direction: event.target.value as CorosWatchfaceExerciseProgressStyle["rect"]["direction"]
-                      }
-                    })
-                  }
-                >
-                  <option value="left">Left to right</option>
-                  <option value="right">Right to left</option>
-                  <option value="top">Top to bottom</option>
-                  <option value="bottom">Bottom to top</option>
-                </select>
-              </label>
-              </details>
-              <p className="watchface-studio-summary">
-                COROS supplies the live exercise-goal percentage. Current
-                settings mirror to Always-on until that mode is customized.
-              </p>
-            </div>
-          </details>
-        ) : null}
       </>
     );
   }
