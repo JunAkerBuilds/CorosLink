@@ -7494,11 +7494,12 @@ export function renderWatchfaceProgressLayers(
     const span = Math.max(-360, Math.min(360, arc.endAngle - arc.startAngle));
     const fraction = Math.max(0, Math.min(100, previewPercent)) / 100;
     const current = arc.startAngle + span * fraction;
-    // COROS WFArc angles use the clock convention (0° = 12 o'clock, clockwise
-    // positive). Canvas 0° sits at 3 o'clock, so shift by -90° to place the
-    // arc's opening where the watch renders it (bottom for the -135..135 default).
-    const start = (arc.background ? current : arc.startAngle) - 90;
-    const end = (arc.background ? arc.endAngle : current) - 90;
+    // COROS WFArc measures 0° at 3 o'clock but with +angle counter-clockwise
+    // (screen Y points up). The canvas has Y down (+angle clockwise), so we
+    // reflect vertically: negate the angles and invert the sweep direction.
+    // Without this the arc renders mirrored top-to-bottom versus the watch.
+    const start = arc.background ? current : arc.startAngle;
+    const end = arc.background ? arc.endAngle : current;
     context.save();
     context.strokeStyle = configColor(colorValue, options.accentColor);
     context.lineWidth = Math.max(1, arc.strokeWidth * scale);
@@ -7509,9 +7510,9 @@ export function renderWatchfaceProgressLayers(
       arc.radiusX * scale,
       arc.radiusY * scale,
       0,
-      (start * Math.PI) / 180,
-      (end * Math.PI) / 180,
-      span < 0
+      (-start * Math.PI) / 180,
+      (-end * Math.PI) / 180,
+      !(span < 0)
     );
     context.stroke();
     context.restore();
