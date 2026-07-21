@@ -1237,13 +1237,16 @@ export async function createAndScheduleWorkout(
 ): Promise<{ programId?: string }> {
   const entry = toPlanWorkoutEntry(entryInput);
   const payload = buildWorkoutPayloadFromEntry(entry);
-  let program = structuredClone(payload) as Record<string, unknown>;
+  // Schedule the freshly-built payload, not the library read-back. The library
+  // list endpoint returns a summary that omits distance/simple/exerciseNum for a
+  // simple distance run, so scheduling it drops the distance target (Volume "--").
+  const program = structuredClone(payload) as Record<string, unknown>;
   let programId: string | undefined;
 
   if (saveToLibrary) {
-    const created = await createWorkoutProgram(program);
+    const created = await createWorkoutProgram(payload);
     programId = created.programId;
-    program = created.program;
+    program.id = programId;
   }
 
   await scheduleWorkoutOnDate(program, happenDay, entryInput.sort_no ?? 1);
@@ -1510,13 +1513,16 @@ export async function uploadTrainingPlan(
   for (const entry of draft.workouts) {
     const payload = buildWorkoutPayloadFromEntry(entry);
     const saveToLibrary = entry.save_to_library !== false;
-    let program = structuredClone(payload) as Record<string, unknown>;
+    // Schedule the freshly-built payload, not the library read-back. The library
+    // list endpoint returns a summary that omits distance/simple/exerciseNum for a
+    // simple distance run, so scheduling it drops the distance target (Volume "--").
+    const program = structuredClone(payload) as Record<string, unknown>;
     let programId: string | undefined;
 
     if (saveToLibrary) {
-      const created = await createWorkoutProgram(program);
+      const created = await createWorkoutProgram(payload);
       programId = created.programId;
-      program = created.program;
+      program.id = programId;
       workoutsCreated += 1;
     }
 
@@ -1864,6 +1870,17 @@ function resolveWorkoutDistanceMeters(
 
   if (estimatedDistance > 0) {
     return estimatedDistance;
+  }
+
+  // Simple distance runs come back with distance/estimatedDistance zeroed out —
+  // COROS keeps the target only in the program-level targetType/targetValue
+  // (targetType 5 = distance, targetValue in centimeters). Read it so the
+  // calendar shows the planned km instead of Volume "--".
+  const programTargetType = toOptionalNumber(program.targetType);
+  const programTargetValue = toOptionalNumber(program.targetValue);
+
+  if (programTargetType === 5 && programTargetValue && programTargetValue > 0) {
+    return corosWorkoutDistanceToMeters(programTargetValue);
   }
 
   const exercises = Array.isArray(program.exercises) ? program.exercises : [];

@@ -26,8 +26,22 @@ assert.equal(pace.intensity_display_unit, 2);
 
 const easy = buildEasyRun({ name: "7km Easy", distanceKm: 7 });
 assert.equal(easy.name, "7km Easy");
-assert.equal(easy.distance, 700000);
 assert.equal(easy.simple, true);
+// A distance run must carry ONE real exercise carrying the distance target —
+// mirroring the official web app. With exercises: [] COROS zeroes the stored
+// program.distance and the calendar reads back Volume "--".
+assert.equal(easy.distance, "700000.00");
+assert.equal(Array.isArray(easy.exercises), true);
+assert.equal(easy.exercises.length, 1);
+const easyExercise = easy.exercises[0];
+assert.equal(easyExercise.exerciseType, 2);
+assert.equal(easyExercise.targetType, 5);
+assert.equal(easyExercise.targetValue, 700000);
+// Program-level target fields are empty strings; the target lives on the exercise.
+assert.equal(easy.targetType, "");
+assert.equal(easy.targetValue, "");
+assert.equal(Array.isArray(easy.exerciseBarChart), true);
+assert.equal(easy.exerciseBarChart[0].targetValue, 700000);
 
 const intervals = buildIntervalWorkout({
   name: "Rolling 400s",
@@ -67,6 +81,25 @@ const payload = buildRunWorkoutPayload("Tempo 5k", [
   }
 ]);
 assert.equal(payload.estimatedDistance, 500000);
+
+// Load target (COROS targetType 6): raw integer, no unit scaling.
+const loadPayload = buildRunWorkoutPayload("Load Block", [
+  { kind: "training", target_type: "load", target_load: 45 }
+]);
+const loadExercise = loadPayload.exercises[0];
+assert.equal(loadExercise.targetType, 6);
+assert.equal(loadExercise.targetValue, 45);
+// A load step contributes no distance/time to the estimate.
+assert.equal(loadPayload.estimatedDistance, 0);
+assert.equal(loadPayload.estimatedTime, 0);
+
+// Open / manual-end target (COROS targetType 1): run until lap, no value.
+const openPayload = buildRunWorkoutPayload("Open Warmup", [
+  { kind: "warmup", target_type: "open" }
+]);
+const openExercise = openPayload.exercises[0];
+assert.equal(openExercise.targetType, 1);
+assert.equal(openExercise.targetValue, 0);
 
 const valid = validatePlanDraft({
   name: "Test Week",

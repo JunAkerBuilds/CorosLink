@@ -24,9 +24,27 @@ with `userId`) against the regional `teamapi*.coros.com` host.
 2. `POST /training/program/add` with identity fields cleared (`id: "0"`, etc.)
 3. Response `data` is the new program ID string.
 
-Running workouts use `sportType: 1`. Distance targets use `targetType: 5` with
-values in **centimeters** (meters × 100). Time targets use `targetType: 2` with
-seconds.
+Running workouts use `sportType: 1`. The full `targetType` enum (from the
+traininghub web-app bundle, `main-*.js` → `targetTypeName`):
+
+| value | name | targetValue encoding | UI label |
+|---|---|---|---|
+| 0 | notSet | 0 | — |
+| 1 | manualEnd | 0 (no value) | **Open** |
+| 2 | time | seconds | **Time** |
+| 3 | count | raw | — |
+| 4 | heart | raw | — |
+| 5 | distance | **centimeters** (meters × 100) | **Distance** |
+| 6 | load | raw integer 0–999 | **Training Load** |
+| 7 | heartRateRecovery | raw | — |
+| 8 | cumulativeClimb | centimeters | — |
+| 9 | routes | raw | — |
+
+The web app derives `targetValue` as `100 × meters` for distance, `cm` for
+cumulativeClimb, and the **raw input value** for everything else (time, load, …).
+Related enums: `intensityType` (2=heart, 3=pace, 4=speed, 6=power, 8=adjustedPace,
+9=ftp, 11=rpe), `intensityUnit` (1=min/km, 2=min/mi, 3=s/100m, 4=km/h, 5=mph),
+`restType` (0=manualEnd, 1=time, 2=heart, 3=noRest, 4=distance).
 
 ## Schedule on calendar
 

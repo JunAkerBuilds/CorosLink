@@ -10,7 +10,9 @@ export type RunStepKind =
   | "cooldown"
   | "interval";
 
-export type RunTargetType = "time" | "distance";
+// Mirrors COROS's targetType enum (from the traininghub web-app bundle):
+// 1=manualEnd ("Open"), 2=time, 5=distance, 6=load ("Training Load").
+export type RunTargetType = "time" | "distance" | "load" | "open";
 
 export interface RunWorkoutStep {
   kind: RunStepKind;
@@ -18,6 +20,8 @@ export interface RunWorkoutStep {
   target_type?: RunTargetType;
   target_distance_meters?: number;
   target_duration_seconds?: number;
+  /** Training-load target (COROS targetType 6): a raw integer 0–999. */
+  target_load?: number;
   /** e.g. "5:30/km", "4:05-4:15/km", "8:00/mi" */
   pace?: string;
   intensity_type?: number;
@@ -124,7 +128,15 @@ const RUN_KIND_ALIASES: Record<string, RunStepKind> = {
 
 const RUN_TARGET_ALIASES: Record<string, RunTargetType> = {
   time: "time",
-  distance: "distance"
+  distance: "distance",
+  load: "load",
+  "training load": "load",
+  training_load: "load",
+  trainingload: "load",
+  open: "open",
+  "manual end": "open",
+  manual_end: "open",
+  manualend: "open"
 };
 
 export function metersToCorosDistance(meters: number): number {
@@ -225,8 +237,13 @@ function resolveRunTarget(step: RunWorkoutStep): {
 } {
   let targetType = step.target_type;
   if (!targetType) {
-    targetType =
-      step.target_distance_meters !== undefined ? "distance" : "time";
+    if (step.target_distance_meters !== undefined) {
+      targetType = "distance";
+    } else if (step.target_load !== undefined) {
+      targetType = "load";
+    } else {
+      targetType = "time";
+    }
   }
 
   if (targetType === "distance") {
@@ -238,6 +255,30 @@ function resolveRunTarget(step: RunWorkoutStep): {
       targetType: 5,
       targetValue: metersToCorosDistance(Number(meters)),
       targetDisplayUnit: step.target_display_unit ?? 3
+    };
+  }
+
+  // "Open" / manual-end segment: run until the athlete presses lap. COROS stores
+  // targetType 1 with no value (verified against the traininghub web-app bundle).
+  if (targetType === "open") {
+    return {
+      targetType: 1,
+      targetValue: 0,
+      targetDisplayUnit: step.target_display_unit ?? 0
+    };
+  }
+
+  // Training-load target: COROS stores the raw integer as targetValue (no unit
+  // scaling — verified in the web-app bundle: targetValue = input, 0–999).
+  if (targetType === "load") {
+    const load = step.target_load ?? step.target_value;
+    if (load === undefined) {
+      throw new Error("Load steps require target_load.");
+    }
+    return {
+      targetType: 6,
+      targetValue: Math.round(Number(load)),
+      targetDisplayUnit: step.target_display_unit ?? 0
     };
   }
 
@@ -322,27 +363,111 @@ function buildRunExercise(
   };
 }
 
+// COROS's default "run training" exercise template. These constants are lifted
+// verbatim from the payload the official web app sends for a simple distance run
+// (captured in t.coros.com.har → /training/schedule/update). A distance run must
+// carry ONE real exercise like this — with exercises: [] COROS zeroes the stored
+// program.distance and only keeps the target in program.targetValue, so the
+// calendar reads back Volume "--".
+const RUN_TRAINING_EXERCISE_ORIGIN_ID = "426109589008859136";
+const RUN_TRAINING_EXERCISE_SOURCE_ID = "425868113867882497";
+const RUN_TRAINING_EXERCISE_SOURCE_URL =
+  "https://d31oxp44ddzkyk.cloudfront.net/source/source_default/0/e3611f19b15648338b0f229b2b1b1015.jpg";
+
 export function buildEasyRun(options: {
   name: string;
   distanceKm: number;
   sportType?: number;
 }): Record<string, unknown> {
   const distance = metersToCorosDistance(options.distanceKm * 1000);
-  return {
-    name: options.name,
-    sportType: options.sportType ?? 1,
-    estimatedTime: 0,
-    estimatedDistance: distance,
-    distanceDisplayUnit: 3,
-    estimatedType: 6,
+  const sportType = options.sportType ?? 1;
+
+  const exercise: Record<string, unknown> = {
+    access: 0,
+    createTimestamp: 1587381919,
+    defaultOrder: 2,
+    equipment: [1],
+    exerciseType: 2,
+    groupId: "",
+    hrType: 0,
+    id: 1,
+    intensityCustom: 0,
+    intensityDisplayUnit: 0,
+    intensityMultiplier: 0,
+    intensityPercent: 0,
+    intensityPercentExtend: 0,
+    intensityType: 0,
+    intensityValue: 0,
+    intensityValueExtend: 0,
+    isDefaultAdd: 1,
+    isGroup: false,
+    isIntensityPercent: true,
+    name: "T3001",
+    originId: RUN_TRAINING_EXERCISE_ORIGIN_ID,
+    overview: "sid_run_training",
+    part: [0],
+    restType: 3,
+    restValue: 0,
+    sets: 1,
+    sortNo: 2,
+    sourceId: "0",
+    sourceUrl: "",
+    sportType,
+    subType: 0,
+    targetDisplayUnit: 1,
     targetType: 5,
     targetValue: distance,
+    userId: 0,
+    videoUrl: ""
+  };
+
+  const barChartEntry: Record<string, unknown> = {
+    exerciseId: "1",
+    exerciseType: 2,
+    height: 5,
+    name: "T3001",
+    targetType: 5,
+    targetValue: distance,
+    value: distance,
+    width: 100,
+    widthFill: 0
+  };
+
+  return {
+    id: "0",
+    name: options.name,
+    sportType,
+    subType: 0,
+    totalSets: 1,
+    sets: 1,
+    // Program-level target fields are intentionally empty strings — the target
+    // lives on the exercise. This matches the web app byte-for-byte.
+    exerciseNum: "",
+    targetType: "",
+    targetValue: "",
+    version: 0,
     simple: true,
+    exercises: [exercise],
     access: 1,
-    exerciseNum: 0,
-    totalSets: 0,
-    exercises: [],
-    distance
+    essence: 0,
+    estimatedTime: 0,
+    originEssence: 0,
+    overview: "",
+    type: 0,
+    unit: 0,
+    pbVersion: 2,
+    sourceId: RUN_TRAINING_EXERCISE_SOURCE_ID,
+    sourceUrl: RUN_TRAINING_EXERCISE_SOURCE_URL,
+    referExercise: { intensityType: 0, hrType: 0, valueType: 0 },
+    poolLengthId: 1,
+    poolLength: 2500,
+    poolLengthUnit: 2,
+    distance: distance.toFixed(2),
+    duration: 0,
+    trainingLoad: 0,
+    pitch: 0,
+    exerciseBarChart: [barChartEntry],
+    distanceDisplayUnit: 1
   };
 }
 

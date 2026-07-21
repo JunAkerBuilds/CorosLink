@@ -178,8 +178,11 @@ export function getChatWorkoutTools(): CorosMcpTool[] {
                   type: "array",
                   description:
                     "Structured run steps. Plain step: kind (warmup|training|rest|cooldown), " +
-                    "target_type (distance|time), target_distance_meters or target_duration_seconds, " +
-                    "optional pace string. Repeat group: { repeat, steps: [...] }."
+                    "target_type (distance|time|load|open) with its value — " +
+                    "distance→target_distance_meters, time→target_duration_seconds, " +
+                    "load→target_load (raw training-load integer 0–999), open→no value " +
+                    "(run until lap press). Optional pace string (single '5:30/km' or range " +
+                    "'4:05-4:15/km', /km or /mi). Repeat group: { repeat, steps: [...] }."
                 }
               },
               required: ["key", "name"]
