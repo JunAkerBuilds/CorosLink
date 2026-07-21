@@ -1286,8 +1286,13 @@ function withLiveToolInstructions(
       "",
       "## Training plan tools",
       `Plan authoring tools: ${planTools.map((tool) => tool.name).join(", ")}. ` +
-        "Use draft_training_plan to build multi-day schedules with structured runs " +
-        "(distance_km for easy runs, steps for intervals). Include schedule_date " +
+        "Use draft_training_plan to build multi-day schedules. Use distance_km for a " +
+        "simple easy run; use steps for anything structured. Pick each step's target " +
+        "deliberately: distance for easy/long/tempo blocks, time for duration-based reps " +
+        "and recovery jogs, load only when prescribing by training-load budget, and open " +
+        "(no value, run-until-lap) for by-feel warmups/cooldowns or fartlek surges. Add a " +
+        "pace target (range like '4:05-4:15/km') to work intervals so they carry training " +
+        "load; leave easy/open segments paceless. Include schedule_date " +
         "(YYYYMMDD) for calendar placement. The athlete must confirm before upload. " +
         "Use list_scheduled_workouts + delete_workout to stage deletions. " +
         "The athlete confirms via the Delete from COROS button in chat."
