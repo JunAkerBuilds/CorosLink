@@ -1,5 +1,5 @@
 import { Loader2, MoonStar } from "lucide-react";
-import { formatSleepNightLabel } from "../formatters";
+import { formatSleepClockRange, formatSleepNightLabel } from "../formatters";
 import type { TrainingHubSleepRecord, TrainingHubSleepSummary } from "../../../electron/types";
 
 interface SleepSummaryPanelProps {
@@ -102,11 +102,7 @@ function formatNapSummary(record: TrainingHubSleepRecord): string {
 }
 
 function formatSleepWindow(record: TrainingHubSleepRecord): string {
-  if (record.sleepStart && record.sleepEnd) {
-    return `${record.sleepStart}-${record.sleepEnd}`;
-  }
-
-  return "–";
+  return formatSleepClockRange(record.sleepStart, record.sleepEnd) ?? "–";
 }
 
 function formatPercent(value?: number): string {

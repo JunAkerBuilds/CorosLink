@@ -11,6 +11,7 @@ const distUrl = (file) =>
 
 const {
   formatHappenDayLabel,
+  formatSleepClockRange,
   formatSleepNightLabel,
   isPersonalRecordVisible
 } = await import(
@@ -28,6 +29,16 @@ assert.equal(
   }),
   formatHappenDayLabel("20260707")
 );
+
+assert.equal(
+  formatSleepClockRange("23:09", "05:32"),
+  "11:09 PM – 5:32 AM"
+);
+assert.equal(
+  formatSleepClockRange("00:05", "12:00"),
+  "12:05 AM – 12:00 PM"
+);
+assert.equal(formatSleepClockRange(undefined, "05:32"), undefined);
 
 const trendPoints = mergeSleepIntoTrendPoints(
   buildTrendPoints([{ happenDay: "20260707" }, { happenDay: "20260708" }]),

@@ -221,6 +221,55 @@ function readNestedString(source: Record<string, unknown>, keys: string[]): stri
   return undefined;
 }
 
+function extractSleepClocks(value?: string): string[] {
+  if (!value) {
+    return [];
+  }
+
+  const clocks: string[] = [];
+  const clockPattern =
+    /(?<![\d+-])(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?\s*([ap]\.?(?:m)\.?)?/gi;
+
+  for (const match of value.matchAll(clockPattern)) {
+    let hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    const period = match[3]?.replace(/\./g, "").toLowerCase();
+
+    if (minutes > 59) {
+      continue;
+    }
+
+    if (period) {
+      if (hours < 1 || hours > 12) {
+        continue;
+      }
+      if (period === "pm" && hours < 12) {
+        hours += 12;
+      } else if (period === "am" && hours === 12) {
+        hours = 0;
+      }
+    } else if (hours > 23) {
+      continue;
+    }
+
+    clocks.push(
+      `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`
+    );
+  }
+
+  return clocks;
+}
+
+function normalizeSleepClock(value?: string): string | undefined {
+  return extractSleepClocks(value)[0];
+}
+
+function parseSleepClockRange(value?: string): [string?, string?] {
+  const clocks = extractSleepClocks(value);
+
+  return [clocks[0], clocks[1]];
+}
+
 function readAwakeCountOverFiveMinutes(
   source: Record<string, unknown>
 ): number | undefined {
@@ -536,35 +585,55 @@ function readSleepWindow(raw: Record<string, unknown>): {
   sleepStart?: string;
   sleepEnd?: string;
 } {
+  const sleepWindowValue =
+    raw.sleepWindow ??
+    raw.mainSleepWindow ??
+    raw.sleepTimeRange ??
+    raw.sleepPeriod ??
+    raw.sleepRange;
   const sleepWindow =
-    raw.sleepWindow && typeof raw.sleepWindow === "object"
-      ? (raw.sleepWindow as Record<string, unknown>)
+    sleepWindowValue && typeof sleepWindowValue === "object"
+      ? (sleepWindowValue as Record<string, unknown>)
       : undefined;
+  const [rangeStart, rangeEnd] = parseSleepClockRange(
+    typeof sleepWindowValue === "string" ? sleepWindowValue : undefined
+  );
+
+  const sleepStart =
+    readNestedString(raw, [
+      "sleepStart",
+      "sleepWindowStart",
+      "startTime",
+      "sleepStartTime",
+      "beginTime",
+      "fallAsleepTime",
+      "fallAsleep",
+      "sleepBeginTime",
+      "sleepOnsetTime",
+      "bedTime",
+      "bedtime"
+    ]) ??
+    readNestedString(sleepWindow ?? {}, ["start", "startTime", "begin", "from"]) ??
+    rangeStart;
+  const sleepEnd =
+    readNestedString(raw, [
+      "sleepEnd",
+      "sleepWindowEnd",
+      "endTime",
+      "sleepEndTime",
+      "finishTime",
+      "wakeUpTime",
+      "wakeUp",
+      "sleepFinishTime",
+      "getUpTime",
+      "wakeTime"
+    ]) ??
+    readNestedString(sleepWindow ?? {}, ["end", "endTime", "finish", "to"]) ??
+    rangeEnd;
 
   return {
-    sleepStart:
-      readNestedString(raw, [
-        "sleepStart",
-        "sleepWindowStart",
-        "startTime",
-        "sleepStartTime",
-        "beginTime",
-        "fallAsleepTime",
-        "fallAsleep",
-        "sleepBeginTime"
-      ]) ??
-      (typeof sleepWindow?.start === "string" ? sleepWindow.start : undefined),
-    sleepEnd:
-      readNestedString(raw, [
-        "sleepEnd",
-        "sleepWindowEnd",
-        "endTime",
-        "sleepEndTime",
-        "finishTime",
-        "wakeUpTime",
-        "wakeUp",
-        "sleepFinishTime"
-      ]) ?? (typeof sleepWindow?.end === "string" ? sleepWindow.end : undefined)
+    sleepStart: normalizeSleepClock(sleepStart),
+    sleepEnd: normalizeSleepClock(sleepEnd)
   };
 }
 
@@ -833,6 +902,7 @@ function parseSleepDayBundle(raw: Record<string, unknown>): TrainingHubSleepReco
   ]);
 
   const records: TrainingHubSleepRecord[] = [];
+  const window = readSleepWindow(raw);
   const sleepData = raw.sleepData ?? raw.sleep_data;
   const mainNested =
     raw.mainSleep ?? raw.mainSleepData ?? raw.nightSleep ?? raw.main ?? sleepData;
@@ -843,7 +913,9 @@ function parseSleepDayBundle(raw: Record<string, unknown>): TrainingHubSleepReco
       happenDay,
       kind: "main",
       score: dayScore,
-      awakeCountOverFiveMinutes: readAwakeCountOverFiveMinutes(raw)
+      awakeCountOverFiveMinutes: readAwakeCountOverFiveMinutes(raw),
+      sleepStart: window.sleepStart,
+      sleepEnd: window.sleepEnd
     });
     if (main) {
       records.push(main);
@@ -1180,13 +1252,15 @@ function parseProseSleepSection(section: string): TrainingHubSleepRecord | undef
   const deepMatch = section.match(/Deep(?: sleep)?(?: ratio| percent(?:age)?)?:\s*(\d+(?:\.\d+)?)\s*%/i);
   const lightMatch = section.match(/Light(?: sleep)?(?: ratio| percent(?:age)?)?:\s*(\d+(?:\.\d+)?)\s*%/i);
   const remMatch = section.match(/REM(?: sleep)?(?: ratio| percent(?:age)?)?:\s*(\d+(?:\.\d+)?)\s*%/i);
-  const windowMatch = section.match(/(?:Main\s+)?Sleep window:\s*([0-9]{1,2}:[0-9]{2})\s*[–-]\s*([0-9]{1,2}:[0-9]{2})/i);
+  const windowLineMatch = section.match(
+    /(?:Main\s+)?Sleep\s+(?:window|period|range)\s*:\s*([^\n]+)/i
+  );
   const napLineMatch = section.match(/\bNaps?(?:\s+Total)?:\s*([^\n]+)/i);
   const napText = napLineMatch?.[1]?.trim();
   const napDurationMatch = napText?.match(
     /\b(?:none|no|zero)\b|(?:(?:\d+(?:\.\d+)?\s*h(?:ours?)?)(?:\s*\d+(?:\.\d+)?\s*m(?:in(?:utes?)?)?)?|\d+(?:\.\d+)?\s*m(?:in(?:utes?)?)?)/i
   );
-  const napWindowMatch = napText?.match(/([0-9]{1,2}:[0-9]{2})\s*[–-]\s*([0-9]{1,2}:[0-9]{2})/);
+  const [napStart, napEnd] = parseSleepClockRange(napText);
 
   if (!scoreMatch && !mainSleepMatch) {
     return undefined;
@@ -1252,8 +1326,7 @@ function parseProseSleepSection(section: string): TrainingHubSleepRecord | undef
   const awakeMinutes = awakeMatch
     ? parseDurationMinutes(awakeMatch[1].trim())
     : undefined;
-  const sleepStart = windowMatch?.[1];
-  const sleepEnd = windowMatch?.[2];
+  const [sleepStart, sleepEnd] = parseSleepClockRange(windowLineMatch?.[1]);
   const windowMinutes = sleepWindowDurationMinutes({ happenDay, sleepStart, sleepEnd });
   const percentDenominator = windowMinutes ?? totalMinutes;
   const deepPercent = deepMatch ? Number(deepMatch[1]) : undefined;
@@ -1296,8 +1369,8 @@ function parseProseSleepSection(section: string): TrainingHubSleepRecord | undef
       sleepStart,
       sleepEnd,
       napMinutes: napDurationText ? parseNapDurationText(napDurationText) : undefined,
-      napStart: napWindowMatch?.[1],
-      napEnd: napWindowMatch?.[2]
+      napStart,
+      napEnd
     }
   );
 }
