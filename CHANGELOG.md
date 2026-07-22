@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Combined playlist downloads now detect completed temporary MP3s reliably, preserve actionable download errors, and resume retries from cached tracks instead of downloading the whole playlist again.
+
 ## [0.1.21] - 2026-07-21
 
 ### Added

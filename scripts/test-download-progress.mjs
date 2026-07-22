@@ -10,7 +10,9 @@ import {
   parseAlreadyDownloadedPath,
   parsePlaylistTrackMarker,
   parseYtDlpProgressLine,
-  partitionDownloadedMp3Files
+  partitionDownloadedMp3Files,
+  selectCombinedTrackOutput,
+  summarizeCombinedTrackFailures
 } from "../dist-electron/downloadProgress.js";
 
 const samples = [
@@ -157,6 +159,27 @@ assert.deepEqual(partitionDownloadedMp3Files(before, [], after), {
   newFiles: [relativeMp3, "/tmp/new.mp3", "/tmp/also-new.mp3"],
   existingFiles: []
 });
+
+const combinedExpected = path.join(downloadDir, "0000.mp3");
+fs.writeFileSync(combinedExpected, "fake");
+assert.equal(
+  selectCombinedTrackOutput(
+    new Set([absoluteMp3, relativeMp3]),
+    [],
+    [absoluteMp3, relativeMp3, combinedExpected],
+    combinedExpected
+  ),
+  combinedExpected,
+  "combined downloads should find an MP3 from the private temp-directory diff when after_move output is missing"
+);
+
+assert.match(
+  summarizeCombinedTrackFailures([
+    '"Track one": yt-dlp exited with code 1. ERROR: Video unavailable',
+    '"Track two": no audio was produced.'
+  ]),
+  /First failure: "Track one".*1 more track also failed/
+);
 
 fs.rmSync(downloadDir, { recursive: true, force: true });
 

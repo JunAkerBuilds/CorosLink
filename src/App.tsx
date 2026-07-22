@@ -851,7 +851,10 @@ export default function App() {
           if (!current[id]?.busy) {
             return current;
           }
-          return { ...current, [id]: { busy: true, progress } };
+          return {
+            ...current,
+            [id]: { busy: true, progress, error: undefined },
+          };
         });
       },
     );
@@ -1317,32 +1320,57 @@ export default function App() {
 
     setCombinedDownloads((current) => ({
       ...current,
-      [id]: { busy: true, progress: null },
+      [id]: { busy: true, progress: null, error: undefined },
     }));
     setError(null);
     setMessage(null);
 
+    let result;
     try {
-      const result = await api.downloadCombinedPlaylist(id, name, items);
-      const skipped = result.totalCount - result.downloadedCount;
-      setMessage(
-        `Combined ${result.downloadedCount} track${
-          result.downloadedCount === 1 ? "" : "s"
-        } into “${result.track.title}”.${
-          skipped > 0
-            ? ` ${skipped} track${skipped === 1 ? "" : "s"} could not be downloaded.`
-            : ""
-        }`,
-      );
+      result = await api.downloadCombinedPlaylist(id, name, items);
+    } catch (caught) {
+      const error = toErrorMessage(caught);
+      setError(error);
+      setCombinedDownloads((current) => ({
+        ...current,
+        [id]: { busy: false, progress: null, error },
+      }));
+      return;
+    }
+
+    const skipped = result.totalCount - result.downloadedCount;
+    const reused = result.reusedCount;
+    setMessage(
+      `Combined ${result.downloadedCount} track${
+        result.downloadedCount === 1 ? "" : "s"
+      } into “${result.track.title}”.${
+        reused > 0
+          ? ` Reused ${reused} cached track${reused === 1 ? "" : "s"}.`
+          : ""
+      }${
+        skipped > 0
+          ? ` ${skipped} track${skipped === 1 ? "" : "s"} could not be downloaded; retry to fetch only the missing ${skipped === 1 ? "track" : "tracks"}.`
+          : ""
+      }`,
+    );
+    setCombinedDownloads((current) => {
+      const next = { ...current };
+      if (skipped > 0) {
+        next[id] = {
+          busy: false,
+          progress: null,
+          retryMissingCount: skipped,
+        };
+      } else {
+        delete next[id];
+      }
+      return next;
+    });
+
+    try {
       await refreshAll();
     } catch (caught) {
       setError(toErrorMessage(caught));
-    } finally {
-      setCombinedDownloads((current) => {
-        const next = { ...current };
-        delete next[id];
-        return next;
-      });
     }
   }
 
@@ -3734,6 +3762,8 @@ interface SpotifySyncViewProps {
 interface CombinedDownloadState {
   busy: boolean;
   progress: CombinedDownloadProgress | null;
+  error?: string;
+  retryMissingCount?: number;
 }
 
 /** Per-playlist combined-download state, keyed by a service-scoped playlist id. */
@@ -3744,6 +3774,8 @@ interface CombinedDownloadButtonProps {
   items: DownloadQueueItem[];
   busy: boolean;
   progress: CombinedDownloadProgress | null;
+  error?: string;
+  retryMissingCount?: number;
   onDownload: (name: string, items: DownloadQueueItem[]) => void;
 }
 
@@ -3758,6 +3790,8 @@ function CombinedDownloadButton({
   items,
   busy,
   progress,
+  error,
+  retryMissingCount,
   onDownload,
 }: CombinedDownloadButtonProps) {
   const [editing, setEditing] = useState(false);
@@ -3779,9 +3813,11 @@ function CombinedDownloadButton({
         ? "Merging tracks…"
         : progress?.phase === "completed"
           ? "Finishing…"
-          : progress
-            ? `Downloading ${progress.index}/${progress.total}`
-            : "Preparing…";
+          : progress?.reused
+            ? `Reusing ${progress.index}/${progress.total}`
+            : progress
+              ? `Downloading ${progress.index}/${progress.total}`
+              : "Preparing…";
     return (
       <div
         className="combined-download combined-download--busy"
@@ -3801,16 +3837,36 @@ function CombinedDownloadButton({
 
   if (!editing) {
     return (
-      <button
-        className="secondary-button combined-download-trigger"
-        type="button"
-        disabled={items.length === 0}
-        onClick={() => setEditing(true)}
-        title="Download every track and merge into one MP3"
+      <div
+        className={`combined-download${
+          error ? " combined-download--failed" : ""
+        }`}
       >
-        <Combine size={16} aria-hidden="true" />
-        Combined download
-      </button>
+        <button
+          className="secondary-button combined-download-trigger"
+          type="button"
+          disabled={items.length === 0}
+          onClick={() => setEditing(true)}
+          title="Download every track and merge into one MP3"
+        >
+          <Combine size={16} aria-hidden="true" />
+          {error
+            ? "Retry combined download"
+            : retryMissingCount
+              ? `Retry ${retryMissingCount} missing track${retryMissingCount === 1 ? "" : "s"}`
+              : "Combined download"}
+        </button>
+        {error ? (
+          <span
+            className="combined-download-error"
+            role="alert"
+            title={error}
+          >
+            <AlertCircle size={14} aria-hidden="true" />
+            <span>{error}</span>
+          </span>
+        ) : null}
+      </div>
     );
   }
 
@@ -4462,6 +4518,8 @@ function YouTubeMusicPlaylistDetail({
               items={combinedItems}
               busy={combinedState?.busy ?? false}
               progress={combinedState?.progress ?? null}
+              error={combinedState?.error}
+              retryMissingCount={combinedState?.retryMissingCount}
               onDownload={(name, items) =>
                 onCombinedDownload(combinedId, name, items)
               }
@@ -5185,6 +5243,8 @@ function SpotifyPlaylistDetail({
               items={combinedItems}
               busy={combinedState?.busy ?? false}
               progress={combinedState?.progress ?? null}
+              error={combinedState?.error}
+              retryMissingCount={combinedState?.retryMissingCount}
               onDownload={(name, items) =>
                 onCombinedDownload(combinedId, name, items)
               }
@@ -6924,6 +6984,8 @@ function AppleMusicPlaylistDetail({
               items={combinedItems}
               busy={combinedState?.busy ?? false}
               progress={combinedState?.progress ?? null}
+              error={combinedState?.error}
+              retryMissingCount={combinedState?.retryMissingCount}
               onDownload={(name, items) =>
                 onCombinedDownload(combinedId, name, items)
               }

@@ -1188,6 +1188,8 @@ export interface CombinedDownloadProgress {
   title: string;
   /** 0..1 progress of the current track download. */
   trackProgress: number;
+  /** The track was already present from an earlier interrupted attempt. */
+  reused?: boolean;
 }
 
 /**
@@ -1203,6 +1205,8 @@ export interface CombinedDownloadResult {
   track: LocalTrack;
   /** Number of source tracks that were successfully downloaded and merged. */
   downloadedCount: number;
+  /** Number of tracks restored from a previous attempt's cache. */
+  reusedCount: number;
   /** Number of source tracks requested. */
   totalCount: number;
   warnings?: string[];

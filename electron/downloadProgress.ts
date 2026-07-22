@@ -202,6 +202,54 @@ export function partitionDownloadedMp3Files(
   return { newFiles, existingFiles };
 }
 
+/**
+ * Selects the MP3 produced by one combined-download track. The temporary
+ * directory is private to the combine operation, so a directory diff is a
+ * reliable fallback when yt-dlp's `after_move` line is missing, split across
+ * output chunks, or formatted differently on another platform.
+ */
+export function selectCombinedTrackOutput(
+  before: Set<string>,
+  printedPaths: string[],
+  after: string[],
+  expectedPath: string
+): string | null {
+  const { newFiles } = partitionDownloadedMp3Files(
+    before,
+    printedPaths,
+    after
+  );
+
+  return (
+    newFiles.find((filePath) => filePath === expectedPath) ??
+    newFiles[0] ??
+    null
+  );
+}
+
+export function summarizeCombinedTrackFailures(failures: string[]): string {
+  const normalized = failures
+    .map((failure) => failure.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  if (normalized.length === 0) {
+    return "None of the playlist tracks could be downloaded, so there was nothing to combine.";
+  }
+
+  const firstFailure = normalized[0];
+  const preview =
+    firstFailure.length > 500
+      ? `${firstFailure.slice(0, 497)}…`
+      : firstFailure;
+  const remaining = normalized.length - 1;
+
+  return `None of the playlist tracks could be downloaded. First failure: ${preview}${
+    remaining > 0
+      ? ` (${remaining} more track${remaining === 1 ? "" : "s"} also failed.)`
+      : ""
+  }`;
+}
+
 function resolveMp3InOutputDirectory(
   candidate: string,
   outputDirectory: string
