@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.22] - 2026-07-22
+
+### Added
+
+- **Calendar workout drag and drop** — drag scheduled workouts between days on the Training Hub calendar
+- **Cross-watch face conversion** — convert watch faces between supported COROS models in Watch Face Studio ([#77](https://github.com/JunAkerBuilds/CorosLink/pull/77))
+
 ### Fixed
 
-- Combined playlist downloads now detect completed temporary MP3s reliably, preserve actionable download errors, and resume retries from cached tracks instead of downloading the whole playlist again.
+- Combined playlist downloads now detect completed temporary MP3s reliably, preserve actionable download errors, and resume retries from cached tracks instead of downloading the whole playlist again ([#76](https://github.com/JunAkerBuilds/CorosLink/pull/76))
+- Sleep window display parsing and formatting in Training Hub ([#78](https://github.com/JunAkerBuilds/CorosLink/pull/78))
 
 ## [0.1.21] - 2026-07-21
 
@@ -356,6 +364,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - GitHub Actions release workflow and installer build documentation
 
+[0.1.22]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.20...v0.1.21
 [0.1.20]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.18...v0.1.19
