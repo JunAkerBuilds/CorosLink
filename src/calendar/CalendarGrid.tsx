@@ -3,7 +3,8 @@ import type {
   TrainingHubScheduledWorkoutEntry
 } from "../../electron/types";
 import type { CalendarDay, CalendarMode, CalendarWeek } from "./calendarTypes";
-import { DayCell, type CalendarDragPayload } from "./DayCell";
+import type { CalendarDragPayload } from "./calendarDrag";
+import { DayCell } from "./DayCell";
 import { WEEKDAY_LABELS } from "./dateUtils";
 import { WeekStatsCell } from "./WeekStatsCell";
 
@@ -29,7 +30,10 @@ export function CalendarGrid({
   onAskCoachWeek
 }: CalendarGridProps) {
   return (
-    <div className={`calendar-grid ${mode === "week" ? "calendar-grid-week" : ""}`}>
+    <div
+      className={`calendar-grid ${mode === "week" ? "calendar-grid-week" : ""}`}
+      aria-busy={busy}
+    >
       <div className="calendar-grid-header">
         {WEEKDAY_LABELS.map((label) => (
           <div key={label} className="calendar-grid-header-cell">

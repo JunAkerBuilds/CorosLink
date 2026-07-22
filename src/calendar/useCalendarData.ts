@@ -6,6 +6,10 @@ import type {
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { getLocalHappenDayKey, happenDayFromTimestamp } from "../training/formatters";
+import {
+  moveScheduledWorkoutEntries,
+  type CalendarDragPayload
+} from "./calendarDrag";
 import type { CalendarDay, CalendarWeek } from "./calendarTypes";
 import { computeWeeklyStats, pairPlannedWithActual } from "./pairing";
 
@@ -106,22 +110,36 @@ export function useCalendarData({
    * instantly; callers must reload() after the API call settles (or fails).
    */
   const applyOptimisticMove = useCallback(
-    (entry: TrainingHubScheduledWorkoutEntry, newHappenDay: string) => {
+    (entry: CalendarDragPayload, newHappenDay: string) => {
       setData((current) => {
         if (!current) {
           return current;
         }
         return {
           ...current,
-          scheduled: current.scheduled.map((candidate) =>
-            candidate.planId === entry.planId &&
-            candidate.idInPlan === entry.idInPlan &&
-            candidate.happenDay === entry.happenDay
-              ? { ...candidate, happenDay: newHappenDay }
-              : candidate
+          scheduled: moveScheduledWorkoutEntries(
+            current.scheduled,
+            entry,
+            newHappenDay
           )
         };
       });
+
+      return () => {
+        setData((current) => {
+          if (!current) {
+            return current;
+          }
+          return {
+            ...current,
+            scheduled: moveScheduledWorkoutEntries(
+              current.scheduled,
+              { ...entry, happenDay: newHappenDay },
+              entry.happenDay
+            )
+          };
+        });
+      };
     },
     []
   );

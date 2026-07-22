@@ -22097,11 +22097,29 @@ tr.data-intervals-row-missing {
 }
 
 .calendar-chip-planned[draggable="true"] {
+  position: relative;
+  padding-right: 25px;
   cursor: grab;
 }
 
 .calendar-chip-planned[draggable="true"]:active {
   cursor: grabbing;
+}
+
+.calendar-chip-drag-handle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  color: var(--text-muted);
+  opacity: 0.55;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.calendar-chip-planned[draggable="true"]:hover .calendar-chip-drag-handle {
+  color: var(--text-secondary);
+  opacity: 1;
 }
 
 .calendar-chip-activity {

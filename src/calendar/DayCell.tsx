@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { GripVertical, Plus } from "lucide-react";
 import { useState } from "react";
 import type {
   TrainingHubActivity,
@@ -11,17 +11,14 @@ import {
   inferUpcomingWorkoutCategory
 } from "../training/formatters";
 import { sportColorCategory } from "../training/sportColors";
+import {
+  CALENDAR_DRAG_MIME,
+  createCalendarDragPayload,
+  parseCalendarDragPayload,
+  type CalendarDragPayload
+} from "./calendarDrag";
 import type { CalendarDay, PlannedActualPair } from "./calendarTypes";
 import { dayNumber } from "./dateUtils";
-
-export const CALENDAR_DRAG_MIME = "application/x-coroslink-scheduled-workout";
-
-export interface CalendarDragPayload {
-  planId: string;
-  idInPlan: string;
-  planProgramId?: string;
-  happenDay: string;
-}
 
 interface DayCellProps {
   day: CalendarDay;
@@ -69,11 +66,13 @@ function activityStatsLine(activity: TrainingHubActivity): string {
 function PairChip({
   pair,
   day,
+  busy,
   onSelectScheduled,
   onSelectActivity
 }: {
   pair: PlannedActualPair;
   day: CalendarDay;
+  busy: boolean;
   onSelectScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   onSelectActivity: (activity: TrainingHubActivity) => void;
 }) {
@@ -113,23 +112,29 @@ function PairChip({
 
   // Planned only. Past days show the COROS-style "0 TL" miss.
   const missed = day.isPast;
+  const canDrag = !day.isPast && !busy;
   return (
     <button
       type="button"
       className={`calendar-chip calendar-chip-planned ${categoryClass(scheduled.name)}`}
-      draggable={!day.isPast}
+      draggable={canDrag}
       onDragStart={(event) => {
-        const payload: CalendarDragPayload = {
-          planId: scheduled.planId,
-          idInPlan: scheduled.idInPlan,
-          planProgramId: scheduled.planProgramId,
-          happenDay: scheduled.happenDay
-        };
+        if (!canDrag) {
+          event.preventDefault();
+          return;
+        }
+        const payload = createCalendarDragPayload(scheduled);
         event.dataTransfer.setData(CALENDAR_DRAG_MIME, JSON.stringify(payload));
+        event.dataTransfer.setData("text/plain", scheduled.name);
         event.dataTransfer.effectAllowed = "move";
       }}
       onClick={() => onSelectScheduled(scheduled)}
-      title={scheduled.name}
+      title={canDrag ? `${scheduled.name} — drag to another day` : scheduled.name}
+      aria-label={
+        canDrag
+          ? `${scheduled.name}. Drag to another day to reschedule.`
+          : scheduled.name
+      }
     >
       <span className="calendar-chip-title">
         <span className="calendar-chip-name">{scheduled.name}</span>
@@ -142,6 +147,13 @@ function PairChip({
             : ` · ${Math.round(scheduled.trainingLoad)} TL`
           : ""}
       </span>
+      {canDrag ? (
+        <GripVertical
+          className="calendar-chip-drag-handle"
+          size={14}
+          aria-hidden="true"
+        />
+      ) : null}
     </button>
   );
 }
@@ -156,7 +168,7 @@ export function DayCell({
   busy
 }: DayCellProps) {
   const [dropTarget, setDropTarget] = useState(false);
-  const canReceiveDrop = !day.isPast;
+  const canReceiveDrop = !day.isPast && !busy;
 
   return (
     <div
@@ -171,14 +183,25 @@ export function DayCell({
         .filter(Boolean)
         .join(" ")}
       onDragOver={(event) => {
-        if (!canReceiveDrop || !event.dataTransfer.types.includes(CALENDAR_DRAG_MIME)) {
+        if (
+          !canReceiveDrop ||
+          !Array.from(event.dataTransfer.types).includes(CALENDAR_DRAG_MIME)
+        ) {
           return;
         }
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
         setDropTarget(true);
       }}
-      onDragLeave={() => setDropTarget(false)}
+      onDragLeave={(event) => {
+        if (
+          event.relatedTarget instanceof Node &&
+          event.currentTarget.contains(event.relatedTarget)
+        ) {
+          return;
+        }
+        setDropTarget(false);
+      }}
       onDrop={(event) => {
         setDropTarget(false);
         if (!canReceiveDrop) {
@@ -189,11 +212,9 @@ export function DayCell({
           return;
         }
         event.preventDefault();
-        try {
-          const payload = JSON.parse(raw) as CalendarDragPayload;
+        const payload = parseCalendarDragPayload(raw);
+        if (payload) {
           onDropEntry(payload, day.dateKey);
-        } catch {
-          // Malformed drag payload — ignore.
         }
       }}
     >
@@ -214,11 +235,12 @@ export function DayCell({
       </div>
 
       <div className="calendar-day-items">
-        {day.pairs.map((pair, index) => (
+        {day.pairs.map((pair) => (
           <PairChip
-            key={`pair-${pair.scheduled.planId}-${pair.scheduled.idInPlan}-${index}`}
+            key={`pair-${pair.scheduled.planId}-${pair.scheduled.idInPlan}`}
             pair={pair}
             day={day}
+            busy={busy}
             onSelectScheduled={onSelectScheduled}
             onSelectActivity={onSelectActivity}
           />

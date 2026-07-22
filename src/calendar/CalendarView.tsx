@@ -2,7 +2,6 @@ import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, RefreshCw } from "lu
 import { useCallback, useMemo, useState } from "react";
 import type {
   TrainingHubActivity,
-  TrainingHubScheduledWorkoutEntry,
   TrainingHubSportType,
   TrainingHubStatus,
   WorkoutEditRef
@@ -24,7 +23,7 @@ import type {
   CalendarSelection,
   CalendarWeek
 } from "./calendarTypes";
-import type { CalendarDragPayload } from "./DayCell";
+import type { CalendarDragPayload } from "./calendarDrag";
 import { DayDetailPanel } from "./DayDetailPanel";
 import {
   isKeyInMonth,
@@ -137,7 +136,7 @@ export function CalendarView({
 
   const handleDropEntry = useCallback(
     (payload: CalendarDragPayload, targetDay: string) => {
-      if (payload.happenDay === targetDay) {
+      if (mutating || payload.happenDay === targetDay) {
         return;
       }
       if (targetDay < getLocalHappenDayKey()) {
@@ -145,22 +144,16 @@ export function CalendarView({
         return;
       }
       setMutating(true);
-      applyOptimisticMove(
-        {
-          planId: payload.planId,
-          idInPlan: payload.idInPlan,
-          planProgramId: payload.planProgramId ?? "",
-          happenDay: payload.happenDay,
-          name: ""
-        } as TrainingHubScheduledWorkoutEntry,
-        targetDay
-      );
+      const rollback = applyOptimisticMove(payload, targetDay);
       void api
         .rescheduleWorkout(payload, targetDay)
         .then(() => {
-          onMessage(`Workout moved to ${formatHappenDayLabel(targetDay)}.`);
+          onMessage(
+            `Moved "${payload.name}" to ${formatHappenDayLabel(targetDay)}.`
+          );
         })
         .catch((cause: unknown) => {
+          rollback();
           onError(cause instanceof Error ? cause.message : String(cause));
         })
         .finally(() => {
@@ -168,7 +161,7 @@ export function CalendarView({
           reload();
         });
     },
-    [api, applyOptimisticMove, onError, onMessage, reload]
+    [api, applyOptimisticMove, mutating, onError, onMessage, reload]
   );
 
   const handleDelete = useCallback(

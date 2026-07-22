@@ -27,6 +27,7 @@
     "test:sketch": "npm run build:electron && node scripts/test-sketch-geometry.mjs",
     "test:greetings": "node --experimental-strip-types scripts/test-greetings.mjs",
     "test:sport-colors": "node --experimental-strip-types scripts/test-sport-colors.mjs",
+    "test:calendar-drag": "node --experimental-strip-types scripts/test-calendar-drag.mjs",
     "test:rpe-load": "node --experimental-strip-types scripts/test-rpe-load.mjs",
     "test:mcp-oauth-compatibility": "node --experimental-strip-types scripts/test-mcp-oauth-compatibility.mjs",
     "test:mcp-tool-names": "node --experimental-strip-types scripts/test-mcp-tool-names.mjs",
