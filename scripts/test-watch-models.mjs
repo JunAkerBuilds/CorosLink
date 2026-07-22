@@ -94,9 +94,33 @@ assert.deepEqual(getWatchfaceDeviceProfile("pace-4"), {
   firmwareType: "COROS W336",
   modelVersion: "W336-3.1709.0"
 });
+assert.deepEqual(getWatchfaceDeviceProfile("pace-3"), {
+  firmwareType: "COROS W331"
+});
+assert.deepEqual(getWatchfaceDeviceProfile("nomad"), {
+  firmwareType: "COROS W942"
+});
+assert.deepEqual(getWatchfaceDeviceProfile("vertix-2"), {
+  firmwareType: "COROS B19"
+});
+assert.deepEqual(getWatchfaceDeviceProfile("vertix-2s"), {
+  firmwareType: "COROS B19S"
+});
 assert.deepEqual(getWatchfaceDeviceProfileByFirmware("coros w336"), {
   firmwareType: "COROS W336",
   modelVersion: "W336-3.1709.0"
+});
+assert.deepEqual(getWatchfaceDeviceProfileByFirmware("coros w331"), {
+  firmwareType: "COROS W331"
+});
+assert.deepEqual(getWatchfaceDeviceProfileByFirmware("coros w942"), {
+  firmwareType: "COROS W942"
+});
+assert.deepEqual(getWatchfaceDeviceProfileByFirmware("coros b19"), {
+  firmwareType: "COROS B19"
+});
+assert.deepEqual(getWatchfaceDeviceProfileByFirmware("coros b19s"), {
+  firmwareType: "COROS B19S"
 });
 assert.deepEqual(getWatchfaceDeviceProfileByFirmware("coros w541"), {
   firmwareType: "COROS W541"

@@ -759,12 +759,12 @@
   padding: 0;
 }
 
-.content:has(> .watchfaces-view) {
+.content:has(> .watchfaces-view:not(.view-panel-hidden)) {
   overflow: hidden;
   padding: 0 14px 14px;
 }
 
-.content:has(> .watchface-shell--signin) {
+.content:has(> .watchface-shell--signin:not(.view-panel-hidden)) {
   padding: 0;
 }
 
@@ -1318,6 +1318,59 @@
   gap: 14px;
 }
 
+.watchface-shell .watchface-conversion-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--wf-accent-border);
+  border-radius: var(--wf-pane-radius);
+  background: color-mix(in srgb, var(--accent-soft) 58%, var(--wf-surface));
+  padding: 12px 14px;
+}
+
+.watchface-shell .watchface-conversion-icon {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--wf-control-radius);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  place-items: center;
+}
+
+.watchface-shell .watchface-conversion-banner > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.watchface-shell .watchface-conversion-banner strong {
+  color: var(--text-primary);
+  font-size: var(--wf-text-md);
+}
+
+.watchface-shell .watchface-conversion-banner span:not(.watchface-conversion-icon) {
+  color: var(--text-secondary);
+  font-size: var(--wf-text-sm);
+  line-height: 1.45;
+}
+
+.watchface-shell .watchface-conversion-banner span.watchface-conversion-warning {
+  color: var(--warning-text);
+  font-weight: 700;
+}
+
+@media (max-width: 680px) {
+  .watchface-shell .watchface-conversion-banner {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .watchface-shell .watchface-conversion-banner > button {
+    grid-column: 1 / -1;
+  }
+}
+
 .watchface-shell .watchface-hub-intro {
   display: flex;
   align-items: flex-end;
@@ -1585,7 +1638,11 @@
 
 .watchface-shell .watchface-template-controls {
   display: grid;
-  grid-template-columns: minmax(180px, 0.65fr) minmax(240px, 1fr) auto;
+  grid-template-columns:
+    minmax(160px, 0.58fr)
+    minmax(160px, 0.58fr)
+    minmax(220px, 1fr)
+    auto;
   align-items: end;
   gap: 10px;
 }
