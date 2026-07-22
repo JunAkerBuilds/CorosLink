@@ -213,6 +213,33 @@ export function formatSleepNightLabel(record: {
   return formatHappenDayLabel(record.happenDay);
 }
 
+function formatSleepClock(value?: string): string | undefined {
+  const match = value?.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) {
+    return undefined;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) {
+    return undefined;
+  }
+
+  const period = hours >= 12 ? "PM" : "AM";
+  const displayHour = hours % 12 || 12;
+  return `${displayHour}:${String(minutes).padStart(2, "0")} ${period}`;
+}
+
+export function formatSleepClockRange(
+  sleepStart?: string,
+  sleepEnd?: string
+): string | undefined {
+  const start = formatSleepClock(sleepStart);
+  const end = formatSleepClock(sleepEnd);
+
+  return start && end ? `${start} – ${end}` : undefined;
+}
+
 export function formatSignedDelta(value?: number, suffix = ""): string {
   if (value === undefined || !Number.isFinite(value)) {
     return "-";

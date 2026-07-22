@@ -250,6 +250,71 @@ assert.equal(mobileLatest?.napMinutes, 71);
 assert.equal(mobileLatest?.sleepStart, "23:58");
 assert.equal(mobileLatest?.sleepEnd, "07:27");
 
+const officialDailyPayload = JSON.stringify({
+  data: {
+    dailyList: [
+      {
+        happenDay: 20260721,
+        performance: 93,
+        sleepStartTime: "2026-07-20 22:58:00",
+        sleepEndTime: "2026-07-21 05:43:00",
+        sleepData: {
+          totalSleepTime: 397,
+          deepTime: 64,
+          lightTime: 234,
+          eyeTime: 91,
+          wakeTime: 8,
+          shortSleepTime: 0
+        }
+      }
+    ]
+  }
+});
+const officialDailyLatest = pickLatestSleepRecord(
+  parseSleepDataResponse(officialDailyPayload)
+);
+assert.equal(officialDailyLatest?.score, 93);
+assert.equal(officialDailyLatest?.totalMinutes, 397);
+assert.equal(officialDailyLatest?.sleepStart, "22:58");
+assert.equal(officialDailyLatest?.sleepEnd, "05:43");
+assert.equal(officialDailyLatest?.windowMinutes, 405);
+
+const fullTimestampProsePayload = [
+  "2026-07-21",
+  "Sleep Score: 93",
+  "Main Sleep: 6h 37min",
+  "Deep Sleep Ratio: 16%",
+  "Light Sleep Ratio: 59%",
+  "REM Ratio: 23%",
+  "Awake Ratio: 2%",
+  "Awake Time: 8min",
+  "Main Sleep Window: 2026-07-20 10:58:00 PM to 2026-07-21 05:43:00 AM",
+  "Naps Total: 0 min"
+].join("\n");
+const fullTimestampProseLatest = pickLatestSleepRecord(
+  parseSleepDataResponse(fullTimestampProsePayload)
+);
+assert.equal(fullTimestampProseLatest?.sleepStart, "22:58");
+assert.equal(fullTimestampProseLatest?.sleepEnd, "05:43");
+assert.equal(fullTimestampProseLatest?.windowMinutes, 405);
+
+const rangeStringPayload = JSON.stringify({
+  happenDay: 20260721,
+  sleepScore: 93,
+  mainSleepMinutes: 397,
+  awakeTimeMinutes: 8,
+  deepSleepPercent: 16,
+  lightSleepPercent: 59,
+  remPercent: 23,
+  mainSleepWindow: "2026-07-20T22:58:00-04:00 — 2026-07-21T05:43:00-04:00"
+});
+const rangeStringLatest = pickLatestSleepRecord(
+  parseSleepDataResponse(rangeStringPayload)
+);
+assert.equal(rangeStringLatest?.sleepStart, "22:58");
+assert.equal(rangeStringLatest?.sleepEnd, "05:43");
+assert.equal(rangeStringLatest?.windowMinutes, 405);
+
 const partialStructuredPayload = JSON.stringify({
   sleepDataList: [
     {
