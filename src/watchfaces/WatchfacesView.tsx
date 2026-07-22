@@ -20,6 +20,7 @@ import {
   Loader2,
   LogOut,
   MoreHorizontal,
+  Pencil,
   Plus,
   Repeat2,
   Search,
@@ -197,7 +198,7 @@ export function WatchfacesView({
 }: WatchfacesViewProps) {
   const [status, setStatus] = useState<CorosWatchfaceStatus | null>(null);
   const [surface, setSurface] = useState<WatchfaceSurface>("hub");
-  const [hubTab, setHubTab] = useState<HubTab>("browse");
+  const [hubTab, setHubTab] = useState<HubTab>("templates");
   const [studioSession, setStudioSession] = useState<StudioSession | null>(null);
   const [conversionDraft, setConversionDraft] =
     useState<WatchfaceConversionDraft | null>(null);
@@ -229,6 +230,7 @@ export function WatchfacesView({
   const [modelVersion, setModelVersion] = useState(DEFAULT_MODEL_VERSION);
   const [themes, setThemes] = useState<CorosWatchfaceTheme[]>([]);
   const [themesLoaded, setThemesLoaded] = useState(false);
+  const themesPreloadStartedRef = useRef(false);
   const [themeSearch, setThemeSearch] = useState("");
   const [downloadingThemeUrl, setDownloadingThemeUrl] = useState<string | null>(
     null
@@ -742,8 +744,8 @@ export function WatchfacesView({
     ]);
   }
 
-  async function handleLoadThemes(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleLoadThemes(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
     setBusy("themes");
     clearMessages();
     try {
@@ -770,6 +772,22 @@ export function WatchfacesView({
       void api.getCorosWatchfaceStatus().then(setStatus).catch(() => undefined);
     }
   }
+
+  useEffect(() => {
+    if (
+      themesPreloadStartedRef.current ||
+      status === null ||
+      surface !== "hub" ||
+      hubTab !== "templates" ||
+      themesLoaded ||
+      busy !== null
+    ) {
+      return;
+    }
+
+    themesPreloadStartedRef.current = true;
+    void handleLoadThemes();
+  }, [busy, hubTab, status, surface, themesLoaded]);
 
   async function handleDownloadTheme(theme: CorosWatchfaceTheme) {
     if (!theme.packageUrl) return;
@@ -1388,8 +1406,8 @@ function WatchFacesHeader({
           <Watch size={21} />
         </span>
         <div className="watchface-hub-brand-copy">
-          <h1>Watch Faces</h1>
-          <p>Create, customize, and install faces for your COROS watch.</p>
+          <h1>Watch Face Studio</h1>
+          <p>Build a face that feels at home on your COROS watch.</p>
         </div>
       </div>
       <div className="watchface-hub-actions">
@@ -1479,7 +1497,7 @@ function DeviceStatusMenu({
         className={`watchface-device-trigger${connectedWatchName ? " is-connected" : ""}`}
         type="button"
         aria-label={`${label}. Open connection details`}
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-expanded={open}
         disabled={statusLoading}
         onClick={() => setOpen((current) => !current)}
@@ -1493,28 +1511,39 @@ function DeviceStatusMenu({
         <ChevronDown size={14} aria-hidden="true" />
       </button>
       {open ? (
-        <div className="watchface-device-popover" role="menu">
+        <div
+          className="watchface-device-popover"
+          role="dialog"
+          aria-label="COROS connection status"
+        >
           <div className="watchface-device-popover-heading">
             <span className={`watchface-device-icon${connectedWatchName ? " is-connected" : ""}`}>
               <Watch size={18} aria-hidden="true" />
             </span>
-            <div>
+            <div className="watchface-device-heading-copy">
+              <small>Device</small>
               <strong>{connectedWatchName ?? "No watch connected"}</strong>
               <span>
                 {connectedWatchName
-                  ? "Connected through the CorosLink watch service"
-                  : "Connect a COROS watch to see it here"}
+                  ? "Ready for watch-face transfers"
+                  : "Connect a watch to install your designs"}
               </span>
             </div>
           </div>
           <dl className="watchface-device-details">
             <div>
               <dt>Watch</dt>
-              <dd>{watchStatus?.connected ? "Connected" : "Disconnected"}</dd>
+              <dd className={watchStatus?.connected ? "is-online" : "is-offline"}>
+                <span aria-hidden="true" />
+                {watchStatus?.connected ? "Connected" : "Not connected"}
+              </dd>
             </div>
             <div>
               <dt>COROS account</dt>
-              <dd>{accountConnected ? "Connected" : "Local mode"}</dd>
+              <dd className={accountConnected ? "is-online" : "is-local"}>
+                <span aria-hidden="true" />
+                {accountConnected ? "Connected" : "Local mode"}
+              </dd>
             </div>
             {watchStatus?.rootPath ? (
               <div>
@@ -1528,9 +1557,8 @@ function DeviceStatusMenu({
           ) : null}
           {accountConnected ? (
             <button
-              className="watchface-device-account-action is-danger"
+              className="watchface-device-account-action is-disconnect"
               type="button"
-              role="menuitem"
               disabled={busy}
               onClick={() => {
                 setOpen(false);
@@ -1538,13 +1566,15 @@ function DeviceStatusMenu({
               }}
             >
               <LogOut size={15} aria-hidden="true" />
-              Disconnect COROS account
+              <span>
+                <strong>Disconnect account</strong>
+                <small>Your local projects stay available</small>
+              </span>
             </button>
           ) : (
             <button
               className="watchface-device-account-action"
               type="button"
-              role="menuitem"
               disabled={busy}
               onClick={() => {
                 setOpen(false);
@@ -1552,7 +1582,10 @@ function DeviceStatusMenu({
               }}
             >
               <KeyRound size={15} aria-hidden="true" />
-              Connect COROS account
+              <span>
+                <strong>Connect COROS account</strong>
+                <small>Required to send a face to your watch</small>
+              </span>
             </button>
           )}
         </div>
@@ -1570,6 +1603,11 @@ function WatchFacesTabs({
   projectCount: number;
   onChange: (tab: HubTab) => void;
 }) {
+  const activeIndicator = (tab: HubTab) =>
+    activeTab === tab ? (
+      <span className="watchface-tab-indicator" aria-hidden="true" />
+    ) : null;
+
   return (
     <div
       className="watchface-hub-tabs watchface-dashboard-tabs"
@@ -1578,7 +1616,7 @@ function WatchFacesTabs({
       onKeyDown={(event) => {
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
         event.preventDefault();
-        const tabs: HubTab[] = ["browse", "projects", "templates"];
+        const tabs: HubTab[] = ["templates", "projects", "browse"];
         const currentIndex = tabs.indexOf(activeTab);
         const direction = event.key === "ArrowRight" ? 1 : -1;
         const nextTab =
@@ -1590,16 +1628,17 @@ function WatchFacesTabs({
       }}
     >
       <button
-        id="watchface-browse-tab"
+        id="watchface-templates-tab"
         type="button"
         role="tab"
-        aria-selected={activeTab === "browse"}
-        aria-controls="watchface-browse-panel"
-        tabIndex={activeTab === "browse" ? 0 : -1}
-        className={activeTab === "browse" ? "is-active" : ""}
-        onClick={() => onChange("browse")}
+        aria-selected={activeTab === "templates"}
+        aria-controls="watchface-templates-panel"
+        tabIndex={activeTab === "templates" ? 0 : -1}
+        className={activeTab === "templates" ? "is-active" : ""}
+        onClick={() => onChange("templates")}
       >
-        Browse
+        Create
+        {activeIndicator("templates")}
       </button>
       <button
         id="watchface-projects-tab"
@@ -1611,19 +1650,21 @@ function WatchFacesTabs({
         className={activeTab === "projects" ? "is-active" : ""}
         onClick={() => onChange("projects")}
       >
-        Projects <span>{projectCount}</span>
+        My projects <span className="watchface-tab-count">{projectCount}</span>
+        {activeIndicator("projects")}
       </button>
       <button
-        id="watchface-templates-tab"
+        id="watchface-browse-tab"
         type="button"
         role="tab"
-        aria-selected={activeTab === "templates"}
-        aria-controls="watchface-templates-panel"
-        tabIndex={activeTab === "templates" ? 0 : -1}
-        className={activeTab === "templates" ? "is-active" : ""}
-        onClick={() => onChange("templates")}
+        aria-selected={activeTab === "browse"}
+        aria-controls="watchface-browse-panel"
+        tabIndex={activeTab === "browse" ? 0 : -1}
+        className={activeTab === "browse" ? "is-active" : ""}
+        onClick={() => onChange("browse")}
       >
-        COROS Templates
+        Community
+        {activeIndicator("browse")}
       </button>
     </div>
   );
@@ -2565,16 +2606,59 @@ function TemplatesPanel(props: TemplatesPanelProps) {
       role="tabpanel"
       aria-labelledby="watchface-templates-tab"
     >
-      <div className="watchface-hub-section-heading">
-        <div>
-          <h3>Template library</h3>
-          <p>Choose a compatible base, then make it yours in Studio.</p>
+      <section className="watchface-create-hero" aria-labelledby="watchface-create-title">
+        <div className="watchface-create-hero-copy">
+          <span className="watchface-create-kicker">Watch Face Studio</span>
+          <h2 id="watchface-create-title">
+            Start with a face. <span>Make it yours.</span>
+          </h2>
+          <p>Choose a compatible design, customize every layer, then export it to your watch.</p>
+          <div className="watchface-create-hero-actions">
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => document.getElementById("watchface-template-catalog")?.focus()}
+            >
+              <Watch size={17} aria-hidden="true" />
+              Choose a template
+              <ArrowRight size={17} aria-hidden="true" />
+            </button>
+          </div>
         </div>
+        <div className="watchface-create-visual" aria-label="Watch face creation steps">
+          <div className="watchface-create-preview-stack" aria-hidden="true">
+            <img src={glassFace} alt="" />
+            <img src={preClassicFace} alt="" />
+            <img src={kineticEnergyFace} alt="" />
+          </div>
+          <ol className="watchface-create-steps">
+            <li>
+              <span><Watch size={18} aria-hidden="true" /></span>
+              <div><strong>Choose</strong><small>Find a compatible base</small></div>
+            </li>
+            <li>
+              <span><Pencil size={18} aria-hidden="true" /></span>
+              <div><strong>Customize</strong><small>Edit it in Studio</small></div>
+            </li>
+            <li>
+              <span><Upload size={18} aria-hidden="true" /></span>
+              <div><strong>Export</strong><small>Send it to your watch</small></div>
+            </li>
+          </ol>
+        </div>
+      </section>
+      <div className="watchface-template-heading">
+        <div>
+          <h3>Choose your starting point</h3>
+          <p>Browse layouts matched to your watch and firmware.</p>
+        </div>
+        <span>Compatibility checked before download</span>
       </div>
       <form className="watchface-template-controls" onSubmit={props.onSubmit}>
         <label className="field">
           Catalog
           <select
+            id="watchface-template-catalog"
             value={props.catalog}
             onChange={(event) =>
               props.onCatalogChange(event.target.value as CorosWatchfaceThemeCatalog)
@@ -2585,9 +2669,13 @@ function TemplatesPanel(props: TemplatesPanelProps) {
             <option value="custom">My custom watch faces</option>
           </select>
         </label>
-        <label className="field">
-          Watch model
+        <label className="field watchface-model-field">
+          <span className="watchface-model-label">
+            <span>Watch model</span>
+            <span>Match your device</span>
+          </span>
           <select
+            aria-describedby="watchface-model-guidance"
             value={props.watchModel}
             onChange={(event) =>
               props.onWatchModelChange(event.target.value as WatchModelId)
@@ -2604,6 +2692,9 @@ function TemplatesPanel(props: TemplatesPanelProps) {
               </option>
             ))}
           </select>
+          <span className="sr-only" id="watchface-model-guidance">
+            Choose the exact COROS model that will receive this watch face.
+          </span>
         </label>
         <label className="watchface-template-search">
           <span className="sr-only">Search loaded templates</span>
@@ -2621,7 +2712,11 @@ function TemplatesPanel(props: TemplatesPanelProps) {
           ) : (
             <Search size={16} aria-hidden="true" />
           )}
-          {props.themesLoaded ? "Refresh" : "Browse"}
+          {props.busy === "themes"
+            ? "Loading"
+            : props.themesLoaded
+              ? "Refresh"
+              : "Browse"}
         </button>
         <details className="watchface-template-advanced">
           <summary>Advanced filters</summary>
