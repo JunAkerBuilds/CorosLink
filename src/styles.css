@@ -9605,6 +9605,35 @@ td span {
   white-space: nowrap;
 }
 
+.combined-download--failed {
+  max-width: 320px;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.combined-download-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  max-width: 320px;
+  color: #fca5a5;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.combined-download-error > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.combined-download-error > span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
 .combined-download-form {
   padding: 4px;
   border: 1px solid rgba(255, 255, 255, 0.16);

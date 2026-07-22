@@ -1182,7 +1182,7 @@ function registerIpcHandlers(): void {
       name: string,
       items: DownloadQueueItem[]
     ): Promise<CombinedDownloadResult> =>
-      downloadCombinedTrack(name, items, (update) => {
+      downloadCombinedTrack(id, name, items, (update) => {
         event.sender.send("music:combinedProgress", { id, ...update });
       })
   );

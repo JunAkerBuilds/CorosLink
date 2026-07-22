@@ -20,6 +20,8 @@
     "test:watch-models": "npm run build:electron && node scripts/test-watch-models.mjs",
     "test:maps": "npm run build:electron && node scripts/test-maps.mjs",
     "test:apple-podcasts": "npm run build:electron && node scripts/test-apple-podcasts.mjs",
+    "test:combined-download-cache": "npm run build:electron && node scripts/test-combined-download-cache.mjs",
+    "test:download-progress": "npm run build:electron && node scripts/test-download-progress.mjs",
     "test:route-location": "node --experimental-strip-types scripts/test-route-location.mjs",
     "test:route-overlap": "node --experimental-strip-types scripts/test-route-overlap.mjs",
     "test:sketch": "npm run build:electron && node scripts/test-sketch-geometry.mjs",

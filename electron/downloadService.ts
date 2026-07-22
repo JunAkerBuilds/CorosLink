@@ -1,9 +1,16 @@
 import { app } from "electron";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import {
+  combinedTrackCompletionMarker,
+  createCombinedDownloadCacheKey,
+  isReusableCombinedTrack,
+  markCombinedTrackReusable,
+  pruneCombinedDownloadCache,
+  touchCombinedDownloadCache
+} from "./combinedDownloadCache";
 import { addDownloads } from "./database";
 import {
   parseYtDlpProgressLine,
@@ -12,7 +19,9 @@ import {
   partitionDownloadedMp3Files,
   buildPlaylistCompletionWarning,
   parsePlaylistTrackMarker,
-  isYtDlpErrorLine
+  isYtDlpErrorLine,
+  selectCombinedTrackOutput,
+  summarizeCombinedTrackFailures
 } from "./downloadProgress";
 import type {
   BinaryCheck,
@@ -56,6 +65,7 @@ interface DownloadRuntimeOptions {
 }
 
 const runningProcesses = new Map<string, ChildProcess>();
+const activeCombinedDownloadCaches = new Set<string>();
 
 export function cancelDownloadProcess(jobId: string): boolean {
   const child = runningProcesses.get(jobId);
@@ -184,6 +194,7 @@ interface ResolvedCombinedItem {
  * warnings rather than aborting the whole combine.
  */
 export async function downloadCombinedTrack(
+  id: string,
   name: string,
   items: DownloadQueueItem[],
   onProgress?: (update: CombinedDownloadProgress) => void,
@@ -207,15 +218,37 @@ export async function downloadCombinedTrack(
 
   const ytDlp = resolveBinary("yt-dlp");
   const ffmpeg = resolveBinary("ffmpeg");
-  const workDir = await fs.promises.mkdtemp(
-    path.join(os.tmpdir(), "coroslink-combined-")
+  const cacheRoot = path.join(
+    app.getPath("userData"),
+    "combined-download-cache"
   );
+  const cacheKey = createCombinedDownloadCacheKey(
+    id,
+    resolved.map((item) => item.input)
+  );
+
+  await pruneCombinedDownloadCache(
+    cacheRoot,
+    activeCombinedDownloadCaches
+  );
+  if (activeCombinedDownloadCaches.has(cacheKey)) {
+    throw new Error("This combined playlist download is already in progress.");
+  }
+
+  activeCombinedDownloadCaches.add(cacheKey);
+  const workDir = path.join(cacheRoot, cacheKey);
 
   const downloadedFiles: string[] = [];
   const warnings: string[] = [];
+  const failures: string[] = [];
   const total = resolved.length;
+  let reusedCount = 0;
+  let shouldRemoveCache = false;
 
   try {
+    await fs.promises.mkdir(workDir, { recursive: true });
+    await touchCombinedDownloadCache(workDir);
+
     for (let index = 0; index < resolved.length; index += 1) {
       if (runtime?.isCancelled?.()) {
         throw new DownloadCancelledError();
@@ -226,6 +259,28 @@ export async function downloadCombinedTrack(
         workDir,
         `${String(index).padStart(4, "0")}.%(ext)s`
       );
+      const cachedFilePath = outputTemplate.replace(/\.%\(ext\)s$/, ".mp3");
+
+      if (await isReusableCombinedTrack(cachedFilePath)) {
+        downloadedFiles.push(cachedFilePath);
+        reusedCount += 1;
+        onProgress?.({
+          phase: "downloading",
+          index: index + 1,
+          total,
+          title: item.title,
+          trackProgress: 1,
+          reused: true
+        });
+        continue;
+      }
+
+      // An unmarked or zero-byte MP3 may have been interrupted mid-write.
+      // Remove it so yt-dlp cannot mistake the track for a completed download.
+      await fs.promises.rm(cachedFilePath, { force: true }).catch(() => {});
+      await fs.promises
+        .rm(combinedTrackCompletionMarker(cachedFilePath), { force: true })
+        .catch(() => {});
 
       onProgress?.({
         phase: "downloading",
@@ -252,27 +307,23 @@ export async function downloadCombinedTrack(
           runtime
         );
 
-        if (filePath) {
-          downloadedFiles.push(filePath);
-        } else {
-          warnings.push(`Skipped "${item.title}" — no audio was produced.`);
-        }
+        downloadedFiles.push(filePath);
+        await markCombinedTrackReusable(filePath);
+        await touchCombinedDownloadCache(workDir);
       } catch (error) {
         if (error instanceof DownloadCancelledError) {
           throw error;
         }
-        warnings.push(
-          `Skipped "${item.title}" — ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
+        const failure = `"${item.title}": ${
+          error instanceof Error ? error.message : String(error)
+        }`;
+        failures.push(failure);
+        warnings.push(`Skipped ${failure}`);
       }
     }
 
     if (downloadedFiles.length === 0) {
-      throw new Error(
-        "None of the playlist tracks could be downloaded, so there was nothing to combine."
-      );
+      throw new Error(summarizeCombinedTrackFailures(failures));
     }
 
     onProgress?.({
@@ -308,16 +359,27 @@ export async function downloadCombinedTrack(
       trackProgress: 1
     });
 
+    // Keep successful source tracks when some playlist items were skipped, so
+    // another attempt needs to fetch only the missing items. A fully complete
+    // combine has nothing left to resume and can discard its cache immediately.
+    shouldRemoveCache = warnings.length === 0;
+
     return {
       track,
       downloadedCount: downloadedFiles.length,
+      reusedCount,
       totalCount: total,
       ...(warnings.length ? { warnings } : {})
     };
   } finally {
-    await fs.promises
-      .rm(workDir, { recursive: true, force: true })
-      .catch(() => {});
+    activeCombinedDownloadCaches.delete(cacheKey);
+    if (shouldRemoveCache) {
+      await fs.promises
+        .rm(workDir, { recursive: true, force: true })
+        .catch(() => {});
+    } else {
+      await touchCombinedDownloadCache(workDir);
+    }
   }
 }
 
@@ -359,9 +421,10 @@ function resolveCombinedItem(
 
 /**
  * Downloads a single track as an MP3 into the directory implied by
- * `outputTemplate` and returns the resulting file path, or null if nothing was
- * produced. Unlike {@link runAudioDownload} this does not touch the database —
- * the caller merges the temp files and registers the final artifact.
+ * `outputTemplate` and returns the resulting file path. Unlike
+ * {@link runAudioDownload} this does not touch the database — the caller merges
+ * the temp files and registers the final artifact. A missing MP3 is an error so
+ * the combine can preserve the actual yt-dlp/ffmpeg diagnostic for the user.
  */
 async function downloadSingleTrackFile(
   input: string,
@@ -370,7 +433,7 @@ async function downloadSingleTrackFile(
   ffmpeg: ResolvedBinary,
   onFraction: (fraction: number) => void,
   runtime?: DownloadRuntimeOptions
-): Promise<string | null> {
+): Promise<string> {
   const args = [
     "--no-playlist",
     "--no-mtime",
@@ -397,6 +460,8 @@ async function downloadSingleTrackFile(
   args.push(input);
 
   const targetDir = path.dirname(outputTemplate);
+  const beforeMp3Files = new Set(listMp3Files(targetDir));
+  const beforeArtifacts = new Set(listMediaArtifacts(targetDir));
   const printedPaths: string[] = [];
 
   const onLine = (line: string) => {
@@ -411,18 +476,52 @@ async function downloadSingleTrackFile(
     }
   };
 
-  await runProcess(ytDlp.command, args, onLine, runtime);
+  const { lines, exitCode } = await runProcess(
+    ytDlp.command,
+    args,
+    onLine,
+    runtime
+  );
 
   if (runtime?.isCancelled?.()) {
     throw new DownloadCancelledError();
   }
 
   const expected = outputTemplate.replace(/\.%\(ext\)s$/, ".mp3");
-  const produced =
-    printedPaths.find((filePath) => filePath.toLowerCase().endsWith(".mp3")) ??
-    (fs.existsSync(expected) ? expected : null);
+  const afterMp3Files = listMp3Files(targetDir);
+  const produced = selectCombinedTrackOutput(
+    beforeMp3Files,
+    printedPaths,
+    afterMp3Files,
+    expected
+  );
 
-  return produced && fs.existsSync(produced) ? produced : null;
+  if (produced && fs.existsSync(produced)) {
+    if (fs.existsSync(expected)) {
+      return expected;
+    }
+
+    // Keep resumable cache filenames deterministic even if yt-dlp reports a
+    // platform-specific output name that differs from the template.
+    await fs.promises.rename(produced, expected);
+    return expected;
+  }
+
+  const newArtifacts = listMediaArtifacts(targetDir).filter(
+    (filePath) => !beforeArtifacts.has(filePath)
+  );
+
+  if (exitCode !== 0 && exitCode !== null) {
+    throw buildProcessError(path.basename(ytDlp.command), exitCode, lines);
+  }
+
+  throw buildNoMp3Error({
+    output: lines,
+    ytDlp,
+    ffmpeg,
+    newArtifacts,
+    exitCode
+  });
 }
 
 /**
@@ -963,6 +1062,7 @@ function runProcess(
 ): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
     const lines: string[] = [];
+    const pending = { stdout: "", stderr: "" };
     const child = spawn(command, args, {
       windowsHide: true,
       env: {
@@ -975,23 +1075,37 @@ function runProcess(
       runningProcesses.set(runtime.jobId, child);
     }
 
-    const capture = (chunk: Buffer): void => {
-      for (const line of chunk.toString().split(/\r?\n/)) {
-        const trimmed = line.trim();
-        if (!trimmed) {
-          continue;
-        }
+    const captureLine = (line: string): void => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        return;
+      }
 
-        onLine?.(trimmed);
-        lines.push(trimmed);
-        if (lines.length > MAX_CAPTURED_LINES) {
-          lines.shift();
-        }
+      onLine?.(trimmed);
+      lines.push(trimmed);
+      if (lines.length > MAX_CAPTURED_LINES) {
+        lines.shift();
       }
     };
 
-    child.stdout.on("data", capture);
-    child.stderr.on("data", capture);
+    const capture = (
+      stream: keyof typeof pending,
+      chunk: Buffer
+    ): void => {
+      const parts = `${pending[stream]}${chunk.toString()}`.split(/\r\n|\n|\r/);
+      pending[stream] = parts.pop() ?? "";
+      parts.forEach(captureLine);
+    };
+
+    const flush = (stream: keyof typeof pending): void => {
+      captureLine(pending[stream]);
+      pending[stream] = "";
+    };
+
+    child.stdout.on("data", (chunk: Buffer) => capture("stdout", chunk));
+    child.stderr.on("data", (chunk: Buffer) => capture("stderr", chunk));
+    child.stdout.on("end", () => flush("stdout"));
+    child.stderr.on("end", () => flush("stderr"));
     child.on("error", (error) => {
       if (runtime?.jobId) {
         runningProcesses.delete(runtime.jobId);
@@ -999,6 +1113,8 @@ function runProcess(
       reject(error);
     });
     child.on("close", (code) => {
+      flush("stdout");
+      flush("stderr");
       if (runtime?.jobId) {
         runningProcesses.delete(runtime.jobId);
       }
