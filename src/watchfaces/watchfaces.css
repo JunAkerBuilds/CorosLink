@@ -7089,6 +7089,15 @@ body.wf-value-scrubbing * {
   color: var(--text-primary);
 }
 
+.watchface-device-trigger > svg:last-child {
+  margin-left: 2px;
+  transition: transform 160ms ease;
+}
+
+.watchface-device-trigger[aria-expanded="true"] > svg:last-child {
+  transform: rotate(180deg);
+}
+
 .watchface-device-dot {
   width: 8px;
   height: 8px;
@@ -7115,29 +7124,36 @@ body.wf-value-scrubbing * {
   z-index: 12;
   top: calc(100% + 8px);
   right: 0;
-  width: min(320px, calc(100vw - 44px));
-  gap: 14px;
+  width: min(344px, calc(100vw - 44px));
+  gap: 0;
   border: 1px solid var(--wf-border-strong);
   border-radius: var(--wf-pane-radius);
-  background: var(--wf-dashboard-card);
-  box-shadow: var(--shadow-elevated);
-  padding: 14px;
+  background: color-mix(in srgb, var(--bg-base) 94%, var(--glass-bg-elevated));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 8%, transparent),
+    0 22px 60px rgba(0, 0, 0, 0.32);
+  padding: 8px;
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
+  backdrop-filter: blur(24px) saturate(120%);
 }
 
 .watchface-device-popover-heading {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr);
   align-items: center;
-  gap: 11px;
+  gap: 12px;
+  padding: 8px 8px 14px;
 }
 
 .watchface-device-icon {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--wf-dashboard-border);
   border-radius: var(--wf-control-radius);
-  background: var(--wf-dashboard-stage);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--text-primary) 7%, transparent), transparent),
+    var(--wf-dashboard-stage);
   color: var(--text-secondary);
   place-items: center;
 }
@@ -7147,38 +7163,57 @@ body.wf-value-scrubbing * {
   color: var(--success-text);
 }
 
-.watchface-device-popover-heading strong,
-.watchface-device-popover-heading span {
+.watchface-device-heading-copy {
+  min-width: 0;
+}
+
+.watchface-device-heading-copy :where(small, strong, span) {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.watchface-device-popover-heading strong {
+.watchface-device-heading-copy > small {
+  margin-bottom: 3px;
+  color: var(--accent-strong);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.watchface-device-heading-copy > strong {
   color: var(--text-primary);
   font-size: var(--wf-text-md);
 }
 
-.watchface-device-popover-heading span {
-  margin-top: 2px;
+.watchface-device-heading-copy > span {
+  margin-top: 3px;
   color: var(--text-secondary);
   font-size: var(--wf-text-xs);
 }
 
 .watchface-device-details {
   display: grid;
-  gap: 8px;
   margin: 0;
-  border-top: 1px solid var(--wf-dashboard-border);
-  padding-top: 12px;
+  overflow: hidden;
+  border: 1px solid var(--wf-dashboard-border);
+  border-radius: var(--wf-control-radius);
+  background: color-mix(in srgb, var(--wf-dashboard-stage) 54%, transparent);
 }
 
 .watchface-device-details > div {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-height: 41px;
+  padding: 0 11px;
+}
+
+.watchface-device-details > div + div {
+  border-top: 1px solid var(--wf-dashboard-border);
 }
 
 .watchface-device-details :where(dt, dd) {
@@ -7191,15 +7226,41 @@ body.wf-value-scrubbing * {
 }
 
 .watchface-device-details dd {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   overflow: hidden;
   color: var(--text-primary);
+  font-weight: 700;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.watchface-device-details dd > span {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-secondary) 48%, transparent);
+}
+
+.watchface-device-details dd.is-online {
+  color: var(--success-text);
+}
+
+.watchface-device-details dd.is-online > span {
+  background: var(--success-dot);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success-dot) 12%, transparent);
+}
+
+.watchface-device-details dd.is-offline,
+.watchface-device-details dd.is-local {
+  color: var(--text-secondary);
+}
+
 .watchface-device-error {
-  margin: 0;
+  margin: 10px 0 0;
   border: 1px solid var(--error-border);
   border-radius: var(--wf-control-radius);
   background: var(--error-bg);
@@ -7212,30 +7273,63 @@ body.wf-value-scrubbing * {
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 40px;
-  gap: 8px;
-  border: 1px solid var(--wf-dashboard-border);
+  min-height: 52px;
+  gap: 10px;
+  margin-top: 10px;
+  border: 1px solid transparent;
   border-radius: var(--wf-control-radius);
-  background: transparent;
+  background: color-mix(in srgb, var(--accent-soft) 32%, transparent);
   color: var(--text-primary);
-  padding: 0 10px;
+  padding: 7px 10px;
   font: inherit;
   font-size: var(--wf-text-xs);
   font-weight: 700;
+  text-align: left;
   cursor: pointer;
 }
 
 .watchface-device-account-action:hover:not(:disabled) {
-  background: var(--wf-dashboard-card-hover);
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--wf-dashboard-border));
+  background: color-mix(in srgb, var(--accent-soft) 54%, transparent);
 }
 
-.watchface-device-account-action.is-danger {
-  color: var(--error-text);
+.watchface-device-account-action > svg {
+  flex: 0 0 auto;
 }
 
-.watchface-device-account-action.is-danger:hover:not(:disabled) {
+.watchface-device-account-action > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.watchface-device-account-action strong,
+.watchface-device-account-action small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-device-account-action strong {
+  color: inherit;
+  font-size: var(--wf-text-xs);
+}
+
+.watchface-device-account-action small {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.watchface-device-account-action.is-disconnect {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.watchface-device-account-action.is-disconnect:hover:not(:disabled) {
   border-color: var(--error-border);
   background: var(--error-bg);
+  color: var(--error-text);
 }
 
 .watchface-shell--hub .watchface-hub-main {
@@ -7281,24 +7375,34 @@ body.wf-value-scrubbing * {
   font-weight: 800;
 }
 
-.watchface-shell--hub .watchface-dashboard-tabs > button.is-active::after,
-.watchface-shell--hub .watchface-dashboard-tabs > button[aria-selected="true"]::after {
-  content: "";
+.watchface-shell--hub .watchface-tab-indicator {
   position: absolute;
+  z-index: 1;
   right: 8px;
   bottom: -1px;
   left: 8px;
-  height: 2px;
+  width: auto;
+  min-width: 0;
+  height: 3px;
   border-radius: var(--wf-control-radius) var(--wf-control-radius) 0 0;
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+  box-shadow: 0 -3px 12px color-mix(in srgb, var(--accent-glow) 48%, transparent);
+  pointer-events: none;
 }
 
-.watchface-shell--hub .watchface-dashboard-tabs > button > span {
+.watchface-shell--hub .watchface-dashboard-tabs > button > .watchface-tab-count {
+  display: inline-grid;
   min-width: 21px;
   height: 20px;
   border-radius: var(--wf-control-radius);
   background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
   font-size: var(--wf-text-xs);
+  place-items: center;
+}
+
+.watchface-shell--hub .watchface-dashboard-tabs > button.is-active > .watchface-tab-count {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent-strong);
 }
 
 .watchface-dashboard-projects {
@@ -8374,4 +8478,409 @@ body.wf-value-scrubbing * {
   .watchface-community-tools,
   .watchface-community-grid,
   .watchface-community-detail { grid-template-columns: 1fr; }
+}
+
+/* Creation-first Watch Face Studio hub */
+
+.watchface-create-hero {
+  display: grid;
+  position: relative;
+  min-height: 318px;
+  overflow: hidden;
+  grid-template-columns: minmax(340px, 0.92fr) minmax(430px, 1.08fr);
+  align-items: center;
+  gap: clamp(28px, 5vw, 78px);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--wf-dashboard-border));
+  border-radius: var(--wf-dashboard-radius);
+  background:
+    radial-gradient(circle at 92% 18%, color-mix(in srgb, var(--accent) 17%, transparent), transparent 34%),
+    radial-gradient(circle at 50% 115%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 42%),
+    linear-gradient(130deg, color-mix(in srgb, var(--wf-dashboard-card) 96%, #07191a), color-mix(in srgb, var(--wf-dashboard-stage) 88%, #06352e));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 9%, transparent),
+    0 24px 60px color-mix(in srgb, var(--bg-base) 42%, transparent);
+  padding: clamp(28px, 4vw, 48px);
+}
+
+.watchface-create-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--text-primary) 3%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--text-primary) 3%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(90deg, transparent 32%, black 100%);
+  pointer-events: none;
+}
+
+.watchface-create-hero-copy,
+.watchface-create-visual {
+  position: relative;
+  z-index: 1;
+}
+
+.watchface-create-hero-copy {
+  display: grid;
+  justify-items: start;
+}
+
+.watchface-create-kicker {
+  margin-bottom: 12px;
+  color: var(--accent-strong);
+  font-size: var(--wf-text-xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.watchface-create-hero h2 {
+  max-width: 520px;
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(34px, 4vw, 49px);
+  font-weight: 850;
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+}
+
+.watchface-create-hero h2 span {
+  display: block;
+  color: var(--accent-strong);
+}
+
+.watchface-create-hero-copy > p {
+  max-width: 48ch;
+  margin: 17px 0 0;
+  color: color-mix(in srgb, var(--text-secondary) 90%, var(--text-primary));
+  font-size: var(--wf-text-md);
+  line-height: 1.6;
+}
+
+.watchface-create-hero-actions {
+  display: flex;
+  margin-top: 22px;
+}
+
+.watchface-create-hero-actions .primary-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 46px;
+  gap: 10px;
+  padding-inline: 17px;
+}
+
+.watchface-create-hero-actions .primary-button svg:last-child {
+  margin-left: 5px;
+}
+
+.watchface-create-visual {
+  display: grid;
+  align-content: center;
+  gap: 22px;
+}
+
+.watchface-create-preview-stack {
+  display: flex;
+  justify-content: center;
+  min-height: 152px;
+  padding-top: 4px;
+}
+
+.watchface-create-preview-stack img {
+  width: 146px;
+  height: 146px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 17%, transparent);
+  border-radius: 50%;
+  background: #070a0c;
+  box-shadow:
+    0 18px 35px rgba(0, 0, 0, 0.32),
+    0 0 0 5px color-mix(in srgb, var(--text-primary) 7%, transparent);
+  object-fit: contain;
+  transition: transform 180ms ease;
+}
+
+.watchface-create-preview-stack img:first-child {
+  margin-right: -44px;
+  transform: translateY(13px) rotate(-7deg) scale(0.83);
+}
+
+.watchface-create-preview-stack img:nth-child(2) {
+  z-index: 2;
+}
+
+.watchface-create-preview-stack img:last-child {
+  margin-left: -44px;
+  transform: translateY(13px) rotate(7deg) scale(0.83);
+}
+
+.watchface-create-preview-stack:hover img:first-child {
+  transform: translate(-7px, 11px) rotate(-9deg) scale(0.85);
+}
+
+.watchface-create-preview-stack:hover img:last-child {
+  transform: translate(7px, 11px) rotate(9deg) scale(0.85);
+}
+
+.watchface-create-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.watchface-create-steps li {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  border-left: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  padding-left: 12px;
+}
+
+.watchface-create-steps li:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.watchface-create-steps li > span {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--wf-dashboard-border));
+  border-radius: var(--wf-control-radius);
+  background: color-mix(in srgb, var(--accent-soft) 56%, transparent);
+  color: var(--accent-strong);
+  place-items: center;
+}
+
+.watchface-create-steps strong,
+.watchface-create-steps small {
+  display: block;
+}
+
+.watchface-create-steps strong {
+  color: var(--text-primary);
+  font-size: var(--wf-text-sm);
+}
+
+.watchface-create-steps small {
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-template-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 28px 0 13px;
+}
+
+.watchface-template-heading h3,
+.watchface-template-heading p {
+  margin: 0;
+}
+
+.watchface-template-heading h3 {
+  font-family: var(--font-display);
+  font-size: var(--wf-text-xl);
+  letter-spacing: -0.025em;
+}
+
+.watchface-template-heading p,
+.watchface-template-heading > span {
+  color: var(--text-secondary);
+  font-size: var(--wf-text-xs);
+}
+
+.watchface-template-heading p {
+  margin-top: 5px;
+}
+
+.watchface-template-heading > span {
+  flex: 0 0 auto;
+  color: var(--accent-strong);
+}
+
+.watchface-shell--hub .watchface-template-controls {
+  grid-template-columns: minmax(150px, 0.62fr) minmax(150px, 0.62fr) minmax(240px, 1.2fr) auto;
+  border-radius: var(--wf-control-radius);
+  padding: 12px;
+}
+
+.watchface-model-label {
+  display: flex;
+  position: relative;
+  z-index: 3;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-primary);
+}
+
+.watchface-model-label > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  border-radius: var(--wf-control-radius);
+  background: color-mix(in srgb, var(--accent-soft) 58%, transparent);
+  color: var(--accent-strong);
+  padding: 0 6px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.watchface-model-field {
+  position: relative;
+  isolation: isolate;
+}
+
+.watchface-shell--hub .watchface-model-field > select {
+  position: relative;
+  z-index: 1;
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--wf-dashboard-border));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-soft) 38%, transparent), transparent 54%),
+    color-mix(in srgb, var(--wf-dashboard-card) 94%, var(--accent-soft));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent),
+    inset 3px 0 0 color-mix(in srgb, var(--accent) 82%, transparent);
+  color: var(--text-primary);
+  font-weight: 750;
+}
+
+.watchface-shell--hub .watchface-model-field > select:hover {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent),
+    inset 3px 0 0 var(--accent);
+}
+
+.watchface-shell--hub .watchface-model-field > select:focus-visible {
+  border-color: var(--wf-focus);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--accent) 24%, transparent),
+    0 8px 22px color-mix(in srgb, var(--accent-glow) 34%, transparent),
+    inset 3px 0 0 var(--accent);
+}
+
+.watchface-shell--hub .watchface-template-grid,
+.watchface-template-skeleton-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.watchface-shell--hub .watchface-template-preview {
+  aspect-ratio: 1.08;
+}
+
+.watchface-shell--hub .watchface-template-copy {
+  gap: 8px;
+  padding: 12px;
+}
+
+.watchface-shell--hub .watchface-template-actions .secondary-button {
+  justify-content: center;
+  width: 100%;
+}
+
+@container watchfaces (max-width: 1099px) {
+  .watchface-create-hero {
+    grid-template-columns: minmax(300px, 0.9fr) minmax(360px, 1.1fr);
+    gap: 22px;
+    padding: 30px;
+  }
+
+  .watchface-create-preview-stack img {
+    width: 126px;
+    height: 126px;
+  }
+
+  .watchface-shell--hub .watchface-template-grid,
+  .watchface-template-skeleton-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container watchfaces (max-width: 799px) {
+  .watchface-create-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .watchface-create-visual {
+    grid-template-columns: minmax(220px, 0.85fr) minmax(280px, 1.15fr);
+    align-items: center;
+  }
+
+  .watchface-create-preview-stack {
+    min-height: 120px;
+  }
+
+  .watchface-create-preview-stack img {
+    width: 108px;
+    height: 108px;
+  }
+
+  .watchface-create-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .watchface-create-steps li,
+  .watchface-create-steps li:first-child {
+    border: 0;
+    padding-left: 0;
+  }
+}
+
+@container watchfaces (max-width: 699px) {
+  .watchface-shell--hub .watchface-template-grid,
+  .watchface-template-skeleton-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container watchfaces (max-width: 559px) {
+  .watchface-create-hero {
+    min-height: 0;
+    padding: 24px;
+  }
+
+  .watchface-create-hero h2 {
+    font-size: 35px;
+  }
+
+  .watchface-create-visual {
+    grid-template-columns: 1fr;
+  }
+
+  .watchface-template-heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .watchface-shell--hub .watchface-template-grid,
+  .watchface-template-skeleton-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .watchface-create-preview-stack img {
+    transition: none;
+  }
+
 }
