@@ -42,6 +42,18 @@ const WATCHFACE_DEVICE_PROFILES: Partial<
     firmwareType: "COROS W336",
     modelVersion: "W336-3.1709.0"
   },
+  "pace-3": {
+    firmwareType: "COROS W331"
+  },
+  nomad: {
+    firmwareType: "COROS W942"
+  },
+  "vertix-2": {
+    firmwareType: "COROS B19"
+  },
+  "vertix-2s": {
+    firmwareType: "COROS B19S"
+  },
   "apex-4": {
     firmwareType: "COROS W541"
   }

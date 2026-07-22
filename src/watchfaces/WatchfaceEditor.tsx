@@ -300,6 +300,7 @@ import {
   PanelLeft,
   PanelRight,
   Redo2,
+  Repeat2,
   RotateCcw,
   Save,
   Send,
@@ -724,6 +725,7 @@ function drawWeatherPreviewLayer(
 
 interface WatchfaceEditorProps {
   api: CorosLinkApi;
+  active: boolean;
   sessionId: string;
   starterArchive: CorosWatchfaceArchive;
   targetFirmwareType?: string;
@@ -731,11 +733,17 @@ interface WatchfaceEditorProps {
   initialDesign?: CorosWatchfaceDesignState;
   initialProjectId?: string;
   initialProjectName?: string;
+  initiallyDirty?: boolean;
   showDevelopmentTools?: boolean;
   onBack: () => void;
   onPublish: (archive: CorosWatchfaceArchive, name: string) => void;
   onArchiveCreated?: (archive: CorosWatchfaceArchive) => void;
   onProjectSaved?: (project: CorosWatchfaceProject) => void;
+  onConvertTarget: (
+    design: CorosWatchfaceDesignState,
+    name: string,
+    sourceDirty: boolean
+  ) => void;
   onError: (message: string) => void;
   onNotice: (message: string) => void;
 }
@@ -1037,6 +1045,7 @@ function normalizeEditorDesign(
 
 export function WatchfaceEditor({
   api,
+  active,
   sessionId,
   starterArchive,
   targetFirmwareType,
@@ -1044,11 +1053,13 @@ export function WatchfaceEditor({
   initialDesign,
   initialProjectId,
   initialProjectName,
+  initiallyDirty = false,
   showDevelopmentTools = false,
   onBack,
   onPublish,
   onArchiveCreated,
   onProjectSaved,
+  onConvertTarget,
   onError,
   onNotice
 }: WatchfaceEditorProps) {
@@ -1117,7 +1128,9 @@ export function WatchfaceEditor({
   );
   const historyRef = useRef(history);
   const [checkpoint, setCheckpoint] = useState(() =>
-    createWatchfaceEditorCheckpoint(history, sessionId)
+    createWatchfaceEditorCheckpoint(history, sessionId, {
+      dirty: initiallyDirty
+    })
   );
   const rootDesign = history.present.value.design;
   const projectName = history.present.value.projectName;
@@ -1492,7 +1505,11 @@ export function WatchfaceEditor({
     const reset = resetWatchfaceEditorHistory(initialValue, historyRef.current);
     historyRef.current = reset;
     setHistoryState(reset);
-    setCheckpoint(createWatchfaceEditorCheckpoint(reset, sessionId));
+    setCheckpoint(
+      createWatchfaceEditorCheckpoint(reset, sessionId, {
+        dirty: initiallyDirty
+      })
+    );
     setProjectId(initialProjectId);
     setSelectedId("background");
     setSelectedIds(["background"]);
@@ -1522,7 +1539,7 @@ export function WatchfaceEditor({
     backgroundRenderQueueRef.current.pending = null;
     previewRenderQueueRef.current.pending = null;
     assetCacheRef.current.clear();
-  }, [initialProjectId, initialValue, sessionId]);
+  }, [initialProjectId, initialValue, initiallyDirty, sessionId]);
 
   useEffect(() => {
     assetCacheRef.current.clear();
@@ -1729,7 +1746,11 @@ export function WatchfaceEditor({
         };
         historyRef.current = initialized;
         setHistoryState(initialized);
-        setCheckpoint(createWatchfaceEditorCheckpoint(initialized, sessionId));
+        setCheckpoint(
+          createWatchfaceEditorCheckpoint(initialized, sessionId, {
+            dirty: initiallyDirty
+          })
+        );
       })
       .catch((caught) => {
         if (!cancelled) {
@@ -1742,6 +1763,7 @@ export function WatchfaceEditor({
   }, [
     api,
     initialDesign,
+    initiallyDirty,
     loadAssets,
     onError,
     sessionId,
@@ -6444,6 +6466,16 @@ export function WatchfaceEditor({
   }
 
   useEffect(() => {
+    if (active) return;
+    setPlacementMenuOpen(false);
+    setExportMenuOpen(false);
+    setContextMenu(null);
+    clearSnapGuides();
+    pointerControllerRef.current?.cancel();
+    dragRef.current = null;
+  }, [active]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const editable = Boolean(
@@ -6517,9 +6549,11 @@ export function WatchfaceEditor({
         endDesignTransaction();
       }
     };
+    if (!active) return;
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
+    active,
     design,
     isDirty,
     projectId,
@@ -6620,6 +6654,22 @@ export function WatchfaceEditor({
                   onClick={() => { setExportMenuOpen(false); void exportEditableProject(); }}
                 >
                   <Download size={15} aria-hidden="true" /> Editable project ZIP
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    const snapshot = historyRef.current.present.value;
+                    onConvertTarget(
+                      structuredClone(snapshot.design),
+                      snapshot.projectName.trim() || "Custom watch face",
+                      isDirty
+                    );
+                  }}
+                >
+                  <Repeat2 size={15} aria-hidden="true" /> Convert to another watch
                 </button>
                 {showDevelopmentTools ? (
                   <button

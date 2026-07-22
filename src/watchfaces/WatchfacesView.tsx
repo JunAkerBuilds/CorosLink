@@ -21,6 +21,7 @@ import {
   LogOut,
   MoreHorizontal,
   Plus,
+  Repeat2,
   Search,
   Send,
   Share2,
@@ -61,6 +62,10 @@ import { WatchfaceEditor } from "./WatchfaceEditor";
 import { renderDesignBackground } from "./watchfaceBackground";
 import { deriveDesignDetails, toStudioOptions } from "./watchfaceCompose";
 import { createWatchfaceEditorSessionId } from "./watchfaceEditorHistory";
+import {
+  firmwareTypeForWatchfaceArchive,
+  prepareWatchfaceConversion
+} from "./watchfaceConversion";
 import {
   drawStudioPreview,
   detailsForPreviewResolution,
@@ -108,6 +113,7 @@ const AUTH_WATCH_FACE_PREVIEWS = [
 
 interface WatchfacesViewProps {
   api: CorosLinkApi;
+  active: boolean;
   showDevelopmentTools: boolean;
   watchStatus: WatchStatus | null;
   communityOpenRequest:
@@ -127,6 +133,17 @@ interface StudioSession {
   initialName: string;
   targetFirmwareType: string;
   targetWatchModel?: WatchModelId;
+  initiallyDirty?: boolean;
+}
+
+interface WatchfaceConversionDraft {
+  design: CorosWatchfaceDesignState;
+  name: string;
+  sourceDesign: CorosWatchfaceDesignState;
+  sourceDirty: boolean;
+  sourceFirmwareType: string;
+  sourceSession: StudioSession;
+  omittedRawConfigEditCount: number;
 }
 
 const DEFAULT_FIRMWARE_TYPE = "COROS W332";
@@ -141,6 +158,29 @@ const COMMUNITY_MODEL_BY_WATCH: Partial<Record<WatchModelId, string>> = {
   "vertix-2s": "VERTIX 2S"
 };
 
+const TEMPLATE_WATCH_OPTIONS: ReadonlyArray<{
+  model: WatchModelId;
+  label: string;
+}> = [
+  { model: "pace-pro", label: "PACE Pro" },
+  { model: "pace-4", label: "PACE 4" },
+  { model: "pace-3", label: "PACE 3" },
+  { model: "nomad", label: "NOMAD" },
+  { model: "vertix-2", label: "VERTIX 2" },
+  { model: "vertix-2s", label: "VERTIX 2S" },
+  { model: "apex-4", label: "APEX 4" }
+];
+
+function templateWatchModelForFirmware(firmwareType: string): WatchModelId | "" {
+  const normalized = firmwareType.trim().toUpperCase();
+  return (
+    TEMPLATE_WATCH_OPTIONS.find(
+      ({ model }) =>
+        getWatchfaceDeviceProfile(model)?.firmwareType.toUpperCase() === normalized
+    )?.model ?? ""
+  );
+}
+
 const REGION_OPTIONS: { value: CorosWatchfaceRegion; label: string }[] = [
   { value: "eu", label: "Europe" },
   { value: "us", label: "United States" },
@@ -149,6 +189,7 @@ const REGION_OPTIONS: { value: CorosWatchfaceRegion; label: string }[] = [
 
 export function WatchfacesView({
   api,
+  active,
   showDevelopmentTools,
   watchStatus,
   communityOpenRequest,
@@ -158,6 +199,8 @@ export function WatchfacesView({
   const [surface, setSurface] = useState<WatchfaceSurface>("hub");
   const [hubTab, setHubTab] = useState<HubTab>("browse");
   const [studioSession, setStudioSession] = useState<StudioSession | null>(null);
+  const [conversionDraft, setConversionDraft] =
+    useState<WatchfaceConversionDraft | null>(null);
   const [communityProgress, setCommunityProgress] =
     useState<CommunityWatchfaceDownloadProgress | null>(null);
   const [communityConfirmFace, setCommunityConfirmFace] =
@@ -354,6 +397,10 @@ export function WatchfacesView({
         .some((value) => value.toLocaleLowerCase().includes(query))
     );
   }, [themeSearch, themes]);
+  const templateWatchModel = useMemo(
+    () => templateWatchModelForFirmware(firmwareType),
+    [firmwareType]
+  );
 
   async function handleLogin(
     event: FormEvent<HTMLFormElement>,
@@ -424,35 +471,129 @@ export function WatchfacesView({
   function openStudio(
     archive: CorosWatchfaceArchive,
     initialName: string,
-    project?: CorosWatchfaceProject
+    project?: CorosWatchfaceProject,
+    transferredDesign?: CorosWatchfaceDesignState,
+    initiallyDirty = false
   ) {
-    const targetFirmwareType =
-      archive.firmwareType?.trim() || project?.firmwareType?.trim() || firmwareType;
-    const targetWatchModel = watchStatus?.connected
-      ? watchStatus.model
+    const targetFirmwareType = firmwareTypeForWatchfaceArchive(
+      archive,
+      project?.firmwareType?.trim() || firmwareType
+    );
+    const firmwareWatchModel = templateWatchModelForFirmware(targetFirmwareType);
+    const connectedProfile = watchStatus?.connected
+      ? getWatchfaceDeviceProfile(watchStatus.model)
       : undefined;
+    const targetWatchModel = firmwareWatchModel ||
+      (connectedProfile?.firmwareType.toUpperCase() === targetFirmwareType.toUpperCase()
+        ? watchStatus?.model
+        : undefined);
     applyDetectedFirmwareType(targetFirmwareType);
     setStudioSession({
       id: createWatchfaceEditorSessionId(project?.projectId ?? archive.archiveId),
       archive,
       project,
-      ...(project?.design || archive.editableProject?.design
-        ? { initialDesign: project?.design ?? archive.editableProject?.design }
+      ...(transferredDesign || project?.design || archive.editableProject?.design
+        ? {
+            initialDesign:
+              transferredDesign ?? project?.design ?? archive.editableProject?.design
+          }
         : {}),
       initialName:
-        project?.name ??
-        archive.editableProject?.name ??
-        (initialName.trim() || "Untitled watch face"),
+        (transferredDesign
+          ? initialName
+          : project?.name ?? archive.editableProject?.name ?? initialName
+        ).trim() || "Untitled watch face",
       targetFirmwareType,
-      ...(targetWatchModel ? { targetWatchModel } : {})
+      ...(targetWatchModel ? { targetWatchModel } : {}),
+      ...(initiallyDirty ? { initiallyDirty: true } : {})
     });
     setBuiltArchive(null);
     setImportOpen(false);
     setImportShareUrl("");
     setShareLink(null);
     setPublishOpen(false);
+    setConversionDraft(null);
     setSurface("studio");
     clearMessages();
+  }
+
+  function beginWatchConversion(
+    design: CorosWatchfaceDesignState,
+    name: string,
+    sourceDirty: boolean
+  ) {
+    if (!studioSession) return;
+    const prepared = prepareWatchfaceConversion(design);
+    setConversionDraft({
+      design: prepared.design,
+      name: name.trim() || "Custom watch face",
+      sourceDesign: prepared.sourceDesign,
+      sourceDirty,
+      sourceFirmwareType: studioSession.targetFirmwareType,
+      sourceSession: studioSession,
+      omittedRawConfigEditCount: prepared.omittedRawConfigEditCount
+    });
+    setStudioSession(null);
+    setBuiltArchive(null);
+    setShareLink(null);
+    setPublishOpen(false);
+    setHubTab("templates");
+    setThemes([]);
+    setThemesLoaded(false);
+    setSurface("hub");
+    setError(null);
+    setNotice(
+      "Choose the destination watch, browse its templates, then use a compatible starter."
+    );
+  }
+
+  function conversionProjectName(
+    draft: WatchfaceConversionDraft,
+    targetFirmwareType: string
+  ): string {
+    const targetModel = templateWatchModelForFirmware(targetFirmwareType);
+    const targetLabel = TEMPLATE_WATCH_OPTIONS.find(
+      ({ model }) => model === targetModel
+    )?.label;
+    if (!targetLabel) return draft.name.slice(0, 80);
+    const suffix = ` (${targetLabel})`;
+    return `${draft.name.slice(0, Math.max(1, 80 - suffix.length)).trimEnd()}${suffix}`;
+  }
+
+  function openStudioWithConversion(
+    archive: CorosWatchfaceArchive,
+    fallbackName: string
+  ) {
+    if (!conversionDraft) {
+      openStudio(archive, fallbackName);
+      return;
+    }
+    const targetFirmwareType = firmwareTypeForWatchfaceArchive(
+      archive,
+      firmwareType
+    );
+    const sourceFirmwareType = conversionDraft.sourceFirmwareType.trim();
+    if (targetFirmwareType.toUpperCase() === sourceFirmwareType.toUpperCase()) {
+      setError("Choose a starter for a different watch model to convert this face.");
+      setNotice(null);
+      return;
+    }
+    const nextName = conversionProjectName(conversionDraft, targetFirmwareType);
+    const design = conversionDraft.design;
+    openStudio(archive, nextName, undefined, design, true);
+    setNotice(
+      `Converted “${conversionDraft.name}” to ${
+        TEMPLATE_WATCH_OPTIONS.find(
+          ({ model }) => model === templateWatchModelForFirmware(targetFirmwareType)
+        )?.label ?? targetFirmwareType
+      }. Review Current and Always-on previews before sending.${
+        conversionDraft.omittedRawConfigEditCount > 0
+          ? ` ${conversionDraft.omittedRawConfigEditCount} raw config edit${
+              conversionDraft.omittedRawConfigEditCount === 1 ? " was" : "s were"
+            } omitted because target layout files are different.`
+          : ""
+      }`
+    );
   }
 
   function returnToHub() {
@@ -508,7 +649,7 @@ export function WatchfacesView({
     try {
       const selected = await api.chooseCorosWatchfaceArchive();
       if (!selected) return;
-      openStudio(
+      openStudioWithConversion(
         selected,
         selected.editableProject?.name ??
           (selected.fileName.replace(/\.(zip|dat)$/i, "") ||
@@ -641,7 +782,7 @@ export function WatchfacesView({
         firmwareType: theme.firmwareType?.trim() || firmwareType
       });
       if (download.usableAsTemplate && download.archive) {
-        openStudio(download.archive, theme.name);
+        openStudioWithConversion(download.archive, theme.name);
       } else {
         setNotice(
           download.entries?.length
@@ -764,7 +905,12 @@ export function WatchfacesView({
 
   if (surface === "studio" && studioSession) {
     return (
-      <div className="watchfaces-view wf-watchfaces watchface-shell watchface-shell--studio">
+      <div
+        className={`watchfaces-view wf-watchfaces watchface-shell watchface-shell--studio${
+          active ? "" : " view-panel-hidden"
+        }`}
+        aria-hidden={!active}
+      >
         {queuedCommunitySlug ? (
           <div className="watchface-community-queued" role="status">
             A website watch face is waiting. Return to Browse when you are ready
@@ -774,6 +920,7 @@ export function WatchfacesView({
         <WatchfaceEditor
           key={studioSession.id}
           api={api}
+          active={active}
           sessionId={studioSession.id}
           starterArchive={studioSession.archive}
           targetFirmwareType={studioSession.targetFirmwareType}
@@ -781,11 +928,13 @@ export function WatchfacesView({
           initialDesign={studioSession.initialDesign}
           initialProjectId={studioSession.project?.projectId}
           initialProjectName={studioSession.project?.name ?? studioSession.initialName}
+          initiallyDirty={studioSession.initiallyDirty}
           showDevelopmentTools={IS_DEVELOPMENT_BUILD && showDevelopmentTools}
           onBack={returnToHub}
           onArchiveCreated={setBuiltArchive}
           onPublish={openPublish}
           onProjectSaved={handleProjectSaved}
+          onConvertTarget={beginWatchConversion}
           onError={setError}
           onNotice={setNotice}
         />
@@ -834,9 +983,10 @@ export function WatchfacesView({
 
   return (
     <div
-      className={`watchfaces-view wf-watchfaces watchface-shell watchface-shell--hub ${
-        surface === "sign-in" ? "watchface-shell--signin" : ""
-      }`}
+      className={`watchfaces-view wf-watchfaces watchface-shell watchface-shell--hub${
+        surface === "sign-in" ? " watchface-shell--signin" : ""
+      }${active ? "" : " view-panel-hidden"}`}
+      aria-hidden={!active}
     >
       {surface !== "sign-in" ? (
         <WatchFacesHeader
@@ -1007,6 +1157,47 @@ export function WatchfacesView({
         </main>
       ) : (
         <main className="watchface-hub-main">
+          {conversionDraft ? (
+            <section className="watchface-conversion-banner" role="status">
+              <span className="watchface-conversion-icon" aria-hidden="true">
+                <Repeat2 size={18} />
+              </span>
+              <div>
+                <strong>Convert “{conversionDraft.name}”</strong>
+                <span>
+                  Select the destination watch below, browse, then choose a
+                  compatible starter. You can also import a local destination
+                  .dat or ZIP from the header.
+                </span>
+                {conversionDraft.omittedRawConfigEditCount > 0 ? (
+                  <span className="watchface-conversion-warning">
+                    {conversionDraft.omittedRawConfigEditCount} advanced raw
+                    config edit{conversionDraft.omittedRawConfigEditCount === 1 ? "" : "s"}
+                    {" "}cannot transfer because the destination uses different
+                    layout files. The original project keeps them.
+                  </span>
+                ) : null}
+              </div>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={busy !== null}
+                onClick={() => {
+                  const draft = conversionDraft;
+                  openStudio(
+                    draft.sourceSession.archive,
+                    draft.name,
+                    draft.sourceSession.project,
+                    draft.sourceDesign,
+                    draft.sourceDirty
+                  );
+                  setNotice("Watch conversion cancelled. Your original project is open.");
+                }}
+              >
+                Cancel
+              </button>
+            </section>
+          ) : null}
           {IS_DEVELOPMENT_BUILD && showDevelopmentTools ? (
             <>
               <DeviceInfoPanel api={api} />
@@ -1055,6 +1246,7 @@ export function WatchfacesView({
             <TemplatesPanel
               busy={busy}
               catalog={themeCatalog}
+              watchModel={templateWatchModel}
               firmwareType={firmwareType}
               language={language}
               maxWatchFaceVersion={maxWatchFaceVersion}
@@ -1070,6 +1262,10 @@ export function WatchfacesView({
                 setThemeCatalog(nextCatalog);
                 setThemes([]);
                 setThemesLoaded(false);
+              }}
+              onWatchModelChange={(nextWatchModel) => {
+                const profile = getWatchfaceDeviceProfile(nextWatchModel);
+                if (profile) applyDetectedFirmwareType(profile.firmwareType);
               }}
               onFirmwareTypeChange={applyDetectedFirmwareType}
               onLanguageChange={setLanguage}
@@ -2336,6 +2532,7 @@ function WatchFacePreview({
 interface TemplatesPanelProps {
   busy: "login" | "themes" | "archive" | "publish" | "project" | "community" | null;
   catalog: CorosWatchfaceThemeCatalog;
+  watchModel: WatchModelId | "";
   firmwareType: string;
   language: string;
   maxWatchFaceVersion: string;
@@ -2348,6 +2545,7 @@ interface TemplatesPanelProps {
   downloadingThemeUrl: string | null;
   sharingThemeId: string | null;
   onCatalogChange: (catalog: CorosWatchfaceThemeCatalog) => void;
+  onWatchModelChange: (model: WatchModelId) => void;
   onFirmwareTypeChange: (value: string) => void;
   onLanguageChange: (value: string) => void;
   onMaxVersionChange: (value: string) => void;
@@ -2385,6 +2583,26 @@ function TemplatesPanel(props: TemplatesPanelProps) {
             <option value="editable">Editable templates</option>
             <option value="official">Official watch faces</option>
             <option value="custom">My custom watch faces</option>
+          </select>
+        </label>
+        <label className="field">
+          Watch model
+          <select
+            value={props.watchModel}
+            onChange={(event) =>
+              props.onWatchModelChange(event.target.value as WatchModelId)
+            }
+          >
+            {props.watchModel === "" ? (
+              <option value="" disabled>
+                Custom firmware (advanced)
+              </option>
+            ) : null}
+            {TEMPLATE_WATCH_OPTIONS.map((option) => (
+              <option key={option.model} value={option.model}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </label>
         <label className="watchface-template-search">

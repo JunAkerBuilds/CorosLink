@@ -260,6 +260,9 @@ export default function App() {
   });
   const [coachBusy, setCoachBusy] = useState(false);
   const [coachMounted, setCoachMounted] = useState(activeView === "coach");
+  const [watchfacesMounted, setWatchfacesMounted] = useState(
+    activeView === "watchfaces",
+  );
   const [coachPrefill, setCoachPrefill] = useState<string | null>(null);
   const [calendarRefreshToken, setCalendarRefreshToken] = useState(0);
   const [activeMediaTab, setActiveMediaTab] = useState<MediaTab>("library");
@@ -454,6 +457,9 @@ export default function App() {
   useEffect(() => {
     if (activeView === "coach") {
       setCoachMounted(true);
+    }
+    if (activeView === "watchfaces") {
+      setWatchfacesMounted(true);
     }
   }, [activeView]);
 
@@ -2289,12 +2295,13 @@ export default function App() {
                 />
               </Suspense>
             ) : null}
-            {activeView === "watchfaces" ? (
+            {watchfacesMounted || activeView === "watchfaces" ? (
               <Suspense
                 fallback={<DeferredSurfaceFallback label="Watch Studio" />}
               >
                 <LazyWatchfacesView
                   api={api}
+                  active={activeView === "watchfaces"}
                   showDevelopmentTools={showDevelopmentTools}
                   watchStatus={watchStatus}
                   communityOpenRequest={communityWatchfaceOpenRequest}

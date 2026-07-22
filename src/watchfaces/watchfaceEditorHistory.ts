@@ -230,9 +230,16 @@ export function createWatchfaceEditorSessionId(
 /** Capture the exact state that was loaded or most recently saved. */
 export function createWatchfaceEditorCheckpoint<T>(
   history: WatchfaceEditorHistory<T>,
-  sessionId: string
+  sessionId: string,
+  options: { dirty?: boolean } = {}
 ): WatchfaceEditorCheckpoint {
-  return { sessionId, revision: history.present.revision };
+  return {
+    sessionId,
+    // History revisions start at zero, so -1 cannot collide with a real
+    // loaded/edited state. Saving replaces this forced-dirty checkpoint with
+    // the current revision through the normal two-argument call.
+    revision: options.dirty ? -1 : history.present.revision
+  };
 }
 
 /**

@@ -79,6 +79,10 @@ import {
   writeWatchfacePlacementPreferences
 } from "../src/watchfaces/watchfaceEditorSnapping.ts";
 import {
+  firmwareTypeForWatchfaceArchive,
+  prepareWatchfaceConversion
+} from "../src/watchfaces/watchfaceConversion.ts";
+import {
   WATCHFACE_INSPECTOR_DEFAULT_OPEN,
   watchfaceInspectorSectionPlan
 } from "../src/watchfaces/watchfaceInspectorSections.ts";
@@ -434,6 +438,53 @@ assert.equal(
 let history = createWatchfaceEditorHistory({ x: 0, name: "Face" });
 const sessionA = createWatchfaceEditorSessionId("project-a", "open-1");
 const saved = createWatchfaceEditorCheckpoint(history, sessionA);
+const forcedDirty = createWatchfaceEditorCheckpoint(history, sessionA, {
+  dirty: true
+});
+assert.equal(
+  isWatchfaceEditorHistoryDirty(history, forcedDirty, sessionA),
+  true,
+  "a transferred project can start dirty before its first save"
+);
+
+assert.equal(
+  firmwareTypeForWatchfaceArchive(
+    { firmwareType: undefined, resolutionProfile: "amoled-416-800" },
+    "COROS W942"
+  ),
+  "COROS W942",
+  "a dimension-only 416px profile must not be misidentified as PACE Pro"
+);
+assert.equal(
+  firmwareTypeForWatchfaceArchive(
+    { firmwareType: "  COROS W336  ", resolutionProfile: "amoled-390-800" },
+    "COROS W332"
+  ),
+  "COROS W336",
+  "an archive-declared target firmware should win"
+);
+const conversionSource = {
+  version: 1,
+  metricChanges: { heartRate: true },
+  configTextEdits: {
+    "watchface_416x416/config.txt": "[watchface_id]=1",
+    "watchface_800x800/AODconfig.txt": "[watchface_id]=1"
+  }
+};
+const preparedConversion = prepareWatchfaceConversion(conversionSource);
+assert.equal(preparedConversion.omittedRawConfigEditCount, 2);
+assert.equal(preparedConversion.design.configTextEdits, undefined);
+assert.deepEqual(
+  preparedConversion.sourceDesign.configTextEdits,
+  conversionSource.configTextEdits,
+  "cancellation should retain the lossless source config edits"
+);
+preparedConversion.design.metricChanges.heartRate = false;
+assert.equal(
+  preparedConversion.sourceDesign.metricChanges.heartRate,
+  true,
+  "the portable target design must not mutate the cancellation snapshot"
+);
 
 assert.equal(isWatchfaceEditorHistoryDirty(history, saved, sessionA), false);
 assert.equal(canUndoWatchfaceEditorHistory(history), false);
