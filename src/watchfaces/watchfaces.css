@@ -2665,11 +2665,96 @@
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-export-popover) {
-  width: 224px;
+  z-index: 30;
+  width: 276px;
+  gap: 3px;
+  border-color: color-mix(in srgb, var(--wf-border-strong) 88%, var(--text-primary));
+  background: color-mix(in srgb, var(--bg-base) 96%, var(--glass-bg-elevated));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 8%, transparent),
+    0 20px 54px rgba(0, 0, 0, 0.38);
+  padding: 7px;
+  -webkit-backdrop-filter: blur(22px) saturate(118%);
+  backdrop-filter: blur(22px) saturate(118%);
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-export-popover) button {
+  display: grid;
+  position: relative;
+  min-height: 58px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 11px;
+  padding: 7px 9px;
+  white-space: normal;
+}
+
+.watchface-shell .wf-export-popover button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-soft) 36%, var(--wf-surface-hover));
+}
+
+.watchface-shell .wf-export-option-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--wf-border);
+  border-radius: var(--wf-control-radius);
+  background: color-mix(in srgb, var(--wf-surface-hover) 74%, transparent);
+  color: var(--text-secondary);
+  place-items: center;
+}
+
+.watchface-shell .wf-export-popover button:hover:not(:disabled) .wf-export-option-icon {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--wf-border));
+  background: color-mix(in srgb, var(--accent-soft) 58%, transparent);
+  color: var(--accent-strong);
+}
+
+.watchface-shell .wf-export-option-copy {
+  display: grid;
+  min-width: 0;
+  align-self: center;
+  gap: 3px;
+}
+
+.watchface-shell .wf-export-option-copy :where(strong, small) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.watchface-shell .wf-export-option-copy strong {
+  color: var(--text-primary);
+  font-size: var(--wf-text-sm);
+  font-weight: 750;
+}
+
+.watchface-shell .wf-export-option-copy small {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.watchface-shell .wf-export-popover button.is-convert {
+  margin-top: 5px;
+}
+
+.watchface-shell .wf-export-popover button.is-convert::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: 7px;
+  left: 7px;
+  height: 1px;
+  background: var(--wf-border);
+}
+
+.watchface-shell .wf-export-button > svg:last-child {
+  transition: transform 160ms ease;
+}
+
+.watchface-shell .wf-export-button[aria-expanded="true"] > svg:last-child {
+  transform: rotate(180deg);
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.watchface-layer-group) {
@@ -7354,54 +7439,74 @@ body.wf-value-scrubbing * {
 
 .watchface-shell--hub .watchface-dashboard-tabs > button {
   position: relative;
-  min-height: 48px;
-  gap: 7px;
+  min-height: 46px;
+  gap: 8px;
   border-radius: 0;
-  padding: 0 10px;
+  padding: 0 15px;
   font-size: var(--wf-text-md);
   font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: color 0.16s ease;
 }
 
-.watchface-shell--hub .watchface-dashboard-tabs > button:hover {
+.watchface-shell--hub .watchface-dashboard-tabs > button:hover,
+.watchface-shell--hub .watchface-dashboard-tabs > button:focus-visible {
   background: transparent;
   color: var(--text-primary);
 }
 
+.watchface-shell--hub .watchface-dashboard-tabs > button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -4px;
+  border-radius: 8px;
+}
+
 .watchface-shell--hub .watchface-dashboard-tabs > button.is-active,
-.watchface-shell--hub .watchface-dashboard-tabs > button[aria-selected="true"] {
+.watchface-shell--hub .watchface-dashboard-tabs > button[aria-selected="true"],
+.watchface-shell--hub .watchface-dashboard-tabs > button.is-active:hover,
+.watchface-shell--hub .watchface-dashboard-tabs > button[aria-selected="true"]:hover {
   background: transparent;
   box-shadow: none;
   color: var(--accent-strong);
-  font-weight: 800;
+  font-weight: 700;
 }
 
-.watchface-shell--hub .watchface-tab-indicator {
+.watchface-shell--hub .watchface-dashboard-tabs > button > .watchface-tab-indicator {
+  display: block;
   position: absolute;
   z-index: 1;
-  right: 8px;
+  right: 12px;
   bottom: -1px;
-  left: 8px;
+  left: 12px;
   width: auto;
   min-width: 0;
-  height: 3px;
-  border-radius: var(--wf-control-radius) var(--wf-control-radius) 0 0;
-  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
-  box-shadow: 0 -3px 12px color-mix(in srgb, var(--accent-glow) 48%, transparent);
+  height: 2.5px;
+  padding: 0;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent-strong);
+  box-shadow: none;
+  filter: none;
   pointer-events: none;
 }
 
 .watchface-shell--hub .watchface-dashboard-tabs > button > .watchface-tab-count {
   display: inline-grid;
-  min-width: 21px;
-  height: 20px;
-  border-radius: var(--wf-control-radius);
-  background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+  min-width: 20px;
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+  color: var(--text-secondary);
   font-size: var(--wf-text-xs);
+  font-weight: 700;
+  line-height: 1;
   place-items: center;
+  transition: background 0.16s ease, color 0.16s ease;
 }
 
 .watchface-shell--hub .watchface-dashboard-tabs > button.is-active > .watchface-tab-count {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent-strong);
 }
 

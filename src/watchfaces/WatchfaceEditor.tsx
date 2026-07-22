@@ -6645,7 +6645,13 @@ export function WatchfaceEditor({
                   disabled={spriteImportPending || previewingExport || creating || exporting || !backgroundDataUrl}
                   onClick={() => { setExportMenuOpen(false); void openExportPreview(); }}
                 >
-                  <Eye size={15} aria-hidden="true" /> Preview export
+                  <span className="wf-export-option-icon" aria-hidden="true">
+                    <Eye size={16} />
+                  </span>
+                  <span className="wf-export-option-copy">
+                    <strong>Preview export</strong>
+                    <small>Review the final render</small>
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -6653,9 +6659,16 @@ export function WatchfaceEditor({
                   disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
                   onClick={() => { setExportMenuOpen(false); void exportEditableProject(); }}
                 >
-                  <Download size={15} aria-hidden="true" /> Editable project ZIP
+                  <span className="wf-export-option-icon" aria-hidden="true">
+                    <Download size={16} />
+                  </span>
+                  <span className="wf-export-option-copy">
+                    <strong>Editable project ZIP</strong>
+                    <small>Save an editable backup</small>
+                  </span>
                 </button>
                 <button
+                  className="is-convert"
                   type="button"
                   role="menuitem"
                   disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
@@ -6669,7 +6682,13 @@ export function WatchfaceEditor({
                     );
                   }}
                 >
-                  <Repeat2 size={15} aria-hidden="true" /> Convert to another watch
+                  <span className="wf-export-option-icon" aria-hidden="true">
+                    <Repeat2 size={16} />
+                  </span>
+                  <span className="wf-export-option-copy">
+                    <strong>Convert to another watch</strong>
+                    <small>Adapt the design for a new model</small>
+                  </span>
                 </button>
                 {showDevelopmentTools ? (
                   <button
@@ -6678,7 +6697,13 @@ export function WatchfaceEditor({
                     disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
                     onClick={() => { setExportMenuOpen(false); void createArchive("export"); }}
                   >
-                    <Package size={15} aria-hidden="true" /> Final watch ZIP (dev)
+                    <span className="wf-export-option-icon" aria-hidden="true">
+                      <Package size={16} />
+                    </span>
+                    <span className="wf-export-option-copy">
+                      <strong>Final watch ZIP</strong>
+                      <small>Development export</small>
+                    </span>
                   </button>
                 ) : null}
               </div>

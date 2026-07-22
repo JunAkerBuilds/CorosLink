@@ -3934,7 +3934,7 @@ function fixedMetricValueParts(
   }];
 }
 
-/** Fixed metrics available to the editor and whether they are already active. */
+/** All fixed metrics the editor can add, and whether each is already active. */
 export function getFixedMetricCapabilities(
   details: CorosWatchfaceTemplateDetails
 ): WatchfaceMetricCapability[] {
@@ -3942,27 +3942,15 @@ export function getFixedMetricCapabilities(
   if (!resolution) {
     return [];
   }
-  return WATCHFACE_FIXED_METRICS.flatMap((metric) => {
-    // Battery and Exercise can be added to templates that did not originally
-    // declare them; buildMetricOverrides supplies their missing config entries.
-    const canAdd = metric.id === "battery" || metric.id === "exercise";
+  return WATCHFACE_FIXED_METRICS.map((metric) => {
     const parts = fixedMetricValueParts(metric);
-    const hasRect = parts.every((part) =>
-      Object.prototype.hasOwnProperty.call(resolution.config, part.rectKey)
-    );
-    const hasFont =
-      !metric.fontKey ||
-      metric.id === "temperature" ||
-      Object.prototype.hasOwnProperty.call(resolution.config, metric.fontKey);
-    return canAdd || (hasRect && hasFont)
-      ? [{
-          id: metric.id,
-          label: metric.label,
-          active: parts.every(
-            (part) => parseConfigRect(resolution.config[part.rectKey]) !== null
-          )
-        }]
-      : [];
+    return {
+      id: metric.id,
+      label: metric.label,
+      active: parts.every(
+        (part) => parseConfigRect(resolution.config[part.rectKey]) !== null
+      )
+    };
   });
 }
 
@@ -5632,27 +5620,12 @@ export function buildMetricOverrides(
         }
         continue;
       }
-      if (
-        enabled === undefined ||
-        (metric.id !== "battery" && metric.id !== "exercise" &&
-          !parts.every((part) =>
-            Object.prototype.hasOwnProperty.call(
-              resolution.config,
-              part.rectKey
-            )
-          )) ||
-        (metric.fontKey &&
-          metric.id !== "battery" &&
-          metric.id !== "exercise" &&
-          metric.id !== "temperature" &&
-          !Object.prototype.hasOwnProperty.call(resolution.config, metric.fontKey))
-      ) {
+      if (enabled === undefined) {
         continue;
       }
       if (!enabled) {
         for (const part of parts) {
           if (
-            metric.id !== "exercise" ||
             Object.prototype.hasOwnProperty.call(
               resolution.config,
               part.rectKey

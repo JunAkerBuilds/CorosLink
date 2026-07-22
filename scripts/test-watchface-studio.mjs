@@ -2611,6 +2611,66 @@ assert.deepEqual(
     { id: "temperature", label: "Temperature", active: false }
   ]
 );
+const sparseMetricDetails = {
+  ...details,
+  resolutions: details.resolutions.map((resolution) => ({
+    ...resolution,
+    config: Object.fromEntries(
+      Object.entries(resolution.config).filter(([key]) =>
+        ![
+          "heartreate_level_rect",
+          "heartreate_level_font",
+          "step_rect",
+          "step_font",
+          "kcal_rect",
+          "kcal_font",
+          "exercise_hour_rect",
+          "exercise_minute_rect",
+          "exercise_font",
+          "elevation_rect",
+          "elevation_font",
+          "temperature_rect",
+          "temperature_font"
+        ].includes(key)
+      )
+    )
+  }))
+};
+assert.deepEqual(
+  getFixedMetricCapabilities(sparseMetricDetails),
+  [
+    { id: "battery", label: "Battery data", active: false },
+    { id: "heartRate", label: "Heart rate", active: false },
+    { id: "steps", label: "Steps", active: false },
+    { id: "calories", label: "Calories", active: false },
+    { id: "exercise", label: "Exercise", active: false },
+    { id: "elevation", label: "Elevation", active: false },
+    { id: "temperature", label: "Temperature", active: false }
+  ],
+  "every fixed metric should remain available when a template omits its config keys"
+);
+const addedSparseMetrics = applyConfigOverridesToDetails(
+  sparseMetricDetails,
+  buildMetricOverrides(sparseMetricDetails, {
+    heartRate: true,
+    steps: true,
+    calories: true,
+    elevation: true,
+    temperature: true
+  })
+);
+for (const resolution of addedSparseMetrics.resolutions) {
+  assert.match(resolution.config.heartreate_level_rect ?? "", /^\{/);
+  assert.equal(resolution.config.heartreate_level_font, "13x19");
+  assert.match(resolution.config.step_rect ?? "", /^\{/);
+  assert.equal(resolution.config.step_font, "13x19");
+  assert.match(resolution.config.kcal_rect ?? "", /^\{/);
+  assert.equal(resolution.config.kcal_font, "13x19");
+  assert.match(resolution.config.elevation_rect ?? "", /^\{/);
+  assert.equal(resolution.config.elevation_font, "13x19");
+  assert.match(resolution.config.temperature_rect ?? "", /^\{/);
+  assert.equal(resolution.config.temperature_font, "13x19");
+}
 assert.deepEqual(
   buildMetricOverrides(details, { exercise: false }),
   [],
