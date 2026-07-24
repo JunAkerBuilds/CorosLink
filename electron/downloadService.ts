@@ -9,9 +9,15 @@ import {
   isReusableCombinedTrack,
   markCombinedTrackReusable,
   pruneCombinedDownloadCache,
-  touchCombinedDownloadCache
+  readCombinedOutputBaseName,
+  touchCombinedDownloadCache,
+  writeCombinedOutputBaseName
 } from "./combinedDownloadCache";
-import { addDownloads } from "./database";
+import {
+  addDownloads,
+  isCombinedDownloadAtPath,
+  replaceDownload
+} from "./database";
 import {
   parseYtDlpProgressLine,
   extractYtDlpErrors,
@@ -335,21 +341,30 @@ export async function downloadCombinedTrack(
     });
 
     const outputDirectory = getDownloadDirectory();
-    const baseName = nextAvailableBaseName(
-      outputDirectory,
-      sanitizeFileBaseName(name || "Combined Playlist")
+    const requestedBaseName = sanitizeFileBaseName(
+      name || "Combined Playlist"
     );
+    const rememberedBaseName = await readCombinedOutputBaseName(workDir);
+    const legacyRetryPath = path.join(
+      outputDirectory,
+      `${requestedBaseName}.mp3`
+    );
+    const canReuseLegacyOutput =
+      reusedCount > 0 &&
+      fs.existsSync(legacyRetryPath) &&
+      isCombinedDownloadAtPath(legacyRetryPath);
+    const baseName =
+      rememberedBaseName ??
+      (canReuseLegacyOutput
+        ? requestedBaseName
+        : nextAvailableBaseName(outputDirectory, requestedBaseName));
     const finalPath = path.join(outputDirectory, `${baseName}.mp3`);
+
+    await writeCombinedOutputBaseName(workDir, baseName);
 
     await mergeMp3Files(downloadedFiles, finalPath, workDir, ffmpeg, runtime);
 
-    const tracks = addDownloads([finalPath], `combined:${baseName}`);
-    const track = tracks[0];
-    if (!track) {
-      throw new Error(
-        "The combined MP3 could not be registered in the library."
-      );
-    }
+    const track = replaceDownload(finalPath, `combined:${id}`);
 
     onProgress?.({
       phase: "completed",

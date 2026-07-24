@@ -4,6 +4,7 @@ import path from "node:path";
 
 export const COMBINED_DOWNLOAD_CACHE_VERSION = 1;
 export const COMBINED_DOWNLOAD_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const COMBINED_OUTPUT_MANIFEST = "output.json";
 
 /**
  * Includes both the service-scoped playlist id and the resolved download
@@ -63,6 +64,43 @@ export async function touchCombinedDownloadCache(
   now = new Date()
 ): Promise<void> {
   await fs.promises.utimes(directory, now, now).catch(() => {});
+}
+
+/**
+ * Remembers the library filename produced by an incomplete combine. Retrying
+ * can then replace that artifact instead of creating "Playlist (1).mp3".
+ */
+export async function writeCombinedOutputBaseName(
+  directory: string,
+  baseName: string
+): Promise<void> {
+  await fs.promises.writeFile(
+    path.join(directory, COMBINED_OUTPUT_MANIFEST),
+    `${JSON.stringify({ baseName })}\n`,
+    "utf8"
+  );
+}
+
+export async function readCombinedOutputBaseName(
+  directory: string
+): Promise<string | undefined> {
+  try {
+    const raw = await fs.promises.readFile(
+      path.join(directory, COMBINED_OUTPUT_MANIFEST),
+      "utf8"
+    );
+    const value = (JSON.parse(raw) as { baseName?: unknown }).baseName;
+    if (
+      typeof value !== "string" ||
+      !value.trim() ||
+      path.basename(value) !== value
+    ) {
+      return undefined;
+    }
+    return value;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Removes abandoned caches without touching combines active in this process. */
