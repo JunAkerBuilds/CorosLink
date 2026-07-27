@@ -250,7 +250,9 @@ assert.deepEqual(WATCHFACE_INSPECTOR_DEFAULT_OPEN, {
   stroke: true,
   specific: true,
   effects: false,
-  advanced: false
+  advanced: false,
+  config: true,
+  archive: false
 });
 
 const defaultStroke = createWatchfaceStroke("#2e05ff");

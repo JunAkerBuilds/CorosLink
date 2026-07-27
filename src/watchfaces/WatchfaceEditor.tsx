@@ -303,6 +303,7 @@ import {
   Repeat2,
   RotateCcw,
   Save,
+  Search,
   Send,
   SlidersHorizontal,
   SunMedium,
@@ -312,6 +313,8 @@ import {
   Ungroup,
   Unlock,
   Undo2,
+  MousePointerSquareDashed,
+  X,
   XCircle,
   MoonStar
 } from "lucide-react";
@@ -1172,12 +1175,16 @@ export function WatchfaceEditor({
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [layerQuery, setLayerQuery] = useState("");
   const [collapsedLayerSections, setCollapsedLayerSections] = useState(
     () => new Set<string>(["Template assets", "Always-on assets"])
   );
   const [propertiesOpen, setPropertiesOpen] = useState(false);
+  const [propertiesTab, setPropertiesTab] = useState<"selection" | "project">(
+    "selection"
+  );
   const [collapsedInspectorSections, setCollapsedInspectorSections] = useState(
-    () => new Set<WatchfaceInspectorSectionId>(["effects", "advanced"])
+    () => new Set<WatchfaceInspectorSectionId>(["effects", "advanced", "archive"])
   );
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<
     Record<string, string>
@@ -1364,6 +1371,11 @@ export function WatchfaceEditor({
       snapStatusElementRef.current.classList.add("is-snap-status");
     }
   }
+
+  /** Selecting anything pulls the Properties pane back to the selection tab. */
+  useEffect(() => {
+    if (selectedId) setPropertiesTab("selection");
+  }, [selectedId]);
 
   useEffect(() => {
     const stage = previewStackRef.current;
@@ -2338,6 +2350,44 @@ export function WatchfaceEditor({
 
   function linkedIdsFor(id: string): string[] {
     return editorGroupForLayer(design.editorGroups, id)?.layerIds ?? [id];
+  }
+
+  /** Human label for anything selectable in the Layers panel, layer or artwork. */
+  function editorItemLabel(id: string): string {
+    const layer = layers.find((candidate) => candidate.id === id);
+    if (layer) return layer.label;
+    const element = id.startsWith("bgel:")
+      ? backgroundElements.find((candidate) => `bgel:${candidate.id}` === id)
+      : undefined;
+    return element ? backgroundElementLabel(element) : id;
+  }
+
+  /** Artwork objects are not editor layers; this adapts one for shared layer UI. */
+  function backgroundElementLayer(
+    element: CorosWatchfaceBackgroundElement
+  ): EditorLayer {
+    return {
+      id: `bgel:${element.id}`,
+      kind: "backgroundElement",
+      label: backgroundElementLabel(element),
+      backgroundElementId: element.id,
+      visible: element.visible !== false,
+      canHide: true,
+      present: true,
+      bounds: null,
+      capabilities: {
+        position: true,
+        color: false,
+        scale: false,
+        font: element.kind === "text",
+        resize: element.kind === "rect" || element.kind === "ellipse",
+        rotate: true,
+        opacity: true,
+        grouping: true,
+        effects: true,
+        stroke: true
+      }
+    };
   }
 
   function isPositionLocked(id: string): boolean {
@@ -6567,6 +6617,37 @@ export function WatchfaceEditor({
     cropSpriteId
   ]);
 
+  const layerSearch = layerQuery.trim().toLowerCase();
+  const layerMatchesSearch = (label: string) =>
+    !layerSearch || label.toLowerCase().includes(layerSearch);
+  const searchedEditorGroups = visibleEditorGroups
+    .map((group) => ({
+      group,
+      layerIds: layerMatchesSearch(group.name)
+        ? group.layerIds
+        : group.layerIds.filter((id) =>
+            layerMatchesSearch(editorItemLabel(id))
+          )
+    }))
+    .filter((entry) => entry.layerIds.length > 0);
+  const searchedLayerSections = groupLayersForDisplay(
+    layers.filter(
+      (layer) =>
+        !groupedEditorLayerIds.has(layer.id) && layerMatchesSearch(layer.label)
+    )
+  ).filter((section) => section.layers.length > 0);
+  const layerSearchIsEmpty =
+    Boolean(layerSearch) &&
+    searchedEditorGroups.length === 0 &&
+    searchedLayerSections.length === 0;
+  /** A search shows every match, whatever the sections were collapsed to. */
+  const groupsSectionOpen =
+    Boolean(layerSearch) || !collapsedLayerSections.has("Groups");
+  /** The identity shown in the Properties header, for layers and artwork alike. */
+  const inspectedLayer: EditorLayer | null = selectedElement
+    ? backgroundElementLayer(selectedElement)
+    : selectedLayer;
+
   return (
     <section className="watchface-editor wf-studio" aria-label="Watch face studio">
       <header className="watchface-editor-topbar wf-command-bar">
@@ -6764,29 +6845,57 @@ export function WatchfaceEditor({
             </div> : null}
           </div>
           {details ? (
+            <div className="wf-layer-search">
+              <Search size={14} aria-hidden="true" />
+              <input
+                type="search"
+                value={layerQuery}
+                placeholder="Find a layer"
+                aria-label="Find a layer"
+                onChange={(event) => setLayerQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape" && layerQuery) {
+                    event.stopPropagation();
+                    setLayerQuery("");
+                  }
+                }}
+              />
+              {layerQuery ? (
+                <button
+                  type="button"
+                  className="wf-layer-search-clear"
+                  aria-label="Clear layer search"
+                  onClick={() => setLayerQuery("")}
+                >
+                  <X size={13} />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {details ? (
             <ul className="wf-layer-list">
-              {visibleEditorGroups.length > 0 ? (
+              {searchedEditorGroups.length > 0 ? (
                 <li className="wf-layer-group">
                   <button
                     type="button"
                     className="wf-layer-section-toggle"
-                    aria-expanded={!collapsedLayerSections.has("Groups")}
+                    aria-expanded={groupsSectionOpen}
                     onClick={() => toggleLayerSection("Groups")}
                   >
                     <ChevronDown
-                      className={collapsedLayerSections.has("Groups") ? "is-collapsed" : ""}
+                      className={groupsSectionOpen ? "" : "is-collapsed"}
                       size={13}
                       aria-hidden="true"
                     />
                     <span>Groups</span>
                     <span className="wf-layer-section-count">
-                      {visibleEditorGroups.length}
+                      {searchedEditorGroups.length}
                     </span>
                   </button>
                 </li>
               ) : null}
-              {!collapsedLayerSections.has("Groups")
-                ? visibleEditorGroups.map((group) => {
+              {groupsSectionOpen
+                ? searchedEditorGroups.map(({ group, layerIds }) => {
                 const locked = group.layerIds.some(isPositionLocked);
                 const visible = editorGroupVisible(group.id);
                 return (
@@ -6806,46 +6915,62 @@ export function WatchfaceEditor({
                       <span className="watchface-layer-name">{group.name}</span>
                       <span className="wf-layer-state">{group.layerIds.length}</span>
                     </button>
-                    <button
-                      type="button"
-                      className="watchface-layer-lock"
-                      aria-label={locked ? `Unlock ${group.name}` : `Lock ${group.name}`}
-                      onClick={() => setEditorGroupLocked(group.id, !locked)}
-                    >
-                      {locked ? <Lock size={15} /> : <Unlock size={15} />}
-                    </button>
-                    <button
-                      type="button"
-                      className="watchface-layer-visibility"
-                      disabled={group.layerIds.some(isPositionLocked)}
-                      aria-label={visible ? `Hide ${group.name}` : `Show ${group.name}`}
-                      onClick={() => toggleEditorGroupVisibility(group.id)}
-                    >
-                      {visible ? <Eye size={15} /> : <EyeOff size={15} />}
-                    </button>
+                    <span className="wf-layer-row-actions">
+                      <button
+                        type="button"
+                        className={`watchface-layer-lock${locked ? " is-locked" : ""}`}
+                        aria-label={locked ? `Unlock ${group.name}` : `Lock ${group.name}`}
+                        aria-pressed={locked}
+                        title={locked ? "Unlock group" : "Lock group"}
+                        onClick={() => setEditorGroupLocked(group.id, !locked)}
+                      >
+                        {locked ? <Lock size={15} /> : <Unlock size={15} />}
+                      </button>
+                      <button
+                        type="button"
+                        className="watchface-layer-visibility"
+                        disabled={group.layerIds.some(isPositionLocked)}
+                        aria-label={visible ? `Hide ${group.name}` : `Show ${group.name}`}
+                        aria-pressed={!visible}
+                        title={visible ? "Hide group" : "Show group"}
+                        onClick={() => toggleEditorGroupVisibility(group.id)}
+                      >
+                        {visible ? <Eye size={15} /> : <EyeOff size={15} />}
+                      </button>
+                    </span>
                     <ul>
-                      {group.layerIds.map((id) => {
+                      {layerIds.map((id) => {
                         const layer = layers.find((candidate) => candidate.id === id);
                         const element = id.startsWith("bgel:")
                           ? backgroundElements.find((candidate) => `bgel:${candidate.id}` === id)
                           : undefined;
+                        const hidden =
+                          (layer && !layer.visible) || element?.visible === false;
                         return (
                           <li key={id}>
                             <button
                               type="button"
                               aria-selected={selectedIds.includes(id)}
+                              className={`watchface-layer-row${selectedIds.includes(id) ? " is-selected" : ""}`}
+                              onMouseEnter={() => setHoveredId(id)}
+                              onMouseLeave={() => setHoveredId(null)}
                               onClick={(event) => {
                                 selectEditorItem(id, event.shiftKey || event.metaKey || event.ctrlKey);
                                 setPropertiesOpen(true);
                               }}
+                              onContextMenu={(event) => openLayerContextMenu(event, id)}
                             >
-                              <span className={`watchface-layer-name${
-                                (layer && !layer.visible) || element?.visible === false
-                                  ? " is-hidden"
-                                  : ""
-                              }`}>
+                              <span className="wf-layer-icon" aria-hidden="true">
+                                {layer ? layerIcon(layer) : <Square size={14} />}
+                              </span>
+                              <span className={`watchface-layer-name${hidden ? " is-hidden" : ""}`}>
                                 {layer?.label ?? (element ? backgroundElementLabel(element) : id)}
                               </span>
+                              {hidden ? (
+                                <span className="wf-layer-hidden-flag" aria-label="Hidden">
+                                  <EyeOff size={12} aria-hidden="true" />
+                                </span>
+                              ) : null}
                             </button>
                           </li>
                         );
@@ -6855,10 +6980,8 @@ export function WatchfaceEditor({
                 );
                 })
                 : null}
-              {groupLayersForDisplay(
-                layers.filter((layer) => !groupedEditorLayerIds.has(layer.id))
-              ).map(({ label: group, layers: groupedLayers }) => {
-                const collapsed = collapsedLayerSections.has(group);
+              {searchedLayerSections.map(({ label: group, layers: groupedLayers }) => {
+                const collapsed = !layerSearch && collapsedLayerSections.has(group);
                 return (
                   <Fragment key={group}>
                     <li className="wf-layer-group">
@@ -6969,7 +7092,12 @@ export function WatchfaceEditor({
                         }}
                         onContextMenu={(event) => openLayerContextMenu(event, layer.id)}
                       >
-                        <span className="wf-layer-icon" aria-hidden="true">{layerIcon(layer)}</span>
+                        <span className="wf-layer-icon" aria-hidden="true">
+                          {reorderable ? (
+                            <GripVertical className="wf-layer-grip" size={13} aria-hidden="true" />
+                          ) : null}
+                          {layerIcon(layer)}
+                        </span>
                         <span className={`watchface-layer-name${layer.visible ? "" : " is-hidden"}`}>{layer.label}</span>
                         {(design.linkedLayerGroups ?? []).some((group) => group.includes(layer.id)) ? (
                           <span className="wf-layer-link-state" title="Linked component" aria-label="Linked component">
@@ -6978,24 +7106,36 @@ export function WatchfaceEditor({
                         ) : null}
                         {layer.configAssetReplaced ? <span className="wf-layer-state">Custom</span> : null}
                       </button>
-                      {renderLayerPositionLockButton(layer.id, layer.label)}
-                      {layer.canHide ? (
-                        <button
-                          type="button"
-                          className="watchface-layer-visibility"
-                          aria-label={layer.visible ? `Hide ${layer.label}` : `Show ${layer.label}`}
-                          aria-pressed={!layer.visible}
-                          onClick={() => toggleLayerVisibility(layer)}
-                        >
-                          {layer.visible ? <Eye size={15} /> : <EyeOff size={15} />}
-                        </button>
-                      ) : null}
+                      <span className="wf-layer-row-actions">
+                        {renderLayerPositionLockButton(layer.id, layer.label)}
+                        {layer.canHide ? (
+                          <button
+                            type="button"
+                            className="watchface-layer-visibility"
+                            aria-label={layer.visible ? `Hide ${layer.label}` : `Show ${layer.label}`}
+                            aria-pressed={!layer.visible}
+                            title={layer.visible ? "Hide layer" : "Show layer"}
+                            onClick={() => toggleLayerVisibility(layer)}
+                          >
+                            {layer.visible ? <Eye size={15} /> : <EyeOff size={15} />}
+                          </button>
+                        ) : null}
+                      </span>
                     </li>
                     );
                     })}
                   </Fragment>
                 );
               })}
+              {layerSearchIsEmpty ? (
+                <li className="wf-layer-empty">
+                  <Search size={18} aria-hidden="true" />
+                  <p>No layer matches “{layerQuery.trim()}”.</p>
+                  <button type="button" onClick={() => setLayerQuery("")}>
+                    Clear search
+                  </button>
+                </li>
+              ) : null}
             </ul>
           ) : (
             <div className="wf-pane-loading" role="status"><Loader2 className="spin" size={16} /> Reading template</div>
@@ -7442,15 +7582,52 @@ export function WatchfaceEditor({
           }}
           onPointerCancel={endDesignTransaction}
         >
-          <div className="wf-pane-heading">
-            <div className="wf-pane-heading-main">
-              <span className="wf-pane-heading-icon" aria-hidden="true">
-                <SlidersHorizontal size={14} />
-              </span>
-              <p className="watchface-editor-pane-title">Properties</p>
-            </div>
+          <div className="wf-pane-heading wf-properties-heading">
+            {inspectedLayer ? (
+              renderPropertiesIdentity(inspectedLayer)
+            ) : (
+              <div className="wf-pane-heading-main">
+                <span className="wf-pane-heading-icon" aria-hidden="true">
+                  <SlidersHorizontal size={14} />
+                </span>
+                <p className="watchface-editor-pane-title">Properties</p>
+              </div>
+            )}
           </div>
-          {selectedElement ? renderElementInspector(selectedElement) : selectedLayer ? renderInspector(selectedLayer) : previewMode === "aod" ? (
+          <div
+            className="wf-properties-tabs"
+            role="tablist"
+            aria-label="Properties scope"
+          >
+            <button
+              type="button"
+              role="tab"
+              id={`wf-properties-tab-selection-${sessionId}`}
+              aria-controls={`wf-properties-panel-${sessionId}`}
+              aria-selected={propertiesTab === "selection"}
+              onClick={() => setPropertiesTab("selection")}
+            >
+              Selection
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id={`wf-properties-tab-project-${sessionId}`}
+              aria-controls={`wf-properties-panel-${sessionId}`}
+              aria-selected={propertiesTab === "project"}
+              onClick={() => setPropertiesTab("project")}
+            >
+              Project
+            </button>
+          </div>
+          <div
+            className="wf-properties-tabpanel"
+            id={`wf-properties-panel-${sessionId}`}
+            role="tabpanel"
+            aria-labelledby={`wf-properties-tab-${propertiesTab}-${sessionId}`}
+          >
+          {propertiesTab === "selection" ? (
+            selectedElement ? renderElementInspector(selectedElement) : selectedLayer ? renderInspector(selectedLayer) : previewMode === "aod" ? (
             <div className="watchface-inspector-group wf-aod-empty-inspector">
               <MoonStar size={20} aria-hidden="true" />
               <strong>{supportsAod ? "No replaceable AOD assets" : "Current is already always on"}</strong>
@@ -7460,8 +7637,18 @@ export function WatchfaceEditor({
                   : "This MIP template has no separate AOD configuration. The Current face shown here is the same face the watch keeps visible."}
               </p>
             </div>
+          ) : (
+            <div className="wf-properties-empty">
+              <MousePointerSquareDashed size={22} aria-hidden="true" />
+              <strong>Nothing selected</strong>
+              <p className="watchface-studio-summary">
+                Pick a layer on the canvas or in the Layers panel to edit it.
+                Template-wide settings live on the Project tab.
+              </p>
+            </div>
+          )
           ) : null}
-          {(() => {
+          {propertiesTab === "project" ? (() => {
             const editorDirectory =
               configEditorDirectory ||
               watchPreviewDirectory ||
@@ -7499,12 +7686,10 @@ export function WatchfaceEditor({
                   configTextBaselines[activePath]
             );
             const resolutionOptions = details?.resolutions ?? [];
-            return (
-              <details
-                className="watchface-inspector-group wf-archive-settings wf-raw-config-editor"
-                open={!selectedElement && !selectedLayer}
-              >
-                <summary className="wf-inspector-heading">Config files</summary>
+            return renderPropertySection(
+              "config",
+              "Config files",
+              <div className="wf-property-stack wf-raw-config-editor">
                 <p className="wf-archive-note">
                   Edit the template’s raw layout files. Studio layer moves still
                   apply on top when you export.
@@ -7630,11 +7815,17 @@ export function WatchfaceEditor({
                       : "This resolution has no config.txt."}
                   </p>
                 )}
-              </details>
+              </div>,
+              {
+                status: activeIsDirty ? "Edited" : undefined,
+                className: "wf-project-section"
+              }
             );
-          })()}
-          <details className="watchface-inspector-group wf-archive-settings" open={!selectedElement && !selectedLayer}>
-            <summary className="wf-inspector-heading">Archive</summary>
+          })() : null}
+          {propertiesTab === "project" ? renderPropertySection(
+            "archive",
+            "Archive",
+            <div className="wf-property-stack wf-archive-settings">
             <label className="field">
               Watch-face version
               <input
@@ -7740,7 +7931,10 @@ export function WatchfaceEditor({
               Rewrites <code>m_name</code> in <code>info.json</code>; it does not
               rename the Studio project.
             </p>
-          </details>
+            </div>,
+            { className: "wf-project-section" }
+          ) : null}
+          </div>
         </aside>
       </div>
 
@@ -8244,7 +8438,12 @@ export function WatchfaceEditor({
     );
   }
 
-  function renderLayerSection(layer: EditorLayer) {
+  /**
+   * Identity strip for the Properties pane header: what is selected, what type
+   * it is, and the two states you flip most often. The Layer section below it
+   * keeps the values you tune rather than repeating this identity.
+   */
+  function renderPropertiesIdentity(layer: EditorLayer) {
     const sprite = layer.spriteId
       ? (design.designSprites ?? []).find(
           (candidate) => candidate.id === layer.spriteId
@@ -8252,48 +8451,19 @@ export function WatchfaceEditor({
       : null;
     const locked = isPositionLocked(layer.id);
     const canLock = isMovableSelectionId(layer.id);
-    const element = layer.backgroundElementId
-      ? backgroundElements.find(
-          (candidate) => candidate.id === layer.backgroundElementId
-        )
-      : null;
-    const opacity = sprite
-      ? normalizeWatchfaceOpacity(sprite.opacity)
-      : element
-        ? normalizeWatchfaceOpacity(element.opacity)
-        : resolveWatchfaceLayerOpacity(design, layer.id);
-    const setOpacity = (value: number) => {
-      const normalizedOpacity = normalizeWatchfaceLayerOpacity(value);
-      if (sprite) {
-        updateSprite(sprite.id, { opacity: normalizedOpacity });
-        return;
-      }
-      if (element) {
-        updateElement(element.id, { opacity: normalizedOpacity });
-        return;
-      }
-      setDesign((current) => {
-        const layerOpacities = { ...(current.layerOpacities ?? {}) };
-        if (normalizedOpacity === 1) delete layerOpacities[layer.id];
-        else layerOpacities[layer.id] = normalizedOpacity;
-        return { ...current, layerOpacities };
-      });
-    };
     const typeIcon =
       layer.kind === "date" || layer.kind === "weekday" ? (
         <CalendarDays size={12} />
       ) : (
         layerIcon(layer)
       );
-    return renderPropertySection(
-      "layer",
-      "Layer",
-      <div className="wf-property-stack">
-        <div className="wf-layer-summary">
-          <div className="wf-layer-property-icon" aria-hidden="true">
+    return (
+      <>
+        <div className="wf-pane-heading-main wf-properties-identity">
+          <span className="wf-pane-heading-icon" aria-hidden="true">
             {layerIcon(layer)}
-          </div>
-          <div className="wf-layer-property-main">
+          </span>
+          <span className="wf-properties-identity-main">
             {sprite ? (
               <label className="wf-layer-title-field">
                 <span className="sr-only">Layer name</span>
@@ -8321,24 +8491,74 @@ export function WatchfaceEditor({
               {typeIcon}
               {editorLayerTypeLabel(layer)}
             </span>
-          </div>
-          <div className="wf-layer-summary-actions">
-            {layer.canHide ? (
-              <button
-                type="button"
-                className="wf-property-icon-button"
-                disabled={locked}
-                aria-label={`${layer.visible ? "Hide" : "Show"} ${layer.label}`}
-                aria-pressed={!layer.visible}
-                title={layer.visible ? "Hide layer" : "Show layer"}
-                onClick={() => toggleLayerVisibility(layer)}
-              >
-                {layer.visible ? <Eye size={16} /> : <EyeOff size={16} />}
-              </button>
-            ) : null}
-            {canLock ? renderLayerPositionLockButton(layer.id, layer.label) : null}
-          </div>
+          </span>
         </div>
+        <div className="wf-properties-identity-actions">
+          {selectedIds.length > 1 ? (
+            <span
+              className="wf-pane-count"
+              title={`${selectedIds.length} layers selected`}
+              aria-label={`${selectedIds.length} layers selected`}
+            >
+              {selectedIds.length}
+            </span>
+          ) : null}
+          {layer.canHide ? (
+            <button
+              type="button"
+              className="wf-property-icon-button"
+              disabled={locked}
+              aria-label={`${layer.visible ? "Hide" : "Show"} ${layer.label}`}
+              aria-pressed={!layer.visible}
+              title={layer.visible ? "Hide layer" : "Show layer"}
+              onClick={() => toggleLayerVisibility(layer)}
+            >
+              {layer.visible ? <Eye size={16} /> : <EyeOff size={16} />}
+            </button>
+          ) : null}
+          {canLock ? renderLayerPositionLockButton(layer.id, layer.label) : null}
+        </div>
+      </>
+    );
+  }
+
+  function renderLayerSection(layer: EditorLayer) {
+    const sprite = layer.spriteId
+      ? (design.designSprites ?? []).find(
+          (candidate) => candidate.id === layer.spriteId
+        )
+      : null;
+    const element = layer.backgroundElementId
+      ? backgroundElements.find(
+          (candidate) => candidate.id === layer.backgroundElementId
+        )
+      : null;
+    const opacity = sprite
+      ? normalizeWatchfaceOpacity(sprite.opacity)
+      : element
+        ? normalizeWatchfaceOpacity(element.opacity)
+        : resolveWatchfaceLayerOpacity(design, layer.id);
+    const setOpacity = (value: number) => {
+      const normalizedOpacity = normalizeWatchfaceLayerOpacity(value);
+      if (sprite) {
+        updateSprite(sprite.id, { opacity: normalizedOpacity });
+        return;
+      }
+      if (element) {
+        updateElement(element.id, { opacity: normalizedOpacity });
+        return;
+      }
+      setDesign((current) => {
+        const layerOpacities = { ...(current.layerOpacities ?? {}) };
+        if (normalizedOpacity === 1) delete layerOpacities[layer.id];
+        else layerOpacities[layer.id] = normalizedOpacity;
+        return { ...current, layerOpacities };
+      });
+    };
+    return renderPropertySection(
+      "layer",
+      "Layer",
+      <div className="wf-property-stack">
         <label className="wf-layer-opacity-control">
           <span>Opacity</span>
           <input
@@ -11016,28 +11236,7 @@ export function WatchfaceEditor({
     const hasFill = element.kind === "rect" || element.kind === "ellipse";
     const layerId = `bgel:${element.id}`;
     const locked = isPositionLocked(layerId);
-    const layer: EditorLayer = {
-      id: layerId,
-      kind: "backgroundElement",
-      label: backgroundElementLabel(element),
-      backgroundElementId: element.id,
-      visible: element.visible !== false,
-      canHide: true,
-      present: true,
-      bounds: null,
-      capabilities: {
-        position: true,
-        color: false,
-        scale: false,
-        font: element.kind === "text",
-        resize: element.kind === "rect" || element.kind === "ellipse",
-        rotate: true,
-        opacity: true,
-        grouping: true,
-        effects: true,
-        stroke: true
-      }
-    };
+    const layer = backgroundElementLayer(element);
     const alignButtons = (
       <div className="wf-align-icon-grid" role="group" aria-label="Align to face">
         <button type="button" title="Align left" aria-label="Align left" onClick={() => set({ x: 0 })}><AlignHorizontalJustifyStart size={14} /></button>

@@ -8,7 +8,10 @@ export type WatchfaceInspectorSectionId =
   | "stroke"
   | "specific"
   | "effects"
-  | "advanced";
+  | "advanced"
+  /** Project-scoped sections; they live on the Properties pane "Project" tab. */
+  | "config"
+  | "archive";
 
 export interface WatchfaceInspectorSectionDescriptor {
   id: WatchfaceInspectorSectionId;
@@ -35,7 +38,9 @@ export const WATCHFACE_INSPECTOR_DEFAULT_OPEN: Readonly<
   stroke: true,
   specific: true,
   effects: false,
-  advanced: false
+  advanced: false,
+  config: true,
+  archive: false
 };
 
 export function watchfaceInspectorSpecificTitle(
