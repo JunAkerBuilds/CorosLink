@@ -1,12 +1,12 @@
 import {
+  AlertCircle,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Play,
-  Search,
-  X
+  Search
 } from "lucide-react";
+import { useReducedMotion } from "motion/react";
 import {
   type KeyboardEvent,
   useEffect,
@@ -62,9 +62,10 @@ export function ExerciseCombobox({
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const reducedMotion = useReducedMotion();
   const [isOpen, setIsOpen] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
   const [previewMediaIndex, setPreviewMediaIndex] = useState(0);
+  const [previewStatus, setPreviewStatus] = useState<"loading" | "ready" | "error">("loading");
   const [query, setQuery] = useState(value);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const listboxId = `${id}-listbox`;
@@ -105,26 +106,28 @@ export function ExerciseCombobox({
   }, [filteredOptions, isOpen, selectedId]);
 
   useEffect(() => {
-    setPreviewOpen(false);
     setPreviewMediaIndex(0);
+    setPreviewStatus("loading");
   }, [selectedId]);
 
   useEffect(() => {
-    if (!isOpen && !previewOpen) return;
+    setPreviewStatus("loading");
+  }, [activePreviewMedia?.videoUrl]);
+
+  useEffect(() => {
+    if (!isOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) {
         setIsOpen(false);
-        setPreviewOpen(false);
       }
     };
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [isOpen, previewOpen]);
+  }, [isOpen]);
 
   const selectOption = (option: LabeledExerciseOption) => {
     setQuery(option.label);
     setIsOpen(false);
-    setPreviewOpen(false);
     onChange({
       name: option.label,
       id: option.id,
@@ -134,7 +137,6 @@ export function ExerciseCombobox({
 
   const open = () => {
     if (!disabled) {
-      setPreviewOpen(false);
       setIsOpen(true);
     }
   };
@@ -175,171 +177,165 @@ export function ExerciseCombobox({
 
   return (
     <div
-      className="exercise-combobox"
+      className={`exercise-combobox ${activePreviewMedia?.videoUrl ? "has-inline-video" : ""}`}
       ref={rootRef}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && previewOpen) {
-          event.stopPropagation();
-          setPreviewOpen(false);
-        }
-      }}
     >
-      <div className={`exercise-combobox-input ${isOpen ? "is-open" : ""}`}>
-        {selectedOption?.thumbnailUrl ? (
-          <img
-            className="exercise-combobox-input-thumbnail"
-            src={selectedOption.thumbnailUrl}
-            alt=""
-            decoding="async"
-            onError={(event) => { event.currentTarget.hidden = true; }}
+      <div className="exercise-combobox-picker">
+        <div className={`exercise-combobox-input ${isOpen ? "is-open" : ""}`}>
+          {selectedOption?.thumbnailUrl ? (
+            <img
+              className="exercise-combobox-input-thumbnail"
+              src={selectedOption.thumbnailUrl}
+              alt=""
+              decoding="async"
+              onError={(event) => { event.currentTarget.hidden = true; }}
+            />
+          ) : <Search size={15} aria-hidden="true" />}
+          <input
+            ref={inputRef}
+            type="search"
+            role="combobox"
+            aria-label={label}
+            aria-autocomplete="list"
+            aria-controls={listboxId}
+            aria-expanded={isOpen}
+            aria-activedescendant={activeOption ? `${id}-option-${activeOption.id}` : undefined}
+            value={query}
+            placeholder={placeholder}
+            disabled={disabled}
+            autoComplete="off"
+            onFocus={open}
+            onClick={open}
+            onKeyDown={handleKeyDown}
+            onChange={(event) => {
+              const name = event.target.value;
+              setQuery(name);
+              setHighlightedIndex(0);
+              setIsOpen(true);
+              onChange({ name });
+            }}
           />
-        ) : <Search size={15} aria-hidden="true" />}
-        <input
-          ref={inputRef}
-          type="search"
-          role="combobox"
-          aria-label={label}
-          aria-autocomplete="list"
-          aria-controls={listboxId}
-          aria-expanded={isOpen}
-          aria-activedescendant={activeOption ? `${id}-option-${activeOption.id}` : undefined}
-          value={query}
-          placeholder={placeholder}
-          disabled={disabled}
-          autoComplete="off"
-          onFocus={open}
-          onClick={open}
-          onKeyDown={handleKeyDown}
-          onChange={(event) => {
-            const name = event.target.value;
-            setQuery(name);
-            setHighlightedIndex(0);
-            setIsOpen(true);
-            onChange({ name });
-          }}
-        />
-        {activePreviewMedia?.videoUrl ? (
           <button
-            className="exercise-combobox-preview-trigger"
+            className="exercise-combobox-toggle"
             type="button"
-            aria-label={previewOpen ? "Close movement preview" : `Preview ${selectedOption?.label ?? "exercise"}`}
-            aria-expanded={previewOpen}
+            aria-label={isOpen ? "Close exercise suggestions" : "Show exercise suggestions"}
+            aria-expanded={isOpen}
+            disabled={disabled}
             onClick={() => {
-              setIsOpen(false);
-              setPreviewOpen((current) => !current);
+              if (isOpen) {
+                setIsOpen(false);
+              } else {
+                setQuery(value);
+                setIsOpen(true);
+                inputRef.current?.focus();
+              }
             }}
           >
-            <Play size={15} aria-hidden="true" />
+            <ChevronDown className={isOpen ? "is-open" : ""} size={16} aria-hidden="true" />
           </button>
+        </div>
+
+        {isOpen ? (
+          <div className="exercise-combobox-menu">
+            <div id={listboxId} role="listbox" aria-label={`${label} suggestions`}>
+              {loading ? (
+                <p className="exercise-combobox-state" role="status">Loading COROS exercises...</p>
+              ) : filteredOptions.length === 0 ? (
+                <p className="exercise-combobox-state">No matching exercises.</p>
+              ) : filteredOptions.map((option, index) => {
+                const isSelected = option.id === selectedId;
+                const isActive = index === highlightedIndex;
+                return (
+                  <button
+                    type="button"
+                    id={`${id}-option-${option.id}`}
+                    key={option.id}
+                    role="option"
+                    aria-selected={isSelected}
+                    className={`${isSelected ? "is-selected" : ""} ${isActive ? "is-active" : ""}`.trim()}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onMouseEnter={() => setHighlightedIndex(index)}
+                    onClick={() => selectOption(option)}
+                  >
+                    <span className="exercise-combobox-option-main">
+                      {option.thumbnailUrl ? (
+                        <img
+                          src={option.thumbnailUrl}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          onError={(event) => { event.currentTarget.hidden = true; }}
+                        />
+                      ) : null}
+                      <span>{option.label}</span>
+                    </span>
+                    {isSelected ? <Check size={15} aria-hidden="true" /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         ) : null}
-        <button
-          className="exercise-combobox-toggle"
-          type="button"
-          aria-label={isOpen ? "Close exercise suggestions" : "Show exercise suggestions"}
-          aria-expanded={isOpen}
-          disabled={disabled}
-          onClick={() => {
-            if (isOpen) {
-              setIsOpen(false);
-            } else {
-              setPreviewOpen(false);
-              setQuery(value);
-              setIsOpen(true);
-              inputRef.current?.focus();
-            }
-          }}
-        >
-          <ChevronDown className={isOpen ? "is-open" : ""} size={16} aria-hidden="true" />
-        </button>
       </div>
 
-      {isOpen ? (
-        <div className="exercise-combobox-menu">
-          <div id={listboxId} role="listbox" aria-label={`${label} suggestions`}>
-            {loading ? (
-              <p className="exercise-combobox-state" role="status">Loading COROS exercises...</p>
-            ) : filteredOptions.length === 0 ? (
-              <p className="exercise-combobox-state">No matching exercises.</p>
-            ) : filteredOptions.map((option, index) => {
-              const isSelected = option.id === selectedId;
-              const isActive = index === highlightedIndex;
-              return (
+      {activePreviewMedia?.videoUrl ? (
+        <section className="exercise-inline-video" aria-label={`${selectedOption?.label ?? "Exercise"} movement demonstration`}>
+          <header className="exercise-inline-video-header">
+            <div>
+              <strong>{selectedOption?.label}</strong>
+              <span>Movement demonstration</span>
+            </div>
+            {previewMedia.length > 1 ? (
+              <div className="exercise-inline-video-actions">
                 <button
                   type="button"
-                  id={`${id}-option-${option.id}`}
-                  key={option.id}
-                  role="option"
-                  aria-selected={isSelected}
-                  className={`${isSelected ? "is-selected" : ""} ${isActive ? "is-active" : ""}`.trim()}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onMouseEnter={() => setHighlightedIndex(index)}
-                  onClick={() => selectOption(option)}
+                  aria-label="Previous movement angle"
+                  onClick={() => setPreviewMediaIndex((current) => (current - 1 + previewMedia.length) % previewMedia.length)}
                 >
-                  <span className="exercise-combobox-option-main">
-                    {option.thumbnailUrl ? (
-                      <img
-                        src={option.thumbnailUrl}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        onError={(event) => { event.currentTarget.hidden = true; }}
-                      />
-                    ) : null}
-                    <span>{option.label}</span>
-                  </span>
-                  {isSelected ? <Check size={15} aria-hidden="true" /> : null}
+                  <ChevronLeft size={15} aria-hidden="true" />
                 </button>
-              );
-            })}
+                <span>{previewMediaIndex + 1} / {previewMedia.length}</span>
+                <button
+                  type="button"
+                  aria-label="Next movement angle"
+                  onClick={() => setPreviewMediaIndex((current) => (current + 1) % previewMedia.length)}
+                >
+                  <ChevronRight size={15} aria-hidden="true" />
+                </button>
+              </div>
+            ) : null}
+          </header>
+          <div className="exercise-inline-video-stage">
+            {previewStatus === "loading" ? (
+              <div className="exercise-inline-video-loading" role="status">
+                <span aria-hidden="true" />
+                <strong>Loading movement</strong>
+              </div>
+            ) : null}
+            {previewStatus === "error" ? (
+              <div className="exercise-inline-video-error" role="alert">
+                <AlertCircle size={21} aria-hidden="true" />
+                <strong>Video unavailable</strong>
+                <span>Try another angle.</span>
+              </div>
+            ) : null}
+            <video
+              key={activePreviewMedia.videoUrl}
+              className={previewStatus === "ready" ? "is-ready" : ""}
+              src={activePreviewMedia.videoUrl}
+              poster={activePreviewMedia.coverUrl ?? selectedOption?.thumbnailUrl}
+              controls
+              autoPlay={!reducedMotion}
+              muted
+              loop={!reducedMotion}
+              playsInline
+              preload="metadata"
+              onLoadedData={() => setPreviewStatus("ready")}
+              onError={() => setPreviewStatus("error")}
+              aria-label={`${selectedOption?.label ?? "Exercise"} demonstration`}
+            />
           </div>
-        </div>
-      ) : null}
-
-      {previewOpen && activePreviewMedia?.videoUrl ? (
-        <div className="exercise-combobox-preview" role="dialog" aria-label={`${selectedOption?.label ?? "Exercise"} movement preview`}>
-          <div className="exercise-combobox-preview-header">
-            <div className="exercise-combobox-preview-title">
-              <strong>{selectedOption?.label}</strong>
-              <span>Official COROS movement preview</span>
-            </div>
-            <div className="exercise-combobox-preview-actions">
-              {previewMedia.length > 1 ? (
-                <>
-                  <button
-                    type="button"
-                    aria-label="Previous movement angle"
-                    onClick={() => setPreviewMediaIndex((current) => (current - 1 + previewMedia.length) % previewMedia.length)}
-                  >
-                    <ChevronLeft size={14} aria-hidden="true" />
-                  </button>
-                  <span>{previewMediaIndex + 1} / {previewMedia.length}</span>
-                  <button
-                    type="button"
-                    aria-label="Next movement angle"
-                    onClick={() => setPreviewMediaIndex((current) => (current + 1) % previewMedia.length)}
-                  >
-                    <ChevronRight size={14} aria-hidden="true" />
-                  </button>
-                </>
-              ) : null}
-              <button type="button" aria-label="Close movement preview" onClick={() => setPreviewOpen(false)}>
-                <X size={15} aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-          <video
-            key={activePreviewMedia.videoUrl}
-            src={activePreviewMedia.videoUrl}
-            poster={activePreviewMedia.coverUrl ?? selectedOption?.thumbnailUrl}
-            controls
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="auto"
-            aria-label={`${selectedOption?.label ?? "Exercise"} demonstration`}
-          />
-        </div>
+        </section>
       ) : null}
     </div>
   );

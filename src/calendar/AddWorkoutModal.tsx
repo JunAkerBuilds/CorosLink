@@ -2,15 +2,25 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   Activity,
   Bike,
+  BookmarkPlus,
+  BookOpen,
+  CalendarDays,
+  CalendarPlus,
   Dumbbell,
+  Flame,
   Footprints,
+  ListTree,
   Mountain,
   Pencil,
   PersonStanding,
   Plus,
+  Repeat2,
   Search,
+  Snowflake,
+  Timer,
   Waves,
   X,
+  Zap,
   type LucideIcon
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -52,6 +62,15 @@ type AddTab = "quick" | "library" | "builder" | "activity";
 type UploadSport = ManualActivityInput["sport"];
 type ActivityDistanceUnit = "km" | "m" | "none";
 
+const ADD_TAB_ITEMS: Record<AddTab, { label: string; Icon: LucideIcon }> = {
+  quick: { label: "Quick training", Icon: Zap },
+  library: { label: "From library", Icon: BookOpen },
+  builder: { label: "Structured", Icon: ListTree },
+  activity: { label: "Log activity", Icon: Activity }
+};
+
+const QUICK_DISTANCE_PRESETS = [5, 8, 10, 21.1] as const;
+
 interface LogSportOption {
   id: string;
   label: string;
@@ -68,6 +87,33 @@ const DEFAULT_LOG_SPORT_OPTION: LogSportOption = {
   distanceUnit: "km",
   Icon: Footprints
 };
+
+function quickWorkoutDuration(distanceKm: number, pace: string): string | null {
+  const paceMatch = pace.trim().match(/^(\d+):([0-5]\d)/);
+  if (!Number.isFinite(distanceKm) || distanceKm <= 0 || !paceMatch) {
+    return null;
+  }
+
+  const secondsPerKm = Number(paceMatch[1]) * 60 + Number(paceMatch[2]);
+  const totalMinutes = Math.round(distanceKm * secondsPerKm / 60);
+  if (totalMinutes < 60) {
+    return `${totalMinutes} min`;
+  }
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes > 0 ? `${hours} hr ${minutes} min` : `${hours} hr`;
+}
+
+function isQuickPaceValid(pace: string): boolean {
+  const value = pace.trim();
+  return value === "" || /^\d+:[0-5]\d(?:-\d+:[0-5]\d)?(?:\/(?:km|mi))?$/i.test(value);
+}
+
+function normalizeQuickPace(pace: string): string {
+  const value = pace.trim();
+  return /\/(?:km|mi)$/i.test(value) ? value : `${value}/km`;
+}
 
 const SUGGESTED_LOG_SPORT_OPTIONS: LogSportOption[] = [
   DEFAULT_LOG_SPORT_OPTION,
@@ -792,7 +838,9 @@ export function AddWorkoutModal({
     run(async () => {
       const name = quickName.trim() || "Quick Run";
       const distanceKm = Number(quickDistanceKm);
-      const entry: PlanWorkoutEntryInput = quickPace.trim()
+      const rawPace = quickPace.trim();
+      const pace = normalizeQuickPace(rawPace);
+      const entry: PlanWorkoutEntryInput = rawPace
         ? {
             key: "calendar-quick",
             name,
@@ -800,7 +848,7 @@ export function AddWorkoutModal({
               {
                 kind: "training",
                 target_distance_meters: Math.round(distanceKm * 1000),
-                pace: quickPace.trim()
+                pace
               }
             ]
           }
@@ -859,13 +907,22 @@ export function AddWorkoutModal({
       await api.addManualActivityToCoros(input);
     }, `Activity logged on ${formatHappenDayLabel(dateKey)}. COROS may take a moment to show it.`);
 
-  const quickValid = Number(quickDistanceKm) > 0;
+  const quickDistance = Number(quickDistanceKm);
+  const quickDistanceValid = Number.isFinite(quickDistance) && quickDistance > 0;
+  const quickPaceValid = isQuickPaceValid(quickPace);
+  const quickValid = quickDistanceValid && quickPaceValid;
+  const quickPaceLabel = quickPace.trim() ? normalizeQuickPace(quickPace) : "";
   const builderValid = rows.length > 0 && rows.every((row) =>
     rowIsValid(row, builderSport, builderExercises, builderExercisesLoading)
   );
   const activityValid =
     activityTime.trim() !== "" &&
     (Number(activityHours) || 0) * 60 + (Number(activityMinutes) || 0) > 0;
+  const quickDuration = quickPaceValid ? quickWorkoutDuration(quickDistance, quickPace) : null;
+  const availableTabs: AddTab[] = [
+    ...(canSchedule ? (["quick", "library", "builder"] as AddTab[]) : []),
+    ...(canLogActivity ? (["activity"] as AddTab[]) : [])
+  ];
 
   return (
     <AnimatePresence>
@@ -877,7 +934,7 @@ export function AddWorkoutModal({
         onClick={onClose}
       >
         <motion.div
-          className="calendar-modal calendar-modal-workspace panel"
+          className={`calendar-modal calendar-modal-workspace calendar-modal-${tab} panel`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="add-calendar-title"
@@ -889,12 +946,15 @@ export function AddWorkoutModal({
         >
           <header className="calendar-modal-header">
             <div>
-              <p className="eyebrow">{formatHappenDayLabel(dateKey)}</p>
+              <p className="calendar-modal-date">
+                <CalendarDays size={13} aria-hidden="true" />
+                {formatHappenDayLabel(dateKey)}
+              </p>
               <h3 id="add-calendar-title">Add to calendar</h3>
             </div>
             <button
               type="button"
-              className="ghost-button"
+              className="ghost-button calendar-modal-close"
               onClick={onClose}
               aria-label="Close"
             >
@@ -903,85 +963,195 @@ export function AddWorkoutModal({
           </header>
 
           <div className="calendar-modal-tabs" role="tablist" aria-label="Add to calendar method">
-            {(
-              [
-                // COROS rejects scheduling in the past, and a future activity
-                // can't be logged — only offer tabs that can succeed.
-                ...(canSchedule
-                  ? ([
-                      ["quick", "Quick training"],
-                      ["library", "From library"],
-                      ["builder", "Structured"]
-                    ] as const)
-                  : []),
-                ...(canLogActivity ? ([["activity", "Log activity"]] as const) : [])
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={tab === id}
-                className={`calendar-modal-tab ${tab === id ? "is-active" : ""}`}
-                onClick={() => setTab(id)}
-              >
-                {label}
-              </button>
-            ))}
+            {availableTabs.map((id) => {
+              const { label, Icon } = ADD_TAB_ITEMS[id];
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === id}
+                  className={`calendar-modal-tab ${tab === id ? "is-active" : ""}`}
+                  onClick={() => setTab(id)}
+                >
+                  <Icon size={14} aria-hidden="true" />
+                  {label}
+                </button>
+              );
+            })}
           </div>
 
           {tab === "quick" ? (
-            <div className="calendar-modal-body calendar-quick-body">
-              <label className="calendar-field">
-                <span>Name</span>
-                <input
-                  type="text"
-                  value={quickName}
-                  onChange={(event) => setQuickName(event.target.value)}
-                  placeholder="Easy Run"
-                />
-              </label>
-              <div className="calendar-field-row">
-                <label className="calendar-field">
-                  <span>Distance (km)</span>
+            <form
+              className="calendar-modal-body calendar-quick-body"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (quickValid && !submitting) void submitQuick();
+              }}
+            >
+              <div className="calendar-quick-settings">
+                <div className="calendar-quick-intro">
+                  <h4>Workout settings</h4>
+                  <p>Set the basics for a simple distance workout.</p>
+                </div>
+
+                <div className="calendar-quick-fields">
+                  <label className="calendar-field calendar-quick-name">
+                    <span className="calendar-field-label">
+                      <span>Workout name</span>
+                      <small>Optional</small>
+                    </span>
+                    <input
+                      type="text"
+                      value={quickName}
+                      onChange={(event) => setQuickName(event.target.value)}
+                      placeholder="Easy run"
+                    />
+                  </label>
+
+                  <label className="calendar-field">
+                    <span className="calendar-field-label">
+                      <span>Distance</span>
+                      <small>Required</small>
+                    </span>
+                    <span className="calendar-quick-input">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        inputMode="decimal"
+                        value={quickDistanceKm}
+                        onChange={(event) => setQuickDistanceKm(event.target.value)}
+                        placeholder="8.0"
+                        aria-label="Distance in kilometres"
+                        required
+                      />
+                      <span aria-hidden="true">km</span>
+                    </span>
+                    <span className="calendar-quick-presets" role="group" aria-label="Common distances">
+                      {QUICK_DISTANCE_PRESETS.map((distance) => (
+                        <button
+                          key={distance}
+                          type="button"
+                          className={quickDistance === distance ? "is-active" : ""}
+                          onClick={() => setQuickDistanceKm(String(distance))}
+                        >
+                          {distance} km
+                        </button>
+                      ))}
+                    </span>
+                  </label>
+
+                  <label className="calendar-field">
+                    <span className="calendar-field-label">
+                      <span>Target pace</span>
+                      <small>Optional</small>
+                    </span>
+                    <span className={`calendar-quick-input ${quickPaceValid ? "" : "has-error"}`}>
+                      <input
+                        type="text"
+                        value={quickPace}
+                        onChange={(event) => setQuickPace(event.target.value)}
+                        placeholder="5:30"
+                        aria-label="Target pace per kilometre"
+                        aria-invalid={!quickPaceValid}
+                      />
+                      <span aria-hidden="true">/km</span>
+                    </span>
+                    <small className={`calendar-field-help ${quickPaceValid ? "" : "is-error"}`}>
+                      {quickPaceValid
+                        ? "Use minutes and seconds, for example 5:30."
+                        : "Enter pace as minutes:seconds, for example 5:30."}
+                    </small>
+                  </label>
+                </div>
+
+                <label className={`calendar-quick-save ${quickSave ? "is-checked" : ""}`}>
                   <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={quickDistanceKm}
-                    onChange={(event) => setQuickDistanceKm(event.target.value)}
-                    placeholder="8"
+                    type="checkbox"
+                    checked={quickSave}
+                    onChange={(event) => setQuickSave(event.target.checked)}
                   />
-                </label>
-                <label className="calendar-field">
-                  <span>Pace (optional)</span>
-                  <input
-                    type="text"
-                    value={quickPace}
-                    onChange={(event) => setQuickPace(event.target.value)}
-                    placeholder="5:30/km"
-                  />
+                  <BookmarkPlus size={18} aria-hidden="true" />
+                  <span>
+                    <strong>Save to workout library</strong>
+                    <small>Keep a reusable copy after scheduling.</small>
+                  </span>
                 </label>
               </div>
-              <label className="calendar-check">
-                <input
-                  type="checkbox"
-                  checked={quickSave}
-                  onChange={(event) => setQuickSave(event.target.checked)}
-                />
-                Also save to workout library
-              </label>
+
+              <section className="calendar-quick-preview" aria-labelledby="calendar-quick-preview-title" aria-live="polite">
+                <header className="calendar-quick-preview-header">
+                  <div>
+                    <h4 id="calendar-quick-preview-title">Workout preview</h4>
+                    <p>{formatHappenDayLabel(dateKey)}</p>
+                  </div>
+                  <span className={quickValid ? "is-ready" : ""}>
+                    {quickValid ? "Ready" : "In progress"}
+                  </span>
+                </header>
+
+                <div className="calendar-quick-preview-title">
+                  <span aria-hidden="true"><Footprints size={20} /></span>
+                  <div>
+                    <strong>{quickName.trim() || "Quick Run"}</strong>
+                    <small>Distance workout</small>
+                  </div>
+                </div>
+
+                <dl className="calendar-quick-preview-metrics">
+                  <div>
+                    <dt>Distance</dt>
+                    <dd>{quickDistanceValid ? `${quickDistance.toLocaleString()} km` : "-"}</dd>
+                  </div>
+                  <div>
+                    <dt>Target pace</dt>
+                    <dd>{quickPaceLabel && quickPaceValid ? quickPaceLabel : "Open"}</dd>
+                  </div>
+                  <div>
+                    <dt>Estimated time</dt>
+                    <dd>{quickDuration ?? "-"}</dd>
+                  </div>
+                </dl>
+
+                <div className="calendar-quick-preview-step">
+                  <span aria-hidden="true">1</span>
+                  <div>
+                    <strong>Run</strong>
+                    <small>
+                      {quickDistanceValid ? `${quickDistance.toLocaleString()} km` : "Set a distance"}
+                      {quickPaceLabel && quickPaceValid ? ` at ${quickPaceLabel}` : " at open pace"}
+                    </small>
+                  </div>
+                </div>
+              </section>
+
               <footer className="calendar-modal-footer">
+                <div className="calendar-quick-summary" aria-live="polite">
+                  {quickDistanceValid && quickPaceValid ? (
+                    <>
+                      <span>Workout total</span>
+                      <strong>
+                        {quickDistance.toLocaleString()} km
+                        {quickDuration ? `, about ${quickDuration}` : ""}
+                      </strong>
+                    </>
+                  ) : !quickDistanceValid ? (
+                    <span>Enter a distance to enable scheduling.</span>
+                  ) : (
+                    <span>Correct the pace format to continue.</span>
+                  )}
+                </div>
                 <button
-                  type="button"
+                  type="submit"
                   className="primary-button"
                   disabled={!quickValid || submitting}
-                  onClick={() => void submitQuick()}
                 >
-                  {submitting ? "Scheduling…" : "Schedule"}
+                  <CalendarPlus size={16} aria-hidden="true" />
+                  {submitting ? "Scheduling…" : "Schedule workout"}
                 </button>
               </footer>
-            </div>
+            </form>
           ) : null}
 
           {tab === "library" ? (
@@ -1045,7 +1215,7 @@ export function AddWorkoutModal({
                 <aside className="calendar-builder-settings" aria-label="Workout settings">
                   <div className="calendar-builder-settings-copy">
                     <h4>Workout settings</h4>
-                    <p>Choose a sport and name before building the session.</p>
+                    <p>Set the basics for your workout.</p>
                   </div>
                   <label className="calendar-field">
                     <span>Sport</span>
@@ -1058,7 +1228,7 @@ export function AddWorkoutModal({
                   {builderSport === "swim" ? <div className="calendar-field-row"><label className="calendar-field"><span>Pool length</span><input type="number" min="1" value={builderPoolLength} onChange={(event) => setBuilderPoolLength(event.target.value)} /></label><label className="calendar-field"><span>Unit</span><select value={builderPoolUnit} onChange={(event) => setBuilderPoolUnit(event.target.value as "m" | "yd")}><option value="m">m</option><option value="yd">yd</option></select></label></div> : null}
                   {(builderSport === "indoorClimb" || builderSport === "bouldering") ? <label className="calendar-field"><span>Grading system</span><select value={builderGradeSystem} onChange={(event) => setBuilderGradeSystem(event.target.value as keyof typeof CLIMB_SYSTEM_IDS)}>{Object.keys(CLIMB_SYSTEM_IDS).map((system) => <option key={system} value={system}>{formatBuilderToken(system)}</option>)}</select></label> : null}
                   <label className="calendar-field">
-                    <span>Name</span>
+                    <span>Workout name</span>
                     <input
                       type="text"
                       value={builderName}
@@ -1066,15 +1236,27 @@ export function AddWorkoutModal({
                       placeholder={builderSport === "strength" ? "Full-body strength" : builderSport === "swim" ? "Pool endurance" : builderSport === "bike" ? "Threshold ride" : builderSport === "indoorClimb" || builderSport === "bouldering" ? "Climbing session" : builderSport === "hyrox" ? "HYROX mixed session" : "6 x 800 m"}
                     />
                   </label>
+                  <label className={`calendar-builder-save-card ${builderSave ? "is-checked" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={builderSave}
+                      onChange={(event) => setBuilderSave(event.target.checked)}
+                    />
+                    <BookmarkPlus size={19} aria-hidden="true" />
+                    <span>
+                      <strong>Save to library</strong>
+                      <small>Keep this workout for reuse after scheduling.</small>
+                    </span>
+                  </label>
                 </aside>
 
                 <section className="calendar-builder-canvas" aria-labelledby="calendar-builder-steps-title">
                   <header className="calendar-builder-canvas-header">
                     <div>
                       <h4 id="calendar-builder-steps-title">Workout steps</h4>
-                      <p>Define each target and intensity in session order.</p>
+                      <p>Build your workout in session order.</p>
                     </div>
-                    <span>{rows.length} {rows.length === 1 ? "step" : "steps"}</span>
+                    <span className="calendar-builder-step-count">{rows.length} {rows.length === 1 ? "step" : "steps"}</span>
                   </header>
                   <div className="calendar-builder-rows">
                 {rows.map((row, index) => {
@@ -1086,10 +1268,24 @@ export function AddWorkoutModal({
                   );
                   const stepKind = row.kind === "intervals" ? "training" : row.kind;
                   const targetTypes = workoutTargetsForStep(builderSport, stepKind, row.exerciseKind);
-                  return <section key={row.id} className={`calendar-builder-row ${validationMessage ? "has-error" : ""}`} aria-labelledby={`builder-step-${row.id}`}>
+                  const StepIcon = row.kind === "warmup"
+                    ? Flame
+                    : row.kind === "cooldown"
+                      ? Snowflake
+                      : row.kind === "intervals"
+                        ? Repeat2
+                        : row.kind === "rest"
+                          ? Timer
+                          : builderSport === "strength"
+                            ? Dumbbell
+                            : Zap;
+                  return <section key={row.id} className={`calendar-builder-row ${validationMessage ? "has-error" : ""}`} data-step-kind={stepKind} aria-labelledby={`builder-step-${row.id}`}>
                     <header className="calendar-builder-row-header">
                       <div>
-                        <span>Step {index + 1}</span>
+                        <span className="calendar-builder-step-icon" aria-hidden="true">
+                          <StepIcon size={15} />
+                        </span>
+                        <span className="calendar-builder-step-label">Step {index + 1}</span>
                         <strong id={`builder-step-${row.id}`}>{row.kind === "intervals" ? `${row.repeats || 0} repeats` : formatBuilderToken(row.kind)}</strong>
                       </div>
                       <button
@@ -1099,7 +1295,7 @@ export function AddWorkoutModal({
                         disabled={rows.length === 1}
                         aria-label={`Remove step ${index + 1}`}
                       >
-                        <X size={14} aria-hidden="true" /> Remove
+                        <X size={14} aria-hidden="true" /> <span>Remove</span>
                       </button>
                     </header>
 
@@ -1179,7 +1375,7 @@ export function AddWorkoutModal({
                 </section>
               </div>
               <footer className="calendar-modal-footer calendar-builder-footer">
-                <label className="calendar-check">
+                <label className="calendar-check calendar-builder-footer-save">
                   <input
                     type="checkbox"
                     checked={builderSave}
@@ -1194,7 +1390,8 @@ export function AddWorkoutModal({
                   disabled={!builderValid || submitting}
                   onClick={() => void submitBuilder()}
                 >
-                  {submitting ? "Scheduling…" : "Schedule"}
+                  <CalendarPlus size={16} aria-hidden="true" />
+                  {submitting ? "Scheduling…" : "Schedule workout"}
                 </button>
               </footer>
             </div>
