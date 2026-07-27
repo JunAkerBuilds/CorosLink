@@ -15,9 +15,9 @@
   --wf-border: rgba(226, 239, 234, 0.14);
   --wf-border-strong: rgba(226, 239, 234, 0.24);
   --wf-accent-border: color-mix(in srgb, var(--accent) 48%, var(--wf-border));
-  --wf-accent-ink: #06150f;
-  --wf-primary-bg: var(--accent);
-  --wf-primary-bg-hover: var(--accent-strong);
+  --wf-accent-ink: #f5f5f7;
+  --wf-primary-bg: #0f7f5f;
+  --wf-primary-bg-hover: #12946e;
   --wf-focus: color-mix(in srgb, var(--accent) 76%, #ffffff);
   --wf-danger: var(--error-text);
   --wf-command-height: 64px;
@@ -56,9 +56,9 @@
   --wf-surface-hover: #eef4f0;
   --wf-border: rgba(43, 58, 50, 0.13);
   --wf-border-strong: rgba(43, 58, 50, 0.22);
-  --wf-accent-ink: #06150f;
-  --wf-primary-bg: color-mix(in srgb, var(--accent) 68%, #9de8cf);
-  --wf-primary-bg-hover: color-mix(in srgb, var(--accent-hover) 70%, #8cdfc3);
+  --wf-accent-ink: #f5f5f7;
+  --wf-primary-bg: #0f7f5f;
+  --wf-primary-bg-hover: #0c6f52;
   --wf-shadow: 0 18px 42px rgba(56, 49, 39, 0.12);
   --wf-workspace-bg: transparent;
 }
@@ -3841,61 +3841,6 @@
   gap: 9px;
 }
 
-.watchface-shell .wf-layer-property {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: 32px minmax(0, 1fr);
-  align-items: start;
-  gap: 9px;
-}
-
-.watchface-shell .wf-layer-property-icon {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--wf-border);
-  border-radius: var(--wf-control-radius);
-  background: var(--wf-surface-raised);
-  color: var(--text-secondary);
-  place-items: center;
-}
-
-.watchface-shell .wf-layer-property-main {
-  display: grid;
-  min-width: 0;
-  gap: 7px;
-}
-
-.watchface-shell :is(.wf-layer-name-field, .wf-layer-name-readout, .wf-layer-type-readout) {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: 38px minmax(0, 1fr);
-  align-items: center;
-  gap: 7px;
-  margin: 0;
-}
-
-.watchface-shell :is(.wf-layer-name-field, .wf-layer-name-readout, .wf-layer-type-readout) > span {
-  color: var(--text-tertiary);
-  font-size: var(--wf-text-xs);
-}
-
-.watchface-shell :is(.wf-layer-name-readout, .wf-layer-type-readout) > strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: var(--wf-text-sm);
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.watchface-shell .wf-layer-type-readout > strong {
-  color: var(--text-secondary);
-  font-weight: 560;
-}
-
-.watchface-shell .wf-layer-name-field input,
 .watchface-shell .wf-property-section :is(input[type="number"], input[type="text"], select) {
   box-sizing: border-box;
   width: 100%;
@@ -4348,16 +4293,6 @@
   color: var(--text-primary);
   font-size: var(--wf-text-sm);
   font-weight: 800;
-}
-
-.watchface-shell .wf-archive-settings > summary {
-  cursor: pointer;
-  color: var(--text-secondary);
-  list-style-position: inside;
-}
-
-.watchface-shell .wf-archive-settings > summary:hover {
-  color: var(--text-primary);
 }
 
 .watchface-shell .wf-inspector-divider {
@@ -5120,37 +5055,6 @@
   opacity: 0.58;
 }
 
-.watchface-shell .wf-layer-property {
-  grid-template-columns: 30px minmax(0, 1fr);
-  gap: 9px;
-}
-
-.watchface-shell .wf-layer-property-icon {
-  width: 30px;
-  height: 30px;
-  border: 0;
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--wf-surface-raised) 88%, var(--wf-surface));
-}
-
-.watchface-shell .wf-layer-property-main {
-  gap: 5px;
-}
-
-.watchface-shell :is(.wf-layer-name-field, .wf-layer-name-readout, .wf-layer-type-readout) {
-  grid-template-columns: 36px minmax(0, 1fr);
-  gap: 7px;
-}
-
-.watchface-shell :is(.wf-layer-name-field, .wf-layer-name-readout, .wf-layer-type-readout) > span {
-  font-size: 11px;
-  font-weight: 520;
-}
-
-.watchface-shell :is(.wf-layer-name-readout, .wf-layer-type-readout) > strong {
-  font-size: 12px;
-}
-
 .watchface-shell .wf-property-section :is(.field, .watchface-inspector-field) {
   gap: 5px;
   color: var(--text-tertiary);
@@ -5647,33 +5551,6 @@ body.wf-value-scrubbing * {
   padding: 14px;
 }
 
-.watchface-shell .wf-layer-summary {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid var(--wf-border);
-  padding-bottom: 12px;
-}
-
-.watchface-shell .wf-layer-summary .wf-layer-property-icon {
-  width: 42px;
-  height: 42px;
-  border: 1px solid var(--wf-border);
-  border-radius: 7px;
-  background: color-mix(
-    in srgb,
-    var(--wf-surface-raised) 78%,
-    transparent
-  );
-}
-
-.watchface-shell .wf-layer-summary .wf-layer-property-main {
-  align-content: center;
-  gap: 6px;
-}
-
 .watchface-shell .wf-layer-title {
   min-width: 0;
   overflow: hidden;
@@ -5720,33 +5597,6 @@ body.wf-value-scrubbing * {
 
 .watchface-shell .wf-layer-type-badge svg {
   flex: 0 0 auto;
-}
-
-.watchface-shell .wf-layer-summary-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.watchface-shell
-  .wf-layer-summary-actions
-  :is(.wf-property-icon-button, .watchface-layer-lock) {
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--wf-border);
-  border-radius: 6px;
-  background: color-mix(
-    in srgb,
-    var(--wf-surface-raised) 58%,
-    transparent
-  );
-}
-
-.watchface-shell
-  .wf-layer-summary-actions
-  .wf-property-icon-button:not([aria-pressed="true"]) {
-  border-color: color-mix(in srgb, var(--accent) 22%, var(--wf-border));
-  background: color-mix(in srgb, var(--accent-soft) 38%, transparent);
-  color: var(--accent-strong);
 }
 
 .watchface-shell .wf-layer-opacity-control {
@@ -7174,6 +7024,27 @@ body.wf-value-scrubbing * {
   color: var(--text-primary);
 }
 
+.watchface-device-trigger.is-sign-in {
+  border-color: color-mix(in srgb, var(--accent) 78%, var(--wf-dashboard-border));
+  background: var(--wf-primary-bg);
+  color: var(--wf-accent-ink);
+}
+
+.watchface-device-trigger.is-sign-in:hover:not(:disabled) {
+  border-color: var(--accent-strong);
+  background: var(--wf-primary-bg-hover);
+  color: var(--wf-accent-ink);
+  transform: translateY(-1px);
+}
+
+.watchface-device-trigger.is-sign-in:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.watchface-device-sign-in-icon {
+  flex: 0 0 auto;
+}
+
 .watchface-device-trigger > svg:last-child {
   margin-left: 2px;
   transition: transform 160ms ease;
@@ -7361,10 +7232,10 @@ body.wf-value-scrubbing * {
   min-height: 52px;
   gap: 10px;
   margin-top: 10px;
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--accent) 82%, #07120e);
   border-radius: var(--wf-control-radius);
-  background: color-mix(in srgb, var(--accent-soft) 32%, transparent);
-  color: var(--text-primary);
+  background: var(--wf-primary-bg);
+  color: var(--wf-accent-ink);
   padding: 7px 10px;
   font: inherit;
   font-size: var(--wf-text-xs);
@@ -7374,8 +7245,13 @@ body.wf-value-scrubbing * {
 }
 
 .watchface-device-account-action:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent) 36%, var(--wf-dashboard-border));
-  background: color-mix(in srgb, var(--accent-soft) 54%, transparent);
+  border-color: var(--accent-strong);
+  background: var(--wf-primary-bg-hover);
+  transform: translateY(-1px);
+}
+
+.watchface-device-account-action:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
 }
 
 .watchface-device-account-action > svg {
@@ -7401,13 +7277,18 @@ body.wf-value-scrubbing * {
 }
 
 .watchface-device-account-action small {
-  color: var(--text-secondary);
+  color: color-mix(in srgb, var(--wf-accent-ink) 72%, transparent);
   font-size: 10px;
   font-weight: 500;
 }
 
 .watchface-device-account-action.is-disconnect {
+  border-color: transparent;
   background: transparent;
+  color: var(--text-secondary);
+}
+
+.watchface-device-account-action.is-disconnect small {
   color: var(--text-secondary);
 }
 
@@ -8680,6 +8561,54 @@ body.wf-value-scrubbing * {
   margin-left: 5px;
 }
 
+.watchface-create-auth-required {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  margin-top: 28px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--wf-dashboard-border));
+  border-radius: var(--wf-control-radius);
+  background: color-mix(in srgb, var(--accent-soft) 34%, var(--wf-dashboard-card));
+  padding: 18px;
+}
+
+.watchface-create-auth-required > span {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--wf-control-radius);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  place-items: center;
+}
+
+.watchface-create-auth-required h3,
+.watchface-create-auth-required p {
+  margin: 0;
+}
+
+.watchface-create-auth-required h3 {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: var(--wf-text-lg);
+}
+
+.watchface-create-auth-required p {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: var(--wf-text-xs);
+}
+
+.watchface-create-auth-required .primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  gap: 8px;
+  white-space: nowrap;
+}
+
 .watchface-create-visual {
   display: grid;
   align-content: center;
@@ -8963,6 +8892,15 @@ body.wf-value-scrubbing * {
     padding: 24px;
   }
 
+  .watchface-create-auth-required {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .watchface-create-auth-required .primary-button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
   .watchface-create-hero h2 {
     font-size: 35px;
   }
@@ -8988,4 +8926,535 @@ body.wf-value-scrubbing * {
     transition: none;
   }
 
+}
+
+/* =========================================================================
+ * Studio panels: Layers and Properties
+ *
+ * One rhythm for both side panes. A pane is a fixed sticky header, an
+ * optional sticky control strip, then flat full-bleed sections divided by
+ * hairlines — no nested cards, so depth always means "contains", never
+ * decoration. Row chrome (lock, visibility) stays out of the way until the
+ * row is hovered, focused, or already in that state.
+ * ========================================================================= */
+
+.watchface-shell :is(.wf-layers-pane, .wf-properties-pane) {
+  --wf-pane-inline: 12px;
+  --wf-pane-header-height: 44px;
+  --wf-row-height: 32px;
+}
+
+/* --- Layers pane --------------------------------------------------------- */
+
+.watchface-shell .wf-layers-pane {
+  padding: 0;
+}
+
+.watchface-shell .wf-layers-pane > .wf-pane-heading {
+  z-index: 4;
+  top: 0;
+  min-height: var(--wf-pane-header-height);
+  margin: 0;
+  border-bottom-color: var(--wf-border-strong);
+  padding: 0 8px 0 var(--wf-pane-inline);
+}
+
+.watchface-shell .wf-layers-pane > .wf-pane-heading::after {
+  display: none;
+}
+
+.watchface-shell .wf-layer-search {
+  display: grid;
+  position: sticky;
+  z-index: 3;
+  top: var(--wf-pane-header-height);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--wf-border);
+  background: var(--wf-surface);
+  color: var(--text-tertiary);
+  padding: 7px var(--wf-pane-inline);
+}
+
+.watchface-shell .wf-layer-search > input {
+  min-height: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--wf-surface-raised) 70%, transparent);
+  color: var(--text-primary);
+  padding: 0 8px;
+  font: inherit;
+  font-size: var(--wf-text-sm);
+}
+
+.watchface-shell .wf-layer-search > input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.watchface-shell .wf-layer-search > input:focus-visible {
+  border-color: var(--wf-focus);
+  outline: none;
+}
+
+.watchface-shell .wf-layer-search-clear {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-tertiary);
+  padding: 0;
+  place-items: center;
+}
+
+.watchface-shell .wf-layer-search-clear:hover {
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-layer-list {
+  gap: 1px;
+  margin: 0;
+  padding: 6px 8px 16px;
+}
+
+.watchface-shell .wf-layer-list > li:not(.wf-layer-group),
+.watchface-shell .wf-editor-group-tree {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px;
+}
+
+/* Section headers stay put while their own layers scroll under them. */
+
+.watchface-shell .wf-layer-group {
+  position: sticky;
+  z-index: 2;
+  top: calc(var(--wf-pane-header-height) + 43px);
+  margin: 12px 0 2px;
+  background: var(--wf-surface);
+}
+
+.watchface-shell .wf-layer-group:first-child {
+  margin-top: 0;
+}
+
+.watchface-shell .wf-layer-section-toggle {
+  min-height: 26px;
+  gap: 5px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.watchface-shell .wf-layer-section-count {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* --- Layer rows ---------------------------------------------------------- */
+
+.watchface-shell :is(.wf-layer-row, .watchface-layer-row) {
+  min-height: var(--wf-row-height);
+  gap: 7px;
+  padding: 0 6px;
+}
+
+.watchface-shell .watchface-layer-row {
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+}
+
+.watchface-shell :is(.wf-layer-name, .watchface-layer-name) {
+  display: block;
+  font-size: var(--wf-text-sm);
+  font-weight: 560;
+}
+
+.watchface-shell :is(.wf-layer-row, .watchface-layer-row).is-selected
+  :is(.wf-layer-name, .watchface-layer-name) {
+  font-weight: 680;
+}
+
+.watchface-shell .wf-layer-icon {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  color: var(--text-tertiary);
+  place-items: center;
+}
+
+.watchface-shell .wf-layer-icon > svg {
+  grid-area: 1 / 1;
+}
+
+.watchface-shell .watchface-layer-row.is-selected .wf-layer-icon {
+  color: var(--accent-strong);
+}
+
+/* The grip only appears on rows that reordering actually applies to. */
+
+.watchface-shell .wf-layer-grip {
+  opacity: 0;
+}
+
+.watchface-shell .wf-layer-item.is-reorderable:hover .wf-layer-grip {
+  opacity: 0.75;
+}
+
+.watchface-shell .wf-layer-item.is-reorderable:hover
+  .wf-layer-icon > svg:not(.wf-layer-grip) {
+  opacity: 0;
+}
+
+.watchface-shell .wf-layer-state {
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.watchface-shell .wf-layer-hidden-flag {
+  display: inline-grid;
+  color: var(--text-tertiary);
+  place-items: center;
+}
+
+/* Row actions stay quiet until they are relevant. */
+
+.watchface-shell .wf-layer-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.watchface-shell :is(.wf-layer-item, .wf-editor-group-tree):hover
+  > .wf-layer-row-actions,
+.watchface-shell :is(.wf-layer-item, .wf-editor-group-tree):focus-within
+  > .wf-layer-row-actions,
+.watchface-shell :is(.wf-layer-item, .wf-editor-group-tree):has(.is-selected)
+  > .wf-layer-row-actions,
+.watchface-shell .wf-layer-row-actions:has(.is-locked),
+.watchface-shell .wf-layer-row-actions:has([aria-pressed="true"]) {
+  opacity: 1;
+}
+
+/* Without a hover pointer there is nothing to reveal them, so never hide. */
+
+@media (hover: none) {
+  .watchface-shell .wf-layer-row-actions {
+    opacity: 1;
+  }
+}
+
+.watchface-shell .wf-layer-row-actions
+  :is(.watchface-layer-lock, .watchface-layer-visibility) {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .watchface-shell .wf-layer-row-actions {
+    transition: none;
+  }
+}
+
+/* --- Grouped layers ------------------------------------------------------ */
+
+.watchface-shell .wf-editor-group-tree > ul {
+  margin: 1px 0 4px 9px;
+  padding: 2px 0 2px 9px;
+}
+
+.watchface-shell .wf-editor-group-tree > ul .watchface-layer-row {
+  min-height: 28px;
+  color: var(--text-tertiary);
+}
+
+.watchface-shell .wf-editor-group-tree > ul .watchface-layer-row:hover,
+.watchface-shell .wf-editor-group-tree > ul .watchface-layer-row.is-selected {
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-editor-group-tree > ul .watchface-layer-name {
+  font-size: var(--wf-text-xs);
+}
+
+.watchface-shell .wf-layer-list > li.wf-layer-empty {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: 8px;
+  margin-top: 26px;
+  color: var(--text-tertiary);
+  padding: 0 12px;
+  text-align: center;
+}
+
+.watchface-shell .wf-layer-empty p {
+  margin: 0;
+  font-size: var(--wf-text-sm);
+}
+
+.watchface-shell .wf-layer-empty button {
+  border: 1px solid var(--wf-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 5px 10px;
+  font: inherit;
+  font-size: var(--wf-text-xs);
+  font-weight: 620;
+}
+
+.watchface-shell .wf-layer-empty button:hover {
+  background: var(--wf-surface-hover);
+  color: var(--text-primary);
+}
+
+/* --- Properties pane header ---------------------------------------------- */
+
+.watchface-shell .wf-properties-pane > .wf-properties-heading {
+  z-index: 4;
+  top: 0;
+  min-height: 56px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px var(--wf-pane-inline);
+}
+
+.watchface-shell .wf-properties-identity {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+}
+
+.watchface-shell .wf-properties-identity .wf-pane-heading-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  color: var(--accent-strong);
+}
+
+.watchface-shell .wf-properties-identity-main {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.watchface-shell .wf-properties-heading .wf-layer-title-field input {
+  min-height: 22px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0 2px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.watchface-shell .wf-properties-heading .wf-layer-title-field input:hover:not(:disabled) {
+  border-color: var(--wf-border);
+}
+
+.watchface-shell .wf-properties-heading .wf-layer-title {
+  font-size: 13px;
+}
+
+.watchface-shell .wf-properties-identity-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.watchface-shell .wf-properties-identity-actions
+  :is(.wf-property-icon-button, .watchface-layer-lock) {
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.watchface-shell .wf-properties-identity-actions
+  :is(.wf-property-icon-button, .watchface-layer-lock):hover:not(:disabled) {
+  border-color: var(--wf-border);
+}
+
+/* --- Properties scope tabs ----------------------------------------------- */
+
+.watchface-shell .wf-properties-tabs {
+  display: grid;
+  position: sticky;
+  z-index: 3;
+  top: 56px;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 2px;
+  border-bottom: 1px solid var(--wf-border);
+  background: var(--wf-surface);
+  padding: 6px var(--wf-pane-inline);
+}
+
+.watchface-shell .wf-properties-tabs button {
+  min-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  padding: 0 10px;
+  font: inherit;
+  font-size: var(--wf-text-sm);
+  font-weight: 620;
+}
+
+.watchface-shell .wf-properties-tabs button:hover {
+  background: color-mix(in srgb, var(--wf-surface-hover) 60%, transparent);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-properties-tabs button[aria-selected="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+/* --- Property sections: flat, divided, one indent level ------------------ */
+
+.watchface-shell .wf-property-section {
+  overflow: visible;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--wf-border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.watchface-shell .wf-property-section:last-child {
+  border-bottom: 0;
+}
+
+.watchface-shell .wf-property-section-header {
+  min-height: 38px;
+  padding: 0 var(--wf-pane-inline);
+}
+
+.watchface-shell .wf-property-section-trigger {
+  min-height: 34px;
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.watchface-shell .wf-property-section-content {
+  gap: 12px;
+  padding: 0 var(--wf-pane-inline) 14px;
+}
+
+.watchface-shell .wf-property-section[data-section="layer"] {
+  margin-top: 0;
+}
+
+.watchface-shell
+  .wf-property-section[data-section="layer"]
+  > .wf-property-section-content {
+  padding: 12px var(--wf-pane-inline);
+}
+
+/* --- Field rhythm: one stacked pattern, one inline pattern ---------------- */
+
+.watchface-shell .wf-property-section :is(.field, .watchface-inspector-field) {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 560;
+}
+
+/* Stacked: the control needs the full pane width (text, select, color, area). */
+
+.watchface-shell .wf-property-section .field {
+  gap: 6px;
+}
+
+/* Inline: a compact value sits opposite its label. */
+
+.watchface-shell .wf-property-section .watchface-inspector-field {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 132px);
+  align-items: center;
+  gap: 10px;
+}
+
+.watchface-shell
+  .wf-property-section
+  .watchface-inspector-field:has(> input[type="checkbox"]) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.watchface-shell .wf-property-section .watchface-inspector-field > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.watchface-shell .wf-property-section .watchface-inspector-field > input[type="checkbox"] {
+  justify-self: end;
+  margin: 0;
+}
+
+.watchface-shell .wf-properties-empty {
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+  margin: 44px auto;
+  max-width: 260px;
+  color: var(--text-tertiary);
+  padding: 0 20px;
+  text-align: center;
+}
+
+.watchface-shell .wf-properties-empty strong {
+  color: var(--text-secondary);
+  font-size: var(--wf-text-md);
+  font-weight: 680;
+}
+
+.watchface-shell .wf-raw-config-editor .wf-raw-config-textarea {
+  font-size: var(--wf-text-xs);
+}
+
+:root[data-theme="paper"] .watchface-shell
+  :is(.wf-layer-search, .wf-layer-group, .wf-properties-tabs) {
+  background: var(--wf-surface);
+}
+
+/* Hidden layers read as dimmed, not struck through; the eye icon carries the
+   state. Overrides the legacy global rule in styles.css. */
+
+.watchface-shell :is(.wf-layer-name, .watchface-layer-name).is-hidden {
+  opacity: 1;
+  color: color-mix(in srgb, var(--text-secondary) 52%, transparent);
+  text-decoration: none;
+}
+
+.watchface-shell .wf-editor-group-tree > ul .watchface-layer-row.is-selected {
+  border-color: var(--wf-accent-border);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-properties-tabpanel {
+  display: block;
+  min-width: 0;
+}
+
+.watchface-shell .wf-properties-tabpanel .wf-aod-empty-inspector {
+  padding-inline: var(--wf-pane-inline);
 }

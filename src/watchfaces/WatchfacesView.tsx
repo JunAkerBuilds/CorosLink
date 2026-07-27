@@ -28,6 +28,7 @@ import {
   Share2,
   Trash2,
   Upload,
+  UserRound,
   Watch,
   X
 } from "lucide-react";
@@ -746,6 +747,12 @@ export function WatchfacesView({
 
   async function handleLoadThemes(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
+    if (!connected) {
+      setError("Sign in to your COROS account before creating a watch face.");
+      setNotice(null);
+      setSurface("sign-in");
+      return;
+    }
     setBusy("themes");
     clearMessages();
     try {
@@ -777,6 +784,7 @@ export function WatchfacesView({
     if (
       themesPreloadStartedRef.current ||
       status === null ||
+      !connected ||
       surface !== "hub" ||
       hubTab !== "templates" ||
       themesLoaded ||
@@ -787,7 +795,7 @@ export function WatchfacesView({
 
     themesPreloadStartedRef.current = true;
     void handleLoadThemes();
-  }, [busy, hubTab, status, surface, themesLoaded]);
+  }, [busy, connected, hubTab, status, surface, themesLoaded]);
 
   async function handleDownloadTheme(theme: CorosWatchfaceTheme) {
     if (!theme.packageUrl) return;
@@ -1009,9 +1017,10 @@ export function WatchfacesView({
       {surface !== "sign-in" ? (
         <WatchFacesHeader
           accountConnected={connected}
+          accountEmail={email.trim() || status?.savedEmail || null}
           connectedWatchName={connectedWatchName}
           watchStatus={watchStatus}
-          statusLoading={status === null || watchStatus === null}
+          statusLoading={status === null}
           busy={busy !== null}
           importing={busy === "archive"}
           onConnect={() => setSurface("sign-in")}
@@ -1052,7 +1061,7 @@ export function WatchfacesView({
             </span>
             <h2 id="watchface-login-title">Sign in to COROS</h2>
             <p>
-              Sign in when you want to send a watch face to COROS.
+              Sign in to choose a template and create a watch face.
             </p>
             <form
               className="watchface-auth-form"
@@ -1160,11 +1169,11 @@ export function WatchfacesView({
                   clearMessages();
                 }}
               >
-                Continue without signing in
+                Browse without signing in
               </button>
             </form>
             <p className="watchface-auth-local-note">
-              You can pick templates, edit them, and save your work without signing in.
+              You can browse community faces and manage saved projects without signing in.
             </p>
             {!status.secureStorageAvailable ? (
               <p className="watchface-auth-warning">
@@ -1262,6 +1271,7 @@ export function WatchfacesView({
             />
           ) : (
             <TemplatesPanel
+              accountConnected={connected}
               busy={busy}
               catalog={themeCatalog}
               watchModel={templateWatchModel}
@@ -1276,6 +1286,7 @@ export function WatchfacesView({
               themesLoaded={themesLoaded}
               downloadingThemeUrl={downloadingThemeUrl}
               sharingThemeId={sharingThemeId}
+              onSignIn={() => setSurface("sign-in")}
               onCatalogChange={(nextCatalog) => {
                 setThemeCatalog(nextCatalog);
                 setThemes([]);
@@ -1376,6 +1387,7 @@ export function WatchfacesView({
 
 interface WatchFacesHeaderProps {
   accountConnected: boolean;
+  accountEmail: string | null;
   connectedWatchName: string | null;
   watchStatus: WatchStatus | null;
   statusLoading: boolean;
@@ -1389,6 +1401,7 @@ interface WatchFacesHeaderProps {
 
 function WatchFacesHeader({
   accountConnected,
+  accountEmail,
   connectedWatchName,
   watchStatus,
   statusLoading,
@@ -1411,8 +1424,9 @@ function WatchFacesHeader({
         </div>
       </div>
       <div className="watchface-hub-actions">
-        <DeviceStatusMenu
+        <AccountStatusMenu
           accountConnected={accountConnected}
+          accountEmail={accountEmail}
           connectedWatchName={connectedWatchName}
           watchStatus={watchStatus}
           statusLoading={statusLoading}
@@ -1447,8 +1461,9 @@ function WatchFacesHeader({
   );
 }
 
-interface DeviceStatusMenuProps {
+interface AccountStatusMenuProps {
   accountConnected: boolean;
+  accountEmail: string | null;
   connectedWatchName: string | null;
   watchStatus: WatchStatus | null;
   statusLoading: boolean;
@@ -1457,15 +1472,16 @@ interface DeviceStatusMenuProps {
   onDisconnect: () => void;
 }
 
-function DeviceStatusMenu({
+function AccountStatusMenu({
   accountConnected,
+  accountEmail,
   connectedWatchName,
   watchStatus,
   statusLoading,
   busy,
   onConnect,
   onDisconnect
-}: DeviceStatusMenuProps) {
+}: AccountStatusMenuProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -1486,63 +1502,85 @@ function DeviceStatusMenu({
   }, [open]);
 
   const label = statusLoading
-    ? "Checking watch"
-    : connectedWatchName
-      ? `${connectedWatchName} connected`
-      : "No watch connected";
+    ? "Checking account"
+    : accountConnected
+      ? accountEmail ?? "COROS account"
+      : "Sign in to COROS";
 
   return (
     <div className="watchface-device-menu" ref={containerRef}>
       <button
-        className={`watchface-device-trigger${connectedWatchName ? " is-connected" : ""}`}
+        className={`watchface-device-trigger${
+          accountConnected ? " is-connected" : " is-sign-in"
+        }`}
         type="button"
-        aria-label={`${label}. Open connection details`}
-        aria-haspopup="dialog"
-        aria-expanded={open}
+        aria-label={accountConnected ? `${label}. Open account details` : label}
+        aria-haspopup={accountConnected ? "dialog" : undefined}
+        aria-expanded={accountConnected ? open : undefined}
         disabled={statusLoading}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (!accountConnected) {
+            onConnect();
+            return;
+          }
+          setOpen((current) => !current);
+        }}
       >
-        <span className="watchface-device-dot" aria-hidden="true" />
+        {accountConnected ? (
+          <span className="watchface-device-dot" aria-hidden="true" />
+        ) : (
+          <KeyRound className="watchface-device-sign-in-icon" size={16} aria-hidden="true" />
+        )}
         {statusLoading ? (
           <span className="watchface-device-label-skeleton" aria-hidden="true" />
         ) : (
           <span title={label}>{label}</span>
         )}
-        <ChevronDown size={14} aria-hidden="true" />
+        {accountConnected ? (
+          <ChevronDown size={14} aria-hidden="true" />
+        ) : (
+          <ArrowRight size={15} aria-hidden="true" />
+        )}
       </button>
       {open ? (
         <div
           className="watchface-device-popover"
           role="dialog"
-          aria-label="COROS connection status"
+          aria-label="COROS account and transfer status"
         >
           <div className="watchface-device-popover-heading">
-            <span className={`watchface-device-icon${connectedWatchName ? " is-connected" : ""}`}>
-              <Watch size={18} aria-hidden="true" />
+            <span className={`watchface-device-icon${accountConnected ? " is-connected" : ""}`}>
+              {accountConnected ? (
+                <UserRound size={18} aria-hidden="true" />
+              ) : (
+                <KeyRound size={18} aria-hidden="true" />
+              )}
             </span>
             <div className="watchface-device-heading-copy">
-              <small>Device</small>
-              <strong>{connectedWatchName ?? "No watch connected"}</strong>
+              <small>COROS account</small>
+              <strong>
+                {accountConnected ? accountEmail ?? "Connected" : "Sign in to COROS"}
+              </strong>
               <span>
-                {connectedWatchName
-                  ? "Ready for watch-face transfers"
-                  : "Connect a watch to install your designs"}
+                {accountConnected
+                  ? "Ready to publish and send watch faces"
+                  : "Sign in to create a new watch face"}
               </span>
             </div>
           </div>
           <dl className="watchface-device-details">
             <div>
-              <dt>Watch</dt>
-              <dd className={watchStatus?.connected ? "is-online" : "is-offline"}>
+              <dt>Account</dt>
+              <dd className={accountConnected ? "is-online" : "is-local"}>
                 <span aria-hidden="true" />
-                {watchStatus?.connected ? "Connected" : "Not connected"}
+                {accountConnected ? "Connected" : "Not signed in"}
               </dd>
             </div>
             <div>
-              <dt>COROS account</dt>
-              <dd className={accountConnected ? "is-online" : "is-local"}>
+              <dt>Transfer watch</dt>
+              <dd className={connectedWatchName ? "is-online" : "is-offline"}>
                 <span aria-hidden="true" />
-                {accountConnected ? "Connected" : "Local mode"}
+                {connectedWatchName ?? "Not connected"}
               </dd>
             </div>
             {watchStatus?.rootPath ? (
@@ -1583,8 +1621,8 @@ function DeviceStatusMenu({
             >
               <KeyRound size={15} aria-hidden="true" />
               <span>
-                <strong>Connect COROS account</strong>
-                <small>Required to send a face to your watch</small>
+                <strong>Sign in to COROS</strong>
+                <small>Required to create a new watch face</small>
               </span>
             </button>
           )}
@@ -2571,6 +2609,7 @@ function WatchFacePreview({
 }
 
 interface TemplatesPanelProps {
+  accountConnected: boolean;
   busy: "login" | "themes" | "archive" | "publish" | "project" | "community" | null;
   catalog: CorosWatchfaceThemeCatalog;
   watchModel: WatchModelId | "";
@@ -2585,6 +2624,7 @@ interface TemplatesPanelProps {
   themesLoaded: boolean;
   downloadingThemeUrl: string | null;
   sharingThemeId: string | null;
+  onSignIn: () => void;
   onCatalogChange: (catalog: CorosWatchfaceThemeCatalog) => void;
   onWatchModelChange: (model: WatchModelId) => void;
   onFirmwareTypeChange: (value: string) => void;
@@ -2612,18 +2652,24 @@ function TemplatesPanel(props: TemplatesPanelProps) {
           <h2 id="watchface-create-title">
             Start with a face. <span>Make it yours.</span>
           </h2>
-          <p>Choose a compatible design, customize every layer, then export it to your watch.</p>
-          <div className="watchface-create-hero-actions">
-            <button
-              className="primary-button"
-              type="button"
-              onClick={() => document.getElementById("watchface-template-catalog")?.focus()}
-            >
-              <Watch size={17} aria-hidden="true" />
-              Choose a template
-              <ArrowRight size={17} aria-hidden="true" />
-            </button>
-          </div>
+          <p>
+            {props.accountConnected
+              ? "Choose a compatible design, customize every layer, then export it to your watch."
+              : "Sign in to your COROS account to choose a template and start creating."}
+          </p>
+          {props.accountConnected ? (
+            <div className="watchface-create-hero-actions">
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => document.getElementById("watchface-template-catalog")?.focus()}
+              >
+                <Watch size={17} aria-hidden="true" />
+                Choose a template
+                <ArrowRight size={17} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
         </div>
         <div className="watchface-create-visual" aria-label="Watch face creation steps">
           <div className="watchface-create-preview-stack" aria-hidden="true">
@@ -2647,7 +2693,26 @@ function TemplatesPanel(props: TemplatesPanelProps) {
           </ol>
         </div>
       </section>
-      <div className="watchface-template-heading">
+      {!props.accountConnected ? (
+        <section
+          className="watchface-create-auth-required"
+          aria-labelledby="watchface-signin-required-title"
+        >
+          <span aria-hidden="true"><KeyRound size={24} /></span>
+          <div>
+            <h3 id="watchface-signin-required-title">Sign in before you create</h3>
+            <p>
+              Your COROS account is required to browse starter templates and create a new watch face.
+            </p>
+          </div>
+          <button className="primary-button" type="button" onClick={props.onSignIn}>
+            <KeyRound size={16} aria-hidden="true" />
+            Sign in to COROS
+          </button>
+        </section>
+      ) : (
+        <>
+          <div className="watchface-template-heading">
         <div>
           <h3>Choose your starting point</h3>
           <p>Browse layouts matched to your watch and firmware.</p>
@@ -2878,6 +2943,8 @@ function TemplatesPanel(props: TemplatesPanelProps) {
           <h4>Find a starting point</h4>
           <p>Browse COROS templates compatible with your watch and firmware.</p>
         </div>
+          )}
+        </>
       )}
     </section>
   );
