@@ -254,6 +254,34 @@ for (const expected of [
     `confirmed Studio battery key should be appendable: ${expected}`
   );
 }
+const configWithSynthesizedFixedMetrics = applyCorosWatchfaceConfigOverrides(
+  configWithoutWeather,
+  {
+    heartreate_level_rect: "{20,40,80,64,hcenter|vcenter}",
+    heartreate_level_font: "13x19",
+    step_rect: "{90,40,180,64,hcenter|vcenter}",
+    step_font: "13x19",
+    kcal_rect: "{20,70,80,94,hcenter|vcenter}",
+    kcal_font: "13x19",
+    elevation_rect: "{90,70,180,94,hcenter|vcenter}",
+    elevation_font: "13x19"
+  }
+);
+for (const expected of [
+  "[heartreate_level_rect]={20,40,80,64,hcenter|vcenter}",
+  "[heartreate_level_font]=13x19",
+  "[step_rect]={90,40,180,64,hcenter|vcenter}",
+  "[step_font]=13x19",
+  "[kcal_rect]={20,70,80,94,hcenter|vcenter}",
+  "[kcal_font]=13x19",
+  "[elevation_rect]={90,70,180,94,hcenter|vcenter}",
+  "[elevation_font]=13x19"
+]) {
+  assert.ok(
+    configWithSynthesizedFixedMetrics.includes(expected),
+    `Studio fixed metric key should be appendable: ${expected}`
+  );
+}
 assert.throws(
   () => applyCorosWatchfaceConfigOverrides(configWithoutWeather, { weather_typo: "x" }),
   /does not define: weather_typo/,

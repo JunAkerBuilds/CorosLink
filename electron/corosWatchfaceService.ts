@@ -1775,6 +1775,17 @@ export function applyCorosWatchfaceConfigOverrides(
     "battery_level_rect",
     "battery_level_font",
     "battery_level_font_color",
+    // Fixed metrics can be enabled even when a sparse starter template did
+    // not declare them. Watchface Studio synthesizes both their rectangles
+    // and font folders from the template's available raster fonts.
+    "heartreate_level_rect",
+    "heartreate_level_font",
+    "step_rect",
+    "step_font",
+    "kcal_rect",
+    "kcal_font",
+    "elevation_rect",
+    "elevation_font",
     "temperature_rect",
     "temperature_font",
     "temperature_font_color",
