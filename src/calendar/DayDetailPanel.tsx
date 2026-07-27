@@ -124,9 +124,9 @@ export function DayDetailPanel({
                   <button
                     type="button"
                     className="ghost-button calendar-detail-action"
-                    disabled={selection.entry.sportType !== 1}
+                    disabled={!selection.entry.sportType || selection.entry.sportType < 1 || selection.entry.sportType > 9}
                     onClick={() => onEdit(selection)}
-                    title={selection.entry.sportType === 1 ? "Edit this scheduled occurrence" : "Editing is available for Run workouts only"}
+                    title={selection.entry.sportType && selection.entry.sportType >= 1 && selection.entry.sportType <= 9 ? "Edit this scheduled occurrence" : "This COROS sport is not supported by the workout editor"}
                   >
                     <Pencil size={15} aria-hidden="true" />
                     Edit

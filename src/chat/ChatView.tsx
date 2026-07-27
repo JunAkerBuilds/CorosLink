@@ -149,6 +149,7 @@ function PlanPreviewCard({
             <tr>
               <th>Date</th>
               <th>Workout</th>
+              <th>Sport</th>
               <th>Volume</th>
               <th>Type</th>
               <th>Steps</th>
@@ -159,6 +160,7 @@ function PlanPreviewCard({
               <tr key={entry.key}>
                 <td>{entry.scheduleDate ?? "Library"}</td>
                 <td>{entry.name}</td>
+                <td>{entry.sport ?? "run"}</td>
                 <td>{entry.volume ?? "—"}</td>
                 <td>{entry.workoutType}</td>
                 <td>{entry.stepsSummary ?? "—"}</td>

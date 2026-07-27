@@ -62,7 +62,10 @@ import type {
   WorkoutEditPreview,
   WorkoutEditRef,
   WorkoutEditSaveResult,
-  WorkoutEditorDocument
+  WorkoutEditorContext,
+  WorkoutEditorDocument,
+  WorkoutExerciseOption,
+  WorkoutSport
 } from "./types";
 import {
   applyWorkoutCalculation,
@@ -84,6 +87,13 @@ import {
   workoutEditRevision,
   type WorkoutEditSource
 } from "./corosWorkoutEditor";
+import {
+  WORKOUT_SPORT_CAPABILITIES,
+  resolveWorkoutExerciseName,
+  workoutExerciseId,
+  workoutExerciseName,
+  workoutSportFromType
+} from "./workoutCapabilities";
 import { TRAINING_HUB_EXPORT_FORMATS } from "./types";
 import { signRequest, sha256Hex } from "./awsSigV4";
 import { createStoreZip } from "./zipStore";
@@ -1530,7 +1540,7 @@ export async function scheduleWorkoutOnDate(
     entities: [entity],
     programs: [programPayload],
     versionObjects: [{ id: idInPlan, status: 1 }],
-    pbVersion: 2
+    pbVersion: toOptionalNumber(program.pbVersion) ?? 2
   });
 }
 
@@ -1553,6 +1563,7 @@ export async function removeScheduledWorkout(entry: {
   planId: string;
   idInPlan: string;
   planProgramId?: string;
+  pbVersion?: number;
 }): Promise<void> {
   const idInPlan = entry.idInPlan;
   await trainingHubPostVoid("/training/schedule/update", {
@@ -1564,7 +1575,7 @@ export async function removeScheduledWorkout(entry: {
         status: 3
       }
     ],
-    pbVersion: 2
+    pbVersion: entry.pbVersion ?? 2
   });
 }
 
@@ -1655,27 +1666,47 @@ async function loadWorkoutEditorAccount(): Promise<Record<string, unknown>> {
   }
 }
 
+export async function getWorkoutEditorContext(): Promise<WorkoutEditorContext> {
+  return parseWorkoutEditorContext(await loadWorkoutEditorAccount());
+}
+
 async function documentFromWorkoutEditSource(
   source: WorkoutEditSource
 ): Promise<WorkoutEditorDocument> {
   const account = await loadWorkoutEditorAccount();
+  const context = parseWorkoutEditorContext(account);
   const sportType = toOptionalNumber(source.program.sportType);
   const isPastOccurrence =
     source.ref.kind === "scheduled" &&
     source.ref.happenDay < formatScheduleDay(new Date());
-  const canEdit = sportType === 1 && !isPastOccurrence;
+  const supportedSport = workoutSportFromType(sportType);
+  const canEdit = Boolean(supportedSport) && !isPastOccurrence;
+  const draft = corosProgramToWorkoutDraft(source.program);
+  if (draft.sport === "swim" && !draft.sportOptions?.poolLength) {
+    draft.sportOptions = { ...draft.sportOptions, poolLength: context.defaultPoolLength };
+  }
+  if (
+    (draft.sport === "indoorClimb" || draft.sport === "bouldering") &&
+    !draft.sportOptions?.gradingSystem
+  ) {
+    draft.sportOptions = {
+      ...draft.sportOptions,
+      gradingSystem: context.climbSystems[draft.sport] ??
+        (draft.sport === "bouldering" ? "vScale" : "yds")
+    };
+  }
   return {
     ref: source.ref,
     revision: workoutEditRevision(source),
-    draft: corosProgramToWorkoutDraft(source.program),
-    context: parseWorkoutEditorContext(account),
+    draft,
+    context,
     canEdit,
     ...(canEdit
       ? {}
       : {
           unsupportedReason: isPastOccurrence
             ? "Past scheduled workouts are read-only."
-            : "Only COROS Run workouts can be edited in this release."
+            : `COROS sport type ${sportType ?? "unknown"} is not supported by this editor.`
         })
   };
 }
@@ -1848,8 +1879,8 @@ export async function saveWorkoutEdit(
   if (ref.kind === "scheduled" && ref.happenDay < formatScheduleDay(new Date())) {
     throw new Error("Past scheduled workouts are read-only.");
   }
-  if (toOptionalNumber(source.program.sportType) !== 1) {
-    throw new Error("Only COROS Run workouts can be edited in this release.");
+  if (!workoutSportFromType(source.program.sportType)) {
+    throw new Error(`COROS sport type ${String(source.program.sportType)} is not supported by this editor.`);
   }
   if (workoutEditRevision(source) !== revision) {
     throw new Error("This workout changed in COROS. Reload it before saving.");
@@ -1909,7 +1940,9 @@ export async function createAndScheduleWorkout(
   saveToLibrary = false
 ): Promise<{ programId?: string }> {
   const entry = toPlanWorkoutEntry(entryInput);
-  const payload = buildWorkoutPayloadFromEntry(entry);
+  const resolvedEntry = await resolveWorkoutEntryExercises(entry);
+  const context = parseWorkoutEditorContext(await loadWorkoutEditorAccount());
+  const payload = buildWorkoutPayloadFromEntry(resolvedEntry, context);
   // Schedule a calculated full payload, not the library query summary. The
   // summary omits fields needed by simple and structured workouts.
   let program: Record<string, unknown>;
@@ -1972,7 +2005,8 @@ export async function rescheduleScheduledWorkout(
   await removeScheduledWorkout({
     planId: match.planId,
     idInPlan: match.idInPlan,
-    planProgramId: match.planProgramId
+    planProgramId: match.planProgramId,
+    pbVersion: toOptionalNumber(match.rawProgram.pbVersion)
   });
 }
 
@@ -2040,7 +2074,8 @@ export async function deleteWorkout(options: {
     await removeScheduledWorkout({
       planId: scheduleEntry.planId,
       idInPlan: scheduleEntry.idInPlan,
-      planProgramId: scheduleEntry.planProgramId
+      planProgramId: scheduleEntry.planProgramId,
+      pbVersion: toOptionalNumber(scheduleEntry.rawProgram?.pbVersion)
     });
     removedFromSchedule = true;
     resolvedName = resolvedName ?? scheduleEntry.name;
@@ -2158,12 +2193,105 @@ function toPlanWorkoutEntry(entry: PlanWorkoutEntryInput): PlanWorkoutEntry {
   return {
     key: entry.key,
     name: entry.name,
+    sport: entry.sport ?? "run",
+    sport_options: entry.sport_options,
     steps: entry.steps as PlanWorkoutEntry["steps"],
     distance_km: entry.distance_km,
     schedule_date: entry.schedule_date,
     sort_no: entry.sort_no,
     save_to_library: entry.save_to_library
   };
+}
+
+function exerciseCatalogRows(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) {
+    return value.flatMap(exerciseCatalogRows);
+  }
+  if (!value || typeof value !== "object") return [];
+  const object = value as Record<string, unknown>;
+  const looksLikeExercise = ["id", "originId", "exerciseId"].some(
+    (key) => object[key] !== undefined
+  ) && ["name", "nameText", "displayName", "exerciseName"].some(
+    (key) => object[key] !== undefined
+  );
+  return [
+    ...(looksLikeExercise ? [object] : []),
+    ...["list", "rows", "data", "exercises", "records"].flatMap((key) =>
+      exerciseCatalogRows(object[key])
+    )
+  ];
+}
+
+async function loadWorkoutExerciseCatalog(sport: WorkoutSport): Promise<Record<string, unknown>[]> {
+  if (sport !== "strength" && sport !== "hyrox") return [];
+  const auth = getStoredAuth();
+  const raw = await trainingHubGet<unknown>("/training/exercise/query", {
+    sportType: workoutSportTypeForService(sport),
+    ...(auth?.userId ? { userId: auth.userId } : {}),
+    keyword: ""
+  });
+  return exerciseCatalogRows(raw);
+}
+
+export async function listWorkoutExercises(
+  sport: WorkoutSport
+): Promise<WorkoutExerciseOption[]> {
+  const catalog = await loadWorkoutExerciseCatalog(sport);
+  return [...new Map(catalog.flatMap((row) => {
+    const id = workoutExerciseId(row);
+    const name = workoutExerciseName(row);
+    if (!id || !name) return [];
+    const exerciseKind = toOptionalNumber(row.exerciseKind);
+    const option: WorkoutExerciseOption = {
+      id,
+      name,
+      ...(exerciseKind !== undefined ? { exerciseKind } : {})
+    };
+    return [[id, option] as const];
+  })).values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+async function resolveWorkoutEntryExercises(
+  entry: PlanWorkoutEntry
+): Promise<PlanWorkoutEntry> {
+  const sport = entry.sport ?? "run";
+  if (!WORKOUT_SPORT_CAPABILITIES[sport].requiresExercise || !entry.steps?.length) {
+    return entry;
+  }
+  const cloned = structuredClone(entry);
+  const plainSteps = cloned.steps!.flatMap((step) =>
+    "repeat" in step ? step.steps : [step]
+  );
+  const unresolved = plainSteps.filter(
+    (step) => step.kind === "training" && !step.exercise_id && step.exercise_name
+  );
+  if (!unresolved.length) return cloned;
+
+  const catalog = await loadWorkoutExerciseCatalog(sport);
+
+  for (const step of unresolved) {
+    const resolution = resolveWorkoutExerciseName(catalog, step.exercise_name!);
+    if (!resolution.match) {
+      throw new Error(
+        resolution.candidates.length === 0
+          ? `Exercise "${step.exercise_name}" is unavailable in the COROS ${WORKOUT_SPORT_CAPABILITIES[sport].label} catalog.`
+          : `Exercise "${step.exercise_name}" is ambiguous. Choose one of: ${resolution.candidates.join(", ")}.`
+      );
+    }
+    const match = resolution.match;
+    const id = workoutExerciseId(match);
+    if (!id) throw new Error(`Exercise "${step.exercise_name}" has no COROS exercise ID.`);
+    step.exercise_id = id;
+    step.exercise_name = workoutExerciseName(match) || step.exercise_name;
+    const exerciseKind = toOptionalNumber(match.exerciseKind);
+    if (exerciseKind !== undefined) step.exercise_kind = exerciseKind;
+  }
+  return cloned;
+}
+
+function workoutSportTypeForService(sport: keyof typeof WORKOUT_SPORT_CAPABILITIES): number {
+  // HYROX functional stations use COROS's Strength exercise catalog.
+  return sport === "hyrox" ? 4 : WORKOUT_SPORT_CAPABILITIES[sport].sportType;
 }
 
 export async function uploadTrainingPlan(
@@ -2188,9 +2316,11 @@ export async function uploadTrainingPlan(
     { programId: string; program: Record<string, unknown> }
   >();
   const calculatedPrograms = new Map<string, Record<string, unknown>>();
+  const context = parseWorkoutEditorContext(await loadWorkoutEditorAccount());
 
   for (const entry of draft.workouts) {
-    const payload = buildWorkoutPayloadFromEntry(entry);
+    const resolvedEntry = await resolveWorkoutEntryExercises(entry);
+    const payload = buildWorkoutPayloadFromEntry(resolvedEntry, context);
     const workoutSignature = JSON.stringify(payload);
     const saveToLibrary = entry.save_to_library !== false;
     // Schedule a calculated full payload, not the library query summary. The

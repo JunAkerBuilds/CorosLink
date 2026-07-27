@@ -25,9 +25,28 @@ import type {
   WorkoutEditPreview,
   WorkoutEditRef,
   WorkoutEditSaveResult,
-  WorkoutEditorContext
+  WorkoutEditorContext,
+  WorkoutExerciseOption,
+  WorkoutHeartRateBasis,
+  WorkoutIntensityInput,
+  WorkoutSport
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
+import {
+  CLIMB_GRADES,
+  CLIMB_SYSTEM_IDS,
+  FTP_PRESETS,
+  HEART_RATE_PRESETS,
+  PACE_PRESETS,
+  RUNNING_POWER_PRESETS,
+  SWIM_STROKE_IDS,
+  WORKOUT_SPORT_CAPABILITIES,
+  formatIntensityType,
+  formatWorkoutSport,
+  validateWorkoutDraftShared,
+  workoutIntensitiesForStep,
+  workoutTargetsForStep
+} from "../../electron/workoutCapabilities";
 
 interface WorkoutEditorModalProps {
   api: CorosLinkApi;
@@ -49,14 +68,21 @@ function localId(prefix: string): string {
   return `${prefix}-new-${Date.now()}-${localNodeCounter}`;
 }
 
-function emptyStep(kind: RunWorkoutEditorStepKind = "training"): RunWorkoutEditorStep {
+function emptyStep(
+  kind: RunWorkoutEditorStepKind = "training",
+  sport: WorkoutSport = "run"
+): RunWorkoutEditorStep {
+  const capability = WORKOUT_SPORT_CAPABILITIES[sport];
   return {
     id: localId("step"),
     nodeType: "step",
     kind,
     name: kind === "rest" ? "Rest" : kind === "warmup" ? "Warm Up" : kind === "cooldown" ? "Cool Down" : "Training",
     target: { type: "time", seconds: kind === "rest" ? 60 : 300 },
-    intensity: { type: "none" },
+    intensity: structuredClone(capability.defaultIntensity),
+    ...(capability.requiresExercise && kind === "training"
+      ? { exerciseName: "" }
+      : {}),
     editable: true
   };
 }
@@ -112,6 +138,8 @@ function stepTitle(kind: RunWorkoutEditorStepKind): string {
       ? "Cool Down"
       : kind === "rest"
         ? "Rest"
+        : kind === "sendOff"
+          ? "Send-off"
         : "Training";
 }
 
@@ -124,6 +152,9 @@ function targetForType(
   if (type === "hrRecovery") {
     return kind === "rest" ? { type, bpm: 120 } : { type: "time", seconds: 60 };
   }
+  if (type === "reps") return { type, count: 10 };
+  if (type === "elevationGain") return { type, meters: 500 };
+  if (type === "routes") return { type, count: 4 };
   if (type === "open") return { type };
   return { type, seconds: kind === "rest" ? 60 : 300 };
 }
@@ -132,7 +163,7 @@ function intensityForType(
   type: RunWorkoutEditorIntensity["type"],
   context: WorkoutEditorContext
 ): RunWorkoutEditorIntensity {
-  if (type === "pace") {
+  if (type === "pace" || type === "effortPace") {
     return {
       type,
       lowSecondsPerKm: 300,
@@ -141,15 +172,17 @@ function intensityForType(
     };
   }
   if (type === "heartRate") return { type, lowBpm: 140, highBpm: 155 };
-  if (type === "lthrPercent") {
-    const zone = context.lthrZones[2];
-    return {
-      type,
-      lowPercent: zone?.lowPercent ?? 90,
-      highPercent: zone?.highPercent ?? 95,
-      ...(zone ? { zoneId: zone.index } : {})
-    };
-  }
+  if (type === "heartRatePercent") return { type, basis: "maxHr", preset: "aerobicEndurance" };
+  if (type === "lthrPercent") return { type, lowPercent: 91, highPercent: 95 };
+  if (type === "thresholdPacePercent" || type === "effortPacePercent") return { type, preset: "aerobicEndurance" };
+  if (type === "ftpPercent") return { type, preset: "aerobicEndurance" };
+  if (type === "power") return { type, lowWatts: 180, highWatts: 220 };
+  if (type === "speed") return { type, low: 10, high: 12, unit: context.distanceUnit === "imperial" ? "mph" : "km/h" };
+  if (type === "cadence") return { type, low: 80, high: 90, unit: "rpm" };
+  if (type === "swimStroke") return { type, stroke: "freestyle" };
+  if (type === "weight") return { type, mode: "bodyweight" };
+  if (type === "rpe") return { type, value: 5 };
+  if (type === "climbGrade") return { type, system: "yds", relativeToOnsight: 0 };
   return { type: "none" };
 }
 
@@ -160,35 +193,6 @@ function moveItem<T>(items: T[], from: number, to: number): T[] {
   if (item === undefined) return items;
   next.splice(Math.min(to, next.length), 0, item);
   return next;
-}
-
-function validateDraft(draft: RunWorkoutEditorDraft): { valid: boolean; errors: Record<string, string> } {
-  const errors: Record<string, string> = {};
-  if (!draft.name.trim()) errors.name = "Name is required.";
-  if (draft.name.trim().length > 90) errors.name = "Name must be 90 characters or fewer.";
-  if (draft.overview.length > 300) errors.overview = "Description must be 300 characters or fewer.";
-  if (draft.nodes.length === 0) errors.nodes = "Add at least one workout step.";
-  const checkStep = (step: RunWorkoutEditorStep, path: string) => {
-    if (!step.editable) return;
-    const target = step.target;
-    if (target.type === "time" && target.seconds <= 0) errors[`${path}.target`] = "Time must be greater than zero.";
-    if (target.type === "distance" && target.meters <= 0) errors[`${path}.target`] = "Distance must be greater than zero.";
-    if (target.type === "load" && (!Number.isInteger(target.load) || target.load < 0 || target.load > 999)) errors[`${path}.target`] = "Training Load must be a whole number from 0 to 999.";
-    if (target.type === "hrRecovery" && (step.kind !== "rest" || target.bpm < 30 || target.bpm > 250)) errors[`${path}.target`] = "HR Recovery must be from 30 to 250 bpm on a Rest step.";
-    const intensity = step.intensity;
-    if (intensity.type === "pace" && (intensity.lowSecondsPerKm <= 0 || intensity.highSecondsPerKm <= 0 || intensity.lowSecondsPerKm > intensity.highSecondsPerKm)) errors[`${path}.intensity`] = "Enter a valid pace range.";
-    if (intensity.type === "heartRate" && (intensity.lowBpm < 30 || intensity.highBpm > 250 || intensity.lowBpm > intensity.highBpm)) errors[`${path}.intensity`] = "Heart rate must be from 30 to 250 bpm.";
-    if (intensity.type === "lthrPercent" && (intensity.lowPercent < 1 || intensity.highPercent > 200 || intensity.lowPercent > intensity.highPercent)) errors[`${path}.intensity`] = "LTHR percentage must be from 1 to 200%.";
-  };
-  draft.nodes.forEach((node, index) => {
-    if (node.nodeType === "step") checkStep(node, `nodes.${index}`);
-    else {
-      if (!Number.isInteger(node.repeat) || node.repeat < 1 || node.repeat > 99) errors[`nodes.${index}.repeat`] = "Repeat count must be from 1 to 99.";
-      if (node.steps.length === 0) errors[`nodes.${index}.steps`] = "Repeat groups need at least one step.";
-      node.steps.forEach((step, childIndex) => checkStep(step, `nodes.${index}.steps.${childIndex}`));
-    }
-  });
-  return { valid: Object.keys(errors).length === 0, errors };
 }
 
 export function WorkoutEditorModal({
@@ -206,6 +210,7 @@ export function WorkoutEditorModal({
   const [previewing, setPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [exerciseOptions, setExerciseOptions] = useState<WorkoutExerciseOption[]>([]);
   const [confirmClose, setConfirmClose] = useState(false);
   const previewSequence = useRef(0);
 
@@ -225,9 +230,20 @@ export function WorkoutEditorModal({
     return () => { cancelled = true; };
   }, [api, editRef]);
 
+  useEffect(() => {
+    const sport = draft?.sport;
+    if (sport !== "strength" && sport !== "hyrox") {
+      setExerciseOptions([]);
+      return;
+    }
+    void api.listWorkoutExercises(sport)
+      .then(setExerciseOptions)
+      .catch(() => setExerciseOptions([]));
+  }, [api, draft?.sport]);
+
   const dirty = Boolean(document && draft && JSON.stringify(document.draft) !== JSON.stringify(draft));
   const validation = useMemo(
-    () => draft ? validateDraft(draft) : { valid: false, errors: {} },
+    () => draft ? validateWorkoutDraftShared(draft) : { valid: false, errors: {} },
     [draft]
   );
 
@@ -419,7 +435,7 @@ export function WorkoutEditorModal({
           <header className="workout-editor-header">
             <div>
               <p className="eyebrow">{editRef.kind === "scheduled" ? "Scheduled occurrence" : "Workout library"}</p>
-              <h2 id="workout-editor-title">Edit running workout</h2>
+              <h2 id="workout-editor-title">Edit {draft ? formatWorkoutSport(draft.sport) : "workout"}</h2>
             </div>
             <button type="button" className="icon-button" aria-label="Close workout editor" onClick={requestClose} disabled={saving}>
               <X size={18} aria-hidden="true" />
@@ -441,6 +457,59 @@ export function WorkoutEditorModal({
                 {!document.canEdit ? <div className="workout-editor-notice"><AlertTriangle size={16} aria-hidden="true" />{document.unsupportedReason}</div> : null}
                 <div className="workout-editor-basics">
                   <label className="calendar-field">
+                    <span>Sport</span>
+                    <select value={draft.sport} disabled title="An existing COROS workout cannot change sport in place.">
+                      <option value={draft.sport}>{formatWorkoutSport(draft.sport)}</option>
+                    </select>
+                  </label>
+                  {draft.sport === "swim" ? (
+                    <label className="calendar-field">
+                      <span>Pool length</span>
+                      <div className="workout-range-inputs">
+                        <input
+                          type="number"
+                          min="1"
+                          value={draft.sportOptions?.poolLength?.value ?? document.context.defaultPoolLength.value}
+                          disabled={!document.canEdit || saving}
+                          onChange={(event) => setDraft({
+                            ...draft,
+                            sportOptions: {
+                              ...draft.sportOptions,
+                              poolLength: {
+                                value: Number(event.target.value),
+                                unit: draft.sportOptions?.poolLength?.unit ?? document.context.defaultPoolLength.unit
+                              }
+                            }
+                          })}
+                        />
+                        <select
+                          value={draft.sportOptions?.poolLength?.unit ?? document.context.defaultPoolLength.unit}
+                          disabled={!document.canEdit || saving}
+                          onChange={(event) => setDraft({
+                            ...draft,
+                            sportOptions: {
+                              ...draft.sportOptions,
+                              poolLength: {
+                                value: draft.sportOptions?.poolLength?.value ?? document.context.defaultPoolLength.value,
+                                unit: event.target.value as "m" | "yd"
+                              }
+                            }
+                          })}
+                        ><option value="m">m</option><option value="yd">yd</option></select>
+                      </div>
+                    </label>
+                  ) : null}
+                  {(draft.sport === "indoorClimb" || draft.sport === "bouldering") ? (
+                    <label className="calendar-field">
+                      <span>Grading system</span>
+                      <select
+                        value={draft.sportOptions?.gradingSystem ?? document.context.climbSystems[draft.sport] ?? (draft.sport === "bouldering" ? "vScale" : "yds")}
+                        disabled={!document.canEdit || saving}
+                        onChange={(event) => setDraft({ ...draft, sportOptions: { ...draft.sportOptions, gradingSystem: event.target.value as keyof typeof CLIMB_SYSTEM_IDS } })}
+                      >{Object.keys(CLIMB_SYSTEM_IDS).map((system) => <option key={system} value={system}>{system}</option>)}</select>
+                    </label>
+                  ) : null}
+                  <label className="calendar-field">
                     <span>Name</span>
                     <input maxLength={90} value={draft.name} disabled={!document.canEdit || saving} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
                     <small>{draft.name.length}/90</small>
@@ -456,13 +525,13 @@ export function WorkoutEditorModal({
 
                 <div className="workout-editor-structure-header">
                   <div><h3>Workout structure</h3><p>Drag between cards to reorder. Drop one step on another to create a repeat.</p></div>
-                  <button type="button" className="ghost-button" disabled={!document.canEdit || saving} onClick={() => setDraft({ ...draft, nodes: [...draft.nodes, emptyStep()] })}>
+                  <button type="button" className="ghost-button" disabled={!document.canEdit || saving} onClick={() => setDraft({ ...draft, nodes: [...draft.nodes, emptyStep("training", draft.sport)] })}>
                     <Plus size={15} aria-hidden="true" /> Add step
                   </button>
                 </div>
 
                 {draft.nodes.length === 0 ? (
-                  <div className="workout-editor-empty"><p>No workout steps yet.</p><button type="button" className="primary-button" onClick={() => setDraft({ ...draft, nodes: [emptyStep()] })}>Add first step</button></div>
+                  <div className="workout-editor-empty"><p>No workout steps yet.</p><button type="button" className="primary-button" onClick={() => setDraft({ ...draft, nodes: [emptyStep("training", draft.sport)] })}>Add first step</button></div>
                 ) : (
                   <div className="workout-editor-nodes">
                     {draft.nodes.map((node, index) => (
@@ -470,8 +539,9 @@ export function WorkoutEditorModal({
                         <div className="workout-drop-zone" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); reorderTop(event.dataTransfer.getData("text/workout-node"), index); }} />
                         {node.nodeType === "step" ? (
                           <StepCard
-                            step={node} location={{ nodeId: node.id }} context={document.context}
-                            error={validation.errors[`nodes.${index}.target`] ?? validation.errors[`nodes.${index}.intensity`]}
+                            step={node} location={{ nodeId: node.id }} context={document.context} sport={draft.sport}
+                            exerciseOptions={exerciseOptions}
+                            error={validation.errors[`nodes.${index}.target`] ?? validation.errors[`nodes.${index}.intensity`] ?? validation.errors[`nodes.${index}.exercise`]}
                             disabled={!document.canEdit || saving} draggable
                             onDragStart={(event) => event.dataTransfer.setData("text/workout-node", node.id)}
                             onDropCard={node.editable ? (sourceId) => groupByDrop(sourceId, node.id) : undefined}
@@ -483,7 +553,8 @@ export function WorkoutEditorModal({
                           />
                         ) : (
                           <RepeatCard
-                            group={node} nodeIndex={index} context={document.context} errors={validation.errors}
+                            group={node} nodeIndex={index} context={document.context} sport={draft.sport} errors={validation.errors}
+                            exerciseOptions={exerciseOptions}
                             disabled={!document.canEdit || saving}
                             onDragStart={(event) => event.dataTransfer.setData("text/workout-node", node.id)}
                             onChange={(group) => setDraft({ ...draft, nodes: draft.nodes.map((item) => item.id === group.id ? group : item) })}
@@ -538,6 +609,8 @@ interface StepCardProps {
   step: RunWorkoutEditorStep;
   location: StepLocation;
   context: WorkoutEditorContext;
+  sport: WorkoutSport;
+  exerciseOptions: WorkoutExerciseOption[];
   error?: string;
   disabled: boolean;
   draggable?: boolean;
@@ -551,19 +624,26 @@ interface StepCardProps {
   onUngroup?: () => void;
 }
 
-function StepCard({ step, context, error, disabled, draggable, onDragStart, onDropCard, onChange, onMove, onDuplicate, onDelete, onGroup, onUngroup }: StepCardProps) {
+function StepCard({ step, context, sport, exerciseOptions, error, disabled, draggable, onDragStart, onDropCard, onChange, onMove, onDuplicate, onDelete, onGroup, onUngroup }: StepCardProps) {
   const locked = disabled || !step.editable;
+  const capability = WORKOUT_SPORT_CAPABILITIES[sport];
   const changeKind = (kind: RunWorkoutEditorStepKind) => {
     let target = step.target;
     if (target.type === "hrRecovery" && kind !== "rest") target = { type: "time", seconds: 60 };
-    onChange({ ...step, kind, name: stepTitle(kind), target });
+    onChange({
+      ...step,
+      kind,
+      name: stepTitle(kind),
+      target,
+      ...(kind === "sendOff" ? { sendOffSeconds: step.sendOffSeconds ?? 120 } : {})
+    });
   };
   return (
     <motion.article layout className={`workout-step-card is-${step.kind} ${!step.editable ? "is-locked" : ""}`} draggable={draggable && !disabled} onDragStartCapture={onDragStart} onDragOver={(event) => { if (onDropCard) event.preventDefault(); }} onDrop={(event) => { if (!onDropCard) return; event.preventDefault(); onDropCard(event.dataTransfer.getData("text/workout-node")); }}>
       <header className="workout-step-header">
         <GripVertical className="workout-drag-handle" size={18} aria-hidden="true" />
         <select aria-label="Step kind" value={step.kind} disabled={locked} onChange={(event) => changeKind(event.target.value as RunWorkoutEditorStepKind)}>
-          <option value="warmup">Warm Up</option><option value="training">Training</option><option value="rest">Rest</option><option value="cooldown">Cool Down</option>
+          {capability.stepKinds.map((kind) => <option key={kind} value={kind}>{stepTitle(kind)}</option>)}
         </select>
         <input aria-label="Step name" value={step.name} disabled={locked} maxLength={90} onChange={(event) => onChange({ ...step, name: event.target.value })} />
         <div className="workout-step-actions">
@@ -577,8 +657,10 @@ function StepCard({ step, context, error, disabled, draggable, onDragStart, onDr
       </header>
       {step.unsupportedReason ? <div className="workout-step-warning"><AlertTriangle size={14} aria-hidden="true" />{step.unsupportedReason}</div> : null}
       <div className="workout-step-fields">
-        <TargetFields step={step} context={context} disabled={locked} onChange={onChange} />
-        <IntensityFields step={step} context={context} disabled={locked} onChange={onChange} />
+        <TargetFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
+        <IntensityFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
+        {step.kind === "sendOff" ? <label className="workout-control-group"><span>Send-off interval</span><ClockInput label="Send-off interval" seconds={step.sendOffSeconds ?? 120} disabled={locked} onChange={(seconds) => onChange({ ...step, sendOffSeconds: seconds })} /></label> : null}
+        {capability.requiresExercise && step.kind === "training" ? <label className="workout-control-group"><span>Exercise</span><input type="search" list={`workout-exercises-${step.id}`} value={step.exerciseName ?? ""} placeholder="Search by COROS exercise name" disabled={locked} onChange={(event) => { const exerciseName = event.target.value; const match = exerciseOptions.find((option) => option.name.toLocaleLowerCase() === exerciseName.trim().toLocaleLowerCase()); onChange({ ...step, exerciseName, exerciseId: match?.id, exerciseKind: match?.exerciseKind }); }} /><datalist id={`workout-exercises-${step.id}`}>{exerciseOptions.map((option) => <option key={option.id} value={option.name} />)}</datalist>{step.exerciseId ? <small>COROS exercise selected · {step.exerciseId}</small> : <small>Name must resolve to one unique COROS exercise before upload.</small>}</label> : null}
       </div>
       {error ? <p className="workout-field-error">{error}</p> : null}
     </motion.article>
@@ -600,42 +682,142 @@ function ClockInput({ seconds, disabled, label, onChange }: { seconds: number; d
   return <input aria-label={label} value={value} disabled={disabled} inputMode="numeric" placeholder="05:00" onChange={(event) => setValue(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />;
 }
 
-function TargetFields({ step, context, disabled, onChange }: { step: RunWorkoutEditorStep; context: WorkoutEditorContext; disabled: boolean; onChange: (step: RunWorkoutEditorStep) => void }) {
+function TargetFields({ step, context, sport, disabled, onChange }: { step: RunWorkoutEditorStep; context: WorkoutEditorContext; sport: WorkoutSport; disabled: boolean; onChange: (step: RunWorkoutEditorStep) => void }) {
   const target = step.target;
+  const targetTypes = workoutTargetsForStep(sport, step.kind, step.exerciseKind);
   const distanceMultiplier = context.distanceUnit === "imperial" ? 1609.344 : 1000;
   return <div className="workout-control-group">
     <label><span>Target</span><select value={target.type} disabled={disabled} onChange={(event) => onChange({ ...step, target: targetForType(event.target.value as RunWorkoutEditorTarget["type"], step.kind) })}>
-      <option value="time">Time</option><option value="distance">Distance</option><option value="load">Training Load</option>{step.kind === "rest" ? <option value="hrRecovery">HR Recovery</option> : null}<option value="open">Open</option>
+      {targetTypes.map((type) => <option key={type} value={type}>{type === "load" ? "Training Load" : type === "hrRecovery" ? "HR Recovery" : type === "elevationGain" ? "Elevation Gain" : type[0]!.toUpperCase() + type.slice(1)}</option>)}
     </select></label>
     {target.type === "time" ? <label><span>Duration</span><ClockInput label="Duration" seconds={target.seconds} disabled={disabled} onChange={(seconds) => onChange({ ...step, target: { type: "time", seconds } })} /></label> : null}
     {target.type === "distance" ? <label><span>Distance ({context.distanceUnit === "imperial" ? "mi" : "km"})</span><input type="number" min="0" step="0.1" value={Number((target.meters / distanceMultiplier).toFixed(3))} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "distance", meters: Number(event.target.value) * distanceMultiplier } })} /></label> : null}
     {target.type === "load" ? <label><span>Training Load</span><input type="number" min="0" max="999" step="1" value={target.load} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "load", load: Number(event.target.value) } })} /></label> : null}
-    {target.type === "hrRecovery" ? <label><span>Return to bpm</span><input type="number" min="30" max="250" value={target.bpm} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "hrRecovery", bpm: Number(event.target.value) } })} /></label> : null}
+    {target.type === "hrRecovery" ? <label><span>Return to bpm</span><input type="number" min="30" max="180" value={target.bpm} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "hrRecovery", bpm: Number(event.target.value) } })} /></label> : null}
+    {target.type === "reps" ? <label><span>Repetitions</span><input type="number" min="1" max="500" value={target.count} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "reps", count: Number(event.target.value) } })} /></label> : null}
+    {target.type === "routes" ? <label><span>Routes</span><input type="number" min="1" max="20" value={target.count} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "routes", count: Number(event.target.value) } })} /></label> : null}
+    {target.type === "elevationGain" ? <label><span>Gain (m)</span><input type="number" min="20" max="10000" value={target.meters} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "elevationGain", meters: Number(event.target.value) } })} /></label> : null}
     {target.type === "open" ? <p className="workout-control-hint">Ends when you press the lap button.</p> : null}
   </div>;
 }
 
-function IntensityFields({ step, context, disabled, onChange }: { step: RunWorkoutEditorStep; context: WorkoutEditorContext; disabled: boolean; onChange: (step: RunWorkoutEditorStep) => void }) {
+function profileZone(
+  context: WorkoutEditorContext,
+  key: keyof WorkoutEditorContext["zones"],
+  preset: string | undefined,
+  id: number | undefined
+) {
+  return context.zones[key]?.find(
+    (zone) => zone.id === id || zone.key === preset || zone.label === preset
+  );
+}
+
+function derivedPaceLabel(secondsPerKm: number, context: WorkoutEditorContext): string {
+  const displaySeconds = secondsPerKm * (context.paceUnit === "mi" ? 1.609344 : 1);
+  return `${clockFromSeconds(displaySeconds)}/${context.paceUnit}`;
+}
+
+function IntensityFields({ step, context, sport, disabled, onChange }: { step: RunWorkoutEditorStep; context: WorkoutEditorContext; sport: WorkoutSport; disabled: boolean; onChange: (step: RunWorkoutEditorStep) => void }) {
   const intensity = step.intensity;
+  const intensityTypes = workoutIntensitiesForStep(sport, step.kind, step.exerciseKind);
   const paceFactor = context.paceUnit === "mi" ? 1.609344 : 1;
   const setIntensity = (next: RunWorkoutEditorIntensity) => onChange({ ...step, intensity: next });
-  const lthrBpm = context.lthrBpm;
+  const numberRange = (low: number, high: number, lowLabel: string, highLabel: string, update: (low: number, high: number) => WorkoutIntensityInput, min = 0, max = 3000) => (
+    <div className="workout-range-inputs"><label><span>{lowLabel}</span><input type="number" min={min} max={max} value={low} disabled={disabled} onChange={(event) => setIntensity(update(Number(event.target.value), high))} /></label><span>to</span><label><span>{highLabel}</span><input type="number" min={min} max={max} value={high} disabled={disabled} onChange={(event) => setIntensity(update(low, Number(event.target.value)))} /></label></div>
+  );
+  const percentRange = (value: { lowPercent: number; highPercent: number }, update: (low: number, high: number) => WorkoutIntensityInput) => numberRange(value.lowPercent, value.highPercent, "Low %", "High %", update, 1, 300);
   return <div className="workout-control-group">
-    <label><span>Intensity</span><select value={intensity.type} disabled={disabled} onChange={(event) => setIntensity(intensityForType(event.target.value as RunWorkoutEditorIntensity["type"], context))}>
-      <option value="none">Not Set</option><option value="pace">Pace range</option><option value="heartRate">Heart Rate range</option><option value="lthrPercent">Percent LTHR</option>
+    <label><span>Intensity</span><select value={intensity.type === "lthrPercent" ? "heartRatePercent" : intensity.type} disabled={disabled} onChange={(event) => setIntensity(intensityForType(event.target.value as RunWorkoutEditorIntensity["type"], context))}>
+      {intensityTypes.map((type) => <option key={type} value={type}>{formatIntensityType(type)}</option>)}
     </select></label>
-    {intensity.type === "pace" ? <div className="workout-range-inputs"><label><span>Fast ({context.paceUnit})</span><ClockInput label={`Fast pace per ${context.paceUnit}`} seconds={intensity.lowSecondsPerKm * paceFactor} disabled={disabled} onChange={(seconds) => setIntensity({ ...intensity, lowSecondsPerKm: seconds / paceFactor, displayUnit: context.paceUnit })} /></label><span>to</span><label><span>Slow ({context.paceUnit})</span><ClockInput label={`Slow pace per ${context.paceUnit}`} seconds={intensity.highSecondsPerKm * paceFactor} disabled={disabled} onChange={(seconds) => setIntensity({ ...intensity, highSecondsPerKm: seconds / paceFactor, displayUnit: context.paceUnit })} /></label></div> : null}
-    {intensity.type === "heartRate" ? <div className="workout-range-inputs"><label><span>Low bpm</span><input type="number" min="30" max="250" value={intensity.lowBpm} disabled={disabled} onChange={(event) => setIntensity({ ...intensity, lowBpm: Number(event.target.value) })} /></label><span>to</span><label><span>High bpm</span><input type="number" min="30" max="250" value={intensity.highBpm} disabled={disabled} onChange={(event) => setIntensity({ ...intensity, highBpm: Number(event.target.value) })} /></label></div> : null}
-    {intensity.type === "lthrPercent" ? <>
-      {context.lthrZones.length > 0 ? <label><span>COROS zone preset</span><select value={intensity.zoneId ?? "custom"} disabled={disabled} onChange={(event) => { const zone = context.lthrZones.find((item) => item.index === Number(event.target.value)); setIntensity(zone ? { type: "lthrPercent", lowPercent: zone.lowPercent, highPercent: zone.highPercent, zoneId: zone.index } : { ...intensity, zoneId: undefined }); }}><option value="custom">Custom range</option>{context.lthrZones.map((zone) => <option key={zone.index} value={zone.index}>{zone.label}: {zone.lowPercent} to {zone.highPercent}%</option>)}</select></label> : null}
-      <div className="workout-range-inputs"><label><span>Low %</span><input type="number" min="1" max="200" value={intensity.lowPercent} disabled={disabled} onChange={(event) => setIntensity({ ...intensity, lowPercent: Number(event.target.value), zoneId: undefined })} /></label><span>to</span><label><span>High %</span><input type="number" min="1" max="200" value={intensity.highPercent} disabled={disabled} onChange={(event) => setIntensity({ ...intensity, highPercent: Number(event.target.value), zoneId: undefined })} /></label></div>
-      <p className="workout-control-hint">{lthrBpm ? `Preview: ${Math.round(lthrBpm * intensity.lowPercent / 100)} to ${Math.round(lthrBpm * intensity.highPercent / 100)} bpm from ${lthrBpm} LTHR` : "COROS zone data is unavailable. Percentages will still be saved."}</p>
+
+    {(intensity.type === "pace" || intensity.type === "effortPace") ? <div className="workout-range-inputs"><label><span>Fast ({context.paceUnit})</span><ClockInput label={`Fast pace per ${context.paceUnit}`} seconds={intensity.lowSecondsPerKm * paceFactor} disabled={disabled} onChange={(seconds) => setIntensity({ ...intensity, lowSecondsPerKm: seconds / paceFactor, displayUnit: context.paceUnit })} /></label><span>to</span><label><span>Slow ({context.paceUnit})</span><ClockInput label={`Slow pace per ${context.paceUnit}`} seconds={intensity.highSecondsPerKm * paceFactor} disabled={disabled} onChange={(seconds) => setIntensity({ ...intensity, highSecondsPerKm: seconds / paceFactor, displayUnit: context.paceUnit })} /></label></div> : null}
+
+    {intensity.type === "heartRate" ? numberRange(intensity.lowBpm, intensity.highBpm, "Low bpm", "High bpm", (lowBpm, highBpm) => ({ type: "heartRate", lowBpm, highBpm }), 30, 250) : null}
+
+    {intensity.type === "heartRatePercent" ? <>
+      <label><span>Basis</span><select value={intensity.basis} disabled={disabled} onChange={(event) => setIntensity({ type: "heartRatePercent", basis: event.target.value as WorkoutHeartRateBasis, preset: "aerobicEndurance" })}><option value="maxHr">% Max Heart Rate</option><option value="reserve">% Heart Rate Reserve</option><option value="lthr">% Lactate Threshold HR</option></select></label>
+      <label><span>Zone or custom</span><select value={intensity.preset ?? "custom"} disabled={disabled} onChange={(event) => { const preset = event.target.value; const definition = HEART_RATE_PRESETS[intensity.basis].find((zone) => zone.preset === preset); const configured = profileZone(context, intensity.basis, preset, definition?.id); setIntensity(preset === "custom" ? { type: "heartRatePercent", basis: intensity.basis, lowPercent: 80, highPercent: 90 } : { type: "heartRatePercent", basis: intensity.basis, preset: preset as never, ...(configured ? { zoneId: configured.id } : {}) }); }}><option value="custom">Custom range</option>{HEART_RATE_PRESETS[intensity.basis].map((zone) => { const configured = profileZone(context, intensity.basis, zone.preset, zone.id); return <option key={zone.id} value={zone.preset}>{configured?.label ?? zone.label} · {configured?.lowPercent ?? zone.low}–{configured?.highPercent ?? zone.high}%</option>; })}</select></label>
+      {!intensity.preset ? percentRange(intensity, (lowPercent, highPercent) => ({ type: "heartRatePercent", basis: intensity.basis, lowPercent, highPercent })) : null}
+      <HeartRatePreview intensity={intensity} context={context} />
+    </> : null}
+
+    {(intensity.type === "thresholdPacePercent" || intensity.type === "effortPacePercent") ? <>
+      <label><span>Zone or custom</span><select value={intensity.preset ?? "custom"} disabled={disabled} onChange={(event) => { const preset = event.target.value; const definition = PACE_PRESETS.find((zone) => zone.preset === preset); const configured = profileZone(context, "thresholdPace", preset, definition?.id); setIntensity((preset === "custom" ? { type: intensity.type, lowPercent: 90, highPercent: 100 } : { type: intensity.type, preset, ...(configured ? { zoneId: configured.id } : {}) }) as WorkoutIntensityInput); }}><option value="custom">Custom range</option>{PACE_PRESETS.map((zone) => { const configured = profileZone(context, "thresholdPace", zone.preset, zone.id); return <option key={zone.id} value={zone.preset}>{configured?.label ?? zone.label} · {configured?.lowPercent ?? zone.low}–{configured?.highPercent ?? zone.high}%</option>; })}</select></label>
+      {!intensity.preset ? percentRange(intensity, (lowPercent, highPercent) => ({ type: intensity.type, lowPercent, highPercent })) : null}
+      <PacePercentPreview intensity={intensity} context={context} />
+    </> : null}
+
+    {intensity.type === "ftpPercent" ? <>
+      <label><span>Zone or custom</span><select value={intensity.preset ?? "custom"} disabled={disabled} onChange={(event) => { const preset = event.target.value; const definition = FTP_PRESETS.find((zone) => zone.preset === preset); const configured = profileZone(context, "ftp", preset, definition?.id); setIntensity(preset === "custom" ? { type: "ftpPercent", lowPercent: 90, highPercent: 100 } : { type: "ftpPercent", preset: preset as never, ...(configured ? { zoneId: configured.id } : {}) }); }}><option value="custom">Custom range</option>{FTP_PRESETS.map((zone) => { const configured = profileZone(context, "ftp", zone.preset, zone.id); return <option key={zone.id} value={zone.preset}>{configured?.label ?? zone.label} · {configured?.lowPercent ?? zone.low}–{configured?.highPercent ?? zone.high}%</option>; })}</select></label>
+      {!intensity.preset ? percentRange(intensity, (lowPercent, highPercent) => ({ type: "ftpPercent", lowPercent, highPercent })) : null}
+      <PowerPercentPreview intensity={intensity} context={context} reference={context.ftp} zoneKey="ftp" />
+    </> : null}
+
+    {intensity.type === "power" ? <>
+      <label><span>Zone or custom</span><select value={intensity.preset ?? "custom"} disabled={disabled} onChange={(event) => { const preset = event.target.value; const definition = RUNNING_POWER_PRESETS.find((zone) => zone.preset === preset); const configured = profileZone(context, "runningPower", preset, definition?.id); setIntensity(preset === "custom" ? { type: "power", lowWatts: 180, highWatts: 220 } : { type: "power", preset: preset as never, ...(configured ? { zoneId: configured.id } : {}) }); }}><option value="custom">Custom watts</option>{RUNNING_POWER_PRESETS.map((zone) => { const configured = profileZone(context, "runningPower", zone.preset, zone.id); return <option key={zone.id} value={zone.preset}>{configured?.label ?? zone.label} · {configured?.lowPercent ?? zone.low}–{configured?.highPercent ?? zone.high}%</option>; })}</select></label>
+      {!intensity.preset ? numberRange(intensity.lowWatts, intensity.highWatts, "Low W", "High W", (lowWatts, highWatts) => ({ type: "power", lowWatts, highWatts }), 0, 3000) : <PowerPercentPreview intensity={intensity} context={context} reference={context.criticalPower} zoneKey="runningPower" />}
+    </> : null}
+
+    {intensity.type === "speed" ? numberRange(intensity.low, intensity.high, `Low ${intensity.unit}`, `High ${intensity.unit}`, (low, high) => ({ ...intensity, low, high }), 0, 200) : null}
+    {intensity.type === "cadence" ? numberRange(intensity.low, intensity.high, `Low ${intensity.unit}`, `High ${intensity.unit}`, (low, high) => ({ ...intensity, low, high }), 0, 300) : null}
+
+    {intensity.type === "swimStroke" ? <label><span>Stroke</span><select value={intensity.stroke} disabled={disabled} onChange={(event) => setIntensity({ type: "swimStroke", stroke: event.target.value as keyof typeof SWIM_STROKE_IDS })}>{Object.keys(SWIM_STROKE_IDS).map((stroke) => <option key={stroke} value={stroke}>{stroke}</option>)}</select></label> : null}
+
+    {intensity.type === "weight" ? <><label><span>Load</span><select value={intensity.mode} disabled={disabled} onChange={(event) => setIntensity(event.target.value === "bodyweight" ? { type: "weight", mode: "bodyweight" } : { type: "weight", mode: "weight", value: 10, unit: context.distanceUnit === "imperial" ? "lb" : "kg" })}><option value="bodyweight">Bodyweight</option><option value="weight">Weight</option></select></label>{intensity.mode === "weight" ? <label><span>Weight</span><div className="workout-range-inputs"><input type="number" min="0" max="2000" value={intensity.value} disabled={disabled} onChange={(event) => setIntensity({ ...intensity, value: Number(event.target.value) })} /><select value={intensity.unit} disabled={disabled} onChange={(event) => setIntensity({ ...intensity, unit: event.target.value as "kg" | "lb" })}><option value="kg">kg</option><option value="lb">lb</option></select></div></label> : null}</> : null}
+
+    {intensity.type === "rpe" ? <label><span>RPE</span><select value={intensity.value} disabled={disabled} onChange={(event) => setIntensity({ type: "rpe", value: Number(event.target.value) })}>{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></label> : null}
+
+    {intensity.type === "climbGrade" ? <>
+      <label><span>System</span><select value={intensity.system} disabled={disabled} onChange={(event) => setIntensity({ type: "climbGrade", system: event.target.value as keyof typeof CLIMB_SYSTEM_IDS, relativeToOnsight: 0 })}>{Object.keys(CLIMB_SYSTEM_IDS).map((system) => <option key={system} value={system}>{system}</option>)}</select></label>
+      <label><span>Grade mode</span><select value={"relativeToOnsight" in intensity ? "relative" : "absolute"} disabled={disabled} onChange={(event) => setIntensity(event.target.value === "relative" ? { type: "climbGrade", system: intensity.system, relativeToOnsight: 0 } : { type: "climbGrade", system: intensity.system, absoluteGrade: CLIMB_GRADES[intensity.system][0]! })}><option value="relative">Relative to onsight</option><option value="absolute">Absolute grade</option></select></label>
+      {"relativeToOnsight" in intensity && intensity.relativeToOnsight !== undefined ? <label><span>Relative level</span><select value={intensity.relativeToOnsight} disabled={disabled} onChange={(event) => setIntensity({ ...intensity, relativeToOnsight: Number(event.target.value) })}>{Array.from({ length: 13 }, (_, index) => index - 8).map((value) => <option key={value} value={value}>{value === 0 ? "Onsight" : `${value > 0 ? "+" : ""}${value}`}</option>)}</select></label> : null}
+      {"absoluteGrade" in intensity && intensity.absoluteGrade !== undefined ? <label><span>Grade</span><select value={intensity.absoluteGrade} disabled={disabled} onChange={(event) => setIntensity({ ...intensity, absoluteGrade: event.target.value })}>{CLIMB_GRADES[intensity.system].map((grade) => <option key={grade} value={grade}>{grade}</option>)}</select></label> : null}
     </> : null}
   </div>;
 }
 
-function RepeatCard({ group, nodeIndex, context, errors, disabled, onDragStart, onChange, onMove, onDuplicate, onDelete, onStepChange, onStepMove, onStepDuplicate, onStepDelete, onStepUngroup }: {
-  group: RunWorkoutEditorRepeatGroup; nodeIndex: number; context: WorkoutEditorContext; errors: Record<string, string>; disabled: boolean;
+function HeartRatePreview({ intensity, context }: { intensity: Extract<WorkoutIntensityInput, { type: "heartRatePercent" }>; context: WorkoutEditorContext }) {
+  const definition = HEART_RATE_PRESETS[intensity.basis].find((zone) => zone.preset === intensity.preset);
+  const configured = profileZone(context, intensity.basis, intensity.preset, intensity.zoneId ?? definition?.id);
+  const low = intensity.lowPercent ?? configured?.lowPercent ?? definition?.low;
+  const high = intensity.highPercent ?? configured?.highPercent ?? definition?.high;
+  const reference = intensity.basis === "lthr" ? context.lthrBpm : context.maxHr;
+  if (low === undefined || high === undefined || !reference) return <p className="workout-control-hint">Profile reference is unavailable; COROS will still receive the percentage target.</p>;
+  const lowBpm = intensity.basis === "reserve" && context.restingHr
+    ? context.restingHr + (reference - context.restingHr) * low / 100
+    : reference * low / 100;
+  const highBpm = intensity.basis === "reserve" && context.restingHr
+    ? context.restingHr + (reference - context.restingHr) * high / 100
+    : reference * high / 100;
+  return <p className="workout-control-hint">Derived preview: {Math.round(lowBpm)}–{Math.round(highBpm)} bpm.</p>;
+}
+
+function PacePercentPreview({ intensity, context }: { intensity: Extract<WorkoutIntensityInput, { type: "thresholdPacePercent" | "effortPacePercent" }>; context: WorkoutEditorContext }) {
+  const definition = PACE_PRESETS.find((zone) => zone.preset === intensity.preset);
+  const configured = profileZone(context, "thresholdPace", intensity.preset, intensity.zoneId ?? definition?.id);
+  const low = intensity.lowPercent ?? configured?.lowPercent ?? definition?.low;
+  const high = intensity.highPercent ?? configured?.highPercent ?? definition?.high;
+  if (!context.thresholdPaceSecondsPerKm || !low || !high) {
+    return <p className="workout-control-hint">Threshold pace is unavailable; the percentage target will still be saved.</p>;
+  }
+  return <p className="workout-control-hint">Derived preview: {derivedPaceLabel(context.thresholdPaceSecondsPerKm * 100 / high, context)}–{derivedPaceLabel(context.thresholdPaceSecondsPerKm * 100 / low, context)}.</p>;
+}
+
+function PowerPercentPreview({ intensity, context, reference, zoneKey }: { intensity: Extract<WorkoutIntensityInput, { type: "ftpPercent" }> | Extract<WorkoutIntensityInput, { type: "power" }> & { preset: string }; context: WorkoutEditorContext; reference?: number; zoneKey: "ftp" | "runningPower" }) {
+  const definitions = zoneKey === "ftp" ? FTP_PRESETS : RUNNING_POWER_PRESETS;
+  const definition = definitions.find((zone) => zone.preset === intensity.preset);
+  const configured = profileZone(context, zoneKey, intensity.preset, intensity.zoneId ?? definition?.id);
+  const low = "lowPercent" in intensity && intensity.lowPercent !== undefined ? intensity.lowPercent : configured?.lowPercent ?? definition?.low;
+  const high = "highPercent" in intensity && intensity.highPercent !== undefined ? intensity.highPercent : configured?.highPercent ?? definition?.high;
+  if (!reference || low === undefined || high === undefined) {
+    return <p className="workout-control-hint">Profile reference is unavailable; the percentage zone will still be saved.</p>;
+  }
+  return <p className="workout-control-hint">Derived preview: {Math.round(reference * low / 100)}–{Math.round(reference * high / 100)} W.</p>;
+}
+
+function RepeatCard({ group, nodeIndex, context, sport, exerciseOptions, errors, disabled, onDragStart, onChange, onMove, onDuplicate, onDelete, onStepChange, onStepMove, onStepDuplicate, onStepDelete, onStepUngroup }: {
+  group: RunWorkoutEditorRepeatGroup; nodeIndex: number; context: WorkoutEditorContext; sport: WorkoutSport; exerciseOptions: WorkoutExerciseOption[]; errors: Record<string, string>; disabled: boolean;
   onDragStart: (event: DragEvent) => void; onChange: (group: RunWorkoutEditorRepeatGroup) => void; onMove: (direction: -1 | 1) => void; onDuplicate: () => void; onDelete: () => void;
   onStepChange: (id: string, step: RunWorkoutEditorStep) => void; onStepMove: (id: string, direction: -1 | 1) => void; onStepDuplicate: (id: string) => void; onStepDelete: (id: string) => void; onStepUngroup: (id: string) => void;
 }) {
@@ -644,8 +826,8 @@ function RepeatCard({ group, nodeIndex, context, errors, disabled, onDragStart, 
   return <motion.section layout className="workout-repeat-card" draggable={!disabled} onDragStartCapture={onDragStart}>
     <header className="workout-repeat-header"><GripVertical size={18} aria-hidden="true" /><input aria-label="Repeat group name" value={group.name} disabled={locked} onChange={(event) => onChange({ ...group, name: event.target.value })} /><div className="workout-repeat-count"><span>Repeat</span><button type="button" disabled={locked || group.repeat <= 1} onClick={() => onChange({ ...group, repeat: group.repeat - 1 })}>−</button><input aria-label="Repeat count" type="number" min="1" max="99" value={group.repeat} disabled={locked} onChange={(event) => onChange({ ...group, repeat: Number(event.target.value) })} /><button type="button" disabled={locked || group.repeat >= 99} onClick={() => onChange({ ...group, repeat: group.repeat + 1 })}>+</button></div><div className="workout-step-actions"><IconAction label="Move group up" onClick={() => onMove(-1)} disabled={disabled}><ChevronUp /></IconAction><IconAction label="Move group down" onClick={() => onMove(1)} disabled={disabled}><ChevronDown /></IconAction><IconAction label="Duplicate group" onClick={onDuplicate} disabled={duplicateLocked}><Copy /></IconAction><IconAction label="Delete group" onClick={onDelete} disabled={disabled}><Trash2 /></IconAction></div></header>
     {errors[`nodes.${nodeIndex}.repeat`] ? <p className="workout-field-error">{errors[`nodes.${nodeIndex}.repeat`]}</p> : null}
-    <div className="workout-repeat-steps">{group.steps.map((step, childIndex) => <StepCard key={step.id} step={step} location={{ nodeId: group.id, childId: step.id }} context={context} disabled={disabled} draggable error={errors[`nodes.${nodeIndex}.steps.${childIndex}.target`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.intensity`]} onDragStart={(event) => event.dataTransfer.setData("text/workout-node", step.id)} onDropCard={(sourceId) => { const from = group.steps.findIndex((candidate) => candidate.id === sourceId); const to = group.steps.findIndex((candidate) => candidate.id === step.id); if (from >= 0 && to >= 0) onChange({ ...group, steps: moveItem(group.steps, from, to) }); }} onChange={(next) => onStepChange(step.id, next)} onMove={(direction) => onStepMove(step.id, direction)} onDuplicate={() => onStepDuplicate(step.id)} onDelete={() => onStepDelete(step.id)} onUngroup={() => onStepUngroup(step.id)} />)}</div>
-    <button type="button" className="ghost-button workout-repeat-add" disabled={locked} onClick={() => onChange({ ...group, steps: [...group.steps, emptyStep("rest")] })}><Plus size={14} aria-hidden="true" /> Add step to repeat</button>
+    <div className="workout-repeat-steps">{group.steps.map((step, childIndex) => <StepCard key={step.id} step={step} location={{ nodeId: group.id, childId: step.id }} context={context} sport={sport} exerciseOptions={exerciseOptions} disabled={disabled} draggable error={errors[`nodes.${nodeIndex}.steps.${childIndex}.target`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.intensity`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.exercise`]} onDragStart={(event) => event.dataTransfer.setData("text/workout-node", step.id)} onDropCard={(sourceId) => { const from = group.steps.findIndex((candidate) => candidate.id === sourceId); const to = group.steps.findIndex((candidate) => candidate.id === step.id); if (from >= 0 && to >= 0) onChange({ ...group, steps: moveItem(group.steps, from, to) }); }} onChange={(next) => onStepChange(step.id, next)} onMove={(direction) => onStepMove(step.id, direction)} onDuplicate={() => onStepDuplicate(step.id)} onDelete={() => onStepDelete(step.id)} onUngroup={() => onStepUngroup(step.id)} />)}</div>
+    <button type="button" className="ghost-button workout-repeat-add" disabled={locked} onClick={() => onChange({ ...group, steps: [...group.steps, emptyStep("rest", sport)] })}><Plus size={14} aria-hidden="true" /> Add step to repeat</button>
   </motion.section>;
 }
 

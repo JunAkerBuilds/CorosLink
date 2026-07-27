@@ -93,7 +93,7 @@ export function WorkoutLibraryModal({ api, onClose, onEdit, onScheduled, onError
           <label className="calendar-field calendar-library-search"><span>Search workouts</span><span className="calendar-sport-search-control"><Search size={14} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name" /></span></label>
           <div className="workout-library-manager-list">
             {items === null ? <div className="workout-library-state"><LoaderCircle className="is-spinning" size={20} aria-hidden="true" /><p>Loading your COROS workout library...</p></div> : error ? <div className="workout-library-state"><p>{error}</p><button type="button" className="ghost-button" onClick={load}>Try again</button></div> : visible.length === 0 ? <div className="workout-library-state"><Library size={24} aria-hidden="true" /><p>{query ? "No workouts match your search." : "Your workout library is empty."}</p></div> : visible.map((item) => {
-              const supported = item.sportType === 1;
+              const supported = Boolean(item.sportType && item.sportType >= 1 && item.sportType <= 9);
               return <article key={item.id} className={`workout-library-row ${selected === item.id ? "is-selected" : ""}`}>
                 <button type="button" className="workout-library-select" aria-pressed={selected === item.id} onClick={() => setSelected(item.id)}>
                   <span><strong>{item.name}</strong><small>{[item.volume, item.trainingLoad !== undefined ? `${Math.round(item.trainingLoad)} TL` : null].filter(Boolean).join(" · ") || "No calculated totals"}</small></span>

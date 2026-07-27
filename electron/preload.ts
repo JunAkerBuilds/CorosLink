@@ -54,7 +54,10 @@ import type {
   WorkoutEditPreview,
   WorkoutEditRef,
   WorkoutEditSaveResult,
+  WorkoutEditorContext,
   WorkoutEditorDocument,
+  WorkoutExerciseOption,
+  WorkoutSport,
   TransferResult,
   AppInfo,
   AppUpdateSnapshot,
@@ -508,6 +511,10 @@ const api = {
     ipcRenderer.invoke("trainingHub:listScheduledWorkouts", startDay, endDay),
   listLibraryWorkouts: (): Promise<TrainingHubLibraryWorkout[]> =>
     ipcRenderer.invoke("trainingHub:listLibraryWorkouts"),
+  listWorkoutExercises: (sport: WorkoutSport): Promise<WorkoutExerciseOption[]> =>
+    ipcRenderer.invoke("trainingHub:listWorkoutExercises", sport),
+  getWorkoutEditorContext: (): Promise<WorkoutEditorContext> =>
+    ipcRenderer.invoke("trainingHub:getWorkoutEditorContext"),
   getWorkoutForEdit: (ref: WorkoutEditRef): Promise<WorkoutEditorDocument> =>
     ipcRenderer.invoke("trainingHub:getWorkoutForEdit", ref),
   previewWorkoutEdit: (
@@ -552,6 +559,7 @@ const api = {
     planId: string;
     idInPlan: string;
     planProgramId?: string;
+    pbVersion?: number;
   }): Promise<void> =>
     ipcRenderer.invoke("trainingHub:removeScheduledWorkout", entry),
   getTrainingHubActivityDetail: (

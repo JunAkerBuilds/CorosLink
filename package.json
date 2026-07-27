@@ -47,6 +47,7 @@
     "test:chat-workout-tools": "npm run build:electron && node scripts/test-chat-workout-tools.mjs",
     "test:coros-workout-builder": "npm run build:electron && node scripts/test-coros-workout-builder.mjs",
     "test:coros-workout-editor": "npm run build:electron && node scripts/test-coros-workout-editor.mjs",
+    "test:workout-intensity-codec": "npm run build:electron && node scripts/test-workout-intensity-codec.mjs",
     "verify:coach-workout-api": "npm run build:electron && node scripts/verify-coach-workout-api.mjs",
     "test:training-hub-write": "npm run build:electron && node scripts/test-training-hub-write.mjs",
     "test:coros-login": "npm run build:electron && node scripts/test-coros-login.mjs",

@@ -2,13 +2,32 @@
  * Build COROS Training Hub workout payloads from AI-friendly step definitions.
  * Ported from reverse-engineered API behavior (see docs/coros-plan-write-api.md).
  */
+import type {
+  WorkoutEditorContext,
+  WorkoutIntensityInput,
+  WorkoutSport,
+  WorkoutSportOptions
+} from "./types";
+import {
+  CLIMB_SYSTEM_IDS,
+  WORKOUT_SPORT_CAPABILITIES,
+  encodeCorosIntensity,
+  formatWorkoutIntensity,
+  formatWorkoutSport,
+  requiredWorkoutPbVersion,
+  validateWorkoutIntensity,
+  validateWorkoutSportOptions,
+  workoutTargetsForStep,
+  workoutSportType
+} from "./workoutCapabilities";
 
 export type RunStepKind =
   | "warmup"
   | "training"
   | "rest"
   | "cooldown"
-  | "interval";
+  | "interval"
+  | "sendOff";
 
 // Mirrors COROS's targetType enum (from the traininghub web-app bundle):
 // 1=manualEnd ("Open"), 2=time, 5=distance, 6=load ("Training Load").
@@ -17,7 +36,10 @@ export type RunTargetType =
   | "distance"
   | "load"
   | "hrRecovery"
-  | "open";
+  | "open"
+  | "reps"
+  | "elevationGain"
+  | "routes";
 
 export interface RunWorkoutStep {
   kind: RunStepKind;
@@ -29,6 +51,14 @@ export interface RunWorkoutStep {
   target_load?: number;
   /** Rest-only target: finish when heart rate falls to this absolute bpm. */
   target_hr_recovery_bpm?: number;
+  target_reps?: number;
+  target_elevation_gain_meters?: number;
+  target_routes?: number;
+  send_off_seconds?: number;
+  intensity?: WorkoutIntensityInput;
+  exercise_id?: string;
+  exercise_name?: string;
+  exercise_kind?: number;
   /** e.g. "5:30/km", "4:05-4:15/km", "8:00/mi" */
   pace?: string;
   intensity_type?: number;
@@ -37,6 +67,7 @@ export interface RunWorkoutStep {
   intensity_display_unit?: number;
   /** COROS stores pace values as seconds/km multiplied by this value (1000). */
   intensity_multiplier?: number;
+  intensity_custom?: number;
   hr_type?: number;
   is_intensity_percent?: boolean;
   intensity_percent?: number;
@@ -65,6 +96,9 @@ export interface PlanWorkoutEntry {
   /** Unique key within the plan draft */
   key: string;
   name: string;
+  /** Omitted legacy drafts default to Run. */
+  sport?: WorkoutSport;
+  sport_options?: WorkoutSportOptions;
   /** Structured steps; omit for simple distance runs */
   steps?: RunWorkoutStepInput[];
   /** Shortcut for a single-segment easy run (km) */
@@ -84,6 +118,7 @@ export interface CorosTrainingPlanDraft {
 export interface PlanDraftPreviewEntry {
   key: string;
   name: string;
+  sport?: WorkoutSport;
   scheduleDate?: string;
   volume?: string;
   saveToLibrary: boolean;
@@ -138,7 +173,8 @@ const RUN_STEP_KIND_TO_EXERCISE_TYPE: Record<RunStepKind, number> = {
   training: 2,
   interval: 2,
   cooldown: 3,
-  rest: 4
+  rest: 4,
+  sendOff: 2
 };
 
 const RUN_KIND_ALIASES: Record<string, RunStepKind> = {
@@ -151,7 +187,10 @@ const RUN_KIND_ALIASES: Record<string, RunStepKind> = {
   rest: "rest",
   cooldown: "cooldown",
   "cool-down": "cooldown",
-  "cool down": "cooldown"
+  "cool down": "cooldown",
+  sendoff: "sendOff",
+  "send-off": "sendOff",
+  "send off": "sendOff"
 };
 
 const RUN_TARGET_ALIASES: Record<string, RunTargetType> = {
@@ -167,7 +206,15 @@ const RUN_TARGET_ALIASES: Record<string, RunTargetType> = {
   open: "open",
   "manual end": "open",
   manual_end: "open",
-  manualend: "open"
+  manualend: "open",
+  reps: "reps",
+  repetitions: "reps",
+  count: "reps",
+  elevationgain: "elevationGain",
+  "elevation gain": "elevationGain",
+  elevation_gain: "elevationGain",
+  cumulativeclimb: "elevationGain",
+  routes: "routes"
 };
 
 export function metersToCorosDistance(meters: number): number {
@@ -249,6 +296,22 @@ export function parsePace(pace: string): {
 
 function normalizeRunStep(step: RunWorkoutStep): RunWorkoutStep {
   const normalized = { ...step };
+  const hasLegacyIntensity = [
+    step.pace,
+    step.intensity_type,
+    step.intensity_value,
+    step.intensity_value_extend,
+    step.intensity_display_unit,
+    step.intensity_multiplier,
+    step.intensity_custom,
+    step.hr_type,
+    step.is_intensity_percent,
+    step.intensity_percent,
+    step.intensity_percent_extend
+  ].some((value) => value !== undefined);
+  if (step.intensity && hasLegacyIntensity) {
+    throw new Error("A step cannot contain both typed intensity and legacy raw COROS intensity fields.");
+  }
   const kindKey = String(normalized.kind ?? "training")
     .trim()
     .toLowerCase();
@@ -348,15 +411,43 @@ function resolveRunTarget(step: RunWorkoutStep): {
       bpm === undefined ||
       !Number.isFinite(Number(bpm)) ||
       Number(bpm) < 30 ||
-      Number(bpm) > 250
+      Number(bpm) > 180
     ) {
-      throw new Error("HR Recovery steps require a target bpm from 30 to 250.");
+      throw new Error("HR Recovery steps require a target bpm from 30 to 180.");
     }
     return {
       targetType: 7,
       targetValue: Math.round(Number(bpm)),
       targetDisplayUnit: step.target_display_unit ?? 0
     };
+  }
+
+  if (targetType === "reps") {
+    const count = step.target_reps ?? step.target_value;
+    if (!Number.isInteger(Number(count)) || Number(count) < 1 || Number(count) > 500) {
+      throw new Error("Repetition targets require target_reps from 1 to 500.");
+    }
+    return { targetType: 3, targetValue: Math.round(Number(count)), targetDisplayUnit: 0 };
+  }
+
+  if (targetType === "elevationGain") {
+    const meters = step.target_elevation_gain_meters ?? step.target_value;
+    if (!Number.isFinite(Number(meters)) || Number(meters) < 20 || Number(meters) > 10_000) {
+      throw new Error("Elevation gain targets require 20 to 10,000 meters.");
+    }
+    return {
+      targetType: 8,
+      targetValue: metersToCorosDistance(Number(meters)),
+      targetDisplayUnit: step.target_display_unit ?? COROS_DISTANCE_UNIT_METERS
+    };
+  }
+
+  if (targetType === "routes") {
+    const count = step.target_routes ?? step.target_value;
+    if (!Number.isInteger(Number(count)) || Number(count) < 1 || Number(count) > 20) {
+      throw new Error("Route targets require target_routes from 1 to 20.");
+    }
+    return { targetType: 9, targetValue: Math.round(Number(count)), targetDisplayUnit: 0 };
   }
 
   const seconds = step.target_duration_seconds ?? step.target_value;
@@ -374,7 +465,22 @@ function resolveRunTarget(step: RunWorkoutStep): {
   };
 }
 
-function defaultRunOverview(kind: RunStepKind, targetType: number): string {
+function defaultRunOverview(
+  kind: RunStepKind,
+  targetType: number,
+  sport: WorkoutSport
+): string {
+  if (sport === "swim") {
+    if (kind === "warmup" || kind === "sendOff") return "sid_poolswim_warm_up_dist";
+    if (kind === "cooldown" || kind === "rest") return "sid_poolswim_cool_down_dist";
+    return "sid_poolswim_dist_default";
+  }
+  if (sport === "bike") {
+    if (kind === "warmup") return "sid_bike_warm_up_dist";
+    if (kind === "cooldown" || kind === "rest") return "sid_bike_cool_down_dist";
+    return "sid_bike_dist_speed";
+  }
+  if (sport === "strength") return "sid_strength_training";
   if (kind === "warmup") {
     return DISTANCE_TARGET_TYPES.has(targetType)
       ? "sid_run_warm_up_dist"
@@ -397,46 +503,118 @@ function buildRunExercise(
   step: RunWorkoutStep,
   exId: number,
   sortNo: number,
-  groupId = "0"
+  groupId = "0",
+  sport: WorkoutSport = "run",
+  context?: WorkoutEditorContext
 ): { exercise: Record<string, unknown>; distance: number; time: number } {
   const normalized = normalizeRunStep(step);
   const { targetType, targetValue, targetDisplayUnit } =
     resolveRunTarget(normalized);
   const kind = normalized.kind ?? "training";
+  const capability = WORKOUT_SPORT_CAPABILITIES[sport];
+  const editorKind = kind === "interval" ? "training" : kind;
+  if (!capability.stepKinds.includes(editorKind)) {
+    throw new Error(`${formatWorkoutSport(sport)} does not support ${kind} steps.`);
+  }
+  if (normalized.intensity) {
+    const error = validateWorkoutIntensity(
+      sport,
+      normalized.intensity,
+      editorKind,
+      normalized.exercise_kind
+    );
+    if (error) throw new Error(error);
+  }
+  const targetNameByType: Partial<Record<number, RunTargetType>> = {
+    1: "open",
+    2: "time",
+    3: "reps",
+    5: "distance",
+    6: "load",
+    7: "hrRecovery",
+    8: "elevationGain",
+    9: "routes"
+  };
+  const resolvedTarget = targetNameByType[targetType];
+  const allowedTargets = workoutTargetsForStep(sport, editorKind, normalized.exercise_kind);
+  if (resolvedTarget && !allowedTargets.includes(resolvedTarget)) {
+    throw new Error(`${formatWorkoutSport(sport)} ${kind} steps do not support ${resolvedTarget}.`);
+  }
+  if (
+    (sport === "strength" || (sport === "hyrox" && normalized.exercise_kind !== undefined)) &&
+    kind === "training" &&
+    !normalized.exercise_id &&
+    !normalized.exercise_name
+  ) {
+    throw new Error(`${capability.label} training steps require exercise_id or exercise_name.`);
+  }
+  const rawIntensity = normalized.intensity
+    ? encodeCorosIntensity(normalized.intensity, context)
+    : {
+        intensityType: normalized.intensity_type ?? 0,
+        intensityValue: normalized.intensity_value ?? 0,
+        intensityValueExtend: normalized.intensity_value_extend ?? 0,
+        intensityMultiplier: normalized.intensity_multiplier ?? 0,
+        intensityDisplayUnit: normalized.intensity_display_unit ?? 0,
+        hrType: normalized.hr_type ?? (normalized.intensity_type === 2 ? 2 : 0),
+        isIntensityPercent: normalized.is_intensity_percent ?? false,
+        intensityCustom: normalized.intensity_custom ?? 0,
+        intensityPercent: normalized.intensity_percent ?? 0,
+        intensityPercentExtend: normalized.intensity_percent_extend ?? 0
+      };
+  const functionalExercise = sport === "strength" ||
+    (sport === "hyrox" && kind === "training" && Boolean(normalized.exercise_kind));
 
   const exercise: Record<string, unknown> = {
     id: exId,
+    access: 0,
+    createTimestamp: 0,
+    defaultOrder: sortNo,
+    deleted: 0,
+    equipment: [1],
+    isDefaultAdd: kind === "training" || kind === "interval" ? 1 : 0,
+    part: [0],
+    sourceId: "0",
+    sourceUrl: "",
+    status: 1,
+    userId: 0,
+    videoUrl: "",
     name:
       normalized.name ??
+      normalized.exercise_name ??
       kind.replace("warmup", "Warm-up").replace("cooldown", "Cool-down"),
     exerciseType: RUN_STEP_KIND_TO_EXERCISE_TYPE[kind],
-    sportType: 1,
-    intensityType: normalized.intensity_type ?? 0,
-    intensityValue: normalized.intensity_value ?? 0,
-    intensityValueExtend: normalized.intensity_value_extend ?? 0,
-    intensityMultiplier: normalized.intensity_multiplier ?? 0,
+    sportType: capability.sportType,
+    subType: kind === "sendOff"
+      ? 1
+      : sport === "hyrox" && kind === "training" && normalized.exercise_kind
+        ? 2
+        : 0,
+    ...rawIntensity,
     targetType,
     targetValue,
     targetDisplayUnit,
-    intensityDisplayUnit: normalized.intensity_display_unit ?? 0,
     sets: normalized.sets ?? 1,
     sortNo,
-    restType: normalized.rest_type ?? 3,
-    restValue: normalized.rest_value ?? 0,
+    restType: normalized.rest_type ?? (functionalExercise ? 1 : 3),
+    restValue: normalized.rest_value ?? (functionalExercise ? 60 : 0),
     groupId,
     isGroup: false,
     originId: "0",
-    overview: normalized.overview ?? defaultRunOverview(kind, targetType),
-    hrType: normalized.hr_type ?? 3,
-    isIntensityPercent: normalized.is_intensity_percent ?? false
+    overview: normalized.overview ?? (functionalExercise
+      ? "sid_strength_training"
+      : defaultRunOverview(kind, targetType, sport)),
+    ...(normalized.exercise_id ? { originId: normalized.exercise_id } : {}),
+    ...(normalized.exercise_kind !== undefined
+      ? { exerciseKind: normalized.exercise_kind }
+      : {}),
+    ...(sport === "hyrox" && kind === "training" && normalized.exercise_kind
+      ? { hyroxTrainingMode: "strength" }
+      : {}),
+    ...(kind === "sendOff" || normalized.send_off_seconds !== undefined
+      ? { packageTime: Math.round(normalized.send_off_seconds ?? 120) }
+      : {})
   };
-
-  if (normalized.intensity_percent !== undefined) {
-    exercise.intensityPercent = normalized.intensity_percent;
-  }
-  if (normalized.intensity_percent_extend !== undefined) {
-    exercise.intensityPercentExtend = normalized.intensity_percent_extend;
-  }
 
   return {
     exercise,
@@ -553,10 +731,20 @@ export function buildEasyRun(options: {
   };
 }
 
-export function buildRunWorkoutPayload(
+export function buildWorkoutPayload(
   name: string,
-  steps: RunWorkoutStepInput[]
+  steps: RunWorkoutStepInput[],
+  sport: WorkoutSport = "run",
+  sportOptions?: WorkoutSportOptions,
+  context?: WorkoutEditorContext
 ): Record<string, unknown> {
+  const capability = WORKOUT_SPORT_CAPABILITIES[sport];
+  if (!capability) throw new Error(`Unsupported workout sport "${String(sport)}".`);
+  const sportOptionErrors = validateWorkoutSportOptions(sport, sportOptions);
+  if (sportOptionErrors.length) throw new Error(sportOptionErrors.join(" "));
+  const gradingSystem = sport === "indoorClimb" || sport === "bouldering"
+    ? sportOptions?.gradingSystem ?? context?.climbSystems[sport] ?? (sport === "bouldering" ? "vScale" : "yds")
+    : undefined;
   const exercises: Record<string, unknown>[] = [];
   let topIndex = 0;
   let exId = 0;
@@ -587,7 +775,9 @@ export function buildRunWorkoutPayload(
           subSteps[j]!,
           exId,
           groupSort + 65536 * (j + 1),
-          String(groupId)
+          String(groupId),
+          sport,
+          context
         );
         builtSubSteps.push(built.exercise);
         groupDistance += built.distance;
@@ -601,7 +791,7 @@ export function buildRunWorkoutPayload(
         id: groupId,
         name: step.name ?? "Interval Group",
         exerciseType: 0,
-        sportType: 1,
+        sportType: capability.sportType,
         intensityType: 0,
         intensityValue: 0,
         targetType: groupTargetType,
@@ -615,7 +805,7 @@ export function buildRunWorkoutPayload(
         groupId: "0",
         isGroup: true,
         originId: "0",
-        overview: step.overview ?? "sid_run_training"
+        overview: step.overview ?? defaultRunOverview("training", groupTargetType, sport)
       });
       exercises.push(...builtSubSteps);
       totalDistance += groupDistance * repeatCount;
@@ -623,7 +813,14 @@ export function buildRunWorkoutPayload(
     } else {
       topIndex += 1;
       exId += 1;
-      const built = buildRunExercise(step, exId, 16777216 * topIndex);
+      const built = buildRunExercise(
+        step,
+        exId,
+        16777216 * topIndex,
+        "0",
+        sport,
+        context
+      );
       exercises.push(built.exercise);
       totalDistance += built.distance;
       totalTime += built.time;
@@ -631,8 +828,38 @@ export function buildRunWorkoutPayload(
   }
 
   return {
+    id: "0",
+    idInPlan: "0",
+    authorId: "0",
+    userId: "0",
+    createTimestamp: 0,
+    deleted: 0,
+    status: 1,
+    version: 0,
     name,
-    sportType: 1,
+    sportType: capability.sportType,
+    subType: 65535,
+    pbVersion: requiredWorkoutPbVersion(sport, exercises),
+    referExercise: {
+      ...capability.referExercise,
+      ...(gradingSystem
+        ? { gradeSystem: CLIMB_SYSTEM_IDS[gradingSystem] }
+        : {})
+    },
+    ...(sport === "swim"
+      ? {
+          poolLengthId: 0,
+          poolLength: Math.round(
+            (sportOptions?.poolLength?.value ?? context?.defaultPoolLength.value ?? 25) *
+            ((sportOptions?.poolLength?.unit ?? context?.defaultPoolLength.unit ?? "m") === "yd" ? 0.9144 : 1) *
+            100
+          ),
+          poolLengthUnit: (sportOptions?.poolLength?.unit ?? context?.defaultPoolLength.unit ?? "m") === "yd" ? 4 : 2
+        }
+      : {}),
+    ...((sport === "indoorClimb" || sport === "bouldering")
+      ? { gradeSystemVersion: 1 }
+      : {}),
     estimatedTime: totalTime,
     estimatedDistance: totalDistance,
     distanceDisplayUnit: COROS_DISTANCE_UNIT_KILOMETERS,
@@ -641,10 +868,23 @@ export function buildRunWorkoutPayload(
     targetValue: totalDistance > 0 ? totalDistance : totalTime,
     simple: false,
     access: 1,
+    essence: 0,
+    originEssence: 0,
+    overview: "",
+    type: 0,
+    unit: 0,
     exerciseNum: exercises.length,
     totalSets: exercises.length,
     exercises
   };
+}
+
+/** @deprecated Prefer buildWorkoutPayload with an explicit sport. */
+export function buildRunWorkoutPayload(
+  name: string,
+  steps: RunWorkoutStepInput[]
+): Record<string, unknown> {
+  return buildWorkoutPayload(name, steps, "run");
 }
 
 export function buildIntervalWorkout(options: {
@@ -674,13 +914,22 @@ export function buildIntervalWorkout(options: {
 }
 
 export function buildWorkoutPayloadFromEntry(
-  entry: PlanWorkoutEntry
+  entry: PlanWorkoutEntry,
+  context?: WorkoutEditorContext
 ): Record<string, unknown> {
+  const sport = entry.sport ?? "run";
   if (entry.steps && entry.steps.length > 0) {
-    return buildRunWorkoutPayload(entry.name, entry.steps);
+    return buildWorkoutPayload(entry.name, entry.steps, sport, entry.sport_options, context);
   }
   if (entry.distance_km !== undefined && entry.distance_km > 0) {
-    return buildEasyRun({ name: entry.name, distanceKm: entry.distance_km });
+    if (sport !== "run" && sport !== "trailRun") {
+      throw new Error(`distance_km shorthand is only available for Run and Trail Run, not ${formatWorkoutSport(sport)}.`);
+    }
+    return buildEasyRun({
+      name: entry.name,
+      distanceKm: entry.distance_km,
+      sportType: workoutSportType(sport)
+    });
   }
   throw new Error(
     `Workout "${entry.name}" needs steps or distance_km.`
@@ -786,13 +1035,21 @@ function formatRunStepSummary(step: RunWorkoutStep): string | undefined {
       ? "open"
       : targetType === "load" && step.target_load !== undefined
         ? `load ${step.target_load}`
+        : targetType === "reps" && step.target_reps !== undefined
+          ? `${step.target_reps} reps`
+          : targetType === "routes" && step.target_routes !== undefined
+            ? `${step.target_routes} routes`
+            : targetType === "elevationGain" && step.target_elevation_gain_meters !== undefined
+              ? `${step.target_elevation_gain_meters} m gain`
         : step.target_distance_meters !== undefined
           ? `${(step.target_distance_meters / 1000).toFixed(1)} km`
           : step.target_duration_seconds !== undefined
             ? `${Math.round(step.target_duration_seconds / 60)} min`
             : undefined;
-  const pace = step.pace ? `@ ${step.pace}` : undefined;
-  return [kind, target, pace].filter(Boolean).join(" ");
+  const intensity = step.intensity
+    ? `@ ${formatWorkoutIntensity(step.intensity)}`
+    : step.pace ? `@ ${step.pace}` : undefined;
+  return [kind, target, intensity].filter(Boolean).join(" ");
 }
 
 export function validatePlanDraft(
@@ -812,6 +1069,11 @@ export function validatePlanDraft(
 
   const keys = new Set<string>();
   for (const entry of draft.workouts ?? []) {
+    const sport = entry.sport ?? "run";
+    if (!(sport in WORKOUT_SPORT_CAPABILITIES)) {
+      errors.push(`Workout "${entry.name || entry.key}" has unsupported sport "${String(entry.sport)}".`);
+      continue;
+    }
     if (!entry.key?.trim()) {
       errors.push("Each workout needs a unique key.");
       continue;
@@ -863,7 +1125,7 @@ export function validatePlanDraft(
 
     if (hasSteps) {
       try {
-        buildRunWorkoutPayload(entry.name, entry.steps!);
+        buildWorkoutPayload(entry.name, entry.steps!, sport, entry.sport_options);
       } catch (caught) {
         errors.push(
           `Workout "${entry.name}": ${caught instanceof Error ? caught.message : String(caught)}`
@@ -897,6 +1159,7 @@ export function buildPlanPreview(
   const entries: PlanDraftPreviewEntry[] = draft.workouts.map((entry) => ({
     key: entry.key,
     name: entry.name,
+    sport: entry.sport ?? "run",
     scheduleDate: entry.schedule_date
       ? formatScheduleDate(entry.schedule_date)
       : undefined,
