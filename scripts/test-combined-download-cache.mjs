@@ -8,6 +8,8 @@ import {
   isReusableCombinedTrack,
   markCombinedTrackReusable,
   pruneCombinedDownloadCache,
+  readCombinedOutputBaseName,
+  writeCombinedOutputBaseName,
   touchCombinedDownloadCache
 } from "../dist-electron/combinedDownloadCache.js";
 
@@ -60,6 +62,14 @@ try {
   assert.equal(
     await isReusableCombinedTrack(path.join(root, "missing.mp3")),
     false
+  );
+
+  assert.equal(await readCombinedOutputBaseName(root), undefined);
+  await writeCombinedOutputBaseName(root, "Long Run");
+  assert.equal(
+    await readCombinedOutputBaseName(root),
+    "Long Run",
+    "a retry should reuse the original combined filename"
   );
 
   const now = Date.now();

@@ -1346,6 +1346,22 @@ export default function App() {
 
     const skipped = result.totalCount - result.downloadedCount;
     const reused = result.reusedCount;
+    let transferred = false;
+    if (
+      skipped === 0 &&
+      autoTransferRef.current &&
+      watchConnectedRef.current
+    ) {
+      try {
+        const transfer = await api.transferLocalTrack(result.track.id);
+        setWatchStatus(transfer.watch);
+        transferred = true;
+      } catch (caught) {
+        setError(
+          `“${result.track.title}” was saved locally, but could not be transferred to the watch: ${toErrorMessage(caught)}`,
+        );
+      }
+    }
     setMessage(
       `Combined ${result.downloadedCount} track${
         result.downloadedCount === 1 ? "" : "s"
@@ -1357,7 +1373,7 @@ export default function App() {
         skipped > 0
           ? ` ${skipped} track${skipped === 1 ? "" : "s"} could not be downloaded; retry to fetch only the missing ${skipped === 1 ? "track" : "tracks"}.`
           : ""
-      }`,
+      }${transferred ? " Transferred it to the watch." : ""}`,
     );
     setCombinedDownloads((current) => {
       const next = { ...current };

@@ -575,6 +575,17 @@ export function getDownloadById(id: string): LocalTrack | undefined {
   return row ? toLocalTrack(row) : undefined;
 }
 
+export function isCombinedDownloadAtPath(filePath: string): boolean {
+  const row = requireDatabase()
+    .prepare(
+      `SELECT 1
+       FROM downloads
+       WHERE file_path = ? AND url LIKE 'combined:%'`
+    )
+    .get(filePath);
+  return Boolean(row);
+}
+
 export function addDownloads(filePaths: string[], url: string): LocalTrack[] {
   const database = requireDatabase();
   const now = new Date().toISOString();
@@ -611,6 +622,43 @@ export function addDownloads(filePaths: string[], url: string): LocalTrack[] {
     .map((filePath) => select.get(filePath) as DownloadRow | undefined)
     .filter((row): row is DownloadRow => Boolean(row))
     .map(toLocalTrack);
+}
+
+/** Registers a file whose contents replace an earlier library artifact. */
+export function replaceDownload(filePath: string, url: string): LocalTrack {
+  const database = requireDatabase();
+  const stats = fs.statSync(filePath);
+  const now = new Date().toISOString();
+  database
+    .prepare(
+      `INSERT INTO downloads
+        (id, url, title, file_path, size_bytes, created_at, transferred_at)
+       VALUES
+        (@id, @url, @title, @filePath, @sizeBytes, @createdAt, NULL)
+       ON CONFLICT(file_path) DO UPDATE SET
+         url = excluded.url,
+         title = excluded.title,
+         size_bytes = excluded.size_bytes,
+         created_at = excluded.created_at,
+         transferred_at = NULL`
+    )
+    .run({
+      id: crypto.randomUUID(),
+      url,
+      title: path.basename(filePath, path.extname(filePath)),
+      filePath,
+      sizeBytes: stats.size,
+      createdAt: now
+    });
+
+  const row = database
+    .prepare(
+      `SELECT id, url, title, file_path, size_bytes, created_at, transferred_at
+       FROM downloads
+       WHERE file_path = ?`
+    )
+    .get(filePath) as DownloadRow;
+  return toLocalTrack(row);
 }
 
 export function markDownloadTransferred(id: string): void {
