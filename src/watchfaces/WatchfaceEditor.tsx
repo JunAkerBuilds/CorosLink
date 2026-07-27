@@ -320,6 +320,7 @@ import {
 } from "lucide-react";
 import {
   resizeWatchfaceDimensions,
+  watchfaceMasterPixelsFromDevice,
   type WatchfaceDimensionAxis,
   type WatchfaceDimensions
 } from "./watchfaceDimensions";
@@ -1974,7 +1975,11 @@ export function WatchfaceEditor({
   const toWatchCoordinate = (value: number) =>
     Math.round(value * watchCoordinateScale);
   const fromWatchCoordinate = (value: number) =>
-    value / watchCoordinateScale;
+    watchfaceMasterPixelsFromDevice(
+      value,
+      previewWidth,
+      watchCoordinateWidth
+    );
   const studioOptionsForResolution = useCallback(
     (
       options: WatchfaceStudioOptions,
@@ -5866,15 +5871,17 @@ export function WatchfaceEditor({
       if (!selected) {
         return;
       }
-      const maxSize = previewWidth * 0.28;
-      const fitScale = Math.min(1, maxSize / Math.max(selected.width, selected.height));
       const sprite: CorosWatchfaceDesignSprite = {
         id: window.crypto.randomUUID(),
         dataUrl: selected.dataUrl,
         sourceWidth: selected.width,
         sourceHeight: selected.height,
-        width: Math.max(1, Math.round(selected.width * fitScale)),
-        height: Math.max(1, Math.round(selected.height * fitScale)),
+        // Freeform artwork is stored in the template's master coordinate
+        // space, while imported PNG dimensions and the inspector are expressed
+        // in physical device pixels. Convert here so the selected watch exports
+        // the image at 1 source pixel per watch pixel before canvas clipping.
+        width: fromWatchCoordinate(selected.width),
+        height: fromWatchCoordinate(selected.height),
         x: Math.round(previewWidth / 2),
         y: Math.round((previewResolution?.height ?? previewWidth) / 2),
         scale: 1,

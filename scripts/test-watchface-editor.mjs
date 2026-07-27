@@ -101,7 +101,8 @@ import {
   WATCHFACE_COMPLICATIONS
 } from "../src/watchfaces/watchfaceStudio.ts";
 import {
-  resizeWatchfaceDimensions
+  resizeWatchfaceDimensions,
+  watchfaceMasterPixelsFromDevice
 } from "../src/watchfaces/watchfaceDimensions.ts";
 
 const dragBackgroundSource = {
@@ -119,6 +120,17 @@ assert.equal(
   dragBackgroundSource.backgroundColor,
   "#123456",
   "drag isolation does not mutate the saved design"
+);
+
+assert.equal(
+  watchfaceMasterPixelsFromDevice(416, 800, 416),
+  800,
+  "a device-width image fills the matching physical export tree"
+);
+assert.equal(
+  watchfaceMasterPixelsFromDevice(3024, 800, 416),
+  3024 * (800 / 416),
+  "oversized gallery images retain native device-pixel dimensions before clipping"
 );
 
 assert.deepEqual(

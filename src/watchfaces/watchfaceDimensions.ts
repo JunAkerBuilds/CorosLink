@@ -5,6 +5,18 @@ export interface WatchfaceDimensions {
   height: number;
 }
 
+/** Converts physical-watch pixels into the editor's master-resolution space. */
+export function watchfaceMasterPixelsFromDevice(
+  value: number,
+  masterWidth: number,
+  deviceWidth: number
+): number {
+  if (!Number.isFinite(value)) return 0;
+  if (!Number.isFinite(masterWidth) || masterWidth <= 0) return value;
+  if (!Number.isFinite(deviceWidth) || deviceWidth <= 0) return value;
+  return value * (masterWidth / deviceWidth);
+}
+
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
 }

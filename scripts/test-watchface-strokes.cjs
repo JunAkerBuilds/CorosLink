@@ -319,6 +319,47 @@ async function main() {
           0
         );
 
+        const nativeSpriteSource = document.createElement("canvas");
+        nativeSpriteSource.width = 1200;
+        nativeSpriteSource.height = 400;
+        nativeSpriteSource.getContext("2d").fillStyle = "#00ffff";
+        nativeSpriteSource.getContext("2d").fillRect(0, 0, 1200, 400);
+        const nativeSpriteDesign = {
+          ...makeDefaultDesign(),
+          backgroundColor: "#000000",
+          designSprites: [{
+            id: "native-size",
+            dataUrl: nativeSpriteSource.toDataURL("image/png"),
+            sourceWidth: 1200,
+            sourceHeight: 400,
+            width: 1200,
+            height: 400,
+            x: 400,
+            y: 400,
+            scale: 1,
+            rotation: 0,
+            opacity: 1,
+            flipX: false,
+            flipY: false,
+            skewX: 0,
+            skewY: 0,
+            aspectLocked: true,
+            crop: { x: 0, y: 0, width: 1, height: 1 },
+            origin: { x: 0.5, y: 0.5 },
+            visible: true,
+            tintColor: null
+          }],
+          artworkLayerOrder: ["sprite:native-size"]
+        };
+        const nativeSpriteImage = await loadStudioImage(
+          await renderDesignBackground(nativeSpriteDesign, 800),
+          false
+        );
+        const nativeSpriteCanvas = document.createElement("canvas");
+        nativeSpriteCanvas.width = 800;
+        nativeSpriteCanvas.height = 800;
+        nativeSpriteCanvas.getContext("2d").drawImage(nativeSpriteImage, 0, 0);
+
         return {
           outside: {
             padding: outside.padding,
@@ -372,6 +413,14 @@ async function main() {
             movedCenter: pixel(exerciseBackgroundCanvas, 480, 400),
             originalCenter: pixel(exerciseBackgroundCanvas, 400, 400),
             hiddenCenter: pixel(hiddenExerciseBackgroundCanvas, 480, 400)
+          },
+          nativeSprite: {
+            leftEdge: pixel(nativeSpriteCanvas, 0, 400),
+            rightEdge: pixel(nativeSpriteCanvas, 799, 400),
+            above: pixel(nativeSpriteCanvas, 400, 199),
+            firstRow: pixel(nativeSpriteCanvas, 400, 200),
+            lastRow: pixel(nativeSpriteCanvas, 400, 599),
+            below: pixel(nativeSpriteCanvas, 400, 600)
           }
         };
       })()
@@ -467,6 +516,20 @@ async function main() {
     assert.ok(
       results.exerciseSeparator.hiddenCenter[0] < 10,
       "hiding Exercise also hides its baked separator"
+    );
+    assert.ok(
+      results.nativeSprite.leftEdge[1] > 240 &&
+        results.nativeSprite.leftEdge[2] > 240 &&
+        results.nativeSprite.rightEdge[1] > 240 &&
+        results.nativeSprite.rightEdge[2] > 240,
+      "native-width images retain their size and clip at both canvas edges"
+    );
+    assert.ok(
+      results.nativeSprite.above[1] < 10 &&
+        results.nativeSprite.firstRow[1] > 240 &&
+        results.nativeSprite.lastRow[1] > 240 &&
+        results.nativeSprite.below[1] < 10,
+      "native-height images retain their exact exported bounds"
     );
     window.destroy();
     console.log("watchface stroke renderer tests passed");
