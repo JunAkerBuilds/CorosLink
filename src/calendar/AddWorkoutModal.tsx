@@ -29,6 +29,7 @@ import type {
 import type { CorosLinkApi } from "../coroslink-api";
 import { formatHappenDayLabel, getLocalHappenDayKey } from "../training/formatters";
 import { dateFromKey } from "./dateUtils";
+import { ExerciseCombobox, type ExerciseComboboxSelection } from "./ExerciseCombobox";
 import {
   CLIMB_GRADES,
   CLIMB_SYSTEM_IDS,
@@ -439,14 +440,14 @@ function BuilderIntensityFields({ row, sport, context, exerciseOptions, exercise
     : row.intensityType === "speed" ? (row.intensityUnit === "mph" ? "mph" : "km/h")
       : row.intensityType === "cadence" ? (row.intensityUnit === "spm" ? "spm" : "rpm")
         : row.intensityType === "power" ? "W" : "%";
-  const selectExercise = (exerciseName: string) => {
-    const match = exerciseOptions.find(
-      (option) => option.name.toLocaleLowerCase() === exerciseName.trim().toLocaleLowerCase()
-    );
+  const selectExercise = (selection: ExerciseComboboxSelection) => {
+    const match = selection.id
+      ? exerciseOptions.find((option) => option.id === selection.id)
+      : undefined;
     const update: Partial<BuilderRow> = {
-      exerciseName,
-      exerciseId: match?.id ?? "",
-      exerciseKind: match?.exerciseKind
+      exerciseName: selection.name,
+      exerciseId: selection.id ?? "",
+      exerciseKind: selection.exerciseKind
     };
     if (sport === "hyrox" && match?.exerciseKind) {
       const targets = workoutTargetsForStep(sport, stepKind, match.exerciseKind);
@@ -465,19 +466,19 @@ function BuilderIntensityFields({ row, sport, context, exerciseOptions, exercise
     onChange(update);
   };
   return <div className="calendar-builder-intensity-grid">
-    {showExercise ? <label className="calendar-builder-control is-wide">
+    {showExercise ? <div className="calendar-builder-control is-wide">
       <span>{sport === "strength" ? "Exercise" : "Exercise (optional for running steps)"}</span>
-      <input
-        type="search"
-        list={`builder-exercises-${row.id}`}
+      <ExerciseCombobox
         value={row.exerciseName}
+        selectedId={row.exerciseId}
+        options={exerciseOptions}
         placeholder={sport === "strength" ? "Search and select a COROS exercise" : "Search HYROX exercises"}
-        required={sport === "strength"}
-        onChange={(event) => selectExercise(event.target.value)}
+        label={sport === "strength" ? "Exercise" : "HYROX exercise"}
+        loading={exercisesLoading}
+        onChange={selectExercise}
       />
-      <datalist id={`builder-exercises-${row.id}`}>{exerciseOptions.map((option) => <option key={option.id} value={option.name} />)}</datalist>
       <small>{exercisesLoading ? "Loading COROS exercises..." : row.exerciseId ? "COROS exercise selected" : exerciseOptions.length === 0 ? "No exercises are available. Reconnect COROS and try again." : sport === "strength" ? "Required. Select an exact match from COROS." : "Leave empty for a running step."}</small>
-    </label> : null}
+    </div> : null}
 
     <label className="calendar-builder-control">
       <span>Intensity</span>
@@ -876,7 +877,7 @@ export function AddWorkoutModal({
         onClick={onClose}
       >
         <motion.div
-          className={`calendar-modal panel ${tab === "builder" ? "calendar-modal-structured" : ""}`}
+          className="calendar-modal calendar-modal-workspace panel"
           role="dialog"
           aria-modal="true"
           aria-labelledby="add-calendar-title"
@@ -930,7 +931,7 @@ export function AddWorkoutModal({
           </div>
 
           {tab === "quick" ? (
-            <div className="calendar-modal-body">
+            <div className="calendar-modal-body calendar-quick-body">
               <label className="calendar-field">
                 <span>Name</span>
                 <input
@@ -984,7 +985,7 @@ export function AddWorkoutModal({
           ) : null}
 
           {tab === "library" ? (
-            <div className="calendar-modal-body">
+            <div className="calendar-modal-body calendar-library-body">
               <label className="calendar-field">
                 <span>Search</span>
                 <input
@@ -1039,28 +1040,43 @@ export function AddWorkoutModal({
           ) : null}
 
           {tab === "builder" ? (
-            <div className="calendar-modal-body">
-              <p className="calendar-builder-intro">Choose a sport, then define the target and intensity for each step.</p>
-              <label className="calendar-field">
-                <span>Sport</span>
-                <select value={builderSport} onChange={(event) => {
-                  const sport = event.target.value as WorkoutSport;
-                  setBuilderSport(sport);
-                  setRows([emptyRow("warmup", sport), emptyRow("training", sport), emptyRow("cooldown", sport)]);
-                }}>{WORKOUT_SPORTS.map((sport) => <option key={sport} value={sport}>{formatWorkoutSport(sport)}</option>)}</select>
-              </label>
-              {builderSport === "swim" ? <div className="calendar-field-row"><label className="calendar-field"><span>Pool length</span><input type="number" min="1" value={builderPoolLength} onChange={(event) => setBuilderPoolLength(event.target.value)} /></label><label className="calendar-field"><span>Unit</span><select value={builderPoolUnit} onChange={(event) => setBuilderPoolUnit(event.target.value as "m" | "yd")}><option value="m">m</option><option value="yd">yd</option></select></label></div> : null}
-              {(builderSport === "indoorClimb" || builderSport === "bouldering") ? <label className="calendar-field"><span>Grading system</span><select value={builderGradeSystem} onChange={(event) => setBuilderGradeSystem(event.target.value as keyof typeof CLIMB_SYSTEM_IDS)}>{Object.keys(CLIMB_SYSTEM_IDS).map((system) => <option key={system} value={system}>{formatBuilderToken(system)}</option>)}</select></label> : null}
-              <label className="calendar-field">
-                <span>Name</span>
-                <input
-                  type="text"
-                  value={builderName}
-                  onChange={(event) => setBuilderName(event.target.value)}
-                  placeholder={builderSport === "strength" ? "Full-body strength" : builderSport === "swim" ? "Pool endurance" : builderSport === "bike" ? "Threshold ride" : builderSport === "indoorClimb" || builderSport === "bouldering" ? "Climbing session" : builderSport === "hyrox" ? "HYROX mixed session" : "6 x 800 m"}
-                />
-              </label>
-              <div className="calendar-builder-rows">
+            <div className="calendar-modal-body calendar-builder-body">
+              <div className="calendar-builder-workspace">
+                <aside className="calendar-builder-settings" aria-label="Workout settings">
+                  <div className="calendar-builder-settings-copy">
+                    <h4>Workout settings</h4>
+                    <p>Choose a sport and name before building the session.</p>
+                  </div>
+                  <label className="calendar-field">
+                    <span>Sport</span>
+                    <select value={builderSport} onChange={(event) => {
+                      const sport = event.target.value as WorkoutSport;
+                      setBuilderSport(sport);
+                      setRows([emptyRow("warmup", sport), emptyRow("training", sport), emptyRow("cooldown", sport)]);
+                    }}>{WORKOUT_SPORTS.map((sport) => <option key={sport} value={sport}>{formatWorkoutSport(sport)}</option>)}</select>
+                  </label>
+                  {builderSport === "swim" ? <div className="calendar-field-row"><label className="calendar-field"><span>Pool length</span><input type="number" min="1" value={builderPoolLength} onChange={(event) => setBuilderPoolLength(event.target.value)} /></label><label className="calendar-field"><span>Unit</span><select value={builderPoolUnit} onChange={(event) => setBuilderPoolUnit(event.target.value as "m" | "yd")}><option value="m">m</option><option value="yd">yd</option></select></label></div> : null}
+                  {(builderSport === "indoorClimb" || builderSport === "bouldering") ? <label className="calendar-field"><span>Grading system</span><select value={builderGradeSystem} onChange={(event) => setBuilderGradeSystem(event.target.value as keyof typeof CLIMB_SYSTEM_IDS)}>{Object.keys(CLIMB_SYSTEM_IDS).map((system) => <option key={system} value={system}>{formatBuilderToken(system)}</option>)}</select></label> : null}
+                  <label className="calendar-field">
+                    <span>Name</span>
+                    <input
+                      type="text"
+                      value={builderName}
+                      onChange={(event) => setBuilderName(event.target.value)}
+                      placeholder={builderSport === "strength" ? "Full-body strength" : builderSport === "swim" ? "Pool endurance" : builderSport === "bike" ? "Threshold ride" : builderSport === "indoorClimb" || builderSport === "bouldering" ? "Climbing session" : builderSport === "hyrox" ? "HYROX mixed session" : "6 x 800 m"}
+                    />
+                  </label>
+                </aside>
+
+                <section className="calendar-builder-canvas" aria-labelledby="calendar-builder-steps-title">
+                  <header className="calendar-builder-canvas-header">
+                    <div>
+                      <h4 id="calendar-builder-steps-title">Workout steps</h4>
+                      <p>Define each target and intensity in session order.</p>
+                    </div>
+                    <span>{rows.length} {rows.length === 1 ? "step" : "steps"}</span>
+                  </header>
+                  <div className="calendar-builder-rows">
                 {rows.map((row, index) => {
                   const validationMessage = builderRowValidationMessage(
                     row,
@@ -1152,23 +1168,25 @@ export function AddWorkoutModal({
                     {validationMessage ? <p className="calendar-builder-error" role="alert">{validationMessage}</p> : null}
                   </section>;
                 })}
+                  <button
+                    type="button"
+                    className="ghost-button calendar-builder-add"
+                    onClick={() => setRows((current) => [...current, emptyRow("training", builderSport)])}
+                  >
+                    <Plus size={14} aria-hidden="true" /> Add step
+                  </button>
+                  </div>
+                </section>
               </div>
-              <button
-                type="button"
-                className="ghost-button calendar-builder-add"
-                onClick={() => setRows((current) => [...current, emptyRow("training", builderSport)])}
-              >
-                <Plus size={14} aria-hidden="true" /> Add step
-              </button>
-              <label className="calendar-check">
-                <input
-                  type="checkbox"
-                  checked={builderSave}
-                  onChange={(event) => setBuilderSave(event.target.checked)}
-                />
-                Also save to workout library
-              </label>
-              <footer className="calendar-modal-footer">
+              <footer className="calendar-modal-footer calendar-builder-footer">
+                <label className="calendar-check">
+                  <input
+                    type="checkbox"
+                    checked={builderSave}
+                    onChange={(event) => setBuilderSave(event.target.checked)}
+                  />
+                  Also save to workout library
+                </label>
                 <span className="calendar-builder-status">{rows.length} {rows.length === 1 ? "step" : "steps"} · {formatWorkoutSport(builderSport)}</span>
                 <button
                   type="button"
@@ -1183,7 +1201,7 @@ export function AddWorkoutModal({
           ) : null}
 
           {tab === "activity" ? (
-            <div className="calendar-modal-body">
+            <div className="calendar-modal-body calendar-activity-body">
               <div
                 className="calendar-activity-sport-picker"
                 role="group"

@@ -70,6 +70,30 @@ assert.deepEqual(
   { run: 2, bike: 2, swim: 2, strength: 2, trailRun: 4, indoorClimb: 7, bouldering: 7, xcSki: 9, hyrox: 9 }
 );
 
+const exerciseMedia = codec.workoutExerciseMedia({
+  thumbnailUrl: "https://s3.coros.com/source/exercise_img/0/cover-one.png",
+  coverUrlArrStr: "https://s3.coros.com/source/exercise_img/0/cover-one.png,https://s3.coros.com/source/exercise_img/0/cover-two.png",
+  videoUrlArrStr: "https://s3.coros.com/source/exercise_gif/0/video-one.mp4,https://s3.coros.com/source/exercise_gif/0/video-two.mp4",
+  videoInfos: [{
+    coverUrl: "https://s3.coros.com/source/exercise_img/0/cover-one.png",
+    videoUrl: "https://s3.coros.com/source/exercise_gif/0/video-one.mp4"
+  }]
+});
+assert.deepEqual(exerciseMedia, [
+  {
+    coverUrl: "https://s3.coros.com/source/exercise_img/0/cover-one.png",
+    videoUrl: "https://s3.coros.com/source/exercise_gif/0/video-one.mp4"
+  },
+  {
+    coverUrl: "https://s3.coros.com/source/exercise_img/0/cover-two.png",
+    videoUrl: "https://s3.coros.com/source/exercise_gif/0/video-two.mp4"
+  }
+]);
+assert.deepEqual(codec.workoutExerciseMedia({
+  thumbnailUrl: "https://example.test/not-coros.png",
+  videoUrlArrStr: "javascript:alert(1)"
+}), []);
+
 const cases = [
   [{ type: "none" }, 0],
   [{ type: "heartRate", lowBpm: 135, highBpm: 145 }, 2],
@@ -215,6 +239,21 @@ assert.equal(codec.resolveWorkoutExerciseName(exerciseCatalog, "Deadlift").match
 assert.deepEqual(
   codec.resolveWorkoutExerciseName(exerciseCatalog, "squat").candidates,
   ["Back Squat", "Front Squat"]
+);
+assert.equal(
+  codec.workoutExerciseName({ name: "T1024", overview: "sid_exercise_preacher_curls" }),
+  "Preacher Curls"
+);
+assert.equal(
+  codec.workoutExerciseName({ name: "My custom carry" }),
+  "My custom carry"
+);
+assert.equal(
+  codec.resolveWorkoutExerciseName(
+    [{ originId: "1024", name: "T1024", overview: "sid_exercise_preacher_curls" }],
+    "Preacher Curls"
+  ).match.originId,
+  "1024"
 );
 
 console.log("sport-aware COROS intensity codec tests passed");

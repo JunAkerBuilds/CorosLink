@@ -2845,6 +2845,13 @@ export interface WorkoutExerciseOption {
   id: string;
   name: string;
   exerciseKind?: number;
+  thumbnailUrl?: string;
+  media?: WorkoutExerciseMedia[];
+}
+
+export interface WorkoutExerciseMedia {
+  coverUrl?: string;
+  videoUrl?: string;
 }
 
 export type WorkoutEditRef =

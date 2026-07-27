@@ -22441,9 +22441,77 @@ tr.data-intervals-row-missing {
   background: var(--bg-base);
 }
 
-.calendar-modal-structured {
+.calendar-modal-workspace {
   width: min(760px, 100%);
-  max-height: min(820px, calc(100dvh - 48px));
+  height: min(820px, calc(100dvh - 48px));
+  max-height: none;
+}
+
+.calendar-modal-workspace > .calendar-modal-body {
+  flex: 1;
+}
+
+.calendar-modal-workspace > .calendar-modal-body > .calendar-field,
+.calendar-modal-workspace > .calendar-modal-body > .calendar-field-row {
+  flex: 0 0 auto;
+}
+
+.calendar-modal-workspace > .calendar-modal-body > .calendar-modal-footer {
+  margin-top: auto;
+}
+
+.calendar-builder-body {
+  gap: 14px;
+}
+
+.calendar-builder-workspace,
+.calendar-builder-settings,
+.calendar-builder-canvas {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.calendar-builder-workspace,
+.calendar-builder-settings,
+.calendar-builder-canvas {
+  gap: 14px;
+}
+
+.calendar-builder-settings-copy h4,
+.calendar-builder-canvas-header h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+}
+
+.calendar-builder-settings-copy h4,
+.calendar-builder-canvas-header {
+  display: none;
+}
+
+.calendar-builder-settings-copy p,
+.calendar-builder-canvas-header p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.calendar-builder-canvas-header {
+  display: none;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.calendar-builder-canvas-header > span {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .calendar-modal-header {
@@ -22661,15 +22729,20 @@ tr.data-intervals-row-missing {
   background: linear-gradient(to bottom, transparent, var(--bg-base) 18px);
 }
 
-.calendar-modal-structured .calendar-modal-footer {
+.calendar-builder-footer {
   justify-content: space-between;
+}
+
+.calendar-builder-footer .calendar-check {
+  margin-right: auto;
 }
 
 .calendar-library-list {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 6px;
-  max-height: 300px;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -22870,6 +22943,414 @@ tr.data-intervals-row-missing {
 
 .calendar-builder-add {
   align-self: flex-start;
+}
+
+@media (min-width: 1100px) and (min-height: 700px) {
+  .calendar-modal-workspace {
+    width: min(1400px, calc(100vw - 48px));
+    height: min(1040px, calc(100dvh - 48px));
+    max-height: none;
+  }
+
+  .calendar-modal-workspace .calendar-modal-header {
+    margin-bottom: 10px;
+  }
+
+  .calendar-modal-workspace .calendar-modal-tabs {
+    margin-bottom: 12px;
+  }
+
+  .calendar-quick-body > .calendar-field,
+  .calendar-quick-body > .calendar-field-row,
+  .calendar-quick-body > .calendar-check {
+    width: min(760px, 100%);
+  }
+
+  .calendar-builder-body {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .calendar-builder-workspace {
+    display: grid;
+    grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
+    flex: 1;
+    gap: 20px;
+    overflow: hidden;
+  }
+
+  .calendar-builder-settings-copy h4 {
+    display: block;
+  }
+
+  .calendar-builder-canvas-header {
+    display: flex;
+  }
+
+  .calendar-builder-settings {
+    align-content: flex-start;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
+  .calendar-builder-settings .calendar-field {
+    flex: 0 0 auto;
+  }
+
+  .calendar-builder-canvas {
+    overflow: hidden;
+    border-left: 1px solid var(--glass-border);
+    padding-left: 20px;
+  }
+
+  .calendar-builder-rows {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 7px;
+  }
+
+  .calendar-builder-add {
+    flex: 0 0 auto;
+  }
+
+  .calendar-builder-footer {
+    position: static;
+    flex: 0 0 auto;
+    margin: 0;
+    border-top: 1px solid var(--glass-border);
+    background: var(--bg-base);
+    padding-top: 12px;
+  }
+}
+
+@media (min-width: 1380px) and (min-height: 760px) {
+  .calendar-builder-row {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    column-gap: 14px;
+  }
+
+  .calendar-builder-row-header,
+  .calendar-builder-error {
+    grid-column: 1 / -1;
+  }
+
+  .calendar-builder-intensity-grid {
+    margin-top: 0;
+    border-top: 0;
+    border-left: 1px solid color-mix(in srgb, var(--glass-border) 72%, transparent);
+    padding-top: 0;
+    padding-left: 14px;
+  }
+
+  .workout-editor-modal {
+    width: min(1400px, 100%);
+    height: min(1040px, calc(100dvh - 36px));
+  }
+}
+
+.exercise-combobox {
+  position: relative;
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.exercise-combobox-input {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  color: var(--text-muted);
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.exercise-combobox-input:hover {
+  border-color: color-mix(in srgb, var(--text-primary) 22%, var(--glass-border));
+  background: var(--glass-bg-hover);
+}
+
+.exercise-combobox-input.is-open,
+.exercise-combobox-input:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--glass-border));
+  background: var(--glass-bg-hover);
+}
+
+.calendar-builder-row .exercise-combobox-input > svg,
+.workout-step-card .exercise-combobox-input > svg {
+  flex: 0 0 auto;
+  margin-left: 11px;
+}
+
+.exercise-combobox-input-thumbnail {
+  width: 34px;
+  height: 22px;
+  flex: 0 0 34px;
+  margin-left: 7px;
+  border: 1px solid var(--glass-border);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  object-fit: cover;
+}
+
+.calendar-builder-row .exercise-combobox-input input,
+.workout-step-card .exercise-combobox-input input {
+  width: 100%;
+  min-height: 38px;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.exercise-combobox-input > button {
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  flex: 0 0 40px;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--glass-border) 70%, transparent);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.exercise-combobox-input > button:hover:not(:disabled) {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.exercise-combobox-preview-trigger {
+  color: var(--text-secondary);
+}
+
+.exercise-combobox-preview-trigger[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.exercise-combobox-input > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.exercise-combobox-input > button svg {
+  transition: transform 150ms ease;
+}
+
+.exercise-combobox-input > button svg.is-open {
+  transform: rotate(180deg);
+}
+
+.exercise-combobox-menu {
+  position: absolute;
+  z-index: 32;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  display: grid;
+  gap: 2px;
+  max-height: 220px;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(180deg, rgba(29, 32, 37, 0.98), rgba(15, 17, 21, 0.98));
+  box-shadow:
+    var(--glass-inset),
+    0 18px 44px rgba(0, 0, 0, 0.48);
+  scrollbar-color: var(--glass-border) transparent;
+}
+
+.exercise-combobox-menu [role="listbox"] {
+  display: grid;
+  gap: 2px;
+}
+
+.exercise-combobox-menu [role="listbox"] > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 8px 10px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.exercise-combobox-menu [role="listbox"] > button:hover,
+.exercise-combobox-menu [role="listbox"] > button.is-active,
+.exercise-combobox-menu [role="listbox"] > button:focus-visible {
+  background: rgba(255, 255, 255, 0.075);
+  outline: none;
+}
+
+.exercise-combobox-menu [role="listbox"] > button.is-selected {
+  background: rgba(255, 255, 255, 0.095);
+  color: var(--text-primary);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
+.exercise-combobox-menu [role="listbox"] > button > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.exercise-combobox-option-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.exercise-combobox-option-main > img {
+  width: 48px;
+  height: 27px;
+  flex: 0 0 48px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.035);
+  object-fit: cover;
+}
+
+.exercise-combobox-option-main > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exercise-combobox-state {
+  margin: 0;
+  padding: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.exercise-combobox-preview {
+  position: absolute;
+  z-index: 34;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(300px, 100%);
+  padding: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, rgba(29, 32, 37, 0.99), rgba(15, 17, 21, 0.99));
+  box-shadow: var(--glass-inset), 0 18px 44px rgba(0, 0, 0, 0.48);
+}
+
+.exercise-combobox-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 2px 8px;
+}
+
+.exercise-combobox-preview-title {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.exercise-combobox-preview-header strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exercise-combobox-preview-header span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.exercise-combobox-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.exercise-combobox-preview-actions > span {
+  min-width: 30px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.exercise-combobox-preview-actions > button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.exercise-combobox-preview-actions > button:hover,
+.exercise-combobox-preview-actions > button:focus-visible {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.exercise-combobox-preview > video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  background: #111318;
+  object-fit: cover;
+}
+
+:root[data-theme="paper"] .exercise-combobox-menu {
+  border-color: var(--glass-border);
+  background: var(--glass-bg-elevated);
+  box-shadow: var(--shadow-elevated), var(--glass-inset);
+}
+
+:root[data-theme="paper"] .exercise-combobox-menu [role="listbox"] > button:hover,
+:root[data-theme="paper"] .exercise-combobox-menu [role="listbox"] > button.is-active,
+:root[data-theme="paper"] .exercise-combobox-menu [role="listbox"] > button:focus-visible,
+:root[data-theme="paper"] .exercise-combobox-menu [role="listbox"] > button.is-selected {
+  background: rgba(38, 34, 28, 0.065);
+}
+
+:root[data-theme="paper"] .exercise-combobox-preview {
+  border-color: var(--glass-border);
+  background: var(--glass-bg-elevated);
+  box-shadow: var(--shadow-elevated), var(--glass-inset);
+}
+
+@container (max-width: 420px) {
+  .exercise-combobox-preview {
+    right: auto;
+    left: 0;
+    width: 100%;
+  }
 }
 
 /* --- workout library manager --- */
@@ -23204,6 +23685,12 @@ tr.data-intervals-row-missing {
   background: color-mix(in srgb, var(--glass-bg) 92%, var(--step-color) 8%);
 }
 
+.workout-step-card:has(.exercise-combobox-menu),
+.workout-repeat-card:has(.exercise-combobox-menu) {
+  z-index: 4;
+  overflow: visible;
+}
+
 .workout-step-card.is-warmup { --step-color: #f0a72e; }
 .workout-step-card.is-rest { --step-color: #9099aa; }
 .workout-step-card.is-cooldown { --step-color: #27c2e5; }
@@ -23295,6 +23782,26 @@ tr.data-intervals-row-missing {
   min-width: 0;
   align-items: flex-end;
   gap: 8px;
+}
+
+.workout-exercise-control {
+  display: grid;
+  align-items: stretch;
+  gap: 5px;
+}
+
+.workout-exercise-control > span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.workout-exercise-control > small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.workout-exercise-control .exercise-combobox {
+  width: 100%;
 }
 
 .workout-control-group > label,
@@ -23597,6 +24104,18 @@ tr.data-intervals-row-missing {
 
   .calendar-modal-footer {
     align-items: stretch;
+  }
+
+  .calendar-builder-footer {
+    flex-wrap: wrap;
+  }
+
+  .calendar-builder-footer .calendar-check {
+    flex-basis: 100%;
+  }
+
+  .calendar-builder-footer .primary-button {
+    margin-left: auto;
   }
 }
 

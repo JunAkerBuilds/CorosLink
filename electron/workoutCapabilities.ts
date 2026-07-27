@@ -9,6 +9,7 @@ import type {
   WorkoutHeartRateBasis,
   WorkoutHeartRatePreset,
   WorkoutIntensityInput,
+  WorkoutExerciseMedia,
   WorkoutPacePreset,
   WorkoutRunningPowerPreset,
   WorkoutSport,
@@ -210,11 +211,29 @@ export interface WorkoutExerciseResolution {
   candidates: string[];
 }
 
+function humanizeExerciseOverview(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) return "";
+  const normalized = value.trim().replace(/^sid_[a-z]+_/i, "");
+  if (normalized === value.trim()) return "";
+  return normalized
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (character) => character.toLocaleUpperCase())
+    .trim();
+}
+
 export function workoutExerciseName(row: Record<string, unknown>): string {
+  const codePattern = /^[TS]\d+$/i;
   for (const key of ["displayName", "exerciseName", "nameText", "name"]) {
     const value = row[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value !== "string" || !value.trim()) continue;
+    const humanizedName = humanizeExerciseOverview(value);
+    if (humanizedName) return humanizedName;
+    if (!codePattern.test(value.trim())) return value.trim();
   }
+  const overviewName = humanizeExerciseOverview(row.overview);
+  if (overviewName) return overviewName;
+  const rawName = row.name;
+  if (typeof rawName === "string" && rawName.trim()) return rawName.trim();
   return "";
 }
 
@@ -223,6 +242,79 @@ export function workoutExerciseId(row: Record<string, unknown>): string | undefi
   return value === undefined || value === null || String(value).trim() === ""
     ? undefined
     : String(value);
+}
+
+const COROS_EXERCISE_IMAGE_PREFIX = "/source/exercise_img/";
+const COROS_EXERCISE_VIDEO_PREFIX = "/source/exercise_gif/";
+
+function officialCorosExerciseMediaUrl(
+  value: unknown,
+  kind: "cover" | "video"
+): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "https:" || url.hostname !== "s3.coros.com") return undefined;
+    const expectedPrefix = kind === "cover"
+      ? COROS_EXERCISE_IMAGE_PREFIX
+      : COROS_EXERCISE_VIDEO_PREFIX;
+    if (!url.pathname.startsWith(expectedPrefix)) return undefined;
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function mediaUrlList(value: unknown, kind: "cover" | "video"): string[] {
+  if (typeof value !== "string") return [];
+  return value
+    .split(",")
+    .map((entry) => officialCorosExerciseMediaUrl(entry, kind))
+    .filter((entry): entry is string => Boolean(entry));
+}
+
+function videoInfoRows(value: unknown): Record<string, unknown>[] {
+  let parsed = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(parsed)
+    ? parsed.filter(
+      (entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object"
+    )
+    : [];
+}
+
+export function workoutExerciseMedia(row: Record<string, unknown>): WorkoutExerciseMedia[] {
+  const structured = videoInfoRows(row.videoInfos).flatMap((entry) => {
+    const coverUrl = officialCorosExerciseMediaUrl(entry.coverUrl, "cover");
+    const videoUrl = officialCorosExerciseMediaUrl(entry.videoUrl, "video");
+    return coverUrl || videoUrl ? [{ ...(coverUrl ? { coverUrl } : {}), ...(videoUrl ? { videoUrl } : {}) }] : [];
+  });
+  const coverUrls = [...new Set([
+    officialCorosExerciseMediaUrl(row.thumbnailUrl, "cover"),
+    officialCorosExerciseMediaUrl(row.sourceUrl, "cover"),
+    ...mediaUrlList(row.coverUrlArrStr, "cover")
+  ].filter((entry): entry is string => Boolean(entry)))];
+  const videoUrls = [...new Set([
+    ...mediaUrlList(row.videoUrlArrStr, "video"),
+    officialCorosExerciseMediaUrl(row.videoUrl, "video")
+  ].filter((entry): entry is string => Boolean(entry)))];
+  const merged = [...structured];
+  const count = Math.max(coverUrls.length, videoUrls.length);
+  for (let index = 0; index < count; index += 1) {
+    const coverUrl = coverUrls[index];
+    const videoUrl = videoUrls[index];
+    if (coverUrl || videoUrl) merged.push({ ...(coverUrl ? { coverUrl } : {}), ...(videoUrl ? { videoUrl } : {}) });
+  }
+  return [...new Map(merged.map((entry) => [
+    `${entry.coverUrl ?? ""}|${entry.videoUrl ?? ""}`,
+    entry
+  ])).values()];
 }
 
 export function resolveWorkoutExerciseName(

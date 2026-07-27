@@ -91,6 +91,7 @@ import {
   WORKOUT_SPORT_CAPABILITIES,
   resolveWorkoutExerciseName,
   workoutExerciseId,
+  workoutExerciseMedia,
   workoutExerciseName,
   workoutSportFromType
 } from "./workoutCapabilities";
@@ -2242,10 +2243,14 @@ export async function listWorkoutExercises(
     const name = workoutExerciseName(row);
     if (!id || !name) return [];
     const exerciseKind = toOptionalNumber(row.exerciseKind);
+    const media = workoutExerciseMedia(row);
+    const thumbnailUrl = media.find((entry) => entry.coverUrl)?.coverUrl;
     const option: WorkoutExerciseOption = {
       id,
       name,
-      ...(exerciseKind !== undefined ? { exerciseKind } : {})
+      ...(exerciseKind !== undefined ? { exerciseKind } : {}),
+      ...(thumbnailUrl ? { thumbnailUrl } : {}),
+      ...(media.length ? { media } : {})
     };
     return [[id, option] as const];
   })).values()].sort((left, right) => left.name.localeCompare(right.name));

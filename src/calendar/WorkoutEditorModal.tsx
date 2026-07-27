@@ -32,6 +32,7 @@ import type {
   WorkoutSport
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
+import { ExerciseCombobox } from "./ExerciseCombobox";
 import {
   CLIMB_GRADES,
   CLIMB_SYSTEM_IDS,
@@ -211,6 +212,7 @@ export function WorkoutEditorModal({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [exerciseOptions, setExerciseOptions] = useState<WorkoutExerciseOption[]>([]);
+  const [exerciseOptionsLoading, setExerciseOptionsLoading] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const previewSequence = useRef(0);
 
@@ -234,11 +236,16 @@ export function WorkoutEditorModal({
     const sport = draft?.sport;
     if (sport !== "strength" && sport !== "hyrox") {
       setExerciseOptions([]);
+      setExerciseOptionsLoading(false);
       return;
     }
+    let active = true;
+    setExerciseOptionsLoading(true);
     void api.listWorkoutExercises(sport)
-      .then(setExerciseOptions)
-      .catch(() => setExerciseOptions([]));
+      .then((options) => { if (active) setExerciseOptions(options); })
+      .catch(() => { if (active) setExerciseOptions([]); })
+      .finally(() => { if (active) setExerciseOptionsLoading(false); });
+    return () => { active = false; };
   }, [api, draft?.sport]);
 
   const dirty = Boolean(document && draft && JSON.stringify(document.draft) !== JSON.stringify(draft));
@@ -541,6 +548,7 @@ export function WorkoutEditorModal({
                           <StepCard
                             step={node} location={{ nodeId: node.id }} context={document.context} sport={draft.sport}
                             exerciseOptions={exerciseOptions}
+                            exerciseOptionsLoading={exerciseOptionsLoading}
                             error={validation.errors[`nodes.${index}.target`] ?? validation.errors[`nodes.${index}.intensity`] ?? validation.errors[`nodes.${index}.exercise`]}
                             disabled={!document.canEdit || saving} draggable
                             onDragStart={(event) => event.dataTransfer.setData("text/workout-node", node.id)}
@@ -555,6 +563,7 @@ export function WorkoutEditorModal({
                           <RepeatCard
                             group={node} nodeIndex={index} context={document.context} sport={draft.sport} errors={validation.errors}
                             exerciseOptions={exerciseOptions}
+                            exerciseOptionsLoading={exerciseOptionsLoading}
                             disabled={!document.canEdit || saving}
                             onDragStart={(event) => event.dataTransfer.setData("text/workout-node", node.id)}
                             onChange={(group) => setDraft({ ...draft, nodes: draft.nodes.map((item) => item.id === group.id ? group : item) })}
@@ -611,6 +620,7 @@ interface StepCardProps {
   context: WorkoutEditorContext;
   sport: WorkoutSport;
   exerciseOptions: WorkoutExerciseOption[];
+  exerciseOptionsLoading: boolean;
   error?: string;
   disabled: boolean;
   draggable?: boolean;
@@ -624,7 +634,7 @@ interface StepCardProps {
   onUngroup?: () => void;
 }
 
-function StepCard({ step, context, sport, exerciseOptions, error, disabled, draggable, onDragStart, onDropCard, onChange, onMove, onDuplicate, onDelete, onGroup, onUngroup }: StepCardProps) {
+function StepCard({ step, context, sport, exerciseOptions, exerciseOptionsLoading, error, disabled, draggable, onDragStart, onDropCard, onChange, onMove, onDuplicate, onDelete, onGroup, onUngroup }: StepCardProps) {
   const locked = disabled || !step.editable;
   const capability = WORKOUT_SPORT_CAPABILITIES[sport];
   const changeKind = (kind: RunWorkoutEditorStepKind) => {
@@ -660,7 +670,7 @@ function StepCard({ step, context, sport, exerciseOptions, error, disabled, drag
         <TargetFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
         <IntensityFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
         {step.kind === "sendOff" ? <label className="workout-control-group"><span>Send-off interval</span><ClockInput label="Send-off interval" seconds={step.sendOffSeconds ?? 120} disabled={locked} onChange={(seconds) => onChange({ ...step, sendOffSeconds: seconds })} /></label> : null}
-        {capability.requiresExercise && step.kind === "training" ? <label className="workout-control-group"><span>Exercise</span><input type="search" list={`workout-exercises-${step.id}`} value={step.exerciseName ?? ""} placeholder="Search by COROS exercise name" disabled={locked} onChange={(event) => { const exerciseName = event.target.value; const match = exerciseOptions.find((option) => option.name.toLocaleLowerCase() === exerciseName.trim().toLocaleLowerCase()); onChange({ ...step, exerciseName, exerciseId: match?.id, exerciseKind: match?.exerciseKind }); }} /><datalist id={`workout-exercises-${step.id}`}>{exerciseOptions.map((option) => <option key={option.id} value={option.name} />)}</datalist>{step.exerciseId ? <small>COROS exercise selected · {step.exerciseId}</small> : <small>Name must resolve to one unique COROS exercise before upload.</small>}</label> : null}
+        {capability.requiresExercise && step.kind === "training" ? <div className="workout-control-group workout-exercise-control"><span>Exercise</span><ExerciseCombobox value={step.exerciseName ?? ""} selectedId={step.exerciseId} options={exerciseOptions} placeholder="Search by COROS exercise name" label="Exercise" loading={exerciseOptionsLoading} disabled={locked} onChange={(selection) => onChange({ ...step, exerciseName: selection.name, exerciseId: selection.id, exerciseKind: selection.exerciseKind })} />{step.exerciseId ? <small>COROS exercise selected</small> : <small>Name must resolve to one unique COROS exercise before upload.</small>}</div> : null}
       </div>
       {error ? <p className="workout-field-error">{error}</p> : null}
     </motion.article>
@@ -816,8 +826,8 @@ function PowerPercentPreview({ intensity, context, reference, zoneKey }: { inten
   return <p className="workout-control-hint">Derived preview: {Math.round(reference * low / 100)}–{Math.round(reference * high / 100)} W.</p>;
 }
 
-function RepeatCard({ group, nodeIndex, context, sport, exerciseOptions, errors, disabled, onDragStart, onChange, onMove, onDuplicate, onDelete, onStepChange, onStepMove, onStepDuplicate, onStepDelete, onStepUngroup }: {
-  group: RunWorkoutEditorRepeatGroup; nodeIndex: number; context: WorkoutEditorContext; sport: WorkoutSport; exerciseOptions: WorkoutExerciseOption[]; errors: Record<string, string>; disabled: boolean;
+function RepeatCard({ group, nodeIndex, context, sport, exerciseOptions, exerciseOptionsLoading, errors, disabled, onDragStart, onChange, onMove, onDuplicate, onDelete, onStepChange, onStepMove, onStepDuplicate, onStepDelete, onStepUngroup }: {
+  group: RunWorkoutEditorRepeatGroup; nodeIndex: number; context: WorkoutEditorContext; sport: WorkoutSport; exerciseOptions: WorkoutExerciseOption[]; exerciseOptionsLoading: boolean; errors: Record<string, string>; disabled: boolean;
   onDragStart: (event: DragEvent) => void; onChange: (group: RunWorkoutEditorRepeatGroup) => void; onMove: (direction: -1 | 1) => void; onDuplicate: () => void; onDelete: () => void;
   onStepChange: (id: string, step: RunWorkoutEditorStep) => void; onStepMove: (id: string, direction: -1 | 1) => void; onStepDuplicate: (id: string) => void; onStepDelete: (id: string) => void; onStepUngroup: (id: string) => void;
 }) {
@@ -826,7 +836,7 @@ function RepeatCard({ group, nodeIndex, context, sport, exerciseOptions, errors,
   return <motion.section layout className="workout-repeat-card" draggable={!disabled} onDragStartCapture={onDragStart}>
     <header className="workout-repeat-header"><GripVertical size={18} aria-hidden="true" /><input aria-label="Repeat group name" value={group.name} disabled={locked} onChange={(event) => onChange({ ...group, name: event.target.value })} /><div className="workout-repeat-count"><span>Repeat</span><button type="button" disabled={locked || group.repeat <= 1} onClick={() => onChange({ ...group, repeat: group.repeat - 1 })}>−</button><input aria-label="Repeat count" type="number" min="1" max="99" value={group.repeat} disabled={locked} onChange={(event) => onChange({ ...group, repeat: Number(event.target.value) })} /><button type="button" disabled={locked || group.repeat >= 99} onClick={() => onChange({ ...group, repeat: group.repeat + 1 })}>+</button></div><div className="workout-step-actions"><IconAction label="Move group up" onClick={() => onMove(-1)} disabled={disabled}><ChevronUp /></IconAction><IconAction label="Move group down" onClick={() => onMove(1)} disabled={disabled}><ChevronDown /></IconAction><IconAction label="Duplicate group" onClick={onDuplicate} disabled={duplicateLocked}><Copy /></IconAction><IconAction label="Delete group" onClick={onDelete} disabled={disabled}><Trash2 /></IconAction></div></header>
     {errors[`nodes.${nodeIndex}.repeat`] ? <p className="workout-field-error">{errors[`nodes.${nodeIndex}.repeat`]}</p> : null}
-    <div className="workout-repeat-steps">{group.steps.map((step, childIndex) => <StepCard key={step.id} step={step} location={{ nodeId: group.id, childId: step.id }} context={context} sport={sport} exerciseOptions={exerciseOptions} disabled={disabled} draggable error={errors[`nodes.${nodeIndex}.steps.${childIndex}.target`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.intensity`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.exercise`]} onDragStart={(event) => event.dataTransfer.setData("text/workout-node", step.id)} onDropCard={(sourceId) => { const from = group.steps.findIndex((candidate) => candidate.id === sourceId); const to = group.steps.findIndex((candidate) => candidate.id === step.id); if (from >= 0 && to >= 0) onChange({ ...group, steps: moveItem(group.steps, from, to) }); }} onChange={(next) => onStepChange(step.id, next)} onMove={(direction) => onStepMove(step.id, direction)} onDuplicate={() => onStepDuplicate(step.id)} onDelete={() => onStepDelete(step.id)} onUngroup={() => onStepUngroup(step.id)} />)}</div>
+    <div className="workout-repeat-steps">{group.steps.map((step, childIndex) => <StepCard key={step.id} step={step} location={{ nodeId: group.id, childId: step.id }} context={context} sport={sport} exerciseOptions={exerciseOptions} exerciseOptionsLoading={exerciseOptionsLoading} disabled={disabled} draggable error={errors[`nodes.${nodeIndex}.steps.${childIndex}.target`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.intensity`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.exercise`]} onDragStart={(event) => event.dataTransfer.setData("text/workout-node", step.id)} onDropCard={(sourceId) => { const from = group.steps.findIndex((candidate) => candidate.id === sourceId); const to = group.steps.findIndex((candidate) => candidate.id === step.id); if (from >= 0 && to >= 0) onChange({ ...group, steps: moveItem(group.steps, from, to) }); }} onChange={(next) => onStepChange(step.id, next)} onMove={(direction) => onStepMove(step.id, direction)} onDuplicate={() => onStepDuplicate(step.id)} onDelete={() => onStepDelete(step.id)} onUngroup={() => onStepUngroup(step.id)} />)}</div>
     <button type="button" className="ghost-button workout-repeat-add" disabled={locked} onClick={() => onChange({ ...group, steps: [...group.steps, emptyStep("rest", sport)] })}><Plus size={14} aria-hidden="true" /> Add step to repeat</button>
   </motion.section>;
 }
