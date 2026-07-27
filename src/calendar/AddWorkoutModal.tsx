@@ -6,9 +6,12 @@ import {
   BookOpen,
   CalendarDays,
   CalendarPlus,
+  ChevronDown,
+  ChevronUp,
   Dumbbell,
   Flame,
   Footprints,
+  GripVertical,
   ListTree,
   Mountain,
   Pencil,
@@ -311,6 +314,17 @@ function emptyRow(kind: BuilderKind, sport: WorkoutSport = "run"): BuilderRow {
   };
 }
 
+function moveBuilderRow(rows: BuilderRow[], sourceId: number, targetId: number): BuilderRow[] {
+  const fromIndex = rows.findIndex((row) => row.id === sourceId);
+  const toIndex = rows.findIndex((row) => row.id === targetId);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return rows;
+  const nextRows = [...rows];
+  const [movedRow] = nextRows.splice(fromIndex, 1);
+  if (!movedRow) return rows;
+  nextRows.splice(Math.min(toIndex, nextRows.length), 0, movedRow);
+  return nextRows;
+}
+
 function paceSeconds(value: string, fallbackUnit: "km" | "mi" = "km"): number {
   const match = value.trim().match(/^(\d+):([0-5]\d)(?:\/(km|mi))?$/i);
   if (!match) return 0;
@@ -460,6 +474,90 @@ function builderTargetTypeLabel(target: BuilderRow["targetType"]): string {
     routes: "Routes"
   };
   return labels[target];
+}
+
+interface BuilderRowSummaryItem {
+  label: string;
+  value: string;
+}
+
+function builderSummaryRange(low: string, high: string, unit: string): string {
+  const start = low.trim();
+  const end = high.trim();
+  if (!start) return "Not set";
+  return `${end && end !== start ? `${start}-${end}` : start}${unit ? ` ${unit}` : ""}`;
+}
+
+function builderIntensitySummary(row: BuilderRow, sport: WorkoutSport): string {
+  switch (row.intensityType) {
+    case "none": return "Open";
+    case "heartRate": return builderSummaryRange(row.intensityLow, row.intensityHigh, "bpm");
+    case "heartRatePercent": {
+      const preset = HEART_RATE_PRESETS[row.intensityBasis].find((zone) => zone.preset === row.intensityPreset);
+      return preset?.label ?? builderSummaryRange(row.intensityLow, row.intensityHigh, "%");
+    }
+    case "pace":
+    case "effortPace": return row.pace.trim() || "Not set";
+    case "thresholdPacePercent":
+    case "effortPacePercent": {
+      const preset = PACE_PRESETS.find((zone) => zone.preset === row.intensityPreset);
+      return preset?.label ?? builderSummaryRange(row.intensityLow, row.intensityHigh, "%");
+    }
+    case "ftpPercent": {
+      const preset = FTP_PRESETS.find((zone) => zone.preset === row.intensityPreset);
+      return preset?.label ?? builderSummaryRange(row.intensityLow, row.intensityHigh, "% FTP");
+    }
+    case "power": {
+      const preset = sport !== "bike"
+        ? RUNNING_POWER_PRESETS.find((zone) => zone.preset === row.intensityPreset)
+        : undefined;
+      return preset?.label ?? builderSummaryRange(row.intensityLow, row.intensityHigh, "W");
+    }
+    case "speed": return builderSummaryRange(row.intensityLow, row.intensityHigh, row.intensityUnit === "mph" ? "mph" : "km/h");
+    case "cadence": return builderSummaryRange(row.intensityLow, row.intensityHigh, row.intensityUnit === "spm" ? "spm" : "rpm");
+    case "swimStroke": return formatBuilderToken(row.intensityPreset || "freestyle");
+    case "weight": return row.intensityPreset === "weight"
+      ? builderSummaryRange(row.intensityLow, row.intensityLow, row.intensityUnit === "lb" ? "lb" : "kg")
+      : "Bodyweight";
+    case "rpe": return `RPE ${row.intensityLow || "5"}`;
+    case "climbGrade": return row.intensityPreset.startsWith("relative:")
+      ? `${row.intensityLow || "0"} from onsight`
+      : row.intensityPreset.split(":")[1] || "Not set";
+    default: return formatIntensityType(row.intensityType);
+  }
+}
+
+function builderRowSummary(row: BuilderRow, sport: WorkoutSport): BuilderRowSummaryItem[] {
+  const rawTarget = row.targetType === "time" ? row.timeMin.trim() : row.distanceKm.trim();
+  const target = row.targetType === "open"
+    ? "Manual"
+    : row.targetType === "time"
+      ? rawTarget ? `${rawTarget} min` : "Not set"
+      : row.targetType === "distance"
+        ? rawTarget ? `${rawTarget} ${sport === "swim" ? "m" : "km"}` : "Not set"
+        : row.targetType === "load"
+          ? rawTarget ? `${rawTarget} TL` : "Not set"
+          : row.targetType === "hrRecovery"
+            ? rawTarget ? `${rawTarget} bpm` : "Not set"
+            : row.targetType === "reps"
+              ? rawTarget ? `${rawTarget} reps` : "Not set"
+              : row.targetType === "elevationGain"
+                ? rawTarget ? `${rawTarget} m` : "Not set"
+                : rawTarget ? `${rawTarget} routes` : "Not set";
+  const details: BuilderRowSummaryItem[] = [
+    { label: builderTargetTypeLabel(row.targetType), value: target },
+    { label: "Intensity", value: builderIntensitySummary(row, sport) }
+  ];
+  if (row.exerciseName.trim()) {
+    details.splice(1, 0, { label: "Exercise", value: row.exerciseName.trim() });
+  }
+  if (row.kind === "intervals") {
+    details.push({
+      label: "Recovery",
+      value: Number(row.restMin) > 0 ? `${row.restMin} min` : "Not set"
+    });
+  }
+  return details;
 }
 
 function BuilderIntensityFields({ row, sport, context, exerciseOptions, exercisesLoading, onChange }: { row: BuilderRow; sport: WorkoutSport; context?: WorkoutEditorContext; exerciseOptions: WorkoutExerciseOption[]; exercisesLoading: boolean; onChange: (update: Partial<BuilderRow>) => void }) {
@@ -700,6 +798,10 @@ export function AddWorkoutModal({
     emptyRow("training"),
     emptyRow("cooldown")
   ]);
+  const [activeBuilderRowId, setActiveBuilderRowId] = useState<number | null>(rows[0]?.id ?? null);
+  const [draggedBuilderRowId, setDraggedBuilderRowId] = useState<number | null>(null);
+  const [dropTargetBuilderRowId, setDropTargetBuilderRowId] = useState<number | null>(null);
+  const [builderReorderMessage, setBuilderReorderMessage] = useState("");
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -923,6 +1025,23 @@ export function AddWorkoutModal({
     ...(canSchedule ? (["quick", "library", "builder"] as AddTab[]) : []),
     ...(canLogActivity ? (["activity"] as AddTab[]) : [])
   ];
+
+  const reorderBuilderRow = (sourceId: number, targetId: number) => {
+    const sourceRow = rows.find((row) => row.id === sourceId);
+    const nextRows = moveBuilderRow(rows, sourceId, targetId);
+    if (!sourceRow || nextRows === rows) return;
+    setRows(nextRows);
+    const nextIndex = nextRows.findIndex((row) => row.id === sourceId);
+    setBuilderReorderMessage(`${formatBuilderToken(sourceRow.kind)} moved to step ${nextIndex + 1}.`);
+  };
+
+  const moveBuilderRowBy = (rowId: number, direction: -1 | 1) => {
+    const currentIndex = rows.findIndex((row) => row.id === rowId);
+    const targetIndex = currentIndex + direction;
+    const targetRow = rows[targetIndex];
+    if (currentIndex < 0 || !targetRow) return;
+    reorderBuilderRow(rowId, targetRow.id);
+  };
 
   return (
     <AnimatePresence>
@@ -1221,8 +1340,10 @@ export function AddWorkoutModal({
                     <span>Sport</span>
                     <select value={builderSport} onChange={(event) => {
                       const sport = event.target.value as WorkoutSport;
+                      const nextRows = [emptyRow("warmup", sport), emptyRow("training", sport), emptyRow("cooldown", sport)];
                       setBuilderSport(sport);
-                      setRows([emptyRow("warmup", sport), emptyRow("training", sport), emptyRow("cooldown", sport)]);
+                      setRows(nextRows);
+                      setActiveBuilderRowId(nextRows[0]?.id ?? null);
                     }}>{WORKOUT_SPORTS.map((sport) => <option key={sport} value={sport}>{formatWorkoutSport(sport)}</option>)}</select>
                   </label>
                   {builderSport === "swim" ? <div className="calendar-field-row"><label className="calendar-field"><span>Pool length</span><input type="number" min="1" value={builderPoolLength} onChange={(event) => setBuilderPoolLength(event.target.value)} /></label><label className="calendar-field"><span>Unit</span><select value={builderPoolUnit} onChange={(event) => setBuilderPoolUnit(event.target.value as "m" | "yd")}><option value="m">m</option><option value="yd">yd</option></select></label></div> : null}
@@ -1254,10 +1375,11 @@ export function AddWorkoutModal({
                   <header className="calendar-builder-canvas-header">
                     <div>
                       <h4 id="calendar-builder-steps-title">Workout steps</h4>
-                      <p>Build your workout in session order.</p>
+                      <p>Drag steps to reorder. Select one to edit.</p>
                     </div>
                     <span className="calendar-builder-step-count">{rows.length} {rows.length === 1 ? "step" : "steps"}</span>
                   </header>
+                  <span className="sr-only" role="status" aria-live="polite">{builderReorderMessage}</span>
                   <div className="calendar-builder-rows">
                 {rows.map((row, index) => {
                   const validationMessage = builderRowValidationMessage(
@@ -1266,8 +1388,14 @@ export function AddWorkoutModal({
                     builderExercises,
                     builderExercisesLoading
                   );
+                  const isActive = activeBuilderRowId === row.id;
                   const stepKind = row.kind === "intervals" ? "training" : row.kind;
                   const targetTypes = workoutTargetsForStep(builderSport, stepKind, row.exerciseKind);
+                  const selectedExercise = row.exerciseId
+                    ? builderExercises.find((exercise) => exercise.id === row.exerciseId)
+                    : undefined;
+                  const exercisePreviewUrl = selectedExercise?.media?.find((media) => media.coverUrl)?.coverUrl
+                    ?? selectedExercise?.thumbnailUrl;
                   const StepIcon = row.kind === "warmup"
                     ? Flame
                     : row.kind === "cooldown"
@@ -1279,19 +1407,125 @@ export function AddWorkoutModal({
                           : builderSport === "strength"
                             ? Dumbbell
                             : Zap;
-                  return <section key={row.id} className={`calendar-builder-row ${validationMessage ? "has-error" : ""}`} data-step-kind={stepKind} aria-labelledby={`builder-step-${row.id}`}>
+                  return <motion.section
+                    layout
+                    key={row.id}
+                    draggable={rows.length > 1}
+                    className={`calendar-builder-row ${isActive ? "is-active" : "is-collapsed"} ${exercisePreviewUrl ? "has-exercise-preview" : ""} ${validationMessage ? "has-error" : ""} ${draggedBuilderRowId === row.id ? "is-dragging" : ""} ${dropTargetBuilderRowId === row.id ? "is-drop-target" : ""}`}
+                    data-step-kind={stepKind}
+                    aria-labelledby={`builder-step-${row.id}`}
+                    onFocusCapture={(event) => {
+                      if (!(event.target as HTMLElement).closest(".calendar-builder-reorder-controls")) {
+                        setActiveBuilderRowId(row.id);
+                      }
+                    }}
+                    onDragStartCapture={(event) => {
+                      if (!(event.target as HTMLElement).closest(".calendar-builder-drag-handle")) {
+                        event.preventDefault();
+                        return;
+                      }
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/calendar-builder-row", String(row.id));
+                      setDraggedBuilderRowId(row.id);
+                      setDropTargetBuilderRowId(null);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedBuilderRowId(null);
+                      setDropTargetBuilderRowId(null);
+                    }}
+                    onDragEnter={(event) => {
+                      if (draggedBuilderRowId !== null && draggedBuilderRowId !== row.id) {
+                        event.preventDefault();
+                        setDropTargetBuilderRowId(row.id);
+                      }
+                    }}
+                    onDragOver={(event) => {
+                      if (draggedBuilderRowId !== null && draggedBuilderRowId !== row.id) {
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                      }
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      const sourceId = Number(event.dataTransfer.getData("text/calendar-builder-row")) || draggedBuilderRowId;
+                      if (sourceId !== null) reorderBuilderRow(sourceId, row.id);
+                      setDraggedBuilderRowId(null);
+                      setDropTargetBuilderRowId(null);
+                    }}
+                  >
                     <header className="calendar-builder-row-header">
-                      <div>
+                      <div className="calendar-builder-reorder-controls" aria-label={`Reorder step ${index + 1}`}>
+                        <span
+                          className="calendar-builder-drag-handle"
+                          draggable={rows.length > 1}
+                          title="Drag to reorder"
+                        >
+                          <GripVertical size={16} aria-hidden="true" />
+                        </span>
+                        <span className="calendar-builder-order-buttons">
+                          <button
+                            type="button"
+                            onClick={() => moveBuilderRowBy(row.id, -1)}
+                            disabled={index === 0}
+                            aria-label={`Move step ${index + 1} up`}
+                            title="Move up"
+                          >
+                            <ChevronUp size={13} aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveBuilderRowBy(row.id, 1)}
+                            disabled={index === rows.length - 1}
+                            aria-label={`Move step ${index + 1} down`}
+                            title="Move down"
+                          >
+                            <ChevronDown size={13} aria-hidden="true" />
+                          </button>
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="calendar-builder-row-toggle"
+                        aria-expanded={isActive}
+                        aria-controls={`builder-step-content-${row.id}`}
+                        onClick={() => setActiveBuilderRowId(row.id)}
+                      >
                         <span className="calendar-builder-step-icon" aria-hidden="true">
                           <StepIcon size={15} />
                         </span>
                         <span className="calendar-builder-step-label">Step {index + 1}</span>
                         <strong id={`builder-step-${row.id}`}>{row.kind === "intervals" ? `${row.repeats || 0} repeats` : formatBuilderToken(row.kind)}</strong>
-                      </div>
+                        {!isActive && exercisePreviewUrl ? (
+                          <span className="calendar-builder-row-thumbnail" aria-hidden="true">
+                            <img
+                              src={exercisePreviewUrl}
+                              alt=""
+                              loading="lazy"
+                              decoding="async"
+                              onError={(event) => { event.currentTarget.hidden = true; }}
+                            />
+                          </span>
+                        ) : null}
+                        <span className="calendar-builder-row-summary" aria-label="Step summary">
+                          {builderRowSummary(row, builderSport).map((item) => (
+                            <span className="calendar-builder-row-summary-item" key={item.label}>
+                              <span>{item.label}</span>
+                              <strong>{item.value}</strong>
+                            </span>
+                          ))}
+                        </span>
+                        <ChevronDown className={isActive ? "is-open" : ""} size={16} aria-hidden="true" />
+                      </button>
                       <button
                         type="button"
                         className="ghost-button calendar-builder-remove"
-                        onClick={() => setRows((current) => current.filter((candidate) => candidate.id !== row.id))}
+                        onClick={() => {
+                          const nextRows = rows.filter((candidate) => candidate.id !== row.id);
+                          setRows(nextRows);
+                          setActiveBuilderRowId((current) => current === row.id
+                            ? nextRows[Math.min(index, nextRows.length - 1)]?.id ?? null
+                            : current);
+                        }}
                         disabled={rows.length === 1}
                         aria-label={`Remove step ${index + 1}`}
                       >
@@ -1299,7 +1533,12 @@ export function AddWorkoutModal({
                       </button>
                     </header>
 
-                    <div className="calendar-builder-primary-grid">
+                    <div
+                      id={`builder-step-content-${row.id}`}
+                      className="calendar-builder-row-content"
+                      hidden={!isActive}
+                    >
+                      <div className="calendar-builder-primary-grid">
                       <label className="calendar-builder-control">
                         <span>Step type</span>
                         <select
@@ -1351,23 +1590,28 @@ export function AddWorkoutModal({
                         <span>Recovery between repeats (min)</span>
                         <input type="number" min="0" step="0.5" value={row.restMin} onChange={(event) => setRows((current) => current.map((candidate) => candidate.id === row.id ? { ...candidate, restMin: event.target.value } : candidate))} />
                       </label> : null}
-                    </div>
+                      </div>
 
-                    <BuilderIntensityFields
-                      row={row}
-                      sport={builderSport}
-                      context={builderContext}
-                      exerciseOptions={builderExercises}
-                      exercisesLoading={builderExercisesLoading}
-                      onChange={(update) => setRows((current) => current.map((candidate) => candidate.id === row.id ? { ...candidate, ...update } : candidate))}
-                    />
-                    {validationMessage ? <p className="calendar-builder-error" role="alert">{validationMessage}</p> : null}
-                  </section>;
+                      <BuilderIntensityFields
+                        row={row}
+                        sport={builderSport}
+                        context={builderContext}
+                        exerciseOptions={builderExercises}
+                        exercisesLoading={builderExercisesLoading}
+                        onChange={(update) => setRows((current) => current.map((candidate) => candidate.id === row.id ? { ...candidate, ...update } : candidate))}
+                      />
+                      {validationMessage ? <p className="calendar-builder-error" role="alert">{validationMessage}</p> : null}
+                    </div>
+                  </motion.section>;
                 })}
                   <button
                     type="button"
                     className="ghost-button calendar-builder-add"
-                    onClick={() => setRows((current) => [...current, emptyRow("training", builderSport)])}
+                    onClick={() => {
+                      const nextRow = emptyRow("training", builderSport);
+                      setRows((current) => [...current, nextRow]);
+                      setActiveBuilderRowId(nextRow.id);
+                    }}
                   >
                     <Plus size={14} aria-hidden="true" /> Add step
                   </button>
