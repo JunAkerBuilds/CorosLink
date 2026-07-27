@@ -9,12 +9,14 @@ import {
 import { useReducedMotion } from "motion/react";
 import {
   type KeyboardEvent,
+  type ReactNode,
   useEffect,
   useId,
   useMemo,
   useRef,
   useState
 } from "react";
+import { createPortal } from "react-dom";
 import type { WorkoutExerciseOption } from "../../electron/types";
 import { resolveExerciseName } from "../training/exerciseNames";
 
@@ -32,11 +34,20 @@ interface ExerciseComboboxProps {
   label: string;
   loading?: boolean;
   disabled?: boolean;
+  details?: ReactNode;
   onChange: (selection: ExerciseComboboxSelection) => void;
 }
 
 interface LabeledExerciseOption extends WorkoutExerciseOption {
   label: string;
+}
+
+interface ExerciseMenuPosition {
+  left: number;
+  width: number;
+  top?: number;
+  bottom?: number;
+  maxHeight: number;
 }
 
 const MAX_VISIBLE_RESULTS = 12;
@@ -57,10 +68,13 @@ export function ExerciseCombobox({
   label,
   loading = false,
   disabled = false,
+  details,
   onChange
 }: ExerciseComboboxProps) {
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
+  const inputShellRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const reducedMotion = useReducedMotion();
   const [isOpen, setIsOpen] = useState(false);
@@ -68,6 +82,7 @@ export function ExerciseCombobox({
   const [previewStatus, setPreviewStatus] = useState<"loading" | "ready" | "error">("loading");
   const [query, setQuery] = useState(value);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [menuPosition, setMenuPosition] = useState<ExerciseMenuPosition>();
   const listboxId = `${id}-listbox`;
 
   const labeledOptions = useMemo<LabeledExerciseOption[]>(() => options
@@ -117,12 +132,44 @@ export function ExerciseCombobox({
   useEffect(() => {
     if (!isOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         setIsOpen(false);
       }
     };
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setMenuPosition(undefined);
+      return;
+    }
+    const updateMenuPosition = () => {
+      const rect = inputShellRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const gap = 6;
+      const viewportPadding = 12;
+      const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+      const spaceAbove = rect.top - viewportPadding;
+      const placeAbove = spaceBelow < 220 && spaceAbove > spaceBelow;
+      setMenuPosition({
+        left: Math.max(viewportPadding, Math.min(rect.left, window.innerWidth - rect.width - viewportPadding)),
+        width: Math.min(rect.width, window.innerWidth - viewportPadding * 2),
+        maxHeight: Math.max(140, Math.min(300, (placeAbove ? spaceAbove : spaceBelow) - gap)),
+        ...(placeAbove
+          ? { bottom: window.innerHeight - rect.top + gap }
+          : { top: rect.bottom + gap })
+      });
+    };
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
   }, [isOpen]);
 
   const selectOption = (option: LabeledExerciseOption) => {
@@ -181,7 +228,7 @@ export function ExerciseCombobox({
       ref={rootRef}
     >
       <div className="exercise-combobox-picker">
-        <div className={`exercise-combobox-input ${isOpen ? "is-open" : ""}`}>
+        <div ref={inputShellRef} className={`exercise-combobox-input ${isOpen ? "is-open" : ""}`}>
           {selectedOption?.thumbnailUrl ? (
             <img
               className="exercise-combobox-input-thumbnail"
@@ -235,8 +282,12 @@ export function ExerciseCombobox({
           </button>
         </div>
 
-        {isOpen ? (
-          <div className="exercise-combobox-menu">
+        {isOpen && menuPosition ? createPortal(
+          <div
+            ref={menuRef}
+            className="exercise-combobox-menu is-portal"
+            style={menuPosition}
+          >
             <div id={listboxId} role="listbox" aria-label={`${label} suggestions`}>
               {loading ? (
                 <p className="exercise-combobox-state" role="status">Loading COROS exercises...</p>
@@ -274,8 +325,11 @@ export function ExerciseCombobox({
                 );
               })}
             </div>
-          </div>
+          </div>,
+          document.body
         ) : null}
+
+        {details ? <div className="exercise-combobox-details">{details}</div> : null}
       </div>
 
       {activePreviewMedia?.videoUrl ? (

@@ -2194,6 +2194,7 @@ function toPlanWorkoutEntry(entry: PlanWorkoutEntryInput): PlanWorkoutEntry {
   return {
     key: entry.key,
     name: entry.name,
+    description: entry.description,
     sport: entry.sport ?? "run",
     sport_options: entry.sport_options,
     steps: entry.steps as PlanWorkoutEntry["steps"],

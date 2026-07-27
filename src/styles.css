@@ -23359,10 +23359,45 @@ tr.data-intervals-row-missing {
   display: none;
 }
 
-.calendar-modal .calendar-builder-remove {
+.calendar-builder-row-reveal {
+  overflow: hidden;
+}
+
+.calendar-builder-row-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+}
+
+.calendar-modal .calendar-builder-row-action {
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   border-color: transparent;
-  padding: 5px 8px;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--radius-sm);
+}
+
+.calendar-builder-row-action span {
+  display: none;
+}
+
+.calendar-modal .calendar-builder-collapse:hover,
+.calendar-modal .calendar-builder-collapse:focus-visible,
+.calendar-modal .calendar-builder-duplicate:hover,
+.calendar-modal .calendar-builder-duplicate:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--glass-border));
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.calendar-modal .calendar-builder-delete:hover:not(:disabled),
+.calendar-modal .calendar-builder-delete:focus-visible:not(:disabled) {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
 }
 
 .calendar-builder-primary-grid,
@@ -23376,6 +23411,10 @@ tr.data-intervals-row-missing {
   margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid color-mix(in srgb, var(--glass-border) 72%, transparent);
+}
+
+.calendar-builder-intensity-grid.has-exercise-workspace {
+  display: block;
 }
 
 .calendar-builder-control {
@@ -23405,6 +23444,50 @@ tr.data-intervals-row-missing {
   line-height: 1.4;
 }
 
+.calendar-builder-exercise-workspace > span:first-child {
+  margin-bottom: 2px;
+}
+
+.calendar-builder-exercise-details {
+  display: grid;
+  gap: 16px;
+  padding-top: 14px;
+}
+
+.calendar-builder-exercise-status {
+  display: grid;
+  gap: 3px;
+  padding: 0 2px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-border) 72%, transparent);
+}
+
+.calendar-builder-exercise-status strong {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 680;
+}
+
+.calendar-builder-exercise-status span {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.calendar-builder-exercise-status.is-selected strong {
+  color: var(--accent-strong);
+}
+
+.calendar-builder-exercise-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.calendar-builder-exercise-fields .calendar-builder-control.is-wide,
+.calendar-builder-exercise-fields .calendar-builder-derived {
+  grid-column: 1 / -1;
+}
+
 .calendar-builder-derived:empty {
   display: none;
 }
@@ -23423,6 +23506,11 @@ tr.data-intervals-row-missing {
 
 .calendar-builder-error {
   margin: 10px 0 0;
+  width: fit-content;
+  border: 1px solid var(--error-border);
+  border-radius: var(--radius-sm);
+  background: var(--error-bg);
+  padding: 7px 10px;
   color: var(--error-text);
   font-size: 11.5px;
   line-height: 1.4;
@@ -23432,6 +23520,26 @@ tr.data-intervals-row-missing {
   margin: -2px 0 0;
   color: var(--text-muted);
   font-size: 12px;
+  line-height: 1.45;
+}
+
+.calendar-builder-description > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.calendar-builder-description > span small {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.calendar-builder-description textarea {
+  min-height: 86px;
+  resize: vertical;
   line-height: 1.45;
 }
 
@@ -23904,18 +24012,6 @@ tr.data-intervals-row-missing {
     font-size: 14.5px;
   }
 
-  .calendar-modal .calendar-builder-remove {
-    width: 32px;
-    height: 32px;
-    justify-content: center;
-    padding: 0;
-    border-radius: var(--radius-sm);
-  }
-
-  .calendar-builder-remove span {
-    display: none;
-  }
-
   .calendar-builder-primary-grid,
   .calendar-builder-intensity-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -23978,6 +24074,11 @@ tr.data-intervals-row-missing {
 
 .exercise-combobox-picker {
   position: relative;
+  z-index: 2;
+  min-width: 0;
+}
+
+.exercise-combobox-details {
   min-width: 0;
 }
 
@@ -24064,14 +24165,10 @@ tr.data-intervals-row-missing {
 }
 
 .exercise-combobox-menu {
-  position: absolute;
-  z-index: 32;
-  top: calc(100% + 6px);
-  right: 0;
-  left: 0;
+  position: fixed;
+  z-index: 120;
   display: grid;
   gap: 2px;
-  max-height: 220px;
   padding: 6px;
   overflow-y: auto;
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -24315,10 +24412,88 @@ tr.data-intervals-row-missing {
 }
 
 @media (min-width: 1100px) and (min-height: 700px) {
-  .calendar-builder-row .exercise-combobox.has-inline-video {
-    grid-template-columns: minmax(230px, 0.78fr) minmax(360px, 1.22fr);
+  .calendar-builder-row-content.has-exercise-workspace:has(.exercise-combobox.has-inline-video) {
+    display: grid;
+    grid-template-columns: minmax(320px, 0.82fr) minmax(450px, 1.18fr);
+    grid-template-rows: auto auto auto auto;
     align-items: start;
-    gap: 12px;
+    column-gap: 18px;
+  }
+
+  .calendar-builder-row-content.has-exercise-workspace:has(.exercise-combobox.has-inline-video) > .calendar-builder-primary-grid {
+    grid-column: 1;
+    grid-row: 1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .calendar-builder-row-content.has-exercise-workspace:has(.exercise-combobox.has-inline-video) > .calendar-builder-primary-grid > .calendar-builder-control:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .calendar-builder-row-content.has-exercise-workspace:has(.exercise-combobox.has-inline-video) > .calendar-builder-intensity-grid,
+  .calendar-builder-row-content.has-exercise-workspace:has(.exercise-combobox.has-inline-video) .calendar-builder-exercise-workspace,
+  .calendar-builder-row-content.has-exercise-workspace:has(.exercise-combobox.has-inline-video) .exercise-combobox.has-inline-video {
+    display: contents;
+  }
+
+  .calendar-builder-row-content.has-exercise-workspace:has(.exercise-combobox.has-inline-video) .calendar-builder-exercise-workspace > span:first-child {
+    grid-column: 1;
+    grid-row: 2;
+    margin-top: 14px;
+    margin-bottom: 7px;
+    border-top: 1px solid color-mix(in srgb, var(--glass-border) 72%, transparent);
+    padding-top: 14px;
+  }
+
+  .calendar-builder-row-content.has-exercise-workspace:has(.exercise-combobox.has-inline-video) .exercise-combobox-picker {
+    grid-column: 1;
+    grid-row: 3;
+    padding: 2px 2px 2px 0;
+  }
+
+  .calendar-builder-row-content.has-exercise-workspace:has(.exercise-combobox.has-inline-video) .exercise-inline-video {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    align-self: start;
+  }
+
+  .calendar-builder-row-content.has-exercise-workspace:has(.exercise-combobox.has-inline-video) > .calendar-builder-error {
+    grid-column: 1;
+    grid-row: 4;
+  }
+
+  .calendar-builder-row .exercise-combobox.has-inline-video .exercise-combobox-input {
+    min-height: 46px;
+  }
+
+  .calendar-builder-row .exercise-combobox.has-inline-video .exercise-combobox-input input {
+    min-height: 44px;
+  }
+
+  .calendar-builder-row .exercise-combobox.has-inline-video .exercise-combobox-input-thumbnail {
+    width: 48px;
+    height: 30px;
+    flex-basis: 48px;
+  }
+
+  .calendar-builder-row .exercise-combobox.has-inline-video .exercise-inline-video {
+    align-self: start;
+  }
+
+  .calendar-builder-row .exercise-combobox.has-inline-video .exercise-inline-video-header {
+    min-height: 56px;
+    padding-inline: 15px 12px;
+  }
+
+  .calendar-builder-row .exercise-combobox.has-inline-video .exercise-inline-video-header strong {
+    font-size: 13.5px;
+  }
+
+  .calendar-builder-row .exercise-combobox.has-inline-video .exercise-inline-video-stage,
+  .calendar-builder-row .exercise-combobox.has-inline-video .exercise-inline-video-stage video {
+    height: clamp(300px, 29vw, 440px);
+    min-height: 300px;
+    aspect-ratio: auto;
   }
 }
 
@@ -24678,12 +24853,6 @@ tr.data-intervals-row-missing {
   border-left: 4px solid var(--step-color);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--glass-bg) 92%, var(--step-color) 8%);
-}
-
-.workout-step-card:has(.exercise-combobox-menu),
-.workout-repeat-card:has(.exercise-combobox-menu) {
-  z-index: 4;
-  overflow: visible;
 }
 
 .workout-step-card.is-warmup { --step-color: #f0a72e; }
@@ -25107,6 +25276,15 @@ tr.data-intervals-row-missing {
 
   .calendar-builder-control.is-wide,
   .calendar-builder-derived {
+    grid-column: auto;
+  }
+
+  .calendar-builder-exercise-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-builder-exercise-fields .calendar-builder-control.is-wide,
+  .calendar-builder-exercise-fields .calendar-builder-derived {
     grid-column: auto;
   }
 

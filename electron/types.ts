@@ -2578,6 +2578,7 @@ export interface PlanDraftPreview {
 export interface PlanWorkoutEntryInput {
   key: string;
   name: string;
+  description?: string;
   /** Structured-workout sport. Omitted legacy drafts are treated as Run. */
   sport?: WorkoutSport;
   sport_options?: WorkoutSportOptions;

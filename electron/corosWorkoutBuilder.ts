@@ -96,6 +96,7 @@ export interface PlanWorkoutEntry {
   /** Unique key within the plan draft */
   key: string;
   name: string;
+  description?: string;
   /** Omitted legacy drafts default to Run. */
   sport?: WorkoutSport;
   sport_options?: WorkoutSportOptions;
@@ -736,7 +737,8 @@ export function buildWorkoutPayload(
   steps: RunWorkoutStepInput[],
   sport: WorkoutSport = "run",
   sportOptions?: WorkoutSportOptions,
-  context?: WorkoutEditorContext
+  context?: WorkoutEditorContext,
+  description = ""
 ): Record<string, unknown> {
   const capability = WORKOUT_SPORT_CAPABILITIES[sport];
   if (!capability) throw new Error(`Unsupported workout sport "${String(sport)}".`);
@@ -870,7 +872,7 @@ export function buildWorkoutPayload(
     access: 1,
     essence: 0,
     originEssence: 0,
-    overview: "",
+    overview: description.trim().slice(0, 300),
     type: 0,
     unit: 0,
     exerciseNum: exercises.length,
@@ -919,7 +921,7 @@ export function buildWorkoutPayloadFromEntry(
 ): Record<string, unknown> {
   const sport = entry.sport ?? "run";
   if (entry.steps && entry.steps.length > 0) {
-    return buildWorkoutPayload(entry.name, entry.steps, sport, entry.sport_options, context);
+    return buildWorkoutPayload(entry.name, entry.steps, sport, entry.sport_options, context, entry.description);
   }
   if (entry.distance_km !== undefined && entry.distance_km > 0) {
     if (sport !== "run" && sport !== "trailRun") {
@@ -1085,6 +1087,9 @@ export function validatePlanDraft(
 
     if (!entry.name?.trim()) {
       errors.push(`Workout ${entry.key} needs a name.`);
+    }
+    if (entry.description && entry.description.length > 300) {
+      errors.push(`Workout "${entry.name || entry.key}" description must be 300 characters or fewer.`);
     }
 
     const hasSteps = Array.isArray(entry.steps) && entry.steps.length > 0;

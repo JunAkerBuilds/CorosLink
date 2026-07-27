@@ -8,6 +8,7 @@ import {
   CalendarPlus,
   ChevronDown,
   ChevronUp,
+  Copy,
   Dumbbell,
   Flame,
   Footprints,
@@ -21,6 +22,7 @@ import {
   Search,
   Snowflake,
   Timer,
+  Trash2,
   Waves,
   X,
   Zap,
@@ -252,6 +254,8 @@ interface BuilderRow {
   // intervals only
   repeats: string;
   restMin: string;
+  sets: string;
+  restSeconds: string;
   intensityType: Exclude<WorkoutIntensityInput["type"], "lthrPercent">;
   intensityLow: string;
   intensityHigh: string;
@@ -288,11 +292,13 @@ function emptyRow(kind: BuilderKind, sport: WorkoutSport = "run"): BuilderRow {
     id: builderRowId,
     kind,
     targetType,
-    distanceKm: "",
+    distanceKm: sport === "strength" && stepKind === "training" ? "10" : "",
     timeMin: "",
     pace: "",
     repeats: "4",
     restMin: "2",
+    sets: sport === "strength" ? "4" : "1",
+    restSeconds: sport === "strength" ? "60" : "0",
     intensityType: sport === "strength" && stepKind !== "training"
       ? "none"
       : capability.defaultIntensity.type === "lthrPercent" ? "heartRatePercent" : capability.defaultIntensity.type,
@@ -379,6 +385,12 @@ function builderRowValidationMessage(
     if (exerciseOptions.length === 0) return "Reconnect COROS to load the exercise catalog.";
     if (!row.exerciseName.trim()) return "Select a COROS exercise for this Strength step.";
     if (!row.exerciseId) return "Choose an exact exercise from the COROS suggestions.";
+    if (!Number.isInteger(Number(row.sets)) || Number(row.sets) < 1 || Number(row.sets) > 99) {
+      return "Enter between 1 and 99 sets.";
+    }
+    if (!Number.isFinite(Number(row.restSeconds)) || Number(row.restSeconds) < 0 || Number(row.restSeconds) > 3600) {
+      return "Enter rest between 0 and 3600 seconds.";
+    }
   }
   if (sport === "hyrox" && row.exerciseName.trim() && !row.exerciseId) {
     return exerciseOptions.length === 0
@@ -402,7 +414,7 @@ function rowToSteps(row: BuilderRow, sport: WorkoutSport): RunWorkoutStepInput[]
   const target = row.targetType === "distance"
     ? { target_type: "distance" as const, target_distance_meters: Math.round(rawValue * (sport === "swim" ? 1 : 1000)) }
     : row.targetType === "time"
-      ? { target_type: "time" as const, target_duration_seconds: Math.round(Number(row.timeMin) * 60) }
+      ? { target_type: "time" as const, target_duration_seconds: Math.round(Number(row.timeMin) * (sport === "strength" ? 1 : 60)) }
       : row.targetType === "load" ? { target_type: "load" as const, target_load: Math.round(rawValue) }
         : row.targetType === "hrRecovery" ? { target_type: "hrRecovery" as const, target_hr_recovery_bpm: Math.round(rawValue) }
           : row.targetType === "reps" ? { target_type: "reps" as const, target_reps: Math.round(rawValue) }
@@ -436,7 +448,14 @@ function rowToSteps(row: BuilderRow, sport: WorkoutSport): RunWorkoutStepInput[]
     ];
   }
 
-  return [{ kind: row.kind, ...target, ...intensity, ...exercise }];
+  const strengthSetDetails = sport === "strength" && row.kind === "training"
+    ? {
+        sets: Math.max(1, Math.round(Number(row.sets) || 1)),
+        rest_type: 1,
+        rest_value: Math.max(0, Math.round(Number(row.restSeconds) || 0))
+      }
+    : {};
+  return [{ kind: row.kind, ...target, ...intensity, ...exercise, ...strengthSetDetails }];
 }
 
 function rowIsValid(
@@ -451,7 +470,7 @@ function rowIsValid(
 function builderTargetLabel(target: BuilderRow["targetType"], sport: WorkoutSport): string {
   const labels: Record<BuilderRow["targetType"], string> = {
     distance: sport === "swim" ? "Distance (m)" : "Distance (km)",
-    time: "Duration (min)",
+    time: sport === "strength" ? "Duration (sec)" : "Duration (min)",
     load: "Training Load",
     hrRecovery: "Return to heart rate (bpm)",
     open: "Manual end",
@@ -532,7 +551,7 @@ function builderRowSummary(row: BuilderRow, sport: WorkoutSport): BuilderRowSumm
   const target = row.targetType === "open"
     ? "Manual"
     : row.targetType === "time"
-      ? rawTarget ? `${rawTarget} min` : "Not set"
+      ? rawTarget ? `${rawTarget} ${sport === "strength" ? "sec" : "min"}` : "Not set"
       : row.targetType === "distance"
         ? rawTarget ? `${rawTarget} ${sport === "swim" ? "m" : "km"}` : "Not set"
         : row.targetType === "load"
@@ -556,6 +575,10 @@ function builderRowSummary(row: BuilderRow, sport: WorkoutSport): BuilderRowSumm
       label: "Recovery",
       value: Number(row.restMin) > 0 ? `${row.restMin} min` : "Not set"
     });
+  }
+  if (sport === "strength" && row.kind === "training") {
+    details.push({ label: "Sets", value: row.sets || "Not set" });
+    details.push({ label: "Rest", value: `${row.restSeconds || "0"} sec` });
   }
   return details;
 }
@@ -609,21 +632,7 @@ function BuilderIntensityFields({ row, sport, context, exerciseOptions, exercise
     }
     onChange(update);
   };
-  return <div className="calendar-builder-intensity-grid">
-    {showExercise ? <div className="calendar-builder-control is-wide">
-      <span>{sport === "strength" ? "Exercise" : "Exercise (optional for running steps)"}</span>
-      <ExerciseCombobox
-        value={row.exerciseName}
-        selectedId={row.exerciseId}
-        options={exerciseOptions}
-        placeholder={sport === "strength" ? "Search and select a COROS exercise" : "Search HYROX exercises"}
-        label={sport === "strength" ? "Exercise" : "HYROX exercise"}
-        loading={exercisesLoading}
-        onChange={selectExercise}
-      />
-      <small>{exercisesLoading ? "Loading COROS exercises..." : row.exerciseId ? "COROS exercise selected" : exerciseOptions.length === 0 ? "No exercises are available. Reconnect COROS and try again." : sport === "strength" ? "Required. Select an exact match from COROS." : "Leave empty for a running step."}</small>
-    </div> : null}
-
+  const intensityControls = <>
     <label className="calendar-builder-control">
       <span>Intensity</span>
       <select value={row.intensityType} onChange={(event) => {
@@ -677,6 +686,37 @@ function BuilderIntensityFields({ row, sport, context, exerciseOptions, exercise
     </> : null}
 
     {context ? <div className="calendar-builder-derived"><BuilderDerivedIntensityPreview intensity={rowIntensity(row, sport)} context={context} /></div> : null}
+  </>;
+  const exerciseStatus = exercisesLoading
+    ? "Loading COROS exercises..."
+    : row.exerciseId
+      ? "Selected from your COROS exercise library."
+      : exerciseOptions.length === 0
+        ? "No exercises are available. Reconnect COROS and try again."
+        : sport === "strength"
+          ? "Choose an exact COROS exercise to continue."
+          : "Optional for running steps.";
+
+  return <div className={`calendar-builder-intensity-grid ${showExercise ? "has-exercise-workspace" : ""}`}>
+    {showExercise ? <div className="calendar-builder-control calendar-builder-exercise-workspace is-wide">
+      <span>{sport === "strength" ? "Exercise" : "Exercise (optional for running steps)"}</span>
+      <ExerciseCombobox
+        value={row.exerciseName}
+        selectedId={row.exerciseId}
+        options={exerciseOptions}
+        placeholder={sport === "strength" ? "Search and select a COROS exercise" : "Search HYROX exercises"}
+        label={sport === "strength" ? "Exercise" : "HYROX exercise"}
+        loading={exercisesLoading}
+        details={<div className="calendar-builder-exercise-details">
+          <div className={`calendar-builder-exercise-status ${row.exerciseId ? "is-selected" : ""}`}>
+            <strong>{row.exerciseId ? "Exercise selected" : sport === "strength" ? "Exercise required" : "Exercise optional"}</strong>
+            <span>{exerciseStatus}</span>
+          </div>
+          <div className="calendar-builder-exercise-fields">{intensityControls}</div>
+        </div>}
+        onChange={selectExercise}
+      />
+    </div> : intensityControls}
   </div>;
 }
 
@@ -792,6 +832,7 @@ export function AddWorkoutModal({
   const [builderExercisesLoading, setBuilderExercisesLoading] = useState(false);
   const [builderContext, setBuilderContext] = useState<WorkoutEditorContext>();
   const [builderName, setBuilderName] = useState("");
+  const [builderDescription, setBuilderDescription] = useState("");
   const [builderSave, setBuilderSave] = useState(true);
   const [rows, setRows] = useState<BuilderRow[]>([
     emptyRow("warmup"),
@@ -971,6 +1012,7 @@ export function AddWorkoutModal({
       const entry: PlanWorkoutEntryInput = {
         key: "calendar-builder",
         name: builderName.trim() || "Structured Workout",
+        ...(builderDescription.trim() ? { description: builderDescription.trim() } : {}),
         sport: builderSport,
         ...((builderSport === "swim")
           ? { sport_options: { poolLength: { value: Number(builderPoolLength), unit: builderPoolUnit } } }
@@ -1340,7 +1382,9 @@ export function AddWorkoutModal({
                     <span>Sport</span>
                     <select value={builderSport} onChange={(event) => {
                       const sport = event.target.value as WorkoutSport;
-                      const nextRows = [emptyRow("warmup", sport), emptyRow("training", sport), emptyRow("cooldown", sport)];
+                      const nextRows = sport === "strength"
+                        ? [emptyRow("training", sport)]
+                        : [emptyRow("warmup", sport), emptyRow("training", sport), emptyRow("cooldown", sport)];
                       setBuilderSport(sport);
                       setRows(nextRows);
                       setActiveBuilderRowId(nextRows[0]?.id ?? null);
@@ -1355,6 +1399,16 @@ export function AddWorkoutModal({
                       value={builderName}
                       onChange={(event) => setBuilderName(event.target.value)}
                       placeholder={builderSport === "strength" ? "Full-body strength" : builderSport === "swim" ? "Pool endurance" : builderSport === "bike" ? "Threshold ride" : builderSport === "indoorClimb" || builderSport === "bouldering" ? "Climbing session" : builderSport === "hyrox" ? "HYROX mixed session" : "6 x 800 m"}
+                    />
+                  </label>
+                  <label className="calendar-field calendar-builder-description">
+                    <span>Description <small>{builderDescription.length}/300</small></span>
+                    <textarea
+                      value={builderDescription}
+                      maxLength={300}
+                      rows={4}
+                      onChange={(event) => setBuilderDescription(event.target.value)}
+                      placeholder="Add coaching notes or the goal of this workout"
                     />
                   </label>
                   <label className={`calendar-builder-save-card ${builderSave ? "is-checked" : ""}`}>
@@ -1390,6 +1444,9 @@ export function AddWorkoutModal({
                   );
                   const isActive = activeBuilderRowId === row.id;
                   const stepKind = row.kind === "intervals" ? "training" : row.kind;
+                  const usesExerciseWorkspace = (builderSport === "strength" || builderSport === "hyrox")
+                    && row.kind !== "warmup"
+                    && row.kind !== "cooldown";
                   const targetTypes = workoutTargetsForStep(builderSport, stepKind, row.exerciseKind);
                   const selectedExercise = row.exerciseId
                     ? builderExercises.find((exercise) => exercise.id === row.exerciseId)
@@ -1408,7 +1465,6 @@ export function AddWorkoutModal({
                             ? Dumbbell
                             : Zap;
                   return <motion.section
-                    layout
                     key={row.id}
                     draggable={rows.length > 1}
                     className={`calendar-builder-row ${isActive ? "is-active" : "is-collapsed"} ${exercisePreviewUrl ? "has-exercise-preview" : ""} ${validationMessage ? "has-error" : ""} ${draggedBuilderRowId === row.id ? "is-dragging" : ""} ${dropTargetBuilderRowId === row.id ? "is-drop-target" : ""}`}
@@ -1516,27 +1572,74 @@ export function AddWorkoutModal({
                         </span>
                         <ChevronDown className={isActive ? "is-open" : ""} size={16} aria-hidden="true" />
                       </button>
-                      <button
-                        type="button"
-                        className="ghost-button calendar-builder-remove"
-                        onClick={() => {
-                          const nextRows = rows.filter((candidate) => candidate.id !== row.id);
-                          setRows(nextRows);
-                          setActiveBuilderRowId((current) => current === row.id
-                            ? nextRows[Math.min(index, nextRows.length - 1)]?.id ?? null
-                            : current);
-                        }}
-                        disabled={rows.length === 1}
-                        aria-label={`Remove step ${index + 1}`}
-                      >
-                        <X size={14} aria-hidden="true" /> <span>Remove</span>
-                      </button>
+                      <div className="calendar-builder-row-actions">
+                        {isActive ? (
+                          <button
+                            type="button"
+                            className="ghost-button calendar-builder-row-action calendar-builder-collapse"
+                            onClick={() => setActiveBuilderRowId(null)}
+                            aria-label={`Collapse step ${index + 1}`}
+                            title="Collapse step"
+                          >
+                            <X size={14} aria-hidden="true" /> <span>Collapse</span>
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="ghost-button calendar-builder-row-action calendar-builder-duplicate"
+                          onClick={() => {
+                            builderRowId += 1;
+                            const duplicate = { ...row, id: builderRowId };
+                            setRows((current) => [
+                              ...current.slice(0, index + 1),
+                              duplicate,
+                              ...current.slice(index + 1)
+                            ]);
+                            setActiveBuilderRowId(duplicate.id);
+                          }}
+                          aria-label={`Duplicate step ${index + 1}`}
+                          title="Duplicate step"
+                        >
+                          <Copy size={14} aria-hidden="true" /> <span>Duplicate</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button calendar-builder-row-action calendar-builder-delete"
+                          onClick={() => {
+                            const nextRows = rows.filter((candidate) => candidate.id !== row.id);
+                            setRows(nextRows);
+                            setActiveBuilderRowId((current) => current === row.id
+                              ? nextRows[Math.min(index, nextRows.length - 1)]?.id ?? null
+                              : current);
+                          }}
+                          disabled={rows.length === 1}
+                          aria-label={`Delete step ${index + 1}`}
+                          title={rows.length === 1 ? "A workout needs at least one step" : "Delete step"}
+                        >
+                          <Trash2 size={14} aria-hidden="true" /> <span>Delete</span>
+                        </button>
+                      </div>
                     </header>
 
+                    <AnimatePresence initial={false}>
+                    {isActive ? <motion.div
+                      key={`builder-step-content-${row.id}`}
+                      className="calendar-builder-row-reveal"
+                      initial={reducedMotion ? false : { height: 0, opacity: 0 }}
+                      animate={{
+                        height: "auto",
+                        opacity: 1,
+                        transitionEnd: { overflow: "visible" }
+                      }}
+                      exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+                      transition={reducedMotion ? { duration: 0 } : {
+                        height: { duration: 0.24, ease: [0.4, 0, 0.2, 1] },
+                        opacity: { duration: 0.14, ease: "easeOut" }
+                      }}
+                    >
                     <div
                       id={`builder-step-content-${row.id}`}
-                      className="calendar-builder-row-content"
-                      hidden={!isActive}
+                      className={`calendar-builder-row-content ${usesExerciseWorkspace ? "has-exercise-workspace" : ""}`}
                     >
                       <div className="calendar-builder-primary-grid">
                       <label className="calendar-builder-control">
@@ -1557,7 +1660,7 @@ export function AddWorkoutModal({
                           }}
                         >
                           {WORKOUT_SPORT_CAPABILITIES[builderSport].stepKinds.map((kind) => <option key={kind} value={kind}>{kind === "warmup" ? "Warm-up" : kind === "cooldown" ? "Cool-down" : kind === "training" ? "Training" : kind === "sendOff" ? "Send-off" : "Rest"}</option>)}
-                          <option value="intervals">Intervals</option>
+                          {builderSport !== "strength" ? <option value="intervals">Intervals</option> : null}
                         </select>
                       </label>
 
@@ -1567,7 +1670,7 @@ export function AddWorkoutModal({
                       </label> : null}
 
                       <label className="calendar-builder-control">
-                        <span>Target</span>
+                        <span>{builderSport === "strength" && row.kind === "training" ? "Measure by" : "Target"}</span>
                         <select value={row.targetType} onChange={(event) => setRows((current) => current.map((candidate) => candidate.id === row.id ? { ...candidate, targetType: event.target.value as BuilderRow["targetType"] } : candidate))}>
                           {targetTypes.map((target) => <option key={target} value={target}>{builderTargetTypeLabel(target)}</option>)}
                         </select>
@@ -1581,10 +1684,34 @@ export function AddWorkoutModal({
                           max={row.targetType === "hrRecovery" ? 180 : row.targetType === "load" ? 999 : row.targetType === "routes" ? 20 : row.targetType === "reps" ? 500 : undefined}
                           step={row.targetType === "distance" ? "0.1" : "1"}
                           value={row.targetType === "time" ? row.timeMin : row.distanceKm}
-                          placeholder={row.targetType === "distance" ? (builderSport === "swim" ? "100" : "0.8") : row.targetType === "hrRecovery" ? "120" : "10"}
+                          placeholder={row.targetType === "distance" ? (builderSport === "swim" ? "100" : "0.8") : row.targetType === "hrRecovery" ? "120" : builderSport === "strength" && row.targetType === "time" ? "30" : "10"}
                           onChange={(event) => setRows((current) => current.map((candidate) => candidate.id === row.id ? row.targetType === "time" ? { ...candidate, timeMin: event.target.value } : { ...candidate, distanceKm: event.target.value } : candidate))}
                         />}
                       </label>
+
+                      {builderSport === "strength" && row.kind === "training" ? <>
+                        <label className="calendar-builder-control">
+                          <span>Sets</span>
+                          <input
+                            type="number"
+                            min="1"
+                            max="99"
+                            value={row.sets}
+                            onChange={(event) => setRows((current) => current.map((candidate) => candidate.id === row.id ? { ...candidate, sets: event.target.value } : candidate))}
+                          />
+                        </label>
+                        <label className="calendar-builder-control">
+                          <span>Rest between sets (sec)</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="3600"
+                            step="5"
+                            value={row.restSeconds}
+                            onChange={(event) => setRows((current) => current.map((candidate) => candidate.id === row.id ? { ...candidate, restSeconds: event.target.value } : candidate))}
+                          />
+                        </label>
+                      </> : null}
 
                       {row.kind === "intervals" ? <label className="calendar-builder-control">
                         <span>Recovery between repeats (min)</span>
@@ -1602,6 +1729,8 @@ export function AddWorkoutModal({
                       />
                       {validationMessage ? <p className="calendar-builder-error" role="alert">{validationMessage}</p> : null}
                     </div>
+                    </motion.div> : null}
+                    </AnimatePresence>
                   </motion.section>;
                 })}
                   <button

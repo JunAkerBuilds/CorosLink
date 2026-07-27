@@ -203,6 +203,29 @@ for (const [sport, values] of sportFixtures) {
   }
 }
 
+const strengthSetPayload = builder.buildWorkoutPayload(
+  "Strength set details",
+  [{
+    kind: "training",
+    target_type: "time",
+    target_duration_seconds: 30,
+    exercise_id: "T5067",
+    sets: 4,
+    rest_type: 1,
+    rest_value: 60,
+    intensity: { type: "weight", mode: "bodyweight" }
+  }],
+  "strength",
+  undefined,
+  context,
+  "Explosive running drills"
+);
+assert.equal(strengthSetPayload.overview, "Explosive running drills");
+assert.equal(strengthSetPayload.exercises[0].sets, 4);
+assert.equal(strengthSetPayload.exercises[0].restType, 1);
+assert.equal(strengthSetPayload.exercises[0].restValue, 60);
+assert.equal(strengthSetPayload.exercises[0].targetValue, 30);
+
 assert.throws(() => builder.buildWorkoutPayload("bad ftp", [{ kind: "training", target_type: "time", target_duration_seconds: 60, intensity: { type: "ftpPercent", preset: "threshold" } }], "run"), /does not support/);
 assert.throws(() => builder.buildWorkoutPayload("bad stroke", [{ kind: "training", target_type: "time", target_duration_seconds: 60, intensity: { type: "swimStroke", stroke: "freestyle" } }], "bike"), /does not support/);
 assert.throws(() => builder.buildWorkoutPayload("bad recovery", [{ kind: "training", target_type: "hrRecovery", target_hr_recovery_bpm: 120, intensity: { type: "none" } }], "run"), /Rest/);
