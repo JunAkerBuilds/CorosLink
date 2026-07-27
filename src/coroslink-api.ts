@@ -32,6 +32,7 @@ import type {
   SpotifySyncResult,
   SpotifySyncTrack,
   SpotifySyncUpdate,
+  StrengthHistory,
   TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
@@ -411,6 +412,7 @@ export interface CorosLinkApi {
   getRacePredictor: () => Promise<TrainingHubRacePredictor>;
   getTrainingDashboard: () => Promise<TrainingHubDashboard>;
   getDailyMetrics: (dateList: string[]) => Promise<TrainingHubDailyMetrics>;
+  syncStrengthHistory: (days?: number, force?: boolean) => Promise<StrengthHistory>;
   startRpeBackfill: () => Promise<void>;
   getRpeBackfillStatus: () => Promise<{ pending: number; running: boolean }>;
   getRpeLoadByDay: () => Promise<Record<string, number>>;

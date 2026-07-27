@@ -33,6 +33,7 @@ import type {
   SpotifySyncResult,
   SpotifySyncTrack,
   SpotifySyncUpdate,
+  StrengthHistory,
   TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
@@ -622,6 +623,8 @@ const api = {
     ipcRenderer.invoke("trainingHub:getDashboard"),
   getDailyMetrics: (dateList: string[]): Promise<TrainingHubDailyMetrics> =>
     ipcRenderer.invoke("trainingHub:getDailyMetrics", dateList),
+  syncStrengthHistory: (days?: number, force?: boolean): Promise<StrengthHistory> =>
+    ipcRenderer.invoke("trainingHub:syncStrengthHistory", days, force),
   startRpeBackfill: (): Promise<void> =>
     ipcRenderer.invoke("trainingHub:startRpeBackfill"),
   getRpeBackfillStatus: (): Promise<{ pending: number; running: boolean }> =>

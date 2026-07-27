@@ -2,6 +2,7 @@ import {
   Activity,
   CalendarDays,
   Database,
+  Dumbbell,
   LayoutGrid,
   Map as MapIcon,
   MessageCircle,
@@ -15,6 +16,7 @@ export type PrimaryView =
   | "overview"
   | "media"
   | "training"
+  | "strength"
   | "data"
   | "calendar"
   | "maps"
@@ -38,6 +40,7 @@ export const PRIMARY_NAV_ITEMS: PrimaryNavItem[] = [
   { id: "maps", label: "Maps", icon: MapIcon, beta: true },
   { id: "watchfaces", label: "Watch Faces", icon: Watch, beta: true },
   { id: "training", label: "Training Hub", icon: Activity },
+  { id: "strength", label: "Strength", icon: Dumbbell },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
   {
     id: "coach",
