@@ -40,7 +40,7 @@ import {
 import { useChartColors } from "../training/useChartColors";
 import { BodyMap, type BodyView } from "./BodyMap";
 import { MusclePanel } from "./MusclePanel";
-import { MUSCLE_BY_ID, type MuscleId } from "./muscles";
+import type { MuscleId } from "./muscles";
 import { buildSampleStrengthSessions } from "./sampleSessions";
 import {
   buildStrengthAnalytics,
@@ -145,14 +145,20 @@ export function StrengthView({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<BodyView>("front");
+  const [viewRequest, setViewRequest] = useState(0);
   const [metric, setMetric] = useState<HeatMetric>("sets");
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleId | null>(null);
-  // Hovering the figure swaps the side panel to that muscle; hovering a row in
-  // the ranking only lights the figure, so the row never vanishes from under
-  // the pointer.
+  // Hover remains a transient highlight on the mannequin. The right-hand
+  // panel changes only after an explicit click, so it never jumps while the
+  // pointer crosses muscle shells or ranking rows.
   const [figureHover, setFigureHover] = useState<MuscleId | null>(null);
   const [listHover, setListHover] = useState<MuscleId | null>(null);
   const syncSequenceRef = useRef(0);
+
+  const requestView = (next: BodyView) => {
+    setView(next);
+    setViewRequest((current) => current + 1);
+  };
 
   const runSync = useCallback(
     async (force: boolean) => {
@@ -232,7 +238,7 @@ export function StrengthView({
   );
 
   const highlightedMuscle = figureHover ?? listHover ?? selectedMuscle;
-  const panelMuscle = figureHover ?? selectedMuscle;
+  const panelMuscle = selectedMuscle;
   const heatMax = analytics.muscleMax[metric];
 
   const chartData = useMemo(
@@ -396,7 +402,7 @@ export function StrengthView({
                     type="button"
                     className={view === "front" ? "is-active" : ""}
                     aria-pressed={view === "front"}
-                    onClick={() => setView("front")}
+                    onClick={() => requestView("front")}
                   >
                     Front
                   </button>
@@ -404,7 +410,7 @@ export function StrengthView({
                     type="button"
                     className={view === "back" ? "is-active" : ""}
                     aria-pressed={view === "back"}
-                    onClick={() => setView("back")}
+                    onClick={() => requestView("back")}
                   >
                     Back
                   </button>
@@ -413,7 +419,7 @@ export function StrengthView({
                   type="button"
                   className="strength-flip"
                   aria-label="Flip the figure"
-                  onClick={() => setView(view === "front" ? "back" : "front")}
+                  onClick={() => requestView(view === "front" ? "back" : "front")}
                 >
                   <RotateCw size={15} aria-hidden="true" />
                 </button>
@@ -434,6 +440,7 @@ export function StrengthView({
 
               <BodyMap
                 view={view}
+                viewRequest={viewRequest}
                 metric={metric}
                 muscleById={analytics.muscleById}
                 max={heatMax}
@@ -443,6 +450,7 @@ export function StrengthView({
                 onSelect={(muscle) =>
                   setSelectedMuscle((current) => (current === muscle ? null : muscle))
                 }
+                onViewChange={setView}
               />
 
               <div className="strength-legend" aria-hidden="true">
@@ -454,11 +462,6 @@ export function StrengthView({
                 </span>
                 <span>Hammered</span>
               </div>
-              {highlightedMuscle ? (
-                <p className="strength-body-caption">
-                  {MUSCLE_BY_ID[highlightedMuscle].label}
-                </p>
-              ) : null}
             </section>
 
             <section className="panel strength-muscle-panel">

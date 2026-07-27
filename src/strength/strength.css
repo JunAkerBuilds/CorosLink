@@ -19,9 +19,26 @@
   --heat-4: rgba(229, 120, 60, 0.72);
   --heat-5: rgba(229, 72, 77, 0.88);
 
-  --body-fill: rgba(255, 255, 255, 0.055);
-  --body-stroke: rgba(255, 255, 255, 0.16);
-  --body-detail: rgba(255, 255, 255, 0.22);
+  /* Solid twins of the ramp above, for the 3D figure. WebGL materials cannot
+     use the translucent swatches the legend paints with, and the mannequin
+     needs its own charcoal so untrained bellies still read against it. */
+  --m3d-base: #39424b;
+  --m3d-heat-0: #46505a;
+  --m3d-heat-1: #2fbe91;
+  --m3d-heat-2: #7fbe6a;
+  --m3d-heat-3: #d89b22;
+  --m3d-heat-4: #e5783c;
+  --m3d-heat-5: #e5484d;
+  --m3d-rim: #7fe8c4;
+  --m3d-sky: #93b8dc;
+  --m3d-ground: #151a1f;
+  --m3d-ambient: 0.55;
+  --m3d-key: 1;
+  --m3d-shadow: 0.5;
+  --m3d-exposure: 1;
+
+  --panel-key: rgba(255, 255, 255, 0.05);
+  --panel-floor: rgba(0, 0, 0, 0.28);
 }
 
 :root[data-theme="paper"] .strength-view {
@@ -32,9 +49,26 @@
   --heat-4: rgba(214, 106, 52, 0.74);
   --heat-5: rgba(203, 48, 53, 0.86);
 
-  --body-fill: rgba(38, 34, 28, 0.05);
-  --body-stroke: rgba(38, 34, 28, 0.2);
-  --body-detail: rgba(38, 34, 28, 0.22);
+  /* On paper the mannequin stays a mid warm grey, not near-white: a light
+     albedo under this rig clips to flat white and loses all its shading. The
+     lights come down to match. */
+  --m3d-base: #948c7e;
+  --m3d-heat-0: #a49c8e;
+  --m3d-heat-1: #12946e;
+  --m3d-heat-2: #63a047;
+  --m3d-heat-3: #b9791a;
+  --m3d-heat-4: #d66a34;
+  --m3d-heat-5: #cb3035;
+  --m3d-rim: #f4efe4;
+  --m3d-sky: #fdf8ec;
+  --m3d-ground: #8c857a;
+  --m3d-ambient: 0.35;
+  --m3d-key: 0.22;
+  --m3d-shadow: 0.2;
+  --m3d-exposure: 1;
+
+  --panel-key: rgba(255, 255, 255, 0.55);
+  --panel-floor: rgba(38, 34, 28, 0.07);
 }
 
 /* ---------- Header ---------- */
@@ -232,19 +266,22 @@
   isolation: isolate;
 }
 
-/* A soft radial wash behind the figure so it reads as lit from above. */
+/* A studio backdrop behind the figure: key light from above, a brand wash,
+   and a floor vignette the contact shadow can sit in. */
 .strength-body-panel::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
   background:
+    radial-gradient(60% 32% at 50% 0%, var(--panel-key) 0%, transparent 70%),
     radial-gradient(
       120% 60% at 50% 8%,
       rgba(229, 72, 77, 0.09) 0%,
       transparent 62%
     ),
-    radial-gradient(90% 50% at 50% 100%, var(--accent-soft) 0%, transparent 70%);
+    radial-gradient(90% 46% at 50% 100%, var(--accent-soft) 0%, transparent 70%),
+    linear-gradient(180deg, transparent 64%, var(--panel-floor) 100%);
   pointer-events: none;
 }
 
@@ -278,115 +315,65 @@
 }
 
 .body-map {
+  position: relative;
   display: grid;
   place-items: center;
   flex: 1;
-  min-height: 0;
-  perspective: 1200px;
+  min-height: 340px;
+  isolation: isolate;
 }
 
-.body-map-svg {
+/*
+ * The figure is a WebGL scene, not markup: `bodyGeometry.ts` sweeps the body
+ * and its muscle bellies, and `BodyMap.tsx` lights and turns them. Everything
+ * that used to be an SVG shading pass is now a light in that scene, so only
+ * the canvas box and its overlays are styled here.
+ */
+/* Taken out of flow so the canvas never feeds its own size back into the
+   container the renderer measures. */
+.body-map-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
   width: 100%;
-  max-width: 320px;
-  height: auto;
-  max-height: 460px;
-  overflow: visible;
-  transform-style: preserve-3d;
-}
-
-.body-base path {
-  fill: var(--body-fill);
-}
-
-.body-outline path {
-  fill: none;
-  stroke: var(--body-stroke);
-  stroke-width: 1.1;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-}
-
-.body-detail path {
-  fill: none;
-  stroke: var(--body-detail);
-  stroke-width: 0.7;
-  stroke-linecap: round;
-  pointer-events: none;
-}
-
-.body-sheen {
-  pointer-events: none;
-}
-
-.body-muscle {
-  fill: var(--heat-0);
-  stroke: rgba(255, 255, 255, 0.1);
-  stroke-width: 0.5;
-  cursor: pointer;
+  height: 100%;
   outline: none;
-  transition:
-    fill 0.4s ease,
-    opacity 0.25s ease,
-    stroke 0.2s ease,
-    filter 0.25s ease;
 }
 
-.body-muscle[data-level="1"] {
-  fill: var(--heat-1);
-}
-.body-muscle[data-level="2"] {
-  fill: var(--heat-2);
-}
-.body-muscle[data-level="3"] {
-  fill: var(--heat-3);
-}
-.body-muscle[data-level="4"] {
-  fill: var(--heat-4);
-}
-.body-muscle[data-level="5"] {
-  fill: var(--heat-5);
+.body-map-canvas:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-md);
 }
 
-/* The hottest muscles breathe, so the eye lands on them first. */
-.body-muscle[data-level="5"],
-.body-muscle[data-level="4"] {
-  animation: strength-muscle-pulse 3.4s ease-in-out infinite;
+.body-map-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  margin: 0;
+  transform: translateX(-50%);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
 }
 
-.body-muscle[data-level="4"] {
-  animation-duration: 4.2s;
+/* The prompt is only worth showing until the user works out it turns. */
+.body-map:hover .body-map-hint {
+  opacity: 0.75;
 }
 
-@keyframes strength-muscle-pulse {
-  0%,
-  100% {
-    filter: brightness(1);
-  }
-  50% {
-    filter: brightness(1.16);
-  }
-}
-
-body.is-backgrounded .body-muscle {
-  animation: none;
-}
-
-.body-muscle.is-dimmed {
-  opacity: 0.3;
-}
-
-.body-muscle.is-active {
-  stroke: var(--text-primary);
-  stroke-width: 1.1;
-  opacity: 1;
-  animation: none;
-  filter: brightness(1.28) drop-shadow(0 0 8px rgba(255, 255, 255, 0.28));
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .body-muscle {
-    animation: none !important;
-  }
+.body-map-fallback {
+  margin: auto;
+  max-width: 34ch;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
 }
 
 .strength-legend {
@@ -408,34 +395,29 @@ body.is-backgrounded .body-muscle {
 
 .strength-legend-ramp i {
   width: 22px;
-  height: 7px;
-  border-radius: 2px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.3);
 }
 
+/* The legend keys the figure, so it uses the figure's solid ramp rather than
+   the translucent one the panel bars are painted with. */
 .strength-legend-ramp i[data-level="1"] {
-  background: var(--heat-1);
+  background: var(--m3d-heat-1);
 }
 .strength-legend-ramp i[data-level="2"] {
-  background: var(--heat-2);
+  background: var(--m3d-heat-2);
 }
 .strength-legend-ramp i[data-level="3"] {
-  background: var(--heat-3);
+  background: var(--m3d-heat-3);
 }
 .strength-legend-ramp i[data-level="4"] {
-  background: var(--heat-4);
+  background: var(--m3d-heat-4);
 }
 .strength-legend-ramp i[data-level="5"] {
-  background: var(--heat-5);
-}
-
-.strength-body-caption {
-  margin: -4px 0 0;
-  color: var(--text-primary);
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-  text-align: center;
-  letter-spacing: 0.01em;
+  background: var(--m3d-heat-5);
 }
 
 /* ---------- Muscle panel ---------- */
