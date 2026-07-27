@@ -22348,74 +22348,465 @@ tr.data-intervals-row-missing {
   padding: 18px 20px;
 }
 
-.calendar-detail-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  margin-bottom: 18px;
+.calendar-detail-empty {
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
-.calendar-detail-stat {
+/* --- scheduled workout detail (sport-aware) --- */
+
+.sched-detail {
+  --detail-sport: var(--sport-other);
+  --step-warmup: #f0a72e;
+  --step-rest: #9099aa;
+  --step-cooldown: #27c2e5;
+  --step-sendoff: #b48cff;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 16px;
+}
+
+.sched-detail.is-run { --detail-sport: var(--sport-run); }
+.sched-detail.is-trail { --detail-sport: var(--sport-trail); }
+.sched-detail.is-bike { --detail-sport: var(--sport-bike); }
+.sched-detail.is-strength { --detail-sport: var(--sport-strength); }
+.sched-detail.is-other { --detail-sport: var(--sport-other); }
+
+/* hero */
+
+.sched-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--detail-sport) 15%, transparent),
+      transparent 62%
+    ),
+    var(--glass-bg);
+  box-shadow: var(--shadow-inset);
+}
+
+.sched-hero-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sched-hero-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  color: var(--detail-sport);
+  background: color-mix(in srgb, var(--detail-sport) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--detail-sport) 34%, transparent);
+  flex-shrink: 0;
+}
+
+.sched-hero-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sched-hero-sport {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sched-hero-chip {
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--detail-sport);
+  background: color-mix(in srgb, var(--detail-sport) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--detail-sport) 30%, transparent);
+}
+
+.sched-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 8px;
+}
+
+.sched-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+}
+
+.sched-stat-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sched-stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* structure section */
+
+.sched-structure {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sched-structure-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sched-structure-head h4 {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.sched-structure-total {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* proportional structure bar */
+
+.sched-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 26px;
+  padding: 3px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+}
+
+.sched-bar-segment {
+  flex-basis: 0;
+  min-width: 4px;
+  border-radius: 3px;
+  transition: filter 0.15s ease;
+}
+
+.sched-bar-segment:hover {
+  filter: brightness(1.18);
+}
+
+.sched-bar-segment.is-warmup { background: var(--step-warmup); }
+.sched-bar-segment.is-training { background: var(--detail-sport); }
+.sched-bar-segment.is-rest {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--step-rest) 62%, transparent) 0 4px,
+    color-mix(in srgb, var(--step-rest) 28%, transparent) 4px 8px
+  );
+}
+.sched-bar-segment.is-cooldown { background: var(--step-cooldown); }
+.sched-bar-segment.is-sendOff { background: var(--step-sendoff); }
+
+.sched-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.sched-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sched-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+}
+
+.sched-legend-item.is-warmup .sched-legend-dot { background: var(--step-warmup); }
+.sched-legend-item.is-training .sched-legend-dot { background: var(--detail-sport); }
+.sched-legend-item.is-rest .sched-legend-dot { background: var(--step-rest); }
+.sched-legend-item.is-cooldown .sched-legend-dot { background: var(--step-cooldown); }
+.sched-legend-item.is-sendOff .sched-legend-dot { background: var(--step-sendoff); }
+
+/* step list */
+
+.sched-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sched-step {
+  --step: var(--detail-sport);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+}
+
+.sched-step.is-warmup { --step: var(--step-warmup); }
+.sched-step.is-rest { --step: var(--step-rest); }
+.sched-step.is-cooldown { --step: var(--step-cooldown); }
+.sched-step.is-sendOff { --step: var(--step-sendoff); }
+
+.sched-step-token {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  color: var(--step);
+  background: color-mix(in srgb, var(--step) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--step) 30%, transparent);
+}
+
+.sched-step-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.sched-step-name {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sched-step-intensity {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.sched-step-target {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* repeat group */
+
+.sched-repeat {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  padding: 10px 12px;
+}
+
+.sched-repeat-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sched-repeat-token {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  color: var(--detail-sport);
+  background: color-mix(in srgb, var(--detail-sport) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--detail-sport) 30%, transparent);
+}
+
+.sched-repeat-title {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.sched-repeat-total {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.sched-repeat-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 9px 0 0;
+  padding: 0 0 0 12px;
+  list-style: none;
+  border-left: 2px solid color-mix(in srgb, var(--detail-sport) 35%, transparent);
+}
+
+.sched-repeat-steps .sched-step {
+  background: transparent;
+  border-color: transparent;
+  padding: 6px 8px;
+}
+
+/* strength layout */
+
+.sched-strength-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.sched-strength-chip {
+  padding: 4px 11px;
+  border-radius: var(--radius-pill);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--detail-sport);
+  background: color-mix(in srgb, var(--detail-sport) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--detail-sport) 28%, transparent);
+}
+
+.sched-strength-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.sched-lift {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 10px 12px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   background: var(--glass-bg);
 }
 
-.calendar-detail-stat span {
-  font-size: 11px;
-  color: var(--text-muted);
+.sched-lift-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  color: var(--detail-sport);
+  background: color-mix(in srgb, var(--detail-sport) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--detail-sport) 30%, transparent);
 }
 
-.calendar-detail-stat strong {
-  font-size: 14px;
-  color: var(--text-primary);
-}
-
-.calendar-detail-steps h4 {
-  margin: 0 0 10px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.calendar-detail-steps ol {
+.sched-lift-text {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: step;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
 }
 
-.calendar-detail-steps li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 9px 12px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-sm);
-  background: var(--glass-bg);
+.sched-lift-name {
   font-size: 13px;
-}
-
-.calendar-detail-step-name {
-  color: var(--text-primary);
   font-weight: 550;
-}
-
-.calendar-detail-step-target {
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.calendar-detail-empty {
+.sched-lift-scheme {
+  font-size: 11.5px;
   color: var(--text-muted);
+}
+
+.sched-lift-weight {
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--detail-sport);
+  background: color-mix(in srgb, var(--detail-sport) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--detail-sport) 28%, transparent);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sched-circuit {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+}
+
+.sched-circuit-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--detail-sport);
+}
+
+.sched-circuit .sched-lift {
+  background: transparent;
+  border-color: transparent;
+  padding: 6px 8px;
+}
+
+/* empty state */
+
+.sched-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 22px 16px;
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+}
+
+.sched-empty p {
+  margin: 0;
   font-size: 13px;
 }
 
