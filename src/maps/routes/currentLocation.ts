@@ -1,3 +1,6 @@
+import type { UnitSystem } from "../../../electron/types";
+import { elevationUnit, metersToElevation } from "../../units/units";
+
 export interface DeviceRouteLocation {
   label: string;
   lat: number;
@@ -17,7 +20,8 @@ const HIGH_ACCURACY_OPTIONS: PositionOptions = {
  * "Use my location". This uses Core Location on macOS rather than an IP lookup.
  */
 export function requestDeviceRouteLocation(
-  source?: GeolocationSource
+  source: GeolocationSource | undefined,
+  unitSystem: UnitSystem
 ): Promise<DeviceRouteLocation> {
   const geolocation =
     source ??
@@ -46,7 +50,10 @@ export function requestDeviceRouteLocation(
 
         const accuracyLabel =
           Number.isFinite(accuracy) && accuracy > 0
-            ? ` (±${Math.max(1, Math.round(accuracy))} m)`
+            ? ` (±${Math.max(
+                1,
+                Math.round(metersToElevation(accuracy, unitSystem))
+              )} ${elevationUnit(unitSystem)})`
             : "";
 
         resolve({

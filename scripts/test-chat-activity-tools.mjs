@@ -14,6 +14,7 @@ const {
 const {
   parseActivityDetail,
   downsampleActivitySeries,
+  formatActivitySeriesForChat,
   parseScheduledExercises,
   formatScheduledExercisesForChat
 } = await import(`${distUrl("trainingHubService.js")}?cacheBust=${Date.now()}`);
@@ -65,6 +66,47 @@ assert.match(formatted, /170/);
 const withSeries = formatActivityDetailForChat(detail, true);
 assert.match(withSeries, /Time series/);
 
+const imperialFormatted = formatActivityDetailForChat(detail, true, "imperial");
+assert.match(imperialFormatted, /62\.1 mi/);
+assert.match(imperialFormatted, /Avg pace: 9:39\/mi/);
+assert.match(imperialFormatted, /2\.49 mi/);
+
+const bikeDetail = {
+  activityId: "bike-1",
+  name: "Ten mile ride",
+  sportType: 200,
+  sportName: "Bike",
+  distance: 16_093.44,
+  duration: 3_600,
+  laps: [{ index: 1, distance: 16_093.44, duration: 3_600, pace: 223.694 }],
+  series: [
+    { distance: 8_046.72, pace: 223.694 },
+    { distance: 16_093.44, pace: 223.694 }
+  ],
+  raw: {}
+};
+const imperialBike = formatActivityDetailForChat(bikeDetail, true, "imperial");
+assert.match(imperialBike, /Avg speed: 10\.0 mph/);
+assert.match(imperialBike, /Max HR \| Speed/);
+assert.match(imperialBike, /Distance \| HR \| Speed \| Power/);
+assert.match(imperialBike, /10\.0 mph/);
+assert.match(
+  formatActivitySeriesForChat(bikeDetail.series, "metric", false, true),
+  /16\.1 km\/h/
+);
+
+const imperialSwim = formatActivityDetailForChat({
+  activityId: "swim-1",
+  name: "Pool",
+  sportType: 300,
+  distance: 100,
+  duration: 120,
+  laps: [{ index: 1, distance: 100, duration: 120 }],
+  raw: {}
+}, false, "imperial");
+assert.match(imperialSwim, /Distance: 109 yd/);
+assert.match(imperialSwim, /1 \| 109 yd/);
+
 const downsampled = downsampleActivitySeries(detail.series ?? [], 3);
 assert.ok(downsampled.length <= 3);
 
@@ -88,6 +130,11 @@ assert.ok(visualPreview.sections.hr);
 assert.equal(visualPreview.sections.hr?.chartKind, "series");
 assert.ok(visualPreview.sections.laps && visualPreview.sections.laps.length > 0);
 assert.equal(visualPreview.previewId, `${detail.activityId}:req-1`);
+assert.equal(visualPreview.sportType, 101);
+
+const bikePreview = buildActivityVisualPreview(bikeDetail, "req-bike");
+assert.equal(bikePreview?.sportType, 200);
+assert.ok(bikePreview?.sections.pace);
 
 const legacyPreview = buildActivityHrTrendPreview(detail, "req-legacy");
 assert.ok(legacyPreview);

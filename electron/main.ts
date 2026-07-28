@@ -72,7 +72,8 @@ import {
   uploadActivityFitToCoros,
   uploadTrainingPlan
 } from "./trainingHubService";
-import type { WorkoutSport } from "./types";
+import type { UnitSystem, WorkoutSport } from "./types";
+import { normalizeUnitSystem } from "./unitSystem.js";
 import {
   cacheCorosWatchfaceProjectPreview,
   createCorosWatchfaceArchive,
@@ -1269,8 +1270,8 @@ function registerIpcHandlers(): void {
   // Kicks off streaming; assistant text is pushed via chat:stream* events.
   ipcMain.handle(
     "chat:send",
-    (_event, requestId: string, messages: ChatMessage[]) =>
-      streamChat(mainWindow, requestId, messages)
+    (_event, requestId: string, messages: ChatMessage[], unitSystem?: UnitSystem) =>
+      streamChat(mainWindow, requestId, messages, normalizeUnitSystem(unitSystem))
   );
 
   ipcMain.handle("chat:cancel", (_event, requestId: string) =>
@@ -1354,8 +1355,8 @@ function registerIpcHandlers(): void {
     await disconnectMcpServer(id, { clearAuthorization: false });
   });
 
-  ipcMain.handle("chat:uploadPlanDraft", (_event, draftId: string) =>
-    uploadTrainingPlanDraft(draftId)
+  ipcMain.handle("chat:uploadPlanDraft", (_event, draftId: string, unitSystem?: UnitSystem) =>
+    uploadTrainingPlanDraft(draftId, normalizeUnitSystem(unitSystem))
   );
 
   ipcMain.handle("chat:confirmWorkoutDelete", (_event, requestId: string) =>
@@ -1364,7 +1365,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "trainingHub:uploadTrainingPlan",
-    (_event, draft: CorosTrainingPlanDraftInput) => uploadTrainingPlan(draft)
+    (_event, draft: CorosTrainingPlanDraftInput, unitSystem?: UnitSystem) =>
+      uploadTrainingPlan(draft, normalizeUnitSystem(unitSystem))
   );
 
   ipcMain.handle("appleMusic:getStatus", () => getAppleMusicStatus());
@@ -1468,13 +1470,14 @@ function registerIpcHandlers(): void {
     (_event, sport: WorkoutSport) => listWorkoutExercises(sport)
   );
 
-  ipcMain.handle("trainingHub:getWorkoutEditorContext", () =>
-    getWorkoutEditorContext()
+  ipcMain.handle("trainingHub:getWorkoutEditorContext", (_event, unitSystem?: UnitSystem) =>
+    getWorkoutEditorContext(normalizeUnitSystem(unitSystem))
   );
 
   ipcMain.handle(
     "trainingHub:getWorkoutForEdit",
-    (_event, ref: WorkoutEditRef) => getWorkoutForEdit(ref)
+    (_event, ref: WorkoutEditRef, unitSystem?: UnitSystem) =>
+      getWorkoutForEdit(ref, normalizeUnitSystem(unitSystem))
   );
 
   ipcMain.handle(
@@ -1483,8 +1486,9 @@ function registerIpcHandlers(): void {
       _event,
       ref: WorkoutEditRef,
       revision: string,
-      draft: RunWorkoutEditorDraft
-    ) => previewWorkoutEdit(ref, revision, draft)
+      draft: RunWorkoutEditorDraft,
+      unitSystem?: UnitSystem
+    ) => previewWorkoutEdit(ref, revision, draft, normalizeUnitSystem(unitSystem))
   );
 
   ipcMain.handle(
@@ -1493,8 +1497,9 @@ function registerIpcHandlers(): void {
       _event,
       ref: WorkoutEditRef,
       revision: string,
-      draft: RunWorkoutEditorDraft
-    ) => saveWorkoutEdit(ref, revision, draft)
+      draft: RunWorkoutEditorDraft,
+      unitSystem?: UnitSystem
+    ) => saveWorkoutEdit(ref, revision, draft, normalizeUnitSystem(unitSystem))
   );
 
   ipcMain.handle(
@@ -1509,8 +1514,17 @@ function registerIpcHandlers(): void {
       _event,
       entry: PlanWorkoutEntryInput,
       happenDay: string,
+      unitSystem?: UnitSystem | boolean,
       saveToLibrary?: boolean
-    ) => createAndScheduleWorkout(entry, happenDay, saveToLibrary)
+    ) =>
+      createAndScheduleWorkout(
+        entry,
+        happenDay,
+        typeof unitSystem === "boolean"
+          ? unitSystem
+          : normalizeUnitSystem(unitSystem),
+        saveToLibrary
+      )
   );
 
   ipcMain.handle(

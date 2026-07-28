@@ -20,6 +20,18 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { CorosLinkApi } from "../coroslink-api";
+import { useUnitSystem } from "../units/UnitSystemProvider";
+import {
+  POUNDS_PER_KILOGRAM,
+  formatDistanceValue,
+  formatElevationValue,
+  formatPaceValue,
+  kilogramsToDisplayWeight,
+  kmhToDisplaySpeed,
+  speedUnit,
+  weightUnit,
+  type UnitSystem
+} from "../units/units";
 import type {
   ChatAuthStatus,
   ChatProvider,
@@ -31,8 +43,10 @@ import type {
   CorosMcpStatus,
   McpServerStatus,
   PlanDraftPreview,
+  PlanWorkoutEntryInput,
   TrainingHubExportResult,
   UploadPlanResult,
+  WorkoutIntensityInput,
   WorkoutDeletePreview,
   DeleteWorkoutResult
 } from "../../electron/types";
@@ -114,6 +128,130 @@ interface ChatViewProps {
   onPendingPromptConsumed?: () => void;
 }
 
+function canonicalPlanDistanceMeters(source: PlanWorkoutEntryInput): number {
+  if (source.distance_km && source.distance_km > 0) {
+    return source.distance_km * 1_000;
+  }
+  let total = 0;
+  for (const step of source.steps ?? []) {
+    if ("repeat" in step) {
+      total += step.repeat * step.steps.reduce(
+        (sum, child) => sum + (child.target_distance_meters ?? 0),
+        0
+      );
+    } else {
+      total += step.target_distance_meters ?? 0;
+    }
+  }
+  return total;
+}
+
+function formatPlanSourceVolume(
+  source: PlanWorkoutEntryInput,
+  unitSystem: UnitSystem
+): string | undefined {
+  const meters = canonicalPlanDistanceMeters(source);
+  if (meters <= 0) return undefined;
+  return formatDistanceValue(meters, unitSystem, {
+    swim: source.sport === "swim"
+  });
+}
+
+function formatPlanSourceSteps(
+  source: PlanWorkoutEntryInput,
+  unitSystem: UnitSystem
+): string | undefined {
+  const swim = source.sport === "swim";
+  const formatStep = (
+    step: NonNullable<PlanWorkoutEntryInput["steps"]>[number]
+  ): string => {
+    if ("repeat" in step) {
+      return `${step.repeat}x (${step.steps.map((child) => formatStep(child)).join(", ")})`;
+    }
+    const target = step.target_distance_meters
+      ? formatDistanceValue(step.target_distance_meters, unitSystem, { swim })
+      : step.target_elevation_gain_meters
+        ? `${formatElevationValue(step.target_elevation_gain_meters, unitSystem)} gain`
+        : step.target_duration_seconds
+          ? `${Math.round(step.target_duration_seconds / 60)} min`
+          : step.target_reps
+            ? `${step.target_reps} reps`
+            : step.target_load
+              ? `${step.target_load} TL`
+              : "open";
+    const intensity = step.intensity
+      ? formatPlanIntensity(step.intensity, unitSystem)
+      : step.pace
+        ? formatLegacyPlanPace(step.pace, unitSystem)
+        : undefined;
+    return `${step.kind ?? "training"} ${target}${intensity ? ` @ ${intensity}` : ""}`;
+  };
+  return source.steps?.length
+    ? source.steps.map(formatStep).join(" → ")
+    : undefined;
+}
+
+function formatPlanPaceRange(
+  lowSecondsPerKm: number,
+  highSecondsPerKm: number,
+  unitSystem: UnitSystem
+): string {
+  const clock = (value: number) => formatPaceValue(value, unitSystem).split(" ")[0];
+  return `${clock(lowSecondsPerKm)}–${clock(highSecondsPerKm)}/${unitSystem === "imperial" ? "mi" : "km"}`;
+}
+
+function formatPlanIntensity(
+  intensity: WorkoutIntensityInput,
+  unitSystem: UnitSystem
+): string | undefined {
+  if (intensity.type === "none") return undefined;
+  if (intensity.type === "pace" || intensity.type === "effortPace") {
+    return formatPlanPaceRange(
+      intensity.lowSecondsPerKm,
+      intensity.highSecondsPerKm,
+      unitSystem
+    );
+  }
+  if (intensity.type === "speed") {
+    const lowKmh = intensity.unit === "mph" ? intensity.low * 1.609344 : intensity.low;
+    const highKmh = intensity.unit === "mph" ? intensity.high * 1.609344 : intensity.high;
+    return `${kmhToDisplaySpeed(lowKmh, unitSystem).toFixed(1)}–${kmhToDisplaySpeed(highKmh, unitSystem).toFixed(1)} ${speedUnit(unitSystem)}`;
+  }
+  if (intensity.type === "weight") {
+    if (intensity.mode === "bodyweight") return "Bodyweight";
+    const kilograms = intensity.unit === "lb"
+      ? intensity.value / POUNDS_PER_KILOGRAM
+      : intensity.value;
+    return `${kilogramsToDisplayWeight(kilograms, unitSystem).toFixed(1)} ${weightUnit(unitSystem)}`;
+  }
+  if (intensity.type === "heartRate") {
+    return `${intensity.lowBpm}–${intensity.highBpm} bpm`;
+  }
+  if (intensity.type === "power" && !intensity.preset) {
+    return `${intensity.lowWatts}–${intensity.highWatts} W`;
+  }
+  if (intensity.type === "cadence") {
+    return `${intensity.low}–${intensity.high} ${intensity.unit}`;
+  }
+  if (intensity.type === "swimStroke") return intensity.stroke;
+  if (intensity.type === "rpe") return `RPE ${intensity.value}`;
+  return undefined;
+}
+
+function formatLegacyPlanPace(
+  pace: string,
+  unitSystem: UnitSystem
+): string {
+  const match = pace.trim().match(/^(\d+):([0-5]\d)(?:-(\d+):([0-5]\d))?\/(km|mi)$/i);
+  if (!match) return pace;
+  const sourceFactor = match[5]?.toLowerCase() === "mi" ? 1 / 1.609344 : 1;
+  const low = (Number(match[1]) * 60 + Number(match[2])) * sourceFactor;
+  const high = match[3]
+    ? (Number(match[3]) * 60 + Number(match[4])) * sourceFactor
+    : low;
+  return formatPlanPaceRange(low, high, unitSystem);
+}
+
 function PlanPreviewCard({
   draft,
   uploading,
@@ -125,6 +263,7 @@ function PlanPreviewCard({
   uploaded?: UploadPlanResult;
   onUpload: () => void;
 }) {
+  const { unitSystem } = useUnitSystem();
   const uploadedResult =
     uploaded ??
     (draft.uploadResult
@@ -161,9 +300,17 @@ function PlanPreviewCard({
                 <td>{entry.scheduleDate ?? "Library"}</td>
                 <td>{entry.name}</td>
                 <td>{entry.sport ?? "run"}</td>
-                <td>{entry.volume ?? "—"}</td>
+                <td>
+                  {(entry.source
+                    ? formatPlanSourceVolume(entry.source, unitSystem)
+                    : entry.volume) ?? "—"}
+                </td>
                 <td>{entry.workoutType}</td>
-                <td>{entry.stepsSummary ?? "—"}</td>
+                <td>
+                  {(entry.source
+                    ? formatPlanSourceSteps(entry.source, unitSystem)
+                    : entry.stepsSummary) ?? "—"}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -338,6 +485,7 @@ export function ChatView({
   pendingPrompt,
   onPendingPromptConsumed
 }: ChatViewProps) {
+  const { unitSystem } = useUnitSystem();
   const [authStatus, setAuthStatus] = useState<ChatAuthStatus | null>(null);
   const [chatSettings, setChatSettings] =
     useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
@@ -1176,7 +1324,7 @@ export function ChatView({
 
     const wireMessages = toWireMessages(nextEntries);
     try {
-      await api.sendChat(requestId, wireMessages);
+      await api.sendChat(requestId, wireMessages, unitSystem);
     } catch (caught) {
       activeRequestIdRef.current = null;
       setStreaming(false);
@@ -1194,7 +1342,7 @@ export function ChatView({
     setUploadingDraftId(draftId);
     onError(null);
     try {
-      const result = await api.uploadTrainingPlanDraft(draftId);
+      const result = await api.uploadTrainingPlanDraft(draftId, unitSystem);
       setUploadedPlans((prev) => ({ ...prev, [draftId]: result }));
       setTimeline((prev) => {
         const next = prev.map((entry) =>

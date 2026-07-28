@@ -22,7 +22,7 @@ const location = await requestDeviceRouteLocation({
       }
     });
   }
-});
+}, "metric");
 
 assert.deepEqual(location, {
   label: "Current location (±12 m)",
@@ -40,7 +40,7 @@ await assert.rejects(
     getCurrentPosition(_success, failure) {
       failure({ code: 1 });
     }
-  }),
+  }, "metric"),
   /Location access was denied/
 );
 
@@ -55,8 +55,21 @@ await assert.rejects(
         }
       });
     }
-  }),
+  }, "metric"),
   /invalid coordinates/
 );
+
+const imperialLocation = await requestDeviceRouteLocation({
+  getCurrentPosition(success) {
+    success({
+      coords: {
+        latitude: 45.4215,
+        longitude: -75.6972,
+        accuracy: 100
+      }
+    });
+  }
+}, "imperial");
+assert.equal(imperialLocation.label, "Current location (±328 ft)");
 
 console.log("route location tests passed");

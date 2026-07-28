@@ -22,7 +22,7 @@
     "test:apple-podcasts": "npm run build:electron && node scripts/test-apple-podcasts.mjs",
     "test:combined-download-cache": "npm run build:electron && node scripts/test-combined-download-cache.mjs",
     "test:download-progress": "npm run build:electron && node scripts/test-download-progress.mjs",
-    "test:route-location": "node --experimental-strip-types scripts/test-route-location.mjs",
+    "test:route-location": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-route-location.mjs",
     "test:route-overlap": "node --experimental-strip-types scripts/test-route-overlap.mjs",
     "test:sketch": "npm run build:electron && node scripts/test-sketch-geometry.mjs",
     "test:greetings": "node --experimental-strip-types scripts/test-greetings.mjs",
@@ -41,11 +41,14 @@
     "test:chat-analytics-tools": "npm run build:electron && node scripts/test-chat-analytics-tools.mjs",
     "test:sleep-data-parser": "npm run build:electron && node scripts/test-sleep-data-parser.mjs",
     "test:daily-health-data-parser": "npm run build:electron && node scripts/test-daily-health-data-parser.mjs",
-    "test:training-formatters": "npm run build:electron && node --experimental-strip-types scripts/test-training-formatters.mjs",
+    "test:training-formatters": "npm run build:electron && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-training-formatters.mjs",
+    "test:weekly-activity": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-weekly-activity.mjs",
+    "test:units": "npm run build:electron && node scripts/test-unit-system.mjs",
     "test:heatmap-summary": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-heatmap-summary.mjs",
     "test:exercise-names": "node --experimental-strip-types scripts/test-exercise-names.mjs",
     "test:strength-detail": "node --experimental-strip-types scripts/test-strength-detail.mjs",
     "test:strength-analytics": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-strength-analytics.mjs",
+    "test:strength-body-focus": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-strength-body-focus.mjs",
     "test:chat-workout-tools": "npm run build:electron && node scripts/test-chat-workout-tools.mjs",
     "test:coros-workout-builder": "npm run build:electron && node scripts/test-coros-workout-builder.mjs",
     "test:coros-workout-editor": "npm run build:electron && node scripts/test-coros-workout-editor.mjs",
@@ -170,7 +173,10 @@
     "win": {
       "target": "nsis",
       "icon": "build/icon.png",
-      "artifactName": "${productName}-Setup-${version}.${ext}"
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "files": [
+        "!**/claude.exe"
+      ]
     },
     "linux": {
       "target": [
@@ -211,6 +217,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@electron/asar": "^3.4.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/d3-geo": "^3.1.0",
     "@types/leaflet": "^1.9.21",

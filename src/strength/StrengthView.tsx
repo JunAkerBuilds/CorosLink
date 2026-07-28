@@ -38,9 +38,10 @@ import {
   trainingChartTooltipStyle
 } from "../training/chartConfig";
 import { useChartColors } from "../training/useChartColors";
+import { resolveMuscleView } from "./bodyFocus";
 import { BodyMapV2, type BodyView } from "./BodyMapV2";
 import { MusclePanel } from "./MusclePanel";
-import type { MuscleId } from "./muscles";
+import { MUSCLE_BY_ID, type MuscleId } from "./muscles";
 import { buildSampleStrengthSessions } from "./sampleSessions";
 import {
   buildStrengthAnalytics,
@@ -50,6 +51,8 @@ import {
   type HeatMetric
 } from "./strengthAnalytics";
 import "./strength.css";
+import { useUnitSystem } from "../units/UnitSystemProvider";
+import { kilogramsToDisplayWeight, weightUnit } from "../units/units";
 
 interface StrengthViewProps {
   api: CorosLinkApi;
@@ -135,6 +138,7 @@ export function StrengthView({
   onOpenTraining,
   showDevelopmentTools = false
 }: StrengthViewProps) {
+  const { unitSystem } = useUnitSystem();
   const connected = Boolean(status?.authenticated);
   const { colors } = useChartColors();
 
@@ -155,10 +159,33 @@ export function StrengthView({
   const [listHover, setListHover] = useState<MuscleId | null>(null);
   const syncSequenceRef = useRef(0);
 
-  const requestView = (next: BodyView) => {
+  const requestView = useCallback((next: BodyView) => {
+    setSelectedMuscle(null);
+    setFigureHover(null);
+    setListHover(null);
     setView(next);
     setViewRequest((current) => current + 1);
-  };
+  }, []);
+
+  const selectMuscle = useCallback(
+    (muscle: MuscleId | null) => {
+      setFigureHover(null);
+      setListHover(null);
+
+      if (muscle === null || muscle === selectedMuscle) {
+        setSelectedMuscle(null);
+        return;
+      }
+
+      const nextView = resolveMuscleView(MUSCLE_BY_ID[muscle].view, view);
+      if (nextView !== view) {
+        setView(nextView);
+        setViewRequest((current) => current + 1);
+      }
+      setSelectedMuscle(muscle);
+    },
+    [selectedMuscle, view]
+  );
 
   const runSync = useCallback(
     async (force: boolean) => {
@@ -245,10 +272,10 @@ export function StrengthView({
     () =>
       analytics.weeks.map((week) => ({
         label: week.label,
-        volume: Math.round(week.volumeKg),
+        volume: Math.round(kilogramsToDisplayWeight(week.volumeKg, unitSystem)),
         sets: Math.round(week.sets)
       })),
-    [analytics.weeks]
+    [analytics.weeks, unitSystem]
   );
 
   const topLifts = useMemo(
@@ -315,8 +342,6 @@ export function StrengthView({
     );
   }
 
-  const empty = sessions.length === 0 && !loading;
-
   return (
     <section className="strength-view">
       <header className="strength-header">
@@ -377,426 +402,420 @@ export function StrengthView({
       {pending > 0 && !sampleMode ? (
         <p className="strength-notice" role="status">
           <Loader2 className="spin" size={14} aria-hidden="true" />
-          Reading {pending} more session{pending === 1 ? "" : "s"} from COROS —
-          the map fills in as they arrive.
+          Reading {pending} more session{pending === 1 ? "" : "s"} from COROS.
+          The map fills in as they arrive.
         </p>
       ) : null}
 
-      {empty ? (
-        <section className="panel strength-empty">
-          <Dumbbell size={28} aria-hidden="true" />
-          <h3>No strength sessions yet</h3>
-          <p>
-            Nothing in the last {days} days recorded a set-by-set breakdown. Log
-            a gym or strength workout on your watch, or widen the time window.
-          </p>
-          {sampleButton}
-        </section>
-      ) : (
-        <>
-          <div className="strength-hero">
-            <section className="panel strength-body-panel">
-              <div className="strength-body-controls">
-                <div className="strength-segmented" role="group" aria-label="Body view">
-                  <button
-                    type="button"
-                    className={view === "front" ? "is-active" : ""}
-                    aria-pressed={view === "front"}
-                    onClick={() => requestView("front")}
-                  >
-                    Front
-                  </button>
-                  <button
-                    type="button"
-                    className={view === "back" ? "is-active" : ""}
-                    aria-pressed={view === "back"}
-                    onClick={() => requestView("back")}
-                  >
-                    Back
-                  </button>
-                </div>
+      {sampleButton && !sampleMode ? (
+        <div className="strength-sample-cta">{sampleButton}</div>
+      ) : null}
+
+      <div
+        className="strength-hero"
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && selectedMuscle) {
+            event.preventDefault();
+            selectMuscle(null);
+          }
+        }}
+      >
+        <section className="panel strength-body-panel">
+          <div className="strength-body-controls">
+            <div className="strength-segmented" role="group" aria-label="Body view">
+              <button
+                type="button"
+                className={view === "front" ? "is-active" : ""}
+                aria-pressed={view === "front"}
+                onClick={() => requestView("front")}
+              >
+                Front
+              </button>
+              <button
+                type="button"
+                className={view === "back" ? "is-active" : ""}
+                aria-pressed={view === "back"}
+                onClick={() => requestView("back")}
+              >
+                Back
+              </button>
+            </div>
+            <button
+              type="button"
+              className="strength-flip"
+              aria-label="Flip the figure"
+              onClick={() => requestView(view === "front" ? "back" : "front")}
+            >
+              <RotateCw size={15} aria-hidden="true" />
+            </button>
+            <div className="strength-segmented is-quiet" role="group" aria-label="Heat metric">
+              {METRIC_OPTIONS.map((option) => (
                 <button
+                  key={option.id}
                   type="button"
-                  className="strength-flip"
-                  aria-label="Flip the figure"
-                  onClick={() => requestView(view === "front" ? "back" : "front")}
+                  className={metric === option.id ? "is-active" : ""}
+                  aria-pressed={metric === option.id}
+                  onClick={() => setMetric(option.id)}
                 >
-                  <RotateCw size={15} aria-hidden="true" />
+                  {option.label}
                 </button>
-                <div className="strength-segmented is-quiet" role="group" aria-label="Heat metric">
-                  {METRIC_OPTIONS.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      className={metric === option.id ? "is-active" : ""}
-                      aria-pressed={metric === option.id}
-                      onClick={() => setMetric(option.id)}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <BodyMapV2
-                view={view}
-                viewRequest={viewRequest}
-                metric={metric}
-                muscleById={analytics.muscleById}
-                max={heatMax}
-                selected={selectedMuscle}
-                hovered={highlightedMuscle}
-                onHover={setFigureHover}
-                onSelect={(muscle) =>
-                  setSelectedMuscle((current) =>
-                    current === muscle ? null : muscle
-                  )
-                }
-                onViewChange={setView}
-              />
-
-              <div className="strength-legend" aria-hidden="true">
-                <span>Light</span>
-                <span className="strength-legend-ramp">
-                  {[1, 2, 3, 4, 5].map((level) => (
-                    <i key={level} data-level={level} />
-                  ))}
-                </span>
-                <span>Hammered</span>
-              </div>
-            </section>
-
-            <section className="panel strength-muscle-panel">
-              <MusclePanel
-                muscles={analytics.muscles}
-                muscleById={analytics.muscleById}
-                metric={metric}
-                max={heatMax}
-                active={panelMuscle}
-                onSelect={(muscle) => {
-                  // The row unmounts as the panel switches, so its pointer-leave
-                  // never fires — drop the hover explicitly.
-                  setListHover(null);
-                  setSelectedMuscle(muscle);
-                }}
-                onHover={setListHover}
-              />
-            </section>
+              ))}
+            </div>
           </div>
 
-          <div className="strength-tiles">
-            <StatTile
-              icon={<Dumbbell size={16} />}
-              label="Sessions"
-              value={String(analytics.summary.sessions)}
-              meta={`${analytics.summary.sessionsPerWeek.toFixed(1)} per week`}
-            />
-            <StatTile
-              icon={<TrendingUp size={16} />}
-              label="Volume"
-              value={formatVolumeKg(analytics.summary.volumeKg)}
-              meta={`${formatVolumeKg(analytics.summary.avgSessionVolumeKg)} per session`}
-            />
-            <StatTile
-              icon={<RotateCw size={16} />}
-              label="Sets"
-              value={String(Math.round(analytics.summary.sets))}
-              meta={`${Math.round(analytics.summary.reps)} reps`}
-            />
-            <StatTile
-              icon={<Timer size={16} />}
-              label="Time"
-              value={formatDurationSeconds(analytics.summary.durationSec)}
-              meta={
-                analytics.summary.trainingLoad > 0
-                  ? `${Math.round(analytics.summary.trainingLoad)} training load`
-                  : undefined
-              }
-            />
-            <StatTile
-              icon={<Trophy size={16} />}
-              label="Best est. 1RM"
-              value={
-                analytics.summary.bestE1rm
-                  ? formatWeightKg(Math.round(analytics.summary.bestE1rm.e1rmKg))
-                  : "—"
-              }
-              meta={analytics.summary.bestE1rm?.name}
-            />
-            <StatTile
-              icon={<Weight size={16} />}
-              label="Heaviest set"
-              value={
-                analytics.summary.heaviestLift
-                  ? formatWeightKg(analytics.summary.heaviestLift.weightKg)
-                  : "—"
-              }
-              meta={
-                analytics.summary.heaviestLift
-                  ? `${analytics.summary.heaviestLift.name} × ${analytics.summary.heaviestLift.reps}`
-                  : undefined
-              }
-            />
-          </div>
+          <BodyMapV2
+            view={view}
+            viewRequest={viewRequest}
+            metric={metric}
+            muscleById={analytics.muscleById}
+            max={heatMax}
+            selected={selectedMuscle}
+            hovered={highlightedMuscle}
+            onHover={setFigureHover}
+            onSelect={selectMuscle}
+            onViewChange={requestView}
+            showLayerControls={showDevelopmentTools}
+          />
 
-          <div className="strength-grid">
-            <section className="panel strength-trend-panel">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">Weekly</p>
-                  <h3>Volume &amp; sets</h3>
-                </div>
-                <div className="training-chart-legend" aria-hidden="true">
-                  <span className="training-chart-legend-item">
-                    <span className="training-chart-legend-dot is-accent" />
-                    Volume
+          <div className="strength-legend" aria-hidden="true">
+            <span>Light</span>
+            <span className="strength-legend-ramp">
+              {[1, 2, 3, 4, 5].map((level) => (
+                <i key={level} data-level={level} />
+              ))}
+            </span>
+            <span>Hammered</span>
+          </div>
+        </section>
+
+        <section className="panel strength-muscle-panel">
+          <MusclePanel
+            muscles={analytics.muscles}
+            muscleById={analytics.muscleById}
+            metric={metric}
+            max={heatMax}
+            active={panelMuscle}
+            onSelect={selectMuscle}
+            onHover={setListHover}
+            unitSystem={unitSystem}
+          />
+        </section>
+      </div>
+
+      <div className="strength-tiles">
+        <StatTile
+          icon={<Dumbbell size={16} />}
+          label="Sessions"
+          value={String(analytics.summary.sessions)}
+          meta={`${analytics.summary.sessionsPerWeek.toFixed(1)} per week`}
+        />
+        <StatTile
+          icon={<TrendingUp size={16} />}
+          label="Volume"
+          value={formatVolumeKg(analytics.summary.volumeKg, unitSystem)}
+          meta={`${formatVolumeKg(analytics.summary.avgSessionVolumeKg, unitSystem)} per session`}
+        />
+        <StatTile
+          icon={<RotateCw size={16} />}
+          label="Sets"
+          value={String(Math.round(analytics.summary.sets))}
+          meta={`${Math.round(analytics.summary.reps)} reps`}
+        />
+        <StatTile
+          icon={<Timer size={16} />}
+          label="Time"
+          value={formatDurationSeconds(analytics.summary.durationSec)}
+          meta={
+            analytics.summary.trainingLoad > 0
+              ? `${Math.round(analytics.summary.trainingLoad)} training load`
+              : undefined
+          }
+        />
+        <StatTile
+          icon={<Trophy size={16} />}
+          label="Best est. 1RM"
+          value={
+            analytics.summary.bestE1rm
+              ? formatWeightKg(analytics.summary.bestE1rm.e1rmKg, unitSystem)
+              : "No data"
+          }
+          meta={analytics.summary.bestE1rm?.name}
+        />
+        <StatTile
+          icon={<Weight size={16} />}
+          label="Heaviest set"
+          value={
+            analytics.summary.heaviestLift
+              ? formatWeightKg(analytics.summary.heaviestLift.weightKg, unitSystem)
+              : "No data"
+          }
+          meta={
+            analytics.summary.heaviestLift
+              ? `${analytics.summary.heaviestLift.name} × ${analytics.summary.heaviestLift.reps}`
+              : undefined
+          }
+        />
+      </div>
+
+      <div className="strength-grid">
+        <section className="panel strength-trend-panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Weekly</p>
+              <h3>Volume &amp; sets</h3>
+            </div>
+            <div className="training-chart-legend" aria-hidden="true">
+              <span className="training-chart-legend-item">
+                <span className="training-chart-legend-dot is-accent" />
+                Volume
+              </span>
+              <span className="training-chart-legend-item">
+                <span className="training-chart-legend-line is-gold" />
+                Sets
+              </span>
+            </div>
+          </div>
+          {chartData.length === 0 ? (
+            <p className="strength-panel-empty">Not enough weeks to chart yet.</p>
+          ) : (
+            <div className="strength-chart">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData} margin={trainingChartMargin}>
+                  <CartesianGrid stroke={colors.grid} vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    stroke={colors.text}
+                    tickLine={false}
+                    axisLine={false}
+                    fontSize={11}
+                    minTickGap={18}
+                  />
+                  <YAxis
+                    yAxisId="volume"
+                    stroke={colors.text}
+                    tickLine={false}
+                    axisLine={false}
+                    fontSize={11}
+                    width={46}
+                  />
+                  <YAxis
+                    yAxisId="sets"
+                    orientation="right"
+                    stroke={colors.text}
+                    tickLine={false}
+                    axisLine={false}
+                    fontSize={11}
+                    width={32}
+                  />
+                  <Tooltip
+                    content={(props) => <TrendTooltip {...props} />}
+                    contentStyle={trainingChartTooltipStyle}
+                    cursor={{ fill: colors.cursor }}
+                  />
+                  <Bar
+                    yAxisId="volume"
+                    dataKey="volume"
+                        name={`Volume (${weightUnit(unitSystem)})`}
+                    fill={colors.accent}
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={26}
+                  />
+                  <Line
+                    yAxisId="sets"
+                    type="monotone"
+                    dataKey="sets"
+                    name="Sets"
+                    stroke={colors.gold}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </section>
+
+        <section className="panel strength-balance-panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Movement mix</p>
+              <h3>Balance</h3>
+            </div>
+          </div>
+          <ul className="strength-balance">
+            {(
+              [
+                ["push", "Push"],
+                ["pull", "Pull"],
+                ["legs", "Legs"],
+                ["core", "Core"]
+              ] as const
+            ).map(([key, label]) => {
+              const value = analytics.balance[key];
+              const share = balanceTotal > 0 ? value / balanceTotal : 0;
+              return (
+                <li key={key}>
+                  <span className="strength-balance-label">{label}</span>
+                  <span className="strength-balance-track" aria-hidden="true">
+                    <span
+                      className={`strength-balance-fill is-${key}`}
+                      style={{ transform: `scaleX(${share})` }}
+                    />
                   </span>
-                  <span className="training-chart-legend-item">
-                    <span className="training-chart-legend-line is-gold" />
-                    Sets
+                  <span className="strength-balance-value">
+                    {Math.round(share * 100)}%
                   </span>
-                </div>
-              </div>
-              {chartData.length === 0 ? (
-                <p className="strength-panel-empty">Not enough weeks to chart yet.</p>
-              ) : (
-                <div className="strength-chart">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={chartData} margin={trainingChartMargin}>
-                      <CartesianGrid stroke={colors.grid} vertical={false} />
-                      <XAxis
-                        dataKey="label"
-                        stroke={colors.text}
-                        tickLine={false}
-                        axisLine={false}
-                        fontSize={11}
-                        minTickGap={18}
-                      />
-                      <YAxis
-                        yAxisId="volume"
-                        stroke={colors.text}
-                        tickLine={false}
-                        axisLine={false}
-                        fontSize={11}
-                        width={46}
-                      />
-                      <YAxis
-                        yAxisId="sets"
-                        orientation="right"
-                        stroke={colors.text}
-                        tickLine={false}
-                        axisLine={false}
-                        fontSize={11}
-                        width={32}
-                      />
-                      <Tooltip
-                        content={(props) => <TrendTooltip {...props} />}
-                        contentStyle={trainingChartTooltipStyle}
-                        cursor={{ fill: colors.cursor }}
-                      />
-                      <Bar
-                        yAxisId="volume"
-                        dataKey="volume"
-                        name="Volume (kg)"
-                        fill={colors.accent}
-                        radius={[4, 4, 0, 0]}
-                        maxBarSize={26}
-                      />
-                      <Line
-                        yAxisId="sets"
-                        type="monotone"
-                        dataKey="sets"
-                        name="Sets"
-                        stroke={colors.gold}
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </section>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="strength-balance-note">
+            Share of working sets. Assistance muscles count partially, so a
+            bench press leans push without erasing its triceps work.
+            {analytics.mobilitySets > 0 || analytics.unmappedSets > 0 ? (
+              <>
+                {" "}
+                Excludes{" "}
+                {[
+                  analytics.mobilitySets > 0
+                    ? `${Math.round(analytics.mobilitySets)} warm-up and mobility`
+                    : null,
+                  analytics.unmappedSets > 0
+                    ? `${Math.round(analytics.unmappedSets)} unrecognised`
+                    : null
+                ]
+                  .filter(Boolean)
+                  .join(" and ")}{" "}
+                set
+                {Math.round(analytics.mobilitySets + analytics.unmappedSets) === 1
+                  ? ""
+                  : "s"}
+                .
+              </>
+            ) : null}
+          </p>
+        </section>
+      </div>
 
-            <section className="panel strength-balance-panel">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">Movement mix</p>
-                  <h3>Balance</h3>
-                </div>
-              </div>
-              <ul className="strength-balance">
-                {(
-                  [
-                    ["push", "Push"],
-                    ["pull", "Pull"],
-                    ["legs", "Legs"],
-                    ["core", "Core"]
-                  ] as const
-                ).map(([key, label]) => {
-                  const value = analytics.balance[key];
-                  const share = balanceTotal > 0 ? value / balanceTotal : 0;
-                  return (
-                    <li key={key}>
-                      <span className="strength-balance-label">{label}</span>
-                      <span className="strength-balance-track" aria-hidden="true">
-                        <span
-                          className={`strength-balance-fill is-${key}`}
-                          style={{ transform: `scaleX(${share})` }}
-                        />
-                      </span>
-                      <span className="strength-balance-value">
-                        {Math.round(share * 100)}%
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-              <p className="strength-balance-note">
-                Share of credited working sets. Assistance muscles count
-                partially, so a bench press leans push without erasing its
-                triceps work.
-                {analytics.mobilitySets > 0 || analytics.unmappedSets > 0 ? (
-                  <>
-                    {" "}
-                    Excludes{" "}
-                    {[
-                      analytics.mobilitySets > 0
-                        ? `${Math.round(analytics.mobilitySets)} warm-up and mobility`
-                        : null,
-                      analytics.unmappedSets > 0
-                        ? `${Math.round(analytics.unmappedSets)} unrecognised`
-                        : null
-                    ]
-                      .filter(Boolean)
-                      .join(" and ")}{" "}
-                    set
-                    {Math.round(analytics.mobilitySets + analytics.unmappedSets) === 1
-                      ? ""
-                      : "s"}
-                    .
-                  </>
-                ) : null}
-              </p>
-            </section>
+      <div className="strength-grid">
+        <section className="panel strength-lifts-panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Estimated one-rep max</p>
+              <h3>Top lifts</h3>
+            </div>
           </div>
-
-          <div className="strength-grid">
-            <section className="panel strength-lifts-panel">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">Estimated one-rep max</p>
-                  <h3>Top lifts</h3>
-                </div>
-              </div>
-              {topLifts.length === 0 ? (
-                <p className="strength-panel-empty">
-                  No loaded sets in this window — bodyweight work doesn&apos;t
-                  produce a 1RM estimate.
-                </p>
-              ) : (
-                <div className="table-shell">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Exercise</th>
-                        <th>Best set</th>
-                        <th>Est. 1RM</th>
-                        <th>Trend</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {topLifts.map((lift) => (
-                        <tr key={lift.name}>
-                          <td>
-                            <span className="strength-lift-name">{lift.name}</span>
-                            <span className="strength-lift-meta">
-                              {lift.sessions} session
-                              {lift.sessions === 1 ? "" : "s"} ·{" "}
-                              {formatSets(lift.sets)} sets
-                            </span>
-                          </td>
-                          <td>{formatWeightKg(lift.bestWeightKg)}</td>
-                          <td>{formatWeightKg(Math.round(lift.bestE1rmKg))}</td>
-                          <td>
-                            {lift.e1rmTrendKg === undefined ? (
-                              <span className="strength-trend is-flat">—</span>
-                            ) : (
-                              <span
-                                className={`strength-trend ${
-                                  lift.e1rmTrendKg > 0.5
-                                    ? "is-up"
-                                    : lift.e1rmTrendKg < -0.5
-                                      ? "is-down"
-                                      : "is-flat"
-                                }`}
-                              >
-                                {lift.e1rmTrendKg > 0 ? "+" : ""}
-                                {lift.e1rmTrendKg.toFixed(1)} kg
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-
-            <section className="panel strength-sessions-panel">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">History</p>
-                  <h3>Recent sessions</h3>
-                </div>
-              </div>
-              <ul className="strength-sessions">
-                {sessions.slice(0, 10).map((session) => {
-                  const summary = session.detail.summary;
-                  const volume = session.detail.exercises.reduce(
-                    (total, exercise) =>
-                      total +
-                      exercise.entries.reduce(
-                        (sum, entry) => sum + entry.reps * entry.weightKg,
-                        0
-                      ),
-                    0
-                  );
-                  return (
-                    <li key={session.activityId}>
-                      <div className="strength-session-head">
-                        <strong>{session.name?.trim() || "Strength session"}</strong>
-                        <span>{formatSessionDate(session.startTime)}</span>
-                      </div>
-                      <div className="strength-session-stats">
-                        <span>{summary.sets} sets</span>
-                        <span>{summary.totalReps} reps</span>
-                        <span>
-                          {volume > 0 ? formatVolumeKg(volume) : "Bodyweight"}
+          {topLifts.length === 0 ? (
+            <p className="strength-panel-empty">
+              No loaded sets in this window. Bodyweight work doesn&apos;t
+              produce a 1RM estimate.
+            </p>
+          ) : (
+            <div className="table-shell">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Exercise</th>
+                    <th>Best set</th>
+                    <th>Est. 1RM</th>
+                    <th>Trend</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topLifts.map((lift) => (
+                    <tr key={lift.name}>
+                      <td>
+                        <span className="strength-lift-name">{lift.name}</span>
+                        <span className="strength-lift-meta">
+                          {lift.sessions} session
+                          {lift.sessions === 1 ? "" : "s"} ·{" "}
+                          {formatSets(lift.sets)} sets
                         </span>
-                        <span>{formatDurationSeconds(summary.durationSec)}</span>
-                      </div>
-                      <div className="strength-session-chips">
-                        {session.detail.exercises.slice(0, 4).map((exercise, index) => (
-                          <span key={`${exercise.nameKey}-${index}`}>
-                            {exercise.sets}×{" "}
-                            {resolveExerciseName(exercise.nameKey, exercise.rawName)}
+                      </td>
+                      <td>{formatWeightKg(lift.bestWeightKg, unitSystem)}</td>
+                      <td>{formatWeightKg(lift.bestE1rmKg, unitSystem)}</td>
+                      <td>
+                        {lift.e1rmTrendKg === undefined ? (
+                          <span className="strength-trend is-flat">No data</span>
+                        ) : (
+                          <span
+                            className={`strength-trend ${
+                              lift.e1rmTrendKg > 0.5
+                                ? "is-up"
+                                : lift.e1rmTrendKg < -0.5
+                                  ? "is-down"
+                                  : "is-flat"
+                            }`}
+                          >
+                            {lift.e1rmTrendKg > 0 ? "+" : ""}
+                                {kilogramsToDisplayWeight(lift.e1rmTrendKg, unitSystem).toFixed(1)} {weightUnit(unitSystem)}
                           </span>
-                        ))}
-                        {session.detail.exercises.length > 4 ? (
-                          <span className="is-more">
-                            +{session.detail.exercises.length - 4}
-                          </span>
-                        ) : null}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="panel strength-sessions-panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">History</p>
+              <h3>Recent sessions</h3>
+            </div>
           </div>
-        </>
-      )}
+          {sessions.length === 0 ? (
+            <p className="strength-panel-empty">No sessions in this window.</p>
+          ) : (
+            <ul className="strength-sessions">
+              {sessions.slice(0, 10).map((session) => {
+                const summary = session.detail.summary;
+                const volume = session.detail.exercises.reduce(
+                  (total, exercise) =>
+                    total +
+                    exercise.entries.reduce(
+                      (sum, entry) => sum + entry.reps * entry.weightKg,
+                      0
+                    ),
+                  0
+                );
+                return (
+                  <li key={session.activityId}>
+                    <div className="strength-session-head">
+                      <strong>{session.name?.trim() || "Strength session"}</strong>
+                      <span>{formatSessionDate(session.startTime)}</span>
+                    </div>
+                    <div className="strength-session-stats">
+                      <span>{summary.sets} sets</span>
+                      <span>{summary.totalReps} reps</span>
+                      <span>
+                        {volume > 0 ? formatVolumeKg(volume, unitSystem) : "Bodyweight"}
+                      </span>
+                      <span>{formatDurationSeconds(summary.durationSec)}</span>
+                    </div>
+                    <div className="strength-session-chips">
+                      {session.detail.exercises.slice(0, 4).map((exercise, index) => (
+                        <span key={`${exercise.nameKey}-${index}`}>
+                          {exercise.sets}×{" "}
+                          {resolveExerciseName(exercise.nameKey, exercise.rawName)}
+                        </span>
+                      ))}
+                      {session.detail.exercises.length > 4 ? (
+                        <span className="is-more">
+                          +{session.detail.exercises.length - 4}
+                        </span>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </div>
     </section>
   );
 }

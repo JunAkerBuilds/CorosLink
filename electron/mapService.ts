@@ -50,6 +50,10 @@ import {
   searchNominatim
 } from "./routing/nominatim";
 import { getWatchStatus, invalidateWatchStatusCache } from "./watchService";
+import {
+  formatDistanceValue,
+  normalizeUnitSystem
+} from "./unitSystem.js";
 
 const COROS_MAP_HOST = "https://map-oss-us.coros.com";
 const COROS_MAP_MANIFEST_URL = `${COROS_MAP_HOST}/regionMap/v5/regions_v5.json`;
@@ -1255,12 +1259,15 @@ export async function saveDrawnRoute(
   const endLabel = payload.closed
     ? undefined
     : await labelForWaypoint(payload.waypoints[payload.waypoints.length - 1]);
-  const distanceKm = payload.distanceMeters / 1000;
   const activityLabel =
     ROUTE_ACTIVITY_LABELS[payload.activityType] ?? payload.activityType;
   const name =
     payload.name?.trim() ||
-    `${distanceKm.toFixed(1)} km custom ${activityLabel.toLowerCase()}`;
+    `${formatDistanceValue(
+      payload.distanceMeters,
+      normalizeUnitSystem(payload.unitSystem),
+      { digits: 1 }
+    )} custom ${activityLabel.toLowerCase()}`;
 
   const route: GeneratedRoute = {
     id: crypto.randomUUID(),
@@ -1328,7 +1335,7 @@ function buildGeneratedRoute(
 ): GeneratedRoute {
   const name =
     request.mode === "loop"
-      ? `${request.distanceKm} km loop from ${startLabel}`
+      ? `${formatDistanceValue(request.distanceKm * 1_000, normalizeUnitSystem(request.unitSystem), { digits: 1 })} loop from ${startLabel}`
       : `${startLabel} to ${destinationLabel ?? request.destinationLocation}`;
 
   return {
@@ -2148,7 +2155,13 @@ function normalizeGenerateRouteRequest(
     distanceKm <= 0 ||
     distanceKm > maxDistanceKm
   ) {
-    throw new Error(`Enter a route distance between 0 and ${maxDistanceKm} km.`);
+    throw new Error(
+      `Enter a route distance between 0 and ${formatDistanceValue(
+        maxDistanceKm * 1_000,
+        normalizeUnitSystem(request.unitSystem),
+        { digits: 1 }
+      )}.`
+    );
   }
 
   return {
@@ -2160,6 +2173,7 @@ function normalizeGenerateRouteRequest(
     surfacePreference: request.surfacePreference,
     avoidHighways: request.avoidHighways,
     elevationPreference: request.elevationPreference,
+    unitSystem: normalizeUnitSystem(request.unitSystem),
     variationSeed: request.variationSeed
   };
 }
@@ -2262,7 +2276,7 @@ function routeFromOrsResponse(
   const now = new Date().toISOString();
   const name =
     request.mode === "loop"
-      ? `${request.distanceKm} km loop from ${startLabel}`
+      ? `${formatDistanceValue(request.distanceKm * 1_000, normalizeUnitSystem(request.unitSystem), { digits: 1 })} loop from ${startLabel}`
       : `${startLabel} to ${destinationLabel ?? request.destinationLocation}`;
 
   return {

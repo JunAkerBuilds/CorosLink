@@ -232,6 +232,17 @@ export interface MusclePatchDef {
   /** Rounded bellies use an ellipsoidal falloff; plates keep a flatter crown
    *  and steeper seam wall. */
   profile?: "plate" | "belly";
+  /**
+   * A narrow longitudinal crest above the main belly. The model sheet uses
+   * these on the deltoids, pectorals, quadriceps and calves: the extra relief
+   * is small in silhouette but is what makes grazing light describe fibre
+   * direction instead of reading each muscle as a plain capsule.
+   */
+  ridge?: number;
+  /** Normalized angular position of the crest across the patch. */
+  ridgePosition?: number;
+  /** Normalized half-width of the crest. */
+  ridgeWidth?: number;
 }
 
 /**
@@ -239,8 +250,8 @@ export interface MusclePatchDef {
  * a plateau with steep walls, which is what reads as a defined muscle: the
  * wall catches a highlight on top and drops the rim into shadow.
  */
-const EDGE_U = 0.15;
-const EDGE_V = 0.17;
+const EDGE_U = 0.1;
+const EDGE_V = 0.12;
 
 /** Patches never quite touch the body, so their rims can't z-fight with it. */
 const LIFT = 0.0035;
@@ -317,7 +328,17 @@ export function buildMusclePatch(
         : rounded
           ? Math.pow(Math.sin(Math.PI * t), 0.72)
           : pad(t, EDGE_V);
-      const offset = LIFT + def.bulge * heightPad * anglePad;
+      const ridgePosition = def.ridgePosition ?? 0.5;
+      const ridgeWidth = Math.max(0.04, def.ridgeWidth ?? 0.22);
+      const ridgeDistance = Math.abs(t - ridgePosition) / ridgeWidth;
+      const ridge =
+        def.ridge && ridgeDistance < 1
+          ? def.ridge *
+            heightPad *
+            anglePad *
+            Math.pow(1 - ridgeDistance, 2.2)
+          : 0;
+      const offset = LIFT + def.bulge * heightPad * anglePad + ridge;
       segment.point(u, theta, offset, scratch);
       positions.push(scratch.x, scratch.y, scratch.z);
     }
@@ -383,18 +404,18 @@ export const BODY_PARTS: Record<BodyPartName, PartDef> = {
     radial: 56,
     axial: 72,
     rings: [
-      { y: 1.46, rx: 0.25, rz: 0.19 },
-      { y: 1.58, rx: 0.292, rz: 0.212 },
-      { y: 1.7, rx: 0.318, rz: 0.222 },
-      { y: 1.84, rx: 0.318, rz: 0.216, cz: 0.002 },
-      { y: 1.98, rx: 0.296, rz: 0.203, cz: 0.004 },
-      { y: 2.12, rx: 0.28, rz: 0.192, cz: 0.004 },
-      { y: 2.26, rx: 0.296, rz: 0.202, cz: 0.002 },
-      { y: 2.4, rx: 0.33, rz: 0.22 },
-      { y: 2.54, rx: 0.356, rz: 0.232, cz: -0.002 },
-      { y: 2.66, rx: 0.364, rz: 0.23, cz: -0.006 },
-      { y: 2.76, rx: 0.356, rz: 0.216, cz: -0.012 },
-      { y: 2.84, rx: 0.3, rz: 0.192, cz: -0.018 },
+      { y: 1.46, rx: 0.262, rz: 0.202 },
+      { y: 1.58, rx: 0.306, rz: 0.222 },
+      { y: 1.7, rx: 0.326, rz: 0.23 },
+      { y: 1.84, rx: 0.324, rz: 0.224, cz: 0.002 },
+      { y: 1.98, rx: 0.3, rz: 0.208, cz: 0.004 },
+      { y: 2.12, rx: 0.286, rz: 0.198, cz: 0.004 },
+      { y: 2.26, rx: 0.306, rz: 0.208, cz: 0.002 },
+      { y: 2.4, rx: 0.346, rz: 0.229 },
+      { y: 2.54, rx: 0.378, rz: 0.244, cz: -0.002 },
+      { y: 2.66, rx: 0.392, rz: 0.242, cz: -0.006 },
+      { y: 2.76, rx: 0.382, rz: 0.226, cz: -0.012 },
+      { y: 2.84, rx: 0.322, rz: 0.2, cz: -0.018 },
       { y: 2.89, rx: 0.205, rz: 0.158, cz: -0.02 },
       { y: 2.94, rx: 0.146, rz: 0.134, cz: -0.018 },
       { y: 3.0, rx: 0.138, rz: 0.128, cz: -0.016 }
@@ -407,13 +428,13 @@ export const BODY_PARTS: Record<BodyPartName, PartDef> = {
     radial: 40,
     axial: 34,
     rings: [
-      { y: 2.95, rx: 0.104, rz: 0.11, cz: 0.01 },
-      { y: 3.02, rx: 0.128, rz: 0.138, cz: 0.01 },
-      { y: 3.09, rx: 0.146, rz: 0.158, cz: 0.006 },
-      { y: 3.18, rx: 0.154, rz: 0.166 },
-      { y: 3.27, rx: 0.15, rz: 0.158, cz: -0.008 },
-      { y: 3.35, rx: 0.122, rz: 0.129, cz: -0.012 },
-      { y: 3.41, rx: 0.05, rz: 0.054, cz: -0.014 },
+      { y: 2.95, rx: 0.108, rz: 0.116, cz: 0.012 },
+      { y: 3.02, rx: 0.142, rz: 0.15, cz: 0.014 },
+      { y: 3.09, rx: 0.164, rz: 0.174, cz: 0.01 },
+      { y: 3.18, rx: 0.174, rz: 0.182, cz: 0.002 },
+      { y: 3.27, rx: 0.168, rz: 0.172, cz: -0.006 },
+      { y: 3.35, rx: 0.14, rz: 0.142, cz: -0.01 },
+      { y: 3.41, rx: 0.064, rz: 0.066, cz: -0.012 },
       /* A near-zero final ring so the crown's cap is too small to read as a
          flat spot when the camera tilts above the figure. */
       { y: 3.425, rx: 0.016, rz: 0.018, cz: -0.014 }
@@ -426,16 +447,16 @@ export const BODY_PARTS: Record<BodyPartName, PartDef> = {
     radial: 32,
     axial: 40,
     rings: [
-      { y: 2.12, cx: 0.55, rx: 0.082 },
-      { y: 2.2, cx: 0.536, rx: 0.09 },
-      { y: 2.32, cx: 0.512, rx: 0.1 },
-      { y: 2.46, cx: 0.486, rx: 0.112 },
-      { y: 2.58, cx: 0.462, rx: 0.124 },
-      { y: 2.68, cx: 0.442, rx: 0.132 },
-      { y: 2.76, cx: 0.428, rx: 0.134 },
-      { y: 2.84, cx: 0.416, rx: 0.116 },
-      { y: 2.88, cx: 0.408, rx: 0.072 },
-      { y: 2.9, cx: 0.404, rx: 0.026 }
+      { y: 2.12, cx: 0.594, rx: 0.082, rz: 0.088 },
+      { y: 2.2, cx: 0.576, rx: 0.09, rz: 0.098 },
+      { y: 2.32, cx: 0.548, rx: 0.102, rz: 0.11 },
+      { y: 2.46, cx: 0.516, rx: 0.116, rz: 0.124 },
+      { y: 2.58, cx: 0.486, rx: 0.116, rz: 0.126 },
+      { y: 2.68, cx: 0.462, rx: 0.124, rz: 0.134 },
+      { y: 2.76, cx: 0.446, rx: 0.128, rz: 0.138 },
+      { y: 2.84, cx: 0.432, rx: 0.112, rz: 0.122 },
+      { y: 2.88, cx: 0.422, rx: 0.076, rz: 0.084 },
+      { y: 2.9, cx: 0.416, rx: 0.032, rz: 0.04 }
     ]
   },
   forearm: {
@@ -445,13 +466,13 @@ export const BODY_PARTS: Record<BodyPartName, PartDef> = {
     radial: 30,
     axial: 34,
     rings: [
-      { y: 1.7, cx: 0.65, rx: 0.052 },
-      { y: 1.76, cx: 0.642, rx: 0.058 },
-      { y: 1.84, cx: 0.63, rx: 0.072 },
-      { y: 1.94, cx: 0.614, rx: 0.09 },
-      { y: 2.04, cx: 0.592, rx: 0.1 },
-      { y: 2.14, cx: 0.568, rx: 0.096 },
-      { y: 2.22, cx: 0.54, rx: 0.084 }
+      { y: 1.68, cx: 0.728, rx: 0.052, rz: 0.058 },
+      { y: 1.76, cx: 0.718, rx: 0.06, rz: 0.066 },
+      { y: 1.84, cx: 0.704, rx: 0.074, rz: 0.082 },
+      { y: 1.94, cx: 0.682, rx: 0.092, rz: 0.104 },
+      { y: 2.04, cx: 0.652, rx: 0.102, rz: 0.114 },
+      { y: 2.14, cx: 0.616, rx: 0.098, rz: 0.11 },
+      { y: 2.22, cx: 0.576, rx: 0.084, rz: 0.094 }
     ]
   },
   hand: {
@@ -461,12 +482,12 @@ export const BODY_PARTS: Record<BodyPartName, PartDef> = {
     radial: 26,
     axial: 26,
     rings: [
-      { y: 1.4, cx: 0.672, rx: 0.038, rz: 0.032 },
-      { y: 1.47, cx: 0.67, rx: 0.054, rz: 0.042 },
-      { y: 1.56, cx: 0.666, rx: 0.068, rz: 0.052 },
-      { y: 1.65, cx: 0.66, rx: 0.07, rz: 0.056 },
-      { y: 1.72, cx: 0.652, rx: 0.062, rz: 0.052 },
-      { y: 1.76, cx: 0.646, rx: 0.054, rz: 0.048 }
+      { y: 1.34, cx: 0.77, rx: 0.052, rz: 0.038 },
+      { y: 1.42, cx: 0.766, rx: 0.064, rz: 0.048 },
+      { y: 1.52, cx: 0.758, rx: 0.076, rz: 0.058 },
+      { y: 1.62, cx: 0.746, rx: 0.078, rz: 0.062 },
+      { y: 1.7, cx: 0.73, rx: 0.066, rz: 0.056 },
+      { y: 1.75, cx: 0.718, rx: 0.054, rz: 0.05 }
     ]
   },
   thigh: {
@@ -513,9 +534,9 @@ export const BODY_PARTS: Record<BodyPartName, PartDef> = {
     radial: 28,
     axial: 26,
     rings: [
-      { y: 0.0, cx: 0.132, cz: 0.052, rx: 0.084, rz: 0.178 },
-      { y: 0.05, cx: 0.132, cz: 0.046, rx: 0.09, rz: 0.19 },
-      { y: 0.11, cx: 0.13, cz: 0.014, rx: 0.078, rz: 0.138 },
+      { y: 0.0, cx: 0.132, cz: 0.078, rx: 0.112, rz: 0.218 },
+      { y: 0.05, cx: 0.132, cz: 0.064, rx: 0.116, rz: 0.226 },
+      { y: 0.11, cx: 0.13, cz: 0.02, rx: 0.09, rz: 0.152 },
       { y: 0.16, cx: 0.128, cz: -0.008, rx: 0.064, rz: 0.084 },
       { y: 0.2, cx: 0.126, cz: -0.014, rx: 0.052, rz: 0.06 }
     ]
@@ -566,7 +587,7 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
        tapering to a point between the shoulder blades. */
     id: "traps",
     part: "torso",
-    bulge: 0.04,
+    bulge: 0.032,
     profile: "belly",
     span: [
       { y: 2.3, from: PI - 0.18, to: PI + 0.18 },
@@ -578,17 +599,35 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
     ]
   },
   {
-    /* Deltoids wrap the whole shoulder, so they are the one muscle that reads
-       from every angle. */
+    /* Front/lateral and rear deltoid shells meet at the side ridge. They use
+       the same semantic material, but the narrow base-body seam gives the
+       cap the reference's pointed lower edge instead of a cylindrical wrap. */
     id: "shoulders",
     part: "upperArm",
     bilateral: true,
-    wrap: true,
     bulge: 0.026,
     profile: "belly",
+    ridge: 0.008,
+    ridgeWidth: 0.24,
     span: [
-      { y: 2.48, from: -PI, to: PI },
-      { y: 2.9, from: -PI, to: PI }
+      { y: 2.5, from: -0.52, to: 0.54 },
+      { y: 2.64, from: -1.34, to: 1.42 },
+      { y: 2.78, from: -1.28, to: 1.34 },
+      { y: 2.89, from: -0.62, to: 0.66 }
+    ]
+  },
+  {
+    id: "shoulders",
+    part: "upperArm",
+    bilateral: true,
+    bulge: 0.025,
+    profile: "belly",
+    ridge: 0.007,
+    span: [
+      { y: 2.5, from: 2.52, to: 3.72 },
+      { y: 2.64, from: 1.7, to: 4.62 },
+      { y: 2.78, from: 1.76, to: 4.56 },
+      { y: 2.89, from: 2.44, to: 3.82 }
     ]
   },
 
@@ -597,14 +636,17 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
     id: "chest",
     part: "torso",
     bilateral: true,
-    bulge: 0.044,
+    bulge: 0.043,
     profile: "belly",
+    ridge: 0.008,
+    ridgePosition: 0.58,
+    ridgeWidth: 0.3,
     span: [
-      { y: 2.3, from: 0.08, to: 0.74 },
-      { y: 2.4, from: 0.05, to: 1.12 },
-      { y: 2.54, from: 0.04, to: 1.34 },
-      { y: 2.66, from: 0.06, to: 1.3 },
-      { y: 2.76, from: 0.1, to: 1.06 }
+      { y: 2.3, from: 0.08, to: 0.7 },
+      { y: 2.4, from: 0.045, to: 1.08 },
+      { y: 2.54, from: 0.035, to: 1.29 },
+      { y: 2.66, from: 0.05, to: 1.26 },
+      { y: 2.77, from: 0.1, to: 1.0 }
     ]
   },
   ...[
@@ -617,8 +659,9 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
     bilateral: true,
     bulge: 0.028,
     span: [
-      { y: y0, from: 0.03, to: 0.72 },
-      { y: y1, from: 0.03, to: 0.72 }
+      { y: y0, from: 0.075, to: 0.64 },
+      { y: (y0 + y1) * 0.5, from: 0.03, to: 0.72 },
+      { y: y1, from: 0.075, to: 0.64 }
     ]
   })),
   {
@@ -628,8 +671,24 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
     bilateral: true,
     bulge: 0.026,
     span: [
-      { y: 1.86, from: 0.03, to: 0.54 },
-      { y: 2.005, from: 0.03, to: 0.62 }
+      { y: 1.86, from: 0.07, to: 0.48 },
+      { y: 1.93, from: 0.03, to: 0.62 },
+      { y: 2.005, from: 0.07, to: 0.54 }
+    ]
+  },
+  {
+    /* Paired triangular lower-abdominal plates continue the teal core into
+       the pelvis instead of leaving the large rectangular base-body gap that
+       made the previous render look assembled from disconnected blocks. */
+    id: "abs",
+    part: "torso",
+    bilateral: true,
+    bulge: 0.026,
+    span: [
+      { y: 1.5, from: 0.04, to: 0.22 },
+      { y: 1.64, from: 0.035, to: 0.5 },
+      { y: 1.82, from: 0.03, to: 0.64 },
+      { y: 1.88, from: 0.03, to: 0.54 }
     ]
   },
   {
@@ -644,30 +703,48 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
       { y: 2.32, from: 0.84, to: 1.36 }
     ]
   },
+  ...[
+    { y0: 2.28, y1: 2.4, a0: 0.9, a1: 1.44 },
+    { y0: 2.39, y1: 2.5, a0: 0.98, a1: 1.5 },
+    { y0: 2.49, y1: 2.59, a0: 1.06, a1: 1.52 }
+  ].map<MusclePatchDef>(({ y0, y1, a0, a1 }) => ({
+    id: "obliques",
+    part: "torso",
+    bilateral: true,
+    bulge: 0.018,
+    profile: "belly",
+    span: [
+      { y: y0, from: a0, to: a1 },
+      { y: y1, from: a0 + 0.08, to: a1 - 0.02 }
+    ]
+  })),
 
   // ---- Back ----
   {
     id: "lats",
     part: "torso",
     bilateral: true,
-    bulge: 0.042,
+    bulge: 0.044,
+    ridge: 0.008,
+    ridgePosition: 0.62,
+    ridgeWidth: 0.34,
     span: [
-      { y: 1.94, from: 2.56, to: 2.9 },
-      { y: 2.12, from: 2.14, to: 2.9 },
-      { y: 2.32, from: 1.7, to: 2.88 },
-      { y: 2.5, from: 1.46, to: 2.74 },
-      { y: 2.66, from: 1.42, to: 2.56 }
+      { y: 1.94, from: 2.4, to: 3.0 },
+      { y: 2.12, from: 1.94, to: 3.0 },
+      { y: 2.32, from: 1.58, to: 2.96 },
+      { y: 2.5, from: 1.34, to: 2.78 },
+      { y: 2.66, from: 1.3, to: 2.54 }
     ]
   },
   {
     id: "lowerBack",
     part: "torso",
-    bulge: 0.028,
+    bulge: 0.026,
     span: [
-      { y: 1.8, from: 2.94, to: 3.34 },
-      { y: 1.96, from: 2.9, to: 3.38 },
-      { y: 2.14, from: 2.9, to: 3.38 },
-      { y: 2.32, from: 2.96, to: 3.32 }
+      { y: 1.78, from: PI - 0.76, to: PI + 0.76 },
+      { y: 1.94, from: PI - 0.66, to: PI + 0.66 },
+      { y: 2.14, from: PI - 0.48, to: PI + 0.48 },
+      { y: 2.34, from: PI - 0.24, to: PI + 0.24 }
     ]
   },
   {
@@ -690,8 +767,10 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
     id: "biceps",
     part: "upperArm",
     bilateral: true,
-    bulge: 0.034,
+    bulge: 0.032,
     profile: "belly",
+    ridge: 0.006,
+    ridgeWidth: 0.32,
     span: [
       { y: 2.1, from: -0.7, to: 0.7 },
       { y: 2.32, from: -0.96, to: 1.0 },
@@ -703,8 +782,11 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
     id: "triceps",
     part: "upperArm",
     bilateral: true,
-    bulge: 0.034,
+    bulge: 0.039,
     profile: "belly",
+    ridge: 0.006,
+    ridgePosition: 0.44,
+    ridgeWidth: 0.34,
     span: [
       { y: 2.1, from: 2.36, to: 3.94 },
       { y: 2.32, from: 2.18, to: 4.1 },
@@ -716,11 +798,43 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
     id: "forearms",
     part: "forearm",
     bilateral: true,
-    wrap: true,
-    bulge: 0.028,
+    bulge: 0.022,
+    profile: "belly",
+    ridge: 0.003,
+    ridgePosition: 0.62,
     span: [
-      { y: 1.72, from: -PI, to: PI },
-      { y: 2.22, from: -PI, to: PI }
+      { y: 1.7, from: -0.54, to: 0.62 },
+      { y: 1.86, from: -0.66, to: 0.8 },
+      { y: 2.04, from: -0.72, to: 0.88 },
+      { y: 2.2, from: -0.46, to: 0.58 }
+    ]
+  },
+  {
+    id: "forearms",
+    part: "forearm",
+    bilateral: true,
+    bulge: 0.024,
+    profile: "belly",
+    ridge: 0.003,
+    span: [
+      { y: 1.72, from: 0.74, to: 1.46 },
+      { y: 1.9, from: 0.66, to: 1.8 },
+      { y: 2.08, from: 0.62, to: 1.9 },
+      { y: 2.2, from: 0.76, to: 1.64 }
+    ]
+  },
+  {
+    id: "forearms",
+    part: "forearm",
+    bilateral: true,
+    bulge: 0.019,
+    profile: "belly",
+    ridge: 0.003,
+    span: [
+      { y: 1.7, from: 2.02, to: 4.04 },
+      { y: 1.88, from: 1.88, to: 4.22 },
+      { y: 2.06, from: 1.82, to: 4.3 },
+      { y: 2.2, from: 2.04, to: 4.06 }
     ]
   },
 
@@ -730,7 +844,10 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
     id: "quads",
     part: "thigh",
     bilateral: true,
-    bulge: 0.032,
+    bulge: 0.04,
+    profile: "belly",
+    ridge: 0.009,
+    ridgeWidth: 0.25,
     span: [
       { y: 0.98, from: -0.34, to: 0.34 },
       { y: 1.18, from: -0.42, to: 0.44 },
@@ -744,7 +861,10 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
     id: "quads",
     part: "thigh",
     bilateral: true,
-    bulge: 0.032,
+    bulge: 0.039,
+    profile: "belly",
+    ridge: 0.008,
+    ridgePosition: 0.6,
     span: [
       { y: 1.02, from: 0.42, to: 0.96 },
       { y: 1.24, from: 0.5, to: 1.42 },
@@ -758,7 +878,9 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
     id: "quads",
     part: "thigh",
     bilateral: true,
-    bulge: 0.03,
+    bulge: 0.038,
+    profile: "belly",
+    ridge: 0.007,
     span: [
       { y: 0.94, from: -0.8, to: -0.42 },
       { y: 1.06, from: -1.1, to: -0.5 },
@@ -770,7 +892,8 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
     id: "adductors",
     part: "thigh",
     bilateral: true,
-    bulge: 0.028,
+    bulge: 0.032,
+    profile: "belly",
     span: [
       { y: 1.1, from: -1.56, to: -1.2 },
       { y: 1.3, from: -1.94, to: -1.24 },
@@ -783,7 +906,9 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
     id: "hamstrings",
     part: "thigh",
     bilateral: true,
-    bulge: 0.032,
+    bulge: 0.038,
+    profile: "belly",
+    ridge: 0.007,
     span: [
       { y: 0.98, from: 2.5, to: 3.08 },
       { y: 1.2, from: 2.18, to: 3.08 },
@@ -797,7 +922,9 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
     id: "hamstrings",
     part: "thigh",
     bilateral: true,
-    bulge: 0.03,
+    bulge: 0.036,
+    profile: "belly",
+    ridge: 0.006,
     span: [
       { y: 0.98, from: 3.22, to: 3.66 },
       { y: 1.2, from: 3.2, to: 3.84 },
@@ -810,7 +937,9 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
     id: "calves",
     part: "shin",
     bilateral: true,
-    bulge: 0.034,
+    bulge: 0.04,
+    profile: "belly",
+    ridge: 0.007,
     span: [
       { y: 0.4, from: 2.6, to: 3.12 },
       { y: 0.55, from: 2.26, to: 3.12 },
@@ -824,7 +953,9 @@ export const MUSCLE_PATCHES: MusclePatchDef[] = [
     id: "calves",
     part: "shin",
     bilateral: true,
-    bulge: 0.036,
+    bulge: 0.042,
+    profile: "belly",
+    ridge: 0.008,
     span: [
       { y: 0.38, from: 3.18, to: 3.7 },
       { y: 0.55, from: 3.18, to: 4.14 },

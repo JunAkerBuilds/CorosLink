@@ -32,7 +32,8 @@ const dayList = [
 const distanceSeries = buildWeeklyActivitySeries(
   dayList,
   "distance",
-  referenceDate
+  referenceDate,
+  "metric"
 );
 
 assert.equal(distanceSeries.hasData, true);
@@ -48,12 +49,13 @@ assert.ok(distanceSeries.yMax >= 11.2);
 const loadSeries = buildWeeklyActivitySeries(
   dayList,
   "trainingLoad",
-  referenceDate
+  referenceDate,
+  "metric"
 );
 
 assert.equal(loadSeries.weeklyTotal, "161");
 
-const emptySeries = buildWeeklyActivitySeries([], "distance", referenceDate);
+const emptySeries = buildWeeklyActivitySeries([], "distance", referenceDate, "metric");
 
 assert.equal(emptySeries.hasData, false);
 assert.equal(emptySeries.weeklyTotal, "—");
@@ -73,12 +75,24 @@ const activityEnriched = buildWeeklyActivitySeries(
     ]
   ),
   "distance",
-  referenceDate
+  referenceDate,
+  "metric"
 );
 
 assert.equal(activityEnriched.hasData, true);
 assert.equal(activityEnriched.days[3].value, 6.5);
 assert.equal(activityEnriched.days[3].displayValue, "6.50 km");
+
+const imperialSeries = buildWeeklyActivitySeries(
+  [{ happenDay: "20260625", distance: 8_046.72 }],
+  "distance",
+  referenceDate,
+  "imperial"
+);
+assert.equal(imperialSeries.days[3].value, 5);
+assert.equal(imperialSeries.days[3].displayValue, "5.00 mi");
+assert.equal(imperialSeries.weeklyTotal, "5.00 mi");
+assert.equal(imperialSeries.yAxisUnit, "mi");
 
 const yTicks = buildWeeklyActivityYAxisTicks(distanceSeries.yMax);
 assert.equal(yTicks.length, 7);

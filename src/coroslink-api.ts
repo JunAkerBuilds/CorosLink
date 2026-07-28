@@ -49,6 +49,7 @@ import type {
   TrainingHubUpcomingWorkout,
   TrainingHubScheduledWorkoutEntry,
   TrainingHubLibraryWorkout,
+  UnitSystem,
   PlanWorkoutEntryInput,
   RunWorkoutEditorDraft,
   WorkoutEditPreview,
@@ -348,17 +349,22 @@ export interface CorosLinkApi {
   ) => Promise<TrainingHubScheduledWorkoutEntry[]>;
   listLibraryWorkouts: () => Promise<TrainingHubLibraryWorkout[]>;
   listWorkoutExercises: (sport: WorkoutSport) => Promise<WorkoutExerciseOption[]>;
-  getWorkoutEditorContext: () => Promise<WorkoutEditorContext>;
-  getWorkoutForEdit: (ref: WorkoutEditRef) => Promise<WorkoutEditorDocument>;
+  getWorkoutEditorContext: (unitSystem: UnitSystem) => Promise<WorkoutEditorContext>;
+  getWorkoutForEdit: (
+    ref: WorkoutEditRef,
+    unitSystem: UnitSystem
+  ) => Promise<WorkoutEditorDocument>;
   previewWorkoutEdit: (
     ref: WorkoutEditRef,
     revision: string,
-    draft: RunWorkoutEditorDraft
+    draft: RunWorkoutEditorDraft,
+    unitSystem: UnitSystem
   ) => Promise<WorkoutEditPreview>;
   saveWorkoutEdit: (
     ref: WorkoutEditRef,
     revision: string,
-    draft: RunWorkoutEditorDraft
+    draft: RunWorkoutEditorDraft,
+    unitSystem: UnitSystem
   ) => Promise<WorkoutEditSaveResult>;
   scheduleLibraryWorkout: (
     programId: string,
@@ -367,6 +373,7 @@ export interface CorosLinkApi {
   createAndScheduleWorkout: (
     entry: PlanWorkoutEntryInput,
     happenDay: string,
+    unitSystem: UnitSystem,
     saveToLibrary?: boolean
   ) => Promise<{ programId?: string }>;
   rescheduleWorkout: (
@@ -424,7 +431,8 @@ export interface CorosLinkApi {
     days?: number
   ) => Promise<TrainingHubDailyHealthSummary>;
   uploadTrainingPlan: (
-    draft: CorosTrainingPlanDraftInput
+    draft: CorosTrainingPlanDraftInput,
+    unitSystem: UnitSystem
   ) => Promise<UploadPlanResult>;
   getIntervalsStatus: () => Promise<IntervalsStatus>;
   connectIntervals: (apiKey: string, athleteId: string) => Promise<IntervalsStatus>;
@@ -515,7 +523,11 @@ export interface CorosLinkApi {
   openClaudeCodeSetupGuide: () => Promise<void>;
   loginChat: () => Promise<ChatAuthStatus>;
   logoutChat: () => Promise<ChatAuthStatus>;
-  sendChat: (requestId: string, messages: ChatMessage[]) => Promise<void>;
+  sendChat: (
+    requestId: string,
+    messages: ChatMessage[],
+    unitSystem: UnitSystem
+  ) => Promise<void>;
   cancelChat: (requestId: string) => Promise<void>;
   listChatSessions: (provider: ChatProvider) => Promise<ChatSessionSummary[]>;
   getChatSession: (sessionId: string) => Promise<PersistedChatEntry[]>;
@@ -545,7 +557,10 @@ export interface CorosLinkApi {
   disconnectMcpServer: (id: string) => Promise<void>;
   getMcpStatuses: () => Promise<McpServerStatus[]>;
   setMcpBearer: (id: string, token: string) => Promise<void>;
-  uploadTrainingPlanDraft: (draftId: string) => Promise<UploadPlanResult>;
+  uploadTrainingPlanDraft: (
+    draftId: string,
+    unitSystem: UnitSystem
+  ) => Promise<UploadPlanResult>;
   confirmWorkoutDelete: (requestId: string) => Promise<DeleteWorkoutResult>;
   setWindowBackground: (color: string) => Promise<void>;
   isWindowFullscreen: () => Promise<boolean>;

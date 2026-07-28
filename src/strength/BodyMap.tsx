@@ -3,6 +3,7 @@ import {
   ACESFilmicToneMapping,
   Box3,
   CanvasTexture,
+  CapsuleGeometry,
   Color,
   DirectionalLight,
   Group,
@@ -16,6 +17,7 @@ import {
   PlaneGeometry,
   Raycaster,
   Scene,
+  SphereGeometry,
   SRGBColorSpace,
   Vector2,
   Vector3,
@@ -226,15 +228,15 @@ function createWorld(
   /* Lights live in world space rather than on the figure, so turning the body
      moves it through a fixed studio rig instead of dragging the key light
      along with it. */
-  const hemi = new HemisphereLight(0x93b8dc, 0x151a1f, 0.55);
-  const key = new DirectionalLight(0xffffff, 2.2);
-  key.position.set(-2.4, 3.6, 3.4);
-  const fill = new DirectionalLight(0xc4dcff, 0.75);
-  fill.position.set(3.2, 0.9, 2.4);
+  const hemi = new HemisphereLight(0x93b8dc, 0x151a1f, 0.62);
+  const key = new DirectionalLight(0xfff8ed, 2.55);
+  key.position.set(-2.7, 4.1, 3.6);
+  const fill = new DirectionalLight(0xc4dcff, 0.88);
+  fill.position.set(3.4, 1.4, 2.7);
   /* A cool rim from behind separates the silhouette from the panel — the same
      job the SVG's edge occlusion used to do. */
-  const rim = new DirectionalLight(0x7fe8c4, 1.15);
-  rim.position.set(0.5, 1.8, -3.6);
+  const rim = new DirectionalLight(0x7fe8c4, 1.48);
+  rim.position.set(0.7, 2.1, -3.8);
   const KEY_BASE = key.intensity;
   const FILL_BASE = fill.intensity;
   const RIM_BASE = rim.intensity;
@@ -243,6 +245,11 @@ function createWorld(
   const figure = new Group();
   figure.name = "strength-muscle-mannequin";
   figure.userData.partId = "root";
+  /* The reference's heroic anatomy is broader than a naturalistic seven-head
+     template. Apply the measured 12% lateral correction at the shared root so
+     muscles, base segments, sockets, colliders and picking surfaces retain
+     exact registration with one another. */
+  figure.scale.x = 1.12;
   scene.add(figure);
 
   const geometries: BufferGeometry[] = [];
@@ -262,10 +269,12 @@ function createWorld(
   };
   const explodableParts: Group[] = [];
 
-  const baseMaterial = new MeshStandardMaterial({
+  const baseMaterial = new MeshPhysicalMaterial({
     color: new Color(FALLBACK.base),
-    roughness: 0.66,
-    metalness: 0.03
+    roughness: 0.48,
+    metalness: 0.02,
+    clearcoat: 0.16,
+    clearcoatRoughness: 0.42
   });
   materials.push(baseMaterial);
 
@@ -309,6 +318,111 @@ function createWorld(
     }
   }
 
+  // ---- Anatomical base detail -----------------------------------------
+  /*
+   * The swept envelopes establish a continuous silhouette; these smaller
+   * volumes are the landmarks the reference relies on at human scale. They
+   * stay children of the existing semantic part pivots, so explode, picking
+   * and disposal still agree on what constitutes a hand, head, knee or foot.
+   */
+  const addBaseDetail = (
+    parentId: string,
+    name: string,
+    geometry: BufferGeometry,
+    position: [number, number, number],
+    scale: [number, number, number] = [1, 1, 1],
+    rotation: [number, number, number] = [0, 0, 0]
+  ) => {
+    const parent = nodes[parentId];
+    if (!(parent instanceof Group)) {
+      geometry.dispose();
+      return;
+    }
+    geometries.push(geometry);
+    const mesh = new Mesh(geometry, baseMaterial);
+    mesh.name = name;
+    mesh.position.set(...position);
+    mesh.scale.set(...scale);
+    mesh.rotation.set(...rotation);
+    mesh.userData.partId = parentId;
+    mesh.userData.explodeWithParent = true;
+    parent.add(mesh);
+    meshes[name] = mesh;
+    pickTargets.push(mesh);
+  };
+
+  const detailSphere = () => new SphereGeometry(1, 24, 16);
+  addBaseDetail(
+    "body-head-center",
+    "body-head-ear-right",
+    detailSphere(),
+    [0.174, 3.2, -0.002],
+    [0.026, 0.052, 0.018],
+    [0, 0, -0.08]
+  );
+  addBaseDetail(
+    "body-head-center",
+    "body-head-ear-left",
+    detailSphere(),
+    [-0.174, 3.2, -0.002],
+    [0.026, 0.052, 0.018],
+    [0, 0, 0.08]
+  );
+
+  for (const sign of [1, -1] as const) {
+    const side = sign > 0 ? "right" : "left";
+    const handId = `body-hand-${side}`;
+    const handX = sign * 0.766;
+    addBaseDetail(
+      handId,
+      `body-hand-${side}-palm`,
+      detailSphere(),
+      [handX, 1.53, 0.046],
+      [0.097, 0.145, 0.06],
+      [0.06, 0, -sign * 0.035]
+    );
+    const fingerOffsets = [-0.054, -0.018, 0.018, 0.052];
+    fingerOffsets.forEach((offset, index) => {
+      const length = 0.132 + index * 0.009;
+      addBaseDetail(
+        handId,
+        `body-hand-${side}-finger-${index + 1}`,
+        new CapsuleGeometry(0.021, length, 5, 10),
+        [handX + sign * offset, 1.31 + index * 0.004, 0.052],
+        [1, 1, 0.86],
+        [0.02 * (index - 1.5), 0, -sign * 0.035 * (index - 1.5)]
+      );
+    });
+    addBaseDetail(
+      handId,
+      `body-hand-${side}-thumb`,
+      new CapsuleGeometry(0.021, 0.118, 5, 10),
+      [sign * 0.828, 1.485, 0.065],
+      [1, 1, 0.9],
+      [0.08, 0, -sign * 0.32]
+    );
+    addBaseDetail(
+      `body-thigh-${side}`,
+      `body-knee-${side}-patella`,
+      detailSphere(),
+      [sign * 0.143, 0.905, 0.096],
+      [0.084, 0.122, 0.042]
+    );
+
+    const footId = `body-foot-${side}`;
+    const toeOffsets = [-0.069, -0.034, 0, 0.033, 0.061];
+    toeOffsets.forEach((offset, index) => {
+      const size = 1 - index * 0.085;
+      addBaseDetail(
+        footId,
+        `body-foot-${side}-toe-${index + 1}`,
+        detailSphere(),
+        [sign * (0.132 + offset), 0.036, 0.305 - index * 0.006],
+        [0.034 * size, 0.022 * size, 0.062 * size]
+      );
+    });
+  }
+
   // ---- Muscles ---------------------------------------------------------
   const groups = new Map<MuscleId, MuscleGroup>();
   const groupOf = (id: MuscleId): MuscleGroup => {
@@ -318,9 +432,9 @@ function createWorld(
     }
     const material = new MeshPhysicalMaterial({
       color: new Color(FALLBACK.heat[0]),
-      roughness: 0.42,
+      roughness: 0.34,
       metalness: 0.02,
-      clearcoat: 0.24,
+      clearcoat: 0.34,
       clearcoatRoughness: 0.28,
       emissive: new Color(FALLBACK.heat[0]),
       emissiveIntensity: 0
@@ -469,7 +583,7 @@ function createWorld(
   const shadow = new Mesh(shadowGeometry, shadowMaterial);
   shadow.rotation.x = -Math.PI / 2;
   shadow.position.y = 0.006;
-  shadow.scale.set(1.5, 0.72, 1);
+  shadow.scale.set(1.66, 0.72, 1);
   shadow.renderOrder = -1;
   scene.add(shadow);
 
@@ -693,7 +807,7 @@ function createWorld(
   // ---- Frame -----------------------------------------------------------
   /* Distance is derived from the framing rather than fixed, so the figure
      fills whatever height the panel gives it. */
-  const distance = (FIGURE_HEIGHT * 1.1) / (2 * Math.tan((FOV * Math.PI) / 360));
+  const distance = (FIGURE_HEIGHT * 1.035) / (2 * Math.tan((FOV * Math.PI) / 360));
 
   const tick = () => {
     frame = 0;
@@ -780,7 +894,7 @@ function createWorld(
     figure.rotation.y = rotation;
     const bob = idle ? Math.sin(clock * 0.85) * 0.016 : 0;
     figure.position.y = bob;
-    shadow.scale.x = 1.5 - bob * 2.4;
+    shadow.scale.x = 1.66 - bob * 2.4;
     shadow.scale.y = 0.72 - bob * 1.15;
 
     camera.position.set(

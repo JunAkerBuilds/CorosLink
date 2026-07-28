@@ -33,6 +33,13 @@ import type {
   TrainingHubActivity,
   TrainingHubActivityDetail,
 } from "../../electron/types";
+import { useUnitSystem } from "../units/UnitSystemProvider";
+import {
+  distanceUnit,
+  elevationUnit,
+  metersToDisplayDistance,
+  metersToElevation,
+} from "../units/units";
 import {
   aggregateActivityStats,
   bucketVisitsGeographically,
@@ -302,6 +309,7 @@ export function ActivityGlobeCard({
   onOpenTraining,
   onSelectActivity,
 }: ActivityGlobeCardProps) {
+  const { unitSystem } = useUnitSystem();
   const globeRendererRef = useRef<ActivityGlobeRendererHandle>(null);
   const streetEnterTimerRef = useRef<number | null>(null);
 
@@ -443,7 +451,7 @@ export function ActivityGlobeCard({
           .map((activity, order) => ({
             order,
             elevation: Math.max(0, activity.elevationGain ?? 0),
-            distance: Math.max(0, (activity.distance ?? 0) / 1000),
+            distance: Math.max(0, activity.distance ?? 0),
           }));
         return {
           key: bucket.key,
@@ -709,7 +717,7 @@ export function ActivityGlobeCard({
     restoreBaselineCamera(900);
   };
 
-  const mapDistance = formatOverallDistance(overall.totalDistanceMeters);
+  const mapDistance = formatOverallDistance(overall.totalDistanceMeters, unitSystem);
   const mapDuration = formatOverallDuration(overall.totalDurationSeconds);
   const mapHasRoute = routePoints.length > 0;
   const mapHasVisits = visits.length > 0;
@@ -761,8 +769,10 @@ export function ActivityGlobeCard({
     overall.totalElevationMeters > 0
       ? {
           label: "Elevation gained",
-          value: Math.round(overall.totalElevationMeters).toLocaleString(),
-          unit: "m",
+          value: Math.round(
+            metersToElevation(overall.totalElevationMeters, unitSystem),
+          ).toLocaleString(),
+          unit: elevationUnit(unitSystem),
           icon: Mountain,
         }
       : null,
@@ -925,10 +935,10 @@ export function ActivityGlobeCard({
                   <div>
                     <dt>Distance</dt>
                     <dd>
-                      {(selectedLocation.distanceMeters / 1000).toLocaleString(
+                      {metersToDisplayDistance(selectedLocation.distanceMeters, unitSystem).toLocaleString(
                         undefined,
                         { maximumFractionDigits: 1 },
-                      )} <small>km</small>
+                      )} <small>{distanceUnit(unitSystem)}</small>
                     </dd>
                   </div>
                   <div>
@@ -950,14 +960,20 @@ export function ActivityGlobeCard({
                     </span>
                     <strong>
                       {selectedLocation.elevationMeters > 0
-                        ? `${Math.round(selectedLocation.elevationMeters).toLocaleString()} m`
-                        : `${(selectedLocation.distanceMeters / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} km`}
+                        ? `${Math.round(metersToElevation(selectedLocation.elevationMeters, unitSystem)).toLocaleString()} ${elevationUnit(unitSystem)}`
+                        : `${metersToDisplayDistance(selectedLocation.distanceMeters, unitSystem).toLocaleString(undefined, { maximumFractionDigits: 1 })} ${distanceUnit(unitSystem)}`}
                     </strong>
                   </div>
                   {selectedLocation.trend.length > 1 ? (
                     <div className="training-map-location-chart" aria-hidden="true">
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={selectedLocation.trend}>
+                        <AreaChart
+                          data={selectedLocation.trend.map((point) => ({
+                            ...point,
+                            elevation: metersToElevation(point.elevation, unitSystem),
+                            distance: metersToDisplayDistance(point.distance, unitSystem),
+                          }))}
+                        >
                           <defs>
                             <linearGradient
                               id="trainingMapLocationFill"
@@ -1216,9 +1232,9 @@ export function ActivityGlobeCard({
                   </span>
                   <span className="training-map-recent-value">
                     <strong>
-                      {(summary.distanceMeters / 1000).toLocaleString(undefined, {
+                      {metersToDisplayDistance(summary.distanceMeters, unitSystem).toLocaleString(undefined, {
                         maximumFractionDigits: 0,
-                      })} <small>km</small>
+                      })} <small>{distanceUnit(unitSystem)}</small>
                     </strong>
                     <small>{formatVisitDate(summary.lastVisited)}</small>
                   </span>

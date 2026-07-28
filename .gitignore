@@ -14,3 +14,4 @@ bin/*/
 /tmp
 /output
 /.work
+/.agents/skills

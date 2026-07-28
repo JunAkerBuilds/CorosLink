@@ -30,10 +30,16 @@ assert.equal(context.thresholdPaceSecondsPerKm, 240);
 assert.equal(context.ftp, 300);
 assert.equal(context.criticalPower, 350);
 assert.deepEqual(context.defaultPoolLength, { value: 25, unit: "m" });
-const yardContext = editor.parseWorkoutEditorContext({ poolLength: 2286, poolLengthUnit: 4 });
+const yardContext = editor.parseWorkoutEditorContext(
+  { poolLength: 2286, poolLengthUnit: 4 },
+  "imperial"
+);
 assert.equal(Number(yardContext.defaultPoolLength.value.toFixed(2)), 25);
 assert.equal(yardContext.defaultPoolLength.unit, "yd");
-const imperialContext = editor.parseWorkoutEditorContext({ unit: 1, thresholdPace: 300_000 });
+const imperialContext = editor.parseWorkoutEditorContext(
+  { unit: 1, thresholdPace: 300_000 },
+  "imperial"
+);
 assert.equal(imperialContext.distanceUnit, "imperial");
 assert.equal(imperialContext.paceUnit, "mi");
 assert.equal(imperialContext.thresholdPaceSecondsPerKm, 300);

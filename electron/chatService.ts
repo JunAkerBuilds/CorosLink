@@ -84,8 +84,14 @@ import type {
   TrainingHubUpcomingWorkout,
   UploadPlanResult,
   PlanDraftPreview,
-  DeleteWorkoutResult
+  DeleteWorkoutResult,
+  UnitSystem
 } from "./types";
+import {
+  formatDistanceValue,
+  formatElevationValue,
+  normalizeUnitSystem
+} from "./unitSystem.js";
 
 // =========================================================================
 // OpenAI "Sign in with ChatGPT" provider details.
@@ -579,8 +585,10 @@ function getStoredToken(): StoredChatToken | null {
 export async function streamChat(
   mainWindow: BrowserWindow | null | undefined,
   requestId: string,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
+  unitSystem: UnitSystem = "metric"
 ): Promise<void> {
+  unitSystem = normalizeUnitSystem(unitSystem);
   const send = (channel: string, payload: unknown) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send(channel, payload);
@@ -611,7 +619,8 @@ export async function streamChat(
       await ensureAllMcpConnected();
       const chatTools = getClaudeCodeTools(settings.claudeCode.permissions);
       const { text: instructions, hasData } = await buildTrainingContext(
-        settings.claudeCode.permissions
+        settings.claudeCode.permissions,
+        unitSystem
       );
       const effectiveInstructions = withLiveToolInstructions(
         instructions,
@@ -666,6 +675,7 @@ export async function streamChat(
             args,
             send,
             requestId,
+            unitSystem,
             settings.claudeCode.permissions
           );
         }
@@ -682,7 +692,10 @@ export async function streamChat(
     }
 
     if (settings.provider === "local") {
-      const { text: instructions, hasData } = await buildTrainingContext();
+      const { text: instructions, hasData } = await buildTrainingContext(
+        undefined,
+        unitSystem
+      );
       const runtimeConfig = getLocalRuntimeConfig(settings.local);
 
       if (runtimeConfig.toolsEnabled) {
@@ -743,7 +756,7 @@ export async function streamChat(
           const tool = findChatTool(call.name);
           const args = parseFunctionCallArguments(call, tool);
           console.log("[chat] tool call:", call.name);
-          return executeChatTool(call.name, args, send, requestId);
+          return executeChatTool(call.name, args, send, requestId, unitSystem);
         }
       });
       fullText = result.fullText;
@@ -752,7 +765,10 @@ export async function streamChat(
     }
 
     const token = await getValidToken();
-    const { text: instructions, hasData } = await buildTrainingContext();
+    const { text: instructions, hasData } = await buildTrainingContext(
+      undefined,
+      unitSystem
+    );
 
     // Reconnect a previously-authorized COROS MCP session, then expose its tools
     // to the model as function tools so it can pull data on demand.
@@ -866,7 +882,13 @@ export async function streamChat(
         try {
           const sourceTool = findChatTool(call.name);
           const args = parseFunctionCallArguments(call, sourceTool);
-          output = await executeChatTool(call.name, args, send, requestId);
+          output = await executeChatTool(
+            call.name,
+            args,
+            send,
+            requestId,
+            unitSystem
+          );
         } catch (toolError) {
           output =
             "Error: " +
@@ -934,9 +956,10 @@ export function cancelChat(requestId: string): void {
 }
 
 export async function uploadTrainingPlanDraft(
-  draftId: string
+  draftId: string,
+  unitSystem: UnitSystem = "metric"
 ): Promise<UploadPlanResult> {
-  return uploadPlanDraftById(draftId);
+  return uploadPlanDraftById(draftId, normalizeUnitSystem(unitSystem));
 }
 
 export async function confirmWorkoutDelete(
@@ -1017,6 +1040,7 @@ async function executeChatTool(
   args: Record<string, unknown>,
   send: (channel: string, payload: unknown) => void,
   requestId: string,
+  unitSystem: UnitSystem,
   claudePermissions?: ClaudeCodePermissions
 ): Promise<string> {
   if (isChatWorkoutTool(name)) {
@@ -1035,7 +1059,8 @@ async function executeChatTool(
           preview
         });
       },
-      allowUpcomingWorkouts: claudePermissions?.upcomingWorkouts !== false
+      allowUpcomingWorkouts: claudePermissions?.upcomingWorkouts !== false,
+      unitSystem
     });
   }
   if (isChatActivityTool(name)) {
@@ -1048,7 +1073,8 @@ async function executeChatTool(
             kind: "activityVisual",
             preview
           });
-        }
+        },
+        unitSystem
       });
     } catch (caught) {
       const message =
@@ -1080,7 +1106,8 @@ async function executeChatTool(
             kind: "hrZoneSummary",
             preview
           });
-        }
+        },
+        unitSystem
       });
     } catch (caught) {
       const message =
@@ -1356,8 +1383,13 @@ function extractSseData(frame: string): string | null {
 // ----- Training-data context assembly -----
 
 async function buildTrainingContext(
-  permissions?: ClaudeCodePermissions
+  permissions?: ClaudeCodePermissions,
+  unitSystem: UnitSystem = "metric"
 ): Promise<{ text: string; hasData: boolean }> {
+  const unitInstruction =
+    `The athlete selected ${unitSystem === "imperial" ? "Imperial" : "Metric"} units. ` +
+    `Use ${unitSystem === "imperial" ? "miles, feet, min/mi, mph, pounds, and yards for swims" : "kilometres, metres, min/km, km/h, and kilograms"} in every user-facing answer and tool summary. ` +
+    "Keep tool-schema distance, elevation, pace, and weight fields canonical internally; do not reinterpret their numeric values.";
   let status: Awaited<ReturnType<typeof getTrainingHubStatus>>;
   try {
     status = getTrainingHubStatus();
@@ -1368,7 +1400,7 @@ async function buildTrainingContext(
     return {
       hasData: false,
       text:
-        `${COACH_INSTRUCTIONS}\n\n` +
+        `${COACH_INSTRUCTIONS}\n\n${unitInstruction}\n\n` +
         "NOTE: The athlete is not signed in to COROS Training Hub, so no training " +
         "data is available. Encourage them to connect it for personalised advice."
     };
@@ -1389,12 +1421,12 @@ async function buildTrainingContext(
       : Promise.resolve([] as TrainingHubUpcomingWorkout[])
   ]);
 
-  const sections: string[] = [COACH_INSTRUCTIONS, ""];
+  const sections: string[] = [COACH_INSTRUCTIONS, "", unitInstruction, ""];
   let hasData = false;
 
   if (activities.status === "fulfilled" && activities.value.length > 0) {
     sections.push("## Recent activities");
-    sections.push(formatActivities(activities.value.slice(0, 8)));
+    sections.push(formatActivities(activities.value.slice(0, 8), unitSystem));
     sections.push("");
     hasData = true;
   }
@@ -1409,7 +1441,7 @@ async function buildTrainingContext(
   }
   if (upcoming.status === "fulfilled" && upcoming.value.length > 0) {
     sections.push("## Upcoming workouts");
-    sections.push(formatUpcoming(upcoming.value.slice(0, 8)));
+    sections.push(formatUpcoming(upcoming.value.slice(0, 8), unitSystem));
     sections.push("");
     hasData = true;
   }
@@ -1424,7 +1456,10 @@ async function buildTrainingContext(
   return { text: sections.join("\n").trim(), hasData };
 }
 
-function formatActivities(activities: TrainingHubActivity[]): string {
+function formatActivities(
+  activities: TrainingHubActivity[],
+  unitSystem: UnitSystem
+): string {
   return activities
     .map((activity) => {
       const parts = [
@@ -1433,11 +1468,20 @@ function formatActivities(activities: TrainingHubActivity[]): string {
         activity.startTime ? isoDate(activity.startTime) : "",
         activity.sportName ?? "",
         activity.name ?? "",
-        activity.distance ? `${(activity.distance / 1000).toFixed(2)} km` : "",
+        activity.distance
+          ? formatDistanceValue(activity.distance, unitSystem, {
+              swim:
+                activity.sportType === 300 ||
+                activity.sportType === 301 ||
+                /swim/i.test(activity.sportName ?? "")
+            })
+          : "",
         activity.duration ? formatDurationSeconds(activity.duration) : "",
         activity.avgHr ? `avg HR ${activity.avgHr}` : "",
         activity.trainingLoad ? `load ${activity.trainingLoad}` : "",
-        activity.elevationGain ? `+${Math.round(activity.elevationGain)} m` : ""
+        activity.elevationGain
+          ? `+${formatElevationValue(activity.elevationGain, unitSystem)}`
+          : ""
       ].filter(Boolean);
       return `- ${parts.join(" · ")}`;
     })
@@ -1466,16 +1510,39 @@ function formatDashboard(dashboard: TrainingHubDashboard): string {
   return lines.join("\n");
 }
 
-function formatUpcoming(workouts: TrainingHubUpcomingWorkout[]): string {
+function formatUpcomingVolume(
+  volume: string | undefined,
+  unitSystem: UnitSystem
+): string {
+  const value = volume?.trim() ?? "";
+  const match = value.match(/^([\d.]+)\s*(km|m)$/i);
+  if (!match) return value;
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount)) return value;
+  return formatDistanceValue(
+    amount * (match[2]?.toLowerCase() === "km" ? 1_000 : 1),
+    unitSystem,
+    { swim: match[2]?.toLowerCase() === "m" }
+  );
+}
+
+function formatUpcoming(
+  workouts: TrainingHubUpcomingWorkout[],
+  unitSystem: UnitSystem
+): string {
   return workouts
     .map((workout) => {
       const exerciseDetail = workout.exercises?.length
-        ? formatScheduledExercisesForChat(workout.exercises)
+        ? formatScheduledExercisesForChat(
+            workout.exercises,
+            unitSystem,
+            Number(workout.sportType) === 3
+          )
         : undefined;
       const parts = [
         workout.happenDay,
         workout.name,
-        workout.volume ?? "",
+        formatUpcomingVolume(workout.volume, unitSystem),
         workout.trainingLoad ? `load ${workout.trainingLoad}` : "",
         exerciseDetail ? `exercises: ${exerciseDetail}` : ""
       ].filter(Boolean);

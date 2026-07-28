@@ -1,9 +1,11 @@
 import { Timer } from "lucide-react";
 import type { TrainingHubRacePredictor } from "../../../electron/types";
 import {
+  formatDistanceMeters,
   formatDurationSeconds,
   formatPaceSecondsPerKm
 } from "../formatters";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
 
 interface RacePredictorCardsProps {
   racePredictor: TrainingHubRacePredictor | null;
@@ -14,6 +16,7 @@ function hasPace(value?: number): value is number {
 }
 
 export function RacePredictorCards({ racePredictor }: RacePredictorCardsProps) {
+  const { unitSystem } = useUnitSystem();
   const scores = racePredictor?.runScoreList ?? [];
   const runningLevel = racePredictor?.staminaLevel;
 
@@ -38,10 +41,10 @@ export function RacePredictorCards({ racePredictor }: RacePredictorCardsProps) {
             const label =
               score.distanceLabel ??
               (score.distance
-                ? `${(score.distance / 1000).toFixed(1)} km`
+                ? formatDistanceMeters(score.distance, unitSystem)
                 : `Race ${index + 1}`);
             const paceLabel = hasPace(score.avgPace)
-              ? formatPaceSecondsPerKm(score.avgPace)
+              ? formatPaceSecondsPerKm(score.avgPace, unitSystem)
               : null;
 
             return (

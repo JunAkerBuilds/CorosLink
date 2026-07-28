@@ -20,6 +20,7 @@ import type {
   IntervalsStatus
 } from "../../../electron/types";
 import type { CorosLinkApi } from "../../coroslink-api";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
 import {
   formatDistanceMeters,
   formatTrainingTimestamp
@@ -72,6 +73,7 @@ function activityTypeIcon(type: string) {
 }
 
 export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
+  const { unitSystem } = useUnitSystem();
   const [status, setStatus] = useState<IntervalsStatus>({ connected: false });
   const [loadingStatus, setLoadingStatus] = useState(true);
 
@@ -456,7 +458,11 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
                             </span>
                           </td>
                           <td className="data-intervals-num">
-                            {formatDistanceMeters(row.distanceM)}
+                            {formatDistanceMeters(
+                              row.distanceM,
+                              unitSystem,
+                              row.type.toLowerCase().includes("swim")
+                            )}
                           </td>
                           <td className="data-intervals-status-col">
                             <div className="data-intervals-status">

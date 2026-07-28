@@ -10,9 +10,12 @@ import {
   formatDurationSeconds,
   formatElevationMeters,
   formatOptionalNumber,
+  formatPaceSecondsPerKm,
   formatTrainingTimestamp
 } from "../formatters";
-import { resolveSportName } from "../sportTypes";
+import { isCyclingSportType, isSwimSportType, resolveSportName } from "../sportTypes";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
+import { formatSpeedValue } from "../../units/units";
 import { ActivityElevationChart } from "./ActivityElevationChart";
 import { ActivityRouteMap } from "./ActivityRouteMap";
 import { StrengthDetailPanel } from "./StrengthDetailPanel";
@@ -49,6 +52,7 @@ export function ActivityDetailPanel({
   busy = null,
   embedded = false
 }: ActivityDetailPanelProps) {
+  const { unitSystem } = useUnitSystem();
   const [showRaw, setShowRaw] = useState(false);
   const sportName = useMemo(() => {
     if (detail) {
@@ -106,6 +110,19 @@ export function ActivityDetailPanel({
 
   const startTime = detail.startTime ?? listActivity?.startTime;
   const showLaps = hasPopulatedLaps(detail);
+  const swim = isSwimSportType(detail.sportType ?? listActivity?.sportType);
+  const cycling =
+    isCyclingSportType(detail.sportType ?? listActivity?.sportType) ||
+    /bike|cycl|ride/i.test(sportName ?? "");
+  const distance = detail.distance ?? listActivity?.distance;
+  const duration = detail.duration ?? listActivity?.duration;
+  const performance = distance && duration
+    ? cycling
+      ? formatSpeedValue((distance / 1000) / (duration / 3600), unitSystem)
+      : !swim
+        ? formatPaceSecondsPerKm(duration / (distance / 1000), unitSystem)
+        : undefined
+    : undefined;
 
   return (
     <div className={panelClassName}>
@@ -137,8 +154,11 @@ export function ActivityDetailPanel({
             />
             <DetailStat
               label="Distance"
-              value={formatDistanceMeters(detail.distance)}
+              value={formatDistanceMeters(detail.distance, unitSystem, swim)}
             />
+            {performance ? (
+              <DetailStat label={cycling ? "Avg Speed" : "Avg Pace"} value={performance} />
+            ) : null}
             <DetailStat label="Avg HR" value={formatOptionalNumber(detail.avgHr)} />
             <DetailStat label="Max HR" value={formatOptionalNumber(detail.maxHr)} />
             <DetailStat
@@ -147,7 +167,7 @@ export function ActivityDetailPanel({
             />
             <DetailStat
               label="Elevation"
-              value={formatElevationMeters(detail.elevationGain)}
+              value={formatElevationMeters(detail.elevationGain, unitSystem)}
             />
             <DetailStat
               label="Training Load"
@@ -191,10 +211,10 @@ export function ActivityDetailPanel({
                       <tr key={lap.index}>
                         <td>{lap.index}</td>
                         <td>{formatDurationSeconds(lap.duration)}</td>
-                        <td>{formatDistanceMeters(lap.distance)}</td>
+                        <td>{formatDistanceMeters(lap.distance, unitSystem, swim)}</td>
                         <td>{formatOptionalNumber(lap.avgHr)}</td>
                         <td>{formatOptionalNumber(lap.maxHr)}</td>
-                        <td>{formatElevationMeters(lap.elevationGain)}</td>
+                        <td>{formatElevationMeters(lap.elevationGain, unitSystem)}</td>
                       </tr>
                     ))}
                   </tbody>

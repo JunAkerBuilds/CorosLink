@@ -34,6 +34,12 @@ import {
   Layers3,
   RotateCcw
 } from "lucide-react";
+import {
+  calculateFocusDistance,
+  cinematicDollyProgress,
+  cinematicEaseOut,
+  nearestOrbitAngle
+} from "./bodyFocus";
 import { MUSCLE_BY_ID, MUSCLES, type MuscleId } from "./muscles";
 import {
   heatLevel,
@@ -53,8 +59,10 @@ interface BodyMapV2Props {
   selected: MuscleId | null;
   hovered: MuscleId | null;
   onHover: (muscle: MuscleId | null) => void;
-  onSelect: (muscle: MuscleId) => void;
+  onSelect: (muscle: MuscleId | null) => void;
   onViewChange?: (view: BodyView) => void;
+  /** Layer visibility/order editing is an authoring tool, hidden in prod. */
+  showLayerControls?: boolean;
 }
 
 const MODEL_URL = "./assets/anatomy/muscular_lite.glb";
@@ -68,6 +76,12 @@ const COLOR_EPSILON = 0.0016;
 const MAX_PIXEL_RATIO = 1.5;
 const OBLIQUE_MEDIAL_TRIM_RATIO = 0.028;
 const LAYER_STORAGE_KEY = "coroslink-strength-muscle-layers-v1";
+const SELECT_TRANSITION_MS = 900;
+const CHANGE_SELECTION_MS = 750;
+const CLEAR_SELECTION_MS = 700;
+const CHANGE_VIEW_MS = 650;
+const CALLOUT_REVEAL_PROGRESS = 0.58;
+const CAMERA_EYE_LIFT = 0.045;
 
 // Anatomy Engine's source is a teaching dissection, so it includes superficial
 // and deep structures at the same time. A workload heat map needs a coherent
@@ -247,10 +261,6 @@ function colorDistance(a: Color, b: Color): number {
   return Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b);
 }
 
-function normalizeAngle(value: number): number {
-  return Math.atan2(Math.sin(value), Math.cos(value));
-}
-
 function structureIdFor(object: Object3D): string | null {
   const embedded = object.userData.structure_id;
   if (typeof embedded === "string" && embedded.length > 0) {
@@ -428,17 +438,32 @@ function createSymmetricSurfacePair(
 interface AnatomyWorld {
   dispose: () => void;
   refreshPalette: () => void;
-  setFocus: (hovered: MuscleId | null, selected: MuscleId | null) => void;
+  setHover: (hovered: MuscleId | null) => void;
   setLayers: (order: MuscleId[], hidden: Set<MuscleId>) => void;
   setLevels: (levels: Record<MuscleId, number>) => void;
-  setView: (view: BodyView) => void;
+  setPresentation: (view: BodyView, selected: MuscleId | null) => void;
+}
+
+interface CameraPose {
+  angle: number;
+  target: Vector3;
+  distance: number;
+}
+
+interface CameraTransition {
+  from: CameraPose;
+  to: CameraPose;
+  startedAt: number;
+  duration: number;
+  revealCallout: boolean;
 }
 
 function createWorld(
   container: HTMLDivElement,
+  callout: HTMLDivElement,
   handlers: {
     onHover: (muscle: MuscleId | null) => void;
-    onSelect: (muscle: MuscleId) => void;
+    onSelect: (muscle: MuscleId | null) => void;
     onViewChange: (view: BodyView) => void;
     onLoad: () => void;
     onLoadProgress: (progress: number | null) => void;
@@ -474,8 +499,10 @@ function createWorld(
     (MODEL_HEIGHT * CAMERA_FRAMING) /
     (2 * Math.tan((CAMERA_FOV * Math.PI) / 360));
   const cameraTarget = new Vector3(0, TARGET_Y, 0);
-  camera.position.set(0, TARGET_Y + 0.05, cameraDistance);
+  camera.position.set(0, TARGET_Y + CAMERA_EYE_LIFT, cameraDistance);
   camera.lookAt(cameraTarget);
+  callout.dataset.visible = "false";
+  callout.dataset.side = "right";
 
   const hemi = new HemisphereLight(0x93b8dc, 0x151a1f, 0.78);
   const key = new DirectionalLight(0xfff8ed, 2.35);
@@ -558,7 +585,18 @@ function createWorld(
   let localHover: MuscleId | null = null;
   let externalHover: MuscleId | null = null;
   let selected: MuscleId | null = null;
-  let cameraTargetAngle: number | null = null;
+  let presentationView: BodyView = "front";
+  let modelReady = false;
+  let calloutProjectionReady = false;
+  let calloutRevealReady = false;
+  let cameraPose: CameraPose = {
+    angle: 0,
+    target: cameraTarget.clone(),
+    distance: cameraDistance
+  };
+  let cameraTransition: CameraTransition | null = null;
+  let selectedBounds: Box3 | null = null;
+  let selectedAnchor: Vector3 | null = null;
   let frame = 0;
   let visible = true;
   let disposed = false;
@@ -567,6 +605,9 @@ function createWorld(
 
   const pointer = new Vector2();
   const raycaster = new Raycaster();
+  const boundsSize = new Vector3();
+  const projectedAnchor = new Vector3();
+  const cameraRight = new Vector3();
   let pointerInside = false;
   let hoverDirty = false;
 
@@ -594,6 +635,163 @@ function createWorld(
     for (const group of groups.values()) {
       group.target.copy(palette.heat[group.level] ?? palette.base);
     }
+    needsRender = true;
+    start();
+  };
+
+  const updateCalloutVisibility = () => {
+    callout.dataset.visible = String(
+      selected !== null && calloutProjectionReady && calloutRevealReady
+    );
+  };
+
+  const applyCameraPose = () => {
+    cameraTarget.copy(cameraPose.target);
+    camera.position.set(
+      cameraPose.target.x + Math.sin(cameraPose.angle) * cameraPose.distance,
+      cameraPose.target.y + CAMERA_EYE_LIFT,
+      cameraPose.target.z + Math.cos(cameraPose.angle) * cameraPose.distance
+    );
+    camera.lookAt(cameraPose.target);
+    // Keep the studio key, fill, and rim stable relative to the viewer.
+    lightRig.rotation.y = cameraPose.angle;
+  };
+
+  const muscleBounds = (muscle: MuscleId): Box3 | null => {
+    const meshes = muscleMeshes.get(muscle) ?? [];
+    if (!modelReady || meshes.length === 0) {
+      return null;
+    }
+    modelRoot.updateMatrixWorld(true);
+    const bounds = new Box3().makeEmpty();
+    for (const mesh of meshes) {
+      bounds.expandByObject(mesh, true);
+    }
+    return bounds.isEmpty() ? null : bounds;
+  };
+
+  const destinationPose = (): CameraPose => {
+    const angle = presentationView === "front" ? 0 : Math.PI;
+    selectedBounds = selected ? muscleBounds(selected) : null;
+    if (!selectedBounds) {
+      selectedAnchor = null;
+      return {
+        angle: nearestOrbitAngle(cameraPose.angle, angle),
+        target: new Vector3(0, TARGET_Y, 0),
+        distance: cameraDistance
+      };
+    }
+
+    const size = selectedBounds.getSize(boundsSize);
+    const center = selectedBounds.getCenter(new Vector3());
+    cameraRight.set(Math.cos(angle), 0, -Math.sin(angle));
+    const compositionOffset = Math.min(
+      0.1,
+      Math.max(0.025, size.x * 0.16)
+    );
+    const target = center.clone().addScaledVector(cameraRight, compositionOffset);
+    const distance = calculateFocusDistance({
+      width: size.x * 1.22,
+      height: size.y,
+      verticalFovDegrees: CAMERA_FOV,
+      aspect: camera.aspect,
+      fullBodyDistance: cameraDistance
+    });
+
+    // Bias the anchor toward the camera-right copy of bilateral groups, then
+    // lift it just off the visible surface so the callout line reads cleanly.
+    selectedAnchor = center.clone();
+    selectedAnchor.addScaledVector(cameraRight, size.x * 0.34);
+    selectedAnchor.y += size.y * 0.06;
+    selectedAnchor.z =
+      presentationView === "front"
+        ? selectedBounds.max.z + 0.008
+        : selectedBounds.min.z - 0.008;
+
+    return {
+      angle: nearestOrbitAngle(cameraPose.angle, angle),
+      target,
+      distance
+    };
+  };
+
+  const positionCallout = () => {
+    if (!selectedAnchor || !selected) {
+      calloutProjectionReady = false;
+      updateCalloutVisibility();
+      return;
+    }
+
+    projectedAnchor.copy(selectedAnchor).project(camera);
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    const projectionIsValid =
+      width > 0 &&
+      height > 0 &&
+      Number.isFinite(projectedAnchor.x) &&
+      Number.isFinite(projectedAnchor.y) &&
+      projectedAnchor.z >= -1 &&
+      projectedAnchor.z <= 1;
+    if (!projectionIsValid) {
+      calloutProjectionReady = false;
+      updateCalloutVisibility();
+      return;
+    }
+
+    const safeInset = 16;
+    const anchorX = (projectedAnchor.x * 0.5 + 0.5) * width;
+    const anchorY = (-projectedAnchor.y * 0.5 + 0.5) * height;
+    const calloutWidth = Math.max(72, callout.offsetWidth);
+    const calloutHeight = Math.max(28, callout.offsetHeight);
+    const fitsRight = anchorX + calloutWidth <= width - safeInset;
+    const side = fitsRight ? "right" : "left";
+    const unclampedX = fitsRight ? anchorX : anchorX - calloutWidth;
+    const x = Math.min(
+      width - safeInset - calloutWidth,
+      Math.max(safeInset, unclampedX)
+    );
+    const y = Math.min(
+      height - safeInset - calloutHeight,
+      Math.max(safeInset, anchorY - calloutHeight / 2)
+    );
+    callout.dataset.side = side;
+    callout.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
+    calloutProjectionReady = true;
+    updateCalloutVisibility();
+  };
+
+  const applyPresentationImmediately = () => {
+    cameraTransition = null;
+    cameraPose = destinationPose();
+    applyCameraPose();
+    calloutRevealReady = selected !== null && selectedAnchor !== null;
+    positionCallout();
+    needsRender = true;
+    start();
+  };
+
+  const beginPresentation = (duration: number) => {
+    const destination = destinationPose();
+    calloutRevealReady = false;
+    updateCalloutVisibility();
+
+    if (reducedMotion || duration <= 0) {
+      cameraPose = destination;
+      applyPresentationImmediately();
+      return;
+    }
+
+    cameraTransition = {
+      from: {
+        angle: cameraPose.angle,
+        target: cameraPose.target.clone(),
+        distance: cameraPose.distance
+      },
+      to: destination,
+      startedAt: performance.now(),
+      duration,
+      revealCallout: selected !== null && selectedAnchor !== null
+    };
     needsRender = true;
     start();
   };
@@ -633,9 +831,11 @@ function createWorld(
     }
     updatePointer(event);
     const hit = pick();
-    if (hit) {
-      handlers.onSelect(hit);
+    if (!hit && localHover) {
+      localHover = null;
+      handlers.onHover(null);
     }
+    handlers.onSelect(hit);
   };
 
   const onPointerLeave = () => {
@@ -661,7 +861,6 @@ function createWorld(
     if (next) {
       event.preventDefault();
       handlers.onViewChange(next);
-      world.setView(next);
     }
   };
 
@@ -679,6 +878,16 @@ function createWorld(
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
+    if (modelReady) {
+      if (cameraTransition) {
+        cameraTransition.to = destinationPose();
+        needsRender = true;
+        start();
+        return;
+      }
+      applyPresentationImmediately();
+      return;
+    }
     needsRender = true;
     start();
   };
@@ -707,28 +916,43 @@ function createWorld(
     last = now;
     let animating = false;
 
-    if (cameraTargetAngle !== null) {
-      const offset = camera.position.clone().sub(cameraTarget);
-      const currentAngle = Math.atan2(offset.x, offset.z);
-      const delta = normalizeAngle(cameraTargetAngle - currentAngle);
-      const amount = reducedMotion ? 1 : 1 - Math.exp(-dt * 9);
-      const nextAngle =
-        Math.abs(delta) < 0.002
-          ? cameraTargetAngle
-          : currentAngle + delta * amount;
-      camera.position.set(
-        cameraTarget.x + Math.sin(nextAngle) * cameraDistance,
-        cameraTarget.y + 0.05,
-        cameraTarget.z + Math.cos(nextAngle) * cameraDistance
+    if (cameraTransition) {
+      const progress = Math.min(
+        1,
+        Math.max(0, (now - cameraTransition.startedAt) / cameraTransition.duration)
       );
-      camera.lookAt(cameraTarget);
-      // Keep the studio key, fill, and rim in the same positions relative to
-      // the viewer so the posterior view is lit as clearly as the anterior.
-      lightRig.rotation.y = nextAngle;
-      if (Math.abs(delta) < 0.002) {
-        cameraTargetAngle = null;
+      const orbitProgress = cinematicEaseOut(progress);
+      const dollyProgress = cinematicDollyProgress(progress);
+      cameraPose.angle =
+        cameraTransition.from.angle +
+        (cameraTransition.to.angle - cameraTransition.from.angle) * orbitProgress;
+      cameraPose.target.lerpVectors(
+        cameraTransition.from.target,
+        cameraTransition.to.target,
+        orbitProgress
+      );
+      cameraPose.distance =
+        cameraTransition.from.distance +
+        (cameraTransition.to.distance - cameraTransition.from.distance) *
+          dollyProgress;
+      applyCameraPose();
+      needsRender = true;
+      if (
+        cameraTransition.revealCallout &&
+        progress >= CALLOUT_REVEAL_PROGRESS
+      ) {
+        calloutRevealReady = true;
       }
-      animating = true;
+      if (progress >= 1) {
+        cameraPose.angle = cameraTransition.to.angle;
+        cameraPose.target.copy(cameraTransition.to.target);
+        cameraPose.distance = cameraTransition.to.distance;
+        applyCameraPose();
+        calloutRevealReady = cameraTransition.revealCallout;
+        cameraTransition = null;
+      } else {
+        animating = true;
+      }
     }
 
     if (hoverDirty && pointerInside) {
@@ -764,6 +988,10 @@ function createWorld(
       } else {
         group.material.emissiveIntensity = wantedGlow;
       }
+    }
+
+    if (selected || calloutProjectionReady) {
+      positionCallout();
     }
 
     if (animating || needsRender) {
@@ -886,7 +1114,9 @@ function createWorld(
         sourceBounds
       );
       modelRoot.add(optimizedRoot);
+      modelReady = true;
       applyLayers();
+      beginPresentation(selected ? SELECT_TRANSITION_MS : 0);
 
       const scaledWidth = size.x * scale;
       const scaledDepth = size.z * scale;
@@ -981,12 +1211,12 @@ function createWorld(
       shadowTexture.dispose();
       draco.dispose();
       renderer.dispose();
+      callout.dataset.visible = "false";
       canvas.remove();
     },
     refreshPalette: applyPalette,
-    setFocus(nextHovered, nextSelected) {
+    setHover(nextHovered) {
       externalHover = nextHovered;
-      selected = nextSelected;
       needsRender = true;
       start();
     },
@@ -1007,9 +1237,24 @@ function createWorld(
       needsRender = true;
       start();
     },
-    setView(next) {
-      cameraTargetAngle = next === "front" ? 0 : Math.PI;
-      start();
+    setPresentation(nextView, nextSelected) {
+      const previousSelected = selected;
+      const previousView = presentationView;
+      selected = nextSelected;
+      presentationView = nextView;
+
+      let duration = 0;
+      if (previousSelected && nextSelected && previousSelected !== nextSelected) {
+        duration = CHANGE_SELECTION_MS;
+      } else if (!previousSelected && nextSelected) {
+        duration = SELECT_TRANSITION_MS;
+      } else if (previousSelected && !nextSelected) {
+        duration = CLEAR_SELECTION_MS;
+      } else if (previousView !== nextView) {
+        duration = CHANGE_VIEW_MS;
+      }
+
+      beginPresentation(duration);
     }
   };
 
@@ -1026,9 +1271,11 @@ export function BodyMapV2({
   hovered,
   onHover,
   onSelect,
-  onViewChange
+  onViewChange,
+  showLayerControls = false
 }: BodyMapV2Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const calloutRef = useRef<HTMLDivElement | null>(null);
   const worldRef = useRef<AnatomyWorld | null>(null);
   const handlersRef = useRef({ onHover, onSelect, onViewChange });
   handlersRef.current = { onHover, onSelect, onViewChange };
@@ -1054,6 +1301,10 @@ export function BodyMapV2({
   };
 
   const toggleLayer = (muscle: MuscleId) => {
+    const willHide = !layerPreferences.hidden.has(muscle);
+    if (willHide && selected === muscle) {
+      handlersRef.current.onSelect(null);
+    }
     setLayerPreferences((current) => {
       const hidden = new Set(current.hidden);
       if (hidden.has(muscle)) {
@@ -1074,7 +1325,8 @@ export function BodyMapV2({
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) {
+    const callout = calloutRef.current;
+    if (!container || !callout) {
       return;
     }
     const reducedMotion = window.matchMedia(
@@ -1085,6 +1337,7 @@ export function BodyMapV2({
     try {
       world = createWorld(
         container,
+        callout,
         {
           onHover: (muscle) => handlersRef.current.onHover(muscle),
           onSelect: (muscle) => handlersRef.current.onSelect(muscle),
@@ -1133,12 +1386,26 @@ export function BodyMapV2({
   }, [metric, max, muscleById]);
 
   useEffect(() => {
-    worldRef.current?.setFocus(hovered, selected);
-  }, [hovered, selected]);
+    worldRef.current?.setHover(hovered);
+  }, [hovered]);
 
   useEffect(() => {
-    worldRef.current?.setView(view);
-  }, [view, viewRequest]);
+    worldRef.current?.setPresentation(view, selected);
+  }, [view, viewRequest, selected]);
+
+  useEffect(() => {
+    if (!selected) {
+      return;
+    }
+    setLayerPreferences((current) => {
+      if (!current.hidden.has(selected)) {
+        return current;
+      }
+      const hidden = new Set(current.hidden);
+      hidden.delete(selected);
+      return { ...current, hidden };
+    });
+  }, [selected]);
 
   useEffect(() => {
     worldRef.current?.setLayers(
@@ -1159,7 +1426,10 @@ export function BodyMapV2({
   }, [layerPreferences]);
 
   return (
-    <div className="body-map anatomy-body-map" ref={containerRef}>
+    <div
+      className={`body-map anatomy-body-map${selected ? " is-focused" : ""}`}
+      ref={containerRef}
+    >
       {loading ? (
         <div className="anatomy-model-status" role="status" aria-live="polite">
           <span className="anatomy-model-skeleton" aria-hidden="true" />
@@ -1175,88 +1445,98 @@ export function BodyMapV2({
           still contains the complete workload breakdown.
         </p>
       ) : null}
-      <div className={`anatomy-layer-control${layersOpen ? " is-open" : ""}`}>
-        <button
-          type="button"
-          className="anatomy-layer-trigger"
-          aria-expanded={layersOpen}
-          aria-controls="anatomy-muscle-layers"
-          onClick={() => setLayersOpen((current) => !current)}
-        >
-          <Layers3 size={15} aria-hidden="true" />
-          <span>Muscle groups</span>
-        </button>
-        {layersOpen ? (
-          <section
-            className="anatomy-layer-panel"
-            id="anatomy-muscle-layers"
-            aria-label="Muscle group visibility and draw order"
-          >
-            <header>
-              <div>
-                <strong>Muscle groups</strong>
-                <span>Visibility &amp; layer priority</span>
-              </div>
-              <button
-                type="button"
-                className="anatomy-layer-reset"
-                aria-label="Reset muscle group visibility and order"
-                title="Reset groups"
-                onClick={resetLayers}
-              >
-                <RotateCcw size={14} aria-hidden="true" />
-              </button>
-            </header>
-            <ul aria-label="Muscle group layer priority, highest first">
-              {layerPreferences.order.map((muscle, index) => {
-                const hidden = layerPreferences.hidden.has(muscle);
-                const label = MUSCLE_BY_ID[muscle].label;
-                return (
-                  <li key={muscle} className={hidden ? "is-hidden" : ""}>
-                    <button
-                      type="button"
-                      className="anatomy-layer-visibility"
-                      aria-label={`${hidden ? "Show" : "Hide"} ${label}`}
-                      aria-pressed={!hidden}
-                      title={`${hidden ? "Show" : "Hide"} ${label}`}
-                      onClick={() => toggleLayer(muscle)}
-                    >
-                      {hidden ? (
-                        <EyeOff size={14} aria-hidden="true" />
-                      ) : (
-                        <Eye size={14} aria-hidden="true" />
-                      )}
-                    </button>
-                    <span>{label}</span>
-                    <div className="anatomy-layer-move">
-                      <button
-                        type="button"
-                        aria-label={`Move ${label} up`}
-                        title="Increase layer priority"
-                        disabled={index === 0}
-                        onClick={() => moveLayer(muscle, -1)}
-                      >
-                        <ChevronUp size={14} aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Move ${label} down`}
-                        title="Decrease layer priority"
-                        disabled={index === layerPreferences.order.length - 1}
-                        onClick={() => moveLayer(muscle, 1)}
-                      >
-                        <ChevronDown size={14} aria-hidden="true" />
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ) : null}
+      <div
+        className="anatomy-muscle-callout"
+        ref={calloutRef}
+        aria-hidden="true"
+      >
+        <span className="anatomy-muscle-callout-line" />
+        <strong>{selected ? MUSCLE_BY_ID[selected].label : ""}</strong>
       </div>
+      {showLayerControls ? (
+        <div className={`anatomy-layer-control${layersOpen ? " is-open" : ""}`}>
+          <button
+            type="button"
+            className="anatomy-layer-trigger"
+            aria-expanded={layersOpen}
+            aria-controls="anatomy-muscle-layers"
+            onClick={() => setLayersOpen((current) => !current)}
+          >
+            <Layers3 size={15} aria-hidden="true" />
+            <span>Muscle groups</span>
+          </button>
+          {layersOpen ? (
+            <section
+              className="anatomy-layer-panel"
+              id="anatomy-muscle-layers"
+              aria-label="Muscle group visibility and draw order"
+            >
+              <header>
+                <div>
+                  <strong>Muscle groups</strong>
+                  <span>Visibility &amp; layer priority</span>
+                </div>
+                <button
+                  type="button"
+                  className="anatomy-layer-reset"
+                  aria-label="Reset muscle group visibility and order"
+                  title="Reset groups"
+                  onClick={resetLayers}
+                >
+                  <RotateCcw size={14} aria-hidden="true" />
+                </button>
+              </header>
+              <ul aria-label="Muscle group layer priority, highest first">
+                {layerPreferences.order.map((muscle, index) => {
+                  const hidden = layerPreferences.hidden.has(muscle);
+                  const label = MUSCLE_BY_ID[muscle].label;
+                  return (
+                    <li key={muscle} className={hidden ? "is-hidden" : ""}>
+                      <button
+                        type="button"
+                        className="anatomy-layer-visibility"
+                        aria-label={`${hidden ? "Show" : "Hide"} ${label}`}
+                        aria-pressed={!hidden}
+                        title={`${hidden ? "Show" : "Hide"} ${label}`}
+                        onClick={() => toggleLayer(muscle)}
+                      >
+                        {hidden ? (
+                          <EyeOff size={14} aria-hidden="true" />
+                        ) : (
+                          <Eye size={14} aria-hidden="true" />
+                        )}
+                      </button>
+                      <span>{label}</span>
+                      <div className="anatomy-layer-move">
+                        <button
+                          type="button"
+                          aria-label={`Move ${label} up`}
+                          title="Increase layer priority"
+                          disabled={index === 0}
+                          onClick={() => moveLayer(muscle, -1)}
+                        >
+                          <ChevronUp size={14} aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Move ${label} down`}
+                          title="Decrease layer priority"
+                          disabled={index === layerPreferences.order.length - 1}
+                          onClick={() => moveLayer(muscle, 1)}
+                        >
+                          <ChevronDown size={14} aria-hidden="true" />
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+      ) : null}
       <span className="sr-only" aria-live="polite">
-        {hovered ? MUSCLE_BY_ID[hovered].label : ""}
+        {selected ? `${MUSCLE_BY_ID[selected].label} selected` : ""}
       </span>
     </div>
   );

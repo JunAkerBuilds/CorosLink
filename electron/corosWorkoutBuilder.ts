@@ -3,11 +3,21 @@
  * Ported from reverse-engineered API behavior (see docs/coros-plan-write-api.md).
  */
 import type {
+  UnitSystem,
   WorkoutEditorContext,
   WorkoutIntensityInput,
   WorkoutSport,
   WorkoutSportOptions
 } from "./types";
+import {
+  POUNDS_PER_KILOGRAM,
+  formatDistanceValue,
+  formatElevationValue,
+  kilogramsToDisplayWeight,
+  kmhToDisplaySpeed,
+  speedUnit,
+  weightUnit
+} from "./unitSystem.js";
 import {
   CLIMB_SYSTEM_IDS,
   WORKOUT_SPORT_CAPABILITIES,
@@ -164,6 +174,9 @@ const TIME_TARGET_TYPES = new Set([2]);
 // COROS targetDisplayUnit: 1=km, 2=m, 3=mi, 4=yd, 5=ft.
 const COROS_DISTANCE_UNIT_KILOMETERS = 1;
 const COROS_DISTANCE_UNIT_METERS = 2;
+const COROS_DISTANCE_UNIT_MILES = 3;
+const COROS_DISTANCE_UNIT_YARDS = 4;
+const COROS_DISTANCE_UNIT_FEET = 5;
 // COROS intensityDisplayUnit: 1=min/km, 2=min/mi.
 const COROS_PACE_UNIT_PER_KILOMETER = 1;
 const COROS_PACE_UNIT_PER_MILE = 2;
@@ -341,7 +354,11 @@ function normalizeRunStep(step: RunWorkoutStep): RunWorkoutStep {
   return normalized;
 }
 
-function resolveRunTarget(step: RunWorkoutStep): {
+function resolveRunTarget(
+  step: RunWorkoutStep,
+  sport: WorkoutSport,
+  context?: WorkoutEditorContext
+): {
   targetType: number;
   targetValue: number;
   targetDisplayUnit: number;
@@ -370,7 +387,14 @@ function resolveRunTarget(step: RunWorkoutStep): {
       targetType: 5,
       targetValue: metersToCorosDistance(Number(meters)),
       targetDisplayUnit:
-        step.target_display_unit ?? COROS_DISTANCE_UNIT_METERS
+        step.target_display_unit ??
+        (sport === "swim"
+          ? context?.distanceUnit === "imperial"
+            ? COROS_DISTANCE_UNIT_YARDS
+            : COROS_DISTANCE_UNIT_METERS
+          : context?.distanceUnit === "imperial"
+            ? COROS_DISTANCE_UNIT_MILES
+            : COROS_DISTANCE_UNIT_METERS)
     };
   }
 
@@ -439,7 +463,11 @@ function resolveRunTarget(step: RunWorkoutStep): {
     return {
       targetType: 8,
       targetValue: metersToCorosDistance(Number(meters)),
-      targetDisplayUnit: step.target_display_unit ?? COROS_DISTANCE_UNIT_METERS
+      targetDisplayUnit:
+        step.target_display_unit ??
+        (context?.distanceUnit === "imperial"
+          ? COROS_DISTANCE_UNIT_FEET
+          : COROS_DISTANCE_UNIT_METERS)
     };
   }
 
@@ -509,18 +537,21 @@ function buildRunExercise(
   context?: WorkoutEditorContext
 ): { exercise: Record<string, unknown>; distance: number; time: number } {
   const normalized = normalizeRunStep(step);
+  const normalizedIntensity = normalized.intensity && context
+    ? intensityForContext(normalized.intensity, context)
+    : normalized.intensity;
   const { targetType, targetValue, targetDisplayUnit } =
-    resolveRunTarget(normalized);
+    resolveRunTarget(normalized, sport, context);
   const kind = normalized.kind ?? "training";
   const capability = WORKOUT_SPORT_CAPABILITIES[sport];
   const editorKind = kind === "interval" ? "training" : kind;
   if (!capability.stepKinds.includes(editorKind)) {
     throw new Error(`${formatWorkoutSport(sport)} does not support ${kind} steps.`);
   }
-  if (normalized.intensity) {
+  if (normalizedIntensity) {
     const error = validateWorkoutIntensity(
       sport,
-      normalized.intensity,
+      normalizedIntensity,
       editorKind,
       normalized.exercise_kind
     );
@@ -549,8 +580,8 @@ function buildRunExercise(
   ) {
     throw new Error(`${capability.label} training steps require exercise_id or exercise_name.`);
   }
-  const rawIntensity = normalized.intensity
-    ? encodeCorosIntensity(normalized.intensity, context)
+  const rawIntensity = normalizedIntensity
+    ? encodeCorosIntensity(normalizedIntensity, context)
     : {
         intensityType: normalized.intensity_type ?? 0,
         intensityValue: normalized.intensity_value ?? 0,
@@ -624,6 +655,36 @@ function buildRunExercise(
   };
 }
 
+function intensityForContext(
+  intensity: WorkoutIntensityInput,
+  context: WorkoutEditorContext
+): WorkoutIntensityInput {
+  if (intensity.type === "pace" || intensity.type === "effortPace") {
+    return { ...intensity, displayUnit: context.paceUnit };
+  }
+  if (intensity.type === "speed") {
+    const lowKmh = intensity.unit === "mph" ? intensity.low * 1.609344 : intensity.low;
+    const highKmh = intensity.unit === "mph" ? intensity.high * 1.609344 : intensity.high;
+    return {
+      ...intensity,
+      low: kmhToDisplaySpeed(lowKmh, context.distanceUnit),
+      high: kmhToDisplaySpeed(highKmh, context.distanceUnit),
+      unit: speedUnit(context.distanceUnit)
+    };
+  }
+  if (intensity.type === "weight" && intensity.mode === "weight") {
+    const kilograms = intensity.unit === "lb"
+      ? intensity.value / POUNDS_PER_KILOGRAM
+      : intensity.value;
+    return {
+      ...intensity,
+      value: kilogramsToDisplayWeight(kilograms, context.distanceUnit),
+      unit: weightUnit(context.distanceUnit)
+    };
+  }
+  return intensity;
+}
+
 // COROS's default "run training" exercise template. These constants are lifted
 // verbatim from the payload the official web app sends for a simple distance run
 // (captured in t.coros.com.har → /training/schedule/update). A distance run must
@@ -639,6 +700,7 @@ export function buildEasyRun(options: {
   name: string;
   distanceKm: number;
   sportType?: number;
+  context?: WorkoutEditorContext;
 }): Record<string, unknown> {
   const distance = metersToCorosDistance(options.distanceKm * 1000);
   const sportType = options.sportType ?? 1;
@@ -675,7 +737,10 @@ export function buildEasyRun(options: {
     sourceUrl: "",
     sportType,
     subType: 0,
-    targetDisplayUnit: 1,
+    targetDisplayUnit:
+      options.context?.distanceUnit === "imperial"
+        ? COROS_DISTANCE_UNIT_MILES
+        : COROS_DISTANCE_UNIT_KILOMETERS,
     targetType: 5,
     targetValue: distance,
     userId: 0,
@@ -728,7 +793,10 @@ export function buildEasyRun(options: {
     trainingLoad: 0,
     pitch: 0,
     exerciseBarChart: [barChartEntry],
-    distanceDisplayUnit: 1
+    distanceDisplayUnit:
+      options.context?.distanceUnit === "imperial"
+        ? COROS_DISTANCE_UNIT_MILES
+        : COROS_DISTANCE_UNIT_KILOMETERS
   };
 }
 
@@ -799,7 +867,15 @@ export function buildWorkoutPayload(
         targetType: groupTargetType,
         targetValue: groupTargetValue,
         targetDisplayUnit:
-          groupTargetType === 5 ? COROS_DISTANCE_UNIT_METERS : 0,
+          groupTargetType === 5
+            ? sport === "swim"
+              ? context?.distanceUnit === "imperial"
+                ? COROS_DISTANCE_UNIT_YARDS
+                : COROS_DISTANCE_UNIT_METERS
+              : context?.distanceUnit === "imperial"
+                ? COROS_DISTANCE_UNIT_MILES
+                : COROS_DISTANCE_UNIT_METERS
+            : 0,
         sets: repeatCount,
         sortNo: groupSort,
         restType: step.rest_type ?? 3,
@@ -864,7 +940,10 @@ export function buildWorkoutPayload(
       : {}),
     estimatedTime: totalTime,
     estimatedDistance: totalDistance,
-    distanceDisplayUnit: COROS_DISTANCE_UNIT_KILOMETERS,
+    distanceDisplayUnit:
+      context?.distanceUnit === "imperial"
+        ? COROS_DISTANCE_UNIT_MILES
+        : COROS_DISTANCE_UNIT_KILOMETERS,
     estimatedType: totalDistance > 0 ? 6 : 0,
     targetType: totalDistance > 0 ? 5 : 2,
     targetValue: totalDistance > 0 ? totalDistance : totalTime,
@@ -930,7 +1009,8 @@ export function buildWorkoutPayloadFromEntry(
     return buildEasyRun({
       name: entry.name,
       distanceKm: entry.distance_km,
-      sportType: workoutSportType(sport)
+      sportType: workoutSportType(sport),
+      context
     });
   }
   throw new Error(
@@ -960,9 +1040,14 @@ function isValidScheduleDay(day: string): boolean {
   );
 }
 
-function formatEntryVolume(entry: PlanWorkoutEntry): string | undefined {
+function formatEntryVolume(
+  entry: PlanWorkoutEntry,
+  unitSystem: UnitSystem = "metric"
+): string | undefined {
   if (entry.distance_km !== undefined && entry.distance_km > 0) {
-    return `${entry.distance_km.toFixed(2)} km`;
+    return formatDistanceValue(entry.distance_km * 1_000, unitSystem, {
+      swim: entry.sport === "swim"
+    });
   }
   if (!entry.steps || entry.steps.length === 0) {
     return undefined;
@@ -984,7 +1069,9 @@ function formatEntryVolume(entry: PlanWorkoutEntry): string | undefined {
   }
 
   if (totalMeters > 0) {
-    return `${(totalMeters / 1000).toFixed(2)} km`;
+    return formatDistanceValue(totalMeters, unitSystem, {
+      swim: entry.sport === "swim"
+    });
   }
   if (repeatSets > 0) {
     return `${repeatSets} set(s)`;
@@ -1002,7 +1089,10 @@ function inferWorkoutType(entry: PlanWorkoutEntry): string {
   return "structured";
 }
 
-export function formatEntryStepsSummary(entry: PlanWorkoutEntry): string | undefined {
+export function formatEntryStepsSummary(
+  entry: PlanWorkoutEntry,
+  unitSystem: UnitSystem = "metric"
+): string | undefined {
   if (!entry.steps || entry.steps.length === 0) {
     return undefined;
   }
@@ -1010,11 +1100,13 @@ export function formatEntryStepsSummary(entry: PlanWorkoutEntry): string | undef
   const parts: string[] = [];
   for (const step of entry.steps) {
     if ("repeat" in step) {
-      const subParts = step.steps.map((sub) => formatRunStepSummary(sub)).filter(Boolean);
+      const subParts = step.steps
+        .map((sub) => formatRunStepSummary(sub, unitSystem, entry.sport === "swim"))
+        .filter(Boolean);
       parts.push(`${step.repeat}x (${subParts.join(", ")})`);
       continue;
     }
-    const summary = formatRunStepSummary(step);
+    const summary = formatRunStepSummary(step, unitSystem, entry.sport === "swim");
     if (summary) {
       parts.push(summary);
     }
@@ -1023,7 +1115,11 @@ export function formatEntryStepsSummary(entry: PlanWorkoutEntry): string | undef
   return parts.length > 0 ? parts.join(" → ") : undefined;
 }
 
-function formatRunStepSummary(step: RunWorkoutStep): string | undefined {
+function formatRunStepSummary(
+  step: RunWorkoutStep,
+  unitSystem: UnitSystem,
+  swim: boolean
+): string | undefined {
   const kind = step.kind ?? "training";
   const targetType =
     step.target_type ??
@@ -1042,16 +1138,68 @@ function formatRunStepSummary(step: RunWorkoutStep): string | undefined {
           : targetType === "routes" && step.target_routes !== undefined
             ? `${step.target_routes} routes`
             : targetType === "elevationGain" && step.target_elevation_gain_meters !== undefined
-              ? `${step.target_elevation_gain_meters} m gain`
+              ? `${formatElevationValue(step.target_elevation_gain_meters, unitSystem)} gain`
         : step.target_distance_meters !== undefined
-          ? `${(step.target_distance_meters / 1000).toFixed(1)} km`
+          ? formatDistanceValue(step.target_distance_meters, unitSystem, { swim })
           : step.target_duration_seconds !== undefined
             ? `${Math.round(step.target_duration_seconds / 60)} min`
             : undefined;
   const intensity = step.intensity
-    ? `@ ${formatWorkoutIntensity(step.intensity)}`
-    : step.pace ? `@ ${step.pace}` : undefined;
+    ? `@ ${formatWorkoutIntensityForUnits(step.intensity, unitSystem)}`
+    : step.pace
+      ? `@ ${formatLegacyPaceForUnits(step.pace, unitSystem)}`
+      : undefined;
   return [kind, target, intensity].filter(Boolean).join(" ");
+}
+
+function formatWorkoutIntensityForUnits(
+  intensity: WorkoutIntensityInput,
+  unitSystem: UnitSystem
+): string {
+  if (intensity.type === "pace" || intensity.type === "effortPace") {
+    return formatWorkoutIntensity({
+      ...intensity,
+      displayUnit: unitSystem === "imperial" ? "mi" : "km"
+    });
+  }
+  if (intensity.type === "speed") {
+    const lowKmh = intensity.unit === "mph" ? intensity.low * 1.609344 : intensity.low;
+    const highKmh = intensity.unit === "mph" ? intensity.high * 1.609344 : intensity.high;
+    return formatWorkoutIntensity({
+      ...intensity,
+      low: Number(kmhToDisplaySpeed(lowKmh, unitSystem).toFixed(1)),
+      high: Number(kmhToDisplaySpeed(highKmh, unitSystem).toFixed(1)),
+      unit: speedUnit(unitSystem)
+    });
+  }
+  if (intensity.type === "weight" && intensity.mode === "weight") {
+    const kilograms = intensity.unit === "lb"
+      ? intensity.value / POUNDS_PER_KILOGRAM
+      : intensity.value;
+    return formatWorkoutIntensity({
+      ...intensity,
+      value: Number(kilogramsToDisplayWeight(kilograms, unitSystem).toFixed(1)),
+      unit: weightUnit(unitSystem)
+    });
+  }
+  return formatWorkoutIntensity(intensity);
+}
+
+function formatLegacyPaceForUnits(
+  pace: string,
+  unitSystem: UnitSystem
+): string {
+  try {
+    const parsed = parsePace(pace);
+    return formatWorkoutIntensity({
+      type: "pace",
+      lowSecondsPerKm: parsed.intensity_value / COROS_PACE_MULTIPLIER,
+      highSecondsPerKm: parsed.intensity_value_extend / COROS_PACE_MULTIPLIER,
+      displayUnit: unitSystem === "imperial" ? "mi" : "km"
+    });
+  } catch {
+    return pace;
+  }
 }
 
 export function validatePlanDraft(
@@ -1159,6 +1307,7 @@ export function buildPlanPreview(
   options?: {
     existingSchedule?: Map<string, string[]>;
     scheduleConflicts?: string[];
+    unitSystem?: UnitSystem;
   }
 ): PlanDraftPreview {
   const entries: PlanDraftPreviewEntry[] = draft.workouts.map((entry) => ({
@@ -1168,10 +1317,22 @@ export function buildPlanPreview(
     scheduleDate: entry.schedule_date
       ? formatScheduleDate(entry.schedule_date)
       : undefined,
-    volume: formatEntryVolume(entry),
+    volume: formatEntryVolume(entry, options?.unitSystem),
     saveToLibrary: entry.save_to_library !== false,
     workoutType: inferWorkoutType(entry),
-    stepsSummary: formatEntryStepsSummary(entry)
+    stepsSummary: formatEntryStepsSummary(entry, options?.unitSystem),
+    source: {
+      key: entry.key,
+      name: entry.name,
+      sport: entry.sport,
+      sport_options: entry.sport_options,
+      description: entry.description,
+      steps: entry.steps,
+      distance_km: entry.distance_km,
+      schedule_date: entry.schedule_date,
+      sort_no: entry.sort_no,
+      save_to_library: entry.save_to_library
+    }
   }));
 
   const scheduled = draft.workouts.filter((entry) => entry.schedule_date);
