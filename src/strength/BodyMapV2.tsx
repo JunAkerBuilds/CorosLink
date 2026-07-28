@@ -66,7 +66,7 @@ const CAMERA_FRAMING = 1.28;
 const TARGET_Y = MODEL_HEIGHT * 0.51;
 const COLOR_EPSILON = 0.0016;
 const MAX_PIXEL_RATIO = 1.5;
-const OBLIQUE_SURFACE_INSET_RATIO = 0.003;
+const OBLIQUE_MEDIAL_TRIM_RATIO = 0.028;
 const LAYER_STORAGE_KEY = "coroslink-strength-muscle-layers-v1";
 
 // Anatomy Engine's source is a teaching dissection, so it includes superficial
@@ -342,6 +342,31 @@ function prepareGeometry(
   return prepared;
 }
 
+function trimMedialSurface(
+  geometry: BufferGeometry,
+  halfWidth: number
+): BufferGeometry {
+  const indices = geometry.getIndex();
+  const positions = geometry.getAttribute("position");
+  if (!indices || !positions) {
+    return geometry;
+  }
+
+  const lateralIndices: number[] = [];
+  for (let index = 0; index < indices.count; index += 3) {
+    const a = indices.getX(index);
+    const b = indices.getX(index + 1);
+    const c = indices.getX(index + 2);
+    const centerX =
+      (positions.getX(a) + positions.getX(b) + positions.getX(c)) / 3;
+    if (Math.abs(centerX) >= halfWidth) {
+      lateralIndices.push(a, b, c);
+    }
+  }
+  geometry.setIndex(lateralIndices);
+  return geometry;
+}
+
 function fitRootToModelFrame(root: Object3D, bounds: Box3) {
   const size = bounds.getSize(new Vector3());
   const center = bounds.getCenter(new Vector3());
@@ -492,12 +517,16 @@ function createWorld(
   let hiddenMuscles = new Set<MuscleId>();
 
   for (const muscle of MUSCLES) {
+    const isSupportingTorsoLayer = muscle.id === "obliques";
     const material = new MeshStandardMaterial({
       color: 0x46505a,
       emissive: 0x46505a,
       emissiveIntensity: 0.025,
       roughness: 0.54,
-      metalness: 0.01
+      metalness: 0.01,
+      polygonOffset: isSupportingTorsoLayer,
+      polygonOffsetFactor: isSupportingTorsoLayer ? 1 : 0,
+      polygonOffsetUnits: isSupportingTorsoLayer ? 1 : 0
     });
     sharedMaterials.add(material);
     groups.set(muscle.id, {
@@ -799,12 +828,12 @@ function createWorld(
         }
         const prepared = prepareGeometry(object.geometry, object);
         if (structure === "external_oblique") {
-          // Treat the oblique as the supporting torso layer in this simplified
-          // heat map, beneath both the pectorals and rectus abdominis.
-          prepared.translate(
-            0,
-            0,
-            -sourceHeight * OBLIQUE_SURFACE_INSET_RATIO
+          // The source combines the lateral muscle with a broad central
+          // aponeurosis. Remove that sheet from the muscle-only presentation so
+          // the pectorals and rectus form the visible anterior torso surface.
+          trimMedialSurface(
+            prepared,
+            sourceHeight * OBLIQUE_MEDIAL_TRIM_RATIO
           );
         }
         const entries = buckets.get(muscle) ?? [];
