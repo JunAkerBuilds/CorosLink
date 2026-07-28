@@ -19,6 +19,65 @@ const {
 const { parseFunctionCallArguments } = await import(
   `${distUrl("chatToolArguments.js")}?cacheBust=${Date.now()}`
 );
+const {
+  buildCoachInstructions,
+  buildCoachSportCapabilityGuide,
+  formatCoachDashboard,
+  formatRecentActivityMix,
+  formatUpcomingWorkoutSport
+} = await import(`${distUrl("chatCoachContext.js")}?cacheBust=${Date.now()}`);
+
+const coachInstructions = buildCoachInstructions();
+assert.match(coachInstructions, /multi-sport endurance and strength-training coach/);
+assert.match(coachInstructions, /Honor every sport the athlete explicitly requests/);
+assert.match(coachInstructions, /Never add an unfamiliar sport merely for variety/);
+assert.match(coachInstructions, /Open Water Swim is not Pool Swim/);
+assert.match(coachInstructions, /exercise_resolution_required/);
+assert.match(coachInstructions, /call draft_training_plan again in the same response/);
+
+const capabilityGuide = buildCoachSportCapabilityGuide();
+for (const sport of [
+  "run",
+  "trailRun",
+  "bike",
+  "swim",
+  "strength",
+  "indoorClimb",
+  "bouldering",
+  "xcSki",
+  "hyrox"
+]) {
+  assert.match(capabilityGuide, new RegExp(`sport=${sport}(?:\\)|;)`));
+}
+
+const activityMix = formatRecentActivityMix(
+  [
+    { activityId: "run-1", sportType: 100, duration: 3_600, distance: 10_000, trainingLoad: 90 },
+    { activityId: "bike-1", sportType: 200, duration: 5_400, distance: 40_000, trainingLoad: 80 },
+    { activityId: "bike-2", sportType: 201, duration: 3_600, distance: 25_000, trainingLoad: 60 },
+    { activityId: "swim-1", sportType: 300, duration: 1_800, distance: 1_500, trainingLoad: 35 },
+    { activityId: "open-water-1", sportType: 301, duration: 2_400, distance: 2_000, trainingLoad: 45 }
+  ],
+  "metric"
+);
+assert.match(activityMix, /Bike \(plan sport=bike\): 2 activities/);
+assert.match(activityMix, /Run \(plan sport=run\): 1 activity/);
+assert.match(activityMix, /Pool Swim \(plan sport=swim\): 1 activity/);
+assert.match(activityMix, /Open Water Swim \(not directly plan-authorable\)/);
+assert.equal(formatUpcomingWorkoutSport(2), "Bike");
+assert.equal(formatUpcomingWorkoutSport(9), "HYROX");
+assert.equal(formatUpcomingWorkoutSport(undefined), undefined);
+
+const dashboardSummary = formatCoachDashboard({
+  rhr: 48,
+  recoveryPct: 82,
+  racePredictor: {
+    staminaLevel: 71,
+    runScoreList: [{ distanceLabel: "5K", predictSeconds: 1_200 }]
+  }
+});
+assert.match(dashboardSummary, /Running stamina level: 71/);
+assert.match(dashboardSummary, /Running race predictions: 5K ~20:00/);
 
 assert.equal(
   normalizeLocalChatBaseUrl("localhost:11434"),

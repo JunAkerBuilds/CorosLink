@@ -244,6 +244,26 @@ export function workoutExerciseId(row: Record<string, unknown>): string | undefi
     : String(value);
 }
 
+function normalizeExerciseName(value: string): string {
+  const singularize = (token: string): string => {
+    if (token.length > 4 && token.endsWith("ies")) return `${token.slice(0, -3)}y`;
+    if (token.length > 4 && /(ches|shes|xes|zes)$/.test(token)) return token.slice(0, -2);
+    if (token.length > 3 && token.endsWith("s") && !/(ss|us|is)$/.test(token)) {
+      return token.slice(0, -1);
+    }
+    return token;
+  };
+  return value
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(singularize)
+    .join(" ");
+}
+
 const COROS_EXERCISE_IMAGE_PREFIX = "/source/exercise_img/";
 const COROS_EXERCISE_VIDEO_PREFIX = "/source/exercise_gif/";
 
@@ -321,13 +341,22 @@ export function resolveWorkoutExerciseName(
   catalog: readonly Record<string, unknown>[],
   requestedName: string
 ): WorkoutExerciseResolution {
-  const normalize = (value: string): string => value.trim().toLocaleLowerCase();
-  const query = normalize(requestedName);
+  const literal = (value: string): string => value.trim().toLocaleLowerCase();
+  const queryLiteral = literal(requestedName);
+  const query = normalizeExerciseName(requestedName);
   if (!query) return { candidates: [] };
-  const exact = catalog.filter((row) => normalize(workoutExerciseName(row)) === query);
-  const matches = exact.length
-    ? exact
-    : catalog.filter((row) => normalize(workoutExerciseName(row)).includes(query));
+  const literalExact = catalog.filter(
+    (row) => literal(workoutExerciseName(row)) === queryLiteral
+  );
+  const canonicalExact = catalog.filter((row) => {
+    const candidate = normalizeExerciseName(workoutExerciseName(row));
+    return candidate === query || candidate.replace(/\s/g, "") === query.replace(/\s/g, "");
+  });
+  const matches = literalExact.length
+    ? literalExact
+    : canonicalExact.length
+      ? canonicalExact
+      : catalog.filter((row) => normalizeExerciseName(workoutExerciseName(row)).includes(query));
   const unique = [...new Map(
     matches.map((row) => [workoutExerciseId(row) ?? workoutExerciseName(row), row])
   ).values()];

@@ -2100,7 +2100,14 @@ export async function createAndScheduleWorkout(
     saveToLibrary = unitSystemOrSave;
   }
   const entry = toPlanWorkoutEntry(entryInput);
-  const resolvedEntry = await resolveWorkoutEntryExercises(entry);
+  const exerciseResolution = await resolveTrainingPlanExercises({
+    name: entry.name,
+    workouts: [entry]
+  });
+  if (exerciseResolution.issues.length > 0) {
+    throw new Error(exerciseResolution.issues.map((issue) => issue.message).join(" "));
+  }
+  const resolvedEntry = exerciseResolution.draft.workouts[0]!;
   const context = parseWorkoutEditorContext(
     await loadWorkoutEditorAccount(),
     unitSystem
@@ -2419,42 +2426,75 @@ export async function listWorkoutExercises(
   })).values()].sort((left, right) => left.name.localeCompare(right.name));
 }
 
-async function resolveWorkoutEntryExercises(
-  entry: PlanWorkoutEntry
-): Promise<PlanWorkoutEntry> {
-  const sport = entry.sport ?? "run";
-  if (!WORKOUT_SPORT_CAPABILITIES[sport].requiresExercise || !entry.steps?.length) {
-    return entry;
-  }
-  const cloned = structuredClone(entry);
-  const plainSteps = cloned.steps!.flatMap((step) =>
-    "repeat" in step ? step.steps : [step]
-  );
-  const unresolved = plainSteps.filter(
-    (step) => step.kind === "training" && !step.exercise_id && step.exercise_name
-  );
-  if (!unresolved.length) return cloned;
+export interface TrainingPlanExerciseResolutionIssue {
+  workoutKey: string;
+  workoutName: string;
+  sport: WorkoutSport;
+  exerciseName: string;
+  candidates: string[];
+  reason: "ambiguous" | "unavailable";
+  message: string;
+}
 
-  const catalog = await loadWorkoutExerciseCatalog(sport);
-
-  for (const step of unresolved) {
-    const resolution = resolveWorkoutExerciseName(catalog, step.exercise_name!);
-    if (!resolution.match) {
-      throw new Error(
-        resolution.candidates.length === 0
-          ? `Exercise "${step.exercise_name}" is unavailable in the COROS ${WORKOUT_SPORT_CAPABILITIES[sport].label} catalog.`
-          : `Exercise "${step.exercise_name}" is ambiguous. Choose one of: ${resolution.candidates.join(", ")}.`
-      );
+export async function resolveTrainingPlanExercises(
+  draft: CorosTrainingPlanDraft
+): Promise<{
+  draft: CorosTrainingPlanDraft;
+  issues: TrainingPlanExerciseResolutionIssue[];
+}> {
+  const resolved = structuredClone(draft);
+  const issues: TrainingPlanExerciseResolutionIssue[] = [];
+  const catalogs = new Map<WorkoutSport, Promise<Record<string, unknown>[]>>();
+  const catalogFor = (sport: WorkoutSport): Promise<Record<string, unknown>[]> => {
+    let catalog = catalogs.get(sport);
+    if (!catalog) {
+      catalog = loadWorkoutExerciseCatalog(sport);
+      catalogs.set(sport, catalog);
     }
-    const match = resolution.match;
-    const id = workoutExerciseId(match);
-    if (!id) throw new Error(`Exercise "${step.exercise_name}" has no COROS exercise ID.`);
-    step.exercise_id = id;
-    step.exercise_name = workoutExerciseName(match) || step.exercise_name;
-    const exerciseKind = toOptionalNumber(match.exerciseKind);
-    if (exerciseKind !== undefined) step.exercise_kind = exerciseKind;
+    return catalog;
+  };
+
+  for (const entry of resolved.workouts) {
+    const sport = entry.sport ?? "run";
+    const capability = WORKOUT_SPORT_CAPABILITIES[sport];
+    if (!capability?.requiresExercise || !entry.steps?.length) continue;
+    const plainSteps = entry.steps.flatMap((step) =>
+      "repeat" in step ? step.steps : [step]
+    );
+    const unresolved = plainSteps.filter(
+      (step) => step.kind === "training" && !step.exercise_id && step.exercise_name
+    );
+    if (!unresolved.length) continue;
+    const catalog = await catalogFor(sport);
+
+    for (const step of unresolved) {
+      const exerciseName = step.exercise_name!;
+      const resolution = resolveWorkoutExerciseName(catalog, exerciseName);
+      const match = resolution.match;
+      const id = match ? workoutExerciseId(match) : undefined;
+      if (!match || !id) {
+        const reason = resolution.candidates.length > 0 ? "ambiguous" : "unavailable";
+        issues.push({
+          workoutKey: entry.key,
+          workoutName: entry.name,
+          sport,
+          exerciseName,
+          candidates: resolution.candidates,
+          reason,
+          message: reason === "ambiguous"
+            ? `Exercise "${exerciseName}" in "${entry.name}" is ambiguous. Choose one of: ${resolution.candidates.join(", ")}.`
+            : `Exercise "${exerciseName}" in "${entry.name}" is unavailable in the COROS ${capability.label} catalog.`
+        });
+        continue;
+      }
+      step.exercise_id = id;
+      step.exercise_name = workoutExerciseName(match) || exerciseName;
+      const exerciseKind = toOptionalNumber(match.exerciseKind);
+      if (exerciseKind !== undefined) step.exercise_kind = exerciseKind;
+    }
   }
-  return cloned;
+
+  return { draft: resolved, issues };
 }
 
 function workoutSportTypeForService(sport: keyof typeof WORKOUT_SPORT_CAPABILITIES): number {
@@ -2476,7 +2516,13 @@ export async function uploadTrainingPlan(
     throw new Error(validation.errors.join(" "));
   }
 
-  const existingByDate = await loadExistingScheduleDates(draft);
+  const exerciseResolution = await resolveTrainingPlanExercises(draft);
+  if (exerciseResolution.issues.length > 0) {
+    throw new Error(exerciseResolution.issues.map((issue) => issue.message).join(" "));
+  }
+  const resolvedDraft = exerciseResolution.draft;
+
+  const existingByDate = await loadExistingScheduleDates(resolvedDraft);
   const entries: UploadPlanResultEntry[] = [];
   let workoutsCreated = 0;
   let workoutsScheduled = 0;
@@ -2490,9 +2536,8 @@ export async function uploadTrainingPlan(
     unitSystem
   );
 
-  for (const entry of draft.workouts) {
-    const resolvedEntry = await resolveWorkoutEntryExercises(entry);
-    const payload = buildWorkoutPayloadFromEntry(resolvedEntry, context);
+  for (const entry of resolvedDraft.workouts) {
+    const payload = buildWorkoutPayloadFromEntry(entry, context);
     const workoutSignature = JSON.stringify(payload);
     const saveToLibrary = entry.save_to_library !== false;
     // Schedule a calculated full payload, not the library query summary. The

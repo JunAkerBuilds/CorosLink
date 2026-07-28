@@ -92,6 +92,13 @@ import {
   formatElevationValue,
   normalizeUnitSystem
 } from "./unitSystem.js";
+import {
+  buildCoachInstructions,
+  buildCoachSportCapabilityGuide,
+  formatCoachDashboard,
+  formatRecentActivityMix,
+  formatUpcomingWorkoutSport
+} from "./chatCoachContext";
 
 // =========================================================================
 // OpenAI "Sign in with ChatGPT" provider details.
@@ -127,21 +134,7 @@ const MAX_TOOL_ROUNDS = 10;
 const RESPONSES_ORIGINATOR = "codex_cli_rs";
 const RESPONSES_USER_AGENT = "codex_cli_rs";
 
-const COACH_INSTRUCTIONS =
-  "You are a friendly, knowledgeable running and endurance-training coach built " +
-  "into CorosLink. You have access to the athlete's recent COROS training data " +
-  "below. Give concise, practical, encouraging advice grounded in that data. If " +
-  "the data does not cover the question, say so rather than inventing numbers.\n\n" +
-  "When building training plans: review recent activities, recovery, and upcoming " +
-  "workouts first. Prefer sensible periodization (easy/hard/rest balance). Use " +
-  "draft_training_plan to validate and preview before upload. Select the workout sport, " +
-  "and always put prescribed heart rate, pace, effort pace, power, cadence, swim stroke, " +
-  "weight, RPE, or climbing grade in the step's typed intensity object rather than only " +
-  "in its name or prose. Never call " +
-  "upload_training_plan until the athlete confirms via the Upload to COROS button.\n\n" +
-  "To delete workouts: use list_scheduled_workouts to find calendar entries, then " +
-  "delete_workout to stage a confirmation card. The athlete must click Delete from COROS — " +
-  "never claim a workout was removed until they confirm via the button.";
+const COACH_INSTRUCTIONS = buildCoachInstructions();
 
 // Settings keys (encrypted blob + a plaintext timestamp).
 const SETTINGS = {
@@ -1317,6 +1310,7 @@ function withLiveToolInstructions(
       "## Training plan tools",
       `Plan authoring tools: ${planTools.map((tool) => tool.name).join(", ")}. ` +
         "Use draft_training_plan to build multi-day schedules across the supported sports. " +
+        "Always provide sport on every new workout, including sport=run. " +
         "Use distance_km only for a simple Run or Trail Run; use steps for anything structured. " +
         "Pick each step's target " +
         "deliberately: distance for easy/long/tempo blocks, time for duration-based reps " +
@@ -1327,7 +1321,10 @@ function withLiveToolInstructions(
         "Include schedule_date " +
         "(YYYYMMDD) for calendar placement. The athlete must confirm before upload. " +
         "Use list_scheduled_workouts + delete_workout to stage deletions. " +
-        "The athlete confirms via the Delete from COROS button in chat."
+        "The athlete confirms via the Delete from COROS button in chat.",
+      "",
+      "Supported workout capabilities (generated from the validator):",
+      buildCoachSportCapabilityGuide()
     );
   }
   return sections.join("\n");
@@ -1411,7 +1408,7 @@ async function buildTrainingContext(
   const includeUpcoming = permissions?.upcomingWorkouts !== false;
   const [activities, dashboard, upcoming] = await Promise.allSettled([
     includeActivities
-      ? listTrainingHubActivities(1, 10)
+      ? listTrainingHubActivities(1, 25)
       : Promise.resolve([] as TrainingHubActivity[]),
     includeMetrics
       ? getTrainingDashboard()
@@ -1425,13 +1422,16 @@ async function buildTrainingContext(
   let hasData = false;
 
   if (activities.status === "fulfilled" && activities.value.length > 0) {
+    sections.push(`## Recent activity mix (latest ${activities.value.length})`);
+    sections.push(formatRecentActivityMix(activities.value, unitSystem));
+    sections.push("");
     sections.push("## Recent activities");
     sections.push(formatActivities(activities.value.slice(0, 8), unitSystem));
     sections.push("");
     hasData = true;
   }
   if (dashboard.status === "fulfilled" && dashboard.value) {
-    const fitness = formatDashboard(dashboard.value);
+    const fitness = formatCoachDashboard(dashboard.value);
     if (fitness) {
       sections.push("## Fitness & recovery");
       sections.push(fitness);
@@ -1441,7 +1441,7 @@ async function buildTrainingContext(
   }
   if (upcoming.status === "fulfilled" && upcoming.value.length > 0) {
     sections.push("## Upcoming workouts");
-    sections.push(formatUpcoming(upcoming.value.slice(0, 8), unitSystem));
+    sections.push(formatUpcoming(upcoming.value, unitSystem));
     sections.push("");
     hasData = true;
   }
@@ -1488,28 +1488,6 @@ function formatActivities(
     .join("\n");
 }
 
-function formatDashboard(dashboard: TrainingHubDashboard): string {
-  const lines: string[] = [];
-  if (dashboard.rhr != null) lines.push(`- Resting HR: ${dashboard.rhr} bpm`);
-  if (dashboard.recoveryPct != null)
-    lines.push(`- Recovery: ${dashboard.recoveryPct}%`);
-  if (dashboard.fullRecoveryHours != null)
-    lines.push(`- Full recovery in ~${dashboard.fullRecoveryHours} h`);
-  const predictor = dashboard.racePredictor;
-  if (predictor?.staminaLevel != null)
-    lines.push(`- Stamina level: ${predictor.staminaLevel}`);
-  const predictions = (predictor?.runScoreList ?? [])
-    .filter((score) => score.distanceLabel && score.predictSeconds)
-    .slice(0, 4)
-    .map(
-      (score) =>
-        `${score.distanceLabel} ~${formatDurationSeconds(score.predictSeconds ?? 0)}`
-    );
-  if (predictions.length > 0)
-    lines.push(`- Race predictions: ${predictions.join(", ")}`);
-  return lines.join("\n");
-}
-
 function formatUpcomingVolume(
   volume: string | undefined,
   unitSystem: UnitSystem
@@ -1541,6 +1519,7 @@ function formatUpcoming(
         : undefined;
       const parts = [
         workout.happenDay,
+        formatUpcomingWorkoutSport(workout.sportType),
         workout.name,
         formatUpcomingVolume(workout.volume, unitSystem),
         workout.trainingLoad ? `load ${workout.trainingLoad}` : "",

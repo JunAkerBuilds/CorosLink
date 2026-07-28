@@ -269,6 +269,19 @@ assert.deepEqual(
   codec.resolveWorkoutExerciseName(exerciseCatalog, "squat").candidates,
   ["Back Squat", "Front Squat"]
 );
+const pulldownCatalog = [
+  { originId: "1052", displayName: "Seated Lat Pulldowns" },
+  { originId: "1342", displayName: "Lat Pulldowns" },
+  { originId: "1350", displayName: "Single Arm Lat Pulldown" }
+];
+assert.equal(
+  codec.resolveWorkoutExerciseName(pulldownCatalog, "Lat Pulldown").match.originId,
+  "1342"
+);
+assert.equal(
+  codec.resolveWorkoutExerciseName(pulldownCatalog, "Lat Pull Downs").match.originId,
+  "1342"
+);
 assert.equal(
   codec.workoutExerciseName({ name: "T1024", overview: "sid_exercise_preacher_curls" }),
   "Preacher Curls"
