@@ -9,6 +9,7 @@ import {
   HemisphereLight,
   Mesh,
   MeshBasicMaterial,
+  MeshPhysicalMaterial,
   MeshStandardMaterial,
   Object3D,
   PerspectiveCamera,
@@ -57,6 +58,7 @@ interface BodyMapV2Props {
 }
 
 const MODEL_URL = "./assets/anatomy/muscular_lite.glb";
+const SKELETON_URL = "./assets/anatomy/skeletal_lite.glb";
 const DRACO_URL = "./assets/anatomy/draco/";
 const MODEL_HEIGHT = 2;
 const CAMERA_FOV = 25;
@@ -64,33 +66,49 @@ const CAMERA_FRAMING = 1.28;
 const TARGET_Y = MODEL_HEIGHT * 0.51;
 const COLOR_EPSILON = 0.0016;
 const MAX_PIXEL_RATIO = 1.5;
-const SURFACE_PICK_DEPTH = 0.025;
+const OBLIQUE_SURFACE_INSET_RATIO = 0.003;
 const LAYER_STORAGE_KEY = "coroslink-strength-muscle-layers-v1";
 
-// The source model uses a right-side dissection cutaway. The Strength heat map
-// needs a consistent superficial view, so deeper abdominal and chest layers
-// are omitted and the intact left surface is mirrored below.
-const HIDDEN_DEEP_STRUCTURES = new Set([
-  "internal_oblique",
-  "transversus_abdominis",
-  "pectoralis_minor",
-  "serratus_anterior"
-]);
-const SYMMETRIC_FRONT_STRUCTURES = new Set([
+// Anatomy Engine's source is a teaching dissection, so it includes superficial
+// and deep structures at the same time. A workload heat map needs a coherent
+// outer body instead. Keep the structures that are visible from the surface,
+// then mirror the intact left side at load time to close the dissection cutaway.
+const SUPERFICIAL_STRUCTURES = new Set([
+  "sternocleidomastoid",
+  "upper_trapezius",
+  "middle_trapezius",
+  "lower_trapezius",
+  "deltoid",
+  "posterior_deltoid",
+  "infraspinatus",
+  "pectoralis_major",
+  "latissimus_dorsi",
+  "teres_major",
+  "biceps_brachii",
+  "triceps_brachii",
+  "brachioradialis",
   "rectus_abdominis",
   "external_oblique",
-  "pectoralis_major"
+  "erector_spinae_lumbar",
+  "gluteus_maximus",
+  "gluteus_medius",
+  "tensor_fasciae_latae",
+  "rectus_femoris",
+  "vastus_lateralis",
+  "vastus_medialis",
+  "sartorius",
+  "biceps_femoris",
+  "semitendinosus",
+  "semimembranosus",
+  "adductor_magnus",
+  "adductor_longus",
+  "gastrocnemius",
+  "soleus",
+  "peroneals",
+  "tibialis_anterior"
 ]);
-// The first item is the frontmost layer. This preserves the currently chosen
-// torso order while making every mapped group user-configurable.
-const DEFAULT_LAYER_ORDER: MuscleId[] = [
-  "obliques",
-  "abs",
-  "chest",
-  ...MUSCLES.map((muscle) => muscle.id).filter(
-    (id) => id !== "obliques" && id !== "abs" && id !== "chest"
-  )
-];
+
+const DEFAULT_LAYER_ORDER = MUSCLES.map((muscle) => muscle.id);
 
 function layerPriority(order: MuscleId[], muscle: MuscleId): number {
   const index = order.indexOf(muscle);
@@ -190,7 +208,7 @@ const STRUCTURE_TO_MUSCLE: Record<string, MuscleId> = {
 
 interface Palette {
   base: Color;
-  untagged: Color;
+  bone: Color;
   heat: Color[];
   rim: Color;
   sky: Color;
@@ -214,7 +232,7 @@ function readPalette(element: HTMLElement): Palette {
 
   return {
     base: readColor("--m3d-base", "#39424b"),
-    untagged: readColor("--m3d-v2-untagged", "#73808a"),
+    bone: readColor("--m3d-v2-bone", "#c8bea7"),
     heat: [0, 1, 2, 3, 4, 5].map((level) =>
       readColor(`--m3d-heat-${level}`, level === 0 ? "#46505a" : "#e5484d")
     ),
@@ -246,12 +264,12 @@ function structureIdFor(object: Object3D): string | null {
   ) ?? null;
 }
 
-function muscleFor(object: Object3D): MuscleId | null {
+function structureFor(object: Object3D): string | null {
   let current: Object3D | null = object;
   while (current) {
     const structure = structureIdFor(current);
-    if (structure && STRUCTURE_TO_MUSCLE[structure]) {
-      return STRUCTURE_TO_MUSCLE[structure];
+    if (structure) {
+      return structure;
     }
     current = current.parent;
   }
@@ -305,8 +323,6 @@ interface MuscleMaterial {
   level: number;
 }
 
-type GeometryBucket = MuscleId | "__untagged";
-
 function prepareGeometry(
   geometry: BufferGeometry,
   object: Object3D
@@ -326,7 +342,20 @@ function prepareGeometry(
   return prepared;
 }
 
-function createSymmetricFrontPair(
+function fitRootToModelFrame(root: Object3D, bounds: Box3) {
+  const size = bounds.getSize(new Vector3());
+  const center = bounds.getCenter(new Vector3());
+  const scale = size.y > 0 ? MODEL_HEIGHT / size.y : 1;
+  root.scale.setScalar(scale);
+  root.position.set(
+    -center.x * scale,
+    -bounds.min.y * scale,
+    -center.z * scale
+  );
+  return { size, scale };
+}
+
+function createSymmetricSurfacePair(
   geometry: BufferGeometry
 ): BufferGeometry[] {
   const indices = geometry.getIndex();
@@ -430,7 +459,10 @@ function createWorld(
   fill.position.set(3.2, 1.6, 2.6);
   const rim = new DirectionalLight(0x7fe8c4, 1.35);
   rim.position.set(0.8, 2.2, -3.8);
-  scene.add(hemi, key, fill, rim);
+  const lightRig = new Group();
+  lightRig.name = "anatomy-camera-light-rig";
+  lightRig.add(key, fill, rim);
+  scene.add(hemi, lightRig);
 
   const modelRoot = new Group();
   modelRoot.name = "anatomy-engine-muscular-system";
@@ -460,16 +492,12 @@ function createWorld(
   let hiddenMuscles = new Set<MuscleId>();
 
   for (const muscle of MUSCLES) {
-    const surfaceLayer = layerPriority(layerOrder, muscle.id);
     const material = new MeshStandardMaterial({
       color: 0x46505a,
       emissive: 0x46505a,
       emissiveIntensity: 0.025,
       roughness: 0.54,
-      metalness: 0.01,
-      polygonOffset: surfaceLayer > 0,
-      polygonOffsetFactor: -surfaceLayer * 2,
-      polygonOffsetUnits: -surfaceLayer * 2
+      metalness: 0.01
     });
     sharedMaterials.add(material);
     groups.set(muscle.id, {
@@ -480,15 +508,22 @@ function createWorld(
     });
   }
 
-  const untaggedMaterial = new MeshStandardMaterial({
-    color: 0x73808a,
-    roughness: 0.72,
+  const boneMaterial = new MeshPhysicalMaterial({
+    color: 0x9bcbd8,
+    emissive: 0x9bcbd8,
+    emissiveIntensity: 0.1,
+    roughness: 0.22,
     metalness: 0,
+    clearcoat: 0.85,
+    clearcoatRoughness: 0.16,
+    transmission: 0.18,
+    thickness: 0.08,
+    ior: 1.38,
     transparent: true,
-    opacity: 0.28,
+    opacity: 0.52,
     depthWrite: false
   });
-  sharedMaterials.add(untaggedMaterial);
+  sharedMaterials.add(boneMaterial);
 
   let palette = readPalette(container);
   let localHover: MuscleId | null = null;
@@ -507,14 +542,11 @@ function createWorld(
   let hoverDirty = false;
 
   const applyLayers = () => {
-    for (const [id, group] of groups) {
-      const priority = layerPriority(layerOrder, id);
-      group.material.polygonOffset = priority > 0;
-      group.material.polygonOffsetFactor = -priority * 2;
-      group.material.polygonOffsetUnits = -priority * 2;
-      group.material.needsUpdate = true;
+    for (const id of groups.keys()) {
       for (const mesh of muscleMeshes.get(id) ?? []) {
-        mesh.renderOrder = priority;
+        // Draw priority resolves coincident boundaries only. Depth testing
+        // remains enabled, so a deeper muscle cannot paint over the surface.
+        mesh.renderOrder = layerPriority(layerOrder, id);
         mesh.visible = !hiddenMuscles.has(id);
       }
     }
@@ -528,7 +560,8 @@ function createWorld(
     hemi.groundColor.copy(palette.ground);
     rim.color.copy(palette.rim);
     renderer.toneMappingExposure = palette.exposure;
-    untaggedMaterial.color.copy(palette.untagged);
+    boneMaterial.color.copy(palette.bone);
+    boneMaterial.emissive.copy(palette.bone);
     for (const group of groups.values()) {
       group.target.copy(palette.heat[group.level] ?? palette.base);
     }
@@ -554,24 +587,7 @@ function createWorld(
     if (!nearest) {
       return null;
     }
-    const hit = hits
-      .filter((candidate) => candidate.distance <= nearest.distance + SURFACE_PICK_DEPTH)
-      .reduce((best, candidate) => {
-        const bestMuscle = best.object.userData.strengthMuscle as
-          | MuscleId
-          | undefined;
-        const candidateMuscle = candidate.object.userData.strengthMuscle as
-          | MuscleId
-          | undefined;
-        const bestLayer = bestMuscle
-          ? layerPriority(layerOrder, bestMuscle)
-          : 0;
-        const candidateLayer = candidateMuscle
-          ? layerPriority(layerOrder, candidateMuscle)
-          : 0;
-        return candidateLayer > bestLayer ? candidate : best;
-      }, nearest);
-    const muscle = hit?.object.userData.strengthMuscle;
+    const muscle = nearest.object.userData.strengthMuscle;
     return typeof muscle === "string" ? (muscle as MuscleId) : null;
   };
 
@@ -677,6 +693,9 @@ function createWorld(
         cameraTarget.z + Math.cos(nextAngle) * cameraDistance
       );
       camera.lookAt(cameraTarget);
+      // Keep the studio key, fill, and rim in the same positions relative to
+      // the viewer so the posterior view is lit as clearly as the anterior.
+      lightRig.rotation.y = nextAngle;
       if (Math.abs(delta) < 0.002) {
         cameraTargetAngle = null;
       }
@@ -752,7 +771,11 @@ function createWorld(
       }
 
       gltf.scene.updateMatrixWorld(true);
-      const buckets = new Map<GeometryBucket, BufferGeometry[]>();
+      // Use the complete source bounds for registration even though fascia and
+      // other untagged context meshes are intentionally not rendered.
+      const sourceBounds = new Box3().setFromObject(gltf.scene);
+      const sourceHeight = sourceBounds.getSize(new Vector3()).y;
+      const buckets = new Map<MuscleId, BufferGeometry[]>();
       const sourceGeometries = new Set<BufferGeometry>();
 
       gltf.scene.traverse((object) => {
@@ -765,27 +788,34 @@ function createWorld(
           : [object.material];
         previous.forEach((material) => originalMaterials.add(material));
 
-        const structure = structureIdFor(object);
-        if (structure && HIDDEN_DEEP_STRUCTURES.has(structure)) {
+        const structure = structureFor(object);
+        if (!structure || !SUPERFICIAL_STRUCTURES.has(structure)) {
           return;
         }
 
-        const muscle = muscleFor(object);
-        const bucket = muscle ?? "__untagged";
+        const muscle = STRUCTURE_TO_MUSCLE[structure];
+        if (!muscle) {
+          return;
+        }
         const prepared = prepareGeometry(object.geometry, object);
-        const entries = buckets.get(bucket) ?? [];
-        entries.push(
-          ...(structure && SYMMETRIC_FRONT_STRUCTURES.has(structure)
-            ? createSymmetricFrontPair(prepared)
-            : [prepared])
-        );
-        buckets.set(bucket, entries);
+        if (structure === "external_oblique") {
+          // Treat the oblique as the supporting torso layer in this simplified
+          // heat map, beneath both the pectorals and rectus abdominis.
+          prepared.translate(
+            0,
+            0,
+            -sourceHeight * OBLIQUE_SURFACE_INSET_RATIO
+          );
+        }
+        const entries = buckets.get(muscle) ?? [];
+        entries.push(...createSymmetricSurfacePair(prepared));
+        buckets.set(muscle, entries);
       });
 
       const optimizedRoot = new Group();
       optimizedRoot.name = "batched-anatomy-muscles";
 
-      for (const [bucket, entries] of buckets) {
+      for (const [muscle, entries] of buckets) {
         if (entries.length === 0) {
           continue;
         }
@@ -802,23 +832,14 @@ function createWorld(
           geometry.computeBoundingSphere();
           geometries.add(geometry);
 
-          const muscle = bucket === "__untagged" ? null : bucket;
-          const mesh = new Mesh(
-            geometry,
-            muscle ? groups.get(muscle)!.material : untaggedMaterial
-          );
-          mesh.name = muscle ? `strength-${muscle}` : "anatomy-context";
-          if (muscle) {
-            mesh.renderOrder = layerPriority(layerOrder, muscle);
-            mesh.visible = !hiddenMuscles.has(muscle);
-            mesh.userData.strengthMuscle = muscle;
-            pickTargets.push(mesh);
-            const meshes = muscleMeshes.get(muscle) ?? [];
-            meshes.push(mesh);
-            muscleMeshes.set(muscle, meshes);
-          } else {
-            mesh.renderOrder = -1;
-          }
+          const mesh = new Mesh(geometry, groups.get(muscle)!.material);
+          mesh.name = `strength-${muscle}`;
+          mesh.visible = !hiddenMuscles.has(muscle);
+          mesh.userData.strengthMuscle = muscle;
+          pickTargets.push(mesh);
+          const meshes = muscleMeshes.get(muscle) ?? [];
+          meshes.push(mesh);
+          muscleMeshes.set(muscle, meshes);
           optimizedRoot.add(mesh);
         }
       }
@@ -831,15 +852,9 @@ function createWorld(
       }
       originalMaterials.clear();
 
-      const bounds = new Box3().setFromObject(optimizedRoot);
-      const size = bounds.getSize(new Vector3());
-      const center = bounds.getCenter(new Vector3());
-      const scale = size.y > 0 ? MODEL_HEIGHT / size.y : 1;
-      optimizedRoot.scale.setScalar(scale);
-      optimizedRoot.position.set(
-        -center.x * scale,
-        -bounds.min.y * scale,
-        -center.z * scale
+      const { size, scale } = fitRootToModelFrame(
+        optimizedRoot,
+        sourceBounds
       );
       modelRoot.add(optimizedRoot);
       applyLayers();
@@ -852,9 +867,58 @@ function createWorld(
         1
       );
 
-      handlers.onLoad();
       needsRender = true;
       start();
+
+      // Bones are a separate Anatomy Engine system. They remain neutral,
+      // unpickable context behind the heat-mapped superficial muscles.
+      handlers.onLoadProgress(null);
+      loader.load(
+        SKELETON_URL,
+        (skeletonGltf) => {
+          if (disposed) {
+            skeletonGltf.scene.traverse((object) => {
+              if (object instanceof Mesh) {
+                object.geometry.dispose();
+                const materials = Array.isArray(object.material)
+                  ? object.material
+                  : [object.material];
+                materials.forEach(disposeOriginalMaterial);
+              }
+            });
+            return;
+          }
+
+          skeletonGltf.scene.updateMatrixWorld(true);
+          const skeletonBounds = new Box3().setFromObject(skeletonGltf.scene);
+          const skeletonMaterials = new Set<Material>();
+          skeletonGltf.scene.traverse((object) => {
+            if (!(object instanceof Mesh)) {
+              return;
+            }
+            const previous = Array.isArray(object.material)
+              ? object.material
+              : [object.material];
+            previous.forEach((material) => skeletonMaterials.add(material));
+            object.material = boneMaterial;
+            object.name = "anatomy-skeleton-context";
+            geometries.add(object.geometry);
+          });
+          skeletonMaterials.forEach(disposeOriginalMaterial);
+
+          skeletonGltf.scene.name = "anatomy-skeleton";
+          fitRootToModelFrame(skeletonGltf.scene, skeletonBounds);
+          modelRoot.add(skeletonGltf.scene);
+          handlers.onLoad();
+          needsRender = true;
+          start();
+        },
+        undefined,
+        () => {
+          // The heat map remains usable if the optional bone context fails.
+          handlers.onLoad();
+        }
+      );
     },
     (event) => {
       handlers.onLoadProgress(
@@ -1091,30 +1155,30 @@ export function BodyMapV2({
           onClick={() => setLayersOpen((current) => !current)}
         >
           <Layers3 size={15} aria-hidden="true" />
-          <span>Muscle layers</span>
+          <span>Muscle groups</span>
         </button>
         {layersOpen ? (
           <section
             className="anatomy-layer-panel"
             id="anatomy-muscle-layers"
-            aria-label="Muscle layer settings"
+            aria-label="Muscle group visibility and draw order"
           >
             <header>
               <div>
-                <strong>Muscle layers</strong>
-                <span>Front to back</span>
+                <strong>Muscle groups</strong>
+                <span>Visibility &amp; layer priority</span>
               </div>
               <button
                 type="button"
                 className="anatomy-layer-reset"
-                aria-label="Reset muscle layers"
-                title="Reset layers"
+                aria-label="Reset muscle group visibility and order"
+                title="Reset groups"
                 onClick={resetLayers}
               >
                 <RotateCcw size={14} aria-hidden="true" />
               </button>
             </header>
-            <ol aria-label="Muscle render order, front to back">
+            <ul aria-label="Muscle group layer priority, highest first">
               {layerPreferences.order.map((muscle, index) => {
                 const hidden = layerPreferences.hidden.has(muscle);
                 const label = MUSCLE_BY_ID[muscle].label;
@@ -1138,8 +1202,8 @@ export function BodyMapV2({
                     <div className="anatomy-layer-move">
                       <button
                         type="button"
-                        aria-label={`Move ${label} forward`}
-                        title="Move forward"
+                        aria-label={`Move ${label} up`}
+                        title="Increase layer priority"
                         disabled={index === 0}
                         onClick={() => moveLayer(muscle, -1)}
                       >
@@ -1147,8 +1211,8 @@ export function BodyMapV2({
                       </button>
                       <button
                         type="button"
-                        aria-label={`Move ${label} backward`}
-                        title="Move backward"
+                        aria-label={`Move ${label} down`}
+                        title="Decrease layer priority"
                         disabled={index === layerPreferences.order.length - 1}
                         onClick={() => moveLayer(muscle, 1)}
                       >
@@ -1158,7 +1222,7 @@ export function BodyMapV2({
                   </li>
                 );
               })}
-            </ol>
+            </ul>
           </section>
         ) : null}
       </div>

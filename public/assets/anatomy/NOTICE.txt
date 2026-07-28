@@ -1,13 +1,13 @@
-Z-Anatomy muscle model
-======================
+Z-Anatomy muscle and skeletal models
+====================================
 
-This adapted 3D muscle mesh is derived from Z-Anatomy
+These adapted 3D muscle and skeletal meshes are derived from Z-Anatomy
 (https://www.z-anatomy.com/), licensed CC BY-SA 4.0. Z-Anatomy includes
 material derived from BodyParts3D, copyright The Database Center for Life
 Science (DBCLS), also licensed CC BY-SA 4.0.
 
-The model was exported with the AJFUTURES/anatomy-engine pipeline, decimated,
-Draco-compressed, grouped by structure, and adapted to CorosLink's strength
-muscle taxonomy. This muscular_lite.glb derivative is distributed under the
+The models were exported with the AJFUTURES/anatomy-engine pipeline,
+decimated, Draco-compressed, and adapted to CorosLink's strength view. The
+muscular_lite.glb and skeletal_lite.glb derivatives are distributed under the
 same CC BY-SA 4.0 license:
 https://creativecommons.org/licenses/by-sa/4.0/

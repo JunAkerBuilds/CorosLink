@@ -23,7 +23,7 @@
      use the translucent swatches the legend paints with, and the mannequin
      needs its own charcoal so untrained bellies still read against it. */
   --m3d-base: #39424b;
-  --m3d-v2-untagged: #798590;
+  --m3d-v2-bone: #9bcbd8;
   --m3d-heat-0: #46505a;
   --m3d-heat-1: #2fbe91;
   --m3d-heat-2: #7fbe6a;
@@ -54,7 +54,7 @@
      albedo under this rig clips to flat white and loses all its shading. The
      lights come down to match. */
   --m3d-base: #948c7e;
-  --m3d-v2-untagged: #7f786d;
+  --m3d-v2-bone: #648894;
   --m3d-heat-0: #a49c8e;
   --m3d-heat-1: #12946e;
   --m3d-heat-2: #63a047;
@@ -437,7 +437,7 @@
   color: var(--text-primary);
 }
 
-.anatomy-layer-panel ol {
+.anatomy-layer-panel ul {
   display: grid;
   gap: 2px;
   min-height: 0;

@@ -40,7 +40,7 @@ export const PRIMARY_NAV_ITEMS: PrimaryNavItem[] = [
   { id: "maps", label: "Maps", icon: MapIcon, beta: true },
   { id: "watchfaces", label: "Watch Faces", icon: Watch, beta: true },
   { id: "training", label: "Training Hub", icon: Activity },
-  { id: "strength", label: "Strength", icon: Dumbbell },
+  { id: "strength", label: "Strength", icon: Dumbbell, beta: true },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
   {
     id: "coach",
