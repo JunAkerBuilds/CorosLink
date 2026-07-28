@@ -1,0 +1,1013 @@
+/*
+ * Exercise Explorer.
+ *
+ * The panel portals into document.body, so it cannot inherit the Strength
+ * page's --sx-* kit — but it is still a Strength surface and follows the same
+ * rule the page writes down: work is warm, and the app's teal accent belongs to
+ * the rest of the app. The ember below is the page's --sx-ember.
+ *
+ * There is no green here. Gains read in charcoal and let the arrow carry the
+ * direction, so the only colors that raise their voice are the ones asking for
+ * attention: amber when a lift stalls or slips, gold when it sets a record.
+ *
+ * Load is the panel's one visual variable. Every set is measured against the
+ * lift's all-time heaviest and lands in a band — warmup, work, heavy, top, or
+ * record — which drives both the spine glyph in a collapsed session row and the
+ * fill behind each row of the expanded set table. One encoding, two scales.
+ */
+
+.strength-explore-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--sx-edge);
+  border-radius: var(--radius-pill);
+  background: var(--sx-well);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.strength-explore-all:hover {
+  border-color: color-mix(in srgb, var(--sx-ember) 45%, var(--sx-edge));
+  background: color-mix(in srgb, var(--sx-ember) 8%, var(--sx-well));
+  color: var(--text-primary);
+}
+
+.strength-explore-all:focus-visible,
+.strength-lift-button:focus-visible,
+.strength-session-chip-button:focus-visible {
+  outline: 2px solid var(--sx-ember);
+  outline-offset: 3px;
+}
+
+.strength-lift-list li.is-interactive {
+  display: block;
+  padding: 0;
+}
+
+.strength-lift-button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px auto 16px;
+  align-items: center;
+  gap: 22px;
+  width: calc(100% + 16px);
+  margin-left: -8px;
+  padding: 15px 8px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.strength-lift-list li:first-child .strength-lift-button {
+  padding-top: 8px;
+}
+
+.strength-lift-list li:last-child .strength-lift-button {
+  padding-bottom: 8px;
+}
+
+.strength-lift-button:hover {
+  background: var(--sx-well);
+}
+
+.strength-lift-open-icon {
+  color: var(--text-muted);
+  transition: color 150ms ease, transform 150ms ease;
+}
+
+.strength-lift-button:hover .strength-lift-open-icon {
+  color: var(--sx-ember);
+  transform: translateX(2px);
+}
+
+.strength-session-chip-button {
+  max-width: 100%;
+  padding: 3px 10px;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+  font-size: 11.5px;
+  letter-spacing: -0.002em;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.strength-session-chip-button:hover {
+  background: color-mix(in srgb, var(--sx-ember) 14%, transparent);
+  color: var(--text-primary);
+}
+
+/* ---------- Shell ---------- */
+
+.exercise-explorer-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.58);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  animation: exercise-explorer-fade 180ms ease both;
+}
+
+:root[data-theme="paper"] .exercise-explorer-backdrop {
+  background: rgba(32, 28, 22, 0.28);
+}
+
+.exercise-explorer {
+  /* Panel kit. Three surfaces (edge / well / raised) carry the whole depth
+     story, mirroring the Strength page, so no card invents its own border. */
+  --xx-edge: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  --xx-hairline: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  --xx-well: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --xx-raised: color-mix(in srgb, var(--text-primary) 6%, transparent);
+
+  /* The app's --surface is a dark teal-green (#0c1814). Ember on green is mud,
+     so the panel lays down its own neutral charcoal instead — opaque, because a
+     translucent panel picks the green straight back up off the page behind it. */
+  --xx-surface: #17191c;
+  --xx-elevated: color-mix(in srgb, var(--text-primary) 9%, var(--xx-surface));
+
+  --xx-ember: #e8813c;
+  --xx-ember-deep: #d2542a;
+  --xx-cool: #5c6a72;
+  --xx-record: #f0b429;
+  /* Charcoal, lifted off the panel far enough to stay legible — the cool
+     counterweight to the ember, and what a gain reads in. */
+  --xx-slate: #9fadb4;
+
+  --xx-band-warmup: var(--xx-cool);
+  --xx-band-work: color-mix(in srgb, var(--xx-ember) 58%, var(--xx-cool));
+  --xx-band-heavy: var(--xx-ember);
+  --xx-band-top: var(--xx-ember-deep);
+  --xx-band-record: var(--xx-record);
+
+  display: flex;
+  width: min(840px, calc(100vw - 64px));
+  min-width: 0;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--xx-edge);
+  border-radius: 24px;
+  background: var(--xx-surface);
+  color: var(--text-primary);
+  box-shadow: -16px 20px 70px rgba(0, 0, 0, 0.42);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Segoe UI", sans-serif;
+  font-kerning: normal;
+  animation: exercise-explorer-enter 240ms cubic-bezier(0.22, 0.8, 0.3, 1) both;
+}
+
+:root[data-theme="paper"] .exercise-explorer {
+  /* On paper a raised face is white and the shadow does the lifting, so the
+     surfaces are respecified rather than derived from the ink. */
+  --xx-edge: rgba(38, 34, 28, 0.11);
+  --xx-hairline: rgba(38, 34, 28, 0.08);
+  --xx-well: rgba(38, 34, 28, 0.045);
+  --xx-raised: #ffffff;
+
+  --xx-surface: #faf7f0;
+  --xx-elevated: #ffffff;
+
+  --xx-ember: #cf6a2a;
+  --xx-ember-deep: #b8461f;
+  --xx-cool: #a3a096;
+  --xx-record: #c98a12;
+  /* On paper the charcoal can be the real thing. */
+  --xx-slate: #46535a;
+
+  box-shadow: -12px 18px 60px rgba(58, 48, 34, 0.2);
+}
+
+/* ---------- Header ---------- */
+
+.exercise-explorer-header {
+  position: relative;
+  z-index: 5;
+  padding: 24px 28px 20px;
+  border-bottom: 1px solid var(--xx-edge);
+  background: color-mix(in srgb, var(--text-primary) 3%, var(--xx-surface));
+}
+
+.exercise-explorer-headline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.exercise-explorer .eyebrow {
+  margin: 0 0 6px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.exercise-explorer-heading {
+  min-width: 0;
+}
+
+.exercise-explorer-heading h2 {
+  margin: 0;
+  font-size: clamp(24px, 3vw, 31px);
+  font-weight: 620;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+
+.exercise-explorer-muscles {
+  margin: 7px 0 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.exercise-explorer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(310px, 45%);
+}
+
+.exercise-explorer-select {
+  flex: 1;
+}
+
+.exercise-explorer-select .app-select-trigger {
+  min-height: 38px;
+  border-radius: 11px;
+  font-size: 12.5px;
+}
+
+.exercise-explorer-select .app-select-menu {
+  max-height: min(360px, 55vh);
+}
+
+.exercise-explorer-close {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border: 1px solid var(--xx-edge);
+  border-radius: 11px;
+  background: var(--xx-well);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.exercise-explorer-close:hover {
+  background: var(--xx-raised);
+  color: var(--text-primary);
+}
+
+.exercise-explorer-close:focus-visible {
+  outline: 2px solid var(--xx-ember);
+  outline-offset: 2px;
+}
+
+/*
+ * The verdict is the answer to the panel's question, so it sits in the header
+ * as a status line under the title rather than competing for attention as one
+ * card among five. Its rule is the only place teal survives in this panel.
+ */
+.exercise-explorer-verdict {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 9px;
+  margin: 16px 0 0;
+  padding: 1px 0 1px 12px;
+  border-left: 2px solid var(--xx-verdict, var(--text-muted));
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.exercise-explorer-verdict svg {
+  align-self: center;
+  flex: 0 0 auto;
+  color: var(--xx-verdict, var(--text-muted));
+}
+
+.exercise-explorer-verdict strong {
+  color: var(--xx-verdict, var(--text-primary));
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+
+.exercise-explorer-verdict span {
+  min-width: 0;
+}
+
+.exercise-explorer-verdict[data-state="progressing"] {
+  --xx-verdict: var(--xx-slate);
+}
+
+.exercise-explorer-verdict[data-state="plateau"],
+.exercise-explorer-verdict[data-state="declining"] {
+  --xx-verdict: var(--warning-text);
+}
+
+.exercise-explorer-verdict[data-state="insufficient"],
+.exercise-explorer-verdict[data-state="steady"] {
+  --xx-verdict: var(--text-muted);
+}
+
+.exercise-explorer-scroll {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-height: 0;
+  padding: 22px 28px 36px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ---------- Shared card shell ---------- */
+
+.exercise-explorer-hero,
+.exercise-explorer-section {
+  border: 1px solid var(--xx-hairline);
+  border-radius: 18px;
+  background: var(--xx-well);
+}
+
+.exercise-explorer-section {
+  padding: 20px 22px;
+}
+
+.exercise-explorer-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.exercise-explorer-section-head h3,
+.exercise-explorer-comparison h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.018em;
+}
+
+.exercise-explorer-comparison h3 span {
+  color: var(--text-muted);
+  font-weight: 450;
+}
+
+/* ---------- Hero: the figure and its trend, read as one object ---------- */
+
+.exercise-explorer-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.6fr);
+  align-items: stretch;
+}
+
+.exercise-explorer-hero[data-has-chart="false"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.exercise-hero-figure {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 22px 24px;
+}
+
+.exercise-hero-value {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 0;
+  min-width: 0;
+}
+
+/* The numbers are the typography here: one big tightly-tracked figure against a
+   10px eyebrow, with the unit demoted to a small-caps suffix. */
+.exercise-hero-value strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: clamp(34px, 4.4vw, 46px);
+  font-weight: 620;
+  line-height: 1;
+  letter-spacing: -0.045em;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+}
+
+.exercise-hero-value small {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.exercise-hero-note {
+  margin: 7px 0 0;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.exercise-hero-chart {
+  min-width: 0;
+  padding: 16px 18px 10px;
+  border-left: 1px solid var(--xx-hairline);
+}
+
+.exercise-hero-chart-label {
+  margin: 0 0 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.exercise-progress-chart {
+  height: 156px;
+}
+
+.exercise-chart-tooltip {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--xx-edge);
+  border-radius: 12px;
+  background: var(--xx-elevated);
+  box-shadow: var(--shadow-soft);
+}
+
+.exercise-chart-tooltip span,
+.exercise-chart-tooltip small {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.exercise-chart-tooltip strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Totals ride under the hero as a hairline rail, not as four more big cards —
+   they are context for the figure above, not rivals to it. */
+.exercise-stat-rail {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--xx-hairline);
+  background: var(--xx-hairline);
+}
+
+.exercise-stat-rail > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 12px 16px 13px;
+  background: var(--xx-surface);
+}
+
+.exercise-stat-rail dt {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.exercise-stat-rail dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Comparison + records ---------- */
+
+.exercise-explorer-insight-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 16px;
+}
+
+/* The two cards hold naturally different amounts (four deltas against up to
+   seven rep ranges), so both stretch and let their own contents take up the
+   slack rather than leaving one card half empty.
+   Ordering matters: `.is-empty` below re-declares display and must stay after
+   this rule to win on source order at equal specificity. */
+.exercise-explorer-insight-grid > .exercise-explorer-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.exercise-comparison-grid {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(58px, 1fr);
+  gap: 8px;
+}
+
+.exercise-comparison-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 11px 13px;
+  border-radius: 11px;
+  background: var(--xx-raised);
+}
+
+.exercise-comparison-item > span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.exercise-comparison-item strong {
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exercise-comparison-item small {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.exercise-comparison-item small[data-tone="up"] {
+  color: var(--xx-slate);
+}
+
+.exercise-comparison-item small[data-tone="down"] {
+  color: var(--warning-text);
+}
+
+.exercise-explorer-comparison.is-empty {
+  display: grid;
+  align-content: center;
+}
+
+.exercise-explorer-comparison.is-empty > p:last-child,
+.exercise-explorer-empty {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+/* A record board is a list, not a grid of cards: one ruled line per rep range,
+   weights aligned into a single right-hand column you can read down. */
+.exercise-rep-records {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 2px;
+}
+
+.exercise-rep-records article {
+  display: grid;
+  grid-template-columns: minmax(52px, auto) minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  padding: 7px 11px;
+  border-radius: 8px;
+  background: var(--xx-raised);
+}
+
+/* Gold lands once — on the rep range holding the lift's heaviest set ever. */
+.exercise-rep-records article[data-anchor="true"] {
+  background: color-mix(in srgb, var(--xx-record) 13%, transparent);
+  box-shadow: inset 2px 0 0 var(--xx-record);
+}
+
+.exercise-rep-records article[data-anchor="true"] strong {
+  color: var(--xx-record);
+}
+
+.exercise-rep-records span {
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.exercise-rep-records small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exercise-rep-records strong {
+  justify-self: end;
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- Set log ---------- */
+
+.exercise-explorer-log {
+  padding-bottom: 14px;
+}
+
+/* The key doubles as the legend for the row fills in every expanded table. */
+.exercise-spine-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.exercise-spine-key i {
+  width: 4px;
+  height: 11px;
+  border-radius: 1px;
+  background: var(--xx-band-warmup);
+}
+
+.exercise-spine-key i:nth-of-type(2) { background: var(--xx-band-work); }
+.exercise-spine-key i:nth-of-type(3) { background: var(--xx-band-heavy); }
+.exercise-spine-key i:nth-of-type(4) {
+  margin-right: 6px;
+  background: var(--xx-band-top);
+}
+
+.exercise-session-history {
+  display: grid;
+  gap: 7px;
+}
+
+.exercise-history-session {
+  overflow: hidden;
+  border: 1px solid var(--xx-hairline);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+}
+
+.exercise-history-trigger {
+  display: grid;
+  grid-template-columns: minmax(112px, 0.8fr) 74px minmax(0, 1fr) auto 16px;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 15px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.exercise-history-trigger:hover {
+  background: var(--xx-well);
+}
+
+.exercise-history-trigger:focus-visible {
+  outline: 2px solid var(--xx-ember);
+  outline-offset: -2px;
+}
+
+.exercise-history-trigger > svg {
+  color: var(--text-muted);
+  transition: transform 180ms ease;
+}
+
+.exercise-history-trigger[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+
+.exercise-history-date {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.exercise-history-date strong {
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.exercise-history-date > span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * The spine. Bar height and color both track the set's load against the lift's
+ * all-time heaviest, so a column of collapsed rows shows the shape of every
+ * session — ramp, top set, back-offs — before a single number is read.
+ */
+.exercise-set-spine {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 26px;
+}
+
+.exercise-set-spine i {
+  min-width: 1px;
+  flex: 1 1 0;
+  max-width: 7px;
+  border-radius: 1.5px;
+  background: var(--xx-band-warmup);
+}
+
+.exercise-set-spine i[data-band="work"] { background: var(--xx-band-work); }
+.exercise-set-spine i[data-band="heavy"] { background: var(--xx-band-heavy); }
+.exercise-set-spine i[data-band="top"] { background: var(--xx-band-top); }
+.exercise-set-spine i[data-band="record"] { background: var(--xx-band-record); }
+
+.exercise-history-prs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* A PR is a record, not a pass, so it takes the panel's gold rather than the
+   app's success green. */
+.exercise-history-prs > span {
+  padding: 3px 7px;
+  border: 1px solid color-mix(in srgb, var(--xx-record) 40%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--xx-record) 14%, transparent);
+  color: var(--xx-record);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.exercise-history-summary {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.exercise-history-summary > span + span::before {
+  content: "·";
+  margin-right: 9px;
+}
+
+.exercise-history-summary strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.exercise-set-table-shell {
+  overflow-x: auto;
+  border-top: 1px solid var(--xx-hairline);
+}
+
+.exercise-set-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.exercise-set-table th,
+.exercise-set-table td {
+  padding: 9px 13px;
+  border-bottom: 1px solid var(--xx-hairline);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.exercise-set-table th:first-child,
+.exercise-set-table td:first-child {
+  text-align: left;
+}
+
+.exercise-set-table th {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.exercise-set-table td {
+  position: relative;
+  color: var(--text-secondary);
+}
+
+/* Same encoding as the spine, at full width: the row itself fills to the set's
+   share of the lift's best, so the table reads as the ramp it describes. */
+.exercise-set-table tbody tr {
+  --xx-load-tint: color-mix(in srgb, var(--xx-band-warmup) 20%, transparent);
+  background: linear-gradient(
+    to right,
+    var(--xx-load-tint) 0%,
+    var(--xx-load-tint) var(--set-load, 0%),
+    transparent var(--set-load, 0%)
+  );
+}
+
+.exercise-set-table tbody tr[data-band="work"] {
+  --xx-load-tint: color-mix(in srgb, var(--xx-band-work) 22%, transparent);
+}
+
+.exercise-set-table tbody tr[data-band="heavy"] {
+  --xx-load-tint: color-mix(in srgb, var(--xx-band-heavy) 24%, transparent);
+}
+
+.exercise-set-table tbody tr[data-band="top"] {
+  --xx-load-tint: color-mix(in srgb, var(--xx-band-top) 28%, transparent);
+}
+
+.exercise-set-table tbody tr[data-band="record"] {
+  --xx-load-tint: color-mix(in srgb, var(--xx-band-record) 26%, transparent);
+}
+
+.exercise-set-table tbody tr[data-band="top"] td:nth-child(2),
+.exercise-set-table tbody tr[data-band="record"] td:nth-child(2) {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.exercise-set-table tr:last-child td {
+  border-bottom: 0;
+}
+
+@keyframes exercise-explorer-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes exercise-explorer-enter {
+  from { opacity: 0; transform: translateX(28px) scale(0.99); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@media (max-width: 980px) {
+  .exercise-explorer-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .exercise-hero-chart {
+    border-top: 1px solid var(--xx-hairline);
+    border-left: 0;
+  }
+
+  .exercise-stat-rail {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .exercise-explorer-backdrop {
+    padding: 10px;
+  }
+
+  .exercise-explorer {
+    width: 100%;
+    border-radius: 19px;
+  }
+
+  .exercise-explorer-insight-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .strength-lift-button {
+    grid-template-columns: minmax(0, 1fr) auto 16px;
+    gap: 14px;
+  }
+
+  .strength-lift-button .strength-spark {
+    display: none;
+  }
+
+  .exercise-explorer-headline {
+    display: grid;
+  }
+
+  .exercise-explorer-header {
+    padding: 20px 20px 18px;
+  }
+
+  .exercise-explorer-actions {
+    width: 100%;
+  }
+
+  .exercise-explorer-scroll {
+    padding: 18px 20px 30px;
+  }
+
+  .exercise-hero-figure {
+    padding: 18px 20px;
+  }
+
+  .exercise-stat-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* The spine is self-explanatory next to the numbers; the key is the first
+     thing to go when the head runs out of room. */
+  .exercise-spine-key {
+    display: none;
+  }
+
+  .exercise-history-trigger {
+    grid-template-columns: minmax(0, 1fr) 74px 16px;
+    gap: 10px 12px;
+  }
+
+  .exercise-history-prs,
+  .exercise-history-summary {
+    grid-column: 1 / span 2;
+    justify-content: flex-start;
+  }
+
+  .exercise-history-trigger > svg {
+    grid-column: 3;
+    grid-row: 1 / span 3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exercise-explorer-backdrop,
+  .exercise-explorer {
+    animation: none;
+  }
+
+  .exercise-history-trigger > svg {
+    transition: none;
+  }
+}

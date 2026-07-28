@@ -9,8 +9,35 @@
 
 .strength-view {
   display: grid;
-  gap: 18px;
+  gap: 24px;
   min-height: 0;
+
+  /* Surface kit for the redrawn sections: one hairline, one well, one raised
+     face. Everything below is built from these three, so the page keeps a
+     single depth story instead of a new border colour per card. */
+  --sx-edge: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  --sx-hairline: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --sx-well: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --sx-raised: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  /* Opaque, unlike the three above: anything that floats over the chart needs
+     real ground, or the bars read straight through the numbers. */
+  --sx-elevated: #22262b;
+  --sx-lift: 0 1px 2px rgba(0, 0, 0, 0.22);
+  --sx-pad: 30px;
+  --sx-radius: 22px;
+
+  /* The page's ember, shared by the weekly bars and the card glow. Work is
+     warm here; the app's teal accent is reserved for the rest of the app. */
+  --sx-ember: #e8813c;
+  --sx-ember-glow: rgba(232, 129, 60, 0.1);
+
+  /* Movement-mix swatches are fixed, not the --sport-* tokens: those are
+     user-customisable in Settings, and a palette that can collide with itself
+     is not a palette. */
+  --mix-push: #e5484d;
+  --mix-pull: #2fbe91;
+  --mix-legs: #d89b22;
+  --mix-core: #7aa2f7;
   --strength-font:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
     "Segoe UI", sans-serif;
@@ -61,6 +88,22 @@
 }
 
 :root[data-theme="paper"] .strength-view {
+  /* On paper a "raised" face is white and the shadow does the lifting, so the
+     three surfaces are respecified rather than derived from the ink. */
+  --sx-edge: rgba(38, 34, 28, 0.11);
+  --sx-hairline: rgba(38, 34, 28, 0.09);
+  --sx-well: rgba(38, 34, 28, 0.045);
+  --sx-raised: #ffffff;
+  --sx-elevated: #ffffff;
+  --sx-lift: 0 1px 2px rgba(60, 50, 35, 0.14);
+  --sx-ember: #cf6a2a;
+  --sx-ember-glow: rgba(207, 106, 42, 0.07);
+
+  --mix-push: #cb3035;
+  --mix-pull: #12946e;
+  --mix-legs: #b9791a;
+  --mix-core: #3d6ecb;
+
   --heat-0: rgba(38, 34, 28, 0.05);
   --heat-1: rgba(18, 148, 110, 0.22);
   --heat-2: rgba(18, 148, 110, 0.5);
@@ -107,36 +150,28 @@
 
 .strength-header {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 20px;
+  gap: 24px;
   flex-wrap: wrap;
+  padding: 4px 2px 2px;
 }
 
-.strength-header h2 {
+.strength-title h2 {
   margin: 0;
-  font-size: clamp(28px, 4vw, 44px);
-  line-height: 1;
+  font-size: clamp(30px, 3.4vw, 40px);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.026em;
 }
 
-.strength-header p:not(.eyebrow) {
-  max-width: 620px;
-  margin: 10px 0 0;
+.strength-title p {
+  max-width: 46ch;
+  margin: 9px 0 0;
   color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.55;
-}
-
-.strength-header-icon {
-  display: grid;
-  width: 48px;
-  height: 48px;
-  place-items: center;
-  flex-shrink: 0;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  background: rgba(229, 72, 77, 0.14);
-  color: var(--sport-strength);
+  font-size: 14.5px;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
 }
 
 .strength-header-controls {
@@ -144,6 +179,77 @@
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  padding-bottom: 4px;
+}
+
+/*
+ * Window picker. Deliberately not the `.strength-segmented` used inside the
+ * body panel: that one is instrument chrome sitting on the figure's stage,
+ * this one is page chrome and reads as part of the title line.
+ */
+.strength-window {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--sx-edge);
+  border-radius: var(--radius-pill);
+  background: var(--sx-well);
+}
+
+.strength-window button {
+  min-height: 32px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
+}
+
+.strength-window button:hover:not(.is-active) {
+  color: var(--text-primary);
+}
+
+.strength-window button.is-active {
+  background: var(--sx-raised);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: var(--sx-lift);
+}
+
+.strength-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--sx-edge);
+  border-radius: var(--radius-pill);
+  background: var(--sx-well);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  transition:
+    border-color 0.18s ease,
+    color 0.18s ease,
+    background 0.18s ease;
+}
+
+.strength-refresh:hover:not(:disabled) {
+  border-color: var(--accent-glow);
+  background: var(--sx-raised);
+  color: var(--text-primary);
+}
+
+.strength-refresh:disabled {
+  opacity: 0.55;
 }
 
 .strength-segmented {
@@ -965,20 +1071,12 @@
   text-overflow: ellipsis;
 }
 
-.muscle-ranking-track,
-.strength-balance-track {
+.muscle-ranking-track {
   position: relative;
+  height: 5px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text-primary) 7%, transparent);
   overflow: hidden;
-}
-
-.muscle-ranking-track {
-  height: 5px;
-}
-
-.strength-balance-track {
-  height: 7px;
 }
 
 .muscle-ranking-fill {
@@ -1628,9 +1726,7 @@
   bottom: 2px;
   padding: 1px 4px;
   border-radius: 4px;
-  background: var(--glass-bg-hover);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+  background: var(--sx-elevated);
   color: var(--text-secondary);
   font-size: 8.5px;
   font-style: normal;
@@ -1715,9 +1811,7 @@
   padding: 3px 7px 4px;
   border: 1px solid var(--glass-border);
   border-radius: 7px;
-  background: var(--glass-bg-hover);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
+  background: var(--sx-elevated);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.24);
   color: var(--text-primary);
   font-size: 11px;
@@ -1992,196 +2086,511 @@
   }
 }
 
-/* ---------- Stat tiles ---------- */
 
-.strength-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
-  gap: 12px;
+/* ==========================================================================
+   Reading sections
+   --------------------------------------------------------------------------
+   Everything below the figure. One card shape, one heading pattern, one
+   figure treatment; the only saturated colour is the weekly chart and the
+   movement-mix bar. Titles are sentence case on purpose — the uppercase
+   kicker the rest of the app uses reads as chrome, and this half of the page
+   is meant to read as writing.
+   ========================================================================== */
+
+.strength-card {
+  position: relative;
+  padding: var(--sx-pad);
+  border-radius: var(--sx-radius);
+  border-color: var(--sx-edge);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--text-primary) 6%, transparent),
+      transparent 46%
+    ),
+    var(--glass-bg);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 9%, transparent),
+    var(--shadow-card);
 }
 
-.strength-tile {
-  display: grid;
-  gap: 2px;
-  padding: 14px 16px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  background: var(--glass-bg);
-  transition:
-    border-color 0.18s ease,
-    transform 0.18s ease;
+/*
+ * One warm bloom, on the chart only. It is the page's loudest card and the
+ * only one that earns colour in its background; repeating it on every card
+ * would turn a signature into wallpaper.
+ */
+.strength-week-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    68% 76% at 88% 0%,
+    var(--sx-ember-glow) 0%,
+    transparent 68%
+  );
+  pointer-events: none;
 }
 
-.strength-tile:hover {
-  border-color: var(--accent-glow);
-  transform: translateY(-1px);
+.strength-week-card > * {
+  position: relative;
 }
 
-.strength-tile-icon {
-  color: var(--sport-strength);
+.strength-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
 }
 
-.strength-tile-label {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.strength-card-head h3 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.016em;
+  line-height: 1.25;
 }
 
-.strength-tile-value {
-  font-family: var(--font-display);
-  font-size: 24px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-}
-
-.strength-tile-meta {
+.strength-card-head > div > p {
+  max-width: 52ch;
+  margin: 6px 0 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  letter-spacing: -0.004em;
+}
+
+.strength-empty {
+  margin: 0;
+  padding: 6px 0 2px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+/* ---------- Big figures ---------- */
+
+.strength-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 0;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.strength-figure > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.strength-figure strong {
+  font-size: 38px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.strength-figure em {
+  color: var(--text-muted);
+  font-size: 15px;
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Summary band ---------- */
+
+/*
+ * The band carries no card, so its first figure sits on the page's own left
+ * edge — the same spine as the title above it — rather than being inset the
+ * way card content is.
+ */
+.strength-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 26px 0;
+  border-top: 1px solid var(--sx-hairline);
+  border-bottom: 1px solid var(--sx-hairline);
+}
+
+.strength-summary-item {
+  padding: 0 30px;
+  border-left: 1px solid var(--sx-hairline);
+}
+
+.strength-summary-item:first-child {
+  padding-left: 2px;
+  border-left: 0;
+}
+
+.strength-summary-label {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+.strength-summary-caption {
+  margin: 11px 0 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* ---------- Lower grids ---------- */
+/* The sidebar eats ~240px, so four figures start crowding well before the
+   viewport itself looks narrow. */
+@media (max-width: 1240px) {
+  .strength-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 28px;
+  }
 
-.strength-grid {
+  .strength-summary-item:nth-child(odd) {
+    padding-left: 2px;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .strength-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .strength-summary-item {
+    padding-left: 2px;
+    border-left: 0;
+  }
+}
+
+/* ---------- Weekly chart ---------- */
+
+.strength-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 7px 14px 7px 11px;
+  border-radius: var(--radius-pill);
+  background: var(--sx-well);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+}
+
+.strength-change[data-tone="up"] {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.strength-change[data-tone="down"] {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  color: var(--text-secondary);
+}
+
+.strength-change svg {
+  flex-shrink: 0;
+}
+
+.strength-chart {
+  height: 268px;
+}
+
+.strength-tooltip {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-  gap: 18px;
+  gap: 3px;
+  padding: 11px 14px;
+  border: 1px solid var(--sx-edge);
+  border-radius: 14px;
+  background: var(--sx-elevated);
+  box-shadow: var(--shadow-elevated);
+  font-size: 12.5px;
+}
+
+.strength-tooltip span {
+  color: var(--text-muted);
+}
+
+.strength-tooltip strong {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.strength-chart-note {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 16px 0 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  letter-spacing: -0.004em;
+}
+
+.strength-chart-dash {
+  width: 22px;
+  height: 0;
+  border-top: 1px dashed currentColor;
+  opacity: 0.7;
+}
+
+/* ---------- Two-column band ---------- */
+
+.strength-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 24px;
   align-items: start;
 }
 
 @media (max-width: 1040px) {
-  .strength-grid {
+  .strength-columns {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-@media (max-width: 720px) {
-  .anatomy-body-map {
-    min-height: 430px;
-  }
-}
+/* ---------- Main lifts ---------- */
 
-.strength-chart {
-  height: 240px;
-}
-
-.strength-panel-empty {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.strength-balance {
+.strength-lift-list {
   display: grid;
-  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.strength-balance li {
+.strength-lift-list li {
   display: grid;
-  grid-template-columns: 54px minmax(0, 1fr) 44px;
+  grid-template-columns: minmax(0, 1fr) 104px auto;
   align-items: center;
-  gap: 10px;
+  gap: 22px;
+  padding: 15px 0;
+  border-top: 1px solid var(--sx-hairline);
 }
 
-.strength-balance-label {
-  color: var(--text-primary);
-  font-size: 12.5px;
-  font-weight: 600;
+.strength-lift-list li:first-child {
+  border-top: 0;
+  padding-top: 2px;
 }
 
-.strength-balance-track {
-  height: 9px;
+.strength-lift-list li:last-child {
+  padding-bottom: 2px;
 }
 
-.strength-balance-fill {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  transform-origin: left center;
-  transition: transform 0.5s cubic-bezier(0.32, 0.8, 0.36, 1);
-}
-
-.strength-balance-fill.is-push {
-  background: var(--sport-strength);
-}
-.strength-balance-fill.is-pull {
-  background: var(--accent);
-}
-.strength-balance-fill.is-legs {
-  background: var(--accent-gold);
-}
-.strength-balance-fill.is-core {
-  background: var(--sport-other);
-}
-
-.strength-balance-value {
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.strength-balance-note {
-  margin: 14px 0 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.55;
+.strength-lift-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 
 .strength-lift-name {
-  display: block;
   color: var(--text-primary);
-  font-weight: 600;
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -0.008em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .strength-lift-meta {
-  display: block;
   color: var(--text-muted);
-  font-size: 11.5px;
-}
-
-.strength-trend {
   font-size: 12.5px;
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
 }
 
-.strength-trend.is-up {
+/*
+ * The one place on the page where a line goes up. Kept small and unlabelled:
+ * it is the shape that matters, and the exact numbers sit right beside it.
+ */
+.strength-spark {
+  display: block;
+  width: 104px;
+  height: 30px;
+  overflow: visible;
+}
+
+.strength-spark.is-empty {
+  height: 30px;
+}
+
+.strength-spark polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.strength-spark circle {
+  fill: var(--accent);
+}
+
+/* Tone only ever moves the stroke; the polyline keeps `fill: none` or it
+   closes itself into a solid shape. */
+.strength-spark[data-tone="down"] polyline {
+  stroke: var(--text-muted);
+}
+
+.strength-spark[data-tone="down"] circle {
+  fill: var(--text-muted);
+}
+
+.strength-spark[data-tone="flat"] polyline {
+  stroke: var(--text-secondary);
+  opacity: 0.75;
+}
+
+.strength-spark[data-tone="flat"] circle {
+  fill: var(--text-secondary);
+  opacity: 0.75;
+}
+
+.strength-lift-figures {
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+  text-align: right;
+}
+
+.strength-lift-figures strong {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+}
+
+.strength-lift-change {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.strength-lift-change[data-tone="up"] {
   color: var(--success-text);
 }
 
-.strength-trend.is-down {
-  color: var(--error-text);
+@media (max-width: 720px) {
+  .strength-lift-list li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
+  }
+
+  .strength-spark {
+    display: none;
+  }
 }
 
-.strength-trend.is-flat {
-  color: var(--text-muted);
+/* ---------- Movement mix ---------- */
+
+.strength-mix-bar {
+  display: flex;
+  gap: 4px;
+  height: 18px;
 }
 
-.strength-sessions {
+.strength-mix-bar > span {
+  min-width: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--pattern-color);
+  transition: flex-grow 0.5s cubic-bezier(0.32, 0.8, 0.36, 1);
+}
+
+[data-pattern="push"] {
+  --pattern-color: var(--mix-push);
+}
+[data-pattern="pull"] {
+  --pattern-color: var(--mix-pull);
+}
+[data-pattern="legs"] {
+  --pattern-color: var(--mix-legs);
+}
+[data-pattern="core"] {
+  --pattern-color: var(--mix-core);
+}
+
+.strength-mix-legend {
   display: grid;
-  gap: 10px;
+  gap: 1px;
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.strength-mix-legend li {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--sx-hairline);
+  font-size: 13.5px;
+}
+
+.strength-mix-legend li:first-child {
+  border-top: 0;
+}
+
+.strength-mix-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--pattern-color);
+}
+
+.strength-mix-legend span {
+  color: var(--text-secondary);
+  letter-spacing: -0.005em;
+}
+
+.strength-mix-legend strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.strength-mix-note {
+  margin: 18px 0 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* ---------- Recent sessions ---------- */
+
+.strength-session-list {
+  display: grid;
+  /* Fixed at three, not auto-fill: six sessions then always land as two even
+     rows, where auto-fill leaves a ragged four-and-two on a wide display. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
   margin: 0;
   padding: 0;
   list-style: none;
-  max-height: 420px;
-  overflow-y: auto;
 }
 
-.strength-sessions li {
+.strength-session-list li {
   display: grid;
-  gap: 6px;
-  padding: 11px 13px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-sm);
-  background: var(--glass-bg);
+  gap: 10px;
+  padding: 18px 20px;
+  border: 1px solid var(--sx-hairline);
+  border-radius: 16px;
+  background: var(--sx-well);
 }
 
 .strength-session-head {
@@ -2192,25 +2601,34 @@
 }
 
 .strength-session-head strong {
-  font-size: 13.5px;
-  white-space: nowrap;
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -0.008em;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .strength-session-head span {
   flex-shrink: 0;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
-.strength-session-stats {
+.strength-session-facts {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 6px 10px;
+  margin: 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
+}
+
+.strength-session-facts span + span::before {
+  content: "·";
+  margin-right: 10px;
+  color: var(--text-muted);
 }
 
 .strength-session-chips {
@@ -2220,13 +2638,80 @@
 }
 
 .strength-session-chips span {
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: var(--radius-pill);
-  background: var(--heat-0);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 11.5px;
+  letter-spacing: -0.002em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .strength-session-chips span.is-more {
+  background: transparent;
   color: var(--text-muted);
+}
+
+@media (max-width: 1180px) {
+  .strength-session-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .strength-session-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------- Standalone states ---------- */
+
+.strength-connect,
+.strength-blank {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 56px 40px;
+  text-align: center;
+}
+
+.strength-connect-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  margin-bottom: 6px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--sport-strength) 16%, transparent);
+  color: var(--sport-strength);
+}
+
+.strength-connect h3,
+.strength-blank h3 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+}
+
+.strength-connect p,
+.strength-blank p {
+  max-width: 44ch;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.strength-connect .primary-button {
+  margin-top: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .strength-mix-bar > span {
+    transition: none;
+  }
 }
