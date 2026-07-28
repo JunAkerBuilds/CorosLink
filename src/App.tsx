@@ -148,6 +148,11 @@ const LazyTrainingHubView = lazy(() =>
     default: TrainingHubView,
   })),
 );
+const LazyStrengthView = lazy(() =>
+  import("./strength/StrengthView").then(({ StrengthView }) => ({
+    default: StrengthView,
+  })),
+);
 const LazyCalendarView = lazy(() =>
   import("./calendar/CalendarView").then(({ CalendarView }) => ({
     default: CalendarView,
@@ -2359,6 +2364,18 @@ export default function App() {
                   onRefresh={handleTrainingHubRefresh}
                   onLoadDetail={handleTrainingHubActivityDetail}
                   onExportFile={handleTrainingHubExport}
+                />
+              </Suspense>
+            ) : null}
+            {activeView === "strength" ? (
+              <Suspense fallback={<DeferredSurfaceFallback label="strength" />}>
+                <LazyStrengthView
+                  api={api}
+                  status={trainingHubStatus}
+                  showDevelopmentTools={
+                    IS_DEVELOPMENT_BUILD && showDevelopmentTools
+                  }
+                  onOpenTraining={() => setActiveView("training")}
                 />
               </Suspense>
             ) : null}

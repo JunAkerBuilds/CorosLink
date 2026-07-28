@@ -1,0 +1,1152 @@
+/*
+ * Strength view.
+ *
+ * The heat ramp runs teal → gold → red: the app's own accent for light work,
+ * the sport-strength red for muscles that have taken a beating. Levels are
+ * driven by `data-level` on each muscle path so the ramp is defined once here
+ * and reused by the legend.
+ */
+
+.strength-view {
+  display: grid;
+  gap: 18px;
+  min-height: 0;
+
+  --heat-0: rgba(255, 255, 255, 0.04);
+  --heat-1: rgba(47, 190, 145, 0.24);
+  --heat-2: rgba(47, 190, 145, 0.52);
+  --heat-3: rgba(216, 155, 34, 0.6);
+  --heat-4: rgba(229, 120, 60, 0.72);
+  --heat-5: rgba(229, 72, 77, 0.88);
+
+  /* Solid twins of the ramp above, for the 3D figure. WebGL materials cannot
+     use the translucent swatches the legend paints with, and the mannequin
+     needs its own charcoal so untrained bellies still read against it. */
+  --m3d-base: #39424b;
+  --m3d-v2-bone: #9bcbd8;
+  --m3d-heat-0: #46505a;
+  --m3d-heat-1: #2fbe91;
+  --m3d-heat-2: #7fbe6a;
+  --m3d-heat-3: #d89b22;
+  --m3d-heat-4: #e5783c;
+  --m3d-heat-5: #e5484d;
+  --m3d-rim: #7fe8c4;
+  --m3d-sky: #93b8dc;
+  --m3d-ground: #151a1f;
+  --m3d-ambient: 0.55;
+  --m3d-key: 1;
+  --m3d-shadow: 0.5;
+  --m3d-exposure: 1;
+
+  --panel-key: rgba(255, 255, 255, 0.05);
+  --panel-floor: rgba(0, 0, 0, 0.28);
+}
+
+:root[data-theme="paper"] .strength-view {
+  --heat-0: rgba(38, 34, 28, 0.05);
+  --heat-1: rgba(18, 148, 110, 0.22);
+  --heat-2: rgba(18, 148, 110, 0.5);
+  --heat-3: rgba(185, 121, 26, 0.6);
+  --heat-4: rgba(214, 106, 52, 0.74);
+  --heat-5: rgba(203, 48, 53, 0.86);
+
+  /* On paper the mannequin stays a mid warm grey, not near-white: a light
+     albedo under this rig clips to flat white and loses all its shading. The
+     lights come down to match. */
+  --m3d-base: #948c7e;
+  --m3d-v2-bone: #648894;
+  --m3d-heat-0: #a49c8e;
+  --m3d-heat-1: #12946e;
+  --m3d-heat-2: #63a047;
+  --m3d-heat-3: #b9791a;
+  --m3d-heat-4: #d66a34;
+  --m3d-heat-5: #cb3035;
+  --m3d-rim: #f4efe4;
+  --m3d-sky: #fdf8ec;
+  --m3d-ground: #8c857a;
+  --m3d-ambient: 0.35;
+  --m3d-key: 0.22;
+  --m3d-shadow: 0.2;
+  --m3d-exposure: 1;
+
+  --panel-key: rgba(255, 255, 255, 0.55);
+  --panel-floor: rgba(38, 34, 28, 0.07);
+}
+
+/* ---------- Header ---------- */
+
+.strength-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.strength-header h2 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1;
+}
+
+.strength-header p:not(.eyebrow) {
+  max-width: 620px;
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.strength-header-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  flex-shrink: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: rgba(229, 72, 77, 0.14);
+  color: var(--sport-strength);
+}
+
+.strength-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.strength-segmented {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+}
+
+.strength-segmented button {
+  min-height: 30px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease;
+}
+
+.strength-segmented button:hover:not(.is-active) {
+  color: var(--text-primary);
+}
+
+.strength-segmented button.is-active {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--accent-glow);
+}
+
+.strength-segmented.is-quiet button.is-active {
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
+}
+
+.strength-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.strength-notice.is-error {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.strength-notice.is-sample {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.strength-notice.is-sample button {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.strength-sample-cta {
+  display: flex;
+}
+
+.strength-sample-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px dashed var(--warning-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--warning-text);
+  font-size: 12.5px;
+  font-weight: 700;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.strength-sample-button:hover {
+  border-style: solid;
+  background: var(--warning-bg);
+}
+
+.strength-empty .strength-sample-button {
+  margin-top: 10px;
+}
+
+.strength-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.strength-empty svg {
+  color: var(--text-muted);
+}
+
+.strength-empty h3 {
+  margin: 4px 0 0;
+  font-size: 17px;
+}
+
+.strength-empty p {
+  max-width: 420px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* ---------- Hero: figure + muscle panel ---------- */
+
+.strength-hero {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.95fr) minmax(0, 1.05fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+@media (max-width: 1040px) {
+  .strength-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.strength-body-panel {
+  display: block;
+  min-height: 620px;
+  padding: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* A studio backdrop behind the figure: key light from above, a brand wash,
+   and a floor vignette the contact shadow can sit in. */
+.strength-body-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(60% 32% at 50% 0%, var(--panel-key) 0%, transparent 70%),
+    radial-gradient(
+      120% 60% at 50% 8%,
+      rgba(229, 72, 77, 0.09) 0%,
+      transparent 62%
+    ),
+    radial-gradient(90% 46% at 50% 100%, var(--accent-soft) 0%, transparent 70%),
+    linear-gradient(180deg, transparent 64%, var(--panel-floor) 100%);
+  pointer-events: none;
+}
+
+.strength-body-controls {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  left: 16px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+
+.strength-body-controls > * {
+  pointer-events: auto;
+}
+
+.strength-body-controls .strength-segmented,
+.strength-body-controls .strength-flip,
+.strength-legend {
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.strength-flip {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  transition:
+    transform 0.35s cubic-bezier(0.32, 0.8, 0.36, 1),
+    color 0.16s ease,
+    background 0.16s ease;
+}
+
+.strength-flip:hover {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+  transform: rotate(180deg);
+}
+
+.anatomy-layer-control {
+  position: absolute;
+  top: 62px;
+  left: 16px;
+  z-index: 4;
+  pointer-events: auto;
+}
+
+.anatomy-layer-trigger {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  transition:
+    color 0.16s ease,
+    background 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.anatomy-layer-trigger:hover,
+.anatomy-layer-control.is-open .anatomy-layer-trigger {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border));
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.anatomy-layer-panel {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(252px, calc(100vw - 48px));
+  max-height: min(448px, calc(100vh - 230px));
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 91%, transparent);
+  color: var(--text-primary);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+}
+
+.anatomy-layer-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.anatomy-layer-panel header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.anatomy-layer-panel header strong {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.anatomy-layer-panel header span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.anatomy-layer-reset,
+.anatomy-layer-visibility,
+.anatomy-layer-move button {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  transition:
+    color 0.14s ease,
+    background 0.14s ease;
+}
+
+.anatomy-layer-reset:hover,
+.anatomy-layer-visibility:hover,
+.anatomy-layer-move button:hover:not(:disabled) {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.anatomy-layer-panel ul {
+  display: grid;
+  gap: 2px;
+  min-height: 0;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.anatomy-layer-panel li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 4px;
+  border-radius: 9px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.anatomy-layer-panel li:hover {
+  background: color-mix(in srgb, var(--glass-bg-hover) 64%, transparent);
+  color: var(--text-primary);
+}
+
+.anatomy-layer-panel li.is-hidden > span {
+  opacity: 0.46;
+  text-decoration: line-through;
+}
+
+.anatomy-layer-visibility[aria-pressed="true"] {
+  color: var(--text-secondary);
+}
+
+.anatomy-layer-move {
+  display: inline-flex;
+  gap: 1px;
+}
+
+.anatomy-layer-move button:disabled {
+  opacity: 0.22;
+}
+
+.body-map {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-height: 340px;
+  isolation: isolate;
+}
+
+.anatomy-body-map {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+}
+
+.anatomy-model-status {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  text-align: center;
+  pointer-events: none;
+}
+
+.anatomy-model-status strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.anatomy-model-status > span:last-child {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.anatomy-model-skeleton {
+  position: relative;
+  width: 72px;
+  height: 210px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  border-radius: 40% 40% 26% 26% / 18% 18% 12% 12%;
+  background: var(--glass-bg-hover);
+  opacity: 0.72;
+}
+
+.anatomy-model-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-110%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.12),
+    transparent
+  );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .anatomy-model-skeleton::after {
+    animation: anatomy-model-shimmer 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes anatomy-model-shimmer {
+  to {
+    transform: translateX(110%);
+  }
+}
+
+/* The anatomical figure is rendered in a WebGL scene; only its canvas box and
+   overlays are styled here. */
+/* Taken out of flow so the canvas never feeds its own size back into the
+   container the renderer measures. */
+.body-map-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+.body-map-canvas:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-md);
+}
+
+.body-map-fallback {
+  margin: auto;
+  max-width: 34ch;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.strength-legend {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  padding: 8px 12px;
+  transform: translateX(-50%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (max-width: 560px) {
+  .strength-body-panel {
+    min-height: 540px;
+  }
+
+  .strength-body-controls {
+    top: 12px;
+    right: 12px;
+    left: 12px;
+  }
+
+  .strength-legend {
+    bottom: 12px;
+  }
+
+  .anatomy-layer-control {
+    top: 58px;
+    left: 12px;
+  }
+
+  .anatomy-layer-panel {
+    max-height: 390px;
+  }
+}
+
+.strength-legend-ramp {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.strength-legend-ramp i {
+  width: 22px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* The legend keys the figure, so it uses the figure's solid ramp rather than
+   the translucent one the panel bars are painted with. */
+.strength-legend-ramp i[data-level="1"] {
+  background: var(--m3d-heat-1);
+}
+.strength-legend-ramp i[data-level="2"] {
+  background: var(--m3d-heat-2);
+}
+.strength-legend-ramp i[data-level="3"] {
+  background: var(--m3d-heat-3);
+}
+.strength-legend-ramp i[data-level="4"] {
+  background: var(--m3d-heat-4);
+}
+.strength-legend-ramp i[data-level="5"] {
+  background: var(--m3d-heat-5);
+}
+
+/* ---------- Muscle panel ---------- */
+
+.strength-muscle-panel {
+  display: flex;
+  min-height: 0;
+}
+
+.muscle-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  min-height: 0;
+}
+
+.muscle-panel-head {
+  position: relative;
+}
+
+.muscle-panel-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: -0.01em;
+}
+
+.muscle-panel-lead {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.muscle-panel-clear {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.muscle-panel-clear:hover {
+  text-decoration: underline;
+}
+
+.muscle-ranking {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.muscle-ranking-row {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) 78px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.muscle-ranking-row:hover {
+  background: var(--glass-bg);
+}
+
+.muscle-ranking-row.is-empty {
+  opacity: 0.45;
+}
+
+.muscle-ranking-name {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.muscle-ranking-track,
+.muscle-exercise-track,
+.strength-balance-track {
+  position: relative;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--heat-0);
+  overflow: hidden;
+}
+
+.muscle-ranking-fill,
+.muscle-exercise-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--accent);
+  transform-origin: left center;
+  transition:
+    transform 0.5s cubic-bezier(0.32, 0.8, 0.36, 1),
+    background 0.4s ease;
+}
+
+/* Ranking bars carry the same heat colour the figure paints that muscle, so a
+   row and its body part always read as the same workload. */
+.muscle-ranking-fill[data-level="1"] {
+  background: var(--heat-1);
+}
+.muscle-ranking-fill[data-level="2"] {
+  background: var(--heat-2);
+}
+.muscle-ranking-fill[data-level="3"] {
+  background: var(--heat-3);
+}
+.muscle-ranking-fill[data-level="4"] {
+  background: var(--heat-4);
+}
+.muscle-ranking-fill[data-level="5"] {
+  background: var(--heat-5);
+}
+
+.muscle-ranking-value {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.muscle-panel-gap {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.muscle-panel-gap strong {
+  color: var(--text-secondary);
+}
+
+.muscle-freshness {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.muscle-freshness.is-fresh {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.muscle-freshness strong {
+  margin-left: auto;
+  color: var(--text-primary);
+}
+
+.muscle-freshness.is-fresh strong {
+  color: inherit;
+}
+
+.muscle-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.muscle-detail-stat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+}
+
+.muscle-detail-stat-icon {
+  display: grid;
+  place-items: center;
+  color: var(--accent-strong);
+}
+
+.muscle-detail-stat-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.muscle-detail-stat-copy span {
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.muscle-detail-stat-copy strong {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.muscle-exercises ul {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.muscle-exercises li {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(70px, 1fr) 34px;
+  align-items: center;
+  gap: 10px;
+}
+
+.muscle-exercise-name {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.muscle-exercise-value {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* ---------- Stat tiles ---------- */
+
+.strength-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 12px;
+}
+
+.strength-tile {
+  display: grid;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  transition:
+    border-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.strength-tile:hover {
+  border-color: var(--accent-glow);
+  transform: translateY(-1px);
+}
+
+.strength-tile-icon {
+  color: var(--sport-strength);
+}
+
+.strength-tile-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.strength-tile-value {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.strength-tile-meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Lower grids ---------- */
+
+.strength-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 1040px) {
+  .strength-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .anatomy-body-map {
+    min-height: 430px;
+  }
+}
+
+.strength-chart {
+  height: 240px;
+}
+
+.strength-panel-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.strength-balance {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.strength-balance li {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 10px;
+}
+
+.strength-balance-label {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.strength-balance-track {
+  height: 9px;
+}
+
+.strength-balance-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform-origin: left center;
+  transition: transform 0.5s cubic-bezier(0.32, 0.8, 0.36, 1);
+}
+
+.strength-balance-fill.is-push {
+  background: var(--sport-strength);
+}
+.strength-balance-fill.is-pull {
+  background: var(--accent);
+}
+.strength-balance-fill.is-legs {
+  background: var(--accent-gold);
+}
+.strength-balance-fill.is-core {
+  background: var(--sport-other);
+}
+
+.strength-balance-value {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.strength-balance-note {
+  margin: 14px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.strength-lift-name {
+  display: block;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.strength-lift-meta {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.strength-trend {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.strength-trend.is-up {
+  color: var(--success-text);
+}
+
+.strength-trend.is-down {
+  color: var(--error-text);
+}
+
+.strength-trend.is-flat {
+  color: var(--text-muted);
+}
+
+.strength-sessions {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.strength-sessions li {
+  display: grid;
+  gap: 6px;
+  padding: 11px 13px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+}
+
+.strength-session-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.strength-session-head strong {
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.strength-session-head span {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.strength-session-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.strength-session-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.strength-session-chips span {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--heat-0);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.strength-session-chips span.is-more {
+  color: var(--text-muted);
+}

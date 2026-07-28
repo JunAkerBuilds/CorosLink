@@ -56,6 +56,7 @@ import {
   listWorkoutExercises,
   getWorkoutEditorContext,
   scheduleLibraryWorkout,
+  syncStrengthHistory,
   createAndScheduleWorkout,
   rescheduleScheduledWorkout,
   removeScheduledWorkout,
@@ -1626,6 +1627,12 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("trainingHub:getDailyMetrics", (_event, dateList: string[]) =>
     getDailyMetrics(dateList)
+  );
+
+  ipcMain.handle(
+    "trainingHub:syncStrengthHistory",
+    (_event, days?: number, force?: boolean) =>
+      syncStrengthHistory(days, force)
   );
 
   ipcMain.handle("trainingHub:getSportTypeMap", () => getSportTypeMap());

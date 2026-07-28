@@ -1986,6 +1986,32 @@ export interface StrengthDetail {
   exercises: StrengthExercise[];
 }
 
+/** One completed strength activity plus its cached set-by-set breakdown. */
+export interface StrengthSession {
+  activityId: string;
+  sportType: number;
+  name?: string;
+  sportName?: string;
+  /** Epoch seconds. */
+  startTime?: number;
+  duration?: number;
+  calories?: number;
+  avgHr?: number;
+  maxHr?: number;
+  trainingLoad?: number;
+  detail: StrengthDetail;
+}
+
+export interface StrengthHistory {
+  sessions: StrengthSession[];
+  /** Strength activities in the window whose breakdown is not cached yet. */
+  pending: number;
+  /** Breakdowns fetched from COROS during this call. */
+  fetched: number;
+  /** Window length in days that produced this history. */
+  days: number;
+}
+
 export interface TrainingHubActivityDetail {
   activityId?: string;
   name?: string;
