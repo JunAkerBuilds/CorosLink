@@ -25,6 +25,7 @@ import type {
   RouteWaypoint
 } from "../../../electron/types";
 import type { CorosLinkApi } from "../../coroslink-api";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
 import type { RouteBaseLayer, RouteOverlayId } from "./constants";
 import { RouteMapCanvas, type RouteStudioMode } from "./RouteMapCanvas";
 import { RouteStatsBar, type RouteSummary } from "./RouteStatsBar";
@@ -63,6 +64,7 @@ export function RouteStudio({
   onMessage: (message: string | null) => void;
   onError: (message: string | null) => void;
 }) {
+  const { unitSystem } = useUnitSystem();
   const [mode, setMode] = useState<RouteStudioMode>("generate");
   const [activityType, setActivityType] = useState<RouteActivityType>("running");
 
@@ -163,7 +165,7 @@ export function RouteStudio({
 
   const handleUseCurrent = useCallback(() => {
     onError(null);
-    void requestDeviceRouteLocation()
+    void requestDeviceRouteLocation(undefined, unitSystem)
       .then((result) => {
         const resolved: ResolvedPoint = {
           lat: result.lat,
@@ -179,7 +181,7 @@ export function RouteStudio({
         setFitRequestId((id) => id + 1);
       })
       .catch((caught) => onError(toErrorMessage(caught)));
-  }, [onError]);
+  }, [onError, unitSystem]);
 
   const handleSelectStart = useCallback(
     (point: ResolvedPoint) => {
@@ -255,6 +257,7 @@ export function RouteStudio({
         surfacePreference: surfaceForActivity(activityType),
         avoidHighways: false,
         elevationPreference,
+        unitSystem,
         variationSeed: regenerate ? Date.now() : undefined
       };
       const route = await api.generateRoute(request);
@@ -287,7 +290,8 @@ export function RouteStudio({
         descentMeters: draw.geometry.descentMeters,
         activityType,
         closed: draw.closed,
-        snap: draw.snap
+        snap: draw.snap,
+        unitSystem
       };
       const route = await api.saveDrawnRoute(payload);
       setRoutes(await api.listGeneratedRoutes());
@@ -331,7 +335,8 @@ export function RouteStudio({
         descentMeters: sketch.geometry.descentMeters,
         activityType,
         closed: sketch.closed,
-        snap: true
+        snap: true,
+        unitSystem
       };
       const route = await api.saveDrawnRoute(payload);
       setRoutes(await api.listGeneratedRoutes());

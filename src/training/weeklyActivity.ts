@@ -2,6 +2,8 @@ import type {
   TrainingHubActivity,
   TrainingHubDailyMetric
 } from "../../electron/types";
+import type { UnitSystem } from "../../electron/types";
+import { distanceUnit, metersToDisplayDistance } from "../units/units";
 
 export type WeeklyActivityMetric = "distance" | "duration" | "trainingLoad";
 
@@ -25,7 +27,7 @@ export interface WeeklyActivitySeries {
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
 const METRIC_LABELS: Record<WeeklyActivityMetric, string> = {
-  distance: "Distance (km)",
+  distance: "Distance",
   duration: "Duration",
   trainingLoad: "Training Load"
 };
@@ -140,10 +142,14 @@ function readMetricRaw(day: TrainingHubDailyMetric | undefined, metric: WeeklyAc
   }
 }
 
-function toChartValue(raw: number, metric: WeeklyActivityMetric): number {
+function toChartValue(
+  raw: number,
+  metric: WeeklyActivityMetric,
+  unitSystem: UnitSystem
+): number {
   switch (metric) {
     case "distance":
-      return raw / 1000;
+      return metersToDisplayDistance(raw, unitSystem);
     case "duration":
       return raw / 3600;
     case "trainingLoad":
@@ -151,10 +157,14 @@ function toChartValue(raw: number, metric: WeeklyActivityMetric): number {
   }
 }
 
-function formatDayDisplayValue(raw: number, metric: WeeklyActivityMetric): string {
+function formatDayDisplayValue(
+  raw: number,
+  metric: WeeklyActivityMetric,
+  unitSystem: UnitSystem
+): string {
   switch (metric) {
     case "distance":
-      return `${(raw / 1000).toFixed(2)} km`;
+      return `${metersToDisplayDistance(raw, unitSystem).toFixed(2)} ${distanceUnit(unitSystem)}`;
     case "duration":
       return formatDurationTotal(raw);
     case "trainingLoad":
@@ -172,10 +182,14 @@ function formatDurationTotal(seconds: number): string {
   return `${Math.round(seconds / 60)}m`;
 }
 
-function formatWeeklyTotal(totalRaw: number, metric: WeeklyActivityMetric): string {
+function formatWeeklyTotal(
+  totalRaw: number,
+  metric: WeeklyActivityMetric,
+  unitSystem: UnitSystem
+): string {
   switch (metric) {
     case "distance":
-      return `${(totalRaw / 1000).toFixed(2)} km`;
+      return `${metersToDisplayDistance(totalRaw, unitSystem).toFixed(2)} ${distanceUnit(unitSystem)}`;
     case "duration":
       return formatDurationTotal(totalRaw);
     case "trainingLoad":
@@ -193,9 +207,13 @@ function roundAxisMax(max: number): number {
   return Math.ceil(padded / step) * step;
 }
 
-function yAxisUnitForMetric(metric: WeeklyActivityMetric, maxValue: number): string {
+function yAxisUnitForMetric(
+  metric: WeeklyActivityMetric,
+  maxValue: number,
+  unitSystem: UnitSystem
+): string {
   if (metric === "distance") {
-    return "km";
+    return distanceUnit(unitSystem);
   }
 
   if (metric === "trainingLoad") {
@@ -224,7 +242,8 @@ function formatAxisTick(value: number, metric: WeeklyActivityMetric, useMinutes:
 export function buildWeeklyActivitySeries(
   dayList: TrainingHubDailyMetric[],
   metric: WeeklyActivityMetric,
-  referenceDate = new Date()
+  referenceDate = new Date(),
+  unitSystem: UnitSystem
 ): WeeklyActivitySeries {
   const dayMap = new Map(dayList.map((day) => [day.happenDay, day]));
   const weekKeys = getCalendarWeekDateKeys(referenceDate);
@@ -236,7 +255,7 @@ export function buildWeeklyActivitySeries(
   const days = weekKeys.map((happenDay, index) => {
     const raw = readMetricRaw(dayMap.get(happenDay), metric);
     const hasValue = raw !== undefined && Number.isFinite(raw) && raw > 0;
-    const chartValue = hasValue ? toChartValue(raw, metric) : 0;
+    const chartValue = hasValue ? toChartValue(raw, metric, unitSystem) : 0;
 
     if (hasValue && raw !== undefined) {
       totalRaw += raw;
@@ -248,7 +267,9 @@ export function buildWeeklyActivitySeries(
       happenDay,
       weekdayLabel: WEEKDAY_LABELS[index],
       value: chartValue,
-      displayValue: hasValue && raw !== undefined ? formatDayDisplayValue(raw, metric) : "—",
+      displayValue: hasValue && raw !== undefined
+        ? formatDayDisplayValue(raw, metric, unitSystem)
+        : "—",
       isToday: happenDay === todayKey
     };
   });
@@ -261,11 +282,11 @@ export function buildWeeklyActivitySeries(
 
   return {
     days,
-    weeklyTotal: hasData ? formatWeeklyTotal(totalRaw, metric) : "—",
+    weeklyTotal: hasData ? formatWeeklyTotal(totalRaw, metric, unitSystem) : "—",
     yMax: yMax > 0 ? yMax : 4,
     hasData,
-    metricLabel: METRIC_LABELS[metric],
-    yAxisUnit: yAxisUnitForMetric(metric, maxChartValue)
+    metricLabel: getWeeklyActivityMetricLabel(metric, unitSystem),
+    yAxisUnit: yAxisUnitForMetric(metric, maxChartValue, unitSystem)
   };
 }
 
@@ -308,6 +329,11 @@ export const WEEKLY_ACTIVITY_METRICS: WeeklyActivityMetric[] = [
   "trainingLoad"
 ];
 
-export function getWeeklyActivityMetricLabel(metric: WeeklyActivityMetric): string {
-  return METRIC_LABELS[metric];
+export function getWeeklyActivityMetricLabel(
+  metric: WeeklyActivityMetric,
+  unitSystem: UnitSystem
+): string {
+  return metric === "distance"
+    ? `Distance (${distanceUnit(unitSystem)})`
+    : METRIC_LABELS[metric];
 }

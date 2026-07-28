@@ -2,7 +2,12 @@ import type {
   TrainingHubActivity,
   TrainingHubScheduledWorkoutEntry
 } from "../../electron/types";
-import type { CalendarDay, CalendarMode, CalendarWeek } from "./calendarTypes";
+import {
+  scheduledWorkoutKey,
+  type CalendarDay,
+  type CalendarMode,
+  type CalendarWeek
+} from "./calendarTypes";
 import type { CalendarDragPayload } from "./calendarDrag";
 import { DayCell } from "./DayCell";
 import { WEEKDAY_LABELS } from "./dateUtils";
@@ -12,8 +17,11 @@ interface CalendarGridProps {
   weeks: CalendarWeek[];
   mode: CalendarMode;
   busy: boolean;
+  selectionMode: boolean;
+  selectedWorkoutKeys: ReadonlySet<string>;
   onSelectScheduled: (day: CalendarDay, entry: TrainingHubScheduledWorkoutEntry) => void;
   onSelectActivity: (day: CalendarDay, activity: TrainingHubActivity) => void;
+  onToggleScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   onAdd: (dateKey: string) => void;
   onDropEntry: (payload: CalendarDragPayload, targetDay: string) => void;
   onAskCoachWeek: (week: CalendarWeek) => void;
@@ -23,8 +31,11 @@ export function CalendarGrid({
   weeks,
   mode,
   busy,
+  selectionMode,
+  selectedWorkoutKeys,
   onSelectScheduled,
   onSelectActivity,
+  onToggleScheduled,
   onAdd,
   onDropEntry,
   onAskCoachWeek
@@ -54,8 +65,13 @@ export function CalendarGrid({
                 day={day}
                 mode={mode}
                 busy={busy}
+                selectionMode={selectionMode}
+                isScheduledSelected={(entry) =>
+                  selectedWorkoutKeys.has(scheduledWorkoutKey(entry))
+                }
                 onSelectScheduled={(entry) => onSelectScheduled(day, entry)}
                 onSelectActivity={(activity) => onSelectActivity(day, activity)}
+                onToggleScheduled={onToggleScheduled}
                 onAdd={onAdd}
                 onDropEntry={onDropEntry}
               />

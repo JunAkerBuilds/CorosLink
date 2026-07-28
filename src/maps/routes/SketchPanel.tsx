@@ -17,6 +17,8 @@ import { SKETCH_TEMPLATES } from "./sketchShapes";
 import { isSketchTextSupported } from "./strokeFont";
 import type { RouteSketch, SketchTool } from "./useRouteSketch";
 import { formatDistance } from "./utils";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
+import { distanceUnit } from "../../units/units";
 
 const TOOL_OPTIONS: Array<{
   id: SketchTool;
@@ -67,6 +69,7 @@ export function SketchPanel({
   saving: boolean;
   canSave: boolean;
 }) {
+  const { unitSystem } = useUnitSystem();
   const needsCenter = sketch.tool !== "freehand" && !sketch.center;
   const busyFitting = sketch.autoFitProgress !== null;
   const textUnsupported =
@@ -172,7 +175,7 @@ export function SketchPanel({
           <div className="route-distance">
             <div className="route-distance-head">
               <span>Size</span>
-              <strong>{formatDistance(sketch.sizeMeters)} km</strong>
+              <strong>{formatDistance(sketch.sizeMeters, unitSystem)} {distanceUnit(unitSystem)}</strong>
             </div>
             <input
               type="range"
@@ -222,7 +225,7 @@ export function SketchPanel({
 
       {sketch.ghost.length >= 2 ? (
         <p className="route-sketch-readout">
-          Sketch outline ≈ {formatDistance(sketch.ghostDistanceMeters)} km
+          Sketch outline ≈ {formatDistance(sketch.ghostDistanceMeters, unitSystem)} {distanceUnit(unitSystem)}
           before snapping.
         </p>
       ) : null}

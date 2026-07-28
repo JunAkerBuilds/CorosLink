@@ -1,5 +1,8 @@
 export type BinaryName = "yt-dlp" | "ffmpeg";
 
+/** User-selected measurement system for CorosLink presentation and writes. */
+export type UnitSystem = "metric" | "imperial";
+
 export interface BinaryCheck {
   name: BinaryName;
   available: boolean;
@@ -1549,6 +1552,8 @@ export interface DrawnRoutePayload {
   /** True when the path returns to its start (a loop). */
   closed: boolean;
   snap: boolean;
+  /** Controls user-facing generated route names only. */
+  unitSystem?: UnitSystem;
 }
 
 export interface RouteApiKeyValidation {
@@ -1597,6 +1602,8 @@ export interface GenerateRouteRequest {
   surfacePreference: RouteSurfacePreference;
   avoidHighways: boolean;
   elevationPreference: RouteElevationPreference;
+  /** Controls user-facing route names and validation messages only. */
+  unitSystem: UnitSystem;
   /**
    * Optional nudge used only for loop routes. Changing it produces a different
    * loop for the same inputs (powers the "Regenerate" control). Absent keeps the
@@ -1984,6 +1991,32 @@ export interface StrengthSummary {
 export interface StrengthDetail {
   summary: StrengthSummary;
   exercises: StrengthExercise[];
+}
+
+/** One completed strength activity plus its cached set-by-set breakdown. */
+export interface StrengthSession {
+  activityId: string;
+  sportType: number;
+  name?: string;
+  sportName?: string;
+  /** Epoch seconds. */
+  startTime?: number;
+  duration?: number;
+  calories?: number;
+  avgHr?: number;
+  maxHr?: number;
+  trainingLoad?: number;
+  detail: StrengthDetail;
+}
+
+export interface StrengthHistory {
+  sessions: StrengthSession[];
+  /** Strength activities in the window whose breakdown is not cached yet. */
+  pending: number;
+  /** Breakdowns fetched from COROS during this call. */
+  fetched: number;
+  /** Window length in days that produced this history. */
+  days: number;
 }
 
 export interface TrainingHubActivityDetail {
@@ -2497,6 +2530,7 @@ export interface ActivityVisualHrSection {
 export interface ActivityVisualPreview {
   previewId: string;
   activityId: string;
+  sportType?: number;
   name?: string;
   startTime?: string;
   avgHr?: number;
@@ -2553,11 +2587,14 @@ export interface HrZonePreview {
 export interface PlanDraftPreviewEntry {
   key: string;
   name: string;
+  sport?: WorkoutSport;
   scheduleDate?: string;
   volume?: string;
   saveToLibrary: boolean;
   workoutType: string;
   stepsSummary?: string;
+  /** Canonical workout input used to reformat previews when units change. */
+  source?: PlanWorkoutEntryInput;
 }
 
 export interface PlanDraftPreview {
@@ -2577,6 +2614,10 @@ export interface PlanDraftPreview {
 export interface PlanWorkoutEntryInput {
   key: string;
   name: string;
+  description?: string;
+  /** Structured-workout sport. Omitted legacy drafts are treated as Run. */
+  sport?: WorkoutSport;
+  sport_options?: WorkoutSportOptions;
   steps?: RunWorkoutStepInput[];
   distance_km?: number;
   schedule_date?: string;
@@ -2584,19 +2625,155 @@ export interface PlanWorkoutEntryInput {
   save_to_library?: boolean;
 }
 
+export type WorkoutSport =
+  | "run"
+  | "trailRun"
+  | "bike"
+  | "swim"
+  | "strength"
+  | "xcSki"
+  | "indoorClimb"
+  | "bouldering"
+  | "hyrox";
+
+export type WorkoutHeartRateBasis = "maxHr" | "reserve" | "lthr";
+export type WorkoutHeartRatePreset =
+  | "recovery"
+  | "warmUp"
+  | "fatBurn"
+  | "aerobicEndurance"
+  | "aerobicPower"
+  | "threshold"
+  | "anaerobicEndurance"
+  | "anaerobicPower"
+  | "anaerobic";
+export type WorkoutPacePreset =
+  | "recovery"
+  | "aerobicEndurance"
+  | "aerobicPower"
+  | "threshold"
+  | "anaerobicEndurance"
+  | "anaerobicPower";
+export type WorkoutFtpPreset =
+  | "recovery"
+  | "aerobicEndurance"
+  | "aerobicPower"
+  | "threshold"
+  | "anaerobicEndurance"
+  | "anaerobicPower"
+  | "sprint";
+export type WorkoutRunningPowerPreset =
+  | "easy"
+  | "moderate"
+  | "threshold"
+  | "interval"
+  | "repetition";
+export type WorkoutSwimStroke =
+  | "freestyle"
+  | "breaststroke"
+  | "backstroke"
+  | "butterfly"
+  | "mix"
+  | "individualMedley"
+  | "drills"
+  | "notSet";
+export type WorkoutClimbSystem =
+  | "yds"
+  | "french"
+  | "uiaa"
+  | "ewbank"
+  | "vScale"
+  | "font";
+
+type WorkoutPercentPresetOrRange<TPreset extends string> =
+  | { preset: TPreset; lowPercent?: never; highPercent?: never }
+  | { preset?: never; lowPercent: number; highPercent: number };
+
+export type WorkoutIntensityInput =
+  | { type: "none" }
+  | { type: "heartRate"; lowBpm: number; highBpm: number }
+  | ({ type: "heartRatePercent"; basis: WorkoutHeartRateBasis; zoneId?: number } &
+      WorkoutPercentPresetOrRange<WorkoutHeartRatePreset>)
+  | {
+      type: "pace";
+      lowSecondsPerKm: number;
+      highSecondsPerKm: number;
+      displayUnit: "km" | "mi";
+    }
+  | {
+      type: "effortPace";
+      lowSecondsPerKm: number;
+      highSecondsPerKm: number;
+      displayUnit: "km" | "mi";
+    }
+  | ({ type: "thresholdPacePercent"; zoneId?: number } &
+      WorkoutPercentPresetOrRange<WorkoutPacePreset>)
+  | ({ type: "effortPacePercent"; zoneId?: number } &
+      WorkoutPercentPresetOrRange<WorkoutPacePreset>)
+  | ({ type: "ftpPercent"; zoneId?: number } &
+      WorkoutPercentPresetOrRange<WorkoutFtpPreset>)
+  | {
+      type: "power";
+      lowWatts: number;
+      highWatts: number;
+      preset?: never;
+      zoneId?: never;
+    }
+  | {
+      type: "power";
+      preset: WorkoutRunningPowerPreset;
+      zoneId?: number;
+      lowWatts?: never;
+      highWatts?: never;
+    }
+  | { type: "speed"; low: number; high: number; unit: "km/h" | "mph" }
+  | { type: "cadence"; low: number; high: number; unit: "spm" | "rpm" }
+  | { type: "swimStroke"; stroke: WorkoutSwimStroke }
+  | { type: "weight"; mode: "bodyweight" }
+  | { type: "weight"; mode: "weight"; value: number; unit: "kg" | "lb" }
+  | { type: "rpe"; value: number }
+  | {
+      type: "climbGrade";
+      system: WorkoutClimbSystem;
+      relativeToOnsight: number;
+      absoluteGrade?: never;
+    }
+  | {
+      type: "climbGrade";
+      system: WorkoutClimbSystem;
+      absoluteGrade: string;
+      relativeToOnsight?: never;
+    }
+  /** @deprecated Read compatibility for editor drafts created before typed HR bases. */
+  | {
+      type: "lthrPercent";
+      lowPercent: number;
+      highPercent: number;
+      zoneId?: number;
+    };
+
+export interface WorkoutSportOptions {
+  poolLength?: { value: number; unit: "m" | "yd" };
+  gradingSystem?: WorkoutClimbSystem;
+}
+
 export type RunWorkoutCreateStepKind =
   | "warmup"
   | "training"
   | "rest"
   | "cooldown"
-  | "interval";
+  | "interval"
+  | "sendOff";
 
 export type RunWorkoutCreateTargetType =
   | "time"
   | "distance"
   | "load"
   | "hrRecovery"
-  | "open";
+  | "open"
+  | "reps"
+  | "elevationGain"
+  | "routes";
 
 export interface RunWorkoutCreateStep {
   kind: RunWorkoutCreateStepKind;
@@ -2606,12 +2783,24 @@ export interface RunWorkoutCreateStep {
   target_duration_seconds?: number;
   target_load?: number;
   target_hr_recovery_bpm?: number;
+  target_reps?: number;
+  target_elevation_gain_meters?: number;
+  target_routes?: number;
+  /** Send-off window used by Pool Swim package intervals. */
+  send_off_seconds?: number;
+  /** Typed intensity is authoritative. Legacy raw fields remain read-compatible. */
+  intensity?: WorkoutIntensityInput;
+  /** COROS strength/HYROX exercise identity or uniquely resolvable name. */
+  exercise_id?: string;
+  exercise_name?: string;
+  exercise_kind?: number;
   pace?: string;
   intensity_type?: number;
   intensity_value?: number;
   intensity_value_extend?: number;
   intensity_display_unit?: number;
   intensity_multiplier?: number;
+  intensity_custom?: number;
   hr_type?: number;
   is_intensity_percent?: boolean;
   intensity_percent?: number;
@@ -2636,6 +2825,12 @@ export interface RunWorkoutCreateRepeatGroup {
 export type RunWorkoutStepInput =
   | RunWorkoutCreateStep
   | RunWorkoutCreateRepeatGroup;
+
+export type WorkoutCreateStepKind = RunWorkoutCreateStepKind;
+export type WorkoutCreateTargetType = RunWorkoutCreateTargetType;
+export type WorkoutCreateStep = RunWorkoutCreateStep;
+export type WorkoutCreateRepeatGroup = RunWorkoutCreateRepeatGroup;
+export type WorkoutStepInput = RunWorkoutStepInput;
 
 export interface CorosTrainingPlanDraftInput {
   name: string;
@@ -2683,6 +2878,19 @@ export interface TrainingHubLibraryWorkout {
   createTimestamp?: number;
 }
 
+export interface WorkoutExerciseOption {
+  id: string;
+  name: string;
+  exerciseKind?: number;
+  thumbnailUrl?: string;
+  media?: WorkoutExerciseMedia[];
+}
+
+export interface WorkoutExerciseMedia {
+  coverUrl?: string;
+  videoUrl?: string;
+}
+
 export type WorkoutEditRef =
   | {
       kind: "scheduled";
@@ -2697,30 +2905,20 @@ export type RunWorkoutEditorStepKind =
   | "warmup"
   | "training"
   | "rest"
-  | "cooldown";
+  | "cooldown"
+  | "sendOff";
 
 export type RunWorkoutEditorTarget =
   | { type: "time"; seconds: number }
   | { type: "distance"; meters: number }
   | { type: "load"; load: number }
   | { type: "hrRecovery"; bpm: number }
-  | { type: "open" };
+  | { type: "open" }
+  | { type: "reps"; count: number }
+  | { type: "elevationGain"; meters: number }
+  | { type: "routes"; count: number };
 
-export type RunWorkoutEditorIntensity =
-  | { type: "none" }
-  | {
-      type: "pace";
-      lowSecondsPerKm: number;
-      highSecondsPerKm: number;
-      displayUnit: "km" | "mi";
-    }
-  | { type: "heartRate"; lowBpm: number; highBpm: number }
-  | {
-      type: "lthrPercent";
-      lowPercent: number;
-      highPercent: number;
-      zoneId?: number;
-    };
+export type RunWorkoutEditorIntensity = WorkoutIntensityInput;
 
 export interface RunWorkoutEditorStep {
   id: string;
@@ -2730,6 +2928,10 @@ export interface RunWorkoutEditorStep {
   name: string;
   target: RunWorkoutEditorTarget;
   intensity: RunWorkoutEditorIntensity;
+  exerciseId?: string;
+  exerciseName?: string;
+  exerciseKind?: number;
+  sendOffSeconds?: number;
   editable: boolean;
   unsupportedReason?: string;
 }
@@ -2752,12 +2954,24 @@ export type RunWorkoutEditorNode =
 export interface RunWorkoutEditorDraft {
   name: string;
   overview: string;
-  sportType: 1;
+  sportType: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+  sport: WorkoutSport;
+  sportOptions?: WorkoutSportOptions;
   nodes: RunWorkoutEditorNode[];
 }
 
-export interface WorkoutLthrZone {
+export type WorkoutEditorStepKind = RunWorkoutEditorStepKind;
+export type WorkoutEditorTarget = RunWorkoutEditorTarget;
+export type WorkoutEditorIntensity = RunWorkoutEditorIntensity;
+export type WorkoutEditorStep = RunWorkoutEditorStep;
+export type WorkoutEditorRepeatGroup = RunWorkoutEditorRepeatGroup;
+export type WorkoutEditorNode = RunWorkoutEditorNode;
+export type WorkoutEditorDraft = RunWorkoutEditorDraft;
+
+export interface WorkoutZone {
   index: number;
+  id: number;
+  key: string;
   label: string;
   lowPercent: number;
   highPercent: number;
@@ -2765,11 +2979,25 @@ export interface WorkoutLthrZone {
   highBpm?: number;
 }
 
+/** @deprecated Use WorkoutZone. */
+export type WorkoutLthrZone = WorkoutZone;
+
 export interface WorkoutEditorContext {
   distanceUnit: "metric" | "imperial";
   paceUnit: "km" | "mi";
   lthrBpm?: number;
+  maxHr?: number;
+  restingHr?: number;
+  thresholdPaceSecondsPerKm?: number;
+  ftp?: number;
+  criticalPower?: number;
+  zones: Partial<Record<
+    "maxHr" | "reserve" | "lthr" | "thresholdPace" | "ftp" | "runningPower",
+    WorkoutZone[]
+  >>;
   lthrZones: WorkoutLthrZone[];
+  defaultPoolLength: { value: number; unit: "m" | "yd" };
+  climbSystems: Partial<Record<"indoorClimb" | "bouldering", WorkoutClimbSystem>>;
 }
 
 export interface WorkoutEditorDocument {

@@ -10,6 +10,8 @@ const {
   applyWorkoutCalculation,
   buildEasyRun,
   buildIntervalWorkout,
+  buildWorkoutPayload,
+  formatEntryStepsSummary,
   buildRunWorkoutPayload,
   buildPlanPreview,
   metersToCorosDistance,
@@ -17,6 +19,15 @@ const {
   resetProgramForCreate,
   validatePlanDraft
 } = await import(`${distUrl("corosWorkoutBuilder.js")}?cacheBust=${Date.now()}`);
+
+const imperialContext = {
+  distanceUnit: "imperial",
+  paceUnit: "mi",
+  zones: {},
+  lthrZones: [],
+  defaultPoolLength: { value: 25, unit: "yd" },
+  climbSystems: {}
+};
 
 assert.equal(metersToCorosDistance(7000), 700000);
 
@@ -92,6 +103,141 @@ assert.equal(intervalWork.targetDisplayUnit, 2);
 assert.equal(intervalWork.intensityValue, 270000);
 assert.equal(intervalWork.intensityDisplayUnit, 1);
 assert.equal(intervalWork.intensityMultiplier, 1000);
+
+const imperialRun = buildWorkoutPayload(
+  "Imperial run",
+  [
+    {
+      kind: "training",
+      target_type: "distance",
+      target_distance_meters: 1609.344,
+      intensity: {
+        type: "pace",
+        lowSecondsPerKm: 300,
+        highSecondsPerKm: 300,
+        displayUnit: "km"
+      }
+    },
+    {
+      kind: "training",
+      target_type: "elevationGain",
+      target_elevation_gain_meters: 100
+    }
+  ],
+  "trailRun",
+  undefined,
+  imperialContext
+);
+assert.equal(imperialRun.distanceDisplayUnit, 3);
+assert.equal(imperialRun.exercises[0].targetValue, 160934);
+assert.equal(imperialRun.exercises[0].targetDisplayUnit, 3);
+assert.equal(imperialRun.exercises[0].intensityValue, 300000);
+assert.equal(imperialRun.exercises[0].intensityDisplayUnit, 2);
+assert.equal(imperialRun.exercises[1].targetValue, 10000);
+assert.equal(imperialRun.exercises[1].targetDisplayUnit, 5);
+
+const imperialBike = buildWorkoutPayload(
+  "Imperial bike",
+  [{
+    kind: "training",
+    target_type: "time",
+    target_duration_seconds: 600,
+    intensity: { type: "speed", low: 16.09344, high: 32.18688, unit: "km/h" }
+  }],
+  "bike",
+  undefined,
+  imperialContext
+);
+assert.equal(imperialBike.exercises[0].intensityValue, 1609);
+assert.equal(imperialBike.exercises[0].intensityValueExtend, 3219);
+assert.equal(imperialBike.exercises[0].intensityDisplayUnit, 5);
+
+const imperialStrength = buildWorkoutPayload(
+  "Imperial strength",
+  [{
+    kind: "training",
+    target_type: "reps",
+    target_reps: 10,
+    exercise_id: "T5067",
+    intensity: { type: "weight", mode: "weight", value: 10, unit: "kg" }
+  }],
+  "strength",
+  undefined,
+  imperialContext
+);
+assert.equal(imperialStrength.exercises[0].intensityValue, 10);
+assert.equal(imperialStrength.exercises[0].intensityDisplayUnit, 7);
+
+const imperialSwim = buildWorkoutPayload(
+  "Imperial swim",
+  [{
+    kind: "training",
+    target_type: "distance",
+    target_distance_meters: 91.44,
+    intensity: { type: "swimStroke", stroke: "freestyle" }
+  }],
+  "swim",
+  undefined,
+  imperialContext
+);
+assert.equal(imperialSwim.poolLength, 2286);
+assert.equal(imperialSwim.poolLengthUnit, 4);
+assert.equal(imperialSwim.exercises[0].targetValue, 9144);
+assert.equal(imperialSwim.exercises[0].targetDisplayUnit, 4);
+
+assert.equal(
+  formatEntryStepsSummary({
+    key: "imperial-summary",
+    name: "Imperial summary",
+    sport: "run",
+    steps: [{
+      kind: "training",
+      target_type: "distance",
+      target_distance_meters: 1609.344,
+      intensity: {
+        type: "pace",
+        lowSecondsPerKm: 300,
+        highSecondsPerKm: 310,
+        displayUnit: "km"
+      }
+    }]
+  }, "imperial"),
+  "training 1.00 mi @ 8:03–8:19/mi"
+);
+assert.equal(
+  formatEntryStepsSummary({
+    key: "imperial-bike-summary",
+    name: "Imperial bike summary",
+    sport: "bike",
+    steps: [{
+      kind: "training",
+      target_type: "time",
+      target_duration_seconds: 600,
+      intensity: {
+        type: "speed",
+        low: 16.09344,
+        high: 32.18688,
+        unit: "km/h"
+      }
+    }]
+  }, "imperial"),
+  "training 10 min @ 10–20 mph"
+);
+assert.equal(
+  formatEntryStepsSummary({
+    key: "imperial-strength-summary",
+    name: "Imperial strength summary",
+    sport: "strength",
+    steps: [{
+      kind: "training",
+      target_type: "reps",
+      target_reps: 10,
+      exercise_id: "T5067",
+      intensity: { type: "weight", mode: "weight", value: 10, unit: "kg" }
+    }]
+  }, "imperial"),
+  "training 10 reps @ 22 lb"
+);
 
 const payload = buildRunWorkoutPayload("Tempo 5k", [
   {
@@ -270,6 +416,33 @@ const preview = buildPlanPreview("draft-1", {
 assert.equal(preview.draftId, "draft-1");
 assert.equal(preview.entries.length, 1);
 assert.equal(preview.entries[0]?.volume, "7.00 km");
+assert.ok(preview.entries[0]?.source);
+
+const imperialPreview = buildPlanPreview("draft-imperial", {
+  name: "Imperial Week",
+  workouts: [
+    {
+      key: "five-mile-run",
+      name: "Five mile run",
+      distance_km: 8.04672,
+      schedule_date: "20991201"
+    },
+    {
+      key: "hundred-yard-swim",
+      name: "Hundred yard swim",
+      sport: "swim",
+      steps: [{
+        kind: "training",
+        target_type: "distance",
+        target_distance_meters: 91.44
+      }],
+      schedule_date: "20991202"
+    }
+  ]
+}, { unitSystem: "imperial" });
+assert.equal(imperialPreview.entries[0]?.volume, "5.00 mi");
+assert.equal(imperialPreview.entries[1]?.volume, "100 yd");
+assert.ok(imperialPreview.entries.every((entry) => entry.source));
 
 const reset = resetProgramForCreate({
   id: "old",

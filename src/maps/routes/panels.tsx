@@ -23,6 +23,12 @@ import type {
   RouteWaypoint
 } from "../../../electron/types";
 import type { CorosLinkApi } from "../../coroslink-api";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
+import {
+  displayDistanceToMeters,
+  distanceUnit,
+  metersToDisplayDistance
+} from "../../units/units";
 import {
   ROUTE_ACTIVITY_OPTIONS,
   ROUTE_BASE_LAYERS,
@@ -215,7 +221,7 @@ export function SportPicker({
 }
 
 /** One-tap distance shortcuts, filtered to the activity's range. */
-const DISTANCE_PRESETS: Record<
+const METRIC_DISTANCE_PRESETS: Record<
   "foot" | "bike",
   Array<{ value: number; label: string }>
 > = {
@@ -231,6 +237,14 @@ const DISTANCE_PRESETS: Record<
     { value: 80, label: "80K" },
     { value: 100, label: "100K" }
   ]
+};
+
+const IMPERIAL_DISTANCE_PRESETS: Record<
+  "foot" | "bike",
+  Array<{ value: number; label: string }>
+> = {
+  foot: [3, 6, 13.1, 26.2].map((value) => ({ value, label: `${value} mi` })),
+  bike: [10, 25, 50, 100].map((value) => ({ value, label: `${value} mi` }))
 };
 
 function StepTitle({ index, children }: { index: number; children: string }) {
@@ -293,16 +307,20 @@ export function GeneratePanel({
   busy: boolean;
   hasResult: boolean;
 }) {
+  const { unitSystem } = useUnitSystem();
   const maxDistance = maxDistanceForActivity(activityType);
+  const displayDistance = metersToDisplayDistance(distanceKm * 1_000, unitSystem);
+  const displayMaxDistance = metersToDisplayDistance(maxDistance * 1_000, unitSystem);
   const canGenerate =
     Boolean(start) &&
     (mode === "loop" || Boolean(destination)) &&
     distanceKm > 0;
+  const presetFamily = unitSystem === "imperial"
+    ? IMPERIAL_DISTANCE_PRESETS
+    : METRIC_DISTANCE_PRESETS;
   const presets = (
-    isCyclingActivity(activityType)
-      ? DISTANCE_PRESETS.bike
-      : DISTANCE_PRESETS.foot
-  ).filter((preset) => preset.value <= maxDistance);
+    isCyclingActivity(activityType) ? presetFamily.bike : presetFamily.foot
+  ).filter((preset) => preset.value <= displayMaxDistance);
   const ctaHint = !start
     ? "Pick a start point — search above, use your location, or drop a pin on the map."
     : mode === "point-to-point" && !destination
@@ -382,16 +400,20 @@ export function GeneratePanel({
           <div className="route-distance">
             <div className="route-distance-head">
               <span>Distance</span>
-              <strong>{distanceKm.toFixed(1)} km</strong>
+              <strong>{displayDistance.toFixed(1)} {distanceUnit(unitSystem)}</strong>
             </div>
             <input
               type="range"
               min={1}
-              max={maxDistance}
+              max={displayMaxDistance}
               step={0.5}
-              value={Math.min(distanceKm, maxDistance)}
-              aria-label="Distance in kilometres"
-              onChange={(event) => onDistanceChange(Number(event.target.value))}
+              value={Math.min(displayDistance, displayMaxDistance)}
+              aria-label={`Distance in ${unitSystem === "imperial" ? "miles" : "kilometres"}`}
+              onChange={(event) =>
+                onDistanceChange(
+                  displayDistanceToMeters(Number(event.target.value), unitSystem) / 1_000
+                )
+              }
             />
             <div
               className="route-distance-presets"
@@ -403,11 +425,15 @@ export function GeneratePanel({
                   key={preset.value}
                   type="button"
                   className={
-                    Math.abs(distanceKm - preset.value) < 0.05
+                    Math.abs(displayDistance - preset.value) < 0.05
                       ? "is-active"
                       : ""
                   }
-                  onClick={() => onDistanceChange(preset.value)}
+                  onClick={() =>
+                    onDistanceChange(
+                      displayDistanceToMeters(preset.value, unitSystem) / 1_000
+                    )
+                  }
                 >
                   {preset.label}
                 </button>

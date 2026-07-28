@@ -30,7 +30,10 @@ import { SleepSummaryPanel } from "./components/SleepSummaryPanel";
 import { TrainingHeatmapPanel } from "./components/TrainingHeatmapPanel";
 import { TrainingActivityTable } from "./components/TrainingActivityTable";
 import { TrainingTrendCharts } from "./components/TrainingTrendChart";
-import { TrainingZoneDistributionCharts } from "./components/TrainingZoneDistributionCharts";
+import {
+  PerceivedEffortPanel,
+  TrainingZoneDistributionCharts
+} from "./components/TrainingZoneDistributionCharts";
 import { UpcomingWorkoutsPanel } from "./components/UpcomingWorkoutsPanel";
 import { Vo2MaxWidget } from "./components/Vo2MaxWidget";
 import type { TrainingHubViewProps } from "./types";
@@ -494,6 +497,9 @@ export function TrainingHubView({
               racePredictor={snapshot?.racePredictor ?? null}
             />
             <RacePredictorCards racePredictor={snapshot?.racePredictor ?? null} />
+            <PerceivedEffortPanel
+              distribution={snapshot?.analytics?.rpeDistribution}
+            />
           </div>
 
           <div className="training-planning-grid">

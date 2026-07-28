@@ -7,13 +7,9 @@ import type {
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { ActivityDetailPanel } from "../training/components/ActivityDetailPanel";
-import {
-  formatHappenDayLabel,
-  formatUpcomingWorkoutLoad,
-  formatUpcomingWorkoutVolumeDisplay,
-  inferUpcomingWorkoutCategory
-} from "../training/formatters";
+import { formatHappenDayLabel } from "../training/formatters";
 import type { CalendarSelection } from "./calendarTypes";
+import { ScheduledWorkoutDetail } from "./ScheduledWorkoutDetail";
 
 interface DayDetailPanelProps {
   api: CorosLinkApi;
@@ -26,7 +22,6 @@ interface DayDetailPanelProps {
   onEdit: (selection: Extract<CalendarSelection, { kind: "scheduled" }>) => void;
   onError: (message: string | null) => void;
 }
-
 export function DayDetailPanel({
   api,
   selection,
@@ -124,9 +119,9 @@ export function DayDetailPanel({
                   <button
                     type="button"
                     className="ghost-button calendar-detail-action"
-                    disabled={selection.entry.sportType !== 1}
+                    disabled={!selection.entry.sportType || selection.entry.sportType < 1 || selection.entry.sportType > 9}
                     onClick={() => onEdit(selection)}
-                    title={selection.entry.sportType === 1 ? "Edit this scheduled occurrence" : "Editing is available for Run workouts only"}
+                    title={selection.entry.sportType && selection.entry.sportType >= 1 && selection.entry.sportType <= 9 ? "Edit this scheduled occurrence" : "This COROS sport is not supported by the workout editor"}
                   >
                     <Pencil size={15} aria-hidden="true" />
                     Edit
@@ -166,7 +161,10 @@ export function DayDetailPanel({
 
             <div className="calendar-detail-body">
               {selection.kind === "scheduled" ? (
-                <ScheduledDetail selection={selection} />
+                <ScheduledWorkoutDetail
+                  entry={selection.entry}
+                  sportTypes={sportTypes}
+                />
               ) : (
                 <ActivityDetailPanel
                   embedded
@@ -181,58 +179,5 @@ export function DayDetailPanel({
         </>
       ) : null}
     </AnimatePresence>
-  );
-}
-
-function ScheduledDetail({
-  selection
-}: {
-  selection: Extract<CalendarSelection, { kind: "scheduled" }>;
-}) {
-  const { entry } = selection;
-  const category = inferUpcomingWorkoutCategory(entry.name);
-
-  return (
-    <div className="calendar-detail-scheduled">
-      <div className="calendar-detail-stats">
-        <div className="calendar-detail-stat">
-          <span>Type</span>
-          <strong>{category}</strong>
-        </div>
-        <div className="calendar-detail-stat">
-          <span>Volume</span>
-          <strong>{formatUpcomingWorkoutVolumeDisplay(entry.volume)}</strong>
-        </div>
-        <div className="calendar-detail-stat">
-          <span>Planned Load</span>
-          <strong>{formatUpcomingWorkoutLoad(entry.trainingLoad)}</strong>
-        </div>
-      </div>
-
-      {entry.exercises && entry.exercises.length > 0 ? (
-        <div className="calendar-detail-steps">
-          <h4>Structure</h4>
-          <ol>
-            {entry.exercises.map((exercise, index) => (
-              <li key={`${exercise.name}-${index}`}>
-                <span className="calendar-detail-step-name">{exercise.name}</span>
-                <span className="calendar-detail-step-target">
-                  {[
-                    exercise.sets && exercise.sets > 1 ? `${exercise.sets}×` : null,
-                    exercise.targetLabel
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      ) : (
-        <p className="calendar-detail-empty">
-          No structured steps — this workout runs by feel.
-        </p>
-      )}
-    </div>
   );
 }

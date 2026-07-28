@@ -11,6 +11,8 @@ import {
   isPersonalRecordPopulated,
   isPersonalRecordVisible
 } from "../formatters";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
+import { formatDistanceValue } from "../../units/units";
 
 interface PersonalRecordsPanelProps {
   dashboard: TrainingHubDashboard | null;
@@ -33,7 +35,7 @@ function recordIcon(type: number) {
 
 /** Split "12.01km" / "84m" into a bold value and a muted unit. */
 function splitHero(hero: string): { value: string; unit: string | null } {
-  const match = hero.match(/^([\d.:]+)\s*(km|m)$/i);
+  const match = hero.match(/^([\d.:]+)\s*(km|mi|m|ft)$/i);
 
   if (match) {
     return { value: match[1]!, unit: match[2]! };
@@ -234,14 +236,22 @@ export function PersonalRecordsPanel({ dashboard }: PersonalRecordsPanelProps) {
 }
 
 function RecordCard({ record }: { record: TrainingHubPersonalRecord }) {
+  const { unitSystem } = useUnitSystem();
   const Icon = recordIcon(record.type);
-  const hero = formatPersonalRecordHero(record);
-  const meta = formatPersonalRecordMeta(record);
+  const hero = formatPersonalRecordHero(record, unitSystem);
+  const meta = formatPersonalRecordMeta(record, unitSystem);
   const populated = isPersonalRecordPopulated(record);
   const { value, unit } = splitHero(hero);
   const seed = `${record.type}-${record.happenDay ?? ""}-${hero}`;
   const isDistanceLike =
     record.type === RECORD_TYPE_LONGEST_RUN || record.type === RECORD_TYPE_ELEVATION_GAIN;
+  const numericLabel = record.label.match(/^([\d.]+)\s*(km|m)$/i);
+  const displayLabel = numericLabel && Number.isFinite(Number(numericLabel[1]))
+    ? formatDistanceValue(
+        Number(numericLabel[1]) * (numericLabel[2]?.toLowerCase() === "km" ? 1000 : 1),
+        unitSystem
+      )
+    : record.label;
 
   return (
     <article
@@ -254,7 +264,7 @@ function RecordCard({ record }: { record: TrainingHubPersonalRecord }) {
           <span className="training-record-card-icon" aria-hidden="true">
             <Icon size={16} strokeWidth={2.2} />
           </span>
-          <span className="training-record-card-label">{record.label}</span>
+          <span className="training-record-card-label">{displayLabel}</span>
         </span>
         {populated ? <LaurelBadge /> : null}
       </div>

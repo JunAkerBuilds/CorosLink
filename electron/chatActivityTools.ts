@@ -12,8 +12,15 @@ import type {
   CorosMcpTool,
   TrainingHubActivity,
   TrainingHubActivityDetail,
-  TrainingHubActivityLap
+  TrainingHubActivityLap,
+  UnitSystem
 } from "./types";
+import {
+  formatDistanceValue,
+  formatElevationValue,
+  formatPaceValue,
+  formatSpeedValue
+} from "./unitSystem.js";
 
 export const CHAT_ACTIVITY_TOOL_NAMES = [
   "list_recent_activities",
@@ -87,6 +94,7 @@ export function getChatActivityTools(): CorosMcpTool[] {
 export interface ChatActivityToolCallbacks {
   onActivityVisual?: (preview: ActivityVisualPreview) => void;
   requestId?: string;
+  unitSystem?: UnitSystem;
 }
 
 export async function handleChatActivityTool(
@@ -95,13 +103,14 @@ export async function handleChatActivityTool(
   callbacks?: ChatActivityToolCallbacks
 ): Promise<string> {
   if (name === "list_recent_activities") {
-    return handleListRecentActivities(args);
+    return handleListRecentActivities(args, callbacks?.unitSystem ?? "metric");
   }
   return handleGetActivityDetail(args, callbacks);
 }
 
 async function handleListRecentActivities(
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  unitSystem: UnitSystem
 ): Promise<string> {
   const limit = Math.min(Math.max(Number(args.limit) || 10, 1), 25);
   const page = Math.max(Number(args.page) || 1, 1);
@@ -112,7 +121,9 @@ async function handleListRecentActivities(
       return "No recent activities found in COROS Training Hub.";
     }
 
-    const lines = activities.map((activity) => formatActivityListLine(activity));
+    const lines = activities.map((activity) =>
+      formatActivityListLine(activity, unitSystem)
+    );
     return [
       `Recent activities (${activities.length}):`,
       "",
@@ -170,7 +181,11 @@ async function handleGetActivityDetail(
       }
     }
 
-    return formatActivityDetailForChat(detail, includeSeries);
+    return formatActivityDetailForChat(
+      detail,
+      includeSeries,
+      callbacks?.unitSystem ?? "metric"
+    );
   } catch (caught) {
     throw formatActivityToolError("get_activity_detail", caught);
   }
@@ -277,6 +292,7 @@ export function buildActivityVisualPreview(
   return {
     previewId: `${activityId}:${requestId}`,
     activityId,
+    sportType: detail.sportType,
     name: detail.name,
     startTime: detail.startTime ? formatIsoDate(detail.startTime) : undefined,
     avgHr: detail.avgHr,
@@ -324,14 +340,30 @@ function formatActivityToolError(tool: string, caught: unknown): Error {
   return new Error(`${tool} failed: ${detail}`);
 }
 
-function formatActivityListLine(activity: TrainingHubActivity): string {
+function isSwimActivity(sportType: number | undefined, sportName?: string): boolean {
+  return sportType === 300 || sportType === 301 || /swim/i.test(sportName ?? "");
+}
+
+function isCyclingActivity(sportType: number | undefined, sportName?: string): boolean {
+  return (sportType !== undefined && sportType >= 200 && sportType <= 299) ||
+    /bike|cycl|ride/i.test(sportName ?? "");
+}
+
+function formatActivityListLine(
+  activity: TrainingHubActivity,
+  unitSystem: UnitSystem
+): string {
   const parts = [
     `id=${activity.activityId}`,
     `sport_type=${activity.sportType}`,
     activity.startTime ? formatIsoDate(activity.startTime) : undefined,
     activity.sportName ?? undefined,
     activity.name ?? undefined,
-    activity.distance ? `${(activity.distance / 1000).toFixed(2)} km` : undefined,
+    activity.distance
+      ? formatDistanceValue(activity.distance, unitSystem, {
+          swim: isSwimActivity(activity.sportType, activity.sportName)
+        })
+      : undefined,
     activity.duration ? formatDurationSeconds(activity.duration) : undefined,
     activity.avgHr ? `avg HR ${activity.avgHr}` : undefined,
     activity.maxHr ? `max HR ${activity.maxHr}` : undefined,
@@ -342,19 +374,32 @@ function formatActivityListLine(activity: TrainingHubActivity): string {
 
 export function formatActivityDetailForChat(
   detail: TrainingHubActivityDetail,
-  includeSeries: boolean
+  includeSeries: boolean,
+  unitSystem: UnitSystem = "metric"
 ): string {
+  const swim = isSwimActivity(detail.sportType, detail.sportName);
+  const cycling = isCyclingActivity(detail.sportType, detail.sportName);
+  const performance = detail.distance && detail.duration
+    ? cycling
+      ? `Avg speed: ${formatSpeedValue((detail.distance / 1000) / (detail.duration / 3600), unitSystem)}`
+      : !swim
+        ? `Avg pace: ${formatPaceSeconds(detail.duration / (detail.distance / 1000), unitSystem)}`
+        : undefined
+    : undefined;
   const summaryParts = [
     detail.name ? `Name: ${detail.name}` : undefined,
     detail.activityId ? `Activity ID: ${detail.activityId}` : undefined,
     detail.sportType !== undefined ? `Sport type: ${detail.sportType}` : undefined,
     detail.startTime ? `Date: ${formatIsoDate(detail.startTime)}` : undefined,
-    detail.distance ? `Distance: ${(detail.distance / 1000).toFixed(2)} km` : undefined,
+    detail.distance
+      ? `Distance: ${formatDistanceValue(detail.distance, unitSystem, { swim })}`
+      : undefined,
     detail.duration ? `Duration: ${formatDurationSeconds(detail.duration)}` : undefined,
+    performance,
     detail.avgHr ? `Avg HR: ${detail.avgHr} bpm` : undefined,
     detail.maxHr ? `Max HR: ${detail.maxHr} bpm` : undefined,
     detail.elevationGain
-      ? `Elevation gain: +${Math.round(detail.elevationGain)} m`
+      ? `Elevation gain: +${formatElevationValue(detail.elevationGain, unitSystem)}`
       : undefined,
     detail.trainingLoad ? `Training load: ${detail.trainingLoad}` : undefined,
     detail.calories ? `Calories: ${Math.round(detail.calories)}` : undefined
@@ -363,7 +408,7 @@ export function formatActivityDetailForChat(
   const sections = ["Activity detail", summaryParts.join("\n")];
 
   if (detail.laps.length > 0) {
-    sections.push("", formatLapTable(detail.laps));
+    sections.push("", formatLapTable(detail.laps, unitSystem, swim, cycling));
   } else {
     sections.push("", "Laps: none recorded for this activity.");
   }
@@ -371,7 +416,14 @@ export function formatActivityDetailForChat(
   if (includeSeries) {
     sections.push("");
     if (detail.series && detail.series.length > 0) {
-      sections.push(formatActivitySeriesForChat(downsampleActivitySeries(detail.series)));
+      sections.push(
+        formatActivitySeriesForChat(
+          downsampleActivitySeries(detail.series),
+          unitSystem,
+          swim,
+          cycling
+        )
+      );
     } else {
       sections.push(
         "Time series: HR/pace samples are not available in the COROS detail response for this activity. " +
@@ -383,17 +435,24 @@ export function formatActivityDetailForChat(
   return sections.join("\n");
 }
 
-function formatLapTable(laps: TrainingHubActivityLap[]): string {
+function formatLapTable(
+  laps: TrainingHubActivityLap[],
+  unitSystem: UnitSystem,
+  swim: boolean,
+  cycling: boolean
+): string {
   const capped = laps.slice(0, MAX_LAPS);
-  const header = "Lap | Distance | Duration | Avg HR | Max HR | Pace";
+  const header = `Lap | Distance | Duration | Avg HR | Max HR | ${cycling ? "Speed" : "Pace"}`;
   const rows = capped.map((lap) => {
     const cols = [
       String(lap.index),
-      lap.distance ? `${(lap.distance / 1000).toFixed(2)} km` : "—",
+      lap.distance ? formatDistanceValue(lap.distance, unitSystem, { swim }) : "—",
       lap.duration ? formatDurationSeconds(lap.duration) : "—",
       lap.avgHr ? `${lap.avgHr}` : "—",
       lap.maxHr ? `${lap.maxHr}` : "—",
-      lap.pace ? formatPaceSeconds(lap.pace) : "—"
+      cycling && lap.distance && lap.duration
+        ? formatSpeedValue((lap.distance / 1000) / (lap.duration / 3600), unitSystem)
+        : lap.pace ? formatPaceSeconds(lap.pace, unitSystem) : "—"
     ];
     return cols.join(" | ");
   });
@@ -420,11 +479,11 @@ function formatDurationSeconds(value: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-function formatPaceSeconds(paceSecondsPerKm: number): string {
-  const total = Math.max(0, Math.round(paceSecondsPerKm));
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}/km`;
+function formatPaceSeconds(
+  paceSecondsPerKm: number,
+  unitSystem: UnitSystem = "metric"
+): string {
+  return formatPaceValue(paceSecondsPerKm, unitSystem).replace(" /", "/");
 }
 
 export { formatDurationSeconds, formatPaceSeconds };

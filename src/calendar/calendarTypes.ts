@@ -55,3 +55,10 @@ export type CalendarMode = "month" | "week";
 export type CalendarSelection =
   | { kind: "scheduled"; day: CalendarDay; entry: TrainingHubScheduledWorkoutEntry }
   | { kind: "activity"; day: CalendarDay; activity: TrainingHubActivity };
+
+/** Stable identity for selecting scheduled occurrences across calendar cells. */
+export function scheduledWorkoutKey(
+  entry: Pick<TrainingHubScheduledWorkoutEntry, "planId" | "idInPlan">
+): string {
+  return JSON.stringify([entry.planId, entry.idInPlan]);
+}

@@ -10,7 +10,9 @@ import { useEffect, useState } from "react";
 import type { GeneratedRoute } from "../../../electron/types";
 import { formatDate } from "../../media/libraryUtils";
 import { ROUTE_ACTIVITY_OPTIONS } from "./constants";
-import { activityTypeLabel } from "./utils";
+import { activityTypeLabel, formatDistance } from "./utils";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
+import { distanceUnit } from "../../units/units";
 
 /** Auto-dismiss window for the two-tap delete confirmation. */
 const DELETE_CONFIRM_MS = 3000;
@@ -36,6 +38,7 @@ export function SavedRoutesDrawer({
   onShare: (route: GeneratedRoute) => void;
   onDelete: (route: GeneratedRoute) => void;
 }) {
+  const { unitSystem } = useUnitSystem();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // The delete confirmation arms briefly, then reverts on its own.
@@ -94,7 +97,7 @@ export function SavedRoutesDrawer({
                 >
                   <strong className="route-card-name">{route.name}</strong>
                   <span className="route-card-meta">
-                    {(route.distanceMeters / 1000).toFixed(1)} km ·{" "}
+                    {formatDistance(route.distanceMeters, unitSystem)} {distanceUnit(unitSystem)} ·{" "}
                     {activityTypeLabel(route.activityType)} ·{" "}
                     {route.mode === "loop" ? "Loop" : "A → B"}
                   </span>

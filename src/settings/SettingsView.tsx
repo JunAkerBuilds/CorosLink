@@ -16,6 +16,7 @@ import {
   Loader2,
   Mountain,
   RefreshCw,
+  Ruler,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
@@ -33,6 +34,7 @@ import {
   type SportColorCategory,
 } from "../training/sportColors";
 import appLogo from "../../build/icon.png";
+import { useUnitSystem } from "../units/UnitSystemProvider";
 
 const ABOUT_LINKS = [
   {
@@ -116,6 +118,7 @@ export function SettingsView({
   );
   const [settingsPage, setSettingsPage] = useState<"main" | "storage">("main");
   const [sportColors, setSportColors] = useState(() => readStoredSportColors());
+  const { unitSystem, setUnitSystem } = useUnitSystem();
 
   function updateSportColor(cat: SportColorCategory, value: string) {
     const next = { ...sportColors, [cat]: value };
@@ -331,6 +334,51 @@ export function SettingsView({
               <span>{label}</span>
               <ExternalLink size={12} aria-hidden="true" />
             </a>
+          ))}
+        </div>
+      </div>
+
+      <div className="panel settings-units-panel">
+        <div className="settings-units-heading">
+          <span className="settings-units-icon" aria-hidden="true">
+            <Ruler size={22} strokeWidth={1.9} />
+          </span>
+          <div>
+            <p className="eyebrow">Measurements</p>
+            <h2>Units</h2>
+            <p>
+              Choose how distance, pace, elevation, swimming, and strength
+              values appear throughout CorosLink.
+            </p>
+          </div>
+        </div>
+        <div className="settings-unit-options" role="radiogroup" aria-label="Unit system">
+          {([
+            {
+              value: "metric" as const,
+              label: "Metric",
+              detail: "Kilometres, metres, min/km, kilograms"
+            },
+            {
+              value: "imperial" as const,
+              label: "Imperial",
+              detail: "Miles, feet, min/mi, pounds, yards"
+            }
+          ]).map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={unitSystem === option.value}
+              className={unitSystem === option.value ? "is-active" : ""}
+              onClick={() => setUnitSystem(option.value)}
+            >
+              <span className="settings-unit-radio" aria-hidden="true" />
+              <span>
+                <strong>{option.label}</strong>
+                <small>{option.detail}</small>
+              </span>
+            </button>
           ))}
         </div>
       </div>

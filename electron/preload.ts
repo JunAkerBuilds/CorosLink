@@ -33,6 +33,7 @@ import type {
   SpotifySyncResult,
   SpotifySyncTrack,
   SpotifySyncUpdate,
+  StrengthHistory,
   TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
@@ -49,12 +50,16 @@ import type {
   TrainingHubUpcomingWorkout,
   TrainingHubScheduledWorkoutEntry,
   TrainingHubLibraryWorkout,
+  UnitSystem,
   PlanWorkoutEntryInput,
   RunWorkoutEditorDraft,
   WorkoutEditPreview,
   WorkoutEditRef,
   WorkoutEditSaveResult,
+  WorkoutEditorContext,
   WorkoutEditorDocument,
+  WorkoutExerciseOption,
+  WorkoutSport,
   TransferResult,
   AppInfo,
   AppUpdateSnapshot,
@@ -508,20 +513,29 @@ const api = {
     ipcRenderer.invoke("trainingHub:listScheduledWorkouts", startDay, endDay),
   listLibraryWorkouts: (): Promise<TrainingHubLibraryWorkout[]> =>
     ipcRenderer.invoke("trainingHub:listLibraryWorkouts"),
-  getWorkoutForEdit: (ref: WorkoutEditRef): Promise<WorkoutEditorDocument> =>
-    ipcRenderer.invoke("trainingHub:getWorkoutForEdit", ref),
+  listWorkoutExercises: (sport: WorkoutSport): Promise<WorkoutExerciseOption[]> =>
+    ipcRenderer.invoke("trainingHub:listWorkoutExercises", sport),
+  getWorkoutEditorContext: (unitSystem: UnitSystem): Promise<WorkoutEditorContext> =>
+    ipcRenderer.invoke("trainingHub:getWorkoutEditorContext", unitSystem),
+  getWorkoutForEdit: (
+    ref: WorkoutEditRef,
+    unitSystem: UnitSystem
+  ): Promise<WorkoutEditorDocument> =>
+    ipcRenderer.invoke("trainingHub:getWorkoutForEdit", ref, unitSystem),
   previewWorkoutEdit: (
     ref: WorkoutEditRef,
     revision: string,
-    draft: RunWorkoutEditorDraft
+    draft: RunWorkoutEditorDraft,
+    unitSystem: UnitSystem
   ): Promise<WorkoutEditPreview> =>
-    ipcRenderer.invoke("trainingHub:previewWorkoutEdit", ref, revision, draft),
+    ipcRenderer.invoke("trainingHub:previewWorkoutEdit", ref, revision, draft, unitSystem),
   saveWorkoutEdit: (
     ref: WorkoutEditRef,
     revision: string,
-    draft: RunWorkoutEditorDraft
+    draft: RunWorkoutEditorDraft,
+    unitSystem: UnitSystem
   ): Promise<WorkoutEditSaveResult> =>
-    ipcRenderer.invoke("trainingHub:saveWorkoutEdit", ref, revision, draft),
+    ipcRenderer.invoke("trainingHub:saveWorkoutEdit", ref, revision, draft, unitSystem),
   scheduleLibraryWorkout: (
     programId: string,
     happenDay: string
@@ -530,12 +544,14 @@ const api = {
   createAndScheduleWorkout: (
     entry: PlanWorkoutEntryInput,
     happenDay: string,
+    unitSystem: UnitSystem,
     saveToLibrary?: boolean
   ): Promise<{ programId?: string }> =>
     ipcRenderer.invoke(
       "trainingHub:createAndScheduleWorkout",
       entry,
       happenDay,
+      unitSystem,
       saveToLibrary
     ),
   rescheduleWorkout: (
@@ -552,6 +568,7 @@ const api = {
     planId: string;
     idInPlan: string;
     planProgramId?: string;
+    pbVersion?: number;
   }): Promise<void> =>
     ipcRenderer.invoke("trainingHub:removeScheduledWorkout", entry),
   getTrainingHubActivityDetail: (
@@ -614,6 +631,8 @@ const api = {
     ipcRenderer.invoke("trainingHub:getDashboard"),
   getDailyMetrics: (dateList: string[]): Promise<TrainingHubDailyMetrics> =>
     ipcRenderer.invoke("trainingHub:getDailyMetrics", dateList),
+  syncStrengthHistory: (days?: number, force?: boolean): Promise<StrengthHistory> =>
+    ipcRenderer.invoke("trainingHub:syncStrengthHistory", days, force),
   startRpeBackfill: (): Promise<void> =>
     ipcRenderer.invoke("trainingHub:startRpeBackfill"),
   getRpeBackfillStatus: (): Promise<{ pending: number; running: boolean }> =>
@@ -635,9 +654,10 @@ const api = {
   ): Promise<TrainingHubDailyHealthSummary> =>
     ipcRenderer.invoke("trainingHub:getDailyHealthData", days),
   uploadTrainingPlan: (
-    draft: CorosTrainingPlanDraftInput
+    draft: CorosTrainingPlanDraftInput,
+    unitSystem: UnitSystem
   ): Promise<UploadPlanResult> =>
-    ipcRenderer.invoke("trainingHub:uploadTrainingPlan", draft),
+    ipcRenderer.invoke("trainingHub:uploadTrainingPlan", draft, unitSystem),
   getIntervalsStatus: (): Promise<IntervalsStatus> =>
     ipcRenderer.invoke("intervals:getStatus"),
   connectIntervals: (
@@ -810,8 +830,11 @@ const api = {
   loginChat: (): Promise<ChatAuthStatus> => ipcRenderer.invoke("chat:login"),
   logoutChat: (): Promise<ChatAuthStatus> => ipcRenderer.invoke("chat:logout"),
   // Fire-and-forget: assistant text arrives via the onChat* subscriptions.
-  sendChat: (requestId: string, messages: ChatMessage[]): Promise<void> =>
-    ipcRenderer.invoke("chat:send", requestId, messages),
+  sendChat: (
+    requestId: string,
+    messages: ChatMessage[],
+    unitSystem: UnitSystem
+  ): Promise<void> => ipcRenderer.invoke("chat:send", requestId, messages, unitSystem),
   cancelChat: (requestId: string): Promise<void> =>
     ipcRenderer.invoke("chat:cancel", requestId),
   listChatSessions: (provider: ChatProvider): Promise<ChatSessionSummary[]> =>
@@ -894,8 +917,11 @@ const api = {
     ipcRenderer.invoke("mcp:statuses"),
   setMcpBearer: (id: string, token: string): Promise<void> =>
     ipcRenderer.invoke("mcp:setBearer", id, token),
-  uploadTrainingPlanDraft: (draftId: string): Promise<UploadPlanResult> =>
-    ipcRenderer.invoke("chat:uploadPlanDraft", draftId),
+  uploadTrainingPlanDraft: (
+    draftId: string,
+    unitSystem: UnitSystem
+  ): Promise<UploadPlanResult> =>
+    ipcRenderer.invoke("chat:uploadPlanDraft", draftId, unitSystem),
   confirmWorkoutDelete: (requestId: string): Promise<DeleteWorkoutResult> =>
     ipcRenderer.invoke("chat:confirmWorkoutDelete", requestId),
   setWindowBackground: (color: string): Promise<void> =>

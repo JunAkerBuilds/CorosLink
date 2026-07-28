@@ -9,6 +9,8 @@ import {
 } from "../training/formatters";
 import { trainingChartTooltipStyle } from "../training/chartConfig";
 import { HEART_RATE_ZONE_COLORS } from "./charts/zoneChartConfig";
+import type { UnitSystem } from "../../electron/types";
+import { useUnitSystem } from "../units/UnitSystemProvider";
 
 interface HrZoneCardProps {
   preview: HrZonePreview;
@@ -87,10 +89,11 @@ function formatHrZoneRange(
 
 function formatZoneMetricValue(
   value: number,
-  metric: HrZonePreview["metric"]
+  metric: HrZonePreview["metric"],
+  unitSystem: UnitSystem
 ): string {
   if (metric === "distance") {
-    return formatDistanceMeters(value);
+    return formatDistanceMeters(value, unitSystem);
   }
 
   if (metric === "time") {
@@ -129,18 +132,19 @@ function ZoneTooltip({ active, payload }: TooltipContentProps) {
 }
 
 export function HrZoneCard({ preview }: HrZoneCardProps) {
+  const { unitSystem } = useUnitSystem();
   const rows = useMemo((): ZoneRow[] => {
     return preview.zones.map((zone, index) => ({
       index: zone.index,
       label: zone.label,
       percent: zone.percent,
       value: zone.value,
-      detail: formatZoneMetricValue(zone.value, preview.metric),
+      detail: formatZoneMetricValue(zone.value, preview.metric, unitSystem),
       caption: heartRateZoneCaption(zone.index),
       hrRange: formatHrZoneRange(zone.index, preview.lthrZones),
       color: HEART_RATE_ZONE_COLORS[index % HEART_RATE_ZONE_COLORS.length]
     }));
-  }, [preview]);
+  }, [preview, unitSystem]);
 
   const chartData = rows.filter((row) => row.percent > 0);
   const topZone = useMemo(() => {

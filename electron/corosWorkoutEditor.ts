@@ -7,10 +7,37 @@ import type {
   RunWorkoutEditorStep,
   RunWorkoutEditorStepKind,
   RunWorkoutEditorTarget,
+  UnitSystem,
   WorkoutEditRef,
   WorkoutEditorContext,
-  WorkoutLthrZone
+  WorkoutLthrZone,
+  WorkoutSport,
+  WorkoutZone
 } from "./types";
+import {
+  CLIMB_SYSTEM_IDS,
+  FTP_PRESETS,
+  HEART_RATE_PRESETS,
+  PACE_PRESETS,
+  RUNNING_POWER_PRESETS,
+  WORKOUT_SPORT_CAPABILITIES,
+  decodeCorosIntensity,
+  encodeCorosIntensity,
+  requiredWorkoutPbVersion,
+  validateWorkoutIntensity,
+  validateWorkoutDraftShared,
+  validateWorkoutTarget,
+  workoutSportFromType,
+  workoutSportType
+} from "./workoutCapabilities";
+import {
+  POUNDS_PER_KILOGRAM,
+  kilogramsToDisplayWeight,
+  kmhToDisplaySpeed,
+  normalizeUnitSystem,
+  speedUnit,
+  weightUnit
+} from "./unitSystem.js";
 
 const TOP_LEVEL_SORT_INTERVAL = 16_777_216;
 const GROUP_CHILD_SORT_INTERVAL = 65_536;
@@ -29,14 +56,16 @@ const EXERCISE_TYPE_TO_KIND: Record<number, RunWorkoutEditorStepKind> = {
   1: "warmup",
   2: "training",
   3: "cooldown",
-  4: "rest"
+  4: "rest",
+  5: "sendOff"
 };
 
 const KIND_TO_EXERCISE_TYPE: Record<RunWorkoutEditorStepKind, number> = {
   warmup: 1,
   training: 2,
   cooldown: 3,
-  rest: 4
+  rest: 4,
+  sendOff: 2
 };
 
 export interface WorkoutEditSource {
@@ -70,6 +99,13 @@ function exerciseId(exercise: Record<string, unknown>): string | undefined {
     : String(exercise.id);
 }
 
+function originExerciseId(exercise: Record<string, unknown>): string | undefined {
+  const value = exercise.originId;
+  return value === null || value === undefined || String(value) === "0"
+    ? undefined
+    : String(value);
+}
+
 function friendlyStepName(kind: RunWorkoutEditorStepKind): string {
   switch (kind) {
     case "warmup":
@@ -78,6 +114,8 @@ function friendlyStepName(kind: RunWorkoutEditorStepKind): string {
       return "Cool Down";
     case "rest":
       return "Rest";
+    case "sendOff":
+      return "Send-off";
     default:
       return "Training";
   }
@@ -106,6 +144,12 @@ function parseTarget(
             target: { type: "open" },
             reason: "HR Recovery is only editable on Rest steps."
           };
+    case 3:
+      return { target: { type: "reps", count: Math.round(targetValue) } };
+    case 8:
+      return { target: { type: "elevationGain", meters: targetValue / 100 } };
+    case 9:
+      return { target: { type: "routes", count: Math.round(targetValue) } };
     default:
       return {
         target: { type: "open" },
@@ -114,66 +158,62 @@ function parseTarget(
   }
 }
 
-function parseIntensity(exercise: Record<string, unknown>): {
+function parseIntensity(
+  exercise: Record<string, unknown>,
+  context?: WorkoutEditorContext
+): {
   intensity: RunWorkoutEditorIntensity;
   reason?: string;
 } {
-  const intensityType = numberValue(exercise.intensityType) ?? 0;
-  const value = numberValue(exercise.intensityValue) ?? 0;
-  const valueExtend = numberValue(exercise.intensityValueExtend) ?? value;
-
-  if (intensityType === 0) {
-    return { intensity: { type: "none" } };
-  }
-
-  if (intensityType === 3) {
+  const parsed = decodeCorosIntensity(exercise);
+  const intensity = parsed.intensity;
+  if (!context) return parsed;
+  if (intensity.type === "pace" || intensity.type === "effortPace") {
     return {
+      ...parsed,
+      intensity: { ...intensity, displayUnit: context.paceUnit }
+    };
+  }
+  if (intensity.type === "speed") {
+    const lowKmh = intensity.unit === "mph" ? intensity.low * 1.609344 : intensity.low;
+    const highKmh = intensity.unit === "mph" ? intensity.high * 1.609344 : intensity.high;
+    return {
+      ...parsed,
       intensity: {
-        type: "pace",
-        lowSecondsPerKm: Math.min(value, valueExtend) / PACE_MULTIPLIER,
-        highSecondsPerKm: Math.max(value, valueExtend) / PACE_MULTIPLIER,
-        displayUnit: numberValue(exercise.intensityDisplayUnit) === 2 ? "mi" : "km"
+        ...intensity,
+        low: kmhToDisplaySpeed(lowKmh, context.distanceUnit),
+        high: kmhToDisplaySpeed(highKmh, context.distanceUnit),
+        unit: speedUnit(context.distanceUnit)
       }
     };
   }
-
-  if (intensityType === 2) {
-    if (Boolean(exercise.isIntensityPercent)) {
-      const low =
-        numberValue(exercise.intensityPercent) ??
-        numberValue(exercise.intensityValue) ??
-        0;
-      const high =
-        numberValue(exercise.intensityPercentExtend) ??
-        numberValue(exercise.intensityValueExtend) ??
-        low;
-      return {
-        intensity: {
-          type: "lthrPercent",
-          lowPercent: Math.min(low, high),
-          highPercent: Math.max(low, high)
-        }
-      };
-    }
-
+  if (intensity.type === "weight" && intensity.mode === "weight") {
+    const kilograms = intensity.unit === "lb"
+      ? intensity.value / POUNDS_PER_KILOGRAM
+      : intensity.value;
     return {
+      ...parsed,
       intensity: {
-        type: "heartRate",
-        lowBpm: Math.min(value, valueExtend),
-        highBpm: Math.max(value, valueExtend)
+        ...intensity,
+        value: kilogramsToDisplayWeight(kilograms, context.distanceUnit),
+        unit: weightUnit(context.distanceUnit)
       }
     };
   }
-
-  return {
-    intensity: { type: "none" },
-    reason: `COROS intensity type ${intensityType} is preserved but not editable.`
-  };
+  return parsed;
 }
 
-function parseStep(exercise: Record<string, unknown>, index: number): RunWorkoutEditorStep {
+function parseStep(
+  exercise: Record<string, unknown>,
+  index: number,
+  sport: WorkoutSport,
+  context?: WorkoutEditorContext
+): RunWorkoutEditorStep {
   const exerciseType = numberValue(exercise.exerciseType) ?? 2;
-  const kind = EXERCISE_TYPE_TO_KIND[exerciseType];
+  const kind = sport === "swim" &&
+    (exerciseType === 5 || (exerciseType === 2 && numberValue(exercise.subType) === 1))
+    ? "sendOff"
+    : EXERCISE_TYPE_TO_KIND[exerciseType];
   const id = exerciseId(exercise);
 
   if (!kind) {
@@ -185,14 +225,21 @@ function parseStep(exercise: Record<string, unknown>, index: number): RunWorkout
       name: String(exercise.name ?? "Unsupported step"),
       target: { type: "open" },
       intensity: { type: "none" },
+      ...(originExerciseId(exercise) ? { exerciseId: originExerciseId(exercise) } : {}),
+      ...(exercise.name ? { exerciseName: String(exercise.name) } : {}),
+      ...(numberValue(exercise.exerciseKind) !== undefined
+        ? { exerciseKind: numberValue(exercise.exerciseKind) }
+        : {}),
       editable: false,
       unsupportedReason: `COROS exercise type ${exerciseType} is preserved but not editable.`
     };
   }
 
   const parsedTarget = parseTarget(exercise, kind);
-  const parsedIntensity = parseIntensity(exercise);
-  const reason = parsedTarget.reason ?? parsedIntensity.reason;
+  const parsedIntensity = parseIntensity(exercise, context);
+  const reason = parsedTarget.reason ?? parsedIntensity.reason ??
+    validateWorkoutTarget(sport, kind, parsedTarget.target, numberValue(exercise.exerciseKind)) ??
+    validateWorkoutIntensity(sport, parsedIntensity.intensity, kind, numberValue(exercise.exerciseKind));
   const rawName = String(exercise.name ?? "").trim();
   const name = rawName && !/^T\d+$/i.test(rawName) ? rawName : friendlyStepName(kind);
 
@@ -204,14 +251,24 @@ function parseStep(exercise: Record<string, unknown>, index: number): RunWorkout
     name,
     target: parsedTarget.target,
     intensity: parsedIntensity.intensity,
+    ...(originExerciseId(exercise) ? { exerciseId: originExerciseId(exercise) } : {}),
+    ...(rawName ? { exerciseName: rawName } : {}),
+    ...(numberValue(exercise.exerciseKind) !== undefined
+      ? { exerciseKind: numberValue(exercise.exerciseKind) }
+      : {}),
+    ...(numberValue(exercise.packageTime) !== undefined
+      ? { sendOffSeconds: numberValue(exercise.packageTime) }
+      : {}),
     editable: !reason,
     ...(reason ? { unsupportedReason: reason } : {})
   };
 }
 
 export function corosProgramToWorkoutDraft(
-  program: Record<string, unknown>
+  program: Record<string, unknown>,
+  context?: WorkoutEditorContext
 ): RunWorkoutEditorDraft {
+  const sport = workoutSportFromType(program.sportType) ?? "run";
   const rawExercises = Array.isArray(program.exercises)
     ? (program.exercises.filter(
         (item): item is Record<string, unknown> =>
@@ -241,7 +298,9 @@ export function corosProgramToWorkoutDraft(
         (candidate) => !candidate.isGroup && String(candidate.groupId ?? "") === id
       );
       children.forEach((child) => consumed.add(child));
-      const steps = children.map((child, childIndex) => parseStep(child, childIndex));
+      const steps = children.map((child, childIndex) =>
+        parseStep(child, childIndex, sport, context)
+      );
       const reason = steps.length === 0 ? "Empty COROS repeat group." : undefined;
       nodes.push({
         id: `group-${id ?? index}`,
@@ -261,14 +320,37 @@ export function corosProgramToWorkoutDraft(
     if (groupId && groupId !== "0" && groupedIds.has(groupId)) {
       return;
     }
-    nodes.push(parseStep(exercise, index));
+    nodes.push(parseStep(exercise, index, sport, context));
     consumed.add(exercise);
   });
 
+  const gradingSystem = Object.entries(CLIMB_SYSTEM_IDS).find(
+    ([, value]) => value === numberValue((objectValue(program.referExercise) ?? {}).gradeSystem)
+  )?.[0] as WorkoutEditorContext["climbSystems"]["indoorClimb"] | undefined;
+  const poolRaw = numberValue(program.poolLength);
+  const poolUnit = context
+    ? context.defaultPoolLength.unit
+    : [3, 4].includes(numberValue(program.poolLengthUnit) ?? 0) ? "yd" : "m";
   return {
     name: String(program.name ?? "Workout"),
     overview: String(program.overview ?? ""),
-    sportType: 1,
+    sportType: workoutSportType(sport),
+    sport,
+    ...((sport === "swim" || sport === "indoorClimb" || sport === "bouldering")
+      ? {
+          sportOptions: {
+            ...(sport === "swim" && poolRaw
+              ? {
+                  poolLength: {
+                    value: poolRaw / 100 / (poolUnit === "yd" ? 0.9144 : 1),
+                    unit: poolUnit
+                  }
+                }
+              : {}),
+            ...(gradingSystem ? { gradingSystem } : {})
+          }
+        }
+      : {}),
     nodes
   };
 }
@@ -287,7 +369,7 @@ function nextExerciseIdFactory(exercises: Record<string, unknown>[]): () => stri
   return () => String(++maximum);
 }
 
-function newExercise(id: string): Record<string, unknown> {
+function newExercise(id: string, sport: WorkoutSport): Record<string, unknown> {
   return {
     id,
     access: 0,
@@ -298,7 +380,7 @@ function newExercise(id: string): Record<string, unknown> {
     sourceId: "0",
     sourceUrl: "",
     videoUrl: "",
-    sportType: 1,
+    sportType: workoutSportType(sport),
     subType: 0,
     userId: 0,
     status: 1,
@@ -307,7 +389,24 @@ function newExercise(id: string): Record<string, unknown> {
   };
 }
 
-function defaultOverview(kind: RunWorkoutEditorStepKind, target: RunWorkoutEditorTarget): string {
+function defaultOverview(
+  sport: WorkoutSport,
+  kind: RunWorkoutEditorStepKind,
+  target: RunWorkoutEditorTarget
+): string {
+  if (sport === "swim") {
+    if (kind === "warmup" || kind === "sendOff") return "sid_poolswim_warm_up_dist";
+    if (kind === "cooldown") return "sid_poolswim_cool_down_dist";
+    if (kind === "rest") return "sid_poolswim_cool_down_dist";
+    return "sid_poolswim_dist_default";
+  }
+  if (sport === "bike") {
+    if (kind === "warmup") return "sid_bike_warm_up_dist";
+    if (kind === "cooldown") return "sid_bike_cool_down_dist";
+    if (kind === "rest") return "sid_bike_cool_down_dist";
+    return "sid_bike_dist_speed";
+  }
+  if (sport === "strength") return "sid_strength_training";
   if (kind === "warmup") {
     return target.type === "distance" ? "sid_run_warm_up_dist" : "sid_run_warm_up";
   }
@@ -323,7 +422,8 @@ function defaultOverview(kind: RunWorkoutEditorStepKind, target: RunWorkoutEdito
 function applyTarget(
   exercise: Record<string, unknown>,
   step: RunWorkoutEditorStep,
-  context: WorkoutEditorContext
+  context: WorkoutEditorContext,
+  sport: WorkoutSport
 ): void {
   exercise.targetDisplayUnit = 0;
   switch (step.target.type) {
@@ -334,7 +434,9 @@ function applyTarget(
     case "distance":
       exercise.targetType = 5;
       exercise.targetValue = Math.round(step.target.meters * 100);
-      exercise.targetDisplayUnit = context.distanceUnit === "imperial" ? 3 : 2;
+      exercise.targetDisplayUnit = sport === "swim"
+        ? context.distanceUnit === "imperial" ? 4 : 2
+        : context.distanceUnit === "imperial" ? 3 : 2;
       break;
     case "load":
       exercise.targetType = 6;
@@ -343,6 +445,19 @@ function applyTarget(
     case "hrRecovery":
       exercise.targetType = 7;
       exercise.targetValue = Math.round(step.target.bpm);
+      break;
+    case "reps":
+      exercise.targetType = 3;
+      exercise.targetValue = Math.round(step.target.count);
+      break;
+    case "elevationGain":
+      exercise.targetType = 8;
+      exercise.targetValue = Math.round(step.target.meters * 100);
+      exercise.targetDisplayUnit = context.distanceUnit === "imperial" ? 5 : 2;
+      break;
+    case "routes":
+      exercise.targetType = 9;
+      exercise.targetValue = Math.round(step.target.count);
       break;
     case "open":
       exercise.targetType = 1;
@@ -356,53 +471,14 @@ function applyIntensity(
   intensity: RunWorkoutEditorIntensity,
   context: WorkoutEditorContext
 ): void {
-  Object.assign(exercise, {
-    intensityType: 0,
-    intensityValue: 0,
-    intensityValueExtend: 0,
-    intensityDisplayUnit: 0,
-    intensityMultiplier: 0,
-    intensityPercent: 0,
-    intensityPercentExtend: 0,
-    hrType: 3,
-    isIntensityPercent: false
-  });
-
-  if (intensity.type === "pace") {
-    exercise.intensityType = 3;
-    exercise.intensityValue = Math.round(
-      Math.min(intensity.lowSecondsPerKm, intensity.highSecondsPerKm) * PACE_MULTIPLIER
-    );
-    exercise.intensityValueExtend = Math.round(
-      Math.max(intensity.lowSecondsPerKm, intensity.highSecondsPerKm) * PACE_MULTIPLIER
-    );
-    exercise.intensityDisplayUnit = intensity.displayUnit === "mi" ? 2 : 1;
-    exercise.intensityMultiplier = PACE_MULTIPLIER;
-    return;
-  }
-
-  if (intensity.type === "heartRate") {
-    exercise.intensityType = 2;
-    exercise.intensityValue = Math.round(Math.min(intensity.lowBpm, intensity.highBpm));
-    exercise.intensityValueExtend = Math.round(Math.max(intensity.lowBpm, intensity.highBpm));
-    return;
-  }
-
-  if (intensity.type === "lthrPercent") {
-    const low = Math.min(intensity.lowPercent, intensity.highPercent);
-    const high = Math.max(intensity.lowPercent, intensity.highPercent);
-    exercise.intensityType = 2;
-    exercise.isIntensityPercent = true;
-    exercise.intensityPercent = low;
-    exercise.intensityPercentExtend = high;
-    // COROS derives the bpm preview from the athlete's LTHR zone data. The
-    // persisted absolute fields remain zero for percentage-based HR targets.
-    exercise.intensityValue = 0;
-    exercise.intensityValueExtend = 0;
-  }
+  Object.assign(exercise, encodeCorosIntensity(intensity, context));
 }
 
-function aggregateGroup(group: RunWorkoutEditorRepeatGroup): {
+function aggregateGroup(
+  group: RunWorkoutEditorRepeatGroup,
+  context: WorkoutEditorContext,
+  sport: WorkoutSport
+): {
   targetType: number;
   targetValue: number;
   targetDisplayUnit: number;
@@ -416,7 +492,13 @@ function aggregateGroup(group: RunWorkoutEditorRepeatGroup): {
     0
   );
   return distance > 0
-    ? { targetType: 5, targetValue: Math.round(distance), targetDisplayUnit: 2 }
+    ? {
+        targetType: 5,
+        targetValue: Math.round(distance),
+        targetDisplayUnit: sport === "swim"
+          ? context.distanceUnit === "imperial" ? 4 : 2
+          : context.distanceUnit === "imperial" ? 3 : 2
+      }
     : { targetType: 2, targetValue: Math.round(time), targetDisplayUnit: 0 };
 }
 
@@ -452,7 +534,7 @@ export function workoutDraftToCorosProgram(
   ): Record<string, unknown> => {
     const id = step.sourceExerciseId ?? allocateId();
     const source = step.sourceExerciseId ? byId.get(step.sourceExerciseId) : undefined;
-    const exercise = source ? structuredClone(source) : newExercise(id);
+    const exercise = source ? structuredClone(source) : newExercise(id, draft.sport);
     exercise.id = id;
     exercise.sortNo = sortNo;
     exercise.groupId = groupId;
@@ -464,12 +546,26 @@ export function workoutDraftToCorosProgram(
 
     exercise.name = step.name.trim() || friendlyStepName(step.kind);
     exercise.exerciseType = KIND_TO_EXERCISE_TYPE[step.kind];
-    exercise.sportType = 1;
+    exercise.subType = step.kind === "sendOff"
+      ? 1
+      : draft.sport === "hyrox" && step.kind === "training" && step.exerciseKind
+        ? 2
+        : 0;
+    exercise.sportType = draft.sportType;
+    if (step.exerciseId) exercise.originId = step.exerciseId;
+    if (step.exerciseKind !== undefined) exercise.exerciseKind = step.exerciseKind;
+    if (draft.sport === "hyrox" && step.kind === "training" && step.exerciseKind) {
+      exercise.hyroxTrainingMode = "strength";
+    } else if (draft.sport === "hyrox") {
+      delete exercise.hyroxTrainingMode;
+      exercise.exerciseKind = 0;
+    }
+    if (step.sendOffSeconds !== undefined) exercise.packageTime = Math.round(step.sendOffSeconds);
     exercise.sets = 1;
     exercise.restType = step.kind === "rest" ? 3 : numberValue(exercise.restType) ?? 3;
     exercise.restValue = numberValue(exercise.restValue) ?? 0;
-    exercise.overview = defaultOverview(step.kind, step.target);
-    applyTarget(exercise, step, context);
+    exercise.overview = defaultOverview(draft.sport, step.kind, step.target);
+    applyTarget(exercise, step, context, draft.sport);
     applyIntensity(exercise, step.intensity, context);
     return exercise;
   };
@@ -483,13 +579,13 @@ export function workoutDraftToCorosProgram(
 
     const id = node.sourceExerciseId ?? allocateId();
     const source = node.sourceExerciseId ? byId.get(node.sourceExerciseId) : undefined;
-    const group = source ? structuredClone(source) : newExercise(id);
-    const aggregate = aggregateGroup(node);
+    const group = source ? structuredClone(source) : newExercise(id, draft.sport);
+    const aggregate = aggregateGroup(node, context, draft.sport);
     Object.assign(group, aggregate, {
       id,
       name: node.name.trim() || "Repeat",
       exerciseType: 0,
-      sportType: 1,
+      sportType: draft.sportType,
       intensityType: 0,
       intensityValue: 0,
       intensityValueExtend: 0,
@@ -500,7 +596,7 @@ export function workoutDraftToCorosProgram(
       sortNo: topSort,
       restType: numberValue(group.restType) ?? 3,
       restValue: numberValue(group.restValue) ?? 0,
-      overview: String(group.overview ?? "sid_run_training")
+      overview: String(group.overview ?? defaultOverview(draft.sport, "training", { type: "open" }))
     });
     flattened.push(group);
     node.steps.forEach((step, childIndex) => {
@@ -512,7 +608,31 @@ export function workoutDraftToCorosProgram(
 
   program.name = draft.name.trim();
   program.overview = draft.overview.trim();
-  program.sportType = 1;
+  program.sportType = draft.sportType;
+  program.pbVersion = requiredWorkoutPbVersion(
+    draft.sport,
+    flattened,
+    numberValue(program.pbVersion) ?? 0
+  );
+  const gradingSystem = draft.sport === "indoorClimb" || draft.sport === "bouldering"
+    ? draft.sportOptions?.gradingSystem ?? context.climbSystems[draft.sport] ?? (draft.sport === "bouldering" ? "vScale" : "yds")
+    : undefined;
+  program.referExercise = {
+    ...WORKOUT_SPORT_CAPABILITIES[draft.sport].referExercise,
+    ...(objectValue(program.referExercise) ?? {}),
+    ...(gradingSystem
+      ? { gradeSystem: CLIMB_SYSTEM_IDS[gradingSystem] }
+      : {})
+  };
+  const poolLength = draft.sport === "swim"
+    ? draft.sportOptions?.poolLength ?? context.defaultPoolLength
+    : undefined;
+  if (poolLength) {
+    program.poolLength = Math.round(poolLength.value * (poolLength.unit === "yd" ? 0.9144 : 1) * 100);
+    program.poolLengthUnit = poolLength.unit === "yd" ? 4 : 2;
+    program.poolLengthId = 0;
+  }
+  if (gradingSystem) program.gradeSystemVersion = numberValue(program.gradeSystemVersion) ?? 1;
   program.simple = false;
   program.exercises = flattened;
   program.exerciseNum = flattened.length;
@@ -521,92 +641,14 @@ export function workoutDraftToCorosProgram(
     0
   );
   program.sets = program.totalSets;
-  program.distanceDisplayUnit = context.distanceUnit === "imperial" ? 3 : 1;
+  program.distanceDisplayUnit = draft.sport === "swim"
+    ? context.distanceUnit === "imperial" ? 4 : 2
+    : context.distanceUnit === "imperial" ? 3 : 1;
   return program;
 }
 
 export function validateWorkoutDraft(draft: RunWorkoutEditorDraft): WorkoutDraftValidation {
-  const errors: Record<string, string> = {};
-  if (!draft.name.trim()) {
-    errors.name = "Name is required.";
-  } else if (draft.name.trim().length > 90) {
-    errors.name = "Name must be 90 characters or fewer.";
-  }
-  if (draft.overview.length > 300) {
-    errors.overview = "Description must be 300 characters or fewer.";
-  }
-  if (draft.nodes.length === 0) {
-    errors.nodes = "Add at least one workout step.";
-  }
-
-  const validateStep = (step: RunWorkoutEditorStep, path: string): void => {
-    if (!step.editable) {
-      return;
-    }
-    if (step.target.type === "time" && step.target.seconds <= 0) {
-      errors[`${path}.target`] = "Time must be greater than zero.";
-    }
-    if (step.target.type === "distance" && step.target.meters <= 0) {
-      errors[`${path}.target`] = "Distance must be greater than zero.";
-    }
-    if (
-      step.target.type === "load" &&
-      (!Number.isInteger(step.target.load) || step.target.load < 0 || step.target.load > 999)
-    ) {
-      errors[`${path}.target`] = "Training Load must be a whole number from 0 to 999.";
-    }
-    if (step.target.type === "hrRecovery") {
-      if (step.kind !== "rest") {
-        errors[`${path}.target`] = "HR Recovery is available only for Rest steps.";
-      } else if (step.target.bpm < 30 || step.target.bpm > 250) {
-        errors[`${path}.target`] = "HR Recovery must be from 30 to 250 bpm.";
-      }
-    }
-    if (step.intensity.type === "pace") {
-      if (
-        step.intensity.lowSecondsPerKm <= 0 ||
-        step.intensity.highSecondsPerKm <= 0 ||
-        step.intensity.lowSecondsPerKm > step.intensity.highSecondsPerKm
-      ) {
-        errors[`${path}.intensity`] = "Enter a valid pace range.";
-      }
-    }
-    if (step.intensity.type === "heartRate") {
-      if (
-        step.intensity.lowBpm < 30 ||
-        step.intensity.highBpm > 250 ||
-        step.intensity.lowBpm > step.intensity.highBpm
-      ) {
-        errors[`${path}.intensity`] = "Heart rate must be from 30 to 250 bpm.";
-      }
-    }
-    if (step.intensity.type === "lthrPercent") {
-      if (
-        step.intensity.lowPercent < 1 ||
-        step.intensity.highPercent > 200 ||
-        step.intensity.lowPercent > step.intensity.highPercent
-      ) {
-        errors[`${path}.intensity`] = "LTHR percentage must be from 1 to 200%.";
-      }
-    }
-  };
-
-  draft.nodes.forEach((node, index) => {
-    if (node.nodeType === "step") {
-      validateStep(node, `nodes.${index}`);
-      return;
-    }
-    if (!Number.isInteger(node.repeat) || node.repeat < 1 || node.repeat > 99) {
-      errors[`nodes.${index}.repeat`] = "Repeat count must be from 1 to 99.";
-    }
-    if (node.steps.length === 0) {
-      errors[`nodes.${index}.steps`] = "Repeat groups need at least one step.";
-    }
-    node.steps.forEach((step, childIndex) =>
-      validateStep(step, `nodes.${index}.steps.${childIndex}`)
-    );
-  });
-  return { valid: Object.keys(errors).length === 0, errors };
+  return validateWorkoutDraftShared(draft);
 }
 
 export function workoutEditRevision(source: WorkoutEditSource): string {
@@ -648,6 +690,9 @@ function normalizedDraft(draft: RunWorkoutEditorDraft): unknown {
   return {
     name: draft.name.trim(),
     overview: draft.overview.trim(),
+    sport: draft.sport,
+    sportType: draft.sportType,
+    sportOptions: draft.sportOptions,
     nodes: draft.nodes.map((node) =>
       node.nodeType === "step"
         ? {
@@ -656,6 +701,9 @@ function normalizedDraft(draft: RunWorkoutEditorDraft): unknown {
             name: node.name.trim(),
             target: node.target,
             intensity: normalizeIntensity(node.intensity),
+            exerciseId: node.exerciseId,
+            exerciseKind: node.exerciseKind,
+            sendOffSeconds: node.sendOffSeconds,
             editable: node.editable
           }
         : {
@@ -667,6 +715,9 @@ function normalizedDraft(draft: RunWorkoutEditorDraft): unknown {
               name: step.name.trim(),
               target: step.target,
               intensity: normalizeIntensity(step.intensity),
+              exerciseId: step.exerciseId,
+              exerciseKind: step.exerciseKind,
+              sendOffSeconds: step.sendOffSeconds,
               editable: step.editable
             }))
           }
@@ -695,61 +746,176 @@ function parseZoneData(account: Record<string, unknown>): Record<string, unknown
 }
 
 export function parseWorkoutEditorContext(
-  account: Record<string, unknown>
+  account: Record<string, unknown>,
+  unitSystem?: UnitSystem
 ): WorkoutEditorContext {
   const zoneData = parseZoneData(account);
-  const lthrBpm = numberValue(zoneData.lthr ?? account.lthr);
-  const rawZones = Array.isArray(zoneData.lthrZone)
-    ? zoneData.lthrZone
-    : Array.isArray(account.lthrZone)
-      ? account.lthrZone
-      : [];
-  const parsed = rawZones
-    .map((item, arrayIndex) => {
-      const zone = objectValue(item);
-      if (!zone) {
-        return undefined;
-      }
-      const index = Math.round(numberValue(zone.index) ?? arrayIndex + 1);
-      const ratio = numberValue(zone.ratio);
-      const hr = numberValue(zone.hr);
-      return { index, ratio, hr };
-    })
-    .filter((zone): zone is { index: number; ratio: number | undefined; hr: number | undefined } => Boolean(zone))
-    .sort((left, right) => left.index - right.index);
-  const lthrZones: WorkoutLthrZone[] = parsed.map((zone, index) => {
-    const next = parsed[index + 1];
-    const lowPercent = zone.ratio !== undefined
-      ? Math.round(zone.ratio <= 2 ? zone.ratio * 100 : zone.ratio)
-      : lthrBpm && zone.hr
-        ? Math.round((zone.hr / lthrBpm) * 100)
-        : 0;
-    const nextPercent = next?.ratio !== undefined
-      ? Math.round(next.ratio <= 2 ? next.ratio * 100 : next.ratio)
-      : lthrBpm && next?.hr
-        ? Math.round((next.hr / lthrBpm) * 100)
+  const firstNumber = (...values: unknown[]): number | undefined => {
+    for (const value of values) {
+      const parsed = numberValue(value);
+      if (parsed !== undefined && parsed > 0) return parsed;
+    }
+    return undefined;
+  };
+  const maxHr = firstNumber(zoneData.maxHr, zoneData.maxHeartRate, account.maxHr, account.maxHeartRate);
+  const restingHr = firstNumber(zoneData.restingHr, zoneData.restHr, account.restingHr, account.restHr);
+  const lthrBpm = firstNumber(zoneData.lthr, zoneData.thresholdHr, account.lthr, account.thresholdHr);
+  const rawThresholdPace = firstNumber(
+    zoneData.thresholdPace,
+    zoneData.thresholdPaceSeconds,
+    account.thresholdPace,
+    account.thresholdPaceSeconds
+  );
+  const thresholdPaceSecondsPerKm = rawThresholdPace && rawThresholdPace > 10_000
+    ? rawThresholdPace / 1_000
+    : rawThresholdPace;
+  const ftp = firstNumber(zoneData.ftp, zoneData.cycleFtp, account.ftp, account.cycleFtp);
+  const criticalPower = firstNumber(
+    zoneData.criticalPower,
+    zoneData.runCriticalPower,
+    account.criticalPower,
+    account.runCriticalPower
+  );
+
+  type ZoneDefinition = { id: number; label: string; low: number; high: number; preset?: string };
+  const zoneArray = (...keys: string[]): unknown[] => {
+    for (const key of keys) {
+      if (Array.isArray(zoneData[key])) return zoneData[key] as unknown[];
+      if (Array.isArray(account[key])) return account[key] as unknown[];
+    }
+    return [];
+  };
+  const configuredZones = (
+    raw: unknown[],
+    defaults: readonly ZoneDefinition[],
+    reference?: number,
+    reserveRest?: number
+  ): WorkoutZone[] => {
+    if (!raw.length) {
+      return defaults.map((zone, index) => {
+        const absolute = reference
+          ? reserveRest !== undefined
+            ? {
+                lowBpm: Math.round(reserveRest + (reference - reserveRest) * zone.low / 100),
+                highBpm: Math.round(reserveRest + (reference - reserveRest) * zone.high / 100)
+              }
+            : {
+                lowBpm: Math.round(reference * zone.low / 100),
+                highBpm: Math.round(reference * zone.high / 100)
+              }
+          : {};
+        return {
+          index: index + 1,
+          id: zone.id,
+          key: zone.preset ?? String(zone.id),
+          label: zone.label,
+          lowPercent: zone.low,
+          highPercent: zone.high,
+          ...absolute
+        };
+      });
+    }
+    const parsed = raw.map((item, arrayIndex) => {
+      const zone = objectValue(item) ?? {};
+      const fallback = defaults[arrayIndex] ?? defaults[defaults.length - 1]!;
+      const ratio = numberValue(zone.ratio ?? zone.lowRatio ?? zone.percent ?? zone.lowPercent);
+      const directHigh = numberValue(zone.highRatio ?? zone.highPercent);
+      const absolute = numberValue(zone.hr ?? zone.value ?? zone.low);
+      const lowPercent = ratio !== undefined
+        ? Math.round(ratio <= 2 ? ratio * 100 : ratio)
+        : reference && absolute !== undefined
+          ? Math.round(
+              reserveRest !== undefined
+                ? ((absolute - reserveRest) / (reference - reserveRest)) * 100
+                : (absolute / reference) * 100
+            )
+          : fallback.low;
+      return {
+        index: Math.round(numberValue(zone.index) ?? arrayIndex + 1),
+        id: Math.round(numberValue(zone.type ?? zone.zoneType ?? zone.id) ?? fallback.id),
+        key: String(zone.key ?? fallback.preset ?? fallback.id),
+        label: String(zone.label ?? fallback.label),
+        lowPercent,
+        directHigh: directHigh !== undefined ? Math.round(directHigh <= 2 ? directHigh * 100 : directHigh) : undefined,
+        absolute
+      };
+    }).sort((left, right) => left.index - right.index);
+    return parsed.map((zone, index) => {
+      const next = parsed[index + 1];
+      const highPercent = zone.directHigh ?? (next ? Math.max(zone.lowPercent, next.lowPercent - 1) : defaults[index]?.high ?? zone.lowPercent);
+      const lowBpm = zone.absolute ?? (reference
+        ? Math.round(reserveRest !== undefined
+          ? reserveRest + (reference - reserveRest) * zone.lowPercent / 100
+          : reference * zone.lowPercent / 100)
+        : undefined);
+      const highBpm = reference
+        ? Math.round(reserveRest !== undefined
+          ? reserveRest + (reference - reserveRest) * highPercent / 100
+          : reference * highPercent / 100)
         : undefined;
-    const highPercent = nextPercent !== undefined
-      ? Math.max(lowPercent, nextPercent - 1)
-      : Math.max(lowPercent, 120);
-    return {
-      index: zone.index,
-      label: LTHR_ZONE_LABELS[index] ?? `Zone ${zone.index}`,
-      lowPercent,
-      highPercent,
-      ...(lthrBpm ? {
-        lowBpm: Math.round((lthrBpm * lowPercent) / 100),
-        highBpm: Math.round((lthrBpm * highPercent) / 100)
-      } : {})
-    };
-  }).filter((zone) => zone.lowPercent > 0);
-  const unit = numberValue(account.unit ?? zoneData.unit) ?? 0;
-  const imperial = unit === 1 || unit === 3;
+      return {
+        index: zone.index,
+        id: zone.id,
+        key: zone.key,
+        label: zone.label,
+        lowPercent: zone.lowPercent,
+        highPercent,
+        ...(lowBpm !== undefined ? { lowBpm: Math.round(lowBpm) } : {}),
+        ...(highBpm !== undefined ? { highBpm } : {})
+      };
+    });
+  };
+
+  const hrDefinitions = (basis: "maxHr" | "reserve" | "lthr"): ZoneDefinition[] =>
+    HEART_RATE_PRESETS[basis].map((zone) => ({ ...zone, preset: zone.preset }));
+  const paceDefinitions = PACE_PRESETS.map((zone) => ({ ...zone, preset: zone.preset }));
+  const ftpDefinitions = FTP_PRESETS.map((zone) => ({ ...zone, preset: zone.preset }));
+  const powerDefinitions = RUNNING_POWER_PRESETS.map((zone) => ({ ...zone, preset: zone.preset }));
+  const zones: WorkoutEditorContext["zones"] = {
+    maxHr: configuredZones(zoneArray("maxHrZone", "maxHrZones", "heartRateZone"), hrDefinitions("maxHr"), maxHr),
+    reserve: configuredZones(zoneArray("rhrZone", "hrrZone", "reserveZone"), hrDefinitions("reserve"), maxHr, restingHr),
+    lthr: configuredZones(zoneArray("lthrZone", "lthrZones", "thresholdHrZone"), hrDefinitions("lthr"), lthrBpm),
+    thresholdPace: configuredZones(zoneArray("thresholdPaceZone", "paceZone"), paceDefinitions),
+    ftp: configuredZones(zoneArray("ftpZone", "cyclePowerZone"), ftpDefinitions),
+    runningPower: configuredZones(zoneArray("criticalPowerZone", "runPowerZone"), powerDefinitions)
+  };
+  const lthrZones: WorkoutLthrZone[] = zones.lthr ?? [];
+  const selectedUnitSystem = normalizeUnitSystem(unitSystem);
+  const imperial = selectedUnitSystem === "imperial";
+  const poolLengthUnit = imperial ? "yd" : "m";
+  const poolLengthRaw = firstNumber(account.poolLength, zoneData.poolLength);
+  const poolLengthMeters = poolLengthRaw
+    ? (poolLengthRaw > 200 ? poolLengthRaw / 100 : poolLengthRaw)
+    : 25;
+  const poolLength = poolLengthMeters / (poolLengthUnit === "yd" ? 0.9144 : 1);
+  const climbConfigs = Array.isArray(account.climbConfig)
+    ? account.climbConfig
+    : Array.isArray(zoneData.climbConfig) ? zoneData.climbConfig : [];
+  const climbSystems: WorkoutEditorContext["climbSystems"] = {};
+  for (const item of climbConfigs) {
+    const config = objectValue(item);
+    if (!config) continue;
+    const sport = workoutSportFromType(config.sportType);
+    const systemId = numberValue(config.gradingSystem ?? config.gradeSystem);
+    const system = (Object.keys(CLIMB_SYSTEM_IDS) as Array<keyof typeof CLIMB_SYSTEM_IDS>)
+      .find((key) => CLIMB_SYSTEM_IDS[key] === systemId);
+    if ((sport === "indoorClimb" || sport === "bouldering") && system) {
+      climbSystems[sport] = system;
+    }
+  }
   return {
     distanceUnit: imperial ? "imperial" : "metric",
     paceUnit: imperial ? "mi" : "km",
     ...(lthrBpm ? { lthrBpm: Math.round(lthrBpm) } : {}),
-    lthrZones
+    ...(maxHr ? { maxHr: Math.round(maxHr) } : {}),
+    ...(restingHr ? { restingHr: Math.round(restingHr) } : {}),
+    ...(thresholdPaceSecondsPerKm ? { thresholdPaceSecondsPerKm } : {}),
+    ...(ftp ? { ftp: Math.round(ftp) } : {}),
+    ...(criticalPower ? { criticalPower: Math.round(criticalPower) } : {}),
+    zones,
+    lthrZones,
+    defaultPoolLength: { value: poolLength, unit: poolLengthUnit },
+    climbSystems
   };
 }
 

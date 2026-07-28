@@ -1,12 +1,24 @@
-import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import {
+  BookOpen,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  ListChecks,
+  RefreshCw,
+  Trash2,
+  X
+} from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import type {
   TrainingHubActivity,
+  TrainingHubScheduledWorkoutEntry,
   TrainingHubSportType,
   TrainingHubStatus,
+  UnitSystem,
   WorkoutEditRef
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
+import { useUnitSystem } from "../units/UnitSystemProvider";
 import {
   formatDistanceMeters,
   formatDurationSeconds,
@@ -15,13 +27,15 @@ import {
   formatUpcomingWorkoutVolumeDisplay,
   getLocalHappenDayKey
 } from "../training/formatters";
+import { isSwimSportType } from "../training/sportTypes";
 import { AddWorkoutModal } from "./AddWorkoutModal";
 import { CalendarGrid } from "./CalendarGrid";
-import type {
-  CalendarDay,
-  CalendarMode,
-  CalendarSelection,
-  CalendarWeek
+import {
+  scheduledWorkoutKey,
+  type CalendarDay,
+  type CalendarMode,
+  type CalendarSelection,
+  type CalendarWeek
 } from "./calendarTypes";
 import type { CalendarDragPayload } from "./calendarDrag";
 import { DayDetailPanel } from "./DayDetailPanel";
@@ -47,17 +61,26 @@ interface CalendarViewProps {
   onOpenCoach: (prompt: string) => void;
 }
 
-function describeDayForCoach(day: CalendarDay): string | null {
+function describeDayForCoach(
+  day: CalendarDay,
+  unitSystem: UnitSystem
+): string | null {
   const parts: string[] = [];
   for (const entry of day.scheduled) {
     parts.push(
-      `planned "${entry.name}" (${formatUpcomingWorkoutVolumeDisplay(entry.volume)}, ${formatUpcomingWorkoutLoad(entry.trainingLoad)})`
+      `planned "${entry.name}" (${formatUpcomingWorkoutVolumeDisplay(entry.volume, unitSystem)}, ${formatUpcomingWorkoutLoad(entry.trainingLoad)})`
     );
   }
   for (const activity of day.activities) {
     const stats = [
       activity.duration ? formatDurationSeconds(activity.duration) : null,
-      activity.distance ? formatDistanceMeters(activity.distance) : null,
+      activity.distance
+        ? formatDistanceMeters(
+            activity.distance,
+            unitSystem,
+            isSwimSportType(activity.sportType)
+          )
+        : null,
       activity.trainingLoad !== undefined
         ? `${Math.round(activity.trainingLoad)} TL`
         : null
@@ -72,6 +95,42 @@ function describeDayForCoach(day: CalendarDay): string | null {
   return `${formatHappenDayLabel(day.dateKey)}: ${parts.join("; ")}`;
 }
 
+function scheduledWorkoutRemovalRef(entry: TrainingHubScheduledWorkoutEntry) {
+  return {
+    planId: entry.planId,
+    idInPlan: entry.idInPlan,
+    planProgramId: entry.planProgramId,
+    pbVersion:
+      typeof entry.rawProgram?.pbVersion === "number"
+        ? entry.rawProgram.pbVersion
+        : undefined
+  };
+}
+
+async function removeScheduledWorkoutEntries(
+  api: CorosLinkApi,
+  entries: TrainingHubScheduledWorkoutEntry[]
+): Promise<
+  Array<{ entry: TrainingHubScheduledWorkoutEntry; cause: unknown }>
+> {
+  const failures: Array<{
+    entry: TrainingHubScheduledWorkoutEntry;
+    cause: unknown;
+  }> = [];
+
+  // Schedule mutations share server-side plan state, so apply them in order
+  // instead of racing several updates against the same COROS calendar.
+  for (const entry of entries) {
+    try {
+      await api.removeScheduledWorkout(scheduledWorkoutRemovalRef(entry));
+    } catch (cause: unknown) {
+      failures.push({ entry, cause });
+    }
+  }
+
+  return failures;
+}
+
 export function CalendarView({
   api,
   status,
@@ -82,6 +141,7 @@ export function CalendarView({
   onOpenTraining,
   onOpenCoach
 }: CalendarViewProps) {
+  const { unitSystem } = useUnitSystem();
   const [mode, setMode] = useState<CalendarMode>("month");
   const [anchor, setAnchor] = useState(() => new Date());
   const [selection, setSelection] = useState<CalendarSelection | null>(null);
@@ -89,6 +149,11 @@ export function CalendarView({
   const [mutating, setMutating] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [editRef, setEditRef] = useState<WorkoutEditRef | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedWorkoutKeys, setSelectedWorkoutKeys] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const anchorYear = anchor.getFullYear();
   const anchorMonth = anchor.getMonth();
@@ -116,12 +181,77 @@ export function CalendarView({
     isInMonth
   });
 
+  const selectableWorkouts = useMemo(() => {
+    const entries = new Map<string, TrainingHubScheduledWorkoutEntry>();
+    for (const week of weeks) {
+      for (const day of week.days) {
+        if (day.isPast) {
+          continue;
+        }
+        for (const entry of day.scheduled) {
+          entries.set(scheduledWorkoutKey(entry), entry);
+        }
+      }
+    }
+    return [...entries.values()];
+  }, [weeks]);
+
+  const allSelectableSelected =
+    selectableWorkouts.length > 0 &&
+    selectableWorkouts.every((entry) =>
+      selectedWorkoutKeys.has(scheduledWorkoutKey(entry))
+    );
+
   const headline =
     mode === "month"
       ? monthLabel(anchorYear, anchorMonth)
       : weekRangeLabel(weekKeys[0] ?? []);
 
+  const exitSelectionMode = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedWorkoutKeys(new Set());
+    setConfirmBulkDelete(false);
+  }, []);
+
+  const toggleSelectionMode = () => {
+    if (selectionMode) {
+      exitSelectionMode();
+      return;
+    }
+    setSelection(null);
+    setSelectionMode(true);
+    setSelectedWorkoutKeys(new Set());
+    setConfirmBulkDelete(false);
+  };
+
+  const toggleScheduledSelection = useCallback(
+    (entry: TrainingHubScheduledWorkoutEntry) => {
+      const key = scheduledWorkoutKey(entry);
+      setConfirmBulkDelete(false);
+      setSelectedWorkoutKeys((current) => {
+        const next = new Set(current);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+        return next;
+      });
+    },
+    []
+  );
+
+  const toggleSelectAll = () => {
+    setConfirmBulkDelete(false);
+    setSelectedWorkoutKeys(
+      allSelectableSelected
+        ? new Set()
+        : new Set(selectableWorkouts.map(scheduledWorkoutKey))
+    );
+  };
+
   const navigate = (direction: -1 | 1) => {
+    exitSelectionMode();
     setAnchor((current) => {
       const next = new Date(current);
       if (mode === "month") {
@@ -168,11 +298,7 @@ export function CalendarView({
     (target: Extract<CalendarSelection, { kind: "scheduled" }>) => {
       setMutating(true);
       void api
-        .removeScheduledWorkout({
-          planId: target.entry.planId,
-          idInPlan: target.entry.idInPlan,
-          planProgramId: target.entry.planProgramId
-        })
+        .removeScheduledWorkout(scheduledWorkoutRemovalRef(target.entry))
         .then(() => {
           onMessage(`Removed "${target.entry.name}" from the calendar.`);
           setSelection(null);
@@ -188,16 +314,80 @@ export function CalendarView({
     [api, onError, onMessage, reload]
   );
 
+  const handleDeleteSelected = useCallback(() => {
+    if (mutating || selectedWorkoutKeys.size === 0) {
+      return;
+    }
+    if (!confirmBulkDelete) {
+      setConfirmBulkDelete(true);
+      return;
+    }
+
+    const targets = selectableWorkouts.filter((entry) =>
+      selectedWorkoutKeys.has(scheduledWorkoutKey(entry))
+    );
+    if (targets.length === 0) {
+      exitSelectionMode();
+      return;
+    }
+
+    setMutating(true);
+    void removeScheduledWorkoutEntries(api, targets)
+      .then((failures) => {
+        const removedCount = targets.length - failures.length;
+
+        if (removedCount > 0) {
+          onMessage(
+            `Removed ${removedCount} workout${removedCount === 1 ? "" : "s"} from the calendar.`
+          );
+        }
+
+        if (failures.length === 0) {
+          exitSelectionMode();
+          return;
+        }
+
+        setSelectedWorkoutKeys(
+          new Set(failures.map(({ entry }) => scheduledWorkoutKey(entry)))
+        );
+        setConfirmBulkDelete(false);
+        const firstCause = failures[0]?.cause;
+        const detail =
+          firstCause instanceof Error
+            ? firstCause.message
+            : firstCause
+              ? String(firstCause)
+              : "Unknown error";
+        onError(
+          `${failures.length} workout${failures.length === 1 ? "" : "s"} could not be removed: ${detail}`
+        );
+      })
+      .finally(() => {
+        setMutating(false);
+        reload();
+      });
+  }, [
+    api,
+    confirmBulkDelete,
+    exitSelectionMode,
+    mutating,
+    onError,
+    onMessage,
+    reload,
+    selectableWorkouts,
+    selectedWorkoutKeys
+  ]);
+
   const handleAskCoachWeek = useCallback(
     (week: CalendarWeek) => {
       const lines = week.days
-        .map(describeDayForCoach)
+        .map((day) => describeDayForCoach(day, unitSystem))
         .filter((line): line is string => Boolean(line));
       const stats = week.stats;
       const summary = [
         `training load ${stats.actualLoad}${stats.plannedLoad ? ` of ${stats.plannedLoad} planned` : ""} TL`,
         stats.distanceMeters > 0
-          ? `${(stats.distanceMeters / 1000).toFixed(1)} km`
+          ? formatDistanceMeters(stats.distanceMeters, unitSystem)
           : null,
         stats.activityTimeSeconds > 0
           ? formatDurationSeconds(stats.activityTimeSeconds)
@@ -211,20 +401,26 @@ export function CalendarView({
           "How is this week looking? Anything I should adjust?"
       );
     },
-    [onOpenCoach]
+    [onOpenCoach, unitSystem]
   );
 
   const handleAskCoachSelection = useCallback(
     (target: CalendarSelection) => {
       if (target.kind === "scheduled") {
         onOpenCoach(
-          `I have "${target.entry.name}" (${formatUpcomingWorkoutVolumeDisplay(target.entry.volume)}, ${formatUpcomingWorkoutLoad(target.entry.trainingLoad)}) scheduled on ${formatHappenDayLabel(target.entry.happenDay)}. How should I approach it?`
+          `I have "${target.entry.name}" (${formatUpcomingWorkoutVolumeDisplay(target.entry.volume, unitSystem)}, ${formatUpcomingWorkoutLoad(target.entry.trainingLoad)}) scheduled on ${formatHappenDayLabel(target.entry.happenDay)}. How should I approach it?`
         );
       } else {
         const activity = target.activity;
         const stats = [
           activity.duration ? formatDurationSeconds(activity.duration) : null,
-          activity.distance ? formatDistanceMeters(activity.distance) : null,
+          activity.distance
+            ? formatDistanceMeters(
+                activity.distance,
+                unitSystem,
+                isSwimSportType(activity.sportType)
+              )
+            : null,
           activity.trainingLoad !== undefined
             ? `${Math.round(activity.trainingLoad)} TL`
             : null
@@ -236,7 +432,7 @@ export function CalendarView({
         );
       }
     },
-    [onOpenCoach]
+    [onOpenCoach, unitSystem]
   );
 
   if (!authenticated) {
@@ -264,7 +460,10 @@ export function CalendarView({
           <button
             type="button"
             className="calendar-nav-button"
-            onClick={() => setAnchor(new Date())}
+            onClick={() => {
+              exitSelectionMode();
+              setAnchor(new Date());
+            }}
           >
             Today
           </button>
@@ -292,8 +491,32 @@ export function CalendarView({
         <div className="calendar-header-actions">
           <button
             type="button"
+            className={`calendar-nav-button calendar-select-button ${selectionMode ? "is-active" : ""}`}
+            onClick={toggleSelectionMode}
+            disabled={
+              mutating || (!selectionMode && selectableWorkouts.length === 0)
+            }
+            aria-pressed={selectionMode}
+            title={
+              selectionMode
+                ? "Cancel workout selection"
+                : selectableWorkouts.length === 0
+                  ? "No upcoming workouts to select"
+                  : "Select multiple workouts"
+            }
+          >
+            {selectionMode ? (
+              <X size={14} aria-hidden="true" />
+            ) : (
+              <ListChecks size={14} aria-hidden="true" />
+            )}
+            {selectionMode ? "Cancel" : "Select"}
+          </button>
+          <button
+            type="button"
             className="calendar-nav-button calendar-library-button"
             onClick={() => setLibraryOpen(true)}
+            disabled={selectionMode}
           >
             <BookOpen size={14} aria-hidden="true" />
             Workout Library
@@ -313,7 +536,10 @@ export function CalendarView({
               role="tab"
               aria-selected={mode === "month"}
               className={mode === "month" ? "is-active" : ""}
-              onClick={() => setMode("month")}
+              onClick={() => {
+                exitSelectionMode();
+                setMode("month");
+              }}
             >
               Month
             </button>
@@ -322,7 +548,10 @@ export function CalendarView({
               role="tab"
               aria-selected={mode === "week"}
               className={mode === "week" ? "is-active" : ""}
-              onClick={() => setMode("week")}
+              onClick={() => {
+                exitSelectionMode();
+                setMode("week");
+              }}
             >
               Week
             </button>
@@ -332,14 +561,72 @@ export function CalendarView({
 
       {error ? <p className="calendar-error">{error}</p> : null}
 
+      {selectionMode ? (
+        <div
+          className="calendar-selection-bar"
+          role="toolbar"
+          aria-label="Selected calendar workouts"
+        >
+          <div className="calendar-selection-summary" aria-live="polite">
+            <span className="calendar-selection-icon" aria-hidden="true">
+              <ListChecks size={15} />
+            </span>
+            <strong>
+              {selectedWorkoutKeys.size} workout
+              {selectedWorkoutKeys.size === 1 ? "" : "s"} selected
+            </strong>
+            <span>Select upcoming workouts in the calendar to remove them.</span>
+          </div>
+          <div className="calendar-selection-actions">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={toggleSelectAll}
+              disabled={mutating || selectableWorkouts.length === 0}
+            >
+              {allSelectableSelected ? "Deselect all" : "Select all"}
+            </button>
+            {selectedWorkoutKeys.size > 0 ? (
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  setSelectedWorkoutKeys(new Set());
+                  setConfirmBulkDelete(false);
+                }}
+                disabled={mutating}
+              >
+                Clear
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={`ghost-button calendar-selection-delete ${confirmBulkDelete ? "is-armed" : ""}`}
+              onClick={handleDeleteSelected}
+              disabled={mutating || selectedWorkoutKeys.size === 0}
+            >
+              <Trash2 size={14} aria-hidden="true" />
+              {mutating
+                ? "Removing…"
+                : confirmBulkDelete
+                  ? `Confirm remove ${selectedWorkoutKeys.size}`
+                  : `Remove ${selectedWorkoutKeys.size || ""}`.trim()}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <CalendarGrid
         weeks={weeks}
         mode={mode}
         busy={mutating}
+        selectionMode={selectionMode}
+        selectedWorkoutKeys={selectedWorkoutKeys}
         onSelectScheduled={(day, entry) => setSelection({ kind: "scheduled", day, entry })}
         onSelectActivity={(day, activity: TrainingHubActivity) =>
           setSelection({ kind: "activity", day, activity })
         }
+        onToggleScheduled={toggleScheduledSelection}
         onAdd={setAddTarget}
         onDropEntry={handleDropEntry}
         onAskCoachWeek={handleAskCoachWeek}

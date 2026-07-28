@@ -10,6 +10,8 @@ import type {
   LocalTrack,
   SpotifySyncTrack,
   SpotifySyncTrackStatus,
+  StrengthDetail,
+  StrengthSession,
   TrainingHubActivity,
   YouTubeHistoryEntry,
   YouTubeHistoryEntryType
@@ -210,6 +212,13 @@ export function initializeDatabase(userDataPath: string): Database.Database {
       training_load REAL,
       elevation_gain REAL,
       synced_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS strength_sessions (
+      activity_id TEXT PRIMARY KEY,
+      sport_type INTEGER NOT NULL,
+      detail_json TEXT,
+      fetched_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS cached_coros_maps (
@@ -1279,6 +1288,154 @@ export function listStoredTrainingActivities(limit = 500): TrainingHubActivity[]
     .all(limit) as TrainingActivityRow[];
 
   return enrichActivitiesWithSportNames(rows.map(toTrainingActivity));
+}
+
+/**
+ * Cache the parsed set-by-set breakdown of one strength activity. A session
+ * with no breakdown (a gym-cardio activity, or a watch that recorded no
+ * exercise laps) is stored with a NULL payload so it is never refetched.
+ */
+export function upsertStrengthSessionDetail(
+  activityId: string,
+  sportType: number,
+  detail: StrengthDetail | undefined
+): void {
+  if (!activityId) {
+    return;
+  }
+  requireDatabase()
+    .prepare(
+      `INSERT INTO strength_sessions (activity_id, sport_type, detail_json, fetched_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(activity_id) DO UPDATE SET
+         sport_type = excluded.sport_type,
+         detail_json = excluded.detail_json,
+         fetched_at = excluded.fetched_at`
+    )
+    .run(
+      activityId,
+      sportType,
+      detail ? JSON.stringify(detail) : null,
+      new Date().toISOString()
+    );
+}
+
+function sportTypePlaceholders(sportTypes: number[]): string {
+  return sportTypes.map(() => "?").join(", ");
+}
+
+/**
+ * Strength activities on/after `sinceEpochSeconds` that have never had their
+ * breakdown fetched, NEWEST first so the most relevant sessions land first.
+ */
+export function listStrengthActivitiesMissingDetail(
+  sinceEpochSeconds: number,
+  sportTypes: number[],
+  limit = 200
+): { activityId: string; sportType: number }[] {
+  if (sportTypes.length === 0) {
+    return [];
+  }
+  const rows = requireDatabase()
+    .prepare(
+      `SELECT a.activity_id, a.sport_type
+       FROM training_activities a
+       LEFT JOIN strength_sessions s ON s.activity_id = a.activity_id
+       WHERE s.activity_id IS NULL
+         AND a.start_time >= ?
+         AND a.sport_type IN (${sportTypePlaceholders(sportTypes)})
+       ORDER BY a.start_time DESC
+       LIMIT ?`
+    )
+    .all(sinceEpochSeconds, ...sportTypes, limit) as {
+    activity_id: string;
+    sport_type: number;
+  }[];
+  return rows.map((row) => ({
+    activityId: row.activity_id,
+    sportType: row.sport_type
+  }));
+}
+
+/** How many strength activities in the window still need a breakdown fetch. */
+export function countStrengthActivitiesMissingDetail(
+  sinceEpochSeconds: number,
+  sportTypes: number[]
+): number {
+  if (sportTypes.length === 0) {
+    return 0;
+  }
+  const row = requireDatabase()
+    .prepare(
+      `SELECT count(*) AS n
+       FROM training_activities a
+       LEFT JOIN strength_sessions s ON s.activity_id = a.activity_id
+       WHERE s.activity_id IS NULL
+         AND a.start_time >= ?
+         AND a.sport_type IN (${sportTypePlaceholders(sportTypes)})`
+    )
+    .get(sinceEpochSeconds, ...sportTypes) as { n: number };
+  return row.n;
+}
+
+/**
+ * Cached strength sessions on/after `sinceEpochSeconds`, joined with their
+ * activity metadata. Rows cached with no breakdown are skipped.
+ */
+export function listStoredStrengthSessions(
+  sinceEpochSeconds: number
+): StrengthSession[] {
+  const rows = requireDatabase()
+    .prepare(
+      `SELECT s.activity_id, s.sport_type, s.detail_json,
+              a.name, a.sport_name, a.start_time, a.duration, a.calories,
+              a.avg_hr, a.max_hr, a.training_load
+       FROM strength_sessions s
+       JOIN training_activities a ON a.activity_id = s.activity_id
+       WHERE s.detail_json IS NOT NULL AND a.start_time >= ?
+       ORDER BY a.start_time DESC`
+    )
+    .all(sinceEpochSeconds) as {
+    activity_id: string;
+    sport_type: number;
+    detail_json: string;
+    name: string | null;
+    sport_name: string | null;
+    start_time: number | null;
+    duration: number | null;
+    calories: number | null;
+    avg_hr: number | null;
+    max_hr: number | null;
+    training_load: number | null;
+  }[];
+
+  const sessions: StrengthSession[] = [];
+  for (const row of rows) {
+    let detail: StrengthDetail;
+    try {
+      detail = JSON.parse(row.detail_json) as StrengthDetail;
+    } catch {
+      // A corrupt payload should never take the whole history down.
+      continue;
+    }
+    if (!Array.isArray(detail?.exercises) || detail.exercises.length === 0) {
+      continue;
+    }
+    sessions.push({
+      activityId: row.activity_id,
+      sportType: row.sport_type,
+      name: row.name ?? undefined,
+      sportName: row.sport_name ?? undefined,
+      startTime: row.start_time ?? undefined,
+      duration: row.duration ?? undefined,
+      calories: row.calories ?? undefined,
+      avgHr: row.avg_hr ?? undefined,
+      maxHr: row.max_hr ?? undefined,
+      trainingLoad: row.training_load ?? undefined,
+      detail
+    });
+  }
+  return sessions;
 }
 
 function toCachedCorosMap(row: CachedCorosMapRow): CachedCorosMapPackage {

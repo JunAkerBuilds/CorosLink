@@ -176,7 +176,7 @@ assert.equal(metricContext.lthrZones[2]?.lowBpm, 159);
 const imperialContext = parseWorkoutEditorContext({
   unit: 1,
   zoneData: JSON.stringify({ lthr: 170, lthrZone: [] })
-});
+}, "imperial");
 assert.equal(imperialContext.distanceUnit, "imperial");
 assert.equal(imperialContext.paceUnit, "mi");
 
@@ -208,10 +208,10 @@ assert.equal(roundTrip.exercises.find((item) => item.id === "72").intensityValue
 assert.equal(roundTrip.exercises.find((item) => item.id === "72").intensityMultiplier, 1000);
 assert.equal(roundTrip.exercises.find((item) => item.id === "73").targetType, 7);
 assert.equal(roundTrip.exercises.find((item) => item.id === "73").targetValue, 118);
-assert.equal(roundTrip.exercises.find((item) => item.id === "74").intensityPercent, 91);
-assert.equal(roundTrip.exercises.find((item) => item.id === "74").intensityPercentExtend, 95);
-assert.equal(roundTrip.exercises.find((item) => item.id === "74").intensityValue, 0);
-assert.equal(roundTrip.exercises.find((item) => item.id === "74").intensityValueExtend, 0);
+assert.equal(roundTrip.exercises.find((item) => item.id === "74").intensityPercent, 91_000);
+assert.equal(roundTrip.exercises.find((item) => item.id === "74").intensityPercentExtend, 95_000);
+assert.equal(roundTrip.exercises.find((item) => item.id === "74").intensityValue, 159);
+assert.equal(roundTrip.exercises.find((item) => item.id === "74").intensityValueExtend, 166);
 assert.equal(workoutDraftsMatch(draft, roundTrip), true);
 
 const withNewStep = structuredClone(draft);
@@ -245,7 +245,7 @@ const invalidResult = validateWorkoutDraft(invalid);
 assert.equal(invalidResult.valid, false);
 assert.match(invalidResult.errors.name, /required/);
 assert.match(invalidResult.errors["nodes.1.repeat"], /1 to 99/);
-assert.match(invalidResult.errors["nodes.1.steps.1.target"], /30 to 250/);
+assert.match(invalidResult.errors["nodes.1.steps.1.target"], /30 to 180/);
 
 const entity = {
   happenDay: "20991201",

@@ -9,8 +9,10 @@ import type {
   CorosMcpTool,
   FitnessTrendPreview,
   HrZonePreview,
-  TrainingHubZoneDistributionEntry
+  TrainingHubZoneDistributionEntry,
+  UnitSystem
 } from "./types";
+import { formatDistanceValue } from "./unitSystem.js";
 
 export const CHAT_ANALYTICS_TOOL_NAMES = [
   "get_fitness_trends",
@@ -27,6 +29,7 @@ export interface ChatAnalyticsToolCallbacks {
   onFitnessTrend?: (preview: FitnessTrendPreview) => void;
   onHrZoneSummary?: (preview: HrZonePreview) => void;
   requestId?: string;
+  unitSystem?: UnitSystem;
 }
 
 export function getChatAnalyticsTools(): CorosMcpTool[] {
@@ -169,7 +172,11 @@ async function handleGetHrZoneSummary(
       "",
       ...preview.zones.map(
         (zone) =>
-          `- ${zone.label}: ${zone.percent.toFixed(1)}% (${Math.round(zone.value)})`
+          `- ${zone.label}: ${zone.percent.toFixed(1)}% (${
+            metric === "distance"
+              ? formatDistanceValue(zone.value, callbacks?.unitSystem ?? "metric")
+              : Math.round(zone.value)
+          })`
       )
     ];
 

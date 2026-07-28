@@ -3,6 +3,8 @@ import type {
   TrainingHubActivityDetail,
   TrainingHubTrackPoint,
 } from "../../electron/types";
+import type { UnitSystem } from "../../electron/types";
+import { distanceUnit, metersToDisplayDistance } from "../units/units";
 
 export interface GlobePoint {
   lat: number;
@@ -399,18 +401,22 @@ export function formatOverallDuration(totalSeconds: number): {
   return { value: String(Math.round(hours)), unit: "h" };
 }
 
-export function formatOverallDistance(meters: number): {
+export function formatOverallDistance(
+  meters: number,
+  unitSystem: UnitSystem,
+): {
   value: string;
   unit: string;
 } {
-  const km = meters / 1000;
-  if (km >= 100) {
-    return { value: String(Math.round(km)), unit: "km" };
+  const distance = metersToDisplayDistance(meters, unitSystem);
+  const unit = distanceUnit(unitSystem);
+  if (distance >= 100) {
+    return { value: String(Math.round(distance)), unit };
   }
-  if (km >= 10) {
-    return { value: km.toFixed(1), unit: "km" };
+  if (distance >= 10) {
+    return { value: distance.toFixed(1), unit };
   }
-  return { value: km.toFixed(2), unit: "km" };
+  return { value: distance.toFixed(2), unit };
 }
 
 type DetailFetcher = (

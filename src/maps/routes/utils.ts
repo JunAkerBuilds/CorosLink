@@ -6,6 +6,15 @@ import type {
   TrainingHubTrackPoint
 } from "../../../electron/types";
 import { ROUTE_ACTIVITY_OPTIONS } from "./constants";
+import type { UnitSystem } from "../../../electron/types";
+import {
+  distanceUnit,
+  elevationUnit,
+  metersToDisplayDistance,
+  metersToElevation,
+  secondsPerKmToDisplayPace,
+  speedUnit
+} from "../../units/units";
 
 export function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -34,11 +43,14 @@ export function surfaceForActivity(
     : "road";
 }
 
-export function formatDistance(meters?: number): string {
+export function formatDistance(
+  meters: number | undefined,
+  unitSystem: UnitSystem
+): string {
   if (meters === undefined || !Number.isFinite(meters)) {
     return "—";
   }
-  return `${(meters / 1000).toFixed(1)}`;
+  return metersToDisplayDistance(meters, unitSystem).toFixed(1);
 }
 
 export function formatDuration(value?: number): string {
@@ -51,11 +63,14 @@ export function formatDuration(value?: number): string {
   return hours > 0 ? `${hours}h ${remainder}m` : `${minutes}m`;
 }
 
-export function formatMeters(value?: number): string {
+export function formatMeters(
+  value: number | undefined,
+  unitSystem: UnitSystem
+): string {
   if (value === undefined || !Number.isFinite(value)) {
     return "—";
   }
-  return `${Math.round(value)} m`;
+  return `${Math.round(metersToElevation(value, unitSystem))} ${elevationUnit(unitSystem)}`;
 }
 
 export function formatElevationPreference(
@@ -109,7 +124,8 @@ export function effectiveRouteDuration(
 /** Average pace (min/km) for foot sports, or average speed (km/h) for cycling. */
 export function formatPaceOrSpeed(
   route: Pick<GeneratedRoute, "distanceMeters" | "activityType">,
-  durationSeconds: number | undefined
+  durationSeconds: number | undefined,
+  unitSystem: UnitSystem
 ): string | null {
   const distanceKm = route.distanceMeters / 1000;
   if (!durationSeconds || durationSeconds <= 0 || distanceKm <= 0) {
@@ -117,14 +133,15 @@ export function formatPaceOrSpeed(
   }
   if (isCyclingActivity(route.activityType)) {
     const speed = distanceKm / (durationSeconds / 3600);
-    return `${speed.toFixed(1)} km/h`;
+    const displaySpeed = unitSystem === "imperial" ? speed / 1.609344 : speed;
+    return `${displaySpeed.toFixed(1)} ${speedUnit(unitSystem)}`;
   }
-  const secondsPerKm = durationSeconds / distanceKm;
-  const minutes = Math.floor(secondsPerKm / 60);
-  const seconds = Math.round(secondsPerKm % 60);
-  const normMinutes = seconds === 60 ? minutes + 1 : minutes;
-  const normSeconds = seconds === 60 ? 0 : seconds;
-  return `${normMinutes}:${String(normSeconds).padStart(2, "0")} /km`;
+  const rounded = Math.round(
+    secondsPerKmToDisplayPace(durationSeconds / distanceKm, unitSystem)
+  );
+  const minutes = Math.floor(rounded / 60);
+  const seconds = rounded % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")} /${distanceUnit(unitSystem)}`;
 }
 
 export function climbRatePerKm(

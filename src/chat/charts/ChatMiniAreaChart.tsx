@@ -13,6 +13,15 @@ import {
 } from "../../training/chartConfig";
 import { useChartColors } from "../../training/useChartColors";
 import { ChartAreaGradient } from "../../training/components/TrainingTrendChart";
+import type { UnitSystem } from "../../../electron/types";
+import {
+  distanceUnit,
+  kmhToDisplaySpeed,
+  metersToDisplayDistance,
+  metersToElevation,
+  metersToSwimDistance,
+  swimDistanceUnit
+} from "../../units/units";
 
 export interface ChartDatum {
   label: string;
@@ -110,7 +119,10 @@ export function ChatMiniAreaChart({
 
 export function buildDistanceSeriesData(
   series: { distance?: number; hr?: number; pace?: number; power?: number }[],
-  valueKey: "hr" | "pace" | "power"
+  valueKey: "hr" | "pace" | "power",
+  unitSystem: UnitSystem,
+  swim = false,
+  paceAsSpeed = false
 ): ChartDatum[] {
   const withValue = series.filter(
     (point) =>
@@ -126,22 +138,28 @@ export function buildDistanceSeriesData(
   );
 
   return withValue.map((point, index): ChartDatum => {
-    const distanceKm =
+    const displayDistance =
       useDistance && point.distance !== undefined
-        ? point.distance / 1000
+        ? swim
+          ? metersToSwimDistance(point.distance, unitSystem)
+          : metersToDisplayDistance(point.distance, unitSystem)
         : index;
 
     return {
       label: useDistance
-        ? `${distanceKm.toFixed(1)} km`
+        ? `${displayDistance.toFixed(swim ? 0 : 1)} ${swim ? swimDistanceUnit(unitSystem) : distanceUnit(unitSystem)}`
         : `Point ${index + 1}`,
-      value: point[valueKey] as number
+      value:
+        valueKey === "pace" && paceAsSpeed
+          ? kmhToDisplaySpeed(3600 / (point.pace as number), unitSystem)
+          : point[valueKey] as number
     };
   });
 }
 
 export function buildElevationSeriesData(
-  points: { elevation?: number; distance?: number }[]
+  points: { elevation?: number; distance?: number }[],
+  unitSystem: UnitSystem
 ): ChartDatum[] {
   const withElevation = points.filter(
     (point) => point.elevation !== undefined && Number.isFinite(point.elevation)
@@ -156,16 +174,16 @@ export function buildElevationSeriesData(
   );
 
   return withElevation.map((point, index): ChartDatum => {
-    const distanceKm =
+    const displayDistance =
       useDistance && point.distance !== undefined
-        ? point.distance / 1000
+        ? metersToDisplayDistance(point.distance, unitSystem)
         : index;
 
     return {
       label: useDistance
-        ? `${distanceKm.toFixed(1)} km`
+        ? `${displayDistance.toFixed(1)} ${distanceUnit(unitSystem)}`
         : `Point ${index + 1}`,
-      value: point.elevation!
+      value: metersToElevation(point.elevation!, unitSystem)
     };
   });
 }

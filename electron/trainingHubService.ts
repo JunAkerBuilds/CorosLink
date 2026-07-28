@@ -3,20 +3,31 @@ import fs from "node:fs";
 import path from "node:path";
 import bcrypt from "bcryptjs";
 import {
+  formatDistanceValue,
+  formatPaceValue,
+  formatSpeedValue,
+  formatWeightValue,
+  normalizeUnitSystem
+} from "./unitSystem.js";
+import {
   corosSportName,
   enrichActivitiesWithSportNames,
   mergeSportTypeEntries
 } from "./corosSportTypes";
 import {
+  countStrengthActivitiesMissingDetail,
   countTrainingActivitiesMissingFeelType,
   countTrainingActivitiesSince,
   deleteSettings,
   getSetting,
+  listStoredStrengthSessions,
   listStoredTrainingActivities,
+  listStrengthActivitiesMissingDetail,
   listTrainingActivitiesMissingFeelType,
   listTrainingActivityRpeInputs,
   setSetting,
   setTrainingActivityFeelType,
+  upsertStrengthSessionDetail,
   upsertTrainingActivities
 } from "./database";
 import { buildRpeDistribution, dailyRpeLoad } from "./rpeLoad";
@@ -24,6 +35,7 @@ import type {
   ActivityPaceBaseline,
   ActivityPaceBaselines,
   RouteActivityType,
+  StrengthHistory,
   TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
@@ -62,7 +74,11 @@ import type {
   WorkoutEditPreview,
   WorkoutEditRef,
   WorkoutEditSaveResult,
-  WorkoutEditorDocument
+  WorkoutEditorContext,
+  WorkoutEditorDocument,
+  WorkoutExerciseOption,
+  UnitSystem,
+  WorkoutSport
 } from "./types";
 import {
   applyWorkoutCalculation,
@@ -84,6 +100,14 @@ import {
   workoutEditRevision,
   type WorkoutEditSource
 } from "./corosWorkoutEditor";
+import {
+  WORKOUT_SPORT_CAPABILITIES,
+  resolveWorkoutExerciseName,
+  workoutExerciseId,
+  workoutExerciseMedia,
+  workoutExerciseName,
+  workoutSportFromType
+} from "./workoutCapabilities";
 import { TRAINING_HUB_EXPORT_FORMATS } from "./types";
 import { signRequest, sha256Hex } from "./awsSigV4";
 import { createStoreZip } from "./zipStore";
@@ -1077,6 +1101,132 @@ export async function backfillFeelTypes(): Promise<void> {
   }
 }
 
+// Gym Cardio and Strength both land in the strength bucket; only sessions that
+// actually recorded exercise laps produce a breakdown, and the rest are cached
+// as empty so they are asked for exactly once.
+const STRENGTH_SPORT_TYPES = [400, 402];
+// Detail payloads are large, so a sync call drains a slice and reports what is
+// left; the renderer loops until `pending` reaches zero, filling in as it goes.
+const STRENGTH_DETAIL_CHUNK = 12;
+const STRENGTH_DETAIL_DELAY_MS = 250;
+const STRENGTH_DETAIL_MAX_CONSECUTIVE_FAILURES = 4;
+const STRENGTH_INDEX_PAGE_SIZE = 100;
+const STRENGTH_INDEX_MAX_PAGES = 20;
+const STRENGTH_INDEX_TTL_MS = 5 * 60 * 1000;
+let strengthIndexRefreshedAt = 0;
+// Widening the window reaches further back than the last refresh covered, so
+// the cached index is only good for windows no longer than this one.
+let strengthIndexRefreshedDays = 0;
+
+function happenDayFromDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}${month}${day}`;
+}
+
+function windowStartEpochSeconds(days: number): number {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - days);
+  return Math.floor(start.getTime() / 1000);
+}
+
+/**
+ * Pull the activity index for the window so `training_activities` knows about
+ * every strength session before we go looking for breakdowns. Each page is
+ * persisted by listTrainingHubActivities as a side effect.
+ */
+async function refreshStrengthActivityIndex(days: number): Promise<void> {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - days);
+  const startDay = happenDayFromDate(start);
+  const endDay = happenDayFromDate(end);
+
+  for (let page = 1; page <= STRENGTH_INDEX_MAX_PAGES; page += 1) {
+    const batch = await listTrainingHubActivities(
+      page,
+      STRENGTH_INDEX_PAGE_SIZE,
+      startDay,
+      endDay
+    );
+    if (batch.length < STRENGTH_INDEX_PAGE_SIZE) {
+      break;
+    }
+  }
+  strengthIndexRefreshedAt = Date.now();
+  strengthIndexRefreshedDays = days;
+}
+
+/**
+ * Strength history for the last `days`, fetching a slice of the missing
+ * breakdowns on each call. Returns everything cached so far plus how much is
+ * still outstanding, so the caller can keep going until `pending` is zero.
+ */
+export async function syncStrengthHistory(
+  days = 180,
+  force = false
+): Promise<StrengthHistory> {
+  const since = windowStartEpochSeconds(days);
+
+  if (
+    force ||
+    days > strengthIndexRefreshedDays ||
+    Date.now() - strengthIndexRefreshedAt > STRENGTH_INDEX_TTL_MS
+  ) {
+    await refreshStrengthActivityIndex(days);
+  }
+
+  const userId = getStoredAuth()?.userId;
+  const missing = listStrengthActivitiesMissingDetail(
+    since,
+    STRENGTH_SPORT_TYPES,
+    STRENGTH_DETAIL_CHUNK
+  );
+
+  let fetched = 0;
+  let consecutiveFailures = 0;
+  for (const { activityId, sportType } of missing) {
+    try {
+      const raw = await trainingHubRequest<Record<string, unknown>>(
+        "/activity/detail/query",
+        {
+          method: "POST",
+          params: {
+            labelId: activityId,
+            sportType,
+            ...(userId ? { userId } : {})
+          }
+        }
+      );
+      upsertStrengthSessionDetail(
+        activityId,
+        sportType,
+        parseStrengthDetail(raw)
+      );
+      cacheFeelTypeFromDetail(activityId, raw);
+      fetched += 1;
+      consecutiveFailures = 0;
+    } catch {
+      // Leave the row uncached so a later sync retries it, and back off once
+      // the API has failed repeatedly rather than draining the whole slice.
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= STRENGTH_DETAIL_MAX_CONSECUTIVE_FAILURES) {
+        break;
+      }
+    }
+    await delay(STRENGTH_DETAIL_DELAY_MS);
+  }
+
+  return {
+    sessions: listStoredStrengthSessions(since),
+    pending: countStrengthActivitiesMissingDetail(since, STRENGTH_SPORT_TYPES),
+    fetched,
+    days
+  };
+}
+
 export async function getDailyMetrics(
   dateList: string[]
 ): Promise<TrainingHubDailyMetrics> {
@@ -1530,7 +1680,7 @@ export async function scheduleWorkoutOnDate(
     entities: [entity],
     programs: [programPayload],
     versionObjects: [{ id: idInPlan, status: 1 }],
-    pbVersion: 2
+    pbVersion: toOptionalNumber(program.pbVersion) ?? 2
   });
 }
 
@@ -1553,6 +1703,7 @@ export async function removeScheduledWorkout(entry: {
   planId: string;
   idInPlan: string;
   planProgramId?: string;
+  pbVersion?: number;
 }): Promise<void> {
   const idInPlan = entry.idInPlan;
   await trainingHubPostVoid("/training/schedule/update", {
@@ -1564,7 +1715,7 @@ export async function removeScheduledWorkout(entry: {
         status: 3
       }
     ],
-    pbVersion: 2
+    pbVersion: entry.pbVersion ?? 2
   });
 }
 
@@ -1655,35 +1806,62 @@ async function loadWorkoutEditorAccount(): Promise<Record<string, unknown>> {
   }
 }
 
+export async function getWorkoutEditorContext(
+  unitSystem: UnitSystem = "metric"
+): Promise<WorkoutEditorContext> {
+  return parseWorkoutEditorContext(await loadWorkoutEditorAccount(), unitSystem);
+}
+
 async function documentFromWorkoutEditSource(
-  source: WorkoutEditSource
+  source: WorkoutEditSource,
+  unitSystem: UnitSystem = "metric"
 ): Promise<WorkoutEditorDocument> {
   const account = await loadWorkoutEditorAccount();
+  const context = parseWorkoutEditorContext(account, unitSystem);
   const sportType = toOptionalNumber(source.program.sportType);
   const isPastOccurrence =
     source.ref.kind === "scheduled" &&
     source.ref.happenDay < formatScheduleDay(new Date());
-  const canEdit = sportType === 1 && !isPastOccurrence;
+  const supportedSport = workoutSportFromType(sportType);
+  const canEdit = Boolean(supportedSport) && !isPastOccurrence;
+  const draft = corosProgramToWorkoutDraft(source.program, context);
+  if (draft.sport === "swim" && !draft.sportOptions?.poolLength) {
+    draft.sportOptions = { ...draft.sportOptions, poolLength: context.defaultPoolLength };
+  }
+  if (
+    (draft.sport === "indoorClimb" || draft.sport === "bouldering") &&
+    !draft.sportOptions?.gradingSystem
+  ) {
+    draft.sportOptions = {
+      ...draft.sportOptions,
+      gradingSystem: context.climbSystems[draft.sport] ??
+        (draft.sport === "bouldering" ? "vScale" : "yds")
+    };
+  }
   return {
     ref: source.ref,
     revision: workoutEditRevision(source),
-    draft: corosProgramToWorkoutDraft(source.program),
-    context: parseWorkoutEditorContext(account),
+    draft,
+    context,
     canEdit,
     ...(canEdit
       ? {}
       : {
           unsupportedReason: isPastOccurrence
             ? "Past scheduled workouts are read-only."
-            : "Only COROS Run workouts can be edited in this release."
+            : `COROS sport type ${sportType ?? "unknown"} is not supported by this editor.`
         })
   };
 }
 
 export async function getWorkoutForEdit(
-  ref: WorkoutEditRef
+  ref: WorkoutEditRef,
+  unitSystem: UnitSystem = "metric"
 ): Promise<WorkoutEditorDocument> {
-  return documentFromWorkoutEditSource(await resolveWorkoutEditSource(ref));
+  return documentFromWorkoutEditSource(
+    await resolveWorkoutEditSource(ref),
+    unitSystem
+  );
 }
 
 export async function calculateExistingWorkoutProgram(
@@ -1769,7 +1947,8 @@ function previewFromEstimate(raw: Record<string, unknown>): WorkoutEditPreview {
 export async function previewWorkoutEdit(
   ref: WorkoutEditRef,
   revision: string,
-  draft: RunWorkoutEditorDraft
+  draft: RunWorkoutEditorDraft,
+  unitSystem: UnitSystem = "metric"
 ): Promise<WorkoutEditPreview> {
   const validation = validateWorkoutDraft(draft);
   if (!validation.valid) {
@@ -1782,7 +1961,10 @@ export async function previewWorkoutEdit(
   if (workoutEditRevision(source) !== revision) {
     throw new Error("This workout changed in COROS. Reload it before continuing.");
   }
-  const context = parseWorkoutEditorContext(await loadWorkoutEditorAccount());
+  const context = parseWorkoutEditorContext(
+    await loadWorkoutEditorAccount(),
+    unitSystem
+  );
   const program = workoutDraftToCorosProgram(source.program, draft, context);
 
   const result = await runWorkoutEditPreview(
@@ -1837,7 +2019,8 @@ async function verifyWorkoutEdit(
 export async function saveWorkoutEdit(
   ref: WorkoutEditRef,
   revision: string,
-  draft: RunWorkoutEditorDraft
+  draft: RunWorkoutEditorDraft,
+  unitSystem: UnitSystem = "metric"
 ): Promise<WorkoutEditSaveResult> {
   const validation = validateWorkoutDraft(draft);
   if (!validation.valid) {
@@ -1848,14 +2031,17 @@ export async function saveWorkoutEdit(
   if (ref.kind === "scheduled" && ref.happenDay < formatScheduleDay(new Date())) {
     throw new Error("Past scheduled workouts are read-only.");
   }
-  if (toOptionalNumber(source.program.sportType) !== 1) {
-    throw new Error("Only COROS Run workouts can be edited in this release.");
+  if (!workoutSportFromType(source.program.sportType)) {
+    throw new Error(`COROS sport type ${String(source.program.sportType)} is not supported by this editor.`);
   }
   if (workoutEditRevision(source) !== revision) {
     throw new Error("This workout changed in COROS. Reload it before saving.");
   }
 
-  const context = parseWorkoutEditorContext(await loadWorkoutEditorAccount());
+  const context = parseWorkoutEditorContext(
+    await loadWorkoutEditorAccount(),
+    unitSystem
+  );
   const edited = workoutDraftToCorosProgram(source.program, draft, context);
   const calculated = await runWorkoutEditWrite(
     ref,
@@ -1885,7 +2071,7 @@ export async function saveWorkoutEdit(
             "COROS accepted the save, but the updated workout could not be verified yet. The view was refreshed."
         }
       : {}),
-    document: await documentFromWorkoutEditSource(latestSource)
+    document: await documentFromWorkoutEditSource(latestSource, unitSystem)
   };
 }
 
@@ -1906,10 +2092,20 @@ export async function scheduleLibraryWorkout(
 export async function createAndScheduleWorkout(
   entryInput: PlanWorkoutEntryInput,
   happenDay: string,
+  unitSystemOrSave: UnitSystem | boolean = "metric",
   saveToLibrary = false
 ): Promise<{ programId?: string }> {
+  const unitSystem = normalizeUnitSystem(unitSystemOrSave);
+  if (typeof unitSystemOrSave === "boolean") {
+    saveToLibrary = unitSystemOrSave;
+  }
   const entry = toPlanWorkoutEntry(entryInput);
-  const payload = buildWorkoutPayloadFromEntry(entry);
+  const resolvedEntry = await resolveWorkoutEntryExercises(entry);
+  const context = parseWorkoutEditorContext(
+    await loadWorkoutEditorAccount(),
+    unitSystem
+  );
+  const payload = buildWorkoutPayloadFromEntry(resolvedEntry, context);
   // Schedule a calculated full payload, not the library query summary. The
   // summary omits fields needed by simple and structured workouts.
   let program: Record<string, unknown>;
@@ -1972,7 +2168,8 @@ export async function rescheduleScheduledWorkout(
   await removeScheduledWorkout({
     planId: match.planId,
     idInPlan: match.idInPlan,
-    planProgramId: match.planProgramId
+    planProgramId: match.planProgramId,
+    pbVersion: toOptionalNumber(match.rawProgram.pbVersion)
   });
 }
 
@@ -2040,7 +2237,8 @@ export async function deleteWorkout(options: {
     await removeScheduledWorkout({
       planId: scheduleEntry.planId,
       idInPlan: scheduleEntry.idInPlan,
-      planProgramId: scheduleEntry.planProgramId
+      planProgramId: scheduleEntry.planProgramId,
+      pbVersion: toOptionalNumber(scheduleEntry.rawProgram?.pbVersion)
     });
     removedFromSchedule = true;
     resolvedName = resolvedName ?? scheduleEntry.name;
@@ -2158,6 +2356,9 @@ function toPlanWorkoutEntry(entry: PlanWorkoutEntryInput): PlanWorkoutEntry {
   return {
     key: entry.key,
     name: entry.name,
+    description: entry.description,
+    sport: entry.sport ?? "run",
+    sport_options: entry.sport_options,
     steps: entry.steps as PlanWorkoutEntry["steps"],
     distance_km: entry.distance_km,
     schedule_date: entry.schedule_date,
@@ -2166,8 +2367,104 @@ function toPlanWorkoutEntry(entry: PlanWorkoutEntryInput): PlanWorkoutEntry {
   };
 }
 
+function exerciseCatalogRows(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) {
+    return value.flatMap(exerciseCatalogRows);
+  }
+  if (!value || typeof value !== "object") return [];
+  const object = value as Record<string, unknown>;
+  const looksLikeExercise = ["id", "originId", "exerciseId"].some(
+    (key) => object[key] !== undefined
+  ) && ["name", "nameText", "displayName", "exerciseName"].some(
+    (key) => object[key] !== undefined
+  );
+  return [
+    ...(looksLikeExercise ? [object] : []),
+    ...["list", "rows", "data", "exercises", "records"].flatMap((key) =>
+      exerciseCatalogRows(object[key])
+    )
+  ];
+}
+
+async function loadWorkoutExerciseCatalog(sport: WorkoutSport): Promise<Record<string, unknown>[]> {
+  if (sport !== "strength" && sport !== "hyrox") return [];
+  const auth = getStoredAuth();
+  const raw = await trainingHubGet<unknown>("/training/exercise/query", {
+    sportType: workoutSportTypeForService(sport),
+    ...(auth?.userId ? { userId: auth.userId } : {}),
+    keyword: ""
+  });
+  return exerciseCatalogRows(raw);
+}
+
+export async function listWorkoutExercises(
+  sport: WorkoutSport
+): Promise<WorkoutExerciseOption[]> {
+  const catalog = await loadWorkoutExerciseCatalog(sport);
+  return [...new Map(catalog.flatMap((row) => {
+    const id = workoutExerciseId(row);
+    const name = workoutExerciseName(row);
+    if (!id || !name) return [];
+    const exerciseKind = toOptionalNumber(row.exerciseKind);
+    const media = workoutExerciseMedia(row);
+    const thumbnailUrl = media.find((entry) => entry.coverUrl)?.coverUrl;
+    const option: WorkoutExerciseOption = {
+      id,
+      name,
+      ...(exerciseKind !== undefined ? { exerciseKind } : {}),
+      ...(thumbnailUrl ? { thumbnailUrl } : {}),
+      ...(media.length ? { media } : {})
+    };
+    return [[id, option] as const];
+  })).values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+async function resolveWorkoutEntryExercises(
+  entry: PlanWorkoutEntry
+): Promise<PlanWorkoutEntry> {
+  const sport = entry.sport ?? "run";
+  if (!WORKOUT_SPORT_CAPABILITIES[sport].requiresExercise || !entry.steps?.length) {
+    return entry;
+  }
+  const cloned = structuredClone(entry);
+  const plainSteps = cloned.steps!.flatMap((step) =>
+    "repeat" in step ? step.steps : [step]
+  );
+  const unresolved = plainSteps.filter(
+    (step) => step.kind === "training" && !step.exercise_id && step.exercise_name
+  );
+  if (!unresolved.length) return cloned;
+
+  const catalog = await loadWorkoutExerciseCatalog(sport);
+
+  for (const step of unresolved) {
+    const resolution = resolveWorkoutExerciseName(catalog, step.exercise_name!);
+    if (!resolution.match) {
+      throw new Error(
+        resolution.candidates.length === 0
+          ? `Exercise "${step.exercise_name}" is unavailable in the COROS ${WORKOUT_SPORT_CAPABILITIES[sport].label} catalog.`
+          : `Exercise "${step.exercise_name}" is ambiguous. Choose one of: ${resolution.candidates.join(", ")}.`
+      );
+    }
+    const match = resolution.match;
+    const id = workoutExerciseId(match);
+    if (!id) throw new Error(`Exercise "${step.exercise_name}" has no COROS exercise ID.`);
+    step.exercise_id = id;
+    step.exercise_name = workoutExerciseName(match) || step.exercise_name;
+    const exerciseKind = toOptionalNumber(match.exerciseKind);
+    if (exerciseKind !== undefined) step.exercise_kind = exerciseKind;
+  }
+  return cloned;
+}
+
+function workoutSportTypeForService(sport: keyof typeof WORKOUT_SPORT_CAPABILITIES): number {
+  // HYROX functional stations use COROS's Strength exercise catalog.
+  return sport === "hyrox" ? 4 : WORKOUT_SPORT_CAPABILITIES[sport].sportType;
+}
+
 export async function uploadTrainingPlan(
-  draftInput: CorosTrainingPlanDraftInput
+  draftInput: CorosTrainingPlanDraftInput,
+  unitSystem: UnitSystem = "metric"
 ): Promise<UploadPlanResult> {
   const draft: CorosTrainingPlanDraft = {
     name: draftInput.name,
@@ -2188,9 +2485,14 @@ export async function uploadTrainingPlan(
     { programId: string; program: Record<string, unknown> }
   >();
   const calculatedPrograms = new Map<string, Record<string, unknown>>();
+  const context = parseWorkoutEditorContext(
+    await loadWorkoutEditorAccount(),
+    unitSystem
+  );
 
   for (const entry of draft.workouts) {
-    const payload = buildWorkoutPayloadFromEntry(entry);
+    const resolvedEntry = await resolveWorkoutEntryExercises(entry);
+    const payload = buildWorkoutPayloadFromEntry(resolvedEntry, context);
     const workoutSignature = JSON.stringify(payload);
     const saveToLibrary = entry.save_to_library !== false;
     // Schedule a calculated full payload, not the library query summary. The
@@ -4913,26 +5215,28 @@ export function downsampleActivitySeries(
   return sampled;
 }
 
-function formatPaceSeconds(paceSecondsPerKm: number): string {
-  const total = Math.max(0, Math.round(paceSecondsPerKm));
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}/km`;
-}
-
 export function formatActivitySeriesForChat(
-  points: TrainingHubActivitySeriesPoint[]
+  points: TrainingHubActivitySeriesPoint[],
+  unitSystem: UnitSystem = "metric",
+  swim = false,
+  cycling = false
 ): string {
   if (points.length === 0) {
     return "Time series: no HR/pace/power samples available.";
   }
 
-  const header = "Distance | HR | Pace | Power";
+  const header = `Distance | HR | ${cycling ? "Speed" : "Pace"} | Power`;
   const rows = points.map((point) =>
     [
-      point.distance !== undefined ? `${(point.distance / 1000).toFixed(2)} km` : "—",
+      point.distance !== undefined
+        ? formatDistanceValue(point.distance, unitSystem, { swim })
+        : "—",
       point.hr !== undefined ? `${point.hr}` : "—",
-      point.pace !== undefined ? formatPaceSeconds(point.pace) : "—",
+      point.pace !== undefined
+        ? cycling
+          ? formatSpeedValue(3600 / point.pace, unitSystem)
+          : formatPaceValue(point.pace, unitSystem).replace(" /", "/")
+        : "—",
       point.power !== undefined ? `${point.power} W` : "—"
     ].join(" | ")
   );
@@ -5007,7 +5311,9 @@ function formatScheduledExerciseTarget(
 }
 
 export function formatScheduledExercisesForChat(
-  exercises: TrainingHubScheduledExercise[]
+  exercises: TrainingHubScheduledExercise[],
+  unitSystem: UnitSystem = "metric",
+  swim = false
 ): string | undefined {
   if (exercises.length === 0) {
     return undefined;
@@ -5023,9 +5329,22 @@ export function formatScheduledExercisesForChat(
         parts.push(`${Math.round(exercise.reps)} reps`);
       }
       if (exercise.weight) {
-        parts.push(`${Math.round(exercise.weight)} kg`);
+        parts.push(formatWeightValue(exercise.weight, unitSystem, 1));
       } else if (exercise.targetLabel) {
-        parts.push(exercise.targetLabel);
+        const distanceMatch = exercise.targetLabel.match(/^([\d.]+)\s*(km|m)$/i);
+        if (distanceMatch) {
+          const amount = Number(distanceMatch[1]);
+          const sourceKm = distanceMatch[2]?.toLowerCase() === "km";
+          parts.push(
+            Number.isFinite(amount)
+              ? formatDistanceValue(amount * (sourceKm ? 1_000 : 1), unitSystem, {
+                  swim: swim || !sourceKm
+                })
+              : exercise.targetLabel
+          );
+        } else {
+          parts.push(exercise.targetLabel);
+        }
       }
       return parts.join(" · ");
     })

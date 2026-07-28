@@ -137,6 +137,9 @@ function parsePlanDraftEntry(value: unknown): PlanDraftPreviewEntry | null {
   return {
     key: value.key,
     name: value.name,
+    sport: typeof value.sport === "string"
+      ? value.sport as PlanDraftPreviewEntry["sport"]
+      : undefined,
     scheduleDate:
       typeof value.scheduleDate === "string" ? value.scheduleDate : undefined,
     volume: typeof value.volume === "string" ? value.volume : undefined,

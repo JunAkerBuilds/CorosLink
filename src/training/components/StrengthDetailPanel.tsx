@@ -1,6 +1,8 @@
 import type { StrengthDetail } from "../../../electron/types";
 import { formatDurationSeconds, formatOptionalNumber } from "../formatters";
 import { resolveExerciseName } from "../exerciseNames";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
+import { formatVolumeKg, formatWeightKg } from "../../strength/strengthAnalytics";
 
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
@@ -28,13 +30,14 @@ function displayExerciseName(
 }
 
 export function StrengthDetailPanel({ strength }: { strength: StrengthDetail }) {
+  const { unitSystem } = useUnitSystem();
   const { summary, exercises } = strength;
   return (
     <div className="strength-detail">
       <div className="activity-detail-grid">
         <StatTile label="Sets" value={String(summary.sets)} />
         <StatTile label="Reps" value={String(summary.totalReps)} />
-        <StatTile label="Total Weight" value={`${summary.totalWeightKg} kg`} />
+        <StatTile label="Total Weight" value={formatVolumeKg(summary.totalWeightKg, unitSystem)} />
         <StatTile label="Calories" value={String(summary.calories)} />
         <StatTile label="Duration" value={formatDurationSeconds(summary.durationSec)} />
         {summary.avgHr !== undefined ? (
@@ -85,7 +88,7 @@ export function StrengthDetailPanel({ strength }: { strength: StrengthDetail }) 
                     <tr key={setIndex}>
                       <td>{setIndex + 1}</td>
                       <td>{entry.reps}</td>
-                      <td>{entry.weightKg > 0 ? `${entry.weightKg} kg` : "—"}</td>
+                      <td>{entry.weightKg > 0 ? formatWeightKg(entry.weightKg, unitSystem) : "—"}</td>
                       <td>{formatDurationSeconds(entry.workSec)}</td>
                       <td>{restLabel(entry.restSec)}</td>
                       <td>{entry.calories}</td>

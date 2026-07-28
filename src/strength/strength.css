@@ -1,0 +1,2232 @@
+/*
+ * Strength view.
+ *
+ * The heat ramp runs teal → gold → red: the app's own accent for light work,
+ * the sport-strength red for muscles that have taken a beating. Levels are
+ * driven by `data-level` on each muscle path so the ramp is defined once here
+ * and reused by the legend.
+ */
+
+.strength-view {
+  display: grid;
+  gap: 18px;
+  min-height: 0;
+  --strength-font:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Segoe UI", sans-serif;
+  --font-display: var(--strength-font);
+  font-family: var(--strength-font);
+  font-kerning: normal;
+
+  --heat-0: rgba(255, 255, 255, 0.04);
+  --heat-1: rgba(47, 190, 145, 0.24);
+  --heat-2: rgba(47, 190, 145, 0.52);
+  --heat-3: rgba(216, 155, 34, 0.6);
+  --heat-4: rgba(229, 120, 60, 0.72);
+  --heat-5: rgba(229, 72, 77, 0.88);
+
+  /* Solid twins of the ramp above, for the 3D figure. WebGL materials cannot
+     use the translucent swatches the legend paints with, and the mannequin
+     needs its own charcoal so untrained bellies still read against it. */
+  --m3d-base: #39424b;
+  --m3d-v2-bone: #9bcbd8;
+  --m3d-heat-0: #46505a;
+  --m3d-heat-1: #2fbe91;
+  --m3d-heat-2: #7fbe6a;
+  --m3d-heat-3: #d89b22;
+  --m3d-heat-4: #e5783c;
+  --m3d-heat-5: #e5484d;
+  --m3d-rim: #7fe8c4;
+  --m3d-sky: #93b8dc;
+  --m3d-ground: #151a1f;
+  --m3d-ambient: 0.55;
+  --m3d-key: 1;
+  --m3d-shadow: 0.5;
+  --m3d-exposure: 1;
+
+  --panel-key: rgba(255, 255, 255, 0.05);
+  --panel-floor: rgba(0, 0, 0, 0.28);
+  --muscle-focus-vignette: rgba(5, 8, 11, 0.24);
+
+  /* Cool graphite stage. The neutral blue cast separates the mannequin from
+     the surrounding panel and lets every heat-map color retain its identity. */
+  --body-stage-top: #18222b;
+  --body-stage-middle: #10171e;
+  --body-stage-bottom: #0a0f14;
+  --body-stage-spotlight: rgba(190, 213, 230, 0.14);
+  --body-stage-reflection: rgba(229, 72, 77, 0.055);
+  --body-stage-floor: rgba(0, 0, 0, 0.44);
+  --body-stage-edge: rgba(167, 192, 209, 0.1);
+  --body-stage-border: rgba(170, 192, 207, 0.13);
+}
+
+:root[data-theme="paper"] .strength-view {
+  --heat-0: rgba(38, 34, 28, 0.05);
+  --heat-1: rgba(18, 148, 110, 0.22);
+  --heat-2: rgba(18, 148, 110, 0.5);
+  --heat-3: rgba(185, 121, 26, 0.6);
+  --heat-4: rgba(214, 106, 52, 0.74);
+  --heat-5: rgba(203, 48, 53, 0.86);
+
+  /* On paper the mannequin stays a mid warm grey, not near-white: a light
+     albedo under this rig clips to flat white and loses all its shading. The
+     lights come down to match. */
+  --m3d-base: #948c7e;
+  --m3d-v2-bone: #648894;
+  --m3d-heat-0: #a49c8e;
+  --m3d-heat-1: #12946e;
+  --m3d-heat-2: #63a047;
+  --m3d-heat-3: #b9791a;
+  --m3d-heat-4: #d66a34;
+  --m3d-heat-5: #cb3035;
+  --m3d-rim: #f4efe4;
+  --m3d-sky: #fdf8ec;
+  --m3d-ground: #8c857a;
+  --m3d-ambient: 0.35;
+  --m3d-key: 0.22;
+  --m3d-shadow: 0.2;
+  --m3d-exposure: 1;
+
+  --panel-key: rgba(255, 255, 255, 0.55);
+  --panel-floor: rgba(38, 34, 28, 0.07);
+  --muscle-focus-vignette: rgba(38, 34, 28, 0.1);
+
+  /* The light theme uses a mineral-gray studio instead of warm paper behind
+     the model, preserving contrast without turning the stage stark white. */
+  --body-stage-top: #f8faf9;
+  --body-stage-middle: #e9eeed;
+  --body-stage-bottom: #d9e0e0;
+  --body-stage-spotlight: rgba(255, 255, 255, 0.9);
+  --body-stage-reflection: rgba(203, 48, 53, 0.05);
+  --body-stage-floor: rgba(60, 70, 74, 0.16);
+  --body-stage-edge: rgba(255, 255, 255, 0.58);
+  --body-stage-border: rgba(46, 60, 64, 0.14);
+}
+
+/* ---------- Header ---------- */
+
+.strength-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.strength-header h2 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1;
+}
+
+.strength-header p:not(.eyebrow) {
+  max-width: 620px;
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.strength-header-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  flex-shrink: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: rgba(229, 72, 77, 0.14);
+  color: var(--sport-strength);
+}
+
+.strength-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.strength-segmented {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+}
+
+.strength-segmented button {
+  min-height: 30px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease;
+}
+
+.strength-segmented button:hover:not(.is-active) {
+  color: var(--text-primary);
+}
+
+.strength-segmented button.is-active {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--accent-glow);
+}
+
+.strength-segmented.is-quiet button.is-active {
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
+}
+
+.strength-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.strength-notice.is-error {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.strength-notice.is-sample {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.strength-notice.is-sample button {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.strength-sample-cta {
+  display: flex;
+}
+
+.strength-sample-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px dashed var(--warning-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--warning-text);
+  font-size: 12.5px;
+  font-weight: 700;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.strength-sample-button:hover {
+  border-style: solid;
+  background: var(--warning-bg);
+}
+
+/* ---------- Hero: figure + muscle panel ---------- */
+
+.strength-hero {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.95fr) minmax(0, 1.05fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+@media (max-width: 1040px) {
+  .strength-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.strength-body-panel {
+  display: block;
+  min-height: 620px;
+  padding: 0;
+  overflow: hidden;
+  isolation: isolate;
+  border-color: var(--body-stage-border);
+  background: linear-gradient(
+    180deg,
+    var(--body-stage-top) 0%,
+    var(--body-stage-middle) 54%,
+    var(--body-stage-bottom) 100%
+  );
+  box-shadow:
+    var(--glass-shadow),
+    inset 0 1px 0 var(--body-stage-edge);
+}
+
+/* A cool studio backdrop behind the figure: broad overhead light, one quiet
+   strength-color reflection, and a neutral floor for the contact shadow. */
+.strength-body-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(
+      72% 38% at 50% 0%,
+      var(--body-stage-spotlight) 0%,
+      transparent 72%
+    ),
+    radial-gradient(
+      52% 48% at 50% 34%,
+      var(--body-stage-reflection) 0%,
+      transparent 76%
+    ),
+    radial-gradient(
+      82% 28% at 50% 98%,
+      var(--body-stage-floor) 0%,
+      transparent 72%
+    );
+  pointer-events: none;
+}
+
+.strength-body-controls {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  left: 16px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+
+.strength-body-controls > * {
+  pointer-events: auto;
+}
+
+.strength-body-controls .strength-segmented,
+.strength-body-controls .strength-flip,
+.strength-legend {
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.strength-flip {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  transition:
+    transform 0.35s cubic-bezier(0.32, 0.8, 0.36, 1),
+    color 0.16s ease,
+    background 0.16s ease;
+}
+
+.strength-flip:hover {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+  transform: rotate(180deg);
+}
+
+.anatomy-layer-control {
+  position: absolute;
+  top: 62px;
+  left: 16px;
+  z-index: 4;
+  pointer-events: auto;
+}
+
+.anatomy-layer-trigger {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  transition:
+    color 0.16s ease,
+    background 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.anatomy-layer-trigger:hover,
+.anatomy-layer-control.is-open .anatomy-layer-trigger {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border));
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.anatomy-layer-panel {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(252px, calc(100vw - 48px));
+  max-height: min(448px, calc(100vh - 230px));
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 91%, transparent);
+  color: var(--text-primary);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+}
+
+.anatomy-layer-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.anatomy-layer-panel header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.anatomy-layer-panel header strong {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.anatomy-layer-panel header span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.anatomy-layer-reset,
+.anatomy-layer-visibility,
+.anatomy-layer-move button {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  transition:
+    color 0.14s ease,
+    background 0.14s ease;
+}
+
+.anatomy-layer-reset:hover,
+.anatomy-layer-visibility:hover,
+.anatomy-layer-move button:hover:not(:disabled) {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.anatomy-layer-panel ul {
+  display: grid;
+  gap: 2px;
+  min-height: 0;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.anatomy-layer-panel li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 4px;
+  border-radius: 9px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.anatomy-layer-panel li:hover {
+  background: color-mix(in srgb, var(--glass-bg-hover) 64%, transparent);
+  color: var(--text-primary);
+}
+
+.anatomy-layer-panel li.is-hidden > span {
+  opacity: 0.46;
+  text-decoration: line-through;
+}
+
+.anatomy-layer-visibility[aria-pressed="true"] {
+  color: var(--text-secondary);
+}
+
+.anatomy-layer-move {
+  display: inline-flex;
+  gap: 1px;
+}
+
+.anatomy-layer-move button:disabled {
+  opacity: 0.22;
+}
+
+.body-map {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-height: 340px;
+  isolation: isolate;
+}
+
+.anatomy-body-map {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+}
+
+.anatomy-body-map::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: radial-gradient(
+    72% 58% at 48% 48%,
+    transparent 42%,
+    var(--muscle-focus-vignette) 100%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.anatomy-body-map.is-focused::after {
+  opacity: 1;
+}
+
+.anatomy-model-status {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  text-align: center;
+  pointer-events: none;
+}
+
+.anatomy-muscle-callout {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  width: max-content;
+  align-items: center;
+  gap: 8px;
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform;
+  transition: opacity 0.18s ease;
+}
+
+.anatomy-muscle-callout[data-side="left"] {
+  flex-direction: row-reverse;
+}
+
+.anatomy-muscle-callout-line {
+  width: 28px;
+  height: 1px;
+  flex: 0 0 auto;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent-strong) 78%, transparent),
+    var(--glass-border)
+  );
+}
+
+.anatomy-muscle-callout[data-side="left"] .anatomy-muscle-callout-line {
+  background: linear-gradient(
+    270deg,
+    color-mix(in srgb, var(--accent-strong) 78%, transparent),
+    var(--glass-border)
+  );
+}
+
+.anatomy-muscle-callout strong {
+  padding: 7px 11px;
+  transform: translateX(-5px);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--glass-border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 28px color-mix(in srgb, var(--panel-floor) 75%, transparent);
+  transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.anatomy-muscle-callout[data-side="left"] strong {
+  transform: translateX(5px);
+}
+
+.anatomy-muscle-callout[data-visible="true"] {
+  opacity: 1;
+}
+
+.anatomy-muscle-callout[data-visible="true"] strong,
+.anatomy-muscle-callout[data-visible="true"][data-side="left"] strong {
+  transform: translateX(0);
+}
+
+.anatomy-model-status strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.anatomy-model-status > span:last-child {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.anatomy-model-skeleton {
+  position: relative;
+  width: 72px;
+  height: 210px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  border-radius: 40% 40% 26% 26% / 18% 18% 12% 12%;
+  background: var(--glass-bg-hover);
+  opacity: 0.72;
+}
+
+.anatomy-model-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-110%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.12),
+    transparent
+  );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .anatomy-model-skeleton::after {
+    animation: anatomy-model-shimmer 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes anatomy-model-shimmer {
+  to {
+    transform: translateX(110%);
+  }
+}
+
+/* The anatomical figure is rendered in a WebGL scene; only its canvas box and
+   overlays are styled here. */
+/* Taken out of flow so the canvas never feeds its own size back into the
+   container the renderer measures. */
+.body-map-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+.body-map-canvas:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-md);
+}
+
+.body-map-fallback {
+  margin: auto;
+  max-width: 34ch;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.strength-legend {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  padding: 8px 12px;
+  transform: translateX(-50%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (max-width: 560px) {
+  .strength-body-panel {
+    min-height: 540px;
+  }
+
+  .strength-body-controls {
+    top: 12px;
+    right: 12px;
+    left: 12px;
+  }
+
+  .strength-legend {
+    bottom: 12px;
+  }
+
+  .anatomy-layer-control {
+    top: 58px;
+    left: 12px;
+  }
+
+  .anatomy-layer-panel {
+    max-height: 390px;
+  }
+
+  .anatomy-muscle-callout {
+    gap: 6px;
+  }
+
+  .anatomy-muscle-callout-line {
+    width: 20px;
+  }
+
+  .anatomy-muscle-callout strong {
+    padding: 6px 9px;
+    font-size: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anatomy-body-map::after,
+  .anatomy-muscle-callout,
+  .anatomy-muscle-callout strong {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .anatomy-muscle-callout strong {
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+.strength-legend-ramp {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.strength-legend-ramp i {
+  width: 22px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* The legend keys the figure, so it uses the figure's solid ramp rather than
+   the translucent one the panel bars are painted with. */
+.strength-legend-ramp i[data-level="1"] {
+  background: var(--m3d-heat-1);
+}
+.strength-legend-ramp i[data-level="2"] {
+  background: var(--m3d-heat-2);
+}
+.strength-legend-ramp i[data-level="3"] {
+  background: var(--m3d-heat-3);
+}
+.strength-legend-ramp i[data-level="4"] {
+  background: var(--m3d-heat-4);
+}
+.strength-legend-ramp i[data-level="5"] {
+  background: var(--m3d-heat-5);
+}
+
+/* ---------- Muscle panel ---------- */
+
+.strength-muscle-panel {
+  display: flex;
+  min-height: 0;
+  padding: 18px 16px 14px;
+}
+
+.muscle-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  min-height: 0;
+}
+
+.muscle-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 4px 2px;
+}
+
+.muscle-panel-title {
+  min-width: 0;
+}
+
+.muscle-panel-kicker {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.muscle-panel-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  color: var(--text-primary);
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+.muscle-panel-lead {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.muscle-panel-summary {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  flex: 0 0 auto;
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 1.2;
+}
+
+.muscle-panel-summary strong {
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.muscle-panel-summary span {
+  white-space: nowrap;
+}
+
+.muscle-ranking {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  min-height: 0;
+}
+
+.muscle-ranking-row {
+  --row-heat: var(--text-muted);
+
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 82px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  transition:
+    background 0.16s ease,
+    transform 0.16s ease;
+}
+
+.muscle-ranking-row[data-level="1"],
+.muscle-ranking-row[data-level="2"] {
+  --row-heat: var(--m3d-heat-1);
+}
+
+.muscle-ranking-row[data-level="3"] {
+  --row-heat: var(--m3d-heat-3);
+}
+
+.muscle-ranking-row[data-level="4"] {
+  --row-heat: var(--m3d-heat-4);
+}
+
+.muscle-ranking-row[data-level="5"] {
+  --row-heat: var(--m3d-heat-5);
+}
+
+.muscle-ranking-row:hover {
+  background: color-mix(in srgb, var(--row-heat) 8%, var(--glass-bg));
+}
+
+.muscle-ranking-row:active {
+  transform: scale(0.995);
+}
+
+.muscle-ranking-row:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--row-heat) 10%, var(--glass-bg));
+}
+
+.muscle-ranking-row.is-empty {
+  color: var(--text-muted);
+}
+
+.muscle-ranking-row.is-empty .muscle-ranking-name {
+  color: var(--text-muted);
+}
+
+.muscle-ranking-name {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 560;
+  letter-spacing: -0.006em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.muscle-ranking-track,
+.strength-balance-track {
+  position: relative;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  overflow: hidden;
+}
+
+.muscle-ranking-track {
+  height: 5px;
+}
+
+.strength-balance-track {
+  height: 7px;
+}
+
+.muscle-ranking-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--sport-strength);
+  transform-origin: left center;
+  transition:
+    transform 0.5s cubic-bezier(0.32, 0.8, 0.36, 1),
+    background 0.4s ease;
+}
+
+/* The same restrained heat ramp appears on the figure and in the ranking.
+   Length carries magnitude while color makes the cross-highlight immediate. */
+.muscle-ranking-fill[data-level="1"] {
+  background: var(--heat-1);
+}
+.muscle-ranking-fill[data-level="2"] {
+  background: var(--heat-2);
+}
+.muscle-ranking-fill[data-level="3"] {
+  background: var(--heat-3);
+}
+.muscle-ranking-fill[data-level="4"] {
+  background: var(--heat-4);
+}
+.muscle-ranking-fill[data-level="5"] {
+  background: var(--heat-5);
+}
+
+.muscle-ranking-value {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 3px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.muscle-ranking-value strong {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 540;
+}
+
+.muscle-ranking-value small {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 450;
+}
+
+.muscle-ranking-row.is-empty .muscle-ranking-value {
+  color: var(--text-muted);
+}
+
+.muscle-panel-gap {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.muscle-panel-gap strong {
+  color: var(--text-secondary);
+}
+
+/* ---------- Muscle detail ----------
+ *
+ * The whole panel is tinted by the muscle's own place on the heat ramp:
+ * --muscle-heat drives the rank plate, the headline gauge and the exercise
+ * table, so a hammered muscle reads red here exactly as it does on the figure.
+ * Recovery runs on a second, independent axis — that one is about time since,
+ * not load — and the weekly strip carries its own per-week ramp.
+ */
+
+.muscle-panel.is-detail {
+  --muscle-heat: var(--m3d-heat-0);
+  /* Cell fill for the hairline readout box. Dark recesses its cells; paper
+     raises them, because the same translucent black that reads as depth on
+     charcoal only muddies a white panel into a grey slab. */
+  --muscle-cell: var(--panel-floor);
+
+  gap: 16px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+:root[data-theme="paper"] .muscle-panel.is-detail {
+  --muscle-cell: rgba(255, 255, 255, 0.66);
+}
+
+.muscle-panel.is-detail[data-level="1"] { --muscle-heat: var(--m3d-heat-1); }
+.muscle-panel.is-detail[data-level="2"] { --muscle-heat: var(--m3d-heat-2); }
+.muscle-panel.is-detail[data-level="3"] { --muscle-heat: var(--m3d-heat-3); }
+.muscle-panel.is-detail[data-level="4"] { --muscle-heat: var(--m3d-heat-4); }
+.muscle-panel.is-detail[data-level="5"] { --muscle-heat: var(--m3d-heat-5); }
+
+/* Sections rise in one after another when a muscle opens — a soft stagger,
+   never a bounce, and only when the user allows motion. */
+@keyframes muscle-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .muscle-panel.is-detail > * {
+    animation: muscle-detail-in 0.5s cubic-bezier(0.22, 0.9, 0.28, 1) both;
+  }
+  .muscle-panel.is-detail > *:nth-child(2) { animation-delay: 50ms; }
+  .muscle-panel.is-detail > *:nth-child(3) { animation-delay: 100ms; }
+  .muscle-panel.is-detail > *:nth-child(4) { animation-delay: 150ms; }
+  .muscle-panel.is-detail > *:nth-child(5) { animation-delay: 200ms; }
+  .muscle-panel.is-detail > *:nth-child(6) { animation-delay: 250ms; }
+}
+
+.muscle-panel-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 5px 12px 5px 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.muscle-panel-back svg {
+  transition: transform 0.18s cubic-bezier(0.32, 0.8, 0.36, 1);
+}
+
+.muscle-panel-back:hover {
+  border-color: var(--accent-glow);
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+}
+
+.muscle-panel-back:hover svg {
+  transform: translateX(-2px);
+}
+
+.muscle-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.muscle-detail-title {
+  display: grid;
+  gap: 7px;
+  justify-items: start;
+  min-width: 0;
+}
+
+/* Anatomy, movement pattern and which side of the figure it lives on — static
+   taxonomy, so it sits in one quiet line rather than three loud chips. */
+.muscle-detail-taxonomy {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.muscle-detail-taxonomy span:first-child {
+  color: var(--muscle-heat);
+}
+
+.muscle-detail-taxonomy i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.muscle-detail-title h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 680;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--text-primary);
+}
+
+/* Rank plate. The five pips underneath repeat the legend beneath the figure,
+   so the panel states its heat band outright instead of leaving it to colour
+   memory alone. */
+.muscle-detail-rank {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 3px;
+  flex-shrink: 0;
+  min-width: 62px;
+  padding: 8px 12px 9px;
+  border: 1px solid color-mix(in srgb, var(--muscle-heat) 34%, var(--glass-border));
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--muscle-heat) 12%, transparent),
+      transparent 70%
+    ),
+    var(--panel-floor);
+  box-shadow: var(--glass-inset);
+  text-align: center;
+}
+
+.muscle-detail-rank strong {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 660;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--muscle-heat);
+}
+
+.muscle-detail-rank > span {
+  color: var(--text-muted);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* ---------- Recovery ---------- */
+
+.muscle-recovery {
+  --tone: var(--text-muted);
+
+  display: grid;
+  gap: 7px;
+}
+
+.muscle-recovery[data-tone="fresh"] { --tone: var(--success-text); }
+.muscle-recovery[data-tone="due"] { --tone: var(--warning-text); }
+.muscle-recovery[data-tone="stale"] { --tone: var(--sport-strength); }
+
+.muscle-recovery-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid color-mix(in srgb, var(--tone) 32%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--tone) 13%, transparent);
+  color: var(--tone);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.muscle-recovery-value {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 0;
+}
+
+.muscle-recovery-value strong {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 620;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.muscle-recovery-value span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.muscle-recovery.is-empty .muscle-recovery-value span {
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+/* Elapsed days against the muscle's own turnaround: the tick is where this
+   muscle normally comes round again, so the fill running past it is the whole
+   point of the meter. */
+.muscle-recovery-track {
+  position: relative;
+  height: 6px;
+  margin-bottom: 15px;
+  border-radius: var(--radius-pill);
+  background: var(--heat-0);
+}
+
+.muscle-recovery-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--tone) 38%, transparent),
+    var(--tone)
+  );
+  transform-origin: left center;
+  transition: transform 0.5s cubic-bezier(0.32, 0.8, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .muscle-recovery-fill {
+    animation: muscle-recovery-in 0.6s cubic-bezier(0.22, 0.9, 0.28, 1) both;
+    animation-delay: 120ms;
+  }
+}
+
+@keyframes muscle-recovery-in {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+.muscle-recovery-tick {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  transform: translateX(-50%);
+}
+
+.muscle-recovery-tick i {
+  display: block;
+  width: 1px;
+  height: 100%;
+  margin: 0 auto;
+  background: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.muscle-recovery-tick em {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Headline readout ---------- */
+
+/* Hairline box: the container's background shows through the 1px gaps. */
+.muscle-readout {
+  display: grid;
+  gap: 1px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-border);
+  box-shadow: var(--glass-inset);
+  overflow: hidden;
+}
+
+/* The hero follows the toolbar's metric, so the panel always leads with the
+   number the figure is currently coloured by. */
+.muscle-hero {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  padding: 14px 16px 13px;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--muscle-heat) 11%, transparent),
+      transparent 58%
+    ),
+    var(--muscle-cell);
+}
+
+.muscle-hero::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 0;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--muscle-heat);
+}
+
+.muscle-hero-label {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.muscle-hero-value {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 0;
+}
+
+.muscle-hero-value strong {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 620;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.muscle-hero-value small {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.muscle-hero-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Only appears when a number is knowably incomplete — currently volume, which
+   cannot see bodyweight work at all. */
+.muscle-hero-caveat {
+  margin: 3px 0 0;
+  padding-left: 11px;
+  position: relative;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.muscle-hero-caveat::before {
+  content: "*";
+  position: absolute;
+  left: 0;
+  top: 1px;
+  color: var(--warning-text);
+  font-weight: 700;
+}
+
+/* Two cells for the sets metric, three for volume and time — auto columns so
+   the row divides itself rather than leaving a hole. */
+.muscle-readout-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 1px;
+  background: var(--glass-border);
+}
+
+.muscle-readout-cell {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  padding: 11px 13px 12px;
+  background: var(--muscle-cell);
+  transition: background 0.18s ease;
+}
+
+.muscle-readout-cell:hover {
+  background: var(--glass-bg);
+}
+
+.muscle-readout-label {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.muscle-readout-cell strong {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.muscle-readout-cell > span {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.muscle-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* Detail eyebrows carry a short tick in the muscle's own heat — a quiet
+   signature that ties recovery, the weekly strip and the exercise table
+   together. */
+.muscle-panel.is-detail .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+}
+
+.muscle-panel.is-detail .eyebrow::before {
+  content: "";
+  width: 12px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--muscle-heat);
+}
+
+.muscle-section-note {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Weekly heat strip ---------- */
+
+.muscle-trend {
+  display: grid;
+  gap: 9px;
+}
+
+.muscle-trend-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--heat-0);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.muscle-trend-delta[data-direction="up"] {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.muscle-trend-delta[data-direction="down"] {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.muscle-trend-plot {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 8px;
+  height: 84px;
+}
+
+/* Peak and zero, so the columns carry a scale instead of relative guesswork. */
+.muscle-trend-scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.muscle-trend-scale b:first-child {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.muscle-trend-bars {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: 3px;
+}
+
+.muscle-trend-bars::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: -1px;
+  height: 1px;
+  background: var(--glass-border);
+}
+
+.muscle-trend-mean {
+  position: absolute;
+  inset-inline: 0;
+  height: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--text-muted) 60%, transparent);
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Sat over the columns, so the label needs its own ground to stay readable. */
+.muscle-trend-mean em {
+  position: absolute;
+  right: 0;
+  bottom: 2px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--glass-bg-hover);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: var(--text-secondary);
+  font-size: 8.5px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Columns carry the muscle's own colour and take their strength from height —
+   a quiet week fades back, a big one comes forward. */
+.muscle-trend-bar {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+}
+
+/* Capped so a short history spaces its columns out instead of inflating them
+   into slabs — this panel is wide and the week count varies. */
+.muscle-trend-bar-fill {
+  width: 100%;
+  max-width: 30px;
+  margin-inline: auto;
+  min-height: 2px;
+  border-radius: 3px 3px 1px 1px;
+  background: linear-gradient(
+    180deg,
+    var(--muscle-heat),
+    color-mix(in srgb, var(--muscle-heat) 52%, transparent)
+  );
+  opacity: calc(0.4 + var(--v, 1) * 0.6);
+  transform-origin: bottom;
+  transition:
+    height 0.45s cubic-bezier(0.32, 0.8, 0.36, 1),
+    opacity 0.18s ease;
+}
+
+/* The week still in progress gets its full extent outlined, so a Monday
+   reading two sets cannot pass for a collapsed week. */
+.muscle-trend-bar[data-progress]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 100%;
+  max-width: 30px;
+  transform: translateX(-50%);
+  border: 1px dashed color-mix(in srgb, var(--text-muted) 45%, transparent);
+  border-bottom: 0;
+  border-radius: 3px 3px 0 0;
+}
+
+/* Bars grow from the baseline in a left-to-right ripple, scaled by --i. */
+@keyframes muscle-bar-in {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .muscle-trend-bar-fill {
+    animation: muscle-bar-in 0.55s cubic-bezier(0.22, 0.9, 0.28, 1) both;
+    animation-delay: calc(180ms + var(--i, 0) * 26ms);
+  }
+}
+
+.muscle-trend-bar:hover .muscle-trend-bar-fill {
+  opacity: 1;
+}
+
+/* Hover readout, pinned to the top of the plot and pulled inside the panel at
+   either end so the first and last weeks stay legible. */
+.muscle-trend-readout {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 4;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 3px 7px 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: 7px;
+  background: var(--glass-bg-hover);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.24);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 660;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-50%, -3px);
+  pointer-events: none;
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease;
+}
+
+.muscle-trend-readout em {
+  color: var(--text-muted);
+  font-size: 8.5px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.muscle-trend-bar:hover .muscle-trend-readout {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.muscle-trend-bar:first-child .muscle-trend-readout {
+  left: 0;
+  transform: translate(0, -3px);
+}
+
+.muscle-trend-bar:first-child:hover .muscle-trend-readout {
+  transform: translate(0, 0);
+}
+
+.muscle-trend-bar:last-child .muscle-trend-readout {
+  left: auto;
+  right: 0;
+  transform: translate(0, -3px);
+}
+
+.muscle-trend-bar:last-child:hover .muscle-trend-readout {
+  transform: translate(0, 0);
+}
+
+.muscle-trend-axis {
+  display: flex;
+  justify-content: space-between;
+  padding-left: 32px;
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+
+/* ---------- Driven by ---------- */
+
+.muscle-drivers {
+  display: grid;
+  gap: 9px;
+}
+
+/* One bar for the whole muscle: how concentrated the work is reads instantly
+   here in a way a column of percentages never manages. */
+.muscle-driver-stack {
+  display: flex;
+  gap: 2px;
+  height: 7px;
+}
+
+.muscle-driver-segment {
+  flex: 0 1 0;
+  min-width: 3px;
+  border-radius: 2px;
+  background: var(--muscle-heat);
+  transform-origin: left center;
+}
+
+.muscle-driver-segment:nth-child(2) { opacity: 0.74; }
+.muscle-driver-segment:nth-child(3) { opacity: 0.56; }
+.muscle-driver-segment:nth-child(4) { opacity: 0.42; }
+.muscle-driver-segment:nth-child(5) { opacity: 0.32; }
+
+.muscle-driver-segment[data-rest] {
+  background: var(--heat-0);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .muscle-driver-segment {
+    animation: muscle-recovery-in 0.5s cubic-bezier(0.22, 0.9, 0.28, 1) both;
+    animation-delay: calc(260ms + var(--i, 0) * 45ms);
+  }
+}
+
+/* Each row is its own bar — the share is painted straight into the row's
+   background, so the table doubles as the chart. */
+.muscle-driver-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The share is washed straight into the row and fades out as it goes, so the
+   table doubles as the chart without a hard block of colour landing on the
+   leading lift. */
+.muscle-driver-list li {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto 38px;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 8px 8px 4px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--muscle-heat) 14%, transparent) 0,
+    color-mix(in srgb, var(--muscle-heat) 3%, transparent)
+      calc(var(--w, 0) * 100%),
+    transparent calc(var(--w, 0) * 100%)
+  );
+  font-variant-numeric: tabular-nums;
+}
+
+.muscle-driver-list li + li {
+  border-top: 1px solid var(--glass-border);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .muscle-driver-list li {
+    animation: muscle-detail-in 0.5s cubic-bezier(0.22, 0.9, 0.28, 1) both;
+    animation-delay: calc(260ms + var(--i, 0) * 55ms);
+  }
+}
+
+.muscle-driver-rank {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.muscle-driver-name {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.muscle-driver-sets {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.muscle-driver-sets em {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.muscle-driver-share {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* The leader gets the muscle's colour outright; the rest stay in text. */
+.muscle-driver-list li:first-child .muscle-driver-share {
+  color: var(--muscle-heat);
+}
+
+.muscle-driver-list li[data-rest] .muscle-driver-name,
+.muscle-driver-list li[data-rest] .muscle-driver-sets {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+@media (max-width: 620px) {
+  .strength-muscle-panel {
+    padding: 16px 14px;
+  }
+
+  .muscle-panel-head {
+    gap: 12px;
+    padding-inline: 2px;
+  }
+
+  .muscle-panel-lead {
+    max-width: 28ch;
+  }
+
+  .muscle-ranking-row {
+    grid-template-columns: minmax(110px, 1fr) auto;
+    gap: 5px 12px;
+    min-height: 44px;
+    padding: 7px 8px;
+  }
+
+  .muscle-ranking-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .muscle-ranking-value {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .muscle-detail-title h3 {
+    font-size: 26px;
+  }
+
+  /* Three headline cells never fit a phone column: stack them and let the
+     labels sit beside their numbers instead. */
+  .muscle-readout-row {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+  }
+
+  .muscle-readout-cell {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    padding: 9px 13px 10px;
+  }
+
+  .muscle-readout-cell strong {
+    grid-row: 1;
+    grid-column: 2;
+    text-align: right;
+  }
+
+  .muscle-readout-cell > span {
+    grid-column: 1 / -1;
+  }
+
+  .muscle-hero-value strong {
+    font-size: 29px;
+  }
+
+  .muscle-trend-plot {
+    grid-template-columns: 20px minmax(0, 1fr);
+    height: 70px;
+  }
+
+  .muscle-trend-axis {
+    padding-left: 28px;
+  }
+
+  /* The set count drops out; the share still carries the ranking. */
+  .muscle-driver-list li {
+    grid-template-columns: 14px minmax(0, 1fr) 36px;
+    gap: 8px;
+  }
+
+  .muscle-driver-sets {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .muscle-ranking-row,
+  .muscle-ranking-fill {
+    transition: none;
+  }
+}
+
+/* ---------- Stat tiles ---------- */
+
+.strength-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 12px;
+}
+
+.strength-tile {
+  display: grid;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  transition:
+    border-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.strength-tile:hover {
+  border-color: var(--accent-glow);
+  transform: translateY(-1px);
+}
+
+.strength-tile-icon {
+  color: var(--sport-strength);
+}
+
+.strength-tile-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.strength-tile-value {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.strength-tile-meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Lower grids ---------- */
+
+.strength-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 1040px) {
+  .strength-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .anatomy-body-map {
+    min-height: 430px;
+  }
+}
+
+.strength-chart {
+  height: 240px;
+}
+
+.strength-panel-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.strength-balance {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.strength-balance li {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 10px;
+}
+
+.strength-balance-label {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.strength-balance-track {
+  height: 9px;
+}
+
+.strength-balance-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform-origin: left center;
+  transition: transform 0.5s cubic-bezier(0.32, 0.8, 0.36, 1);
+}
+
+.strength-balance-fill.is-push {
+  background: var(--sport-strength);
+}
+.strength-balance-fill.is-pull {
+  background: var(--accent);
+}
+.strength-balance-fill.is-legs {
+  background: var(--accent-gold);
+}
+.strength-balance-fill.is-core {
+  background: var(--sport-other);
+}
+
+.strength-balance-value {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.strength-balance-note {
+  margin: 14px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.strength-lift-name {
+  display: block;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.strength-lift-meta {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.strength-trend {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.strength-trend.is-up {
+  color: var(--success-text);
+}
+
+.strength-trend.is-down {
+  color: var(--error-text);
+}
+
+.strength-trend.is-flat {
+  color: var(--text-muted);
+}
+
+.strength-sessions {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.strength-sessions li {
+  display: grid;
+  gap: 6px;
+  padding: 11px 13px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+}
+
+.strength-session-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.strength-session-head strong {
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.strength-session-head span {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.strength-session-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.strength-session-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.strength-session-chips span {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--heat-0);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.strength-session-chips span.is-more {
+  color: var(--text-muted);
+}

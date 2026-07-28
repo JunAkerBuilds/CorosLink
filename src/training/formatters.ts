@@ -1,3 +1,15 @@
+import type { UnitSystem } from "../../electron/types";
+import {
+  distanceUnit,
+  elevationUnit,
+  formatDistanceValue,
+  formatElevationValue,
+  formatPaceValue,
+  metersToDisplayDistance,
+  metersToElevation,
+  secondsPerKmToDisplayPace
+} from "../units/units";
+
 export function formatTrainingTimestamp(value?: number): string {
   if (!value) {
     return "Unknown";
@@ -50,20 +62,19 @@ export function formatDurationSeconds(value?: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-export function formatDistanceMeters(value?: number): string {
-  if (!Number.isFinite(value) || !value) {
-    return "0 km";
-  }
-
-  return `${(value / 1000).toFixed(value >= 10_000 ? 1 : 2)} km`;
+export function formatDistanceMeters(
+  value: number | undefined,
+  unitSystem: UnitSystem,
+  swim = false
+): string {
+  return formatDistanceValue(value, unitSystem, { swim });
 }
 
-export function formatElevationMeters(value?: number): string {
-  if (!Number.isFinite(value) || !value) {
-    return "-";
-  }
-
-  return `${Math.round(value)} m`;
+export function formatElevationMeters(
+  value: number | undefined,
+  unitSystem: UnitSystem
+): string {
+  return formatElevationValue(value, unitSystem);
 }
 
 export function formatOptionalNumber(value?: number): string {
@@ -74,23 +85,24 @@ export function formatOptionalNumber(value?: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-export function formatPaceSecondsPerKm(value?: number): string {
-  if (!Number.isFinite(value) || !value || value <= 0) {
-    return "-";
-  }
-
-  const minutes = Math.floor(value / 60);
-  const seconds = Math.round(value % 60);
-  return `${minutes}:${String(seconds).padStart(2, "0")} /km`;
+export function formatPaceSecondsPerKm(
+  value: number | undefined,
+  unitSystem: UnitSystem
+): string {
+  return formatPaceValue(value, unitSystem);
 }
 
-export function formatCorosCompactPace(value?: number): string {
+export function formatCorosCompactPace(
+  value: number | undefined,
+  unitSystem: UnitSystem
+): string {
   if (!Number.isFinite(value) || !value || value <= 0) {
     return "";
   }
 
-  const minutes = Math.floor(value / 60);
-  const seconds = Math.round(value % 60);
+  const rounded = Math.round(secondsPerKmToDisplayPace(value, unitSystem));
+  const minutes = Math.floor(rounded / 60);
+  const seconds = rounded % 60;
   return `${String(minutes).padStart(2, "0")}'${String(seconds).padStart(2, "0")}"`;
 }
 
@@ -100,8 +112,9 @@ interface PaceZoneBoundary {
 }
 
 export function formatRunningFitnessPaceRange(
-  minPace?: number,
-  maxPace?: number
+  minPace: number | undefined,
+  maxPace: number | undefined,
+  unitSystem: UnitSystem
 ): string | undefined {
   if (
     minPace !== undefined &&
@@ -109,11 +122,11 @@ export function formatRunningFitnessPaceRange(
     Number.isFinite(minPace) &&
     Number.isFinite(maxPace)
   ) {
-    return `${formatCorosCompactPace(minPace)} - ${formatCorosCompactPace(maxPace)}/km`;
+    return `${formatCorosCompactPace(minPace, unitSystem)} - ${formatCorosCompactPace(maxPace, unitSystem)}/${distanceUnit(unitSystem)}`;
   }
 
   if (maxPace !== undefined && Number.isFinite(maxPace)) {
-    return `< ${formatCorosCompactPace(maxPace)}/km`;
+    return `< ${formatCorosCompactPace(maxPace, unitSystem)}/${distanceUnit(unitSystem)}`;
   }
 
   return undefined;
@@ -145,7 +158,8 @@ const RUNNING_FITNESS_ZONE_SLOTS_BY_COUNT: Record<
 };
 
 export function buildRunningFitnessPaceLabels(
-  ltspZones: PaceZoneBoundary[]
+  ltspZones: PaceZoneBoundary[],
+  unitSystem: UnitSystem
 ): Partial<Record<keyof typeof RUNNING_FITNESS_ZONE_SLOTS, string>> {
   const zones = ltspZones
     .filter((zone) => zone.pace !== undefined && Number.isFinite(zone.pace))
@@ -165,7 +179,7 @@ export function buildRunningFitnessPaceLabels(
       const sprintZone = zones[slotIndex];
 
       if (sprintZone?.pace) {
-        labels.Sprint = formatRunningFitnessPaceRange(undefined, sprintZone.pace);
+        labels.Sprint = formatRunningFitnessPaceRange(undefined, sprintZone.pace, unitSystem);
       }
 
       continue;
@@ -184,7 +198,7 @@ export function buildRunningFitnessPaceLabels(
         : fasterZone.pace + 1;
 
     labels[label as keyof typeof RUNNING_FITNESS_ZONE_SLOTS] =
-      formatRunningFitnessPaceRange(minPace, zone.pace);
+      formatRunningFitnessPaceRange(minPace, zone.pace, unitSystem);
   }
 
   return labels;
@@ -354,8 +368,26 @@ export function parseUpcomingWorkoutDistanceKm(
   return null;
 }
 
-export function formatUpcomingWorkoutVolumeDisplay(volume?: string): string {
-  return volume ?? "--";
+export function formatUpcomingWorkoutVolumeDisplay(
+  volume: string | undefined,
+  unitSystem: UnitSystem
+): string {
+  if (!volume) return "--";
+  const km = volume.match(/^([\d.]+)\s*km$/i);
+  if (km) {
+    const meters = Number(km[1]) * 1000;
+    if (Number.isFinite(meters)) {
+      return formatDistanceValue(meters, unitSystem);
+    }
+  }
+  const meters = volume.match(/^([\d.]+)\s*m$/i);
+  if (meters) {
+    const value = Number(meters[1]);
+    if (Number.isFinite(value)) {
+      return formatDistanceValue(value, unitSystem, { swim: true });
+    }
+  }
+  return volume;
 }
 
 export function inferUpcomingWorkoutCategory(name: string): string {
@@ -391,7 +423,8 @@ export function inferUpcomingWorkoutCategory(name: string): string {
 }
 
 export function formatUpcomingWorkoutStats(
-  workouts: Array<{ volume?: string; trainingLoad?: number }>
+  workouts: Array<{ volume?: string; trainingLoad?: number }>,
+  unitSystem: UnitSystem
 ): string {
   const count = workouts.length;
   const workoutLabel = `${count} workout${count === 1 ? "" : "s"}`;
@@ -412,11 +445,12 @@ export function formatUpcomingWorkoutStats(
   const parts = [workoutLabel];
 
   if (totalKm > 0) {
-    const roundedKm =
-      Math.abs(totalKm - Math.round(totalKm)) < 0.05
-        ? Math.round(totalKm)
-        : Number(totalKm.toFixed(1));
-    parts.push(`${roundedKm} km`);
+    const meters = totalKm * 1000;
+    const displayed = metersToDisplayDistance(meters, unitSystem);
+    const rounded = Math.abs(displayed - Math.round(displayed)) < 0.05
+      ? Math.round(displayed)
+      : Number(displayed.toFixed(1));
+    parts.push(`${rounded} ${distanceUnit(unitSystem)}`);
   }
 
   if (totalLoad > 0) {
@@ -428,19 +462,21 @@ export function formatUpcomingWorkoutStats(
 
 export function formatUpcomingWorkoutDetailLine(
   category: string,
-  volume?: string,
-  trainingLoad?: number
+  volume: string | undefined,
+  trainingLoad: number | undefined,
+  unitSystem: UnitSystem
 ): string {
-  const volumeLabel = formatUpcomingWorkoutVolumeDisplay(volume);
+  const volumeLabel = formatUpcomingWorkoutVolumeDisplay(volume, unitSystem);
   const loadLabel = formatUpcomingWorkoutLoad(trainingLoad);
   return `${category} · ${volumeLabel} · ${loadLabel}`;
 }
 
 export function formatUpcomingWorkoutRowStats(
-  volume?: string,
-  trainingLoad?: number
+  volume: string | undefined,
+  trainingLoad: number | undefined,
+  unitSystem: UnitSystem
 ): string | null {
-  const volumeLabel = formatUpcomingWorkoutVolumeDisplay(volume);
+  const volumeLabel = formatUpcomingWorkoutVolumeDisplay(volume, unitSystem);
   const loadLabel = formatUpcomingWorkoutLoad(trainingLoad);
   const parts: string[] = [];
 
@@ -495,13 +531,11 @@ function derivePersonalRecordPaceFromDuration(
   return duration / (knownDistance / 1000);
 }
 
-function formatRecordDistanceHero(distanceMeters: number): string {
-  const km = distanceMeters / 1000;
-  const rounded =
-    Math.abs(km * 100 - Math.round(km * 100)) < 0.05
-      ? km.toFixed(2)
-      : km.toFixed(2);
-  return `${rounded}km`;
+function formatRecordDistanceHero(
+  distanceMeters: number,
+  unitSystem: UnitSystem
+): string {
+  return `${metersToDisplayDistance(distanceMeters, unitSystem).toFixed(2)}${distanceUnit(unitSystem)}`;
 }
 
 export function formatRecordDateShort(happenDay?: string): string {
@@ -538,14 +572,14 @@ export function formatPersonalRecordHero(record: {
   duration?: number;
   distance?: number;
   avgPace?: number;
-}): string {
+}, unitSystem: UnitSystem): string {
   if (PERSONAL_RECORD_SLOT_TYPES.has(record.type) && !isPersonalRecordPopulated(record)) {
     return "Not recorded";
   }
 
   if (record.type === RECORD_TYPE_LONGEST_RUN) {
     if (record.distance !== undefined && record.distance > 0) {
-      return formatRecordDistanceHero(record.distance);
+      return formatRecordDistanceHero(record.distance, unitSystem);
     }
 
     return "—";
@@ -553,7 +587,7 @@ export function formatPersonalRecordHero(record: {
 
   if (record.type === RECORD_TYPE_ELEVATION_GAIN) {
     if (record.distance !== undefined && record.distance > 0) {
-      return `${Math.round(record.distance)}m`;
+      return `${Math.round(metersToElevation(record.distance, unitSystem))}${elevationUnit(unitSystem)}`;
     }
 
     return "—";
@@ -571,14 +605,14 @@ export function formatPersonalRecordMeta(record: {
   duration?: number;
   distance?: number;
   avgPace?: number;
-}): string | null {
+}, unitSystem: UnitSystem): string | null {
   if (!isPersonalRecordPopulated(record)) {
     return null;
   }
 
   const paceSeconds =
     record.avgPace ?? derivePersonalRecordPaceFromDuration(record.type, record.duration);
-  const pace = formatPaceSecondsPerKm(paceSeconds);
+  const pace = formatPaceSecondsPerKm(paceSeconds, unitSystem);
   return pace === "-" ? null : pace;
 }
 

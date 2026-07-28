@@ -18,11 +18,18 @@ import type {
   TrainingHubZoneDistributionEntry
 } from "../../../electron/types";
 import { formatDistanceMeters, formatDurationSeconds } from "../formatters";
+import type { UnitSystem } from "../../../electron/types";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
+import { distanceUnit, metersToDisplayDistance } from "../../units/units";
 
 interface TrainingZoneDistributionChartsProps {
   lthrZones: TrainingHubThresholdZone[];
   activities: TrainingHubActivity[];
   analytics: TrainingHubAnalytics | null;
+}
+
+interface PerceivedEffortPanelProps {
+  distribution: RpeDistribution | null | undefined;
 }
 
 interface ZoneDistributionPanelProps {
@@ -202,22 +209,17 @@ function heartRateZoneCaption(zoneIndex: number): string {
   }
 }
 
-function distanceZoneCaption(label: string): string {
-  const normalized = formatDisplayLabel(label).toLowerCase();
-
-  if (normalized.startsWith("0")) {
+function distanceZoneCaption(zoneIndex: number): string {
+  if (zoneIndex === 1) {
     return "Easy & recovery runs";
   }
-
-  if (normalized.includes("10–20") || normalized.includes("10-20")) {
+  if (zoneIndex === 2) {
     return "Moderate distance sessions";
   }
-
-  if (normalized.includes("20–30") || normalized.includes("20-30")) {
+  if (zoneIndex === 3) {
     return "Long run territory";
   }
-
-  if (normalized.includes("30") || normalized.includes("40") || normalized.includes("50")) {
+  if (zoneIndex >= 4) {
     return "Ultra & marathon prep";
   }
 
@@ -303,7 +305,8 @@ function buildHeartRateData(
   zones: TrainingHubThresholdZone[],
   activities: TrainingHubActivity[],
   metric: ActivityMetric,
-  analytics: TrainingHubAnalytics | null
+  analytics: TrainingHubAnalytics | null,
+  unitSystem: UnitSystem
 ): ZoneDistributionDatum[] {
   const areaList = getHeartRateAreaList(analytics, metric);
 
@@ -312,7 +315,7 @@ function buildHeartRateData(
       areaList,
       areaList.map((_entry, index) => `Zone ${index + 1}`),
       HEART_RATE_ZONE_COLORS,
-      (value) => formatActivityMetricValue(value, metric)
+      (value) => formatActivityMetricValue(value, metric, unitSystem)
     );
   }
 
@@ -347,7 +350,7 @@ function buildHeartRateData(
 
   return totals.map((item, index) => ({
     label: `Zone ${index + 1}`,
-    detail: formatActivityMetricValue(item.value, metric),
+    detail: formatActivityMetricValue(item.value, metric, unitSystem),
     percent: (item.value / total) * 100,
     color: HEART_RATE_ZONE_COLORS[index % HEART_RATE_ZONE_COLORS.length],
     zoneIndex: index + 1
@@ -464,10 +467,11 @@ function activityMetricValue(
 
 function formatActivityMetricValue(
   value: number,
-  metric: ActivityMetric
+  metric: ActivityMetric,
+  unitSystem: UnitSystem
 ): string {
   if (metric === "distance") {
-    return formatDistanceMeters(value);
+    return formatDistanceMeters(value, unitSystem);
   }
 
   if (metric === "time") {
@@ -504,14 +508,25 @@ function formatDistanceMetricValue(
 function buildDistanceData(
   activities: TrainingHubActivity[],
   metric: DistanceMetric,
-  analytics: TrainingHubAnalytics | null
+  analytics: TrainingHubAnalytics | null,
+  unitSystem: UnitSystem
 ): ZoneDistributionDatum[] {
+  const labels = DISTANCE_BUCKETS.map((bucket) => {
+    const lower = metersToDisplayDistance(bucket.minMeters, unitSystem);
+    const upper = bucket.maxMeters === undefined
+      ? undefined
+      : metersToDisplayDistance(bucket.maxMeters, unitSystem);
+    const format = (value: number) => value.toFixed(unitSystem === "imperial" ? 1 : 0);
+    return upper === undefined
+      ? `${format(lower)}+ ${distanceUnit(unitSystem)}`
+      : `${format(lower)}–${format(upper)} ${distanceUnit(unitSystem)}`;
+  });
   const areaList = getDistanceAreaList(analytics, metric);
 
   if (areaList.length > 0) {
     return buildAreaDistributionData(
       areaList,
-      DISTANCE_BUCKETS.map((bucket) => bucket.label),
+      labels,
       DISTANCE_ZONE_COLORS,
       (value) => formatDistanceMetricValue(value, metric)
     );
@@ -529,7 +544,7 @@ function buildDistanceData(
     const value = values[index] ?? 0;
 
     return {
-      label: bucket.label,
+      label: labels[index] ?? bucket.label,
       detail: formatDistanceMetricValue(value, metric),
       percent: (value / total) * 100,
       color: DISTANCE_ZONE_COLORS[index % DISTANCE_ZONE_COLORS.length],
@@ -937,17 +952,11 @@ export function TrainingZoneDistributionCharts({
   activities,
   analytics
 }: TrainingZoneDistributionChartsProps) {
+  const { unitSystem } = useUnitSystem();
   const [heartRateMetric, setHeartRateMetric] =
     useState<ActivityMetric>("trainingLoad");
   const [distanceMetric, setDistanceMetric] =
     useState<DistanceMetric>("frequency");
-  const [rpeMetric, setRpeMetric] = useState<RpeMetric>("frequency");
-
-  const rpeCoverage = analytics?.rpeDistribution?.coverage;
-  const rpeCoverageNote =
-    rpeCoverage && rpeCoverage.total > 0
-      ? `${rpeCoverage.rated} rated / ${rpeCoverage.total} sessions`
-      : undefined;
 
   return (
     <section className="training-load-profile">
@@ -969,7 +978,8 @@ export function TrainingZoneDistributionCharts({
             lthrZones,
             activities,
             heartRateMetric,
-            analytics
+            analytics,
+            unitSystem
           )}
           getCaption={(datum) => heartRateZoneCaption(datum.zoneIndex)}
           metricControl={
@@ -992,8 +1002,8 @@ export function TrainingZoneDistributionCharts({
               ? "Runs"
               : DISTANCE_METRIC_LABELS[distanceMetric]
           }
-          data={buildDistanceData(activities, distanceMetric, analytics)}
-          getCaption={(datum) => distanceZoneCaption(datum.label)}
+          data={buildDistanceData(activities, distanceMetric, analytics, unitSystem)}
+          getCaption={(datum) => distanceZoneCaption(datum.zoneIndex)}
           metricControl={
             <MetricDropdown
               label="Distance distribution metric"
@@ -1003,28 +1013,42 @@ export function TrainingZoneDistributionCharts({
             />
           }
         />
-        <ZoneDistributionPanel
-          title="Perceived Effort"
-          subtitle="RPE"
-          emptyMessage="No RPE-rated sessions in the last 4 weeks."
-          variant="rpe"
-          heroKicker="Most sessions"
-          metricColumnLabel={
-            rpeMetric === "frequency" ? "Sessions" : RPE_METRIC_LABELS[rpeMetric]
-          }
-          coverageNote={rpeCoverageNote}
-          data={buildRpeData(analytics?.rpeDistribution, rpeMetric)}
-          getCaption={(datum) => rpeLevelCaption(datum.zoneIndex)}
-          metricControl={
-            <MetricDropdown
-              label="RPE distribution metric"
-              value={rpeMetric}
-              options={RPE_METRIC_OPTIONS}
-              onChange={setRpeMetric}
-            />
-          }
-        />
       </div>
     </section>
+  );
+}
+
+export function PerceivedEffortPanel({
+  distribution
+}: PerceivedEffortPanelProps) {
+  const [rpeMetric, setRpeMetric] = useState<RpeMetric>("frequency");
+  const coverage = distribution?.coverage;
+  const coverageNote =
+    coverage && coverage.total > 0
+      ? `${coverage.rated} rated / ${coverage.total} sessions`
+      : undefined;
+
+  return (
+    <ZoneDistributionPanel
+      title="Perceived Effort"
+      subtitle="RPE"
+      emptyMessage="No RPE-rated sessions in the last 4 weeks."
+      variant="rpe"
+      heroKicker="Most sessions"
+      metricColumnLabel={
+        rpeMetric === "frequency" ? "Sessions" : RPE_METRIC_LABELS[rpeMetric]
+      }
+      coverageNote={coverageNote}
+      data={buildRpeData(distribution, rpeMetric)}
+      getCaption={(datum) => rpeLevelCaption(datum.zoneIndex)}
+      metricControl={
+        <MetricDropdown
+          label="RPE distribution metric"
+          value={rpeMetric}
+          options={RPE_METRIC_OPTIONS}
+          onChange={setRpeMetric}
+        />
+      }
+    />
   );
 }

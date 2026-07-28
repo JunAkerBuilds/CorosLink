@@ -1,8 +1,9 @@
 // Cleanup-safe live verification for the coach -> COROS structured-workout flow.
 //
-// Uses the app's saved Training Hub session, creates one uniquely named workout,
-// schedules it on a future day, verifies the read-back, and deletes both copies
-// in finally. No other account data is modified.
+// Uses the app's saved Training Hub session, exercises all supported workout
+// sports (including a scheduled Run), verifies create/edit/read-back behavior,
+// and deletes every temporary artifact in finally. No other account data is
+// modified.
 //
 // Usage:
 //   npm run build:electron && node scripts/verify-coach-workout-api.mjs
@@ -18,6 +19,7 @@ const distUrl = (file) =>
   pathToFileURL(path.join(repoRoot, "dist-electron", file)).href;
 const {
   applyWorkoutCalculation,
+  buildWorkoutPayload,
   buildRunWorkoutPayload,
   resetProgramForCreate
 } = await import(`${distUrl("corosWorkoutBuilder.js")}?cacheBust=${Date.now()}`);
@@ -25,7 +27,8 @@ const {
   buildScheduledWorkoutEditRequest,
   corosProgramToWorkoutDraft,
   parseWorkoutEditorContext,
-  workoutDraftToCorosProgram
+  workoutDraftToCorosProgram,
+  workoutDraftsMatch
 } = await import(`${distUrl("corosWorkoutEditor.js")}?cacheBust=${Date.now()}`);
 
 const dbPath = path.join(
@@ -149,11 +152,24 @@ function summarizeExercise(exercise) {
   };
 }
 
+function flattenExerciseCatalog(value) {
+  if (Array.isArray(value)) return value.flatMap(flattenExerciseCatalog);
+  if (!value || typeof value !== "object") return [];
+  const looksLikeExercise = ["id", "originId", "exerciseId"].some((key) => value[key] != null) &&
+    ["name", "nameText", "displayName", "exerciseName"].some((key) => value[key]);
+  return [
+    ...(looksLikeExercise ? [value] : []),
+    ...["list", "rows", "data", "exercises", "records"].flatMap((key) => flattenExerciseCatalog(value[key]))
+  ];
+}
+
 const probeSuffix = Date.now().toString(36);
 const probeName = `CorosLink coach structured probe ${probeSuffix}`;
 const happenDay = futureDay(61);
 let programId;
 let scheduledIdInPlan;
+const allSportProgramIds = [];
+const allSportVerified = [];
 
 try {
   await querySchedule(happenDay);
@@ -346,7 +362,7 @@ try {
     (exercise) => exercise.exerciseType === 4
   );
   const libraryLthrReadback = (libraryReadback.exercises ?? []).find(
-    (exercise) => exercise.intensityPercent === 91
+    (exercise) => exercise.intensityPercent === 91_000
   );
   assert.ok(libraryWorkReadback, "Library edit did not preserve the 500 m target.");
   assert.equal(libraryWorkReadback.intensityValue, 260000);
@@ -354,7 +370,7 @@ try {
   assert.equal(libraryRestReadback?.targetType, 7);
   assert.equal(libraryRestReadback?.targetValue, 118);
   assert.equal(libraryLthrReadback?.isIntensityPercent, true);
-  assert.equal(libraryLthrReadback?.intensityPercentExtend, 95);
+  assert.equal(libraryLthrReadback?.intensityPercentExtend, 95_000);
   assert.equal(Number(libraryReadback.distance), Number(calculatedLibraryEdit.distance));
   assert.equal(Number(libraryReadback.duration), Number(calculatedLibraryEdit.duration));
   assert.equal(Number(libraryReadback.trainingLoad), Number(calculatedLibraryEdit.trainingLoad));
@@ -462,10 +478,87 @@ try {
     "Scheduled edit unexpectedly changed the library definition."
   );
 
+  // Exercise every remaining Training Hub sport through create -> detail -> edit -> detail.
+  // All created library programs are recorded immediately and removed in finally.
+  const exerciseCatalogResponse = requireSuccess(
+    await api("GET", "/training/exercise/query", {
+      params: { sportType: 4, userId: auth.userId }
+    }),
+    "exercise/query"
+  );
+  const strengthExercise = flattenExerciseCatalog(exerciseCatalogResponse).find((exercise) =>
+    (exercise.originId ?? exercise.exerciseId ?? exercise.id) &&
+    (exercise.displayName ?? exercise.exerciseName ?? exercise.nameText ?? exercise.name)
+  );
+  assert.ok(strengthExercise, "COROS returned no Strength exercise for the all-sport verifier.");
+  const strengthExerciseId = String(
+    strengthExercise.originId ?? strengthExercise.exerciseId ?? strengthExercise.id
+  );
+  const strengthExerciseName = String(
+    strengthExercise.displayName ?? strengthExercise.exerciseName ?? strengthExercise.nameText ?? strengthExercise.name
+  );
+  const strengthExerciseKind = Number(strengthExercise.exerciseKind) || undefined;
+  const sportFixtures = [
+    ["trailRun", { sportOptions: undefined, step: { kind: "training", target_type: "elevationGain", target_elevation_gain_meters: 300, intensity: { type: "effortPacePercent", preset: "aerobicEndurance" } } }],
+    ["bike", { sportOptions: undefined, step: { kind: "training", target_type: "time", target_duration_seconds: 600, intensity: { type: "ftpPercent", preset: "threshold" } } }],
+    ["swim", { sportOptions: { poolLength: { value: 25, unit: "m" } }, step: { kind: "training", target_type: "distance", target_distance_meters: 100, intensity: { type: "swimStroke", stroke: "freestyle" } } }],
+    ["strength", { sportOptions: undefined, step: { kind: "training", target_type: "reps", target_reps: 10, exercise_id: strengthExerciseId, exercise_name: strengthExerciseName, ...(strengthExerciseKind ? { exercise_kind: strengthExerciseKind } : {}), intensity: { type: "weight", mode: "bodyweight" } } }],
+    ["xcSki", { sportOptions: undefined, step: { kind: "training", target_type: "distance", target_distance_meters: 1000, intensity: { type: "speed", low: 8, high: 12, unit: "km/h" } } }],
+    ["indoorClimb", { sportOptions: { gradingSystem: "yds" }, step: { kind: "training", target_type: "routes", target_routes: 3, intensity: { type: "climbGrade", system: "yds", relativeToOnsight: 0 } } }],
+    ["bouldering", { sportOptions: { gradingSystem: "vScale" }, step: { kind: "training", target_type: "routes", target_routes: 4, intensity: { type: "climbGrade", system: "vScale", absoluteGrade: "V4" } } }],
+    ["hyrox", { sportOptions: undefined, step: { kind: "training", target_type: "distance", target_distance_meters: 1000, intensity: { type: "rpe", value: 7 } } }]
+  ];
+  allSportVerified.push("run");
+  for (const [sport, fixture] of sportFixtures) {
+    const name = `${probeName} ${sport}`;
+    const raw = resetProgramForCreate(
+      buildWorkoutPayload(name, [fixture.step], sport, fixture.sportOptions, editorContext)
+    );
+    const sportCalculation = requireSuccess(
+      await api("POST", "/training/program/calculate", { body: raw }),
+      `program/calculate ${sport}`
+    );
+    const calculated = applyWorkoutCalculation(raw, sportCalculation);
+    const created = requireSuccess(
+      await api("POST", "/training/program/add", { body: calculated }),
+      `program/add ${sport}`
+    );
+    const id = String(created);
+    allSportProgramIds.push(id);
+    const readback = await retryRead(
+      () => api("GET", "/training/program/detail", { params: { id, supportRestExercise: 1 } })
+        .then((response) => requireSuccess(response, `program/detail ${sport}`)),
+      (program) => program.name === name,
+      `${sport} create`
+    );
+    const editDraft = corosProgramToWorkoutDraft(readback);
+    editDraft.name = `${name} edited`;
+    const edited = workoutDraftToCorosProgram(readback, editDraft, editorContext);
+    const editCalculation = requireSuccess(
+      await api("POST", "/training/program/calculate", { body: edited }),
+      `program/calculate ${sport} edit`
+    );
+    requireSuccess(
+      await api("POST", "/training/program/update", {
+        body: applyWorkoutCalculation(edited, editCalculation)
+      }),
+      `program/update ${sport}`
+    );
+    const editedReadback = await retryRead(
+      () => api("GET", "/training/program/detail", { params: { id, supportRestExercise: 1 } })
+        .then((response) => requireSuccess(response, `program/detail ${sport} edit`)),
+      (program) => program.name === editDraft.name,
+      `${sport} edit`
+    );
+    assert.equal(workoutDraftsMatch(editDraft, editedReadback), true, `${sport} typed round-trip mismatch`);
+    allSportVerified.push(sport);
+  }
+
   console.log(
     JSON.stringify(
       {
         ok: true,
+        sportsVerified: allSportVerified,
         endpoints: {
           calculate: {
             result: "0000",
@@ -532,7 +625,7 @@ try {
               status: 3
             }
           ],
-          pbVersion: 2
+          pbVersion: Number(program.pbVersion ?? 2)
         }
       });
       console.log(`cleanup schedule: ${response.ok ? "ok" : "failed"}`);
@@ -541,14 +634,14 @@ try {
     console.error(`cleanup schedule failed: ${error instanceof Error ? error.message : error}`);
   }
 
-  if (programId) {
+  for (const id of [programId, ...allSportProgramIds].filter(Boolean)) {
     try {
       const response = await api("POST", "/training/program/delete", {
-        body: [programId]
+        body: [id]
       });
-      console.log(`cleanup library: ${response.ok ? "ok" : "failed"}`);
+      console.log(`cleanup library ${id}: ${response.ok ? "ok" : "failed"}`);
     } catch (error) {
-      console.error(`cleanup library failed: ${error instanceof Error ? error.message : error}`);
+      console.error(`cleanup library ${id} failed: ${error instanceof Error ? error.message : error}`);
     }
   }
 }
