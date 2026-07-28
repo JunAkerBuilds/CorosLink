@@ -285,7 +285,7 @@ Ask training questions with answers grounded in your COROS data.
 
 - **Providers** — ChatGPT (cloud), Claude Code, or local LLMs (Ollama / LM Studio)
 - **Model selection & extended thinking** where the provider supports them
-- **Workout tools** — draft plans, preview in chat, upload/list/delete COROS workouts with confirmation cards
+- **Multi-sport workout tools** — draft adaptive plans across Run, Trail Run, Bike, Pool Swim, Strength, Indoor Climb, Bouldering, XC Ski, and HYROX; preview them in chat and upload/list/delete COROS workouts with confirmation cards
 - **Chat history** — per-provider conversations persist across restarts
 
 ---

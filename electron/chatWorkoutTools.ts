@@ -11,6 +11,7 @@ import {
   formatScheduledExercisesForChat,
   getTrainingHubStatus,
   listScheduledWorkoutEntries,
+  resolveTrainingPlanExercises,
   uploadTrainingPlan
 } from "./trainingHubService";
 import {
@@ -148,7 +149,8 @@ export function getChatWorkoutTools(): CorosMcpTool[] {
       description:
         "Validate and store a sport-aware training plan draft for athlete review. " +
         "Put prescribed HR, pace, power, cadence, stroke, weight, RPE, or grade in each step's typed intensity field. " +
-        "Always call this before upload. Returns a draftId and human-readable preview.",
+        "Strength and HYROX exercise names are checked against the COROS catalog; if candidates are returned, " +
+        "revise the affected steps and call this tool again. Always call this before upload. Returns a draftId and human-readable preview.",
       inputSchema: buildDraftTrainingPlanInputSchema()
     },
     {
@@ -284,6 +286,26 @@ function toPlanDraft(args: Record<string, unknown>): CorosTrainingPlanDraft {
   return { name, workouts };
 }
 
+export function buildTrainingPlanUploadInput(
+  plan: CorosTrainingPlanDraft
+): CorosTrainingPlanDraftInput {
+  return {
+    name: plan.name,
+    workouts: plan.workouts.map((entry) => ({
+      key: entry.key,
+      name: entry.name,
+      description: entry.description,
+      sport: entry.sport ?? "run",
+      sport_options: entry.sport_options,
+      steps: entry.steps,
+      distance_km: entry.distance_km,
+      schedule_date: entry.schedule_date,
+      sort_no: entry.sort_no,
+      save_to_library: entry.save_to_library
+    }))
+  };
+}
+
 async function detectScheduleConflicts(
   draft: CorosTrainingPlanDraft
 ): Promise<string[]> {
@@ -337,11 +359,32 @@ async function handleDraftTrainingPlan(
     return JSON.stringify({ ok: false, errors: validation.errors });
   }
 
+  const exerciseResolution = await resolveTrainingPlanExercises(draft);
+  if (exerciseResolution.issues.length > 0) {
+    return JSON.stringify({
+      ok: false,
+      error_code: "exercise_resolution_required",
+      issues: exerciseResolution.issues.map((issue) => ({
+        workout_key: issue.workoutKey,
+        workout_name: issue.workoutName,
+        sport: issue.sport,
+        exercise_name: issue.exerciseName,
+        reason: issue.reason,
+        candidates: issue.candidates,
+        message: issue.message
+      })),
+      action: exerciseResolution.issues.every((issue) => issue.candidates.length > 0)
+        ? "Update each affected step to the exact best-matching candidate and call draft_training_plan again now. Ask the athlete only when the candidates materially change the intended movement."
+        : "At least one exercise is unavailable. Ask the athlete for a supported alternative, then call draft_training_plan again."
+    });
+  }
+  const resolvedDraft = exerciseResolution.draft;
+
   const conflicts = allowUpcomingWorkouts
-    ? await detectScheduleConflicts(draft)
+    ? await detectScheduleConflicts(resolvedDraft)
     : [];
   const draftId = crypto.randomUUID();
-  const preview = buildPlanPreview(draftId, draft, {
+  const preview = buildPlanPreview(draftId, resolvedDraft, {
     scheduleConflicts: conflicts,
     unitSystem
   });
@@ -349,7 +392,7 @@ async function handleDraftTrainingPlan(
 
   draftStore.set(draftId, {
     draftId,
-    plan: draft,
+    plan: resolvedDraft,
     preview,
     createdAt: Date.now()
   });
@@ -410,18 +453,7 @@ async function handleUploadTrainingPlan(
     });
   }
 
-  const input: CorosTrainingPlanDraftInput = {
-    name: stored.plan.name,
-    workouts: stored.plan.workouts.map((entry) => ({
-      key: entry.key,
-      name: entry.name,
-      steps: entry.steps,
-      distance_km: entry.distance_km,
-      schedule_date: entry.schedule_date,
-      sort_no: entry.sort_no,
-      save_to_library: entry.save_to_library
-    }))
-  };
+  const input = buildTrainingPlanUploadInput(stored.plan);
 
   const result = await uploadTrainingPlan(input, unitSystem);
   stored.uploadedAt = Date.now();
@@ -737,18 +769,7 @@ export async function uploadPlanDraftById(
     throw new Error("This training plan was already uploaded.");
   }
 
-  const input: CorosTrainingPlanDraftInput = {
-    name: stored.plan.name,
-    workouts: stored.plan.workouts.map((entry) => ({
-      key: entry.key,
-      name: entry.name,
-      steps: entry.steps,
-      distance_km: entry.distance_km,
-      schedule_date: entry.schedule_date,
-      sort_no: entry.sort_no,
-      save_to_library: entry.save_to_library
-    }))
-  };
+  const input = buildTrainingPlanUploadInput(stored.plan);
 
   const result = await uploadTrainingPlan(input, unitSystem);
   stored.uploadedAt = Date.now();

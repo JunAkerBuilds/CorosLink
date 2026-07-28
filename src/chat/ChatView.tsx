@@ -50,6 +50,7 @@ import type {
   WorkoutDeletePreview,
   DeleteWorkoutResult
 } from "../../electron/types";
+import { formatWorkoutSport } from "../../electron/workoutCapabilities";
 import { ActivityVisualCard } from "./ActivityVisualCard";
 import { FitnessTrendCard } from "./FitnessTrendCard";
 import { HrZoneCard } from "./HrZoneCard";
@@ -299,7 +300,7 @@ function PlanPreviewCard({
               <tr key={entry.key}>
                 <td>{entry.scheduleDate ?? "Library"}</td>
                 <td>{entry.name}</td>
-                <td>{entry.sport ?? "run"}</td>
+                <td>{formatWorkoutSport(entry.sport ?? "run")}</td>
                 <td>
                   {(entry.source
                     ? formatPlanSourceVolume(entry.source, unitSystem)
@@ -1793,11 +1794,13 @@ export function ChatView({
               <h3>How can I help with your training?</h3>
               <div className="chat-suggestions">
                 {[
-                  "How was my last run?",
-                  "Break down my latest run by lap",
-                  "Schedule an easy 8K for Saturday",
+                  "How was my latest activity?",
+                  "Break down my latest workout by lap",
+                  "Build a balanced week from my recent training",
+                  "Schedule bike intervals for Saturday",
+                  "Add strength around my endurance sessions",
                   "Am I recovered enough for a hard session?",
-                  "Download my latest FIT file"
+                  "Download my latest activity FIT file"
                 ].map((suggestion) => (
                   <button
                     key={suggestion}

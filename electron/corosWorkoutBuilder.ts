@@ -1339,6 +1339,14 @@ export function buildPlanPreview(
   const libraryOnly = draft.workouts.filter(
     (entry) => !entry.schedule_date && entry.save_to_library !== false
   );
+  const sportCounts = new Map<WorkoutSport, number>();
+  for (const entry of draft.workouts) {
+    const sport = entry.sport ?? "run";
+    sportCounts.set(sport, (sportCounts.get(sport) ?? 0) + 1);
+  }
+  const sportSummary = [...sportCounts.entries()]
+    .map(([sport, count]) => `${count} ${formatWorkoutSport(sport)}`)
+    .join(" / ");
 
   const summaryParts = [
     `${draft.workouts.length} workout${draft.workouts.length === 1 ? "" : "s"}`,
@@ -1347,7 +1355,8 @@ export function buildPlanPreview(
       : "none scheduled",
     libraryOnly.length > 0
       ? `${libraryOnly.length} library-only`
-      : undefined
+      : undefined,
+    sportSummary
   ].filter(Boolean);
 
   const warnings: string[] = [];

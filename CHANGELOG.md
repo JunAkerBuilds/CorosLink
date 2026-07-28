@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Multi-sport Coach plans** — Coach now uses the athlete's recent activity mix and complete schedule to create adaptive plans across all nine supported COROS workout sports instead of defaulting to running
+
+### Fixed
+
+- Coach plan uploads now preserve each workout's sport and sport options instead of treating non-running workouts as Run
+- Strength and HYROX plan drafts now resolve harmless exercise-name variants automatically and feed genuine COROS catalog ambiguities back to Coach for same-response correction before preview or upload
+
 ## [0.1.24] - 2026-07-28
 
 ### Added
