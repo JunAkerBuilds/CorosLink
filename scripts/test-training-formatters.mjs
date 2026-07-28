@@ -10,9 +10,15 @@ const distUrl = (file) =>
   pathToFileURL(path.join(repoRoot, "dist-electron", file)).href;
 
 const {
+  formatDistanceMeters,
+  formatElevationMeters,
   formatHappenDayLabel,
+  formatPaceSecondsPerKm,
+  formatPersonalRecordHero,
+  formatPersonalRecordMeta,
   formatSleepClockRange,
   formatSleepNightLabel,
+  formatUpcomingWorkoutVolumeDisplay,
   isPersonalRecordVisible
 } = await import(
   `${formattersUrl.href}?cacheBust=${Date.now()}`
@@ -20,6 +26,42 @@ const {
 const { buildTrendPoints, mergeSleepIntoTrendPoints } = await import(
   `${distUrl("trainingTrendUtils.js")}?cacheBust=${Date.now()}`
 );
+const weeklyActivityUrl = pathToFileURL(
+  path.join(repoRoot, "src", "training", "weeklyActivity.ts")
+);
+const { buildWeeklyActivitySeries } = await import(
+  `${weeklyActivityUrl.href}?cacheBust=${Date.now()}`
+);
+
+assert.equal(formatDistanceMeters(1_000, "metric"), "1.00 km");
+assert.equal(formatDistanceMeters(1_000, "imperial"), "0.62 mi");
+assert.equal(formatDistanceMeters(100, "imperial", true), "109 yd");
+assert.equal(formatElevationMeters(100, "imperial"), "328 ft");
+assert.equal(formatPaceSecondsPerKm(300, "imperial"), "8:03 /mi");
+assert.equal(formatUpcomingWorkoutVolumeDisplay("5 km", "imperial"), "3.11 mi");
+assert.equal(
+  formatUpcomingWorkoutVolumeDisplay("custom aerobic volume", "imperial"),
+  "custom aerobic volume"
+);
+assert.equal(
+  formatPersonalRecordHero({ type: 101, distance: 8_046.72 }, "imperial"),
+  "5.00mi"
+);
+assert.equal(
+  formatPersonalRecordMeta({ type: 5, duration: 1_500 }, "imperial"),
+  "8:03 /mi"
+);
+
+const imperialWeek = buildWeeklyActivitySeries(
+  [{ happenDay: "20260727", distance: 8_046.72 }],
+  "distance",
+  new Date(2026, 6, 27, 12),
+  "imperial"
+);
+assert.equal(imperialWeek.days[0]?.value, 5);
+assert.equal(imperialWeek.days[0]?.displayValue, "5.00 mi");
+assert.equal(imperialWeek.weeklyTotal, "5.00 mi");
+assert.equal(imperialWeek.yAxisUnit, "mi");
 
 assert.equal(
   formatSleepNightLabel({

@@ -8,8 +8,9 @@
  * press adds a full set to the chest and a quarter-set to the triceps.
  */
 
-import type { StrengthSession } from "../../electron/types";
+import type { StrengthSession, UnitSystem } from "../../electron/types";
 import { resolveExerciseName } from "../training/exerciseNames";
+import { kilogramsToDisplayWeight, weightUnit } from "../units/units";
 import { MUSCLES, resolveExerciseTargets, type MuscleId } from "./muscles";
 
 /** What the body map shades muscles by. */
@@ -20,18 +21,34 @@ export interface MuscleExerciseShare {
   sets: number;
 }
 
+/** One week of credited sets for a single muscle, for the detail sparkline. */
+export interface MuscleWeekPoint {
+  weekStart: number;
+  label: string;
+  sets: number;
+}
+
 export interface MuscleStat {
   muscle: MuscleId;
   /** Credited sets — fractional, because assistance work counts partially. */
   sets: number;
   reps: number;
   volumeKg: number;
+  /**
+   * Credited sets from exercises that log no external load. Volume is
+   * reps × weight, so these contribute nothing to `volumeKg` — a muscle built
+   * on dips and pull-ups reads far lighter than it trained, and the panel has
+   * to be able to say so.
+   */
+  bodyweightSets: number;
   workSec: number;
   /** Sessions that trained this muscle at all. */
   sessions: number;
   /** Epoch seconds of the most recent session that trained it. */
   lastTrained?: number;
   topExercises: MuscleExerciseShare[];
+  /** Credited sets per week, zero-filled and aligned with `weeks`. */
+  weekly: MuscleWeekPoint[];
 }
 
 export interface ExercisePoint {
@@ -169,9 +186,11 @@ function emptyMuscleStat(muscle: MuscleId): MuscleStat {
     sets: 0,
     reps: 0,
     volumeKg: 0,
+    bodyweightSets: 0,
     workSec: 0,
     sessions: 0,
-    topExercises: []
+    topExercises: [],
+    weekly: []
   };
 }
 
@@ -207,6 +226,8 @@ export function buildStrengthAnalytics(
   // Per-muscle exercise credit, resolved into topExercises at the end.
   const muscleExercises = new Map<MuscleId, Map<string, number>>();
   const muscleSessionIds = new Map<MuscleId, Set<string>>();
+  // Credited sets per muscle per week (keyed by the week's start in ms).
+  const muscleWeeks = new Map<MuscleId, Map<number, number>>();
   const exercises = new Map<string, ExerciseAccumulator>();
   const weeks = new Map<number, WeekBucket>();
   const balance: PatternBalance = { push: 0, pull: 0, legs: 0, core: 0 };
@@ -341,6 +362,9 @@ export function buildStrengthAnalytics(
         stat.sets += setCount * activation.share;
         stat.reps += exerciseReps * activation.share;
         stat.volumeKg += exerciseVolumeKg * activation.share;
+        if (exerciseVolumeKg <= 0) {
+          stat.bodyweightSets += setCount * activation.share;
+        }
         stat.workSec += exerciseWorkSec * activation.share;
         if (at !== undefined && at > (stat.lastTrained ?? 0)) {
           stat.lastTrained = at;
@@ -350,6 +374,12 @@ export function buildStrengthAnalytics(
           muscleSessionIds.get(activation.muscle) ?? new Set<string>();
         sessionIds.add(session.activityId);
         muscleSessionIds.set(activation.muscle, sessionIds);
+
+        if (weekKey !== undefined) {
+          const byWeek = muscleWeeks.get(activation.muscle) ?? new Map<number, number>();
+          byWeek.set(weekKey, (byWeek.get(weekKey) ?? 0) + setCount * activation.share);
+          muscleWeeks.set(activation.muscle, byWeek);
+        }
 
         const byExercise =
           muscleExercises.get(activation.muscle) ?? new Map<string, number>();
@@ -364,6 +394,8 @@ export function buildStrengthAnalytics(
     }
   }
 
+  const weekList = [...weeks.values()].sort((a, b) => a.weekStart - b.weekStart);
+
   for (const muscle of MUSCLES) {
     const stat = muscleById[muscle.id];
     stat.sessions = muscleSessionIds.get(muscle.id)?.size ?? 0;
@@ -371,6 +403,12 @@ export function buildStrengthAnalytics(
       .map(([name, sets]) => ({ name, sets }))
       .sort((a, b) => b.sets - a.sets)
       .slice(0, 5);
+    const byWeek = muscleWeeks.get(muscle.id);
+    stat.weekly = weekList.map((week) => ({
+      weekStart: week.weekStart,
+      label: week.label,
+      sets: byWeek?.get(week.weekStart * 1000) ?? 0
+    }));
   }
 
   const muscleList = MUSCLES.map((muscle) => muscleById[muscle.id]);
@@ -407,7 +445,6 @@ export function buildStrengthAnalytics(
     })
     .sort((a, b) => b.sets - a.sets);
 
-  const weekList = [...weeks.values()].sort((a, b) => a.weekStart - b.weekStart);
   const weeksInWindow = Math.max(1, windowDays / 7);
 
   return {
@@ -461,15 +498,22 @@ export function formatDaysSince(timestamp?: number): string {
   return `${days} days ago`;
 }
 
-export function formatVolumeKg(value: number): string {
-  if (value >= 1000) {
+export function formatVolumeKg(
+  value: number,
+  unitSystem: UnitSystem
+): string {
+  if (unitSystem === "metric" && value >= 1000) {
     return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}t`;
   }
-  return `${Math.round(value)} kg`;
+  return `${Math.round(kilogramsToDisplayWeight(value, unitSystem)).toLocaleString()} ${weightUnit(unitSystem)}`;
 }
 
-export function formatWeightKg(value: number): string {
-  return Number.isInteger(value) ? `${value} kg` : `${value.toFixed(1)} kg`;
+export function formatWeightKg(
+  value: number,
+  unitSystem: UnitSystem
+): string {
+  const display = kilogramsToDisplayWeight(value, unitSystem);
+  return `${Number.isInteger(display) ? display : display.toFixed(1)} ${weightUnit(unitSystem)}`;
 }
 
 export function formatSets(value: number): string {

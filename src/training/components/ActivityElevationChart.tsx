@@ -16,6 +16,14 @@ import {
   trainingChartTooltipStyle
 } from "../chartConfig";
 import { ChartAreaGradient } from "./TrainingTrendChart";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
+import {
+  distanceUnit,
+  elevationUnit,
+  metersToDisplayDistance,
+  metersToElevation
+} from "../../units/units";
+import type { UnitSystem } from "../../../electron/types";
 
 interface ActivityElevationChartProps {
   track?: TrainingHubActivityTrack;
@@ -26,7 +34,12 @@ interface ElevationDatum {
   elevation: number;
 }
 
-function ElevationTooltip({ active, payload, label }: TooltipContentProps) {
+function ElevationTooltip({
+  active,
+  payload,
+  label,
+  unitSystem
+}: TooltipContentProps & { unitSystem: UnitSystem }) {
   if (!active || !payload?.length) {
     return null;
   }
@@ -36,12 +49,13 @@ function ElevationTooltip({ active, payload, label }: TooltipContentProps) {
   return (
     <div className="training-chart-tooltip">
       <span>{label}</span>
-      <strong>{typeof elevation === "number" ? `${Math.round(elevation)} m` : "-"}</strong>
+      <strong>{typeof elevation === "number" ? `${Math.round(elevation)} ${elevationUnit(unitSystem)}` : "-"}</strong>
     </div>
   );
 }
 
 export function ActivityElevationChart({ track }: ActivityElevationChartProps) {
+  const { unitSystem } = useUnitSystem();
   const data = useMemo(() => {
     const points = track?.points ?? [];
     const withElevation = points.filter(
@@ -57,19 +71,19 @@ export function ActivityElevationChart({ track }: ActivityElevationChartProps) {
     );
 
     return withElevation.map((point, index): ElevationDatum => {
-      const distanceKm =
+      const distance =
         useDistance && point.distance !== undefined
-          ? point.distance / 1000
+          ? metersToDisplayDistance(point.distance, unitSystem)
           : index;
 
       return {
         label: useDistance
-          ? `${distanceKm.toFixed(1)} km`
+          ? `${distance.toFixed(1)} ${distanceUnit(unitSystem)}`
           : `Point ${index + 1}`,
-        elevation: point.elevation!
+        elevation: metersToElevation(point.elevation!, unitSystem)
       };
     });
-  }, [track]);
+  }, [track, unitSystem]);
 
   if (data.length < 2) {
     return (
@@ -101,7 +115,7 @@ export function ActivityElevationChart({ track }: ActivityElevationChartProps) {
             tickFormatter={(value) => `${value}`}
           />
           <Tooltip
-            content={(props) => <ElevationTooltip {...props} />}
+            content={(props) => <ElevationTooltip {...props} unitSystem={unitSystem} />}
             cursor={{ stroke: trainingChartColors.cursor }}
             contentStyle={trainingChartTooltipStyle}
           />

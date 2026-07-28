@@ -14,6 +14,7 @@ import {
   WEEKLY_ACTIVITY_METRICS,
   type WeeklyActivityMetric
 } from "../weeklyActivity";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
 
 interface FitnessTrendPanelProps {
   snapshot: TrainingHubSnapshot | null;
@@ -33,6 +34,7 @@ interface MetricMultiSelectProps {
 }
 
 function MetricMultiSelect({ selected, onChange }: MetricMultiSelectProps) {
+  const { unitSystem } = useUnitSystem();
   const rootRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -82,7 +84,7 @@ function MetricMultiSelect({ selected, onChange }: MetricMultiSelectProps) {
     selected.length === WEEKLY_ACTIVITY_METRICS.length
       ? "All metrics"
       : selected.length === 1
-        ? getWeeklyActivityMetricLabel(selected[0])
+        ? getWeeklyActivityMetricLabel(selected[0], unitSystem)
         : `${METRIC_SHORT_LABELS[selected[0]]} +${selected.length - 1}`;
 
   return (
@@ -147,7 +149,7 @@ function MetricMultiSelect({ selected, onChange }: MetricMultiSelectProps) {
                     <Check size={13} strokeWidth={3} aria-hidden="true" />
                   ) : null}
                 </span>
-                <span>{getWeeklyActivityMetricLabel(metric)}</span>
+                <span>{getWeeklyActivityMetricLabel(metric, unitSystem)}</span>
               </button>
             );
           })}
@@ -161,6 +163,7 @@ export function FitnessTrendPanel({
   snapshot,
   activities = []
 }: FitnessTrendPanelProps) {
+  const { unitSystem } = useUnitSystem();
   const [barsVisible, setBarsVisible] = useState(false);
   const [selectedMetrics, setSelectedMetrics] = useState<WeeklyActivityMetric[]>(
     ["distance"]
@@ -180,9 +183,9 @@ export function FitnessTrendPanel({
     () =>
       selectedMetrics.map((metric) => ({
         metric,
-        series: buildWeeklyActivitySeries(dayList, metric)
+        series: buildWeeklyActivitySeries(dayList, metric, new Date(), unitSystem)
       })),
-    [dayList, selectedMetrics]
+    [dayList, selectedMetrics, unitSystem]
   );
 
   const isSingle = seriesByMetric.length === 1;
@@ -222,7 +225,7 @@ export function FitnessTrendPanel({
             <span
               className={`training-fitness-swatch training-fitness-swatch--${metric}`}
             />
-            {getWeeklyActivityMetricLabel(metric)}
+            {getWeeklyActivityMetricLabel(metric, unitSystem)}
             {series.hasData ? (
               <strong className="training-fitness-legend-total">
                 {series.weeklyTotal}

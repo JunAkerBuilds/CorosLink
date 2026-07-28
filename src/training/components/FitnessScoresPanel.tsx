@@ -8,6 +8,7 @@ import {
   formatOptionalNumber,
   formatPaceSecondsPerKm
 } from "../formatters";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
 
 interface FitnessScoresPanelProps {
   dashboard: TrainingHubDashboard | null;
@@ -61,6 +62,7 @@ export function FitnessScoresPanel({
   dashboard,
   racePredictor
 }: FitnessScoresPanelProps) {
+  const { unitSystem } = useUnitSystem();
   const predictor = racePredictor ?? dashboard?.racePredictor ?? null;
 
   if (!dashboard && !predictor) {
@@ -78,7 +80,10 @@ export function FitnessScoresPanel({
     );
   }
 
-  const paceLabels = buildRunningFitnessPaceLabels(dashboard?.ltspZones ?? []);
+  const paceLabels = buildRunningFitnessPaceLabels(
+    dashboard?.ltspZones ?? [],
+    unitSystem
+  );
   const scores: ScoreItem[] = [
     {
       label: "Endurance",
@@ -104,7 +109,11 @@ export function FitnessScoresPanel({
 
   const metrics: MetricItem[] = [
     { label: "LTHR", value: predictor?.lthr, format: formatBpm },
-    { label: "LT Pace", value: predictor?.ltsp, format: formatPaceSecondsPerKm },
+    {
+      label: "LT Pace",
+      value: predictor?.ltsp,
+      format: (value) => formatPaceSecondsPerKm(value, unitSystem)
+    },
     { label: "Max HR", value: dashboard?.fitnessMaxHr, format: formatBpm },
     { label: "Run Level HR", value: dashboard?.runningLevelHr, format: formatBpm }
   ];

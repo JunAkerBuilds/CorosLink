@@ -13,7 +13,8 @@ import {
   formatDurationSeconds,
   formatTrainingTableWhen
 } from "../formatters";
-import { resolveSportName } from "../sportTypes";
+import { isSwimSportType, resolveSportName } from "../sportTypes";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
 
 interface TrainingActivityTableProps {
   activities: TrainingHubActivity[];
@@ -199,6 +200,7 @@ export function TrainingActivityTable({
   onLoadDetail,
   onExportFile
 }: TrainingActivityTableProps) {
+  const { unitSystem } = useUnitSystem();
   const sportTypeMap = new Map(
     sportTypes.map((item) => [item.sportType, item.sportName])
   );
@@ -262,7 +264,11 @@ export function TrainingActivityTable({
                   {formatDurationSeconds(activity.duration)}
                 </td>
                 <td className="training-activity-metric">
-                  {formatDistanceMeters(activity.distance)}
+                  {formatDistanceMeters(
+                    activity.distance,
+                    unitSystem,
+                    isSwimSportType(activity.sportType)
+                  )}
                 </td>
                 <td className="training-activity-export">
                   <div className="row-actions">

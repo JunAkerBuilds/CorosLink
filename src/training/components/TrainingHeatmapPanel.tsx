@@ -36,6 +36,8 @@ import type {
   HeatmapMetric,
   TrainingHubSnapshot
 } from "../types";
+import type { UnitSystem } from "../../../electron/types";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
 
 interface TrainingHeatmapPanelProps {
   snapshot: TrainingHubSnapshot | null;
@@ -104,8 +106,12 @@ function usePrefersReducedMotion() {
   return reducedMotion;
 }
 
-function formatCellAriaLabel(cell: HeatmapCell, metric: HeatmapMetric): string {
-  const distance = formatDistanceMeters(cell.distance);
+function formatCellAriaLabel(
+  cell: HeatmapCell,
+  metric: HeatmapMetric,
+  unitSystem: UnitSystem
+): string {
+  const distance = formatDistanceMeters(cell.distance, unitSystem);
   const duration = formatDurationSeconds(cell.duration);
   const metricLabel =
     metric === "rpeLoad"
@@ -120,6 +126,7 @@ export function TrainingHeatmapPanel({
   activities = [],
   rpeBackfill = null
 }: TrainingHeatmapPanelProps) {
+  const { unitSystem } = useUnitSystem();
   const reducedMotion = usePrefersReducedMotion();
   const [metric, setMetric] = useState<HeatmapMetric>("trainingLoad");
   const gridRef = useRef<HTMLDivElement>(null);
@@ -562,7 +569,7 @@ export function TrainingHeatmapPanel({
                   const loadLabel = isRpe
                     ? `${formatOptionalNumber(cell.rpeLoad)} AU`
                     : formatOptionalNumber(cell.trainingLoad);
-                  const distanceLabel = formatDistanceMeters(cell.distance);
+                  const distanceLabel = formatDistanceMeters(cell.distance, unitSystem);
                   const durationLabel = formatDurationSeconds(cell.duration);
                   const dominantSport =
                     cell.level > 0 ? sportByDay.get(cell.happenDay) : undefined;
@@ -592,7 +599,7 @@ export function TrainingHeatmapPanel({
                       }
                       role="gridcell"
                       tabIndex={0}
-                      aria-label={formatCellAriaLabel(cell, metric)}
+                      aria-label={formatCellAriaLabel(cell, metric, unitSystem)}
                       style={cellStyle as CSSProperties}
                     >
                       <span className="training-heatmap-tooltip" role="tooltip">

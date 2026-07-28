@@ -27,9 +27,11 @@ import type {
   PlanDraftPreview,
   PlanWorkoutEntryInput,
   UploadPlanResult,
-  WorkoutDeletePreview
+  WorkoutDeletePreview,
+  UnitSystem
 } from "./types";
 import { buildDraftTrainingPlanInputSchema } from "./workoutCapabilities";
+import { formatDistanceValue } from "./unitSystem.js";
 
 interface StoredPlanDraft {
   draftId: string;
@@ -240,20 +242,22 @@ export async function handleChatWorkoutTool(
     onPlanDraft?: (preview: PlanDraftPreview) => void;
     onWorkoutDelete?: (preview: WorkoutDeletePreview) => void;
     allowUpcomingWorkouts?: boolean;
+    unitSystem?: UnitSystem;
   }
 ): Promise<string> {
   if (name === "draft_training_plan") {
     return handleDraftTrainingPlan(
       args,
       options?.onPlanDraft,
-      options?.allowUpcomingWorkouts !== false
+      options?.allowUpcomingWorkouts !== false,
+      options?.unitSystem ?? "metric"
     );
   }
   if (name === "upload_training_plan") {
-    return handleUploadTrainingPlan(args);
+    return handleUploadTrainingPlan(args, options?.unitSystem ?? "metric");
   }
   if (name === "list_scheduled_workouts") {
-    return handleListScheduledWorkouts(args);
+    return handleListScheduledWorkouts(args, options?.unitSystem ?? "metric");
   }
   return handleDeleteWorkout(args, options?.onWorkoutDelete);
 }
@@ -322,7 +326,8 @@ async function detectScheduleConflicts(
 async function handleDraftTrainingPlan(
   args: Record<string, unknown>,
   onPlanDraft?: (preview: PlanDraftPreview) => void,
-  allowUpcomingWorkouts = true
+  allowUpcomingWorkouts = true,
+  unitSystem: UnitSystem = "metric"
 ): Promise<string> {
   const draft = toPlanDraft(args);
   const validation = validatePlanDraft(draft, {
@@ -337,7 +342,8 @@ async function handleDraftTrainingPlan(
     : [];
   const draftId = crypto.randomUUID();
   const preview = buildPlanPreview(draftId, draft, {
-    scheduleConflicts: conflicts
+    scheduleConflicts: conflicts,
+    unitSystem
   });
   preview.conflicts = conflicts;
 
@@ -368,7 +374,8 @@ async function handleDraftTrainingPlan(
 }
 
 async function handleUploadTrainingPlan(
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  unitSystem: UnitSystem
 ): Promise<string> {
   const draftId = String(args.draft_id ?? args.draftId ?? "").trim();
   const confirmed = args.confirmed === true;
@@ -416,7 +423,7 @@ async function handleUploadTrainingPlan(
     }))
   };
 
-  const result = await uploadTrainingPlan(input);
+  const result = await uploadTrainingPlan(input, unitSystem);
   stored.uploadedAt = Date.now();
   stored.preview.uploadedAt = stored.uploadedAt;
   stored.preview.uploadResult = {
@@ -434,7 +441,8 @@ async function handleUploadTrainingPlan(
 }
 
 async function handleListScheduledWorkouts(
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  unitSystem: UnitSystem
 ): Promise<string> {
   const today = formatScheduleDay(new Date());
   const startDate = String(args.start_date ?? args.startDate ?? today)
@@ -467,10 +475,14 @@ async function handleListScheduledWorkouts(
     workouts: entries.map((entry) => ({
       schedule_date: entry.happenDay,
       name: entry.name,
-      volume: entry.volume,
+      volume: formatScheduledVolume(entry.volume, unitSystem),
       training_load: entry.trainingLoad,
       exercises: entry.exercises?.length
-        ? formatScheduledExercisesForChat(entry.exercises)
+        ? formatScheduledExercisesForChat(
+            entry.exercises,
+            unitSystem,
+            Number(entry.sportType) === 3
+          )
         : undefined,
       plan_id: entry.planId,
       id_in_plan: entry.idInPlan,
@@ -479,6 +491,20 @@ async function handleListScheduledWorkouts(
       sort_no: entry.sortNo
     }))
   });
+}
+
+function formatScheduledVolume(
+  volume: string | undefined,
+  unitSystem: UnitSystem
+): string | undefined {
+  const value = volume?.trim();
+  if (!value) return volume;
+  const match = value.match(/^([\d.]+)\s*(km|m)$/i);
+  if (!match) return volume;
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount)) return volume;
+  const swim = match[2]?.toLowerCase() === "m";
+  return formatDistanceValue(amount * (swim ? 1 : 1_000), unitSystem, { swim });
 }
 
 async function handleDeleteWorkout(
@@ -698,7 +724,8 @@ export async function confirmWorkoutDeleteById(
 }
 
 export async function uploadPlanDraftById(
-  draftId: string
+  draftId: string,
+  unitSystem: UnitSystem = "metric"
 ): Promise<UploadPlanResult> {
   const stored = loadStoredPlanDraft(draftId);
   if (!stored) {
@@ -723,7 +750,7 @@ export async function uploadPlanDraftById(
     }))
   };
 
-  const result = await uploadTrainingPlan(input);
+  const result = await uploadTrainingPlan(input, unitSystem);
   stored.uploadedAt = Date.now();
   stored.preview.uploadedAt = stored.uploadedAt;
   stored.preview.uploadResult = {

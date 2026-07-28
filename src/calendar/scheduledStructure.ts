@@ -1,7 +1,17 @@
 import type {
   TrainingHubScheduledExercise,
-  TrainingHubScheduledWorkoutEntry
+  TrainingHubScheduledWorkoutEntry,
+  UnitSystem
 } from "../../electron/types";
+import {
+  POUNDS_PER_KILOGRAM,
+  formatDistanceValue,
+  formatElevationValue,
+  kilogramsToDisplayWeight,
+  kmhToDisplaySpeed,
+  speedUnit,
+  weightUnit
+} from "../units/units";
 import {
   decodeCorosIntensity,
   formatWorkoutIntensity
@@ -106,7 +116,17 @@ export function formatStepTimeLabel(totalSeconds: number): string {
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
-export function formatStepDistanceLabel(meters: number): string {
+export function formatStepDistanceLabel(
+  meters: number,
+  unitSystem: UnitSystem,
+  swim = false
+): string {
+  if (unitSystem === "imperial" || swim) {
+    return formatDistanceValue(meters, unitSystem, {
+      swim,
+      digits: swim ? 0 : meters >= 16_093.44 ? 1 : 2
+    });
+  }
   if (meters < 1000) {
     return `${Math.round(meters)} m`;
   }
@@ -123,7 +143,9 @@ interface ParsedTarget {
 /** Mirror of the editor's parseTarget — COROS schedule distances are centimeters. */
 function parseRawTarget(
   exercise: Record<string, unknown>,
-  kind: ScheduledStepKind
+  kind: ScheduledStepKind,
+  unitSystem: UnitSystem,
+  swim: boolean
 ): ParsedTarget {
   const targetType = finiteNumber(exercise.targetType);
   const targetValue = finiteNumber(exercise.targetValue) ?? 0;
@@ -145,7 +167,7 @@ function parseRawTarget(
       const meters = targetValue / 100;
       return meters > 0
         ? {
-            label: formatStepDistanceLabel(meters),
+            label: formatStepDistanceLabel(meters, unitSystem, swim),
             magnitude: meters,
             magnitudeType: "distance"
           }
@@ -158,7 +180,9 @@ function parseRawTarget(
         ? { label: `Until ${Math.round(targetValue)} bpm` }
         : { label: `${Math.round(targetValue)} bpm` };
     case 8:
-      return { label: `${Math.round(targetValue / 100)} m gain` };
+      return {
+        label: `${formatElevationValue(targetValue / 100, unitSystem, "0")} gain`
+      };
     case 9:
       return { label: `${Math.round(targetValue)} routes` };
     default:
@@ -172,17 +196,51 @@ interface DecodedIntensity {
   weightUnit?: "kg" | "lb";
 }
 
-function decodeIntensity(exercise: Record<string, unknown>): DecodedIntensity {
+function decodeIntensity(
+  exercise: Record<string, unknown>,
+  unitSystem: UnitSystem
+): DecodedIntensity {
   try {
     const { intensity } = decodeCorosIntensity(exercise);
     if (intensity.type === "none") {
       return {};
     }
+    if (intensity.type === "pace" || intensity.type === "effortPace") {
+      const formatted = formatWorkoutIntensity({
+        ...intensity,
+        displayUnit: unitSystem === "imperial" ? "mi" : "km"
+      });
+      return { label: formatted === "Not set" ? undefined : formatted };
+    }
+    if (intensity.type === "speed") {
+      const lowKmh = intensity.unit === "mph" ? intensity.low * 1.609344 : intensity.low;
+      const highKmh = intensity.unit === "mph" ? intensity.high * 1.609344 : intensity.high;
+      const formatted = formatWorkoutIntensity({
+        ...intensity,
+        low: kmhToDisplaySpeed(lowKmh, unitSystem),
+        high: kmhToDisplaySpeed(highKmh, unitSystem),
+        unit: speedUnit(unitSystem)
+      });
+      return { label: formatted === "Not set" ? undefined : formatted };
+    }
+    if (intensity.type === "weight" && intensity.mode === "weight") {
+      const weightValue = intensity.unit === "lb"
+        ? intensity.value / POUNDS_PER_KILOGRAM
+        : intensity.value;
+      const displayWeight = kilogramsToDisplayWeight(weightValue, unitSystem);
+      const formatted = formatWorkoutIntensity({
+        ...intensity,
+        value: Number(displayWeight.toFixed(1)),
+        unit: weightUnit(unitSystem)
+      });
+      return {
+        label: formatted === "Not set" ? undefined : formatted,
+        weightValue,
+        weightUnit: "kg"
+      };
+    }
     const formatted = formatWorkoutIntensity(intensity);
     const label = formatted === "Not set" ? undefined : formatted;
-    if (intensity.type === "weight" && intensity.mode === "weight") {
-      return { label, weightValue: intensity.value, weightUnit: intensity.unit };
-    }
     return { label };
   } catch {
     return {};
@@ -200,12 +258,14 @@ function friendlyStepName(rawName: string, kind: ScheduledStepKind): string {
 
 function parseRawStep(
   exercise: Record<string, unknown>,
-  index: number
+  index: number,
+  unitSystem: UnitSystem,
+  swim: boolean
 ): ScheduledStepView {
   const exerciseType = finiteNumber(exercise.exerciseType) ?? 2;
   const kind = EXERCISE_TYPE_TO_KIND[exerciseType] ?? "training";
-  const target = parseRawTarget(exercise, kind);
-  const intensity = decodeIntensity(exercise);
+  const target = parseRawTarget(exercise, kind, unitSystem, swim);
+  const intensity = decodeIntensity(exercise, unitSystem);
   const id =
     exercise.id !== undefined ? String(exercise.id) : `step-${index}`;
   const targetType = finiteNumber(exercise.targetType);
@@ -245,7 +305,9 @@ function dominantMagnitude(
 }
 
 function buildFromRawProgram(
-  program: Record<string, unknown>
+  program: Record<string, unknown>,
+  unitSystem: UnitSystem,
+  swim: boolean
 ): ScheduledNodeView[] {
   const rawExercises = Array.isArray(program.exercises)
     ? program.exercises
@@ -279,7 +341,7 @@ function buildFromRawProgram(
       );
       children.forEach((child) => consumed.add(child));
       const steps = children.map((child, childIndex) =>
-        parseRawStep(child, childIndex)
+        parseRawStep(child, childIndex, unitSystem, swim)
       );
       const repeat = Math.max(
         1,
@@ -301,7 +363,10 @@ function buildFromRawProgram(
     if (groupId && groupId !== "0" && groupedIds.has(groupId)) {
       return; // child consumed by its group
     }
-    nodes.push({ type: "step", step: parseRawStep(exercise, index) });
+    nodes.push({
+      type: "step",
+      step: parseRawStep(exercise, index, unitSystem, swim)
+    });
     consumed.add(exercise);
   });
 
@@ -357,22 +422,30 @@ function magnitudeFromLabel(
 }
 
 function buildFromParsedExercises(
-  exercises: TrainingHubScheduledExercise[]
+  exercises: TrainingHubScheduledExercise[],
+  unitSystem: UnitSystem,
+  swim: boolean
 ): ScheduledNodeView[] {
-  return exercises.map((exercise, index) => ({
-    type: "step" as const,
-    step: {
+  return exercises.map((exercise, index) => {
+    const magnitude = magnitudeFromLabel(exercise.targetLabel);
+    return {
+      type: "step" as const,
+      step: {
       id: `parsed-${index}`,
       kind: classifyParsedExercise(exercise.name),
       name: exercise.name,
-      targetLabel: exercise.targetLabel,
-      ...magnitudeFromLabel(exercise.targetLabel),
+      targetLabel:
+        magnitude.magnitudeType === "distance" && magnitude.magnitude
+          ? formatStepDistanceLabel(magnitude.magnitude, unitSystem, swim)
+          : exercise.targetLabel,
+      ...magnitude,
       sets: exercise.sets,
       reps: exercise.reps,
       weight: exercise.weight,
       weightUnit: exercise.weight !== undefined ? "kg" : undefined
-    }
-  }));
+      }
+    };
+  });
 }
 
 function computeTotals(nodes: ScheduledNodeView[]): ScheduledStructureTotals {
@@ -410,7 +483,11 @@ function computeTotals(nodes: ScheduledNodeView[]): ScheduledStructureTotals {
 }
 
 export function buildScheduledWorkoutView(
-  entry: Pick<TrainingHubScheduledWorkoutEntry, "exercises" | "rawProgram">
+  entry: Pick<
+    TrainingHubScheduledWorkoutEntry,
+    "exercises" | "rawProgram" | "sportType"
+  >,
+  unitSystem: UnitSystem
 ): ScheduledStructureView {
   const rawProgram = objectRecord(entry.rawProgram);
   const hasRawExercises =
@@ -418,9 +495,10 @@ export function buildScheduledWorkoutView(
     Array.isArray(rawProgram.exercises) &&
     rawProgram.exercises.length > 0;
 
+  const swim = Number(entry.sportType) === 3;
   const nodes = hasRawExercises
-    ? buildFromRawProgram(rawProgram)
-    : buildFromParsedExercises(entry.exercises ?? []);
+    ? buildFromRawProgram(rawProgram, unitSystem, swim)
+    : buildFromParsedExercises(entry.exercises ?? [], unitSystem, swim);
 
   return {
     nodes,

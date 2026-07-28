@@ -1,5 +1,8 @@
 export type BinaryName = "yt-dlp" | "ffmpeg";
 
+/** User-selected measurement system for CorosLink presentation and writes. */
+export type UnitSystem = "metric" | "imperial";
+
 export interface BinaryCheck {
   name: BinaryName;
   available: boolean;
@@ -1549,6 +1552,8 @@ export interface DrawnRoutePayload {
   /** True when the path returns to its start (a loop). */
   closed: boolean;
   snap: boolean;
+  /** Controls user-facing generated route names only. */
+  unitSystem?: UnitSystem;
 }
 
 export interface RouteApiKeyValidation {
@@ -1597,6 +1602,8 @@ export interface GenerateRouteRequest {
   surfacePreference: RouteSurfacePreference;
   avoidHighways: boolean;
   elevationPreference: RouteElevationPreference;
+  /** Controls user-facing route names and validation messages only. */
+  unitSystem: UnitSystem;
   /**
    * Optional nudge used only for loop routes. Changing it produces a different
    * loop for the same inputs (powers the "Regenerate" control). Absent keeps the
@@ -2523,6 +2530,7 @@ export interface ActivityVisualHrSection {
 export interface ActivityVisualPreview {
   previewId: string;
   activityId: string;
+  sportType?: number;
   name?: string;
   startTime?: string;
   avgHr?: number;
@@ -2585,6 +2593,8 @@ export interface PlanDraftPreviewEntry {
   saveToLibrary: boolean;
   workoutType: string;
   stepsSummary?: string;
+  /** Canonical workout input used to reformat previews when units change. */
+  source?: PlanWorkoutEntryInput;
 }
 
 export interface PlanDraftPreview {

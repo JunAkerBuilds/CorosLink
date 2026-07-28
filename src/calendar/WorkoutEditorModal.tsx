@@ -32,6 +32,13 @@ import type {
   WorkoutSport
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
+import { useUnitSystem } from "../units/UnitSystemProvider";
+import {
+  elevationToMeters,
+  elevationUnit,
+  metersToElevation,
+  swimDistanceUnit
+} from "../units/units";
 import { ExerciseCombobox } from "./ExerciseCombobox";
 import {
   CLIMB_GRADES,
@@ -203,6 +210,7 @@ export function WorkoutEditorModal({
   onSaved,
   onError
 }: WorkoutEditorModalProps) {
+  const { unitSystem } = useUnitSystem();
   const reducedMotion = useReducedMotion();
   const [document, setDocument] = useState<Awaited<ReturnType<CorosLinkApi["getWorkoutForEdit"]>> | null>(null);
   const [draft, setDraft] = useState<RunWorkoutEditorDraft | null>(null);
@@ -221,7 +229,7 @@ export function WorkoutEditorModal({
     setDocument(null);
     setDraft(null);
     setLoadError(null);
-    void api.getWorkoutForEdit(editRef).then((loaded) => {
+    void api.getWorkoutForEdit(editRef, unitSystem).then((loaded) => {
       if (!cancelled) {
         setDocument(loaded);
         setDraft(structuredClone(loaded.draft));
@@ -230,7 +238,7 @@ export function WorkoutEditorModal({
       if (!cancelled) setLoadError(cause instanceof Error ? cause.message : String(cause));
     });
     return () => { cancelled = true; };
-  }, [api, editRef]);
+  }, [api, editRef, unitSystem]);
 
   useEffect(() => {
     const sport = draft?.sport;
@@ -264,7 +272,12 @@ export function WorkoutEditorModal({
     const timer = window.setTimeout(() => {
       setPreviewing(true);
       setPreviewError(null);
-      void api.previewWorkoutEdit(editRef, document.revision, draft)
+      void api.previewWorkoutEdit(
+        editRef,
+        document.revision,
+        draft,
+        unitSystem
+      )
         .then((result) => {
           if (previewSequence.current === sequence) setPreview(result);
         })
@@ -278,7 +291,7 @@ export function WorkoutEditorModal({
         });
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [api, document, draft, editRef, validation.valid]);
+  }, [api, document, draft, editRef, unitSystem, validation.valid]);
 
   const requestClose = useCallback(() => {
     if (dirty && !saving) setConfirmClose(true);
@@ -417,7 +430,12 @@ export function WorkoutEditorModal({
     if (!document || !draft || !validation.valid) return;
     setSaving(true);
     try {
-      const result = await api.saveWorkoutEdit(editRef, document.revision, draft);
+      const result = await api.saveWorkoutEdit(
+        editRef,
+        document.revision,
+        draft,
+        unitSystem
+      );
       onSaved(result);
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : String(cause));
@@ -471,7 +489,7 @@ export function WorkoutEditorModal({
                   </label>
                   {draft.sport === "swim" ? (
                     <label className="calendar-field">
-                      <span>Pool length</span>
+                      <span>Pool length ({document.context.defaultPoolLength.unit})</span>
                       <div className="workout-range-inputs">
                         <input
                           type="number"
@@ -489,20 +507,9 @@ export function WorkoutEditorModal({
                             }
                           })}
                         />
-                        <select
-                          value={draft.sportOptions?.poolLength?.unit ?? document.context.defaultPoolLength.unit}
-                          disabled={!document.canEdit || saving}
-                          onChange={(event) => setDraft({
-                            ...draft,
-                            sportOptions: {
-                              ...draft.sportOptions,
-                              poolLength: {
-                                value: draft.sportOptions?.poolLength?.value ?? document.context.defaultPoolLength.value,
-                                unit: event.target.value as "m" | "yd"
-                              }
-                            }
-                          })}
-                        ><option value="m">m</option><option value="yd">yd</option></select>
+                        <span className="calendar-builder-readonly-value">
+                          {document.context.defaultPoolLength.unit}
+                        </span>
                       </div>
                     </label>
                   ) : null}
@@ -695,18 +702,23 @@ function ClockInput({ seconds, disabled, label, onChange }: { seconds: number; d
 function TargetFields({ step, context, sport, disabled, onChange }: { step: RunWorkoutEditorStep; context: WorkoutEditorContext; sport: WorkoutSport; disabled: boolean; onChange: (step: RunWorkoutEditorStep) => void }) {
   const target = step.target;
   const targetTypes = workoutTargetsForStep(sport, step.kind, step.exerciseKind);
-  const distanceMultiplier = context.distanceUnit === "imperial" ? 1609.344 : 1000;
+  const distanceMultiplier = sport === "swim"
+    ? context.distanceUnit === "imperial" ? 0.9144 : 1
+    : context.distanceUnit === "imperial" ? 1609.344 : 1000;
+  const targetDistanceUnit = sport === "swim"
+    ? swimDistanceUnit(context.distanceUnit)
+    : context.distanceUnit === "imperial" ? "mi" : "km";
   return <div className="workout-control-group">
     <label><span>Target</span><select value={target.type} disabled={disabled} onChange={(event) => onChange({ ...step, target: targetForType(event.target.value as RunWorkoutEditorTarget["type"], step.kind) })}>
       {targetTypes.map((type) => <option key={type} value={type}>{type === "load" ? "Training Load" : type === "hrRecovery" ? "HR Recovery" : type === "elevationGain" ? "Elevation Gain" : type[0]!.toUpperCase() + type.slice(1)}</option>)}
     </select></label>
     {target.type === "time" ? <label><span>Duration</span><ClockInput label="Duration" seconds={target.seconds} disabled={disabled} onChange={(seconds) => onChange({ ...step, target: { type: "time", seconds } })} /></label> : null}
-    {target.type === "distance" ? <label><span>Distance ({context.distanceUnit === "imperial" ? "mi" : "km"})</span><input type="number" min="0" step="0.1" value={Number((target.meters / distanceMultiplier).toFixed(3))} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "distance", meters: Number(event.target.value) * distanceMultiplier } })} /></label> : null}
+    {target.type === "distance" ? <label><span>Distance ({targetDistanceUnit})</span><input type="number" min="0" step="0.1" value={Number((target.meters / distanceMultiplier).toFixed(3))} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "distance", meters: Number(event.target.value) * distanceMultiplier } })} /></label> : null}
     {target.type === "load" ? <label><span>Training Load</span><input type="number" min="0" max="999" step="1" value={target.load} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "load", load: Number(event.target.value) } })} /></label> : null}
     {target.type === "hrRecovery" ? <label><span>Return to bpm</span><input type="number" min="30" max="180" value={target.bpm} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "hrRecovery", bpm: Number(event.target.value) } })} /></label> : null}
     {target.type === "reps" ? <label><span>Repetitions</span><input type="number" min="1" max="500" value={target.count} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "reps", count: Number(event.target.value) } })} /></label> : null}
     {target.type === "routes" ? <label><span>Routes</span><input type="number" min="1" max="20" value={target.count} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "routes", count: Number(event.target.value) } })} /></label> : null}
-    {target.type === "elevationGain" ? <label><span>Gain (m)</span><input type="number" min="20" max="10000" value={target.meters} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "elevationGain", meters: Number(event.target.value) } })} /></label> : null}
+    {target.type === "elevationGain" ? <label><span>Gain ({elevationUnit(context.distanceUnit)})</span><input type="number" min="20" max={context.distanceUnit === "imperial" ? 32808 : 10000} value={Number(metersToElevation(target.meters, context.distanceUnit).toFixed(1))} disabled={disabled} onChange={(event) => onChange({ ...step, target: { type: "elevationGain", meters: elevationToMeters(Number(event.target.value), context.distanceUnit) } })} /></label> : null}
     {target.type === "open" ? <p className="workout-control-hint">Ends when you press the lap button.</p> : null}
   </div>;
 }
@@ -774,7 +786,7 @@ function IntensityFields({ step, context, sport, disabled, onChange }: { step: R
 
     {intensity.type === "swimStroke" ? <label><span>Stroke</span><select value={intensity.stroke} disabled={disabled} onChange={(event) => setIntensity({ type: "swimStroke", stroke: event.target.value as keyof typeof SWIM_STROKE_IDS })}>{Object.keys(SWIM_STROKE_IDS).map((stroke) => <option key={stroke} value={stroke}>{stroke}</option>)}</select></label> : null}
 
-    {intensity.type === "weight" ? <><label><span>Load</span><select value={intensity.mode} disabled={disabled} onChange={(event) => setIntensity(event.target.value === "bodyweight" ? { type: "weight", mode: "bodyweight" } : { type: "weight", mode: "weight", value: 10, unit: context.distanceUnit === "imperial" ? "lb" : "kg" })}><option value="bodyweight">Bodyweight</option><option value="weight">Weight</option></select></label>{intensity.mode === "weight" ? <label><span>Weight</span><div className="workout-range-inputs"><input type="number" min="0" max="2000" value={intensity.value} disabled={disabled} onChange={(event) => setIntensity({ ...intensity, value: Number(event.target.value) })} /><select value={intensity.unit} disabled={disabled} onChange={(event) => setIntensity({ ...intensity, unit: event.target.value as "kg" | "lb" })}><option value="kg">kg</option><option value="lb">lb</option></select></div></label> : null}</> : null}
+    {intensity.type === "weight" ? <><label><span>Load</span><select value={intensity.mode} disabled={disabled} onChange={(event) => setIntensity(event.target.value === "bodyweight" ? { type: "weight", mode: "bodyweight" } : { type: "weight", mode: "weight", value: 10, unit: context.distanceUnit === "imperial" ? "lb" : "kg" })}><option value="bodyweight">Bodyweight</option><option value="weight">Weight</option></select></label>{intensity.mode === "weight" ? <label><span>Weight ({context.distanceUnit === "imperial" ? "lb" : "kg"})</span><input type="number" min="0" max="2000" value={intensity.value} disabled={disabled} onChange={(event) => setIntensity({ ...intensity, value: Number(event.target.value), unit: context.distanceUnit === "imperial" ? "lb" : "kg" })} /></label> : null}</> : null}
 
     {intensity.type === "rpe" ? <label><span>RPE</span><select value={intensity.value} disabled={disabled} onChange={(event) => setIntensity({ type: "rpe", value: Number(event.target.value) })}>{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></label> : null}
 

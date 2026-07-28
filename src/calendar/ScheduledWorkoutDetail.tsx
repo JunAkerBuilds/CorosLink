@@ -23,8 +23,14 @@ import { useMemo } from "react";
 import type {
   TrainingHubScheduledWorkoutEntry,
   TrainingHubSportType,
+  UnitSystem,
   WorkoutSport
 } from "../../electron/types";
+import { useUnitSystem } from "../units/UnitSystemProvider";
+import {
+  POUNDS_PER_KILOGRAM,
+  formatWeightValue
+} from "../units/units";
 import {
   WORKOUT_SPORT_CAPABILITIES,
   workoutSportFromType
@@ -99,12 +105,16 @@ const SPORT_VIEW: Record<
   xcSki: { category: "other", icon: Snowflake }
 };
 
-function stepMagnitudeLabel(step: ScheduledStepView): string | undefined {
+function stepMagnitudeLabel(
+  step: ScheduledStepView,
+  unitSystem: UnitSystem,
+  swim: boolean
+): string | undefined {
   if (step.magnitude === undefined || !step.magnitudeType) {
     return undefined;
   }
   return step.magnitudeType === "distance"
-    ? formatStepDistanceLabel(step.magnitude)
+    ? formatStepDistanceLabel(step.magnitude, unitSystem, swim)
     : formatStepTimeLabel(step.magnitude);
 }
 
@@ -120,12 +130,29 @@ function flatSteps(view: ScheduledStructureView): ScheduledStepView[] {
   return steps;
 }
 
+function formatDetailVolume(volume: string | undefined, unitSystem: UnitSystem): string {
+  const value = formatUpcomingWorkoutVolumeDisplay(volume, unitSystem);
+  const setCount = value.match(/^(\d+(?:\.\d+)?)\s+set\(s\)$/i);
+  if (!setCount) return value;
+
+  return `${setCount[1]} ${Number(setCount[1]) === 1 ? "set" : "sets"}`;
+}
+
+function formatDetailLoad(load?: number): string {
+  const value = formatUpcomingWorkoutLoad(load);
+  return value === "--" ? value : value.replace(/TL$/, " TL");
+}
+
 export function ScheduledWorkoutDetail({
   entry,
   sportTypes
 }: ScheduledWorkoutDetailProps) {
+  const { unitSystem } = useUnitSystem();
   const reduceMotion = useReducedMotion();
-  const view = useMemo(() => buildScheduledWorkoutView(entry), [entry]);
+  const view = useMemo(
+    () => buildScheduledWorkoutView(entry, unitSystem),
+    [entry, unitSystem]
+  );
   const sport = workoutSportFromType(entry.sportType);
   const sportMeta = sport ? SPORT_VIEW[sport] : undefined;
   const category =
@@ -156,12 +183,12 @@ export function ScheduledWorkoutDetail({
     {
       icon: Route,
       label: "Volume",
-      value: formatUpcomingWorkoutVolumeDisplay(entry.volume)
+      value: formatDetailVolume(entry.volume, unitSystem)
     },
     {
       icon: Gauge,
       label: "Planned load",
-      value: formatUpcomingWorkoutLoad(entry.trainingLoad)
+      value: formatDetailLoad(entry.trainingLoad)
     }
   ];
   if (view.totals.durationSeconds) {
@@ -171,16 +198,13 @@ export function ScheduledWorkoutDetail({
       value: formatDurationSeconds(view.totals.durationSeconds)
     });
   }
-  if (view.totals.stepCount > 0) {
-    stats.push({
-      icon: Layers,
-      label: "Structure",
-      value:
+  const structureSummary = view.totals.stepCount > 0
+    ? `${view.totals.stepCount} step${view.totals.stepCount === 1 ? "" : "s"}${
         view.totals.repeatGroups > 0
-          ? `${view.totals.stepCount} steps · ${view.totals.repeatGroups}× repeat`
-          : `${view.totals.stepCount} step${view.totals.stepCount === 1 ? "" : "s"}`
-    });
-  }
+          ? `, ${view.totals.repeatGroups} repeat group${view.totals.repeatGroups === 1 ? "" : "s"}`
+          : ""
+      }`
+    : undefined;
 
   return (
     <div className={`sched-detail is-${category}`}>
@@ -190,23 +214,31 @@ export function ScheduledWorkoutDetail({
             <SportIcon size={20} />
           </span>
           <div className="sched-hero-title">
-            <span className="sched-hero-sport">{sportName}</span>
-            {showCategoryChip ? (
-              <span className="sched-hero-chip">{workoutCategory}</span>
+            <div className="sched-hero-heading">
+              <span className="sched-hero-sport">{sportName}</span>
+              {showCategoryChip ? (
+                <span className="sched-hero-chip">{workoutCategory}</span>
+              ) : null}
+            </div>
+            {structureSummary ? (
+              <span className="sched-hero-context">
+                <Layers size={12} aria-hidden="true" />
+                {structureSummary}
+              </span>
             ) : null}
           </div>
         </div>
-        <div className="sched-hero-stats">
+        <dl className={`sched-hero-stats is-${stats.length}`}>
           {stats.map((stat) => (
             <div className="sched-stat" key={stat.label}>
-              <span className="sched-stat-label">
+              <dt className="sched-stat-label">
                 <stat.icon size={12} aria-hidden="true" />
                 {stat.label}
-              </span>
-              <strong className="sched-stat-value">{stat.value}</strong>
+              </dt>
+              <dd className="sched-stat-value">{stat.value}</dd>
             </div>
           ))}
-        </div>
+        </dl>
       </motion.div>
 
       {view.nodes.length > 0 ? (
@@ -218,14 +250,22 @@ export function ScheduledWorkoutDetail({
             </h4>
             {view.totals.distanceMeters ? (
               <span className="sched-structure-total">
-                {formatStepDistanceLabel(view.totals.distanceMeters)} total
+                {formatStepDistanceLabel(
+                  view.totals.distanceMeters,
+                  unitSystem,
+                  sport === "swim"
+                )} total
               </span>
             ) : null}
           </div>
           {isStrength ? (
-            <StrengthStructure view={view} />
+            <StrengthStructure view={view} unitSystem={unitSystem} />
           ) : (
-            <CardioStructure view={view} />
+            <CardioStructure
+              view={view}
+              unitSystem={unitSystem}
+              swim={sport === "swim"}
+            />
           )}
         </motion.div>
       ) : (
@@ -249,10 +289,14 @@ interface BarSegment {
   label: string;
 }
 
-function buildBarSegments(view: ScheduledStructureView): BarSegment[] {
+function buildBarSegments(
+  view: ScheduledStructureView,
+  unitSystem: UnitSystem,
+  swim: boolean
+): BarSegment[] {
   const segments: BarSegment[] = [];
   const push = (step: ScheduledStepView, key: string, repeat?: number) => {
-    const magnitude = stepMagnitudeLabel(step);
+    const magnitude = stepMagnitudeLabel(step, unitSystem, swim);
     const label = [
       step.name,
       repeat && repeat > 1 ? `×${repeat}` : null,
@@ -287,8 +331,16 @@ function buildBarSegments(view: ScheduledStructureView): BarSegment[] {
   }));
 }
 
-function CardioStructure({ view }: { view: ScheduledStructureView }) {
-  const segments = buildBarSegments(view);
+function CardioStructure({
+  view,
+  unitSystem,
+  swim
+}: {
+  view: ScheduledStructureView;
+  unitSystem: UnitSystem;
+  swim: boolean;
+}) {
+  const segments = buildBarSegments(view, unitSystem, swim);
   const kindsPresent = KIND_ORDER.filter((kind) =>
     view.nodes.some((node) =>
       node.type === "step"
@@ -330,7 +382,12 @@ function CardioStructure({ view }: { view: ScheduledStructureView }) {
           node.type === "step" ? (
             <StepRow key={node.step.id} step={node.step} />
           ) : (
-            <RepeatCard key={node.id} node={node} />
+            <RepeatCard
+              key={node.id}
+              node={node}
+              unitSystem={unitSystem}
+              swim={swim}
+            />
           )
         )}
       </ol>
@@ -363,16 +420,24 @@ function StepRow({ step }: { step: ScheduledStepView }) {
   );
 }
 
-function RepeatCard({ node }: { node: ScheduledRepeatViewExtract }) {
+function RepeatCard({
+  node,
+  unitSystem,
+  swim
+}: {
+  node: ScheduledRepeatViewExtract;
+  unitSystem: UnitSystem;
+  swim: boolean;
+}) {
   const perRep = node.magnitude
     ? node.magnitudeType === "distance"
-      ? formatStepDistanceLabel(node.magnitude)
+      ? formatStepDistanceLabel(node.magnitude, unitSystem, swim)
       : formatStepTimeLabel(node.magnitude)
     : undefined;
   const total =
     node.magnitude !== undefined
       ? node.magnitudeType === "distance"
-        ? formatStepDistanceLabel(node.magnitude * node.repeat)
+        ? formatStepDistanceLabel(node.magnitude * node.repeat, unitSystem, swim)
         : formatStepTimeLabel(node.magnitude * node.repeat)
       : undefined;
 
@@ -400,21 +465,30 @@ function RepeatCard({ node }: { node: ScheduledRepeatViewExtract }) {
 
 /* ---------------- strength ---------------- */
 
-function formatTonnage(kg: number): string {
-  if (kg >= 10_000) {
+function formatTonnage(kg: number, unitSystem: UnitSystem): string {
+  if (unitSystem === "metric" && kg >= 10_000) {
     return `${(kg / 1000).toFixed(1)} t`;
   }
-  return `${Math.round(kg).toLocaleString()} kg`;
+  return formatWeightValue(kg, unitSystem, 0);
 }
 
-function StrengthStructure({ view }: { view: ScheduledStructureView }) {
+function StrengthStructure({
+  view,
+  unitSystem
+}: {
+  view: ScheduledStructureView;
+  unitSystem: UnitSystem;
+}) {
   const steps = flatSteps(view);
   const totalSets = steps.reduce((sum, step) => sum + (step.sets ?? 1), 0);
   const tonnage = steps.reduce(
     (sum, step) =>
-      step.weightUnit === "lb"
-        ? sum
-        : sum + (step.sets ?? 1) * (step.reps ?? 0) * (step.weight ?? 0),
+      sum +
+      (step.sets ?? 1) *
+        (step.reps ?? 0) *
+        (step.weightUnit === "lb"
+          ? (step.weight ?? 0) / POUNDS_PER_KILOGRAM
+          : (step.weight ?? 0)),
     0
   );
 
@@ -427,14 +501,14 @@ function StrengthStructure({ view }: { view: ScheduledStructureView }) {
         <span className="sched-strength-chip">{totalSets} sets</span>
         {tonnage > 0 ? (
           <span className="sched-strength-chip">
-            {formatTonnage(tonnage)} lifted
+            {formatTonnage(tonnage, unitSystem)} lifted
           </span>
         ) : null}
       </div>
       <div className="sched-strength-list">
         {view.nodes.map((node) =>
           node.type === "step" ? (
-            <LiftCard key={node.step.id} step={node.step} />
+            <LiftCard key={node.step.id} step={node.step} unitSystem={unitSystem} />
           ) : (
             <div className="sched-circuit" key={node.id}>
               <div className="sched-circuit-head">
@@ -442,7 +516,7 @@ function StrengthStructure({ view }: { view: ScheduledStructureView }) {
                 Circuit ×{node.repeat}
               </div>
               {node.steps.map((step) => (
-                <LiftCard key={step.id} step={step} />
+                <LiftCard key={step.id} step={step} unitSystem={unitSystem} />
               ))}
             </div>
           )
@@ -452,7 +526,13 @@ function StrengthStructure({ view }: { view: ScheduledStructureView }) {
   );
 }
 
-function LiftCard({ step }: { step: ScheduledStepView }) {
+function LiftCard({
+  step,
+  unitSystem
+}: {
+  step: ScheduledStepView;
+  unitSystem: UnitSystem;
+}) {
   const sets = step.sets ?? 1;
   const scheme = [
     sets > 1 ? `${sets} ×` : null,
@@ -462,7 +542,13 @@ function LiftCard({ step }: { step: ScheduledStepView }) {
     .join(" ");
   const weightLabel =
     step.weight !== undefined
-      ? `${step.weight} ${step.weightUnit ?? "kg"}`
+      ? formatWeightValue(
+          step.weightUnit === "lb"
+            ? step.weight / POUNDS_PER_KILOGRAM
+            : step.weight,
+          unitSystem,
+          1
+        )
       : (step.intensityLabel ?? undefined);
 
   return (

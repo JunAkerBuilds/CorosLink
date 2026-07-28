@@ -3,6 +3,13 @@ import fs from "node:fs";
 import path from "node:path";
 import bcrypt from "bcryptjs";
 import {
+  formatDistanceValue,
+  formatPaceValue,
+  formatSpeedValue,
+  formatWeightValue,
+  normalizeUnitSystem
+} from "./unitSystem.js";
+import {
   corosSportName,
   enrichActivitiesWithSportNames,
   mergeSportTypeEntries
@@ -70,6 +77,7 @@ import type {
   WorkoutEditorContext,
   WorkoutEditorDocument,
   WorkoutExerciseOption,
+  UnitSystem,
   WorkoutSport
 } from "./types";
 import {
@@ -1798,22 +1806,25 @@ async function loadWorkoutEditorAccount(): Promise<Record<string, unknown>> {
   }
 }
 
-export async function getWorkoutEditorContext(): Promise<WorkoutEditorContext> {
-  return parseWorkoutEditorContext(await loadWorkoutEditorAccount());
+export async function getWorkoutEditorContext(
+  unitSystem: UnitSystem = "metric"
+): Promise<WorkoutEditorContext> {
+  return parseWorkoutEditorContext(await loadWorkoutEditorAccount(), unitSystem);
 }
 
 async function documentFromWorkoutEditSource(
-  source: WorkoutEditSource
+  source: WorkoutEditSource,
+  unitSystem: UnitSystem = "metric"
 ): Promise<WorkoutEditorDocument> {
   const account = await loadWorkoutEditorAccount();
-  const context = parseWorkoutEditorContext(account);
+  const context = parseWorkoutEditorContext(account, unitSystem);
   const sportType = toOptionalNumber(source.program.sportType);
   const isPastOccurrence =
     source.ref.kind === "scheduled" &&
     source.ref.happenDay < formatScheduleDay(new Date());
   const supportedSport = workoutSportFromType(sportType);
   const canEdit = Boolean(supportedSport) && !isPastOccurrence;
-  const draft = corosProgramToWorkoutDraft(source.program);
+  const draft = corosProgramToWorkoutDraft(source.program, context);
   if (draft.sport === "swim" && !draft.sportOptions?.poolLength) {
     draft.sportOptions = { ...draft.sportOptions, poolLength: context.defaultPoolLength };
   }
@@ -1844,9 +1855,13 @@ async function documentFromWorkoutEditSource(
 }
 
 export async function getWorkoutForEdit(
-  ref: WorkoutEditRef
+  ref: WorkoutEditRef,
+  unitSystem: UnitSystem = "metric"
 ): Promise<WorkoutEditorDocument> {
-  return documentFromWorkoutEditSource(await resolveWorkoutEditSource(ref));
+  return documentFromWorkoutEditSource(
+    await resolveWorkoutEditSource(ref),
+    unitSystem
+  );
 }
 
 export async function calculateExistingWorkoutProgram(
@@ -1932,7 +1947,8 @@ function previewFromEstimate(raw: Record<string, unknown>): WorkoutEditPreview {
 export async function previewWorkoutEdit(
   ref: WorkoutEditRef,
   revision: string,
-  draft: RunWorkoutEditorDraft
+  draft: RunWorkoutEditorDraft,
+  unitSystem: UnitSystem = "metric"
 ): Promise<WorkoutEditPreview> {
   const validation = validateWorkoutDraft(draft);
   if (!validation.valid) {
@@ -1945,7 +1961,10 @@ export async function previewWorkoutEdit(
   if (workoutEditRevision(source) !== revision) {
     throw new Error("This workout changed in COROS. Reload it before continuing.");
   }
-  const context = parseWorkoutEditorContext(await loadWorkoutEditorAccount());
+  const context = parseWorkoutEditorContext(
+    await loadWorkoutEditorAccount(),
+    unitSystem
+  );
   const program = workoutDraftToCorosProgram(source.program, draft, context);
 
   const result = await runWorkoutEditPreview(
@@ -2000,7 +2019,8 @@ async function verifyWorkoutEdit(
 export async function saveWorkoutEdit(
   ref: WorkoutEditRef,
   revision: string,
-  draft: RunWorkoutEditorDraft
+  draft: RunWorkoutEditorDraft,
+  unitSystem: UnitSystem = "metric"
 ): Promise<WorkoutEditSaveResult> {
   const validation = validateWorkoutDraft(draft);
   if (!validation.valid) {
@@ -2018,7 +2038,10 @@ export async function saveWorkoutEdit(
     throw new Error("This workout changed in COROS. Reload it before saving.");
   }
 
-  const context = parseWorkoutEditorContext(await loadWorkoutEditorAccount());
+  const context = parseWorkoutEditorContext(
+    await loadWorkoutEditorAccount(),
+    unitSystem
+  );
   const edited = workoutDraftToCorosProgram(source.program, draft, context);
   const calculated = await runWorkoutEditWrite(
     ref,
@@ -2048,7 +2071,7 @@ export async function saveWorkoutEdit(
             "COROS accepted the save, but the updated workout could not be verified yet. The view was refreshed."
         }
       : {}),
-    document: await documentFromWorkoutEditSource(latestSource)
+    document: await documentFromWorkoutEditSource(latestSource, unitSystem)
   };
 }
 
@@ -2069,11 +2092,19 @@ export async function scheduleLibraryWorkout(
 export async function createAndScheduleWorkout(
   entryInput: PlanWorkoutEntryInput,
   happenDay: string,
+  unitSystemOrSave: UnitSystem | boolean = "metric",
   saveToLibrary = false
 ): Promise<{ programId?: string }> {
+  const unitSystem = normalizeUnitSystem(unitSystemOrSave);
+  if (typeof unitSystemOrSave === "boolean") {
+    saveToLibrary = unitSystemOrSave;
+  }
   const entry = toPlanWorkoutEntry(entryInput);
   const resolvedEntry = await resolveWorkoutEntryExercises(entry);
-  const context = parseWorkoutEditorContext(await loadWorkoutEditorAccount());
+  const context = parseWorkoutEditorContext(
+    await loadWorkoutEditorAccount(),
+    unitSystem
+  );
   const payload = buildWorkoutPayloadFromEntry(resolvedEntry, context);
   // Schedule a calculated full payload, not the library query summary. The
   // summary omits fields needed by simple and structured workouts.
@@ -2432,7 +2463,8 @@ function workoutSportTypeForService(sport: keyof typeof WORKOUT_SPORT_CAPABILITI
 }
 
 export async function uploadTrainingPlan(
-  draftInput: CorosTrainingPlanDraftInput
+  draftInput: CorosTrainingPlanDraftInput,
+  unitSystem: UnitSystem = "metric"
 ): Promise<UploadPlanResult> {
   const draft: CorosTrainingPlanDraft = {
     name: draftInput.name,
@@ -2453,7 +2485,10 @@ export async function uploadTrainingPlan(
     { programId: string; program: Record<string, unknown> }
   >();
   const calculatedPrograms = new Map<string, Record<string, unknown>>();
-  const context = parseWorkoutEditorContext(await loadWorkoutEditorAccount());
+  const context = parseWorkoutEditorContext(
+    await loadWorkoutEditorAccount(),
+    unitSystem
+  );
 
   for (const entry of draft.workouts) {
     const resolvedEntry = await resolveWorkoutEntryExercises(entry);
@@ -5180,26 +5215,28 @@ export function downsampleActivitySeries(
   return sampled;
 }
 
-function formatPaceSeconds(paceSecondsPerKm: number): string {
-  const total = Math.max(0, Math.round(paceSecondsPerKm));
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}/km`;
-}
-
 export function formatActivitySeriesForChat(
-  points: TrainingHubActivitySeriesPoint[]
+  points: TrainingHubActivitySeriesPoint[],
+  unitSystem: UnitSystem = "metric",
+  swim = false,
+  cycling = false
 ): string {
   if (points.length === 0) {
     return "Time series: no HR/pace/power samples available.";
   }
 
-  const header = "Distance | HR | Pace | Power";
+  const header = `Distance | HR | ${cycling ? "Speed" : "Pace"} | Power`;
   const rows = points.map((point) =>
     [
-      point.distance !== undefined ? `${(point.distance / 1000).toFixed(2)} km` : "—",
+      point.distance !== undefined
+        ? formatDistanceValue(point.distance, unitSystem, { swim })
+        : "—",
       point.hr !== undefined ? `${point.hr}` : "—",
-      point.pace !== undefined ? formatPaceSeconds(point.pace) : "—",
+      point.pace !== undefined
+        ? cycling
+          ? formatSpeedValue(3600 / point.pace, unitSystem)
+          : formatPaceValue(point.pace, unitSystem).replace(" /", "/")
+        : "—",
       point.power !== undefined ? `${point.power} W` : "—"
     ].join(" | ")
   );
@@ -5274,7 +5311,9 @@ function formatScheduledExerciseTarget(
 }
 
 export function formatScheduledExercisesForChat(
-  exercises: TrainingHubScheduledExercise[]
+  exercises: TrainingHubScheduledExercise[],
+  unitSystem: UnitSystem = "metric",
+  swim = false
 ): string | undefined {
   if (exercises.length === 0) {
     return undefined;
@@ -5290,9 +5329,22 @@ export function formatScheduledExercisesForChat(
         parts.push(`${Math.round(exercise.reps)} reps`);
       }
       if (exercise.weight) {
-        parts.push(`${Math.round(exercise.weight)} kg`);
+        parts.push(formatWeightValue(exercise.weight, unitSystem, 1));
       } else if (exercise.targetLabel) {
-        parts.push(exercise.targetLabel);
+        const distanceMatch = exercise.targetLabel.match(/^([\d.]+)\s*(km|m)$/i);
+        if (distanceMatch) {
+          const amount = Number(distanceMatch[1]);
+          const sourceKm = distanceMatch[2]?.toLowerCase() === "km";
+          parts.push(
+            Number.isFinite(amount)
+              ? formatDistanceValue(amount * (sourceKm ? 1_000 : 1), unitSystem, {
+                  swim: swim || !sourceKm
+                })
+              : exercise.targetLabel
+          );
+        } else {
+          parts.push(exercise.targetLabel);
+        }
       }
       return parts.join(" · ");
     })

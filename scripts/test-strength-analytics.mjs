@@ -10,7 +10,12 @@ const load = async (...segments) => {
 };
 
 const { resolveExerciseTargets, MUSCLES } = await load("src", "strength", "muscles.ts");
-const { buildStrengthAnalytics, estimateOneRepMax } = await load(
+const {
+  buildStrengthAnalytics,
+  estimateOneRepMax,
+  formatVolumeKg,
+  formatWeightKg
+} = await load(
   "src",
   "strength",
   "strengthAnalytics.ts"
@@ -57,6 +62,10 @@ assert.equal(estimateOneRepMax(100, 1), 100);
 assert.ok(Math.abs(estimateOneRepMax(100, 10) - 133.33) < 0.01);
 assert.equal(estimateOneRepMax(0, 10), 0, "bodyweight sets have no 1RM estimate");
 assert.equal(estimateOneRepMax(100, 40), 0, "rep counts outside the usable range are ignored");
+assert.equal(formatWeightKg(10, "metric"), "10 kg");
+assert.equal(formatWeightKg(10, "imperial"), "22.0 lb");
+assert.equal(formatVolumeKg(1_000, "metric"), "1.0t");
+assert.equal(formatVolumeKg(1_000, "imperial"), "2,205 lb");
 
 // ---- Aggregation ----
 

@@ -27,6 +27,8 @@ import {
   formatPaceOrSpeed,
   isCyclingActivity
 } from "./utils";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
+import { distanceUnit, elevationUnit, metersToElevation } from "../../units/units";
 
 export interface RouteSummary {
   distanceMeters: number;
@@ -60,6 +62,7 @@ export function RouteStatsBar({
   exporting?: boolean;
   busy?: boolean;
 }) {
+  const { unitSystem } = useUnitSystem();
   const profile = useMemo(
     () => (summary ? buildElevationProfile(summary.points) : null),
     [summary]
@@ -77,7 +80,7 @@ export function RouteStatsBar({
   const cycling = isCyclingActivity(summary.activityType);
   const baseline = paceBaselines[summary.activityType];
   const duration = effectiveRouteDuration(summary, baseline);
-  const paceSpeed = formatPaceOrSpeed(summary, duration.seconds);
+  const paceSpeed = formatPaceOrSpeed(summary, duration.seconds, unitSystem);
   const climb = climbRatePerKm(summary);
 
   return (
@@ -90,8 +93,8 @@ export function RouteStatsBar({
       <div className="route-statsbar-metrics">
         <Metric
           icon={<RouteIcon size={15} aria-hidden="true" />}
-          value={formatDistance(summary.distanceMeters)}
-          unit="km"
+          value={formatDistance(summary.distanceMeters, unitSystem)}
+          unit={distanceUnit(unitSystem)}
           label="Distance"
         />
         <Metric
@@ -106,12 +109,12 @@ export function RouteStatsBar({
         />
         <Metric
           icon={<TrendingUp size={15} aria-hidden="true" />}
-          value={formatMeters(summary.ascentMeters)}
+          value={formatMeters(summary.ascentMeters, unitSystem)}
           label="Ascent"
         />
         <Metric
           icon={<TrendingDown size={15} aria-hidden="true" />}
-          value={formatMeters(summary.descentMeters)}
+          value={formatMeters(summary.descentMeters, unitSystem)}
           label="Descent"
         />
         <Metric
@@ -126,7 +129,7 @@ export function RouteStatsBar({
           <div className="route-elevation-head">
             <Activity size={13} aria-hidden="true" />
             <span>
-              {Math.round(profile.minEle)}–{Math.round(profile.maxEle)} m
+              {Math.round(metersToElevation(profile.minEle, unitSystem))}–{Math.round(metersToElevation(profile.maxEle, unitSystem))} {elevationUnit(unitSystem)}
             </span>
           </div>
           <svg

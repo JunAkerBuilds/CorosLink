@@ -7,6 +7,7 @@ import type {
   RunWorkoutEditorStep,
   RunWorkoutEditorStepKind,
   RunWorkoutEditorTarget,
+  UnitSystem,
   WorkoutEditRef,
   WorkoutEditorContext,
   WorkoutLthrZone,
@@ -29,6 +30,14 @@ import {
   workoutSportFromType,
   workoutSportType
 } from "./workoutCapabilities";
+import {
+  POUNDS_PER_KILOGRAM,
+  kilogramsToDisplayWeight,
+  kmhToDisplaySpeed,
+  normalizeUnitSystem,
+  speedUnit,
+  weightUnit
+} from "./unitSystem.js";
 
 const TOP_LEVEL_SORT_INTERVAL = 16_777_216;
 const GROUP_CHILD_SORT_INTERVAL = 65_536;
@@ -149,17 +158,56 @@ function parseTarget(
   }
 }
 
-function parseIntensity(exercise: Record<string, unknown>): {
+function parseIntensity(
+  exercise: Record<string, unknown>,
+  context?: WorkoutEditorContext
+): {
   intensity: RunWorkoutEditorIntensity;
   reason?: string;
 } {
-  return decodeCorosIntensity(exercise);
+  const parsed = decodeCorosIntensity(exercise);
+  const intensity = parsed.intensity;
+  if (!context) return parsed;
+  if (intensity.type === "pace" || intensity.type === "effortPace") {
+    return {
+      ...parsed,
+      intensity: { ...intensity, displayUnit: context.paceUnit }
+    };
+  }
+  if (intensity.type === "speed") {
+    const lowKmh = intensity.unit === "mph" ? intensity.low * 1.609344 : intensity.low;
+    const highKmh = intensity.unit === "mph" ? intensity.high * 1.609344 : intensity.high;
+    return {
+      ...parsed,
+      intensity: {
+        ...intensity,
+        low: kmhToDisplaySpeed(lowKmh, context.distanceUnit),
+        high: kmhToDisplaySpeed(highKmh, context.distanceUnit),
+        unit: speedUnit(context.distanceUnit)
+      }
+    };
+  }
+  if (intensity.type === "weight" && intensity.mode === "weight") {
+    const kilograms = intensity.unit === "lb"
+      ? intensity.value / POUNDS_PER_KILOGRAM
+      : intensity.value;
+    return {
+      ...parsed,
+      intensity: {
+        ...intensity,
+        value: kilogramsToDisplayWeight(kilograms, context.distanceUnit),
+        unit: weightUnit(context.distanceUnit)
+      }
+    };
+  }
+  return parsed;
 }
 
 function parseStep(
   exercise: Record<string, unknown>,
   index: number,
-  sport: WorkoutSport
+  sport: WorkoutSport,
+  context?: WorkoutEditorContext
 ): RunWorkoutEditorStep {
   const exerciseType = numberValue(exercise.exerciseType) ?? 2;
   const kind = sport === "swim" &&
@@ -188,7 +236,7 @@ function parseStep(
   }
 
   const parsedTarget = parseTarget(exercise, kind);
-  const parsedIntensity = parseIntensity(exercise);
+  const parsedIntensity = parseIntensity(exercise, context);
   const reason = parsedTarget.reason ?? parsedIntensity.reason ??
     validateWorkoutTarget(sport, kind, parsedTarget.target, numberValue(exercise.exerciseKind)) ??
     validateWorkoutIntensity(sport, parsedIntensity.intensity, kind, numberValue(exercise.exerciseKind));
@@ -217,7 +265,8 @@ function parseStep(
 }
 
 export function corosProgramToWorkoutDraft(
-  program: Record<string, unknown>
+  program: Record<string, unknown>,
+  context?: WorkoutEditorContext
 ): RunWorkoutEditorDraft {
   const sport = workoutSportFromType(program.sportType) ?? "run";
   const rawExercises = Array.isArray(program.exercises)
@@ -249,7 +298,9 @@ export function corosProgramToWorkoutDraft(
         (candidate) => !candidate.isGroup && String(candidate.groupId ?? "") === id
       );
       children.forEach((child) => consumed.add(child));
-      const steps = children.map((child, childIndex) => parseStep(child, childIndex, sport));
+      const steps = children.map((child, childIndex) =>
+        parseStep(child, childIndex, sport, context)
+      );
       const reason = steps.length === 0 ? "Empty COROS repeat group." : undefined;
       nodes.push({
         id: `group-${id ?? index}`,
@@ -269,15 +320,17 @@ export function corosProgramToWorkoutDraft(
     if (groupId && groupId !== "0" && groupedIds.has(groupId)) {
       return;
     }
-    nodes.push(parseStep(exercise, index, sport));
+    nodes.push(parseStep(exercise, index, sport, context));
     consumed.add(exercise);
   });
 
   const gradingSystem = Object.entries(CLIMB_SYSTEM_IDS).find(
     ([, value]) => value === numberValue((objectValue(program.referExercise) ?? {}).gradeSystem)
   )?.[0] as WorkoutEditorContext["climbSystems"]["indoorClimb"] | undefined;
-  const poolUnit = [3, 4].includes(numberValue(program.poolLengthUnit) ?? 0) ? "yd" : "m";
   const poolRaw = numberValue(program.poolLength);
+  const poolUnit = context
+    ? context.defaultPoolLength.unit
+    : [3, 4].includes(numberValue(program.poolLengthUnit) ?? 0) ? "yd" : "m";
   return {
     name: String(program.name ?? "Workout"),
     overview: String(program.overview ?? ""),
@@ -287,7 +340,12 @@ export function corosProgramToWorkoutDraft(
       ? {
           sportOptions: {
             ...(sport === "swim" && poolRaw
-              ? { poolLength: { value: poolRaw / 100 / (poolUnit === "yd" ? 0.9144 : 1), unit: poolUnit } }
+              ? {
+                  poolLength: {
+                    value: poolRaw / 100 / (poolUnit === "yd" ? 0.9144 : 1),
+                    unit: poolUnit
+                  }
+                }
               : {}),
             ...(gradingSystem ? { gradingSystem } : {})
           }
@@ -364,7 +422,8 @@ function defaultOverview(
 function applyTarget(
   exercise: Record<string, unknown>,
   step: RunWorkoutEditorStep,
-  context: WorkoutEditorContext
+  context: WorkoutEditorContext,
+  sport: WorkoutSport
 ): void {
   exercise.targetDisplayUnit = 0;
   switch (step.target.type) {
@@ -375,7 +434,9 @@ function applyTarget(
     case "distance":
       exercise.targetType = 5;
       exercise.targetValue = Math.round(step.target.meters * 100);
-      exercise.targetDisplayUnit = context.distanceUnit === "imperial" ? 3 : 2;
+      exercise.targetDisplayUnit = sport === "swim"
+        ? context.distanceUnit === "imperial" ? 4 : 2
+        : context.distanceUnit === "imperial" ? 3 : 2;
       break;
     case "load":
       exercise.targetType = 6;
@@ -413,7 +474,11 @@ function applyIntensity(
   Object.assign(exercise, encodeCorosIntensity(intensity, context));
 }
 
-function aggregateGroup(group: RunWorkoutEditorRepeatGroup): {
+function aggregateGroup(
+  group: RunWorkoutEditorRepeatGroup,
+  context: WorkoutEditorContext,
+  sport: WorkoutSport
+): {
   targetType: number;
   targetValue: number;
   targetDisplayUnit: number;
@@ -427,7 +492,13 @@ function aggregateGroup(group: RunWorkoutEditorRepeatGroup): {
     0
   );
   return distance > 0
-    ? { targetType: 5, targetValue: Math.round(distance), targetDisplayUnit: 2 }
+    ? {
+        targetType: 5,
+        targetValue: Math.round(distance),
+        targetDisplayUnit: sport === "swim"
+          ? context.distanceUnit === "imperial" ? 4 : 2
+          : context.distanceUnit === "imperial" ? 3 : 2
+      }
     : { targetType: 2, targetValue: Math.round(time), targetDisplayUnit: 0 };
 }
 
@@ -494,7 +565,7 @@ export function workoutDraftToCorosProgram(
     exercise.restType = step.kind === "rest" ? 3 : numberValue(exercise.restType) ?? 3;
     exercise.restValue = numberValue(exercise.restValue) ?? 0;
     exercise.overview = defaultOverview(draft.sport, step.kind, step.target);
-    applyTarget(exercise, step, context);
+    applyTarget(exercise, step, context, draft.sport);
     applyIntensity(exercise, step.intensity, context);
     return exercise;
   };
@@ -509,7 +580,7 @@ export function workoutDraftToCorosProgram(
     const id = node.sourceExerciseId ?? allocateId();
     const source = node.sourceExerciseId ? byId.get(node.sourceExerciseId) : undefined;
     const group = source ? structuredClone(source) : newExercise(id, draft.sport);
-    const aggregate = aggregateGroup(node);
+    const aggregate = aggregateGroup(node, context, draft.sport);
     Object.assign(group, aggregate, {
       id,
       name: node.name.trim() || "Repeat",
@@ -570,7 +641,9 @@ export function workoutDraftToCorosProgram(
     0
   );
   program.sets = program.totalSets;
-  program.distanceDisplayUnit = context.distanceUnit === "imperial" ? 3 : 1;
+  program.distanceDisplayUnit = draft.sport === "swim"
+    ? context.distanceUnit === "imperial" ? 4 : 2
+    : context.distanceUnit === "imperial" ? 3 : 1;
   return program;
 }
 
@@ -673,7 +746,8 @@ function parseZoneData(account: Record<string, unknown>): Record<string, unknown
 }
 
 export function parseWorkoutEditorContext(
-  account: Record<string, unknown>
+  account: Record<string, unknown>,
+  unitSystem?: UnitSystem
 ): WorkoutEditorContext {
   const zoneData = parseZoneData(account);
   const firstNumber = (...values: unknown[]): number | undefined => {
@@ -806,17 +880,14 @@ export function parseWorkoutEditorContext(
     runningPower: configuredZones(zoneArray("criticalPowerZone", "runPowerZone"), powerDefinitions)
   };
   const lthrZones: WorkoutLthrZone[] = zones.lthr ?? [];
-  const unit = numberValue(account.unit ?? zoneData.unit) ?? 0;
-  const imperial = unit === 1 || unit === 3;
-  const poolUnitCode = numberValue(
-    account.poolLengthUnit ?? zoneData.poolLengthUnit
-  );
-  const poolLengthUnit = poolUnitCode === 3 || poolUnitCode === 4 ? "yd" : "m";
+  const selectedUnitSystem = normalizeUnitSystem(unitSystem);
+  const imperial = selectedUnitSystem === "imperial";
+  const poolLengthUnit = imperial ? "yd" : "m";
   const poolLengthRaw = firstNumber(account.poolLength, zoneData.poolLength);
-  const poolLength = poolLengthRaw
-    ? (poolLengthRaw > 200 ? poolLengthRaw / 100 : poolLengthRaw) /
-      (poolLengthUnit === "yd" ? 0.9144 : 1)
+  const poolLengthMeters = poolLengthRaw
+    ? (poolLengthRaw > 200 ? poolLengthRaw / 100 : poolLengthRaw)
     : 25;
+  const poolLength = poolLengthMeters / (poolLengthUnit === "yd" ? 0.9144 : 1);
   const climbConfigs = Array.isArray(account.climbConfig)
     ? account.climbConfig
     : Array.isArray(zoneData.climbConfig) ? zoneData.climbConfig : [];

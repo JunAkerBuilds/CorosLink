@@ -4,6 +4,13 @@ import {
   formatDurationSeconds
 } from "../training/formatters";
 import type { WeeklyStats } from "./calendarTypes";
+import { useUnitSystem } from "../units/UnitSystemProvider";
+import {
+  distanceUnit,
+  elevationUnit,
+  metersToDisplayDistance,
+  metersToElevation
+} from "../units/units";
 
 interface WeekStatsCellProps {
   stats: WeeklyStats;
@@ -30,6 +37,7 @@ function StatRow({
 }
 
 export function WeekStatsCell({ stats, onAskCoach }: WeekStatsCellProps) {
+  const { unitSystem } = useUnitSystem();
   const hasAny =
     stats.actualLoad > 0 ||
     stats.plannedLoad > 0 ||
@@ -73,15 +81,19 @@ export function WeekStatsCell({ stats, onAskCoach }: WeekStatsCellProps) {
         label="Distance"
         value={
           stats.plannedDistanceKm > 0
-            ? `${(stats.distanceMeters / 1000).toFixed(1)} / ${stats.plannedDistanceKm.toFixed(1)} km`
+            ? `${metersToDisplayDistance(stats.distanceMeters, unitSystem).toFixed(1)} / ${metersToDisplayDistance(stats.plannedDistanceKm * 1_000, unitSystem).toFixed(1)} ${distanceUnit(unitSystem)}`
             : stats.distanceMeters > 0
-              ? formatDistanceMeters(stats.distanceMeters)
+              ? formatDistanceMeters(stats.distanceMeters, unitSystem)
               : "--"
         }
       />
       <StatRow
         label="Elev. Gain"
-        value={stats.elevationGain > 0 ? `${stats.elevationGain} m` : "--"}
+        value={
+          stats.elevationGain > 0
+            ? `${Math.round(metersToElevation(stats.elevationGain, unitSystem))} ${elevationUnit(unitSystem)}`
+            : "--"
+        }
       />
       {hasAny ? (
         <button

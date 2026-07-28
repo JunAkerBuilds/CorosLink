@@ -4,6 +4,7 @@ import App from "./App";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { applyTheme, readStoredTheme } from "./theme/theme";
 import { applySportColors, readStoredSportColors } from "./training/sportColors";
+import { UnitSystemProvider } from "./units/UnitSystemProvider";
 import "./styles.css";
 
 // Apply the persisted theme before the first paint to avoid a dark→light flash.
@@ -14,7 +15,9 @@ applySportColors(readStoredSportColors());
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ThemeProvider>
-      <App />
+      <UnitSystemProvider>
+        <App />
+      </UnitSystemProvider>
     </ThemeProvider>
   </React.StrictMode>
 );

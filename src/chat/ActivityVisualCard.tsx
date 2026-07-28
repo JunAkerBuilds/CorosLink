@@ -20,6 +20,9 @@ import {
   trainingChartTooltipStyle
 } from "../training/chartConfig";
 import { useChartColors } from "../training/useChartColors";
+import { useUnitSystem } from "../units/UnitSystemProvider";
+import { elevationUnit, speedUnit } from "../units/units";
+import { isCyclingSportType } from "../training/sportTypes";
 import {
   buildDistanceSeriesData,
   buildElevationSeriesData,
@@ -30,8 +33,11 @@ interface ActivityVisualCardProps {
   preview: ActivityVisualPreview;
 }
 
-function formatPaceValue(paceSecondsPerKm: number): string {
-  return formatPaceSecondsPerKm(paceSecondsPerKm);
+function formatPaceValue(
+  paceSecondsPerKm: number,
+  unitSystem: "metric" | "imperial"
+): string {
+  return formatPaceSecondsPerKm(paceSecondsPerKm, unitSystem);
 }
 
 function HrTooltip({ active, payload, label }: TooltipContentProps) {
@@ -59,35 +65,44 @@ function buildHrBarData(preview: ActivityVisualPreview) {
 }
 
 export function ActivityVisualCard({ preview }: ActivityVisualCardProps) {
+  const { unitSystem } = useUnitSystem();
   const { colors } = useChartColors();
+  const swim = preview.sportType === 300 || preview.sportType === 301;
+  const cycling = isCyclingSportType(preview.sportType);
   const hrSeriesData = useMemo(
     () =>
       preview.sections.hr?.chartKind === "series" && preview.sections.hr.series
-        ? buildDistanceSeriesData(preview.sections.hr.series, "hr")
+        ? buildDistanceSeriesData(preview.sections.hr.series, "hr", unitSystem, swim)
         : [],
-    [preview]
+    [preview, swim, unitSystem]
   );
   const hrBarData = useMemo(() => buildHrBarData(preview), [preview]);
   const paceData = useMemo(
     () =>
       preview.sections.pace?.series
-        ? buildDistanceSeriesData(preview.sections.pace.series, "pace")
+        ? buildDistanceSeriesData(
+            preview.sections.pace.series,
+            "pace",
+            unitSystem,
+            swim,
+            cycling
+          )
         : [],
-    [preview]
+    [cycling, preview, swim, unitSystem]
   );
   const powerData = useMemo(
     () =>
       preview.sections.power?.series
-        ? buildDistanceSeriesData(preview.sections.power.series, "power")
+        ? buildDistanceSeriesData(preview.sections.power.series, "power", unitSystem, swim)
         : [],
-    [preview]
+    [preview, swim, unitSystem]
   );
   const elevationData = useMemo(
     () =>
       preview.sections.elevation?.points
-        ? buildElevationSeriesData(preview.sections.elevation.points)
+        ? buildElevationSeriesData(preview.sections.elevation.points, unitSystem)
         : [],
-    [preview]
+    [preview, unitSystem]
   );
 
   const title = preview.name ?? "Activity";
@@ -170,17 +185,27 @@ export function ActivityVisualCard({ preview }: ActivityVisualCardProps) {
 
       {preview.sections.pace ? (
         <section className="chat-visual-section">
-          <h5>Pace</h5>
+          <h5>{cycling ? "Speed" : "Pace"}</h5>
           {paceData.length >= 2 ? (
             <ChatMiniAreaChart
               data={paceData}
               gradientId={`chatPaceFill-${preview.previewId}`}
-              name="Pace"
-              formatValue={(value) => formatPaceValue(value)}
-              yAxisFormatter={(value) => formatPaceValue(value).replace("/km", "")}
+              name={cycling ? "Speed" : "Pace"}
+              formatValue={(value) =>
+                cycling
+                  ? `${value.toFixed(1)} ${speedUnit(unitSystem)}`
+                  : formatPaceValue(value, unitSystem)
+              }
+              yAxisFormatter={(value) =>
+                cycling
+                  ? value.toFixed(1)
+                  : formatPaceValue(value, unitSystem).replace(/\/(?:km|mi)$/, "")
+              }
             />
           ) : (
-            <p className="chat-visual-empty">Pace samples are not available.</p>
+            <p className="chat-visual-empty">
+              {cycling ? "Speed" : "Pace"} samples are not available.
+            </p>
           )}
         </section>
       ) : null}
@@ -209,7 +234,7 @@ export function ActivityVisualCard({ preview }: ActivityVisualCardProps) {
               data={elevationData}
               gradientId={`chatElevFill-${preview.previewId}`}
               name="Elevation"
-              formatValue={(value) => `${Math.round(value)} m`}
+              formatValue={(value) => `${Math.round(value)} ${elevationUnit(unitSystem)}`}
             />
           ) : (
             <p className="chat-visual-empty">Elevation profile is not available.</p>
@@ -229,19 +254,23 @@ export function ActivityVisualCard({ preview }: ActivityVisualCardProps) {
                   <th>Duration</th>
                   <th>Avg HR</th>
                   <th>Max HR</th>
-                  <th>Pace</th>
+                  <th>{cycling ? "Speed" : "Pace"}</th>
                 </tr>
               </thead>
               <tbody>
                 {laps.map((lap) => (
                   <tr key={lap.index}>
                     <td>{lap.index}</td>
-                    <td>{formatDistanceMeters(lap.distance)}</td>
+                    <td>{formatDistanceMeters(lap.distance, unitSystem, swim)}</td>
                     <td>{formatDurationSeconds(lap.duration)}</td>
                     <td>{formatOptionalNumber(lap.avgHr)}</td>
                     <td>{formatOptionalNumber(lap.maxHr)}</td>
                     <td>
-                      {lap.pace != null ? formatPaceValue(lap.pace) : "—"}
+                      {cycling && lap.distance && lap.duration
+                        ? `${((lap.distance / 1000) / (lap.duration / 3600) / (unitSystem === "imperial" ? 1.609344 : 1)).toFixed(1)} ${speedUnit(unitSystem)}`
+                        : lap.pace != null
+                          ? formatPaceValue(lap.pace, unitSystem)
+                          : "—"}
                     </td>
                   </tr>
                 ))}

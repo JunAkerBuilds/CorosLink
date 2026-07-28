@@ -176,7 +176,7 @@ assert.equal(metricContext.lthrZones[2]?.lowBpm, 159);
 const imperialContext = parseWorkoutEditorContext({
   unit: 1,
   zoneData: JSON.stringify({ lthr: 170, lthrZone: [] })
-});
+}, "imperial");
 assert.equal(imperialContext.distanceUnit, "imperial");
 assert.equal(imperialContext.paceUnit, "mi");
 

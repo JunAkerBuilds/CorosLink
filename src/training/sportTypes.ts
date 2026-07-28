@@ -44,6 +44,14 @@ const KNOWN_SPORT_NAMES: Record<number, string> = {
   65535: "All Sports"
 };
 
+export function isSwimSportType(sportType?: number): boolean {
+  return sportType === 300 || sportType === 301;
+}
+
+export function isCyclingSportType(sportType?: number): boolean {
+  return sportType !== undefined && sportType >= 200 && sportType <= 299;
+}
+
 export function resolveSportName(
   activity: {
     sportType?: number;

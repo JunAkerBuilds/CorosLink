@@ -1,6 +1,7 @@
 import { CalendarDays, ChevronRight, Moon } from "lucide-react";
 import { useMemo } from "react";
 import type { TrainingHubUpcomingWorkout } from "../../../electron/types";
+import { useUnitSystem } from "../../units/UnitSystemProvider";
 import {
   filterUpcomingWorkoutsFromToday,
   formatUpcomingWorkoutDate,
@@ -16,6 +17,7 @@ interface UpcomingWorkoutsPanelProps {
 }
 
 export function UpcomingWorkoutsPanel({ workouts }: UpcomingWorkoutsPanelProps) {
+  const { unitSystem } = useUnitSystem();
   const scheduledWorkouts = useMemo(
     () => filterUpcomingWorkoutsFromToday(workouts),
     [workouts]
@@ -30,7 +32,7 @@ export function UpcomingWorkoutsPanel({ workouts }: UpcomingWorkoutsPanelProps) 
   const countLabel = `${scheduledWorkouts.length} upcoming ${
     scheduledWorkouts.length === 1 ? "workout" : "workouts"
   }`;
-  const statsLabel = formatUpcomingWorkoutStats(scheduledWorkouts);
+  const statsLabel = formatUpcomingWorkoutStats(scheduledWorkouts, unitSystem);
 
   return (
     <section className="panel training-upcoming-panel">
@@ -71,7 +73,8 @@ export function UpcomingWorkoutsPanel({ workouts }: UpcomingWorkoutsPanelProps) 
               {laterWorkouts.map((workout, index) => {
                 const rowStats = formatUpcomingWorkoutRowStats(
                   workout.volume,
-                  workout.trainingLoad
+                  workout.trainingLoad,
+                  unitSystem
                 );
 
                 return (
@@ -113,11 +116,13 @@ export function UpcomingWorkoutsPanel({ workouts }: UpcomingWorkoutsPanelProps) 
 }
 
 function TodayWorkoutCard({ workout }: { workout: TrainingHubUpcomingWorkout }) {
+  const { unitSystem } = useUnitSystem();
   const category = inferUpcomingWorkoutCategory(workout.name);
   const detailLine = formatUpcomingWorkoutDetailLine(
     category,
     workout.volume,
-    workout.trainingLoad
+    workout.trainingLoad,
+    unitSystem
   );
 
   return (
