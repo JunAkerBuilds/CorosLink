@@ -53,6 +53,8 @@ import {
   listTrainingHubActivities,
   listScheduledWorkoutEntries,
   listLibraryWorkouts,
+  listWorkoutExercises,
+  getWorkoutEditorContext,
   scheduleLibraryWorkout,
   createAndScheduleWorkout,
   rescheduleScheduledWorkout,
@@ -69,6 +71,7 @@ import {
   uploadActivityFitToCoros,
   uploadTrainingPlan
 } from "./trainingHubService";
+import type { WorkoutSport } from "./types";
 import {
   cacheCorosWatchfaceProjectPreview,
   createCorosWatchfaceArchive,
@@ -1460,6 +1463,15 @@ function registerIpcHandlers(): void {
   );
 
   ipcMain.handle(
+    "trainingHub:listWorkoutExercises",
+    (_event, sport: WorkoutSport) => listWorkoutExercises(sport)
+  );
+
+  ipcMain.handle("trainingHub:getWorkoutEditorContext", () =>
+    getWorkoutEditorContext()
+  );
+
+  ipcMain.handle(
     "trainingHub:getWorkoutForEdit",
     (_event, ref: WorkoutEditRef) => getWorkoutForEdit(ref)
   );
@@ -1518,7 +1530,12 @@ function registerIpcHandlers(): void {
     "trainingHub:removeScheduledWorkout",
     (
       _event,
-      entry: { planId: string; idInPlan: string; planProgramId?: string }
+      entry: {
+        planId: string;
+        idInPlan: string;
+        planProgramId?: string;
+        pbVersion?: number;
+      }
     ) => removeScheduledWorkout(entry)
   );
 

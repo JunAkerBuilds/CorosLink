@@ -29,6 +29,7 @@ import type {
   UploadPlanResult,
   WorkoutDeletePreview
 } from "./types";
+import { buildDraftTrainingPlanInputSchema } from "./workoutCapabilities";
 
 interface StoredPlanDraft {
   draftId: string;
@@ -143,139 +144,10 @@ export function getChatWorkoutTools(): CorosMcpTool[] {
     {
       name: "draft_training_plan",
       description:
-        "Validate and store a multi-day training plan draft for the athlete to review. " +
-        "Always call this before attempting upload. Returns a draftId and human-readable preview.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          name: { type: "string", description: "Plan name, e.g. '4-Week 10K Build'" },
-          workouts: {
-            type: "array",
-            minItems: 1,
-            description: "Workouts in the plan",
-            items: {
-              type: "object",
-              properties: {
-                key: { type: "string", description: "Unique key within the plan" },
-                name: { type: "string", description: "Workout display name" },
-                distance_km: {
-                  type: "number",
-                  exclusiveMinimum: 0,
-                  description: "Simple easy run distance in km (omit if using steps)"
-                },
-                schedule_date: {
-                  type: "string",
-                  pattern: "^\\d{8}$",
-                  description: "YYYYMMDD calendar date to schedule this workout"
-                },
-                sort_no: {
-                  type: "integer",
-                  minimum: 1,
-                  description: "Order on the day (default 1)"
-                },
-                save_to_library: {
-                  type: "boolean",
-                  description: "Save to COROS workout library (default true)"
-                },
-                steps: {
-                  type: "array",
-                  minItems: 1,
-                  description:
-                    "Structured run steps. Plain step: kind (warmup|training|rest|cooldown), " +
-                    "target_type (distance|time|load|open) with its value — " +
-                    "distance→target_distance_meters, time→target_duration_seconds, " +
-                    "load→target_load (raw training-load integer 0–999), open→no value " +
-                    "(run until lap press). Optional pace string (single '5:30/km' or range " +
-                    "'4:05-4:15/km', /km or /mi). Repeat group: { repeat, steps: [...] }.",
-                  items: {
-                    oneOf: [
-                      {
-                        type: "object",
-                        properties: {
-                          kind: {
-                            type: "string",
-                            enum: ["warmup", "training", "interval", "rest", "cooldown"]
-                          },
-                          name: { type: "string" },
-                          target_type: {
-                            type: "string",
-                            enum: ["distance", "time", "load", "open"]
-                          },
-                          target_distance_meters: {
-                            type: "number",
-                            exclusiveMinimum: 0
-                          },
-                          target_duration_seconds: {
-                            type: "number",
-                            exclusiveMinimum: 0
-                          },
-                          target_load: {
-                            type: "integer",
-                            minimum: 0,
-                            maximum: 999
-                          },
-                          pace: {
-                            type: "string",
-                            description: "Pace such as 5:30/km or 4:05-4:15/km"
-                          }
-                        },
-                        required: ["kind", "target_type"]
-                      },
-                      {
-                        type: "object",
-                        properties: {
-                          repeat: {
-                            type: "integer",
-                            minimum: 1,
-                            maximum: 99
-                          },
-                          name: { type: "string" },
-                          steps: {
-                            type: "array",
-                            minItems: 1,
-                            items: {
-                              type: "object",
-                              properties: {
-                                kind: {
-                                  type: "string",
-                                  enum: ["warmup", "training", "interval", "rest", "cooldown"]
-                                },
-                                name: { type: "string" },
-                                target_type: {
-                                  type: "string",
-                                  enum: ["distance", "time", "load", "open"]
-                                },
-                                target_distance_meters: {
-                                  type: "number",
-                                  exclusiveMinimum: 0
-                                },
-                                target_duration_seconds: {
-                                  type: "number",
-                                  exclusiveMinimum: 0
-                                },
-                                target_load: {
-                                  type: "integer",
-                                  minimum: 0,
-                                  maximum: 999
-                                },
-                                pace: { type: "string" }
-                              },
-                              required: ["kind", "target_type"]
-                            }
-                          }
-                        },
-                        required: ["repeat", "steps"]
-                      }
-                    ]
-                  }
-                }
-              },
-              required: ["key", "name"]
-            }
-          }
-        },
-        required: ["name", "workouts"]
-      }
+        "Validate and store a sport-aware training plan draft for athlete review. " +
+        "Put prescribed HR, pace, power, cadence, stroke, weight, RPE, or grade in each step's typed intensity field. " +
+        "Always call this before upload. Returns a draftId and human-readable preview.",
+      inputSchema: buildDraftTrainingPlanInputSchema()
     },
     {
       name: "upload_training_plan",
@@ -394,6 +266,8 @@ function toPlanDraft(args: Record<string, unknown>): CorosTrainingPlanDraft {
     return {
       key: String(entry.key ?? `workout-${index + 1}`).trim(),
       name: String(entry.name ?? `Workout ${index + 1}`).trim(),
+      sport: entry.sport ?? "run",
+      sport_options: entry.sport_options,
       steps: entry.steps as PlanWorkoutEntry["steps"],
       distance_km: entry.distance_km,
       schedule_date: entry.schedule_date

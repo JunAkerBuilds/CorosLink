@@ -128,7 +128,10 @@ const COACH_INSTRUCTIONS =
   "the data does not cover the question, say so rather than inventing numbers.\n\n" +
   "When building training plans: review recent activities, recovery, and upcoming " +
   "workouts first. Prefer sensible periodization (easy/hard/rest balance). Use " +
-  "draft_training_plan to validate and preview before upload. Never call " +
+  "draft_training_plan to validate and preview before upload. Select the workout sport, " +
+  "and always put prescribed heart rate, pace, effort pace, power, cadence, swim stroke, " +
+  "weight, RPE, or climbing grade in the step's typed intensity object rather than only " +
+  "in its name or prose. Never call " +
   "upload_training_plan until the athlete confirms via the Upload to COROS button.\n\n" +
   "To delete workouts: use list_scheduled_workouts to find calendar entries, then " +
   "delete_workout to stage a confirmation card. The athlete must click Delete from COROS — " +
@@ -1286,13 +1289,15 @@ function withLiveToolInstructions(
       "",
       "## Training plan tools",
       `Plan authoring tools: ${planTools.map((tool) => tool.name).join(", ")}. ` +
-        "Use draft_training_plan to build multi-day schedules. Use distance_km for a " +
-        "simple easy run; use steps for anything structured. Pick each step's target " +
+        "Use draft_training_plan to build multi-day schedules across the supported sports. " +
+        "Use distance_km only for a simple Run or Trail Run; use steps for anything structured. " +
+        "Pick each step's target " +
         "deliberately: distance for easy/long/tempo blocks, time for duration-based reps " +
         "and recovery jogs, load only when prescribing by training-load budget, and open " +
-        "(no value, run-until-lap) for by-feel warmups/cooldowns or fartlek surges. Add a " +
-        "pace target (range like '4:05-4:15/km') to work intervals so they carry training " +
-        "load; leave easy/open segments paceless. Include schedule_date " +
+        "(no value, run-until-lap) for by-feel warmups/cooldowns or fartlek surges. Put every " +
+        "prescribed HR, pace, effort pace, power, cadence, stroke, weight, RPE, or grade in " +
+        "the typed intensity field; do not leave it only in workout prose or the name. " +
+        "Include schedule_date " +
         "(YYYYMMDD) for calendar placement. The athlete must confirm before upload. " +
         "Use list_scheduled_workouts + delete_workout to stage deletions. " +
         "The athlete confirms via the Delete from COROS button in chat."

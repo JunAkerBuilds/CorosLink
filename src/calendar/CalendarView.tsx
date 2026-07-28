@@ -171,7 +171,11 @@ export function CalendarView({
         .removeScheduledWorkout({
           planId: target.entry.planId,
           idInPlan: target.entry.idInPlan,
-          planProgramId: target.entry.planProgramId
+          planProgramId: target.entry.planProgramId,
+          pbVersion:
+            typeof target.entry.rawProgram?.pbVersion === "number"
+              ? target.entry.rawProgram.pbVersion
+              : undefined
         })
         .then(() => {
           onMessage(`Removed "${target.entry.name}" from the calendar.`);

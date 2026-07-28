@@ -53,7 +53,10 @@ import type {
   WorkoutEditPreview,
   WorkoutEditRef,
   WorkoutEditSaveResult,
+  WorkoutEditorContext,
   WorkoutEditorDocument,
+  WorkoutExerciseOption,
+  WorkoutSport,
   TransferResult,
   AppInfo,
   AppUpdateSnapshot,
@@ -343,6 +346,8 @@ export interface CorosLinkApi {
     endDay: string
   ) => Promise<TrainingHubScheduledWorkoutEntry[]>;
   listLibraryWorkouts: () => Promise<TrainingHubLibraryWorkout[]>;
+  listWorkoutExercises: (sport: WorkoutSport) => Promise<WorkoutExerciseOption[]>;
+  getWorkoutEditorContext: () => Promise<WorkoutEditorContext>;
   getWorkoutForEdit: (ref: WorkoutEditRef) => Promise<WorkoutEditorDocument>;
   previewWorkoutEdit: (
     ref: WorkoutEditRef,
@@ -376,6 +381,7 @@ export interface CorosLinkApi {
     planId: string;
     idInPlan: string;
     planProgramId?: string;
+    pbVersion?: number;
   }) => Promise<void>;
   getTrainingHubActivityDetail: (
     activityId: string,
