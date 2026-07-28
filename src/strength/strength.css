@@ -23,6 +23,7 @@
      use the translucent swatches the legend paints with, and the mannequin
      needs its own charcoal so untrained bellies still read against it. */
   --m3d-base: #39424b;
+  --m3d-v2-untagged: #798590;
   --m3d-heat-0: #46505a;
   --m3d-heat-1: #2fbe91;
   --m3d-heat-2: #7fbe6a;
@@ -53,6 +54,7 @@
      albedo under this rig clips to flat white and loses all its shading. The
      lights come down to match. */
   --m3d-base: #948c7e;
+  --m3d-v2-untagged: #7f786d;
   --m3d-heat-0: #a49c8e;
   --m3d-heat-1: #12946e;
   --m3d-heat-2: #63a047;
@@ -259,9 +261,9 @@
 }
 
 .strength-body-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  display: block;
+  min-height: 620px;
+  padding: 0;
   overflow: hidden;
   isolation: isolate;
 }
@@ -286,11 +288,29 @@
 }
 
 .strength-body-controls {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  left: 16px;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
+  pointer-events: none;
+}
+
+.strength-body-controls > * {
+  pointer-events: auto;
+}
+
+.strength-body-controls .strength-segmented,
+.strength-body-controls .strength-flip,
+.strength-legend {
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
 .strength-flip {
@@ -314,6 +334,158 @@
   transform: rotate(180deg);
 }
 
+.anatomy-layer-control {
+  position: absolute;
+  top: 62px;
+  left: 16px;
+  z-index: 4;
+  pointer-events: auto;
+}
+
+.anatomy-layer-trigger {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  transition:
+    color 0.16s ease,
+    background 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.anatomy-layer-trigger:hover,
+.anatomy-layer-control.is-open .anatomy-layer-trigger {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border));
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.anatomy-layer-panel {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(252px, calc(100vw - 48px));
+  max-height: min(448px, calc(100vh - 230px));
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 91%, transparent);
+  color: var(--text-primary);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+}
+
+.anatomy-layer-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.anatomy-layer-panel header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.anatomy-layer-panel header strong {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.anatomy-layer-panel header span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.anatomy-layer-reset,
+.anatomy-layer-visibility,
+.anatomy-layer-move button {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  transition:
+    color 0.14s ease,
+    background 0.14s ease;
+}
+
+.anatomy-layer-reset:hover,
+.anatomy-layer-visibility:hover,
+.anatomy-layer-move button:hover:not(:disabled) {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.anatomy-layer-panel ol {
+  display: grid;
+  gap: 2px;
+  min-height: 0;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.anatomy-layer-panel li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 4px;
+  border-radius: 9px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.anatomy-layer-panel li:hover {
+  background: color-mix(in srgb, var(--glass-bg-hover) 64%, transparent);
+  color: var(--text-primary);
+}
+
+.anatomy-layer-panel li.is-hidden > span {
+  opacity: 0.46;
+  text-decoration: line-through;
+}
+
+.anatomy-layer-visibility[aria-pressed="true"] {
+  color: var(--text-secondary);
+}
+
+.anatomy-layer-move {
+  display: inline-flex;
+  gap: 1px;
+}
+
+.anatomy-layer-move button:disabled {
+  opacity: 0.22;
+}
+
 .body-map {
   position: relative;
   display: grid;
@@ -323,12 +495,74 @@
   isolation: isolate;
 }
 
-/*
- * The figure is a WebGL scene, not markup: `bodyGeometry.ts` sweeps the body
- * and its muscle bellies, and `BodyMap.tsx` lights and turns them. Everything
- * that used to be an SVG shading pass is now a light in that scene, so only
- * the canvas box and its overlays are styled here.
- */
+.anatomy-body-map {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+}
+
+.anatomy-model-status {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  text-align: center;
+  pointer-events: none;
+}
+
+.anatomy-model-status strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.anatomy-model-status > span:last-child {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.anatomy-model-skeleton {
+  position: relative;
+  width: 72px;
+  height: 210px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  border-radius: 40% 40% 26% 26% / 18% 18% 12% 12%;
+  background: var(--glass-bg-hover);
+  opacity: 0.72;
+}
+
+.anatomy-model-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-110%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.12),
+    transparent
+  );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .anatomy-model-skeleton::after {
+    animation: anatomy-model-shimmer 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes anatomy-model-shimmer {
+  to {
+    transform: translateX(110%);
+  }
+}
+
+/* The anatomical figure is rendered in a WebGL scene; only its canvas box and
+   overlays are styled here. */
 /* Taken out of flow so the canvas never feeds its own size back into the
    container the renderer measures. */
 .body-map-canvas {
@@ -346,27 +580,6 @@
   border-radius: var(--radius-md);
 }
 
-.body-map-hint {
-  position: absolute;
-  left: 50%;
-  bottom: 4px;
-  margin: 0;
-  transform: translateX(-50%);
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  opacity: 0;
-  transition: opacity 0.25s ease;
-  pointer-events: none;
-}
-
-/* The prompt is only worth showing until the user works out it turns. */
-.body-map:hover .body-map-hint {
-  opacity: 0.75;
-}
-
 .body-map-fallback {
   margin: auto;
   max-width: 34ch;
@@ -377,15 +590,52 @@
 }
 
 .strength-legend {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
+  margin: 0;
+  padding: 8px 12px;
+  transform: translateX(-50%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (max-width: 560px) {
+  .strength-body-panel {
+    min-height: 540px;
+  }
+
+  .strength-body-controls {
+    top: 12px;
+    right: 12px;
+    left: 12px;
+  }
+
+  .strength-legend {
+    bottom: 12px;
+  }
+
+  .anatomy-layer-control {
+    top: 58px;
+    left: 12px;
+  }
+
+  .anatomy-layer-panel {
+    max-height: 390px;
+  }
 }
 
 .strength-legend-ramp {
@@ -726,6 +976,12 @@
 @media (max-width: 1040px) {
   .strength-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .anatomy-body-map {
+    min-height: 430px;
   }
 }
 

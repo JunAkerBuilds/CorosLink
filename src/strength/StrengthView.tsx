@@ -38,7 +38,7 @@ import {
   trainingChartTooltipStyle
 } from "../training/chartConfig";
 import { useChartColors } from "../training/useChartColors";
-import { BodyMap, type BodyView } from "./BodyMap";
+import { BodyMapV2, type BodyView } from "./BodyMapV2";
 import { MusclePanel } from "./MusclePanel";
 import type { MuscleId } from "./muscles";
 import { buildSampleStrengthSessions } from "./sampleSessions";
@@ -285,8 +285,8 @@ export function StrengthView({
             <p className="eyebrow">Resistance training</p>
             <h2>Strength</h2>
             <p>
-              Every lift you have logged on your COROS watch, mapped onto the
-              muscles it actually worked.
+              Explore your COROS strength workload on a detailed anatomical
+              muscle model.
             </p>
           </div>
           <div className="strength-header-icon" aria-hidden="true">
@@ -324,8 +324,8 @@ export function StrengthView({
           <p className="eyebrow">Resistance training</p>
           <h2>Strength</h2>
           <p>
-            Every lift you have logged on your COROS watch, mapped onto the
-            muscles it actually worked.
+            Explore your COROS strength workload on a detailed anatomical
+            muscle model.
           </p>
         </div>
         <div className="strength-header-controls">
@@ -438,7 +438,7 @@ export function StrengthView({
                 </div>
               </div>
 
-              <BodyMap
+              <BodyMapV2
                 view={view}
                 viewRequest={viewRequest}
                 metric={metric}
@@ -448,7 +448,9 @@ export function StrengthView({
                 hovered={highlightedMuscle}
                 onHover={setFigureHover}
                 onSelect={(muscle) =>
-                  setSelectedMuscle((current) => (current === muscle ? null : muscle))
+                  setSelectedMuscle((current) =>
+                    current === muscle ? null : muscle
+                  )
                 }
                 onViewChange={setView}
               />
