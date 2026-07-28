@@ -7,13 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.24] - 2026-07-28
+
 ### Added
 
-- **Strength tab** — a dedicated view for resistance training, with an animated anatomical body map that shades each muscle by how hard you have worked it, per-muscle set/volume/time breakdowns, weekly volume trends, push/pull/legs/core balance, estimated one-rep-max progression, and recent session history
+- **Strength tab** — a dedicated view for resistance training, built around a rotatable 3D muscle mannequin that shades each muscle by how hard you have worked it, with per-muscle set/volume/time breakdowns, weekly volume trends, push/pull/legs/core balance, estimated one-rep-max progression, and recent session history ([#84](https://github.com/JunAkerBuilds/CorosLink/pull/84))
+- **Imperial units** — a Metric/Imperial switch in Settings that converts distance, elevation, pace, and weight throughout the app ([#88](https://github.com/JunAkerBuilds/CorosLink/pull/88))
+- **Full-sport workout intensity** — the workout builder now covers all nine COROS sports (Run, Trail Run, Bike, Pool Swim, Strength, Indoor Climb, Bouldering, XC Ski, and HYROX), each with its own step kinds, targets, and intensity presets ([#86](https://github.com/JunAkerBuilds/CorosLink/pull/86), [#87](https://github.com/JunAkerBuilds/CorosLink/pull/87))
+- Scheduled workout detail view on the calendar, showing a workout's full step structure before it is sent to the watch
+- Searchable exercise picker when building strength workouts
 - Dev view can preview the Strength tab against a generated sample history, so the page can be worked on without a populated COROS account
+
+### Changed
+
+- **Watch Face Studio panels redesigned** — reworked Layers and Properties panels ([#82](https://github.com/JunAkerBuilds/CorosLink/pull/82))
+- Workout builder polish — step previews and reordering, a faster quick-workout flow, and COROS exercise media in the exercise list
 
 ### Fixed
 
+- Combined playlist retry and watch sync ([#81](https://github.com/JunAkerBuilds/CorosLink/pull/81))
+- Sparse watch face templates could not add fixed metrics ([#83](https://github.com/JunAkerBuilds/CorosLink/pull/83))
+- Watch face image imports no longer lose their native size
 - Auto-update no longer leaves the downloaded installer in the updater cache after installing it, which duplicated roughly 100MB per release on Windows ([#33](https://github.com/JunAkerBuilds/CorosLink/issues/33))
 
 ## [0.1.23] - 2026-07-22
