@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Strength tab** — a dedicated view for resistance training, with an animated anatomical body map that shades each muscle by how hard you have worked it, per-muscle set/volume/time breakdowns, weekly volume trends, push/pull/legs/core balance, estimated one-rep-max progression, and recent session history
+- Dev view can preview the Strength tab against a generated sample history, so the page can be worked on without a populated COROS account
+
 ## [0.1.23] - 2026-07-22
 
 ### Changed

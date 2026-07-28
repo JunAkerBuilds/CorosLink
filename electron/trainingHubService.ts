@@ -8,15 +8,19 @@ import {
   mergeSportTypeEntries
 } from "./corosSportTypes";
 import {
+  countStrengthActivitiesMissingDetail,
   countTrainingActivitiesMissingFeelType,
   countTrainingActivitiesSince,
   deleteSettings,
   getSetting,
+  listStoredStrengthSessions,
   listStoredTrainingActivities,
+  listStrengthActivitiesMissingDetail,
   listTrainingActivitiesMissingFeelType,
   listTrainingActivityRpeInputs,
   setSetting,
   setTrainingActivityFeelType,
+  upsertStrengthSessionDetail,
   upsertTrainingActivities
 } from "./database";
 import { buildRpeDistribution, dailyRpeLoad } from "./rpeLoad";
@@ -24,6 +28,7 @@ import type {
   ActivityPaceBaseline,
   ActivityPaceBaselines,
   RouteActivityType,
+  StrengthHistory,
   TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
@@ -1086,6 +1091,132 @@ export async function backfillFeelTypes(): Promise<void> {
   } finally {
     feelBackfillRunning = false;
   }
+}
+
+// Gym Cardio and Strength both land in the strength bucket; only sessions that
+// actually recorded exercise laps produce a breakdown, and the rest are cached
+// as empty so they are asked for exactly once.
+const STRENGTH_SPORT_TYPES = [400, 402];
+// Detail payloads are large, so a sync call drains a slice and reports what is
+// left; the renderer loops until `pending` reaches zero, filling in as it goes.
+const STRENGTH_DETAIL_CHUNK = 12;
+const STRENGTH_DETAIL_DELAY_MS = 250;
+const STRENGTH_DETAIL_MAX_CONSECUTIVE_FAILURES = 4;
+const STRENGTH_INDEX_PAGE_SIZE = 100;
+const STRENGTH_INDEX_MAX_PAGES = 20;
+const STRENGTH_INDEX_TTL_MS = 5 * 60 * 1000;
+let strengthIndexRefreshedAt = 0;
+// Widening the window reaches further back than the last refresh covered, so
+// the cached index is only good for windows no longer than this one.
+let strengthIndexRefreshedDays = 0;
+
+function happenDayFromDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}${month}${day}`;
+}
+
+function windowStartEpochSeconds(days: number): number {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - days);
+  return Math.floor(start.getTime() / 1000);
+}
+
+/**
+ * Pull the activity index for the window so `training_activities` knows about
+ * every strength session before we go looking for breakdowns. Each page is
+ * persisted by listTrainingHubActivities as a side effect.
+ */
+async function refreshStrengthActivityIndex(days: number): Promise<void> {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - days);
+  const startDay = happenDayFromDate(start);
+  const endDay = happenDayFromDate(end);
+
+  for (let page = 1; page <= STRENGTH_INDEX_MAX_PAGES; page += 1) {
+    const batch = await listTrainingHubActivities(
+      page,
+      STRENGTH_INDEX_PAGE_SIZE,
+      startDay,
+      endDay
+    );
+    if (batch.length < STRENGTH_INDEX_PAGE_SIZE) {
+      break;
+    }
+  }
+  strengthIndexRefreshedAt = Date.now();
+  strengthIndexRefreshedDays = days;
+}
+
+/**
+ * Strength history for the last `days`, fetching a slice of the missing
+ * breakdowns on each call. Returns everything cached so far plus how much is
+ * still outstanding, so the caller can keep going until `pending` is zero.
+ */
+export async function syncStrengthHistory(
+  days = 180,
+  force = false
+): Promise<StrengthHistory> {
+  const since = windowStartEpochSeconds(days);
+
+  if (
+    force ||
+    days > strengthIndexRefreshedDays ||
+    Date.now() - strengthIndexRefreshedAt > STRENGTH_INDEX_TTL_MS
+  ) {
+    await refreshStrengthActivityIndex(days);
+  }
+
+  const userId = getStoredAuth()?.userId;
+  const missing = listStrengthActivitiesMissingDetail(
+    since,
+    STRENGTH_SPORT_TYPES,
+    STRENGTH_DETAIL_CHUNK
+  );
+
+  let fetched = 0;
+  let consecutiveFailures = 0;
+  for (const { activityId, sportType } of missing) {
+    try {
+      const raw = await trainingHubRequest<Record<string, unknown>>(
+        "/activity/detail/query",
+        {
+          method: "POST",
+          params: {
+            labelId: activityId,
+            sportType,
+            ...(userId ? { userId } : {})
+          }
+        }
+      );
+      upsertStrengthSessionDetail(
+        activityId,
+        sportType,
+        parseStrengthDetail(raw)
+      );
+      cacheFeelTypeFromDetail(activityId, raw);
+      fetched += 1;
+      consecutiveFailures = 0;
+    } catch {
+      // Leave the row uncached so a later sync retries it, and back off once
+      // the API has failed repeatedly rather than draining the whole slice.
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= STRENGTH_DETAIL_MAX_CONSECUTIVE_FAILURES) {
+        break;
+      }
+    }
+    await delay(STRENGTH_DETAIL_DELAY_MS);
+  }
+
+  return {
+    sessions: listStoredStrengthSessions(since),
+    pending: countStrengthActivitiesMissingDetail(since, STRENGTH_SPORT_TYPES),
+    fetched,
+    days
+  };
 }
 
 export async function getDailyMetrics(
