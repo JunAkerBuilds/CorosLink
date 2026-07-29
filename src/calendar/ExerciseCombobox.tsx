@@ -1,12 +1,4 @@
-import {
-  AlertCircle,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Search
-} from "lucide-react";
-import { useReducedMotion } from "motion/react";
+import { Check, ChevronDown, Search } from "lucide-react";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -19,6 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import type { WorkoutExerciseOption } from "../../electron/types";
 import { resolveExerciseName } from "../training/exerciseNames";
+import { ExercisePreview } from "./ExercisePreview";
 
 export interface ExerciseComboboxSelection {
   name: string;
@@ -35,6 +28,8 @@ interface ExerciseComboboxProps {
   loading?: boolean;
   disabled?: boolean;
   details?: ReactNode;
+  /** Suppress the built-in demonstration plate when the host renders its own. */
+  hidePreview?: boolean;
   onChange: (selection: ExerciseComboboxSelection) => void;
 }
 
@@ -69,6 +64,7 @@ export function ExerciseCombobox({
   loading = false,
   disabled = false,
   details,
+  hidePreview = false,
   onChange
 }: ExerciseComboboxProps) {
   const id = useId();
@@ -76,10 +72,7 @@ export function ExerciseCombobox({
   const inputShellRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const reducedMotion = useReducedMotion();
   const [isOpen, setIsOpen] = useState(false);
-  const [previewMediaIndex, setPreviewMediaIndex] = useState(0);
-  const [previewStatus, setPreviewStatus] = useState<"loading" | "ready" | "error">("loading");
   const [query, setQuery] = useState(value);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [menuPosition, setMenuPosition] = useState<ExerciseMenuPosition>();
@@ -92,11 +85,8 @@ export function ExerciseCombobox({
     () => labeledOptions.find((option) => option.id === selectedId),
     [labeledOptions, selectedId]
   );
-  const previewMedia = useMemo(
-    () => selectedOption?.media?.filter((entry) => entry.videoUrl) ?? [],
-    [selectedOption]
-  );
-  const activePreviewMedia = previewMedia[previewMediaIndex] ?? previewMedia[0];
+  const hasPreview = !hidePreview
+    && Boolean(selectedOption?.media?.some((entry) => entry.videoUrl));
 
   const filteredOptions = useMemo(() => {
     const term = normalizeSearch(query);
@@ -119,15 +109,6 @@ export function ExerciseCombobox({
     const selectedIndex = filteredOptions.findIndex((option) => option.id === selectedId);
     setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0);
   }, [filteredOptions, isOpen, selectedId]);
-
-  useEffect(() => {
-    setPreviewMediaIndex(0);
-    setPreviewStatus("loading");
-  }, [selectedId]);
-
-  useEffect(() => {
-    setPreviewStatus("loading");
-  }, [activePreviewMedia?.videoUrl]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -224,7 +205,7 @@ export function ExerciseCombobox({
 
   return (
     <div
-      className={`exercise-combobox ${activePreviewMedia?.videoUrl ? "has-inline-video" : ""}`}
+      className={`exercise-combobox ${hasPreview ? "has-inline-video" : ""}`}
       ref={rootRef}
     >
       <div className="exercise-combobox-picker">
@@ -332,64 +313,11 @@ export function ExerciseCombobox({
         {details ? <div className="exercise-combobox-details">{details}</div> : null}
       </div>
 
-      {activePreviewMedia?.videoUrl ? (
-        <section className="exercise-inline-video" aria-label={`${selectedOption?.label ?? "Exercise"} movement demonstration`}>
-          <header className="exercise-inline-video-header">
-            <div>
-              <strong>{selectedOption?.label}</strong>
-              <span>Movement demonstration</span>
-            </div>
-            {previewMedia.length > 1 ? (
-              <div className="exercise-inline-video-actions">
-                <button
-                  type="button"
-                  aria-label="Previous movement angle"
-                  onClick={() => setPreviewMediaIndex((current) => (current - 1 + previewMedia.length) % previewMedia.length)}
-                >
-                  <ChevronLeft size={15} aria-hidden="true" />
-                </button>
-                <span>{previewMediaIndex + 1} / {previewMedia.length}</span>
-                <button
-                  type="button"
-                  aria-label="Next movement angle"
-                  onClick={() => setPreviewMediaIndex((current) => (current + 1) % previewMedia.length)}
-                >
-                  <ChevronRight size={15} aria-hidden="true" />
-                </button>
-              </div>
-            ) : null}
-          </header>
-          <div className="exercise-inline-video-stage">
-            {previewStatus === "loading" ? (
-              <div className="exercise-inline-video-loading" role="status">
-                <span aria-hidden="true" />
-                <strong>Loading movement</strong>
-              </div>
-            ) : null}
-            {previewStatus === "error" ? (
-              <div className="exercise-inline-video-error" role="alert">
-                <AlertCircle size={21} aria-hidden="true" />
-                <strong>Video unavailable</strong>
-                <span>Try another angle.</span>
-              </div>
-            ) : null}
-            <video
-              key={activePreviewMedia.videoUrl}
-              className={previewStatus === "ready" ? "is-ready" : ""}
-              src={activePreviewMedia.videoUrl}
-              poster={activePreviewMedia.coverUrl ?? selectedOption?.thumbnailUrl}
-              controls
-              autoPlay={!reducedMotion}
-              muted
-              loop={!reducedMotion}
-              playsInline
-              preload="metadata"
-              onLoadedData={() => setPreviewStatus("ready")}
-              onError={() => setPreviewStatus("error")}
-              aria-label={`${selectedOption?.label ?? "Exercise"} demonstration`}
-            />
-          </div>
-        </section>
+      {hasPreview ? (
+        <ExercisePreview
+          option={selectedOption}
+          name={selectedOption?.label ?? ""}
+        />
       ) : null}
     </div>
   );

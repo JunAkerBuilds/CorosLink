@@ -62,6 +62,7 @@ import {
 import { formatHappenDayLabel, getLocalHappenDayKey } from "../training/formatters";
 import { dateFromKey } from "./dateUtils";
 import { ExerciseCombobox, type ExerciseComboboxSelection } from "./ExerciseCombobox";
+import { ExercisePreview } from "./ExercisePreview";
 import {
   CLIMB_GRADES,
   CLIMB_SYSTEM_IDS,
@@ -526,6 +527,13 @@ function builderRowValidationMessage(
     if (!Number.isFinite(Number(row.restSeconds)) || Number(row.restSeconds) < 0 || Number(row.restSeconds) > 3600) {
       return "Enter rest between 0 and 3600 seconds.";
     }
+  }
+  // An empty added-weight field reads as 0 and would upload a 0 kg step, so
+  // the load has to be stated once "added weight" is the chosen mode.
+  if (row.intensityType === "weight"
+    && row.intensityPreset === "weight"
+    && !(Number(row.intensityLow) > 0)) {
+    return `Enter the added weight in ${unitSystem === "imperial" ? "lb" : "kg"}.`;
   }
   if (sport === "hyrox" && row.exerciseName.trim() && !row.exerciseId) {
     return exerciseOptions.length === 0
@@ -997,6 +1005,287 @@ function BuilderIntensityFields({ row, sport, context, exerciseOptions, exercise
   </div>;
 }
 
+/** Rest lengths lifters actually reach for; anything else goes in the field. */
+const STRENGTH_REST_PRESETS = [30, 45, 60, 90, 120] as const;
+
+/** Rest chips read as one clock format so they scan as a single scale. */
+function formatRestChip(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function formatStrengthClock(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  if (seconds < 60) return `${seconds} sec`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder === 0 ? `${minutes} min` : `${minutes}:${String(remainder).padStart(2, "0")}`;
+}
+
+/** How the load slot is set, folding the intensity type and its mode into one. */
+type StrengthLoadMode = "bodyweight" | "added" | "unspecified";
+
+function strengthLoadMode(row: BuilderRow): StrengthLoadMode {
+  if (row.intensityType === "none") return "unspecified";
+  return row.intensityPreset === "weight" ? "added" : "bodyweight";
+}
+
+/**
+ * A strength set is written the way lifters write it — sets × work @ load,
+ * then rest — so the editor is that line rather than a column of look-alike
+ * fields. Everything COROS accepts for a Strength training step (reps or
+ * seconds or a manual end, bodyweight or added load, sets, rest) lives here.
+ */
+function BuilderStrengthStepFields({
+  row,
+  exerciseOptions,
+  exercisesLoading,
+  allowedKinds,
+  kindLabel,
+  validationMessage,
+  onChange,
+  onKindChange
+}: {
+  row: BuilderRow;
+  exerciseOptions: WorkoutExerciseOption[];
+  exercisesLoading: boolean;
+  allowedKinds: readonly BuilderKind[];
+  kindLabel: string;
+  validationMessage?: string;
+  onChange: (update: Partial<BuilderRow>) => void;
+  onKindChange: (kind: BuilderKind) => void;
+}) {
+  const { unitSystem } = useUnitSystem();
+  const targetTypes = workoutTargetsForStep("strength", "training", row.exerciseKind);
+  const selectedExercise = row.exerciseId
+    ? exerciseOptions.find((option) => option.id === row.exerciseId)
+    : undefined;
+  const loadMode = strengthLoadMode(row);
+  const weightUnit = unitSystem === "imperial" ? "lb" : "kg";
+  const restSeconds = Number(row.restSeconds);
+  const sets = Number(row.sets);
+  const perSet = row.targetType === "time" ? Number(row.timeMin) : Number(row.distanceKm);
+
+  const measureLabels: Partial<Record<BuilderRow["targetType"], string>> = {
+    reps: "reps",
+    time: "seconds",
+    open: "to lap button"
+  };
+
+  // Only worth saying once the sets multiply into something you can't read
+  // straight off the line above.
+  const restTotal = Number.isFinite(restSeconds) && sets > 1
+    ? Math.max(0, restSeconds) * (sets - 1)
+    : 0;
+  const readout = !(sets > 1)
+    ? undefined
+    : row.targetType === "reps" && perSet > 0
+      ? `${sets * perSet} reps in total${restTotal > 0 ? `, ${formatStrengthClock(restTotal)} resting` : ""}`
+      : row.targetType === "time" && perSet > 0
+        ? `About ${formatStrengthClock(sets * perSet + restTotal)} in total`
+        : row.targetType === "open" && restTotal > 0
+          ? `${formatStrengthClock(restTotal)} resting in total`
+          : undefined;
+
+  const changeMeasure = (targetType: BuilderRow["targetType"]) => {
+    if (targetType === row.targetType) return;
+    const update: Partial<BuilderRow> = { targetType };
+    // Seed the field the new measure reads from so the step stays valid.
+    if (targetType === "reps" && !(Number(row.distanceKm) > 0)) update.distanceKm = "10";
+    if (targetType === "time" && !(Number(row.timeMin) > 0)) update.timeMin = "30";
+    onChange(update);
+  };
+
+  const changeLoadMode = (mode: StrengthLoadMode) => {
+    if (mode === "unspecified") {
+      onChange({ intensityType: "none", intensityPreset: "" });
+      return;
+    }
+    if (mode === "bodyweight") {
+      onChange({ intensityType: "weight", intensityPreset: "bodyweight" });
+      return;
+    }
+    onChange({
+      intensityType: "weight",
+      intensityPreset: "weight",
+      intensityUnit: weightUnit,
+      intensityLow: Number(row.intensityLow) > 0 ? row.intensityLow : ""
+    });
+  };
+
+  return (
+    <div className="calendar-builder-row-content strength-step">
+      <div className="strength-step-form">
+        <label className="calendar-builder-control strength-step-kind">
+          <span>{kindLabel}</span>
+          <select value={row.kind} onChange={(event) => onKindChange(event.target.value as BuilderKind)}>
+            {allowedKinds.map((kind) => (
+              <option key={kind} value={kind}>{BUILDER_KIND_META[kind].label}</option>
+            ))}
+          </select>
+        </label>
+
+        <section className="strength-block">
+          <h4>Movement</h4>
+          <ExerciseCombobox
+            value={row.exerciseName}
+            selectedId={row.exerciseId}
+            options={exerciseOptions}
+            placeholder="Search the COROS exercise library"
+            label="Exercise"
+            loading={exercisesLoading}
+            hidePreview
+            onChange={(selection) => onChange({
+              exerciseName: selection.name,
+              exerciseId: selection.id ?? "",
+              exerciseKind: selection.exerciseKind
+            })}
+          />
+          {exercisesLoading ? (
+            <p className="strength-block-note">Loading the COROS exercise library.</p>
+          ) : exerciseOptions.length === 0 ? (
+            <p className="strength-block-note">No exercises loaded. Reconnect COROS to get the library.</p>
+          ) : !row.exerciseId ? (
+            <p className="strength-block-note">Pick one exercise from the list. The watch needs an exact match.</p>
+          ) : null}
+        </section>
+
+        <section className="strength-block">
+          <h4>Prescription</h4>
+          <div className="set-line">
+            <label className="set-line-cell">
+              <span>Sets</span>
+              <input
+                type="number"
+                min="1"
+                max="99"
+                value={row.sets}
+                onChange={(event) => onChange({ sets: event.target.value })}
+              />
+            </label>
+
+            <span className="set-line-operator" aria-hidden="true">×</span>
+
+            <div className="set-line-cell">
+              <span>Per set</span>
+              <div className="set-line-compound">
+                {row.targetType === "open" ? (
+                  <span className="set-line-open">Ends on the lap button</span>
+                ) : (
+                  <input
+                    type="number"
+                    min="1"
+                    max={row.targetType === "reps" ? 500 : undefined}
+                    aria-label={row.targetType === "reps" ? "Repetitions per set" : "Seconds per set"}
+                    value={row.targetType === "time" ? row.timeMin : row.distanceKm}
+                    placeholder={row.targetType === "time" ? "30" : "10"}
+                    onChange={(event) => onChange(
+                      row.targetType === "time"
+                        ? { timeMin: event.target.value }
+                        : { distanceKm: event.target.value }
+                    )}
+                  />
+                )}
+                <select
+                  aria-label="Measure each set by"
+                  value={row.targetType}
+                  onChange={(event) => changeMeasure(event.target.value as BuilderRow["targetType"])}
+                >
+                  {targetTypes.map((target) => (
+                    <option key={target} value={target}>
+                      {measureLabels[target] ?? builderTargetTypeLabel(target)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <span className="set-line-operator" aria-hidden="true">@</span>
+
+            <div className="set-line-cell is-load">
+              <span>Load</span>
+              <div className="set-line-compound">
+                <select
+                  aria-label="Load"
+                  value={loadMode}
+                  onChange={(event) => changeLoadMode(event.target.value as StrengthLoadMode)}
+                >
+                  <option value="bodyweight">Bodyweight</option>
+                  <option value="added">Added weight</option>
+                  <option value="unspecified">Not set</option>
+                </select>
+                {loadMode === "added" ? (
+                  <span className="set-line-weight">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      aria-label={`Weight in ${weightUnit}`}
+                      placeholder="20"
+                      value={row.intensityLow}
+                      onChange={(event) => onChange({
+                        intensityLow: event.target.value,
+                        intensityUnit: weightUnit
+                      })}
+                    />
+                    <em>{weightUnit}</em>
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+          {readout ? <p className="set-line-readout">{readout}</p> : null}
+        </section>
+
+        <section className="strength-block">
+          <h4>Rest between sets</h4>
+          <div className="rest-picker">
+            {STRENGTH_REST_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                className={restSeconds === preset ? "is-selected" : ""}
+                aria-pressed={restSeconds === preset}
+                onClick={() => onChange({ restSeconds: String(preset) })}
+              >
+                {formatRestChip(preset)}
+              </button>
+            ))}
+            <label className="rest-picker-custom">
+              <input
+                type="number"
+                min="0"
+                max="3600"
+                step="5"
+                aria-label="Rest between sets in seconds"
+                value={row.restSeconds}
+                onChange={(event) => onChange({ restSeconds: event.target.value })}
+              />
+              <em>sec</em>
+            </label>
+          </div>
+        </section>
+
+        {validationMessage ? (
+          <p className="calendar-builder-error" role="alert">
+            <AlertCircle size={13} aria-hidden="true" />
+            <span>{validationMessage}</span>
+          </p>
+        ) : null}
+      </div>
+
+      {selectedExercise ? (
+        <aside className="strength-step-aside">
+          <ExercisePreview
+            option={selectedExercise}
+            name={row.exerciseName}
+            showTargets
+          />
+        </aside>
+      ) : null}
+    </div>
+  );
+}
+
 function BuilderStepFields({
   row,
   sport,
@@ -1031,6 +1320,21 @@ function BuilderStepFields({
     exercisesLoading,
     unitSystem
   );
+
+  if (sport === "strength" && row.kind === "training") {
+    return (
+      <BuilderStrengthStepFields
+        row={row}
+        exerciseOptions={exerciseOptions}
+        exercisesLoading={exercisesLoading}
+        allowedKinds={allowedKinds}
+        kindLabel={kindLabel}
+        validationMessage={validationMessage}
+        onChange={onChange}
+        onKindChange={onKindChange}
+      />
+    );
+  }
 
   return (
     <div className={`calendar-builder-row-content ${usesExerciseWorkspace ? "has-exercise-workspace" : ""}`}>
@@ -1467,6 +1771,7 @@ export function AddWorkoutModal({
   // Log activity
   const [activitySportId, setActivitySportId] = useState(DEFAULT_LOG_SPORT_OPTION.id);
   const [activitySportSearch, setActivitySportSearch] = useState("");
+  const [activitySportSearchOpen, setActivitySportSearchOpen] = useState(false);
   const [activityTime, setActivityTime] = useState(() =>
     dateKey === todayKey
       ? new Date(Date.now() - 3_600_000).toTimeString().slice(0, 5)
@@ -1616,12 +1921,10 @@ export function AddWorkoutModal({
   }, [activitySportSearch, combinedSportOptions, selectedActivitySport]);
 
   const showActivityDistance = selectedActivitySport.distanceUnit !== "none";
-  const activityDistanceLabel =
+  const activityDistanceUnit =
     selectedActivitySport.distanceUnit === "m"
-      ? `Distance (${swimDistanceUnit(unitSystem)})`
-      : `Distance (${distanceUnit(unitSystem)})`;
-  const activityDistancePlaceholder =
-    selectedActivitySport.distanceUnit === "m" ? "1500" : "0";
+      ? swimDistanceUnit(unitSystem)
+      : distanceUnit(unitSystem);
 
   const run = async (action: () => Promise<void>, successMessage: string) => {
     setSubmitting(true);
@@ -2483,24 +2786,44 @@ export function AddWorkoutModal({
 
           {tab === "activity" ? (
             <div className="calendar-modal-body calendar-activity-body">
-              <div
-                className="calendar-activity-sport-picker"
+              <section
+                className="calendar-activity-section calendar-activity-sport-picker"
                 role="group"
                 aria-label="Activity type"
               >
-                <label className="calendar-field calendar-sport-search">
-                  <span>Activity type</span>
+                <div className="calendar-activity-section-head">
+                  <h4>Activity type</h4>
+                  <button
+                    type="button"
+                    className="calendar-activity-search-toggle"
+                    aria-expanded={activitySportSearchOpen}
+                    disabled={submitting}
+                    onClick={() => {
+                      setActivitySportSearchOpen((open) => {
+                        if (open) setActivitySportSearch("");
+                        return !open;
+                      });
+                    }}
+                  >
+                    <Search size={12} aria-hidden="true" />
+                    {activitySportSearchOpen ? "Hide search" : "Search all types"}
+                  </button>
+                </div>
+
+                {activitySportSearchOpen ? (
                   <span className="calendar-sport-search-control">
                     <Search size={14} aria-hidden="true" />
                     <input
                       type="text"
+                      aria-label="Search activity types"
                       value={activitySportSearch}
                       onChange={(event) => setActivitySportSearch(event.target.value)}
-                      placeholder="Search activity types"
+                      placeholder="Rowing, pilates, indoor bike…"
                       disabled={submitting}
+                      autoFocus
                     />
                   </span>
-                </label>
+                ) : null}
 
                 {visibleSportOptions.length === 0 ? (
                   <p className="calendar-activity-hint">
@@ -2527,85 +2850,113 @@ export function AddWorkoutModal({
                     })}
                   </div>
                 )}
-              </div>
+              </section>
 
-              <div className="calendar-field-row">
-                <label className="calendar-field">
-                  <span>Start time</span>
-                  <input
-                    type="time"
-                    value={activityTime}
-                    onChange={(event) => setActivityTime(event.target.value)}
-                    disabled={submitting}
-                  />
-                </label>
-                <label className="calendar-field">
-                  <span>Hours</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={activityHours}
-                    onChange={(event) => setActivityHours(event.target.value)}
-                    placeholder="0"
-                    disabled={submitting}
-                  />
-                </label>
-                <label className="calendar-field">
-                  <span>Minutes</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="59"
-                    value={activityMinutes}
-                    onChange={(event) => setActivityMinutes(event.target.value)}
-                    placeholder="45"
-                    disabled={submitting}
-                  />
-                </label>
-              </div>
-              <div className="calendar-field-row">
-                {showActivityDistance ? (
+              <section className="calendar-activity-section">
+                <h4>When and how long</h4>
+                <div className="calendar-field-row">
                   <label className="calendar-field">
-                    <span>{activityDistanceLabel}</span>
+                    <span>Started at</span>
                     <input
-                      type="number"
-                      min="0"
-                      step={selectedActivitySport.distanceUnit === "m" ? "1" : "0.01"}
-                      value={activityDistance}
-                      onChange={(event) => setActivityDistance(event.target.value)}
-                      placeholder={activityDistancePlaceholder}
+                      type="time"
+                      value={activityTime}
+                      onChange={(event) => setActivityTime(event.target.value)}
                       disabled={submitting}
                     />
                   </label>
-                ) : null}
-                <label className="calendar-field">
-                  <span>Calories (optional)</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={activityCalories}
-                    onChange={(event) => setActivityCalories(event.target.value)}
-                    placeholder="450"
-                    disabled={submitting}
-                  />
-                </label>
-                <label className="calendar-field">
-                  <span>Avg HR (optional)</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={activityAvgHr}
-                    onChange={(event) => setActivityAvgHr(event.target.value)}
-                    placeholder="145"
-                    disabled={submitting}
-                  />
-                </label>
-              </div>
-              <p className="calendar-activity-hint">
-                Logs an activity that wasn&apos;t recorded by a device straight to
-                your COROS account.
-              </p>
-              <footer className="calendar-modal-footer">
+                  <div className="calendar-field">
+                    <span>Duration</span>
+                    <div className="calendar-duration-control">
+                      <span className="calendar-duration-part">
+                        <input
+                          type="number"
+                          min="0"
+                          max="23"
+                          aria-label="Duration, hours"
+                          value={activityHours}
+                          onChange={(event) => setActivityHours(event.target.value)}
+                          placeholder="0"
+                          disabled={submitting}
+                        />
+                        <em>h</em>
+                      </span>
+                      <span className="calendar-duration-part">
+                        <input
+                          type="number"
+                          min="0"
+                          max="59"
+                          aria-label="Duration, minutes"
+                          value={activityMinutes}
+                          onChange={(event) => setActivityMinutes(event.target.value)}
+                          placeholder="0"
+                          disabled={submitting}
+                        />
+                        <em>m</em>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Everything below is recalled rather than measured, so the
+                  heading says so once instead of tagging each field. */}
+              <section className="calendar-activity-section">
+                <h4>If you know them</h4>
+                <div className="calendar-field-row">
+                  {showActivityDistance ? (
+                    <label className="calendar-field">
+                      <span>Distance</span>
+                      <span className="calendar-unit-control">
+                        <input
+                          type="number"
+                          min="0"
+                          step={selectedActivitySport.distanceUnit === "m" ? "1" : "0.01"}
+                          value={activityDistance}
+                          onChange={(event) => setActivityDistance(event.target.value)}
+                          placeholder="—"
+                          disabled={submitting}
+                        />
+                        <em>{activityDistanceUnit}</em>
+                      </span>
+                    </label>
+                  ) : null}
+                  <label className="calendar-field">
+                    <span>Calories</span>
+                    <span className="calendar-unit-control">
+                      <input
+                        type="number"
+                        min="0"
+                        value={activityCalories}
+                        onChange={(event) => setActivityCalories(event.target.value)}
+                        placeholder="—"
+                        disabled={submitting}
+                      />
+                      <em>kcal</em>
+                    </span>
+                  </label>
+                  <label className="calendar-field">
+                    <span>Average heart rate</span>
+                    <span className="calendar-unit-control">
+                      <input
+                        type="number"
+                        min="0"
+                        value={activityAvgHr}
+                        onChange={(event) => setActivityAvgHr(event.target.value)}
+                        placeholder="—"
+                        disabled={submitting}
+                      />
+                      <em>bpm</em>
+                    </span>
+                  </label>
+                </div>
+              </section>
+
+              <footer className="calendar-modal-footer calendar-activity-footer">
+                <p className="calendar-activity-hint">
+                  {activityValid
+                    ? "Goes straight to your COROS account."
+                    : "Add a duration to log this activity."}
+                </p>
                 <button
                   type="button"
                   className="primary-button"
