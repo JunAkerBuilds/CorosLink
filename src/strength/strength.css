@@ -31,6 +31,10 @@
   --sx-ember: #e8813c;
   --sx-ember-glow: rgba(232, 129, 60, 0.1);
 
+  /* Gold belongs to one event: the newest session setting a lift's best.
+     Same record language the Exercise Explorer speaks, scoped to the page. */
+  --sx-record: #f0b429;
+
   /* Movement-mix swatches are fixed, not the --sport-* tokens: those are
      user-customisable in Settings, and a palette that can collide with itself
      is not a palette. */
@@ -57,6 +61,7 @@
      needs its own charcoal so untrained bellies still read against it. */
   --m3d-base: #39424b;
   --m3d-v2-bone: #9bcbd8;
+  --m3d-v2-connective: #d9cfc0;
   --m3d-heat-0: #46505a;
   --m3d-heat-1: #2fbe91;
   --m3d-heat-2: #7fbe6a;
@@ -87,6 +92,13 @@
   --body-stage-border: rgba(170, 192, 207, 0.13);
 }
 
+/* A real final grid row keeps the last card clear of the scrollport edge.
+   Unlike a trailing margin, this spacer is included in scrollable overflow. */
+.strength-view::after {
+  content: "";
+  min-height: 1px;
+}
+
 :root[data-theme="paper"] .strength-view {
   /* On paper a "raised" face is white and the shadow does the lifting, so the
      three surfaces are respecified rather than derived from the ink. */
@@ -98,6 +110,7 @@
   --sx-lift: 0 1px 2px rgba(60, 50, 35, 0.14);
   --sx-ember: #cf6a2a;
   --sx-ember-glow: rgba(207, 106, 42, 0.07);
+  --sx-record: #c98a12;
 
   --mix-push: #cb3035;
   --mix-pull: #12946e;
@@ -116,6 +129,7 @@
      lights come down to match. */
   --m3d-base: #948c7e;
   --m3d-v2-bone: #648894;
+  --m3d-v2-connective: #8b7868;
   --m3d-heat-0: #a49c8e;
   --m3d-heat-1: #12946e;
   --m3d-heat-2: #63a047;
@@ -998,7 +1012,7 @@
   padding: 0;
   list-style: none;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: auto;
   scrollbar-gutter: stable;
   min-height: 0;
 }
@@ -2351,7 +2365,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   gap: 24px;
-  align-items: start;
+  align-items: stretch;
 }
 
 @media (max-width: 1040px) {
@@ -2371,10 +2385,10 @@
 
 .strength-lift-list li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 104px auto;
+  grid-template-columns: minmax(0, 1fr) 112px auto;
   align-items: center;
   gap: 22px;
-  padding: 15px 0;
+  padding: 16px 0;
   border-top: 1px solid var(--sx-hairline);
 }
 
@@ -2395,7 +2409,7 @@
 
 .strength-lift-name {
   color: var(--text-primary);
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 500;
   letter-spacing: -0.008em;
   overflow: hidden;
@@ -2415,13 +2429,20 @@
  */
 .strength-spark {
   display: block;
-  width: 104px;
-  height: 30px;
+  width: 112px;
+  height: 34px;
   overflow: visible;
 }
 
 .strength-spark.is-empty {
-  height: 30px;
+  height: 34px;
+}
+
+/* The fill is the stroke's colour at a whisper: enough to give the line
+   ground to sit on, not enough to read as a chart of its own. */
+.strength-spark-area {
+  fill: color-mix(in srgb, var(--accent) 12%, transparent);
+  stroke: none;
 }
 
 .strength-spark polyline {
@@ -2430,6 +2451,7 @@
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
+  transition: stroke 150ms ease;
 }
 
 .strength-spark circle {
@@ -2438,12 +2460,20 @@
 
 /* Tone only ever moves the stroke; the polyline keeps `fill: none` or it
    closes itself into a solid shape. */
+.strength-spark[data-tone="down"] .strength-spark-area {
+  fill: color-mix(in srgb, var(--text-muted) 10%, transparent);
+}
+
 .strength-spark[data-tone="down"] polyline {
   stroke: var(--text-muted);
 }
 
 .strength-spark[data-tone="down"] circle {
   fill: var(--text-muted);
+}
+
+.strength-spark[data-tone="flat"] .strength-spark-area {
+  fill: color-mix(in srgb, var(--text-secondary) 8%, transparent);
 }
 
 .strength-spark[data-tone="flat"] polyline {
@@ -2456,31 +2486,70 @@
   opacity: 0.75;
 }
 
+/* A lift whose newest session is also its best takes the page's record gold
+   as the end dot itself — kept after the tone rules so it wins the tie. */
+.strength-spark circle.strength-spark-record {
+  fill: var(--sx-record);
+  opacity: 1;
+}
+
 .strength-lift-figures {
   display: grid;
-  gap: 3px;
+  gap: 5px;
   justify-items: end;
   text-align: right;
 }
 
+/* The estimated max is the row's headline, so it is set like the page's other
+   figures: digits loud, unit quiet. */
 .strength-lift-figures strong {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
   color: var(--text-primary);
-  font-size: 16px;
+  font-size: 19px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
   white-space: nowrap;
 }
 
-.strength-lift-change {
+.strength-lift-figures em {
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+/* Gains and slips are chips with an arrow carrying the direction; "no
+   change" and "one session" are plain captions, not fake chips. */
+.strength-lift-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.004em;
   white-space: nowrap;
+}
+
+.strength-lift-change[data-tone="up"],
+.strength-lift-change[data-tone="down"] {
+  padding: 3px 9px 3px 7px;
+  border-radius: var(--radius-pill);
 }
 
 .strength-lift-change[data-tone="up"] {
+  background: var(--success-bg);
   color: var(--success-text);
+}
+
+.strength-lift-change[data-tone="down"] {
+  background: var(--sx-well);
+  color: var(--text-secondary);
 }
 
 @media (max-width: 720px) {
@@ -2495,6 +2564,11 @@
 }
 
 /* ---------- Movement mix ---------- */
+
+.strength-mix-card {
+  display: flex;
+  flex-direction: column;
+}
 
 .strength-mix-bar {
   display: flex;
@@ -2565,7 +2639,8 @@
 }
 
 .strength-mix-note {
-  margin: 18px 0 0;
+  margin: auto 0 0;
+  padding-top: 18px;
   color: var(--text-muted);
   font-size: 12.5px;
   line-height: 1.55;

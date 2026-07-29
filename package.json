@@ -50,6 +50,7 @@
     "test:strength-analytics": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-strength-analytics.mjs",
     "test:exercise-explorer": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-exercise-explorer.mjs",
     "test:strength-body-focus": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-strength-body-focus.mjs",
+    "test:anatomy-assets": "node scripts/test-anatomy-assets.mjs",
     "test:chat-workout-tools": "npm run build:electron && node scripts/test-chat-workout-tools.mjs",
     "test:coros-workout-builder": "npm run build:electron && node scripts/test-coros-workout-builder.mjs",
     "test:coros-workout-editor": "npm run build:electron && node scripts/test-coros-workout-editor.mjs",

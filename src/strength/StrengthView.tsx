@@ -296,10 +296,19 @@ function Figure({ parts }: { parts: FigurePart[] }) {
 }
 
 /** Course of one lift's estimated max, drawn small enough to read as texture. */
-function Sparkline({ values, tone }: { values: number[]; tone: string }) {
-  const width = 104;
-  const height = 30;
-  const pad = 4;
+function Sparkline({
+  values,
+  tone,
+  record = false
+}: {
+  values: number[];
+  tone: string;
+  /** True when the newest point is also the lift's best — that dot earns gold. */
+  record?: boolean;
+}) {
+  const width = 112;
+  const height = 34;
+  const pad = 5;
 
   const path = useMemo(() => {
     if (values.length < 2) {
@@ -319,7 +328,15 @@ function Sparkline({ values, tone }: { values: number[]; tone: string }) {
     return <span className="strength-spark is-empty" aria-hidden="true" />;
   }
 
-  const last = path[path.length - 1];
+  const first = path[0]!;
+  const last = path[path.length - 1]!;
+  const area = [
+    `M ${first.x} ${first.y}`,
+    ...path.slice(1).map((point) => `L ${point.x} ${point.y}`),
+    `L ${last.x} ${height}`,
+    `L ${first.x} ${height}`,
+    "Z"
+  ].join(" ");
   return (
     <svg
       className="strength-spark"
@@ -329,8 +346,14 @@ function Sparkline({ values, tone }: { values: number[]; tone: string }) {
       viewBox={`0 0 ${width} ${height}`}
       aria-hidden="true"
     >
+      <path className="strength-spark-area" d={area} />
       <polyline points={path.map((point) => `${point.x},${point.y}`).join(" ")} />
-      <circle cx={last.x} cy={last.y} r={2.6} />
+      <circle
+        className={record ? "strength-spark-record" : undefined}
+        cx={last.x}
+        cy={last.y}
+        r={2.6}
+      />
     </svg>
   );
 }
@@ -1037,6 +1060,14 @@ export function StrengthView({
                           : trend < -0.5
                             ? "down"
                             : "flat";
+                    const loaded = lift.history.filter(
+                      (point) => point.e1rmKg > 0
+                    );
+                    const latest = loaded[loaded.length - 1];
+                    const onRecord =
+                      latest !== undefined &&
+                      latest.e1rmKg >= lift.bestE1rmKg - 1e-6;
+                    const best = liftWeightParts(lift.bestE1rmKg, unitSystem)[0]!;
                     return (
                       <li key={lift.name} className="is-interactive">
                         <button
@@ -1054,22 +1085,30 @@ export function StrengthView({
                             </span>
                           </div>
                           <Sparkline
-                            values={lift.history
-                              .filter((point) => point.e1rmKg > 0)
-                              .map((point) => point.e1rmKg)}
+                            values={loaded.map((point) => point.e1rmKg)}
                             tone={tone}
+                            record={onRecord}
                           />
                           <div className="strength-lift-figures">
-                            <strong>{formatLiftWeight(lift.bestE1rmKg, unitSystem)}</strong>
+                            <strong>
+                              {best.value}
+                              {best.unit ? <em>{best.unit}</em> : null}
+                            </strong>
                             <span className="strength-lift-change" data-tone={tone}>
-                              {trend === undefined
-                                ? "One session"
-                                : tone === "flat"
-                                  ? "No change"
-                                  : `${trend > 0 ? "+" : "−"}${formatLiftWeight(
-                                      Math.abs(trend),
-                                      unitSystem
-                                    )}`}
+                              {trend === undefined ? (
+                                "One session"
+                              ) : tone === "flat" ? (
+                                "No change"
+                              ) : (
+                                <>
+                                  {tone === "up" ? (
+                                    <ArrowUpRight size={12} aria-hidden="true" />
+                                  ) : (
+                                    <ArrowDownRight size={12} aria-hidden="true" />
+                                  )}
+                                  {formatLiftWeight(Math.abs(trend), unitSystem)}
+                                </>
+                              )}
                             </span>
                           </div>
                           <ChevronRight

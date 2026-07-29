@@ -54,7 +54,9 @@
 
 .strength-lift-button {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 104px auto 16px;
+  /* The figures column is fixed so every sparkline ends on the same spine
+     instead of drifting with each row's number width. */
+  grid-template-columns: minmax(0, 1fr) 112px 108px 16px;
   align-items: center;
   gap: 22px;
   width: calc(100% + 16px);
@@ -80,6 +82,15 @@
 
 .strength-lift-button:hover {
   background: var(--sx-well);
+}
+
+.strength-lift-button:hover .strength-spark polyline {
+  stroke: var(--accent-strong);
+}
+
+.strength-lift-button:hover .strength-spark[data-tone="down"] polyline,
+.strength-lift-button:hover .strength-spark[data-tone="flat"] polyline {
+  stroke: var(--text-primary);
 }
 
 .strength-lift-open-icon {
