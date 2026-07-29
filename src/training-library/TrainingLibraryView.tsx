@@ -1,7 +1,9 @@
 import {
   AlertTriangle,
   BookOpen,
+  Bookmark,
   CalendarClock,
+  CalendarRange,
   CloudOff,
   Copy,
   FolderPlus,
@@ -14,8 +16,10 @@ import {
   Search,
   SkipForward,
   Tag,
+  Target,
   Trash2,
-  X
+  X,
+  Zap
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
@@ -52,11 +56,11 @@ interface TrainingLibraryViewProps {
 
 type LibrarySection = "workouts" | "plans" | "templates" | "adherence";
 
-const SECTIONS: Array<{ id: LibrarySection; label: string }> = [
-  { id: "workouts", label: "Workouts" },
-  { id: "plans", label: "Plans" },
-  { id: "templates", label: "Templates" },
-  { id: "adherence", label: "Adherence" }
+const SECTIONS: Array<{ id: LibrarySection; label: string; icon: typeof Zap }> = [
+  { id: "workouts", label: "Workouts", icon: Zap },
+  { id: "plans", label: "Plans", icon: CalendarRange },
+  { id: "templates", label: "Templates", icon: Bookmark },
+  { id: "adherence", label: "Adherence", icon: Target }
 ];
 
 /** Sync states worth interrupting the reader for. Everything else stays quiet. */
@@ -176,7 +180,7 @@ export function TrainingLibraryView({
         </header>
         <div className="tl-skeleton" aria-label="Loading the training library">
           {Array.from({ length: 7 }, (_, index) => (
-            <span key={index} />
+            <span key={index} style={{ "--tl-row-index": index } as React.CSSProperties} />
           ))}
         </div>
       </section>
@@ -323,13 +327,14 @@ export function TrainingLibraryView({
       ) : null}
 
       <nav className="tl-sections" aria-label="Library sections">
-        {SECTIONS.map(({ id, label }) => (
+        {SECTIONS.map(({ id, label, icon: Icon }) => (
           <button
             type="button"
             key={id}
             aria-current={section === id ? "page" : undefined}
             onClick={() => setSection(id)}
           >
+            <Icon aria-hidden="true" />
             {label}
             <span>{counts[id]}</span>
           </button>
@@ -1198,7 +1203,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
 
         <dl className="tl-tally">
           {(["completed", "partial", "missed", "upcoming"] as const).map((key) => (
-            <div key={key}>
+            <div key={key} data-status={key}>
               <dt>{key}</dt>
               <dd>{matches.filter((match) => match.status === key).length}</dd>
             </div>

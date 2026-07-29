@@ -1,17 +1,22 @@
 /*
  * Training Library
  *
- * A library is a record, so this surface is set as a ledger: one calm glass
- * panel per section, and inside it nothing but hairlines, generous leading, and
- * figures that align into columns so they can be compared by eye.
+ * A library is a record, so this surface keeps a ledger's discipline — hairline
+ * columns, aligned figures — but dresses it in the app's own materials: glass
+ * panels over ambient accent washes, one segmented control for the sections,
+ * and the accent gradient reserved for moments of emphasis.
  *
  * Only one thing is ever drawn — the ridge of weekly training load (Ridge.tsx),
  * small on an index row and at reading size on the adherence lede. It keeps to
  * the accent hue alone; height carries the number.
  *
+ * Motion follows the shell's cadence: the view enters in three beats, rows
+ * settle, then ridges draw themselves. Everything sits under
+ * prefers-reduced-motion, which the guard at the end of this file honours.
+ *
  * Values derive from the app tokens in styles.css, so both themes reskin this
- * file by overriding tokens rather than restyling rules. Two small token blocks
- * follow the root: charcoal for the dark theme, and tile colours for paper.
+ * file by overriding tokens rather than restyling rules. Token blocks follow
+ * the root: charcoal for the dark theme, and warm shadows for paper.
  */
 
 .training-library-view {
@@ -26,12 +31,18 @@
   --tl-row-hover: color-mix(in srgb, var(--accent) 6%, transparent);
   --tl-figure: 15px;
   --tl-column: 58px;
+  /* The one motion signature every control in the view shares. */
+  --tl-ease-out: cubic-bezier(0.2, 0.8, 0.25, 1);
 
   min-width: 0;
   min-height: 100%;
   padding: 30px 34px 56px;
   color: var(--text-primary);
-  background: var(--tl-ground, var(--bg-base));
+  background:
+    radial-gradient(1100px 460px at 16% -8%, var(--bg-ambient-green), transparent 62%),
+    radial-gradient(880px 420px at 90% -12%, var(--bg-ambient-teal), transparent 58%),
+    var(--tl-ground, var(--bg-base));
+  background-attachment: local;
 }
 
 /*
@@ -61,17 +72,42 @@
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28), 0 14px 32px rgba(0, 0, 0, 0.26);
   --shadow-elevated: 0 20px 44px rgba(0, 0, 0, 0.42);
-
-  /* Charcoal sits lighter than the old near-black, so the ridge needs more
-     accent to hold the same presence. */
-  --tl-ridge-fill: color-mix(in srgb, var(--accent) 58%, transparent);
-  --tl-ridge-fill-hover: color-mix(in srgb, var(--accent) 82%, transparent);
 }
 
 /* Crisp white tiles read better than translucent ones on the warm paper panel. */
 :root[data-theme="paper"] .training-library-view {
   --tl-card: #ffffff;
   --tl-card-hover: #fffdf9;
+}
+
+/* Black-alpha shadows go warm on paper, matching the theme's brown tints. */
+:root[data-theme="paper"] .tl-card {
+  box-shadow:
+    0 1px 2px rgba(60, 50, 35, 0.05),
+    0 10px 26px rgba(60, 50, 35, 0.07);
+}
+
+:root[data-theme="paper"] .tl-card:hover {
+  box-shadow:
+    0 2px 4px rgba(60, 50, 35, 0.06),
+    0 18px 38px rgba(60, 50, 35, 0.11),
+    0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+:root[data-theme="paper"] .tl-card.is-selected,
+:root[data-theme="paper"] .tl-card.is-active {
+  box-shadow:
+    0 1px 2px rgba(60, 50, 35, 0.05),
+    0 12px 28px rgba(60, 50, 35, 0.09),
+    0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+:root[data-theme="paper"] .training-library-view .ghost-button:hover:not(:disabled) {
+  box-shadow: 0 4px 14px rgba(60, 50, 35, 0.1);
+}
+
+:root[data-theme="paper"] .plan-week {
+  box-shadow: 0 1px 2px rgba(60, 50, 35, 0.05), 0 8px 22px rgba(60, 50, 35, 0.07);
 }
 
 .training-library-view :is(button, input, select, textarea) {
@@ -105,27 +141,49 @@
 .training-library-view .primary-button {
   border: 0;
   color: #fff;
-  background: var(--accent);
-  box-shadow: none;
-  transition: background 150ms ease;
+  background: var(--accent-gradient);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.14);
+  transition:
+    transform 170ms var(--tl-ease-out),
+    box-shadow 170ms var(--tl-ease-out),
+    filter 170ms ease;
 }
 
 .training-library-view .primary-button:hover:not(:disabled) {
-  background: var(--accent-hover);
-  box-shadow: none;
-  transform: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    0 10px 26px color-mix(in srgb, var(--accent) 38%, transparent);
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+}
+
+.training-library-view .primary-button:active:not(:disabled) {
+  transform: translateY(0);
+  filter: brightness(0.97);
 }
 
 .training-library-view .ghost-button {
   border: 1px solid var(--glass-border);
   color: var(--text-secondary);
   background: var(--glass-bg);
-  transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
+  backdrop-filter: blur(8px);
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 170ms var(--tl-ease-out),
+    box-shadow 170ms var(--tl-ease-out);
 }
 
 .training-library-view .ghost-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--glass-border));
   color: var(--text-primary);
   background: var(--glass-bg-hover);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+  transform: translateY(-1px);
 }
 
 .training-library-view .ghost-button.danger:hover:not(:disabled) {
@@ -180,26 +238,41 @@
 .tl-masthead h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 30px;
+  font-size: 32px;
   font-weight: 600;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.028em;
   line-height: 1.1;
+  /* The signature gradient: ink settling into the accent, left to right. */
+  background: linear-gradient(
+    100deg,
+    var(--text-primary) 38%,
+    color-mix(in srgb, var(--accent-strong) 72%, var(--text-primary)) 88%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 /* The census replaces a tagline: what is actually in the library. */
 .tl-census {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 16px;
-  margin: 9px 0 0;
+  gap: 4px 18px;
+  margin: 10px 0 0;
   color: var(--text-muted);
   font-size: 12.5px;
 }
 
+.tl-census span {
+  display: inline-flex;
+  align-items: baseline;
+}
+
 .tl-census b {
-  margin-right: 4px;
-  color: var(--text-secondary);
+  margin-right: 5px;
+  color: var(--accent-strong);
   font-family: var(--font-display);
+  font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -213,23 +286,46 @@
 .tl-state {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  padding: 5px 11px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
-  font-size: 11px;
-  letter-spacing: 0.06em;
+  background: var(--glass-bg);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
 .tl-state::before {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--success-dot);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success-dot) 18%, transparent);
   content: "";
 }
 
 .tl-state.is-stale::before {
   background: var(--warning-text);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning-text) 18%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tl-state::before {
+    animation: tl-dot-pulse 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes tl-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--success-dot) 22%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--success-dot) 6%, transparent);
+  }
 }
 
 .tl-notice {
@@ -238,7 +334,9 @@
   border: 1px solid var(--warning-border);
   border-radius: var(--radius-md);
   color: var(--warning-text);
-  background: var(--warning-bg);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--warning-text) 10%, transparent), var(--warning-bg));
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--warning-text) 8%, transparent);
   font-size: 12.5px;
 }
 
@@ -257,57 +355,96 @@
 
 /* -------------------------------------------------------------- Section nav */
 
+/*
+ * The same segmented control the shell uses for primary navigation: one glass
+ * pill holding the sections, the active one raised into an accent-lit tile.
+ */
 .tl-sections {
-  display: flex;
-  gap: 26px;
-  margin-bottom: 18px;
-  border-bottom: 1px solid var(--tl-rule);
+  display: inline-flex;
+  max-width: 100%;
+  gap: 4px;
+  margin-bottom: 20px;
+  padding: 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-inset);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tl-sections::-webkit-scrollbar {
+  display: none;
 }
 
 .tl-sections button {
   position: relative;
   display: inline-flex;
-  align-items: baseline;
-  gap: 7px;
-  padding: 0 1px 13px;
-  border: 0;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-lg) - 5px);
   color: var(--text-muted);
   background: none;
   font-family: var(--font-display);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: -0.005em;
+  white-space: nowrap;
   cursor: pointer;
-  transition: color 160ms ease;
+  transition:
+    color 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.tl-sections button svg {
+  width: 15px;
+  height: 15px;
+  transition: color 180ms ease, transform 220ms var(--tl-ease-out);
 }
 
 .tl-sections button:hover {
   color: var(--text-secondary);
+  background: var(--glass-bg-hover);
 }
 
+.tl-sections button:hover svg {
+  transform: scale(1.08);
+}
+
+/* The count rides as a small pill so the tab label stays the reading line. */
 .tl-sections button span {
+  min-width: 20px;
+  padding: 1.5px 6px;
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
-  font-size: 10.5px;
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
+  font-weight: 600;
+  text-align: center;
+  transition: color 180ms ease, background 180ms ease;
 }
 
 .tl-sections button[aria-current="page"] {
-  color: var(--text-primary);
-}
-
-.tl-sections button[aria-current="page"]::after {
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 1.5px;
-  background: var(--accent);
-  content: "";
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--accent-strong);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 16%, transparent), color-mix(in srgb, var(--accent) 9%, transparent));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent) 24%, transparent),
+    0 4px 14px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .tl-sections button[aria-current="page"] span {
-  color: var(--accent);
+  color: #fff;
+  background: var(--accent-gradient);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 34%, transparent);
 }
 
 /* ------------------------------------------------------------------- Panels */
@@ -316,8 +453,11 @@
   min-width: 0;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  background: var(--tl-panel-bg);
-  box-shadow: var(--shadow-card);
+  background:
+    radial-gradient(ellipse 90% 62% at 14% 0%, var(--bg-ambient-green), transparent 58%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012) 42%),
+    var(--tl-panel-bg);
+  box-shadow: var(--shadow-card), var(--glass-inset);
   backdrop-filter: blur(var(--glass-blur));
   overflow: hidden;
 }
@@ -347,7 +487,7 @@
 
 .tl-eyebrow {
   margin: 0;
-  color: var(--text-muted);
+  color: color-mix(in srgb, var(--accent-strong) 78%, var(--text-muted));
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.16em;
@@ -379,7 +519,17 @@
   flex: 0 1 300px;
   align-items: center;
   gap: 8px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
+  background: var(--glass-bg);
+  transition:
+    border-color 170ms ease,
+    box-shadow 170ms ease,
+    color 170ms ease,
+    flex-basis 240ms var(--tl-ease-out);
 }
 
 .tl-search input {
@@ -400,37 +550,55 @@
   outline: 0;
 }
 
+/* The field wakes up: accent ring, soft outer glow, and a little more room. */
 .tl-search:focus-within {
+  flex-basis: 340px;
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
   color: var(--accent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent),
+    0 6px 18px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .tl-chips {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 6px;
 }
 
 .tl-chips button {
-  padding: 4px 11px;
-  border: 1px solid transparent;
+  padding: 5px 12px;
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-pill);
   color: var(--text-muted);
   background: none;
   font-size: 12px;
   cursor: pointer;
-  transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 170ms var(--tl-ease-out);
 }
 
 .tl-chips button:hover {
   color: var(--text-secondary);
+  border-color: color-mix(in srgb, var(--text-muted) 34%, transparent);
   background: var(--glass-bg);
+  transform: translateY(-1px);
 }
 
 .tl-chips button[aria-pressed="true"] {
   color: var(--accent-strong);
-  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
-  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 15%, transparent), color-mix(in srgb, var(--accent) 8%, transparent));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent) 20%, transparent),
+    0 3px 10px color-mix(in srgb, var(--accent) 12%, transparent);
+  font-weight: 600;
 }
 
 /* The "show more" control spans the whole tile grid rather than one cell. */
@@ -463,9 +631,22 @@
   align-items: center;
   gap: 8px;
   padding: 9px 16px;
-  border-bottom: 1px solid var(--tl-rule);
-  background: var(--accent-soft);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 12%, transparent), color-mix(in srgb, var(--accent) 5%, transparent));
   font-size: 12px;
+  animation: tl-bulk-in 240ms var(--tl-ease-out) both;
+}
+
+@keyframes tl-bulk-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .tl-bulk strong {
@@ -559,7 +740,7 @@
 .tl-row {
   align-items: center;
   border-bottom: 1px solid var(--tl-rule-soft);
-  transition: background 140ms ease;
+  transition: background 170ms ease;
 }
 
 .tl-row:last-child {
@@ -691,24 +872,44 @@
 }
 
 .tl-mark {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--text-muted) 52%, transparent);
-  border-radius: 4px;
+  border: 1.5px solid color-mix(in srgb, var(--text-muted) 52%, transparent);
+  border-radius: 5px;
   background: none;
   cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms var(--tl-ease-out);
 }
 
 .tl-mark:hover {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .tl-mark[aria-checked="true"] {
   border-color: var(--accent);
-  background: var(--accent);
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--surface) 80%, transparent);
+  background: var(--accent-gradient);
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--surface) 80%, transparent),
+    0 2px 8px color-mix(in srgb, var(--accent) 32%, transparent);
+  animation: tl-mark-pop 220ms var(--tl-ease-out);
+}
+
+@keyframes tl-mark-pop {
+  0% {
+    transform: scale(0.72);
+  }
+  60% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 /* Secondary actions stay out of the way until the row is reached. */
@@ -799,26 +1000,66 @@
      border is a 0.1-alpha dark that disappears on a white paper tile. */
   border: 1px solid var(--tl-rule);
   border-radius: var(--radius-md);
-  background: var(--tl-card, var(--glass-bg));
-  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+  background:
+    linear-gradient(158deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.014) 46%),
+    var(--tl-card, var(--glass-bg));
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.16),
+    0 10px 26px rgba(0, 0, 0, 0.14);
+  overflow: hidden;
+  transition:
+    border-color 190ms ease,
+    box-shadow 220ms var(--tl-ease-out),
+    transform 220ms var(--tl-ease-out);
+}
+
+/* A wash of accent light that rises from the top edge when the tile is touched. */
+.tl-card::before {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 120% 70% at 50% -18%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 62%);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 240ms ease;
 }
 
 .tl-card:hover {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--glass-border));
-  background: var(--tl-card-hover, var(--glass-bg-hover));
-  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--glass-border));
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.18),
+    0 18px 38px rgba(0, 0, 0, 0.2),
+    0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent),
+    0 10px 30px color-mix(in srgb, var(--accent) 10%, transparent);
+  transform: translateY(-3px);
+}
+
+.tl-card:hover::before,
+.tl-card.is-active::before {
+  opacity: 1;
 }
 
 .tl-card.is-selected {
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 62%, transparent);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.16),
+    0 12px 28px rgba(0, 0, 0, 0.15),
+    0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent),
+    0 8px 26px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .tl-card.is-active {
   border-color: color-mix(in srgb, var(--accent) 58%, var(--glass-border));
-  background: var(--tl-card-hover, var(--glass-bg-hover));
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.16),
+    0 12px 28px rgba(0, 0, 0, 0.15),
+    0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .tl-card-open {
+  position: relative;
   display: flex;
   min-width: 0;
   flex: 1;
@@ -998,24 +1239,28 @@
 .tl-layout-switch {
   display: inline-flex;
   flex: none;
-  gap: 1px;
+  gap: 2px;
   padding: 2px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
+  background: var(--glass-bg);
 }
 
 .tl-layout-switch button {
   display: inline-flex;
-  width: 26px;
-  height: 24px;
+  width: 27px;
+  height: 25px;
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   color: var(--text-muted);
   background: none;
   cursor: pointer;
-  transition: color 140ms ease, background 140ms ease;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .tl-layout-switch button:hover {
@@ -1023,8 +1268,9 @@
 }
 
 .tl-layout-switch button[aria-pressed="true"] {
-  color: var(--text-primary);
-  background: var(--glass-bg-hover);
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 /* ------------------------------------------------- The ridge (the signature) */
@@ -1053,18 +1299,23 @@
   min-width: 1px;
   flex: 0 1 4px;
   height: var(--tl-bar-height);
-  border-radius: 1px;
-  background: var(--tl-ridge-fill, color-mix(in srgb, var(--accent) 46%, transparent));
+  border-radius: 2px 2px 1px 1px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-strong) 82%, transparent), color-mix(in srgb, var(--accent) 46%, transparent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
   transform-origin: bottom;
+  transition: filter 180ms ease;
 }
 
 .tl-ridge-bar.is-empty {
-  background: color-mix(in srgb, var(--text-muted) 40%, transparent);
+  background: color-mix(in srgb, var(--text-muted) 32%, transparent);
+  box-shadow: none;
 }
 
 /* Session counts, not load: grey, so the accent keeps meaning one thing. */
 .tl-ridge.is-count .tl-ridge-bar {
   background: color-mix(in srgb, var(--text-secondary) 34%, transparent);
+  box-shadow: none;
 }
 
 .tl-row:hover .tl-ridge.is-count .tl-ridge-bar {
@@ -1072,16 +1323,19 @@
 }
 
 .tl-ridge-bar.is-peak {
-  background: var(--accent-strong);
+  background: var(--accent-gradient);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 10px color-mix(in srgb, var(--accent) 46%, transparent);
 }
 
 .tl-row:hover .tl-ridge-bar:not(.is-empty),
 .tl-card:hover .tl-ridge-bar:not(.is-empty) {
-  background: var(--tl-ridge-fill-hover, color-mix(in srgb, var(--accent) 72%, transparent));
+  filter: brightness(1.16) saturate(1.1);
 }
 
 .tl-row:hover .tl-ridge-bar.is-peak {
-  background: var(--accent-strong);
+  filter: brightness(1.1);
 }
 
 /* The same axis at reading size: planned load pale, completed load solid. */
@@ -1104,8 +1358,9 @@
   position: absolute;
   bottom: 0;
   height: var(--tl-bar-height);
-  border-radius: 1.5px;
+  border-radius: 2.5px 2.5px 1px 1px;
   transform-origin: bottom;
+  transition: filter 180ms ease;
 }
 
 .tl-bullet b {
@@ -1117,11 +1372,18 @@
 .tl-bullet i {
   right: 30%;
   left: 30%;
-  background: color-mix(in srgb, var(--accent) 82%, transparent);
+  background: var(--accent-gradient);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 0 8px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .tl-bullet:hover b {
   background: color-mix(in srgb, var(--text-muted) 42%, transparent);
+}
+
+.tl-bullet:hover i {
+  filter: brightness(1.14);
 }
 
 /* ------------------------------------------------- Workouts: catalog + reader */
@@ -1165,20 +1427,49 @@
   top: 0;
   right: 0;
   display: inline-flex;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   align-items: center;
   justify-content: center;
-  border: 0;
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: 9px;
   color: var(--text-muted);
   background: none;
   cursor: pointer;
+  transition:
+    color 170ms ease,
+    background 170ms ease,
+    border-color 170ms ease,
+    transform 170ms var(--tl-ease-out);
 }
 
-.tl-reader-favorite:hover,
-.tl-reader-favorite.is-active {
+.tl-reader-favorite:hover {
+  border-color: var(--glass-border);
   color: var(--accent);
+  background: var(--glass-bg);
+  transform: translateY(-1px);
+}
+
+.tl-reader-favorite.is-active {
+  color: var(--accent-strong);
+}
+
+/* The heart answers the tap with a small leap. */
+.tl-reader-favorite.is-active svg {
+  animation: tl-heart-pop 320ms var(--tl-ease-out);
+  filter: drop-shadow(0 2px 8px color-mix(in srgb, var(--accent) 46%, transparent));
+}
+
+@keyframes tl-heart-pop {
+  0% {
+    transform: scale(0.6);
+  }
+  55% {
+    transform: scale(1.22);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .tl-reader-metrics {
@@ -1216,23 +1507,30 @@
 /* Time is continuous, so the segments abut: only the fill marks a boundary. */
 .tl-shape > div {
   display: flex;
-  height: 34px;
-  border-radius: 3px;
+  height: 36px;
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
   overflow: hidden;
 }
 
 .tl-shape span {
   min-width: 1px;
   background: color-mix(in srgb, var(--accent) 30%, transparent);
+  transition: filter 160ms ease;
+}
+
+.tl-shape span:hover {
+  filter: brightness(1.25);
 }
 
 .tl-shape span.is-training {
-  background: var(--accent);
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
 }
 
 .tl-shape span.is-warmup,
 .tl-shape span.is-cooldown {
-  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 .tl-shape span.is-rest,
@@ -1525,8 +1823,13 @@
 }
 
 .tl-tally div {
-  padding: 13px 20px;
+  padding: 14px 20px;
   background: var(--tl-panel-bg);
+  transition: background 180ms ease;
+}
+
+.tl-tally div:hover {
+  background: color-mix(in srgb, var(--accent) 5%, var(--tl-panel-bg));
 }
 
 .tl-tally dt {
@@ -1540,10 +1843,27 @@
 .tl-tally dd {
   margin: 5px 0 0;
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+}
+
+/* Each status number answers in its own colour, set from data-status. */
+.tl-tally [data-status="completed"] dd {
+  color: var(--success-text);
+}
+
+.tl-tally [data-status="partial"] dd {
+  color: var(--warning-text);
+}
+
+.tl-tally [data-status="missed"] dd {
+  color: var(--error-text);
+}
+
+.tl-tally [data-status="upcoming"] dd {
+  color: var(--accent-strong);
 }
 
 .tl-match-row {
@@ -1586,27 +1906,32 @@
   white-space: nowrap;
 }
 
-/* A status is a state, not a label: the day carries a hairline of its colour. */
+/* A status is a state, not a label: the day carries a rail of its colour, and
+   the whole row answers with the faintest wash of the same hue. */
 .tl-match-row {
-  border-left: 2px solid transparent;
-  padding-left: 14px;
+  border-left: 3px solid transparent;
+  padding-left: 13px;
 }
 
 .tl-match-row.is-completed {
   border-left-color: var(--success-text);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--success-text) 6%, transparent), transparent 34%);
 }
 
 .tl-match-row.is-partial,
 .tl-match-row.is-rescheduled {
   border-left-color: var(--warning-text);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--warning-text) 6%, transparent), transparent 34%);
 }
 
 .tl-match-row.is-missed {
   border-left-color: var(--error-text);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--error-text) 6%, transparent), transparent 34%);
 }
 
 .tl-match-row.is-upcoming {
   border-left-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 6%, transparent), transparent 34%);
 }
 
 .tl-activity-row {
@@ -1670,11 +1995,23 @@
 /* --------------------------------------------------- Empty, gate, and dialog */
 
 .tl-empty {
-  padding: 54px 20px 58px;
+  position: relative;
+  padding: 58px 20px 62px;
   text-align: center;
 }
 
+/* A breath of accent light behind the words keeps the void from feeling dead. */
+.tl-empty::before {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 46% 60% at 50% 42%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%);
+  content: "";
+  pointer-events: none;
+}
+
 .tl-empty h3 {
+  position: relative;
   margin: 0;
   font-family: var(--font-display);
   font-size: 16px;
@@ -1682,6 +2019,7 @@
 }
 
 .tl-empty p {
+  position: relative;
   margin: 7px auto 0;
   max-width: 38ch;
   color: var(--text-muted);
@@ -1694,32 +2032,121 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 14px;
   padding: 60px 30px;
   color: var(--text-primary);
   background:
-    radial-gradient(circle at 50% 24%, var(--accent-soft), transparent 42%),
+    radial-gradient(circle at 50% 22%, var(--accent-soft), transparent 44%),
+    radial-gradient(900px 420px at 82% -10%, var(--bg-ambient-teal), transparent 55%),
     var(--bg-base);
   text-align: center;
 }
 
+/* The icon floats inside a glass ring — the one piece of theatre on the gate. */
 .training-library-gate svg {
-  color: var(--text-muted);
+  width: 34px;
+  height: 34px;
+  padding: 18px;
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  color: var(--accent-strong);
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.12), transparent 52%),
+    var(--glass-bg);
+  box-shadow:
+    var(--glass-inset),
+    0 18px 42px color-mix(in srgb, var(--accent) 20%, transparent);
+  box-sizing: content-box;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .training-library-gate svg {
+    animation: tl-gate-float 5s ease-in-out infinite;
+  }
+
+  .training-library-gate h1,
+  .training-library-gate p,
+  .training-library-gate .primary-button {
+    animation: tl-rise 480ms cubic-bezier(0.2, 0.8, 0.25, 1) backwards;
+  }
+
+  .training-library-gate h1 { animation-delay: 60ms; }
+  .training-library-gate p { animation-delay: 130ms; }
+  .training-library-gate .primary-button { animation-delay: 200ms; }
+}
+
+@keyframes tl-gate-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+@keyframes tl-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .training-library-gate h1 {
-  margin: 0;
+  margin: 6px 0 0;
   font-family: var(--font-display);
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 600;
   letter-spacing: -0.02em;
+  background: linear-gradient(
+    100deg,
+    var(--text-primary) 40%,
+    color-mix(in srgb, var(--accent-strong) 70%, var(--text-primary)) 90%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .training-library-gate p {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   max-width: 44ch;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+/* The gate sits outside the view, so it styles its own call to action. */
+.training-library-gate .primary-button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: #fff;
+  background: var(--accent-gradient);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 8px 24px color-mix(in srgb, var(--accent) 34%, transparent);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 180ms var(--tl-ease-out, cubic-bezier(0.2, 0.8, 0.25, 1)),
+    box-shadow 180ms ease,
+    filter 180ms ease;
+}
+
+.training-library-gate .primary-button:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    0 12px 32px color-mix(in srgb, var(--accent) 42%, transparent);
+  filter: brightness(1.07);
+  transform: translateY(-1px);
 }
 
 .tl-skeleton {
@@ -1728,27 +2155,46 @@
   gap: 1px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 
 .tl-skeleton span {
+  position: relative;
   height: 64px;
   background: var(--glass-bg);
+  overflow: hidden;
+}
+
+/* A light sweep travels each row; staggered, they read as one wave. */
+.tl-skeleton span::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 22%,
+    var(--tl-shimmer, rgba(255, 255, 255, 0.09)) 50%,
+    transparent 78%
+  );
+  content: "";
+  transform: translateX(-100%);
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .tl-skeleton span {
-    animation: tl-pulse 1.5s ease-in-out infinite alternate;
+  .tl-skeleton span::after {
+    animation: tl-shimmer 1.5s ease-in-out infinite;
+    animation-delay: calc(var(--tl-row-index, 0) * 90ms);
   }
 }
 
-@keyframes tl-pulse {
-  from {
-    opacity: 0.45;
-  }
+@keyframes tl-shimmer {
   to {
-    opacity: 0.9;
+    transform: translateX(100%);
   }
+}
+
+:root[data-theme="paper"] .tl-skeleton {
+  --tl-shimmer: rgba(38, 34, 28, 0.07);
 }
 
 .tl-dialog-backdrop {
@@ -1760,16 +2206,40 @@
   background: color-mix(in srgb, var(--bg-base) 76%, transparent);
   backdrop-filter: blur(8px);
   place-items: center;
+  animation: tl-fade-in 200ms ease both;
+}
+
+@keyframes tl-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .tl-dialog {
   width: min(460px, 100%);
   padding: 22px;
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--text-primary);
-  background: var(--surface);
-  box-shadow: var(--shadow-elevated);
+  background:
+    radial-gradient(ellipse 110% 60% at 20% 0%, var(--bg-ambient-green), transparent 60%),
+    var(--surface);
+  box-shadow: var(--shadow-elevated), var(--glass-inset);
+  animation: tl-dialog-in 280ms var(--tl-ease-out, cubic-bezier(0.2, 0.8, 0.25, 1)) both;
+}
+
+@keyframes tl-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .tl-dialog h2 {
@@ -1817,7 +2287,16 @@
 
 .tl-dialog .primary-button.danger {
   color: #fff;
-  background: var(--error-text);
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 6px 18px rgba(239, 68, 68, 0.32);
+}
+
+.tl-dialog .primary-button.danger:hover:not(:disabled) {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    0 10px 26px rgba(239, 68, 68, 0.4);
 }
 
 /* ------------------------------------------------------- Plan editor modals */
@@ -1832,9 +2311,23 @@
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-base) 94%, var(--surface));
-  box-shadow: var(--shadow-elevated);
+  background:
+    radial-gradient(ellipse 70% 40% at 50% 0%, var(--bg-ambient-green), transparent 55%),
+    color-mix(in srgb, var(--bg-base) 94%, var(--surface));
+  box-shadow: var(--shadow-elevated), var(--glass-inset);
   overflow: hidden;
+  animation: tl-sheet-in 340ms var(--tl-ease-out, cubic-bezier(0.2, 0.8, 0.25, 1)) both;
+}
+
+@keyframes tl-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .plan-editor::before,
@@ -1845,6 +2338,7 @@
   background: color-mix(in srgb, var(--bg-base) 72%, transparent);
   backdrop-filter: blur(10px);
   content: "";
+  animation: tl-fade-in 240ms ease both;
 }
 
 .plan-editor-header,
@@ -2121,7 +2615,10 @@
 .plan-week {
   border: 1px solid var(--tl-rule);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--surface) 30%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 30%),
+    color-mix(in srgb, var(--surface) 30%, transparent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14), 0 8px 22px rgba(0, 0, 0, 0.12);
   overflow: hidden;
 }
 
@@ -2215,17 +2712,37 @@
   justify-content: space-between;
   gap: 6px;
   padding: 7px 8px;
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   border-radius: var(--radius-sm);
-  background: var(--accent-soft);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--accent) 16%, transparent), color-mix(in srgb, var(--accent) 8%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent) 16%, transparent);
   cursor: grab;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms var(--tl-ease-out);
+}
+
+.plan-entry-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 48%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent) 18%, transparent),
+    0 4px 12px color-mix(in srgb, var(--accent) 14%, transparent);
+  transform: translateY(-1px);
 }
 
 .plan-entry-card.is-rest,
 .plan-entry-card.is-note {
   border-color: var(--glass-border);
   background: var(--glass-bg);
+  box-shadow: none;
   cursor: default;
+}
+
+.plan-entry-card.is-rest:hover,
+.plan-entry-card.is-note:hover {
+  transform: none;
 }
 
 .plan-entry-card > span {
@@ -2263,18 +2780,25 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 11px;
-  border: 1px dashed var(--glass-border);
+  padding: 12px;
+  border: 1px dashed color-mix(in srgb, var(--text-muted) 38%, transparent);
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   background: none;
   font-size: 12.5px;
   cursor: pointer;
+  transition:
+    color 170ms ease,
+    border-color 170ms ease,
+    background 170ms ease,
+    box-shadow 170ms ease;
 }
 
 .plan-add-week:hover {
-  color: var(--text-primary);
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 56%, transparent);
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .plan-editor-preview dl,
@@ -2376,6 +2900,18 @@
   color: var(--text-secondary);
   background: none;
   cursor: pointer;
+  transition:
+    color 170ms ease,
+    border-color 170ms ease,
+    background 170ms ease,
+    box-shadow 170ms ease,
+    transform 170ms var(--tl-ease-out, cubic-bezier(0.2, 0.8, 0.25, 1));
+}
+
+.plan-compare-picker button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--glass-bg);
+  transform: translateY(-1px);
 }
 
 .plan-compare-picker button:disabled {
@@ -2384,9 +2920,11 @@
 }
 
 .plan-compare-picker button.is-selected {
-  color: var(--text-primary);
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 44%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 15%, transparent), color-mix(in srgb, var(--accent) 8%, transparent));
+  box-shadow: 0 3px 12px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .plan-compare-picker button span {
@@ -2502,33 +3040,89 @@
 /* ------------------------------------------------------------------- Motion */
 
 @media (prefers-reduced-motion: no-preference) {
-  /* One orchestrated moment: rows settle in, then the ridges draw themselves. */
-  :is(.tl-index ul, .tl-grid) > li {
-    animation: tl-settle 260ms cubic-bezier(0.2, 0.8, 0.25, 1) backwards;
+  /*
+   * The view arrives in three beats — masthead, section control, then the
+   * working surface — the same cadence the dashboard blocks enter with.
+   */
+  .tl-masthead {
+    animation: tl-view-enter 460ms cubic-bezier(0.2, 0.8, 0.25, 1) backwards;
   }
 
-  :is(.tl-index ul, .tl-grid) > li:nth-child(1) { animation-delay: 0ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(2) { animation-delay: 22ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(3) { animation-delay: 44ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(4) { animation-delay: 66ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(5) { animation-delay: 88ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(6) { animation-delay: 110ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(7) { animation-delay: 132ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(8) { animation-delay: 154ms; }
-  :is(.tl-index ul, .tl-grid) > li:nth-child(n + 9) { animation-delay: 176ms; }
+  .tl-sections {
+    animation: tl-view-enter 460ms cubic-bezier(0.2, 0.8, 0.25, 1) 70ms backwards;
+  }
+
+  .tl-notice {
+    animation: tl-view-enter 460ms cubic-bezier(0.2, 0.8, 0.25, 1) 110ms backwards;
+  }
+
+  .training-library-view > .tl-panel,
+  .training-library-view > .tl-template-layout {
+    animation: tl-view-enter 520ms cubic-bezier(0.2, 0.8, 0.25, 1) 140ms backwards;
+  }
+
+  /* Adherence is a stack of panels; they cascade instead of landing together. */
+  .tl-adherence > .tl-panel:nth-child(1) {
+    animation: tl-view-enter 520ms cubic-bezier(0.2, 0.8, 0.25, 1) 140ms backwards;
+  }
+
+  .tl-adherence > .tl-panel:nth-child(2) {
+    animation: tl-view-enter 520ms cubic-bezier(0.2, 0.8, 0.25, 1) 210ms backwards;
+  }
+
+  .tl-adherence > .tl-panel:nth-child(3) {
+    animation: tl-view-enter 520ms cubic-bezier(0.2, 0.8, 0.25, 1) 280ms backwards;
+  }
+
+  /* One orchestrated moment: rows settle in, then the ridges draw themselves. */
+  :is(.tl-index ul, .tl-grid) > li {
+    animation: tl-settle 300ms cubic-bezier(0.2, 0.8, 0.25, 1) backwards;
+  }
+
+  :is(.tl-index ul, .tl-grid) > li:nth-child(1) { animation-delay: 170ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(2) { animation-delay: 196ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(3) { animation-delay: 222ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(4) { animation-delay: 248ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(5) { animation-delay: 274ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(6) { animation-delay: 300ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(7) { animation-delay: 326ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(8) { animation-delay: 352ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(n + 9) { animation-delay: 378ms; }
 
   .tl-ridge-bar,
   .tl-bullet b,
   .tl-bullet i {
-    animation: tl-grow 420ms cubic-bezier(0.2, 0.85, 0.3, 1) backwards;
-    animation-delay: calc(140ms + var(--tl-bar-index) * 14ms);
+    animation: tl-grow 460ms cubic-bezier(0.2, 0.85, 0.3, 1) backwards;
+    animation-delay: calc(280ms + var(--tl-bar-index) * 16ms);
+  }
+
+  /* The workout reader changes content without a route change; ease the swap. */
+  .tl-reader > * {
+    animation: tl-settle 320ms cubic-bezier(0.2, 0.8, 0.25, 1) backwards;
+  }
+
+  .tl-reader > *:nth-child(2) { animation-delay: 45ms; }
+  .tl-reader > *:nth-child(3) { animation-delay: 90ms; }
+  .tl-reader > *:nth-child(4) { animation-delay: 135ms; }
+  .tl-reader > *:nth-child(5) { animation-delay: 180ms; }
+  .tl-reader > *:nth-child(n + 6) { animation-delay: 225ms; }
+}
+
+@keyframes tl-view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 
 @keyframes tl-settle {
   from {
     opacity: 0;
-    transform: translateY(5px);
+    transform: translateY(6px) scale(0.99);
   }
   to {
     opacity: 1;
@@ -2546,8 +3140,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .training-library-view,
   .training-library-view *,
+  .training-library-gate,
+  .training-library-gate *,
+  .plan-editor,
   .plan-editor *,
+  .plan-compare,
   .plan-compare * {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
@@ -2622,8 +3221,8 @@
   }
 
   .tl-sections {
-    gap: 18px;
-    overflow-x: auto;
+    display: flex;
+    width: 100%;
   }
 
   .tl-filters {
