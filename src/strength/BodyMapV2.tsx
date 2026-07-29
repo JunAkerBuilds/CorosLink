@@ -69,13 +69,20 @@ const MODEL_URL = "./assets/anatomy/muscular_lite.glb";
 const SKELETON_URL = "./assets/anatomy/skeletal_lite.glb";
 const DRACO_URL = "./assets/anatomy/draco/";
 const MODEL_HEIGHT = 2;
+// Canonical bounds of the upstream Z-Anatomy atlas after Blender's Y-up glTF
+// conversion. Both reduced exports use this shared registration frame so a
+// subset of surface muscles cannot scale independently from the skeleton.
+const Z_ANATOMY_BOUNDS = new Box3(
+  new Vector3(-0.33558, 0.00634, -0.1314),
+  new Vector3(0.33558, 1.70753, 0.13713)
+);
 const CAMERA_FOV = 25;
 const CAMERA_FRAMING = 1.28;
 const TARGET_Y = MODEL_HEIGHT * 0.51;
 const COLOR_EPSILON = 0.0016;
 const MAX_PIXEL_RATIO = 1.5;
-const OBLIQUE_MEDIAL_TRIM_RATIO = 0.028;
-const LAYER_STORAGE_KEY = "coroslink-strength-muscle-layers-v1";
+const OBLIQUE_MEDIAL_TRIM_RATIO = 0.038;
+const LAYER_STORAGE_KEY = "coroslink-strength-muscle-layers-v2";
 const SELECT_TRANSITION_MS = 900;
 const CHANGE_SELECTION_MS = 750;
 const CLEAR_SELECTION_MS = 700;
@@ -83,10 +90,9 @@ const CHANGE_VIEW_MS = 650;
 const CALLOUT_REVEAL_PROGRESS = 0.58;
 const CAMERA_EYE_LIFT = 0.045;
 
-// Anatomy Engine's source is a teaching dissection, so it includes superficial
-// and deep structures at the same time. A workload heat map needs a coherent
-// outer body instead. Keep the structures that are visible from the surface,
-// then mirror the intact left side at load time to close the dissection cutaway.
+// Z-Anatomy is a teaching atlas, so it includes superficial and deep structures
+// at the same time. A workload heat map needs a coherent outer body instead.
+// Keep only the structures that are visible from the surface.
 const SUPERFICIAL_STRUCTURES = new Set([
   "sternocleidomastoid",
   "upper_trapezius",
@@ -95,12 +101,23 @@ const SUPERFICIAL_STRUCTURES = new Set([
   "deltoid",
   "posterior_deltoid",
   "infraspinatus",
+  "supraspinatus",
+  "teres_minor",
   "pectoralis_major",
   "latissimus_dorsi",
   "teres_major",
+  "levator_scapulae",
+  "serratus_anterior",
   "biceps_brachii",
   "triceps_brachii",
   "brachioradialis",
+  "brachialis",
+  "coracobrachialis",
+  "pronator_teres",
+  "forearm_flexors",
+  "forearm_extensors",
+  "anconeus",
+  "intrinsic_hand",
   "rectus_abdominis",
   "external_oblique",
   "erector_spinae_lumbar",
@@ -116,13 +133,22 @@ const SUPERFICIAL_STRUCTURES = new Set([
   "semimembranosus",
   "adductor_magnus",
   "adductor_longus",
+  "adductor_brevis",
+  "gracilis",
+  "pectineus",
   "gastrocnemius",
   "soleus",
   "peroneals",
-  "tibialis_anterior"
+  "tibialis_anterior",
+  "lower_leg_extensors",
+  "plantaris",
+  "intrinsic_foot"
 ]);
 
-const DEFAULT_LAYER_ORDER = MUSCLES.map((muscle) => muscle.id);
+const DEFAULT_LAYER_ORDER: MuscleId[] = [
+  "obliques",
+  ...MUSCLES.map((muscle) => muscle.id).filter((id) => id !== "obliques")
+];
 
 function layerPriority(order: MuscleId[], muscle: MuscleId): number {
   const index = order.indexOf(muscle);
@@ -161,7 +187,7 @@ function readLayerPreferences(): {
   }
 }
 
-/** Anatomy Engine structure ids translated into CorosLink's broader training groups. */
+/** Exported Z-Anatomy structure ids translated into CorosLink training groups. */
 const STRUCTURE_TO_MUSCLE: Record<string, MuscleId> = {
   sternocleidomastoid: "neck",
   deep_cervical_flexors: "neck",
@@ -174,6 +200,7 @@ const STRUCTURE_TO_MUSCLE: Record<string, MuscleId> = {
   posterior_deltoid: "shoulders",
   infraspinatus: "shoulders",
   supraspinatus: "shoulders",
+  teres_minor: "shoulders",
   subscapularis: "shoulders",
   pectoralis_major: "chest",
   pectoralis_minor: "chest",
@@ -186,6 +213,11 @@ const STRUCTURE_TO_MUSCLE: Record<string, MuscleId> = {
   coracobrachialis: "biceps",
   triceps_brachii: "triceps",
   brachioradialis: "forearms",
+  pronator_teres: "forearms",
+  forearm_flexors: "forearms",
+  forearm_extensors: "forearms",
+  anconeus: "forearms",
+  intrinsic_hand: "forearms",
   rectus_abdominis: "abs",
   transversus_abdominis: "abs",
   external_oblique: "obliques",
@@ -213,16 +245,22 @@ const STRUCTURE_TO_MUSCLE: Record<string, MuscleId> = {
   adductor_magnus: "adductors",
   adductor_longus: "adductors",
   adductor_brevis: "adductors",
+  gracilis: "adductors",
+  pectineus: "adductors",
   gastrocnemius: "calves",
   soleus: "calves",
   peroneals: "calves",
   tibialis_anterior: "calves",
-  tibialis_posterior: "calves"
+  tibialis_posterior: "calves",
+  lower_leg_extensors: "calves",
+  plantaris: "calves",
+  intrinsic_foot: "calves"
 };
 
 interface Palette {
   base: Color;
   bone: Color;
+  connective: Color;
   heat: Color[];
   rim: Color;
   sky: Color;
@@ -247,6 +285,7 @@ function readPalette(element: HTMLElement): Palette {
   return {
     base: readColor("--m3d-base", "#39424b"),
     bone: readColor("--m3d-v2-bone", "#c8bea7"),
+    connective: readColor("--m3d-v2-connective", "#d9cfc0"),
     heat: [0, 1, 2, 3, 4, 5].map((level) =>
       readColor(`--m3d-heat-${level}`, level === 0 ? "#46505a" : "#e5484d")
     ),
@@ -280,6 +319,18 @@ function structureFor(object: Object3D): string | null {
     const structure = structureIdFor(current);
     if (structure) {
       return structure;
+    }
+    current = current.parent;
+  }
+  return null;
+}
+
+function tissueRoleFor(object: Object3D): string | null {
+  let current: Object3D | null = object;
+  while (current) {
+    const role = current.userData.tissue_role;
+    if (typeof role === "string" && role.length > 0) {
+      return role;
     }
     current = current.parent;
   }
@@ -377,14 +428,14 @@ function trimMedialSurface(
   return geometry;
 }
 
-function fitRootToModelFrame(root: Object3D, bounds: Box3) {
-  const size = bounds.getSize(new Vector3());
-  const center = bounds.getCenter(new Vector3());
+function fitRootToModelFrame(root: Object3D) {
+  const size = Z_ANATOMY_BOUNDS.getSize(new Vector3());
+  const center = Z_ANATOMY_BOUNDS.getCenter(new Vector3());
   const scale = size.y > 0 ? MODEL_HEIGHT / size.y : 1;
   root.scale.setScalar(scale);
   root.position.set(
     -center.x * scale,
-    -bounds.min.y * scale,
+    -Z_ANATOMY_BOUNDS.min.y * scale,
     -center.z * scale
   );
   return { size, scale };
@@ -399,7 +450,7 @@ function createSymmetricSurfacePair(
     return [geometry];
   }
 
-  const leftIndices: number[] = [];
+  const intactIndices: number[] = [];
   for (let index = 0; index < indices.count; index += 3) {
     const a = indices.getX(index);
     const b = indices.getX(index + 1);
@@ -407,21 +458,21 @@ function createSymmetricSurfacePair(
     const centerX =
       (positions.getX(a) + positions.getX(b) + positions.getX(c)) / 3;
     if (centerX <= 0) {
-      leftIndices.push(a, b, c);
+      intactIndices.push(a, b, c);
     }
   }
 
-  if (leftIndices.length === 0) {
+  if (intactIndices.length === 0) {
     geometry.dispose();
     return [];
   }
 
-  geometry.setIndex(leftIndices);
+  geometry.setIndex(intactIndices);
   const mirrored = geometry.clone();
   mirrored.scale(-1, 1, 1);
 
-  // Negative scaling reverses triangle winding; swap the final two vertices
-  // so the mirrored half remains front-facing with normal backface culling.
+  // Negative scaling reverses triangle winding. Restore it so the mirrored
+  // half remains front-facing with normal backface culling.
   const mirroredIndices = mirrored.getIndex();
   if (mirroredIndices) {
     for (let index = 0; index < mirroredIndices.count; index += 3) {
@@ -504,12 +555,12 @@ function createWorld(
   callout.dataset.visible = "false";
   callout.dataset.side = "right";
 
-  const hemi = new HemisphereLight(0x93b8dc, 0x151a1f, 0.78);
-  const key = new DirectionalLight(0xfff8ed, 2.35);
+  const hemi = new HemisphereLight(0xaac3d8, 0x171b20, 0.9);
+  const key = new DirectionalLight(0xfff8ed, 1.82);
   key.position.set(-2.8, 4.2, 3.7);
-  const fill = new DirectionalLight(0xc4dcff, 0.82);
+  const fill = new DirectionalLight(0xe5f0ff, 1.48);
   fill.position.set(3.2, 1.6, 2.6);
-  const rim = new DirectionalLight(0x7fe8c4, 1.35);
+  const rim = new DirectionalLight(0xb9e6da, 0.72);
   rim.position.set(0.8, 2.2, -3.8);
   const lightRig = new Group();
   lightRig.name = "anatomy-camera-light-rig";
@@ -517,7 +568,7 @@ function createWorld(
   scene.add(hemi, lightRig);
 
   const modelRoot = new Group();
-  modelRoot.name = "anatomy-engine-muscular-system";
+  modelRoot.name = "z-anatomy-muscular-system";
   scene.add(modelRoot);
 
   const shadowTexture = createShadowTexture();
@@ -544,16 +595,16 @@ function createWorld(
   let hiddenMuscles = new Set<MuscleId>();
 
   for (const muscle of MUSCLES) {
-    const isSupportingTorsoLayer = muscle.id === "obliques";
+    const isTopTorsoLayer = muscle.id === "obliques";
     const material = new MeshStandardMaterial({
       color: 0x46505a,
       emissive: 0x46505a,
       emissiveIntensity: 0.025,
       roughness: 0.54,
       metalness: 0.01,
-      polygonOffset: isSupportingTorsoLayer,
-      polygonOffsetFactor: isSupportingTorsoLayer ? 1 : 0,
-      polygonOffsetUnits: isSupportingTorsoLayer ? 1 : 0
+      polygonOffset: isTopTorsoLayer,
+      polygonOffsetFactor: isTopTorsoLayer ? -1 : 0,
+      polygonOffsetUnits: isTopTorsoLayer ? -1 : 0
     });
     sharedMaterials.add(material);
     groups.set(muscle.id, {
@@ -580,6 +631,17 @@ function createWorld(
     depthWrite: false
   });
   sharedMaterials.add(boneMaterial);
+
+  const connectiveMaterial = new MeshPhysicalMaterial({
+    color: 0xd9cfc0,
+    emissive: 0xd9cfc0,
+    emissiveIntensity: 0.025,
+    roughness: 0.62,
+    metalness: 0,
+    clearcoat: 0.16,
+    clearcoatRoughness: 0.5
+  });
+  sharedMaterials.add(connectiveMaterial);
 
   let palette = readPalette(container);
   let localHover: MuscleId | null = null;
@@ -632,6 +694,8 @@ function createWorld(
     renderer.toneMappingExposure = palette.exposure;
     boneMaterial.color.copy(palette.bone);
     boneMaterial.emissive.copy(palette.bone);
+    connectiveMaterial.color.copy(palette.connective);
+    connectiveMaterial.emissive.copy(palette.connective);
     for (const group of groups.values()) {
       group.target.copy(palette.heat[group.level] ?? palette.base);
     }
@@ -1028,11 +1092,11 @@ function createWorld(
       }
 
       gltf.scene.updateMatrixWorld(true);
-      // Use the complete source bounds for registration even though fascia and
-      // other untagged context meshes are intentionally not rendered.
-      const sourceBounds = new Box3().setFromObject(gltf.scene);
-      const sourceHeight = sourceBounds.getSize(new Vector3()).y;
+      // Use the complete atlas bounds for registration even though this export
+      // intentionally contains only the surface structures needed at runtime.
+      const sourceHeight = Z_ANATOMY_BOUNDS.getSize(new Vector3()).y;
       const buckets = new Map<MuscleId, BufferGeometry[]>();
+      const connectiveGeometries: BufferGeometry[] = [];
       const sourceGeometries = new Set<BufferGeometry>();
 
       gltf.scene.traverse((object) => {
@@ -1044,6 +1108,11 @@ function createWorld(
           ? object.material
           : [object.material];
         previous.forEach((material) => originalMaterials.add(material));
+
+        if (tissueRoleFor(object) === "connective") {
+          connectiveGeometries.push(prepareGeometry(object.geometry, object));
+          return;
+        }
 
         const structure = structureFor(object);
         if (!structure || !SUPERFICIAL_STRUCTURES.has(structure)) {
@@ -1071,6 +1140,25 @@ function createWorld(
 
       const optimizedRoot = new Group();
       optimizedRoot.name = "batched-anatomy-muscles";
+
+      if (connectiveGeometries.length > 0) {
+        const mergedConnective =
+          connectiveGeometries.length === 1
+            ? connectiveGeometries[0]
+            : mergeGeometries(connectiveGeometries);
+        if (mergedConnective) {
+          if (connectiveGeometries.length > 1) {
+            connectiveGeometries.forEach((geometry) => geometry.dispose());
+          }
+          mergedConnective.computeBoundingBox();
+          mergedConnective.computeBoundingSphere();
+          geometries.add(mergedConnective);
+          const mesh = new Mesh(mergedConnective, connectiveMaterial);
+          mesh.name = "anatomy-connective-tissue";
+          mesh.renderOrder = MUSCLES.length + 1;
+          optimizedRoot.add(mesh);
+        }
+      }
 
       for (const [muscle, entries] of buckets) {
         if (entries.length === 0) {
@@ -1109,10 +1197,7 @@ function createWorld(
       }
       originalMaterials.clear();
 
-      const { size, scale } = fitRootToModelFrame(
-        optimizedRoot,
-        sourceBounds
-      );
+      const { size, scale } = fitRootToModelFrame(optimizedRoot);
       modelRoot.add(optimizedRoot);
       modelReady = true;
       applyLayers();
@@ -1129,7 +1214,7 @@ function createWorld(
       needsRender = true;
       start();
 
-      // Bones are a separate Anatomy Engine system. They remain neutral,
+      // Bones are a separate Z-Anatomy system. They remain neutral,
       // unpickable context behind the heat-mapped superficial muscles.
       handlers.onLoadProgress(null);
       loader.load(
@@ -1149,7 +1234,6 @@ function createWorld(
           }
 
           skeletonGltf.scene.updateMatrixWorld(true);
-          const skeletonBounds = new Box3().setFromObject(skeletonGltf.scene);
           const skeletonMaterials = new Set<Material>();
           skeletonGltf.scene.traverse((object) => {
             if (!(object instanceof Mesh)) {
@@ -1166,7 +1250,7 @@ function createWorld(
           skeletonMaterials.forEach(disposeOriginalMaterial);
 
           skeletonGltf.scene.name = "anatomy-skeleton";
-          fitRootToModelFrame(skeletonGltf.scene, skeletonBounds);
+          fitRootToModelFrame(skeletonGltf.scene);
           modelRoot.add(skeletonGltf.scene);
           handlers.onLoad();
           needsRender = true;
@@ -1441,7 +1525,7 @@ export function BodyMapV2({
       ) : null}
       {failed ? (
         <p className="body-map-fallback" role="alert">
-          The Anatomy Engine model could not load. The muscle ranking beside it
+          The Z-Anatomy model could not load. The muscle ranking beside it
           still contains the complete workload breakdown.
         </p>
       ) : null}

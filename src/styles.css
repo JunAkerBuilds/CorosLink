@@ -23816,6 +23816,7 @@ tr.data-intervals-row-missing {
 
 .calendar-builder-footer {
   justify-content: space-between;
+  background: none;
 }
 
 .calendar-builder-footer .calendar-check {
@@ -25407,7 +25408,7 @@ tr.data-intervals-row-missing {
     margin: 0;
     min-height: 58px;
     border-top: 1px solid var(--glass-border);
-    background: linear-gradient(to bottom, color-mix(in srgb, var(--bg-base) 96%, transparent), var(--bg-base));
+    background: none;
     padding-top: 13px;
   }
 

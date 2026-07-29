@@ -164,7 +164,8 @@ export function estimateOneRepMax(weightKg: number, reps: number): number {
   return reps === 1 ? weightKg : weightKg * (1 + reps / 30);
 }
 
-function startOfWeekMs(timestampMs: number): number {
+/** Monday 00:00 of the week `timestampMs` falls in, in milliseconds. */
+export function startOfWeekMs(timestampMs: number): number {
   const date = new Date(timestampMs);
   date.setHours(0, 0, 0, 0);
   // getDay() is 0 on Sunday; shift so weeks start on Monday.
