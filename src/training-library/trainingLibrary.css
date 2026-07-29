@@ -1404,22 +1404,70 @@
   min-width: 0;
   flex-direction: column;
   gap: 18px;
-  padding: 18px 20px 22px;
-  background: var(--tl-reader-bg, color-mix(in srgb, var(--surface) 34%, transparent));
+  padding: 20px 20px 22px;
+  background:
+    radial-gradient(ellipse 140% 20% at 50% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 64%),
+    var(--tl-reader-bg, color-mix(in srgb, var(--surface) 34%, transparent));
 }
 
 .tl-reader > header {
   position: relative;
-  padding-right: 34px;
+  padding-right: 38px;
 }
 
 .tl-reader > header h2 {
-  margin: 5px 0 0;
+  margin: 9px 0 0;
   font-family: var(--font-display);
-  font-size: 21px;
+  font-size: 22px;
   font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  letter-spacing: -0.022em;
+  line-height: 1.16;
+  text-wrap: balance;
+}
+
+/*
+ * The sport chip answers in the sport's own colour — the same --sport-* tokens
+ * Settings → Activity colors edits, so the reader agrees with the rest of the
+ * app about what a strength day looks like.
+ */
+.tl-reader-sport {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3.5px 10px;
+  border: 1px solid color-mix(in srgb, var(--tl-sport, var(--accent)) 36%, transparent);
+  border-radius: var(--radius-pill);
+  color: color-mix(in srgb, var(--tl-sport, var(--accent-strong)) 80%, var(--text-primary));
+  background: color-mix(in srgb, var(--tl-sport, var(--accent)) 10%, transparent);
+}
+
+.tl-reader-sport::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--tl-sport, var(--accent));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--tl-sport, var(--accent)) 62%, transparent);
+  content: "";
+}
+
+.tl-reader-sport[data-sport="strength"] {
+  --tl-sport: var(--sport-strength);
+}
+
+.tl-reader-sport[data-sport="trail"] {
+  --tl-sport: var(--sport-trail);
+}
+
+.tl-reader-sport[data-sport="run"] {
+  --tl-sport: var(--sport-run);
+}
+
+.tl-reader-sport[data-sport="bike"] {
+  --tl-sport: var(--sport-bike);
+}
+
+.tl-reader-sport[data-sport="other"] {
+  --tl-sport: var(--sport-other);
 }
 
 .tl-reader-favorite {
@@ -1477,9 +1525,19 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin: 0;
-  padding: 14px 0;
+  padding: 14px 0 15px;
   border-top: 1px solid var(--tl-rule);
   border-bottom: 1px solid var(--tl-rule);
+}
+
+.tl-reader-metrics > div {
+  min-width: 0;
+}
+
+/* Hairline dividers keep the four figures reading as one instrument. */
+.tl-reader-metrics > div + div {
+  border-left: 1px solid var(--tl-rule-soft);
+  padding-left: 12px;
 }
 
 .tl-reader-metrics dt {
@@ -1491,12 +1549,21 @@
 }
 
 .tl-reader-metrics dd {
-  margin: 5px 0 0;
+  margin: 6px 0 0;
+  overflow: hidden;
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: 19px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-reader-metrics dd.is-nil {
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 /* Step structure by share of the session: repeats expand into a comb. */
@@ -1549,40 +1616,101 @@
   font-size: 10.5px;
 }
 
+/* The legend keys the bar's fills without repeating words on every segment. */
+.tl-shape-legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 10px;
+}
+
+.tl-shape-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.tl-shape-legend em {
+  width: 8px;
+  height: 8px;
+  border-radius: 2.5px;
+}
+
+.tl-shape-legend em.is-training {
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
+  box-shadow: 0 0 5px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.tl-shape-legend em.is-warmup,
+.tl-shape-legend em.is-cooldown {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+.tl-shape-legend em.is-rest,
+.tl-shape-legend em.is-sendOff {
+  background: color-mix(in srgb, var(--text-secondary) 26%, transparent);
+}
+
 .tl-steps {
-  margin: 0;
+  margin: 0 -20px;
   padding: 0;
   list-style: none;
   counter-reset: tl-step;
 }
 
+/* Rows run edge to edge so the hover wash can light the whole line. */
 .tl-steps li {
   position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 10px;
-  padding: 9px 0 9px 26px;
+  padding: 10px 20px 10px 54px;
   border-bottom: 1px solid var(--tl-rule-soft);
   counter-increment: tl-step;
+  transition: background 160ms ease;
 }
 
+.tl-steps li:first-child {
+  border-top: 1px solid var(--tl-rule-soft);
+}
+
+.tl-steps li:hover {
+  background: var(--tl-row-hover);
+}
+
+/* The index number answers in the step's kind: teal to ease in and out of the
+   session, the accent for work, grey for rest. */
 .tl-steps li::before {
   position: absolute;
-  top: 11px;
-  left: 0;
-  color: var(--text-muted);
+  top: 12px;
+  left: 20px;
+  width: 24px;
+  color: color-mix(in srgb, var(--accent-strong) 84%, var(--text-muted));
   font-family: var(--font-display);
-  font-size: 10px;
+  font-size: 10.5px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   content: counter(tl-step, decimal-leading-zero);
+}
+
+.tl-steps li[data-kind="warmup"]::before,
+.tl-steps li[data-kind="cooldown"]::before {
+  color: var(--accent-2);
+}
+
+.tl-steps li[data-kind="rest"]::before,
+.tl-steps li[data-kind="sendOff"]::before {
+  color: var(--text-muted);
 }
 
 .tl-step-head {
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
@@ -1595,47 +1723,122 @@
   white-space: nowrap;
 }
 
+/* The target rides as a small pill; a repeat block's rounds get the accent. */
 .tl-step-head small {
   flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
   color: var(--text-secondary);
+  background: var(--glass-bg);
   font-family: var(--font-display);
-  font-size: 11.5px;
+  font-size: 10px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
+.tl-step-head small.is-rounds {
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+/* Children hang from a guide rail, each line pinned by its own dot. */
 .tl-step-children {
   display: flex;
   width: 100%;
   flex-direction: column;
-  gap: 3px;
-  padding-left: 10px;
-  border-left: 1px solid var(--tl-rule);
+  gap: 4px;
+  margin-top: 5px;
+  margin-left: 2px;
+  padding: 2px 0 2px 13px;
+  border-left: 1px solid color-mix(in srgb, var(--accent) 24%, var(--tl-rule));
 }
 
 .tl-step-children em {
+  position: relative;
   color: var(--text-muted);
   font-size: 11.5px;
   font-style: normal;
+  line-height: 1.45;
+}
+
+.tl-step-children em::before {
+  position: absolute;
+  top: 50%;
+  left: -15.5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 48%, var(--text-muted));
+  content: "";
+  transform: translateY(-50%);
+}
+
+.tl-step-children em small {
+  margin-left: 4px;
+  color: color-mix(in srgb, var(--text-muted) 84%, transparent);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
 }
 
 .tl-reader-references {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
+  padding: 9px 12px;
+  border: 1px dashed color-mix(in srgb, var(--text-muted) 32%, transparent);
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.tl-reader-references svg {
+  flex: none;
+}
+
+/* A workout that feeds plans and days gets the solid, accent-lit variant. */
+.tl-reader-references.is-linked {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.tl-reader-references.is-linked svg {
+  color: var(--accent-strong);
 }
 
 .tl-reader-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 7px;
-  padding-top: 16px;
+  /* Anchored to the reader's floor: always the last thing the eye lands on. */
+  margin-top: auto;
+  padding-top: 14px;
   border-top: 1px solid var(--tl-rule);
 }
 
+/* Destruction waits at the far end, away from the everyday actions. */
+.tl-reader-actions .ghost-button.danger {
+  margin-left: auto;
+}
+
+/* Scheduling is the reader's one form, so it is set as a small glass card. */
 .tl-reader-schedule {
   display: flex;
-  align-items: flex-end;
-  gap: 9px;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012) 48%),
+    var(--glass-bg);
+  box-shadow: var(--shadow-inset);
 }
 
 .tl-reader-schedule label {
@@ -1643,7 +1846,7 @@
   min-width: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
 }
 
 .tl-reader-schedule label span {
@@ -1662,6 +1865,13 @@
   color: var(--text-primary);
   background: var(--glass-bg);
   font-size: 12.5px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.tl-reader-schedule input:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  outline: 0;
 }
 
 .tl-reader-loading {
@@ -1669,6 +1879,7 @@
   align-items: center;
   gap: 8px;
   margin: 0;
+  padding: 10px 0;
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -3269,6 +3480,12 @@
 
   .tl-reader-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* On two rows the third cell starts fresh, so its divider would float. */
+  .tl-reader-metrics > div:nth-child(3) {
+    border-left: 0;
+    padding-left: 0;
   }
 
   .plan-editor,

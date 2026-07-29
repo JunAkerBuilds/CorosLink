@@ -4,6 +4,7 @@ import {
   Download,
   Heart,
   LayoutGrid,
+  Link2,
   List,
   LoaderCircle,
   Pencil,
@@ -11,6 +12,7 @@ import {
   Search,
   Tag,
   Trash2,
+  Unlink,
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -23,6 +25,7 @@ import type {
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { formatHappenDayLabel } from "../training/formatters";
+import { sportColorCategory } from "../training/sportColors";
 import { formatWorkoutSport } from "../../electron/workoutCapabilities";
 import { workoutSportFromType } from "../../electron/trainingPlanDomain";
 import { SelectDropdown } from "../components/SelectDropdown";
@@ -63,6 +66,16 @@ const UNSETTLED_SYNC = new Set(["pending", "conflicted", "failed", "stale"]);
 /** Enough segments to read an interval comb without drawing thousands of them. */
 const SHAPE_SEGMENT_LIMIT = 96;
 
+/** Legend wording for the step kinds the shape bar can draw, in session order. */
+const STEP_KIND_LABELS: Record<string, string> = {
+  warmup: "Warm-up",
+  training: "Work",
+  rest: "Rest",
+  cooldown: "Cool-down",
+  sendOff: "Send-off"
+};
+const STEP_KIND_ORDER = Object.keys(STEP_KIND_LABELS);
+
 function metricFromVolume(volume: string | undefined, kind: "duration" | "distance"): number {
   const value = volume?.toLowerCase() ?? "";
   if (kind === "duration") {
@@ -95,6 +108,11 @@ function targetLabel(node: RunWorkoutEditorNode): string {
   if (target.type === "elevationGain") return `${target.meters} m gain`;
   if (target.type === "hrRecovery") return `${target.bpm} bpm recovery`;
   return "Open";
+}
+
+/** Repeat groups carry no kind of their own; they borrow their first child's. */
+function nodeKind(node: RunWorkoutEditorNode): string | undefined {
+  return node.nodeType === "step" ? node.kind : node.steps[0]?.kind;
 }
 
 interface ShapeSegment {
@@ -230,6 +248,11 @@ export function WorkoutWorkspace({
   const shape = useMemo(
     () => (previewDocument ? workoutShape(previewDocument.draft.nodes) : []),
     [previewDocument]
+  );
+  /** Kinds actually drawn, in session order, so the legend never lists a ghost. */
+  const shapeKinds = useMemo(
+    () => STEP_KIND_ORDER.filter((kind) => shape.some((segment) => segment.kind === kind)),
+    [shape]
   );
 
   useEffect(() => {
@@ -626,7 +649,10 @@ export function WorkoutWorkspace({
         ) : (
           <>
             <header>
-              <p className="tl-eyebrow">
+              <p
+                className="tl-eyebrow tl-reader-sport"
+                data-sport={sportColorCategory(active.sportType)}
+              >
                 {formatWorkoutSport(workoutSportFromType(active.sportType) ?? "run")}
               </p>
               <h2>{active.name}</h2>
@@ -643,7 +669,7 @@ export function WorkoutWorkspace({
             <dl className="tl-reader-metrics">
               <div>
                 <dt>Time</dt>
-                <dd>
+                <dd className={previewMetrics?.durationSeconds ? "" : "is-nil"}>
                   {previewMetrics?.durationSeconds
                     ? `${Math.round(previewMetrics.durationSeconds / 60)}m`
                     : "—"}
@@ -651,7 +677,7 @@ export function WorkoutWorkspace({
               </div>
               <div>
                 <dt>Distance</dt>
-                <dd>
+                <dd className={previewMetrics?.distanceMeters || active.volume ? "" : "is-nil"}>
                   {previewMetrics?.distanceMeters
                     ? `${(previewMetrics.distanceMeters / 1000).toFixed(1)} km`
                     : (active.volume ?? "—")}
@@ -659,7 +685,7 @@ export function WorkoutWorkspace({
               </div>
               <div>
                 <dt>Load</dt>
-                <dd>
+                <dd className={previewMetrics?.trainingLoad || active.trainingLoad ? "" : "is-nil"}>
                   {previewMetrics?.trainingLoad
                     ? Math.round(previewMetrics.trainingLoad)
                     : active.trainingLoad
@@ -669,7 +695,9 @@ export function WorkoutWorkspace({
               </div>
               <div>
                 <dt>Steps</dt>
-                <dd>{previewDocument?.draft.nodes.length ?? "—"}</dd>
+                <dd className={previewDocument?.draft.nodes.length ? "" : "is-nil"}>
+                  {previewDocument?.draft.nodes.length ?? "—"}
+                </dd>
               </div>
             </dl>
 
@@ -685,7 +713,19 @@ export function WorkoutWorkspace({
                     />
                   ))}
                 </div>
-                <figcaption>Step structure, by share of the session</figcaption>
+                <figcaption>
+                  <span>Step structure, by share of the session</span>
+                  {shapeKinds.length ? (
+                    <span className="tl-shape-legend" aria-hidden="true">
+                      {shapeKinds.map((kind) => (
+                        <span key={kind}>
+                          <em className={`is-${kind}`} />
+                          {STEP_KIND_LABELS[kind]}
+                        </span>
+                      ))}
+                    </span>
+                  ) : null}
+                </figcaption>
               </figure>
             ) : null}
 
@@ -696,10 +736,12 @@ export function WorkoutWorkspace({
             ) : previewDocument ? (
               <ol className="tl-steps">
                 {previewDocument.draft.nodes.map((node) => (
-                  <li key={node.id}>
+                  <li key={node.id} data-kind={nodeKind(node)}>
                     <span className="tl-step-head">
                       <b>{node.name}</b>
-                      <small>{targetLabel(node)}</small>
+                      <small className={node.nodeType === "repeat" ? "is-rounds" : ""}>
+                        {targetLabel(node)}
+                      </small>
                     </span>
                     {node.nodeType === "repeat" ? (
                       <span className="tl-step-children">
@@ -720,13 +762,46 @@ export function WorkoutWorkspace({
               </ol>
             ) : null}
 
-            <p className="tl-reader-references">
-              {active.usedByPlanIds.length || active.scheduledCount
-                ? `Used by ${active.usedByPlanIds.length} plan${
+            <p
+              className={`tl-reader-references${
+                active.usedByPlanIds.length || active.scheduledCount ? " is-linked" : ""
+              }`}
+            >
+              {active.usedByPlanIds.length || active.scheduledCount ? (
+                <>
+                  <Link2 size={13} />
+                  {`Used by ${active.usedByPlanIds.length} plan${
                     active.usedByPlanIds.length === 1 ? "" : "s"
-                  } and scheduled ${active.scheduledCount} time${active.scheduledCount === 1 ? "" : "s"}.`
-                : "Not referenced by a plan or a calendar day."}
+                  } and scheduled ${active.scheduledCount} time${active.scheduledCount === 1 ? "" : "s"}.`}
+                </>
+              ) : (
+                <>
+                  <Unlink size={13} />
+                  Not referenced by a plan or a calendar day.
+                </>
+              )}
             </p>
+
+            <form
+              className="tl-reader-schedule"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void schedule();
+              }}
+            >
+              <label>
+                <span>Put it on the calendar</span>
+                <input
+                  type="date"
+                  value={scheduleDate}
+                  min={tomorrow()}
+                  onChange={(event) => setScheduleDate(event.target.value)}
+                />
+              </label>
+              <button type="submit" className="primary-button" disabled={!scheduleDate || busy === "schedule"}>
+                <CalendarPlus size={14} /> {busy === "schedule" ? "Scheduling" : "Schedule"}
+              </button>
+            </form>
 
             <div className="tl-reader-actions">
               <button
@@ -766,27 +841,6 @@ export function WorkoutWorkspace({
                 <Trash2 size={14} /> Delete
               </button>
             </div>
-
-            <form
-              className="tl-reader-schedule"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void schedule();
-              }}
-            >
-              <label>
-                <span>Put it on the calendar</span>
-                <input
-                  type="date"
-                  value={scheduleDate}
-                  min={tomorrow()}
-                  onChange={(event) => setScheduleDate(event.target.value)}
-                />
-              </label>
-              <button type="submit" className="primary-button" disabled={!scheduleDate || busy === "schedule"}>
-                <CalendarPlus size={14} /> {busy === "schedule" ? "Scheduling" : "Schedule"}
-              </button>
-            </form>
           </>
         )}
       </aside>
