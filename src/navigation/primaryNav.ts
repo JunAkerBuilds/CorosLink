@@ -1,5 +1,6 @@
 import {
   Activity,
+  BookOpen,
   CalendarDays,
   Database,
   Dumbbell,
@@ -16,6 +17,7 @@ export type PrimaryView =
   | "overview"
   | "media"
   | "training"
+  | "library"
   | "strength"
   | "data"
   | "calendar"
@@ -40,6 +42,7 @@ export const PRIMARY_NAV_ITEMS: PrimaryNavItem[] = [
   { id: "maps", label: "Maps", icon: MapIcon, beta: true },
   { id: "watchfaces", label: "Watch Faces", icon: Watch, beta: true },
   { id: "training", label: "Training Hub", icon: Activity },
+  { id: "library", label: "Training Library", icon: BookOpen },
   { id: "strength", label: "Strength", icon: Dumbbell, beta: true },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
   {

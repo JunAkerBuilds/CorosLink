@@ -1,7 +1,9 @@
 # COROS Training Plan Write API (internal)
 
-Reverse-engineered from the COROS Training Hub web app and verified against the
-live API. These endpoints are **undocumented** and may change.
+Reverse-engineered from the COROS Training Hub web app. The workout-program and
+calendar contracts below have been verified against the live API. Native
+Training Plan Library support has only been verified for reads as of
+2026-07-29. These endpoints are **undocumented** and may change.
 
 All requests use the existing Training Hub session (`accesstoken` + `yfheader`
 with `userId`) against the regional `teamapi*.coros.com` host.
@@ -25,6 +27,44 @@ through the athlete's authenticated Training Hub session.
 | `/training/exercise/query` | GET | Resolve Strength and HYROX exercise IDs/names |
 | `/training/schedule/query` | GET | Read calendar (`startDate`, `endDate`, `supportRestExercise=1`) |
 | `/training/schedule/update` | POST | Add, edit, or delete calendar entries (`status: 1`, `2`, or `3`) |
+| `/training/plan/query` | POST | List native COROS Training Plan Library records; read verified |
+| `/training/plan/detail` | GET | Read native plan detail (`id`, `supportRestExercise=1`); read verified |
+
+## Native COROS Training Plan Library
+
+CorosLink keeps native plans behind `corosTrainingPlanAdapter.ts`, separate
+from individual `/training/program/*` workout operations. The adapter maps the
+known plan, entity, program, and week-stage fields into typed models while
+retaining the complete raw payload for forward-compatible, lossless caching.
+
+The 2026-07-29 first-party Training Hub bundle references these additional
+operations:
+
+| Path | Method | Observed first-party purpose | CorosLink status |
+|---|---|---|---|
+| `/training/plan/add` | POST | Create grouped plan | Feature-gated; write payload not live verified |
+| `/training/plan/update` | POST | Update grouped plan | Feature-gated; concurrency/write behavior not live verified |
+| `/training/plan/copy` | POST | Duplicate grouped plan | Feature-gated; write payload not live verified |
+| `/training/plan/delete` | POST | Delete grouped plan | Feature-gated; delete/active-plan behavior not live verified |
+| `/training/schedule/executeSubPlan` | POST | Activate/schedule a plan | Feature-gated; activation payload not live verified |
+| `/training/schedule/quitSubPlan` | POST | Remove active plan | Feature-gated; cleanup semantics not live verified |
+
+The bundle assembles plan-create data from fields including `name`, `overview`,
+`entities`, `programs`, `weekStages`, `maxIdInPlan`, `totalDay`, `unit`,
+`sourceId`, `sourceUrl`, `minWeeks`, `maxWeeks`, `region`, `pbVersion`, and
+`versionObjects`. That observation is not sufficient evidence to send a write:
+required defaults, identity allocation, version checks, and cleanup behavior
+remain uncertain. CorosLink therefore does not guess these payloads.
+
+Native plan query and detail were checked with a saved Training Hub session and
+no credentials or sensitive headers were logged. Some active-plan detail
+responses omit `programs`; the adapter merges detail-only fields with the full
+grouped arrays returned by `/training/plan/query`.
+
+Until a cleanup-safe, explicitly opted-in verifier proves the complete
+create/read/update/activate/remove/delete lifecycle, the UI exposes the exact
+limitation and preserves the verified alternatives: local grouped templates,
+individual Workout Library writes, and direct calendar scheduling.
 
 ## Create library workout
 
@@ -212,11 +252,12 @@ For each unique workout definition:
 One-off calendar workouts can skip the library step and embed the program
 directly in the schedule update payload.
 
-CorosLink's coach “plan” is a local, confirmation-gated draft whose workouts are
-written to the athlete's Workout Library and Training Calendar. It does not
-create a reusable entry in COROS's separate Training Plan Library via
-`/training/plan/add`. Calendar placement is sufficient for COROS App/watch
-calendar sync, but the distinction matters when describing the result.
+CorosLink's Coach “plan” is a local, confirmation-gated draft. The athlete must
+choose Workout Library, Calendar, local CorosLink template, COROS Plan Library,
+or Plan + Calendar on the card. The native grouped choices remain disabled
+while their writes are unverified. The active alternatives write individual
+workouts, write dated calendar occurrences, or save only to local SQLite. An AI
+tool call cannot execute the upload path.
 
 ## Fixtures
 

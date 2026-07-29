@@ -148,6 +148,9 @@ export interface PlanDraftPreview {
   uploadResult?: {
     workoutsScheduled: number;
     workoutsCreated: number;
+    destination?: import("./types").TrainingPlanDestination;
+    localPlanId?: string;
+    groupedPlanCreated?: boolean;
   };
 }
 

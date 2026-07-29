@@ -1,0 +1,2708 @@
+/*
+ * Training Library
+ *
+ * A library is a record, so this surface is set as a ledger: one calm glass
+ * panel per section, and inside it nothing but hairlines, generous leading, and
+ * figures that align into columns so they can be compared by eye.
+ *
+ * Only one thing is ever drawn — the ridge of weekly training load (Ridge.tsx),
+ * small on an index row and at reading size on the adherence lede. It keeps to
+ * the accent hue alone; height carries the number.
+ *
+ * Values derive from the app tokens in styles.css, so both themes reskin this
+ * file by overriding tokens rather than restyling rules. Two small token blocks
+ * follow the root: charcoal for the dark theme, and tile colours for paper.
+ */
+
+.training-library-view {
+  /*
+   * Hairlines derive from the text colour rather than --glass-border, which is
+   * a 0.1-alpha dark on the paper theme and disappears against a white panel.
+   * --text-muted inverts with the theme, so one value reads in both.
+   */
+  --tl-rule: color-mix(in srgb, var(--text-muted) 32%, transparent);
+  --tl-rule-soft: color-mix(in srgb, var(--text-muted) 17%, transparent);
+  --tl-panel-bg: color-mix(in srgb, var(--surface) 58%, transparent);
+  --tl-row-hover: color-mix(in srgb, var(--accent) 6%, transparent);
+  --tl-figure: 15px;
+  --tl-column: 58px;
+
+  min-width: 0;
+  min-height: 100%;
+  padding: 30px 34px 56px;
+  color: var(--text-primary);
+  background: var(--tl-ground, var(--bg-base));
+}
+
+/*
+ * Charcoal, dark theme only. The dark theme is the *absence* of a data-theme
+ * attribute (see theme.ts applyTheme), so this cannot leak into paper.
+ *
+ * It works by overriding the app tokens rather than inventing new ones, which
+ * is how the paper theme reskins too: everything downstream — this file, plus
+ * shared pieces like .app-select and .primary-button — follows for free.
+ */
+:root:not([data-theme]) .training-library-view {
+  --tl-ground: #1b1d20;
+  --tl-panel-bg: #212429;
+  --tl-card: #262a2f;
+  --tl-card-hover: #2d3239;
+  --tl-reader-bg: #1d2023;
+
+  --surface: #262a2f;
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-bg-hover: rgba(255, 255, 255, 0.07);
+  --glass-bg-elevated: rgba(255, 255, 255, 0.09);
+  --glass-border: rgba(255, 255, 255, 0.1);
+
+  --text-primary: #edeef0;
+  --text-secondary: #a9adb2;
+  --text-muted: #7b8085;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28), 0 14px 32px rgba(0, 0, 0, 0.26);
+  --shadow-elevated: 0 20px 44px rgba(0, 0, 0, 0.42);
+
+  /* Charcoal sits lighter than the old near-black, so the ridge needs more
+     accent to hold the same presence. */
+  --tl-ridge-fill: color-mix(in srgb, var(--accent) 58%, transparent);
+  --tl-ridge-fill-hover: color-mix(in srgb, var(--accent) 82%, transparent);
+}
+
+/* Crisp white tiles read better than translucent ones on the warm paper panel. */
+:root[data-theme="paper"] .training-library-view {
+  --tl-card: #ffffff;
+  --tl-card-hover: #fffdf9;
+}
+
+.training-library-view :is(button, input, select, textarea) {
+  font: inherit;
+  font-family: inherit;
+}
+
+.training-library-view :is(button, input, select, textarea, [role="checkbox"]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/*
+ * `.ghost-button` has no global base — each view sets its own — and the global
+ * `.primary-button` is a 44px marketing button. Both are quieted here to sit on
+ * a hairline row without shouting.
+ */
+.training-library-view :is(.primary-button, .ghost-button) {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.training-library-view .primary-button {
+  border: 0;
+  color: #fff;
+  background: var(--accent);
+  box-shadow: none;
+  transition: background 150ms ease;
+}
+
+.training-library-view .primary-button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  box-shadow: none;
+  transform: none;
+}
+
+.training-library-view .ghost-button {
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  background: var(--glass-bg);
+  transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
+}
+
+.training-library-view .ghost-button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+.training-library-view .ghost-button.danger:hover:not(:disabled) {
+  color: var(--error-text);
+  border-color: var(--error-border);
+}
+
+.training-library-view :is(.primary-button, .ghost-button):disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.training-library-view .icon-button {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.training-library-view .icon-button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+.training-library-view .icon-button.danger:hover:not(:disabled) {
+  color: var(--error-text);
+}
+
+.training-library-view .icon-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------------- Masthead */
+
+.tl-masthead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 22px;
+}
+
+.tl-masthead h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+/* The census replaces a tagline: what is actually in the library. */
+.tl-census {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 9px 0 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.tl-census b {
+  margin-right: 4px;
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-masthead-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tl-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tl-state::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--success-dot);
+  content: "";
+}
+
+.tl-state.is-stale::before {
+  background: var(--warning-text);
+}
+
+.tl-notice {
+  margin-bottom: 18px;
+  padding: 11px 14px;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-md);
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  font-size: 12.5px;
+}
+
+.tl-notice summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.tl-notice p {
+  margin: 8px 0 0 22px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* -------------------------------------------------------------- Section nav */
+
+.tl-sections {
+  display: flex;
+  gap: 26px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--tl-rule);
+}
+
+.tl-sections button {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 0 1px 13px;
+  border: 0;
+  color: var(--text-muted);
+  background: none;
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+
+.tl-sections button:hover {
+  color: var(--text-secondary);
+}
+
+.tl-sections button span {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.tl-sections button[aria-current="page"] {
+  color: var(--text-primary);
+}
+
+.tl-sections button[aria-current="page"]::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1.5px;
+  background: var(--accent);
+  content: "";
+}
+
+.tl-sections button[aria-current="page"] span {
+  color: var(--accent);
+}
+
+/* ------------------------------------------------------------------- Panels */
+
+.tl-panel {
+  min-width: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--tl-panel-bg);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(var(--glass-blur));
+  overflow: hidden;
+}
+
+.tl-panel > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px 15px;
+}
+
+.tl-panel > header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.tl-panel > header p {
+  margin: 5px 0 0;
+  max-width: 52ch;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.tl-eyebrow {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------------ Filters */
+
+.tl-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--tl-rule);
+}
+
+/* Sort, layout and the create action group at the right of the filter line. */
+.tl-filters-tail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.tl-search {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 1 300px;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.tl-search input {
+  min-width: 0;
+  width: 100%;
+  padding: 5px 0;
+  border: 0;
+  color: var(--text-primary);
+  background: none;
+  font-size: 13px;
+}
+
+.tl-search input::placeholder {
+  color: var(--text-muted);
+}
+
+.tl-search input:focus-visible {
+  outline: 0;
+}
+
+.tl-search:focus-within {
+  color: var(--accent);
+}
+
+.tl-chips {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tl-chips button {
+  padding: 4px 11px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  background: none;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+
+.tl-chips button:hover {
+  color: var(--text-secondary);
+  background: var(--glass-bg);
+}
+
+.tl-chips button[aria-pressed="true"] {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  background: var(--accent-soft);
+}
+
+/* The "show more" control spans the whole tile grid rather than one cell. */
+.tl-grid > li:has(> .tl-load-more) {
+  grid-column: 1 / -1;
+}
+
+.tl-grid .tl-load-more {
+  border-top: 0;
+}
+
+.tl-inline-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--tl-rule);
+  color: var(--warning-text);
+  background: color-mix(in srgb, var(--warning-bg) 60%, transparent);
+  font-size: 12px;
+}
+
+.tl-inline-note svg {
+  flex: none;
+}
+
+.tl-bulk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--tl-rule);
+  background: var(--accent-soft);
+  font-size: 12px;
+}
+
+.tl-bulk strong {
+  margin-right: 6px;
+  color: var(--accent-strong);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.tl-bulk button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  background: var(--glass-bg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tl-bulk button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+.tl-bulk button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tl-bulk button.danger:hover {
+  color: var(--error-text);
+  border-color: var(--error-border);
+}
+
+/* -------------------------------------------------------------- Ledger index */
+
+.tl-index {
+  min-width: 0;
+}
+
+.tl-index ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Column labels are stated once, so the rows can be pure data. */
+.tl-index-head {
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--tl-rule);
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.tl-index-head .tl-column-label,
+.tl-index-head .tl-sortable {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.tl-index-head .tl-sortable {
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+
+.tl-index-head .tl-sortable:hover {
+  color: var(--text-secondary);
+}
+
+.tl-index-head .tl-sortable[aria-pressed="true"] {
+  color: var(--accent-strong);
+}
+
+.tl-index-head .is-numeric {
+  text-align: right;
+}
+
+.tl-row {
+  align-items: center;
+  border-bottom: 1px solid var(--tl-rule-soft);
+  transition: background 140ms ease;
+}
+
+.tl-row:last-child {
+  border-bottom: 0;
+}
+
+.tl-row:hover {
+  background: var(--tl-row-hover);
+}
+
+.tl-row.is-selected {
+  background: var(--accent-soft);
+}
+
+.tl-plan-row,
+.tl-workout-row,
+.tl-match-row,
+.tl-activity-row {
+  display: grid;
+  gap: 0 14px;
+  padding-right: 16px;
+  padding-left: 16px;
+}
+
+.tl-plan-row {
+  grid-template-columns:
+    16px minmax(0, 1fr)
+    var(--tl-column) var(--tl-column) var(--tl-column) 62px
+    132px 92px;
+}
+
+.tl-workout-row {
+  grid-template-columns: 16px minmax(0, 1fr) 88px 50px 44px;
+}
+
+/* The row's own body is the primary target; it stays a plain block of text. */
+.tl-row-open {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  padding: 15px 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tl-row-open.is-static {
+  cursor: default;
+}
+
+.tl-row-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-row-name svg {
+  flex: none;
+  color: var(--accent);
+}
+
+.tl-row-sub {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.tl-row-sub em {
+  overflow: hidden;
+  font-style: normal;
+  text-overflow: ellipsis;
+}
+
+.tl-row-sub em + em::before {
+  margin-right: 7px;
+  content: "·";
+}
+
+/* Sync state is shown only when it needs attention. */
+.tl-flag {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  font-size: 9.5px;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tl-fig {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: var(--tl-figure);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  text-align: right;
+}
+
+.tl-fig.is-nil {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.tl-fig.is-quiet {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tl-mark {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 52%, transparent);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.tl-mark:hover {
+  border-color: var(--accent);
+}
+
+.tl-mark[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--surface) 80%, transparent);
+}
+
+/* Secondary actions stay out of the way until the row is reached. */
+.tl-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.tl-row:hover .tl-row-actions,
+.tl-row:focus-within .tl-row-actions,
+.tl-row.is-selected .tl-row-actions {
+  opacity: 1;
+}
+
+/* Without a pointer there is no hover to reveal them, so they stay put. */
+@media (hover: none) {
+  .tl-row-actions {
+    opacity: 1;
+  }
+}
+
+.tl-row-actions button {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.tl-row-actions button:hover {
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+.tl-row-actions button.danger:hover {
+  color: var(--error-text);
+}
+
+.tl-load-more {
+  width: 100%;
+  padding: 13px;
+  border: 0;
+  border-top: 1px solid var(--tl-rule);
+  color: var(--text-secondary);
+  background: none;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tl-load-more:hover {
+  color: var(--text-primary);
+  background: var(--glass-bg);
+}
+
+/* ------------------------------------------------------------- Card tiles */
+
+/*
+ * One tile per training. The tile is where the ridge belongs: it gets the full
+ * width and twice the height it can have on a row, so the shape of a block is
+ * readable at a glance while browsing.
+ */
+.tl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(258px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 16px;
+  list-style: none;
+}
+
+.tl-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 198px;
+  flex-direction: column;
+  /* --tl-rule, not --glass-border: a tile needs a defined edge, and the glass
+     border is a 0.1-alpha dark that disappears on a white paper tile. */
+  border: 1px solid var(--tl-rule);
+  border-radius: var(--radius-md);
+  background: var(--tl-card, var(--glass-bg));
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.tl-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--glass-border));
+  background: var(--tl-card-hover, var(--glass-bg-hover));
+  transform: translateY(-1px);
+}
+
+.tl-card.is-selected {
+  border-color: var(--accent);
+}
+
+.tl-card.is-active {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--glass-border));
+  background: var(--tl-card-hover, var(--glass-bg-hover));
+}
+
+.tl-card-open {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 15px 13px;
+  border: 0;
+  color: inherit;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tl-card-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-right: 24px;
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.tl-card-top em {
+  font-style: normal;
+}
+
+.tl-card-top svg {
+  color: var(--accent);
+}
+
+.tl-card-name {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.28;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.tl-card-note {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * Pushes the ridge and figures to the tile floor so tiles align across a row.
+ * A week gets a wider slot here than on a list row — a typical block then fills
+ * most of the tile, and a short plan visibly draws a shorter ridge.
+ */
+.tl-card-open .tl-ridge {
+  height: 42px;
+  margin-top: auto;
+  gap: 2px;
+}
+
+.tl-card-open .tl-ridge-bar {
+  flex-basis: 10px;
+  border-radius: 1.5px;
+}
+
+.tl-card-figs {
+  display: flex;
+  gap: 16px;
+  padding-top: 11px;
+  border-top: 1px solid var(--tl-rule-soft);
+}
+
+.tl-card-figs span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tl-card-figs b {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.tl-card-figs b.is-nil {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.tl-card-figs small {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tl-card > .tl-mark {
+  position: absolute;
+  top: 13px;
+  right: 13px;
+  z-index: 1;
+}
+
+.tl-card-actions {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.tl-card:hover .tl-card-actions,
+.tl-card:focus-within .tl-card-actions,
+.tl-card.is-selected .tl-card-actions {
+  opacity: 1;
+}
+
+.tl-card-actions button {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--tl-card, var(--surface)) 88%, transparent);
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.tl-card-actions button:hover {
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+.tl-card-actions button.danger:hover {
+  color: var(--error-text);
+}
+
+@media (hover: none) {
+  .tl-card-actions {
+    opacity: 1;
+  }
+}
+
+/* Workout tiles carry no weekly data, so they stay shorter and text-only. */
+.tl-catalog .tl-grid {
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+}
+
+.tl-catalog .tl-card {
+  min-height: 120px;
+}
+
+/* With no ridge to push them down, the figures take the auto margin instead so
+   they still land on the tile floor when a name wraps to two lines. */
+.tl-catalog .tl-card-figs {
+  gap: 14px;
+  margin-top: auto;
+}
+
+/* -------------------------------------------------------- Layout switch */
+
+.tl-layout-switch {
+  display: inline-flex;
+  flex: none;
+  gap: 1px;
+  padding: 2px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+}
+
+.tl-layout-switch button {
+  display: inline-flex;
+  width: 26px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.tl-layout-switch button:hover {
+  color: var(--text-secondary);
+}
+
+.tl-layout-switch button[aria-pressed="true"] {
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+/* ------------------------------------------------- The ridge (the signature) */
+
+/*
+ * One week is always the same width, and every ridge starts at week 1, so the
+ * bars stay comparable between rows and a longer plan simply draws a longer
+ * ridge. Only a plan past ~22 weeks compresses to fit its column.
+ */
+.tl-ridge {
+  display: flex;
+  height: 26px;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 1.5px;
+}
+
+.tl-ridge.is-blank {
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.tl-ridge-bar {
+  position: relative;
+  min-width: 1px;
+  flex: 0 1 4px;
+  height: var(--tl-bar-height);
+  border-radius: 1px;
+  background: var(--tl-ridge-fill, color-mix(in srgb, var(--accent) 46%, transparent));
+  transform-origin: bottom;
+}
+
+.tl-ridge-bar.is-empty {
+  background: color-mix(in srgb, var(--text-muted) 40%, transparent);
+}
+
+/* Session counts, not load: grey, so the accent keeps meaning one thing. */
+.tl-ridge.is-count .tl-ridge-bar {
+  background: color-mix(in srgb, var(--text-secondary) 34%, transparent);
+}
+
+.tl-row:hover .tl-ridge.is-count .tl-ridge-bar {
+  background: color-mix(in srgb, var(--text-secondary) 52%, transparent);
+}
+
+.tl-ridge-bar.is-peak {
+  background: var(--accent-strong);
+}
+
+.tl-row:hover .tl-ridge-bar:not(.is-empty),
+.tl-card:hover .tl-ridge-bar:not(.is-empty) {
+  background: var(--tl-ridge-fill-hover, color-mix(in srgb, var(--accent) 72%, transparent));
+}
+
+.tl-row:hover .tl-ridge-bar.is-peak {
+  background: var(--accent-strong);
+}
+
+/* The same axis at reading size: planned load pale, completed load solid. */
+.tl-bullets {
+  display: flex;
+  height: 78px;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.tl-bullet {
+  position: relative;
+  min-width: 3px;
+  flex: 1 1 0;
+  height: 100%;
+}
+
+.tl-bullet b,
+.tl-bullet i {
+  position: absolute;
+  bottom: 0;
+  height: var(--tl-bar-height);
+  border-radius: 1.5px;
+  transform-origin: bottom;
+}
+
+.tl-bullet b {
+  right: 0;
+  left: 0;
+  background: color-mix(in srgb, var(--text-muted) 24%, transparent);
+}
+
+.tl-bullet i {
+  right: 30%;
+  left: 30%;
+  background: color-mix(in srgb, var(--accent) 82%, transparent);
+}
+
+.tl-bullet:hover b {
+  background: color-mix(in srgb, var(--text-muted) 42%, transparent);
+}
+
+/* ------------------------------------------------- Workouts: catalog + reader */
+
+.tl-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 372px;
+}
+
+.tl-catalog {
+  min-width: 0;
+  border-right: 1px solid var(--tl-rule);
+}
+
+/* Sits a step below the catalog so the tiles read as the raised layer. */
+.tl-reader {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 20px 22px;
+  background: var(--tl-reader-bg, color-mix(in srgb, var(--surface) 34%, transparent));
+}
+
+.tl-reader > header {
+  position: relative;
+  padding-right: 34px;
+}
+
+.tl-reader > header h2 {
+  margin: 5px 0 0;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.tl-reader-favorite {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+}
+
+.tl-reader-favorite:hover,
+.tl-reader-favorite.is-active {
+  color: var(--accent);
+}
+
+.tl-reader-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 14px 0;
+  border-top: 1px solid var(--tl-rule);
+  border-bottom: 1px solid var(--tl-rule);
+}
+
+.tl-reader-metrics dt {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tl-reader-metrics dd {
+  margin: 5px 0 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Step structure by share of the session: repeats expand into a comb. */
+.tl-shape {
+  margin: 0;
+}
+
+/* Time is continuous, so the segments abut: only the fill marks a boundary. */
+.tl-shape > div {
+  display: flex;
+  height: 34px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.tl-shape span {
+  min-width: 1px;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.tl-shape span.is-training {
+  background: var(--accent);
+}
+
+.tl-shape span.is-warmup,
+.tl-shape span.is-cooldown {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.tl-shape span.is-rest,
+.tl-shape span.is-sendOff {
+  background: color-mix(in srgb, var(--text-secondary) 20%, transparent);
+}
+
+.tl-shape figcaption,
+.tl-adherence-chart figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.tl-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: tl-step;
+}
+
+.tl-steps li {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 9px 0 9px 26px;
+  border-bottom: 1px solid var(--tl-rule-soft);
+  counter-increment: tl-step;
+}
+
+.tl-steps li::before {
+  position: absolute;
+  top: 11px;
+  left: 0;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  content: counter(tl-step, decimal-leading-zero);
+}
+
+.tl-step-head {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tl-step-head b {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-step-head small {
+  flex: none;
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-step-children {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 3px;
+  padding-left: 10px;
+  border-left: 1px solid var(--tl-rule);
+}
+
+.tl-step-children em {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+.tl-reader-references {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.tl-reader-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding-top: 16px;
+  border-top: 1px solid var(--tl-rule);
+}
+
+.tl-reader-schedule {
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+}
+
+.tl-reader-schedule label {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tl-reader-schedule label span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tl-reader-schedule input {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--glass-bg);
+  font-size: 12.5px;
+}
+
+.tl-reader-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------- Templates: collections */
+
+.tl-template-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 292px;
+  align-items: start;
+  gap: 16px;
+}
+
+.tl-collections > header {
+  display: block;
+  padding-bottom: 12px;
+}
+
+.tl-collection-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  padding: 0 20px 14px;
+}
+
+.tl-collection-create input {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--glass-bg);
+  font-size: 12.5px;
+}
+
+.tl-collections ul {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--tl-rule);
+  list-style: none;
+}
+
+.tl-collections li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 16px 11px 20px;
+  border-bottom: 1px solid var(--tl-rule-soft);
+}
+
+.tl-collections li:last-child {
+  border-bottom: 0;
+}
+
+.tl-collections li span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tl-collections li strong {
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-collections li small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.tl-collections li button {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+}
+
+.tl-collections li button:hover {
+  color: var(--error-text);
+  background: var(--glass-bg-hover);
+}
+
+.tl-collections-empty {
+  margin: 0;
+  padding: 0 20px 20px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------------------- Adherence */
+
+.tl-adherence {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tl-adherence-lede > header {
+  align-items: center;
+}
+
+.tl-adherence-chart {
+  margin: 0;
+  padding: 4px 20px 0;
+}
+
+.tl-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tl-legend em {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.tl-legend em:not(:first-child) {
+  margin-left: 8px;
+}
+
+.tl-legend .is-planned {
+  background: color-mix(in srgb, var(--text-muted) 34%, transparent);
+}
+
+.tl-legend .is-done {
+  background: color-mix(in srgb, var(--accent) 82%, transparent);
+}
+
+.tl-tally {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 18px 0 0;
+  border-top: 1px solid var(--tl-rule);
+  background: var(--tl-rule);
+}
+
+.tl-tally div {
+  padding: 13px 20px;
+  background: var(--tl-panel-bg);
+}
+
+.tl-tally dt {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.tl-tally dd {
+  margin: 5px 0 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.tl-match-row {
+  grid-template-columns: 92px minmax(0, 1fr) minmax(0, 1.05fr) 60px 88px;
+}
+
+.tl-match-row.tl-row {
+  padding-top: 11px;
+  padding-bottom: 11px;
+}
+
+.tl-match-day,
+.tl-match-planned,
+.tl-match-done {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tl-match-day b {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-match-day small,
+.tl-match-planned small,
+.tl-match-done small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.tl-match-planned b {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A status is a state, not a label: the day carries a hairline of its colour. */
+.tl-match-row {
+  border-left: 2px solid transparent;
+  padding-left: 14px;
+}
+
+.tl-match-row.is-completed {
+  border-left-color: var(--success-text);
+}
+
+.tl-match-row.is-partial,
+.tl-match-row.is-rescheduled {
+  border-left-color: var(--warning-text);
+}
+
+.tl-match-row.is-missed {
+  border-left-color: var(--error-text);
+}
+
+.tl-match-row.is-upcoming {
+  border-left-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.tl-activity-row {
+  grid-template-columns: minmax(0, 1fr) 64px 70px 52px 34px;
+}
+
+.tl-recent .tl-index-head,
+.tl-recent .tl-row {
+  padding-left: 20px;
+}
+
+/* --------------------------------------------------------- Quiet dropdowns */
+
+.training-library-view .tl-quiet-select {
+  min-width: 0;
+}
+
+.training-library-view .tl-quiet-select .app-select-trigger {
+  min-height: 28px;
+  padding: 0 6px 0 9px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.training-library-view .tl-quiet-select.is-wide {
+  max-width: 100%;
+}
+
+/*
+ * The activity picker doubles as the value it edits, so it is set as text with
+ * the chevron tucked against it rather than a field spanning the whole cell.
+ */
+.training-library-view .tl-quiet-select.is-wide .app-select-trigger {
+  width: auto;
+  max-width: 100%;
+  justify-content: flex-start;
+  gap: 3px;
+  padding: 0 2px 0 0;
+  border-color: transparent;
+  background: none;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.training-library-view .tl-quiet-select.is-wide .app-select-value {
+  flex: 0 1 auto;
+}
+
+.training-library-view .tl-quiet-select.is-wide .app-select-icon {
+  color: var(--text-muted);
+}
+
+.training-library-view .tl-quiet-select.is-wide .app-select-trigger:hover,
+.training-library-view .tl-quiet-select.is-wide .app-select-trigger[aria-expanded="true"] {
+  padding: 0 4px 0 7px;
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+}
+
+/* --------------------------------------------------- Empty, gate, and dialog */
+
+.tl-empty {
+  padding: 54px 20px 58px;
+  text-align: center;
+}
+
+.tl-empty h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.tl-empty p {
+  margin: 7px auto 0;
+  max-width: 38ch;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.training-library-gate {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 30px;
+  color: var(--text-primary);
+  background:
+    radial-gradient(circle at 50% 24%, var(--accent-soft), transparent 42%),
+    var(--bg-base);
+  text-align: center;
+}
+
+.training-library-gate svg {
+  color: var(--text-muted);
+}
+
+.training-library-gate h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.training-library-gate p {
+  margin: 0 0 8px;
+  max-width: 44ch;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.tl-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.tl-skeleton span {
+  height: 64px;
+  background: var(--glass-bg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tl-skeleton span {
+    animation: tl-pulse 1.5s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes tl-pulse {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 0.9;
+  }
+}
+
+.tl-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: grid;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg-base) 76%, transparent);
+  backdrop-filter: blur(8px);
+  place-items: center;
+}
+
+.tl-dialog {
+  width: min(460px, 100%);
+  padding: 22px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  background: var(--surface);
+  box-shadow: var(--shadow-elevated);
+}
+
+.tl-dialog h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.tl-dialog p {
+  margin: 9px 0 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.tl-dialog ul {
+  max-height: 200px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.tl-dialog li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 0;
+  border-top: 1px solid var(--tl-rule);
+  font-size: 13px;
+}
+
+.tl-dialog li span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.tl-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.tl-dialog .primary-button.danger {
+  color: #fff;
+  background: var(--error-text);
+}
+
+/* ------------------------------------------------------- Plan editor modals */
+
+.plan-editor,
+.plan-compare {
+  position: fixed;
+  inset: 16px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-base) 94%, var(--surface));
+  box-shadow: var(--shadow-elevated);
+  overflow: hidden;
+}
+
+.plan-editor::before,
+.plan-compare::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in srgb, var(--bg-base) 72%, transparent);
+  backdrop-filter: blur(10px);
+  content: "";
+}
+
+.plan-editor-header,
+.plan-compare > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--tl-rule);
+}
+
+.plan-editor-header .tl-eyebrow,
+.plan-compare > header .tl-eyebrow {
+  margin-bottom: 4px;
+}
+
+.plan-editor-name {
+  min-width: 300px;
+  padding: 0;
+  border: 0;
+  color: var(--text-primary);
+  background: none;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  outline: 0;
+}
+
+.plan-editor-name:focus-visible {
+  border-bottom: 1px solid var(--accent);
+}
+
+.plan-editor-header > div > p:last-of-type {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.plan-editor-source-warning {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  font-size: 10.5px;
+}
+
+.plan-editor-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plan-editor-layout {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: 268px minmax(0, 1fr) 236px;
+  flex: 1;
+}
+
+.plan-editor-sidebar,
+.plan-editor-main,
+.plan-editor-preview {
+  min-width: 0;
+  padding: 18px;
+  overflow-y: auto;
+}
+
+.plan-editor-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  border-right: 1px solid var(--tl-rule);
+}
+
+.plan-editor-preview {
+  border-left: 1px solid var(--tl-rule);
+  background: color-mix(in srgb, var(--surface) 34%, transparent);
+}
+
+.plan-editor-sidebar h3,
+.plan-editor-preview h3,
+.plan-holding-area h3,
+.plan-week h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+.plan-editor-sidebar label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 12px;
+}
+
+.plan-editor-sidebar label > span:first-child {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.plan-editor-sidebar :is(input, select, textarea) {
+  min-height: 32px;
+  padding: 6px 9px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--glass-bg);
+  font-size: 12.5px;
+}
+
+.plan-editor-sidebar textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+
+.plan-editor-date,
+.plan-editor-duration {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-muted);
+}
+
+.plan-editor-date input,
+.plan-editor-duration input {
+  min-width: 0;
+  flex: 1;
+}
+
+.plan-editor-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.plan-editor-new-workout {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--tl-rule);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+}
+
+.plan-editor-new-workout .primary-button {
+  margin-top: 10px;
+}
+
+.plan-editor-library-list {
+  display: flex;
+  max-height: 240px;
+  flex-direction: column;
+  margin-top: 10px;
+  overflow-y: auto;
+}
+
+.plan-editor-library-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--tl-rule-soft);
+  color: var(--text-secondary);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plan-editor-library-list button:hover {
+  color: var(--text-primary);
+}
+
+.plan-editor-library-list span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.plan-editor-library-list strong {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-editor-library-list small {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.plan-editor-phases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.plan-editor-phases > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  background: var(--accent-soft);
+  font-size: 11.5px;
+}
+
+.plan-editor-phases small {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-editor-phases > span button {
+  display: inline-flex;
+  border: 0;
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+}
+
+.plan-editor-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.plan-holding-area {
+  padding: 14px;
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
+}
+
+.plan-holding-area p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.plan-holding-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.plan-editor-empty-inline {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.plan-week-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plan-week {
+  border: 1px solid var(--tl-rule);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 30%, transparent);
+  overflow: hidden;
+}
+
+.plan-week > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--tl-rule);
+}
+
+.plan-week > header p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-week > header > div:last-child {
+  display: flex;
+  gap: 2px;
+}
+
+.plan-week-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.plan-day {
+  min-height: 96px;
+  padding: 9px;
+  border-right: 1px solid var(--tl-rule-soft);
+}
+
+.plan-day:last-child {
+  border-right: 0;
+}
+
+.plan-day-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.plan-day-heading span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.plan-day-heading strong {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.plan-day-heading small {
+  color: var(--text-muted);
+  font-size: 9.5px;
+}
+
+.plan-day-heading button {
+  display: inline-flex;
+  border: 0;
+  color: var(--text-muted);
+  background: none;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 140ms ease;
+}
+
+.plan-day:hover .plan-day-heading button,
+.plan-day-heading button:focus-visible {
+  opacity: 1;
+}
+
+.plan-day-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.plan-entry-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 7px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  cursor: grab;
+}
+
+.plan-entry-card.is-rest,
+.plan-entry-card.is-note {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  cursor: default;
+}
+
+.plan-entry-card > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.plan-entry-card strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-entry-card small {
+  color: var(--text-muted);
+  font-size: 9.5px;
+}
+
+.plan-entry-card button {
+  display: inline-flex;
+  flex: none;
+  border: 0;
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+}
+
+.plan-add-week {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px;
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  background: none;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.plan-add-week:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.plan-editor-preview dl,
+.plan-compare-grid dl {
+  margin: 12px 0 0;
+}
+
+.plan-editor-preview dl div,
+.plan-compare-grid dl div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--tl-rule-soft);
+}
+
+.plan-editor-preview dt,
+.plan-compare-grid dt {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.plan-editor-preview dd,
+.plan-compare-grid dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-editor-limitation,
+.plan-editor-validation p,
+.plan-editor-valid {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-sm);
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  font-size: 11.5px;
+}
+
+.plan-editor-limitation p {
+  margin: 0;
+}
+
+.plan-editor-validation p.error {
+  color: var(--error-text);
+  border-color: var(--error-border);
+  background: var(--error-bg);
+}
+
+.plan-editor-valid {
+  color: var(--success-text);
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+
+/* ------------------------------------------------------------ Plan compare */
+
+.plan-compare {
+  overflow-y: auto;
+}
+
+.plan-compare > header h2 {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.plan-compare > header p:last-of-type {
+  margin: 6px 0 0;
+  max-width: 60ch;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.plan-compare-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 16px 20px;
+}
+
+.plan-compare-picker button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  background: none;
+  cursor: pointer;
+}
+
+.plan-compare-picker button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.plan-compare-picker button.is-selected {
+  color: var(--text-primary);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.plan-compare-picker button span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  text-align: left;
+}
+
+.plan-compare-picker strong {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.plan-compare-picker small {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.plan-compare-grid,
+.plan-compare-chart,
+.plan-compare-insights {
+  margin: 0 20px 16px;
+}
+
+.plan-compare-grid {
+  display: grid;
+  gap: 1px;
+  border: 1px solid var(--tl-rule);
+  border-radius: var(--radius-md);
+  background: var(--tl-rule);
+  overflow: hidden;
+}
+
+.plan-compare-grid > article {
+  min-width: 0;
+  padding: 16px;
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+}
+
+.plan-compare-grid h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.plan-compare-sports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 12px;
+}
+
+.plan-compare-sports span {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  background: var(--glass-bg);
+  font-size: 10.5px;
+}
+
+.plan-compare-longest {
+  display: flex;
+  flex-direction: column;
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--tl-rule);
+}
+
+.plan-compare-longest small,
+.plan-compare-longest span {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.plan-compare-chart,
+.plan-compare-insights {
+  padding: 16px;
+  border: 1px solid var(--tl-rule);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 46%, transparent);
+}
+
+.plan-compare-chart h3,
+.plan-compare-insights h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.plan-compare-chart p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.plan-compare-insights p {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.plan-compare-insights small {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+/* ------------------------------------------------------------------- Motion */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* One orchestrated moment: rows settle in, then the ridges draw themselves. */
+  :is(.tl-index ul, .tl-grid) > li {
+    animation: tl-settle 260ms cubic-bezier(0.2, 0.8, 0.25, 1) backwards;
+  }
+
+  :is(.tl-index ul, .tl-grid) > li:nth-child(1) { animation-delay: 0ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(2) { animation-delay: 22ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(3) { animation-delay: 44ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(4) { animation-delay: 66ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(5) { animation-delay: 88ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(6) { animation-delay: 110ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(7) { animation-delay: 132ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(8) { animation-delay: 154ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(n + 9) { animation-delay: 176ms; }
+
+  .tl-ridge-bar,
+  .tl-bullet b,
+  .tl-bullet i {
+    animation: tl-grow 420ms cubic-bezier(0.2, 0.85, 0.3, 1) backwards;
+    animation-delay: calc(140ms + var(--tl-bar-index) * 14ms);
+  }
+}
+
+@keyframes tl-settle {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes tl-grow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .training-library-view *,
+  .plan-editor *,
+  .plan-compare * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --------------------------------------------------------------- Responsive */
+
+@media (max-width: 1500px) {
+  .tl-split {
+    grid-template-columns: minmax(0, 1fr) 330px;
+  }
+}
+
+@media (max-width: 1320px) {
+  .tl-plan-row {
+    grid-template-columns:
+      16px minmax(0, 1fr)
+      var(--tl-column) var(--tl-column) var(--tl-column)
+      104px 84px;
+  }
+
+  /* Updated is the first column to go: the ridge says more in the same space. */
+  .tl-plan-row > :nth-child(6) {
+    display: none;
+  }
+
+  .tl-template-layout {
+    grid-template-columns: minmax(0, 1fr) 250px;
+  }
+
+  .plan-editor-layout {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  .plan-editor-preview {
+    display: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .tl-split,
+  .tl-template-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tl-catalog {
+    border-right: 0;
+    border-bottom: 1px solid var(--tl-rule);
+  }
+
+  .tl-match-row {
+    grid-template-columns: 84px minmax(0, 1fr) minmax(0, 1fr) 56px;
+  }
+
+  .tl-match-row > .tl-row-actions {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .training-library-view {
+    padding: 22px 16px 44px;
+  }
+
+  .tl-masthead {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .tl-sections {
+    gap: 18px;
+    overflow-x: auto;
+  }
+
+  .tl-filters {
+    flex-wrap: wrap;
+  }
+
+  .tl-search {
+    flex: 1 1 100%;
+  }
+
+  .tl-filters-tail {
+    margin-left: 0;
+  }
+
+  .tl-plan-row {
+    grid-template-columns: 16px minmax(0, 1fr) 46px 78px 84px;
+  }
+
+  .tl-plan-row > :nth-child(4),
+  .tl-plan-row > :nth-child(5),
+  .tl-plan-row > :nth-child(6) {
+    display: none;
+  }
+
+  .tl-workout-row {
+    grid-template-columns: 16px minmax(0, 1fr) 78px 44px;
+  }
+
+  .tl-workout-row > :nth-child(5) {
+    display: none;
+  }
+
+  .tl-activity-row {
+    grid-template-columns: minmax(0, 1fr) 60px 52px 34px;
+  }
+
+  .tl-activity-row > :nth-child(3) {
+    display: none;
+  }
+
+  .tl-tally {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tl-reader-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .plan-editor,
+  .plan-compare {
+    inset: 0;
+    border-radius: 0;
+  }
+
+  .plan-editor-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .plan-editor-layout {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .plan-editor-sidebar,
+  .plan-editor-main {
+    overflow: visible;
+  }
+
+  .plan-editor-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--tl-rule);
+  }
+
+  .plan-week-days {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .plan-compare-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}

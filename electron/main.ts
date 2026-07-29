@@ -53,11 +53,13 @@ import {
   listTrainingHubActivities,
   listScheduledWorkoutEntries,
   listLibraryWorkouts,
+  duplicateLibraryWorkout,
   listWorkoutExercises,
   getWorkoutEditorContext,
   scheduleLibraryWorkout,
   syncStrengthHistory,
   createAndScheduleWorkout,
+  createLibraryWorkout,
   rescheduleScheduledWorkout,
   removeScheduledWorkout,
   getWorkoutForEdit,
@@ -73,6 +75,19 @@ import {
   uploadTrainingPlan
 } from "./trainingHubService";
 import type { UnitSystem, WorkoutSport } from "./types";
+import {
+  deleteLocalTrainingPlan,
+  deleteTrainingLibraryWorkouts,
+  getNativeTrainingPlan,
+  getTrainingLibrarySnapshot,
+  refreshTrainingActivityMatches,
+  removeTrainingCollection,
+  saveLocalTrainingPlan,
+  saveManualActivityMatch,
+  updateWorkoutMetadata,
+  updateTrainingPlanMetadata,
+  upsertTrainingCollection
+} from "./trainingLibraryService";
 import { normalizeUnitSystem } from "./unitSystem.js";
 import {
   cacheCorosWatchfaceProjectPreview,
@@ -1355,8 +1370,8 @@ function registerIpcHandlers(): void {
     await disconnectMcpServer(id, { clearAuthorization: false });
   });
 
-  ipcMain.handle("chat:uploadPlanDraft", (_event, draftId: string, unitSystem?: UnitSystem) =>
-    uploadTrainingPlanDraft(draftId, normalizeUnitSystem(unitSystem))
+  ipcMain.handle("chat:uploadPlanDraft", (_event, draftId: string, unitSystem?: UnitSystem, destination?: import("./types").TrainingPlanDestination) =>
+    uploadTrainingPlanDraft(draftId, normalizeUnitSystem(unitSystem), destination)
   );
 
   ipcMain.handle("chat:confirmWorkoutDelete", (_event, requestId: string) =>
@@ -1464,6 +1479,50 @@ function registerIpcHandlers(): void {
   ipcMain.handle("trainingHub:listLibraryWorkouts", () =>
     listLibraryWorkouts()
   );
+  ipcMain.handle(
+    "trainingHub:duplicateLibraryWorkout",
+    (_event, programId: string, name: string, targetSportType?: number) =>
+      duplicateLibraryWorkout(programId, name, targetSportType)
+  );
+
+  ipcMain.handle("trainingLibrary:snapshot", () =>
+    getTrainingLibrarySnapshot()
+  );
+  ipcMain.handle("trainingLibrary:getNativePlan", (_event, remoteId: string) =>
+    getNativeTrainingPlan(remoteId)
+  );
+  ipcMain.handle("trainingLibrary:savePlan", (_event, plan) =>
+    saveLocalTrainingPlan(plan)
+  );
+  ipcMain.handle("trainingLibrary:updatePlanMetadata", (_event, id, patch) =>
+    updateTrainingPlanMetadata(id, patch)
+  );
+  ipcMain.handle(
+    "trainingLibrary:deletePlan",
+    (_event, id: string, confirmed: boolean) => deleteLocalTrainingPlan(id, confirmed)
+  );
+  ipcMain.handle(
+    "trainingLibrary:updateWorkoutMetadata",
+    (_event, programIds, patch) => updateWorkoutMetadata(programIds, patch)
+  );
+  ipcMain.handle("trainingLibrary:saveCollection", (_event, collection) =>
+    upsertTrainingCollection(collection)
+  );
+  ipcMain.handle(
+    "trainingLibrary:deleteCollection",
+    (_event, id: string, confirmed: boolean) => removeTrainingCollection(id, confirmed)
+  );
+  ipcMain.handle("trainingLibrary:deleteWorkouts", (_event, request) =>
+    deleteTrainingLibraryWorkouts(request)
+  );
+  ipcMain.handle(
+    "trainingLibrary:refreshMatches",
+    (_event, startDay: string, endDay: string) =>
+      refreshTrainingActivityMatches(startDay, endDay)
+  );
+  ipcMain.handle("trainingLibrary:saveManualMatch", (_event, match) =>
+    saveManualActivityMatch(match)
+  );
 
   ipcMain.handle(
     "trainingHub:listWorkoutExercises",
@@ -1525,6 +1584,12 @@ function registerIpcHandlers(): void {
           : normalizeUnitSystem(unitSystem),
         saveToLibrary
       )
+  );
+
+  ipcMain.handle(
+    "trainingHub:createLibraryWorkout",
+    (_event, entry: PlanWorkoutEntryInput, unitSystem?: UnitSystem) =>
+      createLibraryWorkout(entry, normalizeUnitSystem(unitSystem))
   );
 
   ipcMain.handle(

@@ -8,11 +8,17 @@ import type {
   CachedCorosMapPackage,
   GeneratedRoute,
   LocalTrack,
+  NativeCorosPlanDetail,
   SpotifySyncTrack,
   SpotifySyncTrackStatus,
   StrengthDetail,
   StrengthSession,
+  TrainingActivityMatch,
+  TrainingCollection,
   TrainingHubActivity,
+  TrainingHubLibraryWorkout,
+  TrainingPlanDocument,
+  TrainingWorkoutMetadata,
   YouTubeHistoryEntry,
   YouTubeHistoryEntryType
 } from "./types";
@@ -256,6 +262,82 @@ export function initializeDatabase(userDataPath: string): Database.Database {
 
     CREATE INDEX IF NOT EXISTS idx_chat_plan_drafts_created
       ON chat_plan_drafts(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS training_plans (
+      id TEXT PRIMARY KEY,
+      remote_id TEXT UNIQUE,
+      source TEXT NOT NULL,
+      name TEXT NOT NULL,
+      document_json TEXT NOT NULL,
+      raw_remote_json TEXT,
+      remote_version INTEGER,
+      remote_updated_at INTEGER,
+      sync_state TEXT NOT NULL DEFAULT 'local',
+      last_synced_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      archived_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_training_plans_source_updated
+      ON training_plans(source, updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS training_workout_metadata (
+      program_id TEXT PRIMARY KEY,
+      favorite INTEGER NOT NULL DEFAULT 0,
+      tags_json TEXT NOT NULL DEFAULT '[]',
+      collection_id TEXT,
+      source TEXT NOT NULL DEFAULT 'coros',
+      sync_state TEXT NOT NULL DEFAULT 'synced',
+      last_used_at TEXT,
+      last_synced_at TEXT,
+      cached_version TEXT,
+      cached_payload_json TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS training_collections (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      color TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS training_plan_workout_links (
+      plan_id TEXT NOT NULL,
+      entry_id TEXT NOT NULL,
+      program_id TEXT,
+      happen_day TEXT,
+      remote_plan_program_id TEXT,
+      PRIMARY KEY (plan_id, entry_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_training_plan_workout_program
+      ON training_plan_workout_links(program_id);
+
+    CREATE TABLE IF NOT EXISTS training_activity_matches (
+      id TEXT PRIMARY KEY,
+      plan_id TEXT,
+      plan_entry_id TEXT,
+      schedule_plan_id TEXT NOT NULL,
+      schedule_id_in_plan TEXT NOT NULL,
+      activity_id TEXT,
+      happen_day TEXT NOT NULL,
+      status TEXT NOT NULL,
+      confidence REAL,
+      manual INTEGER NOT NULL DEFAULT 0,
+      planned_duration_seconds REAL,
+      completed_duration_seconds REAL,
+      planned_distance_meters REAL,
+      completed_distance_meters REAL,
+      planned_training_load REAL,
+      completed_training_load REAL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_training_activity_match_schedule
+      ON training_activity_matches(schedule_plan_id, schedule_id_in_plan);
 
     CREATE TABLE IF NOT EXISTS mcp_servers (
       id TEXT PRIMARY KEY,
@@ -1649,4 +1731,378 @@ export function deleteChatPlanDraft(draftId: string): void {
   requireDatabase()
     .prepare("DELETE FROM chat_plan_drafts WHERE draft_id = ?")
     .run(draftId);
+}
+
+interface TrainingPlanRow {
+  id: string;
+  document_json: string;
+  raw_remote_json: string | null;
+}
+
+interface TrainingWorkoutMetadataRow {
+  program_id: string;
+  favorite: number;
+  tags_json: string;
+  collection_id: string | null;
+  source: TrainingWorkoutMetadata["source"];
+  sync_state: TrainingWorkoutMetadata["syncState"];
+  last_used_at: string | null;
+  last_synced_at: string | null;
+  cached_version: string | null;
+}
+
+interface TrainingCollectionRow {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface TrainingActivityMatchRow {
+  id: string;
+  plan_id: string | null;
+  plan_entry_id: string | null;
+  schedule_plan_id: string;
+  schedule_id_in_plan: string;
+  activity_id: string | null;
+  happen_day: string;
+  status: TrainingActivityMatch["status"];
+  confidence: number | null;
+  manual: number;
+  planned_duration_seconds: number | null;
+  completed_duration_seconds: number | null;
+  planned_distance_meters: number | null;
+  completed_distance_meters: number | null;
+  planned_training_load: number | null;
+  completed_training_load: number | null;
+  updated_at: string;
+}
+
+function parseStoredJson<T>(value: string, fallback: T): T {
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveTrainingPlanDocument(
+  document: TrainingPlanDocument,
+  rawRemote?: Record<string, unknown>
+): void {
+  const database = requireDatabase();
+  database.transaction(() => {
+    database
+      .prepare(
+        `INSERT INTO training_plans (
+           id, remote_id, source, name, document_json, raw_remote_json,
+           remote_version, remote_updated_at, sync_state, last_synced_at,
+           created_at, updated_at, archived_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           remote_id = excluded.remote_id,
+           source = excluded.source,
+           name = excluded.name,
+           document_json = excluded.document_json,
+           raw_remote_json = COALESCE(excluded.raw_remote_json, training_plans.raw_remote_json),
+           remote_version = excluded.remote_version,
+           remote_updated_at = excluded.remote_updated_at,
+           sync_state = excluded.sync_state,
+           last_synced_at = excluded.last_synced_at,
+           updated_at = excluded.updated_at,
+           archived_at = excluded.archived_at`
+      )
+      .run(
+        document.id,
+        document.remoteId ?? null,
+        document.source,
+        document.name,
+        JSON.stringify(document),
+        rawRemote ? JSON.stringify(rawRemote) : null,
+        document.remoteVersion ?? null,
+        document.remoteUpdatedAt ?? null,
+        document.syncState,
+        document.lastSyncedAt ?? null,
+        document.createdAt,
+        document.updatedAt,
+        document.archived ? document.updatedAt : null
+      );
+
+    database
+      .prepare("DELETE FROM training_plan_workout_links WHERE plan_id = ?")
+      .run(document.id);
+    const insertLink = database.prepare(
+      `INSERT INTO training_plan_workout_links
+       (plan_id, entry_id, program_id, happen_day, remote_plan_program_id)
+       VALUES (?, ?, ?, ?, ?)`
+    );
+    for (const entry of document.entries) {
+      insertLink.run(
+        document.id,
+        entry.id,
+        entry.programId ?? null,
+        entry.workout?.schedule_date ?? null,
+        entry.remotePlanProgramId ?? null
+      );
+    }
+  })();
+}
+
+export function listTrainingPlanDocuments(): TrainingPlanDocument[] {
+  const rows = requireDatabase()
+    .prepare(
+      `SELECT id, document_json, raw_remote_json
+       FROM training_plans
+       ORDER BY updated_at DESC`
+    )
+    .all() as TrainingPlanRow[];
+  return rows
+    .map((row) => parseStoredJson<TrainingPlanDocument | undefined>(row.document_json, undefined))
+    .filter((plan): plan is TrainingPlanDocument => Boolean(plan));
+}
+
+export function getTrainingPlanDocument(
+  id: string
+): TrainingPlanDocument | undefined {
+  const row = requireDatabase()
+    .prepare(
+      `SELECT id, document_json, raw_remote_json
+       FROM training_plans
+       WHERE id = ? OR remote_id = ?`
+    )
+    .get(id, id) as TrainingPlanRow | undefined;
+  return row
+    ? parseStoredJson<TrainingPlanDocument | undefined>(row.document_json, undefined)
+    : undefined;
+}
+
+export function getNativePlanRawPayload(
+  id: string
+): NativeCorosPlanDetail["rawPayload"] | undefined {
+  const row = requireDatabase()
+    .prepare(
+      `SELECT id, document_json, raw_remote_json
+       FROM training_plans
+       WHERE id = ? OR remote_id = ?`
+    )
+    .get(id, id) as TrainingPlanRow | undefined;
+  return row?.raw_remote_json
+    ? parseStoredJson<Record<string, unknown> | undefined>(row.raw_remote_json, undefined)
+    : undefined;
+}
+
+export function deleteTrainingPlanDocument(id: string): void {
+  const database = requireDatabase();
+  database.transaction(() => {
+    database.prepare("DELETE FROM training_plan_workout_links WHERE plan_id = ?").run(id);
+    database.prepare("DELETE FROM training_plans WHERE id = ?").run(id);
+  })();
+}
+
+export function listTrainingWorkoutMetadata(): TrainingWorkoutMetadata[] {
+  const rows = requireDatabase()
+    .prepare(
+      `SELECT program_id, favorite, tags_json, collection_id, source, sync_state,
+              last_used_at, last_synced_at, cached_version
+       FROM training_workout_metadata`
+    )
+    .all() as TrainingWorkoutMetadataRow[];
+  return rows.map((row) => ({
+    programId: row.program_id,
+    favorite: Boolean(row.favorite),
+    tags: parseStoredJson<string[]>(row.tags_json, []),
+    collectionId: row.collection_id ?? undefined,
+    source: row.source,
+    syncState: row.sync_state,
+    lastUsedAt: row.last_used_at ?? undefined,
+    lastSyncedAt: row.last_synced_at ?? undefined,
+    cachedVersion: row.cached_version ?? undefined
+  }));
+}
+
+export function listCachedTrainingLibraryWorkouts(): TrainingHubLibraryWorkout[] {
+  const rows = requireDatabase()
+    .prepare(
+      `SELECT cached_payload_json
+       FROM training_workout_metadata
+       WHERE cached_payload_json IS NOT NULL`
+    )
+    .all() as Array<{ cached_payload_json: string }>;
+  return rows
+    .map((row) =>
+      parseStoredJson<TrainingHubLibraryWorkout | undefined>(
+        row.cached_payload_json,
+        undefined
+      )
+    )
+    .filter((item): item is TrainingHubLibraryWorkout => Boolean(item?.id));
+}
+
+export function saveTrainingWorkoutMetadata(
+  metadata: TrainingWorkoutMetadata,
+  cachedPayload?: Record<string, unknown>
+): void {
+  requireDatabase()
+    .prepare(
+      `INSERT INTO training_workout_metadata (
+         program_id, favorite, tags_json, collection_id, source, sync_state,
+         last_used_at, last_synced_at, cached_version, cached_payload_json
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(program_id) DO UPDATE SET
+         favorite = excluded.favorite,
+         tags_json = excluded.tags_json,
+         collection_id = excluded.collection_id,
+         source = excluded.source,
+         sync_state = excluded.sync_state,
+         last_used_at = excluded.last_used_at,
+         last_synced_at = excluded.last_synced_at,
+         cached_version = excluded.cached_version,
+         cached_payload_json = COALESCE(excluded.cached_payload_json, training_workout_metadata.cached_payload_json)`
+    )
+    .run(
+      metadata.programId,
+      metadata.favorite ? 1 : 0,
+      JSON.stringify(metadata.tags),
+      metadata.collectionId ?? null,
+      metadata.source,
+      metadata.syncState,
+      metadata.lastUsedAt ?? null,
+      metadata.lastSyncedAt ?? null,
+      metadata.cachedVersion ?? null,
+      cachedPayload ? JSON.stringify(cachedPayload) : null
+    );
+}
+
+export function listTrainingCollections(): TrainingCollection[] {
+  const rows = requireDatabase()
+    .prepare(
+      `SELECT id, name, description, color, created_at, updated_at
+       FROM training_collections
+       ORDER BY name COLLATE NOCASE`
+    )
+    .all() as TrainingCollectionRow[];
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    description: row.description ?? undefined,
+    color: row.color ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }));
+}
+
+export function saveTrainingCollection(collection: TrainingCollection): void {
+  requireDatabase()
+    .prepare(
+      `INSERT INTO training_collections
+       (id, name, description, color, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         description = excluded.description,
+         color = excluded.color,
+         updated_at = excluded.updated_at`
+    )
+    .run(
+      collection.id,
+      collection.name,
+      collection.description ?? null,
+      collection.color ?? null,
+      collection.createdAt,
+      collection.updatedAt
+    );
+}
+
+export function deleteTrainingCollection(id: string): void {
+  const database = requireDatabase();
+  database.transaction(() => {
+    database
+      .prepare("UPDATE training_workout_metadata SET collection_id = NULL WHERE collection_id = ?")
+      .run(id);
+    database.prepare("DELETE FROM training_collections WHERE id = ?").run(id);
+  })();
+}
+
+function toTrainingActivityMatch(row: TrainingActivityMatchRow): TrainingActivityMatch {
+  return {
+    id: row.id,
+    planId: row.plan_id ?? undefined,
+    planEntryId: row.plan_entry_id ?? undefined,
+    schedulePlanId: row.schedule_plan_id,
+    scheduleIdInPlan: row.schedule_id_in_plan,
+    activityId: row.activity_id ?? undefined,
+    happenDay: row.happen_day,
+    status: row.status,
+    confidence: row.confidence ?? undefined,
+    manual: Boolean(row.manual),
+    plannedDurationSeconds: row.planned_duration_seconds ?? undefined,
+    completedDurationSeconds: row.completed_duration_seconds ?? undefined,
+    plannedDistanceMeters: row.planned_distance_meters ?? undefined,
+    completedDistanceMeters: row.completed_distance_meters ?? undefined,
+    plannedTrainingLoad: row.planned_training_load ?? undefined,
+    completedTrainingLoad: row.completed_training_load ?? undefined,
+    updatedAt: row.updated_at
+  };
+}
+
+export function listTrainingActivityMatches(): TrainingActivityMatch[] {
+  return (
+    requireDatabase()
+      .prepare(
+        `SELECT id, plan_id, plan_entry_id, schedule_plan_id, schedule_id_in_plan,
+                activity_id, happen_day, status, confidence, manual,
+                planned_duration_seconds, completed_duration_seconds,
+                planned_distance_meters, completed_distance_meters,
+                planned_training_load, completed_training_load, updated_at
+         FROM training_activity_matches
+         ORDER BY happen_day DESC`
+      )
+      .all() as TrainingActivityMatchRow[]
+  ).map(toTrainingActivityMatch);
+}
+
+export function saveTrainingActivityMatch(match: TrainingActivityMatch): void {
+  requireDatabase()
+    .prepare(
+      `INSERT INTO training_activity_matches (
+         id, plan_id, plan_entry_id, schedule_plan_id, schedule_id_in_plan,
+         activity_id, happen_day, status, confidence, manual,
+         planned_duration_seconds, completed_duration_seconds,
+         planned_distance_meters, completed_distance_meters,
+         planned_training_load, completed_training_load, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         plan_id = excluded.plan_id,
+         plan_entry_id = excluded.plan_entry_id,
+         activity_id = excluded.activity_id,
+         happen_day = excluded.happen_day,
+         status = excluded.status,
+         confidence = excluded.confidence,
+         manual = excluded.manual,
+         completed_duration_seconds = excluded.completed_duration_seconds,
+         completed_distance_meters = excluded.completed_distance_meters,
+         completed_training_load = excluded.completed_training_load,
+         updated_at = excluded.updated_at`
+    )
+    .run(
+      match.id,
+      match.planId ?? null,
+      match.planEntryId ?? null,
+      match.schedulePlanId,
+      match.scheduleIdInPlan,
+      match.activityId ?? null,
+      match.happenDay,
+      match.status,
+      match.confidence ?? null,
+      match.manual ? 1 : 0,
+      match.plannedDurationSeconds ?? null,
+      match.completedDurationSeconds ?? null,
+      match.plannedDistanceMeters ?? null,
+      match.completedDistanceMeters ?? null,
+      match.plannedTrainingLoad ?? null,
+      match.completedTrainingLoad ?? null,
+      match.updatedAt
+    );
 }

@@ -44,6 +44,7 @@ import type {
   McpServerStatus,
   PlanDraftPreview,
   PlanWorkoutEntryInput,
+  TrainingPlanDestination,
   TrainingHubExportResult,
   UploadPlanResult,
   WorkoutIntensityInput,
@@ -262,9 +263,12 @@ function PlanPreviewCard({
   draft: PlanDraftPreview;
   uploading: boolean;
   uploaded?: UploadPlanResult;
-  onUpload: () => void;
+  onUpload: (destination: TrainingPlanDestination) => void;
 }) {
   const { unitSystem } = useUnitSystem();
+  const [destination, setDestination] = useState<TrainingPlanDestination>(
+    "workoutLibrary"
+  );
   const uploadedResult =
     uploaded ??
     (draft.uploadResult
@@ -276,6 +280,44 @@ function PlanPreviewCard({
         }
       : undefined);
   const isUploaded = Boolean(uploadedResult || draft.uploadedAt);
+  const rawDates = draft.entries
+    .map((entry) => entry.source?.schedule_date?.replace(/-/g, ""))
+    .filter((date): date is string => Boolean(date && /^\d{8}$/.test(date)))
+    .sort();
+  const firstDate = rawDates[0];
+  const lastDate = rawDates[rawDates.length - 1];
+  const planWeeks = firstDate && lastDate
+    ? Math.max(
+        1,
+        Math.ceil(
+          (new Date(`${lastDate.slice(0, 4)}-${lastDate.slice(4, 6)}-${lastDate.slice(6, 8)}T12:00:00`).valueOf() -
+            new Date(`${firstDate.slice(0, 4)}-${firstDate.slice(4, 6)}-${firstDate.slice(6, 8)}T12:00:00`).valueOf()) /
+            604_800_000 +
+            1 / 7
+        )
+      )
+    : Math.max(1, Math.ceil(draft.entries.length / 7));
+  const sports = [
+    ...new Set(draft.entries.map((entry) => formatWorkoutSport(entry.sport ?? "run")))
+  ];
+  const unavailableNative =
+    destination === "nativePlan" || destination === "nativePlanAndCalendar";
+  const remoteWrites = destination === "localTemplate"
+    ? []
+    : destination === "workoutLibrary"
+      ? draft.entries.map((entry) => `Create workout “${entry.name}” in COROS`)
+      : destination === "calendar"
+        ? draft.entries
+            .filter((entry) => entry.scheduleDate)
+            .map((entry) => `Schedule “${entry.name}” on ${entry.scheduleDate}`)
+        : [];
+  const destinationLabel: Record<TrainingPlanDestination, string> = {
+    workoutLibrary: "COROS Workout Library",
+    calendar: "COROS Calendar",
+    nativePlan: "COROS Plan Library",
+    localTemplate: "Local CorosLink template",
+    nativePlanAndCalendar: "COROS plan + Calendar"
+  };
 
   return (
     <div className="chat-plan-card">
@@ -331,9 +373,50 @@ function PlanPreviewCard({
           ))}
         </ul>
       ) : null}
+      {!isUploaded ? (
+        <div className="chat-plan-confirmation">
+          <label>
+            <span>Destination</span>
+            <select
+              value={destination}
+              onChange={(event) =>
+                setDestination(event.target.value as TrainingPlanDestination)
+              }
+              disabled={uploading}
+            >
+              <option value="workoutLibrary">Workout Library</option>
+              <option value="calendar">Calendar</option>
+              <option value="nativePlan">Plan Library — unavailable</option>
+              <option value="localTemplate">Local template</option>
+              <option value="nativePlanAndCalendar">Plan + Calendar — unavailable</option>
+            </select>
+          </label>
+          <dl className="chat-plan-facts">
+            <div><dt>Weeks</dt><dd>{planWeeks}</dd></div>
+            <div><dt>Workouts</dt><dd>{draft.entries.length}</dd></div>
+            <div><dt>Sports</dt><dd>{sports.join(", ")}</dd></div>
+            <div><dt>Start</dt><dd>{draft.entries.find((entry) => entry.scheduleDate)?.scheduleDate ?? "Not set"}</dd></div>
+            <div><dt>Conflicts</dt><dd>{draft.conflicts.length}</dd></div>
+            <div><dt>Reused</dt><dd>0</dd></div>
+            <div><dt>Grouped COROS plan</dt><dd>{unavailableNative ? "Unavailable" : "No"}</dd></div>
+          </dl>
+          <div className="chat-plan-write-preview">
+            <strong>Writes after confirmation</strong>
+            {unavailableNative ? (
+              <p>Native plan writes remain gated until COROS create/update payloads can be live-verified safely.</p>
+            ) : remoteWrites.length > 0 ? (
+              <ul>
+                {remoteWrites.map((write, index) => <li key={`${write}-${index}`}>{write}</li>)}
+              </ul>
+            ) : (
+              <p>Local database only. No COROS write.</p>
+            )}
+          </div>
+        </div>
+      ) : null}
       {uploadedResult || isUploaded ? (
         <p className="chat-plan-success">
-          Uploaded —{" "}
+          Saved to {destinationLabel[uploadedResult?.destination ?? draft.uploadResult?.destination ?? destination]} —{" "}
           {uploadedResult?.workoutsScheduled ??
             draft.uploadResult?.workoutsScheduled ??
             0}{" "}
@@ -348,15 +431,15 @@ function PlanPreviewCard({
           <button
             type="button"
             className="chat-plan-upload"
-            onClick={onUpload}
-            disabled={uploading}
+            onClick={() => onUpload(destination)}
+            disabled={uploading || unavailableNative}
           >
             {uploading ? (
               <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
             ) : (
               <Upload size={14} aria-hidden="true" />
             )}
-            Upload to COROS
+            Confirm {destinationLabel[destination]}
           </button>
         </div>
       )}
@@ -1338,12 +1421,15 @@ export function ChatView({
     void api.cancelChat(activeRequestIdRef.current);
   };
 
-  const handleUploadPlanDraft = async (draftId: string) => {
+  const handleUploadPlanDraft = async (
+    draftId: string,
+    destination: TrainingPlanDestination
+  ) => {
     if (!api || uploadingDraftId) return;
     setUploadingDraftId(draftId);
     onError(null);
     try {
-      const result = await api.uploadTrainingPlanDraft(draftId, unitSystem);
+      const result = await api.uploadTrainingPlanDraft(draftId, unitSystem, destination);
       setUploadedPlans((prev) => ({ ...prev, [draftId]: result }));
       setTimeline((prev) => {
         const next = prev.map((entry) =>
@@ -1355,7 +1441,10 @@ export function ChatView({
                   uploadedAt: Date.now(),
                   uploadResult: {
                     workoutsScheduled: result.workoutsScheduled,
-                    workoutsCreated: result.workoutsCreated
+                    workoutsCreated: result.workoutsCreated,
+                    destination: result.destination,
+                    localPlanId: result.localPlanId,
+                    groupedPlanCreated: result.groupedPlanCreated
                   }
                 }
               }
@@ -1850,8 +1939,8 @@ export function ChatView({
                       draft={entry.draft}
                       uploading={uploadingDraftId === entry.draft.draftId}
                       uploaded={uploadedPlans[entry.draft.draftId]}
-                      onUpload={() =>
-                        void handleUploadPlanDraft(entry.draft.draftId)
+                      onUpload={(destination) =>
+                        void handleUploadPlanDraft(entry.draft.draftId, destination)
                       }
                     />
                   </div>

@@ -29,6 +29,8 @@ import {
   X,
 } from "lucide-react";
 import {
+  Component,
+  type ErrorInfo,
   type FormEvent,
   type ReactNode,
   lazy,
@@ -148,6 +150,11 @@ const LazyTrainingHubView = lazy(() =>
     default: TrainingHubView,
   })),
 );
+const LazyTrainingLibraryView = lazy(() =>
+  import("./training-library/TrainingLibraryView").then(({ TrainingLibraryView }) => ({
+    default: TrainingLibraryView,
+  })),
+);
 const LazyStrengthView = lazy(() =>
   import("./strength/StrengthView").then(({ StrengthView }) => ({
     default: StrengthView,
@@ -174,6 +181,41 @@ function DeferredSurfaceFallback({ label }: { label: string }) {
       <span>Loading {label}…</span>
     </div>
   );
+}
+
+class TrainingLibraryErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Training Library render failed", error, info);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    // Uses the global .empty-state: the library's own stylesheet ships with the
+    // lazy chunk, which may be exactly what failed to load.
+    return (
+      <section className="empty-state" role="alert">
+        <AlertCircle size={28} aria-hidden="true" />
+        <strong>Training Library could not render</strong>
+        <span>{this.state.error.message}</span>
+        <button
+          type="button"
+          className="primary-button"
+          onClick={() => this.setState({ error: null })}
+        >
+          Try again
+        </button>
+      </section>
+    );
+  }
 }
 
 function getLatestReleasePreview(changelog: string): {
@@ -2183,7 +2225,7 @@ export default function App() {
           className={[
             "content",
             isOverviewDashboard && "content-overview",
-            (activeView === "media" || activeView === "coach") && "content-fill",
+            (activeView === "media" || activeView === "coach" || activeView === "library") && "content-fill",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -2366,6 +2408,19 @@ export default function App() {
                   onExportFile={handleTrainingHubExport}
                 />
               </Suspense>
+            ) : null}
+            {activeView === "library" ? (
+              <TrainingLibraryErrorBoundary>
+                <Suspense fallback={<DeferredSurfaceFallback label="Training Library" />}>
+                  <LazyTrainingLibraryView
+                    api={api}
+                    status={trainingHubStatus}
+                    onOpenTraining={() => setActiveView("training")}
+                    onMessage={setMessage}
+                    onError={setError}
+                  />
+                </Suspense>
+              </TrainingLibraryErrorBoundary>
             ) : null}
             {activeView === "strength" ? (
               <Suspense fallback={<DeferredSurfaceFallback label="strength" />}>

@@ -950,9 +950,10 @@ export function cancelChat(requestId: string): void {
 
 export async function uploadTrainingPlanDraft(
   draftId: string,
-  unitSystem: UnitSystem = "metric"
+  unitSystem: UnitSystem = "metric",
+  destination: import("./types").TrainingPlanDestination = "workoutLibrary"
 ): Promise<UploadPlanResult> {
-  return uploadPlanDraftById(draftId, normalizeUnitSystem(unitSystem));
+  return uploadPlanDraftById(draftId, normalizeUnitSystem(unitSystem), destination);
 }
 
 export async function confirmWorkoutDelete(
