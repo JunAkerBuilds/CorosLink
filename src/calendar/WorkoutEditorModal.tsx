@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, ReactElement } from "react";
+import { createPortal } from "react-dom";
 import type {
   RunWorkoutEditorDraft,
   RunWorkoutEditorIntensity,
@@ -499,7 +500,7 @@ export function WorkoutEditorModal({
     }
   };
 
-  return (
+  return createPortal(
     <AnimatePresence>
       <motion.div className="workout-editor-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
         <motion.section
@@ -668,7 +669,8 @@ export function WorkoutEditorModal({
           ) : null}
         </motion.section>
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    window.document.body
   );
 }
 
