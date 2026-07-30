@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.26] - 2026-07-30
+
+### Added
+
+- **Media library storage and sync feedback** — the watch panel shows a capacity meter with how much of the watch's storage is in use, the connector between the two panels reports its own state (disconnected, syncing, pending, all synced) and animates while a transfer batch runs, and local tracks carry a compact synced/pending dot instead of a status badge
+- **Workout tiles show their shape** — every workout in the Training Library draws its step structure as a comb sized by step duration, alongside a training-load meter relative to the heaviest workout in the library and how long ago the workout was last scheduled. Step structure is fetched only as tiles scroll into view, a few at a time, so browsing the library costs a handful of requests rather than one per workout
+- **Gear management** (developer builds only) — read and add COROS activity gear (shoes and bikes) from the account, behind the Dev view toggle while the undocumented mobile endpoints are verified
+
+### Changed
+
+- **One sport identity across the Training Library** — all nine COROS sports get their own colour and icon, so swim, XC ski, the two climbing sports, and HYROX no longer share the generic "other" teal; plan cards and rows take an accent from their dominant sport and show their sport mix as dots. Sports covered by Settings → Activity colors still follow the customized colours
+- **Consistent dropdowns throughout the app** — native `<select>` controls in the workout builder, plan editor, and strength step editor are replaced with the app's own dropdown, which renders in a portal so long menus are no longer clipped by the dialog around them, flips above the trigger when there is no room below, and supports type-ahead
+- **Media library layout** — transfer actions moved next to the filters, bulk actions float over the track list as a dismissable bar rather than pushing the rows down, and the redundant "selected only" filter on the watch panel is gone
+- **Strength attribution is honest about Full Body sets** — COROS records unstructured strength segments only as "Full Body", which names no specific muscle. Those sets are no longer spread across chest, lats, quads, and glutes as if they were measured; they are counted separately and explained on the page, and the muscle map stays neutral when nothing in the window can be attributed
+- The ChatGPT account email is no longer displayed in the Coach header or settings panel
+
+### Fixed
+
+- The media library's sync indicator now reports "Syncing…" while a transfer is in flight instead of continuing to show the pending count
+
 ## [0.1.25] - 2026-07-30
 
 ### Added

@@ -78,6 +78,9 @@ Your local MP3 collection, ready to transfer.
 - **Full library table** with title, size, date, and watch sync status
 - **Transfer single tracks** or **transfer all** pending downloads at once
 - **Multi-select bulk delete** to clean up your local library
+- **Watch storage meter** showing how much of the watch's capacity is in use
+- **Live sync state** between the two panels — connected, syncing, pending, or
+  all synced
 
 <p align="center">
   <img src="docs/screenshots/library.png" alt="Media library" width="900" />
@@ -289,7 +292,9 @@ workout through a complete multi-week cycle.
 
 - **Workout Library** — search, filter, sort, preview full steps, create with the
   sport-aware builder, edit with revision checks, duplicate, tag, collect,
-  export, schedule, and safely delete COROS workouts
+  export, schedule, and safely delete COROS workouts; tiles draw each workout's
+  step structure, its training load relative to the rest of the library, and
+  when it was last scheduled, in the sport's own colour
 - **Training Plans** — discover and cache native COROS plans, build local grouped
   plans, drag workouts across days and a holding area, add rest days and phases,
   duplicate/reorder/recovery weeks, shift start dates, and undo/redo changes
