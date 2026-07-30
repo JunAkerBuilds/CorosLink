@@ -29,6 +29,8 @@ import {
   X,
 } from "lucide-react";
 import {
+  Component,
+  type ErrorInfo,
   type FormEvent,
   type ReactNode,
   lazy,
@@ -60,6 +62,7 @@ import type {
   TrainingHubSportType,
   TrainingHubStatus,
   TrainingHubUpcomingWorkout,
+  TrainingPlanDocument,
   WatchStatus,
   WatchTrack,
   WatchTransferProgress,
@@ -83,6 +86,7 @@ import { recentTrainingHubDateList } from "./training/formatters";
 import type { TrainingHubSnapshot } from "./training/types";
 import type { CorosLinkApi } from "./coroslink-api";
 import { AppUpdateControls } from "./components/AppUpdateControls";
+import { DonateButton } from "./components/DonateButton";
 import { UpdateAvailablePrompt } from "./components/UpdateAvailablePrompt";
 import {
   AppSidebar,
@@ -148,6 +152,11 @@ const LazyTrainingHubView = lazy(() =>
     default: TrainingHubView,
   })),
 );
+const LazyTrainingLibraryView = lazy(() =>
+  import("./training-library/TrainingLibraryView").then(({ TrainingLibraryView }) => ({
+    default: TrainingLibraryView,
+  })),
+);
 const LazyStrengthView = lazy(() =>
   import("./strength/StrengthView").then(({ StrengthView }) => ({
     default: StrengthView,
@@ -174,6 +183,41 @@ function DeferredSurfaceFallback({ label }: { label: string }) {
       <span>Loading {label}…</span>
     </div>
   );
+}
+
+class TrainingLibraryErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Training Library render failed", error, info);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    // Uses the global .empty-state: the library's own stylesheet ships with the
+    // lazy chunk, which may be exactly what failed to load.
+    return (
+      <section className="empty-state" role="alert">
+        <AlertCircle size={28} aria-hidden="true" />
+        <strong>Training Library could not render</strong>
+        <span>{this.state.error.message}</span>
+        <button
+          type="button"
+          className="primary-button"
+          onClick={() => this.setState({ error: null })}
+        >
+          Try again
+        </button>
+      </section>
+    );
+  }
 }
 
 function getLatestReleasePreview(changelog: string): {
@@ -269,6 +313,7 @@ export default function App() {
     activeView === "watchfaces",
   );
   const [coachPrefill, setCoachPrefill] = useState<string | null>(null);
+  const [pendingCoachPlan, setPendingCoachPlan] = useState<TrainingPlanDocument | null>(null);
   const [calendarRefreshToken, setCalendarRefreshToken] = useState(0);
   const [activeMediaTab, setActiveMediaTab] = useState<MediaTab>("library");
   const [watchStatus, setWatchStatus] = useState<WatchStatus | null>(null);
@@ -2092,6 +2137,7 @@ export default function App() {
     <div className="app">
       <header className="app-header app-header--slim">
         <div className="app-header-end">
+          <DonateButton />
           <ThemeToggle />
           <StartupViewMenu
             value={startupView}
@@ -2183,7 +2229,7 @@ export default function App() {
           className={[
             "content",
             isOverviewDashboard && "content-overview",
-            (activeView === "media" || activeView === "coach") && "content-fill",
+            (activeView === "media" || activeView === "coach" || activeView === "library") && "content-fill",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -2367,6 +2413,25 @@ export default function App() {
                 />
               </Suspense>
             ) : null}
+            {activeView === "library" ? (
+              <TrainingLibraryErrorBoundary>
+                <Suspense fallback={<DeferredSurfaceFallback label="Training Library" />}>
+                  <LazyTrainingLibraryView
+                    api={api}
+                    status={trainingHubStatus}
+                    onOpenTraining={() => setActiveView("training")}
+                    onOpenCoach={(prompt) => {
+                      setCoachPrefill(prompt ?? null);
+                      setActiveView("coach");
+                    }}
+                    pendingPlan={pendingCoachPlan}
+                    onPendingPlanConsumed={() => setPendingCoachPlan(null)}
+                    onMessage={setMessage}
+                    onError={setError}
+                  />
+                </Suspense>
+              </TrainingLibraryErrorBoundary>
+            ) : null}
             {activeView === "strength" ? (
               <Suspense fallback={<DeferredSurfaceFallback label="strength" />}>
                 <LazyStrengthView
@@ -2431,6 +2496,10 @@ export default function App() {
                     onPlanUploaded={() => {
                       void loadTrainingHubData();
                       setCalendarRefreshToken((token) => token + 1);
+                    }}
+                    onReviewPlan={(plan) => {
+                      setPendingCoachPlan(plan);
+                      setActiveView("library");
                     }}
                     onActivityChange={setCoachBusy}
                     pendingPrompt={coachPrefill}

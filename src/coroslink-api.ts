@@ -32,7 +32,10 @@ import type {
   SpotifySyncResult,
   SpotifySyncTrack,
   SpotifySyncUpdate,
+  HevySettingsInput,
+  HevyStatus,
   StrengthHistory,
+  StrengthHistoryRequest,
   TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
@@ -49,6 +52,16 @@ import type {
   TrainingHubUpcomingWorkout,
   TrainingHubScheduledWorkoutEntry,
   TrainingHubLibraryWorkout,
+  TrainingActivityMatch,
+  TrainingCollection,
+  TrainingLibraryDeleteRequest,
+  TrainingLibrarySnapshot,
+  TrainingPlanDocument,
+  TrainingPlanCalendarMutationResult,
+  TrainingPlanCalendarPreview,
+  TrainingPlanDestination,
+  TrainingPlanMetadataPatch,
+  WorkoutMetadataPatch,
   UnitSystem,
   PlanWorkoutEntryInput,
   RunWorkoutEditorDraft,
@@ -348,6 +361,42 @@ export interface CorosLinkApi {
     endDay: string
   ) => Promise<TrainingHubScheduledWorkoutEntry[]>;
   listLibraryWorkouts: () => Promise<TrainingHubLibraryWorkout[]>;
+  duplicateLibraryWorkout: (
+    programId: string,
+    name: string,
+    targetSportType?: number
+  ) => Promise<TrainingHubLibraryWorkout>;
+  getTrainingLibrarySnapshot: () => Promise<TrainingLibrarySnapshot>;
+  getNativeTrainingPlan: (remoteId: string) => Promise<TrainingPlanDocument>;
+  saveLocalTrainingPlan: (plan: TrainingPlanDocument) => Promise<TrainingPlanDocument>;
+  updateTrainingPlanMetadata: (
+    id: string,
+    patch: TrainingPlanMetadataPatch
+  ) => Promise<TrainingPlanDocument>;
+  deleteLocalTrainingPlan: (id: string, confirmed: boolean) => Promise<void>;
+  previewTrainingPlanCalendar: (planId: string, startDate: string) => Promise<TrainingPlanCalendarPreview>;
+  addTrainingPlanToCalendar: (previewId: string, confirmed: boolean) => Promise<TrainingPlanCalendarMutationResult>;
+  previewTrainingPlanCalendarRemoval: (planId: string) => Promise<TrainingPlanCalendarPreview>;
+  removeTrainingPlanFromCalendar: (previewId: string, confirmed: boolean) => Promise<TrainingPlanCalendarMutationResult>;
+  updateWorkoutMetadata: (
+    programIds: string[],
+    patch: WorkoutMetadataPatch
+  ) => Promise<void>;
+  saveTrainingCollection: (
+    collection: Pick<TrainingCollection, "id" | "name"> &
+      Partial<Pick<TrainingCollection, "description" | "color">>
+  ) => Promise<TrainingCollection>;
+  deleteTrainingCollection: (id: string, confirmed: boolean) => Promise<void>;
+  deleteTrainingLibraryWorkouts: (
+    request: TrainingLibraryDeleteRequest
+  ) => Promise<string[]>;
+  refreshTrainingActivityMatches: (
+    startDay: string,
+    endDay: string
+  ) => Promise<TrainingActivityMatch[]>;
+  saveManualActivityMatch: (
+    match: TrainingActivityMatch
+  ) => Promise<TrainingActivityMatch>;
   listWorkoutExercises: (sport: WorkoutSport) => Promise<WorkoutExerciseOption[]>;
   getWorkoutEditorContext: (unitSystem: UnitSystem) => Promise<WorkoutEditorContext>;
   getWorkoutForEdit: (
@@ -375,6 +424,10 @@ export interface CorosLinkApi {
     happenDay: string,
     unitSystem: UnitSystem,
     saveToLibrary?: boolean
+  ) => Promise<{ programId?: string }>;
+  createLibraryWorkout: (
+    entry: PlanWorkoutEntryInput,
+    unitSystem: UnitSystem
   ) => Promise<{ programId?: string }>;
   rescheduleWorkout: (
     entry: {
@@ -419,7 +472,11 @@ export interface CorosLinkApi {
   getRacePredictor: () => Promise<TrainingHubRacePredictor>;
   getTrainingDashboard: () => Promise<TrainingHubDashboard>;
   getDailyMetrics: (dateList: string[]) => Promise<TrainingHubDailyMetrics>;
-  syncStrengthHistory: (days?: number, force?: boolean) => Promise<StrengthHistory>;
+  syncStrengthHistory: (request?: StrengthHistoryRequest) => Promise<StrengthHistory>;
+  getHevyStatus: () => Promise<HevyStatus>;
+  connectHevy: (apiKey: string) => Promise<HevyStatus>;
+  updateHevySettings: (input: HevySettingsInput) => Promise<HevyStatus>;
+  disconnectHevy: () => Promise<void>;
   startRpeBackfill: () => Promise<void>;
   getRpeBackfillStatus: () => Promise<{ pending: number; running: boolean }>;
   getRpeLoadByDay: () => Promise<Record<string, number>>;
@@ -559,7 +616,8 @@ export interface CorosLinkApi {
   setMcpBearer: (id: string, token: string) => Promise<void>;
   uploadTrainingPlanDraft: (
     draftId: string,
-    unitSystem: UnitSystem
+    unitSystem: UnitSystem,
+    destination?: TrainingPlanDestination
   ) => Promise<UploadPlanResult>;
   confirmWorkoutDelete: (requestId: string) => Promise<DeleteWorkoutResult>;
   setWindowBackground: (color: string) => Promise<void>;

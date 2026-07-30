@@ -1,0 +1,4891 @@
+/*
+ * Training Library
+ *
+ * A library is a record, so this surface keeps a ledger's discipline — hairline
+ * columns, aligned figures — but dresses it in the app's own materials: glass
+ * panels over ambient accent washes, one segmented control for the sections,
+ * and the accent gradient reserved for moments of emphasis.
+ *
+ * The dark theme is layered charcoal, never pure black, and the gate shares
+ * the same ground. The accent stays the app's signature green; red and
+ * yellow stay reserved for danger and caution.
+ *
+ * Only one thing is ever drawn — the ridge of weekly training load (Ridge.tsx),
+ * small on an index row and at reading size on the adherence lede. It keeps to
+ * the accent hue alone; height carries the number.
+ *
+ * Motion follows the shell's cadence: the view enters in three beats, rows
+ * settle, then ridges draw themselves. Everything sits under
+ * prefers-reduced-motion, which the guard at the end of this file honours.
+ *
+ * Values derive from the app tokens in styles.css, so both themes reskin this
+ * file by overriding tokens rather than restyling rules. Token blocks follow
+ * the root: charcoal for the dark theme, and warm shadows for paper.
+ */
+
+.training-library-view {
+  /*
+   * Hairlines derive from the text colour rather than --glass-border, which is
+   * a 0.1-alpha dark on the paper theme and disappears against a white panel.
+   * --text-muted inverts with the theme, so one value reads in both.
+   */
+  --tl-rule: color-mix(in srgb, var(--text-muted) 32%, transparent);
+  --tl-rule-soft: color-mix(in srgb, var(--text-muted) 17%, transparent);
+  --tl-panel-bg: color-mix(in srgb, var(--surface) 58%, transparent);
+  --tl-row-hover: color-mix(in srgb, var(--accent) 6%, transparent);
+  --tl-figure: 15px;
+  --tl-column: 58px;
+  /* The one motion signature every control in the view shares. */
+  --tl-ease-out: cubic-bezier(0.2, 0.8, 0.25, 1);
+
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 30px 34px 24px;
+  color: var(--text-primary);
+  background:
+    radial-gradient(1100px 460px at 16% -8%, var(--bg-ambient-green), transparent 62%),
+    radial-gradient(880px 420px at 90% -12%, var(--bg-ambient-teal), transparent 58%),
+    var(--tl-ground, var(--bg-base));
+  background-attachment: local;
+  overflow: hidden;
+}
+
+/* Highlighted text takes the accent, never the system blue. */
+.training-library-view ::selection {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+/*
+ * Charcoal, dark theme only. The dark theme is the *absence* of a data-theme
+ * attribute (see theme.ts applyTheme), so this cannot leak into paper.
+ *
+ * It works by overriding the app tokens rather than inventing new ones, which
+ * is how the paper theme reskins too: everything downstream — this file, plus
+ * shared pieces like .app-select and .primary-button — follows for free. The
+ * modals the workspace opens render inside the view, so they inherit all of
+ * this without a rule of their own.
+ *
+ * The gate shares the block so the connect screen sits on the same charcoal.
+ */
+:root:not([data-theme]) .training-library-view,
+:root:not([data-theme]) .training-library-gate {
+  --tl-ground: #16171b;
+  --tl-panel-bg: #1d1f25;
+  --tl-card: #23262e;
+  --tl-card-hover: #2b2f38;
+  --tl-reader-bg: #1a1c21;
+
+  --surface: #23262e;
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-bg-hover: rgba(255, 255, 255, 0.07);
+  --glass-bg-elevated: rgba(255, 255, 255, 0.09);
+  --glass-border: rgba(255, 255, 255, 0.1);
+
+  --text-primary: #edeef0;
+  --text-secondary: #a9adb2;
+  --text-muted: #7b8085;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28), 0 14px 32px rgba(0, 0, 0, 0.26);
+  --shadow-elevated: 0 20px 44px rgba(0, 0, 0, 0.42);
+}
+
+/* Crisp white tiles read better than translucent ones on the warm paper panel. */
+:root[data-theme="paper"] .training-library-view {
+  --tl-card: #ffffff;
+  --tl-card-hover: #fffdf9;
+}
+
+/* Black-alpha shadows go warm on paper, matching the theme's brown tints. */
+:root[data-theme="paper"] .tl-card {
+  box-shadow:
+    0 1px 2px rgba(60, 50, 35, 0.05),
+    0 10px 26px rgba(60, 50, 35, 0.07);
+}
+
+:root[data-theme="paper"] .tl-card:hover {
+  box-shadow:
+    0 2px 4px rgba(60, 50, 35, 0.06),
+    0 18px 38px rgba(60, 50, 35, 0.11),
+    0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+:root[data-theme="paper"] .tl-card.is-selected,
+:root[data-theme="paper"] .tl-card.is-active {
+  box-shadow:
+    0 1px 2px rgba(60, 50, 35, 0.05),
+    0 12px 28px rgba(60, 50, 35, 0.09),
+    0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+:root[data-theme="paper"] .training-library-view .ghost-button:hover:not(:disabled) {
+  box-shadow: 0 4px 14px rgba(60, 50, 35, 0.1);
+}
+
+:root[data-theme="paper"] .plan-week {
+  box-shadow: 0 1px 2px rgba(60, 50, 35, 0.05), 0 8px 22px rgba(60, 50, 35, 0.07);
+}
+
+.training-library-view :is(button, input, select, textarea) {
+  font: inherit;
+  font-family: inherit;
+}
+
+.training-library-view :is(button, input, select, textarea, [role="checkbox"]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/*
+ * `.ghost-button` has no global base — each view sets its own — and the global
+ * `.primary-button` is a 44px marketing button. Both are quieted here to sit on
+ * a hairline row without shouting.
+ */
+.training-library-view :is(.primary-button, .ghost-button) {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.training-library-view .primary-button {
+  border: 0;
+  color: #fff;
+  background: var(--accent-gradient);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.14);
+  transition:
+    transform 170ms var(--tl-ease-out),
+    box-shadow 170ms var(--tl-ease-out),
+    filter 170ms ease;
+}
+
+.training-library-view .primary-button:hover:not(:disabled) {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    0 10px 26px color-mix(in srgb, var(--accent) 38%, transparent);
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+}
+
+.training-library-view .primary-button:active:not(:disabled) {
+  transform: translateY(0);
+  filter: brightness(0.97);
+}
+
+.training-library-view .ghost-button {
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 170ms var(--tl-ease-out),
+    box-shadow 170ms var(--tl-ease-out);
+}
+
+.training-library-view .ghost-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--glass-border));
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+  transform: translateY(-1px);
+}
+
+.training-library-view .ghost-button.danger:hover:not(:disabled) {
+  color: var(--error-text);
+  border-color: var(--error-border);
+}
+
+.training-library-view :is(.primary-button, .ghost-button):disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.training-library-view .icon-button {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.training-library-view .icon-button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+.training-library-view .icon-button.danger:hover:not(:disabled) {
+  color: var(--error-text);
+}
+
+.training-library-view .icon-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------------- Masthead */
+
+.tl-masthead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 22px;
+}
+
+.tl-masthead h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  line-height: 1.1;
+  /* The signature gradient: ink settling into the accent, left to right. */
+  background: linear-gradient(
+    100deg,
+    var(--text-primary) 38%,
+    color-mix(in srgb, var(--accent-strong) 72%, var(--text-primary)) 88%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* The census replaces a tagline: what is actually in the library. */
+.tl-census {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.tl-census span {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.tl-census b {
+  margin-right: 5px;
+  color: var(--accent-strong);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-masthead-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tl-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  background: var(--glass-bg);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.tl-state::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success-dot);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success-dot) 18%, transparent);
+  content: "";
+}
+
+.tl-state.is-stale::before {
+  background: var(--warning-text);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning-text) 18%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tl-state::before {
+    animation: tl-dot-pulse 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes tl-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--success-dot) 22%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--success-dot) 6%, transparent);
+  }
+}
+
+.tl-notice {
+  margin-bottom: 18px;
+  padding: 11px 14px;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-md);
+  color: var(--warning-text);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--warning-text) 10%, transparent), var(--warning-bg));
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--warning-text) 8%, transparent);
+  font-size: 12.5px;
+}
+
+.tl-notice summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.tl-notice p {
+  margin: 8px 0 0 22px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* -------------------------------------------------------------- Section nav */
+
+/*
+ * The same segmented control the shell uses for primary navigation: one glass
+ * pill holding the sections, the active one raised into an accent-lit tile.
+ */
+.tl-sections {
+  display: inline-flex;
+  max-width: 100%;
+  gap: 4px;
+  margin-bottom: 20px;
+  padding: 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-inset);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tl-sections::-webkit-scrollbar {
+  display: none;
+}
+
+/* The desktop shell stays anchored while the active workspace owns scrolling. */
+.tl-masthead,
+.tl-notice,
+.tl-sections {
+  flex: none;
+}
+
+.tl-sections button {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-lg) - 5px);
+  color: var(--text-muted);
+  background: none;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.tl-sections button svg {
+  width: 15px;
+  height: 15px;
+  transition: color 180ms ease, transform 220ms var(--tl-ease-out);
+}
+
+.tl-sections button:hover:not(:disabled) {
+  color: var(--text-secondary);
+  background: var(--glass-bg-hover);
+}
+
+.tl-sections button:hover:not(:disabled) svg {
+  transform: scale(1.08);
+}
+
+.tl-sections button:disabled {
+  cursor: default;
+}
+
+.tl-sections button:disabled:not([aria-current="page"]) {
+  opacity: 0.5;
+}
+
+/* The count rides as a small pill so the tab label stays the reading line. */
+.tl-sections button span {
+  min-width: 20px;
+  padding: 1.5px 6px;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: center;
+  transition: color 180ms ease, background 180ms ease;
+}
+
+.tl-sections button[aria-current="page"] {
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--accent-strong);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 16%, transparent), color-mix(in srgb, var(--accent) 9%, transparent));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent) 24%, transparent),
+    0 4px 14px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.tl-sections button[aria-current="page"] span {
+  color: #fff;
+  background: var(--accent-gradient);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+/* ------------------------------------------------------------------- Panels */
+
+.tl-panel {
+  min-width: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(ellipse 90% 62% at 14% 0%, var(--bg-ambient-green), transparent 58%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012) 42%),
+    var(--tl-panel-bg);
+  box-shadow: var(--shadow-card), var(--glass-inset);
+  backdrop-filter: blur(var(--glass-blur));
+  overflow: hidden;
+}
+
+.training-library-view > :is(.tl-panel, .tl-template-layout, .tl-adherence) {
+  min-height: 0;
+  flex: 1 1 0;
+}
+
+.training-library-view > .tl-panel:not(.tl-split),
+.tl-template-layout > .tl-panel {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.training-library-view > .tl-panel:not(.tl-split) > :is(.tl-grid, .tl-index),
+.tl-template-layout > .tl-panel:not(.tl-collections) > :is(.tl-grid, .tl-index) {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--glass-border) transparent;
+  scrollbar-gutter: stable;
+}
+
+.training-library-view > .tl-panel:not(.tl-split) > .tl-grid,
+.tl-template-layout > .tl-panel:not(.tl-collections) > .tl-grid {
+  align-content: start;
+}
+
+.training-library-view > .tl-panel:not(.tl-split) > .tl-empty,
+.tl-template-layout > .tl-panel:not(.tl-collections) > .tl-empty {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.tl-panel > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px 15px;
+}
+
+.tl-panel > header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.tl-panel > header p {
+  margin: 5px 0 0;
+  max-width: 52ch;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.tl-eyebrow {
+  margin: 0;
+  color: color-mix(in srgb, var(--accent-strong) 78%, var(--text-muted));
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------------ Filters */
+
+.tl-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--tl-rule);
+}
+
+/* Sort, layout and the create action group at the right of the filter line. */
+.tl-filters-tail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.tl-search {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 1 300px;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  background: var(--glass-bg);
+  transition:
+    border-color 170ms ease,
+    box-shadow 170ms ease,
+    color 170ms ease,
+    flex-basis 240ms var(--tl-ease-out);
+}
+
+.tl-search input {
+  min-width: 0;
+  width: 100%;
+  padding: 5px 0;
+  border: 0;
+  color: var(--text-primary);
+  background: none;
+  font-size: 13px;
+}
+
+.tl-search input::placeholder {
+  color: var(--text-muted);
+}
+
+.tl-search input:focus-visible {
+  outline: 0;
+}
+
+/* The field wakes up: accent ring, soft outer glow, and a little more room. */
+.tl-search:focus-within {
+  flex-basis: 340px;
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  color: var(--accent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent),
+    0 6px 18px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.tl-chips {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tl-chips button {
+  padding: 5px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  background: none;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 170ms var(--tl-ease-out);
+}
+
+.tl-chips button:hover {
+  color: var(--text-secondary);
+  border-color: color-mix(in srgb, var(--text-muted) 34%, transparent);
+  background: var(--glass-bg);
+  transform: translateY(-1px);
+}
+
+.tl-chips button[aria-pressed="true"] {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 15%, transparent), color-mix(in srgb, var(--accent) 8%, transparent));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent) 20%, transparent),
+    0 3px 10px color-mix(in srgb, var(--accent) 12%, transparent);
+  font-weight: 600;
+}
+
+/* The "show more" control spans the whole tile grid rather than one cell. */
+.tl-grid > li:has(> .tl-load-more) {
+  grid-column: 1 / -1;
+}
+
+.tl-grid .tl-load-more {
+  border-top: 0;
+}
+
+.tl-inline-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--tl-rule);
+  color: var(--warning-text);
+  background: color-mix(in srgb, var(--warning-bg) 60%, transparent);
+  font-size: 12px;
+}
+
+.tl-inline-note svg {
+  flex: none;
+}
+
+.tl-bulk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 12%, transparent), color-mix(in srgb, var(--accent) 5%, transparent));
+  font-size: 12px;
+  animation: tl-bulk-in 240ms var(--tl-ease-out) both;
+}
+
+@keyframes tl-bulk-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tl-bulk strong {
+  margin-right: 6px;
+  color: var(--accent-strong);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.tl-bulk button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  background: var(--glass-bg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tl-bulk button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+.tl-bulk button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tl-bulk button.danger:hover {
+  color: var(--error-text);
+  border-color: var(--error-border);
+}
+
+/* -------------------------------------------------------------- Ledger index */
+
+.tl-index {
+  min-width: 0;
+}
+
+.tl-index ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Column labels are stated once, so the rows can be pure data. */
+.tl-index-head {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--tl-rule);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(12px);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.tl-index-head .tl-column-label,
+.tl-index-head .tl-sortable {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.tl-index-head .tl-sortable {
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+
+.tl-index-head .tl-sortable:hover {
+  color: var(--text-secondary);
+}
+
+.tl-index-head .tl-sortable[aria-pressed="true"] {
+  color: var(--accent-strong);
+}
+
+.tl-index-head .is-numeric {
+  text-align: right;
+}
+
+.tl-row {
+  align-items: center;
+  border-bottom: 1px solid var(--tl-rule-soft);
+  transition: background 170ms ease;
+}
+
+.tl-row:last-child {
+  border-bottom: 0;
+}
+
+.tl-row:hover {
+  background: var(--tl-row-hover);
+}
+
+.tl-row.is-selected {
+  background: var(--accent-soft);
+}
+
+.tl-plan-row,
+.tl-workout-row,
+.tl-match-row,
+.tl-activity-row {
+  display: grid;
+  gap: 0 14px;
+  padding-right: 16px;
+  padding-left: 16px;
+}
+
+.tl-plan-row {
+  grid-template-columns:
+    16px minmax(0, 1fr)
+    var(--tl-column) var(--tl-column) var(--tl-column) 62px
+    132px 92px;
+}
+
+.tl-workout-row {
+  grid-template-columns: 16px minmax(0, 1fr) 88px 50px 44px;
+}
+
+/* The row's own body is the primary target; it stays a plain block of text. */
+.tl-row-open {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  padding: 15px 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tl-row-open.is-static {
+  cursor: default;
+}
+
+.tl-row-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-row-name svg {
+  flex: none;
+  color: var(--accent);
+}
+
+.tl-row-sub {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.tl-row-sub em {
+  overflow: hidden;
+  font-style: normal;
+  text-overflow: ellipsis;
+}
+
+.tl-row-sub em + em::before {
+  margin-right: 7px;
+  content: "·";
+}
+
+/* Sync state is shown only when it needs attention. */
+.tl-flag {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  font-size: 9.5px;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tl-fig {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: var(--tl-figure);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  text-align: right;
+}
+
+.tl-fig.is-nil {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.tl-fig.is-quiet {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tl-mark {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 1.5px solid color-mix(in srgb, var(--text-muted) 52%, transparent);
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms var(--tl-ease-out);
+}
+
+.tl-mark:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.tl-mark[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent-gradient);
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--surface) 80%, transparent),
+    0 2px 8px color-mix(in srgb, var(--accent) 32%, transparent);
+  animation: tl-mark-pop 220ms var(--tl-ease-out);
+}
+
+@keyframes tl-mark-pop {
+  0% {
+    transform: scale(0.72);
+  }
+  60% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Secondary actions stay out of the way until the row is reached. */
+.tl-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.tl-row:hover .tl-row-actions,
+.tl-row:focus-within .tl-row-actions,
+.tl-row.is-selected .tl-row-actions {
+  opacity: 1;
+}
+
+/* Without a pointer there is no hover to reveal them, so they stay put. */
+@media (hover: none) {
+  .tl-row-actions {
+    opacity: 1;
+  }
+}
+
+.tl-row-actions button {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.tl-row-actions button:hover {
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+.tl-row-actions button.danger:hover {
+  color: var(--error-text);
+}
+
+.tl-load-more {
+  width: 100%;
+  padding: 13px;
+  border: 0;
+  border-top: 1px solid var(--tl-rule);
+  color: var(--text-secondary);
+  background: none;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tl-load-more:hover {
+  color: var(--text-primary);
+  background: var(--glass-bg);
+}
+
+/* ------------------------------------------------------------- Card tiles */
+
+/*
+ * One tile per training. The tile is where the ridge belongs: it gets the full
+ * width and twice the height it can have on a row, so the shape of a block is
+ * readable at a glance while browsing.
+ */
+.tl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(258px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 16px;
+  list-style: none;
+}
+
+.tl-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 198px;
+  flex-direction: column;
+  /* --tl-rule, not --glass-border: a tile needs a defined edge, and the glass
+     border is a 0.1-alpha dark that disappears on a white paper tile. */
+  border: 1px solid var(--tl-rule);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(158deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.014) 46%),
+    var(--tl-card, var(--glass-bg));
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.16),
+    0 10px 26px rgba(0, 0, 0, 0.14);
+  overflow: hidden;
+  transition:
+    border-color 190ms ease,
+    box-shadow 220ms var(--tl-ease-out),
+    transform 220ms var(--tl-ease-out);
+}
+
+/* A wash of accent light that rises from the top edge when the tile is touched. */
+.tl-card::before {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 120% 70% at 50% -18%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 62%);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 240ms ease;
+}
+
+.tl-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--glass-border));
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.18),
+    0 18px 38px rgba(0, 0, 0, 0.2),
+    0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent),
+    0 10px 30px color-mix(in srgb, var(--accent) 10%, transparent);
+  transform: translateY(-3px);
+}
+
+.tl-card:hover::before,
+.tl-card.is-active::before {
+  opacity: 1;
+}
+
+.tl-card.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 62%, transparent);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.16),
+    0 12px 28px rgba(0, 0, 0, 0.15),
+    0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent),
+    0 8px 26px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.tl-card.is-active {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--glass-border));
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.16),
+    0 12px 28px rgba(0, 0, 0, 0.15),
+    0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.tl-card-open {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 15px 13px;
+  border: 0;
+  color: inherit;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tl-card-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-right: 24px;
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.tl-card-top em {
+  font-style: normal;
+}
+
+.tl-card-top svg {
+  color: var(--accent);
+}
+
+.tl-card-name {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.28;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.tl-card-note {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * Pushes the ridge and figures to the tile floor so tiles align across a row.
+ * A week gets a wider slot here than on a list row — a typical block then fills
+ * most of the tile, and a short plan visibly draws a shorter ridge.
+ */
+.tl-card-open .tl-ridge {
+  height: 42px;
+  margin-top: auto;
+  gap: 2px;
+}
+
+.tl-card-open .tl-ridge-bar {
+  flex-basis: 10px;
+  border-radius: 1.5px;
+}
+
+.tl-card-figs {
+  display: flex;
+  gap: 16px;
+  padding-top: 11px;
+  border-top: 1px solid var(--tl-rule-soft);
+}
+
+.tl-card-figs span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tl-card-figs b {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.tl-card-figs b.is-nil {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.tl-card-figs small {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tl-card > .tl-mark {
+  position: absolute;
+  top: 13px;
+  right: 13px;
+  z-index: 1;
+}
+
+.tl-card-actions {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.tl-card:hover .tl-card-actions,
+.tl-card:focus-within .tl-card-actions,
+.tl-card.is-selected .tl-card-actions {
+  opacity: 1;
+}
+
+.tl-card-actions button {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--tl-card, var(--surface)) 88%, transparent);
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.tl-card-actions button:hover {
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+.tl-card-actions button.danger:hover {
+  color: var(--error-text);
+}
+
+@media (hover: none) {
+  .tl-card-actions {
+    opacity: 1;
+  }
+}
+
+/* Workout tiles carry no weekly data, so they stay shorter and text-only. */
+.tl-catalog .tl-grid {
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+}
+
+.tl-catalog .tl-card {
+  min-height: 120px;
+}
+
+/* With no ridge to push them down, the figures take the auto margin instead so
+   they still land on the tile floor when a name wraps to two lines. */
+.tl-catalog .tl-card-figs {
+  gap: 14px;
+  margin-top: auto;
+}
+
+/* -------------------------------------------------------- Layout switch */
+
+.tl-layout-switch {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+}
+
+.tl-layout-switch button {
+  display: inline-flex;
+  width: 27px;
+  height: 25px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.tl-layout-switch button:hover {
+  color: var(--text-secondary);
+}
+
+.tl-layout-switch button[aria-pressed="true"] {
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* ------------------------------------------------- The ridge (the signature) */
+
+/*
+ * One week is always the same width, and every ridge starts at week 1, so the
+ * bars stay comparable between rows and a longer plan simply draws a longer
+ * ridge. Only a plan past ~22 weeks compresses to fit its column.
+ */
+.tl-ridge {
+  display: flex;
+  height: 26px;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 1.5px;
+}
+
+.tl-ridge.is-blank {
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.tl-ridge-bar {
+  position: relative;
+  min-width: 1px;
+  flex: 0 1 4px;
+  height: var(--tl-bar-height);
+  border-radius: 2px 2px 1px 1px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-strong) 82%, transparent), color-mix(in srgb, var(--accent) 46%, transparent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  transform-origin: bottom;
+  transition: filter 180ms ease;
+}
+
+.tl-ridge-bar.is-empty {
+  background: color-mix(in srgb, var(--text-muted) 32%, transparent);
+  box-shadow: none;
+}
+
+/* Session counts, not load: grey, so the accent keeps meaning one thing. */
+.tl-ridge.is-count .tl-ridge-bar {
+  background: color-mix(in srgb, var(--text-secondary) 34%, transparent);
+  box-shadow: none;
+}
+
+.tl-row:hover .tl-ridge.is-count .tl-ridge-bar {
+  background: color-mix(in srgb, var(--text-secondary) 52%, transparent);
+}
+
+.tl-ridge-bar.is-peak {
+  background: var(--accent-gradient);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 10px color-mix(in srgb, var(--accent) 46%, transparent);
+}
+
+.tl-row:hover .tl-ridge-bar:not(.is-empty),
+.tl-card:hover .tl-ridge-bar:not(.is-empty) {
+  filter: brightness(1.16) saturate(1.1);
+}
+
+.tl-row:hover .tl-ridge-bar.is-peak {
+  filter: brightness(1.1);
+}
+
+/* The same axis at reading size: planned load pale, completed load solid. */
+.tl-bullets {
+  display: flex;
+  height: 78px;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.tl-bullet {
+  position: relative;
+  min-width: 3px;
+  flex: 1 1 0;
+  height: 100%;
+}
+
+.tl-bullet b,
+.tl-bullet i {
+  position: absolute;
+  bottom: 0;
+  height: var(--tl-bar-height);
+  border-radius: 2.5px 2.5px 1px 1px;
+  transform-origin: bottom;
+  transition: filter 180ms ease;
+}
+
+.tl-bullet b {
+  right: 0;
+  left: 0;
+  background: color-mix(in srgb, var(--text-muted) 24%, transparent);
+}
+
+.tl-bullet i {
+  right: 30%;
+  left: 30%;
+  background: var(--accent-gradient);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 0 8px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.tl-bullet:hover b {
+  background: color-mix(in srgb, var(--text-muted) 42%, transparent);
+}
+
+.tl-bullet:hover i {
+  filter: brightness(1.14);
+}
+
+/* ------------------------------------------------- Workouts: catalog + reader */
+
+.tl-split {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) 392px;
+  overflow: hidden;
+}
+
+.tl-catalog {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--tl-rule);
+}
+
+.tl-catalog > :is(.tl-grid, .tl-index) {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--glass-border) transparent;
+  scrollbar-gutter: stable;
+}
+
+.tl-catalog > .tl-grid {
+  align-content: start;
+}
+
+.tl-catalog > .tl-empty {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+/* Sits a step below the catalog so the tiles read as the raised layer. */
+.tl-reader {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  /* The metric figures scale in cqi, so the strip fits at both split widths. */
+  container-type: inline-size;
+  background:
+    radial-gradient(ellipse 140% 20% at 50% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 64%),
+    var(--tl-reader-bg, color-mix(in srgb, var(--surface) 34%, transparent));
+  overflow: hidden;
+}
+
+/* The workout details scroll independently, leaving the core actions docked. */
+.tl-reader-scroll {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--glass-border) transparent;
+  scrollbar-gutter: stable;
+}
+
+.tl-reader-scroll > header {
+  position: relative;
+  padding-right: 38px;
+}
+
+.tl-reader-scroll > header h2 {
+  margin: 10px 0 0;
+  font-family: var(--font-display);
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: -0.024em;
+  line-height: 1.16;
+  text-wrap: balance;
+}
+
+/* The workout's own tags ride under the title as quiet ghost chips. */
+.tl-reader-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 11px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tl-reader-tags li {
+  max-width: 100%;
+  padding: 2.5px 9px;
+  border: 1px solid var(--tl-rule-soft);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * The sport chip answers in the sport's own colour — the same --sport-* tokens
+ * Settings → Activity colors edits, so the reader agrees with the rest of the
+ * app about what a strength day looks like.
+ */
+.tl-reader-sport {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3.5px 10px;
+  border: 1px solid color-mix(in srgb, var(--tl-sport, var(--accent)) 36%, transparent);
+  border-radius: var(--radius-pill);
+  color: color-mix(in srgb, var(--tl-sport, var(--accent-strong)) 80%, var(--text-primary));
+  background: color-mix(in srgb, var(--tl-sport, var(--accent)) 10%, transparent);
+}
+
+.tl-reader-sport::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--tl-sport, var(--accent));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--tl-sport, var(--accent)) 62%, transparent);
+  content: "";
+}
+
+.tl-reader-sport[data-sport="strength"] {
+  --tl-sport: var(--sport-strength);
+}
+
+.tl-reader-sport[data-sport="trail"] {
+  --tl-sport: var(--sport-trail);
+}
+
+.tl-reader-sport[data-sport="run"] {
+  --tl-sport: var(--sport-run);
+}
+
+.tl-reader-sport[data-sport="bike"] {
+  --tl-sport: var(--sport-bike);
+}
+
+.tl-reader-sport[data-sport="other"] {
+  --tl-sport: var(--sport-other);
+}
+
+.tl-reader-favorite {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+  transition:
+    color 170ms ease,
+    background 170ms ease,
+    border-color 170ms ease,
+    transform 170ms var(--tl-ease-out);
+}
+
+.tl-reader-favorite:hover {
+  border-color: var(--glass-border);
+  color: var(--accent);
+  background: var(--glass-bg);
+  transform: translateY(-1px);
+}
+
+.tl-reader-favorite:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  outline: 0;
+}
+
+.tl-reader-favorite.is-active {
+  color: var(--accent-strong);
+}
+
+/* The heart answers the tap with a small leap. */
+.tl-reader-favorite.is-active svg {
+  animation: tl-heart-pop 320ms var(--tl-ease-out);
+  filter: drop-shadow(0 2px 8px color-mix(in srgb, var(--accent) 46%, transparent));
+}
+
+@keyframes tl-heart-pop {
+  0% {
+    transform: scale(0.6);
+  }
+  55% {
+    transform: scale(1.22);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.tl-reader-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 15px 0 16px;
+  border-top: 1px solid var(--tl-rule);
+  border-bottom: 1px solid var(--tl-rule);
+}
+
+.tl-reader-metrics > div {
+  min-width: 0;
+}
+
+/* Hairline dividers keep the four figures reading as one instrument. */
+.tl-reader-metrics > div + div {
+  border-left: 1px solid var(--tl-rule-soft);
+  padding-left: 10px;
+}
+
+.tl-reader-metrics dt {
+  overflow: hidden;
+  color: var(--text-muted);
+  /* Like the figure, the label scales with the panel so DISTANCE never clips. */
+  font-size: clamp(8.2px, 2.3cqi, 9px);
+  font-weight: 600;
+  letter-spacing: clamp(0.8px, 0.26cqi, 1.1px);
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/*
+ * The figure scales with the reader's width (the panel is the container), so
+ * values like "12 sets" fit at full width and only shrink at the narrow
+ * breakpoint; ellipsis stays the last resort, with the full string on title.
+ */
+.tl-reader-metrics dd {
+  margin: 7px 0 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: clamp(14px, 4.4cqi, 18px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-reader-metrics dd.is-nil {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/*
+ * Step structure by share of the session: repeats expand into a comb. The
+ * figure is set as a small glass card — the same recipe as the schedule form —
+ * so the bar and its legend read as one contained instrument.
+ */
+.tl-shape {
+  margin: 0;
+  padding: 12px 12px 11px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012) 48%),
+    var(--glass-bg);
+  box-shadow: var(--shadow-inset);
+}
+
+/* Time is continuous, so the segments abut: only the fill marks a boundary. */
+.tl-shape > div {
+  display: flex;
+  height: 36px;
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+/* Segment fills scope to the bar itself, never the caption or legend spans. */
+.tl-shape > div > span {
+  min-width: 1px;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  transition: filter 160ms ease;
+}
+
+.tl-shape > div > span:hover {
+  filter: brightness(1.25);
+}
+
+.tl-shape > div > span.is-training {
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
+}
+
+.tl-shape > div > span.is-warmup,
+.tl-shape > div > span.is-cooldown {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.tl-shape > div > span.is-rest,
+.tl-shape > div > span.is-sendOff {
+  background: color-mix(in srgb, var(--text-secondary) 26%, transparent);
+}
+
+.tl-shape figcaption,
+.tl-adherence-chart figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+/*
+ * The reader's card stacks the caption over the legend instead of squeezing
+ * both onto one line: each gets the card's full width, and the legend wraps
+ * left-aligned when every kind shows up at once.
+ */
+.tl-shape figcaption {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* The legend keys the bar's fills without repeating words on every segment. */
+.tl-shape-legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px 14px;
+}
+
+.tl-shape-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.tl-shape-legend em {
+  width: 8px;
+  height: 8px;
+  border-radius: 2.5px;
+}
+
+.tl-shape-legend em.is-training {
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
+  box-shadow: 0 0 5px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.tl-shape-legend em.is-warmup,
+.tl-shape-legend em.is-cooldown {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+.tl-shape-legend em.is-rest,
+.tl-shape-legend em.is-sendOff {
+  background: color-mix(in srgb, var(--text-secondary) 26%, transparent);
+}
+
+/* The list and its eyebrow label travel as one zone, apart from the shape card. */
+.tl-steps-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tl-steps-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tl-steps-label span {
+  color: color-mix(in srgb, var(--text-muted) 78%, transparent);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.tl-steps {
+  margin: 0 -20px;
+  padding: 0;
+  list-style: none;
+  counter-reset: tl-step;
+}
+
+/* Rows run edge to edge so the hover wash can light the whole line. */
+.tl-steps li {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 10px 20px 10px 54px;
+  border-bottom: 1px solid var(--tl-rule-soft);
+  counter-increment: tl-step;
+  transition: background 160ms ease;
+}
+
+.tl-steps li:first-child {
+  border-top: 1px solid var(--tl-rule-soft);
+}
+
+.tl-steps li:hover {
+  background: var(--tl-row-hover);
+}
+
+/* The index number answers in the step's kind: teal to ease in and out of the
+   session, the accent for work, grey for rest. */
+.tl-steps li::before {
+  position: absolute;
+  top: 12px;
+  left: 20px;
+  width: 24px;
+  color: color-mix(in srgb, var(--accent-strong) 84%, var(--text-muted));
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  content: counter(tl-step, decimal-leading-zero);
+}
+
+.tl-steps li[data-kind="warmup"]::before,
+.tl-steps li[data-kind="cooldown"]::before {
+  color: var(--accent-2);
+}
+
+.tl-steps li[data-kind="rest"]::before,
+.tl-steps li[data-kind="sendOff"]::before {
+  color: var(--text-muted);
+}
+
+.tl-step-head {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tl-step-head b {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The target rides as a small pill; a repeat block's rounds get the accent. */
+.tl-step-head small {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  background: var(--glass-bg);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-step-head small.is-rounds {
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+/* Children hang from a guide rail, each line pinned by a ring threaded on it. */
+.tl-step-children {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 6px;
+  margin-left: 2px;
+  padding: 2px 0 2px 13px;
+  border-left: 1px solid color-mix(in srgb, var(--accent) 18%, var(--tl-rule));
+}
+
+.tl-step-children em {
+  position: relative;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.tl-step-children em::before {
+  position: absolute;
+  top: 50%;
+  left: -16.5px;
+  width: 4px;
+  height: 4px;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 44%, var(--text-muted));
+  border-radius: 50%;
+  content: "";
+  transform: translateY(-50%);
+}
+
+.tl-step-children em small {
+  margin-left: 5px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-reader-references {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px dashed color-mix(in srgb, var(--text-muted) 32%, transparent);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.tl-reader-references svg {
+  flex: none;
+}
+
+/* A workout that feeds plans and days gets the solid, accent-lit variant. */
+.tl-reader-references.is-linked {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.tl-reader-references.is-linked svg {
+  color: var(--accent-strong);
+}
+
+/*
+ * A web glassmorphism dock: calendar and workout commands share one anchored
+ * control surface, while the fade above it keeps the reader from ending hard.
+ */
+.tl-reader-dock {
+  position: relative;
+  isolation: isolate;
+  flex: none;
+  padding: 12px 14px 14px;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 18%, var(--tl-rule));
+  background:
+    radial-gradient(ellipse 105% 100% at 0% 0%, color-mix(in srgb, var(--accent) 11%, transparent), transparent 64%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018) 54%),
+    color-mix(in srgb, var(--tl-reader-bg, var(--surface)) 86%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    0 -18px 42px color-mix(in srgb, var(--tl-reader-bg, var(--surface)) 72%, transparent);
+  backdrop-filter: blur(24px) saturate(145%);
+  -webkit-backdrop-filter: blur(24px) saturate(145%);
+}
+
+.tl-reader-dock::before {
+  position: absolute;
+  z-index: -1;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 22px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--tl-reader-bg, var(--surface)) 66%, transparent)
+  );
+  content: "";
+  pointer-events: none;
+}
+
+.tl-reader-dock::after {
+  position: absolute;
+  z-index: -1;
+  inset: 1px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0.035), transparent 42%);
+  content: "";
+  pointer-events: none;
+}
+
+/* Scheduling gets the first row and a clear two-part hierarchy. */
+.tl-reader-schedule {
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--tl-rule-soft);
+}
+
+.tl-reader-schedule-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 9px;
+}
+
+.tl-reader-schedule-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--glass-border));
+  border-radius: var(--radius-sm);
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 10%, var(--glass-bg));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.tl-reader-schedule-heading > span:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tl-reader-schedule-heading strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.tl-reader-schedule-heading small {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 1.3;
+}
+
+.tl-reader-schedule-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.tl-reader-schedule label {
+  min-width: 0;
+}
+
+.tl-reader-schedule input {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--glass-bg);
+  font-size: 12.5px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.tl-reader-schedule input:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  outline: 0;
+}
+
+.tl-reader-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 11px;
+}
+
+.tl-reader-actions-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px;
+}
+
+.tl-reader-actions-main > .primary-button {
+  min-width: 68px;
+}
+
+/* Duplicate and its destination sport read as one compound action. */
+.tl-reader-duplicate {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(76px, 1fr);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--glass-bg) 78%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.tl-reader-duplicate > .ghost-button {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 1px) 0 0 calc(var(--radius-sm) - 1px);
+  white-space: nowrap;
+}
+
+.tl-reader-duplicate .app-select-trigger {
+  min-height: 32px;
+  border: 0;
+  border-left: 1px solid var(--tl-rule-soft);
+  border-radius: 0 calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0;
+  background: transparent;
+}
+
+.tl-reader-actions-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tl-reader-actions-meta .ghost-button {
+  color: var(--text-muted);
+}
+
+.tl-reader-actions-meta .ghost-button:hover:not(:disabled) {
+  color: var(--text-secondary);
+}
+
+/* The dock sits at the bottom edge, so its sport picker opens into the reader. */
+.tl-reader-dock .app-select-menu {
+  top: auto;
+  right: 0;
+  bottom: calc(100% + 6px);
+  left: auto;
+  min-width: 148px;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .tl-reader-dock {
+    background: var(--tl-reader-bg, var(--surface));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.tl-reader-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------- Templates: collections */
+
+.tl-template-layout {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) 292px;
+  align-items: stretch;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.tl-collections > header {
+  display: block;
+  padding-bottom: 12px;
+}
+
+.tl-collection-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  padding: 0 20px 14px;
+}
+
+.tl-collection-create input {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--glass-bg);
+  font-size: 12.5px;
+}
+
+.tl-collections ul {
+  min-height: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--tl-rule);
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--glass-border) transparent;
+  scrollbar-gutter: stable;
+}
+
+.tl-collections li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 16px 11px 20px;
+  border-bottom: 1px solid var(--tl-rule-soft);
+}
+
+.tl-collections li:last-child {
+  border-bottom: 0;
+}
+
+.tl-collections li span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tl-collections li strong {
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-collections li small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.tl-collections li button {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+}
+
+.tl-collections li button:hover {
+  color: var(--error-text);
+  background: var(--glass-bg-hover);
+}
+
+.tl-collections-empty {
+  margin: 0;
+  padding: 0 20px 20px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------------------- Adherence */
+
+.tl-adherence {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--glass-border) transparent;
+  scrollbar-gutter: stable;
+}
+
+.tl-adherence-lede > header {
+  align-items: center;
+}
+
+.tl-adherence-chart {
+  margin: 0;
+  padding: 4px 20px 0;
+}
+
+.tl-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tl-legend em {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.tl-legend em:not(:first-child) {
+  margin-left: 8px;
+}
+
+.tl-legend .is-planned {
+  background: color-mix(in srgb, var(--text-muted) 34%, transparent);
+}
+
+.tl-legend .is-done {
+  background: color-mix(in srgb, var(--accent) 82%, transparent);
+}
+
+.tl-tally {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 18px 0 0;
+  border-top: 1px solid var(--tl-rule);
+  background: var(--tl-rule);
+}
+
+.tl-tally div {
+  padding: 14px 20px;
+  background: var(--tl-panel-bg);
+  transition: background 180ms ease;
+}
+
+.tl-tally div:hover {
+  background: color-mix(in srgb, var(--accent) 5%, var(--tl-panel-bg));
+}
+
+.tl-tally dt {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.tl-tally dd {
+  margin: 5px 0 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Each status number answers in its own colour, set from data-status. */
+.tl-tally [data-status="completed"] dd {
+  color: var(--success-text);
+}
+
+.tl-tally [data-status="partial"] dd {
+  color: var(--warning-text);
+}
+
+.tl-tally [data-status="missed"] dd {
+  color: var(--error-text);
+}
+
+.tl-tally [data-status="upcoming"] dd {
+  color: var(--accent-strong);
+}
+
+.tl-match-row {
+  grid-template-columns: 92px minmax(0, 1fr) minmax(0, 1.05fr) 60px 88px;
+}
+
+.tl-match-row.tl-row {
+  padding-top: 11px;
+  padding-bottom: 11px;
+}
+
+.tl-match-day,
+.tl-match-planned,
+.tl-match-done {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tl-match-day b {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-match-day small,
+.tl-match-planned small,
+.tl-match-done small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.tl-match-planned b {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A status is a state, not a label: the day carries a rail of its colour, and
+   the whole row answers with the faintest wash of the same hue. */
+.tl-match-row {
+  border-left: 3px solid transparent;
+  padding-left: 13px;
+}
+
+.tl-match-row.is-completed {
+  border-left-color: var(--success-text);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--success-text) 6%, transparent), transparent 34%);
+}
+
+.tl-match-row.is-partial,
+.tl-match-row.is-rescheduled {
+  border-left-color: var(--warning-text);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--warning-text) 6%, transparent), transparent 34%);
+}
+
+.tl-match-row.is-missed {
+  border-left-color: var(--error-text);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--error-text) 6%, transparent), transparent 34%);
+}
+
+.tl-match-row.is-upcoming {
+  border-left-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 6%, transparent), transparent 34%);
+}
+
+.tl-activity-row {
+  grid-template-columns: minmax(0, 1fr) 64px 70px 52px 34px;
+}
+
+.tl-recent .tl-index-head,
+.tl-recent .tl-row {
+  padding-left: 20px;
+}
+
+/* --------------------------------------------------------- Quiet dropdowns */
+
+.training-library-view .tl-quiet-select {
+  min-width: 0;
+}
+
+.training-library-view .tl-quiet-select .app-select-trigger {
+  min-height: 28px;
+  padding: 0 6px 0 9px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.training-library-view .tl-quiet-select.is-wide {
+  max-width: 100%;
+}
+
+/*
+ * The activity picker doubles as the value it edits, so it is set as text with
+ * the chevron tucked against it rather than a field spanning the whole cell.
+ */
+.training-library-view .tl-quiet-select.is-wide .app-select-trigger {
+  width: auto;
+  max-width: 100%;
+  justify-content: flex-start;
+  gap: 3px;
+  padding: 0 2px 0 0;
+  border-color: transparent;
+  background: none;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.training-library-view .tl-quiet-select.is-wide .app-select-value {
+  flex: 0 1 auto;
+}
+
+.training-library-view .tl-quiet-select.is-wide .app-select-icon {
+  color: var(--text-muted);
+}
+
+.training-library-view .tl-quiet-select.is-wide .app-select-trigger:hover,
+.training-library-view .tl-quiet-select.is-wide .app-select-trigger[aria-expanded="true"] {
+  padding: 0 4px 0 7px;
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+}
+
+/* --------------------------------------------------- Empty, gate, and dialog */
+
+.tl-empty {
+  position: relative;
+  padding: 58px 20px 62px;
+  text-align: center;
+}
+
+/* A breath of accent light behind the words keeps the void from feeling dead. */
+.tl-empty::before {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 46% 60% at 50% 42%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%);
+  content: "";
+  pointer-events: none;
+}
+
+.tl-empty h3 {
+  position: relative;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.tl-empty p {
+  position: relative;
+  margin: 7px auto 0;
+  max-width: 38ch;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.training-library-gate {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 60px 30px;
+  color: var(--text-primary);
+  background:
+    radial-gradient(circle at 50% 22%, var(--accent-soft), transparent 44%),
+    radial-gradient(900px 420px at 82% -10%, var(--bg-ambient-teal), transparent 55%),
+    var(--tl-ground, var(--bg-base));
+  text-align: center;
+}
+
+/* The icon floats inside a glass ring — the one piece of theatre on the gate. */
+.training-library-gate svg {
+  width: 34px;
+  height: 34px;
+  padding: 18px;
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  color: var(--accent-strong);
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.12), transparent 52%),
+    var(--glass-bg);
+  box-shadow:
+    var(--glass-inset),
+    0 18px 42px color-mix(in srgb, var(--accent) 20%, transparent);
+  box-sizing: content-box;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .training-library-gate svg {
+    animation: tl-gate-float 5s ease-in-out infinite;
+  }
+
+  .training-library-gate h1,
+  .training-library-gate p,
+  .training-library-gate .primary-button {
+    animation: tl-rise 480ms cubic-bezier(0.2, 0.8, 0.25, 1) backwards;
+  }
+
+  .training-library-gate h1 { animation-delay: 60ms; }
+  .training-library-gate p { animation-delay: 130ms; }
+  .training-library-gate .primary-button { animation-delay: 200ms; }
+}
+
+@keyframes tl-gate-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+@keyframes tl-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.training-library-gate h1 {
+  margin: 6px 0 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  background: linear-gradient(
+    100deg,
+    var(--text-primary) 40%,
+    color-mix(in srgb, var(--accent-strong) 70%, var(--text-primary)) 90%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.training-library-gate p {
+  margin: 0 0 10px;
+  max-width: 44ch;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* The gate sits outside the view, so it styles its own call to action. */
+.training-library-gate .primary-button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: #fff;
+  background: var(--accent-gradient);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 8px 24px color-mix(in srgb, var(--accent) 34%, transparent);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 180ms var(--tl-ease-out, cubic-bezier(0.2, 0.8, 0.25, 1)),
+    box-shadow 180ms ease,
+    filter 180ms ease;
+}
+
+.training-library-gate .primary-button:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    0 12px 32px color-mix(in srgb, var(--accent) 42%, transparent);
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+}
+
+.tl-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.tl-skeleton span {
+  position: relative;
+  height: 64px;
+  background: var(--glass-bg);
+  overflow: hidden;
+}
+
+/* A light sweep travels each row; staggered, they read as one wave. */
+.tl-skeleton span::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 22%,
+    var(--tl-shimmer, rgba(255, 255, 255, 0.09)) 50%,
+    transparent 78%
+  );
+  content: "";
+  transform: translateX(-100%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tl-skeleton span::after {
+    animation: tl-shimmer 1.5s ease-in-out infinite;
+    animation-delay: calc(var(--tl-row-index, 0) * 90ms);
+  }
+}
+
+@keyframes tl-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+:root[data-theme="paper"] .tl-skeleton {
+  --tl-shimmer: rgba(38, 34, 28, 0.07);
+}
+
+.tl-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: grid;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg-base) 76%, transparent);
+  backdrop-filter: blur(8px);
+  place-items: center;
+  animation: tl-fade-in 200ms ease both;
+}
+
+@keyframes tl-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.tl-dialog {
+  width: min(460px, 100%);
+  padding: 22px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  background:
+    radial-gradient(ellipse 110% 60% at 20% 0%, var(--bg-ambient-green), transparent 60%),
+    var(--surface);
+  box-shadow: var(--shadow-elevated), var(--glass-inset);
+  animation: tl-dialog-in 280ms var(--tl-ease-out, cubic-bezier(0.2, 0.8, 0.25, 1)) both;
+}
+
+@keyframes tl-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tl-dialog h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.tl-dialog p {
+  margin: 9px 0 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.tl-dialog ul {
+  max-height: 200px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.tl-dialog li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 0;
+  border-top: 1px solid var(--tl-rule);
+  font-size: 13px;
+}
+
+.tl-dialog li span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.tl-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.tl-dialog .primary-button.danger {
+  color: #fff;
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 6px 18px rgba(239, 68, 68, 0.32);
+}
+
+.tl-dialog .primary-button.danger:hover:not(:disabled) {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    0 10px 26px rgba(239, 68, 68, 0.4);
+}
+
+/* ----------------------------------------------- Plan editor and comparison */
+
+.plan-editor,
+.plan-compare {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  background:
+    radial-gradient(ellipse 70% 40% at 50% 0%, var(--bg-ambient-green), transparent 55%),
+    color-mix(in srgb, var(--tl-ground, var(--bg-base)) 94%, var(--surface));
+  box-shadow: var(--shadow-elevated), var(--glass-inset);
+  overflow: hidden;
+  animation: tl-sheet-in 340ms var(--tl-ease-out, cubic-bezier(0.2, 0.8, 0.25, 1)) both;
+}
+
+.plan-editor {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+}
+
+.plan-compare {
+  position: fixed;
+  inset: 16px;
+  z-index: 90;
+}
+
+@keyframes tl-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.plan-compare::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in srgb, var(--bg-base) 72%, transparent);
+  backdrop-filter: blur(10px);
+  content: "";
+  animation: tl-fade-in 240ms ease both;
+}
+
+.plan-editor-header,
+.plan-compare > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--tl-rule);
+}
+
+.plan-editor-header .tl-eyebrow,
+.plan-compare > header .tl-eyebrow {
+  margin-bottom: 4px;
+}
+
+.plan-editor-name {
+  min-width: 300px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: var(--text-primary);
+  background: none;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  outline: 0;
+  transition: border-color 160ms ease;
+}
+
+.plan-editor-name:hover {
+  border-bottom-color: var(--tl-rule);
+}
+
+.plan-editor-name:focus-visible {
+  border-bottom-color: var(--accent);
+}
+
+.plan-editor-header > div > p:last-of-type {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.plan-editor-source-warning,
+.plan-editor-dirty {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  font-size: 10.5px;
+}
+
+.plan-editor-dirty {
+  margin-right: 6px;
+}
+
+.plan-editor-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plan-editor-layout {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: 268px minmax(0, 1fr) 236px;
+  flex: 1;
+}
+
+.plan-editor-sidebar,
+.plan-editor-main,
+.plan-editor-preview {
+  min-width: 0;
+  padding: 18px;
+  overflow-y: auto;
+  scrollbar-color: var(--glass-border) transparent;
+}
+
+.plan-editor-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-right: 1px solid var(--tl-rule);
+}
+
+.plan-editor-sidebar > section {
+  padding-bottom: 20px;
+}
+
+.plan-editor-sidebar > section + section {
+  padding-top: 20px;
+  border-top: 1px solid var(--tl-rule-soft);
+}
+
+.plan-editor-sidebar > section:last-child {
+  padding-bottom: 0;
+}
+
+.plan-editor-preview {
+  border-left: 1px solid var(--tl-rule);
+  background: color-mix(in srgb, var(--surface) 34%, transparent);
+}
+
+/* The plan's load silhouette, at reading size, before the numbers. */
+.plan-editor-preview .tl-ridge {
+  height: 42px;
+  margin-top: 14px;
+  gap: 2px;
+}
+
+.plan-editor-preview .tl-ridge-bar {
+  flex-basis: 9px;
+  border-radius: 2px;
+}
+
+.plan-editor-preview-note {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.plan-editor-sidebar h3,
+.plan-editor-preview h3,
+.plan-holding-area h3,
+.plan-week h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+.plan-editor-sidebar label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 12px;
+}
+
+.plan-editor-sidebar label > span:first-child {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.plan-editor-sidebar :is(input, select, textarea) {
+  min-height: 32px;
+  padding: 6px 9px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--glass-bg);
+  font-size: 12.5px;
+}
+
+.plan-editor-sidebar textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+
+.plan-editor-date,
+.plan-editor-duration {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-muted);
+}
+
+.plan-editor-date input,
+.plan-editor-duration input {
+  min-width: 0;
+  flex: 1;
+}
+
+.plan-editor-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.plan-editor-section-title > div {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.plan-editor-section-title > div > span {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-editor-section-title .icon-button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+}
+
+.plan-editor-section-title .icon-button:hover:not(:disabled),
+.plan-editor-section-title .icon-button.is-active {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--glass-border));
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+.plan-editor-new-workout {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--tl-rule);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+}
+
+.plan-editor-new-workout .primary-button {
+  margin-top: 10px;
+}
+
+.plan-editor-library-search {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: var(--glass-bg);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
+}
+
+.plan-editor-sidebar .plan-editor-library-search input {
+  min-width: 0;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--text-primary);
+  background: transparent;
+  font-size: 12.5px;
+  line-height: 1.4;
+  outline: 0;
+}
+
+.plan-editor-library-search input::placeholder {
+  color: color-mix(in srgb, var(--text-muted) 88%, transparent);
+}
+
+.plan-editor-library-search > button {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.plan-editor-library-search > button:hover {
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+.plan-editor-library-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.plan-editor-library-list {
+  display: flex;
+  max-height: 240px;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  padding: 4px;
+  border: 1px solid var(--tl-rule-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 24%, transparent);
+  overflow-y: auto;
+  scrollbar-color: var(--glass-border) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.plan-editor-library-list button {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color 150ms ease,
+    background 150ms ease,
+    transform 120ms ease;
+}
+
+.plan-editor-library-list button:hover {
+  color: var(--text-primary);
+  background: var(--tl-row-hover);
+}
+
+.plan-editor-library-list button:active {
+  transform: scale(0.99);
+}
+
+/* The row answers in the sport's own colour; the plus wakes on hover. */
+.plan-editor-library-list button[data-sport]::before {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--tl-sport, var(--accent));
+  content: "";
+}
+
+.plan-editor-library-list button[data-sport="run"] { --tl-sport: var(--sport-run); }
+.plan-editor-library-list button[data-sport="bike"] { --tl-sport: var(--sport-bike); }
+.plan-editor-library-list button[data-sport="strength"] { --tl-sport: var(--sport-strength); }
+.plan-editor-library-list button[data-sport="other"] { --tl-sport: var(--sport-other); }
+
+.plan-editor-library-list button > .plan-editor-library-add {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  opacity: 0.72;
+  transition:
+    color 150ms ease,
+    background 150ms ease,
+    border-color 150ms ease,
+    opacity 150ms ease;
+}
+
+.plan-editor-library-list button:hover > .plan-editor-library-add {
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  opacity: 1;
+}
+
+.plan-editor-library-list span {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.plan-editor-library-list strong {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-editor-library-list small {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.plan-editor-library-list > .plan-editor-empty-inline {
+  margin: 0;
+  padding: 18px 12px;
+  text-align: center;
+}
+
+.plan-editor-phases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.plan-editor-phases > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  background: var(--accent-soft);
+  font-size: 11.5px;
+}
+
+.plan-editor-phases small {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-editor-phases > span button {
+  display: inline-flex;
+  border: 0;
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+}
+
+.plan-editor-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.plan-holding-area {
+  padding: 14px;
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.plan-holding-area.is-drop-target {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.plan-holding-area p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.plan-holding-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.plan-editor-empty-inline {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.plan-week-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plan-week {
+  border: 1px solid var(--tl-rule);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 30%),
+    color-mix(in srgb, var(--surface) 30%, transparent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14), 0 8px 22px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.plan-week > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--tl-rule);
+}
+
+.plan-week > header p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Week housekeeping stays out of the way until the week is reached. */
+.plan-week > header > div:last-child {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.plan-week:hover > header > div:last-child,
+.plan-week > header > div:last-child:focus-within {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .plan-week > header > div:last-child {
+    opacity: 1;
+  }
+}
+
+.plan-week-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.plan-day {
+  min-height: 96px;
+  padding: 9px;
+  border-right: 1px solid var(--tl-rule-soft);
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+/* A dragged card lights the day it is over — the clearest answer to "where
+   will this land?" */
+.plan-day.is-drop-target {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.plan-day:last-child {
+  border-right: 0;
+}
+
+.plan-day-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.plan-day-heading span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.plan-day-heading strong {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.plan-day-heading small {
+  color: var(--text-muted);
+  font-size: 9.5px;
+}
+
+.plan-day-heading button {
+  display: inline-flex;
+  border: 0;
+  color: var(--text-muted);
+  background: none;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 140ms ease;
+}
+
+.plan-day:hover .plan-day-heading button,
+.plan-day-heading button:focus-visible {
+  opacity: 1;
+}
+
+.plan-day-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* An empty day draws its well so it reads as a place, not a gap. */
+.plan-day-entries:empty {
+  min-height: 34px;
+  border: 1px dashed var(--tl-rule-soft);
+  border-radius: var(--radius-sm);
+}
+
+.plan-day.is-drop-target .plan-day-entries:empty {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.plan-entry-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 7px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--accent) 16%, transparent), color-mix(in srgb, var(--accent) 8%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent) 16%, transparent);
+  cursor: grab;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms var(--tl-ease-out);
+}
+
+.plan-entry-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 48%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent) 18%, transparent),
+    0 4px 12px color-mix(in srgb, var(--accent) 14%, transparent);
+  transform: translateY(-1px);
+}
+
+.plan-entry-card.is-rest,
+.plan-entry-card.is-note {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  box-shadow: none;
+  cursor: default;
+}
+
+.plan-entry-card.is-rest:hover,
+.plan-entry-card.is-note:hover {
+  transform: none;
+}
+
+/* Workout cards carry the sport's colour as a small dot; rest and notes
+   stay quiet. */
+.plan-entry-card[data-sport]::before {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--tl-sport, var(--accent));
+  content: "";
+}
+
+.plan-entry-card[data-sport="run"] { --tl-sport: var(--sport-run); }
+.plan-entry-card[data-sport="bike"] { --tl-sport: var(--sport-bike); }
+.plan-entry-card[data-sport="strength"] { --tl-sport: var(--sport-strength); }
+.plan-entry-card[data-sport="other"] { --tl-sport: var(--sport-other); }
+
+.plan-entry-card > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.plan-entry-card strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-entry-card small {
+  color: var(--text-muted);
+  font-size: 9.5px;
+}
+
+.plan-entry-card button {
+  display: inline-flex;
+  flex: none;
+  border: 0;
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+}
+
+.plan-add-week {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 12px;
+  border: 1px dashed color-mix(in srgb, var(--text-muted) 38%, transparent);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  background: none;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    color 170ms ease,
+    border-color 170ms ease,
+    background 170ms ease,
+    box-shadow 170ms ease;
+}
+
+.plan-add-week:hover {
+  border-color: color-mix(in srgb, var(--accent) 56%, transparent);
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.plan-editor-preview dl,
+.plan-compare-grid dl {
+  margin: 12px 0 0;
+}
+
+.plan-editor-preview dl div,
+.plan-compare-grid dl div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--tl-rule-soft);
+}
+
+.plan-editor-preview dt,
+.plan-compare-grid dt {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.plan-editor-preview dd,
+.plan-compare-grid dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-editor-limitation,
+.plan-editor-validation p,
+.plan-editor-valid {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-sm);
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  font-size: 11.5px;
+}
+
+.plan-editor-limitation p {
+  margin: 0;
+}
+
+.plan-editor-validation p.error {
+  color: var(--error-text);
+  border-color: var(--error-border);
+  background: var(--error-bg);
+}
+
+.plan-editor-valid {
+  color: var(--success-text);
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+
+/* ------------------------------------------------------------ Plan compare */
+
+.plan-compare {
+  overflow-y: auto;
+}
+
+.plan-compare > header h2 {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.plan-compare > header p:last-of-type {
+  margin: 6px 0 0;
+  max-width: 60ch;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.plan-compare-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 16px 20px;
+}
+
+.plan-compare-picker button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  background: none;
+  cursor: pointer;
+  transition:
+    color 170ms ease,
+    border-color 170ms ease,
+    background 170ms ease,
+    box-shadow 170ms ease,
+    transform 170ms var(--tl-ease-out, cubic-bezier(0.2, 0.8, 0.25, 1));
+}
+
+.plan-compare-picker button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--glass-bg);
+  transform: translateY(-1px);
+}
+
+.plan-compare-picker button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.plan-compare-picker button.is-selected {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 44%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 15%, transparent), color-mix(in srgb, var(--accent) 8%, transparent));
+  box-shadow: 0 3px 12px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.plan-compare-picker button span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  text-align: left;
+}
+
+.plan-compare-picker strong {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.plan-compare-picker small {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.plan-compare-grid,
+.plan-compare-chart,
+.plan-compare-insights {
+  margin: 0 20px 16px;
+}
+
+.plan-compare-grid {
+  display: grid;
+  gap: 1px;
+  border: 1px solid var(--tl-rule);
+  border-radius: var(--radius-md);
+  background: var(--tl-rule);
+  overflow: hidden;
+}
+
+.plan-compare-grid > article {
+  min-width: 0;
+  padding: 16px;
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+}
+
+.plan-compare-grid h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.plan-compare-sports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 12px;
+}
+
+.plan-compare-sports span {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  background: var(--glass-bg);
+  font-size: 10.5px;
+}
+
+.plan-compare-longest {
+  display: flex;
+  flex-direction: column;
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--tl-rule);
+}
+
+.plan-compare-longest small,
+.plan-compare-longest span {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.plan-compare-chart,
+.plan-compare-insights {
+  padding: 16px;
+  border: 1px solid var(--tl-rule);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 46%, transparent);
+}
+
+.plan-compare-chart h3,
+.plan-compare-insights h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.plan-compare-chart p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.plan-compare-insights p {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.plan-compare-insights small {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+/* ------------------------------------------------------------------- Motion */
+
+@media (prefers-reduced-motion: no-preference) {
+  /*
+   * The view arrives in three beats — masthead, section control, then the
+   * working surface — the same cadence the dashboard blocks enter with.
+   */
+  .tl-masthead {
+    animation: tl-view-enter 460ms cubic-bezier(0.2, 0.8, 0.25, 1) backwards;
+  }
+
+  .tl-sections {
+    animation: tl-view-enter 460ms cubic-bezier(0.2, 0.8, 0.25, 1) 70ms backwards;
+  }
+
+  .tl-notice {
+    animation: tl-view-enter 460ms cubic-bezier(0.2, 0.8, 0.25, 1) 110ms backwards;
+  }
+
+  .training-library-view > .tl-panel,
+  .training-library-view > .tl-template-layout {
+    animation: tl-view-enter 520ms cubic-bezier(0.2, 0.8, 0.25, 1) 140ms backwards;
+  }
+
+  /* Adherence is a stack of panels; they cascade instead of landing together. */
+  .tl-adherence > .tl-panel:nth-child(1) {
+    animation: tl-view-enter 520ms cubic-bezier(0.2, 0.8, 0.25, 1) 140ms backwards;
+  }
+
+  .tl-adherence > .tl-panel:nth-child(2) {
+    animation: tl-view-enter 520ms cubic-bezier(0.2, 0.8, 0.25, 1) 210ms backwards;
+  }
+
+  .tl-adherence > .tl-panel:nth-child(3) {
+    animation: tl-view-enter 520ms cubic-bezier(0.2, 0.8, 0.25, 1) 280ms backwards;
+  }
+
+  /* One orchestrated moment: rows settle in, then the ridges draw themselves. */
+  :is(.tl-index ul, .tl-grid) > li {
+    animation: tl-settle 300ms cubic-bezier(0.2, 0.8, 0.25, 1) backwards;
+  }
+
+  :is(.tl-index ul, .tl-grid) > li:nth-child(1) { animation-delay: 170ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(2) { animation-delay: 196ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(3) { animation-delay: 222ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(4) { animation-delay: 248ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(5) { animation-delay: 274ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(6) { animation-delay: 300ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(7) { animation-delay: 326ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(8) { animation-delay: 352ms; }
+  :is(.tl-index ul, .tl-grid) > li:nth-child(n + 9) { animation-delay: 378ms; }
+
+  .tl-ridge-bar,
+  .tl-bullet b,
+  .tl-bullet i {
+    animation: tl-grow 460ms cubic-bezier(0.2, 0.85, 0.3, 1) backwards;
+    animation-delay: calc(280ms + var(--tl-bar-index) * 16ms);
+  }
+
+  /* The workout reader changes content without a route change; ease the swap. */
+  .tl-reader-scroll > * {
+    animation: tl-settle 320ms cubic-bezier(0.2, 0.8, 0.25, 1) backwards;
+  }
+
+  .tl-reader-scroll > *:nth-child(2) { animation-delay: 45ms; }
+  .tl-reader-scroll > *:nth-child(3) { animation-delay: 90ms; }
+  .tl-reader-scroll > *:nth-child(4) { animation-delay: 135ms; }
+  .tl-reader-scroll > *:nth-child(5) { animation-delay: 180ms; }
+  .tl-reader-scroll > *:nth-child(n + 6) { animation-delay: 225ms; }
+
+  /* The dock rises once to establish it as the reader's persistent command area. */
+  .tl-reader-dock {
+    animation: tl-reader-dock-in 420ms cubic-bezier(0.16, 1, 0.3, 1) 190ms backwards;
+  }
+}
+
+@keyframes tl-view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes tl-settle {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes tl-grow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes tl-reader-dock-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .training-library-view,
+  .training-library-view *,
+  .training-library-gate,
+  .training-library-gate *,
+  .plan-editor,
+  .plan-editor *,
+  .plan-compare,
+  .plan-compare * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --------------------------------------------------------------- Responsive */
+
+@media (max-width: 1500px) {
+  .tl-split {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+}
+
+@media (max-width: 1320px) {
+  .tl-plan-row {
+    grid-template-columns:
+      16px minmax(0, 1fr)
+      var(--tl-column) var(--tl-column) var(--tl-column)
+      104px 84px;
+  }
+
+  /* Updated is the first column to go: the ridge says more in the same space. */
+  .tl-plan-row > :nth-child(6) {
+    display: none;
+  }
+
+  .tl-template-layout {
+    grid-template-columns: minmax(0, 1fr) 250px;
+  }
+
+  .plan-editor-layout {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  .plan-editor-preview {
+    display: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .tl-split,
+  .tl-template-layout {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-color: var(--glass-border) transparent;
+    scrollbar-gutter: stable;
+  }
+
+  .tl-catalog {
+    display: block;
+    min-height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--tl-rule);
+  }
+
+  .tl-reader,
+  .tl-template-layout > .tl-panel {
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .tl-reader-scroll {
+    min-height: auto;
+    flex: none;
+    overflow: visible;
+  }
+
+  .tl-catalog > :is(.tl-grid, .tl-index),
+  .tl-template-layout > .tl-panel:not(.tl-collections) > :is(.tl-grid, .tl-index),
+  .tl-collections ul {
+    min-height: auto;
+    flex: none;
+    overflow: visible;
+  }
+
+  .tl-match-row {
+    grid-template-columns: 84px minmax(0, 1fr) minmax(0, 1fr) 56px;
+  }
+
+  .tl-match-row > .tl-row-actions {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .training-library-view {
+    padding: 22px 16px 16px;
+  }
+
+  .tl-masthead {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .tl-sections {
+    display: flex;
+    width: 100%;
+  }
+
+  .tl-filters {
+    flex-wrap: wrap;
+  }
+
+  .tl-search {
+    flex: 1 1 100%;
+  }
+
+  .tl-filters-tail {
+    margin-left: 0;
+  }
+
+  .tl-plan-row {
+    grid-template-columns: 16px minmax(0, 1fr) 46px 78px 84px;
+  }
+
+  .tl-plan-row > :nth-child(4),
+  .tl-plan-row > :nth-child(5),
+  .tl-plan-row > :nth-child(6) {
+    display: none;
+  }
+
+  .tl-workout-row {
+    grid-template-columns: 16px minmax(0, 1fr) 78px 44px;
+  }
+
+  .tl-workout-row > :nth-child(5) {
+    display: none;
+  }
+
+  .tl-activity-row {
+    grid-template-columns: minmax(0, 1fr) 60px 52px 34px;
+  }
+
+  .tl-activity-row > :nth-child(3) {
+    display: none;
+  }
+
+  .tl-tally {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tl-reader-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* On two rows the third cell starts fresh, so its divider would float. */
+  .tl-reader-metrics > div:nth-child(3) {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .plan-compare {
+    inset: 0;
+    border-radius: 0;
+  }
+
+  .plan-editor-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .plan-editor-layout {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .plan-editor-sidebar,
+  .plan-editor-main {
+    overflow: visible;
+  }
+
+  .plan-editor-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--tl-rule);
+  }
+
+  .plan-week-days {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .plan-compare-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* Guided Coach plan generation and owned-calendar previews share the library's
+   dense, review-first modal language. */
+.plan-generator-backdrop,
+.plan-calendar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  padding: 20px;
+  background: color-mix(in srgb, var(--bg-base) 78%, transparent);
+  backdrop-filter: blur(10px);
+  place-items: center;
+  animation: tl-fade-in 180ms ease both;
+}
+
+.plan-generator,
+.plan-calendar-dialog {
+  display: flex;
+  width: min(1080px, 100%);
+  max-height: calc(100dvh - 40px);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  background:
+    radial-gradient(760px 240px at 12% 0%, var(--bg-ambient-green), transparent 62%),
+    var(--tl-reader-bg, var(--bg-base));
+  box-shadow: var(--shadow-elevated), var(--glass-inset);
+  animation: tl-dialog-in 240ms var(--tl-ease-out) both;
+}
+
+.plan-calendar-dialog {
+  width: min(680px, 100%);
+}
+
+.plan-generator > header,
+.plan-calendar-dialog > header {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--tl-rule);
+}
+
+.plan-generator > header h2,
+.plan-calendar-dialog > header h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.plan-generator-title-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 9px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  place-items: center;
+}
+
+.plan-generator > header p:last-child,
+.plan-calendar-dialog > header p:last-child {
+  max-width: 680px;
+  margin: 7px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.plan-generator-body {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) 286px;
+  overflow: hidden;
+}
+
+.plan-generator-form {
+  min-width: 0;
+  padding: 22px 24px 28px;
+  overflow-y: auto;
+}
+
+.plan-generator-form label,
+.plan-calendar-start label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.plan-generator-form label > span:first-child,
+.plan-calendar-start label > span:first-child,
+.plan-generator-form legend {
+  color: var(--text-secondary);
+  letter-spacing: 0.025em;
+}
+
+.plan-generator-form :is(input, select, textarea),
+.plan-calendar-start input {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--glass-bg);
+  outline: none;
+}
+
+.plan-generator-form textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.plan-generator-goal input {
+  min-height: 43px;
+  font-size: 14px;
+}
+
+.plan-generator-form fieldset {
+  margin: 20px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.plan-generator-form legend {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.plan-generator-sports,
+.plan-generator-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.plan-generator-sports button,
+.plan-generator-days button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--tl-rule);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: var(--glass-bg);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+
+.plan-generator-sports button svg { flex: none; opacity: 0.72; }
+
+.plan-generator-sports button:hover:not(:disabled):not(.is-selected),
+.plan-generator-days button:hover:not(:disabled):not(.is-selected) {
+  border-color: var(--glass-border);
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+.plan-generator-sports button:active:not(:disabled),
+.plan-generator-days button:active:not(:disabled) { transform: translateY(0.5px); }
+
+.plan-generator-form button:disabled { cursor: default; opacity: 0.5; }
+
+.plan-generator-sports button:focus-visible,
+.plan-generator-days button:focus-visible,
+.plan-generator-segmented button:focus-visible,
+.plan-generator-stepper button:focus-visible,
+.plan-generator-examples button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.plan-generator-inline-error {
+  margin: 7px 0 0;
+  color: var(--warning-text);
+  font-size: 10.5px;
+}
+
+.plan-generator-sports button.is-selected {
+  border-color: color-mix(in srgb, var(--sport-accent, var(--accent)) 52%, transparent);
+  color: var(--sport-accent, var(--accent));
+  background: color-mix(in srgb, var(--sport-accent, var(--accent)) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sport-accent, var(--accent)) 18%, transparent);
+  font-weight: 600;
+}
+
+.plan-generator-sports button.is-selected svg { opacity: 1; }
+
+.plan-generator-days button.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-weight: 600;
+}
+
+.plan-generator-days button {
+  min-width: 44px;
+  justify-content: center;
+  padding: 0;
+}
+
+.plan-generator-grid {
+  display: grid;
+  margin-top: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.plan-generator-grid.is-bottom {
+  grid-template-columns: 180px minmax(0, 1fr);
+}
+
+.plan-generator-date,
+.plan-generator-duration {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+}
+
+.plan-generator-date {
+  padding-left: 9px;
+}
+
+.plan-generator-date input,
+.plan-generator-duration input {
+  border: 0;
+  background: transparent;
+}
+
+.plan-generator-duration em {
+  padding-right: 9px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.plan-generator-form small {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.plan-generator-examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.plan-generator-examples > span {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.plan-generator-examples button {
+  padding: 4px 10px;
+  border: 1px dashed var(--tl-rule);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: transparent;
+  font-size: 10.5px;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.plan-generator-examples button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.plan-generator-segmented {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.plan-generator-segmented button {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--tl-rule);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: var(--glass-bg);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.plan-generator-segmented button strong { color: inherit; font-size: 11px; font-weight: 600; }
+.plan-generator-segmented button small { font-size: 9px; color: var(--text-muted); line-height: 1.3; }
+
+.plan-generator-segmented button:hover:not(:disabled):not(.is-selected) {
+  border-color: var(--glass-border);
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+.plan-generator-segmented button.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.plan-generator-segmented button.is-selected small { color: color-mix(in srgb, var(--accent) 68%, var(--text-muted)); }
+
+.plan-generator-stepper {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+}
+
+.plan-generator-stepper button {
+  display: grid;
+  width: 34px;
+  flex: none;
+  border: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  place-items: center;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.plan-generator-stepper button:first-child { border-right: 1px solid var(--tl-rule-soft); }
+.plan-generator-stepper button:last-child { border-left: 1px solid var(--tl-rule-soft); }
+
+.plan-generator-stepper button:hover:not(:disabled) {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.plan-generator-stepper button:disabled { cursor: default; opacity: 0.4; }
+
+.plan-generator-stepper strong {
+  display: grid;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.plan-generator-status {
+  padding: 22px;
+  border-left: 1px solid var(--tl-rule);
+  background: color-mix(in srgb, var(--surface) 68%, transparent);
+  overflow-y: auto;
+}
+
+.plan-generator-provider {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 8px;
+  padding: 10px 11px;
+  border: 1px solid var(--tl-rule);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: var(--glass-bg);
+}
+
+.plan-generator-provider-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 13%, transparent);
+  place-items: center;
+}
+
+.plan-generator-aside-eyebrow { margin-top: 20px; }
+
+.plan-generator-snapshot {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 8px 0 0;
+  padding: 11px 12px;
+  border: 1px solid var(--tl-rule);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  list-style: none;
+}
+
+.plan-generator-snapshot li {
+  display: flex;
+  min-height: 18px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.plan-generator-snapshot li > span:first-child { flex: none; color: var(--text-muted); font-size: 10px; }
+
+.plan-generator-snapshot strong {
+  overflow: hidden;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+  text-overflow: ellipsis;
+}
+
+.plan-generator-snapshot-sports { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+
+.plan-generator-snapshot-sport {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  color: var(--sport-accent, var(--accent));
+  background: color-mix(in srgb, var(--sport-accent, var(--accent)) 13%, transparent);
+  place-items: center;
+}
+
+.plan-generator-provider.is-ready { color: var(--accent); }
+.plan-generator-provider.is-blocked { color: var(--warning-text); }
+.plan-generator-provider span { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.plan-generator-provider strong { color: var(--text-primary); font-size: 11.5px; }
+.plan-generator-provider small { color: var(--text-secondary); font-size: 10px; line-height: 1.4; }
+.plan-generator-status > .ghost-button { width: 100%; margin-top: 9px; }
+
+.plan-generator-progress,
+.plan-generator-failure,
+.plan-generator-privacy {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--tl-rule);
+}
+
+.plan-generator-progress {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  text-align: center;
+}
+
+.plan-generator-pulse {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 50%;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  place-items: center;
+  animation: plan-generator-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes plan-generator-pulse {
+  50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 0%, transparent); transform: scale(1.04); }
+}
+
+.plan-generator-stages {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 7px;
+  margin: 14px 0 0;
+  padding: 13px 2px 0;
+  border-top: 1px solid var(--tl-rule-soft);
+  list-style: none;
+  text-align: left;
+}
+
+.plan-generator-stages li { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 10.5px; }
+.plan-generator-stages li.is-active { color: var(--text-primary); font-weight: 600; }
+.plan-generator-stages li.is-done { color: var(--accent); }
+
+.plan-generator-stage-dot {
+  display: grid;
+  width: 15px;
+  height: 15px;
+  flex: none;
+  border: 1px solid var(--tl-rule);
+  border-radius: 50%;
+  place-items: center;
+}
+
+.plan-generator-stages li.is-active .plan-generator-stage-dot { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+
+.plan-generator-stages li.is-active .plan-generator-stage-dot::after {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  content: "";
+  animation: plan-generator-stage-blink 1.1s ease-in-out infinite;
+}
+
+.plan-generator-stages li.is-done .plan-generator-stage-dot {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+@keyframes plan-generator-stage-blink {
+  50% { opacity: 0.35; }
+}
+
+.plan-generator-progress strong,
+.plan-generator-failure strong,
+.plan-generator-privacy strong { font-size: 12px; }
+.plan-generator-progress p,
+.plan-generator-failure p,
+.plan-generator-privacy p { margin: 5px 0 0; color: var(--text-secondary); font-size: 10.5px; line-height: 1.5; }
+.plan-generator-progress .ghost-button { margin-top: 12px; }
+.plan-generator-failure > svg { color: var(--warning-text); }
+.plan-generator-failure > div { display: flex; flex-direction: column; gap: 7px; margin-top: 11px; }
+
+.plan-generator > footer,
+.plan-calendar-dialog > footer {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 13px 24px;
+  border-top: 1px solid var(--tl-rule);
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+}
+
+.plan-generator-footer-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 auto 0 0;
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.plan-generator-footer-hint svg { flex: none; color: var(--accent); }
+
+.plan-calendar-start,
+.plan-calendar-loading,
+.plan-calendar-offline,
+.plan-calendar-error {
+  margin: 24px;
+}
+
+.plan-calendar-start {
+  display: grid;
+  align-items: end;
+  grid-template-columns: 190px minmax(0, 1fr) auto;
+  gap: 15px;
+}
+
+.plan-calendar-start p,
+.plan-calendar-loading p,
+.plan-calendar-offline p,
+.plan-calendar-error p,
+.plan-calendar-safety {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.plan-calendar-loading {
+  display: flex;
+  min-height: 170px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--accent);
+  text-align: center;
+}
+
+.plan-calendar-loading strong { color: var(--text-primary); font-size: 13px; }
+.plan-calendar-offline,
+.plan-calendar-error { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border: 1px solid var(--warning-border); border-radius: var(--radius-sm); color: var(--warning-text); background: var(--warning-bg); }
+.plan-calendar-offline strong,
+.plan-calendar-error strong { color: var(--text-primary); font-size: 12px; }
+.plan-calendar-error .ghost-button { flex: none; margin-left: auto; }
+
+.plan-calendar-preview {
+  min-height: 0;
+  padding: 22px 24px;
+  overflow-y: auto;
+}
+
+.plan-calendar-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-block: 1px solid var(--tl-rule);
+}
+
+.plan-calendar-summary > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border-left: 1px solid var(--tl-rule);
+}
+
+.plan-calendar-summary > span:first-child { border-left: 0; }
+.plan-calendar-summary strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.plan-calendar-summary small { color: var(--text-muted); font-size: 9.5px; }
+.plan-calendar-summary .has-conflict strong { color: var(--warning-text); }
+
+.plan-calendar-blockers {
+  margin-top: 15px;
+  padding: 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+}
+
+.plan-calendar-blockers strong { display: flex; align-items: center; gap: 7px; color: var(--warning-text); font-size: 11px; }
+.plan-calendar-blockers p { margin: 6px 0 0; color: var(--text-secondary); font-size: 10.5px; }
+.plan-calendar-dates { margin-top: 16px; border-top: 1px solid var(--tl-rule); }
+.plan-calendar-dates article { display: grid; align-items: start; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--tl-rule-soft); }
+.plan-calendar-dates time { color: var(--text-secondary); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.plan-calendar-dates article > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.plan-calendar-dates strong { overflow: hidden; font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.plan-calendar-dates small { display: flex; align-items: center; gap: 4px; color: var(--text-muted); font-size: 9.5px; }
+.plan-calendar-safety { margin-top: 14px; padding-left: 10px; border-left: 2px solid var(--accent); }
+
+.plan-entry-card .plan-entry-actions {
+  display: inline-flex;
+  flex: none;
+  flex-direction: row;
+  gap: 2px;
+}
+
+.plan-entry-card .plan-entry-actions button {
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 4px;
+}
+
+.plan-entry-card .plan-entry-actions button:hover { color: var(--text-primary); background: var(--glass-bg-hover); }
+.plan-editor-workout-error { position: fixed; right: 22px; bottom: 22px; z-index: 95; display: flex; align-items: center; gap: 8px; max-width: 420px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--danger, #e5484d) 36%, transparent); border-radius: var(--radius-sm); color: var(--danger, #e5484d); background: var(--surface); box-shadow: var(--shadow-elevated); font-size: 11px; }
+.plan-editor-workout-error button { display: inline-flex; margin-left: auto; border: 0; color: inherit; background: none; cursor: pointer; }
+
+@media (max-width: 840px) {
+  .plan-generator-body { display: block; overflow-y: auto; }
+  .plan-generator-form { overflow: visible; }
+  .plan-generator-status { border-top: 1px solid var(--tl-rule); border-left: 0; overflow: visible; }
+  .plan-generator-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .plan-calendar-start { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .plan-generator-backdrop,
+  .plan-calendar-backdrop { padding: 0; }
+  .plan-generator,
+  .plan-calendar-dialog { width: 100%; max-height: 100dvh; border-radius: 0; }
+  .plan-generator-grid,
+  .plan-generator-grid.is-bottom { grid-template-columns: 1fr; }
+  .plan-generator-segmented { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .plan-calendar-summary { grid-template-columns: 1fr; }
+  .plan-calendar-summary > span { border-top: 1px solid var(--tl-rule); border-left: 0; }
+  .plan-calendar-summary > span:first-child { border-top: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-generator-pulse { animation: none; }
+  .plan-generator-stages li.is-active .plan-generator-stage-dot::after { animation: none; }
+}

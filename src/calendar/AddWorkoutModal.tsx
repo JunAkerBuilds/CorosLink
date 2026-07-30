@@ -339,6 +339,7 @@ interface AddWorkoutModalProps {
   onScheduled: (message: string) => void;
   onError: (message: string | null) => void;
   onEditLibrary: (programId: string) => void;
+  libraryOnly?: boolean;
 }
 
 let builderRowId = 0;
@@ -1744,7 +1745,8 @@ export function AddWorkoutModal({
   onClose,
   onScheduled,
   onError,
-  onEditLibrary
+  onEditLibrary,
+  libraryOnly = false
 }: AddWorkoutModalProps) {
   const { unitSystem } = useUnitSystem();
   const reducedMotion = useReducedMotion();
@@ -1752,9 +1754,9 @@ export function AddWorkoutModal({
   // Logging makes no sense for a day that hasn't happened yet, and COROS
   // rejects scheduling in the past — so each side of "today" gets the
   // tab set (and default tab) that can actually succeed.
-  const canLogActivity = dateKey <= todayKey;
+  const canLogActivity = !libraryOnly && dateKey <= todayKey;
   const canSchedule = dateKey >= todayKey;
-  const [tab, setTab] = useState<AddTab>(canSchedule ? "quick" : "activity");
+  const [tab, setTab] = useState<AddTab>(libraryOnly ? "builder" : canSchedule ? "quick" : "activity");
   const [submitting, setSubmitting] = useState(false);
 
   // Quick training
@@ -1985,8 +1987,14 @@ export function AddWorkoutModal({
             : {}),
         steps: rows.flatMap((row) => rowToSteps(row, builderSport, unitSystem))
       };
-      await api.createAndScheduleWorkout(entry, dateKey, unitSystem, builderSave);
-    }, `Scheduled "${builderName.trim() || "Structured Workout"}" on ${formatHappenDayLabel(dateKey)}.`);
+      if (libraryOnly) {
+        await api.createLibraryWorkout(entry, unitSystem);
+      } else {
+        await api.createAndScheduleWorkout(entry, dateKey, unitSystem, builderSave);
+      }
+    }, libraryOnly
+      ? `Saved "${builderName.trim() || "Structured Workout"}" to the Workout Library.`
+      : `Scheduled "${builderName.trim() || "Structured Workout"}" on ${formatHappenDayLabel(dateKey)}.`);
 
   const submitActivity = () =>
     run(async () => {
@@ -2052,7 +2060,7 @@ export function AddWorkoutModal({
   const quickDuration = quickPaceValid
     ? quickWorkoutDuration(quickDistance, quickPace, unitSystem)
     : null;
-  const availableTabs: AddTab[] = [
+  const availableTabs: AddTab[] = libraryOnly ? ["builder"] : [
     ...(canSchedule ? (["quick", "library", "builder"] as AddTab[]) : []),
     ...(canLogActivity ? (["activity"] as AddTab[]) : [])
   ];
@@ -2120,9 +2128,9 @@ export function AddWorkoutModal({
             <div>
               <p className="calendar-modal-date">
                 <CalendarDays size={13} aria-hidden="true" />
-                {formatHappenDayLabel(dateKey)}
+                {libraryOnly ? "Reusable workout" : formatHappenDayLabel(dateKey)}
               </p>
-              <h3 id="add-calendar-title">Add to calendar</h3>
+              <h3 id="add-calendar-title">{libraryOnly ? "Create library workout" : "Add to calendar"}</h3>
             </div>
             <button
               type="button"
@@ -2134,7 +2142,7 @@ export function AddWorkoutModal({
             </button>
           </header>
 
-          <div className="calendar-modal-tabs" role="tablist" aria-label="Add to calendar method">
+          <div className="calendar-modal-tabs" role="tablist" aria-label={libraryOnly ? "Workout creation method" : "Add to calendar method"}>
             {availableTabs.map((id) => {
               const { label, Icon } = ADD_TAB_ITEMS[id];
               return (
@@ -2443,7 +2451,7 @@ export function AddWorkoutModal({
                       placeholder="Add coaching notes or the goal of this workout"
                     />
                   </label>
-                  <label className={`calendar-builder-save-card ${builderSave ? "is-checked" : ""}`}>
+                  {!libraryOnly ? <label className={`calendar-builder-save-card ${builderSave ? "is-checked" : ""}`}>
                     <input
                       type="checkbox"
                       role="switch"
@@ -2461,7 +2469,7 @@ export function AddWorkoutModal({
                     <span className="calendar-builder-save-switch" aria-hidden="true">
                       <span />
                     </span>
-                  </label>
+                  </label> : null}
                 </aside>
 
                 <section className="calendar-builder-canvas" aria-labelledby="calendar-builder-steps-title">
@@ -2734,14 +2742,14 @@ export function AddWorkoutModal({
                 </section>
               </div>
               <footer className="calendar-modal-footer calendar-builder-footer">
-                <label className="calendar-check calendar-builder-footer-save">
+                {!libraryOnly ? <label className="calendar-check calendar-builder-footer-save">
                   <input
                     type="checkbox"
                     checked={builderSave}
                     onChange={(event) => setBuilderSave(event.target.checked)}
                   />
                   Also save to workout library
-                </label>
+                </label> : null}
                 <span className="calendar-builder-totals">
                   <span className="calendar-builder-total">
                     <ListTree size={11} aria-hidden="true" />
@@ -2777,8 +2785,8 @@ export function AddWorkoutModal({
                   disabled={!builderValid || submitting}
                   onClick={() => void submitBuilder()}
                 >
-                  <CalendarPlus size={16} aria-hidden="true" />
-                  {submitting ? "Scheduling…" : "Schedule workout"}
+                  {libraryOnly ? <BookmarkPlus size={16} aria-hidden="true" /> : <CalendarPlus size={16} aria-hidden="true" />}
+                  {submitting ? (libraryOnly ? "Saving…" : "Scheduling…") : (libraryOnly ? "Save workout" : "Schedule workout")}
                 </button>
               </footer>
             </div>

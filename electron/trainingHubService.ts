@@ -795,9 +795,46 @@ export async function reconnectTrainingHub(): Promise<TrainingHubLoginResult> {
   return { twoFactorRequired: false, status: getTrainingHubStatus() };
 }
 
-export async function listTrainingHubActivities(
-  page = 1,
-  size = 50,
+const COROS_ACTIVITY_PAGE_SIZE_LIMIT = 100;
+
+export function buildTrainingHubActivityPagePlan(
+  page: number,
+  size: number
+): { requests: Array<{ page: number; size: number }>; sliceStart: number } {
+  if (!Number.isSafeInteger(page) || page < 1) {
+    throw new Error("Activity page must be a positive integer.");
+  }
+  if (!Number.isSafeInteger(size) || size < 1) {
+    throw new Error("Activity page size must be a positive integer.");
+  }
+
+  if (size <= COROS_ACTIVITY_PAGE_SIZE_LIMIT) {
+    return { requests: [{ page, size }], sliceStart: 0 };
+  }
+
+  const firstIndex = (page - 1) * size;
+  const lastIndex = firstIndex + size - 1;
+  if (!Number.isSafeInteger(firstIndex) || !Number.isSafeInteger(lastIndex)) {
+    throw new Error("Activity page is too large.");
+  }
+
+  const firstRemotePage = Math.floor(firstIndex / COROS_ACTIVITY_PAGE_SIZE_LIMIT) + 1;
+  const lastRemotePage = Math.floor(lastIndex / COROS_ACTIVITY_PAGE_SIZE_LIMIT) + 1;
+  return {
+    requests: Array.from(
+      { length: lastRemotePage - firstRemotePage + 1 },
+      (_, index) => ({
+        page: firstRemotePage + index,
+        size: COROS_ACTIVITY_PAGE_SIZE_LIMIT
+      })
+    ),
+    sliceStart: firstIndex % COROS_ACTIVITY_PAGE_SIZE_LIMIT
+  };
+}
+
+async function queryTrainingHubActivityPage(
+  page: number,
+  size: number,
   startDay?: string,
   endDay?: string
 ): Promise<TrainingHubActivity[]> {
@@ -816,8 +853,32 @@ export async function listTrainingHubActivities(
     params
   );
 
+  return (data.dataList ?? []).map(mapTrainingHubActivity);
+}
+
+export async function listTrainingHubActivities(
+  page = 1,
+  size = 50,
+  startDay?: string,
+  endDay?: string
+): Promise<TrainingHubActivity[]> {
+  const plan = buildTrainingHubActivityPagePlan(page, size);
+  const fetched: TrainingHubActivity[] = [];
+  for (const request of plan.requests) {
+    const batch = await queryTrainingHubActivityPage(
+      request.page,
+      request.size,
+      startDay,
+      endDay
+    );
+    fetched.push(...batch);
+    if (batch.length < request.size) {
+      break;
+    }
+  }
+
   const activities = enrichActivitiesWithSportNames(
-    (data.dataList ?? []).map(mapTrainingHubActivity)
+    fetched.slice(plan.sliceStart, plan.sliceStart + size)
   );
   // Persist a local copy so analytics (e.g. personal pace) work offline and
   // across sessions without re-fetching from COROS.
@@ -1746,6 +1807,54 @@ export async function listLibraryWorkouts(): Promise<TrainingHubLibraryWorkout[]
     .sort((left, right) => (right.createTimestamp ?? 0) - (left.createTimestamp ?? 0));
 }
 
+export async function duplicateLibraryWorkout(
+  programId: string,
+  name: string,
+  targetSportType?: number
+): Promise<TrainingHubLibraryWorkout> {
+  const source = await getWorkoutProgramDetail(programId);
+  if (!source) throw new Error("Workout could not be loaded from COROS.");
+  const sourceSport = toOptionalNumber(source.sportType);
+  const targetSport = targetSportType ?? sourceSport;
+  if (!sourceSport || !targetSport) throw new Error("Workout sport is unavailable.");
+  const crossSport = sourceSport !== targetSport;
+  const runTrailCompatible =
+    (sourceSport === 1 && targetSport === 5) ||
+    (sourceSport === 5 && targetSport === 1);
+  if (crossSport && !runTrailCompatible) {
+    throw new Error(
+      "This sport conversion is not compatible with the workout's targets and intensities. Duplicate it in the same sport instead."
+    );
+  }
+  if (
+    sourceSport === 5 &&
+    targetSport === 1 &&
+    Array.isArray(source.exercises) &&
+    source.exercises.some(
+      (exercise) =>
+        typeof exercise === "object" &&
+        exercise !== null &&
+        toOptionalNumber((exercise as Record<string, unknown>).targetType) === 8
+    )
+  ) {
+    throw new Error(
+      "Trail elevation-gain targets are not supported by Run. Remove that target before converting the workout."
+    );
+  }
+  const duplicate = resetProgramForCreate(source);
+  duplicate.name = name.trim() || `${String(source.name ?? "Workout")} Copy`;
+  duplicate.sportType = targetSport;
+  const created = await createWorkoutProgram(duplicate);
+  return {
+    id: created.programId,
+    name: String(created.program.name ?? duplicate.name),
+    sportType: toOptionalNumber(created.program.sportType),
+    volume: formatUpcomingWorkoutVolume(created.program, {}),
+    trainingLoad: resolveUpcomingWorkoutLoad(created.program, {}),
+    createTimestamp: Date.now()
+  };
+}
+
 async function resolveWorkoutEditSource(ref: WorkoutEditRef): Promise<WorkoutEditSource> {
   if (ref.kind === "library") {
     const program = await trainingHubGet<Record<string, unknown>>(
@@ -2597,6 +2706,27 @@ export async function uploadTrainingPlan(
   };
 }
 
+export async function createLibraryWorkout(
+  entry: PlanWorkoutEntryInput,
+  unitSystem: UnitSystem = "metric"
+): Promise<{ programId?: string }> {
+  const result = await uploadTrainingPlan(
+    {
+      name: entry.name,
+      workouts: [
+        {
+          ...entry,
+          key: entry.key || `library-${Date.now()}`,
+          schedule_date: undefined,
+          save_to_library: true
+        }
+      ]
+    },
+    unitSystem
+  );
+  return { programId: result.entries[0]?.programId };
+}
+
 async function loadExistingScheduleDates(
   draft: CorosTrainingPlanDraft
 ): Promise<Map<string, string[]>> {
@@ -2663,7 +2793,7 @@ async function findLibraryWorkoutById(
   return programs.find((program) => String(program.id ?? "") === programId);
 }
 
-async function getWorkoutProgramDetail(
+export async function getWorkoutProgramDetail(
   programId: string
 ): Promise<Record<string, unknown> | undefined> {
   try {
@@ -5728,6 +5858,27 @@ async function trainingHubGet<T>(
   params?: Record<string, string | number>
 ): Promise<T> {
   return trainingHubRequest<T>(path, { method: "GET", params });
+}
+
+/**
+ * Narrow read-only bridge for the native training-plan adapter. Keeping the
+ * allowlist here prevents plan discovery from becoming a generic raw API
+ * escape hatch or accidentally issuing an unverified write.
+ */
+export async function readNativeTrainingPlanEndpoint<T>(
+  path: "/training/plan/query" | "/training/plan/detail",
+  options:
+    | { method: "POST"; body: Record<string, unknown> }
+    | { method: "GET"; params: Record<string, string | number> }
+): Promise<T> {
+  if (path === "/training/plan/query" && options.method === "POST") {
+    const result = await trainingHubPost<T>(path, options.body);
+    return result as T;
+  }
+  if (path === "/training/plan/detail" && options.method === "GET") {
+    return trainingHubGet<T>(path, options.params);
+  }
+  throw new Error("Unsupported native training-plan read operation.");
 }
 
 interface TrainingHubRequestOptions extends RequestInit {

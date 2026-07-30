@@ -64,7 +64,7 @@ assert.equal(estimateOneRepMax(0, 10), 0, "bodyweight sets have no 1RM estimate"
 assert.equal(estimateOneRepMax(100, 40), 0, "rep counts outside the usable range are ignored");
 assert.equal(formatWeightKg(10, "metric"), "10 kg");
 assert.equal(formatWeightKg(10, "imperial"), "22.0 lb");
-assert.equal(formatVolumeKg(1_000, "metric"), "1.0t");
+assert.equal(formatVolumeKg(1_000, "metric"), "1.0 tonnes");
 assert.equal(formatVolumeKg(1_000, "imperial"), "2,205 lb");
 
 // ---- Aggregation ----
@@ -141,6 +141,22 @@ const quads = analytics.muscleById.quads;
 assert.ok(chest.sets > 0 && quads.sets > 0);
 assert.equal(analytics.muscleById.neck.sets, 0);
 assert.equal(analytics.muscleById.neck.lastTrained, undefined);
+
+// Unknown custom names fall back to Hevy's exercise-template muscle metadata.
+const providerFallback = buildStrengthAnalytics(
+  [
+    session("hevy-custom", now, [
+      {
+        ...exercise("Uncatalogued Lever Movement", [{ reps: 10, weightKg: 40 }]),
+        primaryMuscleGroup: "quadriceps",
+        secondaryMuscleGroups: ["glutes"]
+      }
+    ])
+  ],
+  30
+);
+assert.ok(providerFallback.muscleById.quads.sets > 0);
+assert.ok(providerFallback.muscleById.glutes.sets > 0);
 
 // Credited sets never exceed the sets actually performed.
 const creditedSets = analytics.muscles.reduce((sum, stat) => sum + stat.sets, 0);

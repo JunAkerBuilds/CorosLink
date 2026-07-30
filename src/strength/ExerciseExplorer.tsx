@@ -139,7 +139,7 @@ function formatVolume(kg: number, unitSystem: UnitSystem, empty = "—"): string
   if (kg <= 0) return empty;
   const display = kilogramsToDisplayWeight(kg, unitSystem);
   if (unitSystem === "metric" && display >= 1000) {
-    return `${(display / 1000).toFixed(display >= 10_000 ? 0 : 1)}t`;
+    return `${(display / 1000).toFixed(display >= 10_000 ? 0 : 1)} tonnes`;
   }
   return `${Math.round(display).toLocaleString()} ${weightUnit(unitSystem)}`;
 }

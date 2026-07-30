@@ -1,6 +1,7 @@
 import type {
   ActivityVisualPreview,
   ChatMessage,
+  CoachInputPrompt,
   FitnessTrendPreview,
   HrZonePreview,
   PersistedChatEntry,
@@ -22,11 +23,17 @@ export interface ChatMessageEntry {
   role: ChatMessage["role"];
   content: string;
   source?: SourceInfo;
+  reasoningSummary?: string;
 }
 
 export interface ChatPlanDraftEntry {
   kind: "planDraft";
   draft: PlanDraftPreview;
+}
+
+export interface ChatCoachPromptEntry {
+  kind: "coachPrompt";
+  prompt: CoachInputPrompt;
 }
 
 export interface ChatWorkoutDeleteEntry {
@@ -56,6 +63,7 @@ export interface ChatToolNoticeEntry {
 
 export type ChatEntry =
   | ChatMessageEntry
+  | ChatCoachPromptEntry
   | ChatPlanDraftEntry
   | ChatWorkoutDeleteEntry
   | ChatActivityVisualEntry
@@ -87,6 +95,22 @@ export function upsertPlanDraftEntry(
     return next;
   }
   return [...entries, { kind: "planDraft", draft }];
+}
+
+export function upsertCoachPromptEntry(
+  entries: ChatEntry[],
+  prompt: CoachInputPrompt
+): ChatEntry[] {
+  const index = entries.findIndex(
+    (entry) =>
+      entry.kind === "coachPrompt" && entry.prompt.promptId === prompt.promptId
+  );
+  if (index >= 0) {
+    const next = [...entries];
+    next[index] = { kind: "coachPrompt", prompt };
+    return next;
+  }
+  return [...entries, { kind: "coachPrompt", prompt }];
 }
 
 export function upsertWorkoutDeleteEntry(
@@ -158,12 +182,34 @@ export function upsertHrZoneEntry(
 }
 
 export function toWireMessages(entries: ChatEntry[]): ChatMessage[] {
-  return entries
-    .filter((entry): entry is ChatMessageEntry => entry.kind === "message")
-    .map(({ role, content }) => ({ role, content }));
+  return entries.flatMap((entry): ChatMessage[] => {
+    if (entry.kind === "message") {
+      return [{ role: entry.role, content: entry.content }];
+    }
+    if (entry.kind === "coachPrompt") {
+      const choices = entry.prompt.choices
+        .map((choice) => `- ${choice.label}`)
+        .join("\n");
+      const promptMessage: ChatMessage =
+        {
+          role: "assistant",
+          content: `I need the athlete's answer before continuing:\n${entry.prompt.question}\n${choices}`
+        };
+      return entry.prompt.answer
+        ? [
+            promptMessage,
+            { role: "user", content: entry.prompt.answer }
+          ]
+        : [promptMessage];
+    }
+    return [];
+  });
 }
 
 function persistVisualEntry(entry: ChatEntry): PersistedChatEntry | null {
+  if (entry.kind === "coachPrompt") {
+    return { kind: "coachPrompt", prompt: entry.prompt };
+  }
   if (entry.kind === "planDraft") {
     return { kind: "planDraft", draft: entry.draft };
   }
@@ -187,14 +233,15 @@ function persistVisualEntry(entry: ChatEntry): PersistedChatEntry | null {
     };
   }
   if (entry.kind === "message") {
-    return entry.source
-      ? {
-          kind: "message",
-          role: entry.role,
-          content: entry.content,
-          source: entry.source
-        }
-      : { kind: "message", role: entry.role, content: entry.content };
+    return {
+      kind: "message",
+      role: entry.role,
+      content: entry.content,
+      ...(entry.source ? { source: entry.source } : {}),
+      ...(entry.reasoningSummary
+        ? { reasoningSummary: entry.reasoningSummary }
+        : {})
+    };
   }
   return null;
 }
@@ -209,6 +256,10 @@ export function fromPersistedEntries(entries: PersistedChatEntry[]): ChatEntry[]
   const result: ChatEntry[] = [];
 
   for (const entry of entries) {
+    if (entry.kind === "coachPrompt") {
+      result.push({ kind: "coachPrompt", prompt: entry.prompt });
+      continue;
+    }
     if (entry.kind === "planDraft") {
       result.push({ kind: "planDraft", draft: entry.draft });
       continue;
@@ -250,20 +301,15 @@ export function fromPersistedEntries(entries: PersistedChatEntry[]): ChatEntry[]
       result.push({ kind: "hrZoneSummary", preview: entry.preview });
       continue;
     }
-    result.push(
-      entry.source
-        ? {
-            kind: "message",
-            role: entry.role,
-            content: entry.content,
-            source: entry.source
-          }
-        : {
-            kind: "message",
-            role: entry.role,
-            content: entry.content
-          }
-    );
+    result.push({
+      kind: "message",
+      role: entry.role,
+      content: entry.content,
+      ...(entry.source ? { source: entry.source } : {}),
+      ...(entry.reasoningSummary
+        ? { reasoningSummary: entry.reasoningSummary }
+        : {})
+    });
   }
 
   return result;

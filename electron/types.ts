@@ -1964,11 +1964,33 @@ export interface StrengthSet {
   workSec: number;
   restSec: number;
   calories: number;
+  /** Original set classification when supplied by an external strength log. */
+  type?: StrengthSetType;
+  /** Rating of perceived exertion, on Hevy's 1–10 scale. */
+  rpe?: number;
+}
+
+export type StrengthSetType = "normal" | "warmup" | "dropset" | "failure";
+
+export type StrengthSource = "coros" | "hevy" | "combined";
+
+export type StrengthDataSource = StrengthSource;
+
+export interface StrengthSourceIds {
+  coros?: string;
+  hevy?: string;
 }
 
 export interface StrengthExercise {
   nameKey: string;   // "T####"/"S####" library code, or a custom name
   rawName?: string;  // payload name, used to resolve custom exercises
+  /** Provider exercise/template identity, when one exists. */
+  externalId?: string;
+  /** Provider exercise classification (for example, `weight_reps`). */
+  exerciseType?: string;
+  /** Hevy muscle metadata, used only when name-based resolution has no match. */
+  primaryMuscleGroup?: string;
+  secondaryMuscleGroups?: string[];
   sets: number;
   totalReps: number;
   entries: StrengthSet[];
@@ -1996,6 +2018,9 @@ export interface StrengthDetail {
 /** One completed strength activity plus its cached set-by-set breakdown. */
 export interface StrengthSession {
   activityId: string;
+  /** Absent on legacy cached rows, which are implicitly COROS sessions. */
+  source?: StrengthSource;
+  sourceIds?: StrengthSourceIds;
   sportType: number;
   name?: string;
   sportName?: string;
@@ -2017,6 +2042,31 @@ export interface StrengthHistory {
   fetched: number;
   /** Window length in days that produced this history. */
   days: number;
+  /** Source selection used to produce this history. */
+  source?: StrengthDataSource;
+  pendingBySource?: Partial<Record<Exclude<StrengthSource, "combined">, number>>;
+  fetchedBySource?: Partial<Record<Exclude<StrengthSource, "combined">, number>>;
+  /** Non-fatal provider errors; cached sessions remain usable. */
+  warnings?: string[];
+}
+
+export interface StrengthHistoryRequest {
+  days?: number;
+  force?: boolean;
+  source?: StrengthDataSource;
+}
+
+export interface HevyStatus {
+  connected: boolean;
+  userId?: string;
+  displayName?: string;
+  profileUrl?: string;
+  lastSyncedAt?: string;
+  includeWarmups: boolean;
+}
+
+export interface HevySettingsInput {
+  includeWarmups: boolean;
 }
 
 export interface TrainingHubActivityDetail {
@@ -2233,6 +2283,27 @@ export interface PersistedChatMessageEntry {
   role: ChatRole;
   content: string;
   source?: PersistedChatSource;
+  /** Display-safe provider reasoning summary, never raw chain-of-thought. */
+  reasoningSummary?: string;
+}
+
+export interface CoachInputChoice {
+  id: string;
+  label: string;
+  description?: string;
+  /** Text sent back to Coach when the athlete selects this choice. */
+  response: string;
+}
+
+export interface CoachInputPrompt {
+  promptId: string;
+  question: string;
+  choices: CoachInputChoice[];
+  allowCustom: boolean;
+  /** Athlete response retained as model context without a separate chat bubble. */
+  answer?: string;
+  selectedChoiceId?: string;
+  answeredAt?: number;
 }
 
 export type ChatProvider = "chatgpt" | "claude-code" | "local";
@@ -2469,7 +2540,7 @@ export type ChatStreamInfo =
   | {
       requestId: string;
       kind: "thinking";
-      /** Incremental extended-thinking text from the model. */
+      /** Incremental display-safe reasoning/thinking summary from the provider. */
       delta: string;
     }
   | {
@@ -2496,9 +2567,345 @@ export type ChatStreamInfo =
       requestId: string;
       kind: "hrZoneSummary";
       preview: HrZonePreview;
+    }
+  | {
+      requestId: string;
+      kind: "coachPrompt";
+      prompt: CoachInputPrompt;
     };
 
 // ----- Training plan upload (AI coach) -----
+
+export type TrainingLibrarySyncState =
+  | "local"
+  | "synced"
+  | "pending"
+  | "conflicted"
+  | "failed"
+  | "stale";
+
+export type TrainingPlanSource =
+  | "coros"
+  | "local"
+  | "template"
+  | "coach";
+
+export type TrainingPlanDifficulty =
+  | "beginner"
+  | "intermediate"
+  | "advanced"
+  | "custom";
+
+export type TrainingPlanDestination =
+  | "workoutLibrary"
+  | "calendar"
+  | "nativePlan"
+  | "localTemplate"
+  | "nativePlanAndCalendar";
+
+export type TrainingPlanEntryKind = "workout" | "rest" | "note";
+
+export interface TrainingPlanPhase {
+  id: string;
+  name: string;
+  startWeek: number;
+  endWeek: number;
+  kind?: "base" | "build" | "peak" | "taper" | "recovery" | "custom";
+}
+
+export interface TrainingPlanEntry {
+  id: string;
+  kind: TrainingPlanEntryKind;
+  weekIndex: number;
+  /** Undefined dayIndex places the workout in the holding area. */
+  dayIndex?: number;
+  sortOrder: number;
+  title?: string;
+  workout?: PlanWorkoutEntryInput;
+  programId?: string;
+  remotePlanProgramId?: string;
+  plannedDurationSeconds?: number;
+  plannedDistanceMeters?: number;
+  plannedTrainingLoad?: number;
+  plannedStrengthSets?: number;
+  notes?: string;
+}
+
+export interface TrainingPlanGenerationRequest {
+  goal: string;
+  sports: WorkoutSport[];
+  difficulty: TrainingPlanDifficulty;
+  weeks: number;
+  sessionsPerWeek: number;
+  /** ISO date for Week 1 Monday. */
+  startDate: string;
+  /** Monday = 0 through Sunday = 6. */
+  availableDayIndexes: number[];
+  maxSessionMinutes?: number;
+  constraints?: string;
+}
+
+export interface TrainingPlanCalendarOccurrence {
+  planEntryId: string;
+  happenDay: string;
+  schedulePlanId: string;
+  scheduleIdInPlan: string;
+  planProgramId: string;
+  pbVersion?: number;
+  createdAt: string;
+  removedAt?: string;
+}
+
+export interface TrainingPlanCalendarFailure {
+  planEntryId: string;
+  happenDay: string;
+  message: string;
+  /** True when COROS may have accepted the write but its identity could not be verified. */
+  writeMayHaveSucceeded?: boolean;
+}
+
+export interface TrainingPlanCalendarInstall {
+  id: string;
+  startDate: string;
+  planRevision: string;
+  state: "active" | "partial" | "removed";
+  lastOperation?: "install" | "remove";
+  occurrences: TrainingPlanCalendarOccurrence[];
+  failures: TrainingPlanCalendarFailure[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TrainingPlanDocument {
+  id: string;
+  remoteId?: string;
+  name: string;
+  description: string;
+  goal: string;
+  difficulty: TrainingPlanDifficulty;
+  notes: string;
+  source: TrainingPlanSource;
+  sportMix: WorkoutSport[];
+  weekCount: number;
+  startDate?: string;
+  phases: TrainingPlanPhase[];
+  entries: TrainingPlanEntry[];
+  calendarInstalls?: TrainingPlanCalendarInstall[];
+  tags: string[];
+  collectionId?: string;
+  favorite: boolean;
+  archived: boolean;
+  syncState: TrainingLibrarySyncState;
+  remoteVersion?: number;
+  remoteUpdatedAt?: number;
+  lastSyncedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TrainingPlanCalendarPreviewEntry {
+  planEntryId: string;
+  name: string;
+  happenDay: string;
+  sport?: WorkoutSport;
+  schedulePlanId?: string;
+  scheduleIdInPlan?: string;
+  planProgramId?: string;
+  pbVersion?: number;
+}
+
+export interface TrainingPlanCalendarConflict {
+  happenDay: string;
+  existing: Array<{
+    name: string;
+    schedulePlanId: string;
+    scheduleIdInPlan: string;
+  }>;
+}
+
+export interface TrainingPlanCalendarPreview {
+  previewId: string;
+  operation: "install" | "remove";
+  planId: string;
+  planName: string;
+  planRevision: string;
+  startDate: string;
+  entries: TrainingPlanCalendarPreviewEntry[];
+  conflicts: TrainingPlanCalendarConflict[];
+  blockers: string[];
+  expiresAt: string;
+}
+
+export interface TrainingPlanCalendarMutationResult {
+  plan: TrainingPlanDocument;
+  scheduledCount: number;
+  removedCount: number;
+  failures: TrainingPlanCalendarFailure[];
+}
+
+export interface TrainingCollection {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TrainingWorkoutMetadata {
+  programId: string;
+  favorite: boolean;
+  tags: string[];
+  collectionId?: string;
+  source: "coros" | "local" | "activity" | "coach";
+  syncState: TrainingLibrarySyncState;
+  lastUsedAt?: string;
+  lastSyncedAt?: string;
+  cachedVersion?: string;
+}
+
+export interface TrainingLibraryWorkout extends TrainingHubLibraryWorkout {
+  favorite: boolean;
+  tags: string[];
+  collectionId?: string;
+  source: TrainingWorkoutMetadata["source"];
+  syncState: TrainingLibrarySyncState;
+  lastUsedAt?: string;
+  lastSyncedAt?: string;
+  usedByPlanIds: string[];
+  scheduledCount: number;
+}
+
+export interface NativeCorosPlanSummary {
+  remoteId: string;
+  name: string;
+  overview: string;
+  totalDay: number;
+  minWeeks?: number;
+  maxWeeks?: number;
+  startDay?: string;
+  endDay?: string;
+  executeStatus?: number;
+  inSchedule?: boolean;
+  workoutCount: number;
+  sportTypes: number[];
+  trainingLoad?: number;
+  durationSeconds?: number;
+  distanceMeters?: number;
+  version?: number;
+  updateTimestamp?: number;
+  syncState: TrainingLibrarySyncState;
+  lastSyncedAt?: string;
+}
+
+export interface NativeCorosPlanEntity {
+  idInPlan: string;
+  planProgramId?: string;
+  happenDay?: string;
+  dayNo?: number;
+  sortNo?: number;
+  sortNoInPlan?: number;
+  sortNoInSchedule?: number;
+  status?: number;
+}
+
+export interface NativeCorosPlanProgram {
+  id?: string;
+  idInPlan?: string;
+  planProgramId?: string;
+  name: string;
+  overview?: string;
+  sportType?: number;
+  planDistance?: number;
+  planDuration?: number;
+  planTrainingLoad?: number;
+  planSets?: number;
+  exercises?: TrainingHubScheduledExercise[];
+}
+
+export interface NativeCorosPlanDetail extends NativeCorosPlanSummary {
+  entities: NativeCorosPlanEntity[];
+  programs: NativeCorosPlanProgram[];
+  weekStages: Array<{
+    weekNo: number;
+    stage?: number | string;
+    planDistance?: number;
+    planDuration?: number;
+    planTrainingLoad?: number;
+  }>;
+  /** Lossless payload retained only at the remote adapter boundary. */
+  rawPayload: Record<string, unknown>;
+}
+
+export interface TrainingPlanWriteCapabilities {
+  create: boolean;
+  update: boolean;
+  duplicate: boolean;
+  delete: boolean;
+  activate: boolean;
+  removeActive: boolean;
+  reason?: string;
+  verifiedAt?: string;
+}
+
+export interface TrainingActivityMatch {
+  id: string;
+  planId?: string;
+  planEntryId?: string;
+  schedulePlanId: string;
+  scheduleIdInPlan: string;
+  activityId?: string;
+  happenDay: string;
+  status:
+    | "completed"
+    | "partial"
+    | "missed"
+    | "skipped"
+    | "rescheduled"
+    | "upcoming";
+  confidence?: number;
+  manual: boolean;
+  plannedDurationSeconds?: number;
+  completedDurationSeconds?: number;
+  plannedDistanceMeters?: number;
+  completedDistanceMeters?: number;
+  plannedTrainingLoad?: number;
+  completedTrainingLoad?: number;
+  updatedAt: string;
+}
+
+export interface TrainingLibrarySnapshot {
+  workouts: TrainingLibraryWorkout[];
+  plans: TrainingPlanDocument[];
+  nativePlans: NativeCorosPlanSummary[];
+  collections: TrainingCollection[];
+  matches: TrainingActivityMatch[];
+  cachedAt: string;
+  stale: boolean;
+  offline: boolean;
+  partialFailures: string[];
+  nativePlanWrites: TrainingPlanWriteCapabilities;
+}
+
+export interface WorkoutMetadataPatch {
+  favorite?: boolean;
+  tags?: string[];
+  collectionId?: string | null;
+  source?: TrainingWorkoutMetadata["source"];
+  lastUsedAt?: string;
+}
+
+export interface TrainingPlanMetadataPatch {
+  favorite?: boolean;
+  tags?: string[];
+  collectionId?: string | null;
+  archived?: boolean;
+}
+
+export interface TrainingLibraryDeleteRequest {
+  programIds: string[];
+  confirmed: boolean;
+}
 
 export interface TrainingTrendPoint {
   date: string;
@@ -2608,6 +3015,9 @@ export interface PlanDraftPreview {
   uploadResult?: {
     workoutsScheduled: number;
     workoutsCreated: number;
+    destination?: TrainingPlanDestination;
+    localPlanId?: string;
+    groupedPlanCreated?: boolean;
   };
 }
 
@@ -2851,6 +3261,10 @@ export interface UploadPlanResult {
   workoutsCreated: number;
   workoutsScheduled: number;
   entries: UploadPlanResultEntry[];
+  destination?: TrainingPlanDestination;
+  localPlanId?: string;
+  groupedPlanCreated?: boolean;
+  remoteWrites?: string[];
 }
 
 export interface TrainingHubScheduledWorkoutEntry {
@@ -3045,6 +3459,7 @@ export interface WorkoutDeletePreview {
 /** Persisted coach timeline entry (messages plus inline action cards). */
 export type PersistedChatEntry =
   | PersistedChatMessageEntry
+  | { kind: "coachPrompt"; prompt: CoachInputPrompt }
   | { kind: "planDraft"; draft: PlanDraftPreview }
   | { kind: "workoutDelete"; preview: WorkoutDeletePreview }
   | { kind: "activityVisual"; preview: ActivityVisualPreview }

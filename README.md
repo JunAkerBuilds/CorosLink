@@ -269,6 +269,48 @@ Log in with your COROS account to view training data, fitness scores, and race p
 
 ---
 
+### Strength — resistance training analytics
+
+A dedicated view for lifting, built around a rotatable 3D muscle mannequin that
+shades each muscle by how hard you have worked it.
+
+- **Muscle map** — per-muscle set, volume, and time breakdowns on muscular and skeletal layers
+- **Weekly trends** — weight lifted and sets side by side, with push/pull/legs/core balance
+- **Exercise Explorer** — open any lift for every set, per-session PRs, best sets by rep range, estimated one-rep-max progression, and volume over time
+- **Hevy sync** — connect a Hevy API key to merge Hevy workouts with your COROS strength history; sessions logged in both apps are de-duplicated, warmup sets are optional, and disconnecting erases the cached Hevy data
+- **Metric or imperial** weights and volume, following the Settings unit switch
+
+---
+
+### Training Library — workouts, plans, templates, and adherence
+
+A dedicated workspace for building and reusing training, from one structured
+workout through a complete multi-week cycle.
+
+- **Workout Library** — search, filter, sort, preview full steps, create with the
+  sport-aware builder, edit with revision checks, duplicate, tag, collect,
+  export, schedule, and safely delete COROS workouts
+- **Training Plans** — discover and cache native COROS plans, build local grouped
+  plans, drag workouts across days and a holding area, add rest days and phases,
+  duplicate/reorder/recovery weeks, shift start dates, and undo/redo changes
+- **Templates** — reusable local plans and collections, including templates
+  created from completed activities
+- **Plan comparison** — compare two or three plans by duration, distance,
+  training load, strength sets, sport/intensity mix, weekly progression, peak
+  week, taper, shared workouts, and scheduling conflicts
+- **Completed & adherence** — automatic confidence-scored calendar/activity
+  matching, manual correction, skipped/missed/partial states, rescheduling, and
+  planned-versus-completed metrics
+- **Offline-aware sync** — cached data remains visible when one or more COROS
+  reads fail, with explicit local/synced/pending/conflicted/failed/stale states
+
+Native COROS plan discovery and detail reads are active. Native grouped-plan
+writes remain visibly gated until the undocumented create/update/activation
+contract can be verified without guessing; local templates and the existing
+individual Workout Library/Calendar writes remain available.
+
+---
+
 ### Calendar — scheduled workouts and activities
 
 Month and week views for planned workouts and completed activities on one grid.
@@ -285,7 +327,10 @@ Ask training questions with answers grounded in your COROS data.
 
 - **Providers** — ChatGPT (cloud), Claude Code, or local LLMs (Ollama / LM Studio)
 - **Model selection & extended thinking** where the provider supports them
-- **Multi-sport workout tools** — draft adaptive plans across Run, Trail Run, Bike, Pool Swim, Strength, Indoor Climb, Bouldering, XC Ski, and HYROX; preview them in chat and upload/list/delete COROS workouts with confirmation cards
+- **Multi-sport workout tools** — draft adaptive plans across Run, Trail Run, Bike, Pool Swim, Strength, Indoor Climb, Bouldering, XC Ski, and HYROX
+- **Destination-aware confirmation** — choose Workout Library, Calendar, local template, COROS Plan Library, or Plan + Calendar; review weeks, workouts, sports, start date, conflicts, grouped-plan status, and every remote write before confirming
+- **AI write guard** — Coach tool calls can draft plans but cannot upload them; the athlete must use the confirmation card
+- **Follow-up questions** — Coach asks one clarifying question at a time with tappable answers instead of guessing; typing an answer still works
 - **Chat history** — per-provider conversations persist across restarts
 
 ---

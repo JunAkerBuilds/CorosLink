@@ -33,7 +33,10 @@ import type {
   SpotifySyncResult,
   SpotifySyncTrack,
   SpotifySyncUpdate,
+  HevySettingsInput,
+  HevyStatus,
   StrengthHistory,
+  StrengthHistoryRequest,
   TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
@@ -50,6 +53,16 @@ import type {
   TrainingHubUpcomingWorkout,
   TrainingHubScheduledWorkoutEntry,
   TrainingHubLibraryWorkout,
+  TrainingActivityMatch,
+  TrainingCollection,
+  TrainingLibraryDeleteRequest,
+  TrainingLibrarySnapshot,
+  TrainingPlanDocument,
+  TrainingPlanCalendarMutationResult,
+  TrainingPlanCalendarPreview,
+  TrainingPlanDestination,
+  TrainingPlanMetadataPatch,
+  WorkoutMetadataPatch,
   UnitSystem,
   PlanWorkoutEntryInput,
   RunWorkoutEditorDraft,
@@ -513,6 +526,63 @@ const api = {
     ipcRenderer.invoke("trainingHub:listScheduledWorkouts", startDay, endDay),
   listLibraryWorkouts: (): Promise<TrainingHubLibraryWorkout[]> =>
     ipcRenderer.invoke("trainingHub:listLibraryWorkouts"),
+  duplicateLibraryWorkout: (
+    programId: string,
+    name: string,
+    targetSportType?: number
+  ): Promise<TrainingHubLibraryWorkout> =>
+    ipcRenderer.invoke(
+      "trainingHub:duplicateLibraryWorkout",
+      programId,
+      name,
+      targetSportType
+    ),
+  getTrainingLibrarySnapshot: (): Promise<TrainingLibrarySnapshot> =>
+    ipcRenderer.invoke("trainingLibrary:snapshot"),
+  getNativeTrainingPlan: (remoteId: string): Promise<TrainingPlanDocument> =>
+    ipcRenderer.invoke("trainingLibrary:getNativePlan", remoteId),
+  saveLocalTrainingPlan: (plan: TrainingPlanDocument): Promise<TrainingPlanDocument> =>
+    ipcRenderer.invoke("trainingLibrary:savePlan", plan),
+  updateTrainingPlanMetadata: (
+    id: string,
+    patch: TrainingPlanMetadataPatch
+  ): Promise<TrainingPlanDocument> =>
+    ipcRenderer.invoke("trainingLibrary:updatePlanMetadata", id, patch),
+  deleteLocalTrainingPlan: (id: string, confirmed: boolean): Promise<void> =>
+    ipcRenderer.invoke("trainingLibrary:deletePlan", id, confirmed),
+  previewTrainingPlanCalendar: (planId: string, startDate: string): Promise<TrainingPlanCalendarPreview> =>
+    ipcRenderer.invoke("trainingLibrary:previewPlanCalendar", planId, startDate),
+  addTrainingPlanToCalendar: (previewId: string, confirmed: boolean): Promise<TrainingPlanCalendarMutationResult> =>
+    ipcRenderer.invoke("trainingLibrary:addPlanToCalendar", previewId, confirmed),
+  previewTrainingPlanCalendarRemoval: (planId: string): Promise<TrainingPlanCalendarPreview> =>
+    ipcRenderer.invoke("trainingLibrary:previewPlanCalendarRemoval", planId),
+  removeTrainingPlanFromCalendar: (previewId: string, confirmed: boolean): Promise<TrainingPlanCalendarMutationResult> =>
+    ipcRenderer.invoke("trainingLibrary:removePlanFromCalendar", previewId, confirmed),
+  updateWorkoutMetadata: (
+    programIds: string[],
+    patch: WorkoutMetadataPatch
+  ): Promise<void> =>
+    ipcRenderer.invoke("trainingLibrary:updateWorkoutMetadata", programIds, patch),
+  saveTrainingCollection: (
+    collection: Pick<TrainingCollection, "id" | "name"> &
+      Partial<Pick<TrainingCollection, "description" | "color">>
+  ): Promise<TrainingCollection> =>
+    ipcRenderer.invoke("trainingLibrary:saveCollection", collection),
+  deleteTrainingCollection: (id: string, confirmed: boolean): Promise<void> =>
+    ipcRenderer.invoke("trainingLibrary:deleteCollection", id, confirmed),
+  deleteTrainingLibraryWorkouts: (
+    request: TrainingLibraryDeleteRequest
+  ): Promise<string[]> =>
+    ipcRenderer.invoke("trainingLibrary:deleteWorkouts", request),
+  refreshTrainingActivityMatches: (
+    startDay: string,
+    endDay: string
+  ): Promise<TrainingActivityMatch[]> =>
+    ipcRenderer.invoke("trainingLibrary:refreshMatches", startDay, endDay),
+  saveManualActivityMatch: (
+    match: TrainingActivityMatch
+  ): Promise<TrainingActivityMatch> =>
+    ipcRenderer.invoke("trainingLibrary:saveManualMatch", match),
   listWorkoutExercises: (sport: WorkoutSport): Promise<WorkoutExerciseOption[]> =>
     ipcRenderer.invoke("trainingHub:listWorkoutExercises", sport),
   getWorkoutEditorContext: (unitSystem: UnitSystem): Promise<WorkoutEditorContext> =>
@@ -554,6 +624,11 @@ const api = {
       unitSystem,
       saveToLibrary
     ),
+  createLibraryWorkout: (
+    entry: PlanWorkoutEntryInput,
+    unitSystem: UnitSystem
+  ): Promise<{ programId?: string }> =>
+    ipcRenderer.invoke("trainingHub:createLibraryWorkout", entry, unitSystem),
   rescheduleWorkout: (
     entry: {
       planId: string;
@@ -631,8 +706,14 @@ const api = {
     ipcRenderer.invoke("trainingHub:getDashboard"),
   getDailyMetrics: (dateList: string[]): Promise<TrainingHubDailyMetrics> =>
     ipcRenderer.invoke("trainingHub:getDailyMetrics", dateList),
-  syncStrengthHistory: (days?: number, force?: boolean): Promise<StrengthHistory> =>
-    ipcRenderer.invoke("trainingHub:syncStrengthHistory", days, force),
+  syncStrengthHistory: (request?: StrengthHistoryRequest): Promise<StrengthHistory> =>
+    ipcRenderer.invoke("trainingHub:syncStrengthHistory", request),
+  getHevyStatus: (): Promise<HevyStatus> => ipcRenderer.invoke("hevy:getStatus"),
+  connectHevy: (apiKey: string): Promise<HevyStatus> =>
+    ipcRenderer.invoke("hevy:connect", apiKey),
+  updateHevySettings: (input: HevySettingsInput): Promise<HevyStatus> =>
+    ipcRenderer.invoke("hevy:updateSettings", input),
+  disconnectHevy: (): Promise<void> => ipcRenderer.invoke("hevy:disconnect"),
   startRpeBackfill: (): Promise<void> =>
     ipcRenderer.invoke("trainingHub:startRpeBackfill"),
   getRpeBackfillStatus: (): Promise<{ pending: number; running: boolean }> =>
@@ -919,9 +1000,10 @@ const api = {
     ipcRenderer.invoke("mcp:setBearer", id, token),
   uploadTrainingPlanDraft: (
     draftId: string,
-    unitSystem: UnitSystem
+    unitSystem: UnitSystem,
+    destination?: TrainingPlanDestination
   ): Promise<UploadPlanResult> =>
-    ipcRenderer.invoke("chat:uploadPlanDraft", draftId, unitSystem),
+    ipcRenderer.invoke("chat:uploadPlanDraft", draftId, unitSystem, destination),
   confirmWorkoutDelete: (requestId: string): Promise<DeleteWorkoutResult> =>
     ipcRenderer.invoke("chat:confirmWorkoutDelete", requestId),
   setWindowBackground: (color: string): Promise<void> =>

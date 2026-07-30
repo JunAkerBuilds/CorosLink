@@ -72,6 +72,7 @@ assert.deepEqual(
         kind: "message",
         role: "assistant",
         content: "Hi",
+        reasoningSummary: "I should greet the athlete briefly.",
         source: {
           snapshotIncluded: true,
           mcpEnabled: false,
@@ -87,6 +88,7 @@ assert.deepEqual(
       kind: "message",
       role: "assistant",
       content: "Hi",
+      reasoningSummary: "I should greet the athlete briefly.",
       source: {
         snapshotIncluded: true,
         mcpEnabled: false,
@@ -95,6 +97,53 @@ assert.deepEqual(
       }
     }
   ]
+);
+
+const waitingPromptEntry = {
+  kind: "coachPrompt",
+  prompt: {
+    promptId: "prompt-1",
+    question: "Which strength option should Coach use?",
+    choices: [
+      {
+        id: "choice-1",
+        label: "Use split squats",
+        description: "Recommended supported alternative.",
+        response: "Use split squats."
+      },
+      {
+        id: "choice-2",
+        label: "I’ll provide the exact name",
+        response: "I’ll provide the exact COROS exercise name."
+      }
+    ],
+    allowCustom: true
+  }
+};
+assert.deepEqual(
+  parseChatTranscriptJson(JSON.stringify([waitingPromptEntry])),
+  [waitingPromptEntry]
+);
+assert.deepEqual(
+  parseChatTranscriptJson(
+    JSON.stringify([
+      {
+        ...waitingPromptEntry,
+        prompt: {
+          ...waitingPromptEntry.prompt,
+          answer: "Use split squats.",
+          selectedChoiceId: "choice-1",
+          answeredAt: 1234
+        }
+      }
+    ])
+  )[0].prompt,
+  {
+    ...waitingPromptEntry.prompt,
+    answer: "Use split squats.",
+    selectedChoiceId: "choice-1",
+    answeredAt: 1234
+  }
 );
 
 assert.equal(

@@ -197,22 +197,29 @@
 }
 
 /*
- * Window picker. Deliberately not the `.strength-segmented` used inside the
- * body panel: that one is instrument chrome sitting on the figure's stage,
- * this one is page chrome and reads as part of the title line.
+ * Header control cluster. One segmented system for the two view pickers and
+ * a quieter ghost for the actions, so the row reads "choose what you're
+ * looking at, then act on it". The pickers share a container and a height
+ * (38px, matching the actions), and the only warm element is the active
+ * source pill — the page's "work is warm" rule marking the loudest control.
+ * Deliberately not the `.strength-segmented` used inside the body panel:
+ * that one is instrument chrome sitting on the figure's stage.
  */
-.strength-window {
+.strength-segment {
   display: inline-flex;
-  gap: 2px;
+  align-items: center;
+  /* Spacing lives on the bloom's animated margins, not the container's gap,
+     so folded buttons leave no slivers behind. */
+  gap: 0;
   padding: 3px;
-  border: 1px solid var(--sx-edge);
+  border: 1px solid var(--sx-hairline);
   border-radius: var(--radius-pill);
   background: var(--sx-well);
 }
 
-.strength-window button {
-  min-height: 32px;
-  padding: 0 15px;
+.strength-segment button {
+  min-height: 30px;
+  padding: 0 14px;
   border: 0;
   border-radius: var(--radius-pill);
   background: transparent;
@@ -221,13 +228,42 @@
   font-weight: 500;
   letter-spacing: -0.005em;
   white-space: nowrap;
+  overflow: hidden;
+  /* The fold (pointer leaving): one quick, uniform close. The bloom's
+     springier transition replaces this while the group is open. */
   transition:
+    margin-left 0.2s cubic-bezier(0.6, 0.04, 0.3, 1),
+    max-width 0.2s cubic-bezier(0.6, 0.04, 0.3, 1),
+    padding-inline 0.2s cubic-bezier(0.6, 0.04, 0.3, 1),
     background 0.18s ease,
+    box-shadow 0.18s ease,
     color 0.18s ease;
 }
 
-.strength-window button:hover:not(.is-active) {
+.strength-segment button:hover:not(.is-active):not(:disabled) {
   color: var(--text-primary);
+}
+
+.strength-segment button:focus-visible,
+.strength-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.strength-segment button:disabled {
+  opacity: 0.36;
+  cursor: not-allowed;
+}
+
+/* The source picker decides what the page is about, so its active pill gets
+   the ember; the window picker only filters it and stays neutral. */
+.strength-source button.is-active {
+  background: color-mix(in srgb, var(--sx-ember) 22%, var(--sx-raised));
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow:
+    var(--sx-lift),
+    inset 0 0 0 1px color-mix(in srgb, var(--sx-ember) 42%, transparent);
 }
 
 .strength-window button.is-active {
@@ -237,33 +273,160 @@
   box-shadow: var(--sx-lift);
 }
 
-.strength-refresh {
+/*
+ * Both pickers rest folded: just the active choice showing, so the header
+ * reads "Combined · 3 months" instead of seven competing labels. Hovering
+ * blooms the alternatives open; the fold comes the instant the pointer
+ * leaves.
+ *
+ * The bloom keys on :hover and :has(:focus-visible) — deliberately not
+ * :focus-within. A mouse click focuses the clicked button without
+ * :focus-visible, so the group never stays pinned open after the pointer
+ * is gone; tabbing in with a keyboard still blooms it.
+ *
+ * The motion is split on purpose. Entering uses the bloom rule's
+ * transition: a soft spring on the geometry with a left-to-right cascade,
+ * while each label drifts in a beat later on its own transform — so text
+ * is never sliced by the clipping edge. Leaving uses the base rule: one
+ * quick, uniform close, labels gone before the fold reaches them.
+ */
+.strength-segment-label {
+  display: inline-block;
+  transition:
+    opacity 0.1s ease,
+    transform 0.1s ease;
+}
+
+.strength-segment button:not(.is-active) {
+  max-width: 0;
+  margin-left: 0;
+  padding-inline: 0;
+}
+
+.strength-segment button:not(.is-active) .strength-segment-label {
+  opacity: 0;
+  transform: translateX(-5px);
+}
+
+.strength-segment:is(:hover, :has(:focus-visible)) button:not(.is-active) {
+  max-width: 110px;
+  padding-inline: 14px;
+  transition:
+    margin-left 0.36s cubic-bezier(0.32, 1.28, 0.46, 1),
+    max-width 0.36s cubic-bezier(0.32, 1.28, 0.46, 1),
+    padding-inline 0.36s cubic-bezier(0.32, 1.28, 0.46, 1),
+    background 0.18s ease,
+    box-shadow 0.18s ease,
+    color 0.18s ease;
+}
+
+.strength-segment:is(:hover, :has(:focus-visible)) button + button {
+  margin-left: 2px;
+}
+
+/* The bloom cascades: each option opens a beat after the one before it,
+   and its label follows a beat behind that. Delays are listed per property
+   so only the geometry is staggered — hover feedback (background, color)
+   on an already-open option stays instant. */
+.strength-segment:is(:hover, :has(:focus-visible)) button:nth-child(2) {
+  transition-delay: 45ms, 45ms, 45ms, 0s, 0s, 0s;
+}
+
+.strength-segment:is(:hover, :has(:focus-visible)) button:nth-child(3) {
+  transition-delay: 90ms, 90ms, 90ms, 0s, 0s, 0s;
+}
+
+.strength-segment:is(:hover, :has(:focus-visible)) button:nth-child(4) {
+  transition-delay: 135ms, 135ms, 135ms, 0s, 0s, 0s;
+}
+
+.strength-segment:is(:hover, :has(:focus-visible)) button:not(.is-active) .strength-segment-label {
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity 0.18s ease 90ms,
+    transform 0.3s cubic-bezier(0.22, 0.9, 0.3, 1) 90ms;
+}
+
+.strength-segment:is(:hover, :has(:focus-visible)) button:nth-child(2) .strength-segment-label {
+  transition-delay: 135ms;
+}
+
+.strength-segment:is(:hover, :has(:focus-visible)) button:nth-child(3) .strength-segment-label {
+  transition-delay: 180ms;
+}
+
+.strength-segment:is(:hover, :has(:focus-visible)) button:nth-child(4) .strength-segment-label {
+  transition-delay: 225ms;
+}
+
+/* While a group is open its active pill stays lit as the "you are here"
+   anchor the eye returns to as the row moves: a warmer ember ring for the
+   source, a brighter raise for the neutral window picker. */
+.strength-source:is(:hover, :has(:focus-visible)) button.is-active {
+  box-shadow:
+    var(--sx-lift),
+    inset 0 0 0 1px color-mix(in srgb, var(--sx-ember) 60%, transparent);
+}
+
+.strength-window:is(:hover, :has(:focus-visible)) button.is-active {
+  background: color-mix(in srgb, var(--text-primary) 14%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .strength-segment button,
+  .strength-segment:is(:hover, :has(:focus-visible)) button:not(.is-active),
+  .strength-segment .strength-segment-label,
+  .strength-segment:is(:hover, :has(:focus-visible)) button:not(.is-active) .strength-segment-label {
+    transition: none;
+  }
+}
+
+.strength-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 4px;
+}
+
+.strength-action {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   min-height: 38px;
-  padding: 0 16px;
+  padding: 0 15px;
   border: 1px solid var(--sx-edge);
   border-radius: var(--radius-pill);
-  background: var(--sx-well);
+  background: transparent;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
   letter-spacing: -0.005em;
+  white-space: nowrap;
   transition:
+    background 0.18s ease,
     border-color 0.18s ease,
-    color 0.18s ease,
-    background 0.18s ease;
+    color 0.18s ease;
 }
 
-.strength-refresh:hover:not(:disabled) {
-  border-color: var(--accent-glow);
-  background: var(--sx-raised);
+.strength-action:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--sx-ember) 38%, var(--sx-edge));
+  background: var(--sx-well);
   color: var(--text-primary);
 }
 
-.strength-refresh:disabled {
+.strength-action:disabled {
   opacity: 0.55;
+}
+
+/* Connection state on the Hevy action: a steady teal heartbeat, the app's
+   own "linked" language, kept tiny so it never competes with the ember. */
+.strength-hevy-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
 }
 
 .strength-segmented {
@@ -324,6 +487,12 @@
 }
 
 .strength-notice.is-sample {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.strength-notice.is-warning {
   border-color: var(--warning-border);
   background: var(--warning-bg);
   color: var(--warning-text);
@@ -2690,6 +2859,26 @@
   font-size: 12px;
 }
 
+.strength-session-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+.strength-session-head .strength-session-source {
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--sport-strength) 24%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--sport-strength) 10%, transparent);
+  color: color-mix(in srgb, var(--sport-strength) 72%, var(--text-primary));
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
 .strength-session-facts {
   display: flex;
   flex-wrap: wrap;
@@ -2783,6 +2972,203 @@
 
 .strength-connect .primary-button {
   margin-top: 12px;
+}
+
+.strength-connect-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.strength-connect-actions .primary-button {
+  margin-top: 0;
+}
+
+/* ---------- Hevy connection ---------- */
+
+.strength-hevy-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 320;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 7, 10, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+:root[data-theme="paper"] .strength-hevy-backdrop {
+  background: rgba(35, 31, 25, 0.42);
+}
+
+.strength-hevy-dialog {
+  width: min(520px, 100%);
+  max-height: min(720px, calc(100vh - 48px));
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid var(--sx-edge);
+  border-radius: 22px;
+  background: var(--panel-bg-solid, var(--panel-bg));
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
+}
+
+.strength-hevy-dialog > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 22px;
+}
+
+.strength-hevy-dialog .eyebrow {
+  margin: 0 0 5px;
+}
+
+.strength-hevy-dialog h2 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.025em;
+}
+
+.strength-hevy-close {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--sx-edge);
+  border-radius: 50%;
+  background: var(--sx-well);
+  color: var(--text-secondary);
+}
+
+.strength-hevy-account {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--sx-hairline);
+  border-radius: 16px;
+  background: var(--sx-well);
+}
+
+.strength-hevy-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 12px;
+  background: #1976ff;
+  color: white;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.strength-hevy-account div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.strength-hevy-account strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strength-hevy-account div > span,
+.strength-hevy-dialog form > p,
+.strength-hevy-privacy {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.strength-hevy-account a,
+.strength-hevy-developer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.strength-hevy-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--sx-hairline);
+  border-radius: 14px;
+}
+
+.strength-hevy-toggle input {
+  margin-top: 3px;
+}
+
+.strength-hevy-toggle span {
+  display: grid;
+  gap: 3px;
+}
+
+.strength-hevy-toggle small {
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.strength-hevy-dialog form {
+  display: grid;
+  gap: 15px;
+}
+
+.strength-hevy-dialog form > p,
+.strength-hevy-privacy {
+  margin: 0;
+}
+
+.strength-hevy-dialog footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.strength-hevy-dialog .danger {
+  color: var(--danger, #e16068);
+}
+
+.strength-hevy-error {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--danger, #e16068) 12%, transparent);
+  color: var(--danger, #e16068);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+@media (max-width: 700px) {
+  .strength-session-head {
+    align-items: flex-start;
+  }
+
+  .strength-session-meta {
+    align-items: flex-end;
+    flex-direction: column-reverse;
+    gap: 4px;
+  }
+
+  .strength-hevy-dialog footer {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  BookOpen,
   Database,
   ExternalLink,
   FileDown,
@@ -38,12 +39,16 @@ import type {
   ChatSessionSummary,
   ChatSettings,
   ClaudeCodeStatus,
+  CoachInputChoice,
+  CoachInputPrompt,
   LocalChatConnectionTest,
   LocalChatDiscovery,
   CorosMcpStatus,
   McpServerStatus,
   PlanDraftPreview,
   PlanWorkoutEntryInput,
+  TrainingPlanDocument,
+  TrainingPlanDestination,
   TrainingHubExportResult,
   UploadPlanResult,
   WorkoutIntensityInput,
@@ -51,6 +56,7 @@ import type {
   DeleteWorkoutResult
 } from "../../electron/types";
 import { formatWorkoutSport } from "../../electron/workoutCapabilities";
+import { trainingPlanFromCoachDraftPreview } from "../../electron/trainingPlanDomain";
 import { ActivityVisualCard } from "./ActivityVisualCard";
 import { FitnessTrendCard } from "./FitnessTrendCard";
 import { HrZoneCard } from "./HrZoneCard";
@@ -62,6 +68,7 @@ import {
   toPersistedEntries,
   toWireMessages,
   upsertActivityVisualEntry,
+  upsertCoachPromptEntry,
   upsertFitnessTrendEntry,
   upsertHrZoneEntry,
   upsertPlanDraftEntry,
@@ -118,10 +125,89 @@ function AssistantMarkdown({
   );
 }
 
+function ThinkingDisclosure({
+  content,
+  live = false
+}: {
+  content: string;
+  live?: boolean;
+}) {
+  return (
+    <details className={`chat-thinking${live ? " chat-thinking-live" : ""}`}>
+      <summary>
+        <span>Thinking</span>
+        {live ? <small><i aria-hidden="true" />Live</small> : null}
+      </summary>
+      <div className="chat-thinking-text">
+        <AssistantMarkdown content={content} />
+      </div>
+    </details>
+  );
+}
+
+function CoachInputCard({
+  prompt,
+  disabled,
+  onChoose,
+  onCustom
+}: {
+  prompt: CoachInputPrompt;
+  disabled: boolean;
+  onChoose: (choice: CoachInputChoice) => void;
+  onCustom: () => void;
+}) {
+  const answered = prompt.answeredAt !== undefined;
+  return (
+    <section
+      className={`chat-coach-prompt${answered ? " is-answered" : ""}`}
+      aria-labelledby={`coach-prompt-${prompt.promptId}`}
+    >
+      <header className="chat-coach-prompt-header">
+        <span className="chat-coach-prompt-status">
+          <MessageCircle size={14} aria-hidden="true" />
+          {answered ? "Answered" : "Waiting for your answer"}
+        </span>
+        <h4 id={`coach-prompt-${prompt.promptId}`}>{prompt.question}</h4>
+      </header>
+      <div className="chat-coach-prompt-choices" role="group" aria-label="Answer choices">
+        {prompt.choices.map((choice, index) => {
+          const selected = prompt.selectedChoiceId === choice.id;
+          return (
+            <button
+              key={choice.id}
+              type="button"
+              className={`chat-coach-prompt-choice${selected ? " is-selected" : ""}`}
+              onClick={() => onChoose(choice)}
+              disabled={disabled || answered}
+            >
+              <span>
+                {choice.label}
+                {!answered && index === 0 ? <em>Recommended</em> : null}
+              </span>
+              {choice.description ? <small>{choice.description}</small> : null}
+            </button>
+          );
+        })}
+      </div>
+      {!answered && prompt.allowCustom ? (
+        <button
+          type="button"
+          className="chat-coach-prompt-custom"
+          onClick={onCustom}
+          disabled={disabled}
+        >
+          Type another answer
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
 interface ChatViewProps {
   api: CorosLinkApi | undefined;
   onError: (message: string | null) => void;
   onPlanUploaded?: () => void;
+  onReviewPlan?: (plan: TrainingPlanDocument) => void;
   /** Fires when a coach request is in progress (streaming or exporting). */
   onActivityChange?: (active: boolean) => void;
   /** Text preloaded into the composer (e.g. "Ask Coach" from the calendar). */
@@ -257,14 +343,19 @@ function PlanPreviewCard({
   draft,
   uploading,
   uploaded,
-  onUpload
+  onUpload,
+  onReview
 }: {
   draft: PlanDraftPreview;
   uploading: boolean;
   uploaded?: UploadPlanResult;
-  onUpload: () => void;
+  onUpload: (destination: TrainingPlanDestination) => void;
+  onReview?: () => void;
 }) {
   const { unitSystem } = useUnitSystem();
+  const [destination, setDestination] = useState<TrainingPlanDestination>(
+    "workoutLibrary"
+  );
   const uploadedResult =
     uploaded ??
     (draft.uploadResult
@@ -276,6 +367,44 @@ function PlanPreviewCard({
         }
       : undefined);
   const isUploaded = Boolean(uploadedResult || draft.uploadedAt);
+  const rawDates = draft.entries
+    .map((entry) => entry.source?.schedule_date?.replace(/-/g, ""))
+    .filter((date): date is string => Boolean(date && /^\d{8}$/.test(date)))
+    .sort();
+  const firstDate = rawDates[0];
+  const lastDate = rawDates[rawDates.length - 1];
+  const planWeeks = firstDate && lastDate
+    ? Math.max(
+        1,
+        Math.ceil(
+          (new Date(`${lastDate.slice(0, 4)}-${lastDate.slice(4, 6)}-${lastDate.slice(6, 8)}T12:00:00`).valueOf() -
+            new Date(`${firstDate.slice(0, 4)}-${firstDate.slice(4, 6)}-${firstDate.slice(6, 8)}T12:00:00`).valueOf()) /
+            604_800_000 +
+            1 / 7
+        )
+      )
+    : Math.max(1, Math.ceil(draft.entries.length / 7));
+  const sports = [
+    ...new Set(draft.entries.map((entry) => formatWorkoutSport(entry.sport ?? "run")))
+  ];
+  const unavailableNative =
+    destination === "nativePlan" || destination === "nativePlanAndCalendar";
+  const remoteWrites = destination === "localTemplate"
+    ? []
+    : destination === "workoutLibrary"
+      ? draft.entries.map((entry) => `Create workout “${entry.name}” in COROS`)
+      : destination === "calendar"
+        ? draft.entries
+            .filter((entry) => entry.scheduleDate)
+            .map((entry) => `Schedule “${entry.name}” on ${entry.scheduleDate}`)
+        : [];
+  const destinationLabel: Record<TrainingPlanDestination, string> = {
+    workoutLibrary: "COROS Workout Library",
+    calendar: "COROS Calendar",
+    nativePlan: "COROS Plan Library",
+    localTemplate: "Local CorosLink template",
+    nativePlanAndCalendar: "COROS plan + Calendar"
+  };
 
   return (
     <div className="chat-plan-card">
@@ -331,9 +460,50 @@ function PlanPreviewCard({
           ))}
         </ul>
       ) : null}
+      {!isUploaded ? (
+        <div className="chat-plan-confirmation">
+          <label>
+            <span>Destination</span>
+            <select
+              value={destination}
+              onChange={(event) =>
+                setDestination(event.target.value as TrainingPlanDestination)
+              }
+              disabled={uploading}
+            >
+              <option value="workoutLibrary">Workout Library</option>
+              <option value="calendar">Calendar</option>
+              <option value="nativePlan">Plan Library — unavailable</option>
+              <option value="localTemplate">Local template</option>
+              <option value="nativePlanAndCalendar">Plan + Calendar — unavailable</option>
+            </select>
+          </label>
+          <dl className="chat-plan-facts">
+            <div><dt>Weeks</dt><dd>{planWeeks}</dd></div>
+            <div><dt>Workouts</dt><dd>{draft.entries.length}</dd></div>
+            <div><dt>Sports</dt><dd>{sports.join(", ")}</dd></div>
+            <div><dt>Start</dt><dd>{draft.entries.find((entry) => entry.scheduleDate)?.scheduleDate ?? "Not set"}</dd></div>
+            <div><dt>Conflicts</dt><dd>{draft.conflicts.length}</dd></div>
+            <div><dt>Reused</dt><dd>0</dd></div>
+            <div><dt>Grouped COROS plan</dt><dd>{unavailableNative ? "Unavailable" : "No"}</dd></div>
+          </dl>
+          <div className="chat-plan-write-preview">
+            <strong>Writes after confirmation</strong>
+            {unavailableNative ? (
+              <p>Native plan writes remain gated until COROS create/update payloads can be live-verified safely.</p>
+            ) : remoteWrites.length > 0 ? (
+              <ul>
+                {remoteWrites.map((write, index) => <li key={`${write}-${index}`}>{write}</li>)}
+              </ul>
+            ) : (
+              <p>Local database only. No COROS write.</p>
+            )}
+          </div>
+        </div>
+      ) : null}
       {uploadedResult || isUploaded ? (
         <p className="chat-plan-success">
-          Uploaded —{" "}
+          Saved to {destinationLabel[uploadedResult?.destination ?? draft.uploadResult?.destination ?? destination]} —{" "}
           {uploadedResult?.workoutsScheduled ??
             draft.uploadResult?.workoutsScheduled ??
             0}{" "}
@@ -345,18 +515,19 @@ function PlanPreviewCard({
         </p>
       ) : (
         <div className="chat-plan-actions">
+          {onReview ? <button type="button" className="chat-plan-review" onClick={onReview} disabled={uploading}><BookOpen size={14} aria-hidden="true" /> Review &amp; save in Training Library</button> : null}
           <button
             type="button"
             className="chat-plan-upload"
-            onClick={onUpload}
-            disabled={uploading}
+            onClick={() => onUpload(destination)}
+            disabled={uploading || unavailableNative}
           >
             {uploading ? (
               <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
             ) : (
               <Upload size={14} aria-hidden="true" />
             )}
-            Upload to COROS
+            Confirm {destinationLabel[destination]}
           </button>
         </div>
       )}
@@ -482,6 +653,7 @@ export function ChatView({
   api,
   onError,
   onPlanUploaded,
+  onReviewPlan,
   onActivityChange,
   pendingPrompt,
   onPendingPromptConsumed
@@ -537,6 +709,13 @@ export function ChatView({
   const activeSessionIdRef = useRef<string | null>(null);
   // Accumulates source info across the current stream's info events.
   const sourceRef = useRef<SourceInfo | null>(null);
+  const thinkingRef = useRef("");
+  // Interaction cards are appended after the assistant's final text so the
+  // question and its choices stay in a natural reading order.
+  const pendingCoachPromptsRef = useRef<CoachInputPrompt[]>([]);
+  // Kept only while a paused Coach turn is resuming, so a failed/cancelled
+  // request can restore the question instead of silently losing it.
+  const resumedCoachPromptRef = useRef<CoachInputPrompt | null>(null);
   const autoDetectLocalRef = useRef(false);
   const claudePollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -558,6 +737,8 @@ export function ChatView({
   const resetEphemeralChatState = () => {
     setUploadedPlans({});
     setDeletedWorkouts({});
+    pendingCoachPromptsRef.current = [];
+    resumedCoachPromptRef.current = null;
   };
 
   const persistHistory = (
@@ -746,27 +927,57 @@ export function ChatView({
   // Subscribe once to the streaming push channels.
   useEffect(() => {
     if (!api) return;
-    const finishStreaming = (finalText: string) => {
+    const restoreResumedCoachPrompt = () => {
+      const originalPrompt = resumedCoachPromptRef.current;
+      resumedCoachPromptRef.current = null;
+      if (!originalPrompt) return;
+      setTimeline((prev) => {
+        const next = prev.map((entry): ChatEntry =>
+          entry.kind === "coachPrompt" &&
+          entry.prompt.promptId === originalPrompt.promptId
+            ? { kind: "coachPrompt", prompt: originalPrompt }
+            : entry
+        );
+        persistHistory(activeSessionIdRef.current, next, true);
+        return next;
+      });
+    };
+    const finishStreaming = (finalText: string, finishReason?: string) => {
       activeRequestIdRef.current = null;
       setStreaming(false);
       setStreamingText("");
       setThinkingText("");
       setActiveTool(null);
       const source = sourceRef.current ?? undefined;
+      const reasoningSummary = thinkingRef.current.trim() || undefined;
+      thinkingRef.current = "";
+      const coachPrompts = pendingCoachPromptsRef.current;
+      pendingCoachPromptsRef.current = [];
       setCurrentSource(null);
       sourceRef.current = null;
-      if (finalText) {
+      if (finishReason === "cancelled") {
+        restoreResumedCoachPrompt();
+        return;
+      }
+      resumedCoachPromptRef.current = null;
+      if (finalText || coachPrompts.length > 0) {
         setTimeline((prev) => {
-          const next: ChatEntry[] = [...prev];
+          let next: ChatEntry[] = [...prev];
           if (source?.mcpError) {
             next.push({ kind: "toolNotice", message: source.mcpError });
           }
-          next.push({
-            kind: "message",
-            role: "assistant",
-            content: finalText,
-            source
-          });
+          if (finalText) {
+            next.push({
+              kind: "message",
+              role: "assistant",
+              content: finalText,
+              source,
+              reasoningSummary
+            });
+          }
+          for (const prompt of coachPrompts) {
+            next = upsertCoachPromptEntry(next, prompt);
+          }
           persistHistory(activeSessionIdRef.current, next, true);
           return next;
         });
@@ -778,7 +989,9 @@ export function ChatView({
         if (payload.requestId !== activeRequestIdRef.current) return;
         setStreamingText("");
         setThinkingText("");
+        thinkingRef.current = "";
         setActiveTool(null);
+        pendingCoachPromptsRef.current = [];
       }),
       api.onChatStreamToken((payload) => {
         if (payload.requestId !== activeRequestIdRef.current) return;
@@ -813,8 +1026,16 @@ export function ChatView({
           if (chatSettings.visualizationsEnabled) {
             setTimeline((prev) => upsertHrZoneEntry(prev, payload.preview));
           }
+        } else if (payload.kind === "coachPrompt") {
+          pendingCoachPromptsRef.current = [
+            ...pendingCoachPromptsRef.current.filter(
+              (prompt) => prompt.promptId !== payload.prompt.promptId
+            ),
+            payload.prompt
+          ];
         } else if (payload.kind === "thinking") {
-          setThinkingText((prev) => prev + payload.delta);
+          thinkingRef.current += payload.delta;
+          setThinkingText(thinkingRef.current);
         } else if (payload.kind === "mcp") {
           setActiveTool(payload.status === "call" ? payload.tool ?? null : null);
           const base: SourceInfo = sourceRef.current ?? {
@@ -839,7 +1060,7 @@ export function ChatView({
       }),
       api.onChatStreamDone((payload) => {
         if (payload.requestId !== activeRequestIdRef.current) return;
-        finishStreaming(payload.fullText);
+        finishStreaming(payload.fullText, payload.finishReason);
       }),
       api.onChatStreamError((payload) => {
         if (payload.requestId !== activeRequestIdRef.current) return;
@@ -847,9 +1068,12 @@ export function ChatView({
         setStreaming(false);
         setStreamingText("");
         setThinkingText("");
+        thinkingRef.current = "";
         setActiveTool(null);
         setCurrentSource(null);
         sourceRef.current = null;
+        pendingCoachPromptsRef.current = [];
+        restoreResumedCoachPrompt();
         onError(payload.message);
         if (payload.authError) {
           setAuthStatus({ signedIn: false });
@@ -1279,8 +1503,10 @@ export function ChatView({
     }
   };
 
-  const handleSend = async () => {
-    const trimmed = input.trim();
+  const sendMessage = async (
+    trimmed: string,
+    answeredPrompt?: { promptId: string; choiceId: string }
+  ) => {
     if (!api || !trimmed || streaming || exportingLatestActivity) return;
     if (isLatestActivityFileRequest(trimmed)) {
       await handleLatestActivityFileRequest(trimmed);
@@ -1307,17 +1533,62 @@ export function ChatView({
         return;
       }
     }
-    const nextEntries: ChatEntry[] = [
-      ...timeline,
-      { kind: "message", role: "user", content: trimmed }
-    ];
+    let answeredPromptIndex = answeredPrompt
+      ? timeline.findIndex(
+          (entry) =>
+            entry.kind === "coachPrompt" &&
+            entry.prompt.promptId === answeredPrompt.promptId &&
+            entry.prompt.answeredAt === undefined
+        )
+      : -1;
+    if (answeredPromptIndex < 0) {
+      for (let index = timeline.length - 1; index >= 0; index -= 1) {
+        const entry = timeline[index];
+        if (entry.kind === "coachPrompt" && entry.prompt.answeredAt === undefined) {
+          answeredPromptIndex = index;
+          break;
+        }
+      }
+    }
+    const promptEntry =
+      answeredPromptIndex >= 0 ? timeline[answeredPromptIndex] : undefined;
+    const originalPrompt =
+      promptEntry?.kind === "coachPrompt" ? promptEntry.prompt : null;
+    const answeredTimeline = timeline.map((entry, index): ChatEntry =>
+      index === answeredPromptIndex && entry.kind === "coachPrompt"
+        ? {
+            kind: "coachPrompt",
+            prompt: {
+              ...entry.prompt,
+              answer: trimmed,
+              answeredAt: Date.now(),
+              selectedChoiceId:
+                answeredPrompt?.promptId === entry.prompt.promptId
+                  ? answeredPrompt.choiceId
+                  : undefined
+            }
+          }
+        : entry
+    );
+    const nextEntries: ChatEntry[] = originalPrompt
+      ? answeredTimeline
+      : [
+          ...answeredTimeline,
+          { kind: "message", role: "user", content: trimmed }
+        ];
     const requestId = crypto.randomUUID();
 
     activeRequestIdRef.current = requestId;
+    resumedCoachPromptRef.current = originalPrompt;
     sourceRef.current = null;
     setCurrentSource(null);
     setTimeline(nextEntries);
-    persistHistory(activeSessionIdRef.current, nextEntries, true);
+    // Keep the unanswered card durable until the resumed turn completes. If
+    // the app closes mid-request, reloading the session can safely offer it
+    // again instead of leaving an answered-but-incomplete invisible entry.
+    if (!originalPrompt) {
+      persistHistory(activeSessionIdRef.current, nextEntries, true);
+    }
     setInput("");
     setStreaming(true);
     setStreamingText("");
@@ -1329,8 +1600,37 @@ export function ChatView({
     } catch (caught) {
       activeRequestIdRef.current = null;
       setStreaming(false);
+      if (originalPrompt) {
+        resumedCoachPromptRef.current = null;
+        const restoredEntries = timeline.map((entry): ChatEntry =>
+          entry.kind === "coachPrompt" &&
+          entry.prompt.promptId === originalPrompt.promptId
+            ? { kind: "coachPrompt", prompt: originalPrompt }
+            : entry
+        );
+        setTimeline(restoredEntries);
+        persistHistory(activeSessionIdRef.current, restoredEntries, true);
+      }
       onError(caught instanceof Error ? caught.message : "Chat request failed.");
     }
+  };
+
+  const handleSend = async () => {
+    await sendMessage(input.trim());
+  };
+
+  const handleCoachPromptChoice = async (
+    prompt: CoachInputPrompt,
+    choice: CoachInputChoice
+  ) => {
+    await sendMessage(choice.response, {
+      promptId: prompt.promptId,
+      choiceId: choice.id
+    });
+  };
+
+  const handleCustomCoachAnswer = () => {
+    inputRef.current?.focus();
   };
 
   const handleStop = () => {
@@ -1338,12 +1638,15 @@ export function ChatView({
     void api.cancelChat(activeRequestIdRef.current);
   };
 
-  const handleUploadPlanDraft = async (draftId: string) => {
+  const handleUploadPlanDraft = async (
+    draftId: string,
+    destination: TrainingPlanDestination
+  ) => {
     if (!api || uploadingDraftId) return;
     setUploadingDraftId(draftId);
     onError(null);
     try {
-      const result = await api.uploadTrainingPlanDraft(draftId, unitSystem);
+      const result = await api.uploadTrainingPlanDraft(draftId, unitSystem, destination);
       setUploadedPlans((prev) => ({ ...prev, [draftId]: result }));
       setTimeline((prev) => {
         const next = prev.map((entry) =>
@@ -1355,7 +1658,10 @@ export function ChatView({
                   uploadedAt: Date.now(),
                   uploadResult: {
                     workoutsScheduled: result.workoutsScheduled,
-                    workoutsCreated: result.workoutsCreated
+                    workoutsCreated: result.workoutsCreated,
+                    destination: result.destination,
+                    localPlanId: result.localPlanId,
+                    groupedPlanCreated: result.groupedPlanCreated
                   }
                 }
               }
@@ -1373,6 +1679,16 @@ export function ChatView({
       );
     } finally {
       setUploadingDraftId(null);
+    }
+  };
+
+  const handleReviewPlanDraft = (draft: PlanDraftPreview) => {
+    if (!onReviewPlan) return;
+    try {
+      onError(null);
+      onReviewPlan(trainingPlanFromCoachDraftPreview(draft));
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : "The Coach plan could not be opened in the Training Library.");
     }
   };
 
@@ -1457,6 +1773,12 @@ export function ChatView({
   const isChatGptProvider = chatSettings.provider === "chatgpt";
   const localModelConfigured = chatSettings.local.model.trim().length > 0;
   const isBusy = streaming || exportingLatestActivity;
+  const waitingForCoachAnswer = [...timeline]
+    .reverse()
+    .some(
+      (entry) =>
+        entry.kind === "coachPrompt" && entry.prompt.answeredAt === undefined
+    );
   const showLoginGate = isChatGptProvider && !authStatus?.signedIn;
   const showClaudeGate =
     isClaudeProvider && claudeStatus?.state !== "connected";
@@ -1836,6 +2158,32 @@ export function ChatView({
               );
             }
 
+            if (entry.kind === "coachPrompt") {
+              if (entry.prompt.answeredAt !== undefined) {
+                return null;
+              }
+              return (
+                <div
+                  key={entry.prompt.promptId}
+                  className="chat-row chat-row-assistant"
+                >
+                  <div className="chat-avatar chat-avatar-assistant">
+                    <MessageCircle size={16} aria-hidden="true" />
+                  </div>
+                  <div className="chat-bubble chat-bubble-coach-prompt">
+                    <CoachInputCard
+                      prompt={entry.prompt}
+                      disabled={streaming || exportingLatestActivity}
+                      onChoose={(choice) =>
+                        void handleCoachPromptChoice(entry.prompt, choice)
+                      }
+                      onCustom={handleCustomCoachAnswer}
+                    />
+                  </div>
+                </div>
+              );
+            }
+
             if (entry.kind === "planDraft") {
               return (
                 <div
@@ -1850,9 +2198,10 @@ export function ChatView({
                       draft={entry.draft}
                       uploading={uploadingDraftId === entry.draft.draftId}
                       uploaded={uploadedPlans[entry.draft.draftId]}
-                      onUpload={() =>
-                        void handleUploadPlanDraft(entry.draft.draftId)
+                      onUpload={(destination) =>
+                        void handleUploadPlanDraft(entry.draft.draftId, destination)
                       }
+                      onReview={onReviewPlan ? () => handleReviewPlanDraft(entry.draft) : undefined}
                     />
                   </div>
                 </div>
@@ -1945,6 +2294,9 @@ export function ChatView({
                 <div className="chat-bubble">
                   {entry.role === "assistant" ? (
                     <>
+                      {entry.reasoningSummary ? (
+                        <ThinkingDisclosure content={entry.reasoningSummary} />
+                      ) : null}
                       <AssistantMarkdown content={entry.content} />
                       {entry.source ? (
                         <SourceBadge source={entry.source} />
@@ -1963,30 +2315,27 @@ export function ChatView({
               <div className="chat-avatar chat-avatar-assistant">
                 <Sparkles size={16} aria-hidden="true" />
               </div>
-              <div className="chat-bubble">
-                {streamingText && thinkingText ? (
-                  <details className="chat-thinking">
-                    <summary>Thought process</summary>
-                    <p className="chat-thinking-text">{thinkingText}</p>
-                  </details>
-                ) : null}
+              <div className="chat-bubble chat-bubble-streaming">
                 {streamingText ? (
-                  <AssistantMarkdown content={streamingText} streaming />
+                  <>
+                    {thinkingText ? (
+                      <ThinkingDisclosure content={thinkingText} live />
+                    ) : null}
+                    <AssistantMarkdown content={streamingText} streaming />
+                  </>
                 ) : (
                   <div className="chat-stream-pending">
-                    <span className="chat-stream-status">
-                      {activeTool
-                        ? `Using ${activeTool.replace(/_/g, " ")}…`
-                        : thinkingText
-                          ? "Thinking…"
-                          : "Working on it…"}
-                    </span>
+                    {activeTool || !thinkingText ? (
+                      <span className="chat-stream-status">
+                        {activeTool
+                          ? `Using ${activeTool.replace(/_/g, " ")}…`
+                          : resumedCoachPromptRef.current
+                            ? "Resuming plan…"
+                            : "Working on it…"}
+                      </span>
+                    ) : null}
                     {thinkingText ? (
-                      <p className="chat-thinking-preview">
-                        {thinkingText.length > 280
-                          ? `…${thinkingText.slice(-280)}`
-                          : thinkingText}
-                      </p>
+                      <ThinkingDisclosure content={thinkingText} live />
                     ) : null}
                   </div>
                 )}
@@ -2015,7 +2364,11 @@ export function ChatView({
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={handleInputKeyDown}
-                placeholder="Ask your coach…"
+                placeholder={
+                  waitingForCoachAnswer
+                    ? "Type another answer…"
+                    : "Ask your coach…"
+                }
                 rows={1}
                 disabled={exportingLatestActivity}
               />
