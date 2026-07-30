@@ -32,7 +32,10 @@ import type {
   SpotifySyncResult,
   SpotifySyncTrack,
   SpotifySyncUpdate,
+  HevySettingsInput,
+  HevyStatus,
   StrengthHistory,
+  StrengthHistoryRequest,
   TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
@@ -54,6 +57,8 @@ import type {
   TrainingLibraryDeleteRequest,
   TrainingLibrarySnapshot,
   TrainingPlanDocument,
+  TrainingPlanCalendarMutationResult,
+  TrainingPlanCalendarPreview,
   TrainingPlanDestination,
   TrainingPlanMetadataPatch,
   WorkoutMetadataPatch,
@@ -369,6 +374,10 @@ export interface CorosLinkApi {
     patch: TrainingPlanMetadataPatch
   ) => Promise<TrainingPlanDocument>;
   deleteLocalTrainingPlan: (id: string, confirmed: boolean) => Promise<void>;
+  previewTrainingPlanCalendar: (planId: string, startDate: string) => Promise<TrainingPlanCalendarPreview>;
+  addTrainingPlanToCalendar: (previewId: string, confirmed: boolean) => Promise<TrainingPlanCalendarMutationResult>;
+  previewTrainingPlanCalendarRemoval: (planId: string) => Promise<TrainingPlanCalendarPreview>;
+  removeTrainingPlanFromCalendar: (previewId: string, confirmed: boolean) => Promise<TrainingPlanCalendarMutationResult>;
   updateWorkoutMetadata: (
     programIds: string[],
     patch: WorkoutMetadataPatch
@@ -463,7 +472,11 @@ export interface CorosLinkApi {
   getRacePredictor: () => Promise<TrainingHubRacePredictor>;
   getTrainingDashboard: () => Promise<TrainingHubDashboard>;
   getDailyMetrics: (dateList: string[]) => Promise<TrainingHubDailyMetrics>;
-  syncStrengthHistory: (days?: number, force?: boolean) => Promise<StrengthHistory>;
+  syncStrengthHistory: (request?: StrengthHistoryRequest) => Promise<StrengthHistory>;
+  getHevyStatus: () => Promise<HevyStatus>;
+  connectHevy: (apiKey: string) => Promise<HevyStatus>;
+  updateHevySettings: (input: HevySettingsInput) => Promise<HevyStatus>;
+  disconnectHevy: () => Promise<void>;
   startRpeBackfill: () => Promise<void>;
   getRpeBackfillStatus: () => Promise<{ pending: number; running: boolean }>;
   getRpeLoadByDay: () => Promise<Record<string, number>>;

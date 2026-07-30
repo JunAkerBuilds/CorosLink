@@ -22,9 +22,12 @@ import type {
   RunWorkoutEditorStep,
   RunWorkoutEditorStepKind,
   RunWorkoutEditorTarget,
+  PlanWorkoutEntryInput,
+  TrainingPlanEntry,
   WorkoutEditPreview,
   WorkoutEditRef,
   WorkoutEditSaveResult,
+  WorkoutEditorDocument,
   WorkoutEditorContext,
   WorkoutExerciseOption,
   WorkoutHeartRateBasis,
@@ -32,6 +35,10 @@ import type {
   WorkoutSport
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
+import {
+  editorDraftToPlanWorkoutInput,
+  planWorkoutInputToEditorDraft
+} from "../../electron/planWorkoutEditor";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import {
   elevationToMeters,
@@ -58,9 +65,11 @@ import {
 
 interface WorkoutEditorModalProps {
   api: CorosLinkApi;
-  editRef: WorkoutEditRef;
+  editRef?: WorkoutEditRef;
+  planEntry?: TrainingPlanEntry;
   onClose: () => void;
-  onSaved: (result: WorkoutEditSaveResult) => void;
+  onSaved?: (result: WorkoutEditSaveResult) => void;
+  onSavedToPlan?: (workout: PlanWorkoutEntryInput) => void;
   onError: (message: string | null) => void;
 }
 
@@ -206,13 +215,15 @@ function moveItem<T>(items: T[], from: number, to: number): T[] {
 export function WorkoutEditorModal({
   api,
   editRef,
+  planEntry,
   onClose,
   onSaved,
+  onSavedToPlan,
   onError
 }: WorkoutEditorModalProps) {
   const { unitSystem } = useUnitSystem();
   const reducedMotion = useReducedMotion();
-  const [document, setDocument] = useState<Awaited<ReturnType<CorosLinkApi["getWorkoutForEdit"]>> | null>(null);
+  const [document, setDocument] = useState<WorkoutEditorDocument | null>(null);
   const [draft, setDraft] = useState<RunWorkoutEditorDraft | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [preview, setPreview] = useState<WorkoutEditPreview | null>(null);
@@ -223,13 +234,51 @@ export function WorkoutEditorModal({
   const [exerciseOptionsLoading, setExerciseOptionsLoading] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const previewSequence = useRef(0);
+  const planMode = Boolean(planEntry);
+  const planWorkout = useMemo<PlanWorkoutEntryInput | undefined>(() => {
+    if (!planEntry) return undefined;
+    return planEntry.workout ?? {
+      key: `plan:${planEntry.id}`,
+      name: planEntry.title ?? "Workout",
+      sport: "run",
+      save_to_library: false
+    };
+  }, [planEntry]);
 
   useEffect(() => {
     let cancelled = false;
     setDocument(null);
     setDraft(null);
     setLoadError(null);
-    void api.getWorkoutForEdit(editRef, unitSystem).then((loaded) => {
+    const load = async (): Promise<WorkoutEditorDocument> => {
+      if (!planEntry) {
+        if (!editRef) throw new Error("No workout was selected.");
+        return api.getWorkoutForEdit(editRef, unitSystem);
+      }
+      if (planEntry.programId) {
+        const linked = await api.getWorkoutForEdit(
+          { kind: "library", programId: planEntry.programId },
+          unitSystem
+        );
+        return {
+          ...linked,
+          ref: { kind: "library", programId: planEntry.programId },
+          revision: `plan:${planEntry.id}`,
+          canEdit: true,
+          unsupportedReason: undefined
+        };
+      }
+      if (!planWorkout) throw new Error("This plan entry has no editable workout definition.");
+      const context = await api.getWorkoutEditorContext(unitSystem);
+      return {
+        ref: { kind: "library", programId: `plan:${planEntry.id}` },
+        revision: `plan:${planEntry.id}`,
+        draft: planWorkoutInputToEditorDraft(planWorkout),
+        context,
+        canEdit: true
+      };
+    };
+    void load().then((loaded) => {
       if (!cancelled) {
         setDocument(loaded);
         setDraft(structuredClone(loaded.draft));
@@ -238,7 +287,7 @@ export function WorkoutEditorModal({
       if (!cancelled) setLoadError(cause instanceof Error ? cause.message : String(cause));
     });
     return () => { cancelled = true; };
-  }, [api, editRef, unitSystem]);
+  }, [api, editRef, planEntry, planWorkout, unitSystem]);
 
   useEffect(() => {
     const sport = draft?.sport;
@@ -264,7 +313,7 @@ export function WorkoutEditorModal({
 
   useEffect(() => {
     const sequence = ++previewSequence.current;
-    if (!document || !draft || !document.canEdit || !validation.valid) {
+    if (!document || !draft || !document.canEdit || !validation.valid || planMode || !editRef) {
       setPreview(null);
       setPreviewing(false);
       return;
@@ -291,7 +340,7 @@ export function WorkoutEditorModal({
         });
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [api, document, draft, editRef, unitSystem, validation.valid]);
+  }, [api, document, draft, editRef, planMode, unitSystem, validation.valid]);
 
   const requestClose = useCallback(() => {
     if (dirty && !saving) setConfirmClose(true);
@@ -430,6 +479,12 @@ export function WorkoutEditorModal({
     if (!document || !draft || !validation.valid) return;
     setSaving(true);
     try {
+      if (planMode) {
+        if (!planWorkout || !onSavedToPlan) throw new Error("The plan workout cannot be updated.");
+        onSavedToPlan(editorDraftToPlanWorkoutInput(draft, planWorkout));
+        return;
+      }
+      if (!editRef || !onSaved) throw new Error("The workout editor is missing its save target.");
       const result = await api.saveWorkoutEdit(
         editRef,
         document.revision,
@@ -459,7 +514,7 @@ export function WorkoutEditorModal({
         >
           <header className="workout-editor-header">
             <div>
-              <p className="eyebrow">{editRef.kind === "scheduled" ? "Scheduled occurrence" : "Workout library"}</p>
+              <p className="eyebrow">{planMode ? "Training plan copy" : editRef?.kind === "scheduled" ? "Scheduled occurrence" : "Workout library"}</p>
               <h2 id="workout-editor-title">Edit {draft ? formatWorkoutSport(draft.sport) : "workout"}</h2>
             </div>
             <button type="button" className="icon-button" aria-label="Close workout editor" onClick={requestClose} disabled={saving}>
@@ -597,7 +652,7 @@ export function WorkoutEditorModal({
                   <button type="button" className="ghost-button" onClick={requestClose} disabled={saving}>Cancel</button>
                   <button type="button" className="primary-button" disabled={!document.canEdit || !dirty || !validation.valid || saving} onClick={() => void save()}>
                     {saving ? <LoaderCircle className="is-spinning" size={15} aria-hidden="true" /> : <Save size={15} aria-hidden="true" />}
-                    {saving ? "Saving and verifying..." : "Save"}
+                    {saving ? (planMode ? "Applying..." : "Saving and verifying...") : (planMode ? "Apply to plan" : "Save")}
                   </button>
                 </div>
               </footer>
@@ -606,7 +661,7 @@ export function WorkoutEditorModal({
 
           {confirmClose ? (
             <div className="workout-editor-confirm" role="alertdialog" aria-label="Discard workout changes">
-              <div><strong>Discard unsaved changes?</strong><span>Your edits have not been sent to COROS.</span></div>
+              <div><strong>Discard unsaved changes?</strong><span>{planMode ? "Your edits have not been applied to the plan." : "Your edits have not been sent to COROS."}</span></div>
               <button type="button" className="ghost-button" onClick={() => setConfirmClose(false)}>Keep editing</button>
               <button type="button" className="danger-button" onClick={onClose}>Discard</button>
             </div>

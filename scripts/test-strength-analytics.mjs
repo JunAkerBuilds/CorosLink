@@ -142,6 +142,22 @@ assert.ok(chest.sets > 0 && quads.sets > 0);
 assert.equal(analytics.muscleById.neck.sets, 0);
 assert.equal(analytics.muscleById.neck.lastTrained, undefined);
 
+// Unknown custom names fall back to Hevy's exercise-template muscle metadata.
+const providerFallback = buildStrengthAnalytics(
+  [
+    session("hevy-custom", now, [
+      {
+        ...exercise("Uncatalogued Lever Movement", [{ reps: 10, weightKg: 40 }]),
+        primaryMuscleGroup: "quadriceps",
+        secondaryMuscleGroups: ["glutes"]
+      }
+    ])
+  ],
+  30
+);
+assert.ok(providerFallback.muscleById.quads.sets > 0);
+assert.ok(providerFallback.muscleById.glutes.sets > 0);
+
 // Credited sets never exceed the sets actually performed.
 const creditedSets = analytics.muscles.reduce((sum, stat) => sum + stat.sets, 0);
 assert.ok(creditedSets <= analytics.summary.sets + 1e-9);

@@ -1964,11 +1964,33 @@ export interface StrengthSet {
   workSec: number;
   restSec: number;
   calories: number;
+  /** Original set classification when supplied by an external strength log. */
+  type?: StrengthSetType;
+  /** Rating of perceived exertion, on Hevy's 1–10 scale. */
+  rpe?: number;
+}
+
+export type StrengthSetType = "normal" | "warmup" | "dropset" | "failure";
+
+export type StrengthSource = "coros" | "hevy" | "combined";
+
+export type StrengthDataSource = StrengthSource;
+
+export interface StrengthSourceIds {
+  coros?: string;
+  hevy?: string;
 }
 
 export interface StrengthExercise {
   nameKey: string;   // "T####"/"S####" library code, or a custom name
   rawName?: string;  // payload name, used to resolve custom exercises
+  /** Provider exercise/template identity, when one exists. */
+  externalId?: string;
+  /** Provider exercise classification (for example, `weight_reps`). */
+  exerciseType?: string;
+  /** Hevy muscle metadata, used only when name-based resolution has no match. */
+  primaryMuscleGroup?: string;
+  secondaryMuscleGroups?: string[];
   sets: number;
   totalReps: number;
   entries: StrengthSet[];
@@ -1996,6 +2018,9 @@ export interface StrengthDetail {
 /** One completed strength activity plus its cached set-by-set breakdown. */
 export interface StrengthSession {
   activityId: string;
+  /** Absent on legacy cached rows, which are implicitly COROS sessions. */
+  source?: StrengthSource;
+  sourceIds?: StrengthSourceIds;
   sportType: number;
   name?: string;
   sportName?: string;
@@ -2017,6 +2042,31 @@ export interface StrengthHistory {
   fetched: number;
   /** Window length in days that produced this history. */
   days: number;
+  /** Source selection used to produce this history. */
+  source?: StrengthDataSource;
+  pendingBySource?: Partial<Record<Exclude<StrengthSource, "combined">, number>>;
+  fetchedBySource?: Partial<Record<Exclude<StrengthSource, "combined">, number>>;
+  /** Non-fatal provider errors; cached sessions remain usable. */
+  warnings?: string[];
+}
+
+export interface StrengthHistoryRequest {
+  days?: number;
+  force?: boolean;
+  source?: StrengthDataSource;
+}
+
+export interface HevyStatus {
+  connected: boolean;
+  userId?: string;
+  displayName?: string;
+  profileUrl?: string;
+  lastSyncedAt?: string;
+  includeWarmups: boolean;
+}
+
+export interface HevySettingsInput {
+  includeWarmups: boolean;
 }
 
 export interface TrainingHubActivityDetail {
@@ -2555,6 +2605,51 @@ export interface TrainingPlanEntry {
   notes?: string;
 }
 
+export interface TrainingPlanGenerationRequest {
+  goal: string;
+  sports: WorkoutSport[];
+  difficulty: TrainingPlanDifficulty;
+  weeks: number;
+  sessionsPerWeek: number;
+  /** ISO date for Week 1 Monday. */
+  startDate: string;
+  /** Monday = 0 through Sunday = 6. */
+  availableDayIndexes: number[];
+  maxSessionMinutes?: number;
+  constraints?: string;
+}
+
+export interface TrainingPlanCalendarOccurrence {
+  planEntryId: string;
+  happenDay: string;
+  schedulePlanId: string;
+  scheduleIdInPlan: string;
+  planProgramId: string;
+  pbVersion?: number;
+  createdAt: string;
+  removedAt?: string;
+}
+
+export interface TrainingPlanCalendarFailure {
+  planEntryId: string;
+  happenDay: string;
+  message: string;
+  /** True when COROS may have accepted the write but its identity could not be verified. */
+  writeMayHaveSucceeded?: boolean;
+}
+
+export interface TrainingPlanCalendarInstall {
+  id: string;
+  startDate: string;
+  planRevision: string;
+  state: "active" | "partial" | "removed";
+  lastOperation?: "install" | "remove";
+  occurrences: TrainingPlanCalendarOccurrence[];
+  failures: TrainingPlanCalendarFailure[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TrainingPlanDocument {
   id: string;
   remoteId?: string;
@@ -2569,6 +2664,7 @@ export interface TrainingPlanDocument {
   startDate?: string;
   phases: TrainingPlanPhase[];
   entries: TrainingPlanEntry[];
+  calendarInstalls?: TrainingPlanCalendarInstall[];
   tags: string[];
   collectionId?: string;
   favorite: boolean;
@@ -2579,6 +2675,46 @@ export interface TrainingPlanDocument {
   lastSyncedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TrainingPlanCalendarPreviewEntry {
+  planEntryId: string;
+  name: string;
+  happenDay: string;
+  sport?: WorkoutSport;
+  schedulePlanId?: string;
+  scheduleIdInPlan?: string;
+  planProgramId?: string;
+  pbVersion?: number;
+}
+
+export interface TrainingPlanCalendarConflict {
+  happenDay: string;
+  existing: Array<{
+    name: string;
+    schedulePlanId: string;
+    scheduleIdInPlan: string;
+  }>;
+}
+
+export interface TrainingPlanCalendarPreview {
+  previewId: string;
+  operation: "install" | "remove";
+  planId: string;
+  planName: string;
+  planRevision: string;
+  startDate: string;
+  entries: TrainingPlanCalendarPreviewEntry[];
+  conflicts: TrainingPlanCalendarConflict[];
+  blockers: string[];
+  expiresAt: string;
+}
+
+export interface TrainingPlanCalendarMutationResult {
+  plan: TrainingPlanDocument;
+  scheduledCount: number;
+  removedCount: number;
+  failures: TrainingPlanCalendarFailure[];
 }
 
 export interface TrainingCollection {

@@ -18875,7 +18875,33 @@ tr.data-intervals-row-missing {
 
 .chat-plan-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.chat-plan-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  background: var(--glass-bg);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.chat-plan-review:hover:not(:disabled) {
+  border-color: var(--chat-signal-border);
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+.chat-plan-review:disabled {
+  opacity: 0.65;
+  cursor: default;
 }
 
 .chat-plan-upload {

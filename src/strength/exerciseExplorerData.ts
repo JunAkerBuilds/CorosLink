@@ -1,6 +1,9 @@
 import type { StrengthSession, StrengthSet } from "../../electron/types";
 import { resolveExerciseName } from "../training/exerciseNames";
-import { estimateOneRepMax } from "./strengthAnalytics";
+import {
+  canonicalExerciseDisplayName,
+  estimateOneRepMax
+} from "./strengthAnalytics";
 
 const EPSILON = 0.01;
 
@@ -97,7 +100,9 @@ export function explorerExerciseName(
   rawName: string | undefined
 ): string {
   const resolved = resolveExerciseName(nameKey, rawName);
-  return /^[TS]\d/.test(resolved) ? "Unnamed exercise" : resolved;
+  return /^[TS]\d/.test(resolved)
+    ? "Unnamed exercise"
+    : canonicalExerciseDisplayName(resolved);
 }
 
 function repRangeFor(reps: number): RepRangeDefinition | undefined {

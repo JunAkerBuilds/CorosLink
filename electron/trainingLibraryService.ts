@@ -18,12 +18,18 @@ import {
   readNativeCorosPlan
 } from "./corosTrainingPlanAdapter";
 import {
+  createAndScheduleWorkout,
   deleteWorkoutProgram,
   listLibraryWorkouts,
   listScheduledWorkoutEntries,
-  listTrainingHubActivities
+  listTrainingHubActivities,
+  removeScheduledWorkout,
+  scheduleLibraryWorkout
 } from "./trainingHubService";
 import {
+  activeTrainingPlanCalendarInstall,
+  shiftTrainingPlan,
+  trainingPlanCalendarRevision,
   validateTrainingPlan,
   workoutSportFromType
 } from "./trainingPlanDomain";
@@ -39,6 +45,11 @@ import type {
   TrainingLibrarySnapshot,
   TrainingLibraryWorkout,
   TrainingPlanDocument,
+  TrainingPlanCalendarFailure,
+  TrainingPlanCalendarInstall,
+  TrainingPlanCalendarMutationResult,
+  TrainingPlanCalendarPreview,
+  TrainingPlanCalendarPreviewEntry,
   TrainingPlanMetadataPatch,
   TrainingPlanWriteCapabilities,
   TrainingWorkoutMetadata,
@@ -47,7 +58,7 @@ import type {
 } from "./types";
 
 const UNVERIFIED_WRITE_REASON =
-  "Native COROS plan writes are disabled until the cleanup-safe opt-in verifier confirms this account and API version. Local templates and individual workout/calendar upload remain available.";
+  "Native COROS plan writes are unavailable.";
 
 export function getNativePlanWriteCapabilities(): TrainingPlanWriteCapabilities {
   return {
@@ -365,7 +376,470 @@ export function deleteLocalTrainingPlan(id: string, confirmed: boolean): void {
   if (plan.source === "coros") {
     throw new Error(UNVERIFIED_WRITE_REASON);
   }
+  if (activeTrainingPlanCalendarInstall(plan)) {
+    throw new Error("Remove this plan's future calendar workouts before deleting the plan.");
+  }
   deleteTrainingPlanDocument(id);
+}
+
+interface StoredPlanCalendarPreview {
+  preview: TrainingPlanCalendarPreview;
+  projectedPlan: TrainingPlanDocument;
+  calendarFingerprint: string;
+  rangeStart: string;
+  rangeEnd: string;
+  installId?: string;
+}
+
+interface TrainingPlanCalendarAdapter {
+  listScheduled: typeof listScheduledWorkoutEntries;
+  scheduleLibrary: typeof scheduleLibraryWorkout;
+  createAndSchedule: typeof createAndScheduleWorkout;
+  removeScheduled: typeof removeScheduledWorkout;
+}
+
+const defaultTrainingPlanCalendarAdapter: TrainingPlanCalendarAdapter = {
+  listScheduled: listScheduledWorkoutEntries,
+  scheduleLibrary: scheduleLibraryWorkout,
+  createAndSchedule: createAndScheduleWorkout,
+  removeScheduled: removeScheduledWorkout
+};
+
+let trainingPlanCalendarAdapter = defaultTrainingPlanCalendarAdapter;
+
+/** Test seam for calendar mutation simulations. Never used by the renderer. */
+export function setTrainingPlanCalendarAdapterForTests(
+  overrides?: Partial<TrainingPlanCalendarAdapter>
+): void {
+  trainingPlanCalendarAdapter = overrides
+    ? { ...defaultTrainingPlanCalendarAdapter, ...overrides }
+    : defaultTrainingPlanCalendarAdapter;
+}
+
+const PLAN_CALENDAR_PREVIEW_TTL_MS = 15 * 60_000;
+const planCalendarPreviews = new Map<string, StoredPlanCalendarPreview>();
+
+function normalizedCalendarDay(value: string): string {
+  const day = value.replace(/-/g, "");
+  if (!/^\d{8}$/.test(day)) throw new Error("Calendar dates must use YYYY-MM-DD.");
+  return day;
+}
+
+function dashedCalendarDay(value: string): string {
+  const day = normalizedCalendarDay(value);
+  return `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6)}`;
+}
+
+function addCalendarDays(value: string, offset: number): string {
+  const date = parsePlanDay(value);
+  if (!date) throw new Error("Calendar dates must use YYYY-MM-DD.");
+  date.setDate(date.getDate() + offset);
+  return dateKey(date);
+}
+
+function scheduleIdentity(entry: TrainingHubScheduledWorkoutEntry): string {
+  return `${entry.planId}:${entry.idInPlan}`;
+}
+
+function fingerprintCalendar(entries: TrainingHubScheduledWorkoutEntry[]): string {
+  const serialized = entries
+    .map((entry) => ({
+      planId: entry.planId,
+      idInPlan: entry.idInPlan,
+      planProgramId: entry.planProgramId,
+      happenDay: entry.happenDay,
+      name: entry.name
+    }))
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  return crypto.createHash("sha256").update(JSON.stringify(serialized)).digest("hex");
+}
+
+function latestInstallForPlan(plan: TrainingPlanDocument): TrainingPlanCalendarInstall | undefined {
+  const today = dateKey(new Date());
+  return [...(plan.calendarInstalls ?? [])]
+    .filter((install) => install.state === "partial" || (
+      install.state !== "removed" && install.occurrences.some((occurrence) => !occurrence.removedAt && occurrence.happenDay >= today)
+    ))
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+}
+
+export function buildTrainingPlanCalendarProjection(
+  plan: TrainingPlanDocument,
+  startDate: string,
+  scheduled: TrainingHubScheduledWorkoutEntry[],
+  today = dateKey(new Date())
+): Pick<TrainingPlanCalendarPreview, "startDate" | "entries" | "conflicts" | "blockers"> & {
+  projectedPlan: TrainingPlanDocument;
+} {
+  if (plan.source === "coros") {
+    throw new Error("Native COROS plans are read-only in the Training Library.");
+  }
+  const startDay = normalizedCalendarDay(startDate);
+  const start = parsePlanDay(startDay)!;
+  if (start.getDay() !== 1) throw new Error("The plan start date must be a Monday.");
+  if (startDay < today) throw new Error("A training plan cannot be installed in the past.");
+  const projectedPlan = shiftTrainingPlan(plan, dashedCalendarDay(startDay));
+  const planRevision = trainingPlanCalendarRevision(projectedPlan);
+  const existingInstall = latestInstallForPlan(plan);
+  const blockers: string[] = [];
+  if (existingInstall?.state === "active") {
+    blockers.push("This plan already has an active calendar installation.");
+  } else if (existingInstall) {
+    if (existingInstall.lastOperation === "remove") {
+      blockers.push("Finish removing the partial calendar installation before reinstalling.");
+    }
+    if (normalizedCalendarDay(existingInstall.startDate) !== startDay) {
+      blockers.push("Remove the partial calendar installation before choosing a new start date.");
+    }
+    if (existingInstall.planRevision !== planRevision) {
+      blockers.push("The plan changed after its partial calendar installation. Remove it before reinstalling.");
+    }
+    if (existingInstall.failures.some((failure) => failure.writeMayHaveSucceeded && failure.happenDay >= today)) {
+      blockers.push("COROS may have accepted an unverified workout. Refresh the calendar before retrying.");
+    }
+  }
+  const owned = new Set(
+    existingInstall?.occurrences
+      .filter((occurrence) => !occurrence.removedAt)
+      .map((occurrence) => `${occurrence.planEntryId}:${occurrence.happenDay}`) ?? []
+  );
+  const entries: TrainingPlanCalendarPreviewEntry[] = [];
+  for (const entry of projectedPlan.entries) {
+    if (entry.kind !== "workout") continue;
+    if (entry.dayIndex === undefined) {
+      blockers.push(`"${entry.title ?? "Untitled workout"}" is still in the holding area.`);
+      continue;
+    }
+    const happenDay = addCalendarDays(startDay, entry.weekIndex * 7 + entry.dayIndex);
+    if (owned.has(`${entry.id}:${happenDay}`)) continue;
+    if (!entry.programId && !entry.workout) {
+      blockers.push(`"${entry.title ?? "Untitled workout"}" has no workout definition.`);
+      continue;
+    }
+    entries.push({
+      planEntryId: entry.id,
+      name: entry.title ?? entry.workout?.name ?? "Workout",
+      happenDay,
+      sport: entry.workout?.sport
+    });
+  }
+  const conflicts = [...new Set(entries.map((entry) => entry.happenDay))]
+    .map((happenDay) => ({
+      happenDay,
+      existing: scheduled
+        .filter((entry) => entry.happenDay === happenDay)
+        .map((entry) => ({
+          name: entry.name,
+          schedulePlanId: entry.planId,
+          scheduleIdInPlan: entry.idInPlan
+        }))
+    }))
+    .filter((conflict) => conflict.existing.length > 0);
+  return {
+    projectedPlan,
+    startDate: dashedCalendarDay(startDay),
+    entries,
+    conflicts,
+    blockers: [...new Set(blockers)]
+  };
+}
+
+function rememberPlanCalendarPreview(
+  preview: Omit<TrainingPlanCalendarPreview, "previewId" | "expiresAt">,
+  projectedPlan: TrainingPlanDocument,
+  calendarEntries: TrainingHubScheduledWorkoutEntry[],
+  rangeStart: string,
+  rangeEnd: string,
+  installId?: string
+): TrainingPlanCalendarPreview {
+  for (const [id, record] of planCalendarPreviews) {
+    if (Date.parse(record.preview.expiresAt) <= Date.now()) planCalendarPreviews.delete(id);
+  }
+  const previewId = crypto.randomUUID().replaceAll("-", "").slice(0, 16);
+  const saved: TrainingPlanCalendarPreview = {
+    ...preview,
+    previewId,
+    expiresAt: new Date(Date.now() + PLAN_CALENDAR_PREVIEW_TTL_MS).toISOString()
+  };
+  planCalendarPreviews.set(previewId, {
+    preview: saved,
+    projectedPlan,
+    calendarFingerprint: fingerprintCalendar(calendarEntries),
+    rangeStart,
+    rangeEnd,
+    installId
+  });
+  return saved;
+}
+
+export async function previewTrainingPlanCalendar(
+  planId: string,
+  startDate: string
+): Promise<TrainingPlanCalendarPreview> {
+  const plan = getTrainingPlanDocument(planId);
+  if (!plan) throw new Error("Training plan was not found.");
+  const startDay = normalizedCalendarDay(startDate);
+  const rangeEnd = addCalendarDays(startDay, Math.max(0, plan.weekCount * 7 - 1));
+  const scheduled = await trainingPlanCalendarAdapter.listScheduled(startDay, rangeEnd);
+  const projection = buildTrainingPlanCalendarProjection(plan, startDate, scheduled);
+  return rememberPlanCalendarPreview(
+    {
+      operation: "install",
+      planId: plan.id,
+      planName: plan.name,
+      planRevision: trainingPlanCalendarRevision(projection.projectedPlan),
+      startDate: projection.startDate,
+      entries: projection.entries,
+      conflicts: projection.conflicts,
+      blockers: projection.blockers
+    },
+    projection.projectedPlan,
+    scheduled,
+    startDay,
+    rangeEnd,
+    latestInstallForPlan(plan)?.id
+  );
+}
+
+export async function previewTrainingPlanCalendarRemoval(
+  planId: string
+): Promise<TrainingPlanCalendarPreview> {
+  const plan = getTrainingPlanDocument(planId);
+  if (!plan) throw new Error("Training plan was not found.");
+  const today = dateKey(new Date());
+  const install = activeTrainingPlanCalendarInstall(plan, today);
+  if (!install) throw new Error("This plan has no future calendar workouts to remove.");
+  const occurrences = install.occurrences.filter(
+    (occurrence) => !occurrence.removedAt && occurrence.happenDay >= today
+  );
+  const rangeStart = occurrences.map((entry) => entry.happenDay).sort()[0] ?? today;
+  const rangeEnd = occurrences.map((entry) => entry.happenDay).sort().at(-1) ?? today;
+  const scheduled = await trainingPlanCalendarAdapter.listScheduled(rangeStart, rangeEnd);
+  const entries: TrainingPlanCalendarPreviewEntry[] = occurrences.map((occurrence) => ({
+    planEntryId: occurrence.planEntryId,
+    name: plan.entries.find((entry) => entry.id === occurrence.planEntryId)?.title ?? "Workout",
+    happenDay: occurrence.happenDay,
+    schedulePlanId: occurrence.schedulePlanId,
+    scheduleIdInPlan: occurrence.scheduleIdInPlan,
+    planProgramId: occurrence.planProgramId,
+    pbVersion: occurrence.pbVersion
+  }));
+  return rememberPlanCalendarPreview(
+    {
+      operation: "remove",
+      planId: plan.id,
+      planName: plan.name,
+      planRevision: trainingPlanCalendarRevision(plan),
+      startDate: install.startDate,
+      entries,
+      conflicts: [],
+      blockers: []
+    },
+    plan,
+    scheduled,
+    rangeStart,
+    rangeEnd,
+    install.id
+  );
+}
+
+async function requireCurrentCalendarPreview(
+  previewId: string,
+  operation: "install" | "remove",
+  confirmed: boolean
+): Promise<{ record: StoredPlanCalendarPreview; plan: TrainingPlanDocument }> {
+  if (!confirmed) throw new Error("Calendar changes require confirmation.");
+  const record = planCalendarPreviews.get(previewId);
+  if (!record || record.preview.operation !== operation || Date.parse(record.preview.expiresAt) <= Date.now()) {
+    planCalendarPreviews.delete(previewId);
+    throw new Error("This calendar preview expired. Refresh it before confirming.");
+  }
+  if (record.preview.blockers.length > 0) {
+    throw new Error(record.preview.blockers.join(" "));
+  }
+  const plan = getTrainingPlanDocument(record.preview.planId);
+  if (!plan) throw new Error("Training plan was not found.");
+  const revision = operation === "install"
+    ? trainingPlanCalendarRevision(shiftTrainingPlan(plan, record.preview.startDate))
+    : trainingPlanCalendarRevision(plan);
+  if (revision !== record.preview.planRevision) {
+    throw new Error("The plan changed after this preview. Refresh before confirming.");
+  }
+  const scheduled = await trainingPlanCalendarAdapter.listScheduled(record.rangeStart, record.rangeEnd);
+  if (fingerprintCalendar(scheduled) !== record.calendarFingerprint) {
+    throw new Error("The COROS calendar changed after this preview. Refresh before confirming.");
+  }
+  return { record, plan };
+}
+
+function waitForCalendar(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+async function captureScheduledIdentity(
+  previewEntry: TrainingPlanCalendarPreviewEntry,
+  before: Set<string>
+): Promise<TrainingHubScheduledWorkoutEntry | undefined> {
+  for (const delayMs of [0, 250, 600, 1_200]) {
+    if (delayMs) await waitForCalendar(delayMs);
+    const current = await trainingPlanCalendarAdapter.listScheduled(previewEntry.happenDay, previewEntry.happenDay);
+    const added = current.filter((entry) => !before.has(scheduleIdentity(entry)));
+    const exact = added.filter((entry) => entry.name === previewEntry.name);
+    if (exact.length === 1) return exact[0];
+    if (added.length === 1) return added[0];
+  }
+  return undefined;
+}
+
+export async function addTrainingPlanToCalendar(
+  previewId: string,
+  confirmed: boolean
+): Promise<TrainingPlanCalendarMutationResult> {
+  const { record, plan } = await requireCurrentCalendarPreview(previewId, "install", confirmed);
+  const projectedPlan = shiftTrainingPlan(plan, record.preview.startDate);
+  const now = new Date().toISOString();
+  let install = projectedPlan.calendarInstalls?.find((item) => item.id === record.installId && item.state === "partial");
+  if (!install) {
+    install = {
+      id: crypto.randomUUID(),
+      startDate: record.preview.startDate,
+      planRevision: record.preview.planRevision,
+      state: "partial",
+      lastOperation: "install",
+      occurrences: [],
+      failures: [],
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+  install.lastOperation = "install";
+  const installs = (projectedPlan.calendarInstalls ?? []).filter((item) => item.id !== install!.id);
+  let nextPlan: TrainingPlanDocument = { ...projectedPlan, calendarInstalls: [...installs, install] };
+  saveTrainingPlanDocument(nextPlan);
+  let scheduledCount = 0;
+  for (const previewEntry of record.preview.entries) {
+    const planEntry = nextPlan.entries.find((entry) => entry.id === previewEntry.planEntryId);
+    if (!planEntry || planEntry.kind !== "workout") continue;
+    if (install.occurrences.some((occurrence) => !occurrence.removedAt && occurrence.planEntryId === planEntry.id && occurrence.happenDay === previewEntry.happenDay)) {
+      continue;
+    }
+    install.failures = install.failures.filter((failure) => !(failure.planEntryId === planEntry.id && failure.happenDay === previewEntry.happenDay));
+    let writeMayHaveSucceeded = false;
+    try {
+      const beforeEntries = await trainingPlanCalendarAdapter.listScheduled(previewEntry.happenDay, previewEntry.happenDay);
+      const before = new Set(beforeEntries.map(scheduleIdentity));
+      writeMayHaveSucceeded = true;
+      if (planEntry.programId) {
+        await trainingPlanCalendarAdapter.scheduleLibrary(planEntry.programId, previewEntry.happenDay);
+      } else if (planEntry.workout) {
+        await trainingPlanCalendarAdapter.createAndSchedule(
+          { ...planEntry.workout, schedule_date: previewEntry.happenDay, save_to_library: false },
+          previewEntry.happenDay,
+          "metric",
+          false
+        );
+      } else {
+        throw new Error("The plan workout definition is missing.");
+      }
+      const captured = await captureScheduledIdentity(previewEntry, before);
+      if (!captured) throw new Error("COROS accepted the workout, but its schedule identity could not be verified yet.");
+      install.occurrences.push({
+        planEntryId: planEntry.id,
+        happenDay: captured.happenDay,
+        schedulePlanId: captured.planId,
+        scheduleIdInPlan: captured.idInPlan,
+        planProgramId: captured.planProgramId,
+        createdAt: new Date().toISOString()
+      });
+      scheduledCount += 1;
+    } catch (cause) {
+      install.failures.push({
+        planEntryId: planEntry.id,
+        happenDay: previewEntry.happenDay,
+        message: cause instanceof Error ? cause.message : String(cause),
+        writeMayHaveSucceeded
+      });
+    }
+    install.updatedAt = new Date().toISOString();
+    install.state = "partial";
+    nextPlan = { ...nextPlan, calendarInstalls: [...installs, structuredClone(install)] };
+    saveTrainingPlanDocument(nextPlan);
+  }
+  install.state = install.failures.length > 0 ? "partial" : "active";
+  install.updatedAt = new Date().toISOString();
+  nextPlan = { ...nextPlan, calendarInstalls: [...installs, structuredClone(install)] };
+  saveTrainingPlanDocument(nextPlan);
+  planCalendarPreviews.delete(previewId);
+  return {
+    plan: nextPlan,
+    scheduledCount,
+    removedCount: 0,
+    failures: structuredClone(install.failures)
+  };
+}
+
+export async function removeTrainingPlanFromCalendar(
+  previewId: string,
+  confirmed: boolean
+): Promise<TrainingPlanCalendarMutationResult> {
+  const { record, plan } = await requireCurrentCalendarPreview(previewId, "remove", confirmed);
+  const install = plan.calendarInstalls?.find((item) => item.id === record.installId);
+  if (!install) throw new Error("The calendar installation was not found.");
+  install.lastOperation = "remove";
+  install.state = "partial";
+  install.updatedAt = new Date().toISOString();
+  saveTrainingPlanDocument(plan);
+  let removedCount = 0;
+  const failures: TrainingPlanCalendarFailure[] = [];
+  for (const previewEntry of record.preview.entries) {
+    const occurrence = install.occurrences.find((item) =>
+      item.planEntryId === previewEntry.planEntryId &&
+      item.schedulePlanId === previewEntry.schedulePlanId &&
+      item.scheduleIdInPlan === previewEntry.scheduleIdInPlan &&
+      !item.removedAt
+    );
+    if (!occurrence) continue;
+    try {
+      const current = await trainingPlanCalendarAdapter.listScheduled(occurrence.happenDay, occurrence.happenDay);
+      const present = current.some((entry) =>
+        entry.planId === occurrence.schedulePlanId && entry.idInPlan === occurrence.scheduleIdInPlan
+      );
+      if (present) {
+        await trainingPlanCalendarAdapter.removeScheduled({
+          planId: occurrence.schedulePlanId,
+          idInPlan: occurrence.scheduleIdInPlan,
+          planProgramId: occurrence.planProgramId,
+          pbVersion: occurrence.pbVersion
+        });
+        removedCount += 1;
+      }
+      occurrence.removedAt = new Date().toISOString();
+    } catch (cause) {
+      failures.push({
+        planEntryId: occurrence.planEntryId,
+        happenDay: occurrence.happenDay,
+        message: cause instanceof Error ? cause.message : String(cause)
+      });
+    }
+    install.updatedAt = new Date().toISOString();
+    saveTrainingPlanDocument(plan);
+  }
+  const today = dateKey(new Date());
+  const futureOwned = install.occurrences.some((occurrence) => !occurrence.removedAt && occurrence.happenDay >= today);
+  const unresolved = install.failures.some((failure) => failure.writeMayHaveSucceeded && failure.happenDay >= today);
+  install.state = futureOwned || unresolved || failures.length > 0 ? "partial" : "removed";
+  install.updatedAt = new Date().toISOString();
+  saveTrainingPlanDocument(plan);
+  planCalendarPreviews.delete(previewId);
+  return {
+    plan,
+    scheduledCount: 0,
+    removedCount,
+    failures: [
+      ...failures,
+      ...install.failures.filter((failure) => failure.writeMayHaveSucceeded && failure.happenDay >= today)
+    ]
+  };
 }
 
 export function updateWorkoutMetadata(

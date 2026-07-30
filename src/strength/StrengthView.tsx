@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent
+} from "react";
 import {
   Bar,
   BarChart,
@@ -14,15 +21,21 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   ChevronRight,
+  ExternalLink,
   FlaskConical,
+  Link2,
   Loader2,
   LockKeyhole,
   Minus,
   RefreshCw,
   RotateCw,
-  Search
+  Search,
+  Settings2,
+  X
 } from "lucide-react";
 import type {
+  HevyStatus,
+  StrengthDataSource,
   StrengthSession,
   TrainingHubStatus,
   UnitSystem
@@ -128,6 +141,26 @@ function formatSessionDate(startTime?: number): string {
     day: "numeric",
     ...(sameYear ? {} : { year: "numeric" })
   });
+}
+
+function formatSyncTime(value?: string): string {
+  if (!value) return "Not synced yet";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Not synced yet"
+    : `Last synced ${date.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+      })}`;
+}
+
+function sessionSourceLabel(session: StrengthSession): string | undefined {
+  if (session.source === "combined") return "Hevy + COROS";
+  if (session.source === "hevy") return "Hevy";
+  if (session.source === "coros") return "COROS";
+  return undefined;
 }
 
 interface FigurePart {
@@ -365,17 +398,25 @@ export function StrengthView({
   showDevelopmentTools = false
 }: StrengthViewProps) {
   const { unitSystem } = useUnitSystem();
-  const connected = Boolean(status?.authenticated);
+  const corosConnected = Boolean(status?.authenticated);
   const { colors } = useChartColors();
   const { theme } = useTheme();
   const ember = theme === "paper" ? EMBER.paper : EMBER.dark;
 
   const [days, setDays] = useState(90);
+  const [source, setSource] = useState<StrengthDataSource>("combined");
+  const [hevyStatus, setHevyStatus] = useState<HevyStatus | null>(null);
+  const [hevyStatusLoading, setHevyStatusLoading] = useState(true);
+  const [hevyDialogOpen, setHevyDialogOpen] = useState(false);
+  const [hevyApiKey, setHevyApiKey] = useState("");
+  const [hevyBusy, setHevyBusy] = useState(false);
+  const [hevyDialogError, setHevyDialogError] = useState<string | null>(null);
   const [loadedSessions, setLoadedSessions] = useState<StrengthSession[]>([]);
   const [sampleMode, setSampleMode] = useState(false);
   const [pending, setPending] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [view, setView] = useState<BodyView>("front");
   const [viewRequest, setViewRequest] = useState(0);
   const [metric, setMetric] = useState<HeatMetric>("sets");
@@ -387,6 +428,72 @@ export function StrengthView({
   const [figureHover, setFigureHover] = useState<MuscleId | null>(null);
   const [listHover, setListHover] = useState<MuscleId | null>(null);
   const syncSequenceRef = useRef(0);
+  const sourceInitializedRef = useRef(false);
+  const hevyConnected = Boolean(hevyStatus?.connected);
+  const anyConnected = corosConnected || hevyConnected;
+
+  useEffect(() => {
+    let active = true;
+    setHevyStatusLoading(true);
+    api
+      .getHevyStatus()
+      .then((next) => {
+        if (!active) return;
+        setHevyStatus(next);
+        if (!sourceInitializedRef.current) {
+          sourceInitializedRef.current = true;
+          setSource(
+            corosConnected && next.connected
+              ? "combined"
+              : next.connected
+                ? "hevy"
+                : "coros"
+          );
+        }
+      })
+      .catch((caught) => {
+        if (!active) return;
+        setHevyStatus({ connected: false, includeWarmups: false });
+        sourceInitializedRef.current = true;
+        setSource("coros");
+        setError(toErrorMessage(caught));
+      })
+      .finally(() => {
+        if (active) setHevyStatusLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, corosConnected]);
+
+  useEffect(() => {
+    if (hevyStatus === null) return;
+    setSource((current) => {
+      if (current === "combined" && corosConnected && hevyConnected) return current;
+      if (current === "coros" && corosConnected) return current;
+      if (current === "hevy" && hevyConnected) return current;
+      return corosConnected && hevyConnected
+        ? "combined"
+        : hevyConnected
+          ? "hevy"
+          : "coros";
+    });
+  }, [corosConnected, hevyConnected, hevyStatus]);
+
+  useEffect(() => {
+    if (source !== "coros" && metric === "time") {
+      setMetric("sets");
+    }
+  }, [metric, source]);
+
+  useEffect(() => {
+    if (!hevyDialogOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !hevyBusy) setHevyDialogOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [hevyBusy, hevyDialogOpen]);
 
   const requestView = useCallback((next: BodyView) => {
     setSelectedMuscle(null);
@@ -418,21 +525,23 @@ export function StrengthView({
 
   const runSync = useCallback(
     async (force: boolean) => {
-      if (!connected) {
+      if (hevyStatusLoading || !anyConnected) {
         return;
       }
 
       const sequence = ++syncSequenceRef.current;
       setLoading(true);
       setError(null);
+      setWarnings([]);
 
       try {
-        let result = await api.syncStrengthHistory(days, force);
+        let result = await api.syncStrengthHistory({ days, force, source });
         if (syncSequenceRef.current !== sequence) {
           return;
         }
         setLoadedSessions(result.sessions);
         setPending(result.pending);
+        setWarnings(result.warnings ?? []);
 
         // Keep draining while COROS still owes us breakdowns; each round
         // repaints the body map so it fills in as the history arrives.
@@ -440,12 +549,17 @@ export function StrengthView({
           if (result.pending <= 0) {
             break;
           }
-          const next = await api.syncStrengthHistory(days, false);
+          const next = await api.syncStrengthHistory({
+            days,
+            force: false,
+            source
+          });
           if (syncSequenceRef.current !== sequence) {
             return;
           }
           setLoadedSessions(next.sessions);
           setPending(next.pending);
+          setWarnings(next.warnings ?? []);
           // A round that fetched nothing means the API is refusing; stop
           // instead of spinning against it.
           if (next.fetched === 0) {
@@ -460,10 +574,13 @@ export function StrengthView({
       } finally {
         if (syncSequenceRef.current === sequence) {
           setLoading(false);
+          if (source !== "coros") {
+            void api.getHevyStatus().then(setHevyStatus).catch(() => undefined);
+          }
         }
       }
     },
-    [api, connected, days]
+    [api, anyConnected, days, hevyStatusLoading, source]
   );
 
   useEffect(() => {
@@ -480,6 +597,68 @@ export function StrengthView({
       setSampleMode(false);
     }
   }, [showDevelopmentTools]);
+
+  const connectHevyAccount = useCallback(
+    async (event: FormEvent) => {
+      event.preventDefault();
+      setHevyBusy(true);
+      setHevyDialogError(null);
+      try {
+        const next = await api.connectHevy(hevyApiKey);
+        setHevyStatus(next);
+        setHevyApiKey("");
+        setSource(corosConnected ? "combined" : "hevy");
+      } catch (caught) {
+        setHevyDialogError(toErrorMessage(caught));
+      } finally {
+        setHevyBusy(false);
+      }
+    },
+    [api, corosConnected, hevyApiKey]
+  );
+
+  const changeWarmupSetting = useCallback(
+    async (includeWarmups: boolean) => {
+      setHevyBusy(true);
+      setHevyDialogError(null);
+      try {
+        const next = await api.updateHevySettings({ includeWarmups });
+        setHevyStatus(next);
+        await runSync(false);
+      } catch (caught) {
+        setHevyDialogError(toErrorMessage(caught));
+      } finally {
+        setHevyBusy(false);
+      }
+    },
+    [api, runSync]
+  );
+
+  const disconnectHevyAccount = useCallback(async () => {
+    if (
+      !window.confirm(
+        "Disconnect Hevy and erase its cached workouts from this device?"
+      )
+    ) {
+      return;
+    }
+    setHevyBusy(true);
+    setHevyDialogError(null);
+    try {
+      syncSequenceRef.current += 1;
+      await api.disconnectHevy();
+      setHevyStatus({ connected: false, includeWarmups: false });
+      setLoadedSessions([]);
+      setWarnings([]);
+      setPending(0);
+      setSource(corosConnected ? "coros" : "hevy");
+      if (!corosConnected) setHevyDialogOpen(false);
+    } catch (caught) {
+      setHevyDialogError(toErrorMessage(caught));
+    } finally {
+      setHevyBusy(false);
+    }
+  }, [api, corosConnected]);
 
   // Sample mode swaps in a generated history so the page can be worked on
   // without a populated account; nothing about it touches the API or the cache.
@@ -664,6 +843,138 @@ export function StrengthView({
     </button>
   ) : null;
 
+  const hevyDialog = hevyDialogOpen ? (
+    <div
+      className="strength-hevy-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !hevyBusy) {
+          setHevyDialogOpen(false);
+        }
+      }}
+    >
+      <section
+        className="strength-hevy-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="strength-hevy-title"
+      >
+        <header>
+          <div>
+            <p className="eyebrow">Strength source</p>
+            <h2 id="strength-hevy-title">
+              {hevyConnected ? "Hevy connected" : "Connect Hevy"}
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="strength-hevy-close"
+            aria-label="Close Hevy settings"
+            disabled={hevyBusy}
+            onClick={() => setHevyDialogOpen(false)}
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </header>
+
+        {hevyConnected ? (
+          <>
+            <div className="strength-hevy-account">
+              <span className="strength-hevy-mark" aria-hidden="true">H</span>
+              <div>
+                <strong>{hevyStatus?.displayName || "Hevy account"}</strong>
+                <span>{formatSyncTime(hevyStatus?.lastSyncedAt)}</span>
+              </div>
+              {hevyStatus?.profileUrl ? (
+                <a href={hevyStatus.profileUrl} target="_blank" rel="noreferrer">
+                  Profile <ExternalLink size={13} aria-hidden="true" />
+                </a>
+              ) : null}
+            </div>
+            <label className="strength-hevy-toggle">
+              <input
+                type="checkbox"
+                checked={Boolean(hevyStatus?.includeWarmups)}
+                disabled={hevyBusy}
+                onChange={(event) => void changeWarmupSetting(event.target.checked)}
+              />
+              <span>
+                <strong>Include warm-up sets</strong>
+                <small>Count warm-ups in sets, volume, and lift records.</small>
+              </span>
+            </label>
+            <p className="strength-hevy-privacy">
+              CorosLink reads completed workouts only. It never writes to Hevy or
+              sends Hevy workouts to COROS.
+            </p>
+            <footer>
+              <button
+                type="button"
+                className="secondary-button danger"
+                disabled={hevyBusy}
+                onClick={() => void disconnectHevyAccount()}
+              >
+                Disconnect and erase cache
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={hevyBusy}
+                onClick={() => setHevyDialogOpen(false)}
+              >
+                Done
+              </button>
+            </footer>
+          </>
+        ) : (
+          <form onSubmit={connectHevyAccount}>
+            <p>
+              Hevy&apos;s developer API requires Hevy Pro. Create a key in your
+              Hevy web settings, then paste it below.
+            </p>
+            <a
+              className="strength-hevy-developer-link"
+              href="https://hevy.com/settings?developer"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open Hevy developer settings
+              <ExternalLink size={14} aria-hidden="true" />
+            </a>
+            <label className="field">
+              <span>Hevy API key</span>
+              <input
+                type="password"
+                value={hevyApiKey}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="Paste API key"
+                disabled={hevyBusy}
+                onChange={(event) => setHevyApiKey(event.target.value)}
+              />
+            </label>
+            <p className="strength-hevy-privacy">
+              The key is encrypted with your operating system&apos;s credential
+              storage and is never exposed to the page after connection.
+            </p>
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={hevyBusy || !hevyApiKey.trim()}
+            >
+              {hevyBusy ? <Loader2 className="spin" size={16} aria-hidden="true" /> : <Link2 size={16} aria-hidden="true" />}
+              Connect Hevy
+            </button>
+          </form>
+        )}
+
+        {hevyDialogError ? (
+          <p className="strength-hevy-error" role="alert">{hevyDialogError}</p>
+        ) : null}
+      </section>
+    </div>
+  ) : null;
+
   // The controls only appear once there is something to control: on the
   // connect screen a window picker and a Refresh button would both be dead.
   const renderHeader = (withControls: boolean) => (
@@ -680,9 +991,30 @@ export function StrengthView({
               : `Your lifting from ${activeWindow.phrase}, muscle by muscle.`}
         </p>
       </div>
-      {withControls ? (
-        <div className="strength-header-controls">
-          <div className="strength-window" role="group" aria-label="Time covered">
+      <div className="strength-header-controls">
+        {withControls ? (
+          <>
+          <div className="strength-segment strength-source" role="group" aria-label="Strength source">
+            {(
+              [
+                ["combined", "Combined", !(corosConnected && hevyConnected)],
+                ["hevy", "Hevy", !hevyConnected],
+                ["coros", "COROS", !corosConnected]
+              ] as const
+            ).map(([id, label, disabled]) => (
+              <button
+                key={id}
+                type="button"
+                disabled={disabled}
+                className={source === id ? "is-active" : ""}
+                aria-pressed={source === id}
+                onClick={() => setSource(id)}
+              >
+                <span className="strength-segment-label">{label}</span>
+              </button>
+            ))}
+          </div>
+          <div className="strength-segment strength-window" role="group" aria-label="Time covered">
             {WINDOW_OPTIONS.map((option) => (
               <button
                 key={option.days}
@@ -691,29 +1023,68 @@ export function StrengthView({
                 aria-pressed={days === option.days}
                 onClick={() => setDays(option.days)}
               >
-                {option.label}
+                <span className="strength-segment-label">{option.label}</span>
               </button>
             ))}
           </div>
+          </>
+        ) : null}
+        <div className="strength-header-actions">
+          {withControls ? (
+            <button
+              type="button"
+              className="strength-action"
+              disabled={loading || sampleMode}
+              onClick={() => void runSync(true)}
+            >
+              {loading ? (
+                <Loader2 className="spin" size={14} aria-hidden="true" />
+              ) : (
+                <RefreshCw size={14} aria-hidden="true" />
+              )}
+              Refresh
+            </button>
+          ) : null}
           <button
             type="button"
-            className="strength-refresh"
-            disabled={loading || sampleMode}
-            onClick={() => void runSync(true)}
+            className="strength-action"
+            onClick={() => {
+              setHevyDialogError(null);
+              setHevyDialogOpen(true);
+            }}
           >
-            {loading ? (
-              <Loader2 className="spin" size={14} aria-hidden="true" />
+            {hevyConnected ? (
+              <>
+                <span className="strength-hevy-dot" aria-hidden="true" />
+                <Settings2 size={14} aria-hidden="true" />
+                Hevy
+              </>
             ) : (
-              <RefreshCw size={14} aria-hidden="true" />
+              <>
+                <Link2 size={14} aria-hidden="true" />
+                Connect Hevy
+              </>
             )}
-            Refresh
           </button>
         </div>
-      ) : null}
+      </div>
     </header>
   );
 
-  if (!connected && !sampleMode) {
+  if (hevyStatusLoading && !corosConnected && !sampleMode) {
+    return (
+      <section className="strength-view">
+        {renderHeader(false)}
+        <p className="strength-notice" role="status">
+          <Loader2 className="spin" size={14} aria-hidden="true" />
+          Checking strength connections…
+        </p>
+        {hevyDialog}
+      </section>
+    );
+  }
+
+  if (!anyConnected && !sampleMode) {
     return (
       <section className="strength-view">
         {renderHeader(false)}
@@ -722,19 +1093,30 @@ export function StrengthView({
           <span className="strength-connect-icon" aria-hidden="true">
             <LockKeyhole size={22} />
           </span>
-          <h3>Connect COROS to see your lifting</h3>
+          <h3>Connect a strength source</h3>
           <p>
-            Your gym sessions live in your Training Hub account. Once it&apos;s
-            connected, every set you log appears here.
+            Import completed workouts from Hevy, read sessions from COROS
+            Training Hub, or connect both for one combined history.
           </p>
-          <button type="button" className="primary-button" onClick={onOpenTraining}>
-            Open Training Hub
-          </button>
+          <div className="strength-connect-actions">
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => setHevyDialogOpen(true)}
+            >
+              <Link2 size={16} aria-hidden="true" />
+              Connect Hevy
+            </button>
+            <button type="button" className="secondary-button" onClick={onOpenTraining}>
+              Open Training Hub
+            </button>
+          </div>
         </section>
 
         {sampleButton ? (
           <div className="strength-sample-cta">{sampleButton}</div>
         ) : null}
+        {hevyDialog}
       </section>
     );
   }
@@ -742,6 +1124,7 @@ export function StrengthView({
   return (
     <section className="strength-view">
       {renderHeader(true)}
+      {hevyDialog}
 
       {sampleMode ? (
         <p className="strength-notice is-sample" role="status">
@@ -758,6 +1141,14 @@ export function StrengthView({
           {error}
         </p>
       ) : null}
+
+      {!sampleMode
+        ? warnings.map((warning) => (
+            <p className="strength-notice is-warning" role="status" key={warning}>
+              {warning} Showing the most recent cached workouts instead.
+            </p>
+          ))
+        : null}
 
       {pending > 0 && !sampleMode ? (
         <p className="strength-notice" role="status">
@@ -809,7 +1200,9 @@ export function StrengthView({
               <RotateCw size={15} aria-hidden="true" />
             </button>
             <div className="strength-segmented is-quiet" role="group" aria-label="Heat metric">
-              {METRIC_OPTIONS.map((option) => (
+              {METRIC_OPTIONS.filter(
+                (option) => source === "coros" || option.id !== "time"
+              ).map((option) => (
                 <button
                   key={option.id}
                   type="button"
@@ -1195,7 +1588,14 @@ export function StrengthView({
                   <li key={session.activityId}>
                     <div className="strength-session-head">
                       <strong>{session.name?.trim() || "Strength session"}</strong>
-                      <span>{formatSessionDate(session.startTime)}</span>
+                      <div className="strength-session-meta">
+                        {sessionSourceLabel(session) ? (
+                          <span className="strength-session-source">
+                            {sessionSourceLabel(session)}
+                          </span>
+                        ) : null}
+                        <span>{formatSessionDate(session.startTime)}</span>
+                      </div>
                     </div>
                     <p className="strength-session-facts">
                       <span>{detail.sets} sets</span>

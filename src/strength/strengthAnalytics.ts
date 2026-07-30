@@ -8,10 +8,19 @@
  * press adds a full set to the chest and a quarter-set to the triceps.
  */
 
-import type { StrengthSession, UnitSystem } from "../../electron/types";
+import type {
+  StrengthExercise,
+  StrengthSession,
+  UnitSystem
+} from "../../electron/types";
 import { resolveExerciseName } from "../training/exerciseNames";
 import { kilogramsToDisplayWeight, weightUnit } from "../units/units";
-import { MUSCLES, resolveExerciseTargets, type MuscleId } from "./muscles";
+import {
+  MUSCLES,
+  resolveExerciseTargets,
+  resolveProviderMuscleTargets,
+  type MuscleId
+} from "./muscles";
 
 /** What the body map shades muscles by. */
 export type HeatMetric = "sets" | "volume" | "time";
@@ -212,9 +221,34 @@ interface ExerciseAccumulator {
  * Resolve a display name for one exercise, falling back to the body region or
  * the raw key when COROS gives us an unmapped code.
  */
+export function canonicalExerciseDisplayName(name: string): string {
+  const suffix = name.match(/\s*\((barbell|dumbbell|machine)\)\s*$/i)?.[1]?.toLowerCase();
+  const base = suffix
+    ? name.replace(/\s*\((barbell|dumbbell|machine)\)\s*$/i, "").trim()
+    : name.trim();
+  if (suffix === "dumbbell" && !/^dumbbell\b/i.test(base)) {
+    return `Dumbbell ${base}`;
+  }
+  if (suffix === "machine" && !/\bmachine\b/i.test(base)) {
+    return `${base} Machine`;
+  }
+  return base || name;
+}
+
 function exerciseDisplayName(nameKey: string, rawName: string | undefined): string {
   const resolved = resolveExerciseName(nameKey, rawName);
-  return /^[TS]\d/.test(resolved) ? "Unnamed exercise" : resolved;
+  return /^[TS]\d/.test(resolved)
+    ? "Unnamed exercise"
+    : canonicalExerciseDisplayName(resolved);
+}
+
+function exerciseTargets(exercise: StrengthExercise, name: string) {
+  const named = resolveExerciseTargets(name);
+  if (named.mobility || named.activations.length > 0) return named;
+  return resolveProviderMuscleTargets(
+    exercise.primaryMuscleGroup,
+    exercise.secondaryMuscleGroups
+  );
 }
 
 export function buildStrengthAnalytics(
@@ -272,7 +306,7 @@ export function buildStrengthAnalytics(
 
     for (const exercise of session.detail.exercises) {
       const name = exerciseDisplayName(exercise.nameKey, exercise.rawName);
-      const targets = resolveExerciseTargets(name);
+      const targets = exerciseTargets(exercise, name);
       const setCount = exercise.entries.length;
 
       let exerciseReps = 0;

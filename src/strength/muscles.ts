@@ -387,6 +387,53 @@ const targetsCache = new Map<string, ExerciseTargets>();
 
 const NO_TARGETS: ExerciseTargets = { activations: [], mobility: false };
 
+const HEVY_GROUPS: Record<string, MuscleId[]> = {
+  abdominals: ["abs"],
+  shoulders: ["shoulders"],
+  biceps: ["biceps"],
+  triceps: ["triceps"],
+  forearms: ["forearms"],
+  quadriceps: ["quads"],
+  hamstrings: ["hamstrings"],
+  calves: ["calves"],
+  glutes: ["glutes"],
+  abductors: ["glutes"],
+  adductors: ["adductors"],
+  lats: ["lats"],
+  upper_back: ["lats", "traps"],
+  traps: ["traps"],
+  lower_back: ["lowerBack"],
+  chest: ["chest"],
+  neck: ["neck"],
+  full_body: ["chest", "lats", "quads", "glutes", "abs"]
+};
+
+/** Use provider muscle metadata only when the richer name rules cannot resolve. */
+export function resolveProviderMuscleTargets(
+  primary: string | undefined,
+  secondary: string[] | undefined
+): ExerciseTargets {
+  const weights = new Map<MuscleId, number>();
+  for (const muscle of HEVY_GROUPS[primary ?? ""] ?? []) {
+    weights.set(muscle, (weights.get(muscle) ?? 0) + 1);
+  }
+  for (const group of secondary ?? []) {
+    for (const muscle of HEVY_GROUPS[group] ?? []) {
+      weights.set(muscle, (weights.get(muscle) ?? 0) + SECONDARY_WEIGHT);
+    }
+  }
+  const total = [...weights.values()].reduce((sum, weight) => sum + weight, 0);
+  return total <= 0
+    ? NO_TARGETS
+    : {
+        mobility: false,
+        activations: [...weights.entries()].map(([muscle, weight]) => ({
+          muscle,
+          share: weight / total
+        }))
+      };
+}
+
 /**
  * Resolve a display exercise name into weighted muscle activations. Unknown
  * names return no activations rather than a guess, so the body map only ever

@@ -401,6 +401,20 @@ export function WorkoutWorkspace({
       ? [active]
       : [];
 
+  /*
+   * Reader figures resolve once, so a cell the strip has to ellipsize can
+   * still carry its full string on the title attribute.
+   */
+  const readerTime = previewMetrics?.durationSeconds
+    ? `${Math.round(previewMetrics.durationSeconds / 60)}m`
+    : null;
+  const readerDistance = previewMetrics?.distanceMeters
+    ? `${(previewMetrics.distanceMeters / 1000).toFixed(1)} km`
+    : (active?.volume ?? null);
+  const readerLoadSource = previewMetrics?.trainingLoad || active?.trainingLoad;
+  const readerLoad = readerLoadSource ? Math.round(readerLoadSource) : null;
+  const readerSteps = previewDocument?.draft.nodes.length ?? null;
+
   return (
     <div className="tl-panel tl-split">
       <section className="tl-catalog" aria-label={`${filtered.length} workouts`}>
@@ -648,56 +662,55 @@ export function WorkoutWorkspace({
           </div>
         ) : (
           <>
-            <header>
-              <p
-                className="tl-eyebrow tl-reader-sport"
-                data-sport={sportColorCategory(active.sportType)}
-              >
-                {formatWorkoutSport(workoutSportFromType(active.sportType) ?? "run")}
-              </p>
-              <h2>{active.name}</h2>
-              <button
-                type="button"
-                className={`tl-reader-favorite${active.favorite ? " is-active" : ""}`}
-                aria-label={active.favorite ? "Remove from favorites" : "Add to favorites"}
-                onClick={() => void updateMetadata([active.id], { favorite: !active.favorite })}
-              >
-                <Heart size={16} fill={active.favorite ? "currentColor" : "none"} />
-              </button>
-            </header>
+            <div className="tl-reader-scroll">
+              <header>
+                <p
+                  className="tl-eyebrow tl-reader-sport"
+                  data-sport={sportColorCategory(active.sportType)}
+                >
+                  {formatWorkoutSport(workoutSportFromType(active.sportType) ?? "run")}
+                </p>
+                <h2>{active.name}</h2>
+                {active.tags.length ? (
+                  <ul className="tl-reader-tags" aria-label="Workout tags">
+                    {active.tags.slice(0, 8).map((tag) => (
+                      <li key={tag}>{tag}</li>
+                    ))}
+                    {active.tags.length > 8 ? <li>+{active.tags.length - 8} more</li> : null}
+                  </ul>
+                ) : null}
+                <button
+                  type="button"
+                  className={`tl-reader-favorite${active.favorite ? " is-active" : ""}`}
+                  aria-label={active.favorite ? "Remove from favorites" : "Add to favorites"}
+                  onClick={() => void updateMetadata([active.id], { favorite: !active.favorite })}
+                >
+                  <Heart size={16} fill={active.favorite ? "currentColor" : "none"} />
+                </button>
+              </header>
 
-            <dl className="tl-reader-metrics">
+              <dl className="tl-reader-metrics">
               <div>
                 <dt>Time</dt>
-                <dd className={previewMetrics?.durationSeconds ? "" : "is-nil"}>
-                  {previewMetrics?.durationSeconds
-                    ? `${Math.round(previewMetrics.durationSeconds / 60)}m`
-                    : "—"}
+                <dd className={readerTime ? "" : "is-nil"} title={readerTime ?? undefined}>
+                  {readerTime ?? "—"}
                 </dd>
               </div>
               <div>
                 <dt>Distance</dt>
-                <dd className={previewMetrics?.distanceMeters || active.volume ? "" : "is-nil"}>
-                  {previewMetrics?.distanceMeters
-                    ? `${(previewMetrics.distanceMeters / 1000).toFixed(1)} km`
-                    : (active.volume ?? "—")}
+                <dd className={readerDistance ? "" : "is-nil"} title={readerDistance ?? undefined}>
+                  {readerDistance ?? "—"}
                 </dd>
               </div>
               <div>
                 <dt>Load</dt>
-                <dd className={previewMetrics?.trainingLoad || active.trainingLoad ? "" : "is-nil"}>
-                  {previewMetrics?.trainingLoad
-                    ? Math.round(previewMetrics.trainingLoad)
-                    : active.trainingLoad
-                      ? Math.round(active.trainingLoad)
-                      : "—"}
+                <dd className={readerLoad ? "" : "is-nil"} title={readerLoad ? String(readerLoad) : undefined}>
+                  {readerLoad ?? "—"}
                 </dd>
               </div>
               <div>
                 <dt>Steps</dt>
-                <dd className={previewDocument?.draft.nodes.length ? "" : "is-nil"}>
-                  {previewDocument?.draft.nodes.length ?? "—"}
-                </dd>
+                <dd className={readerSteps ? "" : "is-nil"}>{readerSteps ?? "—"}</dd>
               </div>
             </dl>
 
@@ -734,32 +747,37 @@ export function WorkoutWorkspace({
                 <LoaderCircle className="is-spinning" size={16} /> Loading the full structure
               </p>
             ) : previewDocument ? (
-              <ol className="tl-steps">
-                {previewDocument.draft.nodes.map((node) => (
-                  <li key={node.id} data-kind={nodeKind(node)}>
-                    <span className="tl-step-head">
-                      <b>{node.name}</b>
-                      <small className={node.nodeType === "repeat" ? "is-rounds" : ""}>
-                        {targetLabel(node)}
-                      </small>
-                    </span>
-                    {node.nodeType === "repeat" ? (
-                      <span className="tl-step-children">
-                        {node.steps.map((step) => (
-                          <em key={step.id}>
-                            {step.name} <small>{targetLabel(step)}</small>
-                          </em>
-                        ))}
+              <div className="tl-steps-block">
+                <p className="tl-steps-label">
+                  Session steps <span>{previewDocument.draft.nodes.length}</span>
+                </p>
+                <ol className="tl-steps">
+                  {previewDocument.draft.nodes.map((node) => (
+                    <li key={node.id} data-kind={nodeKind(node)}>
+                      <span className="tl-step-head">
+                        <b>{node.name}</b>
+                        <small className={node.nodeType === "repeat" ? "is-rounds" : ""}>
+                          {targetLabel(node)}
+                        </small>
                       </span>
-                    ) : null}
-                    {!node.editable ? (
-                      <i className="tl-flag" title={node.unsupportedReason}>
-                        read only
-                      </i>
-                    ) : null}
-                  </li>
-                ))}
-              </ol>
+                      {node.nodeType === "repeat" ? (
+                        <span className="tl-step-children">
+                          {node.steps.map((step) => (
+                            <em key={step.id}>
+                              {step.name} <small>{targetLabel(step)}</small>
+                            </em>
+                          ))}
+                        </span>
+                      ) : null}
+                      {!node.editable ? (
+                        <i className="tl-flag" title={node.unsupportedReason}>
+                          read only
+                        </i>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
+              </div>
             ) : null}
 
             <p
@@ -781,66 +799,90 @@ export function WorkoutWorkspace({
                 </>
               )}
             </p>
-
-            <form
-              className="tl-reader-schedule"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void schedule();
-              }}
-            >
-              <label>
-                <span>Put it on the calendar</span>
-                <input
-                  type="date"
-                  value={scheduleDate}
-                  min={tomorrow()}
-                  onChange={(event) => setScheduleDate(event.target.value)}
-                />
-              </label>
-              <button type="submit" className="primary-button" disabled={!scheduleDate || busy === "schedule"}>
-                <CalendarPlus size={14} /> {busy === "schedule" ? "Scheduling" : "Schedule"}
-              </button>
-            </form>
-
-            <div className="tl-reader-actions">
-              <button
-                type="button"
-                className="primary-button"
-                disabled={!previewDocument?.canEdit}
-                onClick={() => setEditId(active.id)}
-              >
-                <Pencil size={14} /> Edit
-              </button>
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={busy === "duplicate"}
-                onClick={() => void duplicate()}
-              >
-                <Copy size={14} /> Duplicate as
-              </button>
-              <SelectDropdown
-                className="tl-quiet-select"
-                label="Sport for the duplicate"
-                value={String(duplicateSport ?? active.sportType ?? 1)}
-                options={Array.from({ length: 9 }, (_, index) => ({
-                  value: String(index + 1),
-                  label: formatWorkoutSport(workoutSportFromType(index + 1) ?? "run")
-                }))}
-                onChange={(value) => setDuplicateSport(Number(value))}
-              />
-              <button type="button" className="ghost-button" onClick={applyTags}>
-                <Tag size={14} /> Tags
-              </button>
-              <button
-                type="button"
-                className="ghost-button danger"
-                onClick={() => setPendingDelete([active.id])}
-              >
-                <Trash2 size={14} /> Delete
-              </button>
             </div>
+
+            <footer className="tl-reader-dock">
+              <form
+                className="tl-reader-schedule"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void schedule();
+                }}
+              >
+                <div className="tl-reader-schedule-heading">
+                  <span className="tl-reader-schedule-icon" aria-hidden="true">
+                    <CalendarPlus size={15} />
+                  </span>
+                  <span>
+                    <strong>Schedule workout</strong>
+                    <small>Add it to your COROS calendar</small>
+                  </span>
+                </div>
+                <div className="tl-reader-schedule-controls">
+                  <label>
+                    <span className="sr-only">Schedule date</span>
+                    <input
+                      type="date"
+                      value={scheduleDate}
+                      min={tomorrow()}
+                      onChange={(event) => setScheduleDate(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    className="primary-button"
+                    disabled={!scheduleDate || busy === "schedule"}
+                  >
+                    {busy === "schedule" ? "Scheduling" : "Schedule"}
+                  </button>
+                </div>
+              </form>
+
+              <div className="tl-reader-actions">
+                <div className="tl-reader-actions-main">
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={!previewDocument?.canEdit}
+                    onClick={() => setEditId(active.id)}
+                  >
+                    <Pencil size={14} /> Edit
+                  </button>
+                  <div className="tl-reader-duplicate">
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      disabled={busy === "duplicate"}
+                      onClick={() => void duplicate()}
+                    >
+                      <Copy size={14} /> Duplicate as
+                    </button>
+                    <SelectDropdown
+                      className="tl-quiet-select"
+                      label="Sport for the duplicate"
+                      value={String(duplicateSport ?? active.sportType ?? 1)}
+                      options={Array.from({ length: 9 }, (_, index) => ({
+                        value: String(index + 1),
+                        label: formatWorkoutSport(workoutSportFromType(index + 1) ?? "run")
+                      }))}
+                      onChange={(value) => setDuplicateSport(Number(value))}
+                    />
+                  </div>
+                </div>
+                <div className="tl-reader-actions-meta">
+                  <button type="button" className="ghost-button" onClick={applyTags}>
+                    <Tag size={14} /> Tags
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button danger"
+                    onClick={() => setPendingDelete([active.id])}
+                  >
+                    <Trash2 size={14} /> Delete
+                  </button>
+                </div>
+              </div>
+            </footer>
           </>
         )}
       </aside>

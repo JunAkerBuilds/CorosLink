@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  BookOpen,
   Database,
   ExternalLink,
   FileDown,
@@ -44,6 +45,7 @@ import type {
   McpServerStatus,
   PlanDraftPreview,
   PlanWorkoutEntryInput,
+  TrainingPlanDocument,
   TrainingPlanDestination,
   TrainingHubExportResult,
   UploadPlanResult,
@@ -52,6 +54,7 @@ import type {
   DeleteWorkoutResult
 } from "../../electron/types";
 import { formatWorkoutSport } from "../../electron/workoutCapabilities";
+import { trainingPlanFromCoachDraftPreview } from "../../electron/trainingPlanDomain";
 import { ActivityVisualCard } from "./ActivityVisualCard";
 import { FitnessTrendCard } from "./FitnessTrendCard";
 import { HrZoneCard } from "./HrZoneCard";
@@ -123,6 +126,7 @@ interface ChatViewProps {
   api: CorosLinkApi | undefined;
   onError: (message: string | null) => void;
   onPlanUploaded?: () => void;
+  onReviewPlan?: (plan: TrainingPlanDocument) => void;
   /** Fires when a coach request is in progress (streaming or exporting). */
   onActivityChange?: (active: boolean) => void;
   /** Text preloaded into the composer (e.g. "Ask Coach" from the calendar). */
@@ -258,12 +262,14 @@ function PlanPreviewCard({
   draft,
   uploading,
   uploaded,
-  onUpload
+  onUpload,
+  onReview
 }: {
   draft: PlanDraftPreview;
   uploading: boolean;
   uploaded?: UploadPlanResult;
   onUpload: (destination: TrainingPlanDestination) => void;
+  onReview?: () => void;
 }) {
   const { unitSystem } = useUnitSystem();
   const [destination, setDestination] = useState<TrainingPlanDestination>(
@@ -428,6 +434,7 @@ function PlanPreviewCard({
         </p>
       ) : (
         <div className="chat-plan-actions">
+          {onReview ? <button type="button" className="chat-plan-review" onClick={onReview} disabled={uploading}><BookOpen size={14} aria-hidden="true" /> Review &amp; save in Training Library</button> : null}
           <button
             type="button"
             className="chat-plan-upload"
@@ -565,6 +572,7 @@ export function ChatView({
   api,
   onError,
   onPlanUploaded,
+  onReviewPlan,
   onActivityChange,
   pendingPrompt,
   onPendingPromptConsumed
@@ -1465,6 +1473,16 @@ export function ChatView({
     }
   };
 
+  const handleReviewPlanDraft = (draft: PlanDraftPreview) => {
+    if (!onReviewPlan) return;
+    try {
+      onError(null);
+      onReviewPlan(trainingPlanFromCoachDraftPreview(draft));
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : "The Coach plan could not be opened in the Training Library.");
+    }
+  };
+
   const handleConfirmWorkoutDelete = async (requestId: string) => {
     if (!api || deletingRequestId) return;
     setDeletingRequestId(requestId);
@@ -1942,6 +1960,7 @@ export function ChatView({
                       onUpload={(destination) =>
                         void handleUploadPlanDraft(entry.draft.draftId, destination)
                       }
+                      onReview={onReviewPlan ? () => handleReviewPlanDraft(entry.draft) : undefined}
                     />
                   </div>
                 </div>

@@ -1,10 +1,12 @@
 import type {
   PlanWorkoutEntryInput,
+  PlanDraftPreview,
   RunWorkoutCreateRepeatGroup,
   RunWorkoutCreateStep,
   RunWorkoutStepInput,
   TrainingPlanDocument,
   TrainingPlanEntry,
+  TrainingPlanGenerationRequest,
   TrainingPlanPhase,
   WorkoutSport
 } from "./types";
@@ -71,6 +73,191 @@ function isoNow(): string {
 function uniqueId(prefix: string): string {
   const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
   return `${prefix}:${random}`;
+}
+
+function normalizedPlanDate(value: string): Date | undefined {
+  const digits = value.replace(/-/g, "");
+  if (!/^\d{8}$/.test(digits)) return undefined;
+  const date = new Date(
+    Number(digits.slice(0, 4)),
+    Number(digits.slice(4, 6)) - 1,
+    Number(digits.slice(6, 8)),
+    12
+  );
+  return Number.isNaN(date.valueOf()) ? undefined : date;
+}
+
+function dayOffset(startDate: string, value: string): number | undefined {
+  const start = normalizedPlanDate(startDate);
+  const date = normalizedPlanDate(value);
+  if (!start || !date) return undefined;
+  return Math.round((date.valueOf() - start.valueOf()) / 86_400_000);
+}
+
+export function trainingPlanFromDraftPreview(
+  preview: PlanDraftPreview,
+  request: TrainingPlanGenerationRequest
+): TrainingPlanDocument {
+  if (!request.goal.trim()) throw new Error("Add a training goal before generating a plan.");
+  if (request.weeks < 1 || request.weeks > 24) throw new Error("Generated plans must contain 1 to 24 weeks.");
+  if (request.sessionsPerWeek < 1 || request.sessionsPerWeek > 7) throw new Error("Sessions per week must be between 1 and 7.");
+  if (request.sports.length === 0) throw new Error("Choose at least one sport.");
+  if (request.availableDayIndexes.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) throw new Error("Available days must be Monday through Sunday.");
+  if (request.availableDayIndexes.length < request.sessionsPerWeek) throw new Error("Choose at least as many available days as weekly sessions.");
+  if (request.maxSessionMinutes !== undefined && request.maxSessionMinutes <= 0) throw new Error("The session-duration limit must be greater than zero.");
+  const start = normalizedPlanDate(request.startDate);
+  if (!start || start.getDay() !== 1) throw new Error("Week 1 must start on a Monday.");
+  if (!preview.name.trim()) throw new Error("Training Coach returned a plan without a name.");
+
+  const document = createTrainingPlan(preview.name, "coach");
+  document.id = `plan:coach:${preview.draftId}`;
+  document.description = preview.summary.trim() || "Generated with Training Coach from your current training context.";
+  document.goal = request.goal.trim();
+  document.difficulty = request.difficulty;
+  document.notes = [request.constraints?.trim(), ...preview.warnings].filter(Boolean).join("\n");
+  document.startDate = request.startDate;
+  document.weekCount = request.weeks;
+  document.entries = preview.entries.map((entry, index) => {
+    if (!entry.source) throw new Error(`Generated workout "${entry.name}" is missing its structured definition.`);
+    const scheduleDate = entry.source.schedule_date ?? entry.scheduleDate;
+    if (!scheduleDate) throw new Error(`Generated workout "${entry.name}" is missing a schedule date.`);
+    const offset = dayOffset(request.startDate, scheduleDate);
+    if (offset === undefined || offset < 0 || offset >= request.weeks * 7) {
+      throw new Error(`Generated workout "${entry.name}" falls outside the requested plan dates.`);
+    }
+    const dayIndex = offset % 7;
+    if (!request.availableDayIndexes.includes(dayIndex)) {
+      throw new Error(`Generated workout "${entry.name}" was placed on an unavailable day.`);
+    }
+    const sport = entry.source.sport ?? "run";
+    if (!request.sports.includes(sport)) {
+      throw new Error(`Generated workout "${entry.name}" uses a sport that was not requested.`);
+    }
+    return {
+      id: `entry:${preview.draftId}:${entry.key || index}`,
+      kind: "workout" as const,
+      weekIndex: Math.floor(offset / 7),
+      dayIndex,
+      sortOrder: entry.source.sort_no ?? index,
+      title: entry.name,
+      workout: {
+        ...structuredClone(entry.source),
+        schedule_date: scheduleDate,
+        save_to_library: false
+      }
+    };
+  });
+  const weekCounts = new Map<number, number>();
+  for (const entry of document.entries) {
+    weekCounts.set(entry.weekIndex, (weekCounts.get(entry.weekIndex) ?? 0) + 1);
+  }
+  for (let weekIndex = 0; weekIndex < request.weeks; weekIndex += 1) {
+    const count = weekCounts.get(weekIndex) ?? 0;
+    if (count !== request.sessionsPerWeek) {
+      throw new Error(`Generated week ${weekIndex + 1} has ${count} workouts instead of ${request.sessionsPerWeek}.`);
+    }
+  }
+  if (request.maxSessionMinutes) {
+    const overLimit = document.entries.find((entry) => workoutMetrics(entry.workout).durationSeconds > request.maxSessionMinutes! * 60);
+    if (overLimit) {
+      throw new Error(`Generated workout "${overLimit.title ?? "Untitled workout"}" exceeds the session-duration limit.`);
+    }
+  }
+  document.sportMix = [...new Set(document.entries.map((entry) => entry.workout?.sport).filter((sport): sport is WorkoutSport => Boolean(sport)))];
+  return document;
+}
+
+/** Convert an arbitrary Coach plan card into an unsaved, editable library plan. */
+export function trainingPlanFromCoachDraftPreview(
+  preview: PlanDraftPreview
+): TrainingPlanDocument {
+  if (!preview.name.trim()) throw new Error("Training Coach returned a plan without a name.");
+  const datedEntries = preview.entries
+    .map((entry) => entry.source?.schedule_date ?? entry.scheduleDate)
+    .map((value) => value ? normalizedPlanDate(value) : undefined)
+    .filter((value): value is Date => Boolean(value))
+    .sort((left, right) => left.valueOf() - right.valueOf());
+  const firstDate = datedEntries[0];
+  const start = firstDate ? new Date(firstDate) : undefined;
+  if (start) start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+
+  const document = createTrainingPlan(preview.name, "coach");
+  document.id = `plan:coach:${preview.draftId}`;
+  document.description = preview.summary.trim() || "Created in Training Coach for review in the Training Library.";
+  document.notes = [
+    ...preview.warnings,
+    ...preview.conflicts.map((conflict) => `Calendar conflict: ${conflict}`)
+  ].join("\n");
+  document.startDate = start ? formatPlanDate(start, true) : undefined;
+  document.entries = preview.entries.map((entry, index) => {
+    const source: PlanWorkoutEntryInput = entry.source
+      ? structuredClone(entry.source)
+      : {
+          key: entry.key || `coach-${index + 1}`,
+          name: entry.name,
+          sport: entry.sport ?? "run",
+          save_to_library: false
+        };
+    const rawDate = source.schedule_date ?? entry.scheduleDate;
+    const date = rawDate ? normalizedPlanDate(rawDate) : undefined;
+    const offset = start && date
+      ? Math.max(0, Math.round((date.valueOf() - start.valueOf()) / 86_400_000))
+      : undefined;
+    return {
+      id: `entry:${preview.draftId}:${entry.key || index}`,
+      kind: "workout" as const,
+      weekIndex: offset === undefined ? 0 : Math.floor(offset / 7),
+      dayIndex: offset === undefined ? undefined : offset % 7,
+      sortOrder: source.sort_no ?? index,
+      title: entry.name,
+      workout: {
+        ...source,
+        name: entry.name,
+        ...(rawDate ? { schedule_date: rawDate } : {}),
+        save_to_library: false
+      }
+    };
+  });
+  document.weekCount = Math.max(1, ...document.entries.map((entry) => entry.weekIndex + 1));
+  document.sportMix = [...new Set(document.entries.map((entry) => entry.workout?.sport ?? "run"))];
+  return document;
+}
+
+/** Stable hash of only the plan content that changes calendar writes. */
+export function trainingPlanCalendarRevision(plan: TrainingPlanDocument): string {
+  const serialized = JSON.stringify({
+    name: plan.name,
+    startDate: plan.startDate,
+    weekCount: plan.weekCount,
+    entries: plan.entries.map((entry) => ({
+      id: entry.id,
+      kind: entry.kind,
+      weekIndex: entry.weekIndex,
+      dayIndex: entry.dayIndex,
+      sortOrder: entry.sortOrder,
+      title: entry.title,
+      programId: entry.programId,
+      workout: entry.workout
+    }))
+  });
+  let hash = 2166136261;
+  for (let index = 0; index < serialized.length; index += 1) {
+    hash ^= serialized.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+export function activeTrainingPlanCalendarInstall(
+  plan: TrainingPlanDocument,
+  today = formatPlanDate(new Date(), false)
+) {
+  return plan.calendarInstalls?.find((install) =>
+    install.state !== "removed" && (
+      install.occurrences.some((occurrence) => !occurrence.removedAt && occurrence.happenDay >= today) ||
+      install.failures.some((failure) => failure.happenDay >= today && failure.writeMayHaveSucceeded)
+    )
+  );
 }
 
 export function createTrainingPlan(

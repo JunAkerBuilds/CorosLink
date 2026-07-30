@@ -2,8 +2,10 @@ import {
   AlertTriangle,
   BookOpen,
   Bookmark,
+  CalendarPlus,
   CalendarClock,
   CalendarRange,
+  CalendarX,
   CloudOff,
   Copy,
   FolderPlus,
@@ -15,6 +17,7 @@ import {
   Scale,
   Search,
   SkipForward,
+  Sparkles,
   Tag,
   Target,
   Trash2,
@@ -33,8 +36,10 @@ import type {
 } from "../../electron/types";
 import {
   createTrainingPlan,
+  activeTrainingPlanCalendarInstall,
   planEntryFromWorkout,
   summarizeTrainingPlan,
+  trainingPlanCalendarRevision,
   workoutSportFromType
 } from "../../electron/trainingPlanDomain";
 import type { CorosLinkApi } from "../coroslink-api";
@@ -44,12 +49,17 @@ import { BulletRidge, Ridge, type BulletWeek } from "./Ridge";
 import { PlanCompare } from "./PlanCompare";
 import { PlanEditor } from "./PlanEditor";
 import { WorkoutWorkspace } from "./WorkoutWorkspace";
+import { TrainingPlanCalendarDialog } from "./TrainingPlanCalendarDialog";
+import { TrainingPlanGenerator } from "./TrainingPlanGenerator";
 import "./trainingLibrary.css";
 
 interface TrainingLibraryViewProps {
   api: CorosLinkApi;
   status: TrainingHubStatus | null;
   onOpenTraining: () => void;
+  onOpenCoach: (prompt?: string) => void;
+  pendingPlan?: TrainingPlanDocument | null;
+  onPendingPlanConsumed?: () => void;
   onMessage: (message: string) => void;
   onError: (message: string | null) => void;
 }
@@ -131,6 +141,9 @@ export function TrainingLibraryView({
   api,
   status,
   onOpenTraining,
+  onOpenCoach,
+  pendingPlan,
+  onPendingPlanConsumed,
   onMessage,
   onError
 }: TrainingLibraryViewProps) {
@@ -142,6 +155,8 @@ export function TrainingLibraryView({
   const [compareOpen, setCompareOpen] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [pendingPlanDelete, setPendingPlanDelete] = useState<TrainingPlanDocument | null>(null);
+  const [generatorOpen, setGeneratorOpen] = useState(false);
+  const [calendarTarget, setCalendarTarget] = useState<{ plan: TrainingPlanDocument; operation?: "install" | "remove" } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -158,6 +173,13 @@ export function TrainingLibraryView({
   useEffect(() => {
     if (status?.authenticated) void load();
   }, [load, status?.authenticated]);
+
+  useEffect(() => {
+    if (!status?.authenticated || !pendingPlan) return;
+    setSection("plans");
+    setEditingPlan(structuredClone(pendingPlan));
+    onPendingPlanConsumed?.();
+  }, [onPendingPlanConsumed, pendingPlan, status?.authenticated]);
 
   if (!status?.authenticated) {
     return (
@@ -261,6 +283,7 @@ export function TrainingLibraryView({
       id: `${duplicate.id}:entry:${index}`,
       remotePlanProgramId: undefined
     }));
+    duplicate.calendarInstalls = [];
     await savePlan(duplicate);
   };
 
@@ -332,6 +355,7 @@ export function TrainingLibraryView({
             type="button"
             key={id}
             aria-current={section === id ? "page" : undefined}
+            disabled={Boolean(editingPlan)}
             onClick={() => setSection(id)}
           >
             <Icon aria-hidden="true" />
@@ -341,70 +365,79 @@ export function TrainingLibraryView({
         ))}
       </nav>
 
-      {section === "workouts" ? (
-        <WorkoutWorkspace
-          api={api}
-          workouts={current.workouts}
-          collections={current.collections}
-          onRefresh={load}
-          onMessage={onMessage}
-          onError={onError}
-        />
-      ) : null}
-
-      {section === "plans" ? (
-        <PlanIndex
-          api={api}
-          noun="plan"
-          plans={plans}
-          collections={current.collections}
-          readOnlyReason={current.nativePlanWrites.reason}
-          onCreate={() => createPlan("local")}
-          onOpen={(plan) => void openPlan(plan)}
-          onDuplicate={(plan) => void duplicatePlan(plan)}
-          onDelete={setPendingPlanDelete}
-          onRefresh={load}
-          onError={onError}
-          onCompare={(ids) => {
-            setCompareIds(ids);
-            setCompareOpen(true);
-          }}
-        />
-      ) : null}
-
-      {section === "templates" ? (
-        <TemplateSection
-          api={api}
-          templates={templates}
-          collections={current.collections}
-          onCreate={() => createPlan("template")}
-          onOpen={setEditingPlan}
-          onDuplicate={(plan) => void duplicatePlan(plan)}
-          onDelete={setPendingPlanDelete}
-          onRefresh={load}
-          onMessage={onMessage}
-          onError={onError}
-        />
-      ) : null}
-
-      {section === "adherence" ? (
-        <AdherenceSection
-          api={api}
-          matches={current.matches}
-          onRefresh={load}
-          onMessage={onMessage}
-          onError={onError}
-        />
-      ) : null}
-
       {editingPlan ? (
         <PlanEditor
+          key={`${editingPlan.id}:${editingPlan.updatedAt}`}
+          api={api}
           initialPlan={editingPlan}
           workouts={current.workouts}
+          calendarEnabled={current.plans.some((plan) => plan.id === editingPlan.id) && editingPlan.source !== "coros"}
+          offline={current.offline}
+          onCalendar={(plan, operation) => setCalendarTarget({ plan, operation })}
           onSave={savePlan}
           onClose={() => setEditingPlan(null)}
         />
-      ) : null}
+      ) : (
+        <>
+          {section === "workouts" ? (
+            <WorkoutWorkspace
+              api={api}
+              workouts={current.workouts}
+              collections={current.collections}
+              onRefresh={load}
+              onMessage={onMessage}
+              onError={onError}
+            />
+          ) : null}
+
+          {section === "plans" ? (
+            <PlanIndex
+              api={api}
+              noun="plan"
+              plans={plans}
+              collections={current.collections}
+              onCreate={() => createPlan("local")}
+              onGenerate={() => setGeneratorOpen(true)}
+              onCalendar={(plan, operation) => setCalendarTarget({ plan, operation })}
+              offline={current.offline}
+              onOpen={(plan) => void openPlan(plan)}
+              onDuplicate={(plan) => void duplicatePlan(plan)}
+              onDelete={setPendingPlanDelete}
+              onRefresh={load}
+              onError={onError}
+              onCompare={(ids) => {
+                setCompareIds(ids);
+                setCompareOpen(true);
+              }}
+            />
+          ) : null}
+
+          {section === "templates" ? (
+            <TemplateSection
+              api={api}
+              templates={templates}
+              collections={current.collections}
+              onCreate={() => createPlan("template")}
+              onOpen={setEditingPlan}
+              onDuplicate={(plan) => void duplicatePlan(plan)}
+              onDelete={setPendingPlanDelete}
+              onRefresh={load}
+              onMessage={onMessage}
+              onError={onError}
+            />
+          ) : null}
+
+          {section === "adherence" ? (
+            <AdherenceSection
+              api={api}
+              matches={current.matches}
+              onRefresh={load}
+              onMessage={onMessage}
+              onError={onError}
+            />
+          ) : null}
+        </>
+      )}
 
       {compareOpen ? (
         <PlanCompare
@@ -414,6 +447,17 @@ export function TrainingLibraryView({
           onClose={() => setCompareOpen(false)}
         />
       ) : null}
+
+      {generatorOpen ? <TrainingPlanGenerator api={api} onClose={() => setGeneratorOpen(false)} onOpenCoach={onOpenCoach} onGenerated={(plan) => { setGeneratorOpen(false); setEditingPlan(plan); }} /> : null}
+
+      {calendarTarget ? <TrainingPlanCalendarDialog api={api} plan={calendarTarget.plan} requestedOperation={calendarTarget.operation} offline={current.offline} onClose={() => setCalendarTarget(null)} onComplete={(result) => {
+        setCalendarTarget(null);
+        if (editingPlan?.id === result.plan.id) setEditingPlan(result.plan);
+        if (result.failures.length) onMessage(`Updated ${result.scheduledCount + result.removedCount} calendar workout${result.scheduledCount + result.removedCount === 1 ? "" : "s"}; ${result.failures.length} need retry.`);
+        else if (result.scheduledCount) onMessage(`Added ${result.scheduledCount} workouts from "${result.plan.name}" to the COROS calendar.`);
+        else onMessage(`Removed ${result.removedCount} future workouts owned by "${result.plan.name}".`);
+        void load();
+      }} /> : null}
 
       {pendingPlanDelete ? (
         <div className="tl-dialog-backdrop">
@@ -504,8 +548,10 @@ interface PlanIndexProps {
   noun: "plan" | "template";
   plans: TrainingPlanDocument[];
   collections: TrainingCollection[];
-  readOnlyReason?: string;
   onCreate: () => void;
+  onGenerate?: () => void;
+  onCalendar?: (plan: TrainingPlanDocument, operation?: "install" | "remove") => void;
+  offline?: boolean;
   onOpen: (plan: TrainingPlanDocument) => void;
   onDuplicate: (plan: TrainingPlanDocument) => void;
   onDelete: (plan: TrainingPlanDocument) => void;
@@ -519,8 +565,10 @@ function PlanIndex({
   noun,
   plans,
   collections,
-  readOnlyReason,
   onCreate,
+  onGenerate,
+  onCalendar,
+  offline = false,
   onOpen,
   onDuplicate,
   onDelete,
@@ -632,8 +680,10 @@ function PlanIndex({
     />
   );
 
-  const planActions = (plan: TrainingPlanDocument) => (
-    <>
+  const planActions = (plan: TrainingPlanDocument) => {
+    const install = activeTrainingPlanCalendarInstall(plan);
+    const retryingInstall = install?.state === "partial" && install.lastOperation === "install";
+    return <>
       <button
         type="button"
         aria-label={plan.favorite ? "Remove from favorites" : "Add to favorites"}
@@ -644,18 +694,32 @@ function PlanIndex({
       <button type="button" aria-label={`Duplicate ${plan.name}`} onClick={() => onDuplicate(plan)}>
         <Copy size={14} />
       </button>
+      {noun === "plan" && plan.source !== "coros" && onCalendar ? (
+        <button
+          type="button"
+          disabled={offline}
+          title={offline ? "Reconnect to COROS to change the calendar" : undefined}
+          aria-label={`${install && !retryingInstall ? "Remove" : retryingInstall ? "Retry adding" : "Add"} ${plan.name} ${install && !retryingInstall ? "from" : "to"} calendar`}
+          onClick={() => onCalendar(plan, retryingInstall ? "install" : undefined)}
+        >
+          {install && !retryingInstall ? <CalendarX size={14} /> : <CalendarPlus size={14} />}
+        </button>
+      ) : null}
+      {noun === "plan" && plan.source !== "coros" && onCalendar && retryingInstall ? <button type="button" disabled={offline} aria-label={`Remove partial installation of ${plan.name} from calendar`} onClick={() => onCalendar(plan, "remove")}><CalendarX size={14} /></button> : null}
       {plan.source !== "coros" ? (
         <button
           type="button"
           className="danger"
+          disabled={Boolean(activeTrainingPlanCalendarInstall(plan))}
+          title={activeTrainingPlanCalendarInstall(plan) ? "Remove future plan-owned calendar workouts before deleting this plan" : undefined}
           aria-label={`Delete ${plan.name}`}
           onClick={() => onDelete(plan)}
         >
           <Trash2 size={14} />
         </button>
       ) : null}
-    </>
-  );
+    </>;
+  };
 
   return (
     <div className="tl-panel">
@@ -709,18 +773,12 @@ function PlanIndex({
               <List size={14} />
             </button>
           </div>
-          <button type="button" className="primary-button" onClick={onCreate}>
+          <button type="button" className={noun === "plan" && onGenerate ? "ghost-button" : "primary-button"} onClick={onCreate}>
             <Plus size={14} /> New {noun}
           </button>
+          {noun === "plan" && onGenerate ? <button type="button" className="primary-button tl-generate-button" onClick={onGenerate}><Sparkles size={14} /> Generate plan</button> : null}
         </div>
       </div>
-
-      {readOnlyReason ? (
-        <p className="tl-inline-note">
-          <AlertTriangle size={14} />
-          COROS plans open as read-only copies here. {readOnlyReason}
-        </p>
-      ) : null}
 
       {selected.length ? (
         <div className="tl-bulk" role="toolbar" aria-label={`Actions for selected ${noun}s`}>
@@ -801,6 +859,7 @@ function PlanIndex({
                     {UNSETTLED_SYNC.has(plan.syncState) ? (
                       <i className="tl-flag">{plan.syncState}</i>
                     ) : null}
+                    {activeTrainingPlanCalendarInstall(plan) && activeTrainingPlanCalendarInstall(plan)?.planRevision !== trainingPlanCalendarRevision(plan) ? <i className="tl-flag">Calendar differs</i> : null}
                   </span>
                   <span className="tl-card-name">{plan.name}</span>
                   <span className="tl-card-note">
@@ -878,6 +937,7 @@ function PlanIndex({
                       {UNSETTLED_SYNC.has(plan.syncState) ? (
                         <i className="tl-flag">{plan.syncState}</i>
                       ) : null}
+                      {activeTrainingPlanCalendarInstall(plan) && activeTrainingPlanCalendarInstall(plan)?.planRevision !== trainingPlanCalendarRevision(plan) ? <i className="tl-flag">Calendar differs</i> : null}
                     </span>
                   </button>
                   <span className="tl-fig">{plan.weekCount}</span>

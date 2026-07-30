@@ -62,6 +62,7 @@ import type {
   TrainingHubSportType,
   TrainingHubStatus,
   TrainingHubUpcomingWorkout,
+  TrainingPlanDocument,
   WatchStatus,
   WatchTrack,
   WatchTransferProgress,
@@ -311,6 +312,7 @@ export default function App() {
     activeView === "watchfaces",
   );
   const [coachPrefill, setCoachPrefill] = useState<string | null>(null);
+  const [pendingCoachPlan, setPendingCoachPlan] = useState<TrainingPlanDocument | null>(null);
   const [calendarRefreshToken, setCalendarRefreshToken] = useState(0);
   const [activeMediaTab, setActiveMediaTab] = useState<MediaTab>("library");
   const [watchStatus, setWatchStatus] = useState<WatchStatus | null>(null);
@@ -2416,6 +2418,12 @@ export default function App() {
                     api={api}
                     status={trainingHubStatus}
                     onOpenTraining={() => setActiveView("training")}
+                    onOpenCoach={(prompt) => {
+                      setCoachPrefill(prompt ?? null);
+                      setActiveView("coach");
+                    }}
+                    pendingPlan={pendingCoachPlan}
+                    onPendingPlanConsumed={() => setPendingCoachPlan(null)}
                     onMessage={setMessage}
                     onError={setError}
                   />
@@ -2486,6 +2494,10 @@ export default function App() {
                     onPlanUploaded={() => {
                       void loadTrainingHubData();
                       setCalendarRefreshToken((token) => token + 1);
+                    }}
+                    onReviewPlan={(plan) => {
+                      setPendingCoachPlan(plan);
+                      setActiveView("library");
                     }}
                     onActivityChange={setCoachBusy}
                     pendingPrompt={coachPrefill}

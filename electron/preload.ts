@@ -33,7 +33,10 @@ import type {
   SpotifySyncResult,
   SpotifySyncTrack,
   SpotifySyncUpdate,
+  HevySettingsInput,
+  HevyStatus,
   StrengthHistory,
+  StrengthHistoryRequest,
   TrainingHubActivity,
   TrainingHubActivityDetail,
   TrainingHubActivityFileType,
@@ -55,6 +58,8 @@ import type {
   TrainingLibraryDeleteRequest,
   TrainingLibrarySnapshot,
   TrainingPlanDocument,
+  TrainingPlanCalendarMutationResult,
+  TrainingPlanCalendarPreview,
   TrainingPlanDestination,
   TrainingPlanMetadataPatch,
   WorkoutMetadataPatch,
@@ -545,6 +550,14 @@ const api = {
     ipcRenderer.invoke("trainingLibrary:updatePlanMetadata", id, patch),
   deleteLocalTrainingPlan: (id: string, confirmed: boolean): Promise<void> =>
     ipcRenderer.invoke("trainingLibrary:deletePlan", id, confirmed),
+  previewTrainingPlanCalendar: (planId: string, startDate: string): Promise<TrainingPlanCalendarPreview> =>
+    ipcRenderer.invoke("trainingLibrary:previewPlanCalendar", planId, startDate),
+  addTrainingPlanToCalendar: (previewId: string, confirmed: boolean): Promise<TrainingPlanCalendarMutationResult> =>
+    ipcRenderer.invoke("trainingLibrary:addPlanToCalendar", previewId, confirmed),
+  previewTrainingPlanCalendarRemoval: (planId: string): Promise<TrainingPlanCalendarPreview> =>
+    ipcRenderer.invoke("trainingLibrary:previewPlanCalendarRemoval", planId),
+  removeTrainingPlanFromCalendar: (previewId: string, confirmed: boolean): Promise<TrainingPlanCalendarMutationResult> =>
+    ipcRenderer.invoke("trainingLibrary:removePlanFromCalendar", previewId, confirmed),
   updateWorkoutMetadata: (
     programIds: string[],
     patch: WorkoutMetadataPatch
@@ -693,8 +706,14 @@ const api = {
     ipcRenderer.invoke("trainingHub:getDashboard"),
   getDailyMetrics: (dateList: string[]): Promise<TrainingHubDailyMetrics> =>
     ipcRenderer.invoke("trainingHub:getDailyMetrics", dateList),
-  syncStrengthHistory: (days?: number, force?: boolean): Promise<StrengthHistory> =>
-    ipcRenderer.invoke("trainingHub:syncStrengthHistory", days, force),
+  syncStrengthHistory: (request?: StrengthHistoryRequest): Promise<StrengthHistory> =>
+    ipcRenderer.invoke("trainingHub:syncStrengthHistory", request),
+  getHevyStatus: (): Promise<HevyStatus> => ipcRenderer.invoke("hevy:getStatus"),
+  connectHevy: (apiKey: string): Promise<HevyStatus> =>
+    ipcRenderer.invoke("hevy:connect", apiKey),
+  updateHevySettings: (input: HevySettingsInput): Promise<HevyStatus> =>
+    ipcRenderer.invoke("hevy:updateSettings", input),
+  disconnectHevy: (): Promise<void> => ipcRenderer.invoke("hevy:disconnect"),
   startRpeBackfill: (): Promise<void> =>
     ipcRenderer.invoke("trainingHub:startRpeBackfill"),
   getRpeBackfillStatus: (): Promise<{ pending: number; running: boolean }> =>

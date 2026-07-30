@@ -48,6 +48,8 @@
     "test:exercise-names": "node --experimental-strip-types scripts/test-exercise-names.mjs",
     "test:strength-detail": "node --experimental-strip-types scripts/test-strength-detail.mjs",
     "test:strength-analytics": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-strength-analytics.mjs",
+    "test:hevy-strength": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-hevy-strength.mjs",
+    "test:hevy-service": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-hevy-service.mjs",
     "test:exercise-explorer": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-exercise-explorer.mjs",
     "test:strength-body-focus": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-strength-body-focus.mjs",
     "test:anatomy-assets": "node scripts/test-anatomy-assets.mjs",

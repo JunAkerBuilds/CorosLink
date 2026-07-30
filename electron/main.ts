@@ -57,7 +57,6 @@ import {
   listWorkoutExercises,
   getWorkoutEditorContext,
   scheduleLibraryWorkout,
-  syncStrengthHistory,
   createAndScheduleWorkout,
   createLibraryWorkout,
   rescheduleScheduledWorkout,
@@ -74,13 +73,29 @@ import {
   uploadActivityFitToCoros,
   uploadTrainingPlan
 } from "./trainingHubService";
-import type { UnitSystem, WorkoutSport } from "./types";
+import { syncStrengthHistory } from "./strengthHistoryService";
 import {
+  connectHevy,
+  disconnectHevy,
+  getHevyStatus,
+  updateHevySettings
+} from "./hevyService";
+import type {
+  HevySettingsInput,
+  StrengthHistoryRequest,
+  UnitSystem,
+  WorkoutSport
+} from "./types";
+import {
+  addTrainingPlanToCalendar,
   deleteLocalTrainingPlan,
   deleteTrainingLibraryWorkouts,
   getNativeTrainingPlan,
   getTrainingLibrarySnapshot,
   refreshTrainingActivityMatches,
+  previewTrainingPlanCalendar,
+  previewTrainingPlanCalendarRemoval,
+  removeTrainingPlanFromCalendar,
   removeTrainingCollection,
   saveLocalTrainingPlan,
   saveManualActivityMatch,
@@ -1502,6 +1517,22 @@ function registerIpcHandlers(): void {
     (_event, id: string, confirmed: boolean) => deleteLocalTrainingPlan(id, confirmed)
   );
   ipcMain.handle(
+    "trainingLibrary:previewPlanCalendar",
+    (_event, planId: string, startDate: string) => previewTrainingPlanCalendar(planId, startDate)
+  );
+  ipcMain.handle(
+    "trainingLibrary:addPlanToCalendar",
+    (_event, previewId: string, confirmed: boolean) => addTrainingPlanToCalendar(previewId, confirmed)
+  );
+  ipcMain.handle(
+    "trainingLibrary:previewPlanCalendarRemoval",
+    (_event, planId: string) => previewTrainingPlanCalendarRemoval(planId)
+  );
+  ipcMain.handle(
+    "trainingLibrary:removePlanFromCalendar",
+    (_event, previewId: string, confirmed: boolean) => removeTrainingPlanFromCalendar(previewId, confirmed)
+  );
+  ipcMain.handle(
     "trainingLibrary:updateWorkoutMetadata",
     (_event, programIds, patch) => updateWorkoutMetadata(programIds, patch)
   );
@@ -1710,9 +1741,15 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "trainingHub:syncStrengthHistory",
-    (_event, days?: number, force?: boolean) =>
-      syncStrengthHistory(days, force)
+    (_event, request?: StrengthHistoryRequest) => syncStrengthHistory(request)
   );
+
+  ipcMain.handle("hevy:getStatus", () => getHevyStatus());
+  ipcMain.handle("hevy:connect", (_event, apiKey: string) => connectHevy(apiKey));
+  ipcMain.handle("hevy:updateSettings", (_event, input: HevySettingsInput) =>
+    updateHevySettings(input)
+  );
+  ipcMain.handle("hevy:disconnect", () => disconnectHevy());
 
   ipcMain.handle("trainingHub:getSportTypeMap", () => getSportTypeMap());
 

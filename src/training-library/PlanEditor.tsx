@@ -1,14 +1,20 @@
 import {
   AlertTriangle,
   ArrowDown,
+  ArrowLeft,
   ArrowUp,
   CalendarRange,
+  CalendarPlus,
+  CalendarX,
+  CloudOff,
   Copy,
   CornerDownLeft,
+  Pencil,
   Plus,
   Redo2,
   RotateCcw,
   Save,
+  Search,
   Trash2,
   Undo2,
   X
@@ -23,24 +29,46 @@ import type {
 } from "../../electron/types";
 import {
   duplicateTrainingPlanWeek,
+  activeTrainingPlanCalendarInstall,
   insertRecoveryWeek,
   planEntryFromWorkout,
   reorderTrainingPlanWeek,
   shiftTrainingPlan,
   summarizeTrainingPlan,
+  trainingPlanCalendarRevision,
   validateTrainingPlan,
   workoutSportFromType
 } from "../../electron/trainingPlanDomain";
 import { formatWorkoutSport, WORKOUT_SPORTS } from "../../electron/workoutCapabilities";
+import type { CorosLinkApi } from "../coroslink-api";
+import { WorkoutEditorModal } from "../calendar/WorkoutEditorModal";
+import { replaceTrainingPlanEntryWorkout } from "../../electron/planWorkoutEditor";
+import { Ridge } from "./Ridge";
 
 interface PlanEditorProps {
+  api: CorosLinkApi;
   initialPlan: TrainingPlanDocument;
   workouts: TrainingLibraryWorkout[];
+  calendarEnabled: boolean;
+  offline: boolean;
+  onCalendar: (plan: TrainingPlanDocument, operation?: "install" | "remove") => void;
   onSave: (plan: TrainingPlanDocument) => Promise<void>;
   onClose: () => void;
 }
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** Entry cards and library rows carry a dot in the sport's own colour. */
+const SPORT_DOT_CATEGORY: Record<string, string> = {
+  run: "run",
+  bike: "bike",
+  strength: "strength"
+};
+
+function sportDotCategory(sport: WorkoutSport | undefined): string | undefined {
+  if (!sport) return undefined;
+  return SPORT_DOT_CATEGORY[sport] ?? "other";
+}
 
 function withDerivedSportMix(plan: TrainingPlanDocument): TrainingPlanDocument {
   const sports = plan.entries
@@ -79,7 +107,7 @@ function mondayOf(value: string): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-export function PlanEditor({ initialPlan, workouts, onSave, onClose }: PlanEditorProps) {
+export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offline, onCalendar, onSave, onClose }: PlanEditorProps) {
   const [history, setHistory] = useState<TrainingPlanDocument[]>([structuredClone(initialPlan)]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -87,10 +115,25 @@ export function PlanEditor({ initialPlan, workouts, onSave, onClose }: PlanEdito
   const [newWorkoutName, setNewWorkoutName] = useState("");
   const [newWorkoutSport, setNewWorkoutSport] = useState<WorkoutSport>("run");
   const [newWorkoutMinutes, setNewWorkoutMinutes] = useState("45");
+  const [libraryQuery, setLibraryQuery] = useState("");
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [workoutEditorError, setWorkoutEditorError] = useState<string | null>(null);
   const plan = history[historyIndex]!;
+  const editingEntry = plan.entries.find((entry) => entry.id === editingEntryId);
   const dirty = JSON.stringify(plan) !== JSON.stringify(initialPlan);
   const validation = useMemo(() => validateTrainingPlan(plan), [plan]);
   const summary = useMemo(() => summarizeTrainingPlan(plan), [plan]);
+  const calendarInstall = activeTrainingPlanCalendarInstall(plan);
+  const retryingInstall = calendarInstall?.state === "partial" && calendarInstall.lastOperation === "install";
+  const calendarDiffers = Boolean(calendarInstall && calendarInstall.planRevision !== trainingPlanCalendarRevision(plan));
+  const libraryMatches = useMemo(() => {
+    const query = libraryQuery.trim().toLowerCase();
+    const matches = query
+      ? workouts.filter((workout) => workout.name.toLowerCase().includes(query))
+      : workouts;
+    return matches.slice(0, 40);
+  }, [workouts, libraryQuery]);
 
   useEffect(() => {
     const protect = (event: BeforeUnloadEvent) => {
@@ -158,6 +201,16 @@ export function PlanEditor({ initialPlan, workouts, onSave, onClose }: PlanEdito
     commit({ ...plan, entries: plan.entries.filter((entry) => entry.id !== entryId) });
   };
 
+  const applyWorkoutEdit = (entryId: string, workout: PlanWorkoutEntryInput) => {
+    commit({
+      ...plan,
+      entries: plan.entries.map((entry) => entry.id === entryId
+        ? replaceTrainingPlanEntryWorkout(entry, workout)
+        : entry)
+    });
+    setEditingEntryId(null);
+  };
+
   const addRest = (weekIndex: number, dayIndex: number) => {
     const rest: TrainingPlanEntry = {
       id: `rest:${Date.now()}:${weekIndex}:${dayIndex}`,
@@ -191,6 +244,24 @@ export function PlanEditor({ initialPlan, workouts, onSave, onClose }: PlanEdito
     if (entryId) moveEntry(entryId, weekIndex, dayIndex);
   };
 
+  /** Lights the day (or the holding area) a dragged card is hovering over. */
+  const dropTargetProps = (key: string, handleDrop: (event: DragEvent) => void) => ({
+    onDragOver: (event: DragEvent) => {
+      event.preventDefault();
+      if (dropTarget !== key) setDropTarget(key);
+    },
+    onDragLeave: (event: DragEvent) => {
+      const next = event.relatedTarget as Node | null;
+      if (!next || !event.currentTarget.contains(next)) {
+        setDropTarget((current) => (current === key ? null : current));
+      }
+    },
+    onDrop: (event: DragEvent) => {
+      setDropTarget(null);
+      handleDrop(event);
+    }
+  });
+
   const unscheduled = plan.entries.filter(
     (entry) => entry.kind === "workout" && entry.dayIndex === undefined
   );
@@ -207,12 +278,16 @@ export function PlanEditor({ initialPlan, workouts, onSave, onClose }: PlanEdito
             onChange={(event) => patchPlan({ name: event.target.value })}
           />
           <p>{summary.weekCount} weeks, {summary.workouts} workouts, {Math.round(summary.trainingLoad)} estimated load</p>
+          {dirty ? <span className="plan-editor-dirty">Unsaved changes</span> : null}
+          {calendarDiffers ? <span className="plan-editor-source-warning">Calendar differs · Remove and reinstall to apply edits</span> : null}
           {plan.source === "coros" ? <span className="plan-editor-source-warning">Native source · Save creates a local copy</span> : null}
         </div>
         <div className="plan-editor-header-actions">
           <button type="button" className="icon-button" aria-label="Undo" disabled={historyIndex === 0} onClick={() => setHistoryIndex((index) => index - 1)}><Undo2 size={17} /></button>
           <button type="button" className="icon-button" aria-label="Redo" disabled={historyIndex === history.length - 1} onClick={() => setHistoryIndex((index) => index + 1)}><Redo2 size={17} /></button>
-          <button type="button" className="ghost-button" onClick={close}><X size={15} /> Close</button>
+          <button type="button" className="ghost-button" onClick={close}><ArrowLeft size={15} /> Back to library</button>
+          {calendarEnabled ? <button type="button" className="ghost-button" disabled={dirty || offline || saving} title={dirty ? "Save the plan before changing its calendar installation" : offline ? "Reconnect to COROS to change the calendar" : undefined} onClick={() => onCalendar(plan, retryingInstall ? "install" : undefined)}>{offline ? <CloudOff size={15} /> : calendarInstall && !retryingInstall ? <CalendarX size={15} /> : <CalendarPlus size={15} />}{retryingInstall ? "Retry calendar install" : calendarInstall ? "Remove from calendar" : "Add to calendar"}</button> : null}
+          {calendarEnabled && retryingInstall ? <button type="button" className="ghost-button" disabled={dirty || offline || saving} onClick={() => onCalendar(plan, "remove")}><CalendarX size={15} /> Remove partial install</button> : null}
           <button type="button" className="primary-button" disabled={saving || validation.some((issue) => issue.severity === "error")} onClick={() => void save()}><Save size={15} /> {saving ? "Saving..." : "Save plan"}</button>
         </div>
       </header>
@@ -229,15 +304,34 @@ export function PlanEditor({ initialPlan, workouts, onSave, onClose }: PlanEdito
           </section>
 
           <section>
-            <div className="plan-editor-section-title"><h3>Workout library</h3><button type="button" className="icon-button" aria-label="Create a new workout" onClick={() => setShowNewWorkout((value) => !value)}><Plus size={16} /></button></div>
+            <div className="plan-editor-section-title">
+              <div>
+                <h3>Workout library</h3>
+                <span>{workouts.length} saved</span>
+              </div>
+              <button
+                type="button"
+                className={`icon-button${showNewWorkout ? " is-active" : ""}`}
+                aria-label={showNewWorkout ? "Close new workout form" : "Create a new workout"}
+                aria-expanded={showNewWorkout}
+                onClick={() => setShowNewWorkout((value) => !value)}
+              >
+                {showNewWorkout ? <X size={15} /> : <Plus size={16} />}
+              </button>
+            </div>
             {showNewWorkout ? <div className="plan-editor-new-workout">
               <label><span>Name</span><input value={newWorkoutName} onChange={(event) => setNewWorkoutName(event.target.value)} /></label>
               <label><span>Sport</span><select value={newWorkoutSport} onChange={(event) => setNewWorkoutSport(event.target.value as WorkoutSport)}>{WORKOUT_SPORTS.map((sport) => <option key={sport} value={sport}>{formatWorkoutSport(sport)}</option>)}</select></label>
               <label><span>Duration</span><span className="plan-editor-duration"><input type="number" min="1" value={newWorkoutMinutes} onChange={(event) => setNewWorkoutMinutes(event.target.value)} /><em>min</em></span></label>
               <button type="button" className="primary-button" disabled={!newWorkoutName.trim()} onClick={createWorkout}>Add to holding area</button>
             </div> : null}
+            <div className="plan-editor-library-search">
+              <Search size={15} aria-hidden />
+              <input value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="Filter workouts" aria-label="Filter workouts" />
+              {libraryQuery ? <button type="button" aria-label="Clear workout filter" onClick={() => setLibraryQuery("")}><X size={13} /></button> : null}
+            </div>
             <div className="plan-editor-library-list">
-              {workouts.slice(0, 40).map((workout) => <button type="button" key={workout.id} onClick={() => addLibraryWorkout(workout)}><span><strong>{workout.name}</strong><small>{formatWorkoutSport(workoutSportFromType(workout.sportType) ?? "run")}</small></span><Plus size={14} /></button>)}
+              {libraryMatches.length === 0 ? <p className="plan-editor-empty-inline">No workouts match your filter.</p> : libraryMatches.map((workout) => <button type="button" key={workout.id} data-sport={sportDotCategory(workoutSportFromType(workout.sportType))} aria-label={`Add ${workout.name} to plan`} onClick={() => addLibraryWorkout(workout)}><span><strong>{workout.name}</strong><small>{formatWorkoutSport(workoutSportFromType(workout.sportType) ?? "run")}</small></span><span className="plan-editor-library-add" aria-hidden="true"><Plus size={14} /></span></button>)}
             </div>
           </section>
 
@@ -251,10 +345,10 @@ export function PlanEditor({ initialPlan, workouts, onSave, onClose }: PlanEdito
         </aside>
 
         <main className="plan-editor-main">
-          <section className="plan-holding-area" onDragOver={(event) => event.preventDefault()} onDrop={(event) => drop(event, 0, undefined)}>
+          <section className={`plan-holding-area${dropTarget === "holding" ? " is-drop-target" : ""}`} {...dropTargetProps("holding", (event) => drop(event, 0, undefined))}>
             <div><h3>Holding area</h3><p>Drag unscheduled workouts into a day.</p></div>
             <div className="plan-holding-list">
-              {unscheduled.length === 0 ? <span className="plan-editor-empty-inline">No unscheduled workouts</span> : unscheduled.map((entry) => <PlanEntryCard key={entry.id} entry={entry} onRemove={() => removeEntry(entry.id)} />)}
+              {unscheduled.length === 0 ? <span className="plan-editor-empty-inline">No unscheduled workouts</span> : unscheduled.map((entry) => <PlanEntryCard key={entry.id} entry={entry} onEdit={() => setEditingEntryId(entry.id)} onRemove={() => removeEntry(entry.id)} />)}
             </div>
           </section>
 
@@ -264,7 +358,7 @@ export function PlanEditor({ initialPlan, workouts, onSave, onClose }: PlanEdito
               const weekSummary = summary.weekly[weekIndex];
               return <section className="plan-week" key={weekIndex}>
                 <header>
-                  <div><h3>Week {weekIndex + 1}</h3><p>{weekSummary?.workouts ?? 0} workouts, {Math.round(weekSummary?.trainingLoad ?? 0)} load</p></div>
+                  <div><h3>Week {weekIndex + 1}</h3><p>{weekSummary?.workouts ?? 0} workouts · {Math.round((weekSummary?.durationSeconds ?? 0) / 360) / 10} hr · {Math.round(weekSummary?.trainingLoad ?? 0)} load</p></div>
                   <div>
                     <button type="button" className="icon-button" aria-label={`Move week ${weekIndex + 1} up`} disabled={weekIndex === 0} onClick={() => commit(reorderTrainingPlanWeek(plan, weekIndex, weekIndex - 1))}><ArrowUp size={15} /></button>
                     <button type="button" className="icon-button" aria-label={`Move week ${weekIndex + 1} down`} disabled={weekIndex === plan.weekCount - 1} onClick={() => commit(reorderTrainingPlanWeek(plan, weekIndex, weekIndex + 1))}><ArrowDown size={15} /></button>
@@ -276,10 +370,11 @@ export function PlanEditor({ initialPlan, workouts, onSave, onClose }: PlanEdito
                 <div className="plan-week-days">
                   {DAY_NAMES.map((day, dayIndex) => {
                     const entries = weekEntries.filter((entry) => entry.dayIndex === dayIndex).sort((a, b) => a.sortOrder - b.sortOrder);
-                    return <div className="plan-day" key={day} onDragOver={(event) => event.preventDefault()} onDrop={(event) => drop(event, weekIndex, dayIndex)}>
+                    const dayKey = `week-${weekIndex}-day-${dayIndex}`;
+                    return <div className={`plan-day${dropTarget === dayKey ? " is-drop-target" : ""}`} key={day} {...dropTargetProps(dayKey, (event) => drop(event, weekIndex, dayIndex))}>
                       <div className="plan-day-heading"><span><strong>{day}</strong><small>{entryDate(plan, weekIndex, dayIndex)}</small></span><button type="button" aria-label={`Add rest day on ${day}`} onClick={() => addRest(weekIndex, dayIndex)}><CornerDownLeft size={13} /></button></div>
                       <div className="plan-day-entries">
-                        {entries.map((entry) => <PlanEntryCard key={entry.id} entry={entry} onRemove={() => removeEntry(entry.id)} />)}
+                        {entries.map((entry) => <PlanEntryCard key={entry.id} entry={entry} onEdit={() => setEditingEntryId(entry.id)} onRemove={() => removeEntry(entry.id)} />)}
                       </div>
                     </div>;
                   })}
@@ -292,6 +387,14 @@ export function PlanEditor({ initialPlan, workouts, onSave, onClose }: PlanEdito
 
         <aside className="plan-editor-preview">
           <h3>Save preview</h3>
+          <Ridge
+            values={summary.weekly.map((week) => week.trainingLoad)}
+            peakWeek={summary.peakWeek}
+            unit="load"
+            variant="load"
+            label={`Estimated weekly training load across the ${summary.weekCount} weeks`}
+          />
+          <p className="plan-editor-preview-note">Estimated load by week</p>
           <dl>
             <div><dt>Workouts</dt><dd>{summary.workouts}</dd></div>
             <div><dt>Duration</dt><dd>{Math.round(summary.durationSeconds / 360) / 10} hr</dd></div>
@@ -304,13 +407,26 @@ export function PlanEditor({ initialPlan, workouts, onSave, onClose }: PlanEdito
           {validation.length ? <div className="plan-editor-validation" aria-live="polite">{validation.map((issue, index) => <p className={issue.severity} key={`${issue.path}:${index}`}><AlertTriangle size={13} />{issue.message}</p>)}</div> : <p className="plan-editor-valid">Ready to save.</p>}
         </aside>
       </div>
+      {workoutEditorError ? <div className="plan-editor-workout-error" role="alert"><AlertTriangle size={14} />{workoutEditorError}<button type="button" onClick={() => setWorkoutEditorError(null)}><X size={12} /></button></div> : null}
+      {editingEntry?.kind === "workout" ? (
+        <WorkoutEditorModal
+          api={api}
+          planEntry={editingEntry}
+          onClose={() => setEditingEntryId(null)}
+          onSavedToPlan={(workout) => applyWorkoutEdit(editingEntry.id, workout)}
+          onError={setWorkoutEditorError}
+        />
+      ) : null}
     </section>
   );
 }
 
-function PlanEntryCard({ entry, onRemove }: { entry: TrainingPlanEntry; onRemove: () => void }) {
-  return <article className={`plan-entry-card is-${entry.kind}`} draggable={entry.kind === "workout"} onDragStart={(event) => event.dataTransfer.setData("text/training-plan-entry", entry.id)}>
+function PlanEntryCard({ entry, onEdit, onRemove }: { entry: TrainingPlanEntry; onEdit: () => void; onRemove: () => void }) {
+  return <article className={`plan-entry-card is-${entry.kind}`} data-sport={sportDotCategory(entry.workout?.sport)} draggable={entry.kind === "workout"} onDragStart={(event) => event.dataTransfer.setData("text/training-plan-entry", entry.id)}>
     <span><strong>{entry.title ?? (entry.kind === "rest" ? "Rest day" : "Note")}</strong>{entry.workout?.sport ? <small>{formatWorkoutSport(entry.workout.sport)}</small> : null}</span>
-    <button type="button" aria-label={`Remove ${entry.title ?? entry.kind}`} onClick={onRemove}><X size={12} /></button>
+    <span className="plan-entry-actions">
+      {entry.kind === "workout" ? <button type="button" aria-label={`Edit ${entry.title ?? "workout"}`} onClick={onEdit}><Pencil size={12} /></button> : null}
+      <button type="button" aria-label={`Remove ${entry.title ?? entry.kind}`} onClick={onRemove}><X size={12} /></button>
+    </span>
   </article>;
 }

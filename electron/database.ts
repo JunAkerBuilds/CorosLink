@@ -227,6 +227,23 @@ export function initializeDatabase(userDataPath: string): Database.Database {
       fetched_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS hevy_workouts (
+      workout_id TEXT PRIMARY KEY,
+      start_time INTEGER NOT NULL,
+      updated_at TEXT,
+      payload_json TEXT NOT NULL,
+      synced_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_hevy_workouts_start_time
+      ON hevy_workouts(start_time);
+
+    CREATE TABLE IF NOT EXISTS hevy_exercise_templates (
+      template_id TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      synced_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS cached_coros_maps (
       package_id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -1505,6 +1522,8 @@ export function listStoredStrengthSessions(
     }
     sessions.push({
       activityId: row.activity_id,
+      source: "coros",
+      sourceIds: { coros: row.activity_id },
       sportType: row.sport_type,
       name: row.name ?? undefined,
       sportName: row.sport_name ?? undefined,
@@ -1518,6 +1537,140 @@ export function listStoredStrengthSessions(
     });
   }
   return sessions;
+}
+
+export interface StoredHevyWorkout {
+  workoutId: string;
+  startTime: number;
+  updatedAt?: string;
+  payload: Record<string, unknown>;
+}
+
+/** Persist the provider payload so settings can re-normalize it without I/O. */
+export function upsertHevyWorkout(
+  workoutId: string,
+  startTime: number,
+  updatedAt: string | undefined,
+  payload: Record<string, unknown>
+): void {
+  requireDatabase()
+    .prepare(
+      `INSERT INTO hevy_workouts
+         (workout_id, start_time, updated_at, payload_json, synced_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(workout_id) DO UPDATE SET
+         start_time = excluded.start_time,
+         updated_at = excluded.updated_at,
+         payload_json = excluded.payload_json,
+         synced_at = excluded.synced_at`
+    )
+    .run(
+      workoutId,
+      startTime,
+      updatedAt ?? null,
+      JSON.stringify(payload),
+      new Date().toISOString()
+    );
+}
+
+export function deleteHevyWorkout(workoutId: string): void {
+  requireDatabase().prepare("DELETE FROM hevy_workouts WHERE workout_id = ?").run(workoutId);
+}
+
+export function listStoredHevyWorkouts(sinceEpochSeconds: number): StoredHevyWorkout[] {
+  const rows = requireDatabase()
+    .prepare(
+      `SELECT workout_id, start_time, updated_at, payload_json
+       FROM hevy_workouts
+       WHERE start_time >= ?
+       ORDER BY start_time DESC`
+    )
+    .all(sinceEpochSeconds) as Array<{
+    workout_id: string;
+    start_time: number;
+    updated_at: string | null;
+    payload_json: string;
+  }>;
+
+  const workouts: StoredHevyWorkout[] = [];
+  for (const row of rows) {
+    try {
+      const payload = JSON.parse(row.payload_json) as unknown;
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        continue;
+      }
+      workouts.push({
+        workoutId: row.workout_id,
+        startTime: row.start_time,
+        updatedAt: row.updated_at ?? undefined,
+        payload: payload as Record<string, unknown>
+      });
+    } catch {
+      // A single corrupt cache entry must not hide the rest of the history.
+    }
+  }
+  return workouts;
+}
+
+/** Remove stale rows in a fully reconciled history window. */
+export function reconcileHevyWorkoutIds(
+  sinceEpochSeconds: number,
+  retainedIds: Set<string>
+): void {
+  const database = requireDatabase();
+  const rows = database
+    .prepare("SELECT workout_id FROM hevy_workouts WHERE start_time >= ?")
+    .all(sinceEpochSeconds) as Array<{ workout_id: string }>;
+  const remove = database.prepare("DELETE FROM hevy_workouts WHERE workout_id = ?");
+  const transaction = database.transaction(() => {
+    for (const row of rows) {
+      if (!retainedIds.has(row.workout_id)) {
+        remove.run(row.workout_id);
+      }
+    }
+  });
+  transaction();
+}
+
+export function upsertHevyExerciseTemplate(
+  templateId: string,
+  payload: Record<string, unknown>
+): void {
+  requireDatabase()
+    .prepare(
+      `INSERT INTO hevy_exercise_templates (template_id, payload_json, synced_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(template_id) DO UPDATE SET
+         payload_json = excluded.payload_json,
+         synced_at = excluded.synced_at`
+    )
+    .run(templateId, JSON.stringify(payload), new Date().toISOString());
+}
+
+export function listStoredHevyExerciseTemplates(): Map<string, Record<string, unknown>> {
+  const rows = requireDatabase()
+    .prepare("SELECT template_id, payload_json FROM hevy_exercise_templates")
+    .all() as Array<{ template_id: string; payload_json: string }>;
+  const templates = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    try {
+      const payload = JSON.parse(row.payload_json) as unknown;
+      if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+        templates.set(row.template_id, payload as Record<string, unknown>);
+      }
+    } catch {
+      // Ignore corrupt template rows; title-based analytics still work.
+    }
+  }
+  return templates;
+}
+
+export function clearHevyCache(): void {
+  const database = requireDatabase();
+  database.transaction(() => {
+    database.prepare("DELETE FROM hevy_workouts").run();
+    database.prepare("DELETE FROM hevy_exercise_templates").run();
+  })();
 }
 
 function toCachedCorosMap(row: CachedCorosMapRow): CachedCorosMapPackage {
