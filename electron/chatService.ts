@@ -37,7 +37,18 @@ import {
   isChatAnalyticsTool,
   type ChatAnalyticsToolName
 } from "./chatAnalyticsTools";
+import {
+  getChatInteractionTools,
+  handleChatInteractionTool,
+  isChatInteractionTool,
+  type ChatInteractionToolName
+} from "./chatInteractionTools";
 import { parseFunctionCallArguments } from "./chatToolArguments";
+import {
+  buildResponsesRequest,
+  extractReasoningSummaryDelta,
+  extractResponseTextDelta
+} from "./chatResponsesProtocol";
 import {
   detectLocalChatServersRequest,
   streamLocalChatCompletion,
@@ -694,7 +705,9 @@ export async function streamChat(
       if (runtimeConfig.toolsEnabled) {
         await ensureAllMcpConnected();
       }
-      const chatTools = runtimeConfig.toolsEnabled ? getAllChatTools() : getChatWorkoutTools();
+      const chatTools = runtimeConfig.toolsEnabled
+        ? getAllChatTools()
+        : [...getChatWorkoutTools(), ...getChatInteractionTools()];
       const effectiveInstructions = withLiveToolInstructions(
         instructions,
         chatTools
@@ -840,7 +853,16 @@ export async function streamChat(
               Array.isArray(echoed) ? echoed.length : "unknown"
             );
           }
-          const delta = extractDelta(event);
+          const reasoningDelta = extractReasoningSummaryDelta(event);
+          if (reasoningDelta) {
+            send("chat:streamInfo", {
+              requestId,
+              kind: "thinking",
+              delta: reasoningDelta
+            });
+            continue;
+          }
+          const delta = extractResponseTextDelta(event);
           if (delta) {
             fullText += delta;
             send("chat:streamToken", { requestId, delta });
@@ -967,7 +989,8 @@ function getAllChatTools(): CorosMcpTool[] {
     ...getAllMcpTools(),
     ...getChatActivityTools(),
     ...getChatAnalyticsTools(),
-    ...getChatWorkoutTools()
+    ...getChatWorkoutTools(),
+    ...getChatInteractionTools()
   ];
 }
 
@@ -1026,7 +1049,13 @@ export function getClaudeCodeTools(
     return tool.name === "draft_training_plan";
   });
 
-  return [...remoteTools, ...activityTools, ...analyticsTools, ...workoutTools];
+  return [
+    ...remoteTools,
+    ...activityTools,
+    ...analyticsTools,
+    ...workoutTools,
+    ...getChatInteractionTools()
+  ];
 }
 
 async function executeChatTool(
@@ -1037,6 +1066,19 @@ async function executeChatTool(
   unitSystem: UnitSystem,
   claudePermissions?: ClaudeCodePermissions
 ): Promise<string> {
+  if (isChatInteractionTool(name)) {
+    return handleChatInteractionTool(
+      name as ChatInteractionToolName,
+      args,
+      (prompt) => {
+        send("chat:streamInfo", {
+          requestId,
+          kind: "coachPrompt",
+          prompt
+        });
+      }
+    );
+  }
   if (isChatWorkoutTool(name)) {
     return handleChatWorkoutTool(name as ChatWorkoutToolName, args, {
       onPlanDraft: (preview: PlanDraftPreview) => {
@@ -1157,21 +1199,42 @@ async function resolveModelAndOpenStream(
 
   let lastDetail = "";
   for (const model of candidates) {
-    const response = await fetch(RESPONSES_URL, {
-      method: "POST",
-      signal,
-      headers: {
-        Authorization: `Bearer ${token.access_token}`,
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-        "OpenAI-Beta": "responses=experimental",
-        originator: RESPONSES_ORIGINATOR,
-        "User-Agent": RESPONSES_USER_AGENT,
-        session_id: requestId,
-        ...(token.account_id ? { "chatgpt-account-id": token.account_id } : {})
-      },
-      body: JSON.stringify(buildResponsesRequest(model, instructions, input, tools))
-    });
+    const open = (includeReasoningSummary: boolean) =>
+      fetch(RESPONSES_URL, {
+        method: "POST",
+        signal,
+        headers: {
+          Authorization: `Bearer ${token.access_token}`,
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+          "OpenAI-Beta": "responses=experimental",
+          originator: RESPONSES_ORIGINATOR,
+          "User-Agent": RESPONSES_USER_AGENT,
+          session_id: requestId,
+          ...(token.account_id ? { "chatgpt-account-id": token.account_id } : {})
+        },
+        body: JSON.stringify(
+          buildResponsesRequest(
+            model,
+            instructions,
+            input,
+            tools,
+            includeReasoningSummary
+          )
+        )
+      });
+
+    let response = await open(true);
+    let responseDetail = "";
+    if (!response.ok && response.status === 400) {
+      responseDetail = await response.text().catch(() => "");
+      if (/reasoning|summary/i.test(responseDetail)) {
+        // Some plan/model combinations do not expose summaries. Preserve the
+        // Coach response and tool progress rather than failing the whole turn.
+        response = await open(false);
+        responseDetail = "";
+      }
+    }
 
     if (response.ok && response.body) {
       if (model !== cached) setSetting(SETTINGS.model, model);
@@ -1185,7 +1248,8 @@ async function resolveModelAndOpenStream(
       };
     }
 
-    lastDetail = await response.text().catch(() => "");
+    lastDetail =
+      responseDetail || (await response.text().catch(() => ""));
     // Unsupported-model rejection: drop a stale cached choice and try the next.
     if (response.status === 400 && /is not supported/i.test(lastDetail)) {
       if (model === cached) deleteSettings([SETTINGS.model]);
@@ -1201,26 +1265,6 @@ async function resolveModelAndOpenStream(
     error: `No supported chat model for this ChatGPT account. ${truncate(lastDetail, 600)}`,
     authError: false
   };
-}
-
-function buildResponsesRequest(
-  model: string,
-  instructions: string,
-  input: Record<string, unknown>[],
-  tools: Record<string, unknown>[]
-): Record<string, unknown> {
-  const request: Record<string, unknown> = {
-    model,
-    instructions,
-    input,
-    stream: true,
-    store: false
-  };
-  if (tools.length > 0) {
-    request.tools = tools;
-    request.tool_choice = "auto";
-  }
-  return request;
 }
 
 /** A COROS message turned into a Responses-API input item. */
@@ -1257,11 +1301,15 @@ function withLiveToolInstructions(
   }
   const activityTools = tools.filter((tool) => isChatActivityTool(tool.name));
   const analyticsTools = tools.filter((tool) => isChatAnalyticsTool(tool.name));
+  const interactionTools = tools.filter((tool) =>
+    isChatInteractionTool(tool.name)
+  );
   const mcpTools = tools.filter(
     (tool) =>
       !isChatWorkoutTool(tool.name) &&
       !isChatActivityTool(tool.name) &&
-      !isChatAnalyticsTool(tool.name)
+      !isChatAnalyticsTool(tool.name) &&
+      !isChatInteractionTool(tool.name)
   );
   const corosMcpTools = mcpTools.filter((tool) =>
     tool.name.startsWith("coros__")
@@ -1328,6 +1376,15 @@ function withLiveToolInstructions(
       buildCoachSportCapabilityGuide()
     );
   }
+  if (interactionTools.length > 0) {
+    sections.push(
+      "",
+      "## Athlete questions",
+      "When you need an answer before continuing, call request_coach_input with one concise question and 2–5 distinct choices. " +
+        "Put the recommended choice first and explain important tradeoffs in each choice description. " +
+        "Do not ask a clarification question only in prose. After calling request_coach_input, stop and wait for the athlete's next message."
+    );
+  }
   return sections.join("\n");
 }
 
@@ -1335,16 +1392,6 @@ interface FunctionCall {
   call_id: string;
   name: string;
   arguments: string;
-}
-
-/** Pulls incremental assistant text out of a Responses-API SSE event. */
-function extractDelta(event: unknown): string {
-  if (!event || typeof event !== "object") return "";
-  const evt = event as { type?: string; delta?: unknown };
-  if (evt.type === "response.output_text.delta" && typeof evt.delta === "string") {
-    return evt.delta;
-  }
-  return "";
 }
 
 /** Detects a completed function tool call in a Responses-API SSE event. */

@@ -35,7 +35,10 @@ export function buildCoachInstructions(): string {
     "upload_training_plan until the athlete confirms via the Upload to COROS button. If " +
     "draft_training_plan returns exercise_resolution_required, update the affected steps to exact COROS " +
     "candidate names and call draft_training_plan again in the same response. Ask the athlete only when " +
-    "the candidates materially change the intended movement or no supported candidate is available.\n\n" +
+    "the candidates materially change the intended movement or no supported candidate is available. " +
+    "Whenever you need the athlete to choose or clarify something, call request_coach_input with " +
+    "2–5 concise choices instead of asking only in prose. Put the recommended answer first, call it " +
+    "at most once per turn, and wait for the athlete's response before continuing.\n\n" +
     "To delete workouts: use list_scheduled_workouts to find calendar entries, then " +
     "delete_workout to stage a confirmation card. The athlete must click Delete from COROS — " +
     "never claim a workout was removed until they confirm via the button."

@@ -2283,6 +2283,27 @@ export interface PersistedChatMessageEntry {
   role: ChatRole;
   content: string;
   source?: PersistedChatSource;
+  /** Display-safe provider reasoning summary, never raw chain-of-thought. */
+  reasoningSummary?: string;
+}
+
+export interface CoachInputChoice {
+  id: string;
+  label: string;
+  description?: string;
+  /** Text sent back to Coach when the athlete selects this choice. */
+  response: string;
+}
+
+export interface CoachInputPrompt {
+  promptId: string;
+  question: string;
+  choices: CoachInputChoice[];
+  allowCustom: boolean;
+  /** Athlete response retained as model context without a separate chat bubble. */
+  answer?: string;
+  selectedChoiceId?: string;
+  answeredAt?: number;
 }
 
 export type ChatProvider = "chatgpt" | "claude-code" | "local";
@@ -2519,7 +2540,7 @@ export type ChatStreamInfo =
   | {
       requestId: string;
       kind: "thinking";
-      /** Incremental extended-thinking text from the model. */
+      /** Incremental display-safe reasoning/thinking summary from the provider. */
       delta: string;
     }
   | {
@@ -2546,6 +2567,11 @@ export type ChatStreamInfo =
       requestId: string;
       kind: "hrZoneSummary";
       preview: HrZonePreview;
+    }
+  | {
+      requestId: string;
+      kind: "coachPrompt";
+      prompt: CoachInputPrompt;
     };
 
 // ----- Training plan upload (AI coach) -----
@@ -3433,6 +3459,7 @@ export interface WorkoutDeletePreview {
 /** Persisted coach timeline entry (messages plus inline action cards). */
 export type PersistedChatEntry =
   | PersistedChatMessageEntry
+  | { kind: "coachPrompt"; prompt: CoachInputPrompt }
   | { kind: "planDraft"; draft: PlanDraftPreview }
   | { kind: "workoutDelete"; preview: WorkoutDeletePreview }
   | { kind: "activityVisual"; preview: ActivityVisualPreview }

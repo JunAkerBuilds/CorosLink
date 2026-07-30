@@ -795,9 +795,46 @@ export async function reconnectTrainingHub(): Promise<TrainingHubLoginResult> {
   return { twoFactorRequired: false, status: getTrainingHubStatus() };
 }
 
-export async function listTrainingHubActivities(
-  page = 1,
-  size = 50,
+const COROS_ACTIVITY_PAGE_SIZE_LIMIT = 100;
+
+export function buildTrainingHubActivityPagePlan(
+  page: number,
+  size: number
+): { requests: Array<{ page: number; size: number }>; sliceStart: number } {
+  if (!Number.isSafeInteger(page) || page < 1) {
+    throw new Error("Activity page must be a positive integer.");
+  }
+  if (!Number.isSafeInteger(size) || size < 1) {
+    throw new Error("Activity page size must be a positive integer.");
+  }
+
+  if (size <= COROS_ACTIVITY_PAGE_SIZE_LIMIT) {
+    return { requests: [{ page, size }], sliceStart: 0 };
+  }
+
+  const firstIndex = (page - 1) * size;
+  const lastIndex = firstIndex + size - 1;
+  if (!Number.isSafeInteger(firstIndex) || !Number.isSafeInteger(lastIndex)) {
+    throw new Error("Activity page is too large.");
+  }
+
+  const firstRemotePage = Math.floor(firstIndex / COROS_ACTIVITY_PAGE_SIZE_LIMIT) + 1;
+  const lastRemotePage = Math.floor(lastIndex / COROS_ACTIVITY_PAGE_SIZE_LIMIT) + 1;
+  return {
+    requests: Array.from(
+      { length: lastRemotePage - firstRemotePage + 1 },
+      (_, index) => ({
+        page: firstRemotePage + index,
+        size: COROS_ACTIVITY_PAGE_SIZE_LIMIT
+      })
+    ),
+    sliceStart: firstIndex % COROS_ACTIVITY_PAGE_SIZE_LIMIT
+  };
+}
+
+async function queryTrainingHubActivityPage(
+  page: number,
+  size: number,
   startDay?: string,
   endDay?: string
 ): Promise<TrainingHubActivity[]> {
@@ -816,8 +853,32 @@ export async function listTrainingHubActivities(
     params
   );
 
+  return (data.dataList ?? []).map(mapTrainingHubActivity);
+}
+
+export async function listTrainingHubActivities(
+  page = 1,
+  size = 50,
+  startDay?: string,
+  endDay?: string
+): Promise<TrainingHubActivity[]> {
+  const plan = buildTrainingHubActivityPagePlan(page, size);
+  const fetched: TrainingHubActivity[] = [];
+  for (const request of plan.requests) {
+    const batch = await queryTrainingHubActivityPage(
+      request.page,
+      request.size,
+      startDay,
+      endDay
+    );
+    fetched.push(...batch);
+    if (batch.length < request.size) {
+      break;
+    }
+  }
+
   const activities = enrichActivitiesWithSportNames(
-    (data.dataList ?? []).map(mapTrainingHubActivity)
+    fetched.slice(plan.sliceStart, plan.sliceStart + size)
   );
   // Persist a local copy so analytics (e.g. personal pace) work offline and
   // across sessions without re-fetching from COROS.

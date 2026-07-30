@@ -6,8 +6,32 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const distUrl = (file) =>
   pathToFileURL(path.join(repoRoot, "dist-electron", file)).href;
 
-const { parseTrainingHubApiResponse } = await import(
+const {
+  buildTrainingHubActivityPagePlan,
+  parseTrainingHubApiResponse
+} = await import(
   `${distUrl("trainingHubService.js")}?cacheBust=${Date.now()}`
+);
+
+assert.deepEqual(buildTrainingHubActivityPagePlan(1, 50), {
+  requests: [{ page: 1, size: 50 }],
+  sliceStart: 0
+});
+assert.deepEqual(buildTrainingHubActivityPagePlan(1, 500), {
+  requests: [1, 2, 3, 4, 5].map((page) => ({ page, size: 100 })),
+  sliceStart: 0
+});
+assert.deepEqual(buildTrainingHubActivityPagePlan(2, 150), {
+  requests: [2, 3].map((page) => ({ page, size: 100 })),
+  sliceStart: 50
+});
+assert.throws(
+  () => buildTrainingHubActivityPagePlan(0, 50),
+  /page must be a positive integer/
+);
+assert.throws(
+  () => buildTrainingHubActivityPagePlan(1, Number.NaN),
+  /page size must be a positive integer/
 );
 
 assert.equal(

@@ -13,6 +13,8 @@ import type {
   ActivityVisualPreview,
   ChatProvider,
   ChatSessionSummary,
+  CoachInputChoice,
+  CoachInputPrompt,
   FitnessTrendPreview,
   HrZoneEntry,
   HrZonePreview,
@@ -118,6 +120,57 @@ function parseSource(value: unknown): PersistedChatSource | undefined {
     source.mcpError = value.mcpError;
   }
   return source;
+}
+
+function parseCoachInputPrompt(value: unknown): CoachInputPrompt | null {
+  if (
+    !isRecord(value) ||
+    typeof value.promptId !== "string" ||
+    typeof value.question !== "string" ||
+    typeof value.allowCustom !== "boolean" ||
+    !Array.isArray(value.choices)
+  ) {
+    return null;
+  }
+
+  const choices = value.choices
+    .map((choice): CoachInputChoice | null => {
+      if (
+        !isRecord(choice) ||
+        typeof choice.id !== "string" ||
+        typeof choice.label !== "string" ||
+        typeof choice.response !== "string"
+      ) {
+        return null;
+      }
+      return {
+        id: choice.id,
+        label: choice.label,
+        response: choice.response,
+        ...(typeof choice.description === "string"
+          ? { description: choice.description }
+          : {})
+      };
+    })
+    .filter((choice): choice is CoachInputChoice => choice !== null);
+
+  if (choices.length !== value.choices.length || choices.length < 2) {
+    return null;
+  }
+
+  return {
+    promptId: value.promptId,
+    question: value.question,
+    choices,
+    allowCustom: value.allowCustom,
+    ...(typeof value.answer === "string" ? { answer: value.answer } : {}),
+    ...(typeof value.selectedChoiceId === "string"
+      ? { selectedChoiceId: value.selectedChoiceId }
+      : {}),
+    ...(typeof value.answeredAt === "number"
+      ? { answeredAt: value.answeredAt }
+      : {})
+  };
 }
 
 function parsePlanDraftEntry(value: unknown): PlanDraftPreviewEntry | null {
@@ -560,19 +613,6 @@ function parseMessageEntry(value: unknown): PersistedChatMessageEntry | null {
     return null;
   }
 
-  if (value.kind !== "message") {
-    const role =
-      value.role === "assistant" ? "assistant" : value.role === "user" ? "user" : null;
-    if (!role || typeof value.content !== "string") {
-      return null;
-    }
-
-    const source = parseSource(value.source);
-    return source
-      ? { kind: "message", role, content: value.content, source }
-      : { kind: "message", role, content: value.content };
-  }
-
   const role =
     value.role === "assistant" ? "assistant" : value.role === "user" ? "user" : null;
   if (!role || typeof value.content !== "string") {
@@ -580,9 +620,17 @@ function parseMessageEntry(value: unknown): PersistedChatMessageEntry | null {
   }
 
   const source = parseSource(value.source);
-  return source
-    ? { kind: "message", role, content: value.content, source }
-    : { kind: "message", role, content: value.content };
+  const reasoningSummary =
+    typeof value.reasoningSummary === "string" && value.reasoningSummary.trim()
+      ? value.reasoningSummary
+      : undefined;
+  return {
+    kind: "message",
+    role,
+    content: value.content,
+    ...(source ? { source } : {}),
+    ...(reasoningSummary ? { reasoningSummary } : {})
+  };
 }
 
 function parseEntry(value: unknown): PersistedChatEntry | null {
@@ -593,6 +641,11 @@ function parseEntry(value: unknown): PersistedChatEntry | null {
   if (value.kind === "planDraft") {
     const draft = parsePlanDraft(value.draft);
     return draft ? { kind: "planDraft", draft } : null;
+  }
+
+  if (value.kind === "coachPrompt") {
+    const prompt = parseCoachInputPrompt(value.prompt);
+    return prompt ? { kind: "coachPrompt", prompt } : null;
   }
 
   if (value.kind === "workoutDelete") {
@@ -678,6 +731,11 @@ function derivePreviewFromEntries(entries: PersistedChatEntry[]): string {
     }
     if (entry.kind === "planDraft") {
       return entry.draft.summary || entry.draft.name;
+    }
+    if (entry.kind === "coachPrompt") {
+      return entry.prompt.answeredAt
+        ? entry.prompt.question
+        : `Waiting for your answer: ${entry.prompt.question}`;
     }
     if (entry.kind === "workoutDelete") {
       return entry.preview.summary;

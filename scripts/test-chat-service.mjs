@@ -20,6 +20,20 @@ const { parseFunctionCallArguments } = await import(
   `${distUrl("chatToolArguments.js")}?cacheBust=${Date.now()}`
 );
 const {
+  buildCoachInputPrompt,
+  getChatInteractionTools,
+  handleChatInteractionTool
+} = await import(
+  `${distUrl("chatInteractionTools.js")}?cacheBust=${Date.now()}`
+);
+const {
+  buildResponsesRequest,
+  extractReasoningSummaryDelta,
+  extractResponseTextDelta
+} = await import(
+  `${distUrl("chatResponsesProtocol.js")}?cacheBust=${Date.now()}`
+);
+const {
   buildCoachInstructions,
   buildCoachSportCapabilityGuide,
   formatCoachDashboard,
@@ -34,6 +48,90 @@ assert.match(coachInstructions, /Never add an unfamiliar sport merely for variet
 assert.match(coachInstructions, /Open Water Swim is not Pool Swim/);
 assert.match(coachInstructions, /exercise_resolution_required/);
 assert.match(coachInstructions, /call draft_training_plan again in the same response/);
+assert.match(coachInstructions, /request_coach_input/);
+
+const interactionTool = getChatInteractionTools()[0];
+assert.equal(interactionTool.name, "request_coach_input");
+assert.deepEqual(interactionTool.inputSchema.required, ["question", "choices"]);
+
+const prompt = buildCoachInputPrompt(
+  {
+    question: "Which squat option should I use?",
+    choices: [
+      {
+        label: "Use split squats",
+        description: "Uses a supported unilateral movement.",
+        response: "Use split squats for the heavy gym sessions."
+      },
+      { label: "I’ll provide the COROS name" }
+    ]
+  },
+  "prompt-test"
+);
+assert.equal(prompt.promptId, "prompt-test");
+assert.equal(prompt.allowCustom, true);
+assert.equal(prompt.choices[0].response, "Use split squats for the heavy gym sessions.");
+assert.equal(prompt.choices[1].response, "I’ll provide the COROS name");
+assert.throws(
+  () =>
+    buildCoachInputPrompt({
+      question: "Choose",
+      choices: [{ label: "Only one" }]
+    }),
+  /at least two/
+);
+
+let emittedPrompt;
+const interactionResult = JSON.parse(
+  handleChatInteractionTool(
+    "request_coach_input",
+    {
+      question: "Choose a gym movement",
+      choices: [{ label: "Split squat" }, { label: "Leg press" }],
+      allow_custom: false
+    },
+    (nextPrompt) => {
+      emittedPrompt = nextPrompt;
+    }
+  )
+);
+assert.equal(interactionResult.status, "waiting_for_athlete");
+assert.equal(emittedPrompt.allowCustom, false);
+
+const responsesRequest = buildResponsesRequest(
+  "gpt-test",
+  "Coach instructions",
+  [{ type: "message", role: "user" }],
+  [{ type: "function", name: "get_metrics" }]
+);
+assert.deepEqual(responsesRequest.reasoning, { summary: "auto" });
+assert.equal(responsesRequest.tool_choice, "auto");
+assert.equal(
+  "reasoning" in
+    buildResponsesRequest("gpt-test", "Coach", [], [], false),
+  false
+);
+assert.equal(
+  extractReasoningSummaryDelta({
+    type: "response.reasoning_summary_text.delta",
+    delta: "Reviewing recent training load."
+  }),
+  "Reviewing recent training load."
+);
+assert.equal(
+  extractReasoningSummaryDelta({
+    type: "response.reasoning_text.delta",
+    delta: "raw reasoning"
+  }),
+  ""
+);
+assert.equal(
+  extractResponseTextDelta({
+    type: "response.output_text.delta",
+    delta: "Your plan is ready."
+  }),
+  "Your plan is ready."
+);
 
 const capabilityGuide = buildCoachSportCapabilityGuide();
 for (const sport of [

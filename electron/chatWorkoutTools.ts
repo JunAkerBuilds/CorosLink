@@ -473,8 +473,8 @@ async function handleDraftTrainingPlan(
         message: issue.message
       })),
       action: exerciseResolution.issues.every((issue) => issue.candidates.length > 0)
-        ? "Update each affected step to the exact best-matching candidate and call draft_training_plan again now. Ask the athlete only when the candidates materially change the intended movement."
-        : "At least one exercise is unavailable. Ask the athlete for a supported alternative, then call draft_training_plan again."
+        ? "Update each affected step to the exact best-matching candidate and call draft_training_plan again now. If the candidates materially change the intended movement, call request_coach_input with the exact candidates as clickable choices."
+        : "At least one exercise is unavailable. Call request_coach_input with supported alternatives as clickable choices, then wait for the athlete before calling draft_training_plan again."
     });
   }
   const resolvedDraft = exerciseResolution.draft;

@@ -18165,43 +18165,107 @@ tr.data-intervals-row-missing {
   to { background-position: -200% 0; }
 }
 
-.chat-thinking-preview {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
-  font-style: italic;
-  color: var(--text-muted);
-  opacity: 0.85;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 108px;
-  overflow: hidden;
+.chat-bubble-streaming {
+  width: min(100%, 620px);
 }
 
-/* Collapsible thought process once the answer starts streaming */
+.chat-thinking-text .chat-markdown > :first-child {
+  margin-top: 0;
+}
+
+.chat-thinking-text .chat-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+/* Compact, user-controlled safe reasoning summary. */
 .chat-thinking {
   margin-bottom: 8px;
-  border-left: 2px solid var(--glass-border);
-  padding-left: 10px;
+  width: min(100%, 560px);
 }
 
 .chat-thinking summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  min-height: 24px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  padding: 2px 7px;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 650;
   color: var(--text-muted);
   user-select: none;
+  transition: color 0.18s ease, border-color 0.18s ease,
+    background 0.18s ease;
+}
+
+.chat-thinking summary:hover,
+.chat-thinking[open] summary {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+}
+
+.chat-thinking summary::before {
+  content: "›";
+  display: inline-block;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 0.18s ease;
+}
+
+.chat-thinking[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.chat-thinking summary small {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent-strong);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.chat-thinking summary i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+  animation: chat-dot-pulse 1.3s ease-in-out infinite;
 }
 
 .chat-thinking-text {
-  margin: 6px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-muted);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 220px;
+  margin: 5px 0 0 8px;
+  max-height: 180px;
   overflow-y: auto;
+  border-left: 1px solid var(--glass-border);
+  padding: 4px 0 4px 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.chat-thinking-text .chat-markdown {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.chat-thinking-text .chat-markdown h1,
+.chat-thinking-text .chat-markdown h2,
+.chat-thinking-text .chat-markdown h3,
+.chat-thinking-text .chat-markdown h4 {
+  margin: 7px 0 2px;
+  font: inherit;
+  font-weight: 700;
+  color: var(--text-secondary);
 }
 
 @keyframes chat-row-enter {
@@ -18280,6 +18344,7 @@ tr.data-intervals-row-missing {
   .chat-row,
   .chat-avatar,
   .chat-typing span,
+  .chat-thinking summary i,
   .chat-mcp-pill.connected::before,
   .chat-mcp-panel {
     animation: none;
@@ -18751,6 +18816,148 @@ tr.data-intervals-row-missing {
   background: transparent;
   border: none;
   box-shadow: none;
+}
+
+.chat-bubble-coach-prompt {
+  width: min(100%, 560px);
+  padding: 0 !important;
+}
+
+.chat-coach-prompt {
+  display: grid;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 52%, var(--glass-border));
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--accent-soft) 72%, var(--glass-bg-elevated)),
+    var(--glass-bg)
+  );
+  padding: 15px;
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--accent-glow) 48%, transparent),
+    var(--glass-inset);
+}
+
+.chat-coach-prompt.is-answered {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-inset);
+}
+
+.chat-coach-prompt-header {
+  display: grid;
+  gap: 7px;
+}
+
+.chat-coach-prompt-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.chat-coach-prompt.is-answered .chat-coach-prompt-status {
+  color: var(--text-muted);
+}
+
+.chat-coach-prompt-header h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.chat-coach-prompt-choices {
+  display: grid;
+  gap: 8px;
+}
+
+.chat-coach-prompt-choice {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 58%, transparent);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease,
+    transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.chat-coach-prompt-choice > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.chat-coach-prompt-choice em {
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  padding: 2px 7px;
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.chat-coach-prompt-choice small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.chat-coach-prompt-choice:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+  box-shadow: 0 5px 16px var(--accent-glow);
+}
+
+.chat-coach-prompt-choice.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.chat-coach-prompt-choice:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.chat-coach-prompt-choice.is-selected:disabled {
+  opacity: 1;
+}
+
+.chat-coach-prompt-custom {
+  width: fit-content;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.chat-coach-prompt-custom:hover:not(:disabled) {
+  color: var(--accent-strong);
+}
+
+.chat-coach-prompt-custom:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .chat-plan-card {
