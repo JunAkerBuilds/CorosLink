@@ -7,14 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.25] - 2026-07-30
+
+### Added
+
+- **Training Library** — a dedicated tab for reusable training: search, filter, sort, preview, create, edit, duplicate, tag, collect, export, schedule, and delete COROS Workout Library workouts; build grouped multi-week plans by dragging workouts across days and a holding area, with rest days, phases, recovery weeks, start-date shifting, and undo/redo; keep local templates and collections; and compare two or three plans by duration, distance, training load, strength sets, sport/intensity mix, weekly progression, peak week, taper, shared workouts, and scheduling conflicts. Native COROS plan discovery and detail reads are live and cached; native grouped-plan writes stay visibly gated until the undocumented contract can be verified (see [architecture notes](docs/training-library-architecture.md))
+- **AI training plans** — describe a goal, length, weekly availability, sports, and constraints, and Coach drafts a complete plan straight into the library, ready to review, edit workout by workout, and schedule
+- **Plan adherence** — scheduled workouts are paired with completed activities by confidence score, with manual correction, skipped/missed/partial states, rescheduling, and planned-versus-completed metrics
+- **Hevy strength sync** — connect a Hevy API key from the Strength tab to merge Hevy workouts into your strength history; sessions logged in both apps are de-duplicated, warmup sets are optional, and disconnecting erases the cached Hevy data from this device
+- **Exercise Explorer** — open any lift for its full history: every set, per-session PRs, best sets by rep range, estimated one-rep-max progression, and volume over time ([#91](https://github.com/JunAkerBuilds/CorosLink/pull/91))
+- **Coach follow-up questions** — instead of guessing, Coach can ask one clarifying question with two to five tappable answers; a typed reply still works, and the question card survives a restart
+
 ### Changed
 
-- **Multi-sport Coach plans** — Coach now uses the athlete's recent activity mix and complete schedule to create adaptive plans across all nine supported COROS workout sports instead of defaulting to running
+- **Multi-sport Coach plans** — Coach now uses the athlete's recent activity mix and complete schedule to create adaptive plans across all nine supported COROS workout sports instead of defaulting to running ([#90](https://github.com/JunAkerBuilds/CorosLink/pull/90))
+- **Destination-aware plan confirmation** — before anything is uploaded, Coach's confirmation card shows the destination (Workout Library, Calendar, local template, COROS Plan Library, or plan plus calendar) along with the weeks, workouts, sports, start date, conflicts, and every remote write it will make; Coach's own tools can draft a plan but can never upload one
+- **Strength view redesign** — reworked layout and charts, a refined muscle mannequin on roughly 30% smaller anatomy assets, and a weekly chart that plots sets alongside weight lifted ([#91](https://github.com/JunAkerBuilds/CorosLink/pull/91))
+- **Workout builder and activity logging redesign** — restructured movement, prescription, load, and rest editing, exercise demonstration clips showing which muscles each movement trains, and a clearer manual activity form
+- Strength volume reads in full words ("1.2 tonnes" rather than "1.2t")
+- Activity queries above the COROS 100-per-page limit are now split across multiple requests and stitched back together
+- A Donate button in the header, for anyone who wants to support the project
 
 ### Fixed
 
 - Coach plan uploads now preserve each workout's sport and sport options instead of treating non-running workouts as Run
 - Strength and HYROX plan drafts now resolve harmless exercise-name variants automatically and feed genuine COROS catalog ambiguities back to Coach for same-response correction before preview or upload
+- The workout editor opened from a training plan is no longer cropped by the dialog around it
 
 ## [0.1.24] - 2026-07-28
 

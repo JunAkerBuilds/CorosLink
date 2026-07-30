@@ -269,6 +269,19 @@ Log in with your COROS account to view training data, fitness scores, and race p
 
 ---
 
+### Strength — resistance training analytics
+
+A dedicated view for lifting, built around a rotatable 3D muscle mannequin that
+shades each muscle by how hard you have worked it.
+
+- **Muscle map** — per-muscle set, volume, and time breakdowns on muscular and skeletal layers
+- **Weekly trends** — weight lifted and sets side by side, with push/pull/legs/core balance
+- **Exercise Explorer** — open any lift for every set, per-session PRs, best sets by rep range, estimated one-rep-max progression, and volume over time
+- **Hevy sync** — connect a Hevy API key to merge Hevy workouts with your COROS strength history; sessions logged in both apps are de-duplicated, warmup sets are optional, and disconnecting erases the cached Hevy data
+- **Metric or imperial** weights and volume, following the Settings unit switch
+
+---
+
 ### Training Library — workouts, plans, templates, and adherence
 
 A dedicated workspace for building and reusing training, from one structured
@@ -317,6 +330,7 @@ Ask training questions with answers grounded in your COROS data.
 - **Multi-sport workout tools** — draft adaptive plans across Run, Trail Run, Bike, Pool Swim, Strength, Indoor Climb, Bouldering, XC Ski, and HYROX
 - **Destination-aware confirmation** — choose Workout Library, Calendar, local template, COROS Plan Library, or Plan + Calendar; review weeks, workouts, sports, start date, conflicts, grouped-plan status, and every remote write before confirming
 - **AI write guard** — Coach tool calls can draft plans but cannot upload them; the athlete must use the confirmation card
+- **Follow-up questions** — Coach asks one clarifying question at a time with tappable answers instead of guessing; typing an answer still works
 - **Chat history** — per-provider conversations persist across restarts
 
 ---
