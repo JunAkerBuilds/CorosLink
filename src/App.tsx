@@ -86,6 +86,7 @@ import { recentTrainingHubDateList } from "./training/formatters";
 import type { TrainingHubSnapshot } from "./training/types";
 import type { CorosLinkApi } from "./coroslink-api";
 import { AppUpdateControls } from "./components/AppUpdateControls";
+import { DonateButton } from "./components/DonateButton";
 import { UpdateAvailablePrompt } from "./components/UpdateAvailablePrompt";
 import {
   AppSidebar,
@@ -2136,6 +2137,7 @@ export default function App() {
     <div className="app">
       <header className="app-header app-header--slim">
         <div className="app-header-end">
+          <DonateButton />
           <ThemeToggle />
           <StartupViewMenu
             value={startupView}
