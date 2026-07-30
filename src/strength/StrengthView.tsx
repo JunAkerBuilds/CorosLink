@@ -8,8 +8,9 @@ import {
 } from "react";
 import {
   Bar,
-  BarChart,
   CartesianGrid,
+  ComposedChart,
+  Line,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -113,6 +114,7 @@ const EMBER = {
     hot: "#f6b04a",
     mid: "#e8813c",
     base: "#d9434b",
+    sets: "#f3dfc4",
     /* The hover column reads as the bar's own warmth turned up, not as the
        shared white wash — which on this chart outshone the bar it marked. */
     cursor: "rgba(232, 129, 60, 0.12)"
@@ -121,6 +123,7 @@ const EMBER = {
     hot: "#d9901c",
     mid: "#cf6a2a",
     base: "#bd3238",
+    sets: "#614b3a",
     cursor: "rgba(207, 106, 42, 0.1)"
   }
 };
@@ -178,7 +181,7 @@ function totalWeightParts(kg: number, unitSystem: UnitSystem): FigurePart[] {
     return [
       {
         value: tonnes >= 10 ? Math.round(tonnes).toLocaleString() : tonnes.toFixed(1),
-        unit: "t"
+        unit: "tonnes"
       }
     ];
   }
@@ -824,7 +827,9 @@ export function StrengthView({
       return String(value);
     }
     return value >= 1000
-      ? `${Math.round(value / 1000)}${unitSystem === "metric" ? "t" : "k"}`
+      ? unitSystem === "metric"
+        ? `${Math.round(value / 1000)} tonnes`
+        : `${Math.round(value / 1000)}k`
       : String(value);
   };
 
@@ -1278,10 +1283,10 @@ export function StrengthView({
           <section className="panel strength-card strength-week-card">
             <div className="strength-card-head">
               <div>
-                <h3>{usesWeights ? "Weight lifted each week" : "Sets each week"}</h3>
+                <h3>{usesWeights ? "Weight lifted and sets each week" : "Sets each week"}</h3>
                 <p>
                   {usesWeights
-                    ? "Every bar is everything you lifted that week."
+                    ? "Bars show total weight lifted; the line tracks your sets."
                     : "Every bar is every set you did that week."}
                 </p>
               </div>
@@ -1314,9 +1319,9 @@ export function StrengthView({
 
             <div className="strength-chart">
               <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-                <BarChart
+                <ComposedChart
                   data={chartData}
-                  margin={{ top: 6, right: 2, left: -10, bottom: 0 }}
+                  margin={{ top: 6, right: 2, left: 0, bottom: 0 }}
                 >
                   <defs>
                     {/*
@@ -1349,14 +1354,28 @@ export function StrengthView({
                     minTickGap={28}
                   />
                   <YAxis
+                    yAxisId="weight"
                     stroke={colors.text}
                     tickLine={false}
                     axisLine={false}
                     fontSize={11.5}
                     tickMargin={6}
-                    width={52}
+                    width={usesWeights && unitSystem === "metric" ? 82 : 52}
                     tickFormatter={axisFormatter}
                   />
+                  {usesWeights ? (
+                    <YAxis
+                      yAxisId="sets"
+                      orientation="right"
+                      stroke={ember.sets}
+                      tickLine={false}
+                      axisLine={false}
+                      fontSize={11.5}
+                      tickMargin={6}
+                      width={32}
+                      allowDecimals={false}
+                    />
+                  ) : null}
                   <Tooltip
                     content={(props: TooltipContentProps) => {
                       if (!props.active || !props.payload?.length) {
@@ -1388,6 +1407,7 @@ export function StrengthView({
                   />
                   {averageValue > 0 ? (
                     <ReferenceLine
+                      yAxisId="weight"
                       y={averageValue}
                       stroke={colors.text}
                       strokeOpacity={0.45}
@@ -1395,13 +1415,32 @@ export function StrengthView({
                     />
                   ) : null}
                   <Bar
+                    yAxisId="weight"
                     dataKey="value"
                     name={usesWeights ? "Weight lifted" : "Sets"}
                     fill="url(#strengthWeekFill)"
                     radius={[5, 5, 2, 2]}
                     maxBarSize={30}
                   />
-                </BarChart>
+                  {usesWeights ? (
+                    <Line
+                      yAxisId="sets"
+                      type="monotone"
+                      dataKey="sets"
+                      name="Sets"
+                      stroke={ember.sets}
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{
+                        r: 4,
+                        fill: ember.sets,
+                        stroke: colors.dotStroke,
+                        strokeWidth: 2
+                      }}
+                      isAnimationActive={false}
+                    />
+                  ) : null}
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
 

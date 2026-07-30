@@ -538,7 +538,7 @@ export function formatVolumeKg(
   unitSystem: UnitSystem
 ): string {
   if (unitSystem === "metric" && value >= 1000) {
-    return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}t`;
+    return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)} tonnes`;
   }
   return `${Math.round(kilogramsToDisplayWeight(value, unitSystem)).toLocaleString()} ${weightUnit(unitSystem)}`;
 }
