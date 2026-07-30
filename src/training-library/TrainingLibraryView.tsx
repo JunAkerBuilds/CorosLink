@@ -44,6 +44,13 @@ import {
 } from "../../electron/trainingPlanDomain";
 import type { CorosLinkApi } from "../coroslink-api";
 import { formatWorkoutSport } from "../../electron/workoutCapabilities";
+import {
+  PlanSourceBadge,
+  SportMixDots,
+  dominantSport,
+  planSourceLabel,
+  sportAccentStyle
+} from "./sportTheme";
 import { SelectDropdown } from "../components/SelectDropdown";
 import { BulletRidge, Ridge, type BulletWeek } from "./Ridge";
 import { PlanCompare } from "./PlanCompare";
@@ -131,10 +138,7 @@ function planStartLabel(plan: TrainingPlanDocument): string {
 }
 
 function sourceLabel(source: TrainingPlanDocument["source"]): string {
-  if (source === "coros") return "COROS";
-  if (source === "coach") return "Coach";
-  if (source === "template") return "Template";
-  return "Local";
+  return planSourceLabel(source);
 }
 
 export function TrainingLibraryView({
@@ -532,7 +536,9 @@ function planView(
     context,
     sessions: summary?.workouts ?? 0,
     load: summary?.trainingLoad ? Math.round(summary.trainingLoad) : 0,
-    details: [context, planStartLabel(plan), sourceLabel(plan.source)],
+    details: [context, planStartLabel(plan)],
+    dominant: dominantSport(summary?.sportDistribution, plan.sportMix),
+    sportCounts: summary?.sportDistribution,
     ridge: {
       values: weekly.map((week) => (hasLoad ? week.trainingLoad : week.workouts)),
       peakWeek: hasLoad ? summary?.peakWeek : undefined,
@@ -848,14 +854,19 @@ function PlanIndex({
             const isSelected = selected.includes(plan.id);
 
             return (
-              <li className={`tl-card${isSelected ? " is-selected" : ""}`} key={plan.id}>
+              <li
+                className={`tl-card${isSelected ? " is-selected" : ""}`}
+                key={plan.id}
+                data-accent={view.dominant ?? undefined}
+                style={view.dominant ? sportAccentStyle(view.dominant) : undefined}
+              >
                 {selectMark(plan, isSelected)}
                 <button type="button" className="tl-card-open" onClick={() => onOpen(plan)}>
                   <span className="tl-card-top">
                     {plan.favorite ? (
                       <Heart size={11} fill="currentColor" strokeWidth={0} aria-label="Favorite" />
                     ) : null}
-                    <em>{sourceLabel(plan.source)}</em>
+                    <PlanSourceBadge source={plan.source} />
                     {UNSETTLED_SYNC.has(plan.syncState) ? (
                       <i className="tl-flag">{plan.syncState}</i>
                     ) : null}
@@ -865,6 +876,7 @@ function PlanIndex({
                   <span className="tl-card-note">
                     {view.context} · {planStartLabel(plan)}
                   </span>
+                  <SportMixDots sports={plan.sportMix} counts={view.sportCounts} />
                   <Ridge {...view.ridge} />
                   <span className="tl-card-figs">
                     <span>
@@ -921,7 +933,12 @@ function PlanIndex({
               const isSelected = selected.includes(plan.id);
 
               return (
-                <li className={`tl-plan-row tl-row${isSelected ? " is-selected" : ""}`} key={plan.id}>
+                <li
+                  className={`tl-plan-row tl-row${isSelected ? " is-selected" : ""}`}
+                  key={plan.id}
+                  data-accent={view.dominant ?? undefined}
+                  style={view.dominant ? sportAccentStyle(view.dominant) : undefined}
+                >
                   {selectMark(plan, isSelected)}
                   <button type="button" className="tl-row-open" onClick={() => onOpen(plan)}>
                     <span className="tl-row-name">
@@ -931,9 +948,11 @@ function PlanIndex({
                       {plan.name}
                     </span>
                     <span className="tl-row-sub">
+                      <SportMixDots sports={plan.sportMix} counts={view.sportCounts} />
                       {view.details.map((detail, index) => (
                         <em key={index}>{detail}</em>
                       ))}
+                      <PlanSourceBadge source={plan.source} />
                       {UNSETTLED_SYNC.has(plan.syncState) ? (
                         <i className="tl-flag">{plan.syncState}</i>
                       ) : null}

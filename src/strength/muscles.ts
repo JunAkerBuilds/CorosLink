@@ -190,6 +190,8 @@ export interface ExerciseTargets {
   activations: MuscleActivation[];
   /** Stretching, foam rolling and warm-up drills carry no training credit. */
   mobility: boolean;
+  /** The provider supplied only a non-anatomical label such as "Full Body". */
+  generic: boolean;
 }
 
 interface MuscleRule {
@@ -209,7 +211,6 @@ const SECONDARY_WEIGHT = 0.45;
  */
 const MUSCLE_RULES: MuscleRule[] = [
   // ---- Body regions reported by unstructured (free) strength sessions ----
-  { match: /^full body$/, primary: ["chest", "lats", "quads", "glutes"], secondary: ["shoulders", "abs", "hamstrings"] },
   { match: /^shoulders$/, primary: ["shoulders"], secondary: ["traps"] },
   { match: /^arms$/, primary: ["biceps", "triceps"], secondary: ["forearms"] },
   { match: /^chest$/, primary: ["chest"], secondary: ["triceps", "shoulders"] },
@@ -385,7 +386,29 @@ function normalizeExerciseName(name: string): string {
 
 const targetsCache = new Map<string, ExerciseTargets>();
 
-const NO_TARGETS: ExerciseTargets = { activations: [], mobility: false };
+const NO_TARGETS: ExerciseTargets = {
+  activations: [],
+  mobility: false,
+  generic: false
+};
+
+const GENERIC_TARGETS: ExerciseTargets = {
+  activations: [],
+  mobility: false,
+  generic: true
+};
+
+/**
+ * COROS uses S4208 for unstructured segments it can only describe as "Full
+ * Body". That label is useful for display, but it contains no evidence that a
+ * particular anatomical muscle was trained.
+ */
+export function resolveCorosExerciseTargets(
+  nameKey: string,
+  displayName: string
+): ExerciseTargets {
+  return nameKey === "S4208" ? GENERIC_TARGETS : resolveExerciseTargets(displayName);
+}
 
 const HEVY_GROUPS: Record<string, MuscleId[]> = {
   abdominals: ["abs"],
@@ -427,6 +450,7 @@ export function resolveProviderMuscleTargets(
     ? NO_TARGETS
     : {
         mobility: false,
+        generic: false,
         activations: [...weights.entries()].map(([muscle, weight]) => ({
           muscle,
           share: weight / total
@@ -454,7 +478,7 @@ export function resolveExerciseTargets(name: string): ExerciseTargets {
   let resolved: ExerciseTargets = NO_TARGETS;
 
   if (rule?.mobility) {
-    resolved = { activations: [], mobility: true };
+    resolved = { activations: [], mobility: true, generic: false };
   } else if (rule) {
     const weights = new Map<MuscleId, number>();
     for (const muscle of rule.primary ?? []) {
@@ -467,6 +491,7 @@ export function resolveExerciseTargets(name: string): ExerciseTargets {
     if (total > 0) {
       resolved = {
         mobility: false,
+        generic: false,
         activations: [...weights.entries()].map(([muscle, weight]) => ({
           muscle,
           share: weight / total

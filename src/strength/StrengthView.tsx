@@ -24,6 +24,7 @@ import {
   ChevronRight,
   ExternalLink,
   FlaskConical,
+  Info,
   Link2,
   Loader2,
   LockKeyhole,
@@ -689,6 +690,11 @@ export function StrengthView({
     WINDOW_OPTIONS.find((option) => option.days === days) ?? WINDOW_OPTIONS[1];
   const summary = analytics.summary;
   const hasSessions = summary.sessions > 0;
+  const attributedSetCount = Math.round(analytics.attributedSets);
+  const genericSetCount = Math.round(analytics.genericSets);
+  const workingSetCount = Math.round(
+    analytics.attributedSets + analytics.genericSets + analytics.unmappedSets
+  );
   // A history of dips and pull-ups carries no load, so the page switches to
   // counting sets rather than showing a column of zeroes.
   const usesWeights = summary.volumeKg > 0;
@@ -1163,6 +1169,17 @@ export function StrengthView({
         </p>
       ) : null}
 
+      {hasSessions && genericSetCount > 0 ? (
+        <p className="strength-notice is-attribution" role="note">
+          <Info size={15} aria-hidden="true" />
+          <span>
+            {`COROS recorded ${genericSetCount.toLocaleString()} working ${
+              genericSetCount === 1 ? "set" : "sets"
+            } only as Full Body, so ${genericSetCount === 1 ? "it is" : "they are"} excluded from the map. Specific attribution is available for ${attributedSetCount.toLocaleString()} of ${workingSetCount.toLocaleString()} working sets.`}
+          </span>
+        </p>
+      ) : null}
+
       {sampleButton && !sampleMode ? (
         <div className="strength-sample-cta">{sampleButton}</div>
       ) : null}
@@ -1247,16 +1264,33 @@ export function StrengthView({
         </section>
 
         <section className="panel strength-muscle-panel">
-          <MusclePanel
-            muscles={analytics.muscles}
-            muscleById={analytics.muscleById}
-            metric={metric}
-            max={heatMax}
-            active={panelMuscle}
-            onSelect={selectMuscle}
-            onHover={setListHover}
-            unitSystem={unitSystem}
-          />
+          {hasSessions && workingSetCount > 0 && analytics.attributedSets <= 0 ? (
+            <div className="muscle-panel is-unattributed">
+              <span className="muscle-panel-unattributed-icon" aria-hidden="true">
+                <Info size={22} />
+              </span>
+              <p className="eyebrow">Muscle attribution</p>
+              <h3>No specific muscle data</h3>
+              <p>
+                {genericSetCount > 0
+                  ? `COROS recorded ${genericSetCount.toLocaleString()} working ${
+                      genericSetCount === 1 ? "set" : "sets"
+                    } only as Full Body. Session totals remain available, but the map stays neutral because no specific muscles were identified.`
+                  : "None of the exercises in this window could be matched to specific muscles. Session totals remain available, but the map stays neutral."}
+              </p>
+            </div>
+          ) : (
+            <MusclePanel
+              muscles={analytics.muscles}
+              muscleById={analytics.muscleById}
+              metric={metric}
+              max={heatMax}
+              active={panelMuscle}
+              onSelect={selectMuscle}
+              onHover={setListHover}
+              unitSystem={unitSystem}
+            />
+          )}
         </section>
       </div>
 
@@ -1594,6 +1628,9 @@ export function StrengthView({
                   <p className="strength-mix-note">
                     Helper muscles count for part of a set, so a bench press
                     mostly counts as pushing.
+                    {analytics.genericSets > 0
+                      ? " COROS Full Body sets are left out because they do not identify a specific muscle."
+                      : ""}
                     {analytics.mobilitySets > 0 || analytics.unmappedSets > 0
                       ? " Warm-ups, stretching and moves we don't recognise are left out."
                       : ""}

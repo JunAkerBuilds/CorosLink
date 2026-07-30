@@ -42,8 +42,10 @@ import {
 import { formatWorkoutSport, WORKOUT_SPORTS } from "../../electron/workoutCapabilities";
 import type { CorosLinkApi } from "../coroslink-api";
 import { WorkoutEditorModal } from "../calendar/WorkoutEditorModal";
+import { SelectDropdown } from "../components/SelectDropdown";
 import { replaceTrainingPlanEntryWorkout } from "../../electron/planWorkoutEditor";
 import { Ridge } from "./Ridge";
+import { SportDot } from "./sportTheme";
 
 interface PlanEditorProps {
   api: CorosLinkApi;
@@ -58,18 +60,7 @@ interface PlanEditorProps {
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-/** Entry cards and library rows carry a dot in the sport's own colour. */
-const SPORT_DOT_CATEGORY: Record<string, string> = {
-  run: "run",
-  bike: "bike",
-  strength: "strength"
-};
-
-function sportDotCategory(sport: WorkoutSport | undefined): string | undefined {
-  if (!sport) return undefined;
-  return SPORT_DOT_CATEGORY[sport] ?? "other";
-}
-
+/** Entry cards and library rows carry the sport's icon in its own colour. */
 function withDerivedSportMix(plan: TrainingPlanDocument): TrainingPlanDocument {
   const sports = plan.entries
     .map((entry) => entry.workout?.sport)
@@ -298,7 +289,21 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
             <h3>Plan details</h3>
             <label><span>Description</span><textarea value={plan.description} onChange={(event) => patchPlan({ description: event.target.value })} /></label>
             <label><span>Goal</span><input value={plan.goal} onChange={(event) => patchPlan({ goal: event.target.value })} /></label>
-            <label><span>Difficulty</span><select value={plan.difficulty} onChange={(event) => patchPlan({ difficulty: event.target.value as TrainingPlanDocument["difficulty"] })}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="custom">Custom</option></select></label>
+            <label>
+              <span>Difficulty</span>
+              <SelectDropdown<TrainingPlanDocument["difficulty"]>
+                label="Plan difficulty"
+                value={plan.difficulty}
+                options={[
+                  { value: "beginner", label: "Beginner" },
+                  { value: "intermediate", label: "Intermediate" },
+                  { value: "advanced", label: "Advanced" },
+                  { value: "custom", label: "Custom" }
+                ]}
+                portal
+                onChange={(difficulty) => patchPlan({ difficulty })}
+              />
+            </label>
             <label><span>Week 1 Monday</span><span className="plan-editor-date"><CalendarRange size={15} /><input type="date" value={plan.startDate ?? ""} onChange={(event) => commit(shiftTrainingPlan(plan, mondayOf(event.target.value)))} /></span></label>
             <label><span>Notes</span><textarea value={plan.notes} onChange={(event) => patchPlan({ notes: event.target.value })} /></label>
           </section>
@@ -321,7 +326,19 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
             </div>
             {showNewWorkout ? <div className="plan-editor-new-workout">
               <label><span>Name</span><input value={newWorkoutName} onChange={(event) => setNewWorkoutName(event.target.value)} /></label>
-              <label><span>Sport</span><select value={newWorkoutSport} onChange={(event) => setNewWorkoutSport(event.target.value as WorkoutSport)}>{WORKOUT_SPORTS.map((sport) => <option key={sport} value={sport}>{formatWorkoutSport(sport)}</option>)}</select></label>
+              <label>
+                <span>Sport</span>
+                <SelectDropdown<WorkoutSport>
+                  label="Workout sport"
+                  value={newWorkoutSport}
+                  options={WORKOUT_SPORTS.map((sport) => ({
+                    value: sport,
+                    label: formatWorkoutSport(sport)
+                  }))}
+                  portal
+                  onChange={setNewWorkoutSport}
+                />
+              </label>
               <label><span>Duration</span><span className="plan-editor-duration"><input type="number" min="1" value={newWorkoutMinutes} onChange={(event) => setNewWorkoutMinutes(event.target.value)} /><em>min</em></span></label>
               <button type="button" className="primary-button" disabled={!newWorkoutName.trim()} onClick={createWorkout}>Add to holding area</button>
             </div> : null}
@@ -331,7 +348,7 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
               {libraryQuery ? <button type="button" aria-label="Clear workout filter" onClick={() => setLibraryQuery("")}><X size={13} /></button> : null}
             </div>
             <div className="plan-editor-library-list">
-              {libraryMatches.length === 0 ? <p className="plan-editor-empty-inline">No workouts match your filter.</p> : libraryMatches.map((workout) => <button type="button" key={workout.id} data-sport={sportDotCategory(workoutSportFromType(workout.sportType))} aria-label={`Add ${workout.name} to plan`} onClick={() => addLibraryWorkout(workout)}><span><strong>{workout.name}</strong><small>{formatWorkoutSport(workoutSportFromType(workout.sportType) ?? "run")}</small></span><span className="plan-editor-library-add" aria-hidden="true"><Plus size={14} /></span></button>)}
+              {libraryMatches.length === 0 ? <p className="plan-editor-empty-inline">No workouts match your filter.</p> : libraryMatches.map((workout) => <button type="button" key={workout.id} aria-label={`Add ${workout.name} to plan`} onClick={() => addLibraryWorkout(workout)}><SportDot sport={workoutSportFromType(workout.sportType)} /><span><strong>{workout.name}</strong><small>{formatWorkoutSport(workoutSportFromType(workout.sportType) ?? "run")}</small></span><span className="plan-editor-library-add" aria-hidden="true"><Plus size={14} /></span></button>)}
             </div>
           </section>
 
@@ -422,7 +439,8 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
 }
 
 function PlanEntryCard({ entry, onEdit, onRemove }: { entry: TrainingPlanEntry; onEdit: () => void; onRemove: () => void }) {
-  return <article className={`plan-entry-card is-${entry.kind}`} data-sport={sportDotCategory(entry.workout?.sport)} draggable={entry.kind === "workout"} onDragStart={(event) => event.dataTransfer.setData("text/training-plan-entry", entry.id)}>
+  return <article className={`plan-entry-card is-${entry.kind}`} draggable={entry.kind === "workout"} onDragStart={(event) => event.dataTransfer.setData("text/training-plan-entry", entry.id)}>
+    {entry.kind === "workout" ? <SportDot sport={entry.workout?.sport} /> : null}
     <span><strong>{entry.title ?? (entry.kind === "rest" ? "Rest day" : "Note")}</strong>{entry.workout?.sport ? <small>{formatWorkoutSport(entry.workout.sport)}</small> : null}</span>
     <span className="plan-entry-actions">
       {entry.kind === "workout" ? <button type="button" aria-label={`Edit ${entry.title ?? "workout"}`} onClick={onEdit}><Pencil size={12} /></button> : null}

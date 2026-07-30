@@ -1,26 +1,16 @@
 import {
   AlertTriangle,
   ArrowRight,
-  Bike,
   CalendarDays,
   Check,
-  Dumbbell,
-  Footprints,
-  Grip,
-  Hand,
   Info,
   LoaderCircle,
   Minus,
-  Mountain,
   Plus,
   RotateCw,
-  Snowflake,
   Sparkles,
-  Trophy,
-  Waves,
   X
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type {
@@ -34,6 +24,7 @@ import { trainingPlanFromDraftPreview } from "../../electron/trainingPlanDomain"
 import { formatWorkoutSport, WORKOUT_SPORTS } from "../../electron/workoutCapabilities";
 import type { CorosLinkApi } from "../coroslink-api";
 import { useUnitSystem } from "../units/UnitSystemProvider";
+import { sportTheme } from "./sportTheme";
 
 interface TrainingPlanGeneratorProps {
   api: CorosLinkApi;
@@ -51,22 +42,8 @@ interface ProviderAvailability {
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAY_NAMES_FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-/**
- * Sport chip identity: an icon plus the user's customizable sport color token.
- * Mirrors BUILDER_SPORT_META in AddWorkoutModal.
- */
-const SPORT_META: Record<WorkoutSport, { Icon: LucideIcon; colorVar: string }> = {
-  run: { Icon: Footprints, colorVar: "var(--sport-run)" },
-  bike: { Icon: Bike, colorVar: "var(--sport-bike)" },
-  swim: { Icon: Waves, colorVar: "var(--sport-other)" },
-  strength: { Icon: Dumbbell, colorVar: "var(--sport-strength)" },
-  trailRun: { Icon: Mountain, colorVar: "var(--sport-trail)" },
-  indoorClimb: { Icon: Grip, colorVar: "var(--sport-other)" },
-  bouldering: { Icon: Hand, colorVar: "var(--sport-other)" },
-  xcSki: { Icon: Snowflake, colorVar: "var(--sport-other)" },
-  hyrox: { Icon: Trophy, colorVar: "var(--sport-strength)" }
-};
-
+/* Sport chip identity — icon plus colour — comes from ./sportTheme, so the
+   generator agrees with the library indexes about what a sport looks like. */
 const DIFFICULTY_OPTIONS: { value: TrainingPlanGenerationRequest["difficulty"]; label: string; hint: string }[] = [
   { value: "beginner", label: "Beginner", hint: "New to structured training" },
   { value: "intermediate", label: "Intermediate", hint: "Training consistently" },
@@ -385,19 +362,20 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
               <legend>Sports</legend>
               <div className="plan-generator-sports">
                 {WORKOUT_SPORTS.map((sport) => {
-                  const meta = SPORT_META[sport];
+                  const theme = sportTheme(sport);
+                  const SportIcon = theme.icon;
                   const selected = sports.includes(sport);
                   return (
                     <button
                       type="button"
                       key={sport}
                       className={selected ? "is-selected" : ""}
-                      style={{ "--sport-accent": meta.colorVar } as CSSProperties}
+                      style={{ "--sport-accent": theme.color } as CSSProperties}
                       aria-pressed={selected}
                       disabled={generating}
                       onClick={() => toggleSport(sport)}
                     >
-                      <meta.Icon size={13} />
+                      <SportIcon size={13} />
                       {formatWorkoutSport(sport)}
                     </button>
                   );
@@ -500,10 +478,11 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
                 {sports.length ? (
                   <span className="plan-generator-snapshot-sports">
                     {sports.map((sport) => {
-                      const meta = SPORT_META[sport];
+                      const theme = sportTheme(sport);
+                      const SportIcon = theme.icon;
                       return (
-                        <span key={sport} className="plan-generator-snapshot-sport" style={{ "--sport-accent": meta.colorVar } as CSSProperties} title={formatWorkoutSport(sport)}>
-                          <meta.Icon size={12} />
+                        <span key={sport} className="plan-generator-snapshot-sport" style={{ "--sport-accent": theme.color } as CSSProperties} title={formatWorkoutSport(sport)}>
+                          <SportIcon size={12} />
                         </span>
                       );
                     })}

@@ -145,6 +145,8 @@ import type {
   CorosWatchfaceThemeListInput,
   CorosBatteryQueryInput,
   CorosBatteryReport,
+  CorosGearCatalog,
+  CorosGearSaveInput,
   CorosPairedDevice,
   CorosBluetoothDeviceChoice,
   CommunityWatchface,
@@ -180,6 +182,8 @@ export interface CorosLinkApi {
   getCorosBatteryReport: (
     input: CorosBatteryQueryInput
   ) => Promise<CorosBatteryReport>;
+  queryCorosGear: () => Promise<CorosGearCatalog>;
+  saveCorosGear: (input: CorosGearSaveInput) => Promise<CorosGearCatalog>;
   listCorosWatchfaceThemes: (
     input: CorosWatchfaceThemeListInput
   ) => Promise<CorosWatchfaceTheme[]>;

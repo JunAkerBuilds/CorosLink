@@ -498,6 +498,16 @@
   color: var(--warning-text);
 }
 
+.strength-notice.is-attribution {
+  align-items: flex-start;
+  line-height: 1.45;
+}
+
+.strength-notice.is-attribution svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
 .strength-notice.is-sample button {
   margin-left: auto;
   padding: 0;
@@ -1112,6 +1122,45 @@
   gap: 12px;
   width: 100%;
   min-height: 0;
+}
+
+.muscle-panel.is-unattributed {
+  align-items: center;
+  justify-content: center;
+  max-width: 36ch;
+  margin: auto;
+  padding: 36px 18px;
+  text-align: center;
+}
+
+.muscle-panel-unattributed-icon {
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  background: var(--sx-well);
+  color: var(--text-secondary);
+}
+
+.muscle-panel.is-unattributed .eyebrow,
+.muscle-panel.is-unattributed h3,
+.muscle-panel.is-unattributed p {
+  margin: 0;
+}
+
+.muscle-panel.is-unattributed h3 {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: -0.025em;
+}
+
+.muscle-panel.is-unattributed > p:last-child {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .muscle-panel-head {

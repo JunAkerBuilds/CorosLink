@@ -146,6 +146,8 @@ import type {
   CorosWatchfaceThemeListInput,
   CorosBatteryQueryInput,
   CorosBatteryReport,
+  CorosGearCatalog,
+  CorosGearSaveInput,
   CorosPairedDevice,
   CorosBluetoothDeviceChoice,
   CommunityWatchface,
@@ -195,6 +197,10 @@ const api = {
   getCorosBatteryReport: (
     input: CorosBatteryQueryInput
   ): Promise<CorosBatteryReport> => ipcRenderer.invoke("watchfaces:getBatteryReport", input),
+  queryCorosGear: (): Promise<CorosGearCatalog> =>
+    ipcRenderer.invoke("gear:query"),
+  saveCorosGear: (input: CorosGearSaveInput): Promise<CorosGearCatalog> =>
+    ipcRenderer.invoke("gear:save", input),
   listCorosWatchfaceThemes: (
     input: CorosWatchfaceThemeListInput
   ): Promise<CorosWatchfaceTheme[]> => ipcRenderer.invoke("watchfaces:listThemes", input),

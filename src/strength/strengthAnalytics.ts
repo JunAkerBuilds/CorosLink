@@ -17,7 +17,7 @@ import { resolveExerciseName } from "../training/exerciseNames";
 import { kilogramsToDisplayWeight, weightUnit } from "../units/units";
 import {
   MUSCLES,
-  resolveExerciseTargets,
+  resolveCorosExerciseTargets,
   resolveProviderMuscleTargets,
   type MuscleId
 } from "./muscles";
@@ -130,6 +130,10 @@ export interface StrengthAnalytics {
   balance: PatternBalance;
   /** Credited sets that went to warm-ups, stretching or foam rolling. */
   mobilitySets: number;
+  /** Working sets assigned to at least one specific muscle. */
+  attributedSets: number;
+  /** COROS sets reported only as the non-anatomical S4208 "Full Body" label. */
+  genericSets: number;
   /** Sets whose exercise name has no muscle mapping. */
   unmappedSets: number;
 }
@@ -243,8 +247,8 @@ function exerciseDisplayName(nameKey: string, rawName: string | undefined): stri
 }
 
 function exerciseTargets(exercise: StrengthExercise, name: string) {
-  const named = resolveExerciseTargets(name);
-  if (named.mobility || named.activations.length > 0) return named;
+  const named = resolveCorosExerciseTargets(exercise.nameKey, name);
+  if (named.mobility || named.generic || named.activations.length > 0) return named;
   return resolveProviderMuscleTargets(
     exercise.primaryMuscleGroup,
     exercise.secondaryMuscleGroups
@@ -274,6 +278,8 @@ export function buildStrengthAnalytics(
   let totalTrainingLoad = 0;
   let totalCalories = 0;
   let mobilitySets = 0;
+  let attributedSets = 0;
+  let genericSets = 0;
   let unmappedSets = 0;
   let heaviestLift: StrengthSummaryStats["heaviestLift"];
   let bestE1rm: StrengthSummaryStats["bestE1rm"];
@@ -339,10 +345,15 @@ export function buildStrengthAnalytics(
         mobilitySets += setCount;
         continue;
       }
+      if (targets.generic) {
+        genericSets += setCount;
+        continue;
+      }
       if (targets.activations.length === 0) {
         unmappedSets += setCount;
         continue;
       }
+      attributedSets += setCount;
 
       if (topWeightKg > (heaviestLift?.weightKg ?? 0)) {
         heaviestLift = { name, weightKg: topWeightKg, reps: topWeightReps, at };
@@ -503,6 +514,8 @@ export function buildStrengthAnalytics(
     weeks: weekList,
     balance,
     mobilitySets,
+    attributedSets,
+    genericSets,
     unmappedSets
   };
 }

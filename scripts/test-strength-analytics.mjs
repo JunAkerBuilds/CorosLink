@@ -9,7 +9,11 @@ const load = async (...segments) => {
   return import(`${url.href}?cacheBust=${bust}`);
 };
 
-const { resolveExerciseTargets, MUSCLES } = await load("src", "strength", "muscles.ts");
+const { resolveCorosExerciseTargets, resolveExerciseTargets, MUSCLES } = await load(
+  "src",
+  "strength",
+  "muscles.ts"
+);
 const {
   buildStrengthAnalytics,
   estimateOneRepMax,
@@ -48,6 +52,12 @@ assert.ok(shareOf("Inverse Nordic Curl", "quads") === 1);
 // Body regions from unstructured sessions resolve too.
 assert.ok(shareOf("Legs & Hips", "quads") > 0);
 assert.ok(shareOf("Arms", "biceps") > 0 && shareOf("Arms", "triceps") > 0);
+
+// COROS S4208 means only "Full Body"; it cannot support specific attribution.
+const genericCorosTargets = resolveCorosExerciseTargets("S4208", "Full Body");
+assert.equal(genericCorosTargets.generic, true);
+assert.equal(genericCorosTargets.activations.length, 0);
+assert.equal(shareOf("Full Body", "quads"), 0);
 
 // Recovery work carries no training credit.
 for (const name of ["Quadriceps Stretch", "Foam Rolling Quads", "Warm Up", "Rest"]) {
@@ -126,6 +136,8 @@ const analytics = buildStrengthAnalytics(sessions, 90);
 
 assert.equal(analytics.summary.sessions, 2);
 assert.equal(analytics.summary.sets, 8);
+assert.equal(analytics.attributedSets, 8);
+assert.equal(analytics.genericSets, 0);
 
 // Volume load is Σ reps × weight across every set.
 const expectedVolume = 10 * 60 + 8 * 70 + 6 * 80 + 2 * 10 * 100 + 10 * 50 + 8 * 60;
@@ -157,6 +169,45 @@ const providerFallback = buildStrengthAnalytics(
 );
 assert.ok(providerFallback.muscleById.quads.sets > 0);
 assert.ok(providerFallback.muscleById.glutes.sets > 0);
+
+// A provider that explicitly supplies full-body metadata can still attribute it;
+// only COROS's S4208 placeholder is confidence-gated.
+const providerFullBody = buildStrengthAnalytics(
+  [
+    session("provider-full-body", now, [
+      {
+        ...exercise("Full Body", [{ reps: 10, weightKg: 20 }]),
+        primaryMuscleGroup: "full_body"
+      }
+    ])
+  ],
+  30
+);
+assert.equal(providerFullBody.genericSets, 0);
+assert.equal(providerFullBody.attributedSets, 1);
+assert.ok(providerFullBody.muscleById.quads.sets > 0);
+
+// Generic COROS sessions remain in workout totals without colouring the body.
+const genericCoros = buildStrengthAnalytics(
+  [
+    session("coros-generic", now, [
+      exercise("S4208", [
+        { reps: 12, weightKg: 0 },
+        { reps: 10, weightKg: 0 },
+        { reps: 8, weightKg: 0 }
+      ])
+    ])
+  ],
+  30
+);
+assert.equal(genericCoros.summary.sets, 3);
+assert.equal(genericCoros.genericSets, 3);
+assert.equal(genericCoros.attributedSets, 0);
+assert.equal(
+  genericCoros.muscles.reduce((sum, stat) => sum + stat.sets, 0),
+  0
+);
+assert.equal(genericCoros.muscleById.quads.lastTrained, undefined);
 
 // Credited sets never exceed the sets actually performed.
 const creditedSets = analytics.muscles.reduce((sum, stat) => sum + stat.sets, 0);

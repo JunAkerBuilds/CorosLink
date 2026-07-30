@@ -45,8 +45,6 @@ interface ExerciseMenuPosition {
   maxHeight: number;
 }
 
-const MAX_VISIBLE_RESULTS = 12;
-
 function normalizeSearch(value: string): string {
   return value.trim().toLocaleLowerCase();
 }
@@ -94,10 +92,9 @@ export function ExerciseCombobox({
     const showAll = !term || Boolean(
       selectedId && selectedLabel && normalizeSearch(selectedLabel) === term
     );
-    const matches = showAll
+    return showAll
       ? labeledOptions
       : labeledOptions.filter((option) => normalizeSearch(option.label).includes(term));
-    return matches.slice(0, MAX_VISIBLE_RESULTS);
   }, [labeledOptions, query, selectedId]);
 
   useEffect(() => {

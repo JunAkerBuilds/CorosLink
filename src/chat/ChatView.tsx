@@ -2087,9 +2087,6 @@ export function ChatView({
             );
             })()}
           </div>
-          {isChatGptProvider && authStatus?.email ? (
-            <span className="chat-account">{authStatus.email}</span>
-          ) : null}
           {isChatGptProvider ? (
             <button
               type="button"

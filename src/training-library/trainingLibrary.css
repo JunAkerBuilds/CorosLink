@@ -6,9 +6,11 @@
  * panels over ambient accent washes, one segmented control for the sections,
  * and the accent gradient reserved for moments of emphasis.
  *
- * The dark theme is layered charcoal, never pure black, and the gate shares
- * the same ground. The accent stays the app's signature green; red and
- * yellow stay reserved for danger and caution.
+ * The library is its own room in either theme: layered charcoal, never pure
+ * black, when the app is dark; a deeper paper than the shell, panels lifted
+ * off it in near-white, when the app is paper. The gate shares that ground.
+ * The accent stays the app's signature green; red and yellow stay reserved
+ * for danger and caution.
  *
  * Only one thing is ever drawn — the ridge of weekly training load (Ridge.tsx),
  * small on an index row and at reading size on the adherence lede. It keeps to
@@ -18,9 +20,8 @@
  * settle, then ridges draw themselves. Everything sits under
  * prefers-reduced-motion, which the guard at the end of this file honours.
  *
- * Values derive from the app tokens in styles.css, so both themes reskin this
- * file by overriding tokens rather than restyling rules. Token blocks follow
- * the root: charcoal for the dark theme, and warm shadows for paper.
+ * Values derive from the app tokens in styles.css; the two blocks below state
+ * only where the library departs from them, once per theme.
  */
 
 .training-library-view {
@@ -62,73 +63,142 @@
 }
 
 /*
- * Charcoal, dark theme only. The dark theme is the *absence* of a data-theme
- * attribute (see theme.ts applyTheme), so this cannot leak into paper.
+ * The library's own materials, stated once per theme.
  *
- * It works by overriding the app tokens rather than inventing new ones, which
- * is how the paper theme reskins too: everything downstream — this file, plus
- * shared pieces like .app-select and .primary-button — follows for free. The
- * modals the workspace opens render inside the view, so they inherit all of
- * this without a rule of their own.
+ * Both blocks work by pinning tokens on the view itself rather than inventing
+ * new names, so everything downstream — this file, plus shared pieces like
+ * .app-select and .primary-button — follows for free, and the modals the
+ * editor and the workspace render inline inherit it all without a rule of
+ * their own. Only what the library departs from is listed; the accent, the
+ * status hues, and the ambient washes come from the app theme untouched.
  *
- * The gate shares the block so the connect screen sits on the same charcoal.
+ * The two blocks are the same room lit from the same side. Dark stacks value
+ * upward — ground, panel, tile — and paper stacks it the same way with the
+ * range turned over: a deeper paper for the ground, near-white panels lifted
+ * off it, white tiles. Depth is a sheen and a lit top edge on dark, where the
+ * ground can still take light; on paper it is carried by the shadows instead,
+ * which is why every raised recipe is a token rather than a literal.
+ *
+ * The gate shares both blocks so the connect screen sits on the same ground.
  */
-:root:not([data-theme]) .training-library-view,
-:root:not([data-theme]) .training-library-gate {
+:root:not([data-theme="paper"]) :is(.training-library-view, .training-library-gate) {
+  color-scheme: dark;
+
   --tl-ground: #16171b;
   --tl-panel-bg: #1d1f25;
   --tl-card: #23262e;
-  --tl-card-hover: #2b2f38;
   --tl-reader-bg: #1a1c21;
+  /* Catalog plates sit a step below the panel; hovering lifts them back to it. */
+  --tl-tile: #131418;
+  --tl-tile-hover: #191b20;
 
   --surface: #23262e;
   --glass-bg: rgba(255, 255, 255, 0.04);
   --glass-bg-hover: rgba(255, 255, 255, 0.07);
   --glass-bg-elevated: rgba(255, 255, 255, 0.09);
   --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 
   --text-primary: #edeef0;
   --text-secondary: #a9adb2;
   --text-muted: #7b8085;
 
+  /* Light from above: a sheen down a raised surface, a lit hairline on its
+     top edge, and a well for anything recessed into it. */
+  --tl-sheen: rgba(255, 255, 255, 0.05);
+  --tl-sheen-lit: rgba(255, 255, 255, 0.075);
+  --tl-sheen-fade: rgba(255, 255, 255, 0.014);
+  --tl-edge-light: rgba(255, 255, 255, 0.09);
+  --tl-well: rgba(255, 255, 255, 0.028);
+  --tl-shimmer: rgba(255, 255, 255, 0.09);
+  --tl-scrim: rgba(22, 23, 27, 0.76);
+
+  --tl-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.16), 0 10px 26px rgba(0, 0, 0, 0.14);
+  --tl-shadow-card-hover: 0 2px 4px rgba(0, 0, 0, 0.18), 0 18px 38px rgba(0, 0, 0, 0.2);
+  --tl-shadow-card-held: 0 1px 2px rgba(0, 0, 0, 0.16), 0 12px 28px rgba(0, 0, 0, 0.15);
+  --tl-shadow-plate: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --tl-shadow-plate-hover: 0 2px 5px rgba(0, 0, 0, 0.34), 0 14px 30px rgba(0, 0, 0, 0.28);
+  --tl-shadow-plate-held: 0 2px 5px rgba(0, 0, 0, 0.32);
+  --tl-shadow-week: 0 1px 2px rgba(0, 0, 0, 0.14), 0 8px 22px rgba(0, 0, 0, 0.12);
+  --tl-shadow-lift: 0 4px 14px rgba(0, 0, 0, 0.14);
+
+  /* Provenance: where a plan came from, never what it contains. */
+  --tl-source-coach: #c084fc;
+  --tl-source-template: #eab308;
+
+  /* The calendar's phase hues (--step-* on .sched-detail), brought over so the
+     structure bar reads the same in both views. */
+  --step-warmup: #f0a72e;
+  --step-rest: #9099aa;
+  --step-cooldown: #27c2e5;
+  --step-sendoff: #b48cff;
+
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28), 0 14px 32px rgba(0, 0, 0, 0.26);
   --shadow-elevated: 0 20px 44px rgba(0, 0, 0, 0.42);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-/* Crisp white tiles read better than translucent ones on the warm paper panel. */
-:root[data-theme="paper"] .training-library-view {
+:root[data-theme="paper"] :is(.training-library-view, .training-library-gate) {
+  color-scheme: light;
+
+  --tl-ground: #efebe1;
+  --tl-panel-bg: #fdfcf8;
   --tl-card: #ffffff;
-  --tl-card-hover: #fffdf9;
-}
+  --tl-reader-bg: #f4f1e9;
+  --tl-tile: #f5f2ea;
+  --tl-tile-hover: #fbf9f4;
 
-/* Black-alpha shadows go warm on paper, matching the theme's brown tints. */
-:root[data-theme="paper"] .tl-card {
-  box-shadow:
-    0 1px 2px rgba(60, 50, 35, 0.05),
-    0 10px 26px rgba(60, 50, 35, 0.07);
-}
+  /*
+   * Controls take an ink wash rather than the app's white glass: the library's
+   * panels are already near-white, and a white-on-white fill leaves hover
+   * states with nothing to say.
+   */
+  --surface: #ffffff;
+  --glass-bg: rgba(38, 34, 28, 0.045);
+  --glass-bg-hover: rgba(38, 34, 28, 0.08);
+  --glass-bg-elevated: rgba(38, 34, 28, 0.1);
+  --glass-border: rgba(38, 34, 28, 0.14);
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 
-:root[data-theme="paper"] .tl-card:hover {
-  box-shadow:
-    0 2px 4px rgba(60, 50, 35, 0.06),
-    0 18px 38px rgba(60, 50, 35, 0.11),
-    0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent);
-}
+  --text-primary: #26251f;
+  --text-secondary: #55524a;
+  --text-muted: #857f74;
 
-:root[data-theme="paper"] .tl-card.is-selected,
-:root[data-theme="paper"] .tl-card.is-active {
-  box-shadow:
-    0 1px 2px rgba(60, 50, 35, 0.05),
-    0 12px 28px rgba(60, 50, 35, 0.09),
-    0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent);
-}
+  /*
+   * The sheen survives only where paper is not already white — the reader
+   * dock, the week frames, the glass cards over a tinted ground. Recesses
+   * invert: a well is an ink wash, and its top edge darkens instead of lights.
+   */
+  --tl-sheen: rgba(255, 255, 255, 0.6);
+  --tl-sheen-lit: rgba(255, 255, 255, 0.85);
+  --tl-sheen-fade: rgba(255, 255, 255, 0);
+  --tl-edge-light: rgba(255, 255, 255, 0.8);
+  --tl-well: rgba(38, 34, 28, 0.055);
+  --tl-shimmer: rgba(255, 255, 255, 0.9);
+  --tl-scrim: rgba(38, 34, 28, 0.34);
 
-:root[data-theme="paper"] .training-library-view .ghost-button:hover:not(:disabled) {
-  box-shadow: 0 4px 14px rgba(60, 50, 35, 0.1);
-}
+  --tl-shadow-card: 0 1px 2px rgba(60, 50, 35, 0.07), 0 10px 26px rgba(60, 50, 35, 0.09);
+  --tl-shadow-card-hover: 0 2px 4px rgba(60, 50, 35, 0.09), 0 18px 38px rgba(60, 50, 35, 0.14);
+  --tl-shadow-card-held: 0 1px 2px rgba(60, 50, 35, 0.07), 0 12px 28px rgba(60, 50, 35, 0.11);
+  /* Sunk, so the plate's shadow falls inward — until hover lifts it clear. */
+  --tl-shadow-plate: inset 0 1px 3px rgba(60, 50, 35, 0.07);
+  --tl-shadow-plate-hover: 0 2px 5px rgba(60, 50, 35, 0.08), 0 14px 30px rgba(60, 50, 35, 0.11);
+  --tl-shadow-plate-held: 0 2px 6px rgba(60, 50, 35, 0.1);
+  --tl-shadow-week: 0 1px 2px rgba(60, 50, 35, 0.05), 0 8px 22px rgba(60, 50, 35, 0.07);
+  --tl-shadow-lift: 0 4px 14px rgba(60, 50, 35, 0.1);
 
-:root[data-theme="paper"] .plan-week {
-  box-shadow: 0 1px 2px rgba(60, 50, 35, 0.05), 0 8px 22px rgba(60, 50, 35, 0.07);
+  --tl-source-coach: #7c3aed;
+  --tl-source-template: #a16207;
+
+  /*
+   * The phase hues darken for paper. They are recessed by mixing toward
+   * transparent, which pales them against a light track rather than sinking
+   * them into it, so the dark-theme values would arrive here washed out.
+   */
+  --step-warmup: #c2740c;
+  --step-rest: #6f6a61;
+  --step-cooldown: #0f7f9c;
+  --step-sendoff: #7c4dd8;
 }
 
 .training-library-view :is(button, input, select, textarea) {
@@ -203,7 +273,7 @@
   border-color: color-mix(in srgb, var(--accent) 34%, var(--glass-border));
   color: var(--text-primary);
   background: var(--glass-bg-hover);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--tl-shadow-lift);
   transform: translateY(-1px);
 }
 
@@ -491,7 +561,7 @@
   border-radius: var(--radius-lg);
   background:
     radial-gradient(ellipse 90% 62% at 14% 0%, var(--bg-ambient-green), transparent 58%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012) 42%),
+    linear-gradient(180deg, var(--tl-sheen), var(--tl-sheen-fade) 42%),
     var(--tl-panel-bg);
   box-shadow: var(--shadow-card), var(--glass-inset);
   backdrop-filter: blur(var(--glass-blur));
@@ -939,6 +1009,116 @@
   font-weight: 500;
 }
 
+/*
+ * Sport identity chips. --tl-sport is set inline from sportTheme, so the
+ * customizable --sport-* tokens reach every badge, dot, and icon.
+ */
+.tl-sport-badge {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  padding: 2.5px 8px;
+  border: 1px solid color-mix(in srgb, var(--tl-sport, var(--accent)) 34%, transparent);
+  border-radius: var(--radius-pill);
+  color: color-mix(in srgb, var(--tl-sport, var(--accent-strong)) 82%, var(--text-primary));
+  background: color-mix(in srgb, var(--tl-sport, var(--accent)) 10%, transparent);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  line-height: 1.5;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tl-sport-badge svg {
+  flex: none;
+  color: var(--tl-sport, var(--accent));
+}
+
+.tl-sport-badge > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Dense rows keep the colour and the icon but drop the pill chrome. */
+.tl-sport-badge.is-compact {
+  padding: 0;
+  border: 0;
+  color: color-mix(in srgb, var(--tl-sport, var(--accent)) 74%, var(--text-secondary));
+  background: none;
+  font-size: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-transform: none;
+}
+
+/* One mini icon chip per sport — plan mixes, editor entries, pickers. */
+.tl-sport-dots {
+  display: inline-flex;
+  min-width: 0;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.tl-sport-dot {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--tl-sport, var(--accent)) 30%, transparent);
+  border-radius: 50%;
+  color: var(--tl-sport, var(--accent));
+  background: color-mix(in srgb, var(--tl-sport, var(--accent)) 10%, transparent);
+}
+
+.tl-sport-dots > b {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* Provenance labels: colour says where a plan came from. */
+.tl-source {
+  font-style: normal;
+}
+
+.tl-source[data-source="coros"] {
+  color: var(--accent-strong);
+}
+
+.tl-source[data-source="coach"] {
+  color: var(--tl-source-coach);
+}
+
+.tl-source[data-source="template"] {
+  color: var(--tl-source-template);
+}
+
+.tl-source[data-source="local"] {
+  color: var(--text-secondary);
+}
+
+/* On tiles the source gets a dot; list rows keep their "·" separators. */
+.tl-card-top .tl-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.tl-card-top .tl-source::before {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
 .tl-fig.is-quiet {
   color: var(--text-muted);
   font-size: 12px;
@@ -1075,11 +1255,9 @@
   border: 1px solid var(--tl-rule);
   border-radius: var(--radius-md);
   background:
-    linear-gradient(158deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.014) 46%),
+    linear-gradient(158deg, var(--tl-sheen), var(--tl-sheen-fade) 46%),
     var(--tl-card, var(--glass-bg));
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.16),
-    0 10px 26px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--tl-shadow-card);
   overflow: hidden;
   transition:
     border-color 190ms ease,
@@ -1103,8 +1281,7 @@
 .tl-card:hover {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--glass-border));
   box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.18),
-    0 18px 38px rgba(0, 0, 0, 0.2),
+    var(--tl-shadow-card-hover),
     0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent),
     0 10px 30px color-mix(in srgb, var(--accent) 10%, transparent);
   transform: translateY(-3px);
@@ -1118,8 +1295,7 @@
 .tl-card.is-selected {
   border-color: color-mix(in srgb, var(--accent) 62%, transparent);
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.16),
-    0 12px 28px rgba(0, 0, 0, 0.15),
+    var(--tl-shadow-card-held),
     0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent),
     0 8px 26px color-mix(in srgb, var(--accent) 16%, transparent);
 }
@@ -1127,8 +1303,7 @@
 .tl-card.is-active {
   border-color: color-mix(in srgb, var(--accent) 58%, var(--glass-border));
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.16),
-    0 12px 28px rgba(0, 0, 0, 0.15),
+    var(--tl-shadow-card-held),
     0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
@@ -1292,20 +1467,368 @@
   }
 }
 
-/* Workout tiles carry no weekly data, so they stay shorter and text-only. */
+/* ------------------------------------------------------- Workout tiles */
+
+/*
+ * A plan tile draws its ridge; a workout tile draws its load meter — one
+ * figure each, and nothing else on the tile is drawn. The meter reads as a
+ * share of the heaviest workout in the library, filled in the sport's own
+ * hue, so a grid of tiles sorts itself into light and heavy days by bar
+ * length alone. Everything below it is provenance: how much, how often, and
+ * how long since the session was last used.
+ *
+ * Tracks auto-fill rather than a fixed four, so the tiles keep a readable
+ * width when the reader takes its 392px and when it collapses away.
+ */
 .tl-catalog .tl-grid {
-  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
-}
-
-.tl-catalog .tl-card {
-  min-height: 120px;
-}
-
-/* With no ridge to push them down, the figures take the auto margin instead so
-   they still land on the tile floor when a name wraps to two lines. */
-.tl-catalog .tl-card-figs {
+  grid-template-columns: repeat(auto-fill, minmax(246px, 1fr));
   gap: 14px;
+  padding: 18px;
+}
+
+/*
+ * The tile is a plate sunk below the panel rather than raised over it: one
+ * step back from the panel's value in either theme, one hairline, and no
+ * accent stripe, wash, or glow. All the colour a tile carries is the sport's,
+ * and only where the sport is the information — the badge, the load bar, the
+ * glyph behind them.
+ */
+.tl-catalog .tl-card {
+  min-height: 190px;
+  border-color: var(--tl-rule-soft);
+  background: var(--tl-tile);
+  box-shadow:
+    inset 0 1px 0 var(--tl-well),
+    var(--tl-shadow-plate);
+}
+
+/* ::before is the accent wash, ::after the sport stripe. Neither survives. */
+.tl-catalog .tl-card::before,
+.tl-catalog .tl-card[data-accent]::before,
+.tl-catalog .tl-card[data-accent]::after {
+  content: none;
+}
+
+.tl-catalog .tl-card:hover,
+.tl-catalog .tl-card[data-accent]:hover {
+  border-color: color-mix(in srgb, var(--text-muted) 48%, transparent);
+  background: var(--tl-tile-hover);
+  box-shadow:
+    inset 0 1px 0 var(--tl-well),
+    var(--tl-shadow-plate-hover);
+  transform: translateY(-2px);
+}
+
+/* Reading and selection read as light on the edge, never as hue. */
+.tl-catalog .tl-card.is-active,
+.tl-catalog .tl-card[data-accent].is-active {
+  border-color: color-mix(in srgb, var(--text-primary) 40%, transparent);
+  background: var(--tl-tile-hover);
+  box-shadow:
+    inset 0 1px 0 var(--tl-well),
+    0 0 0 1px color-mix(in srgb, var(--text-primary) 14%, transparent),
+    var(--tl-shadow-plate-held);
+}
+
+.tl-catalog .tl-card.is-selected,
+.tl-catalog .tl-card[data-accent].is-selected {
+  border-color: color-mix(in srgb, var(--text-primary) 58%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--tl-well),
+    0 0 0 1px color-mix(in srgb, var(--text-primary) 24%, transparent),
+    var(--tl-shadow-plate-held);
+}
+
+.tl-catalog .tl-card-open {
+  gap: 9px;
+  padding: 15px 16px 14px;
+}
+
+/* Everything on the tile sits over the sport glyph behind it. */
+.tl-catalog .tl-card-open > :not(.tl-wk-glyph) {
+  position: relative;
+  z-index: 1;
+}
+
+.tl-catalog .tl-card-name {
+  font-size: 16.5px;
+  line-height: 1.24;
+}
+
+/* Centred on the sport badge opposite it, not on the tile corner. */
+.tl-catalog .tl-card > .tl-mark {
+  top: 17px;
+  right: 16px;
+}
+
+/*
+ * The sport's own icon at reading size, cropped by the tile corner: sport
+ * recognition from the corner of the eye, held at an alpha that never
+ * competes with the name or the meter. The mask fades it out towards the
+ * text, so a busy glyph — the dumbbell, the swimmer — never reads as noise
+ * behind the footer.
+ */
+.tl-wk-glyph {
+  position: absolute;
+  right: -30px;
+  bottom: -24px;
+  z-index: 0;
+  color: var(--tl-sport-accent, var(--accent));
+  opacity: 0.09;
+  pointer-events: none;
+  mask-image: radial-gradient(circle at 78% 78%, #000, transparent 72%);
+  transition:
+    opacity 260ms var(--tl-ease-out),
+    transform 320ms var(--tl-ease-out);
+}
+
+.tl-card:hover .tl-wk-glyph,
+.tl-card.is-active .tl-wk-glyph {
+  opacity: 0.15;
+  transform: translate(-5px, -5px);
+}
+
+.tl-wk-tags {
+  display: flex;
+  min-width: 0;
+  max-height: 20px;
+  flex-wrap: wrap;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.tl-wk-tags em {
+  padding: 1.5px 7px;
+  border: 1px solid var(--tl-rule-soft);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.tl-wk-tags em.is-more {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
+/* The auto margin lands the meter and the footer on the tile floor, so bars
+   line up across a row however far a name wraps. */
+.tl-wk-meter {
+  display: flex;
+  flex-direction: column;
   margin-top: auto;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.tl-wk-meter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tl-wk-meter-head small {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tl-wk-meter-head b {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.tl-wk-meter-head b.is-nil {
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.tl-wk-load {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.tl-wk-load em {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/*
+ * The session drawn as it is run: one segment per step, sized by how long the
+ * step lasts, repeats expanded so an interval set reads as a comb.
+ *
+ * This is the calendar's structure bar (.sched-bar in styles.css), brought
+ * over intact — same framed track, same 2px gaps and rounded pills, same
+ * phase hues, same hatched rest. The two views show the same thing, so they
+ * should look like the same thing. Only the height and the work colour differ:
+ * the tile is shorter, and work takes the tile's own sport accent.
+ */
+.tl-wk-shape {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 22px;
+  padding: 3px;
+  border: 1px solid var(--tl-rule-soft);
+  border-radius: var(--radius-sm);
+  background: var(--tl-well);
+  animation: tl-wk-fill 460ms var(--tl-ease-out) backwards;
+  transform-origin: left;
+}
+
+.tl-wk-shape i {
+  min-width: 4px;
+  flex-basis: 0;
+  border-radius: 3px;
+  background: var(--tl-sport-accent, var(--accent));
+  transition: filter 150ms ease;
+}
+
+/* A long interval set has more steps than a tile has pixels for pills, so the
+   comb closes up and reads as a striped band instead of overflowing. */
+.tl-wk-shape[data-dense] {
+  gap: 1px;
+  padding: 2px;
+}
+
+.tl-wk-shape[data-dense] i {
+  min-width: 1px;
+  border-radius: 1px;
+}
+
+/*
+ * Warm-up and cool-down keep the calendar's hues but sit back a step in value.
+ * At tile size hue alone is not enough to separate them from the work blocks:
+ * the bike accent (#e6b800) and the warm-up amber (#f0a72e) are near neighbours,
+ * as are the trail blue and the cool-down cyan. Recessing the framing phases
+ * keeps work reading as work whatever sport the tile is.
+ */
+.tl-wk-shape i.is-warmup {
+  background: color-mix(in srgb, var(--step-warmup) 68%, transparent);
+}
+
+.tl-wk-shape i.is-training {
+  background: var(--tl-sport-accent, var(--accent));
+}
+
+.tl-wk-shape i.is-cooldown {
+  background: color-mix(in srgb, var(--step-cooldown) 68%, transparent);
+}
+
+.tl-wk-shape i.is-sendOff {
+  background: var(--step-sendoff);
+}
+
+.tl-wk-shape i.is-rest {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--step-rest) 62%, transparent) 0 4px,
+    color-mix(in srgb, var(--step-rest) 28%, transparent) 4px 8px
+  );
+}
+
+.tl-wk-shape i:hover,
+.tl-card:hover .tl-wk-shape i {
+  filter: brightness(1.18);
+}
+
+/*
+ * The load bar stands in until the steps arrive — same frame, same height, so
+ * the tile never reflows when the comb replaces it. Workouts COROS gives no
+ * structure for keep it for good.
+ */
+.tl-wk-track {
+  display: block;
+  height: 22px;
+  padding: 3px;
+  border: 1px solid var(--tl-rule-soft);
+  border-radius: var(--radius-sm);
+  background: var(--tl-well);
+}
+
+/* A hatched fill says COROS reported no load, which is not the same as none. */
+.tl-wk-track.is-nil {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--text-muted) 26%, transparent) 0 4px,
+      transparent 4px 8px
+    ),
+    var(--tl-well);
+}
+
+.tl-wk-track i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--tl-sport-accent, var(--accent)) 78%, transparent);
+  transform-origin: left;
+  animation: tl-wk-fill 560ms var(--tl-ease-out) backwards;
+  transition: filter 200ms ease;
+}
+
+.tl-card:hover .tl-wk-track i {
+  filter: brightness(1.16) saturate(1.08);
+}
+
+@keyframes tl-wk-fill {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.tl-wk-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--tl-rule-soft);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.tl-wk-foot > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-wk-foot svg {
+  flex: none;
+  opacity: 0.7;
+}
+
+.tl-wk-foot b {
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 /* -------------------------------------------------------- Layout switch */
@@ -1410,6 +1933,82 @@
 
 .tl-row:hover .tl-ridge-bar.is-peak {
   filter: brightness(1.1);
+}
+
+/*
+ * Sport accent. A tile or row with [data-accent] carries --tl-sport-accent
+ * inline (see sportTheme): the tile borrows the sport's hue for its top
+ * stripe, hover glow, and load ridge; the row gets a quiet leading edge.
+ * Grey session-count ridges stay grey so they are never mistaken for load.
+ */
+.tl-card[data-accent]::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2.5px;
+  background: linear-gradient(90deg, var(--tl-sport-accent), color-mix(in srgb, var(--tl-sport-accent) 22%, transparent));
+  content: "";
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.tl-card[data-accent]::before {
+  background:
+    radial-gradient(ellipse 120% 70% at 50% -18%, color-mix(in srgb, var(--tl-sport-accent) 14%, transparent), transparent 62%);
+}
+
+.tl-card[data-accent]:hover {
+  border-color: color-mix(in srgb, var(--tl-sport-accent) 42%, var(--glass-border));
+  box-shadow:
+    var(--tl-shadow-card-hover),
+    0 0 0 1px color-mix(in srgb, var(--tl-sport-accent) 14%, transparent),
+    0 10px 30px color-mix(in srgb, var(--tl-sport-accent) 12%, transparent);
+}
+
+.tl-card[data-accent].is-selected {
+  border-color: color-mix(in srgb, var(--tl-sport-accent) 62%, transparent);
+  box-shadow:
+    var(--tl-shadow-card-held),
+    0 0 0 1px color-mix(in srgb, var(--tl-sport-accent) 30%, transparent),
+    0 8px 26px color-mix(in srgb, var(--tl-sport-accent) 16%, transparent);
+}
+
+.tl-card[data-accent].is-active {
+  border-color: color-mix(in srgb, var(--tl-sport-accent) 58%, var(--glass-border));
+  box-shadow:
+    var(--tl-shadow-card-held),
+    0 0 0 1px color-mix(in srgb, var(--tl-sport-accent) 22%, transparent);
+}
+
+.tl-card[data-accent] .tl-card-top > svg {
+  color: var(--tl-sport-accent);
+}
+
+.tl-row[data-accent] {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--tl-sport-accent) 72%, transparent);
+}
+
+.tl-row[data-accent].is-selected {
+  background: color-mix(in srgb, var(--tl-sport-accent) 10%, transparent);
+}
+
+.tl-row[data-accent] .tl-row-name > svg {
+  color: var(--tl-sport-accent);
+}
+
+.tl-card[data-accent] .tl-ridge:not(.is-count) .tl-ridge-bar:not(.is-empty),
+.tl-row[data-accent] .tl-ridge:not(.is-count) .tl-ridge-bar:not(.is-empty) {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--tl-sport-accent) 86%, transparent), color-mix(in srgb, var(--tl-sport-accent) 52%, transparent));
+}
+
+.tl-card[data-accent] .tl-ridge:not(.is-count) .tl-ridge-bar.is-peak,
+.tl-row[data-accent] .tl-ridge:not(.is-count) .tl-ridge-bar.is-peak {
+  background: var(--tl-sport-accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 10px color-mix(in srgb, var(--tl-sport-accent) 46%, transparent);
 }
 
 /* The same axis at reading size: planned load pale, completed load solid. */
@@ -1587,24 +2186,14 @@
   content: "";
 }
 
-.tl-reader-sport[data-sport="strength"] {
-  --tl-sport: var(--sport-strength);
+/* With the sport's own icon inside, the generic dot steps aside. */
+.tl-reader-sport.has-icon::before {
+  content: none;
 }
 
-.tl-reader-sport[data-sport="trail"] {
-  --tl-sport: var(--sport-trail);
-}
-
-.tl-reader-sport[data-sport="run"] {
-  --tl-sport: var(--sport-run);
-}
-
-.tl-reader-sport[data-sport="bike"] {
-  --tl-sport: var(--sport-bike);
-}
-
-.tl-reader-sport[data-sport="other"] {
-  --tl-sport: var(--sport-other);
+.tl-reader-sport svg {
+  flex: none;
+  color: var(--tl-sport, var(--accent));
 }
 
 .tl-reader-favorite {
@@ -1729,44 +2318,75 @@
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012) 48%),
+    linear-gradient(160deg, var(--tl-sheen), var(--tl-sheen-fade) 48%),
     var(--glass-bg);
   box-shadow: var(--shadow-inset);
 }
 
-/* Time is continuous, so the segments abut: only the fill marks a boundary. */
+/*
+ * The bar is the calendar's structure bar (.sched-bar in styles.css) at reading
+ * size: discrete pills over a framed track, one per step, sized by how long the
+ * step runs. The tile comb, this bar, and the calendar's all draw the same
+ * thing the same way — see the .tl-wk-shape block for the phase palette.
+ */
 .tl-shape > div {
   display: flex;
+  align-items: stretch;
+  gap: 3px;
   height: 36px;
-  border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+  padding: 4px;
+  border: 1px solid var(--tl-rule-soft);
   border-radius: 8px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  overflow: hidden;
+  background: var(--tl-well);
+  box-shadow: inset 0 1px 0 var(--tl-well);
 }
 
 /* Segment fills scope to the bar itself, never the caption or legend spans. */
 .tl-shape > div > span {
-  min-width: 1px;
-  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  min-width: 5px;
+  flex-basis: 0;
+  border-radius: 4px;
+  background: var(--tl-sport-accent, var(--accent));
   transition: filter 160ms ease;
 }
 
+/* A long interval set closes the pills up rather than overflowing the panel. */
+.tl-shape > div[data-dense] {
+  gap: 1.5px;
+  padding: 3px;
+}
+
+.tl-shape > div[data-dense] > span {
+  min-width: 1px;
+  border-radius: 2px;
+}
+
 .tl-shape > div > span:hover {
-  filter: brightness(1.25);
+  filter: brightness(1.18);
 }
 
 .tl-shape > div > span.is-training {
-  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
+  background: var(--tl-sport-accent, var(--accent));
 }
 
-.tl-shape > div > span.is-warmup,
+.tl-shape > div > span.is-warmup {
+  background: color-mix(in srgb, var(--step-warmup) 68%, transparent);
+}
+
 .tl-shape > div > span.is-cooldown {
-  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  background: color-mix(in srgb, var(--step-cooldown) 68%, transparent);
 }
 
-.tl-shape > div > span.is-rest,
 .tl-shape > div > span.is-sendOff {
-  background: color-mix(in srgb, var(--text-secondary) 26%, transparent);
+  background: var(--step-sendoff);
+}
+
+.tl-shape > div > span.is-rest {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--step-rest) 62%, transparent) 0 4px,
+    color-mix(in srgb, var(--step-rest) 28%, transparent) 4px 8px
+  );
 }
 
 .tl-shape figcaption,
@@ -1814,19 +2434,29 @@
   border-radius: 2.5px;
 }
 
+/* The legend keys the bar, so every swatch repeats a fill from it exactly. */
 .tl-shape-legend em.is-training {
-  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
-  box-shadow: 0 0 5px color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--tl-sport-accent, var(--accent));
 }
 
-.tl-shape-legend em.is-warmup,
+.tl-shape-legend em.is-warmup {
+  background: color-mix(in srgb, var(--step-warmup) 68%, transparent);
+}
+
 .tl-shape-legend em.is-cooldown {
-  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  background: color-mix(in srgb, var(--step-cooldown) 68%, transparent);
 }
 
-.tl-shape-legend em.is-rest,
 .tl-shape-legend em.is-sendOff {
-  background: color-mix(in srgb, var(--text-secondary) 26%, transparent);
+  background: var(--step-sendoff);
+}
+
+.tl-shape-legend em.is-rest {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--step-rest) 62%, transparent) 0 3px,
+    color-mix(in srgb, var(--step-rest) 28%, transparent) 3px 6px
+  );
 }
 
 /* The list and its eyebrow label travel as one zone, apart from the shape card. */
@@ -2024,10 +2654,10 @@
   border-top: 1px solid color-mix(in srgb, var(--accent) 18%, var(--tl-rule));
   background:
     radial-gradient(ellipse 105% 100% at 0% 0%, color-mix(in srgb, var(--accent) 11%, transparent), transparent 64%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018) 54%),
+    linear-gradient(145deg, var(--tl-sheen-lit), var(--tl-sheen-fade) 54%),
     color-mix(in srgb, var(--tl-reader-bg, var(--surface)) 86%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    inset 0 1px 0 var(--tl-edge-light),
     0 -18px 42px color-mix(in srgb, var(--tl-reader-bg, var(--surface)) 72%, transparent);
   backdrop-filter: blur(24px) saturate(145%);
   -webkit-backdrop-filter: blur(24px) saturate(145%);
@@ -2053,8 +2683,8 @@
   position: absolute;
   z-index: -1;
   inset: 1px 0 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(105deg, rgba(255, 255, 255, 0.035), transparent 42%);
+  border-top: 1px solid var(--tl-edge-light);
+  background: linear-gradient(105deg, var(--tl-sheen), transparent 42%);
   content: "";
   pointer-events: none;
 }
@@ -2083,7 +2713,7 @@
   border-radius: var(--radius-sm);
   color: var(--accent-strong);
   background: color-mix(in srgb, var(--accent) 10%, var(--glass-bg));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 var(--tl-edge-light);
 }
 
 .tl-reader-schedule-heading > span:last-child {
@@ -2158,7 +2788,7 @@
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--glass-bg) 78%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 1px 0 var(--tl-edge-light);
 }
 
 .tl-reader-duplicate > .ghost-button {
@@ -2610,7 +3240,7 @@
   border-radius: 50%;
   color: var(--accent-strong);
   background:
-    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.12), transparent 52%),
+    radial-gradient(circle at 32% 26%, var(--tl-edge-light), transparent 52%),
     var(--glass-bg);
   box-shadow:
     var(--glass-inset),
@@ -2732,7 +3362,7 @@
   background: linear-gradient(
     100deg,
     transparent 22%,
-    var(--tl-shimmer, rgba(255, 255, 255, 0.09)) 50%,
+    var(--tl-shimmer) 50%,
     transparent 78%
   );
   content: "";
@@ -2752,17 +3382,13 @@
   }
 }
 
-:root[data-theme="paper"] .tl-skeleton {
-  --tl-shimmer: rgba(38, 34, 28, 0.07);
-}
-
 .tl-dialog-backdrop {
   position: fixed;
   inset: 0;
   z-index: 110;
   display: grid;
   padding: 24px;
-  background: color-mix(in srgb, var(--bg-base) 76%, transparent);
+  background: var(--tl-scrim);
   backdrop-filter: blur(8px);
   place-items: center;
   animation: tl-fade-in 200ms ease both;
@@ -2903,7 +3529,7 @@
   position: fixed;
   inset: 0;
   z-index: -1;
-  background: color-mix(in srgb, var(--bg-base) 72%, transparent);
+  background: var(--tl-scrim);
   backdrop-filter: blur(10px);
   content: "";
   animation: tl-fade-in 240ms ease both;
@@ -3070,6 +3696,17 @@
   color: var(--text-primary);
   background: var(--glass-bg);
   font-size: 12.5px;
+}
+
+.plan-editor-sidebar .app-select {
+  width: 100%;
+}
+
+.plan-editor-sidebar .app-select-trigger {
+  min-height: 32px;
+  padding: 6px 9px;
+  font-size: 12.5px;
+  font-weight: 500;
 }
 
 .plan-editor-sidebar textarea {
@@ -3246,20 +3883,11 @@
   transform: scale(0.99);
 }
 
-/* The row answers in the sport's own colour; the plus wakes on hover. */
-.plan-editor-library-list button[data-sport]::before {
-  width: 6px;
-  height: 6px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--tl-sport, var(--accent));
-  content: "";
+/* The row answers with the sport's icon chip; the plus wakes on hover. */
+.plan-editor-library-list button > .tl-sport-dot {
+  width: 20px;
+  height: 20px;
 }
-
-.plan-editor-library-list button[data-sport="run"] { --tl-sport: var(--sport-run); }
-.plan-editor-library-list button[data-sport="bike"] { --tl-sport: var(--sport-bike); }
-.plan-editor-library-list button[data-sport="strength"] { --tl-sport: var(--sport-strength); }
-.plan-editor-library-list button[data-sport="other"] { --tl-sport: var(--sport-other); }
 
 .plan-editor-library-list button > .plan-editor-library-add {
   display: inline-flex;
@@ -3395,9 +4023,9 @@
   border: 1px solid var(--tl-rule);
   border-radius: var(--radius-md);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 30%),
+    linear-gradient(180deg, var(--tl-sheen), transparent 30%),
     color-mix(in srgb, var(--surface) 30%, transparent);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14), 0 8px 22px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--tl-shadow-week);
   overflow: hidden;
 }
 
@@ -3559,21 +4187,11 @@
   transform: none;
 }
 
-/* Workout cards carry the sport's colour as a small dot; rest and notes
-   stay quiet. */
-.plan-entry-card[data-sport]::before {
-  width: 6px;
-  height: 6px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--tl-sport, var(--accent));
-  content: "";
+/* Workout cards carry the sport's icon chip; rest and notes stay quiet. */
+.plan-entry-card > .tl-sport-dot {
+  width: 17px;
+  height: 17px;
 }
-
-.plan-entry-card[data-sport="run"] { --tl-sport: var(--sport-run); }
-.plan-entry-card[data-sport="bike"] { --tl-sport: var(--sport-bike); }
-.plan-entry-card[data-sport="strength"] { --tl-sport: var(--sport-strength); }
-.plan-entry-card[data-sport="other"] { --tl-sport: var(--sport-other); }
 
 .plan-entry-card > span {
   display: flex;
@@ -4087,6 +4705,10 @@
     padding: 22px 16px 16px;
   }
 
+  .tl-catalog .tl-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .tl-masthead {
     align-items: flex-start;
     flex-direction: column;
@@ -4193,7 +4815,7 @@
   z-index: 120;
   display: grid;
   padding: 20px;
-  background: color-mix(in srgb, var(--bg-base) 78%, transparent);
+  background: var(--tl-scrim);
   backdrop-filter: blur(10px);
   place-items: center;
   animation: tl-fade-in 180ms ease both;
@@ -4873,6 +5495,10 @@
 }
 
 @media (max-width: 560px) {
+  .tl-catalog .tl-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .plan-generator-backdrop,
   .plan-calendar-backdrop { padding: 0; }
   .plan-generator,

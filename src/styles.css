@@ -435,22 +435,9 @@ input::placeholder {
   transform-origin: 50% 80%;
 }
 
-.donate-button-spark {
-  position: absolute;
-  top: -5px;
-  right: -6px;
-  opacity: 0.48;
-  transform: scale(0.72) rotate(-10deg);
-  transform-origin: center;
-}
-
 @media (prefers-reduced-motion: no-preference) {
   .donate-button::after {
     animation: donate-shine 4.4s cubic-bezier(0.45, 0, 0.2, 1) infinite;
-  }
-
-  .donate-button-spark {
-    animation: donate-sparkle 3.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
   }
 
   .donate-button:hover .donate-button-cup {
@@ -476,25 +463,6 @@ input::placeholder {
   82%,
   100% {
     transform: translateX(460%) skewX(-18deg);
-  }
-}
-
-@keyframes donate-sparkle {
-  0%,
-  68%,
-  100% {
-    opacity: 0.35;
-    transform: scale(0.7) rotate(-12deg);
-  }
-
-  76% {
-    opacity: 1;
-    transform: scale(1.24) rotate(8deg);
-  }
-
-  84% {
-    opacity: 0.56;
-    transform: scale(0.88) rotate(0deg);
   }
 }
 
@@ -3247,8 +3215,8 @@ input::placeholder {
   border-radius: var(--radius-lg);
   background:
     radial-gradient(ellipse 80% 60% at 20% 0%, var(--bg-ambient-green), transparent 55%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.045)),
-    var(--glass-bg);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
+    #14171c;
   box-shadow: var(--glass-shadow), var(--glass-inset);
   animation: training-card-enter 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
@@ -3264,10 +3232,11 @@ input::placeholder {
 .library-panel {
   --library-track-grid: 16px 36px minmax(0, 1fr) 68px 92px 96px 76px;
   --library-track-row-height: 56px;
-  --library-row-bg: rgba(0, 0, 0, 0.26);
-  --library-row-bg-hover: rgba(0, 0, 0, 0.18);
-  --library-row-border: rgba(255, 255, 255, 0.05);
+  --library-row-bg: rgba(255, 255, 255, 0.04);
+  --library-row-bg-hover: rgba(255, 255, 255, 0.07);
+  --library-row-border: rgba(255, 255, 255, 0.06);
 
+  position: relative;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -3277,12 +3246,17 @@ input::placeholder {
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.045)),
-    var(--glass-bg);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015)),
+    #1b2026;
   -webkit-backdrop-filter: blur(var(--glass-blur));
   backdrop-filter: blur(var(--glass-blur));
   padding: 20px;
   box-shadow: var(--glass-shadow), var(--glass-inset);
+}
+
+/* Watch rows drop the redundant per-row status badge. */
+.library-panel--watch {
+  --library-track-grid: 16px 36px minmax(0, 1fr) 68px 92px 44px;
 }
 
 /* Accent-tinted eyebrows and count pills. */
@@ -3337,30 +3311,9 @@ input::placeholder {
   white-space: nowrap;
 }
 
-.library-panel-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  min-height: 36px;
-  flex-shrink: 0;
-}
-
-.library-bulk-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .compact-button {
   min-height: 36px;
   padding: 0 12px;
-  font-size: 13px;
-}
-
-.library-panel-hint {
-  color: var(--text-muted);
   font-size: 13px;
 }
 
@@ -3396,7 +3349,7 @@ input::placeholder {
   gap: 10px;
   font-size: 12px;
   font-weight: 700;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .library-transfer-progress-name {
@@ -3415,16 +3368,40 @@ input::placeholder {
 .library-transfer-progress-bar {
   height: 100%;
   border-radius: var(--radius-pill);
-  background: var(--accent, #3b82f6);
+  background: var(--accent-gradient);
+  box-shadow: 0 0 10px var(--accent-glow);
   transition: width 0.15s ease-out;
 }
 
 .library-panel-tools {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+}
+
+.library-panel-cta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+.library-pending-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 42%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent-gold) 12%, transparent);
+  color: var(--accent-gold);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .library-search-field {
@@ -3436,8 +3413,8 @@ input::placeholder {
   min-height: 36px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
-  background: var(--glass-bg);
-  color: var(--text-muted);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text-secondary);
   padding: 0 10px;
   transition:
     border-color 0.15s ease,
@@ -3456,6 +3433,11 @@ input::placeholder {
   background: transparent;
   color: var(--text-primary);
   font-size: 13px;
+}
+
+.library-search-field input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.65;
 }
 
 .library-search-clear {
@@ -3500,7 +3482,7 @@ input::placeholder {
 }
 
 .library-filter-option small {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 700;
 }
@@ -3517,52 +3499,75 @@ input::placeholder {
   opacity: 1;
 }
 
-.library-selection-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-shrink: 0;
+.library-header-select {
+  display: grid;
+  place-items: center;
 }
 
-.library-select-all {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.library-selection-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.library-select-all input {
+.library-header-select input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
   accent-color: var(--accent);
 }
 
-.library-selection-clear {
-  min-height: 26px;
+/* Floating selection action bar, overlaid at the bottom of the track list. */
+.library-selection-fab {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 40px);
+  transform: translateX(-50%);
   border: 1px solid var(--glass-border);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-secondary);
-  padding: 0 8px;
-  font-size: 12px;
-  font-weight: 700;
+  border-radius: var(--radius-pill);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05)),
+    rgba(13, 18, 22, 0.88);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.42),
+    var(--glass-inset);
+  padding: 7px 8px 7px 14px;
+  animation: library-fab-enter 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  white-space: nowrap;
 }
 
-.library-selection-clear:hover {
-  border-color: var(--glass-border);
-  background: var(--glass-bg-hover);
-  color: var(--text-primary);
+.library-selection-fab-meta {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+}
+
+.library-selection-fab .compact-button {
+  min-height: 32px;
+  border-radius: var(--radius-pill);
+}
+
+.library-selection-fab-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+@keyframes library-fab-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
 }
 
 .library-track-header {
@@ -3572,7 +3577,7 @@ input::placeholder {
   gap: 10px;
   flex-shrink: 0;
   padding: 0 10px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -3591,7 +3596,7 @@ input::placeholder {
   min-width: 0;
   border: 0;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   padding: 0;
   font-size: 12px;
   font-weight: 800;
@@ -3614,8 +3619,13 @@ input::placeholder {
   overflow-y: auto;
   padding: 8px;
   border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.14);
+  background: rgba(0, 0, 0, 0.24);
   scrollbar-gutter: stable;
+}
+
+/* Leave room for the floating selection bar so it never covers a row. */
+.library-track-stack.has-selection-fab {
+  padding-bottom: 64px;
 }
 
 .library-track-row {
@@ -3632,6 +3642,7 @@ input::placeholder {
   border: 1px solid var(--library-row-border);
   border-radius: var(--radius-sm);
   background: var(--library-row-bg);
+  cursor: pointer;
   padding: 8px 10px;
   transition:
     border-color 0.15s ease,
@@ -3639,7 +3650,7 @@ input::placeholder {
 }
 
 .library-track-row:hover:not(.is-selected) {
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
   background: var(--library-row-bg-hover);
 }
 
@@ -3655,10 +3666,27 @@ input::placeholder {
   accent-color: var(--accent);
 }
 
+/* Library avatars derive a soft gradient from the per-track accent color. */
+.track-avatar.track-avatar--library {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--track-color, var(--accent)) 92%, #ffffff 8%),
+    color-mix(in srgb, var(--track-color, var(--accent)) 70%, #000000 30%)
+  );
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 4px 10px rgba(0, 0, 0, 0.22);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
+}
+
 .track-avatar.track-avatar--watch {
   background: var(--glass-bg);
   box-shadow: inset 0 0 0 1px var(--glass-border);
   color: var(--text-muted);
+}
+
+.track-avatar.track-avatar--watch svg {
+  opacity: 0.8;
 }
 
 .library-track-meta {
@@ -3682,7 +3710,7 @@ input::placeholder {
 
 .library-track-meta small {
   margin-top: 2px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
 }
@@ -3696,15 +3724,40 @@ input::placeholder {
 }
 
 .library-track-date {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.library-track-status {
+/* Compact dot + label sync status for local tracks. */
+.library-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
   white-space: nowrap;
+}
+
+.library-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-gold);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent-gold) 55%, transparent);
+  flex-shrink: 0;
+}
+
+.library-status.is-synced {
+  color: var(--success-text);
+}
+
+.library-status.is-synced .library-status-dot {
+  background: var(--success-dot);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--success-dot) 55%, transparent);
 }
 
 .library-track-actions {
@@ -3738,21 +3791,114 @@ input::placeholder {
 }
 
 .library-connector-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-pill);
-  background: var(--glass-bg);
+  background: rgba(0, 0, 0, 0.24);
   color: var(--text-secondary);
   padding: 6px 10px;
   font-size: 11px;
   font-weight: 700;
   text-align: center;
   white-space: nowrap;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease;
 }
 
-.library-connector-pill.ready {
+.library-connector-pill--ready {
   border-color: var(--success-border);
   background: var(--success-bg);
   color: var(--success-text);
+}
+
+.library-connector-pill--syncing {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.library-connector-pill--pending {
+  border-color: color-mix(in srgb, var(--accent-gold) 40%, transparent);
+  color: var(--accent-gold);
+}
+
+/* Animated flow toward the watch while a transfer batch is running. */
+.library-connector.is-syncing .library-connector-line {
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--accent-soft),
+    var(--accent),
+    var(--accent-soft),
+    transparent
+  );
+  background-size: 100% 240%;
+  animation: library-connector-flow 1.3s linear infinite;
+}
+
+@keyframes library-connector-flow {
+  from {
+    background-position: 0 120%;
+  }
+
+  to {
+    background-position: 0 -120%;
+  }
+}
+
+/* Watch capacity meter shown under the "On watch" header. */
+.watch-storage {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.watch-storage-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.watch-storage-meta svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.watch-storage-meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-storage-meta em {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-storage-track {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted, rgba(148, 163, 184, 0.25));
+  overflow: hidden;
+}
+
+.watch-storage-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-gradient);
+  box-shadow: 0 0 10px var(--accent-glow);
+  transition: width 0.4s ease;
 }
 
 .library-empty-state {
@@ -3767,6 +3913,22 @@ input::placeholder {
 
 .library-empty-state svg {
   opacity: 0.65;
+}
+
+.library-empty-icon {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  background: var(--accent-soft);
+  box-shadow: var(--glass-inset);
+  color: var(--accent-strong);
+}
+
+.library-empty-icon svg {
+  opacity: 0.9;
 }
 
 .library-empty-state strong {
@@ -3785,7 +3947,7 @@ input::placeholder {
 }
 
 .library-empty-subtitle {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
@@ -3863,6 +4025,14 @@ input::placeholder {
   }
 
   .library-sync-panel {
+    animation: none;
+  }
+
+  .library-selection-fab {
+    animation: none;
+  }
+
+  .library-connector.is-syncing .library-connector-line {
     animation: none;
   }
 }
@@ -6625,6 +6795,14 @@ td span {
   border-radius: var(--radius-sm);
   background: var(--surface);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+}
+
+/* Form dropdowns inside scrollable dialogs escape their clipping containers. */
+.app-select-menu.is-portaled {
+  position: fixed;
+  z-index: 420;
+  right: auto;
+  bottom: auto;
 }
 
 .app-select-option {
@@ -16788,14 +16966,13 @@ tr.data-intervals-row-missing {
     grid-template-rows: auto auto auto;
   }
 
-  .library-panel-actions,
-  .library-bulk-actions {
-    justify-content: flex-start;
-  }
-
   .library-panel-tools {
     grid-template-columns: minmax(0, 1fr);
     align-items: stretch;
+  }
+
+  .library-panel-cta {
+    justify-content: flex-start;
   }
 
   .library-filter-group {
@@ -16808,13 +16985,18 @@ tr.data-intervals-row-missing {
     justify-content: center;
   }
 
-  .library-selection-bar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
   .library-panel {
     --library-track-grid: 16px 36px minmax(0, 1fr) 96px 44px;
+  }
+
+  .library-panel--watch {
+    --library-track-grid: 16px 36px minmax(0, 1fr) 44px;
+  }
+
+  .library-selection-fab {
+    bottom: 12px;
+    max-width: calc(100% - 24px);
+    padding-left: 12px;
   }
 
   .library-connector {
@@ -16837,6 +17019,29 @@ tr.data-intervals-row-missing {
       var(--bg-ambient-teal),
       transparent
     );
+  }
+
+  .library-connector.is-syncing .library-connector-line {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--accent-soft),
+      var(--accent),
+      var(--accent-soft),
+      transparent
+    );
+    background-size: 240% 100%;
+    animation: library-connector-flow-x 1.3s linear infinite;
+  }
+
+  @keyframes library-connector-flow-x {
+    from {
+      background-position: 120% 0;
+    }
+
+    to {
+      background-position: -120% 0;
+    }
   }
 
   .library-track-size {
@@ -21377,14 +21582,28 @@ tr.data-intervals-row-missing {
   box-shadow: var(--shadow-inset);
 }
 
-:root[data-theme="paper"] .library-selection-clear {
+:root[data-theme="paper"] .library-selection-fab {
   border-color: var(--glass-border);
-  background: rgba(38, 34, 28, 0.04);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.45)),
+    var(--glass-bg-elevated);
+  box-shadow: var(--shadow-card);
 }
 
-:root[data-theme="paper"] .library-selection-clear:hover {
-  border-color: rgba(38, 34, 28, 0.14);
-  background: rgba(38, 34, 28, 0.08);
+:root[data-theme="paper"] .library-empty-icon {
+  border-color: var(--glass-border);
+  background: var(--accent-soft);
+}
+
+:root[data-theme="paper"] .watch-storage-track,
+:root[data-theme="paper"] .library-transfer-progress-track {
+  background: rgba(38, 34, 28, 0.1);
+}
+
+:root[data-theme="paper"] .track-avatar.track-avatar--library {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
+    0 2px 6px rgba(38, 34, 28, 0.18);
 }
 
 :root[data-theme="paper"] .library-panel {
@@ -21417,6 +21636,18 @@ tr.data-intervals-row-missing {
   background: rgba(38, 34, 28, 0.05);
 }
 
+:root[data-theme="paper"] .library-connector-pill--ready {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+:root[data-theme="paper"] .library-connector-pill--syncing {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
 :root[data-theme="paper"] .library-connector-line {
   background: linear-gradient(
     180deg,
@@ -21426,6 +21657,18 @@ tr.data-intervals-row-missing {
     var(--bg-ambient-teal),
     transparent
   );
+}
+
+:root[data-theme="paper"] .library-connector.is-syncing .library-connector-line {
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--accent-soft),
+    var(--accent),
+    var(--accent-soft),
+    transparent
+  );
+  background-size: 100% 240%;
 }
 
 :root[data-theme="paper"] .watch-connect-note {
@@ -23948,6 +24191,19 @@ tr.data-intervals-row-missing {
   background: var(--glass-bg);
   color: var(--text-primary);
   font-size: 13px;
+}
+
+.calendar-field > .app-select,
+.calendar-builder-control > .app-select {
+  width: 100%;
+}
+
+.calendar-field > .app-select .app-select-trigger,
+.calendar-builder-control > .app-select .app-select-trigger {
+  min-height: 40px;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .calendar-field input:focus,
@@ -26725,6 +26981,27 @@ tr.data-intervals-row-missing {
   background: var(--glass-bg-hover);
 }
 
+.calendar-builder-row .set-line .set-line-select {
+  min-width: 108px;
+  flex: 0 1 auto;
+}
+
+.calendar-builder-row .set-line .set-line-select .app-select-trigger {
+  min-height: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.calendar-builder-row .set-line .set-line-select .app-select-trigger:hover,
+.calendar-builder-row .set-line .set-line-select .app-select-trigger[aria-expanded="true"] {
+  background: var(--glass-bg-hover);
+}
+
 .set-line-cell.is-load select {
   font-size: 13px;
 }
@@ -27214,6 +27491,25 @@ tr.data-intervals-row-missing {
   font-weight: 650;
 }
 
+.workout-step-header .workout-step-kind-select {
+  width: 126px;
+  flex: 0 0 auto;
+}
+
+.workout-step-header .workout-step-kind-select .app-select-trigger {
+  min-height: 34px;
+  border-color: transparent;
+  background: transparent;
+  padding: 0 4px 0 2px;
+  font-weight: 650;
+}
+
+.workout-step-header .workout-step-kind-select .app-select-trigger:hover,
+.workout-step-header .workout-step-kind-select .app-select-trigger[aria-expanded="true"] {
+  border-color: var(--glass-border);
+  background: var(--glass-bg-hover);
+}
+
 .workout-step-header > input {
   flex: 1;
   border-color: transparent;
@@ -27311,6 +27607,17 @@ tr.data-intervals-row-missing {
 .workout-control-group select {
   width: 100%;
   min-height: 34px;
+}
+
+.workout-control-group .app-select {
+  width: 100%;
+  flex: 1;
+}
+
+.workout-control-group .app-select-trigger {
+  min-height: 34px;
+  padding: 7px 9px;
+  font-weight: 500;
 }
 
 .workout-range-inputs {

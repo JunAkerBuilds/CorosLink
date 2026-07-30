@@ -11,6 +11,7 @@ const distUrl = (file) =>
 
 const {
   applyCorosWatchfaceConfigOverrides,
+  buildCorosGearSaveBody,
   buildCreateLinkBody,
   buildMobileLoginRegion,
   createDuplicateProjectName,
@@ -20,6 +21,7 @@ const {
   finalizeCorosWatchfaceBarometerConfig,
   findHttpsUrlInJson,
   normalizeCorosBatteryReport,
+  normalizeCorosGearCatalog,
   normalizeCorosPairedDevices,
   normalizeCorosWatchfaceThemes,
   parseCorosMobileJson,
@@ -238,6 +240,85 @@ const configWithSynthesizedBattery = applyCorosWatchfaceConfigOverrides(
     control_battery_level_font: "13x19",
     control_battery_level_font_color: "0x12ABEF"
   }
+);
+
+const gearEnvelope = parseCorosMobileJson(
+  '{"data":{"gearInfos":[{"deletedList":[],"gearList":[{"additional":{"sportTypeList":[100]},"brandName":"adizero","clientGearUniqId":1785000000000,"createTime":1785437313,"displayName":"adizero","firstUseDay":20260730,"gearId":478900000000000001,"initDistance":0.0,"lifeDistance":700000.0,"notifyFlag":1,"realDistance":12500.0,"status":0,"type":1,"updateTime":1785437313,"usageStatus":0,"userId":478900000000000002}],"type":1}],"supportedInfoList":[{"sportTypeList":[100,101,102,103,104,900,105],"type":1},{"sportTypeList":[200,201,203,204,202,205],"type":2}]}}'
+);
+assert.equal(
+  gearEnvelope.data.gearInfos[0].gearList[0].gearId,
+  "478900000000000001",
+  "gear IDs larger than Number.MAX_SAFE_INTEGER must remain lossless"
+);
+assert.deepEqual(
+  normalizeCorosGearCatalog(gearEnvelope.data),
+  {
+    gear: [
+      {
+        gearId: "478900000000000001",
+        clientGearUniqId: "1785000000000",
+        name: "adizero",
+        brandName: "adizero",
+        type: 1,
+        sportTypeList: [100],
+        firstUseDay: "2026-07-30",
+        initialDistanceMeters: 0,
+        lifeDistanceMeters: 700000,
+        realDistanceMeters: 12500,
+        notify: true,
+        status: 0,
+        usageStatus: 0,
+        createdAt: "2026-07-30T18:48:33.000Z",
+        updatedAt: "2026-07-30T18:48:33.000Z"
+      }
+    ],
+    supportedInfo: [
+      { type: 1, sportTypeList: [100, 101, 102, 103, 104, 900, 105] },
+      { type: 2, sportTypeList: [200, 201, 203, 204, 202, 205] }
+    ]
+  },
+  "gear query responses should normalize into renderer-safe metres and dates"
+);
+const gearSaveBody = JSON.parse(
+  buildCorosGearSaveBody({
+    brandName: "Adizero",
+    type: 1,
+    sportTypeList: [100, 102, 100],
+    firstUseDay: "2026-07-30",
+    initialDistanceMeters: 0,
+    lifeDistanceMeters: 700000,
+    notify: true
+  })
+);
+assert.deepEqual(
+  {
+    ...gearSaveBody.gearList[0],
+    clientGearUniqId: "dynamic"
+  },
+  {
+    additional: { sportTypeList: [100, 102] },
+    brandName: "Adizero",
+    clientGearUniqId: "dynamic",
+    firstUseDay: 20260730,
+    initDistance: 0,
+    lifeDistance: 700000,
+    notifyFlag: 1,
+    type: 1
+  },
+  "gear save payloads should match the COROS Android request shape"
+);
+assert.throws(
+  () =>
+    buildCorosGearSaveBody({
+      brandName: "Future shoe",
+      type: 1,
+      sportTypeList: [],
+      firstUseDay: "2026-02-30",
+      initialDistanceMeters: 0,
+      lifeDistanceMeters: 700000,
+      notify: true
+    }),
+  /valid first-use date/
 );
 for (const expected of [
   "[battery_icon_pos]={20,30}",
