@@ -6,11 +6,11 @@
  * panels over ambient accent washes, one segmented control for the sections,
  * and the accent gradient reserved for moments of emphasis.
  *
- * The library is layered charcoal, never pure black — in *both* app themes.
- * It is the one surface that does not follow the paper reskin: a dark room
- * for the training record. The gate shares the same ground. The accent stays
- * the app's signature green; red and yellow stay reserved for danger and
- * caution.
+ * The library is its own room in either theme: layered charcoal, never pure
+ * black, when the app is dark; a deeper paper than the shell, panels lifted
+ * off it in near-white, when the app is paper. The gate shares that ground.
+ * The accent stays the app's signature green; red and yellow stay reserved
+ * for danger and caution.
  *
  * Only one thing is ever drawn — the ridge of weekly training load (Ridge.tsx),
  * small on an index row and at reading size on the adherence lede. It keeps to
@@ -20,9 +20,8 @@
  * settle, then ridges draw themselves. Everything sits under
  * prefers-reduced-motion, which the guard at the end of this file honours.
  *
- * Values derive from the app tokens in styles.css. The charcoal block below
- * pins the dark token set on the view itself, so the paper theme's light
- * values never reach the ledger.
+ * Values derive from the app tokens in styles.css; the two blocks below state
+ * only where the library departs from them, once per theme.
  */
 
 .training-library-view {
@@ -64,33 +63,34 @@
 }
 
 /*
- * Charcoal, always — the library is a dark room in both app themes.
+ * The library's own materials, stated once per theme.
  *
- * It works by pinning the dark token set on the view itself rather than
- * inventing new tokens: everything downstream — this file, plus shared
- * pieces like .app-select and .primary-button — follows for free. The
- * pinned set is the dark theme's palette from styles.css, so the paper
- * theme's light values (darkened accent, brown-tinted shadows, white
- * glass) never reach the ledger. The modals the editor renders inline
- * inherit all of this without a rule of their own.
+ * Both blocks work by pinning tokens on the view itself rather than inventing
+ * new names, so everything downstream — this file, plus shared pieces like
+ * .app-select and .primary-button — follows for free, and the modals the
+ * editor and the workspace render inline inherit it all without a rule of
+ * their own. Only what the library departs from is listed; the accent, the
+ * status hues, and the ambient washes come from the app theme untouched.
  *
- * The gate shares the block so the connect screen sits on the same charcoal.
+ * The two blocks are the same room lit from the same side. Dark stacks value
+ * upward — ground, panel, tile — and paper stacks it the same way with the
+ * range turned over: a deeper paper for the ground, near-white panels lifted
+ * off it, white tiles. Depth is a sheen and a lit top edge on dark, where the
+ * ground can still take light; on paper it is carried by the shadows instead,
+ * which is why every raised recipe is a token rather than a literal.
+ *
+ * The gate shares both blocks so the connect screen sits on the same ground.
  */
-.training-library-view,
-.training-library-gate {
+:root:not([data-theme="paper"]) :is(.training-library-view, .training-library-gate) {
   color-scheme: dark;
 
   --tl-ground: #16171b;
   --tl-panel-bg: #1d1f25;
   --tl-card: #23262e;
-  --tl-card-hover: #2b2f38;
   --tl-reader-bg: #1a1c21;
-
-  --bg-base: #16171b;
-  --bg-ambient-green: rgba(47, 190, 145, 0.1);
-  --bg-ambient-teal: rgba(31, 182, 166, 0.07);
-  --bg-ambient-gold: rgba(216, 155, 34, 0.04);
-  --bg-ambient-white: rgba(255, 255, 255, 0.035);
+  /* Catalog plates sit a step below the panel; hovering lifts them back to it. */
+  --tl-tile: #131418;
+  --tl-tile-hover: #191b20;
 
   --surface: #23262e;
   --glass-bg: rgba(255, 255, 255, 0.04);
@@ -103,32 +103,102 @@
   --text-secondary: #a9adb2;
   --text-muted: #7b8085;
 
-  --accent: #2fbe91;
-  --accent-strong: #4fd6a6;
-  --accent-2: #1fb6a6;
-  --accent-hover: #26a37c;
-  --accent-glow: rgba(47, 190, 145, 0.32);
-  --accent-soft: rgba(47, 190, 145, 0.12);
-  --accent-gradient: linear-gradient(135deg, #2fbe91 0%, #1fb6a6 100%);
-  --accent-gold: #d89b22;
+  /* Light from above: a sheen down a raised surface, a lit hairline on its
+     top edge, and a well for anything recessed into it. */
+  --tl-sheen: rgba(255, 255, 255, 0.05);
+  --tl-sheen-lit: rgba(255, 255, 255, 0.075);
+  --tl-sheen-fade: rgba(255, 255, 255, 0.014);
+  --tl-edge-light: rgba(255, 255, 255, 0.09);
+  --tl-well: rgba(255, 255, 255, 0.028);
+  --tl-shimmer: rgba(255, 255, 255, 0.09);
+  --tl-scrim: rgba(22, 23, 27, 0.76);
 
-  --success-bg: rgba(47, 190, 145, 0.15);
-  --success-border: rgba(110, 231, 168, 0.28);
-  --success-text: #6ee7a8;
-  --success-dot: #34d399;
+  --tl-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.16), 0 10px 26px rgba(0, 0, 0, 0.14);
+  --tl-shadow-card-hover: 0 2px 4px rgba(0, 0, 0, 0.18), 0 18px 38px rgba(0, 0, 0, 0.2);
+  --tl-shadow-card-held: 0 1px 2px rgba(0, 0, 0, 0.16), 0 12px 28px rgba(0, 0, 0, 0.15);
+  --tl-shadow-plate: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --tl-shadow-plate-hover: 0 2px 5px rgba(0, 0, 0, 0.34), 0 14px 30px rgba(0, 0, 0, 0.28);
+  --tl-shadow-plate-held: 0 2px 5px rgba(0, 0, 0, 0.32);
+  --tl-shadow-week: 0 1px 2px rgba(0, 0, 0, 0.14), 0 8px 22px rgba(0, 0, 0, 0.12);
+  --tl-shadow-lift: 0 4px 14px rgba(0, 0, 0, 0.14);
 
-  --warning-bg: rgba(216, 155, 34, 0.15);
-  --warning-border: rgba(251, 191, 36, 0.25);
-  --warning-text: #fbbf24;
+  /* Provenance: where a plan came from, never what it contains. */
+  --tl-source-coach: #c084fc;
+  --tl-source-template: #eab308;
 
-  --error-bg: rgba(194, 65, 12, 0.15);
-  --error-border: rgba(248, 113, 113, 0.25);
-  --error-text: #f87171;
-  --error-dot: #f87171;
+  /* The calendar's phase hues (--step-* on .sched-detail), brought over so the
+     structure bar reads the same in both views. */
+  --step-warmup: #f0a72e;
+  --step-rest: #9099aa;
+  --step-cooldown: #27c2e5;
+  --step-sendoff: #b48cff;
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28), 0 14px 32px rgba(0, 0, 0, 0.26);
   --shadow-elevated: 0 20px 44px rgba(0, 0, 0, 0.42);
   --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="paper"] :is(.training-library-view, .training-library-gate) {
+  color-scheme: light;
+
+  --tl-ground: #efebe1;
+  --tl-panel-bg: #fdfcf8;
+  --tl-card: #ffffff;
+  --tl-reader-bg: #f4f1e9;
+  --tl-tile: #f5f2ea;
+  --tl-tile-hover: #fbf9f4;
+
+  /*
+   * Controls take an ink wash rather than the app's white glass: the library's
+   * panels are already near-white, and a white-on-white fill leaves hover
+   * states with nothing to say.
+   */
+  --surface: #ffffff;
+  --glass-bg: rgba(38, 34, 28, 0.045);
+  --glass-bg-hover: rgba(38, 34, 28, 0.08);
+  --glass-bg-elevated: rgba(38, 34, 28, 0.1);
+  --glass-border: rgba(38, 34, 28, 0.14);
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+
+  --text-primary: #26251f;
+  --text-secondary: #55524a;
+  --text-muted: #857f74;
+
+  /*
+   * The sheen survives only where paper is not already white — the reader
+   * dock, the week frames, the glass cards over a tinted ground. Recesses
+   * invert: a well is an ink wash, and its top edge darkens instead of lights.
+   */
+  --tl-sheen: rgba(255, 255, 255, 0.6);
+  --tl-sheen-lit: rgba(255, 255, 255, 0.85);
+  --tl-sheen-fade: rgba(255, 255, 255, 0);
+  --tl-edge-light: rgba(255, 255, 255, 0.8);
+  --tl-well: rgba(38, 34, 28, 0.055);
+  --tl-shimmer: rgba(255, 255, 255, 0.9);
+  --tl-scrim: rgba(38, 34, 28, 0.34);
+
+  --tl-shadow-card: 0 1px 2px rgba(60, 50, 35, 0.07), 0 10px 26px rgba(60, 50, 35, 0.09);
+  --tl-shadow-card-hover: 0 2px 4px rgba(60, 50, 35, 0.09), 0 18px 38px rgba(60, 50, 35, 0.14);
+  --tl-shadow-card-held: 0 1px 2px rgba(60, 50, 35, 0.07), 0 12px 28px rgba(60, 50, 35, 0.11);
+  /* Sunk, so the plate's shadow falls inward — until hover lifts it clear. */
+  --tl-shadow-plate: inset 0 1px 3px rgba(60, 50, 35, 0.07);
+  --tl-shadow-plate-hover: 0 2px 5px rgba(60, 50, 35, 0.08), 0 14px 30px rgba(60, 50, 35, 0.11);
+  --tl-shadow-plate-held: 0 2px 6px rgba(60, 50, 35, 0.1);
+  --tl-shadow-week: 0 1px 2px rgba(60, 50, 35, 0.05), 0 8px 22px rgba(60, 50, 35, 0.07);
+  --tl-shadow-lift: 0 4px 14px rgba(60, 50, 35, 0.1);
+
+  --tl-source-coach: #7c3aed;
+  --tl-source-template: #a16207;
+
+  /*
+   * The phase hues darken for paper. They are recessed by mixing toward
+   * transparent, which pales them against a light track rather than sinking
+   * them into it, so the dark-theme values would arrive here washed out.
+   */
+  --step-warmup: #c2740c;
+  --step-rest: #6f6a61;
+  --step-cooldown: #0f7f9c;
+  --step-sendoff: #7c4dd8;
 }
 
 .training-library-view :is(button, input, select, textarea) {
@@ -203,7 +273,7 @@
   border-color: color-mix(in srgb, var(--accent) 34%, var(--glass-border));
   color: var(--text-primary);
   background: var(--glass-bg-hover);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--tl-shadow-lift);
   transform: translateY(-1px);
 }
 
@@ -491,7 +561,7 @@
   border-radius: var(--radius-lg);
   background:
     radial-gradient(ellipse 90% 62% at 14% 0%, var(--bg-ambient-green), transparent 58%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012) 42%),
+    linear-gradient(180deg, var(--tl-sheen), var(--tl-sheen-fade) 42%),
     var(--tl-panel-bg);
   box-shadow: var(--shadow-card), var(--glass-inset);
   backdrop-filter: blur(var(--glass-blur));
@@ -1022,11 +1092,11 @@
 }
 
 .tl-source[data-source="coach"] {
-  color: #c084fc;
+  color: var(--tl-source-coach);
 }
 
 .tl-source[data-source="template"] {
-  color: #eab308;
+  color: var(--tl-source-template);
 }
 
 .tl-source[data-source="local"] {
@@ -1185,11 +1255,9 @@
   border: 1px solid var(--tl-rule);
   border-radius: var(--radius-md);
   background:
-    linear-gradient(158deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.014) 46%),
+    linear-gradient(158deg, var(--tl-sheen), var(--tl-sheen-fade) 46%),
     var(--tl-card, var(--glass-bg));
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.16),
-    0 10px 26px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--tl-shadow-card);
   overflow: hidden;
   transition:
     border-color 190ms ease,
@@ -1213,8 +1281,7 @@
 .tl-card:hover {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--glass-border));
   box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.18),
-    0 18px 38px rgba(0, 0, 0, 0.2),
+    var(--tl-shadow-card-hover),
     0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent),
     0 10px 30px color-mix(in srgb, var(--accent) 10%, transparent);
   transform: translateY(-3px);
@@ -1228,8 +1295,7 @@
 .tl-card.is-selected {
   border-color: color-mix(in srgb, var(--accent) 62%, transparent);
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.16),
-    0 12px 28px rgba(0, 0, 0, 0.15),
+    var(--tl-shadow-card-held),
     0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent),
     0 8px 26px color-mix(in srgb, var(--accent) 16%, transparent);
 }
@@ -1237,8 +1303,7 @@
 .tl-card.is-active {
   border-color: color-mix(in srgb, var(--accent) 58%, var(--glass-border));
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.16),
-    0 12px 28px rgba(0, 0, 0, 0.15),
+    var(--tl-shadow-card-held),
     0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
@@ -1416,27 +1481,25 @@
  * width when the reader takes its 392px and when it collapses away.
  */
 .tl-catalog .tl-grid {
-  --tl-tile: #131418;
-  --tl-tile-hover: #191b20;
-
   grid-template-columns: repeat(auto-fill, minmax(246px, 1fr));
   gap: 14px;
   padding: 18px;
 }
 
 /*
- * The tile is a dark plate, sunk below the panel rather than raised over it:
- * near-black charcoal, one hairline, and no accent stripe, wash, or glow. All
- * the colour a tile carries is the sport's, and only where the sport is the
- * information — the badge, the load bar, the glyph behind them.
+ * The tile is a plate sunk below the panel rather than raised over it: one
+ * step back from the panel's value in either theme, one hairline, and no
+ * accent stripe, wash, or glow. All the colour a tile carries is the sport's,
+ * and only where the sport is the information — the badge, the load bar, the
+ * glyph behind them.
  */
 .tl-catalog .tl-card {
   min-height: 190px;
   border-color: var(--tl-rule-soft);
   background: var(--tl-tile);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.028),
-    0 1px 2px rgba(0, 0, 0, 0.3);
+    inset 0 1px 0 var(--tl-well),
+    var(--tl-shadow-plate);
 }
 
 /* ::before is the accent wash, ::after the sport stripe. Neither survives. */
@@ -1451,9 +1514,8 @@
   border-color: color-mix(in srgb, var(--text-muted) 48%, transparent);
   background: var(--tl-tile-hover);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.045),
-    0 2px 5px rgba(0, 0, 0, 0.34),
-    0 14px 30px rgba(0, 0, 0, 0.28);
+    inset 0 1px 0 var(--tl-well),
+    var(--tl-shadow-plate-hover);
   transform: translateY(-2px);
 }
 
@@ -1463,18 +1525,18 @@
   border-color: color-mix(in srgb, var(--text-primary) 40%, transparent);
   background: var(--tl-tile-hover);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 var(--tl-well),
     0 0 0 1px color-mix(in srgb, var(--text-primary) 14%, transparent),
-    0 2px 5px rgba(0, 0, 0, 0.32);
+    var(--tl-shadow-plate-held);
 }
 
 .tl-catalog .tl-card.is-selected,
 .tl-catalog .tl-card[data-accent].is-selected {
   border-color: color-mix(in srgb, var(--text-primary) 58%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 var(--tl-well),
     0 0 0 1px color-mix(in srgb, var(--text-primary) 24%, transparent),
-    0 2px 5px rgba(0, 0, 0, 0.32);
+    var(--tl-shadow-plate-held);
 }
 
 .tl-catalog .tl-card-open {
@@ -1618,11 +1680,6 @@
  * the tile is shorter, and work takes the tile's own sport accent.
  */
 .tl-wk-shape {
-  --step-warmup: #f0a72e;
-  --step-rest: #9099aa;
-  --step-cooldown: #27c2e5;
-  --step-sendoff: #b48cff;
-
   display: flex;
   align-items: stretch;
   gap: 2px;
@@ -1630,7 +1687,7 @@
   padding: 3px;
   border: 1px solid var(--tl-rule-soft);
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.028);
+  background: var(--tl-well);
   animation: tl-wk-fill 460ms var(--tl-ease-out) backwards;
   transform-origin: left;
 }
@@ -1702,7 +1759,7 @@
   padding: 3px;
   border: 1px solid var(--tl-rule-soft);
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.028);
+  background: var(--tl-well);
 }
 
 /* A hatched fill says COROS reported no load, which is not the same as none. */
@@ -1713,7 +1770,7 @@
       color-mix(in srgb, var(--text-muted) 26%, transparent) 0 4px,
       transparent 4px 8px
     ),
-    rgba(255, 255, 255, 0.028);
+    var(--tl-well);
 }
 
 .tl-wk-track i {
@@ -1904,8 +1961,7 @@
 .tl-card[data-accent]:hover {
   border-color: color-mix(in srgb, var(--tl-sport-accent) 42%, var(--glass-border));
   box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.18),
-    0 18px 38px rgba(0, 0, 0, 0.2),
+    var(--tl-shadow-card-hover),
     0 0 0 1px color-mix(in srgb, var(--tl-sport-accent) 14%, transparent),
     0 10px 30px color-mix(in srgb, var(--tl-sport-accent) 12%, transparent);
 }
@@ -1913,8 +1969,7 @@
 .tl-card[data-accent].is-selected {
   border-color: color-mix(in srgb, var(--tl-sport-accent) 62%, transparent);
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.16),
-    0 12px 28px rgba(0, 0, 0, 0.15),
+    var(--tl-shadow-card-held),
     0 0 0 1px color-mix(in srgb, var(--tl-sport-accent) 30%, transparent),
     0 8px 26px color-mix(in srgb, var(--tl-sport-accent) 16%, transparent);
 }
@@ -1922,8 +1977,7 @@
 .tl-card[data-accent].is-active {
   border-color: color-mix(in srgb, var(--tl-sport-accent) 58%, var(--glass-border));
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.16),
-    0 12px 28px rgba(0, 0, 0, 0.15),
+    var(--tl-shadow-card-held),
     0 0 0 1px color-mix(in srgb, var(--tl-sport-accent) 22%, transparent);
 }
 
@@ -2264,7 +2318,7 @@
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012) 48%),
+    linear-gradient(160deg, var(--tl-sheen), var(--tl-sheen-fade) 48%),
     var(--glass-bg);
   box-shadow: var(--shadow-inset);
 }
@@ -2276,11 +2330,6 @@
  * thing the same way — see the .tl-wk-shape block for the phase palette.
  */
 .tl-shape > div {
-  --step-warmup: #f0a72e;
-  --step-rest: #9099aa;
-  --step-cooldown: #27c2e5;
-  --step-sendoff: #b48cff;
-
   display: flex;
   align-items: stretch;
   gap: 3px;
@@ -2288,8 +2337,8 @@
   padding: 4px;
   border: 1px solid var(--tl-rule-soft);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  background: var(--tl-well);
+  box-shadow: inset 0 1px 0 var(--tl-well);
 }
 
 /* Segment fills scope to the bar itself, never the caption or legend spans. */
@@ -2386,13 +2435,6 @@
 }
 
 /* The legend keys the bar, so every swatch repeats a fill from it exactly. */
-.tl-shape-legend em {
-  --step-warmup: #f0a72e;
-  --step-rest: #9099aa;
-  --step-cooldown: #27c2e5;
-  --step-sendoff: #b48cff;
-}
-
 .tl-shape-legend em.is-training {
   background: var(--tl-sport-accent, var(--accent));
 }
@@ -2612,10 +2654,10 @@
   border-top: 1px solid color-mix(in srgb, var(--accent) 18%, var(--tl-rule));
   background:
     radial-gradient(ellipse 105% 100% at 0% 0%, color-mix(in srgb, var(--accent) 11%, transparent), transparent 64%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018) 54%),
+    linear-gradient(145deg, var(--tl-sheen-lit), var(--tl-sheen-fade) 54%),
     color-mix(in srgb, var(--tl-reader-bg, var(--surface)) 86%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    inset 0 1px 0 var(--tl-edge-light),
     0 -18px 42px color-mix(in srgb, var(--tl-reader-bg, var(--surface)) 72%, transparent);
   backdrop-filter: blur(24px) saturate(145%);
   -webkit-backdrop-filter: blur(24px) saturate(145%);
@@ -2641,8 +2683,8 @@
   position: absolute;
   z-index: -1;
   inset: 1px 0 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(105deg, rgba(255, 255, 255, 0.035), transparent 42%);
+  border-top: 1px solid var(--tl-edge-light);
+  background: linear-gradient(105deg, var(--tl-sheen), transparent 42%);
   content: "";
   pointer-events: none;
 }
@@ -2671,7 +2713,7 @@
   border-radius: var(--radius-sm);
   color: var(--accent-strong);
   background: color-mix(in srgb, var(--accent) 10%, var(--glass-bg));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 var(--tl-edge-light);
 }
 
 .tl-reader-schedule-heading > span:last-child {
@@ -2746,7 +2788,7 @@
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--glass-bg) 78%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 1px 0 var(--tl-edge-light);
 }
 
 .tl-reader-duplicate > .ghost-button {
@@ -3198,7 +3240,7 @@
   border-radius: 50%;
   color: var(--accent-strong);
   background:
-    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.12), transparent 52%),
+    radial-gradient(circle at 32% 26%, var(--tl-edge-light), transparent 52%),
     var(--glass-bg);
   box-shadow:
     var(--glass-inset),
@@ -3320,7 +3362,7 @@
   background: linear-gradient(
     100deg,
     transparent 22%,
-    var(--tl-shimmer, rgba(255, 255, 255, 0.09)) 50%,
+    var(--tl-shimmer) 50%,
     transparent 78%
   );
   content: "";
@@ -3346,7 +3388,7 @@
   z-index: 110;
   display: grid;
   padding: 24px;
-  background: color-mix(in srgb, var(--bg-base) 76%, transparent);
+  background: var(--tl-scrim);
   backdrop-filter: blur(8px);
   place-items: center;
   animation: tl-fade-in 200ms ease both;
@@ -3487,7 +3529,7 @@
   position: fixed;
   inset: 0;
   z-index: -1;
-  background: color-mix(in srgb, var(--bg-base) 72%, transparent);
+  background: var(--tl-scrim);
   backdrop-filter: blur(10px);
   content: "";
   animation: tl-fade-in 240ms ease both;
@@ -3981,9 +4023,9 @@
   border: 1px solid var(--tl-rule);
   border-radius: var(--radius-md);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 30%),
+    linear-gradient(180deg, var(--tl-sheen), transparent 30%),
     color-mix(in srgb, var(--surface) 30%, transparent);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14), 0 8px 22px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--tl-shadow-week);
   overflow: hidden;
 }
 
@@ -4773,7 +4815,7 @@
   z-index: 120;
   display: grid;
   padding: 20px;
-  background: color-mix(in srgb, var(--bg-base) 78%, transparent);
+  background: var(--tl-scrim);
   backdrop-filter: blur(10px);
   place-items: center;
   animation: tl-fade-in 180ms ease both;

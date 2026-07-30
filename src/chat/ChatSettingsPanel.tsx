@@ -132,11 +132,7 @@ export function ChatSettingsPanel({
         <h3>ChatGPT account</h3>
         {authStatus?.signedIn ? (
           <div className="chat-settings-account">
-            {authStatus.email ? (
-              <span className="chat-settings-email">{authStatus.email}</span>
-            ) : (
-              <span className="chat-settings-email">Signed in</span>
-            )}
+            <span className="chat-settings-email">Signed in</span>
             <button
               type="button"
               className="chat-signout chat-signout-settings"

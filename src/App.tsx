@@ -3180,6 +3180,9 @@ function MediaLibraryTab({
           pendingCount={pendingTransferCount}
           localCount={downloads.length}
           watchConnected={watchConnected}
+          syncing={
+            transferProgress != null || Boolean(busy?.startsWith("transfer"))
+          }
           localPanel={
             <LocalLibraryPanel
               downloads={downloads}

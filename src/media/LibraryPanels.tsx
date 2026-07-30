@@ -1,14 +1,23 @@
-import { useDeferredValue, useMemo, useState, type ReactNode } from "react";
+import {
+  useDeferredValue,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Cable,
   CheckCircle2,
+  HardDrive,
   Loader2,
   Music,
   Search,
   Trash2,
   Upload,
+  Watch,
   X,
 } from "lucide-react";
 import type { LocalTrack, WatchStatus, WatchTrack } from "../../electron/types";
@@ -26,7 +35,6 @@ type SortDirection = "asc" | "desc";
 type LocalLibrarySortKey = "title" | "size" | "created" | "status";
 type WatchLibrarySortKey = "name" | "size" | "modified";
 type LocalTrackFilter = "all" | "pending" | "synced";
-type WatchTrackFilter = "all" | "selected";
 
 interface SortState<Key extends string> {
   key: Key;
@@ -165,6 +173,7 @@ interface LibrarySyncLayoutProps {
   pendingCount: number;
   localCount: number;
   watchConnected: boolean;
+  syncing?: boolean;
 }
 
 export function LibrarySyncLayout({
@@ -173,6 +182,7 @@ export function LibrarySyncLayout({
   pendingCount,
   localCount,
   watchConnected,
+  syncing = false,
 }: LibrarySyncLayoutProps) {
   return (
     <div className="library-sync-grid">
@@ -181,38 +191,69 @@ export function LibrarySyncLayout({
         pendingCount={pendingCount}
         localCount={localCount}
         watchConnected={watchConnected}
+        syncing={syncing}
       />
       {watchPanel}
     </div>
   );
 }
 
+type ConnectorState = "disconnected" | "syncing" | "pending" | "ready" | "idle";
+
 function LibraryConnector({
   pendingCount,
   localCount,
   watchConnected,
+  syncing,
 }: {
   pendingCount: number;
   localCount: number;
   watchConnected: boolean;
+  syncing: boolean;
 }) {
-  let label = watchConnected ? "Watch connected" : "Connect watch";
-  if (watchConnected && pendingCount > 0) {
-    label = `${pendingCount} to sync`;
-  } else if (watchConnected && pendingCount === 0 && localCount > 0) {
-    label = "All synced";
+  let state: ConnectorState = "idle";
+  if (!watchConnected) {
+    state = "disconnected";
+  } else if (syncing) {
+    state = "syncing";
+  } else if (pendingCount > 0) {
+    state = "pending";
+  } else if (localCount > 0) {
+    state = "ready";
   }
 
+  const label =
+    state === "disconnected"
+      ? "Connect watch"
+      : state === "syncing"
+        ? "Syncing…"
+        : state === "pending"
+          ? `${pendingCount} to sync`
+          : state === "ready"
+            ? "All synced"
+            : "Watch connected";
+
+  const Icon =
+    state === "disconnected"
+      ? Cable
+      : state === "syncing"
+        ? Loader2
+        : state === "ready"
+          ? CheckCircle2
+          : Watch;
+
   return (
-    <div className="library-connector" aria-hidden="true">
+    <div
+      className={`library-connector${state === "syncing" ? " is-syncing" : ""}`}
+      aria-hidden="true"
+    >
       <span className="library-connector-line" />
-      <span
-        className={
-          watchConnected && pendingCount === 0
-            ? "library-connector-pill ready"
-            : "library-connector-pill"
-        }
-      >
+      <span className={`library-connector-pill library-connector-pill--${state}`}>
+        <Icon
+          size={13}
+          className={state === "syncing" ? "spin" : undefined}
+          aria-hidden="true"
+        />
         {label}
       </span>
       <span className="library-connector-line" />
@@ -422,68 +463,6 @@ export function LocalLibraryPanel({
         </em>
       </header>
 
-      <div className="library-panel-actions">
-        {someSelected ? (
-          <div className="library-bulk-actions">
-            {pendingSelectedTracks.length > 0 ? (
-              <button
-                className="primary-button compact-button"
-                type="button"
-                disabled={!watchConnected || isTransferring || isDeletingLocal}
-                onClick={handleBulkTransfer}
-              >
-                {busy === "transfer-selected" ? (
-                  <Loader2 className="spin" size={17} aria-hidden="true" />
-                ) : (
-                  <Upload size={17} aria-hidden="true" />
-                )}
-                Transfer selected ({pendingSelectedTracks.length})
-              </button>
-            ) : null}
-            <button
-              className="secondary-button compact-button danger-button"
-              type="button"
-              disabled={isDeletingLocal || isTransferring}
-              onClick={handleBulkDelete}
-            >
-              {busy === "delete-local-bulk" ? (
-                <Loader2 className="spin" size={17} aria-hidden="true" />
-              ) : (
-                <Trash2 size={17} aria-hidden="true" />
-              )}
-              Delete selected ({selectedIds.size})
-            </button>
-          </div>
-        ) : canTransferAll ? (
-          <button
-            className="primary-button compact-button"
-            type="button"
-            disabled={isTransferring}
-            onClick={onTransferAll}
-          >
-            {busy === "transfer-all" ? (
-              <Loader2 className="spin" size={17} aria-hidden="true" />
-            ) : (
-              <Upload size={17} aria-hidden="true" />
-            )}
-            Transfer all ({pendingLocalCount})
-          </button>
-        ) : (
-          <span className="library-panel-hint">
-            {downloads.length === 0
-              ? "Download tracks from YouTube or Spotify"
-              : pendingLocalCount === 0
-                ? (
-                    <span className="library-sync-indicator">
-                      <CheckCircle2 size={15} aria-hidden="true" />
-                      All synced
-                    </span>
-                  )
-                : `${pendingLocalCount} not on watch`}
-          </span>
-        )}
-      </div>
-
       {transferProgress ? (
         <div
           className="library-transfer-progress"
@@ -555,33 +534,32 @@ export function LocalLibraryPanel({
               </button>
             ))}
           </div>
-        </div>
-      ) : null}
-
-      {downloads.length > 0 ? (
-        <div className="library-selection-bar">
-          <label className="library-select-all">
-            <input
-              type="checkbox"
-              aria-label="Select visible local tracks"
-              checked={allVisibleSelected}
-              disabled={visibleLocalItems.length === 0}
-              onChange={handleSelectVisible}
-            />
-            Select visible
-          </label>
-          {someSelected ? (
-            <div className="library-selection-meta">
-              <span>
-                {selectedTracks.length} selected · {formatBytes(selectedSize)}
-              </span>
-              <button
-                className="library-selection-clear"
-                type="button"
-                onClick={onClearSelection}
-              >
-                Clear
-              </button>
+          {!someSelected ? (
+            <div className="library-panel-cta">
+              {canTransferAll ? (
+                <button
+                  className="primary-button compact-button"
+                  type="button"
+                  disabled={isTransferring}
+                  onClick={onTransferAll}
+                >
+                  {busy === "transfer-all" ? (
+                    <Loader2 className="spin" size={17} aria-hidden="true" />
+                  ) : (
+                    <Upload size={17} aria-hidden="true" />
+                  )}
+                  Transfer all ({pendingLocalCount})
+                </button>
+              ) : pendingLocalCount === 0 ? (
+                <span className="library-sync-indicator">
+                  <CheckCircle2 size={15} aria-hidden="true" />
+                  All synced
+                </span>
+              ) : (
+                <span className="library-pending-chip">
+                  {pendingLocalCount} pending
+                </span>
+              )}
             </div>
           ) : null}
         </div>
@@ -589,7 +567,15 @@ export function LocalLibraryPanel({
 
       {visibleLocalItems.length > 0 ? (
         <div className="library-track-header">
-          <span />
+          <span className="library-header-select">
+            <input
+              type="checkbox"
+              aria-label="Select visible local tracks"
+              checked={allVisibleSelected}
+              disabled={visibleLocalItems.length === 0}
+              onChange={handleSelectVisible}
+            />
+          </span>
           <span />
           <SortButton
             label="Track"
@@ -635,9 +621,22 @@ export function LocalLibraryPanel({
         </div>
       ) : null}
 
-      <div className="library-track-stack">
+      <div
+        className={
+          someSelected
+            ? "library-track-stack has-selection-fab"
+            : "library-track-stack"
+        }
+      >
         {visibleLocalItems.length === 0 ? (
-          <LibraryEmptyState title={emptyTitle()} />
+          <LibraryEmptyState
+            title={emptyTitle()}
+            subtitle={
+              downloads.length === 0
+                ? "Download tracks from YouTube or Spotify to get started"
+                : undefined
+            }
+          />
         ) : (
           visibleLocalItems.map(({ track, fileName, onWatch }) => {
             const selected = selectedIds.has(track.id);
@@ -646,6 +645,7 @@ export function LocalLibraryPanel({
               <div
                 key={track.id}
                 className={selected ? "library-track-row is-selected" : "library-track-row"}
+                onClick={() => onToggleSelect(track.id)}
               >
                 <input
                   type="checkbox"
@@ -653,10 +653,15 @@ export function LocalLibraryPanel({
                   aria-label={`Select ${track.title}`}
                   checked={selected}
                   onChange={() => onToggleSelect(track.id)}
+                  onClick={(event) => event.stopPropagation()}
                 />
                 <div
-                  className="track-avatar"
-                  style={{ backgroundColor: trackAvatarColor(track.title) }}
+                  className="track-avatar track-avatar--library"
+                  style={
+                    {
+                      "--track-color": trackAvatarColor(track.title),
+                    } as CSSProperties
+                  }
                   aria-hidden="true"
                 >
                   {trackInitial(track.title)}
@@ -668,11 +673,17 @@ export function LocalLibraryPanel({
                 <span className="library-track-size">{formatBytes(track.sizeBytes)}</span>
                 <span className="library-track-date">{formatDate(track.createdAt)}</span>
                 <span
-                  className={onWatch ? "badge ready library-track-status" : "badge library-track-status"}
+                  className={
+                    onWatch ? "library-status is-synced" : "library-status"
+                  }
                 >
-                  {onWatch ? "Synced" : "Not synced"}
+                  <span className="library-status-dot" aria-hidden="true" />
+                  {onWatch ? "Synced" : "Pending"}
                 </span>
-                <div className="library-track-actions">
+                <div
+                  className="library-track-actions"
+                  onClick={(event) => event.stopPropagation()}
+                >
                   <button
                     className="icon-button"
                     type="button"
@@ -710,6 +721,55 @@ export function LocalLibraryPanel({
           })
         )}
       </div>
+
+      {someSelected ? (
+        <div
+          className="library-selection-fab"
+          role="toolbar"
+          aria-label="Local track selection actions"
+        >
+          <span className="library-selection-fab-meta">
+            {selectedTracks.length} selected · {formatBytes(selectedSize)}
+          </span>
+          {pendingSelectedTracks.length > 0 ? (
+            <button
+              className="primary-button compact-button"
+              type="button"
+              disabled={!watchConnected || isTransferring || isDeletingLocal}
+              onClick={handleBulkTransfer}
+            >
+              {busy === "transfer-selected" ? (
+                <Loader2 className="spin" size={16} aria-hidden="true" />
+              ) : (
+                <Upload size={16} aria-hidden="true" />
+              )}
+              Transfer ({pendingSelectedTracks.length})
+            </button>
+          ) : null}
+          <button
+            className="secondary-button compact-button danger-button"
+            type="button"
+            disabled={isDeletingLocal || isTransferring}
+            onClick={handleBulkDelete}
+          >
+            {busy === "delete-local-bulk" ? (
+              <Loader2 className="spin" size={16} aria-hidden="true" />
+            ) : (
+              <Trash2 size={16} aria-hidden="true" />
+            )}
+            Delete
+          </button>
+          <button
+            className="icon-button library-selection-fab-close"
+            type="button"
+            title="Clear selection"
+            aria-label="Clear selection"
+            onClick={onClearSelection}
+          >
+            <X size={15} aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -738,7 +798,6 @@ export function WatchLibraryPanel({
   onDeleteWatchTracks,
 }: WatchLibraryPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [trackFilter, setTrackFilter] = useState<WatchTrackFilter>("all");
   const [sort, setSort] = useState<SortState<WatchLibrarySortKey>>({
     key: "name",
     direction: "asc",
@@ -766,19 +825,12 @@ export function WatchLibraryPanel({
   const totalSize = useMemo(() => sumBytes(watchTracks), [watchTracks]);
   const selectedSize = useMemo(() => sumBytes(selectedTracks), [selectedTracks]);
   const visibleWatchItems = useMemo(() => {
-    const filtered = watchTrackItems.filter((item) => {
-      if (
-        trackFilter === "selected" &&
-        !selectedPaths.has(item.track.relativePath)
-      ) {
-        return false;
-      }
-
-      return searchTextMatchesTerms(item.searchText, searchTerms);
-    });
+    const filtered = watchTrackItems.filter((item) =>
+      searchTextMatchesTerms(item.searchText, searchTerms),
+    );
 
     return sortWatchTrackItems(filtered, sort);
-  }, [searchTerms, selectedPaths, sort, trackFilter, watchTrackItems]);
+  }, [searchTerms, sort, watchTrackItems]);
   const visibleWatchTracks = useMemo(
     () => visibleWatchItems.map(({ track }) => track),
     [visibleWatchItems],
@@ -802,19 +854,6 @@ export function WatchLibraryPanel({
     visibleWatchTracks.length === watchTracks.length
       ? `${watchTracks.length} track${watchTracks.length === 1 ? "" : "s"}`
       : `${visibleWatchTracks.length}/${watchTracks.length} tracks`;
-  const storageLabel =
-    watchStatus?.usedBytes != null
-      ? `${formatBytes(watchStatus.usedBytes)} used`
-      : formatBytes(totalSize);
-  const filterOptions: Array<{
-    value: WatchTrackFilter;
-    label: string;
-    count: number;
-  }> = [
-    { value: "all", label: "All", count: watchTracks.length },
-    { value: "selected", label: "Selected", count: selectedTracks.length },
-  ];
-
   function handleBulkDelete() {
     if (selectedTracks.length === 0) {
       return;
@@ -841,9 +880,6 @@ export function WatchLibraryPanel({
     if (searchTerms.length > 0) {
       return "No matching watch tracks";
     }
-    if (trackFilter === "selected") {
-      return "No selected watch tracks";
-    }
 
     return "No MP3 files on the watch";
   }
@@ -860,43 +896,19 @@ export function WatchLibraryPanel({
           <p className="eyebrow">{presentation.displayName}</p>
           <h3>On watch</h3>
         </div>
-        <em>
-          {watchConnected
-            ? `${countLabel} · ${storageLabel}`
-            : "Not connected"}
-        </em>
+        <em>{watchConnected ? countLabel : "Not connected"}</em>
       </header>
 
-      <div className="library-panel-actions">
-        {someSelected ? (
-          <button
-            className="secondary-button danger-button"
-            type="button"
-            disabled={isDeletingWatch}
-            onClick={handleBulkDelete}
-          >
-            {busy === "delete-watch-bulk" ? (
-              <Loader2 className="spin" size={17} aria-hidden="true" />
-            ) : (
-              <Trash2 size={17} aria-hidden="true" />
-            )}
-            Delete selected ({selectedPaths.size})
-          </button>
-        ) : (
-          <span className="library-panel-hint">
-            {!watchConnected
-              ? presentation.connectHint || "Connect your watch via USB"
-              : watchTracks.length === 0
-                ? "No MP3 files on the watch"
-                : "Select tracks to delete from watch"}
-          </span>
-        )}
-      </div>
+      {watchConnected && watchTracks.length > 0 ? (
+        <WatchStorageMeter watchStatus={watchStatus} tracksSize={totalSize} />
+      ) : null}
 
       {!watchConnected ? (
         <LibraryEmptyState
           title={emptyTitle()}
-          subtitle="to view and manage your music"
+          subtitle={
+            presentation.connectHint || "to view and manage your music"
+          }
           variant="watch"
         />
       ) : watchTracks.length > 0 ? (
@@ -922,53 +934,18 @@ export function WatchLibraryPanel({
                 </button>
               ) : null}
             </div>
-            <div className="library-filter-group" aria-label="Watch track filter">
-              {filterOptions.map((option) => (
-                <button
-                  key={option.value}
-                  className={
-                    trackFilter === option.value
-                      ? "library-filter-option active"
-                      : "library-filter-option"
-                  }
-                  type="button"
-                  onClick={() => setTrackFilter(option.value)}
-                >
-                  <span>{option.label}</span>
-                  <small>{option.count}</small>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="library-selection-bar">
-            <label className="library-select-all">
-              <input
-                type="checkbox"
-                aria-label="Select visible watch tracks"
-                checked={allVisibleSelected}
-                disabled={visibleWatchTracks.length === 0}
-                onChange={handleSelectVisible}
-              />
-              Select visible
-            </label>
-            {someSelected ? (
-              <div className="library-selection-meta">
-                <span>
-                  {selectedTracks.length} selected · {formatBytes(selectedSize)}
-                </span>
-                <button
-                  className="library-selection-clear"
-                  type="button"
-                  onClick={onClearSelection}
-                >
-                  Clear
-                </button>
-              </div>
-            ) : null}
           </div>
           {visibleWatchTracks.length > 0 ? (
             <div className="library-track-header">
-              <span />
+              <span className="library-header-select">
+                <input
+                  type="checkbox"
+                  aria-label="Select visible watch tracks"
+                  checked={allVisibleSelected}
+                  disabled={visibleWatchTracks.length === 0}
+                  onChange={handleSelectVisible}
+                />
+              </span>
               <span />
               <SortButton
                 label="Track"
@@ -1000,11 +977,16 @@ export function WatchLibraryPanel({
                   )
                 }
               />
-              <span>Status</span>
               <span />
             </div>
           ) : null}
-          <div className="library-track-stack">
+          <div
+            className={
+              someSelected
+                ? "library-track-stack has-selection-fab"
+                : "library-track-stack"
+            }
+          >
             {visibleWatchTracks.length === 0 ? (
               <LibraryEmptyState title={emptyTitle()} />
             ) : (
@@ -1017,6 +999,7 @@ export function WatchLibraryPanel({
                     className={
                       selected ? "library-track-row is-selected" : "library-track-row"
                     }
+                    onClick={() => onToggleSelect(track.relativePath)}
                   >
                     <input
                       type="checkbox"
@@ -1024,16 +1007,21 @@ export function WatchLibraryPanel({
                       aria-label={`Select ${track.name}`}
                       checked={selected}
                       onChange={() => onToggleSelect(track.relativePath)}
+                      onClick={(event) => event.stopPropagation()}
                     />
-                    <div className="track-avatar track-avatar--watch" aria-hidden="true" />
+                    <div className="track-avatar track-avatar--watch" aria-hidden="true">
+                      <Music size={15} aria-hidden="true" />
+                    </div>
                     <span className="library-track-meta">
                       <strong>{track.name}</strong>
                       <small>{track.relativePath}</small>
                     </span>
                     <span className="library-track-size">{formatBytes(track.sizeBytes)}</span>
                     <span className="library-track-date">{formatDate(track.modifiedAt)}</span>
-                    <span className="badge ready library-track-status">On watch</span>
-                    <div className="library-track-actions">
+                    <div
+                      className="library-track-actions"
+                      onClick={(event) => event.stopPropagation()}
+                    >
                       <button
                         className="icon-button danger"
                         type="button"
@@ -1053,11 +1041,86 @@ export function WatchLibraryPanel({
               })
             )}
           </div>
+
+          {someSelected ? (
+            <div
+              className="library-selection-fab"
+              role="toolbar"
+              aria-label="Watch track selection actions"
+            >
+              <span className="library-selection-fab-meta">
+                {selectedTracks.length} selected · {formatBytes(selectedSize)}
+              </span>
+              <button
+                className="secondary-button compact-button danger-button"
+                type="button"
+                disabled={isDeletingWatch}
+                onClick={handleBulkDelete}
+              >
+                {busy === "delete-watch-bulk" ? (
+                  <Loader2 className="spin" size={16} aria-hidden="true" />
+                ) : (
+                  <Trash2 size={16} aria-hidden="true" />
+                )}
+                Delete
+              </button>
+              <button
+                className="icon-button library-selection-fab-close"
+                type="button"
+                title="Clear selection"
+                aria-label="Clear selection"
+                onClick={onClearSelection}
+              >
+                <X size={15} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
         </>
       ) : (
         <LibraryEmptyState title={emptyTitle()} />
       )}
     </section>
+  );
+}
+
+function WatchStorageMeter({
+  watchStatus,
+  tracksSize,
+}: {
+  watchStatus: WatchStatus | null;
+  tracksSize: number;
+}) {
+  const totalBytes = watchStatus?.totalBytes;
+  if (!totalBytes || totalBytes <= 0) {
+    return null;
+  }
+
+  const usedBytes = watchStatus?.usedBytes ?? tracksSize;
+  const percent = Math.min(100, Math.round((usedBytes / totalBytes) * 100));
+
+  return (
+    <div className="watch-storage">
+      <div className="watch-storage-meta">
+        <HardDrive size={13} aria-hidden="true" />
+        <span>
+          {formatBytes(usedBytes)} of {formatBytes(totalBytes)} used
+        </span>
+        <em>{percent}%</em>
+      </div>
+      <div
+        className="watch-storage-track"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        aria-label="Watch storage used"
+      >
+        <div
+          className="watch-storage-bar"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -1172,7 +1235,9 @@ function LibraryEmptyState({
       {variant === "watch" ? (
         <WatchConnectIllustration />
       ) : (
-        <Music size={24} aria-hidden="true" />
+        <span className="library-empty-icon">
+          <Music size={22} aria-hidden="true" />
+        </span>
       )}
       <strong>{title}</strong>
       {subtitle ? (
