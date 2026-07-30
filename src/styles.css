@@ -6627,6 +6627,14 @@ td span {
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
 }
 
+/* Form dropdowns inside scrollable dialogs escape their clipping containers. */
+.app-select-menu.is-portaled {
+  position: fixed;
+  z-index: 420;
+  right: auto;
+  bottom: auto;
+}
+
 .app-select-option {
   display: flex;
   align-items: center;
@@ -23950,6 +23958,19 @@ tr.data-intervals-row-missing {
   font-size: 13px;
 }
 
+.calendar-field > .app-select,
+.calendar-builder-control > .app-select {
+  width: 100%;
+}
+
+.calendar-field > .app-select .app-select-trigger,
+.calendar-builder-control > .app-select .app-select-trigger {
+  min-height: 40px;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
 .calendar-field input:focus,
 .calendar-field select:focus,
 .calendar-field textarea:focus,
@@ -26725,6 +26746,27 @@ tr.data-intervals-row-missing {
   background: var(--glass-bg-hover);
 }
 
+.calendar-builder-row .set-line .set-line-select {
+  min-width: 108px;
+  flex: 0 1 auto;
+}
+
+.calendar-builder-row .set-line .set-line-select .app-select-trigger {
+  min-height: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.calendar-builder-row .set-line .set-line-select .app-select-trigger:hover,
+.calendar-builder-row .set-line .set-line-select .app-select-trigger[aria-expanded="true"] {
+  background: var(--glass-bg-hover);
+}
+
 .set-line-cell.is-load select {
   font-size: 13px;
 }
@@ -27214,6 +27256,25 @@ tr.data-intervals-row-missing {
   font-weight: 650;
 }
 
+.workout-step-header .workout-step-kind-select {
+  width: 126px;
+  flex: 0 0 auto;
+}
+
+.workout-step-header .workout-step-kind-select .app-select-trigger {
+  min-height: 34px;
+  border-color: transparent;
+  background: transparent;
+  padding: 0 4px 0 2px;
+  font-weight: 650;
+}
+
+.workout-step-header .workout-step-kind-select .app-select-trigger:hover,
+.workout-step-header .workout-step-kind-select .app-select-trigger[aria-expanded="true"] {
+  border-color: var(--glass-border);
+  background: var(--glass-bg-hover);
+}
+
 .workout-step-header > input {
   flex: 1;
   border-color: transparent;
@@ -27311,6 +27372,17 @@ tr.data-intervals-row-missing {
 .workout-control-group select {
   width: 100%;
   min-height: 34px;
+}
+
+.workout-control-group .app-select {
+  width: 100%;
+  flex: 1;
+}
+
+.workout-control-group .app-select-trigger {
+  min-height: 34px;
+  padding: 7px 9px;
+  font-weight: 500;
 }
 
 .workout-range-inputs {

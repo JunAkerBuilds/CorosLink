@@ -198,6 +198,55 @@ export interface CorosPairedDevice {
   profileVersion?: number;
 }
 
+/** Gear categories currently exposed by COROS's mobile API. */
+export type CorosGearType = 1 | 2;
+
+/** One piece of activity gear attached to the signed-in COROS account. */
+export interface CorosGear {
+  /** Decimal text because COROS gear IDs exceed Number.MAX_SAFE_INTEGER. */
+  gearId: string;
+  /** Client-generated decimal identifier used when the gear was created. */
+  clientGearUniqId?: string;
+  name: string;
+  brandName: string;
+  type: CorosGearType;
+  sportTypeList: number[];
+  /** Calendar day in YYYY-MM-DD form. */
+  firstUseDay: string;
+  /** All distance values are normalized to metres. */
+  initialDistanceMeters: number;
+  lifeDistanceMeters: number;
+  realDistanceMeters: number;
+  notify: boolean;
+  status?: number;
+  usageStatus?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Sport associations supported by COROS for a gear category. */
+export interface CorosGearSupportedInfo {
+  type: CorosGearType;
+  sportTypeList: number[];
+}
+
+export interface CorosGearCatalog {
+  gear: CorosGear[];
+  supportedInfo: CorosGearSupportedInfo[];
+}
+
+/** Values accepted when adding gear to a COROS account. */
+export interface CorosGearSaveInput {
+  brandName: string;
+  type: CorosGearType;
+  sportTypeList: number[];
+  /** Calendar day in YYYY-MM-DD form. */
+  firstUseDay: string;
+  initialDistanceMeters: number;
+  lifeDistanceMeters: number;
+  notify: boolean;
+}
+
 /** A nearby Bluetooth device exposed by Electron's Web Bluetooth chooser. */
 export interface CorosBluetoothDeviceChoice {
   deviceId: string;

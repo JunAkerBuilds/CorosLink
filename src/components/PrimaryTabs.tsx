@@ -6,8 +6,8 @@ import {
   useState,
 } from "react";
 import {
-  PRIMARY_NAV_ITEMS,
   type PrimaryView,
+  visiblePrimaryNavItems,
 } from "../navigation/primaryNav";
 import { SelectDropdown } from "./SelectDropdown";
 
@@ -17,6 +17,7 @@ interface PrimaryTabsProps {
   activeView: PrimaryView;
   onChange: (view: PrimaryView) => void;
   coachBusy?: boolean;
+  showDevelopmentItems?: boolean;
 }
 
 function useMediaQuery(query: string): boolean {
@@ -45,8 +46,10 @@ export function PrimaryTabs({
   activeView,
   onChange,
   coachBusy = false,
+  showDevelopmentItems = false,
 }: PrimaryTabsProps) {
   const compactNav = useMediaQuery("(max-width: 720px)");
+  const navItems = visiblePrimaryNavItems(showDevelopmentItems);
   const navRef = useRef<HTMLElement>(null);
   const tabRefs = useRef(new Map<PrimaryView, HTMLButtonElement>());
   const [indicator, setIndicator] = useState({
@@ -104,7 +107,7 @@ export function PrimaryTabs({
     return (
       <SelectDropdown
         value={activeView}
-        options={PRIMARY_NAV_ITEMS.map((tab) => ({
+        options={navItems.map((tab) => ({
           value: tab.id,
           label: tab.beta ? `${tab.label} (Beta)` : tab.label,
         }))}
@@ -127,7 +130,7 @@ export function PrimaryTabs({
           opacity: indicator.ready ? 1 : 0,
         }}
       />
-      {PRIMARY_NAV_ITEMS.map((tab) => {
+      {navItems.map((tab) => {
         const Icon = tab.icon;
         const isActive = activeView === tab.id;
 

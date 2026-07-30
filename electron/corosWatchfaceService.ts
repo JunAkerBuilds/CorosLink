@@ -43,6 +43,11 @@ import type {
   CorosBatteryUsageDetail,
   CorosBatteryUsageGroup,
   CorosBatteryDay,
+  CorosGear,
+  CorosGearCatalog,
+  CorosGearSaveInput,
+  CorosGearSupportedInfo,
+  CorosGearType,
   CorosPairedDevice,
   WatchModelId
 } from "./types";
@@ -802,6 +807,35 @@ export async function listCorosPairedDevices(): Promise<CorosPairedDevice[]> {
     body: JSON.stringify({ clientType: 1 })
   });
   return normalizeCorosPairedDevices(response.data);
+}
+
+/** Lists activity gear from the authenticated COROS mobile account. */
+export async function queryCorosGear(): Promise<CorosGearCatalog> {
+  const session = requireSession();
+  const response = await mobileRequest<unknown>("/user/gear/query", {
+    method: "GET",
+    accessToken: session.accessToken,
+    userId: session.userId,
+    extraHeaders: { "Content-Type": "application/json" }
+  });
+  return normalizeCorosGearCatalog(response.data);
+}
+
+/**
+ * Adds gear through the mobile endpoint, then mirrors the Android client's
+ * follow-up query so the renderer receives the server-assigned gear ID.
+ */
+export async function saveCorosGear(
+  input: CorosGearSaveInput
+): Promise<CorosGearCatalog> {
+  const session = requireSession();
+  await mobileRequest<unknown>("/user/gear/save", {
+    method: "POST",
+    accessToken: session.accessToken,
+    userId: session.userId,
+    body: buildCorosGearSaveBody(input)
+  });
+  return queryCorosGear();
 }
 
 /**
@@ -2591,7 +2625,7 @@ export function extractDecimalProperty(raw: string, property: string): string | 
  */
 export function parseCorosMobileJson(raw: string): unknown {
   const losslessRaw = raw.replace(
-    /("(?:watchFaceThemeId|watchFaceTemplateId|srcWatchFaceTemplateId|watchfaceId)"\s*:\s*)(\d{16,})(?=\s*[,}])/g,
+    /("(?:watchFaceThemeId|watchFaceTemplateId|srcWatchFaceTemplateId|watchfaceId|gearId|userId)"\s*:\s*)(\d{16,})(?=\s*[,}])/g,
     (_match, prefix: string, value: string) => `${prefix}"${value}"`
   );
   return JSON.parse(losslessRaw) as unknown;
@@ -2754,6 +2788,193 @@ export function normalizeCorosPairedDevices(data: unknown): CorosPairedDevice[] 
     devices.push(pairedDevice);
   }
   return devices;
+}
+
+export function normalizeCorosGearCatalog(data: unknown): CorosGearCatalog {
+  const record = asRecord(data);
+  if (!record) {
+    return { gear: [], supportedInfo: [] };
+  }
+
+  const gearInfos = Array.isArray(record.gearInfos) ? record.gearInfos : [];
+  const gear = gearInfos.flatMap((info): CorosGear[] => {
+    const group = asRecord(info);
+    if (!group || !Array.isArray(group.gearList)) {
+      return [];
+    }
+    return group.gearList.flatMap((entry) => normalizeCorosGear(entry));
+  });
+  const supportedInfo = Array.isArray(record.supportedInfoList)
+    ? record.supportedInfoList.flatMap(
+        (entry): CorosGearSupportedInfo[] => normalizeCorosGearSupportedInfo(entry)
+      )
+    : [];
+
+  return { gear, supportedInfo };
+}
+
+export function buildCorosGearSaveBody(input: CorosGearSaveInput): string {
+  const brandName = typeof input?.brandName === "string" ? input.brandName.trim() : "";
+  if (
+    !brandName ||
+    brandName.length > 80 ||
+    /[\u0000-\u001f\u007f]/.test(brandName)
+  ) {
+    throw new Error("Enter a gear name between 1 and 80 characters.");
+  }
+  const type = normalizeCorosGearType(input?.type);
+  if (!type) {
+    throw new Error("Choose a supported COROS gear type.");
+  }
+  const dayMatch = input?.firstUseDay?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!dayMatch || !isCalendarDay(input.firstUseDay)) {
+    throw new Error("Choose a valid first-use date.");
+  }
+  const initialDistance = normalizeGearDistance(
+    input.initialDistanceMeters,
+    "Initial distance",
+    true
+  );
+  const lifeDistance = normalizeGearDistance(
+    input.lifeDistanceMeters,
+    "Lifespan distance",
+    false
+  );
+  if (initialDistance > lifeDistance) {
+    throw new Error("Initial distance cannot exceed the lifespan distance.");
+  }
+  const sportTypeList = Array.from(
+    new Set(
+      Array.isArray(input.sportTypeList)
+        ? input.sportTypeList.filter(
+            (value) =>
+              Number.isSafeInteger(value) && value > 0 && value <= 65_535
+          )
+        : []
+    )
+  );
+  if (sportTypeList.length === 0 || sportTypeList.length > 20) {
+    throw new Error("Choose between 1 and 20 activities for this gear.");
+  }
+
+  return JSON.stringify({
+    gearList: [
+      {
+        additional: { sportTypeList },
+        brandName,
+        clientGearUniqId: Date.now(),
+        firstUseDay: Number(`${dayMatch[1]}${dayMatch[2]}${dayMatch[3]}`),
+        initDistance: initialDistance,
+        lifeDistance,
+        notifyFlag: input.notify ? 1 : 0,
+        type
+      }
+    ]
+  });
+}
+
+function normalizeCorosGear(value: unknown): CorosGear[] {
+  const record = asRecord(value);
+  if (!record) {
+    return [];
+  }
+  const gearId = readString(record, ["gearId"]);
+  const type = normalizeCorosGearType(readInteger(record, ["type"]));
+  const firstUseDay = formatCorosDay(record.firstUseDay);
+  if (!gearId || !type || !firstUseDay) {
+    return [];
+  }
+  const additional = asRecord(record.additional);
+  const sportTypeList = normalizeSportTypeList(additional?.sportTypeList);
+  const brandName =
+    readString(record, ["brandName", "displayName", "name"]) ?? "Unnamed gear";
+  const name =
+    readString(record, ["displayName", "brandName", "name"]) ?? brandName;
+  const initialDistanceMeters = readFiniteNumber(record, ["initDistance"]) ?? 0;
+  const lifeDistanceMeters = readFiniteNumber(record, ["lifeDistance"]) ?? 0;
+  const realDistanceMeters = readFiniteNumber(record, ["realDistance"]) ?? 0;
+  const notifyFlag = readInteger(record, ["notifyFlag"]);
+  const status = readInteger(record, ["status"]);
+  const usageStatus = readInteger(record, ["usageStatus"]);
+  const created = readFiniteNumber(record, ["createTime"]);
+  const updated = readFiniteNumber(record, ["updateTime"]);
+  const clientGearUniqId = readString(record, ["clientGearUniqId"]);
+
+  return [
+    {
+      gearId,
+      ...(clientGearUniqId ? { clientGearUniqId } : {}),
+      name,
+      brandName,
+      type,
+      sportTypeList,
+      firstUseDay,
+      initialDistanceMeters,
+      lifeDistanceMeters,
+      realDistanceMeters,
+      notify: notifyFlag === 1,
+      ...(status !== undefined ? { status } : {}),
+      ...(usageStatus !== undefined ? { usageStatus } : {}),
+      ...(created !== undefined ? { createdAt: toIsoTimestamp(created) } : {}),
+      ...(updated !== undefined ? { updatedAt: toIsoTimestamp(updated) } : {})
+    }
+  ];
+}
+
+function normalizeCorosGearSupportedInfo(
+  value: unknown
+): CorosGearSupportedInfo[] {
+  const record = asRecord(value);
+  const type = record && normalizeCorosGearType(readInteger(record, ["type"]));
+  if (!record || !type) {
+    return [];
+  }
+  return [{ type, sportTypeList: normalizeSportTypeList(record.sportTypeList) }];
+}
+
+function normalizeCorosGearType(value: unknown): CorosGearType | undefined {
+  return value === 1 || value === 2 ? value : undefined;
+}
+
+function normalizeSportTypeList(value: unknown): number[] {
+  return Array.isArray(value)
+    ? Array.from(
+        new Set(
+          value.filter(
+            (entry): entry is number =>
+              Number.isSafeInteger(entry) && entry > 0 && entry <= 65_535
+          )
+        )
+      )
+    : [];
+}
+
+function normalizeGearDistance(
+  value: unknown,
+  label: string,
+  allowZero: boolean
+): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < (allowZero ? 0 : 1) ||
+    value > 10_000_000
+  ) {
+    throw new Error(
+      `${label} must be ${allowZero ? "between 0 and" : "greater than 0 and at most"} 10,000 km.`
+    );
+  }
+  return Math.round(value);
+}
+
+function isCalendarDay(value: string): boolean {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year!, month! - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month! - 1 &&
+    date.getUTCDate() === day
+  );
 }
 
 function normalizeCorosBatteryDay(value: unknown): CorosBatteryDay[] {
@@ -3715,8 +3936,8 @@ function detectWatchfaceResolutionProfile(
 async function mobileRequest<T>(
   endpoint: string,
   options: {
-    method: "POST";
-    body: string | FormData;
+    method: "GET" | "POST";
+    body?: string | FormData;
     accessToken?: string;
     includeAccessTokenInQuery?: boolean;
     userId?: string;
@@ -3740,18 +3961,18 @@ async function mobileRequest<T>(
   const response = await fetch(`${baseUrl}${endpoint}${query}`, {
     method: options.method,
     headers,
-    body: options.body
+    ...(options.body !== undefined ? { body: options.body } : {})
   });
   const raw = await response.text();
   if (!response.ok) {
-    throw new Error(`COROS watchface request failed (HTTP ${response.status}).`);
+    throw new Error(`COROS mobile request failed (HTTP ${response.status}).`);
   }
 
   let payload: MobileApiEnvelope<T>;
   try {
     payload = parseCorosMobileJson(raw) as MobileApiEnvelope<T>;
   } catch {
-    throw new Error("COROS returned an unreadable watchface response.");
+    throw new Error("COROS returned an unreadable mobile API response.");
   }
   const result = mobileApiResult(payload);
   if (result !== API_SUCCESS && !options.allowedResultCodes?.includes(result)) {
@@ -3759,7 +3980,7 @@ async function mobileRequest<T>(
       logoutCorosWatchfaces();
       throw new Error("Your COROS mobile session expired. Sign in again.");
     }
-    throw new Error(payload.message?.trim() || "COROS rejected the watchface request.");
+    throw new Error(payload.message?.trim() || "COROS rejected the mobile request.");
   }
   return { ...payload, raw };
 }

@@ -35,6 +35,7 @@ import {
   type LucideIcon
 } from "lucide-react";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import type {
   ManualActivityInput,
   PlanWorkoutEntryInput,
@@ -50,6 +51,7 @@ import type {
   WorkoutSport
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
+import { SelectDropdown } from "../components/SelectDropdown";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import {
   displayDistanceToMeters,
@@ -916,8 +918,12 @@ function BuilderIntensityFields({ row, sport, context, exerciseOptions, exercise
   const intensityControls = <>
     <label className="calendar-builder-control">
       <span>Intensity</span>
-      <select value={row.intensityType} onChange={(event) => {
-        const intensityType = event.target.value as BuilderRow["intensityType"];
+      <SelectDropdown<BuilderRow["intensityType"]>
+        label="Intensity"
+        value={row.intensityType}
+        options={intensityTypes.map((type) => ({ value: type, label: formatIntensityType(type) }))}
+        portal
+        onChange={(intensityType) => {
         onChange({
           intensityType,
           intensityLow: intensityType === "heartRate" ? "135" : intensityType === "rpe" ? "5" : intensityType === "climbGrade" ? "0" : "80",
@@ -925,7 +931,7 @@ function BuilderIntensityFields({ row, sport, context, exerciseOptions, exercise
           intensityPreset: intensityType === "swimStroke" ? "freestyle" : intensityType === "weight" ? "bodyweight" : intensityType === "climbGrade" ? `relative:${sport === "bouldering" ? "vScale" : "yds"}` : "",
           intensityUnit: intensityType === "weight" ? (unitSystem === "imperial" ? "lb" : "kg") : intensityType === "speed" ? (unitSystem === "imperial" ? "mph" : "km/h") : sport === "run" || sport === "trailRun" || sport === "hyrox" ? "spm" : "rpm"
         });
-      }}>{intensityTypes.map((type) => <option key={type} value={type}>{formatIntensityType(type)}</option>)}</select>
+      }} />
     </label>
 
     {(row.intensityType === "pace" || row.intensityType === "effortPace") ? <label className="calendar-builder-control is-wide">
@@ -941,12 +947,39 @@ function BuilderIntensityFields({ row, sport, context, exerciseOptions, exercise
 
     {row.intensityType === "heartRatePercent" ? <label className="calendar-builder-control">
       <span>Heart-rate basis</span>
-      <select value={row.intensityBasis} onChange={(event) => onChange({ intensityBasis: event.target.value as WorkoutHeartRateBasis, intensityPreset: "" })}><option value="maxHr">% Max Heart Rate</option><option value="reserve">% Heart Rate Reserve</option><option value="lthr">% Lactate Threshold HR</option></select>
+      <SelectDropdown<WorkoutHeartRateBasis>
+        label="Heart-rate basis"
+        value={row.intensityBasis}
+        options={[
+          { value: "maxHr", label: "% Max Heart Rate" },
+          { value: "reserve", label: "% Heart Rate Reserve" },
+          { value: "lthr", label: "% Lactate Threshold HR" }
+        ]}
+        portal
+        onChange={(intensityBasis) => onChange({ intensityBasis, intensityPreset: "" })}
+      />
     </label> : null}
 
     {(percentType || (row.intensityType === "power" && sport !== "bike")) ? <label className="calendar-builder-control">
       <span>Zone</span>
-      <select value={row.intensityPreset || "custom"} onChange={(event) => onChange({ intensityPreset: event.target.value === "custom" ? "" : event.target.value })}><option value="custom">Custom range</option>{presets.map((zone) => { const configured = presetZoneKey ? context?.zones[presetZoneKey]?.find((candidate) => candidate.id === zone.id || candidate.key === zone.preset) : undefined; return <option key={zone.id} value={zone.preset}>{configured?.label ?? zone.label}{configured ? ` · ${configured.lowPercent}-${configured.highPercent}%` : ""}</option>; })}</select>
+      <SelectDropdown
+        label="Intensity zone"
+        value={row.intensityPreset || "custom"}
+        options={[
+          { value: "custom", label: "Custom range" },
+          ...presets.map((zone) => {
+            const configured = presetZoneKey
+              ? context?.zones[presetZoneKey]?.find((candidate) => candidate.id === zone.id || candidate.key === zone.preset)
+              : undefined;
+            return {
+              value: zone.preset,
+              label: `${configured?.label ?? zone.label}${configured ? ` · ${configured.lowPercent}-${configured.highPercent}%` : ""}`
+            };
+          })
+        ]}
+        portal
+        onChange={(intensityPreset) => onChange({ intensityPreset: intensityPreset === "custom" ? "" : intensityPreset })}
+      />
     </label> : null}
 
     {(numericRange || (percentType && !row.intensityPreset)) ? <>
@@ -955,20 +988,20 @@ function BuilderIntensityFields({ row, sport, context, exerciseOptions, exercise
     </> : null}
 
     {row.intensityType === "speed" ? <label className="calendar-builder-control"><span>Speed unit</span><span className="calendar-builder-readonly-value">{unitSystem === "imperial" ? "mph" : "km/h"}</span></label> : null}
-    {row.intensityType === "cadence" ? <label className="calendar-builder-control"><span>Cadence unit</span><select value={row.intensityUnit === "spm" ? "spm" : "rpm"} onChange={(event) => onChange({ intensityUnit: event.target.value as BuilderRow["intensityUnit"] })}><option value="spm">steps/min</option><option value="rpm">revs/min</option></select></label> : null}
-    {row.intensityType === "swimStroke" ? <label className="calendar-builder-control"><span>Stroke</span><select value={row.intensityPreset || "freestyle"} onChange={(event) => onChange({ intensityPreset: event.target.value })}>{Object.keys(SWIM_STROKE_IDS).map((stroke) => <option key={stroke} value={stroke}>{formatBuilderToken(stroke)}</option>)}</select></label> : null}
+    {row.intensityType === "cadence" ? <label className="calendar-builder-control"><span>Cadence unit</span><SelectDropdown label="Cadence unit" value={row.intensityUnit === "spm" ? "spm" : "rpm"} options={[{ value: "spm", label: "steps/min" }, { value: "rpm", label: "revs/min" }]} portal onChange={(intensityUnit) => onChange({ intensityUnit })} /></label> : null}
+    {row.intensityType === "swimStroke" ? <label className="calendar-builder-control"><span>Stroke</span><SelectDropdown label="Swim stroke" value={row.intensityPreset || "freestyle"} options={Object.keys(SWIM_STROKE_IDS).map((stroke) => ({ value: stroke, label: formatBuilderToken(stroke) }))} portal onChange={(intensityPreset) => onChange({ intensityPreset })} /></label> : null}
 
     {row.intensityType === "weight" ? <>
-      <label className="calendar-builder-control"><span>Load type</span><select value={row.intensityPreset || "bodyweight"} onChange={(event) => onChange({ intensityPreset: event.target.value })}><option value="bodyweight">Bodyweight</option><option value="weight">Added weight</option></select></label>
+      <label className="calendar-builder-control"><span>Load type</span><SelectDropdown label="Load type" value={row.intensityPreset || "bodyweight"} options={[{ value: "bodyweight", label: "Bodyweight" }, { value: "weight", label: "Added weight" }]} portal onChange={(intensityPreset) => onChange({ intensityPreset })} /></label>
       {row.intensityPreset === "weight" ? <><label className="calendar-builder-control"><span>Weight ({unitSystem === "imperial" ? "lb" : "kg"})</span><input type="number" min="0" value={row.intensityLow} onChange={(event) => onChange({ intensityLow: event.target.value, intensityUnit: unitSystem === "imperial" ? "lb" : "kg" })} /></label></> : null}
     </> : null}
 
-    {row.intensityType === "rpe" ? <label className="calendar-builder-control"><span>RPE</span><select value={row.intensityLow || "5"} onChange={(event) => onChange({ intensityLow: event.target.value })}>{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value}>{value}</option>)}</select></label> : null}
+    {row.intensityType === "rpe" ? <label className="calendar-builder-control"><span>RPE</span><SelectDropdown label="RPE" value={row.intensityLow || "5"} options={Array.from({ length: 10 }, (_, index) => String(index + 1)).map((value) => ({ value, label: value }))} portal onChange={(intensityLow) => onChange({ intensityLow })} /></label> : null}
 
     {row.intensityType === "climbGrade" ? <>
-      <label className="calendar-builder-control"><span>Grade system</span><select value={climbSystem} onChange={(event) => onChange({ intensityPreset: `relative:${event.target.value}` })}>{Object.keys(CLIMB_SYSTEM_IDS).map((system) => <option key={system} value={system}>{formatBuilderToken(system)}</option>)}</select></label>
-      <label className="calendar-builder-control"><span>Grade mode</span><select value={row.intensityPreset.startsWith("relative:") ? "relative" : "absolute"} onChange={(event) => onChange({ intensityPreset: event.target.value === "relative" ? `relative:${climbSystem}` : `${climbSystem}:${CLIMB_GRADES[climbSystem][0]}` })}><option value="relative">Relative to onsight</option><option value="absolute">Absolute grade</option></select></label>
-      {row.intensityPreset.startsWith("relative:") ? <label className="calendar-builder-control"><span>Relative level</span><input type="number" min="-8" max="4" value={row.intensityLow || "0"} onChange={(event) => onChange({ intensityLow: event.target.value })} /></label> : <label className="calendar-builder-control"><span>Grade</span><select value={row.intensityPreset.split(":")[1]} onChange={(event) => onChange({ intensityPreset: `${climbSystem}:${event.target.value}` })}>{CLIMB_GRADES[climbSystem].map((grade) => <option key={grade}>{grade}</option>)}</select></label>}
+      <label className="calendar-builder-control"><span>Grade system</span><SelectDropdown label="Grade system" value={climbSystem} options={(Object.keys(CLIMB_SYSTEM_IDS) as Array<keyof typeof CLIMB_SYSTEM_IDS>).map((system) => ({ value: system, label: formatBuilderToken(system) }))} portal onChange={(system) => onChange({ intensityPreset: `relative:${system}` })} /></label>
+      <label className="calendar-builder-control"><span>Grade mode</span><SelectDropdown label="Grade mode" value={row.intensityPreset.startsWith("relative:") ? "relative" : "absolute"} options={[{ value: "relative", label: "Relative to onsight" }, { value: "absolute", label: "Absolute grade" }]} portal onChange={(mode) => onChange({ intensityPreset: mode === "relative" ? `relative:${climbSystem}` : `${climbSystem}:${CLIMB_GRADES[climbSystem][0]}` })} /></label>
+      {row.intensityPreset.startsWith("relative:") ? <label className="calendar-builder-control"><span>Relative level</span><input type="number" min="-8" max="4" value={row.intensityLow || "0"} onChange={(event) => onChange({ intensityLow: event.target.value })} /></label> : <label className="calendar-builder-control"><span>Grade</span><SelectDropdown label="Climbing grade" value={row.intensityPreset.split(":")[1] ?? CLIMB_GRADES[climbSystem][0]} options={CLIMB_GRADES[climbSystem].map((grade) => ({ value: grade, label: grade }))} portal onChange={(grade) => onChange({ intensityPreset: `${climbSystem}:${grade}` })} /></label>}
     </> : null}
 
     {context ? <div className="calendar-builder-derived"><BuilderDerivedIntensityPreview intensity={rowIntensity(row, sport, unitSystem)} context={context} /></div> : null}
@@ -1118,11 +1151,16 @@ function BuilderStrengthStepFields({
       <div className="strength-step-form">
         <label className="calendar-builder-control strength-step-kind">
           <span>{kindLabel}</span>
-          <select value={row.kind} onChange={(event) => onKindChange(event.target.value as BuilderKind)}>
-            {allowedKinds.map((kind) => (
-              <option key={kind} value={kind}>{BUILDER_KIND_META[kind].label}</option>
-            ))}
-          </select>
+          <SelectDropdown<BuilderKind>
+            label={kindLabel ?? "Step type"}
+            value={row.kind}
+            options={allowedKinds.map((kind) => ({
+              value: kind,
+              label: BUILDER_KIND_META[kind].label
+            }))}
+            portal
+            onChange={onKindChange}
+          />
         </label>
 
         <section className="strength-block">
@@ -1186,17 +1224,17 @@ function BuilderStrengthStepFields({
                     )}
                   />
                 )}
-                <select
-                  aria-label="Measure each set by"
+                <SelectDropdown<BuilderRow["targetType"]>
+                  className="set-line-select"
+                  label="Measure each set by"
                   value={row.targetType}
-                  onChange={(event) => changeMeasure(event.target.value as BuilderRow["targetType"])}
-                >
-                  {targetTypes.map((target) => (
-                    <option key={target} value={target}>
-                      {measureLabels[target] ?? builderTargetTypeLabel(target)}
-                    </option>
-                  ))}
-                </select>
+                  options={targetTypes.map((target) => ({
+                    value: target,
+                    label: measureLabels[target] ?? builderTargetTypeLabel(target)
+                  }))}
+                  portal
+                  onChange={changeMeasure}
+                />
               </div>
             </div>
 
@@ -1205,15 +1243,18 @@ function BuilderStrengthStepFields({
             <div className="set-line-cell is-load">
               <span>Load</span>
               <div className="set-line-compound">
-                <select
-                  aria-label="Load"
+                <SelectDropdown<StrengthLoadMode>
+                  className="set-line-select"
+                  label="Load"
                   value={loadMode}
-                  onChange={(event) => changeLoadMode(event.target.value as StrengthLoadMode)}
-                >
-                  <option value="bodyweight">Bodyweight</option>
-                  <option value="added">Added weight</option>
-                  <option value="unspecified">Not set</option>
-                </select>
+                  options={[
+                    { value: "bodyweight", label: "Bodyweight" },
+                    { value: "added", label: "Added weight" },
+                    { value: "unspecified", label: "Not set" }
+                  ]}
+                  portal
+                  onChange={changeLoadMode}
+                />
                 {loadMode === "added" ? (
                   <span className="set-line-weight">
                     <input
@@ -1342,28 +1383,30 @@ function BuilderStepFields({
       <div className="calendar-builder-primary-grid">
         <label className="calendar-builder-control">
           <span>{kindLabel}</span>
-          <select
+          <SelectDropdown<BuilderKind>
+            label={kindLabel ?? "Step type"}
             value={row.kind}
-            onChange={(event) => onKindChange(event.target.value as BuilderKind)}
-          >
-            {allowedKinds.map((kind) => (
-              <option key={kind} value={kind}>{BUILDER_KIND_META[kind].label}</option>
-            ))}
-          </select>
+            options={allowedKinds.map((kind) => ({
+              value: kind,
+              label: BUILDER_KIND_META[kind].label
+            }))}
+            portal
+            onChange={onKindChange}
+          />
         </label>
 
         <label className="calendar-builder-control">
           <span>{sport === "strength" && row.kind === "training" ? "Measure by" : "Target"}</span>
-          <select
+          <SelectDropdown<BuilderRow["targetType"]>
+            label={sport === "strength" && row.kind === "training" ? "Measure by" : "Target"}
             value={row.targetType}
-            onChange={(event) => onChange({
-              targetType: event.target.value as BuilderRow["targetType"]
-            })}
-          >
-            {targetTypes.map((target) => (
-              <option key={target} value={target}>{builderTargetTypeLabel(target)}</option>
-            ))}
-          </select>
+            options={targetTypes.map((target) => ({
+              value: target,
+              label: builderTargetTypeLabel(target)
+            }))}
+            portal
+            onChange={(targetType) => onChange({ targetType })}
+          />
         </label>
 
         <label className="calendar-builder-control">
@@ -2101,7 +2144,7 @@ export function AddWorkoutModal({
     setActiveBuilderChildId(nextRow.children?.[0]?.id ?? null);
   };
 
-  return (
+  return createPortal(
     <AnimatePresence>
       <motion.div
         className="calendar-modal-backdrop"
@@ -2424,7 +2467,7 @@ export function AddWorkoutModal({
                     </div>
                   </div>
                   {builderSport === "swim" ? <div className="calendar-field-row"><label className="calendar-field"><span>Pool length ({swimDistanceUnit(unitSystem)})</span><input type="number" min="1" value={builderPoolLength} onChange={(event) => { setBuilderPoolLength(event.target.value); setBuilderPoolUnit(unitSystem === "imperial" ? "yd" : "m"); }} /></label></div> : null}
-                  {(builderSport === "indoorClimb" || builderSport === "bouldering") ? <label className="calendar-field"><span>Grading system</span><select value={builderGradeSystem} onChange={(event) => setBuilderGradeSystem(event.target.value as keyof typeof CLIMB_SYSTEM_IDS)}>{Object.keys(CLIMB_SYSTEM_IDS).map((system) => <option key={system} value={system}>{formatBuilderToken(system)}</option>)}</select></label> : null}
+                  {(builderSport === "indoorClimb" || builderSport === "bouldering") ? <label className="calendar-field"><span>Grading system</span><SelectDropdown label="Grading system" value={builderGradeSystem} options={(Object.keys(CLIMB_SYSTEM_IDS) as Array<keyof typeof CLIMB_SYSTEM_IDS>).map((system) => ({ value: system, label: formatBuilderToken(system) }))} portal onChange={setBuilderGradeSystem} /></label> : null}
                   <label className="calendar-field">
                     <span className="calendar-field-label">
                       <span>Workout name</span>
@@ -2978,6 +3021,7 @@ export function AddWorkoutModal({
           ) : null}
         </motion.div>
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

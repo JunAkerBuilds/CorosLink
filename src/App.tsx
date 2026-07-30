@@ -152,6 +152,13 @@ const LazyTrainingHubView = lazy(() =>
     default: TrainingHubView,
   })),
 );
+const LazyGearView = IS_DEVELOPMENT_BUILD
+  ? lazy(() =>
+      import("./gear/GearView").then(({ GearView }) => ({
+        default: GearView,
+      })),
+    )
+  : null;
 const LazyTrainingLibraryView = lazy(() =>
   import("./training-library/TrainingLibraryView").then(({ TrainingLibraryView }) => ({
     default: TrainingLibraryView,
@@ -2128,6 +2135,20 @@ export default function App() {
     );
   }
 
+  function handleDevelopmentViewToggle() {
+    const nextVisible = !showDevelopmentTools;
+    setShowDevelopmentTools(nextVisible);
+    if (!nextVisible) {
+      if (activeView === "gear") {
+        setActiveView("overview");
+      }
+      if (startupView === "gear") {
+        setStartupView("overview");
+        saveStartupView("overview");
+      }
+    }
+  }
+
   const { toasts, dismissToast } = useToaster(
     message,
     error ?? watchStatus?.error ?? null,
@@ -2142,6 +2163,7 @@ export default function App() {
           <StartupViewMenu
             value={startupView}
             onChange={handleStartupViewChange}
+            showDevelopmentItems={showDevelopmentTools}
           />
           <ResourcesMenu />
           <AppUpdateControls
@@ -2163,7 +2185,7 @@ export default function App() {
                   ? "Switch to production view"
                   : "Switch to developer view"
               }
-              onClick={() => setShowDevelopmentTools((visible) => !visible)}
+              onClick={handleDevelopmentViewToggle}
             >
               {showDevelopmentTools ? "Dev view" : "Prod view"}
             </button>
@@ -2218,6 +2240,7 @@ export default function App() {
           activeView={activeView}
           onChange={setActiveView}
           coachBusy={coachBusy}
+          showDevelopmentItems={showDevelopmentTools}
           appLogo={appLogo}
           expanded={sidebarExpanded}
           onExpandedChange={setSidebarExpanded}
@@ -2411,6 +2434,14 @@ export default function App() {
                   onLoadDetail={handleTrainingHubActivityDetail}
                   onExportFile={handleTrainingHubExport}
                 />
+              </Suspense>
+            ) : null}
+            {IS_DEVELOPMENT_BUILD &&
+            showDevelopmentTools &&
+            LazyGearView &&
+            activeView === "gear" ? (
+              <Suspense fallback={<DeferredSurfaceFallback label="gear" />}>
+                <LazyGearView api={api} />
               </Suspense>
             ) : null}
             {activeView === "library" ? (

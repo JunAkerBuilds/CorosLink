@@ -127,6 +127,8 @@ import {
   logoutCorosWatchfaces,
   listCorosWatchfaceProjects,
   publishCorosWatchface,
+  queryCorosGear,
+  saveCorosGear,
   saveCorosWatchfaceProject,
   deleteCorosWatchfaceProject,
   selectCorosWatchfaceArchive
@@ -215,6 +217,7 @@ import type {
   CorosWatchfaceThemeDownloadInput,
   CorosWatchfaceThemeListInput,
   CorosBatteryQueryInput,
+  CorosGearSaveInput,
   CorosBluetoothDeviceChoice,
   WatchTransferProgress
 } from "./types";
@@ -865,6 +868,14 @@ function registerIpcHandlers(): void {
     "watchfaces:getBatteryReport",
     (_event, input: CorosBatteryQueryInput) => getCorosBatteryReport(input)
   );
+
+  if (!app.isPackaged) {
+    ipcMain.handle("gear:query", () => queryCorosGear());
+    ipcMain.handle(
+      "gear:save",
+      (_event, input: CorosGearSaveInput) => saveCorosGear(input)
+    );
+  }
 
   ipcMain.handle(
     "watchfaces:listThemes",

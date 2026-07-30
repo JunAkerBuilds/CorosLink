@@ -1,14 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Star } from "lucide-react";
-import { PRIMARY_NAV_ITEMS, type PrimaryView } from "../navigation/primaryNav";
+import {
+  type PrimaryView,
+  visiblePrimaryNavItems,
+} from "../navigation/primaryNav";
 import { getPrimaryViewLabel } from "../navigation/startupView";
 
 interface StartupViewMenuProps {
   value: PrimaryView;
   onChange: (view: PrimaryView) => void;
+  showDevelopmentItems?: boolean;
 }
 
-export function StartupViewMenu({ value, onChange }: StartupViewMenuProps) {
+export function StartupViewMenu({
+  value,
+  onChange,
+  showDevelopmentItems = false,
+}: StartupViewMenuProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const activeLabel = getPrimaryViewLabel(value);
@@ -55,7 +63,7 @@ export function StartupViewMenu({ value, onChange }: StartupViewMenuProps) {
         <div className="startup-view-popover" role="menu">
           <p className="update-settings-heading">Startup view</p>
           <div className="startup-view-options">
-            {PRIMARY_NAV_ITEMS.filter(
+            {visiblePrimaryNavItems(showDevelopmentItems).filter(
               (item) => !item.excludeFromStartup,
             ).map(({ id, label, icon: Icon, beta }) => {
               const active = id === value;

@@ -3,19 +3,22 @@ import {
   Copy,
   Download,
   Heart,
+  History,
+  Layers,
   LayoutGrid,
   Link2,
   List,
   LoaderCircle,
   Pencil,
   Plus,
+  Route,
   Search,
   Tag,
   Trash2,
   Unlink,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   RunWorkoutEditorNode,
   TrainingCollection,
@@ -25,9 +28,9 @@ import type {
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { formatHappenDayLabel } from "../training/formatters";
-import { sportColorCategory } from "../training/sportColors";
 import { formatWorkoutSport } from "../../electron/workoutCapabilities";
 import { workoutSportFromType } from "../../electron/trainingPlanDomain";
+import { SportBadge, sportAccentStyle, sportChipStyle, sportTheme } from "./sportTheme";
 import { SelectDropdown } from "../components/SelectDropdown";
 import { WorkoutEditorModal } from "../calendar/WorkoutEditorModal";
 import { AddWorkoutModal } from "../calendar/AddWorkoutModal";
@@ -65,6 +68,15 @@ const WORKOUT_SORT_OPTIONS: Array<{ value: WorkoutColumn; label: string }> = [
 const UNSETTLED_SYNC = new Set(["pending", "conflicted", "failed", "stale"]);
 /** Enough segments to read an interval comb without drawing thousands of them. */
 const SHAPE_SEGMENT_LIMIT = 96;
+/*
+ * A tile's shape needs the step list, and COROS only ships that on
+ * /training/program/detail — one request per workout. So tiles ask for it only
+ * once they scroll into view, a few at a time, and never twice for the same
+ * workout. Browsing the library costs a handful of requests, not sixty.
+ */
+const SHAPE_BATCH = 3;
+/** Draws the comb a beat before the tile lands, so it is never seen filling in. */
+const SHAPE_PREFETCH_MARGIN = "160px";
 
 /** Legend wording for the step kinds the shape bar can draw, in session order. */
 const STEP_KIND_LABELS: Record<string, string> = {
@@ -93,6 +105,25 @@ function tomorrow(): string {
   const date = new Date();
   date.setDate(date.getDate() + 1);
   return date.toISOString().slice(0, 10);
+}
+
+/** How long ago a workout was last scheduled, short enough for a tile footer. */
+function sinceLabel(iso: string | undefined): string | null {
+  if (!iso) return null;
+  const then = new Date(iso).valueOf();
+  if (Number.isNaN(then)) return null;
+  const days = Math.max(0, Math.round((Date.now() - then) / 86_400_000));
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days}d ago`;
+  if (days < 60) return `${Math.round(days / 7)}w ago`;
+  if (days < 365) return `${Math.round(days / 30)}mo ago`;
+  return `${Math.round(days / 365)}y ago`;
+}
+
+/** COROS reports volume as a distance or a set count; the icon says which. */
+function isSetVolume(volume: string | undefined): boolean {
+  return /set/i.test(volume ?? "");
 }
 
 function targetLabel(node: RunWorkoutEditorNode): string {
@@ -157,6 +188,25 @@ function workoutShape(nodes: RunWorkoutEditorNode[]): ShapeSegment[] {
   return segments.map((segment) => ({ ...segment, share: (segment.share / total) * 100 }));
 }
 
+/*
+ * The calendar's structure bar sizes its segments by flex-grow and floors the
+ * tiny ones, so a 20-second recovery between reps never collapses to nothing.
+ * The tile borrows the rule outright — the two bars should read as one idea.
+ */
+function combGrow(segments: ShapeSegment[]): number[] {
+  const largest = Math.max(0, ...segments.map((segment) => segment.share));
+  if (largest <= 0) return segments.map(() => 1);
+  const floor = largest * 0.035;
+  return segments.map((segment) => Math.max(segment.share, floor));
+}
+
+/*
+ * Past this many steps the gapped pills stop fitting a tile's width, so the
+ * comb closes up into a striped band instead of overflowing. A 20 × 30s set
+ * genuinely looks like that.
+ */
+const COMB_DENSE_AT = 30;
+
 function downloadSelection(workouts: TrainingLibraryWorkout[]) {
   const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), workouts }, null, 2)], {
     type: "application/json"
@@ -193,6 +243,12 @@ export function WorkoutWorkspace({
   const [pendingDelete, setPendingDelete] = useState<string[]>([]);
   const [duplicateSport, setDuplicateSport] = useState<number | undefined>();
   const [creating, setCreating] = useState(false);
+  /** Step structure per workout id; an empty array means "asked, none to draw". */
+  const [shapes, setShapes] = useState<Record<string, ShapeSegment[]>>({});
+  const [shapeQueue, setShapeQueue] = useState<string[]>([]);
+  const requestedShapes = useRef(new Set<string>());
+  const shapeBusy = useRef(false);
+  const shapeObserver = useRef<IntersectionObserver | null>(null);
 
   const scopes = useMemo(() => {
     const options = [{ id: "all", label: "All" }];
@@ -244,6 +300,93 @@ export function WorkoutWorkspace({
     });
   }, [workouts, query, scope, sort]);
 
+  /*
+   * The tile meter is self-referential: a bar reads as a share of the heaviest
+   * workout in the library, so it stays honest without asserting thresholds
+   * COROS never publishes. The whole library, not the filtered set, so the bars
+   * do not resize under the reader when a filter changes.
+   */
+  const heaviestLoad = useMemo(
+    () => workouts.reduce((most, workout) => Math.max(most, workout.trainingLoad ?? 0), 0),
+    [workouts]
+  );
+
+  /*
+   * The observer is built on the first tile that mounts rather than in an
+   * effect, so the tiles already on screen at first paint are watched too.
+   */
+  const observeTile = useCallback((node: HTMLLIElement | null) => {
+    if (!node) return;
+    if (!shapeObserver.current) {
+      shapeObserver.current = new IntersectionObserver(
+        (entries, observer) => {
+          const seen: string[] = [];
+          for (const entry of entries) {
+            const id = entry.isIntersecting ? (entry.target as HTMLElement).dataset.workoutId : null;
+            if (!id || requestedShapes.current.has(id)) continue;
+            requestedShapes.current.add(id);
+            seen.push(id);
+            observer.unobserve(entry.target);
+          }
+          if (seen.length) setShapeQueue((current) => [...current, ...seen]);
+        },
+        { rootMargin: SHAPE_PREFETCH_MARGIN }
+      );
+    }
+    shapeObserver.current.observe(node);
+  }, []);
+
+  useEffect(
+    () => () => {
+      shapeObserver.current?.disconnect();
+      shapeObserver.current = null;
+    },
+    []
+  );
+
+  /* One batch in flight at a time; finishing it trims the queue and re-runs. */
+  useEffect(() => {
+    if (shapeBusy.current || !shapeQueue.length) return;
+    shapeBusy.current = true;
+    const batch = shapeQueue.slice(0, SHAPE_BATCH);
+    let cancelled = false;
+
+    void Promise.all(
+      batch.map(async (id) => {
+        let segments: ShapeSegment[] = [];
+        try {
+          const document = await api.getWorkoutForEdit({ kind: "library", programId: id }, "metric");
+          segments = workoutShape(document.draft.nodes);
+        } catch {
+          /* A tile that cannot draw its shape falls back to its load bar. */
+        }
+        if (!cancelled) setShapes((current) => ({ ...current, [id]: segments }));
+      })
+    ).finally(() => {
+      shapeBusy.current = false;
+      if (!cancelled) setShapeQueue((current) => current.slice(batch.length));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [api, shapeQueue]);
+
+  /*
+   * An edit rewrites one workout's steps. Queue that id directly rather than
+   * waiting on the observer — the tile is already on screen and will not cross
+   * the viewport edge again to announce itself.
+   */
+  const redrawShape = useCallback((id: string) => {
+    setShapes((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    requestedShapes.current.add(id);
+    setShapeQueue((current) => (current.includes(id) ? current : [...current, id]));
+  }, []);
+
   const active = workouts.find((workout) => workout.id === activeId);
   const shape = useMemo(
     () => (previewDocument ? workoutShape(previewDocument.draft.nodes) : []),
@@ -270,6 +413,9 @@ export function WorkoutWorkspace({
       .then(async (document) => {
         if (cancelled) return;
         setPreviewDocument(document);
+        /* The reader just paid for this workout's steps; its tile draws for free. */
+        requestedShapes.current.add(activeId);
+        setShapes((current) => ({ ...current, [activeId]: workoutShape(document.draft.nodes) }));
         try {
           const metrics = await api.previewWorkoutEdit(
             document.ref,
@@ -414,6 +560,8 @@ export function WorkoutWorkspace({
   const readerLoadSource = previewMetrics?.trainingLoad || active?.trainingLoad;
   const readerLoad = readerLoadSource ? Math.round(readerLoadSource) : null;
   const readerSteps = previewDocument?.draft.nodes.length ?? null;
+  const activeSport = workoutSportFromType(active?.sportType);
+  const ActiveSportIcon = sportTheme(activeSport).icon;
 
   return (
     <div className="tl-panel tl-split">
@@ -514,6 +662,16 @@ export function WorkoutWorkspace({
             {filtered.slice(0, visibleCount).map((workout) => {
               const isSelected = selected.includes(workout.id);
               const references = workout.usedByPlanIds.length + workout.scheduledCount;
+              const sport = workoutSportFromType(workout.sportType);
+              const SportGlyph = sportTheme(sport).icon;
+              const VolumeIcon = isSetVolume(workout.volume) ? Layers : Route;
+              const load = workout.trainingLoad ? Math.round(workout.trainingLoad) : null;
+              /* A sliver of fill so the lightest session still draws something. */
+              const loadShare = load && heaviestLoad ? Math.max(3, (load / heaviestLoad) * 100) : 0;
+              const lastUsed = sinceLabel(workout.lastUsedAt);
+              const tags = workout.tags.slice(0, 3);
+              const tileShape = shapes[workout.id];
+              const hasShape = Boolean(tileShape?.length);
 
               return (
                 <li
@@ -521,6 +679,10 @@ export function WorkoutWorkspace({
                     isSelected ? " is-selected" : ""
                   }`}
                   key={workout.id}
+                  ref={observeTile}
+                  data-workout-id={workout.id}
+                  data-accent={sport ?? "other"}
+                  style={sportAccentStyle(sport)}
                 >
                   {workoutMark(workout.id, workout.name, isSelected)}
                   <button
@@ -528,31 +690,88 @@ export function WorkoutWorkspace({
                     className="tl-card-open"
                     onClick={() => setActiveId(workout.id)}
                   >
+                    <SportGlyph className="tl-wk-glyph" size={132} strokeWidth={1} aria-hidden="true" />
                     <span className="tl-card-top">
                       {workout.favorite ? (
                         <Heart size={11} fill="currentColor" strokeWidth={0} aria-label="Favorite" />
                       ) : null}
-                      <em>{formatWorkoutSport(workoutSportFromType(workout.sportType) ?? "run")}</em>
+                      <SportBadge sport={sport ?? "run"} />
                       {UNSETTLED_SYNC.has(workout.syncState) ? (
                         <i className="tl-flag">{workout.syncState}</i>
                       ) : null}
                     </span>
                     <span className="tl-card-name">{workout.name}</span>
-                    <span className="tl-card-figs">
+                    {tags.length ? (
+                      <span className="tl-wk-tags">
+                        {tags.map((tag) => (
+                          <em key={tag}>{tag}</em>
+                        ))}
+                        {workout.tags.length > tags.length ? (
+                          <em className="is-more">+{workout.tags.length - tags.length}</em>
+                        ) : null}
+                      </span>
+                    ) : null}
+                    <span className="tl-wk-meter">
+                      <span className="tl-wk-meter-head">
+                        <small>{hasShape ? "Session shape" : "Training load"}</small>
+                        <span className="tl-wk-load">
+                          <b className={load ? "" : "is-nil"}>{load ?? "—"}</b>
+                          <em>load</em>
+                        </span>
+                      </span>
+                      {hasShape ? (
+                        <span
+                          className="tl-wk-shape"
+                          data-dense={tileShape.length > COMB_DENSE_AT ? "true" : undefined}
+                          role="img"
+                          aria-label={`Workout structure: ${tileShape
+                            .map((segment) => segment.label)
+                            .join(", ")}`}
+                        >
+                          {combGrow(tileShape).map((grow, index) => (
+                            <i
+                              key={index}
+                              className={`is-${tileShape[index].kind}`}
+                              style={{ flexGrow: grow }}
+                              title={tileShape[index].label}
+                            />
+                          ))}
+                        </span>
+                      ) : (
+                        <span
+                          className={`tl-wk-track${load ? "" : " is-nil"}`}
+                          aria-hidden="true"
+                          title={
+                            load
+                              ? `${load} training load — ${Math.round((load / heaviestLoad) * 100)}% of the heaviest workout in your library`
+                              : "COROS has not reported a training load for this workout"
+                          }
+                        >
+                          {load ? <i style={{ width: `${loadShare}%` }} /> : null}
+                        </span>
+                      )}
+                    </span>
+                    <span className="tl-wk-foot">
                       <span>
-                        <b className={workout.volume ? "" : "is-nil"}>{workout.volume ?? "—"}</b>
-                        <small>total</small>
+                        <VolumeIcon size={11} aria-hidden="true" />
+                        <b>{workout.volume ?? "No volume"}</b>
                       </span>
                       <span>
-                        <b className={workout.trainingLoad ? "" : "is-nil"}>
-                          {workout.trainingLoad ? Math.round(workout.trainingLoad) : "—"}
-                        </b>
-                        <small>load</small>
+                        <Link2 size={11} aria-hidden="true" />
+                        {references ? (
+                          <>
+                            <b>{references}</b> {references === 1 ? "use" : "uses"}
+                          </>
+                        ) : (
+                          "Unused"
+                        )}
                       </span>
-                      <span>
-                        <b className={references ? "" : "is-nil"}>{references || "—"}</b>
-                        <small>used</small>
-                      </span>
+                      {lastUsed ? (
+                        <span>
+                          <History size={11} aria-hidden="true" />
+                          {lastUsed}
+                        </span>
+                      ) : null}
                     </span>
                   </button>
                 </li>
@@ -600,10 +819,8 @@ export function WorkoutWorkspace({
               {filtered.slice(0, visibleCount).map((workout) => {
                 const isSelected = selected.includes(workout.id);
                 const references = workout.usedByPlanIds.length + workout.scheduledCount;
-                const details = [
-                  formatWorkoutSport(workoutSportFromType(workout.sportType) ?? "run"),
-                  ...workout.tags.slice(0, 2)
-                ];
+                const sport = workoutSportFromType(workout.sportType);
+                const details = workout.tags.slice(0, 2);
 
                 return (
                   <li
@@ -611,6 +828,8 @@ export function WorkoutWorkspace({
                       isSelected ? " is-selected" : ""
                     }`}
                     key={workout.id}
+                    data-accent={sport ?? "other"}
+                    style={sportAccentStyle(sport)}
                   >
                     {workoutMark(workout.id, workout.name, isSelected)}
                     <button type="button" className="tl-row-open" onClick={() => setActiveId(workout.id)}>
@@ -621,6 +840,7 @@ export function WorkoutWorkspace({
                         {workout.name}
                       </span>
                       <span className="tl-row-sub">
+                        <SportBadge sport={sport ?? "run"} compact />
                         {details.map((detail, index) => (
                           <em key={index}>{detail}</em>
                         ))}
@@ -664,11 +884,9 @@ export function WorkoutWorkspace({
           <>
             <div className="tl-reader-scroll">
               <header>
-                <p
-                  className="tl-eyebrow tl-reader-sport"
-                  data-sport={sportColorCategory(active.sportType)}
-                >
-                  {formatWorkoutSport(workoutSportFromType(active.sportType) ?? "run")}
+                <p className="tl-eyebrow tl-reader-sport has-icon" style={sportChipStyle(activeSport)}>
+                  <ActiveSportIcon size={12} strokeWidth={2.2} aria-hidden="true" />
+                  {formatWorkoutSport(activeSport ?? "run")}
                 </p>
                 <h2>{active.name}</h2>
                 {active.tags.length ? (
@@ -715,14 +933,18 @@ export function WorkoutWorkspace({
             </dl>
 
             {shape.length ? (
-              <figure className="tl-shape">
-                <div role="img" aria-label={`Step structure of ${active.name}, ${shape.length} steps`}>
-                  {shape.map((segment, index) => (
+              <figure className="tl-shape" style={sportAccentStyle(activeSport)}>
+                <div
+                  role="img"
+                  data-dense={shape.length > COMB_DENSE_AT ? "true" : undefined}
+                  aria-label={`Step structure of ${active.name}, ${shape.length} steps`}
+                >
+                  {combGrow(shape).map((grow, index) => (
                     <span
                       key={index}
-                      className={`is-${segment.kind}`}
-                      style={{ width: `${segment.share}%` }}
-                      title={segment.label}
+                      className={`is-${shape[index].kind}`}
+                      style={{ flexGrow: grow }}
+                      title={shape[index].label}
                     />
                   ))}
                 </div>
@@ -937,6 +1159,7 @@ export function WorkoutWorkspace({
           editRef={{ kind: "library", programId: editId }}
           onClose={() => setEditId(null)}
           onSaved={(result) => {
+            redrawShape(editId);
             setEditId(null);
             onMessage(result.verified ? "Workout saved and verified." : (result.warning ?? "Workout saved."));
             void onRefresh();

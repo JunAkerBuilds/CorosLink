@@ -6,9 +6,11 @@
  * panels over ambient accent washes, one segmented control for the sections,
  * and the accent gradient reserved for moments of emphasis.
  *
- * The dark theme is layered charcoal, never pure black, and the gate shares
- * the same ground. The accent stays the app's signature green; red and
- * yellow stay reserved for danger and caution.
+ * The library is layered charcoal, never pure black — in *both* app themes.
+ * It is the one surface that does not follow the paper reskin: a dark room
+ * for the training record. The gate shares the same ground. The accent stays
+ * the app's signature green; red and yellow stay reserved for danger and
+ * caution.
  *
  * Only one thing is ever drawn — the ridge of weekly training load (Ridge.tsx),
  * small on an index row and at reading size on the adherence lede. It keeps to
@@ -18,9 +20,9 @@
  * settle, then ridges draw themselves. Everything sits under
  * prefers-reduced-motion, which the guard at the end of this file honours.
  *
- * Values derive from the app tokens in styles.css, so both themes reskin this
- * file by overriding tokens rather than restyling rules. Token blocks follow
- * the root: charcoal for the dark theme, and warm shadows for paper.
+ * Values derive from the app tokens in styles.css. The charcoal block below
+ * pins the dark token set on the view itself, so the paper theme's light
+ * values never reach the ledger.
  */
 
 .training-library-view {
@@ -62,73 +64,71 @@
 }
 
 /*
- * Charcoal, dark theme only. The dark theme is the *absence* of a data-theme
- * attribute (see theme.ts applyTheme), so this cannot leak into paper.
+ * Charcoal, always — the library is a dark room in both app themes.
  *
- * It works by overriding the app tokens rather than inventing new ones, which
- * is how the paper theme reskins too: everything downstream — this file, plus
- * shared pieces like .app-select and .primary-button — follows for free. The
- * modals the workspace opens render inside the view, so they inherit all of
- * this without a rule of their own.
+ * It works by pinning the dark token set on the view itself rather than
+ * inventing new tokens: everything downstream — this file, plus shared
+ * pieces like .app-select and .primary-button — follows for free. The
+ * pinned set is the dark theme's palette from styles.css, so the paper
+ * theme's light values (darkened accent, brown-tinted shadows, white
+ * glass) never reach the ledger. The modals the editor renders inline
+ * inherit all of this without a rule of their own.
  *
  * The gate shares the block so the connect screen sits on the same charcoal.
  */
-:root:not([data-theme]) .training-library-view,
-:root:not([data-theme]) .training-library-gate {
+.training-library-view,
+.training-library-gate {
+  color-scheme: dark;
+
   --tl-ground: #16171b;
   --tl-panel-bg: #1d1f25;
   --tl-card: #23262e;
   --tl-card-hover: #2b2f38;
   --tl-reader-bg: #1a1c21;
 
+  --bg-base: #16171b;
+  --bg-ambient-green: rgba(47, 190, 145, 0.1);
+  --bg-ambient-teal: rgba(31, 182, 166, 0.07);
+  --bg-ambient-gold: rgba(216, 155, 34, 0.04);
+  --bg-ambient-white: rgba(255, 255, 255, 0.035);
+
   --surface: #23262e;
   --glass-bg: rgba(255, 255, 255, 0.04);
   --glass-bg-hover: rgba(255, 255, 255, 0.07);
   --glass-bg-elevated: rgba(255, 255, 255, 0.09);
   --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 
   --text-primary: #edeef0;
   --text-secondary: #a9adb2;
   --text-muted: #7b8085;
 
+  --accent: #2fbe91;
+  --accent-strong: #4fd6a6;
+  --accent-2: #1fb6a6;
+  --accent-hover: #26a37c;
+  --accent-glow: rgba(47, 190, 145, 0.32);
+  --accent-soft: rgba(47, 190, 145, 0.12);
+  --accent-gradient: linear-gradient(135deg, #2fbe91 0%, #1fb6a6 100%);
+  --accent-gold: #d89b22;
+
+  --success-bg: rgba(47, 190, 145, 0.15);
+  --success-border: rgba(110, 231, 168, 0.28);
+  --success-text: #6ee7a8;
+  --success-dot: #34d399;
+
+  --warning-bg: rgba(216, 155, 34, 0.15);
+  --warning-border: rgba(251, 191, 36, 0.25);
+  --warning-text: #fbbf24;
+
+  --error-bg: rgba(194, 65, 12, 0.15);
+  --error-border: rgba(248, 113, 113, 0.25);
+  --error-text: #f87171;
+  --error-dot: #f87171;
+
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28), 0 14px 32px rgba(0, 0, 0, 0.26);
   --shadow-elevated: 0 20px 44px rgba(0, 0, 0, 0.42);
-}
-
-/* Crisp white tiles read better than translucent ones on the warm paper panel. */
-:root[data-theme="paper"] .training-library-view {
-  --tl-card: #ffffff;
-  --tl-card-hover: #fffdf9;
-}
-
-/* Black-alpha shadows go warm on paper, matching the theme's brown tints. */
-:root[data-theme="paper"] .tl-card {
-  box-shadow:
-    0 1px 2px rgba(60, 50, 35, 0.05),
-    0 10px 26px rgba(60, 50, 35, 0.07);
-}
-
-:root[data-theme="paper"] .tl-card:hover {
-  box-shadow:
-    0 2px 4px rgba(60, 50, 35, 0.06),
-    0 18px 38px rgba(60, 50, 35, 0.11),
-    0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent);
-}
-
-:root[data-theme="paper"] .tl-card.is-selected,
-:root[data-theme="paper"] .tl-card.is-active {
-  box-shadow:
-    0 1px 2px rgba(60, 50, 35, 0.05),
-    0 12px 28px rgba(60, 50, 35, 0.09),
-    0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent);
-}
-
-:root[data-theme="paper"] .training-library-view .ghost-button:hover:not(:disabled) {
-  box-shadow: 0 4px 14px rgba(60, 50, 35, 0.1);
-}
-
-:root[data-theme="paper"] .plan-week {
-  box-shadow: 0 1px 2px rgba(60, 50, 35, 0.05), 0 8px 22px rgba(60, 50, 35, 0.07);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .training-library-view :is(button, input, select, textarea) {
@@ -939,6 +939,116 @@
   font-weight: 500;
 }
 
+/*
+ * Sport identity chips. --tl-sport is set inline from sportTheme, so the
+ * customizable --sport-* tokens reach every badge, dot, and icon.
+ */
+.tl-sport-badge {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  padding: 2.5px 8px;
+  border: 1px solid color-mix(in srgb, var(--tl-sport, var(--accent)) 34%, transparent);
+  border-radius: var(--radius-pill);
+  color: color-mix(in srgb, var(--tl-sport, var(--accent-strong)) 82%, var(--text-primary));
+  background: color-mix(in srgb, var(--tl-sport, var(--accent)) 10%, transparent);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  line-height: 1.5;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tl-sport-badge svg {
+  flex: none;
+  color: var(--tl-sport, var(--accent));
+}
+
+.tl-sport-badge > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Dense rows keep the colour and the icon but drop the pill chrome. */
+.tl-sport-badge.is-compact {
+  padding: 0;
+  border: 0;
+  color: color-mix(in srgb, var(--tl-sport, var(--accent)) 74%, var(--text-secondary));
+  background: none;
+  font-size: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-transform: none;
+}
+
+/* One mini icon chip per sport — plan mixes, editor entries, pickers. */
+.tl-sport-dots {
+  display: inline-flex;
+  min-width: 0;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.tl-sport-dot {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--tl-sport, var(--accent)) 30%, transparent);
+  border-radius: 50%;
+  color: var(--tl-sport, var(--accent));
+  background: color-mix(in srgb, var(--tl-sport, var(--accent)) 10%, transparent);
+}
+
+.tl-sport-dots > b {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* Provenance labels: colour says where a plan came from. */
+.tl-source {
+  font-style: normal;
+}
+
+.tl-source[data-source="coros"] {
+  color: var(--accent-strong);
+}
+
+.tl-source[data-source="coach"] {
+  color: #c084fc;
+}
+
+.tl-source[data-source="template"] {
+  color: #eab308;
+}
+
+.tl-source[data-source="local"] {
+  color: var(--text-secondary);
+}
+
+/* On tiles the source gets a dot; list rows keep their "·" separators. */
+.tl-card-top .tl-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.tl-card-top .tl-source::before {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
 .tl-fig.is-quiet {
   color: var(--text-muted);
   font-size: 12px;
@@ -1292,20 +1402,376 @@
   }
 }
 
-/* Workout tiles carry no weekly data, so they stay shorter and text-only. */
+/* ------------------------------------------------------- Workout tiles */
+
+/*
+ * A plan tile draws its ridge; a workout tile draws its load meter — one
+ * figure each, and nothing else on the tile is drawn. The meter reads as a
+ * share of the heaviest workout in the library, filled in the sport's own
+ * hue, so a grid of tiles sorts itself into light and heavy days by bar
+ * length alone. Everything below it is provenance: how much, how often, and
+ * how long since the session was last used.
+ *
+ * Tracks auto-fill rather than a fixed four, so the tiles keep a readable
+ * width when the reader takes its 392px and when it collapses away.
+ */
 .tl-catalog .tl-grid {
-  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
-}
+  --tl-tile: #131418;
+  --tl-tile-hover: #191b20;
 
-.tl-catalog .tl-card {
-  min-height: 120px;
-}
-
-/* With no ridge to push them down, the figures take the auto margin instead so
-   they still land on the tile floor when a name wraps to two lines. */
-.tl-catalog .tl-card-figs {
+  grid-template-columns: repeat(auto-fill, minmax(246px, 1fr));
   gap: 14px;
+  padding: 18px;
+}
+
+/*
+ * The tile is a dark plate, sunk below the panel rather than raised over it:
+ * near-black charcoal, one hairline, and no accent stripe, wash, or glow. All
+ * the colour a tile carries is the sport's, and only where the sport is the
+ * information — the badge, the load bar, the glyph behind them.
+ */
+.tl-catalog .tl-card {
+  min-height: 190px;
+  border-color: var(--tl-rule-soft);
+  background: var(--tl-tile);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.028),
+    0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* ::before is the accent wash, ::after the sport stripe. Neither survives. */
+.tl-catalog .tl-card::before,
+.tl-catalog .tl-card[data-accent]::before,
+.tl-catalog .tl-card[data-accent]::after {
+  content: none;
+}
+
+.tl-catalog .tl-card:hover,
+.tl-catalog .tl-card[data-accent]:hover {
+  border-color: color-mix(in srgb, var(--text-muted) 48%, transparent);
+  background: var(--tl-tile-hover);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 2px 5px rgba(0, 0, 0, 0.34),
+    0 14px 30px rgba(0, 0, 0, 0.28);
+  transform: translateY(-2px);
+}
+
+/* Reading and selection read as light on the edge, never as hue. */
+.tl-catalog .tl-card.is-active,
+.tl-catalog .tl-card[data-accent].is-active {
+  border-color: color-mix(in srgb, var(--text-primary) 40%, transparent);
+  background: var(--tl-tile-hover);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 0 1px color-mix(in srgb, var(--text-primary) 14%, transparent),
+    0 2px 5px rgba(0, 0, 0, 0.32);
+}
+
+.tl-catalog .tl-card.is-selected,
+.tl-catalog .tl-card[data-accent].is-selected {
+  border-color: color-mix(in srgb, var(--text-primary) 58%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 0 1px color-mix(in srgb, var(--text-primary) 24%, transparent),
+    0 2px 5px rgba(0, 0, 0, 0.32);
+}
+
+.tl-catalog .tl-card-open {
+  gap: 9px;
+  padding: 15px 16px 14px;
+}
+
+/* Everything on the tile sits over the sport glyph behind it. */
+.tl-catalog .tl-card-open > :not(.tl-wk-glyph) {
+  position: relative;
+  z-index: 1;
+}
+
+.tl-catalog .tl-card-name {
+  font-size: 16.5px;
+  line-height: 1.24;
+}
+
+/* Centred on the sport badge opposite it, not on the tile corner. */
+.tl-catalog .tl-card > .tl-mark {
+  top: 17px;
+  right: 16px;
+}
+
+/*
+ * The sport's own icon at reading size, cropped by the tile corner: sport
+ * recognition from the corner of the eye, held at an alpha that never
+ * competes with the name or the meter. The mask fades it out towards the
+ * text, so a busy glyph — the dumbbell, the swimmer — never reads as noise
+ * behind the footer.
+ */
+.tl-wk-glyph {
+  position: absolute;
+  right: -30px;
+  bottom: -24px;
+  z-index: 0;
+  color: var(--tl-sport-accent, var(--accent));
+  opacity: 0.09;
+  pointer-events: none;
+  mask-image: radial-gradient(circle at 78% 78%, #000, transparent 72%);
+  transition:
+    opacity 260ms var(--tl-ease-out),
+    transform 320ms var(--tl-ease-out);
+}
+
+.tl-card:hover .tl-wk-glyph,
+.tl-card.is-active .tl-wk-glyph {
+  opacity: 0.15;
+  transform: translate(-5px, -5px);
+}
+
+.tl-wk-tags {
+  display: flex;
+  min-width: 0;
+  max-height: 20px;
+  flex-wrap: wrap;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.tl-wk-tags em {
+  padding: 1.5px 7px;
+  border: 1px solid var(--tl-rule-soft);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.tl-wk-tags em.is-more {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
+/* The auto margin lands the meter and the footer on the tile floor, so bars
+   line up across a row however far a name wraps. */
+.tl-wk-meter {
+  display: flex;
+  flex-direction: column;
   margin-top: auto;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.tl-wk-meter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tl-wk-meter-head small {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tl-wk-meter-head b {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.tl-wk-meter-head b.is-nil {
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.tl-wk-load {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.tl-wk-load em {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/*
+ * The session drawn as it is run: one segment per step, sized by how long the
+ * step lasts, repeats expanded so an interval set reads as a comb.
+ *
+ * This is the calendar's structure bar (.sched-bar in styles.css), brought
+ * over intact — same framed track, same 2px gaps and rounded pills, same
+ * phase hues, same hatched rest. The two views show the same thing, so they
+ * should look like the same thing. Only the height and the work colour differ:
+ * the tile is shorter, and work takes the tile's own sport accent.
+ */
+.tl-wk-shape {
+  --step-warmup: #f0a72e;
+  --step-rest: #9099aa;
+  --step-cooldown: #27c2e5;
+  --step-sendoff: #b48cff;
+
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 22px;
+  padding: 3px;
+  border: 1px solid var(--tl-rule-soft);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.028);
+  animation: tl-wk-fill 460ms var(--tl-ease-out) backwards;
+  transform-origin: left;
+}
+
+.tl-wk-shape i {
+  min-width: 4px;
+  flex-basis: 0;
+  border-radius: 3px;
+  background: var(--tl-sport-accent, var(--accent));
+  transition: filter 150ms ease;
+}
+
+/* A long interval set has more steps than a tile has pixels for pills, so the
+   comb closes up and reads as a striped band instead of overflowing. */
+.tl-wk-shape[data-dense] {
+  gap: 1px;
+  padding: 2px;
+}
+
+.tl-wk-shape[data-dense] i {
+  min-width: 1px;
+  border-radius: 1px;
+}
+
+/*
+ * Warm-up and cool-down keep the calendar's hues but sit back a step in value.
+ * At tile size hue alone is not enough to separate them from the work blocks:
+ * the bike accent (#e6b800) and the warm-up amber (#f0a72e) are near neighbours,
+ * as are the trail blue and the cool-down cyan. Recessing the framing phases
+ * keeps work reading as work whatever sport the tile is.
+ */
+.tl-wk-shape i.is-warmup {
+  background: color-mix(in srgb, var(--step-warmup) 68%, transparent);
+}
+
+.tl-wk-shape i.is-training {
+  background: var(--tl-sport-accent, var(--accent));
+}
+
+.tl-wk-shape i.is-cooldown {
+  background: color-mix(in srgb, var(--step-cooldown) 68%, transparent);
+}
+
+.tl-wk-shape i.is-sendOff {
+  background: var(--step-sendoff);
+}
+
+.tl-wk-shape i.is-rest {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--step-rest) 62%, transparent) 0 4px,
+    color-mix(in srgb, var(--step-rest) 28%, transparent) 4px 8px
+  );
+}
+
+.tl-wk-shape i:hover,
+.tl-card:hover .tl-wk-shape i {
+  filter: brightness(1.18);
+}
+
+/*
+ * The load bar stands in until the steps arrive — same frame, same height, so
+ * the tile never reflows when the comb replaces it. Workouts COROS gives no
+ * structure for keep it for good.
+ */
+.tl-wk-track {
+  display: block;
+  height: 22px;
+  padding: 3px;
+  border: 1px solid var(--tl-rule-soft);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.028);
+}
+
+/* A hatched fill says COROS reported no load, which is not the same as none. */
+.tl-wk-track.is-nil {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--text-muted) 26%, transparent) 0 4px,
+      transparent 4px 8px
+    ),
+    rgba(255, 255, 255, 0.028);
+}
+
+.tl-wk-track i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--tl-sport-accent, var(--accent)) 78%, transparent);
+  transform-origin: left;
+  animation: tl-wk-fill 560ms var(--tl-ease-out) backwards;
+  transition: filter 200ms ease;
+}
+
+.tl-card:hover .tl-wk-track i {
+  filter: brightness(1.16) saturate(1.08);
+}
+
+@keyframes tl-wk-fill {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.tl-wk-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--tl-rule-soft);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.tl-wk-foot > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-wk-foot svg {
+  flex: none;
+  opacity: 0.7;
+}
+
+.tl-wk-foot b {
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 /* -------------------------------------------------------- Layout switch */
@@ -1410,6 +1876,85 @@
 
 .tl-row:hover .tl-ridge-bar.is-peak {
   filter: brightness(1.1);
+}
+
+/*
+ * Sport accent. A tile or row with [data-accent] carries --tl-sport-accent
+ * inline (see sportTheme): the tile borrows the sport's hue for its top
+ * stripe, hover glow, and load ridge; the row gets a quiet leading edge.
+ * Grey session-count ridges stay grey so they are never mistaken for load.
+ */
+.tl-card[data-accent]::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2.5px;
+  background: linear-gradient(90deg, var(--tl-sport-accent), color-mix(in srgb, var(--tl-sport-accent) 22%, transparent));
+  content: "";
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.tl-card[data-accent]::before {
+  background:
+    radial-gradient(ellipse 120% 70% at 50% -18%, color-mix(in srgb, var(--tl-sport-accent) 14%, transparent), transparent 62%);
+}
+
+.tl-card[data-accent]:hover {
+  border-color: color-mix(in srgb, var(--tl-sport-accent) 42%, var(--glass-border));
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.18),
+    0 18px 38px rgba(0, 0, 0, 0.2),
+    0 0 0 1px color-mix(in srgb, var(--tl-sport-accent) 14%, transparent),
+    0 10px 30px color-mix(in srgb, var(--tl-sport-accent) 12%, transparent);
+}
+
+.tl-card[data-accent].is-selected {
+  border-color: color-mix(in srgb, var(--tl-sport-accent) 62%, transparent);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.16),
+    0 12px 28px rgba(0, 0, 0, 0.15),
+    0 0 0 1px color-mix(in srgb, var(--tl-sport-accent) 30%, transparent),
+    0 8px 26px color-mix(in srgb, var(--tl-sport-accent) 16%, transparent);
+}
+
+.tl-card[data-accent].is-active {
+  border-color: color-mix(in srgb, var(--tl-sport-accent) 58%, var(--glass-border));
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.16),
+    0 12px 28px rgba(0, 0, 0, 0.15),
+    0 0 0 1px color-mix(in srgb, var(--tl-sport-accent) 22%, transparent);
+}
+
+.tl-card[data-accent] .tl-card-top > svg {
+  color: var(--tl-sport-accent);
+}
+
+.tl-row[data-accent] {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--tl-sport-accent) 72%, transparent);
+}
+
+.tl-row[data-accent].is-selected {
+  background: color-mix(in srgb, var(--tl-sport-accent) 10%, transparent);
+}
+
+.tl-row[data-accent] .tl-row-name > svg {
+  color: var(--tl-sport-accent);
+}
+
+.tl-card[data-accent] .tl-ridge:not(.is-count) .tl-ridge-bar:not(.is-empty),
+.tl-row[data-accent] .tl-ridge:not(.is-count) .tl-ridge-bar:not(.is-empty) {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--tl-sport-accent) 86%, transparent), color-mix(in srgb, var(--tl-sport-accent) 52%, transparent));
+}
+
+.tl-card[data-accent] .tl-ridge:not(.is-count) .tl-ridge-bar.is-peak,
+.tl-row[data-accent] .tl-ridge:not(.is-count) .tl-ridge-bar.is-peak {
+  background: var(--tl-sport-accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 10px color-mix(in srgb, var(--tl-sport-accent) 46%, transparent);
 }
 
 /* The same axis at reading size: planned load pale, completed load solid. */
@@ -1587,24 +2132,14 @@
   content: "";
 }
 
-.tl-reader-sport[data-sport="strength"] {
-  --tl-sport: var(--sport-strength);
+/* With the sport's own icon inside, the generic dot steps aside. */
+.tl-reader-sport.has-icon::before {
+  content: none;
 }
 
-.tl-reader-sport[data-sport="trail"] {
-  --tl-sport: var(--sport-trail);
-}
-
-.tl-reader-sport[data-sport="run"] {
-  --tl-sport: var(--sport-run);
-}
-
-.tl-reader-sport[data-sport="bike"] {
-  --tl-sport: var(--sport-bike);
-}
-
-.tl-reader-sport[data-sport="other"] {
-  --tl-sport: var(--sport-other);
+.tl-reader-sport svg {
+  flex: none;
+  color: var(--tl-sport, var(--accent));
 }
 
 .tl-reader-favorite {
@@ -1734,39 +2269,75 @@
   box-shadow: var(--shadow-inset);
 }
 
-/* Time is continuous, so the segments abut: only the fill marks a boundary. */
+/*
+ * The bar is the calendar's structure bar (.sched-bar in styles.css) at reading
+ * size: discrete pills over a framed track, one per step, sized by how long the
+ * step runs. The tile comb, this bar, and the calendar's all draw the same
+ * thing the same way — see the .tl-wk-shape block for the phase palette.
+ */
 .tl-shape > div {
+  --step-warmup: #f0a72e;
+  --step-rest: #9099aa;
+  --step-cooldown: #27c2e5;
+  --step-sendoff: #b48cff;
+
   display: flex;
+  align-items: stretch;
+  gap: 3px;
   height: 36px;
-  border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+  padding: 4px;
+  border: 1px solid var(--tl-rule-soft);
   border-radius: 8px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 /* Segment fills scope to the bar itself, never the caption or legend spans. */
 .tl-shape > div > span {
-  min-width: 1px;
-  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  min-width: 5px;
+  flex-basis: 0;
+  border-radius: 4px;
+  background: var(--tl-sport-accent, var(--accent));
   transition: filter 160ms ease;
 }
 
+/* A long interval set closes the pills up rather than overflowing the panel. */
+.tl-shape > div[data-dense] {
+  gap: 1.5px;
+  padding: 3px;
+}
+
+.tl-shape > div[data-dense] > span {
+  min-width: 1px;
+  border-radius: 2px;
+}
+
 .tl-shape > div > span:hover {
-  filter: brightness(1.25);
+  filter: brightness(1.18);
 }
 
 .tl-shape > div > span.is-training {
-  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
+  background: var(--tl-sport-accent, var(--accent));
 }
 
-.tl-shape > div > span.is-warmup,
+.tl-shape > div > span.is-warmup {
+  background: color-mix(in srgb, var(--step-warmup) 68%, transparent);
+}
+
 .tl-shape > div > span.is-cooldown {
-  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  background: color-mix(in srgb, var(--step-cooldown) 68%, transparent);
 }
 
-.tl-shape > div > span.is-rest,
 .tl-shape > div > span.is-sendOff {
-  background: color-mix(in srgb, var(--text-secondary) 26%, transparent);
+  background: var(--step-sendoff);
+}
+
+.tl-shape > div > span.is-rest {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--step-rest) 62%, transparent) 0 4px,
+    color-mix(in srgb, var(--step-rest) 28%, transparent) 4px 8px
+  );
 }
 
 .tl-shape figcaption,
@@ -1814,19 +2385,36 @@
   border-radius: 2.5px;
 }
 
+/* The legend keys the bar, so every swatch repeats a fill from it exactly. */
+.tl-shape-legend em {
+  --step-warmup: #f0a72e;
+  --step-rest: #9099aa;
+  --step-cooldown: #27c2e5;
+  --step-sendoff: #b48cff;
+}
+
 .tl-shape-legend em.is-training {
-  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
-  box-shadow: 0 0 5px color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--tl-sport-accent, var(--accent));
 }
 
-.tl-shape-legend em.is-warmup,
+.tl-shape-legend em.is-warmup {
+  background: color-mix(in srgb, var(--step-warmup) 68%, transparent);
+}
+
 .tl-shape-legend em.is-cooldown {
-  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  background: color-mix(in srgb, var(--step-cooldown) 68%, transparent);
 }
 
-.tl-shape-legend em.is-rest,
 .tl-shape-legend em.is-sendOff {
-  background: color-mix(in srgb, var(--text-secondary) 26%, transparent);
+  background: var(--step-sendoff);
+}
+
+.tl-shape-legend em.is-rest {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--step-rest) 62%, transparent) 0 3px,
+    color-mix(in srgb, var(--step-rest) 28%, transparent) 3px 6px
+  );
 }
 
 /* The list and its eyebrow label travel as one zone, apart from the shape card. */
@@ -2752,10 +3340,6 @@
   }
 }
 
-:root[data-theme="paper"] .tl-skeleton {
-  --tl-shimmer: rgba(38, 34, 28, 0.07);
-}
-
 .tl-dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -3072,6 +3656,17 @@
   font-size: 12.5px;
 }
 
+.plan-editor-sidebar .app-select {
+  width: 100%;
+}
+
+.plan-editor-sidebar .app-select-trigger {
+  min-height: 32px;
+  padding: 6px 9px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
 .plan-editor-sidebar textarea {
   min-height: 58px;
   resize: vertical;
@@ -3246,20 +3841,11 @@
   transform: scale(0.99);
 }
 
-/* The row answers in the sport's own colour; the plus wakes on hover. */
-.plan-editor-library-list button[data-sport]::before {
-  width: 6px;
-  height: 6px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--tl-sport, var(--accent));
-  content: "";
+/* The row answers with the sport's icon chip; the plus wakes on hover. */
+.plan-editor-library-list button > .tl-sport-dot {
+  width: 20px;
+  height: 20px;
 }
-
-.plan-editor-library-list button[data-sport="run"] { --tl-sport: var(--sport-run); }
-.plan-editor-library-list button[data-sport="bike"] { --tl-sport: var(--sport-bike); }
-.plan-editor-library-list button[data-sport="strength"] { --tl-sport: var(--sport-strength); }
-.plan-editor-library-list button[data-sport="other"] { --tl-sport: var(--sport-other); }
 
 .plan-editor-library-list button > .plan-editor-library-add {
   display: inline-flex;
@@ -3559,21 +4145,11 @@
   transform: none;
 }
 
-/* Workout cards carry the sport's colour as a small dot; rest and notes
-   stay quiet. */
-.plan-entry-card[data-sport]::before {
-  width: 6px;
-  height: 6px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--tl-sport, var(--accent));
-  content: "";
+/* Workout cards carry the sport's icon chip; rest and notes stay quiet. */
+.plan-entry-card > .tl-sport-dot {
+  width: 17px;
+  height: 17px;
 }
-
-.plan-entry-card[data-sport="run"] { --tl-sport: var(--sport-run); }
-.plan-entry-card[data-sport="bike"] { --tl-sport: var(--sport-bike); }
-.plan-entry-card[data-sport="strength"] { --tl-sport: var(--sport-strength); }
-.plan-entry-card[data-sport="other"] { --tl-sport: var(--sport-other); }
 
 .plan-entry-card > span {
   display: flex;
@@ -4085,6 +4661,10 @@
 @media (max-width: 900px) {
   .training-library-view {
     padding: 22px 16px 16px;
+  }
+
+  .tl-catalog .tl-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .tl-masthead {
@@ -4873,6 +5453,10 @@
 }
 
 @media (max-width: 560px) {
+  .tl-catalog .tl-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .plan-generator-backdrop,
   .plan-calendar-backdrop { padding: 0; }
   .plan-generator,

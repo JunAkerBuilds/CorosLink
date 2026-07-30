@@ -8,10 +8,10 @@ import {
   useState,
 } from "react";
 import {
-  PRIMARY_NAV_ITEMS,
   SIDEBAR_COLLAPSED_WIDTH,
   SIDEBAR_EXPANDED_WIDTH,
   type PrimaryView,
+  visiblePrimaryNavItems,
 } from "../navigation/primaryNav";
 
 const SIDEBAR_COLLAPSED_KEY = "coroslink.sidebarCollapsed";
@@ -108,6 +108,7 @@ export interface AppSidebarProps {
   activeView: PrimaryView;
   onChange: (view: PrimaryView) => void;
   coachBusy?: boolean;
+  showDevelopmentItems?: boolean;
   appLogo: string;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
@@ -119,6 +120,7 @@ export function AppSidebar({
   activeView,
   onChange,
   coachBusy = false,
+  showDevelopmentItems = false,
   appLogo,
   expanded,
   onExpandedChange,
@@ -126,6 +128,7 @@ export function AppSidebar({
   onOverlayOpenChange,
 }: AppSidebarProps) {
   const overlayMode = useMediaQuery("(max-width: 720px)");
+  const navItems = visiblePrimaryNavItems(showDevelopmentItems);
   const reducedMotion = useReducedMotion();
   const navRef = useRef<HTMLElement>(null);
   const itemRefs = useRef(new Map<PrimaryView, HTMLButtonElement>());
@@ -287,7 +290,7 @@ export function AppSidebar({
               opacity: indicator.ready ? 1 : 0,
             }}
           />
-          {PRIMARY_NAV_ITEMS.map((item, index) => {
+          {navItems.map((item, index) => {
             const Icon = item.icon;
             const isActive = activeView === item.id;
             const tooltip = item.beta
