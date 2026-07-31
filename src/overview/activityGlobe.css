@@ -640,7 +640,22 @@
 }
 
 .training-map-view-action:hover svg {
-  transform: translateX(2px);
+  transform: scale(1.12);
+}
+
+.training-map-view-action:disabled {
+  cursor: wait;
+  filter: brightness(1.04);
+}
+
+.training-map-view-action.is-zooming svg {
+  animation: training-map-zoom-pulse 520ms ease-in-out infinite alternate;
+}
+
+@keyframes training-map-zoom-pulse {
+  to {
+    transform: scale(1.28);
+  }
 }
 
 .training-map-overview {

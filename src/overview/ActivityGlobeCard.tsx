@@ -1,6 +1,5 @@
 import {
   Activity,
-  ArrowRight,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -16,6 +15,7 @@ import {
   Route,
   RotateCcw,
   Timer,
+  ZoomIn,
 } from "lucide-react";
 import {
   Area,
@@ -75,8 +75,6 @@ interface ActivityGlobeCardProps {
   activities: TrainingHubActivity[];
   connected: boolean;
   detail: TrainingHubActivityDetail | null;
-  loading: boolean;
-  onOpenTraining: () => void;
   onSelectActivity: (activity: TrainingHubActivity) => void;
 }
 
@@ -89,6 +87,7 @@ interface ActivityPeriodPreference {
 }
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const LOCATION_ZOOM_DURATION_MS = 1_100;
 
 function isIsoDateOrEmpty(value: unknown): value is string {
   if (value === "") return true;
@@ -348,8 +347,6 @@ export function ActivityGlobeCard({
   activities,
   connected,
   detail,
-  loading,
-  onOpenTraining,
   onSelectActivity,
 }: ActivityGlobeCardProps) {
   const { unitSystem } = useUnitSystem();
@@ -419,6 +416,7 @@ export function ActivityGlobeCard({
   const [canResetView, setCanResetView] = useState(false);
   const [hoveringCluster, setHoveringCluster] = useState(false);
   const [streetFocus, setStreetFocus] = useState<StreetMapFocus | null>(null);
+  const [zoomingToStreet, setZoomingToStreet] = useState(false);
   const streetMode = streetFocus !== null;
 
   const routePoints = useMemo(() => {
@@ -580,6 +578,7 @@ export function ActivityGlobeCard({
     }
     setSelectedLocationKey(null);
     setStreetFocus(null);
+    setZoomingToStreet(false);
     setCanResetView(false);
   }, [period, customStart, customEnd]);
 
@@ -588,6 +587,7 @@ export function ActivityGlobeCard({
       window.clearTimeout(streetEnterTimerRef.current);
       streetEnterTimerRef.current = null;
     }
+    setZoomingToStreet(false);
     setStreetFocus(focus);
     setCanResetView(true);
     setHoveringCluster(false);
@@ -607,6 +607,11 @@ export function ActivityGlobeCard({
     bucket: GeoHeatBucket,
     options?: { openStreet?: boolean },
   ) => {
+    if (streetEnterTimerRef.current !== null) {
+      window.clearTimeout(streetEnterTimerRef.current);
+      streetEnterTimerRef.current = null;
+    }
+    setZoomingToStreet(false);
     const summary = locationSummaries.find(
       (candidate) => candidate.key === bucket.key,
     );
@@ -621,11 +626,33 @@ export function ActivityGlobeCard({
     setCanResetView(true);
   };
 
+  const zoomIntoSelectedLocation = () => {
+    if (!selectedLocation || zoomingToStreet) {
+      return;
+    }
+    const focus = {
+      lat: selectedLocation.bucket.lat,
+      lon: selectedLocation.bucket.lon,
+    };
+    const duration =
+      globeRendererRef.current?.zoomToLocation(
+        focus,
+        LOCATION_ZOOM_DURATION_MS,
+      ) ?? 0;
+    if (duration === 0) {
+      enterStreetFocus(focus);
+      return;
+    }
+    setZoomingToStreet(true);
+    scheduleStreetFocus(focus, duration);
+  };
+
   const restoreBaselineCamera = (duration = 900) => {
     if (streetEnterTimerRef.current !== null) {
       window.clearTimeout(streetEnterTimerRef.current);
       streetEnterTimerRef.current = null;
     }
+    setZoomingToStreet(false);
     globeRendererRef.current?.resetView(duration);
     setCanResetView(false);
   };
@@ -1075,11 +1102,12 @@ export function ActivityGlobeCard({
                   )}
                   <button
                     type="button"
-                    className="training-map-view-action"
-                    onClick={onOpenTraining}
+                    className={`training-map-view-action${zoomingToStreet ? " is-zooming" : ""}`}
+                    onClick={zoomIntoSelectedLocation}
+                    disabled={zoomingToStreet}
                   >
-                    {loading ? "Loading route" : "View activities"}
-                    <ArrowRight size={15} aria-hidden="true" />
+                    {zoomingToStreet ? "Zooming in" : "Zoom in"}
+                    <ZoomIn size={15} aria-hidden="true" />
                   </button>
                 </div>
               </div>

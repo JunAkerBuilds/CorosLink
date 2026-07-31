@@ -2294,7 +2294,6 @@ export default function App() {
                 onTransfer={handleTransfer}
                 onDeleteDownload={handleDeleteDownload}
                 onOpenLibrary={() => openMediaTab("library")}
-                onOpenTraining={() => setActiveView("training")}
                 onSelectTrainingActivity={handleTrainingHubActivityDetail}
               />
             ) : null}
@@ -2851,7 +2850,6 @@ interface MediaOverviewTabProps {
   onTransfer: (id: string) => void;
   onDeleteDownload: (track: LocalTrack) => void;
   onOpenLibrary: () => void;
-  onOpenTraining: () => void;
   onSelectTrainingActivity: (activity: TrainingHubActivity) => void;
 }
 
@@ -2867,7 +2865,6 @@ function MediaOverviewTab({
   onTransfer,
   onDeleteDownload,
   onOpenLibrary,
-  onOpenTraining,
   onSelectTrainingActivity,
 }: MediaOverviewTabProps) {
   const greeting = useTimeOfDayGreeting();
@@ -3046,8 +3043,6 @@ function MediaOverviewTab({
             activities={trainingActivities}
             connected={trainingConnected}
             detail={trainingActivityDetail}
-            loading={busy?.startsWith("training-detail:") ?? false}
-            onOpenTraining={onOpenTraining}
             onSelectActivity={onSelectTrainingActivity}
           />
         </Suspense>
