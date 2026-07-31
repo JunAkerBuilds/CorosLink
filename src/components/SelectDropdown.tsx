@@ -2,6 +2,7 @@ import { Check, ChevronDown } from "lucide-react";
 import {
   type CSSProperties,
   type KeyboardEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useId,
@@ -23,6 +24,7 @@ export interface SelectDropdownProps<T extends string> {
   label: string;
   className?: string;
   menuClassName?: string;
+  renderIcon?: (value: T) => ReactNode;
   disabled?: boolean;
   portal?: boolean;
   title?: string;
@@ -49,6 +51,8 @@ const PORTAL_THEME_VARIABLES = [
   "--radius-sm"
 ] as const;
 
+const MENU_CLOSE_DURATION_MS = 180;
+
 export function SelectDropdown<T extends string>({
   value,
   options,
@@ -56,6 +60,7 @@ export function SelectDropdown<T extends string>({
   label,
   className,
   menuClassName,
+  renderIcon,
   disabled = false,
   portal = false,
   title
@@ -64,16 +69,41 @@ export function SelectDropdown<T extends string>({
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
   const typeaheadRef = useRef({ query: "", updatedAt: 0 });
   const [isOpen, setIsOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const [highlightedValue, setHighlightedValue] = useState<T>(value);
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const [portalTheme, setPortalTheme] = useState<PortalTheme>({});
   const selectedOption = options.find((option) => option.value === value);
   const selectedLabel = selectedOption?.label ?? "Select";
+  const selectedIcon = renderIcon?.(value);
+  const isMenuMounted = isOpen || isClosing;
   const labelId = `${dropdownId}-label`;
   const valueId = `${dropdownId}-value`;
   const menuId = `${dropdownId}-menu`;
+
+  const openMenu = useCallback(() => {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setIsClosing(false);
+    setIsOpen(true);
+  }, []);
+
+  const closeMenu = useCallback(() => {
+    setIsOpen(false);
+    setIsClosing(true);
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = window.setTimeout(() => {
+      setIsClosing(false);
+      closeTimerRef.current = null;
+    }, MENU_CLOSE_DURATION_MS);
+  }, []);
 
   const updateMenuPosition = useCallback(() => {
     if (!portal || !triggerRef.current) return;
@@ -114,13 +144,13 @@ export function SelectDropdown<T extends string>({
     function handlePointerDown(event: PointerEvent) {
       const target = event.target as Node;
       if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) {
-        setIsOpen(false);
+        closeMenu();
       }
     }
 
     function handleDocumentKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key === "Escape" || event.key === "Tab") {
-        setIsOpen(false);
+        closeMenu();
       }
     }
 
@@ -131,10 +161,18 @@ export function SelectDropdown<T extends string>({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleDocumentKeyDown);
     };
-  }, [isOpen, value]);
+  }, [closeMenu, isOpen, value]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    };
+  }, []);
 
   useLayoutEffect(() => {
-    if (!isOpen || !portal) {
+    if (!isMenuMounted || !portal) {
       setMenuPosition(null);
       return;
     }
@@ -150,7 +188,7 @@ export function SelectDropdown<T extends string>({
       observer?.disconnect();
       window.removeEventListener("resize", updateMenuPosition);
     };
-  }, [isOpen, portal, updateMenuPosition]);
+  }, [isMenuMounted, portal, updateMenuPosition]);
 
   function moveHighlight(direction: 1 | -1) {
     if (options.length === 0) {
@@ -174,7 +212,7 @@ export function SelectDropdown<T extends string>({
   function selectOption(nextValue: T) {
     onChange(nextValue);
     setHighlightedValue(nextValue);
-    setIsOpen(false);
+    closeMenu();
   }
 
   function handleTriggerKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
@@ -186,7 +224,7 @@ export function SelectDropdown<T extends string>({
       event.preventDefault();
 
       if (!isOpen) {
-        setIsOpen(true);
+        openMenu();
         setHighlightedValue(value);
         return;
       }
@@ -216,17 +254,19 @@ export function SelectDropdown<T extends string>({
       typeaheadRef.current = { query, updatedAt: now };
       const match = options.find((option) => option.label.toLocaleLowerCase().startsWith(query));
       if (match) {
-        setIsOpen(true);
+        openMenu();
         setHighlightedValue(match.value);
       }
     }
   }
 
-  const menu = isOpen ? (
+  const menu = isMenuMounted ? (
     <div
       className={[
         "app-select-menu",
         portal ? "is-portaled" : "",
+        isOpen && (!portal || menuPosition) ? "is-opening" : "",
+        isClosing ? "is-closing" : "",
         menuClassName
       ]
         .filter(Boolean)
@@ -235,6 +275,8 @@ export function SelectDropdown<T extends string>({
       ref={menuRef}
       role="listbox"
       aria-label={label}
+      aria-hidden={isClosing || undefined}
+      data-side={menuPosition?.transform ? "top" : "bottom"}
       style={portal ? ({
         ...portalTheme,
         left: menuPosition?.left ?? 0,
@@ -245,41 +287,61 @@ export function SelectDropdown<T extends string>({
         visibility: menuPosition ? "visible" : "hidden"
       } satisfies CSSProperties) : undefined}
     >
-      {options.map((option) => {
-        const isSelected = option.value === value;
-        const isActive = option.value === highlightedValue;
+      <div className="app-select-menu-list">
+        {options.map((option, index) => {
+          const isSelected = option.value === value;
+          const isActive = option.value === highlightedValue;
+          const optionIcon = renderIcon?.(option.value);
 
-        return (
-          <button
-            type="button"
-            className={[
-              "app-select-option",
-              isSelected ? "is-selected" : "",
-              isActive ? "is-active" : ""
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            id={`${dropdownId}-option-${String(option.value)}`}
-            key={option.value}
-            role="option"
-            aria-selected={isSelected}
-            onClick={() => selectOption(option.value)}
-            onMouseDown={(event) => event.preventDefault()}
-            onMouseEnter={() => setHighlightedValue(option.value)}
-          >
-            <span>{option.label}</span>
-            {isSelected ? (
-              <Check size={15} strokeWidth={2.6} aria-hidden="true" />
-            ) : null}
-          </button>
-        );
-      })}
+          return (
+            <button
+              type="button"
+              className={[
+                "app-select-option",
+                isSelected ? "is-selected" : "",
+                isActive ? "is-active" : ""
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              data-value={option.value}
+              id={`${dropdownId}-option-${String(option.value)}`}
+              key={option.value}
+              role="option"
+              aria-selected={isSelected}
+              style={{
+                "--app-select-delay": `${40 + index * 18}ms`
+              } as CSSProperties}
+              onClick={() => selectOption(option.value)}
+              onMouseDown={(event) => event.preventDefault()}
+              onMouseEnter={() => setHighlightedValue(option.value)}
+            >
+              <span className="app-select-option-content">
+                {optionIcon ? (
+                  <span className="app-select-leading-icon" aria-hidden="true">
+                    {optionIcon}
+                  </span>
+                ) : null}
+                <span className="app-select-option-label">{option.label}</span>
+              </span>
+              {isSelected ? (
+                <Check
+                  className="app-select-option-check"
+                  size={15}
+                  strokeWidth={2.6}
+                  aria-hidden="true"
+                />
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
     </div>
   ) : null;
 
   return (
     <div
       className={["app-select", className].filter(Boolean).join(" ")}
+      data-value={value}
       ref={rootRef}
     >
       <span className="sr-only" id={labelId}>
@@ -299,13 +361,22 @@ export function SelectDropdown<T extends string>({
         title={title}
         onClick={() => {
           if (!disabled) {
-            setIsOpen((current) => !current);
+            if (isOpen) {
+              closeMenu();
+            } else {
+              openMenu();
+            }
           }
         }}
         onKeyDown={handleTriggerKeyDown}
       >
         <span className="app-select-value" id={valueId}>
-          {selectedLabel}
+          {selectedIcon ? (
+            <span className="app-select-leading-icon" aria-hidden="true">
+              {selectedIcon}
+            </span>
+          ) : null}
+          <span className="app-select-value-label">{selectedLabel}</span>
         </span>
         <ChevronDown
           className={isOpen ? "app-select-icon is-open" : "app-select-icon"}

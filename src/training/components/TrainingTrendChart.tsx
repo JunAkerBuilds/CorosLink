@@ -133,9 +133,16 @@ function TrendChartTooltip({
     (payload[0]?.payload as TrainingTrendPoint | undefined)?.date,
     label
   );
+  const accentColor = payload[0]?.color ?? "var(--accent)";
 
   return (
     <div className="training-chart-tooltip">
+      <span
+        className="training-chart-tooltip-accent"
+        style={{
+          background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)`
+        }}
+      />
       {heading ? (
         <span className="training-chart-tooltip-label">{heading}</span>
       ) : null}
@@ -186,16 +193,28 @@ export function ChartAreaGradient({
 
 function EmptyChartNotice({
   icon: Icon,
+  palette,
+  title,
   children
 }: {
   icon: LucideIcon;
+  palette: TrainingMetricPalette;
+  title: string;
   children: string;
 }) {
   return (
-    <p className="training-empty-chart training-chart-empty">
-      <Icon size={20} aria-hidden="true" />
-      <span>{children}</span>
-    </p>
+    <div className="training-chart-empty">
+      <span
+        className="training-chart-empty-icon"
+        style={{ background: palette.soft, color: palette.chip }}
+      >
+        <Icon size={18} aria-hidden="true" />
+      </span>
+      <span className="training-chart-empty-text">
+        <strong>{title}</strong>
+        <span>{children}</span>
+      </span>
+    </div>
   );
 }
 
@@ -396,8 +415,12 @@ export function TrainingTrendCharts({ points }: TrainingTrendChartsProps) {
             </ResponsiveContainer>
           </div>
         ) : (
-          <EmptyChartNotice icon={Activity}>
-            No training load data this week.
+          <EmptyChartNotice
+            icon={Activity}
+            palette={metrics.load}
+            title="No training load yet"
+          >
+            Complete a workout and sync from COROS to see your load trend.
           </EmptyChartNotice>
         )}
       </section>
@@ -445,8 +468,12 @@ export function TrainingTrendCharts({ points }: TrainingTrendChartsProps) {
             </ResponsiveContainer>
           </div>
         ) : (
-          <EmptyChartNotice icon={Gauge}>
-            No RPE data yet — rate activities in COROS.
+          <EmptyChartNotice
+            icon={Gauge}
+            palette={metrics.rpe}
+            title="No RPE data yet"
+          >
+            Rate your activities in COROS to track perceived effort.
           </EmptyChartNotice>
         )}
       </section>
@@ -514,8 +541,12 @@ export function TrainingTrendCharts({ points }: TrainingTrendChartsProps) {
             </ResponsiveContainer>
           </div>
         ) : (
-          <EmptyChartNotice icon={HeartPulse}>
-            No HRV data this week.
+          <EmptyChartNotice
+            icon={HeartPulse}
+            palette={metrics.hrv}
+            title="No HRV readings"
+          >
+            Wear your device during sleep to capture nightly HRV.
           </EmptyChartNotice>
         )}
       </section>
@@ -567,8 +598,12 @@ export function TrainingTrendCharts({ points }: TrainingTrendChartsProps) {
             </ResponsiveContainer>
           </div>
         ) : (
-          <EmptyChartNotice icon={MoonStar}>
-            No sleep duration data this week.
+          <EmptyChartNotice
+            icon={MoonStar}
+            palette={metrics.sleep}
+            title="No sleep data"
+          >
+            Sync sleep sessions from COROS to see duration trends.
           </EmptyChartNotice>
         )}
       </section>

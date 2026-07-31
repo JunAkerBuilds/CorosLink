@@ -1267,7 +1267,7 @@ export function ActivityGlobeCard({
             ) : null}
           </header>
           <div className="training-map-recent-list">
-            {recentPlaces.map((summary) => {
+            {recentPlaces.map((summary, index) => {
               const label = placeLabels[summary.key] ?? coordinateLabel(summary.bucket);
               const selected = selectedLocationKey === summary.key;
               return (
@@ -1275,6 +1275,7 @@ export function ActivityGlobeCard({
                   key={summary.key}
                   type="button"
                   className={selected ? "is-selected" : undefined}
+                  style={{ "--recent-delay": `${index * 45}ms` } as CSSProperties}
                   aria-pressed={selected}
                   onClick={() => selectLocation(summary.bucket)}
                 >
