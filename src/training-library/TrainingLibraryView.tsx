@@ -58,6 +58,8 @@ import { PlanEditor } from "./PlanEditor";
 import { WorkoutWorkspace } from "./WorkoutWorkspace";
 import { TrainingPlanCalendarDialog } from "./TrainingPlanCalendarDialog";
 import { TrainingPlanGenerator } from "./TrainingPlanGenerator";
+import { useUnitSystem } from "../units/UnitSystemProvider";
+import { formatDistanceValue } from "../units/units";
 import "./trainingLibrary.css";
 
 interface TrainingLibraryViewProps {
@@ -1116,6 +1118,7 @@ interface AdherenceSectionProps {
 }
 
 function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: AdherenceSectionProps) {
+  const { unitSystem } = useUnitSystem();
   const [activities, setActivities] = useState<TrainingHubActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [state, setState] = useState("all");
@@ -1331,7 +1334,7 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
                 const completedParts = [
                   formatDuration(match.completedDurationSeconds),
                   match.completedDistanceMeters
-                    ? `${(match.completedDistanceMeters / 1000).toFixed(1)} km`
+                    ? formatDistanceValue(match.completedDistanceMeters, unitSystem, { digits: 1 })
                     : null,
                   match.completedTrainingLoad ? `${Math.round(match.completedTrainingLoad)} load` : null
                 ].filter(Boolean);
@@ -1464,7 +1467,9 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
                 </span>
                 <span className="tl-fig">{formatDuration(activity.duration)}</span>
                 <span className={`tl-fig${activity.distance ? "" : " is-nil"}`}>
-                  {activity.distance ? `${(activity.distance / 1000).toFixed(1)}` : "—"}
+                  {activity.distance
+                    ? formatDistanceValue(activity.distance, unitSystem, { digits: 1 })
+                    : "—"}
                 </span>
                 <span className={`tl-fig${activity.trainingLoad ? "" : " is-nil"}`}>
                   {activity.trainingLoad ? Math.round(activity.trainingLoad) : "—"}

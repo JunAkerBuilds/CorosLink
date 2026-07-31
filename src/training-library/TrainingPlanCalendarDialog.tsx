@@ -15,6 +15,7 @@ import type {
 } from "../../electron/types";
 import { activeTrainingPlanCalendarInstall } from "../../electron/trainingPlanDomain";
 import type { CorosLinkApi } from "../coroslink-api";
+import { useUnitSystem } from "../units/UnitSystemProvider";
 
 interface TrainingPlanCalendarDialogProps {
   api: CorosLinkApi;
@@ -51,6 +52,7 @@ function initialInstallDate(plan: TrainingPlanDocument): string {
 }
 
 export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperation, onClose, onComplete }: TrainingPlanCalendarDialogProps) {
+  const { unitSystem } = useUnitSystem();
   const install = activeTrainingPlanCalendarInstall(plan);
   const operation = requestedOperation ?? (install && !(install.state === "partial" && install.lastOperation === "install") ? "remove" : "install");
   const [startDate, setStartDate] = useState(() => initialInstallDate(plan));
@@ -102,7 +104,7 @@ export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperat
     setError(null);
     try {
       const result = operation === "install"
-        ? await api.addTrainingPlanToCalendar(preview.previewId, true)
+        ? await api.addTrainingPlanToCalendar(preview.previewId, true, unitSystem)
         : await api.removeTrainingPlanFromCalendar(preview.previewId, true);
       onComplete(result);
     } catch (cause) {

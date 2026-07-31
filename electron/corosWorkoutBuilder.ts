@@ -943,8 +943,11 @@ export function buildWorkoutPayload(
       : {}),
     estimatedTime: totalTime,
     estimatedDistance: totalDistance,
-    distanceDisplayUnit:
-      context?.distanceUnit === "imperial"
+    distanceDisplayUnit: sport === "swim"
+      ? context?.distanceUnit === "imperial"
+        ? COROS_DISTANCE_UNIT_YARDS
+        : COROS_DISTANCE_UNIT_METERS
+      : context?.distanceUnit === "imperial"
         ? COROS_DISTANCE_UNIT_MILES
         : COROS_DISTANCE_UNIT_KILOMETERS,
     estimatedType: totalDistance > 0 ? 6 : 0,

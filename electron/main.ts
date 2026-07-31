@@ -1533,7 +1533,8 @@ function registerIpcHandlers(): void {
   );
   ipcMain.handle(
     "trainingLibrary:addPlanToCalendar",
-    (_event, previewId: string, confirmed: boolean) => addTrainingPlanToCalendar(previewId, confirmed)
+    (_event, previewId: string, confirmed: boolean, unitSystem?: UnitSystem) =>
+      addTrainingPlanToCalendar(previewId, confirmed, normalizeUnitSystem(unitSystem))
   );
   ipcMain.handle(
     "trainingLibrary:previewPlanCalendarRemoval",

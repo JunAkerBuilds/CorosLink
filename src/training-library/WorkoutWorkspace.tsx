@@ -23,6 +23,7 @@ import type {
   RunWorkoutEditorNode,
   TrainingCollection,
   TrainingLibraryWorkout,
+  UnitSystem,
   WorkoutEditPreview,
   WorkoutEditorDocument
 } from "../../electron/types";
@@ -34,6 +35,8 @@ import { SportBadge, sportAccentStyle, sportChipStyle, sportTheme } from "./spor
 import { SelectDropdown } from "../components/SelectDropdown";
 import { WorkoutEditorModal } from "../calendar/WorkoutEditorModal";
 import { AddWorkoutModal } from "../calendar/AddWorkoutModal";
+import { useUnitSystem } from "../units/UnitSystemProvider";
+import { formatDistanceValue, formatElevationValue } from "../units/units";
 
 interface WorkoutWorkspaceProps {
   api: CorosLinkApi;
@@ -77,6 +80,7 @@ const SHAPE_SEGMENT_LIMIT = 96;
 const SHAPE_BATCH = 3;
 /** Draws the comb a beat before the tile lands, so it is never seen filling in. */
 const SHAPE_PREFETCH_MARGIN = "160px";
+const DISTANCE_VOLUME_PATTERN = /([\d.]+)\s*(km|mi|yd|m)\b/i;
 
 /** Legend wording for the step kinds the shape bar can draw, in session order. */
 const STEP_KIND_LABELS: Record<string, string> = {
@@ -95,10 +99,27 @@ function metricFromVolume(volume: string | undefined, kind: "duration" | "distan
     const minutes = Number(value.match(/([\d.]+)\s*m(?:in)?/)?.[1] ?? 0);
     return hours * 3600 + minutes * 60;
   }
-  const distance = Number(value.match(/([\d.]+)\s*(km|mi|m)\b/)?.[1] ?? 0);
+  const distance = Number(value.match(DISTANCE_VOLUME_PATTERN)?.[1] ?? 0);
   if (value.includes(" km")) return distance * 1000;
   if (value.includes(" mi")) return distance * 1609.344;
+  if (value.includes(" yd")) return distance * 0.9144;
   return distance;
+}
+
+function formatWorkoutVolume(
+  volume: string | undefined,
+  unitSystem: UnitSystem,
+  swim = false
+): string | undefined {
+  if (!volume || !DISTANCE_VOLUME_PATTERN.test(volume)) return volume;
+  const meters = metricFromVolume(volume, "distance");
+  if (unitSystem === "metric" && !swim && meters < 1000) {
+    return `${Math.round(meters)} m`;
+  }
+  return formatDistanceValue(meters, unitSystem, {
+    swim,
+    ...(swim ? { digits: 0 } : {})
+  });
 }
 
 function tomorrow(): string {
@@ -126,17 +147,27 @@ function isSetVolume(volume: string | undefined): boolean {
   return /set/i.test(volume ?? "");
 }
 
-function targetLabel(node: RunWorkoutEditorNode): string {
+function targetLabel(
+  node: RunWorkoutEditorNode,
+  unitSystem: UnitSystem,
+  swim = false
+): string {
   if (node.nodeType === "repeat") return `${node.repeat} rounds`;
   const target = node.target;
   if (target.type === "time") return `${Math.round(target.seconds / 60)} min`;
   if (target.type === "distance") {
-    return target.meters >= 1000 ? `${(target.meters / 1000).toFixed(1)} km` : `${target.meters} m`;
+    if (unitSystem === "metric" && !swim && target.meters < 1000) {
+      return `${Math.round(target.meters)} m`;
+    }
+    return formatDistanceValue(target.meters, unitSystem, {
+      swim,
+      ...(swim ? { digits: 0 } : {})
+    });
   }
   if (target.type === "load") return `${target.load} load`;
   if (target.type === "reps") return `${target.count} reps`;
   if (target.type === "routes") return `${target.count} routes`;
-  if (target.type === "elevationGain") return `${target.meters} m gain`;
+  if (target.type === "elevationGain") return `${formatElevationValue(target.meters, unitSystem)} gain`;
   if (target.type === "hrRecovery") return `${target.bpm} bpm recovery`;
   return "Open";
 }
@@ -157,7 +188,11 @@ interface ShapeSegment {
  * proportional to how long the step runs, shaded by the step's declared kind.
  * Repeats expand, so an interval set reads as a comb.
  */
-function workoutShape(nodes: RunWorkoutEditorNode[]): ShapeSegment[] {
+function workoutShape(
+  nodes: RunWorkoutEditorNode[],
+  unitSystem: UnitSystem,
+  swim = false
+): ShapeSegment[] {
   const segments: ShapeSegment[] = [];
 
   const push = (node: RunWorkoutEditorNode) => {
@@ -171,7 +206,11 @@ function workoutShape(nodes: RunWorkoutEditorNode[]): ShapeSegment[] {
           : target.type === "reps"
             ? target.count * 4
             : 120;
-    segments.push({ kind: node.kind, share: Math.max(weight, 1), label: `${node.name} · ${targetLabel(node)}` });
+    segments.push({
+      kind: node.kind,
+      share: Math.max(weight, 1),
+      label: `${node.name} · ${targetLabel(node, unitSystem, swim)}`
+    });
   };
 
   for (const node of nodes) {
@@ -227,6 +266,7 @@ export function WorkoutWorkspace({
   onMessage,
   onError
 }: WorkoutWorkspaceProps) {
+  const { unitSystem } = useUnitSystem();
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState("all");
   const [sort, setSort] = useState<WorkoutSort>({ column: "name", descending: false });
@@ -355,8 +395,8 @@ export function WorkoutWorkspace({
       batch.map(async (id) => {
         let segments: ShapeSegment[] = [];
         try {
-          const document = await api.getWorkoutForEdit({ kind: "library", programId: id }, "metric");
-          segments = workoutShape(document.draft.nodes);
+          const document = await api.getWorkoutForEdit({ kind: "library", programId: id }, unitSystem);
+          segments = workoutShape(document.draft.nodes, unitSystem, document.draft.sport === "swim");
         } catch {
           /* A tile that cannot draw its shape falls back to its load bar. */
         }
@@ -370,7 +410,7 @@ export function WorkoutWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [api, shapeQueue]);
+  }, [api, shapeQueue, unitSystem]);
 
   /*
    * An edit rewrites one workout's steps. Queue that id directly rather than
@@ -389,8 +429,10 @@ export function WorkoutWorkspace({
 
   const active = workouts.find((workout) => workout.id === activeId);
   const shape = useMemo(
-    () => (previewDocument ? workoutShape(previewDocument.draft.nodes) : []),
-    [previewDocument]
+    () => previewDocument
+      ? workoutShape(previewDocument.draft.nodes, unitSystem, previewDocument.draft.sport === "swim")
+      : [],
+    [previewDocument, unitSystem]
   );
   /** Kinds actually drawn, in session order, so the legend never lists a ghost. */
   const shapeKinds = useMemo(
@@ -409,19 +451,22 @@ export function WorkoutWorkspace({
     setPreviewDocument(null);
     setPreviewMetrics(null);
     void api
-      .getWorkoutForEdit({ kind: "library", programId: activeId }, "metric")
+      .getWorkoutForEdit({ kind: "library", programId: activeId }, unitSystem)
       .then(async (document) => {
         if (cancelled) return;
         setPreviewDocument(document);
         /* The reader just paid for this workout's steps; its tile draws for free. */
         requestedShapes.current.add(activeId);
-        setShapes((current) => ({ ...current, [activeId]: workoutShape(document.draft.nodes) }));
+        setShapes((current) => ({
+          ...current,
+          [activeId]: workoutShape(document.draft.nodes, unitSystem, document.draft.sport === "swim")
+        }));
         try {
           const metrics = await api.previewWorkoutEdit(
             document.ref,
             document.revision,
             document.draft,
-            "metric"
+            unitSystem
           );
           if (!cancelled) setPreviewMetrics(metrics);
         } catch {
@@ -437,7 +482,7 @@ export function WorkoutWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [api, activeId, onError]);
+  }, [api, activeId, onError, unitSystem]);
 
   const updateMetadata = async (ids: string[], patch: Parameters<CorosLinkApi["updateWorkoutMetadata"]>[1]) => {
     setBusy("metadata");
@@ -554,13 +599,16 @@ export function WorkoutWorkspace({
   const readerTime = previewMetrics?.durationSeconds
     ? `${Math.round(previewMetrics.durationSeconds / 60)}m`
     : null;
+  const activeSport = workoutSportFromType(active?.sportType);
   const readerDistance = previewMetrics?.distanceMeters
-    ? `${(previewMetrics.distanceMeters / 1000).toFixed(1)} km`
-    : (active?.volume ?? null);
+    ? formatDistanceValue(previewMetrics.distanceMeters, unitSystem, {
+        swim: activeSport === "swim",
+        ...(activeSport === "swim" ? { digits: 0 } : {})
+      })
+    : (formatWorkoutVolume(active?.volume, unitSystem, activeSport === "swim") ?? null);
   const readerLoadSource = previewMetrics?.trainingLoad || active?.trainingLoad;
   const readerLoad = readerLoadSource ? Math.round(readerLoadSource) : null;
   const readerSteps = previewDocument?.draft.nodes.length ?? null;
-  const activeSport = workoutSportFromType(active?.sportType);
   const ActiveSportIcon = sportTheme(activeSport).icon;
 
   return (
@@ -754,7 +802,7 @@ export function WorkoutWorkspace({
                     <span className="tl-wk-foot">
                       <span>
                         <VolumeIcon size={11} aria-hidden="true" />
-                        <b>{workout.volume ?? "No volume"}</b>
+                        <b>{formatWorkoutVolume(workout.volume, unitSystem, workoutSportFromType(workout.sportType) === "swim") ?? "No volume"}</b>
                       </span>
                       <span>
                         <Link2 size={11} aria-hidden="true" />
@@ -850,7 +898,7 @@ export function WorkoutWorkspace({
                       </span>
                     </button>
                     <span className={`tl-fig${workout.volume ? "" : " is-nil"}`}>
-                      {workout.volume ?? "—"}
+                      {formatWorkoutVolume(workout.volume, unitSystem, workoutSportFromType(workout.sportType) === "swim") ?? "—"}
                     </span>
                     <span className={`tl-fig${workout.trainingLoad ? "" : " is-nil"}`}>
                       {workout.trainingLoad ? Math.round(workout.trainingLoad) : "—"}
@@ -979,14 +1027,14 @@ export function WorkoutWorkspace({
                       <span className="tl-step-head">
                         <b>{node.name}</b>
                         <small className={node.nodeType === "repeat" ? "is-rounds" : ""}>
-                          {targetLabel(node)}
+                          {targetLabel(node, unitSystem, previewDocument?.draft.sport === "swim")}
                         </small>
                       </span>
                       {node.nodeType === "repeat" ? (
                         <span className="tl-step-children">
                           {node.steps.map((step) => (
                             <em key={step.id}>
-                              {step.name} <small>{targetLabel(step)}</small>
+                              {step.name} <small>{targetLabel(step, unitSystem, previewDocument?.draft.sport === "swim")}</small>
                             </em>
                           ))}
                         </span>

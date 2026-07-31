@@ -12,6 +12,8 @@ import {
 } from "recharts";
 import type { TrainingPlanDocument } from "../../electron/types";
 import { compareTrainingPlans } from "../../electron/trainingPlanDomain";
+import { useUnitSystem } from "../units/UnitSystemProvider";
+import { formatDistanceValue } from "../units/units";
 
 interface PlanCompareProps {
   plans: TrainingPlanDocument[];
@@ -27,6 +29,7 @@ function durationLabel(seconds: number): string {
 }
 
 export function PlanCompare({ plans, selectedIds, onSelectionChange, onClose }: PlanCompareProps) {
+  const { unitSystem } = useUnitSystem();
   const selected = plans.filter((plan) => selectedIds.includes(plan.id)).slice(0, 3);
   const comparison = useMemo(() => compareTrainingPlans(selected), [selected]);
   const chartData = useMemo(() => {
@@ -67,7 +70,7 @@ export function PlanCompare({ plans, selectedIds, onSelectionChange, onClose }: 
           <h3>{summary.name}</h3>
           <dl>
             <div><dt>Total duration</dt><dd>{durationLabel(summary.durationSeconds)}</dd></div>
-            <div><dt>Total distance</dt><dd>{(summary.distanceMeters / 1000).toFixed(1)} km</dd></div>
+            <div><dt>Total distance</dt><dd>{formatDistanceValue(summary.distanceMeters, unitSystem, { digits: 1 })}</dd></div>
             <div><dt>Estimated load</dt><dd>{Math.round(summary.trainingLoad)}</dd></div>
             <div><dt>Workouts</dt><dd>{summary.workouts}</dd></div>
             <div><dt>Peak week</dt><dd>{summary.peakWeek ?? "-"}</dd></div>
