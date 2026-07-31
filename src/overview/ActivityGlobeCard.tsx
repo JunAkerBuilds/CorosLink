@@ -65,6 +65,10 @@ import {
   ActivityGlobeRenderer,
   type ActivityGlobeRendererHandle,
 } from "./ActivityGlobeRenderer";
+import {
+  defineSelectionPreference,
+  useSelectionPreference,
+} from "../preferences/selectionPreferences";
 import "./activityGlobe.css";
 
 interface ActivityGlobeCardProps {
@@ -77,6 +81,45 @@ interface ActivityGlobeCardProps {
 }
 
 type ActivityPeriod = "all" | "year" | "90-days" | "custom";
+
+interface ActivityPeriodPreference {
+  period: ActivityPeriod;
+  customStart: string;
+  customEnd: string;
+}
+
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function isIsoDateOrEmpty(value: unknown): value is string {
+  if (value === "") return true;
+  if (typeof value !== "string" || !ISO_DATE_PATTERN.test(value)) return false;
+  const date = new Date(`${value}T00:00:00`);
+  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
+}
+
+const ACTIVITY_PERIOD_PREFERENCE =
+  defineSelectionPreference<ActivityPeriodPreference>({
+    key: "overview.activityPeriod",
+    defaultValue: { period: "all", customStart: "", customEnd: "" },
+    validate: (value): value is ActivityPeriodPreference => {
+      if (typeof value !== "object" || value === null) return false;
+      const candidate = value as Record<string, unknown>;
+      if (
+        !["all", "year", "90-days", "custom"].includes(
+          String(candidate.period),
+        ) ||
+        !isIsoDateOrEmpty(candidate.customStart) ||
+        !isIsoDateOrEmpty(candidate.customEnd)
+      ) {
+        return false;
+      }
+      return !(
+        candidate.customStart &&
+        candidate.customEnd &&
+        candidate.customStart > candidate.customEnd
+      );
+    },
+  });
 
 interface PlaceLabel {
   city: string;
@@ -313,9 +356,10 @@ export function ActivityGlobeCard({
   const globeRendererRef = useRef<ActivityGlobeRendererHandle>(null);
   const streetEnterTimerRef = useRef<number | null>(null);
 
-  const [period, setPeriod] = useState<ActivityPeriod>("all");
-  const [customStart, setCustomStart] = useState("");
-  const [customEnd, setCustomEnd] = useState("");
+  const [periodPreference, setPeriodPreference] = useSelectionPreference(
+    ACTIVITY_PERIOD_PREFERENCE,
+  );
+  const { period, customStart, customEnd } = periodPreference;
   const [selectedLocationKey, setSelectedLocationKey] = useState<string | null>(
     null,
   );
@@ -830,7 +874,12 @@ export function ActivityGlobeCard({
                   type="button"
                   className={period === value ? "is-selected" : undefined}
                   aria-pressed={period === value}
-                  onClick={() => setPeriod(value)}
+                  onClick={() =>
+                    setPeriodPreference((current) => ({
+                      ...current,
+                      period: value,
+                    }))
+                  }
                 >
                   {label}
                   {value === "custom" ? (
@@ -847,7 +896,12 @@ export function ActivityGlobeCard({
                     type="date"
                     value={customStart}
                     max={customEnd || undefined}
-                    onChange={(event) => setCustomStart(event.target.value)}
+                    onChange={(event) =>
+                      setPeriodPreference((current) => ({
+                        ...current,
+                        customStart: event.target.value,
+                      }))
+                    }
                   />
                 </label>
                 <label>
@@ -856,7 +910,12 @@ export function ActivityGlobeCard({
                     type="date"
                     value={customEnd}
                     min={customStart || undefined}
-                    onChange={(event) => setCustomEnd(event.target.value)}
+                    onChange={(event) =>
+                      setPeriodPreference((current) => ({
+                        ...current,
+                        customEnd: event.target.value,
+                      }))
+                    }
                   />
                 </label>
               </div>

@@ -38,6 +38,17 @@ import type {
 } from "../types";
 import type { UnitSystem } from "../../../electron/types";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
+import {
+  defineSelectionPreference,
+  selectionIsOneOf,
+  useSelectionPreference
+} from "../../preferences/selectionPreferences";
+
+const HEATMAP_METRIC_PREFERENCE = defineSelectionPreference<HeatmapMetric>({
+  key: "training.heatmapMetric",
+  defaultValue: "trainingLoad",
+  validate: selectionIsOneOf(["trainingLoad", "rpeLoad"])
+});
 
 interface TrainingHeatmapPanelProps {
   snapshot: TrainingHubSnapshot | null;
@@ -128,7 +139,9 @@ export function TrainingHeatmapPanel({
 }: TrainingHeatmapPanelProps) {
   const { unitSystem } = useUnitSystem();
   const reducedMotion = usePrefersReducedMotion();
-  const [metric, setMetric] = useState<HeatmapMetric>("trainingLoad");
+  const [metric, setMetric] = useSelectionPreference(
+    HEATMAP_METRIC_PREFERENCE
+  );
   const gridRef = useRef<HTMLDivElement>(null);
   const pointerFrameRef = useRef<number | null>(null);
   const pointerClientRef = useRef({ x: 0, y: 0 });

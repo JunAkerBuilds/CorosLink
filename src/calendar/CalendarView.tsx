@@ -49,6 +49,17 @@ import {
 import { useCalendarData } from "./useCalendarData";
 import { WorkoutEditorModal } from "./WorkoutEditorModal";
 import { WorkoutLibraryModal } from "./WorkoutLibraryModal";
+import {
+  defineSelectionPreference,
+  selectionIsOneOf,
+  useSelectionPreference
+} from "../preferences/selectionPreferences";
+
+const CALENDAR_MODE_PREFERENCE = defineSelectionPreference<CalendarMode>({
+  key: "calendar.mode",
+  defaultValue: "month",
+  validate: selectionIsOneOf(["month", "week"])
+});
 
 interface CalendarViewProps {
   api: CorosLinkApi;
@@ -142,7 +153,7 @@ export function CalendarView({
   onOpenCoach
 }: CalendarViewProps) {
   const { unitSystem } = useUnitSystem();
-  const [mode, setMode] = useState<CalendarMode>("month");
+  const [mode, setMode] = useSelectionPreference(CALENDAR_MODE_PREFERENCE);
   const [anchor, setAnchor] = useState(() => new Date());
   const [selection, setSelection] = useState<CalendarSelection | null>(null);
   const [addTarget, setAddTarget] = useState<string | null>(null);

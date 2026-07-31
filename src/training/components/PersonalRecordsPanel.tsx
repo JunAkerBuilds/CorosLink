@@ -13,6 +13,10 @@ import {
 } from "../formatters";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import { formatDistanceValue } from "../../units/units";
+import {
+  defineSelectionPreference,
+  useSelectionPreference
+} from "../../preferences/selectionPreferences";
 
 interface PersonalRecordsPanelProps {
   dashboard: TrainingHubDashboard | null;
@@ -20,6 +24,13 @@ interface PersonalRecordsPanelProps {
 
 const RECORD_TYPE_LONGEST_RUN = 101;
 const RECORD_TYPE_ELEVATION_GAIN = 103;
+
+const PERSONAL_RECORD_GROUP_PREFERENCE = defineSelectionPreference<number>({
+  key: "training.personalRecordGroup",
+  defaultValue: 1,
+  validate: (value): value is number =>
+    typeof value === "number" && Number.isInteger(value) && value > 0
+});
 
 function recordIcon(type: number) {
   if (type === RECORD_TYPE_LONGEST_RUN) {
@@ -155,7 +166,9 @@ function LaurelBadge() {
 
 export function PersonalRecordsPanel({ dashboard }: PersonalRecordsPanelProps) {
   const groups = dashboard?.personalRecords ?? [];
-  const [activeGroupType, setActiveGroupType] = useState<number>(1);
+  const [activeGroupType, setActiveGroupType] = useSelectionPreference(
+    PERSONAL_RECORD_GROUP_PREFERENCE
+  );
 
   useEffect(() => {
     if (groups.length === 0) {

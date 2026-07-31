@@ -1,4 +1,9 @@
-import { Loader2, MoonStar } from "lucide-react";
+import {
+  Loader2,
+  Moon,
+  MoonStar,
+  Sunrise
+} from "lucide-react";
 import { formatSleepClockRange, formatSleepNightLabel } from "../formatters";
 import type { TrainingHubSleepRecord, TrainingHubSleepSummary } from "../../../electron/types";
 
@@ -90,19 +95,72 @@ function stageTotal(record: TrainingHubSleepRecord): number {
 
 function formatNapSummary(record: TrainingHubSleepRecord): string {
   if (record.napMinutes === undefined) {
-    return "–";
+    return "No data";
   }
 
-  const duration = formatSleepDuration(record.napMinutes);
-  if (record.napStart && record.napEnd) {
-    return `${duration} · ${record.napStart}–${record.napEnd}`;
-  }
-
-  return duration;
+  return formatSleepDuration(record.napMinutes);
 }
 
-function formatSleepWindow(record: TrainingHubSleepRecord): string {
-  return formatSleepClockRange(record.sleepStart, record.sleepEnd) ?? "–";
+function formatSleepWindow(
+  record: TrainingHubSleepRecord
+): { start: string; end: string } | undefined {
+  const range = formatSleepClockRange(record.sleepStart, record.sleepEnd);
+  if (!range) {
+    return undefined;
+  }
+
+  const [start, end] = range.split(" – ");
+  return start && end ? { start, end } : undefined;
+}
+
+function formatSleepMetricDuration(minutes?: number): string {
+  const duration = formatSleepDuration(minutes);
+  return duration === "–" ? "No data" : duration;
+}
+
+function SleepMetric({
+  label,
+  value
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="sleep-metric">
+      <dt>{label}</dt>
+      <dd title={String(value)}>{value}</dd>
+    </div>
+  );
+}
+
+function SleepWindowMetric({ record }: { record: TrainingHubSleepRecord }) {
+  const window = formatSleepWindow(record);
+
+  return (
+    <div className="sleep-metric is-window">
+      <dt>Sleep window</dt>
+      <dd
+        className="sleep-window-value"
+        title={window ? `${window.start} to ${window.end}` : "No data"}
+      >
+        {window ? (
+          <>
+            <span className="sleep-window-time">
+              <Moon size={13} strokeWidth={2} aria-hidden="true" />
+              {window.start}
+            </span>
+            <span className="sleep-window-arrow" aria-hidden="true">→</span>
+            <span className="sleep-window-time">
+              <Sunrise size={13} strokeWidth={2} aria-hidden="true" />
+              {window.end}
+            </span>
+          </>
+        ) : (
+          "No data"
+        )}
+      </dd>
+    </div>
+  );
 }
 
 function formatPercent(value?: number): string {
@@ -243,24 +301,21 @@ export function SleepSummaryPanel({
             </p>
           ) : null}
 
-          <div className="sleep-panel-metrics">
-            <div>
-              <span>Window</span>
-              <strong>{formatSleepWindow(latest)}</strong>
-            </div>
-            <div>
-              <span>Awake</span>
-              <strong>{formatSleepDuration(latest.awakeMinutes)}</strong>
-            </div>
-            <div>
-              <span>Awake &gt;5m</span>
-              <strong>{latest.awakeCountOverFiveMinutes ?? "–"}</strong>
-            </div>
-            <div>
-              <span>Naps</span>
-              <strong>{formatNapSummary(latest)}</strong>
-            </div>
-          </div>
+          <dl className="sleep-panel-metrics" aria-label="Sleep details">
+            <SleepWindowMetric record={latest} />
+            <SleepMetric
+              label="Awake"
+              value={formatSleepMetricDuration(latest.awakeMinutes)}
+            />
+            <SleepMetric
+              label="Wake-ups > 5m"
+              value={latest.awakeCountOverFiveMinutes ?? "No data"}
+            />
+            <SleepMetric
+              label="Naps"
+              value={formatNapSummary(latest)}
+            />
+          </dl>
         </>
       ) : null}
 

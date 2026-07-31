@@ -21,6 +21,11 @@ import { formatDistanceMeters, formatDurationSeconds } from "../formatters";
 import type { UnitSystem } from "../../../electron/types";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import { distanceUnit, metersToDisplayDistance } from "../../units/units";
+import {
+  defineSelectionPreference,
+  selectionIsOneOf,
+  useSelectionPreference
+} from "../../preferences/selectionPreferences";
 
 interface TrainingZoneDistributionChartsProps {
   lthrZones: TrainingHubThresholdZone[];
@@ -153,6 +158,26 @@ const RPE_METRIC_OPTIONS: MetricDropdownOption<RpeMetric>[] = [
   { value: "srpe", label: RPE_METRIC_LABELS.srpe },
   { value: "time", label: RPE_METRIC_LABELS.time }
 ];
+
+const HEART_RATE_METRIC_PREFERENCE =
+  defineSelectionPreference<ActivityMetric>({
+    key: "training.heartRateDistributionMetric",
+    defaultValue: "trainingLoad",
+    validate: selectionIsOneOf(["trainingLoad", "distance", "time"])
+  });
+
+const DISTANCE_METRIC_PREFERENCE =
+  defineSelectionPreference<DistanceMetric>({
+    key: "training.distanceDistributionMetric",
+    defaultValue: "frequency",
+    validate: selectionIsOneOf(["frequency", "trainingLoad", "time"])
+  });
+
+const RPE_METRIC_PREFERENCE = defineSelectionPreference<RpeMetric>({
+  key: "training.rpeDistributionMetric",
+  defaultValue: "frequency",
+  validate: selectionIsOneOf(["frequency", "srpe", "time"])
+});
 
 const FOUR_WEEKS_MS = 28 * 24 * 60 * 60 * 1000;
 
@@ -953,10 +978,12 @@ export function TrainingZoneDistributionCharts({
   analytics
 }: TrainingZoneDistributionChartsProps) {
   const { unitSystem } = useUnitSystem();
-  const [heartRateMetric, setHeartRateMetric] =
-    useState<ActivityMetric>("trainingLoad");
-  const [distanceMetric, setDistanceMetric] =
-    useState<DistanceMetric>("frequency");
+  const [heartRateMetric, setHeartRateMetric] = useSelectionPreference(
+    HEART_RATE_METRIC_PREFERENCE
+  );
+  const [distanceMetric, setDistanceMetric] = useSelectionPreference(
+    DISTANCE_METRIC_PREFERENCE
+  );
 
   return (
     <section className="training-load-profile">
@@ -1021,7 +1048,9 @@ export function TrainingZoneDistributionCharts({
 export function PerceivedEffortPanel({
   distribution
 }: PerceivedEffortPanelProps) {
-  const [rpeMetric, setRpeMetric] = useState<RpeMetric>("frequency");
+  const [rpeMetric, setRpeMetric] = useSelectionPreference(
+    RPE_METRIC_PREFERENCE
+  );
   const coverage = distribution?.coverage;
   const coverageNote =
     coverage && coverage.total > 0

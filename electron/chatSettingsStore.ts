@@ -6,6 +6,7 @@ import {
 
 export const CHAT_SETTINGS_KEYS = {
   provider: "chat.provider",
+  chatgptModel: "chat.chatgpt.model",
   claudeExecutablePath: "chat.claudeCode.executablePath",
   claudeModel: "chat.claudeCode.model",
   claudeLastConnectionStatus: "chat.claudeCode.lastConnectionStatus",
@@ -41,6 +42,9 @@ export function readChatSettingsFromStore(
 ): ChatSettings {
   return {
     provider: normalizeProvider(store.get(CHAT_SETTINGS_KEYS.provider)),
+    chatgpt: {
+      model: store.get(CHAT_SETTINGS_KEYS.chatgptModel) || undefined
+    },
     claudeCode: {
       executablePath:
         store.get(CHAT_SETTINGS_KEYS.claudeExecutablePath) || undefined,
@@ -82,6 +86,12 @@ export function saveChatSettingsToStore(
   settings: ChatSettings
 ): ChatSettings {
   store.set(CHAT_SETTINGS_KEYS.provider, normalizeProvider(settings.provider));
+  const chatgptModel = settings.chatgpt?.model?.trim();
+  if (chatgptModel) {
+    store.set(CHAT_SETTINGS_KEYS.chatgptModel, chatgptModel);
+  } else {
+    store.delete([CHAT_SETTINGS_KEYS.chatgptModel]);
+  }
   const executablePath = settings.claudeCode?.executablePath?.trim();
   if (executablePath) {
     store.set(CHAT_SETTINGS_KEYS.claudeExecutablePath, executablePath);

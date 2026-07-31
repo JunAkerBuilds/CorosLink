@@ -65,6 +65,11 @@ import "./strength.css";
 import "./exerciseExplorer.css";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import { kilogramsToDisplayWeight, weightUnit } from "../units/units";
+import {
+  defineSelectionPreference,
+  selectionIsOneOf,
+  useSelectionPreference
+} from "../preferences/selectionPreferences";
 
 interface StrengthViewProps {
   api: CorosLinkApi;
@@ -86,6 +91,31 @@ const METRIC_OPTIONS: { id: HeatMetric; label: string }[] = [
   { id: "volume", label: "Volume" },
   { id: "time", label: "Time" }
 ];
+
+const STRENGTH_DAYS_PREFERENCE = defineSelectionPreference<number>({
+  key: "strength.days",
+  defaultValue: 90,
+  validate: selectionIsOneOf([30, 90, 180, 365])
+});
+
+const STRENGTH_SOURCE_PREFERENCE =
+  defineSelectionPreference<StrengthDataSource>({
+    key: "strength.source",
+    defaultValue: "combined",
+    validate: selectionIsOneOf(["combined", "hevy", "coros"])
+  });
+
+const STRENGTH_BODY_VIEW_PREFERENCE = defineSelectionPreference<BodyView>({
+  key: "strength.bodyView",
+  defaultValue: "front",
+  validate: selectionIsOneOf(["front", "back"])
+});
+
+const STRENGTH_METRIC_PREFERENCE = defineSelectionPreference<HeatMetric>({
+  key: "strength.metric",
+  defaultValue: "sets",
+  validate: selectionIsOneOf(["sets", "volume", "time"])
+});
 
 /** Chunks are drained in a loop; this caps a runaway backfill. */
 const MAX_SYNC_ROUNDS = 60;
@@ -407,8 +437,10 @@ export function StrengthView({
   const { theme } = useTheme();
   const ember = theme === "paper" ? EMBER.paper : EMBER.dark;
 
-  const [days, setDays] = useState(90);
-  const [source, setSource] = useState<StrengthDataSource>("combined");
+  const [days, setDays] = useSelectionPreference(STRENGTH_DAYS_PREFERENCE);
+  const [source, setSource, sourcePreference] = useSelectionPreference(
+    STRENGTH_SOURCE_PREFERENCE
+  );
   const [hevyStatus, setHevyStatus] = useState<HevyStatus | null>(null);
   const [hevyStatusLoading, setHevyStatusLoading] = useState(true);
   const [hevyDialogOpen, setHevyDialogOpen] = useState(false);
@@ -421,9 +453,13 @@ export function StrengthView({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
-  const [view, setView] = useState<BodyView>("front");
+  const [view, setView] = useSelectionPreference(
+    STRENGTH_BODY_VIEW_PREFERENCE
+  );
   const [viewRequest, setViewRequest] = useState(0);
-  const [metric, setMetric] = useState<HeatMetric>("sets");
+  const [metric, setMetric] = useSelectionPreference(
+    STRENGTH_METRIC_PREFERENCE
+  );
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleId | null>(null);
   const [selectedExerciseName, setSelectedExerciseName] = useState<string | null>(null);
   // Hover remains a transient highlight on the mannequin. The right-hand
@@ -432,7 +468,7 @@ export function StrengthView({
   const [figureHover, setFigureHover] = useState<MuscleId | null>(null);
   const [listHover, setListHover] = useState<MuscleId | null>(null);
   const syncSequenceRef = useRef(0);
-  const sourceInitializedRef = useRef(false);
+  const sourceInitializedRef = useRef(sourcePreference.restored);
   const hevyConnected = Boolean(hevyStatus?.connected);
   const anyConnected = corosConnected || hevyConnected;
 

@@ -60,6 +60,11 @@ import { TrainingPlanCalendarDialog } from "./TrainingPlanCalendarDialog";
 import { TrainingPlanGenerator } from "./TrainingPlanGenerator";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import { formatDistanceValue } from "../units/units";
+import {
+  defineSelectionPreference,
+  selectionIsOneOf,
+  useSelectionPreference
+} from "../preferences/selectionPreferences";
 import "./trainingLibrary.css";
 
 interface TrainingLibraryViewProps {
@@ -81,6 +86,18 @@ const SECTIONS: Array<{ id: LibrarySection; label: string; icon: typeof Zap }> =
   { id: "templates", label: "Templates", icon: Bookmark },
   { id: "adherence", label: "Adherence", icon: Target }
 ];
+
+const LIBRARY_SECTION_PREFERENCE =
+  defineSelectionPreference<LibrarySection>({
+    key: "trainingLibrary.section",
+    defaultValue: "workouts",
+    validate: selectionIsOneOf([
+      "workouts",
+      "plans",
+      "templates",
+      "adherence"
+    ])
+  });
 
 /** Sync states worth interrupting the reader for. Everything else stays quiet. */
 const UNSETTLED_SYNC = new Set(["pending", "conflicted", "failed", "stale"]);
@@ -153,7 +170,9 @@ export function TrainingLibraryView({
   onMessage,
   onError
 }: TrainingLibraryViewProps) {
-  const [section, setSection] = useState<LibrarySection>("workouts");
+  const [section, setSection] = useSelectionPreference(
+    LIBRARY_SECTION_PREFERENCE
+  );
   const [snapshot, setSnapshot] = useState<TrainingLibrarySnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [fatalError, setFatalError] = useState<string | null>(null);
@@ -519,6 +538,61 @@ const PLAN_SORT_OPTIONS: Array<{ value: PlanColumn; label: string }> = [
   { value: "load", label: "Training load" }
 ];
 
+type PlanIndexNoun = "plan" | "template";
+
+const PLAN_SCOPE_PREFERENCES = {
+  plan: defineSelectionPreference<string>({
+    key: "trainingLibrary.plans.scope",
+    defaultValue: "all",
+    validate: (value): value is string =>
+      typeof value === "string" &&
+      ["all", "favorite", "coros", "local", "coach", "unsettled", "archived"].includes(value)
+  }),
+  template: defineSelectionPreference<string>({
+    key: "trainingLibrary.templates.scope",
+    defaultValue: "all",
+    validate: (value): value is string =>
+      typeof value === "string" &&
+      ["all", "favorite", "coros", "local", "coach", "unsettled", "archived"].includes(value)
+  })
+} satisfies Record<PlanIndexNoun, unknown>;
+
+function isPlanSort(value: unknown): value is PlanSort {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    ["name", "weeks", "sessions", "load", "updated"].includes(
+      String(candidate.column)
+    ) && typeof candidate.descending === "boolean"
+  );
+}
+
+const PLAN_SORT_PREFERENCES = {
+  plan: defineSelectionPreference<PlanSort>({
+    key: "trainingLibrary.plans.sort",
+    defaultValue: { column: "updated", descending: true },
+    validate: isPlanSort
+  }),
+  template: defineSelectionPreference<PlanSort>({
+    key: "trainingLibrary.templates.sort",
+    defaultValue: { column: "updated", descending: true },
+    validate: isPlanSort
+  })
+} satisfies Record<PlanIndexNoun, unknown>;
+
+const PLAN_LAYOUT_PREFERENCES = {
+  plan: defineSelectionPreference<"grid" | "list">({
+    key: "trainingLibrary.plans.layout",
+    defaultValue: "grid",
+    validate: selectionIsOneOf(["grid", "list"])
+  }),
+  template: defineSelectionPreference<"grid" | "list">({
+    key: "trainingLibrary.templates.layout",
+    defaultValue: "grid",
+    validate: selectionIsOneOf(["grid", "list"])
+  })
+} satisfies Record<PlanIndexNoun, unknown>;
+
 /**
  * Everything a tile and a row both need, derived once so the two layouts can
  * never drift apart on what a plan says.
@@ -553,7 +627,7 @@ function planView(
 
 interface PlanIndexProps {
   api: CorosLinkApi;
-  noun: "plan" | "template";
+  noun: PlanIndexNoun;
   plans: TrainingPlanDocument[];
   collections: TrainingCollection[];
   onCreate: () => void;
@@ -585,9 +659,13 @@ function PlanIndex({
   onCompare
 }: PlanIndexProps) {
   const [query, setQuery] = useState("");
-  const [scope, setScope] = useState("all");
-  const [sort, setSort] = useState<PlanSort>({ column: "updated", descending: true });
-  const [layout, setLayout] = useState<"grid" | "list">("grid");
+  const [scope, setScope] = useSelectionPreference(
+    PLAN_SCOPE_PREFERENCES[noun]
+  );
+  const [sort, setSort] = useSelectionPreference(PLAN_SORT_PREFERENCES[noun]);
+  const [layout, setLayout] = useSelectionPreference(
+    PLAN_LAYOUT_PREFERENCES[noun]
+  );
   const [selected, setSelected] = useState<string[]>([]);
 
   const summaries = useMemo(
@@ -609,6 +687,11 @@ function PlanIndex({
     if (plans.some((plan) => plan.archived)) options.push({ id: "archived", label: "Archived" });
     return options;
   }, [plans]);
+
+  const scopeAvailable = scopes.some((option) => option.id === scope);
+  useEffect(() => {
+    if (!scopeAvailable) setScope("all");
+  }, [scopeAvailable, setScope]);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -1109,6 +1192,14 @@ const ADHERENCE_STATES: Array<{ id: string; label: string }> = [
   { id: "upcoming", label: "Upcoming" }
 ];
 
+const ADHERENCE_STATE_PREFERENCE = defineSelectionPreference<string>({
+  key: "trainingLibrary.adherenceState",
+  defaultValue: "all",
+  validate: (value): value is string =>
+    typeof value === "string" &&
+    ADHERENCE_STATES.some((option) => option.id === value)
+});
+
 interface AdherenceSectionProps {
   api: CorosLinkApi;
   matches: TrainingActivityMatch[];
@@ -1121,7 +1212,9 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
   const { unitSystem } = useUnitSystem();
   const [activities, setActivities] = useState<TrainingHubActivity[]>([]);
   const [loading, setLoading] = useState(true);
-  const [state, setState] = useState("all");
+  const [state, setState] = useSelectionPreference(
+    ADHERENCE_STATE_PREFERENCE
+  );
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -1178,6 +1271,11 @@ function AdherenceSection({ api, matches, onRefresh, onMessage, onError }: Adher
   const statesPresent = ADHERENCE_STATES.filter(
     (option) => option.id === "all" || matches.some((match) => match.status === option.id)
   );
+  const stateAvailable = statesPresent.some((option) => option.id === state);
+
+  useEffect(() => {
+    if (!stateAvailable) setState("all");
+  }, [setState, stateAvailable]);
 
   const activityOptions = useMemo(
     () => [

@@ -37,6 +37,11 @@ import { WorkoutEditorModal } from "../calendar/WorkoutEditorModal";
 import { AddWorkoutModal } from "../calendar/AddWorkoutModal";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import { formatDistanceValue, formatElevationValue } from "../units/units";
+import {
+  defineSelectionPreference,
+  selectionIsOneOf,
+  useSelectionPreference
+} from "../preferences/selectionPreferences";
 
 interface WorkoutWorkspaceProps {
   api: CorosLinkApi;
@@ -67,6 +72,34 @@ const WORKOUT_SORT_OPTIONS: Array<{ value: WorkoutColumn; label: string }> = [
   { value: "load", label: "Training load" },
   { value: "used", label: "Most used" }
 ];
+
+const WORKOUT_SCOPE_PREFERENCE = defineSelectionPreference<string>({
+  key: "trainingLibrary.workouts.scope",
+  defaultValue: "all",
+  validate: (value): value is string =>
+    typeof value === "string" &&
+    (["all", "favorite", "unsettled"].includes(value) || /^sport:\d+$/.test(value))
+});
+
+const WORKOUT_SORT_PREFERENCE = defineSelectionPreference<WorkoutSort>({
+  key: "trainingLibrary.workouts.sort",
+  defaultValue: { column: "name", descending: false },
+  validate: (value): value is WorkoutSort => {
+    if (typeof value !== "object" || value === null) return false;
+    const candidate = value as Record<string, unknown>;
+    return (
+      ["name", "total", "load", "used"].includes(String(candidate.column)) &&
+      typeof candidate.descending === "boolean"
+    );
+  }
+});
+
+const WORKOUT_LAYOUT_PREFERENCE =
+  defineSelectionPreference<"grid" | "list">({
+    key: "trainingLibrary.workouts.layout",
+    defaultValue: "grid",
+    validate: selectionIsOneOf(["grid", "list"])
+  });
 
 const UNSETTLED_SYNC = new Set(["pending", "conflicted", "failed", "stale"]);
 /** Enough segments to read an interval comb without drawing thousands of them. */
@@ -268,9 +301,13 @@ export function WorkoutWorkspace({
 }: WorkoutWorkspaceProps) {
   const { unitSystem } = useUnitSystem();
   const [query, setQuery] = useState("");
-  const [scope, setScope] = useState("all");
-  const [sort, setSort] = useState<WorkoutSort>({ column: "name", descending: false });
-  const [layout, setLayout] = useState<"grid" | "list">("grid");
+  const [scope, setScope] = useSelectionPreference(
+    WORKOUT_SCOPE_PREFERENCE
+  );
+  const [sort, setSort] = useSelectionPreference(WORKOUT_SORT_PREFERENCE);
+  const [layout, setLayout] = useSelectionPreference(
+    WORKOUT_LAYOUT_PREFERENCE
+  );
   const [selected, setSelected] = useState<string[]>([]);
   const [activeId, setActiveId] = useState<string | null>(workouts[0]?.id ?? null);
   const [visibleCount, setVisibleCount] = useState(60);
@@ -309,6 +346,11 @@ export function WorkoutWorkspace({
     }
     return options;
   }, [workouts]);
+
+  const scopeAvailable = scopes.some((option) => option.id === scope);
+  useEffect(() => {
+    if (!scopeAvailable) setScope("all");
+  }, [scopeAvailable, setScope]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();

@@ -22,6 +22,7 @@ export interface SelectDropdownProps<T extends string> {
   onChange: (value: T) => void;
   label: string;
   className?: string;
+  menuClassName?: string;
   disabled?: boolean;
   portal?: boolean;
   title?: string;
@@ -54,6 +55,7 @@ export function SelectDropdown<T extends string>({
   onChange,
   label,
   className,
+  menuClassName,
   disabled = false,
   portal = false,
   title
@@ -222,7 +224,13 @@ export function SelectDropdown<T extends string>({
 
   const menu = isOpen ? (
     <div
-      className={`app-select-menu${portal ? " is-portaled" : ""}`}
+      className={[
+        "app-select-menu",
+        portal ? "is-portaled" : "",
+        menuClassName
+      ]
+        .filter(Boolean)
+        .join(" ")}
       id={menuId}
       ref={menuRef}
       role="listbox"

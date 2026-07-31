@@ -1,10 +1,10 @@
-import { Bot, Sparkles, Terminal } from "lucide-react";
 import type { ChatProvider } from "../../electron/types";
+import { SelectDropdown } from "../components/SelectDropdown";
 
-const OPTIONS = [
-  { value: "chatgpt" as const, label: "ChatGPT", icon: Sparkles },
-  { value: "claude-code" as const, label: "Claude", icon: Terminal },
-  { value: "local" as const, label: "Local model", icon: Bot }
+const OPTIONS: Array<{ value: ChatProvider; label: string }> = [
+  { value: "chatgpt", label: "ChatGPT" },
+  { value: "claude-code", label: "Claude" },
+  { value: "local", label: "Local model" }
 ];
 
 export function ProviderSwitch({
@@ -16,42 +16,20 @@ export function ProviderSwitch({
   disabled?: boolean;
   onChange: (provider: ChatProvider) => void;
 }) {
-  const activeIndex = OPTIONS.findIndex((option) => option.value === provider);
+  const selectedLabel =
+    OPTIONS.find((option) => option.value === provider)?.label ?? provider;
 
   return (
-    <div
-      className="chat-provider-switch"
-      data-provider={provider}
-      role="radiogroup"
-      aria-label="Coach provider"
-    >
-      <span
-        className="chat-provider-switch-indicator"
-        style={{ transform: `translateX(${Math.max(activeIndex, 0) * 100}%)` }}
-        aria-hidden="true"
-      />
-      {OPTIONS.map((option) => {
-        const Icon = option.icon;
-        const isActive = provider === option.value;
-
-        return (
-          <button
-            key={option.value}
-            type="button"
-            className={isActive ? "active" : ""}
-            role="radio"
-            aria-checked={isActive}
-            onClick={() => onChange(option.value)}
-            disabled={disabled || isActive}
-          >
-            <Icon size={13} aria-hidden="true" />
-            <span>{option.label}</span>
-            {isActive ? (
-              <span className="chat-provider-switch-dot" aria-hidden="true" />
-            ) : null}
-          </button>
-        );
-      })}
-    </div>
+    <SelectDropdown
+      className="app-select--pill chat-provider-select"
+      menuClassName="chat-select-menu"
+      value={provider}
+      options={OPTIONS}
+      onChange={onChange}
+      label="Coach provider"
+      title={`Coach provider: ${selectedLabel}`}
+      disabled={disabled}
+      portal
+    />
   );
 }

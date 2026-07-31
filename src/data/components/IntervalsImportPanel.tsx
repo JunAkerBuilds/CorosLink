@@ -25,6 +25,11 @@ import {
   formatDistanceMeters,
   formatTrainingTimestamp
 } from "../../training/formatters";
+import {
+  defineSelectionPreference,
+  selectionIsOneOf,
+  useSelectionPreference
+} from "../../preferences/selectionPreferences";
 
 const DEFAULT_DAYS_BACK = 30;
 
@@ -34,6 +39,12 @@ const RANGE_OPTIONS = [
   { days: 90, label: "90 days" },
   { days: 365, label: "1 year" }
 ] as const;
+
+const INTERVALS_RANGE_PREFERENCE = defineSelectionPreference<number>({
+  key: "data.intervalsDaysBack",
+  defaultValue: DEFAULT_DAYS_BACK,
+  validate: selectionIsOneOf([7, 30, 90, 365])
+});
 
 interface RowState {
   busy: boolean;
@@ -82,7 +93,9 @@ export function IntervalsImportPanel({ api }: { api: CorosLinkApi }) {
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
 
-  const [daysBack, setDaysBack] = useState(DEFAULT_DAYS_BACK);
+  const [daysBack, setDaysBack] = useSelectionPreference(
+    INTERVALS_RANGE_PREFERENCE
+  );
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [rows, setRows] = useState<IntervalsActivityWithStatus[]>([]);
   const [refreshing, setRefreshing] = useState(false);

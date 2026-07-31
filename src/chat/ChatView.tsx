@@ -15,6 +15,7 @@ import {
   Loader2,
   LogOut,
   MessageCircle,
+  Plus,
   RefreshCw,
   Send,
   Settings2,
@@ -72,6 +73,7 @@ import { FitnessTrendCard } from "./FitnessTrendCard";
 import { HrZoneCard } from "./HrZoneCard";
 import { ChatSettingsModal } from "./ChatSettingsModal";
 import { ChatSidebar } from "./ChatSidebar";
+import { ModelSwitch } from "./ModelSwitch";
 import { ProviderSwitch } from "./ProviderSwitch";
 import {
   fromPersistedEntries,
@@ -90,6 +92,7 @@ import {
 
 const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   provider: "chatgpt",
+  chatgpt: {},
   claudeCode: {
     permissions: {
       recentActivities: true,
@@ -1703,6 +1706,43 @@ export function ChatView({
     }
   };
 
+  const handleModelChange = async (model: string) => {
+    if (!api || chatSettings.provider === "local") return;
+    const normalizedModel = model.trim() || undefined;
+    const nextSettings: ChatSettings =
+      chatSettings.provider === "claude-code"
+        ? {
+            ...chatSettings,
+            claudeCode: {
+              ...chatSettings.claudeCode,
+              model: normalizedModel
+            }
+          }
+        : {
+            ...chatSettings,
+            chatgpt: {
+              ...chatSettings.chatgpt,
+              model: normalizedModel
+            }
+          };
+
+    setChatSettings(nextSettings);
+    setSavingSettings(true);
+    onError(null);
+    try {
+      const saved = await api.saveChatSettings(nextSettings);
+      setChatSettings(saved);
+    } catch (caught) {
+      onError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not save the selected model."
+      );
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   const updateLocalDraft = (patch: Partial<ChatSettings["local"]>) => {
     setChatSettings((current) => ({
       ...current,
@@ -2268,6 +2308,21 @@ export function ChatView({
       onChange={(provider) => void handleProviderChange(provider)}
     />
   );
+  const selectedModel =
+    chatSettings.provider === "claude-code"
+      ? chatSettings.claudeCode.model ?? ""
+      : chatSettings.chatgpt.model ?? "";
+  const providerControls = (
+    <div className="chat-provider-controls">
+      {providerSwitch}
+      <ModelSwitch
+        provider={chatSettings.provider}
+        model={selectedModel}
+        disabled={savingSettings || isBusy}
+        onChange={(model) => void handleModelChange(model)}
+      />
+    </div>
+  );
 
   const conversationSidebarOpen = chatSettings.sidebarOpen !== false;
   const sidebarProps = {
@@ -2414,7 +2469,7 @@ export function ChatView({
               </p>
             </div>
             <div className="chat-composer-toolbar chat-composer-toolbar-login">
-              {providerSwitch}
+              {providerControls}
             </div>
           </div>
         </div>
@@ -2472,7 +2527,7 @@ export function ChatView({
               </p>
             </div>
             <div className="chat-composer-toolbar chat-composer-toolbar-login">
-              {providerSwitch}
+              {providerControls}
             </div>
           </div>
         </div>
@@ -2841,7 +2896,20 @@ export function ChatView({
       </div>
 
           <div className="chat-composer">
-            <div className="chat-composer-toolbar">{providerSwitch}</div>
+            <div className="chat-composer-toolbar">
+              {providerControls}
+              <button
+                type="button"
+                className="chat-new-chat chat-composer-new-chat"
+                onClick={() => void handleNewChat()}
+                disabled={!api || isBusy}
+                aria-label="Start a new chat"
+                title="Start a new chat"
+              >
+                <Plus size={14} aria-hidden="true" />
+                <span>New chat</span>
+              </button>
+            </div>
             <div className="chat-composer-inner">
               <textarea
                 ref={inputRef}

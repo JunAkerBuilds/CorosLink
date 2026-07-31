@@ -2416,8 +2416,14 @@ export interface LocalChatConfig {
   toolsEnabled: boolean;
 }
 
+export interface ChatGptConfig {
+  /** Optional model id. Empty uses the best model available to the account. */
+  model?: string;
+}
+
 export interface ChatSettings {
   provider: ChatProvider;
+  chatgpt: ChatGptConfig;
   claudeCode: ClaudeCodeConfig;
   local: LocalChatConfig;
   sidebarOpen?: boolean;

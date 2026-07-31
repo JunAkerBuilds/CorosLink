@@ -479,6 +479,18 @@ globalThis.fetch = originalFetch;
 const { readChatSettingsFromStore, saveChatSettingsToStore } = await import(
   `${distUrl("chatSettingsStore.js")}?cacheBust=${Date.now()}`
 );
+const { getChatGptModelCandidates } = await import(
+  `${distUrl("chatModels.js")}?cacheBust=${Date.now()}`
+);
+
+assert.deepEqual(
+  getChatGptModelCandidates("gpt-5.6-terra", "gpt-5.5"),
+  ["gpt-5.6-terra"]
+);
+assert.deepEqual(
+  getChatGptModelCandidates(undefined, "gpt-5.5").slice(0, 2),
+  ["gpt-5.5", "gpt-5.6-sol"]
+);
 
 const settingsValues = new Map();
 let storedApiKey = "";
@@ -503,7 +515,11 @@ const fakeApiKeyStore = {
 
 const saved = saveChatSettingsToStore(fakeStore, fakeApiKeyStore, {
   provider: "claude-code",
+  chatgpt: {
+    model: "gpt-5.6-terra"
+  },
   claudeCode: {
+    model: "sonnet",
     executablePath: "/opt/claude/bin/claude",
     lastConnectionStatus: "connected",
     lastCheckedAt: "2026-07-10T12:00:00.000Z",
@@ -524,7 +540,9 @@ const saved = saveChatSettingsToStore(fakeStore, fakeApiKeyStore, {
   }
 });
 assert.equal(saved.provider, "claude-code");
+assert.equal(saved.chatgpt.model, "gpt-5.6-terra");
 assert.equal(saved.claudeCode.executablePath, "/opt/claude/bin/claude");
+assert.equal(saved.claudeCode.model, "sonnet");
 assert.equal(saved.claudeCode.lastConnectionStatus, "connected");
 assert.deepEqual(saved.claudeCode.permissions, {
   recentActivities: true,
