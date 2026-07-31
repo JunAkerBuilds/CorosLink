@@ -2,6 +2,7 @@ import type {
   TrainingHubActivity,
   TrainingHubScheduledWorkoutEntry
 } from "../../electron/types";
+import { useLayoutEffect, useRef } from "react";
 import {
   scheduledWorkoutKey,
   type CalendarDay,
@@ -16,6 +17,7 @@ import { WeekStatsCell } from "./WeekStatsCell";
 interface CalendarGridProps {
   weeks: CalendarWeek[];
   mode: CalendarMode;
+  loading: boolean;
   busy: boolean;
   selectionMode: boolean;
   selectedWorkoutKeys: ReadonlySet<string>;
@@ -30,6 +32,7 @@ interface CalendarGridProps {
 export function CalendarGrid({
   weeks,
   mode,
+  loading,
   busy,
   selectionMode,
   selectedWorkoutKeys,
@@ -40,6 +43,39 @@ export function CalendarGrid({
   onDropEntry,
   onAskCoachWeek
 }: CalendarGridProps) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const todayRowRef = useRef<HTMLDivElement>(null);
+  const todayWeekKey = weeks.find((week) =>
+    week.days.some((day) => day.isToday)
+  )?.key;
+
+  useLayoutEffect(() => {
+    if (loading || !todayWeekKey) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const body = bodyRef.current;
+      const todayRow = todayRowRef.current;
+      if (!body || !todayRow) {
+        return;
+      }
+
+      const bodyRect = body.getBoundingClientRect();
+      const rowRect = todayRow.getBoundingClientRect();
+      const rowTop = body.scrollTop + rowRect.top - bodyRect.top;
+      const centeredTop = rowTop - (body.clientHeight - rowRect.height) / 2;
+      const maxScrollTop = Math.max(0, body.scrollHeight - body.clientHeight);
+
+      body.scrollTo({
+        top: Math.min(maxScrollTop, Math.max(0, centeredTop)),
+        behavior: "auto"
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [loading, mode, todayWeekKey]);
+
   return (
     <div
       className={`calendar-grid ${mode === "week" ? "calendar-grid-week" : ""}`}
@@ -56,29 +92,39 @@ export function CalendarGrid({
         </div>
       </div>
 
-      <div className="calendar-grid-body">
-        {weeks.map((week) => (
-          <div key={week.key} className="calendar-grid-row">
-            {week.days.map((day) => (
-              <DayCell
-                key={day.dateKey}
-                day={day}
-                mode={mode}
-                busy={busy}
-                selectionMode={selectionMode}
-                isScheduledSelected={(entry) =>
-                  selectedWorkoutKeys.has(scheduledWorkoutKey(entry))
-                }
-                onSelectScheduled={(entry) => onSelectScheduled(day, entry)}
-                onSelectActivity={(activity) => onSelectActivity(day, activity)}
-                onToggleScheduled={onToggleScheduled}
-                onAdd={onAdd}
-                onDropEntry={onDropEntry}
+      <div ref={bodyRef} className="calendar-grid-body">
+        {weeks.map((week) => {
+          const containsToday = week.key === todayWeekKey;
+          return (
+            <div
+              key={week.key}
+              ref={containsToday ? todayRowRef : undefined}
+              className="calendar-grid-row"
+            >
+              {week.days.map((day) => (
+                <DayCell
+                  key={day.dateKey}
+                  day={day}
+                  mode={mode}
+                  busy={busy}
+                  selectionMode={selectionMode}
+                  isScheduledSelected={(entry) =>
+                    selectedWorkoutKeys.has(scheduledWorkoutKey(entry))
+                  }
+                  onSelectScheduled={(entry) => onSelectScheduled(day, entry)}
+                  onSelectActivity={(activity) => onSelectActivity(day, activity)}
+                  onToggleScheduled={onToggleScheduled}
+                  onAdd={onAdd}
+                  onDropEntry={onDropEntry}
+                />
+              ))}
+              <WeekStatsCell
+                stats={week.stats}
+                onAskCoach={() => onAskCoachWeek(week)}
               />
-            ))}
-            <WeekStatsCell stats={week.stats} onAskCoach={() => onAskCoachWeek(week)} />
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

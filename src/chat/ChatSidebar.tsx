@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { PanelLeft } from "lucide-react";
 import { ChatHistoryPanel } from "./ChatHistoryPanel";
 import type { ChatSessionSummary } from "../../electron/types";
 
@@ -9,6 +10,7 @@ export function ChatSidebar({
   activeSessionId,
   busy,
   onClose,
+  onOpen,
   onNewChat,
   onSelectSession,
   onDeleteSession
@@ -19,6 +21,7 @@ export function ChatSidebar({
   activeSessionId: string | null;
   busy?: boolean;
   onClose: () => void;
+  onOpen: () => void;
   onNewChat: () => void;
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
@@ -66,6 +69,7 @@ export function ChatSidebar({
           .join(" ")}
       >
         <aside
+          id="chat-conversation-sidebar"
           className={[
             "chat-sidebar",
             open ? "is-open" : "",
@@ -80,6 +84,7 @@ export function ChatSidebar({
               sessions={sessions}
               activeSessionId={activeSessionId}
               busy={busy}
+              onCollapse={onClose}
               onNewChat={onNewChat}
               onSelectSession={onSelectSession}
               onDeleteSession={onDeleteSession}
@@ -87,6 +92,19 @@ export function ChatSidebar({
           </div>
         </aside>
       </div>
+      {!open && !overlay ? (
+        <button
+          type="button"
+          className="chat-sidebar-expand-button"
+          onClick={onOpen}
+          aria-expanded="false"
+          aria-controls="chat-conversation-sidebar"
+          aria-label="Expand conversations"
+          title="Expand conversations"
+        >
+          <PanelLeft size={17} aria-hidden="true" />
+        </button>
+      ) : null}
     </>
   );
 }

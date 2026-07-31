@@ -619,6 +619,7 @@ export function CalendarView({
       <CalendarGrid
         weeks={weeks}
         mode={mode}
+        loading={loading}
         busy={mutating}
         selectionMode={selectionMode}
         selectedWorkoutKeys={selectedWorkoutKeys}
