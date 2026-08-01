@@ -1396,8 +1396,13 @@ function registerIpcHandlers(): void {
     await disconnectMcpServer(id, { clearAuthorization: false });
   });
 
-  ipcMain.handle("chat:uploadPlanDraft", (_event, draftId: string, unitSystem?: UnitSystem, destination?: import("./types").TrainingPlanDestination) =>
-    uploadTrainingPlanDraft(draftId, normalizeUnitSystem(unitSystem), destination)
+  ipcMain.handle("chat:uploadPlanDraft", (_event, draftId: string, unitSystem?: UnitSystem, destination?: import("./types").TrainingPlanDestination, scheduleDate?: string) =>
+    uploadTrainingPlanDraft(
+      draftId,
+      normalizeUnitSystem(unitSystem),
+      destination,
+      scheduleDate
+    )
   );
 
   ipcMain.handle("chat:confirmWorkoutDelete", (_event, requestId: string) =>

@@ -121,6 +121,12 @@ function friendlyStepName(kind: RunWorkoutEditorStepKind): string {
   }
 }
 
+function editableStepOverview(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const overview = value.trim();
+  return overview && !/^sid_[a-z0-9_]+$/i.test(overview) ? overview : undefined;
+}
+
 function parseTarget(
   exercise: Record<string, unknown>,
   kind: RunWorkoutEditorStepKind
@@ -255,6 +261,16 @@ function parseStep(
     ...(rawName ? { exerciseName: rawName } : {}),
     ...(numberValue(exercise.exerciseKind) !== undefined
       ? { exerciseKind: numberValue(exercise.exerciseKind) }
+      : {}),
+    ...(sport === "strength" && kind === "training"
+      ? {
+          sets: Math.max(1, Math.min(99, Math.round(numberValue(exercise.sets) ?? 1))),
+          restType: Math.round(numberValue(exercise.restType) ?? 1),
+          restValue: Math.max(0, Math.round(numberValue(exercise.restValue) ?? 60))
+        }
+      : {}),
+    ...(editableStepOverview(exercise.overview)
+      ? { overview: editableStepOverview(exercise.overview) }
       : {}),
     ...(numberValue(exercise.packageTime) !== undefined
       ? { sendOffSeconds: numberValue(exercise.packageTime) }
@@ -561,10 +577,17 @@ export function workoutDraftToCorosProgram(
       exercise.exerciseKind = 0;
     }
     if (step.sendOffSeconds !== undefined) exercise.packageTime = Math.round(step.sendOffSeconds);
-    exercise.sets = 1;
-    exercise.restType = step.kind === "rest" ? 3 : numberValue(exercise.restType) ?? 3;
-    exercise.restValue = numberValue(exercise.restValue) ?? 0;
-    exercise.overview = defaultOverview(draft.sport, step.kind, step.target);
+    const strengthExercise = draft.sport === "strength" && step.kind === "training";
+    exercise.sets = strengthExercise ? step.sets ?? 1 : 1;
+    exercise.restType = step.kind === "rest"
+      ? 3
+      : strengthExercise
+        ? step.restType ?? 1
+        : numberValue(exercise.restType) ?? 3;
+    exercise.restValue = strengthExercise
+      ? step.restValue ?? 60
+      : numberValue(exercise.restValue) ?? 0;
+    exercise.overview = step.overview?.trim() || defaultOverview(draft.sport, step.kind, step.target);
     applyTarget(exercise, step, context, draft.sport);
     applyIntensity(exercise, step.intensity, context);
     return exercise;
@@ -637,7 +660,11 @@ export function workoutDraftToCorosProgram(
   program.exercises = flattened;
   program.exerciseNum = flattened.length;
   program.totalSets = flattened.reduce(
-    (total, exercise) => total + (exercise.isGroup ? Number(exercise.sets ?? 1) : 1),
+    (total, exercise) => {
+      const sets = Math.max(1, Number(exercise.sets ?? 1));
+      if (exercise.isGroup) return total + sets;
+      return String(exercise.groupId ?? "0") === "0" ? total + sets : total + 1;
+    },
     0
   );
   program.sets = program.totalSets;
@@ -703,6 +730,14 @@ function normalizedDraft(draft: RunWorkoutEditorDraft): unknown {
             intensity: normalizeIntensity(node.intensity),
             exerciseId: node.exerciseId,
             exerciseKind: node.exerciseKind,
+            ...(draft.sport === "strength" && node.kind === "training"
+              ? {
+                  sets: node.sets ?? 1,
+                  restType: node.restType ?? 1,
+                  restValue: node.restValue ?? 60
+                }
+              : {}),
+            overview: node.overview,
             sendOffSeconds: node.sendOffSeconds,
             editable: node.editable
           }
@@ -717,6 +752,14 @@ function normalizedDraft(draft: RunWorkoutEditorDraft): unknown {
               intensity: normalizeIntensity(step.intensity),
               exerciseId: step.exerciseId,
               exerciseKind: step.exerciseKind,
+              ...(draft.sport === "strength" && step.kind === "training"
+                ? {
+                    sets: step.sets ?? 1,
+                    restType: step.restType ?? 1,
+                    restValue: step.restValue ?? 60
+                  }
+                : {}),
+              overview: step.overview,
               sendOffSeconds: step.sendOffSeconds,
               editable: step.editable
             }))

@@ -188,7 +188,7 @@ const sportFixtures = [
   ["trailRun", { target_type: "elevationGain", target_elevation_gain_meters: 500, intensity: { type: "effortPacePercent", preset: "aerobicEndurance" } }],
   ["bike", { target_type: "time", target_duration_seconds: 600, intensity: { type: "ftpPercent", preset: "threshold" } }],
   ["swim", { target_type: "distance", target_distance_meters: 100, intensity: { type: "swimStroke", stroke: "mix" } }],
-  ["strength", { target_type: "reps", target_reps: 12, exercise_id: "T5067", intensity: { type: "weight", mode: "weight", value: 20, unit: "kg" } }],
+  ["strength", { target_type: "reps", target_reps: 12, exercise_id: "T5067", sets: 4, rest_type: 1, rest_value: 75, overview: "Control the lowering phase", intensity: { type: "weight", mode: "weight", value: 20, unit: "kg" } }],
   ["xcSki", { target_type: "distance", target_distance_meters: 1_000, intensity: { type: "speed", low: 15, high: 20, unit: "km/h" } }],
   ["indoorClimb", { target_type: "routes", target_routes: 4, intensity: { type: "climbGrade", system: "yds", relativeToOnsight: 0 } }],
   ["bouldering", { target_type: "routes", target_routes: 6, intensity: { type: "climbGrade", system: "vScale", absoluteGrade: "V5" } }],
@@ -206,6 +206,17 @@ for (const [sport, values] of sportFixtures) {
   if (sport === "hyrox") {
     assert.equal(program.exercises[0].subType, 2);
     assert.equal(program.exercises[0].hyroxTrainingMode, "strength");
+  }
+  if (sport === "strength") {
+    assert.equal(draft.nodes[0].sets, 4);
+    assert.equal(draft.nodes[0].restType, 1);
+    assert.equal(draft.nodes[0].restValue, 75);
+    assert.equal(draft.nodes[0].overview, "Control the lowering phase");
+    assert.equal(written.exercises[0].sets, 4);
+    assert.equal(written.exercises[0].restType, 1);
+    assert.equal(written.exercises[0].restValue, 75);
+    assert.equal(written.exercises[0].overview, "Control the lowering phase");
+    assert.equal(written.totalSets, 4);
   }
 }
 
@@ -244,6 +255,11 @@ assert.deepEqual(
   workoutSchemas.map((workout) => workout.properties.sport.const).sort(),
   [...codec.WORKOUT_SPORTS].sort()
 );
+const strengthWorkoutSchema = workoutSchemas.find((workout) => workout.properties.sport.const === "strength");
+const strengthStepSchema = strengthWorkoutSchema.properties.steps.items.oneOf[0];
+assert.equal(strengthStepSchema.properties.sets.maximum, 99);
+assert.deepEqual(strengthStepSchema.properties.rest_type.enum, [1]);
+assert.equal(strengthStepSchema.properties.rest_value.maximum, 3600);
 const bikeSchema = workoutSchemas.find((workout) => workout.properties.sport.const === "bike");
 const bikeStepSchema = bikeSchema.properties.steps.items.oneOf[0];
 assert.match(JSON.stringify(bikeStepSchema.properties.intensity), /ftpPercent/);
@@ -262,9 +278,29 @@ assert.equal(
 const exerciseCatalog = [
   { originId: "1", displayName: "Back Squat" },
   { originId: "2", displayName: "Front Squat" },
-  { originId: "3", displayName: "Deadlift" }
+  { originId: "3", displayName: "Deadlift" },
+  { originId: "1045", displayName: "Dumbbell Flys" },
+  { originId: "1337", displayName: "Shoulder Press Machine" },
+  { originId: "1338", displayName: "Chest Press Machine" },
+  { originId: "1341", displayName: "Triceps Pushdown Machine" }
 ];
 assert.equal(codec.resolveWorkoutExerciseName(exerciseCatalog, "Deadlift").match.originId, "3");
+assert.equal(
+  codec.resolveWorkoutExerciseName(exerciseCatalog, "Machine Chest Press").match.originId,
+  "1338"
+);
+assert.equal(
+  codec.resolveWorkoutExerciseName(exerciseCatalog, "Machine Shoulder Press").match.originId,
+  "1337"
+);
+assert.equal(
+  codec.resolveWorkoutExerciseName(exerciseCatalog, "Dumbbell Fly").match.originId,
+  "1045"
+);
+assert.equal(
+  codec.resolveWorkoutExerciseName(exerciseCatalog, "Machine Triceps Pushdown").match.originId,
+  "1341"
+);
 assert.deepEqual(
   codec.resolveWorkoutExerciseName(exerciseCatalog, "squat").candidates,
   ["Back Squat", "Front Squat"]

@@ -49,6 +49,7 @@ import {
   swimDistanceUnit
 } from "../units/units";
 import { ExerciseCombobox } from "./ExerciseCombobox";
+import { ExercisePreview } from "./ExercisePreview";
 import {
   CLIMB_GRADES,
   CLIMB_SYSTEM_IDS,
@@ -97,10 +98,19 @@ function emptyStep(
     nodeType: "step",
     kind,
     name: kind === "rest" ? "Rest" : kind === "warmup" ? "Warm Up" : kind === "cooldown" ? "Cool Down" : "Training",
-    target: { type: "time", seconds: kind === "rest" ? 60 : 300 },
-    intensity: structuredClone(capability.defaultIntensity),
+    target: sport === "strength" && kind === "training"
+      ? { type: "reps", count: 10 }
+      : { type: "time", seconds: kind === "rest" ? 60 : 300 },
+    intensity: sport === "strength" && kind !== "training"
+      ? { type: "none" }
+      : structuredClone(capability.defaultIntensity),
     ...(capability.requiresExercise && kind === "training"
-      ? { exerciseName: "" }
+      ? {
+          exerciseName: "",
+          ...(sport === "strength"
+            ? { sets: 3, restType: 1, restValue: 60 }
+            : {})
+        }
       : {}),
     editable: true
   };
@@ -160,6 +170,43 @@ function stepTitle(kind: RunWorkoutEditorStepKind): string {
         : kind === "sendOff"
           ? "Send-off"
         : "Training";
+}
+
+const STRENGTH_REST_PRESETS = [0, 30, 45, 60, 90, 120, 180] as const;
+
+type StrengthLoadMode = "unspecified" | "bodyweight" | "added";
+
+function strengthLoadMode(intensity: RunWorkoutEditorIntensity): StrengthLoadMode {
+  if (intensity.type !== "weight") return "unspecified";
+  return intensity.mode === "bodyweight" ? "bodyweight" : "added";
+}
+
+function strengthRestLabel(seconds: number): string {
+  if (seconds === 0) return "None";
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = seconds / 60;
+  return Number.isInteger(minutes) ? `${minutes}m` : `${minutes.toFixed(1)}m`;
+}
+
+function strengthTargetSummary(target: RunWorkoutEditorTarget): string {
+  if (target.type === "reps") return `${target.count} reps`;
+  if (target.type === "time") return clockFromSeconds(target.seconds);
+  if (target.type === "open") return "Open";
+  return target.type;
+}
+
+function strengthStepSummary(
+  step: RunWorkoutEditorStep
+): string {
+  const sets = step.sets ?? 1;
+  const target = strengthTargetSummary(step.target);
+  const load = step.intensity.type === "weight"
+    ? step.intensity.mode === "bodyweight"
+      ? "bodyweight"
+      : `${step.intensity.value} ${step.intensity.unit}`
+    : "load not set";
+  const rest = step.restValue ?? 0;
+  return `${sets} ${sets === 1 ? "set" : "sets"} × ${target} @ ${load}${sets > 1 ? `, ${strengthRestLabel(rest)} rest` : ""}`;
 }
 
 function targetForType(
@@ -603,14 +650,43 @@ export function WorkoutEditorModal({
                 </div>
 
                 <div className="workout-editor-structure-header">
-                  <div><h3>Workout structure</h3><p>Drag between cards to reorder. Drop one step on another to create a repeat.</p></div>
-                  <button type="button" className="ghost-button" disabled={!document.canEdit || saving} onClick={() => setDraft({ ...draft, nodes: [...draft.nodes, emptyStep("training", draft.sport)] })}>
-                    <Plus size={15} aria-hidden="true" /> Add step
-                  </button>
+                  <div>
+                    <h3>{draft.sport === "strength" ? "Strength session" : "Workout structure"}</h3>
+                    <p>{draft.sport === "strength"
+                      ? "Each exercise saves its own sets, per-set target, load, and recovery."
+                      : "Drag between cards to reorder. Drop one step on another to create a repeat."}</p>
+                  </div>
+                  {draft.sport === "strength" ? (
+                    <div className="workout-editor-add-actions" aria-label="Add strength session step">
+                      {([
+                        ["warmup", "Warm-up"],
+                        ["training", "Exercise"],
+                        ["rest", "Rest"],
+                        ["cooldown", "Cool-down"]
+                      ] as const).map(([kind, label]) => (
+                        <button
+                          key={kind}
+                          type="button"
+                          className="ghost-button"
+                          disabled={!document.canEdit || saving}
+                          onClick={() => setDraft({
+                            ...draft,
+                            nodes: [...draft.nodes, emptyStep(kind, draft.sport)]
+                          })}
+                        >
+                          <Plus size={14} aria-hidden="true" /> {label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <button type="button" className="ghost-button" disabled={!document.canEdit || saving} onClick={() => setDraft({ ...draft, nodes: [...draft.nodes, emptyStep("training", draft.sport)] })}>
+                      <Plus size={15} aria-hidden="true" /> Add step
+                    </button>
+                  )}
                 </div>
 
                 {draft.nodes.length === 0 ? (
-                  <div className="workout-editor-empty"><p>No workout steps yet.</p><button type="button" className="primary-button" onClick={() => setDraft({ ...draft, nodes: [emptyStep("training", draft.sport)] })}>Add first step</button></div>
+                  <div className="workout-editor-empty"><p>No workout steps yet.</p><button type="button" className="primary-button" onClick={() => setDraft({ ...draft, nodes: [emptyStep("training", draft.sport)] })}>{draft.sport === "strength" ? "Add first exercise" : "Add first step"}</button></div>
                 ) : (
                   <div className="workout-editor-nodes">
                     {draft.nodes.map((node, index) => (
@@ -621,7 +697,11 @@ export function WorkoutEditorModal({
                             step={node} location={{ nodeId: node.id }} context={document.context} sport={draft.sport}
                             exerciseOptions={exerciseOptions}
                             exerciseOptionsLoading={exerciseOptionsLoading}
-                            error={validation.errors[`nodes.${index}.target`] ?? validation.errors[`nodes.${index}.intensity`] ?? validation.errors[`nodes.${index}.exercise`]}
+                            error={validation.errors[`nodes.${index}.target`]
+                              ?? validation.errors[`nodes.${index}.intensity`]
+                              ?? validation.errors[`nodes.${index}.exercise`]
+                              ?? validation.errors[`nodes.${index}.sets`]
+                              ?? validation.errors[`nodes.${index}.rest`]}
                             disabled={!document.canEdit || saving} draggable
                             onDragStart={(event) => event.dataTransfer.setData("text/workout-node", node.id)}
                             onDropCard={node.editable ? (sourceId) => groupByDrop(sourceId, node.id) : undefined}
@@ -657,7 +737,11 @@ export function WorkoutEditorModal({
               </div>
 
               <footer className="workout-editor-footer">
-                <EstimateFooter preview={preview} loading={previewing} error={previewError} context={document.context} />
+                {draft.sport === "strength" ? (
+                  <StrengthEstimateFooter draft={draft} />
+                ) : (
+                  <EstimateFooter preview={preview} loading={previewing} error={previewError} context={document.context} />
+                )}
                 <div className="workout-editor-footer-actions">
                   <button type="button" className="ghost-button" onClick={requestClose} disabled={saving}>Cancel</button>
                   <button type="button" className="primary-button" disabled={!document.canEdit || !dirty || !validation.valid || saving} onClick={() => void save()}>
@@ -710,14 +794,37 @@ interface StepCardProps {
 function StepCard({ step, context, sport, exerciseOptions, exerciseOptionsLoading, error, disabled, draggable, onDragStart, onDropCard, onChange, onMove, onDuplicate, onDelete, onGroup, onUngroup }: StepCardProps) {
   const locked = disabled || !step.editable;
   const capability = WORKOUT_SPORT_CAPABILITIES[sport];
+  const strengthExercise = sport === "strength" && step.kind === "training";
   const changeKind = (kind: RunWorkoutEditorStepKind) => {
     let target = step.target;
-    if (target.type === "hrRecovery" && kind !== "rest") target = { type: "time", seconds: 60 };
+    const targetTypes = workoutTargetsForStep(sport, kind, step.exerciseKind);
+    if (sport === "strength" && kind === "training" && step.kind !== "training") {
+      target = { type: "reps", count: 10 };
+    } else if (!targetTypes.includes(target.type)) {
+      target = targetForType(targetTypes[0] ?? "time", kind);
+    }
+    const intensityTypes = workoutIntensitiesForStep(sport, kind, step.exerciseKind);
+    const currentIntensityType = step.intensity.type === "lthrPercent"
+      ? "heartRatePercent"
+      : step.intensity.type;
+    const intensity = sport === "strength" && kind === "training" && step.kind !== "training"
+      ? structuredClone(capability.defaultIntensity)
+      : intensityTypes.includes(currentIntensityType)
+        ? step.intensity
+        : intensityForType(intensityTypes[0] ?? "none", context);
     onChange({
       ...step,
       kind,
       name: stepTitle(kind),
       target,
+      intensity,
+      ...(sport === "strength" && kind === "training"
+        ? {
+            sets: step.sets ?? 3,
+            restType: step.restType ?? 1,
+            restValue: step.restValue ?? 60
+          }
+        : {}),
       ...(kind === "sendOff" ? { sendOffSeconds: step.sendOffSeconds ?? 120 } : {})
     });
   };
@@ -734,7 +841,14 @@ function StepCard({ step, context, sport, exerciseOptions, exerciseOptionsLoadin
           portal
           onChange={changeKind}
         />
-        <input aria-label="Step name" value={step.name} disabled={locked} maxLength={90} onChange={(event) => onChange({ ...step, name: event.target.value })} />
+        {strengthExercise ? (
+          <div className="workout-strength-step-heading">
+            <strong>{step.exerciseName?.trim() || "Choose an exercise"}</strong>
+            <span>{strengthStepSummary(step)}</span>
+          </div>
+        ) : (
+          <input aria-label="Step name" value={step.name} disabled={locked} maxLength={90} onChange={(event) => onChange({ ...step, name: event.target.value })} />
+        )}
         <div className="workout-step-actions">
           <IconAction label="Move up" onClick={() => onMove(-1)} disabled={disabled}><ChevronUp /></IconAction>
           <IconAction label="Move down" onClick={() => onMove(1)} disabled={disabled}><ChevronDown /></IconAction>
@@ -745,14 +859,268 @@ function StepCard({ step, context, sport, exerciseOptions, exerciseOptionsLoadin
         </div>
       </header>
       {step.unsupportedReason ? <div className="workout-step-warning"><AlertTriangle size={14} aria-hidden="true" />{step.unsupportedReason}</div> : null}
-      <div className="workout-step-fields">
-        <TargetFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
-        <IntensityFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
-        {step.kind === "sendOff" ? <label className="workout-control-group"><span>Send-off interval</span><ClockInput label="Send-off interval" seconds={step.sendOffSeconds ?? 120} disabled={locked} onChange={(seconds) => onChange({ ...step, sendOffSeconds: seconds })} /></label> : null}
-        {capability.requiresExercise && step.kind === "training" ? <div className="workout-control-group workout-exercise-control"><span>Exercise</span><ExerciseCombobox value={step.exerciseName ?? ""} selectedId={step.exerciseId} options={exerciseOptions} placeholder="Search by COROS exercise name" label="Exercise" loading={exerciseOptionsLoading} disabled={locked} onChange={(selection) => onChange({ ...step, exerciseName: selection.name, exerciseId: selection.id, exerciseKind: selection.exerciseKind })} />{step.exerciseId ? <small>COROS exercise selected</small> : <small>Name must resolve to one unique COROS exercise before upload.</small>}</div> : null}
-      </div>
+      {strengthExercise ? (
+        <StrengthStepFields
+          step={step}
+          context={context}
+          exerciseOptions={exerciseOptions}
+          exerciseOptionsLoading={exerciseOptionsLoading}
+          disabled={locked}
+          onChange={onChange}
+        />
+      ) : (
+        <div className="workout-step-fields">
+          <TargetFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
+          <IntensityFields step={step} context={context} sport={sport} disabled={locked} onChange={onChange} />
+          {step.kind === "sendOff" ? <label className="workout-control-group"><span>Send-off interval</span><ClockInput label="Send-off interval" seconds={step.sendOffSeconds ?? 120} disabled={locked} onChange={(seconds) => onChange({ ...step, sendOffSeconds: seconds })} /></label> : null}
+          {capability.requiresExercise && step.kind === "training" ? <div className="workout-control-group workout-exercise-control"><span>Exercise</span><ExerciseCombobox value={step.exerciseName ?? ""} selectedId={step.exerciseId} options={exerciseOptions} placeholder="Search by COROS exercise name" label="Exercise" loading={exerciseOptionsLoading} disabled={locked} onChange={(selection) => onChange({ ...step, exerciseName: selection.name, exerciseId: selection.id, exerciseKind: selection.exerciseKind })} />{step.exerciseId ? <small>COROS exercise selected</small> : <small>Select one exact COROS exercise before saving.</small>}</div> : null}
+        </div>
+      )}
       {error ? <p className="workout-field-error">{error}</p> : null}
     </motion.article>
+  );
+}
+
+function StrengthStepFields({
+  step,
+  context,
+  exerciseOptions,
+  exerciseOptionsLoading,
+  disabled,
+  onChange
+}: {
+  step: RunWorkoutEditorStep;
+  context: WorkoutEditorContext;
+  exerciseOptions: WorkoutExerciseOption[];
+  exerciseOptionsLoading: boolean;
+  disabled: boolean;
+  onChange: (step: RunWorkoutEditorStep) => void;
+}) {
+  const selectedExercise = step.exerciseId
+    ? exerciseOptions.find((option) => option.id === step.exerciseId)
+    : undefined;
+  const hasExercisePreview = Boolean(
+    selectedExercise?.media?.some((media) => media.videoUrl)
+  );
+  const sets = step.sets ?? 1;
+  const restSeconds = step.restValue ?? 0;
+  const loadMode = strengthLoadMode(step.intensity);
+  const displayWeightUnit = context.distanceUnit === "imperial" ? "lb" : "kg";
+  const targetTypes = workoutTargetsForStep("strength", "training", step.exerciseKind)
+    .filter((target): target is "reps" | "time" | "open" =>
+      target === "reps" || target === "time" || target === "open"
+    );
+  const editableTarget = step.target.type === "reps"
+    || step.target.type === "time"
+    || step.target.type === "open"
+    ? step.target
+    : { type: "open" as const };
+  const totalRest = sets > 1 ? restSeconds * (sets - 1) : 0;
+  const totalSummary = sets > 1 && step.target.type === "reps"
+    ? `${sets * step.target.count} total reps${totalRest ? `, ${clockFromSeconds(totalRest)} total rest` : ""}`
+    : sets > 1 && step.target.type === "time"
+      ? `${clockFromSeconds(sets * step.target.seconds + totalRest)} including rest`
+      : undefined;
+
+  const changeTargetType = (type: "reps" | "time" | "open") => {
+    onChange({ ...step, target: targetForType(type, "training") });
+  };
+  const changeLoadMode = (mode: StrengthLoadMode) => {
+    const intensity: RunWorkoutEditorIntensity = mode === "bodyweight"
+      ? { type: "weight", mode: "bodyweight" }
+      : mode === "added"
+        ? { type: "weight", mode: "weight", value: 0, unit: displayWeightUnit }
+        : { type: "none" };
+    onChange({ ...step, intensity });
+  };
+
+  return (
+    <div className={`workout-strength-fields${hasExercisePreview ? " has-preview" : ""}`}>
+      <div className="workout-strength-form">
+        <section className="strength-block">
+          <h4>Movement</h4>
+          <ExerciseCombobox
+            value={step.exerciseName ?? ""}
+            selectedId={step.exerciseId}
+            options={exerciseOptions}
+            placeholder="Search the COROS exercise library"
+            label="Exercise"
+            loading={exerciseOptionsLoading}
+            disabled={disabled}
+            hidePreview
+            onChange={(selection) => onChange({
+              ...step,
+              ...(selection.id ? { name: selection.name } : {}),
+              exerciseName: selection.name,
+              exerciseId: selection.id,
+              exerciseKind: selection.exerciseKind
+            })}
+          />
+          {exerciseOptionsLoading ? (
+            <p className="strength-block-note">Loading the COROS exercise library.</p>
+          ) : exerciseOptions.length === 0 ? (
+            <p className="strength-block-note">Reconnect COROS to load the exercise library.</p>
+          ) : !step.exerciseId ? (
+            <p className="strength-block-note">Select one exact exercise. The watch needs its COROS ID.</p>
+          ) : null}
+        </section>
+
+        <section className="strength-block">
+          <h4>Prescription</h4>
+          <div className="set-line">
+            <label className="set-line-cell">
+              <span>Sets</span>
+              <input
+                type="number"
+                min="1"
+                max="99"
+                value={sets}
+                disabled={disabled}
+                onChange={(event) => onChange({ ...step, sets: Number(event.target.value) })}
+              />
+            </label>
+            <span className="set-line-operator" aria-hidden="true">×</span>
+            <div className="set-line-cell">
+              <span>Per set</span>
+              <div className="set-line-compound">
+                {editableTarget.type === "open" ? (
+                  <span className="set-line-open">Ends with the lap button</span>
+                ) : (
+                  <input
+                    type="number"
+                    min="1"
+                    max={editableTarget.type === "reps" ? 500 : 86_399}
+                    aria-label={editableTarget.type === "reps" ? "Repetitions per set" : "Seconds per set"}
+                    value={editableTarget.type === "reps" ? editableTarget.count : editableTarget.seconds}
+                    disabled={disabled}
+                    onChange={(event) => onChange({
+                      ...step,
+                      target: editableTarget.type === "reps"
+                        ? { type: "reps", count: Number(event.target.value) }
+                        : { type: "time", seconds: Number(event.target.value) }
+                    })}
+                  />
+                )}
+                <SelectDropdown<"reps" | "time" | "open">
+                  className="set-line-select"
+                  label="Measure each set by"
+                  value={editableTarget.type}
+                  disabled={disabled}
+                  options={targetTypes.map((type) => ({
+                    value: type,
+                    label: type === "reps" ? "Reps" : type === "time" ? "Seconds" : "Open"
+                  }))}
+                  portal
+                  onChange={changeTargetType}
+                />
+              </div>
+            </div>
+            <span className="set-line-operator" aria-hidden="true">@</span>
+            <div className="set-line-cell is-load">
+              <span>Load</span>
+              <div className="set-line-compound">
+                <SelectDropdown<StrengthLoadMode>
+                  className="set-line-select"
+                  label="Load"
+                  value={loadMode}
+                  disabled={disabled}
+                  options={[
+                    { value: "bodyweight", label: "Bodyweight" },
+                    { value: "added", label: "Added weight" },
+                    { value: "unspecified", label: "Not set" }
+                  ]}
+                  portal
+                  onChange={changeLoadMode}
+                />
+                {step.intensity.type === "weight" && step.intensity.mode === "weight" ? (
+                  <span className="set-line-weight">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      aria-label={`Added weight in ${step.intensity.unit}`}
+                      value={step.intensity.value}
+                      disabled={disabled}
+                      onChange={(event) => onChange({
+                        ...step,
+                        intensity: {
+                          type: "weight",
+                          mode: "weight",
+                          value: Number(event.target.value),
+                          unit: step.intensity.type === "weight" && step.intensity.mode === "weight"
+                            ? step.intensity.unit
+                            : displayWeightUnit
+                        }
+                      })}
+                    />
+                    <em>{step.intensity.unit}</em>
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+          {totalSummary ? <p className="set-line-readout">{totalSummary}</p> : null}
+        </section>
+
+        <section className="strength-block">
+          <h4>Rest between sets</h4>
+          <div className="rest-picker">
+            {STRENGTH_REST_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                className={restSeconds === preset ? "is-selected" : ""}
+                aria-pressed={restSeconds === preset}
+                disabled={disabled}
+                onClick={() => onChange({ ...step, restType: 1, restValue: preset })}
+              >
+                {strengthRestLabel(preset)}
+              </button>
+            ))}
+            <label className="rest-picker-custom">
+              <input
+                type="number"
+                min="0"
+                max="3600"
+                step="5"
+                aria-label="Rest between sets in seconds"
+                value={restSeconds}
+                disabled={disabled}
+                onChange={(event) => onChange({
+                  ...step,
+                  restType: 1,
+                  restValue: Number(event.target.value)
+                })}
+              />
+              <em>sec</em>
+            </label>
+          </div>
+        </section>
+
+        <label className="workout-strength-instructions">
+          <span>Exercise instructions</span>
+          <textarea
+            rows={2}
+            maxLength={300}
+            placeholder="Optional cues or setup notes"
+            value={step.overview ?? ""}
+            disabled={disabled}
+            onChange={(event) => onChange({ ...step, overview: event.target.value })}
+          />
+          <small>{step.overview?.length ?? 0}/300</small>
+        </label>
+      </div>
+
+      {selectedExercise && hasExercisePreview ? (
+        <aside className="workout-strength-preview">
+          <ExercisePreview
+            option={selectedExercise}
+            name={step.exerciseName ?? selectedExercise.name}
+            showTargets
+          />
+        </aside>
+      ) : null}
+    </div>
   );
 }
 
@@ -916,7 +1284,7 @@ function RepeatCard({ group, nodeIndex, context, sport, exerciseOptions, exercis
   return <motion.section layout className="workout-repeat-card" draggable={!disabled} onDragStartCapture={onDragStart}>
     <header className="workout-repeat-header"><GripVertical size={18} aria-hidden="true" /><input aria-label="Repeat group name" value={group.name} disabled={locked} onChange={(event) => onChange({ ...group, name: event.target.value })} /><div className="workout-repeat-count"><span>Repeat</span><button type="button" disabled={locked || group.repeat <= 1} onClick={() => onChange({ ...group, repeat: group.repeat - 1 })}>−</button><input aria-label="Repeat count" type="number" min="1" max="99" value={group.repeat} disabled={locked} onChange={(event) => onChange({ ...group, repeat: Number(event.target.value) })} /><button type="button" disabled={locked || group.repeat >= 99} onClick={() => onChange({ ...group, repeat: group.repeat + 1 })}>+</button></div><div className="workout-step-actions"><IconAction label="Move group up" onClick={() => onMove(-1)} disabled={disabled}><ChevronUp /></IconAction><IconAction label="Move group down" onClick={() => onMove(1)} disabled={disabled}><ChevronDown /></IconAction><IconAction label="Duplicate group" onClick={onDuplicate} disabled={duplicateLocked}><Copy /></IconAction><IconAction label="Delete group" onClick={onDelete} disabled={disabled}><Trash2 /></IconAction></div></header>
     {errors[`nodes.${nodeIndex}.repeat`] ? <p className="workout-field-error">{errors[`nodes.${nodeIndex}.repeat`]}</p> : null}
-    <div className="workout-repeat-steps">{group.steps.map((step, childIndex) => <StepCard key={step.id} step={step} location={{ nodeId: group.id, childId: step.id }} context={context} sport={sport} exerciseOptions={exerciseOptions} exerciseOptionsLoading={exerciseOptionsLoading} disabled={disabled} draggable error={errors[`nodes.${nodeIndex}.steps.${childIndex}.target`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.intensity`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.exercise`]} onDragStart={(event) => event.dataTransfer.setData("text/workout-node", step.id)} onDropCard={(sourceId) => { const from = group.steps.findIndex((candidate) => candidate.id === sourceId); const to = group.steps.findIndex((candidate) => candidate.id === step.id); if (from >= 0 && to >= 0) onChange({ ...group, steps: moveItem(group.steps, from, to) }); }} onChange={(next) => onStepChange(step.id, next)} onMove={(direction) => onStepMove(step.id, direction)} onDuplicate={() => onStepDuplicate(step.id)} onDelete={() => onStepDelete(step.id)} onUngroup={() => onStepUngroup(step.id)} />)}</div>
+    <div className="workout-repeat-steps">{group.steps.map((step, childIndex) => <StepCard key={step.id} step={step} location={{ nodeId: group.id, childId: step.id }} context={context} sport={sport} exerciseOptions={exerciseOptions} exerciseOptionsLoading={exerciseOptionsLoading} disabled={disabled} draggable error={errors[`nodes.${nodeIndex}.steps.${childIndex}.target`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.intensity`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.exercise`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.sets`] ?? errors[`nodes.${nodeIndex}.steps.${childIndex}.rest`]} onDragStart={(event) => event.dataTransfer.setData("text/workout-node", step.id)} onDropCard={(sourceId) => { const from = group.steps.findIndex((candidate) => candidate.id === sourceId); const to = group.steps.findIndex((candidate) => candidate.id === step.id); if (from >= 0 && to >= 0) onChange({ ...group, steps: moveItem(group.steps, from, to) }); }} onChange={(next) => onStepChange(step.id, next)} onMove={(direction) => onStepMove(step.id, direction)} onDuplicate={() => onStepDuplicate(step.id)} onDelete={() => onStepDelete(step.id)} onUngroup={() => onStepUngroup(step.id)} />)}</div>
     <button type="button" className="ghost-button workout-repeat-add" disabled={locked} onClick={() => onChange({ ...group, steps: [...group.steps, emptyStep("rest", sport)] })}><Plus size={14} aria-hidden="true" /> Add step to repeat</button>
   </motion.section>;
 }
@@ -934,4 +1302,33 @@ function EstimateFooter({ preview, loading, error, context }: { preview: Workout
       {preview?.intensityTrendPercent !== undefined ? <span><small>Intensity Trend</small><strong>{Math.round(preview.intensityTrendPercent)}%</strong></span> : null}
     </>}
   </div>;
+}
+
+function StrengthEstimateFooter({ draft }: { draft: RunWorkoutEditorDraft }) {
+  let exercises = 0;
+  let sets = 0;
+  let reps = 0;
+  let restSeconds = 0;
+  const countStep = (step: RunWorkoutEditorStep, multiplier: number) => {
+    if (step.kind !== "training") return;
+    exercises += 1;
+    const stepSets = Math.max(1, step.sets ?? 1);
+    sets += stepSets * multiplier;
+    if (step.target.type === "reps") {
+      reps += step.target.count * stepSets * multiplier;
+    }
+    restSeconds += Math.max(0, stepSets - 1) * Math.max(0, step.restValue ?? 0) * multiplier;
+  };
+  for (const node of draft.nodes) {
+    if (node.nodeType === "step") countStep(node, 1);
+    else node.steps.forEach((step) => countStep(step, Math.max(1, node.repeat)));
+  }
+  return (
+    <div className="workout-estimate" aria-label="Strength session totals">
+      <span><small>Exercises</small><strong>{exercises}</strong></span>
+      <span><small>Sets</small><strong>{sets}</strong></span>
+      <span><small>Reps</small><strong>{reps || "--"}</strong></span>
+      <span><small>Set rest</small><strong>{restSeconds ? clockFromSeconds(restSeconds) : "--"}</strong></span>
+    </div>
+  );
 }

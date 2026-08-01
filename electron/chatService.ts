@@ -964,9 +964,15 @@ export function cancelChat(requestId: string): void {
 export async function uploadTrainingPlanDraft(
   draftId: string,
   unitSystem: UnitSystem = "metric",
-  destination: import("./types").TrainingPlanDestination = "workoutLibrary"
+  destination: import("./types").TrainingPlanDestination = "workoutLibrary",
+  scheduleDate?: string
 ): Promise<UploadPlanResult> {
-  return uploadPlanDraftById(draftId, normalizeUnitSystem(unitSystem), destination);
+  return uploadPlanDraftById(
+    draftId,
+    normalizeUnitSystem(unitSystem),
+    destination,
+    scheduleDate
+  );
 }
 
 export async function confirmWorkoutDelete(
@@ -1037,7 +1043,11 @@ export function getClaudeCodeTools(
     ) {
       return permissions.upcomingWorkouts;
     }
-    return tool.name === "draft_training_plan";
+    return (
+      tool.name === "draft_workout" ||
+      tool.name === "draft_training_plan" ||
+      tool.name === "search_coros_exercises"
+    );
   });
 
   return [
@@ -1348,9 +1358,15 @@ function withLiveToolInstructions(
   if (planTools.length > 0) {
     sections.push(
       "",
-      "## Training plan tools",
-      `Plan authoring tools: ${planTools.map((tool) => tool.name).join(", ")}. ` +
-        "Use draft_training_plan to build multi-day schedules across the supported sports. " +
+      "## Workout and training plan tools",
+      `Authoring tools: ${planTools.map((tool) => tool.name).join(", ")}. ` +
+        "Use draft_workout for exactly one standalone workout. Its card lets the athlete choose Workout Library or Calendar; set calendar_date only when the athlete names a date. " +
+        "Use draft_training_plan only for multi-day or multi-week schedules. Never wrap a one-off workout in a plan. " +
+        "Before drafting Strength or HYROX workouts, call search_coros_exercises once with all intended " +
+        "exercise queries, or with target muscles, movement patterns, and known equipment; then use the " +
+        "returned exact exercise IDs and names. A COROS naming mismatch alone never requires an athlete question. " +
+        "For Strength exercises, set sets explicitly, use target_reps or target_duration_seconds per set, " +
+        "and set rest_type=1 plus rest_value in seconds. Do not hide the prescription only in the step name. " +
         "Always provide sport on every new workout, including sport=run. " +
         "Use distance_km only for a simple Run or Trail Run; use steps for anything structured. " +
         "Pick each step's target " +
@@ -1359,8 +1375,8 @@ function withLiveToolInstructions(
         "(no value, run-until-lap) for by-feel warmups/cooldowns or fartlek surges. Put every " +
         "prescribed HR, pace, effort pace, power, cadence, stroke, weight, RPE, or grade in " +
         "the typed intensity field; do not leave it only in workout prose or the name. " +
-        "Include schedule_date " +
-        "(YYYYMMDD) for calendar placement. The athlete must confirm before upload. " +
+        "For draft_training_plan entries intended for calendar placement, include schedule_date " +
+        "(YYYYMMDD). The athlete must confirm the destination and any one-off workout date before upload. " +
         "Use list_scheduled_workouts + delete_workout to stage deletions. " +
         "The athlete confirms via the Delete from COROS button in chat.",
       "",

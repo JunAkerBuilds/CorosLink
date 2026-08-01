@@ -12,11 +12,68 @@ const {
   formatEntryStepsSummary,
   validatePlanDraft
 } = await import(`${distUrl("corosWorkoutBuilder.js")}?cacheBust=${Date.now()}`);
-const { buildDraftTrainingPlanInputSchema } = await import(
+const { buildDraftTrainingPlanInputSchema, buildDraftWorkoutInputSchema } = await import(
   `${distUrl("workoutCapabilities.js")}?cacheBust=${Date.now()}`
 );
-const { buildTrainingPlanUploadInput } = await import(
+const {
+  buildTrainingPlanDestinationInput,
+  buildTrainingPlanUploadInput,
+  isChatWorkoutTool
+} = await import(
   `${distUrl("chatWorkoutTools.js")}?cacheBust=${Date.now()}`
+);
+const {
+  classifyWorkoutExerciseName,
+  searchWorkoutExerciseCatalog
+} = await import(`${distUrl("exerciseCatalogSearch.js")}?cacheBust=${Date.now()}`);
+
+const strengthCatalog = [
+  { originId: "1045", displayName: "Dumbbell Flys" },
+  { originId: "1334", displayName: "Lateral Raise Machine" },
+  { originId: "1337", displayName: "Shoulder Press Machine" },
+  { originId: "1338", displayName: "Chest Press Machine" },
+  { originId: "1341", displayName: "Triceps Pushdown Machine" },
+  { originId: "1004", displayName: "Push Ups" },
+  { originId: "1053", displayName: "Seated Cable Row" }
+];
+
+assert.equal(isChatWorkoutTool("search_coros_exercises"), true);
+assert.equal(isChatWorkoutTool("draft_workout"), true);
+
+assert.deepEqual(
+  classifyWorkoutExerciseName("Chest Press Machine").equipment,
+  ["machine"]
+);
+assert.deepEqual(
+  classifyWorkoutExerciseName("Dumbbell Flys").targetMuscles,
+  ["chest", "triceps", "shoulders"]
+);
+assert.equal(
+  searchWorkoutExerciseCatalog(strengthCatalog, {
+    query: "machine chest press",
+    limit: 3
+  })[0]?.id,
+  "1338"
+);
+assert.deepEqual(
+  searchWorkoutExerciseCatalog(strengthCatalog, {
+    targetMuscles: ["chest"],
+    equipment: ["machine"]
+  }).map((entry) => entry.id),
+  ["1338"]
+);
+assert.ok(
+  searchWorkoutExerciseCatalog(strengthCatalog, {
+    targetMuscles: ["triceps"],
+    equipment: ["machine"]
+  }).some((entry) => entry.id === "1341")
+);
+assert.deepEqual(
+  searchWorkoutExerciseCatalog(strengthCatalog, {
+    movementPatterns: ["pull"],
+    equipment: ["cable"]
+  }).map((entry) => entry.id),
+  ["1053"]
 );
 
 const draft = {
@@ -67,6 +124,16 @@ assert.deepEqual(
   new Set(["run", "trailRun", "bike", "swim", "strength", "xcSki", "indoorClimb", "bouldering", "hyrox"])
 );
 
+const workoutSchema = buildDraftWorkoutInputSchema();
+const workoutSportSchemas = workoutSchema.properties.workout.oneOf;
+assert.equal(workoutSportSchemas.length, 9);
+assert.equal(workoutSchema.properties.calendar_date.pattern, "^\\d{8}$");
+for (const sportSchema of workoutSportSchemas) {
+  assert.equal("schedule_date" in sportSchema.properties, false);
+  assert.equal("save_to_library" in sportSchema.properties, false);
+  assert.equal("sort_no" in sportSchema.properties, false);
+}
+
 // Representative typed result for: “Create a 5 km run at 135–145 bpm.”
 const heartRateDraft = {
   name: "Heart Rate Plan",
@@ -90,6 +157,25 @@ assert.equal(validatePlanDraft(heartRateDraft, { todayDay: "20260101" }).ok, tru
 const heartRatePreview = buildPlanPreview("draft-test-hr", heartRateDraft);
 assert.equal(heartRatePreview.entries[0]?.sport, "run");
 assert.match(heartRatePreview.entries[0]?.stepsSummary ?? "", /135–145 bpm/);
+const oneOffPreview = buildPlanPreview("draft-one-off", heartRateDraft, {
+  artifactType: "workout"
+});
+assert.equal(oneOffPreview.artifactType, "workout");
+assert.doesNotMatch(oneOffPreview.summary, /none scheduled/);
+assert.equal(oneOffPreview.warnings.length, 0);
+const oneOffCalendarInput = buildTrainingPlanDestinationInput(
+  heartRateDraft,
+  "calendar",
+  "2099-12-06"
+);
+assert.equal(oneOffCalendarInput.workouts[0].schedule_date, "20991206");
+assert.equal(oneOffCalendarInput.workouts[0].save_to_library, false);
+const oneOffLibraryInput = buildTrainingPlanDestinationInput(
+  heartRateDraft,
+  "workoutLibrary"
+);
+assert.equal(oneOffLibraryInput.workouts[0].schedule_date, undefined);
+assert.equal(oneOffLibraryInput.workouts[0].save_to_library, true);
 const heartRatePayload = buildWorkoutPayload(
   heartRateDraft.workouts[0].name,
   heartRateDraft.workouts[0].steps,

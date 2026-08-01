@@ -14,6 +14,7 @@ const {
   listChatSessions,
   migrateLegacyTranscriptRow,
   parseChatTranscriptJson,
+  restoreChatPlanDraftSources,
   saveChatSession
 } = await import(`${distUrl("chatHistoryStore.js")}?cacheBust=${Date.now()}`);
 
@@ -123,6 +124,88 @@ const waitingPromptEntry = {
 assert.deepEqual(
   parseChatTranscriptJson(JSON.stringify([waitingPromptEntry])),
   [waitingPromptEntry]
+);
+
+const oneOffWorkoutEntry = {
+  kind: "planDraft",
+  draft: {
+    draftId: "workout-1",
+    artifactType: "workout",
+    name: "Full Gym Push Day",
+    summary: "Strength · 16 sets · structured",
+    entries: [{
+      key: "push-day",
+      name: "Full Gym Push Day",
+      sport: "strength",
+      volume: "16 sets",
+      scheduleDate: "2026-07-31",
+      saveToLibrary: true,
+      workoutType: "structured",
+      stepsSummary: "warmup 10 min → Chest Press Machine 4 × 8 reps",
+      source: {
+        key: "push-day",
+        name: "Full Gym Push Day",
+        sport: "strength",
+        save_to_library: true,
+        steps: [
+          {
+            kind: "warmup",
+            target_type: "time",
+            target_duration_seconds: 600
+          },
+          {
+            kind: "training",
+            target_type: "reps",
+            target_reps: 8,
+            exercise_id: "1338",
+            exercise_name: "Chest Press Machine",
+            sets: 4,
+            rest_type: 1,
+            rest_value: 120,
+            intensity: { type: "weight", mode: "weight", value: 0, unit: "kg" }
+          }
+        ]
+      }
+    }],
+    conflicts: [],
+    warnings: [],
+    uploadedAt: 1234,
+    uploadResult: {
+      workoutsScheduled: 1,
+      workoutsCreated: 0,
+      destination: "calendar"
+    }
+  }
+};
+assert.equal(
+  parseChatTranscriptJson(JSON.stringify([oneOffWorkoutEntry]))[0].draft.artifactType,
+  "workout"
+);
+assert.equal(
+  parseChatTranscriptJson(JSON.stringify([oneOffWorkoutEntry]))[0].draft.uploadResult.destination,
+  "calendar"
+);
+assert.deepEqual(
+  parseChatTranscriptJson(JSON.stringify([oneOffWorkoutEntry]))[0].draft.entries[0].source,
+  oneOffWorkoutEntry.draft.entries[0].source
+);
+const flattenedWorkoutEntry = structuredClone(oneOffWorkoutEntry);
+delete flattenedWorkoutEntry.draft.entries[0].source;
+const restoredWorkoutEntry = restoreChatPlanDraftSources(
+  parseChatTranscriptJson(JSON.stringify([flattenedWorkoutEntry])),
+  (draftId) => draftId === oneOffWorkoutEntry.draft.draftId
+    ? JSON.stringify(oneOffWorkoutEntry.draft)
+    : undefined
+)[0];
+assert.deepEqual(
+  restoredWorkoutEntry.draft.entries[0].source,
+  oneOffWorkoutEntry.draft.entries[0].source
+);
+const legacyPlanEntry = structuredClone(oneOffWorkoutEntry);
+delete legacyPlanEntry.draft.artifactType;
+assert.equal(
+  parseChatTranscriptJson(JSON.stringify([legacyPlanEntry]))[0].draft.artifactType,
+  "plan"
 );
 assert.deepEqual(
   parseChatTranscriptJson(

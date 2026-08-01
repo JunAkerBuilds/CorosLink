@@ -143,6 +143,23 @@ assert.equal(generated.entries[0].workout.steps[0].repeat, 4);
 assert.deepEqual(generated.entries[1].workout.steps[0].intensity, { type: "weight", mode: "weight", value: 24, unit: "kg" });
 assert.deepEqual(generated.entries[3].workout.sport_options, { poolLength: { value: 25, unit: "m" } });
 assert.match(generated.notes, /Review loads/);
+const tuesdayDraft = structuredClone(generatedDraft);
+tuesdayDraft.draftId = "tuesday-start";
+const tuesdayDates = ["20260804", "20260806", "20260811", "20260813"];
+tuesdayDraft.entries.forEach((entry, index) => {
+  entry.scheduleDate = tuesdayDates[index];
+  entry.source.schedule_date = tuesdayDates[index];
+});
+const tuesdayPlan = domain.trainingPlanFromDraftPreview(tuesdayDraft, {
+  ...generationRequest,
+  startDate: "2026-08-04",
+  availableDayIndexes: [1, 3]
+});
+assert.deepEqual(tuesdayPlan.entries.map((entry) => [entry.weekIndex, entry.dayIndex]), [[0, 0], [0, 2], [1, 0], [1, 2]]);
+assert.throws(
+  () => domain.trainingPlanFromDraftPreview(tuesdayDraft, { ...generationRequest, startDate: "2026-08-04" }),
+  /unavailable day/i
+);
 const coachLibraryPlan = domain.trainingPlanFromCoachDraftPreview(generatedDraft);
 assert.equal(coachLibraryPlan.source, "coach");
 assert.equal(coachLibraryPlan.startDate, "2026-08-03");
@@ -224,7 +241,8 @@ assert.equal(linkedEntry.programId, "remote-program", "the linked source entry r
 assert.equal(detachedEntry.workout.steps[0].exercise_id, "deadlift-1");
 for (const specialistInput of [
   { key: "pool", name: "Pool", sport: "swim", sport_options: { poolLength: { value: 50, unit: "m" } }, steps: [{ kind: "sendOff", name: "100s", target_type: "distance", target_distance_meters: 100, send_off_seconds: 105, intensity: { type: "swimStroke", stroke: "butterfly" } }] },
-  { key: "climb", name: "Boulders", sport: "bouldering", sport_options: { gradingSystem: "font" }, steps: [{ kind: "training", name: "Limit route", target_type: "routes", target_routes: 4, intensity: { type: "climbGrade", system: "font", absoluteGrade: "7B" } }] }
+  { key: "climb", name: "Boulders", sport: "bouldering", sport_options: { gradingSystem: "font" }, steps: [{ kind: "training", name: "Limit route", target_type: "routes", target_routes: 4, intensity: { type: "climbGrade", system: "font", absoluteGrade: "7B" } }] },
+  { key: "strength", name: "Push", sport: "strength", steps: [{ kind: "training", name: "Bench Press", target_type: "reps", target_reps: 8, exercise_id: "bench-press", exercise_name: "Bench Press", sets: 4, rest_type: 1, rest_value: 90, overview: "Pause on the chest", intensity: { type: "weight", mode: "weight", value: 70, unit: "kg" } }] }
 ]) {
   const specialistDraft = planWorkoutEditor.planWorkoutInputToEditorDraft(specialistInput);
   assert.deepEqual(planWorkoutEditor.editorDraftToPlanWorkoutInput(specialistDraft, specialistInput).steps, specialistInput.steps);
@@ -243,7 +261,9 @@ assert.equal(projection.conflicts[0].existing[0].name, "Existing run");
 const holdingPlan = structuredClone(calendarPlan);
 holdingPlan.entries[0].dayIndex = undefined;
 assert.match(library.buildTrainingPlanCalendarProjection(holdingPlan, "2099-08-03", [], "20990101").blockers[0], /holding area/i);
-assert.throws(() => library.buildTrainingPlanCalendarProjection(calendarPlan, "2099-08-04", [], "20990101"), /Monday/i);
+const anyDayProjection = library.buildTrainingPlanCalendarProjection(calendarPlan, "2099-08-04", [], "20990101");
+assert.equal(anyDayProjection.startDate, "2099-08-04");
+assert.deepEqual(anyDayProjection.entries.map((entry) => entry.happenDay), ["20990804", "20990806"]);
 const revisionBefore = domain.trainingPlanCalendarRevision(calendarPlan);
 calendarPlan.entries[0].title = "Edited after install";
 assert.notEqual(domain.trainingPlanCalendarRevision(calendarPlan), revisionBefore);

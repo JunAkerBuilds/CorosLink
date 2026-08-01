@@ -273,28 +273,61 @@ function formatPlanSourceVolume(
   });
 }
 
+type PlanSourceNode = NonNullable<PlanWorkoutEntryInput["steps"]>[number];
+type PlanSourceRepeat = Extract<PlanSourceNode, { repeat: number }>;
+type PlanSourceStep = Exclude<PlanSourceNode, { repeat: number }>;
+
+function isPlanSourceRepeat(step: PlanSourceNode): step is PlanSourceRepeat {
+  return "repeat" in step;
+}
+
+function formatPlanDuration(seconds: number): string {
+  if (seconds < 90) return `${Math.round(seconds)} sec`;
+  const minutes = seconds / 60;
+  return Number.isInteger(minutes)
+    ? `${minutes} min`
+    : `${minutes.toFixed(1)} min`;
+}
+
+function formatPlanStepTarget(
+  step: PlanSourceStep,
+  sport: PlanWorkoutEntryInput["sport"],
+  unitSystem: UnitSystem
+): string {
+  if (step.target_distance_meters) {
+    return formatDistanceValue(step.target_distance_meters, unitSystem, {
+      swim: sport === "swim"
+    });
+  }
+  if (step.target_elevation_gain_meters) {
+    return `${formatElevationValue(step.target_elevation_gain_meters, unitSystem)} gain`;
+  }
+  if (step.target_duration_seconds) {
+    return formatPlanDuration(step.target_duration_seconds);
+  }
+  if (step.target_reps) return `${step.target_reps} reps`;
+  if (step.target_routes) {
+    return `${step.target_routes} ${step.target_routes === 1 ? "route" : "routes"}`;
+  }
+  if (step.target_hr_recovery_bpm) {
+    return `to ${step.target_hr_recovery_bpm} bpm`;
+  }
+  if (step.send_off_seconds) return `${formatPlanDuration(step.send_off_seconds)} send-off`;
+  if (step.target_load) return `${step.target_load} TL`;
+  return "Open";
+}
+
 function formatPlanSourceSteps(
   source: PlanWorkoutEntryInput,
   unitSystem: UnitSystem
 ): string | undefined {
-  const swim = source.sport === "swim";
   const formatStep = (
     step: NonNullable<PlanWorkoutEntryInput["steps"]>[number]
   ): string => {
-    if ("repeat" in step) {
+    if (isPlanSourceRepeat(step)) {
       return `${step.repeat}x (${step.steps.map((child) => formatStep(child)).join(", ")})`;
     }
-    const target = step.target_distance_meters
-      ? formatDistanceValue(step.target_distance_meters, unitSystem, { swim })
-      : step.target_elevation_gain_meters
-        ? `${formatElevationValue(step.target_elevation_gain_meters, unitSystem)} gain`
-        : step.target_duration_seconds
-          ? `${Math.round(step.target_duration_seconds / 60)} min`
-          : step.target_reps
-            ? `${step.target_reps} reps`
-            : step.target_load
-              ? `${step.target_load} TL`
-              : "open";
+    const target = formatPlanStepTarget(step, source.sport, unitSystem);
     const intensity = step.intensity
       ? formatPlanIntensity(step.intensity, unitSystem)
       : step.pace
@@ -305,6 +338,114 @@ function formatPlanSourceSteps(
   return source.steps?.length
     ? source.steps.map(formatStep).join(" → ")
     : undefined;
+}
+
+function isStrengthExerciseStep(step: PlanSourceStep): boolean {
+  return step.kind === "training" || step.kind === "interval";
+}
+
+function strengthStepTitle(step: PlanSourceStep): string {
+  if (step.exercise_name?.trim()) return step.exercise_name.trim();
+  if (step.name?.trim()) return step.name.trim();
+  if (step.kind === "warmup") return "Warm-up";
+  if (step.kind === "cooldown") return "Cooldown";
+  if (step.kind === "rest") return "Recovery";
+  return "Strength exercise";
+}
+
+function strengthStepMarker(step: PlanSourceStep, exerciseNumber?: number): string {
+  if (exerciseNumber !== undefined) return String(exerciseNumber);
+  if (step.kind === "warmup") return "W";
+  if (step.kind === "cooldown") return "C";
+  if (step.kind === "rest") return "R";
+  return "S";
+}
+
+function countStrengthExercises(steps: readonly PlanSourceNode[]): number {
+  return steps.reduce((count, step) => {
+    if (isPlanSourceRepeat(step)) {
+      return count + step.steps.filter(isStrengthExerciseStep).length;
+    }
+    return count + (isStrengthExerciseStep(step) ? 1 : 0);
+  }, 0);
+}
+
+function StrengthPlanStructure({
+  source,
+  unitSystem
+}: {
+  source: PlanWorkoutEntryInput;
+  unitSystem: UnitSystem;
+}) {
+  const steps = source.steps ?? [];
+  const exerciseCount = countStrengthExercises(steps);
+  let exerciseNumber = 0;
+
+  const renderStep = (step: PlanSourceStep, key: string) => {
+    const exercise = isStrengthExerciseStep(step);
+    const currentExerciseNumber = exercise ? ++exerciseNumber : undefined;
+    const intensity = step.intensity
+      ? formatPlanIntensity(step.intensity, unitSystem)
+      : undefined;
+    const setCount = step.sets && step.sets > 1 ? `${step.sets} sets` : undefined;
+    const setRest = step.sets && step.sets > 1 && step.rest_value !== undefined
+      ? `${formatPlanDuration(step.rest_value)} rest`
+      : undefined;
+
+    return (
+      <li
+        key={key}
+        className={`chat-plan-strength-step is-${step.kind ?? "training"}`}
+      >
+        <span className="chat-plan-strength-marker" aria-hidden="true">
+          {strengthStepMarker(step, currentExerciseNumber)}
+        </span>
+        <span className="chat-plan-strength-step-copy">
+          <strong>{strengthStepTitle(step)}</strong>
+        </span>
+        <span className="chat-plan-strength-prescription">
+          {setCount ? <span>{setCount}</span> : null}
+          <strong>{formatPlanStepTarget(step, source.sport, unitSystem)}</strong>
+          {intensity ? <span>{intensity}</span> : null}
+          {setRest ? <span>{setRest}</span> : null}
+        </span>
+      </li>
+    );
+  };
+
+  return (
+    <section
+      className="chat-plan-strength-structure"
+      aria-label={`${exerciseCount} ${exerciseCount === 1 ? "exercise" : "exercises"} in strength session structure`}
+    >
+      <header className="chat-plan-strength-header">
+        <strong>Session structure</strong>
+        <span>
+          {exerciseCount} {exerciseCount === 1 ? "exercise" : "exercises"}
+        </span>
+      </header>
+      <ol className="chat-plan-strength-steps">
+        {steps.map((step, index) => {
+          if (!isPlanSourceRepeat(step)) {
+            return renderStep(step, `step-${index}`);
+          }
+          return (
+            <li key={`repeat-${index}`} className="chat-plan-strength-repeat">
+              <div className="chat-plan-strength-repeat-header">
+                <strong>{step.name?.trim() || "Repeat block"}</strong>
+                <span>{step.repeat} rounds</span>
+              </div>
+              <ol>
+                {step.steps.map((child, childIndex) =>
+                  renderStep(child, `repeat-${index}-step-${childIndex}`)
+                )}
+              </ol>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
 }
 
 function formatPlanPaceRange(
@@ -486,6 +627,263 @@ function groupPlanEntriesByWeek(entries: PlanDraftPreviewEntry[]): PlanWeekGroup
 /** Inline style hook that tints a row/chip with the sport's own colour. */
 function planSportStyle(sport: PlanDraftPreviewEntry["sport"]): CSSProperties {
   return { "--chat-plan-sport": sportTheme(sport).color } as CSSProperties;
+}
+
+function WorkoutPreviewCard({
+  draft,
+  uploading,
+  uploaded,
+  onUpload
+}: {
+  draft: PlanDraftPreview;
+  uploading: boolean;
+  uploaded?: UploadPlanResult;
+  onUpload: (
+    destination: TrainingPlanDestination,
+    scheduleDate?: string
+  ) => void;
+}) {
+  const { unitSystem } = useUnitSystem();
+  const entry = draft.entries[0];
+  const suggestedDate = entry ? planEntryScheduleDate(entry) : undefined;
+  const today = localPlanDateKey(new Date());
+  const [destination, setDestination] = useState<
+    Extract<TrainingPlanDestination, "workoutLibrary" | "calendar">
+  >(suggestedDate ? "calendar" : "workoutLibrary");
+  const [scheduleDate, setScheduleDate] = useState(suggestedDate ?? today);
+  const uploadedResult =
+    uploaded ??
+    (draft.uploadResult
+      ? {
+          planName: draft.name,
+          workoutsCreated: draft.uploadResult.workoutsCreated,
+          workoutsScheduled: draft.uploadResult.workoutsScheduled,
+          entries: [],
+          destination: draft.uploadResult.destination
+        }
+      : undefined);
+  const isUploaded = Boolean(uploadedResult || draft.uploadedAt);
+  const uploadedDestination =
+    uploadedResult?.destination ?? draft.uploadResult?.destination ?? destination;
+  const calendarDateParts = destination === "calendar"
+    ? planDateParts(scheduleDate)
+    : undefined;
+  const calendarDateInvalid =
+    destination === "calendar" && (!scheduleDate || scheduleDate < today);
+  const SportIcon = sportTheme(entry?.sport).icon;
+  const hasStrengthStructure = Boolean(
+    entry &&
+      (entry.sport === "strength" || entry.sport === "hyrox") &&
+      entry.source?.steps?.length
+  );
+  const volume = entry
+    ? (entry.source
+        ? formatPlanSourceVolume(entry.source, unitSystem)
+        : undefined) ?? entry.volume ?? "Not set"
+    : "Not set";
+  const steps = entry
+    ? (entry.source
+        ? formatPlanSourceSteps(entry.source, unitSystem)
+        : undefined) ?? entry.stepsSummary ?? "No structure provided"
+    : "No structure provided";
+
+  return (
+    <div className="chat-plan-card chat-workout-card">
+      <div className="chat-plan-card-header">
+        <div className="chat-plan-card-title">
+          <span className="chat-workout-card-kicker">One-off workout</span>
+          <h4>{draft.name}</h4>
+          <span className="chat-plan-card-summary">{draft.summary}</span>
+        </div>
+        {entry ? (
+          <span
+            className="chat-plan-sport-dot"
+            style={planSportStyle(entry.sport)}
+            title={formatWorkoutSport(entry.sport ?? "run")}
+          >
+            <SportIcon size={12} strokeWidth={2.2} aria-hidden="true" />
+          </span>
+        ) : null}
+      </div>
+      {entry ? (
+        <ul className="chat-plan-entries chat-workout-entries">
+          <li
+            className={`chat-plan-entry${hasStrengthStructure ? " is-strength" : ""}`}
+            style={planSportStyle(entry.sport)}
+          >
+            <span
+              className={`chat-plan-entry-date${calendarDateParts ? "" : " is-undated"}`}
+              title={
+                destination === "calendar"
+                  ? `Add to Calendar on ${scheduleDate}`
+                  : "Save to Workout Library"
+              }
+            >
+              {calendarDateParts ? (
+                <>
+                  <span className="chat-plan-entry-weekday">
+                    {calendarDateParts.weekday}
+                  </span>
+                  <span className="chat-plan-entry-day">
+                    {calendarDateParts.day}
+                  </span>
+                  <span className="chat-plan-entry-month">
+                    {calendarDateParts.month}
+                  </span>
+                </>
+              ) : (
+                <Bookmark size={14} aria-hidden="true" />
+              )}
+            </span>
+            <span className="chat-plan-entry-main">
+              <span className="chat-plan-entry-name">{entry.name}</span>
+              {hasStrengthStructure && entry.source ? (
+                <StrengthPlanStructure
+                  source={entry.source}
+                  unitSystem={unitSystem}
+                />
+              ) : (
+                <span className="chat-plan-entry-steps">{steps}</span>
+              )}
+            </span>
+            <span className="chat-plan-entry-meta">
+              {!hasStrengthStructure ? (
+                <span className="chat-plan-entry-volume">{volume}</span>
+              ) : null}
+              <span className="chat-plan-entry-tags">
+                <span className="chat-plan-entry-type">{entry.workoutType}</span>
+                <span className="chat-plan-entry-sport">
+                  <SportIcon size={11} strokeWidth={2.2} aria-hidden="true" />
+                  {formatWorkoutSport(entry.sport ?? "run")}
+                </span>
+              </span>
+            </span>
+          </li>
+        </ul>
+      ) : (
+        <div className="chat-plan-empty-week">
+          <Bookmark size={16} aria-hidden="true" />
+          <span>This workout does not contain any steps yet.</span>
+        </div>
+      )}
+      {isUploaded ? (
+        <p className="chat-plan-success">
+          <CircleCheck size={15} aria-hidden="true" />
+          <span>
+            {uploadedDestination === "calendar"
+              ? `Added to your COROS Calendar on ${formatPlanDateLabel(scheduleDate)}.`
+              : "Saved to your COROS Workout Library."}
+          </span>
+        </p>
+      ) : (
+        <>
+          <fieldset className="chat-plan-confirmation" disabled={uploading}>
+            <legend>Where should this workout go?</legend>
+            <div className="chat-plan-destination-options">
+              <label
+                className={`chat-plan-destination-option${
+                  destination === "workoutLibrary" ? " is-selected" : ""
+                }`}
+              >
+                <input
+                  className="sr-only"
+                  type="radio"
+                  name={`workout-destination-${draft.draftId}`}
+                  value="workoutLibrary"
+                  checked={destination === "workoutLibrary"}
+                  onChange={() => setDestination("workoutLibrary")}
+                />
+                <span className="chat-plan-destination-icon">
+                  <BookOpen size={16} aria-hidden="true" />
+                </span>
+                <span className="chat-plan-destination-copy">
+                  <strong>Workout Library</strong>
+                  <small>Save it as an unscheduled, reusable workout.</small>
+                </span>
+                <CircleCheck
+                  className="chat-plan-destination-check"
+                  size={16}
+                  aria-hidden="true"
+                />
+              </label>
+              <label
+                className={`chat-plan-destination-option${
+                  destination === "calendar" ? " is-selected" : ""
+                }`}
+              >
+                <input
+                  className="sr-only"
+                  type="radio"
+                  name={`workout-destination-${draft.draftId}`}
+                  value="calendar"
+                  checked={destination === "calendar"}
+                  onChange={() => setDestination("calendar")}
+                />
+                <span className="chat-plan-destination-icon">
+                  <CalendarDays size={16} aria-hidden="true" />
+                </span>
+                <span className="chat-plan-destination-copy">
+                  <strong>Calendar</strong>
+                  <small>Add this workout on the date you choose.</small>
+                </span>
+                <CircleCheck
+                  className="chat-plan-destination-check"
+                  size={16}
+                  aria-hidden="true"
+                />
+              </label>
+            </div>
+            {destination === "calendar" ? (
+              <label className="chat-workout-calendar-date">
+                <span>Calendar date</span>
+                <input
+                  type="date"
+                  value={scheduleDate}
+                  min={today}
+                  onChange={(event) => setScheduleDate(event.target.value)}
+                />
+              </label>
+            ) : null}
+            <p className="chat-plan-destination-summary" data-tone="ok">
+              {destination === "calendar" ? (
+                <CalendarDays size={13} aria-hidden="true" />
+              ) : (
+                <BookOpen size={13} aria-hidden="true" />
+              )}
+              <span>
+                {destination === "calendar"
+                  ? `This workout will be added to Calendar on ${formatPlanDateLabel(scheduleDate)}.`
+                  : "This workout will be saved to your Workout Library without a calendar date."}
+                {" "}It will remain a one-off workout, not a training plan.
+              </span>
+            </p>
+          </fieldset>
+          <div className="chat-plan-actions">
+            <button
+              type="button"
+              className="chat-plan-upload"
+              onClick={() => onUpload(
+                destination,
+                destination === "calendar" ? scheduleDate : undefined
+              )}
+              disabled={uploading || !entry || calendarDateInvalid}
+            >
+              {uploading ? (
+                <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
+              ) : (
+                destination === "calendar" ? (
+                  <CalendarDays size={14} aria-hidden="true" />
+                ) : (
+                  <Bookmark size={14} aria-hidden="true" />
+                )
+              )}
+              {destination === "calendar" ? "Add to Calendar" : "Save to Library"}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 function PlanPreviewCard({
@@ -677,6 +1075,9 @@ function PlanPreviewCard({
               const SportIcon = sportTheme(entry.sport).icon;
               const scheduleDate = planEntryScheduleDate(entry);
               const dateParts = planDateParts(scheduleDate);
+              const hasStrengthStructure =
+                (entry.sport === "strength" || entry.sport === "hyrox") &&
+                Boolean(entry.source?.steps?.length);
               const volume =
                 (entry.source
                   ? formatPlanSourceVolume(entry.source, unitSystem)
@@ -688,7 +1089,7 @@ function PlanPreviewCard({
               return (
                 <li
                   key={entry.key}
-                  className="chat-plan-entry"
+                  className={`chat-plan-entry${hasStrengthStructure ? " is-strength" : ""}`}
                   style={planSportStyle(entry.sport)}
                 >
                   <span
@@ -711,10 +1112,19 @@ function PlanPreviewCard({
                   </span>
                   <span className="chat-plan-entry-main">
                     <span className="chat-plan-entry-name">{entry.name}</span>
-                    <span className="chat-plan-entry-steps">{steps}</span>
+                    {hasStrengthStructure && entry.source ? (
+                      <StrengthPlanStructure
+                        source={entry.source}
+                        unitSystem={unitSystem}
+                      />
+                    ) : (
+                      <span className="chat-plan-entry-steps">{steps}</span>
+                    )}
                   </span>
                   <span className="chat-plan-entry-meta">
-                    <span className="chat-plan-entry-volume">{volume}</span>
+                    {!hasStrengthStructure ? (
+                      <span className="chat-plan-entry-volume">{volume}</span>
+                    ) : null}
                     <span className="chat-plan-entry-tags">
                       <span className="chat-plan-entry-type">
                         {entry.workoutType}
@@ -933,6 +1343,44 @@ function PlanPreviewCard({
         </div>
       )}
     </div>
+  );
+}
+
+function CoachDraftPreviewCard({
+  draft,
+  uploading,
+  uploaded,
+  onUpload,
+  onReview
+}: {
+  draft: PlanDraftPreview;
+  uploading: boolean;
+  uploaded?: UploadPlanResult;
+  onUpload: (
+    destination: TrainingPlanDestination,
+    scheduleDate?: string
+  ) => void;
+  onReview?: () => void;
+}) {
+  if (draft.artifactType === "workout") {
+    return (
+      <WorkoutPreviewCard
+        draft={draft}
+        uploading={uploading}
+        uploaded={uploaded}
+        onUpload={onUpload}
+      />
+    );
+  }
+
+  return (
+    <PlanPreviewCard
+      draft={draft}
+      uploading={uploading}
+      uploaded={uploaded}
+      onUpload={onUpload}
+      onReview={onReview}
+    />
   );
 }
 
@@ -2092,13 +2540,30 @@ export function ChatView({
 
   const handleUploadPlanDraft = async (
     draftId: string,
-    destination: TrainingPlanDestination
+    destination: TrainingPlanDestination,
+    scheduleDate?: string
   ) => {
     if (!api || uploadingDraftId) return;
     setUploadingDraftId(draftId);
     onError(null);
     try {
-      const result = await api.uploadTrainingPlanDraft(draftId, unitSystem, destination);
+      const result = await api.uploadTrainingPlanDraft(
+        draftId,
+        unitSystem,
+        destination,
+        scheduleDate
+      );
+      const scheduledDates = new Map(
+        result.entries.flatMap((entry) => {
+          if (!entry.date) return [];
+          const normalized = entry.date.replace(/-/g, "");
+          if (!/^\d{8}$/.test(normalized)) return [];
+          return [[
+            entry.key,
+            `${normalized.slice(0, 4)}-${normalized.slice(4, 6)}-${normalized.slice(6, 8)}`
+          ] as const];
+        })
+      );
       setUploadedPlans((prev) => ({ ...prev, [draftId]: result }));
       setTimeline((prev) => {
         const next = prev.map((entry) =>
@@ -2108,6 +2573,27 @@ export function ChatView({
                 draft: {
                   ...entry.draft,
                   uploadedAt: Date.now(),
+                  entries: entry.draft.entries.map((draftEntry) => {
+                    const scheduledDate = scheduledDates.get(draftEntry.key);
+                    const clearDate =
+                      destination === "workoutLibrary" &&
+                      entry.draft.artifactType === "workout";
+                    return {
+                      ...draftEntry,
+                      scheduleDate: clearDate
+                        ? undefined
+                        : scheduledDate ?? draftEntry.scheduleDate,
+                      source: draftEntry.source
+                        ? {
+                            ...draftEntry.source,
+                            schedule_date: clearDate
+                              ? undefined
+                              : scheduledDate?.replace(/-/g, "") ??
+                                draftEntry.source.schedule_date
+                          }
+                        : undefined
+                    };
+                  }),
                   uploadResult: {
                     workoutsScheduled: result.workoutsScheduled,
                     workoutsCreated: result.workoutsCreated,
@@ -2127,7 +2613,7 @@ export function ChatView({
       onError(
         caught instanceof Error
           ? caught.message
-          : "Failed to upload training plan to COROS."
+          : "Failed to save the workout or plan to COROS."
       );
     } finally {
       setUploadingDraftId(null);
@@ -2290,9 +2776,14 @@ export function ChatView({
   const selectedPlanDraft =
     planDrafts.find((draft) => draft.draftId === selectedPlanDraftId) ??
     latestPlanDraft;
-  const selectedPlanDraftIndex = selectedPlanDraft
-    ? planDrafts.findIndex((draft) => draft.draftId === selectedPlanDraft.draftId)
-    : -1;
+  const trainingPlanDrafts = planDrafts.filter(
+    (draft) => draft.artifactType !== "workout"
+  );
+  const selectedTrainingPlanNumber = selectedPlanDraft?.artifactType !== "workout"
+    ? trainingPlanDrafts.findIndex(
+        (draft) => draft.draftId === selectedPlanDraft?.draftId
+      ) + 1
+    : 0;
 
   useEffect(() => {
     setSelectedPlanDraftId(latestPlanDraft?.draftId ?? null);
@@ -2650,6 +3141,7 @@ export function ChatView({
                 {[
                   "How was my latest activity?",
                   "Break down my latest workout by lap",
+                  "Create one workout for today and save it to my Workout Library",
                   "Build a balanced week from my recent training",
                   "Schedule bike intervals for Saturday",
                   "Add strength around my endurance sessions",
@@ -2729,12 +3221,16 @@ export function ChatView({
                     <Sparkles size={16} aria-hidden="true" />
                   </div>
                   <div className="chat-bubble chat-bubble-plan">
-                    <PlanPreviewCard
+                    <CoachDraftPreviewCard
                       draft={entry.draft}
                       uploading={uploadingDraftId === entry.draft.draftId}
                       uploaded={uploadedPlans[entry.draft.draftId]}
-                      onUpload={(destination) =>
-                        void handleUploadPlanDraft(entry.draft.draftId, destination)
+                      onUpload={(destination, scheduleDate) =>
+                        void handleUploadPlanDraft(
+                          entry.draft.draftId,
+                          destination,
+                          scheduleDate
+                        )
                       }
                       onReview={onReviewPlan ? () => handleReviewPlanDraft(entry.draft) : undefined}
                     />
@@ -2969,7 +3465,7 @@ export function ChatView({
               planPanelExpanded ? " is-expanded" : " is-list-view"
             }`}
             aria-label={
-              planPanelExpanded ? "Training plan details" : "Generated plans"
+              planPanelExpanded ? "Generated item details" : "Coach creations"
             }
           >
             {!planPanelExpanded ? (
@@ -2980,8 +3476,8 @@ export function ChatView({
                       <BookOpen size={15} aria-hidden="true" />
                     </span>
                     <div>
-                      <strong>Generated plans</strong>
-                      <span>Select a plan to review</span>
+                      <strong>Coach creations</strong>
+                      <span>Plans and one-off workouts</span>
                     </div>
                   </div>
                   <strong className="chat-plan-list-count">
@@ -2995,12 +3491,20 @@ export function ChatView({
                         draft.uploadResult ||
                         draft.uploadedAt
                     );
-                    const weeks = Math.max(
-                      1,
-                      groupPlanEntriesByWeek(draft.entries).filter(
-                        (week) => week.id !== "unscheduled"
-                      ).length
-                    );
+                    const isWorkout = draft.artifactType === "workout";
+                    const planNumber = isWorkout
+                      ? 0
+                      : planDrafts
+                          .slice(0, index + 1)
+                          .filter((item) => item.artifactType !== "workout").length;
+                    const weeks = isWorkout
+                      ? 0
+                      : Math.max(
+                          1,
+                          groupPlanEntriesByWeek(draft.entries).filter(
+                            (week) => week.id !== "unscheduled"
+                          ).length
+                        );
                     const primarySport = draft.entries[0]?.sport;
                     const SportIcon = sportTheme(primarySport).icon;
                     const selected = draft.draftId === selectedPlanDraft.draftId;
@@ -3016,7 +3520,7 @@ export function ChatView({
                             setSelectedPlanDraftId(draft.draftId);
                             setPlanPanelExpanded(true);
                           }}
-                          aria-label={`Open ${draft.name || `plan ${index + 1}`}`}
+                          aria-label={`Open ${draft.name || `${isWorkout ? "workout" : "plan"} ${index + 1}`}`}
                         >
                           <span
                             className="chat-plan-list-sport"
@@ -3030,9 +3534,11 @@ export function ChatView({
                           </span>
                           <span className="chat-plan-list-copy">
                             <span className="chat-plan-list-kicker">
-                              Plan {index + 1}
+                              {isWorkout ? "One-off workout" : `Plan ${planNumber}`}
                             </span>
-                            <strong>{draft.name || "Untitled plan"}</strong>
+                            <strong>
+                              {draft.name || (isWorkout ? "Untitled workout" : "Untitled plan")}
+                            </strong>
                             <span className="chat-plan-list-meta">
                               <span>
                                 {draft.entries.length}{" "}
@@ -3040,9 +3546,13 @@ export function ChatView({
                                   ? "workout"
                                   : "workouts"}
                               </span>
-                              <span>
-                                {weeks} {weeks === 1 ? "week" : "weeks"}
-                              </span>
+                              {!isWorkout ? (
+                                <span>
+                                  {weeks} {weeks === 1 ? "week" : "weeks"}
+                                </span>
+                              ) : (
+                                <span>Workout Library</span>
+                              )}
                               <span data-status={saved ? "saved" : "draft"}>
                                 {saved ? "Saved" : "Draft"}
                               </span>
@@ -3063,19 +3573,24 @@ export function ChatView({
                       type="button"
                       className="chat-plan-panel-back"
                       onClick={() => setPlanPanelExpanded(false)}
-                      aria-label="Back to generated plans"
-                      title="Back to generated plans"
+                      aria-label="Back to Coach creations"
+                      title="Back to Coach creations"
                     >
                       <ChevronLeft size={15} aria-hidden="true" />
-                      Plans
+                      Creations
                     </button>
                     <div className="chat-plan-panel-title is-detail-title">
                       <div>
                         <strong title={selectedPlanDraft.name}>
-                          {selectedPlanDraft.name || "Untitled plan"}
+                          {selectedPlanDraft.name ||
+                            (selectedPlanDraft.artifactType === "workout"
+                              ? "Untitled workout"
+                              : "Untitled plan")}
                         </strong>
                         <span>
-                          Plan {selectedPlanDraftIndex + 1} of {planDrafts.length}
+                          {selectedPlanDraft.artifactType === "workout"
+                            ? "One-off workout"
+                            : `Plan ${selectedTrainingPlanNumber} of ${trainingPlanDrafts.length}`}
                         </span>
                       </div>
                     </div>
@@ -3095,13 +3610,17 @@ export function ChatView({
                   </div>
                 </header>
                 <div className="chat-plan-panel-body">
-                  <PlanPreviewCard
+                  <CoachDraftPreviewCard
                     key={selectedPlanDraft.draftId}
                     draft={selectedPlanDraft}
                     uploading={uploadingDraftId === selectedPlanDraft.draftId}
                     uploaded={uploadedPlans[selectedPlanDraft.draftId]}
-                    onUpload={(destination) =>
-                      void handleUploadPlanDraft(selectedPlanDraft.draftId, destination)
+                    onUpload={(destination, scheduleDate) =>
+                      void handleUploadPlanDraft(
+                        selectedPlanDraft.draftId,
+                        destination,
+                        scheduleDate
+                      )
                     }
                     onReview={
                       onReviewPlan

@@ -1011,9 +1011,16 @@ const api = {
   uploadTrainingPlanDraft: (
     draftId: string,
     unitSystem: UnitSystem,
-    destination?: TrainingPlanDestination
+    destination?: TrainingPlanDestination,
+    scheduleDate?: string
   ): Promise<UploadPlanResult> =>
-    ipcRenderer.invoke("chat:uploadPlanDraft", draftId, unitSystem, destination),
+    ipcRenderer.invoke(
+      "chat:uploadPlanDraft",
+      draftId,
+      unitSystem,
+      destination,
+      scheduleDate
+    ),
   confirmWorkoutDelete: (requestId: string): Promise<DeleteWorkoutResult> =>
     ipcRenderer.invoke("chat:confirmWorkoutDelete", requestId),
   setWindowBackground: (color: string): Promise<void> =>

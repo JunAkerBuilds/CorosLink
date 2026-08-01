@@ -625,7 +625,8 @@ export interface CorosLinkApi {
   uploadTrainingPlanDraft: (
     draftId: string,
     unitSystem: UnitSystem,
-    destination?: TrainingPlanDestination
+    destination?: TrainingPlanDestination,
+    scheduleDate?: string
   ) => Promise<UploadPlanResult>;
   confirmWorkoutDelete: (requestId: string) => Promise<DeleteWorkoutResult>;
   setWindowBackground: (color: string) => Promise<void>;

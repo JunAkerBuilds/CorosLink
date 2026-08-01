@@ -139,6 +139,8 @@ export interface PlanDraftPreviewEntry {
 
 export interface PlanDraftPreview {
   draftId: string;
+  /** Distinguishes a multi-workout plan from a reusable one-off workout. */
+  artifactType?: "plan" | "workout";
   name: string;
   summary: string;
   entries: PlanDraftPreviewEntry[];
@@ -1060,17 +1062,24 @@ function formatEntryVolume(
   }
   let totalMeters = 0;
   let repeatSets = 0;
+  let strengthSets = 0;
 
   for (const step of entry.steps) {
     if ("repeat" in step) {
       repeatSets += step.repeat;
       for (const sub of step.steps) {
+        if (entry.sport === "strength" && sub.kind === "training") {
+          strengthSets += (sub.sets ?? 1) * step.repeat;
+        }
         if (sub.target_distance_meters) {
           totalMeters += sub.target_distance_meters * step.repeat;
         }
       }
-    } else if (step.target_distance_meters) {
-      totalMeters += step.target_distance_meters;
+    } else {
+      if (entry.sport === "strength" && step.kind === "training") {
+        strengthSets += step.sets ?? 1;
+      }
+      if (step.target_distance_meters) totalMeters += step.target_distance_meters;
     }
   }
 
@@ -1078,6 +1087,9 @@ function formatEntryVolume(
     return formatDistanceValue(totalMeters, unitSystem, {
       swim: entry.sport === "swim"
     });
+  }
+  if (strengthSets > 0) {
+    return `${strengthSets} ${strengthSets === 1 ? "set" : "sets"}`;
   }
   if (repeatSets > 0) {
     return `${repeatSets} set(s)`;
@@ -1155,7 +1167,14 @@ function formatRunStepSummary(
     : step.pace
       ? `@ ${formatLegacyPaceForUnits(step.pace, unitSystem)}`
       : undefined;
-  return [kind, target, intensity].filter(Boolean).join(" ");
+  const exercise = step.exercise_name?.trim();
+  const prescribedTarget = target && step.sets && step.sets > 1
+    ? `${step.sets} × ${target}`
+    : target;
+  const rest = step.rest_value !== undefined && step.sets && step.sets > 1
+    ? `(${step.rest_value} sec rest)`
+    : undefined;
+  return [exercise || kind, prescribedTarget, intensity, rest].filter(Boolean).join(" ");
 }
 
 function formatWorkoutIntensityForUnits(
@@ -1314,6 +1333,7 @@ export function buildPlanPreview(
     existingSchedule?: Map<string, string[]>;
     scheduleConflicts?: string[];
     unitSystem?: UnitSystem;
+    artifactType?: "plan" | "workout";
   }
 ): PlanDraftPreview {
   const entries: PlanDraftPreviewEntry[] = draft.workouts.map((entry) => ({
@@ -1353,20 +1373,26 @@ export function buildPlanPreview(
   const sportSummary = [...sportCounts.entries()]
     .map(([sport, count]) => `${count} ${formatWorkoutSport(sport)}`)
     .join(" / ");
+  const workoutSportSummary = formatWorkoutSport(
+    draft.workouts[0]?.sport ?? "run"
+  );
 
-  const summaryParts = [
-    `${draft.workouts.length} workout${draft.workouts.length === 1 ? "" : "s"}`,
-    scheduled.length > 0
-      ? `${scheduled.length} scheduled`
-      : "none scheduled",
-    libraryOnly.length > 0
-      ? `${libraryOnly.length} library-only`
-      : undefined,
-    sportSummary
-  ].filter(Boolean);
+  const artifactType = options?.artifactType ?? "plan";
+  const summaryParts = artifactType === "workout"
+    ? [workoutSportSummary, entries[0]?.volume, entries[0]?.workoutType].filter(Boolean)
+    : [
+        `${draft.workouts.length} workout${draft.workouts.length === 1 ? "" : "s"}`,
+        scheduled.length > 0
+          ? `${scheduled.length} scheduled`
+          : "none scheduled",
+        libraryOnly.length > 0
+          ? `${libraryOnly.length} library-only`
+          : undefined,
+        sportSummary
+      ].filter(Boolean);
 
   const warnings: string[] = [];
-  if (scheduled.length === 0) {
+  if (artifactType === "plan" && scheduled.length === 0) {
     warnings.push(
       "No workouts have schedule_date set — they will only be saved to your COROS library."
     );
@@ -1374,6 +1400,7 @@ export function buildPlanPreview(
 
   return {
     draftId,
+    artifactType,
     name: draft.name,
     summary: summaryParts.join(" · "),
     entries,

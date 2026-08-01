@@ -18043,6 +18043,10 @@ tr.data-intervals-row-missing {
   justify-content: space-between;
 }
 
+.chat-plan-panel .chat-plan-entry.is-strength .chat-plan-entry-meta {
+  justify-content: flex-end;
+}
+
 .chat-plan-panel .chat-plan-actions > button {
   justify-content: center;
   white-space: nowrap;
@@ -19748,7 +19752,10 @@ tr.data-intervals-row-missing {
 }
 
 .chat-model-select {
-  width: 146px;
+  flex: 0 1 auto;
+  width: max-content;
+  min-width: 146px;
+  max-width: 220px;
 }
 
 .chat-provider-select .app-select-trigger,
@@ -20652,6 +20659,17 @@ tr.data-intervals-row-missing {
   min-width: 0;
 }
 
+.chat-workout-card-kicker {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--chat-signal-strong);
+  font-size: 9.5px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
 .chat-plan-card-header h4 {
   margin: 0 0 4px;
   font-size: 14px;
@@ -21047,11 +21065,179 @@ tr.data-intervals-row-missing {
   overflow-wrap: anywhere;
 }
 
+.chat-plan-entry.is-strength {
+  align-items: start;
+  padding-block: 10px;
+}
+
+.chat-plan-entry.is-strength .chat-plan-entry-date {
+  margin-top: 1px;
+}
+
+.chat-plan-entry.is-strength .chat-plan-entry-main {
+  gap: 7px;
+}
+
+.chat-plan-entry.is-strength .chat-plan-entry-name {
+  font-size: 13px;
+}
+
+.chat-plan-strength-structure {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--glass-bg-elevated) 30%, transparent);
+}
+
+.chat-plan-strength-header,
+.chat-plan-strength-repeat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-plan-strength-header {
+  min-height: 34px;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--glass-border);
+  background: color-mix(in srgb, var(--chat-plan-sport, var(--text-muted)) 7%, transparent);
+}
+
+.chat-plan-strength-header strong,
+.chat-plan-strength-repeat-header strong {
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.chat-plan-strength-header > span,
+.chat-plan-strength-repeat-header > span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chat-plan-strength-steps,
+.chat-plan-strength-repeat > ol {
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  gap: 2px;
+}
+
+.chat-plan-strength-step {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 38px;
+  padding: 6px 7px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--glass-bg) 54%, transparent);
+}
+
+.chat-plan-strength-step.is-rest {
+  min-height: 32px;
+  background: transparent;
+}
+
+.chat-plan-strength-step.is-warmup,
+.chat-plan-strength-step.is-cooldown {
+  background: color-mix(in srgb, var(--glass-bg) 28%, transparent);
+}
+
+.chat-plan-strength-marker {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid color-mix(in srgb, var(--chat-plan-sport, var(--text-muted)) 28%, var(--glass-border));
+  border-radius: 7px;
+  color: var(--chat-plan-sport, var(--text-secondary));
+  background: color-mix(in srgb, var(--chat-plan-sport, var(--text-muted)) 10%, transparent);
+  font-size: 10px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-plan-strength-step.is-rest .chat-plan-strength-marker,
+.chat-plan-strength-step.is-warmup .chat-plan-strength-marker,
+.chat-plan-strength-step.is-cooldown .chat-plan-strength-marker {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-muted);
+}
+
+.chat-plan-strength-step-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.chat-plan-strength-step-copy strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-plan-strength-prescription {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  max-width: 260px;
+  text-align: right;
+}
+
+.chat-plan-strength-prescription strong {
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-plan-strength-prescription span {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chat-plan-strength-repeat {
+  overflow: hidden;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--chat-plan-sport, var(--text-muted)) 6%, var(--glass-bg));
+}
+
+.chat-plan-strength-repeat-header {
+  min-height: 30px;
+  padding: 6px 9px 3px;
+}
+
+.chat-plan-strength-repeat > ol {
+  padding-top: 2px;
+}
+
 .chat-plan-entry-meta {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 5px;
+}
+
+.chat-plan-entry.is-strength .chat-plan-entry-meta {
+  align-self: start;
 }
 
 .chat-plan-entry-volume {
@@ -21286,6 +21472,44 @@ tr.data-intervals-row-missing {
   margin-top: 1px;
 }
 
+.chat-workout-calendar-date {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, auto);
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--glass-bg-elevated) 42%, transparent);
+}
+
+.chat-workout-calendar-date > span {
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.chat-workout-calendar-date > input {
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--glass-border);
+  border-radius: 7px;
+  color: var(--text-primary);
+  background: var(--glass-bg);
+  font: inherit;
+  color-scheme: dark;
+}
+
+:root[data-theme="paper"] .chat-workout-calendar-date > input {
+  color-scheme: light;
+}
+
+.chat-workout-calendar-date > input:focus-visible {
+  outline: 2px solid var(--chat-signal);
+  outline-offset: 2px;
+}
+
 .chat-plan-actions {
   display: flex;
   flex-wrap: wrap;
@@ -21407,8 +21631,33 @@ tr.data-intervals-row-missing {
     justify-content: flex-start;
   }
 
+  .chat-plan-strength-step {
+    grid-template-columns: 24px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .chat-plan-strength-step-copy strong {
+    white-space: normal;
+  }
+
+  .chat-plan-strength-prescription {
+    grid-column: 2;
+    justify-content: flex-start;
+    max-width: none;
+    text-align: left;
+  }
+
+  .chat-plan-panel .chat-plan-entry.is-strength .chat-plan-entry-meta {
+    justify-content: flex-start;
+  }
+
   .chat-plan-destination-options {
     grid-template-columns: 1fr;
+  }
+
+  .chat-workout-calendar-date {
+    grid-template-columns: 1fr;
+    gap: 7px;
   }
 
   .chat-plan-actions > button {
@@ -29364,6 +29613,17 @@ tr.data-intervals-row-missing {
   cursor: pointer;
 }
 
+.workout-editor-add-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.workout-editor-add-actions .ghost-button {
+  padding-inline: 9px;
+}
+
 .workout-editor-nodes {
   display: flex;
   flex-direction: column;
@@ -29457,6 +29717,32 @@ tr.data-intervals-row-missing {
   background: var(--glass-bg);
 }
 
+.workout-strength-step-heading {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.workout-strength-step-heading strong,
+.workout-strength-step-heading span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workout-strength-step-heading strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.workout-strength-step-heading span {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
 .workout-step-actions {
   display: flex;
   flex: 0 0 auto;
@@ -29521,6 +29807,165 @@ tr.data-intervals-row-missing {
 
 .workout-exercise-control .exercise-combobox {
   width: 100%;
+}
+
+.workout-strength-fields {
+  display: grid;
+  min-width: 0;
+  gap: 18px;
+  padding: 14px;
+  container: workout-strength-fields / inline-size;
+}
+
+.workout-strength-form {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 15px;
+}
+
+.workout-strength-fields.has-preview {
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 270px);
+}
+
+.workout-strength-preview {
+  min-width: 0;
+}
+
+.workout-strength-preview .exercise-preview {
+  position: sticky;
+  top: 0;
+}
+
+.workout-strength-instructions {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.workout-strength-instructions > span {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.workout-strength-instructions textarea {
+  min-height: 62px;
+  resize: vertical;
+}
+
+.workout-strength-instructions small {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.workout-step-card .set-line input {
+  width: auto;
+  min-height: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-primary);
+  padding: 0;
+  font-size: 27px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  appearance: textfield;
+}
+
+.workout-step-card .set-line input::-webkit-inner-spin-button,
+.workout-step-card .set-line input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.workout-step-card .set-line input:focus {
+  border: 0;
+  box-shadow: none;
+  outline: none;
+}
+
+.workout-step-card .set-line input:focus-visible,
+.workout-step-card .rest-picker input:focus-visible,
+.workout-step-card .rest-picker button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--step-color, var(--accent)) 80%, transparent);
+  outline-offset: 3px;
+}
+
+.workout-step-card .set-line-cell > input {
+  width: 2.6em;
+}
+
+.workout-step-card .set-line-compound > input {
+  width: 3.2em;
+}
+
+.workout-step-card .set-line .set-line-select {
+  min-width: 108px;
+  flex: 0 1 auto;
+}
+
+.workout-step-card .set-line .set-line-select .app-select-trigger {
+  min-height: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workout-step-card .set-line-weight input {
+  width: 3.4em;
+  font-size: 22px;
+}
+
+.workout-step-card .rest-picker > button {
+  min-height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--glass-bg) 55%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.workout-step-card .rest-picker > button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text-primary) 22%, var(--glass-border));
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.workout-step-card .rest-picker > button.is-selected {
+  border-color: color-mix(in srgb, var(--step-color, var(--accent)) 55%, transparent);
+  background: color-mix(in srgb, var(--step-color, var(--accent)) 18%, transparent);
+  color: var(--text-primary);
+}
+
+.workout-step-card .rest-picker-custom input {
+  width: 66px;
+  min-height: 32px;
+  border-radius: var(--radius-pill);
+  padding: 0 10px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.workout-step-card .rest-picker-custom input:focus {
+  border-color: color-mix(in srgb, var(--step-color, var(--accent)) 70%, var(--glass-border));
+  box-shadow: none;
 }
 
 .workout-control-group > label,
@@ -29759,6 +30204,7 @@ tr.data-intervals-row-missing {
   .workout-editor-modal { height: calc(100dvh - 16px); }
   .workout-editor-basics,
   .workout-step-fields { grid-template-columns: 1fr; }
+  .workout-strength-fields.has-preview { grid-template-columns: 1fr; }
   .workout-control-group { align-items: stretch; flex-wrap: wrap; }
   .workout-step-header { flex-wrap: wrap; }
   .workout-step-header > input { order: 2; flex-basis: calc(100% - 40px); }
@@ -29776,6 +30222,8 @@ tr.data-intervals-row-missing {
   .workout-library-footer .calendar-field { max-width: none; }
   .workout-editor-scroll { padding-inline: 10px; }
   .workout-editor-header { padding-inline: 12px; }
+  .workout-editor-structure-header { align-items: stretch; flex-direction: column; }
+  .workout-editor-add-actions { justify-content: flex-start; }
   .workout-repeat-header { flex-wrap: wrap; }
   .workout-repeat-count { margin-left: 0; }
   .workout-repeat-header .workout-step-actions { margin-left: auto; }

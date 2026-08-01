@@ -93,11 +93,12 @@ function entryDate(plan: TrainingPlanDocument, weekIndex: number, dayIndex: numb
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function mondayOf(value: string): string {
-  const date = new Date(`${value}T12:00:00`);
-  if (Number.isNaN(date.valueOf())) return value;
-  date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+function planDayName(startDate: string | undefined, dayIndex: number): string {
+  if (!startDate) return DAY_NAMES[dayIndex]!;
+  const date = new Date(`${startDate}T12:00:00`);
+  if (Number.isNaN(date.valueOf())) return DAY_NAMES[dayIndex]!;
+  date.setDate(date.getDate() + dayIndex);
+  return date.toLocaleDateString(undefined, { weekday: "short" });
 }
 
 export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offline, onCalendar, onSave, onClose }: PlanEditorProps) {
@@ -114,6 +115,7 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [workoutEditorError, setWorkoutEditorError] = useState<string | null>(null);
   const plan = history[historyIndex]!;
+  const planDayNames = useMemo(() => DAY_NAMES.map((_day, dayIndex) => planDayName(plan.startDate, dayIndex)), [plan.startDate]);
   const editingEntry = plan.entries.find((entry) => entry.id === editingEntryId);
   const dirty = JSON.stringify(plan) !== JSON.stringify(initialPlan);
   const validation = useMemo(() => validateTrainingPlan(plan), [plan]);
@@ -307,7 +309,7 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
                 onChange={(difficulty) => patchPlan({ difficulty })}
               />
             </label>
-            <label><span>Week 1 Monday</span><span className="plan-editor-date"><CalendarRange size={15} /><input type="date" value={plan.startDate ?? ""} onChange={(event) => commit(shiftTrainingPlan(plan, mondayOf(event.target.value)))} /></span></label>
+            <label><span>Plan start date</span><span className="plan-editor-date"><CalendarRange size={15} /><input type="date" value={plan.startDate ?? ""} onChange={(event) => { if (event.target.value) commit(shiftTrainingPlan(plan, event.target.value)); }} /></span></label>
             <label><span>Notes</span><textarea value={plan.notes} onChange={(event) => patchPlan({ notes: event.target.value })} /></label>
           </section>
 
@@ -388,10 +390,10 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
                   </div>
                 </header>
                 <div className="plan-week-days">
-                  {DAY_NAMES.map((day, dayIndex) => {
+                  {planDayNames.map((day, dayIndex) => {
                     const entries = weekEntries.filter((entry) => entry.dayIndex === dayIndex).sort((a, b) => a.sortOrder - b.sortOrder);
                     const dayKey = `week-${weekIndex}-day-${dayIndex}`;
-                    return <div className={`plan-day${dropTarget === dayKey ? " is-drop-target" : ""}`} key={day} {...dropTargetProps(dayKey, (event) => drop(event, weekIndex, dayIndex))}>
+                    return <div className={`plan-day${dropTarget === dayKey ? " is-drop-target" : ""}`} key={dayKey} {...dropTargetProps(dayKey, (event) => drop(event, weekIndex, dayIndex))}>
                       <div className="plan-day-heading"><span><strong>{day}</strong><small>{entryDate(plan, weekIndex, dayIndex)}</small></span><button type="button" aria-label={`Add rest day on ${day}`} onClick={() => addRest(weekIndex, dayIndex)}><CornerDownLeft size={13} /></button></div>
                       <div className="plan-day-entries">
                         {entries.map((entry) => <PlanEntryCard key={entry.id} entry={entry} onEdit={() => setEditingEntryId(entry.id)} onRemove={() => removeEntry(entry.id)} />)}

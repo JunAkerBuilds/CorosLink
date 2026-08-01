@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import {
   deleteChatSessionRow,
+  getChatPlanDraft,
   getChatSessionRow,
   insertChatSessionRow,
   listChatSessionRows,
@@ -23,6 +24,7 @@ import type {
   PersistedChatSource,
   PlanDraftPreview,
   PlanDraftPreviewEntry,
+  PlanWorkoutEntryInput,
   TrainingHubActivitySeriesPoint,
   TrainingHubThresholdZone,
   TrainingHubTrackPoint,
@@ -173,6 +175,92 @@ function parseCoachInputPrompt(value: unknown): CoachInputPrompt | null {
   };
 }
 
+const PERSISTED_WORKOUT_SPORTS = new Set([
+  "run",
+  "trailRun",
+  "bike",
+  "swim",
+  "strength",
+  "xcSki",
+  "indoorClimb",
+  "bouldering",
+  "hyrox"
+]);
+
+type PersistedPlanStep = NonNullable<PlanWorkoutEntryInput["steps"]>[number];
+
+function parsePersistedPlanStep(value: unknown): PersistedPlanStep | null {
+  if (!isRecord(value)) return null;
+
+  if (typeof value.repeat === "number") {
+    if (!Array.isArray(value.steps)) return null;
+    const children = value.steps.filter(
+      (step): step is Record<string, unknown> =>
+        isRecord(step) && typeof step.kind === "string"
+    );
+    if (children.length !== value.steps.length) return null;
+    return {
+      ...value,
+      steps: children.map((step) => ({ ...step }))
+    } as unknown as PersistedPlanStep;
+  }
+
+  if (typeof value.kind !== "string") return null;
+  return { ...value } as unknown as PersistedPlanStep;
+}
+
+function parsePlanWorkoutSource(
+  value: unknown
+): PlanWorkoutEntryInput | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.key !== "string" ||
+    typeof value.name !== "string"
+  ) {
+    return undefined;
+  }
+
+  const parsedSteps = Array.isArray(value.steps)
+    ? value.steps.map(parsePersistedPlanStep)
+    : undefined;
+  const steps = parsedSteps?.every(
+    (step): step is PersistedPlanStep => step !== null
+  )
+    ? parsedSteps
+    : undefined;
+  const sport =
+    typeof value.sport === "string" && PERSISTED_WORKOUT_SPORTS.has(value.sport)
+      ? value.sport as PlanWorkoutEntryInput["sport"]
+      : undefined;
+
+  return {
+    key: value.key,
+    name: value.name,
+    ...(typeof value.description === "string"
+      ? { description: value.description }
+      : {}),
+    ...(sport ? { sport } : {}),
+    ...(isRecord(value.sport_options)
+      ? {
+          sport_options: {
+            ...value.sport_options
+          } as PlanWorkoutEntryInput["sport_options"]
+        }
+      : {}),
+    ...(steps ? { steps } : {}),
+    ...(typeof value.distance_km === "number"
+      ? { distance_km: value.distance_km }
+      : {}),
+    ...(typeof value.schedule_date === "string"
+      ? { schedule_date: value.schedule_date }
+      : {}),
+    ...(typeof value.sort_no === "number" ? { sort_no: value.sort_no } : {}),
+    ...(typeof value.save_to_library === "boolean"
+      ? { save_to_library: value.save_to_library }
+      : {})
+  };
+}
+
 function parsePlanDraftEntry(value: unknown): PlanDraftPreviewEntry | null {
   if (!isRecord(value)) {
     return null;
@@ -187,6 +275,7 @@ function parsePlanDraftEntry(value: unknown): PlanDraftPreviewEntry | null {
     return null;
   }
 
+  const source = parsePlanWorkoutSource(value.source);
   return {
     key: value.key,
     name: value.name,
@@ -199,7 +288,8 @@ function parsePlanDraftEntry(value: unknown): PlanDraftPreviewEntry | null {
     saveToLibrary: value.saveToLibrary,
     workoutType: value.workoutType,
     stepsSummary:
-      typeof value.stepsSummary === "string" ? value.stepsSummary : undefined
+      typeof value.stepsSummary === "string" ? value.stepsSummary : undefined,
+    ...(source ? { source } : {})
   };
 }
 
@@ -235,6 +325,7 @@ function parsePlanDraft(value: unknown): PlanDraftPreview | null {
 
   return {
     draftId: value.draftId,
+    artifactType: value.artifactType === "workout" ? "workout" : "plan",
     name: value.name,
     summary: value.summary,
     entries,
@@ -248,7 +339,23 @@ function parsePlanDraft(value: unknown): PlanDraftPreview | null {
       typeof value.uploadResult.workoutsCreated === "number"
         ? {
             workoutsScheduled: value.uploadResult.workoutsScheduled,
-            workoutsCreated: value.uploadResult.workoutsCreated
+            workoutsCreated: value.uploadResult.workoutsCreated,
+            destination:
+              value.uploadResult.destination === "workoutLibrary" ||
+              value.uploadResult.destination === "calendar" ||
+              value.uploadResult.destination === "nativePlan" ||
+              value.uploadResult.destination === "localTemplate" ||
+              value.uploadResult.destination === "nativePlanAndCalendar"
+                ? value.uploadResult.destination
+                : undefined,
+            localPlanId:
+              typeof value.uploadResult.localPlanId === "string"
+                ? value.uploadResult.localPlanId
+                : undefined,
+            groupedPlanCreated:
+              typeof value.uploadResult.groupedPlanCreated === "boolean"
+                ? value.uploadResult.groupedPlanCreated
+                : undefined
           }
         : undefined
   };
@@ -695,6 +802,53 @@ export function parseChatTranscriptJson(raw: string): PersistedChatEntry[] {
     .filter((entry): entry is PersistedChatEntry => entry !== null);
 }
 
+/**
+ * Older chat rows were normalized without each preview entry's canonical
+ * workout source. The separate Coach draft store retained that full preview,
+ * so use it to restore structured cards without replacing chat-local upload
+ * state or destination choices.
+ */
+export function restoreChatPlanDraftSources(
+  entries: PersistedChatEntry[],
+  loadPreviewJson: (draftId: string) => string | undefined
+): PersistedChatEntry[] {
+  return entries.map((entry) => {
+    if (
+      entry.kind !== "planDraft" ||
+      entry.draft.entries.every((draftEntry) => draftEntry.source)
+    ) {
+      return entry;
+    }
+
+    const rawPreview = loadPreviewJson(entry.draft.draftId);
+    if (!rawPreview) return entry;
+
+    let recovered: PlanDraftPreview | null = null;
+    try {
+      recovered = parsePlanDraft(JSON.parse(rawPreview));
+    } catch {
+      return entry;
+    }
+    if (!recovered) return entry;
+
+    const recoveredByKey = new Map(
+      recovered.entries.map((draftEntry) => [draftEntry.key, draftEntry])
+    );
+    return {
+      kind: "planDraft",
+      draft: {
+        ...entry.draft,
+        artifactType: recovered.artifactType ?? entry.draft.artifactType,
+        entries: entry.draft.entries.map((draftEntry) => ({
+          ...draftEntry,
+          source:
+            draftEntry.source ?? recoveredByKey.get(draftEntry.key)?.source
+        }))
+      }
+    };
+  });
+}
+
 function normalizeEntries(entries: PersistedChatEntry[]): PersistedChatEntry[] {
   return entries
     .map((entry) => parseEntry(entry))
@@ -792,7 +946,12 @@ export function getChatSession(
   if (!row) {
     return [];
   }
-  return parseChatTranscriptJson(row.messages_json);
+  const entries = parseChatTranscriptJson(row.messages_json);
+  if (database !== defaultDatabase) return entries;
+  return restoreChatPlanDraftSources(
+    entries,
+    (draftId) => getChatPlanDraft(draftId)?.previewJson
+  );
 }
 
 export function createChatSession(
