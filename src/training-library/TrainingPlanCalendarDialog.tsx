@@ -26,11 +26,20 @@ interface TrainingPlanCalendarDialogProps {
   onComplete: (result: TrainingPlanCalendarMutationResult) => void;
 }
 
-function mondayOnOrAfter(value = new Date()): string {
-  const date = new Date(value);
-  const offset = (8 - date.getDay()) % 7;
-  date.setDate(date.getDate() + offset);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+function calendarDay(value = new Date()): string {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+
+function installDateProblem(value: string, today: string): string | null {
+  const date = new Date(`${value}T12:00:00`);
+  if (!value || Number.isNaN(date.valueOf())) return "Choose a start date.";
+  if (value < today) return "A training plan cannot start in the past.";
+  return null;
+}
+
+function userFacingError(cause: unknown): string {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return message.replace(/^Error invoking remote method '[^']+': Error:\s*/, "");
 }
 
 function displayDay(value: string): string {
@@ -46,9 +55,9 @@ function initialInstallDate(plan: TrainingPlanDocument): string {
     const date = new Date(`${dashed}T12:00:00`);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    if (!Number.isNaN(date.valueOf()) && date >= today && date.getDay() === 1) return dashed;
+    if (!Number.isNaN(date.valueOf()) && date >= today) return dashed;
   }
-  return mondayOnOrAfter();
+  return calendarDay();
 }
 
 export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperation, onClose, onComplete }: TrainingPlanCalendarDialogProps) {
@@ -56,10 +65,12 @@ export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperat
   const install = activeTrainingPlanCalendarInstall(plan);
   const operation = requestedOperation ?? (install && !(install.state === "partial" && install.lastOperation === "install") ? "remove" : "install");
   const [startDate, setStartDate] = useState(() => initialInstallDate(plan));
+  const [today] = useState(() => calendarDay());
   const [preview, setPreview] = useState<TrainingPlanCalendarPreview | null>(null);
   const [loading, setLoading] = useState(operation === "remove" && !offline);
   const [mutating, setMutating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ title: string; message: string } | null>(null);
+  const startDateProblem = operation === "install" ? installDateProblem(startDate, today) : null;
 
   const conflictCount = useMemo(
     () => preview?.conflicts.reduce((sum, conflict) => sum + conflict.existing.length, 0) ?? 0,
@@ -67,7 +78,7 @@ export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperat
   );
 
   const loadPreview = async () => {
-    if (offline) return;
+    if (offline || startDateProblem) return;
     setLoading(true);
     setError(null);
     setPreview(null);
@@ -76,7 +87,7 @@ export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperat
         ? await api.previewTrainingPlanCalendar(plan.id, startDate)
         : await api.previewTrainingPlanCalendarRemoval(plan.id));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError({ title: "Couldn’t preview calendar", message: userFacingError(cause) });
     } finally {
       setLoading(false);
     }
@@ -108,7 +119,7 @@ export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperat
         : await api.removeTrainingPlanFromCalendar(preview.previewId, true);
       onComplete(result);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError({ title: "Calendar update needs attention", message: userFacingError(cause) });
       setPreview(null);
     } finally {
       setMutating(false);
@@ -124,11 +135,11 @@ export function TrainingPlanCalendarDialog({ api, plan, offline, requestedOperat
 
       {offline ? <div className="plan-calendar-offline"><AlertTriangle size={18} /><div><strong>Calendar actions are unavailable offline</strong><p>Reconnect to COROS, refresh the Training Library, and try again.</p></div></div> : null}
 
-      {!offline && operation === "install" && !preview ? <div className="plan-calendar-start"><label><span>Week 1 Monday</span><input autoFocus type="date" value={startDate} disabled={loading} onChange={(event) => setStartDate(event.target.value)} /></label><p>The preview checks exact dates and shows same-day workouts. Existing workouts are kept and this plan is added alongside them.</p><button type="button" className="primary-button" disabled={loading || !startDate} onClick={() => void loadPreview()}>{loading ? <LoaderCircle className="is-spinning" size={15} /> : <CalendarPlus size={15} />}{loading ? "Checking calendar..." : "Preview dates"}</button></div> : null}
+      {!offline && operation === "install" && !preview ? <div className="plan-calendar-start"><label><span>Plan start date</span><input autoFocus type="date" value={startDate} min={today} aria-invalid={Boolean(startDateProblem)} aria-describedby={startDateProblem ? "plan-calendar-date-error" : undefined} disabled={loading} onChange={(event) => { setStartDate(event.target.value); setError(null); }} />{startDateProblem ? <small id="plan-calendar-date-error" className="plan-calendar-date-error" role="alert">{startDateProblem}</small> : null}</label><p>Day 1 starts on the selected date. The preview checks exact dates and shows same-day workouts; existing workouts are kept.</p><button type="button" className="primary-button" disabled={loading || Boolean(startDateProblem)} onClick={() => void loadPreview()}>{loading ? <LoaderCircle className="is-spinning" size={15} /> : <CalendarPlus size={15} />}{loading ? "Checking calendar..." : "Preview dates"}</button></div> : null}
 
       {!offline && loading ? <div className="plan-calendar-loading"><LoaderCircle className="is-spinning" size={22} /><strong>Checking the COROS calendar</strong><p>Comparing plan dates with current scheduled workouts.</p></div> : null}
 
-      {error ? <div className="plan-calendar-error" role="alert"><AlertTriangle size={17} /><div><strong>Refresh required</strong><p>{error}</p></div><button type="button" className="ghost-button" disabled={loading || mutating} onClick={() => void loadPreview()}><RefreshCw size={14} /> Try again</button></div> : null}
+      {error ? <div className="plan-calendar-error" role="alert"><AlertTriangle size={17} /><div><strong>{error.title}</strong><p>{error.message}</p></div><button type="button" className="ghost-button" disabled={loading || mutating} onClick={() => void loadPreview()}><RefreshCw size={14} /> Try again</button></div> : null}
 
       {preview ? <div className="plan-calendar-preview">
         <div className="plan-calendar-summary"><span><strong>{preview.entries.length}</strong><small>{operation === "install" ? "workouts to add" : "future workouts to remove"}</small></span><span><strong>{displayDay(preview.startDate)}</strong><small>{operation === "install" ? "Week 1 starts" : "installed start"}</small></span><span className={conflictCount ? "has-conflict" : ""}><strong>{conflictCount}</strong><small>same-day conflicts</small></span></div>

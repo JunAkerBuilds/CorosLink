@@ -56,6 +56,16 @@ function editorStep(step: RunWorkoutCreateStep, sport: WorkoutSport): RunWorkout
     exerciseId: step.exercise_id,
     exerciseName: step.exercise_name,
     exerciseKind: step.exercise_kind,
+    sets: sport === "strength" && (step.kind === "training" || step.kind === "interval")
+      ? step.sets ?? 1
+      : step.sets,
+    restType: sport === "strength" && (step.kind === "training" || step.kind === "interval")
+      ? step.rest_type ?? 1
+      : step.rest_type,
+    restValue: sport === "strength" && (step.kind === "training" || step.kind === "interval")
+      ? step.rest_value ?? 60
+      : step.rest_value,
+    overview: step.overview,
     sendOffSeconds: step.send_off_seconds,
     editable: true
   };
@@ -129,6 +139,10 @@ function inputStep(step: RunWorkoutEditorStep): RunWorkoutCreateStep {
     ...(step.exerciseId?.trim() ? { exercise_id: step.exerciseId.trim() } : {}),
     ...(step.exerciseName?.trim() ? { exercise_name: step.exerciseName.trim() } : {}),
     ...(step.exerciseKind !== undefined ? { exercise_kind: step.exerciseKind } : {}),
+    ...(step.sets !== undefined ? { sets: step.sets } : {}),
+    ...(step.restType !== undefined ? { rest_type: step.restType } : {}),
+    ...(step.restValue !== undefined ? { rest_value: step.restValue } : {}),
+    ...(step.overview?.trim() ? { overview: step.overview.trim() } : {}),
     ...(step.sendOffSeconds !== undefined ? { send_off_seconds: step.sendOffSeconds } : {})
   };
 }

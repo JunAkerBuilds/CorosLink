@@ -5416,6 +5416,8 @@
 }
 
 .plan-calendar-loading strong { color: var(--text-primary); font-size: 13px; }
+.plan-calendar-start input[aria-invalid="true"] { border-color: var(--warning-border); }
+.plan-calendar-date-error { color: var(--warning-text); font-size: 10.5px; font-weight: 400; }
 .plan-calendar-offline,
 .plan-calendar-error { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border: 1px solid var(--warning-border); border-radius: var(--radius-sm); color: var(--warning-text); background: var(--warning-bg); }
 .plan-calendar-offline strong,

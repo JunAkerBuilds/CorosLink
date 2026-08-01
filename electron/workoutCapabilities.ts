@@ -244,7 +244,7 @@ export function workoutExerciseId(row: Record<string, unknown>): string | undefi
     : String(value);
 }
 
-function normalizeExerciseName(value: string): string {
+export function normalizeWorkoutExerciseName(value: string): string {
   const singularize = (token: string): string => {
     if (token.length > 4 && token.endsWith("ies")) return `${token.slice(0, -3)}y`;
     if (token.length > 4 && /(ches|shes|xes|zes)$/.test(token)) return token.slice(0, -2);
@@ -262,6 +262,44 @@ function normalizeExerciseName(value: string): string {
     .filter(Boolean)
     .map(singularize)
     .join(" ");
+}
+
+function workoutExerciseNameTokens(value: string): string[] {
+  return normalizeWorkoutExerciseName(value).split(" ").filter(Boolean);
+}
+
+function workoutExerciseTokenKey(value: string): string {
+  return [...new Set(workoutExerciseNameTokens(value))].sort().join(" ");
+}
+
+/**
+ * Token-aware similarity for user/AI exercise phrasing. COROS frequently puts
+ * equipment at the end ("Chest Press Machine") while natural language puts it
+ * first ("machine chest press"), so ordered substring matching is insufficient.
+ */
+export function workoutExerciseNameSimilarity(
+  requestedName: string,
+  catalogName: string
+): number {
+  const requested = [...new Set(workoutExerciseNameTokens(requestedName))];
+  const candidate = [...new Set(workoutExerciseNameTokens(catalogName))];
+  if (requested.length === 0 || candidate.length === 0) return 0;
+  if (workoutExerciseTokenKey(requestedName) === workoutExerciseTokenKey(catalogName)) {
+    return 1;
+  }
+
+  const candidateTokens = new Set(candidate);
+  const overlap = requested.filter((token) => candidateTokens.has(token)).length;
+  if (overlap === 0) return 0;
+  const recall = overlap / requested.length;
+  const precision = overlap / candidate.length;
+  const orderedRequested = normalizeWorkoutExerciseName(requestedName);
+  const orderedCandidate = normalizeWorkoutExerciseName(catalogName);
+  const containmentBonus =
+    orderedRequested.includes(orderedCandidate) || orderedCandidate.includes(orderedRequested)
+      ? 0.08
+      : 0;
+  return Math.min(0.99, recall * 0.68 + precision * 0.32 + containmentBonus);
 }
 
 const COROS_EXERCISE_IMAGE_PREFIX = "/source/exercise_img/";
@@ -343,20 +381,37 @@ export function resolveWorkoutExerciseName(
 ): WorkoutExerciseResolution {
   const literal = (value: string): string => value.trim().toLocaleLowerCase();
   const queryLiteral = literal(requestedName);
-  const query = normalizeExerciseName(requestedName);
+  const query = normalizeWorkoutExerciseName(requestedName);
   if (!query) return { candidates: [] };
   const literalExact = catalog.filter(
     (row) => literal(workoutExerciseName(row)) === queryLiteral
   );
   const canonicalExact = catalog.filter((row) => {
-    const candidate = normalizeExerciseName(workoutExerciseName(row));
+    const candidate = normalizeWorkoutExerciseName(workoutExerciseName(row));
     return candidate === query || candidate.replace(/\s/g, "") === query.replace(/\s/g, "");
   });
+  const tokenExact = catalog.filter(
+    (row) => workoutExerciseTokenKey(workoutExerciseName(row)) === workoutExerciseTokenKey(requestedName)
+  );
+  const ranked = catalog
+    .map((row) => ({
+      row,
+      score: workoutExerciseNameSimilarity(requestedName, workoutExerciseName(row))
+    }))
+    .filter(({ score }) => score >= 0.48)
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        workoutExerciseName(left.row).localeCompare(workoutExerciseName(right.row))
+    )
+    .map(({ row }) => row);
   const matches = literalExact.length
     ? literalExact
     : canonicalExact.length
       ? canonicalExact
-      : catalog.filter((row) => normalizeExerciseName(workoutExerciseName(row)).includes(query));
+      : tokenExact.length
+        ? tokenExact
+        : ranked;
   const unique = [...new Map(
     matches.map((row) => [workoutExerciseId(row) ?? workoutExerciseName(row), row])
   ).values()];
@@ -1066,8 +1121,18 @@ export function validateWorkoutDraftShared(
     if (intensityError) errors[`${path}.intensity`] = intensityError;
     const needsExercise = draft.sport === "strength" ||
       (draft.sport === "hyrox" && step.exerciseKind !== undefined);
-    if (needsExercise && step.kind === "training" && !step.exerciseId && !step.exerciseName) {
-      errors[`${path}.exercise`] = `${capability.label} training steps require an exercise.`;
+    if (needsExercise && step.kind === "training" && !step.exerciseId) {
+      errors[`${path}.exercise`] = `Select an exact COROS exercise for this ${capability.label} step.`;
+    }
+    if (draft.sport === "strength" && step.kind === "training") {
+      const sets = step.sets ?? 1;
+      if (!Number.isInteger(sets) || sets < 1 || sets > 99) {
+        errors[`${path}.sets`] = "Sets must be a whole number from 1 to 99.";
+      }
+      const restValue = step.restValue ?? 0;
+      if (!Number.isInteger(restValue) || restValue < 0 || restValue > 3_600) {
+        errors[`${path}.rest`] = "Rest between sets must be from 0 to 3600 seconds.";
+      }
     }
   };
   draft.nodes.forEach((node, index) => {
@@ -1238,7 +1303,11 @@ export function buildDraftTrainingPlanInputSchema(): Record<string, unknown> {
       intensity,
       exercise_id: { type: "string" },
       exercise_name: { type: "string" },
-      exercise_kind: { type: "integer" }
+      exercise_kind: { type: "integer" },
+      sets: { type: "integer", minimum: 1, maximum: 99, description: "Strength sets for this exercise." },
+      rest_type: { type: "integer", enum: [1], description: "Timed recovery between Strength sets." },
+      rest_value: { type: "integer", minimum: 0, maximum: 3600, description: "Recovery seconds between Strength sets." },
+      overview: { type: "string", maxLength: 300, description: "Optional step instructions." }
     },
     required: ["kind", "target_type"]
   };
@@ -1324,5 +1393,51 @@ export function buildDraftTrainingPlanInputSchema(): Record<string, unknown> {
       }
     },
     required: ["name", "workouts"]
+  };
+}
+
+/** JSON Schema for a single reusable workout, without plan/calendar fields. */
+export function buildDraftWorkoutInputSchema(): Record<string, unknown> {
+  const planSchema = buildDraftTrainingPlanInputSchema() as {
+    properties: {
+      workouts: {
+        items: {
+          oneOf: Array<{
+            type: string;
+            properties: Record<string, unknown>;
+            required: string[];
+          }>;
+        };
+      };
+    };
+  };
+  const workoutVariants = planSchema.properties.workouts.items.oneOf.map(
+    (variant) => {
+      const {
+        schedule_date: _scheduleDate,
+        sort_no: _sortNo,
+        save_to_library: _saveToLibrary,
+        ...properties
+      } = variant.properties;
+      return { ...variant, properties };
+    }
+  );
+
+  return {
+    type: "object",
+    properties: {
+      workout: {
+        oneOf: workoutVariants,
+        description:
+          "One complete standalone workout. Do not include schedule_date or save_to_library; the athlete chooses Workout Library or Calendar from the confirmation card."
+      },
+      calendar_date: {
+        type: "string",
+        pattern: "^\\d{8}$",
+        description:
+          "Optional suggested calendar date (YYYYMMDD) when the athlete explicitly asks for a day. The athlete can change it before confirming."
+      }
+    },
+    required: ["workout"]
   };
 }

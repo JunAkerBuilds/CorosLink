@@ -476,8 +476,6 @@ export function buildTrainingPlanCalendarProjection(
     throw new Error("Native COROS plans are read-only in the Training Library.");
   }
   const startDay = normalizedCalendarDay(startDate);
-  const start = parsePlanDay(startDay)!;
-  if (start.getDay() !== 1) throw new Error("The plan start date must be a Monday.");
   if (startDay < today) throw new Error("A training plan cannot be installed in the past.");
   const projectedPlan = shiftTrainingPlan(plan, dashedCalendarDay(startDay));
   const planRevision = trainingPlanCalendarRevision(projectedPlan);

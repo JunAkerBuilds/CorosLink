@@ -65,10 +65,7 @@ const STAGE_STEPS = [
   { id: "Validating workouts and dates", label: "Validating workouts" }
 ];
 
-function nextMonday(): string {
-  const date = new Date();
-  const days = (8 - date.getDay()) % 7 || 7;
-  date.setDate(date.getDate() + days);
+function calendarDay(date = new Date()): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
@@ -78,9 +75,9 @@ function providerName(provider: ChatProvider): string {
   return "ChatGPT";
 }
 
-function isMonday(value: string): boolean {
+function isValidStartDate(value: string): boolean {
   const date = new Date(`${value}T12:00:00`);
-  return !Number.isNaN(date.valueOf()) && date.getDay() === 1;
+  return !Number.isNaN(date.valueOf()) && value >= calendarDay();
 }
 
 function generationPrompt(request: TrainingPlanGenerationRequest): string {
@@ -93,8 +90,9 @@ function generationPrompt(request: TrainingPlanGenerationRequest): string {
     `Difficulty: ${request.difficulty}`,
     `Length: exactly ${request.weeks} weeks`,
     `Sessions: exactly ${request.sessionsPerWeek} workouts per week`,
-    `Week 1 Monday: ${request.startDate}`,
-    `Available workout days (use only these): ${available}`,
+    `Plan start date (Day 1 of Week 1): ${request.startDate}`,
+    "Each plan week is a consecutive seven-day block beginning on the plan start date.",
+    `Available calendar weekdays (use only these): ${available}`,
     request.maxSessionMinutes ? `Maximum duration for every session: ${request.maxSessionMinutes} minutes` : "No explicit session-duration cap.",
     request.constraints?.trim() ? `Additional constraints: ${request.constraints.trim()}` : "No additional constraints.",
     "Every workout must have a schedule_date, explicit sport, and complete typed steps including repeats, targets, and intensities. Set save_to_library to false.",
@@ -132,7 +130,7 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
   const [difficulty, setDifficulty] = useState<TrainingPlanGenerationRequest["difficulty"]>("intermediate");
   const [weeks, setWeeks] = useState(8);
   const [sessionsPerWeek, setSessionsPerWeek] = useState(4);
-  const [startDate, setStartDate] = useState(nextMonday);
+  const [startDate, setStartDate] = useState(calendarDay);
   const [availableDays, setAvailableDays] = useState([0, 1, 2, 3, 4, 5, 6]);
   const [maxSessionMinutes, setMaxSessionMinutes] = useState("");
   const [constraints, setConstraints] = useState("");
@@ -161,7 +159,7 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
     request.goal && request.sports.length && request.availableDayIndexes.length &&
     request.weeks >= 1 && request.weeks <= 24 &&
     request.sessionsPerWeek >= 1 && request.sessionsPerWeek <= Math.min(7, request.availableDayIndexes.length) &&
-    isMonday(request.startDate) &&
+    isValidStartDate(request.startDate) &&
     (request.maxSessionMinutes === undefined || request.maxSessionMinutes > 0)
   );
 
@@ -183,7 +181,7 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
     const total = Number.isFinite(weeks * sessionsPerWeek) ? weeks * sessionsPerWeek : 0;
     return {
       total,
-      range: end ? `${dayFmt.format(start)} – ${fullFmt.format(end)}` : "Pick a Week 1 Monday"
+      range: end ? `${dayFmt.format(start)} – ${fullFmt.format(end)}` : "Pick a plan start date"
     };
   }, [sessionsPerWeek, startDate, weeks]);
 
@@ -325,7 +323,7 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
     if (!request.sports.length) return "Pick at least one sport.";
     if (!request.availableDayIndexes.length) return "Pick at least one available day.";
     if (request.sessionsPerWeek > request.availableDayIndexes.length) return `Choose at least ${request.sessionsPerWeek} available days.`;
-    if (!isMonday(request.startDate)) return "Week 1 must start on a Monday.";
+    if (!isValidStartDate(request.startDate)) return "Choose today or a future start date.";
     return "Check the highlighted fields above.";
   })();
   return (
@@ -412,10 +410,10 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
                 <Stepper value={sessionsPerWeek} min={1} max={Math.min(7, availableDays.length || 1)} disabled={generating} decreaseLabel="Fewer sessions per week" increaseLabel="More sessions per week" onChange={setSessionsPerWeek} />
               </label>
               <label>
-                <span>Week 1 Monday</span>
+                <span>Plan start date</span>
                 <span className="plan-generator-date">
                   <CalendarDays size={14} />
-                  <input type="date" value={startDate} disabled={generating} onChange={(event) => setStartDate(event.target.value)} />
+                  <input type="date" value={startDate} min={calendarDay()} disabled={generating} onChange={(event) => setStartDate(event.target.value)} />
                 </span>
               </label>
             </div>
@@ -439,7 +437,7 @@ export function TrainingPlanGenerator({ api, onClose, onGenerated, onOpenCoach }
               </div>
             </fieldset>
             {sessionsPerWeek > availableDays.length ? <p className="plan-generator-inline-error" role="alert">Choose at least {sessionsPerWeek} available days.</p> : null}
-            {!isMonday(startDate) ? <p className="plan-generator-inline-error" role="alert">Week 1 must start on a Monday.</p> : null}
+            {!isValidStartDate(startDate) ? <p className="plan-generator-inline-error" role="alert">Choose today or a future start date.</p> : null}
 
             <div className="plan-generator-grid is-bottom">
               <label>

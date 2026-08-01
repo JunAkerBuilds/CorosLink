@@ -108,6 +108,11 @@ import {
   workoutExerciseName,
   workoutSportFromType
 } from "./workoutCapabilities";
+import {
+  searchWorkoutExerciseCatalog,
+  type WorkoutExerciseSearchInput,
+  type WorkoutExerciseSearchResult
+} from "./exerciseCatalogSearch";
 import { TRAINING_HUB_EXPORT_FORMATS } from "./types";
 import { signRequest, sha256Hex } from "./awsSigV4";
 import { createStoreZip } from "./zipStore";
@@ -2502,15 +2507,32 @@ function exerciseCatalogRows(value: unknown): Record<string, unknown>[] {
   ];
 }
 
+const WORKOUT_EXERCISE_CATALOG_CACHE_MS = 5 * 60_000;
+const workoutExerciseCatalogCache = new Map<
+  string,
+  { expiresAt: number; rows: Record<string, unknown>[] }
+>();
+
 async function loadWorkoutExerciseCatalog(sport: WorkoutSport): Promise<Record<string, unknown>[]> {
   if (sport !== "strength" && sport !== "hyrox") return [];
   const auth = getStoredAuth();
+  const catalogSport = workoutSportTypeForService(sport);
+  const cacheKey = `${auth?.userId ?? "anonymous"}:${catalogSport}`;
+  const cached = workoutExerciseCatalogCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.rows;
+  }
   const raw = await trainingHubGet<unknown>("/training/exercise/query", {
-    sportType: workoutSportTypeForService(sport),
+    sportType: catalogSport,
     ...(auth?.userId ? { userId: auth.userId } : {}),
     keyword: ""
   });
-  return exerciseCatalogRows(raw);
+  const rows = exerciseCatalogRows(raw);
+  workoutExerciseCatalogCache.set(cacheKey, {
+    expiresAt: Date.now() + WORKOUT_EXERCISE_CATALOG_CACHE_MS,
+    rows
+  });
+  return rows;
 }
 
 export async function listWorkoutExercises(
@@ -2533,6 +2555,13 @@ export async function listWorkoutExercises(
     };
     return [[id, option] as const];
   })).values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export async function searchWorkoutExercises(
+  sport: WorkoutSport,
+  input: WorkoutExerciseSearchInput
+): Promise<WorkoutExerciseSearchResult[]> {
+  return searchWorkoutExerciseCatalog(await loadWorkoutExerciseCatalog(sport), input);
 }
 
 export interface TrainingPlanExerciseResolutionIssue {
@@ -2570,15 +2599,21 @@ export async function resolveTrainingPlanExercises(
     const plainSteps = entry.steps.flatMap((step) =>
       "repeat" in step ? step.steps : [step]
     );
-    const unresolved = plainSteps.filter(
-      (step) => step.kind === "training" && !step.exercise_id && step.exercise_name
+    const exerciseSteps = plainSteps.filter(
+      (step) => step.kind === "training" && (step.exercise_id || step.exercise_name)
     );
-    if (!unresolved.length) continue;
+    if (!exerciseSteps.length) continue;
     const catalog = await catalogFor(sport);
 
-    for (const step of unresolved) {
-      const exerciseName = step.exercise_name!;
-      const resolution = resolveWorkoutExerciseName(catalog, exerciseName);
+    for (const step of exerciseSteps) {
+      const requestedId = step.exercise_id?.trim();
+      const exerciseName = step.exercise_name?.trim() || (requestedId ? `ID ${requestedId}` : "Exercise");
+      const idMatch = requestedId
+        ? catalog.find((row) => workoutExerciseId(row) === requestedId)
+        : undefined;
+      const resolution = idMatch || !step.exercise_name
+        ? { match: idMatch, candidates: [] }
+        : resolveWorkoutExerciseName(catalog, step.exercise_name);
       const match = resolution.match;
       const id = match ? workoutExerciseId(match) : undefined;
       if (!match || !id) {
@@ -6161,6 +6196,7 @@ function buildTrainingHubHeaders(
 }
 
 function clearTrainingHubAuth(): void {
+  workoutExerciseCatalogCache.clear();
   deleteSettings([
     SETTINGS.accessToken,
     SETTINGS.userId,

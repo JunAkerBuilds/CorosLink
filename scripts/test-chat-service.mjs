@@ -46,8 +46,14 @@ assert.match(coachInstructions, /multi-sport endurance and strength-training coa
 assert.match(coachInstructions, /Honor every sport the athlete explicitly requests/);
 assert.match(coachInstructions, /Never add an unfamiliar sport merely for variety/);
 assert.match(coachInstructions, /Open Water Swim is not Pool Swim/);
+assert.match(coachInstructions, /exactly one standalone workout/);
+assert.match(coachInstructions, /call draft_workout/);
+assert.match(coachInstructions, /Workout Library or Calendar/);
+assert.match(coachInstructions, /never disguise it as a one-workout training plan/);
 assert.match(coachInstructions, /exercise_resolution_required/);
-assert.match(coachInstructions, /call draft_training_plan again in the same response/);
+assert.match(coachInstructions, /call search_coros_exercises first/);
+assert.match(coachInstructions, /naming mismatch alone is never a reason/);
+assert.match(coachInstructions, /call the same draft tool again in the same response/);
 assert.match(coachInstructions, /request_coach_input/);
 
 const interactionTool = getChatInteractionTools()[0];

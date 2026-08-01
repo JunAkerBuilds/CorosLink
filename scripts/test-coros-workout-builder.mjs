@@ -445,6 +445,31 @@ assert.equal(imperialPreview.entries[0]?.volume, "5.00 mi");
 assert.equal(imperialPreview.entries[1]?.volume, "100 yd");
 assert.ok(imperialPreview.entries.every((entry) => entry.source));
 
+const strengthPreview = buildPlanPreview("draft-strength", {
+  name: "Push plan",
+  workouts: [{
+    key: "push",
+    name: "Push day",
+    sport: "strength",
+    steps: [{
+      kind: "training",
+      exercise_id: "bench-press",
+      exercise_name: "Bench Press",
+      target_type: "reps",
+      target_reps: 8,
+      sets: 4,
+      rest_type: 1,
+      rest_value: 90,
+      intensity: { type: "weight", mode: "weight", value: 70, unit: "kg" }
+    }]
+  }]
+});
+assert.equal(strengthPreview.entries[0]?.volume, "4 sets");
+assert.equal(
+  strengthPreview.entries[0]?.stepsSummary,
+  "Bench Press 4 × 8 reps @ 70 kg (90 sec rest)"
+);
+
 const reset = resetProgramForCreate({
   id: "old",
   idInPlan: "99",

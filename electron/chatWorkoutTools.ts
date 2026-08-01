@@ -12,6 +12,7 @@ import {
   getTrainingHubStatus,
   listScheduledWorkoutEntries,
   resolveTrainingPlanExercises,
+  searchWorkoutExercises,
   uploadTrainingPlan
 } from "./trainingHubService";
 import {
@@ -33,10 +34,22 @@ import type {
   WorkoutDeletePreview,
   UnitSystem
 } from "./types";
-import { buildDraftTrainingPlanInputSchema } from "./workoutCapabilities";
+import {
+  buildDraftTrainingPlanInputSchema,
+  buildDraftWorkoutInputSchema
+} from "./workoutCapabilities";
 import { formatDistanceValue } from "./unitSystem.js";
 import { createTrainingPlan } from "./trainingPlanDomain";
 import { saveLocalTrainingPlan } from "./trainingLibraryService";
+import {
+  EXERCISE_SEARCH_EQUIPMENT,
+  EXERCISE_SEARCH_MOVEMENTS,
+  EXERCISE_SEARCH_MUSCLES,
+  type ExerciseSearchEquipment,
+  type ExerciseSearchMovement,
+  type ExerciseSearchMuscle,
+  type WorkoutExerciseSearchResult
+} from "./exerciseCatalogSearch";
 
 interface StoredPlanDraft {
   draftId: string;
@@ -129,6 +142,8 @@ export function hydratePlanDraftStoreFromDatabase(): void {
 }
 
 export const CHAT_WORKOUT_TOOL_NAMES = [
+  "search_coros_exercises",
+  "draft_workout",
   "draft_training_plan",
   "upload_training_plan",
   "list_scheduled_workouts",
@@ -149,12 +164,78 @@ export function getChatWorkoutTools(): CorosMcpTool[] {
 
   return [
     {
+      name: "search_coros_exercises",
+      description:
+        "Search the athlete's live COROS Strength/HYROX exercise catalog and return exact exercise IDs and names. " +
+        "Call this before drafting strength or HYROX workouts whenever exact COROS exercise IDs are not already known. " +
+        "Search several intended movements in one call with queries, or discover exercises by target muscles, movement patterns, and available equipment. " +
+        "Use returned exercise_id and exercise_name values in whichever draft tool matches the request. Catalog naming differences are not a reason to ask the athlete.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          sport: {
+            type: "string",
+            enum: ["strength", "hyrox"],
+            description: "Catalog context. HYROX functional stations use the COROS Strength catalog. Default strength."
+          },
+          query: {
+            type: "string",
+            description: "One intended exercise or natural-language movement, such as 'machine chest press'."
+          },
+          queries: {
+            type: "array",
+            minItems: 1,
+            maxItems: 8,
+            items: { type: "string" },
+            description: "Several intended exercises to resolve in one tool call."
+          },
+          target_muscles: {
+            type: "array",
+            uniqueItems: true,
+            items: { type: "string", enum: [...EXERCISE_SEARCH_MUSCLES] },
+            description: "Accept exercises targeting any of these muscles."
+          },
+          movement_patterns: {
+            type: "array",
+            uniqueItems: true,
+            items: { type: "string", enum: [...EXERCISE_SEARCH_MOVEMENTS] },
+            description: "Accept exercises matching any of these movement patterns."
+          },
+          equipment: {
+            type: "array",
+            uniqueItems: true,
+            items: { type: "string", enum: [...EXERCISE_SEARCH_EQUIPMENT] },
+            description: "Accept exercises using any of this available equipment. Omit when equipment is unrestricted."
+          },
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 12,
+            description: "Maximum results per query, or for the filtered discovery search. Default 5 for queries and 10 otherwise."
+          }
+        }
+      }
+    },
+    {
+      name: "draft_workout",
+      description:
+        "Validate and store one standalone workout for athlete review. " +
+        "Use this for one-off requests such as today's run, a single gym session, or one workout to reuse later; " +
+        "do not wrap a one-off workout in draft_training_plan. Set calendar_date only when the athlete names a date. " +
+        "Put prescribed HR, pace, power, cadence, stroke, weight, RPE, or grade in each step's typed intensity field. " +
+        "For Strength and HYROX, call search_coros_exercises first and pass its exact exercise IDs and names. " +
+        "Returns a workout card where the athlete can choose Workout Library or Calendar and confirm.",
+      inputSchema: buildDraftWorkoutInputSchema()
+    },
+    {
       name: "draft_training_plan",
       description:
-        "Validate and store a sport-aware training plan draft for athlete review. " +
+        "Validate and store a multi-day or multi-week sport-aware training plan draft for athlete review. " +
+        "Use draft_workout instead when the athlete asks for only one standalone workout. " +
         "Put prescribed HR, pace, power, cadence, stroke, weight, RPE, or grade in each step's typed intensity field. " +
-        "Strength and HYROX exercise names are checked against the COROS catalog; if candidates are returned, " +
-        "revise the affected steps and call this tool again. Always call this before upload. Returns a draftId and human-readable preview.",
+        "Strength and HYROX exercise names are checked against the COROS catalog; use search_coros_exercises first " +
+        "and pass its exact IDs and names. If candidates are returned, revise the affected steps and call this tool again. " +
+        "Always call this before upload. Returns a draftId and human-readable preview.",
       inputSchema: buildDraftTrainingPlanInputSchema()
     },
     {
@@ -165,7 +246,7 @@ export function getChatWorkoutTools(): CorosMcpTool[] {
       inputSchema: {
         type: "object",
         properties: {
-          draft_id: { type: "string", description: "draftId from draft_training_plan" },
+          draft_id: { type: "string", description: "draftId from a workout or plan draft tool" },
           confirmed: {
             type: "boolean",
             description: "Must be true only after explicit athlete confirmation"
@@ -259,6 +340,17 @@ export async function handleChatWorkoutTool(
       options?.unitSystem ?? "metric"
     );
   }
+  if (name === "draft_workout") {
+    return handleDraftWorkout(
+      args,
+      options?.onPlanDraft,
+      options?.allowUpcomingWorkouts !== false,
+      options?.unitSystem ?? "metric"
+    );
+  }
+  if (name === "search_coros_exercises") {
+    return handleSearchCorosExercises(args);
+  }
   if (name === "upload_training_plan") {
     return handleUploadTrainingPlan(args, options?.unitSystem ?? "metric");
   }
@@ -266,6 +358,104 @@ export async function handleChatWorkoutTool(
     return handleListScheduledWorkouts(args, options?.unitSystem ?? "metric");
   }
   return handleDeleteWorkout(args, options?.onWorkoutDelete);
+}
+
+function allowedStringList<T extends string>(
+  value: unknown,
+  allowed: readonly T[]
+): T[] {
+  const allowedValues = new Set<string>(allowed);
+  return [...new Set(
+    (Array.isArray(value) ? value : [])
+      .map((entry) => String(entry ?? "").trim())
+      .filter((entry): entry is T => allowedValues.has(entry))
+  )];
+}
+
+function exerciseSearchResultForChat(result: WorkoutExerciseSearchResult) {
+  return {
+    exercise_id: result.id,
+    exercise_name: result.name,
+    target_muscles: result.targetMuscles,
+    movement_patterns: result.movementPatterns,
+    equipment: result.equipment,
+    match_reasons: result.matchReasons
+  };
+}
+
+async function handleSearchCorosExercises(
+  args: Record<string, unknown>
+): Promise<string> {
+  const sport = args.sport === "hyrox" ? "hyrox" : "strength";
+  const singleQuery = typeof args.query === "string" ? args.query.trim() : "";
+  const queries = [...new Set([
+    ...(singleQuery ? [singleQuery] : []),
+    ...(Array.isArray(args.queries)
+      ? args.queries.map((entry) => String(entry ?? "").trim()).filter(Boolean)
+      : [])
+  ])].slice(0, 8);
+  const targetMuscles = allowedStringList<ExerciseSearchMuscle>(
+    args.target_muscles,
+    EXERCISE_SEARCH_MUSCLES
+  );
+  const movementPatterns = allowedStringList<ExerciseSearchMovement>(
+    args.movement_patterns,
+    EXERCISE_SEARCH_MOVEMENTS
+  );
+  const equipment = allowedStringList<ExerciseSearchEquipment>(
+    args.equipment,
+    EXERCISE_SEARCH_EQUIPMENT
+  );
+  const requestedLimit = Number(args.limit);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(12, Math.max(1, Math.round(requestedLimit)))
+    : queries.length > 0
+      ? 5
+      : 10;
+
+  if (
+    queries.length === 0 &&
+    targetMuscles.length === 0 &&
+    movementPatterns.length === 0 &&
+    equipment.length === 0
+  ) {
+    return JSON.stringify({
+      ok: false,
+      error_code: "exercise_search_intent_required",
+      action:
+        "Call again with query/queries or at least one target_muscles, movement_patterns, or equipment filter."
+    });
+  }
+
+  const sharedInput = { targetMuscles, movementPatterns, equipment, limit };
+  if (queries.length > 0) {
+    const searches = [];
+    // Keep these sequential: the first call fills the short-lived live-catalog
+    // cache, so resolving several movements still performs one COROS request.
+    for (const query of queries) {
+      const results = await searchWorkoutExercises(sport, { ...sharedInput, query });
+      searches.push({
+        query,
+        results: results.map(exerciseSearchResultForChat)
+      });
+    }
+    return JSON.stringify({
+      ok: true,
+      sport,
+      searches,
+      action:
+        "Choose the closest result for each intended movement and use its exact exercise_id and exercise_name in the matching draft tool. Ask the athlete only if the available movement or equipment would materially change the workout."
+    });
+  }
+
+  const results = await searchWorkoutExercises(sport, sharedInput);
+  return JSON.stringify({
+    ok: true,
+    sport,
+    results: results.map(exerciseSearchResultForChat),
+    action:
+      "Use exact exercise_id and exercise_name values from these results in the matching draft tool. Refine the search if a needed movement is not represented."
+  });
 }
 
 function toPlanDraft(args: Record<string, unknown>): CorosTrainingPlanDraft {
@@ -276,6 +466,7 @@ function toPlanDraft(args: Record<string, unknown>): CorosTrainingPlanDraft {
     return {
       key: String(entry.key ?? `workout-${index + 1}`).trim(),
       name: String(entry.name ?? `Workout ${index + 1}`).trim(),
+      description: entry.description?.trim(),
       sport: entry.sport ?? "run",
       sport_options: entry.sport_options,
       steps: entry.steps as PlanWorkoutEntry["steps"],
@@ -288,6 +479,41 @@ function toPlanDraft(args: Record<string, unknown>): CorosTrainingPlanDraft {
     };
   });
   return { name, workouts };
+}
+
+function handleDraftWorkout(
+  args: Record<string, unknown>,
+  onPlanDraft?: (preview: PlanDraftPreview) => void,
+  allowUpcomingWorkouts = true,
+  unitSystem: UnitSystem = "metric"
+): Promise<string> {
+  const rawWorkout = args.workout;
+  if (!rawWorkout || typeof rawWorkout !== "object" || Array.isArray(rawWorkout)) {
+    return Promise.resolve(JSON.stringify({
+      ok: false,
+      errors: ["workout is required."]
+    }));
+  }
+
+  const workout = rawWorkout as Record<string, unknown>;
+  const workoutName = String(workout.name ?? "").trim();
+  const calendarDate = args.calendar_date
+    ? String(args.calendar_date).replace(/-/g, "").trim()
+    : undefined;
+  return handleDraftTrainingPlan(
+    {
+      name: workoutName,
+      workouts: [{
+        ...workout,
+        schedule_date: calendarDate,
+        save_to_library: true
+      }]
+    },
+    onPlanDraft,
+    allowUpcomingWorkouts,
+    unitSystem,
+    "workout"
+  );
 }
 
 export function buildTrainingPlanUploadInput(
@@ -372,9 +598,10 @@ function saveDraftAsLocalTemplate(
   return saveLocalTrainingPlan(document);
 }
 
-function inputForDestination(
+export function buildTrainingPlanDestinationInput(
   plan: CorosTrainingPlanDraft,
-  destination: TrainingPlanDestination
+  destination: TrainingPlanDestination,
+  scheduleDate?: string
 ): CorosTrainingPlanDraftInput {
   const input = buildTrainingPlanUploadInput(plan);
   if (destination === "workoutLibrary") {
@@ -388,7 +615,15 @@ function inputForDestination(
     };
   }
   if (destination === "calendar") {
-    const unscheduled = input.workouts.filter((workout) => !workout.schedule_date);
+    const normalizedDate = scheduleDate?.replace(/-/g, "").trim();
+    if (normalizedDate && input.workouts.length !== 1) {
+      throw new Error("A calendar date override is only supported for one-off workouts.");
+    }
+    const calendarWorkouts = input.workouts.map((workout) => ({
+      ...workout,
+      schedule_date: normalizedDate || workout.schedule_date
+    }));
+    const unscheduled = calendarWorkouts.filter((workout) => !workout.schedule_date);
     if (unscheduled.length > 0) {
       throw new Error(
         `${unscheduled.length} workout${unscheduled.length === 1 ? " is" : "s are"} missing a date. Add dates before choosing Calendar.`
@@ -396,7 +631,7 @@ function inputForDestination(
     }
     return {
       ...input,
-      workouts: input.workouts.map((workout) => ({
+      workouts: calendarWorkouts.map((workout) => ({
         ...workout,
         save_to_library: false
       }))
@@ -448,7 +683,8 @@ async function handleDraftTrainingPlan(
   args: Record<string, unknown>,
   onPlanDraft?: (preview: PlanDraftPreview) => void,
   allowUpcomingWorkouts = true,
-  unitSystem: UnitSystem = "metric"
+  unitSystem: UnitSystem = "metric",
+  artifactType: "plan" | "workout" = "plan"
 ): Promise<string> {
   const draft = toPlanDraft(args);
   const validation = validatePlanDraft(draft, {
@@ -460,6 +696,9 @@ async function handleDraftTrainingPlan(
 
   const exerciseResolution = await resolveTrainingPlanExercises(draft);
   if (exerciseResolution.issues.length > 0) {
+    const retryTool = artifactType === "workout"
+      ? "draft_workout"
+      : "draft_training_plan";
     return JSON.stringify({
       ok: false,
       error_code: "exercise_resolution_required",
@@ -473,8 +712,8 @@ async function handleDraftTrainingPlan(
         message: issue.message
       })),
       action: exerciseResolution.issues.every((issue) => issue.candidates.length > 0)
-        ? "Update each affected step to the exact best-matching candidate and call draft_training_plan again now. If the candidates materially change the intended movement, call request_coach_input with the exact candidates as clickable choices."
-        : "At least one exercise is unavailable. Call request_coach_input with supported alternatives as clickable choices, then wait for the athlete before calling draft_training_plan again."
+        ? `Update each affected step to the exact best-matching candidate and call ${retryTool} again now. If the candidates materially change the intended movement, call request_coach_input with the exact candidates as clickable choices.`
+        : `At least one exercise name is unavailable. Call search_coros_exercises now using the intended movement, target muscles, and known equipment; use an exact returned ID/name and call ${retryTool} again. Ask the athlete only if the available movement or equipment would materially change the workout.`
     });
   }
   const resolvedDraft = exerciseResolution.draft;
@@ -485,7 +724,8 @@ async function handleDraftTrainingPlan(
   const draftId = crypto.randomUUID();
   const preview = buildPlanPreview(draftId, resolvedDraft, {
     scheduleConflicts: conflicts,
-    unitSystem
+    unitSystem,
+    artifactType
   });
   preview.conflicts = conflicts;
 
@@ -509,9 +749,9 @@ async function handleDraftTrainingPlan(
       conflicts: preview.conflicts,
       warnings: preview.warnings
     },
-    message:
-      "Draft saved. Tell the athlete to review the plan preview and click Upload to COROS " +
-      "when ready. Do not call upload_training_plan until they confirm."
+    message: artifactType === "workout"
+      ? "Workout draft saved. Tell the athlete to review it, choose Workout Library or Calendar, and confirm. The workout is not a training plan."
+      : "Draft saved. Tell the athlete to review the plan preview and click Upload to COROS when ready. Do not call upload_training_plan until they confirm."
   });
 }
 
@@ -835,7 +1075,8 @@ export async function confirmWorkoutDeleteById(
 export async function uploadPlanDraftById(
   draftId: string,
   unitSystem: UnitSystem = "metric",
-  destination: TrainingPlanDestination = "workoutLibrary"
+  destination: TrainingPlanDestination = "workoutLibrary",
+  scheduleDate?: string
 ): Promise<UploadPlanResult> {
   const stored = loadStoredPlanDraft(draftId);
   if (!stored) {
@@ -867,7 +1108,14 @@ export async function uploadPlanDraftById(
       remoteWrites: []
     };
   } else {
-    const input = inputForDestination(stored.plan, destination);
+    if (scheduleDate && stored.preview.artifactType !== "workout") {
+      throw new Error("A calendar date can only override a one-off workout draft.");
+    }
+    const input = buildTrainingPlanDestinationInput(
+      stored.plan,
+      destination,
+      scheduleDate
+    );
     const uploaded = await uploadTrainingPlan(input, unitSystem);
     result = {
       ...uploaded,

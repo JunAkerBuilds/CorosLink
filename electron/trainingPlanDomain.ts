@@ -105,8 +105,7 @@ export function trainingPlanFromDraftPreview(
   if (request.availableDayIndexes.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) throw new Error("Available days must be Monday through Sunday.");
   if (request.availableDayIndexes.length < request.sessionsPerWeek) throw new Error("Choose at least as many available days as weekly sessions.");
   if (request.maxSessionMinutes !== undefined && request.maxSessionMinutes <= 0) throw new Error("The session-duration limit must be greater than zero.");
-  const start = normalizedPlanDate(request.startDate);
-  if (!start || start.getDay() !== 1) throw new Error("Week 1 must start on a Monday.");
+  if (!normalizedPlanDate(request.startDate)) throw new Error("Choose a valid plan start date.");
   if (!preview.name.trim()) throw new Error("Training Coach returned a plan without a name.");
 
   const document = createTrainingPlan(preview.name, "coach");
@@ -126,7 +125,9 @@ export function trainingPlanFromDraftPreview(
       throw new Error(`Generated workout "${entry.name}" falls outside the requested plan dates.`);
     }
     const dayIndex = offset % 7;
-    if (!request.availableDayIndexes.includes(dayIndex)) {
+    const scheduledDay = normalizedPlanDate(scheduleDate)!;
+    const scheduledWeekdayIndex = (scheduledDay.getDay() + 6) % 7;
+    if (!request.availableDayIndexes.includes(scheduledWeekdayIndex)) {
       throw new Error(`Generated workout "${entry.name}" was placed on an unavailable day.`);
     }
     const sport = entry.source.sport ?? "run";
@@ -501,7 +502,7 @@ export function validateTrainingPlan(
       issues.push({ path: `entries.${entry.id}`, message: "A workout is outside the plan range.", severity: "error" });
     }
     if (entry.dayIndex !== undefined && (entry.dayIndex < 0 || entry.dayIndex > 6)) {
-      issues.push({ path: `entries.${entry.id}.dayIndex`, message: "Day must be Monday through Sunday.", severity: "error" });
+      issues.push({ path: `entries.${entry.id}.dayIndex`, message: "Plan day must be between Day 1 and Day 7.", severity: "error" });
     }
     if (entry.kind === "workout" && !entry.workout && !entry.programId) {
       issues.push({ path: `entries.${entry.id}`, message: "Workout entry has no reusable workout definition.", severity: "error" });

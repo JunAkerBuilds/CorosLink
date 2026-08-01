@@ -2672,7 +2672,7 @@ export interface TrainingPlanEntry {
   id: string;
   kind: TrainingPlanEntryKind;
   weekIndex: number;
-  /** Undefined dayIndex places the workout in the holding area. */
+  /** Zero-based day within the plan week; undefined places the entry in the holding area. */
   dayIndex?: number;
   sortOrder: number;
   title?: string;
@@ -2692,7 +2692,7 @@ export interface TrainingPlanGenerationRequest {
   difficulty: TrainingPlanDifficulty;
   weeks: number;
   sessionsPerWeek: number;
-  /** ISO date for Week 1 Monday. */
+  /** ISO date for Day 1 of Week 1. */
   startDate: string;
   /** Monday = 0 through Sunday = 6. */
   availableDayIndexes: number[];
@@ -3061,6 +3061,8 @@ export interface PlanDraftPreviewEntry {
 
 export interface PlanDraftPreview {
   draftId: string;
+  /** Distinguishes a multi-workout plan from a reusable one-off workout. */
+  artifactType?: "plan" | "workout";
   name: string;
   summary: string;
   entries: PlanDraftPreviewEntry[];
@@ -3400,6 +3402,14 @@ export interface RunWorkoutEditorStep {
   exerciseId?: string;
   exerciseName?: string;
   exerciseKind?: number;
+  /** Number of sets for a standalone Strength exercise. */
+  sets?: number;
+  /** COROS recovery mode used between sets. Strength uses timed rest (1). */
+  restType?: number;
+  /** Recovery duration between sets, in seconds. */
+  restValue?: number;
+  /** Optional per-step instructions. COROS localization keys are not exposed here. */
+  overview?: string;
   sendOffSeconds?: number;
   editable: boolean;
   unsupportedReason?: string;
