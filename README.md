@@ -332,9 +332,9 @@ Ask training questions with answers grounded in your COROS data.
 
 - **Providers** — ChatGPT (cloud), Claude Code, or local LLMs (Ollama / LM Studio)
 - **Model selection & extended thinking** where the provider supports them
-- **Multi-sport workout tools** — draft adaptive plans across Run, Trail Run, Bike, Pool Swim, Strength, Indoor Climb, Bouldering, XC Ski, and HYROX
+- **Multi-sport workout tools** — draft a single workout or adaptive multi-week plans across Run, Trail Run, Bike, Pool Swim, Strength, Indoor Climb, Bouldering, XC Ski, and HYROX, with COROS exercise catalog search for Strength and HYROX
 - **Destination-aware confirmation** — choose Workout Library, Calendar, local template, COROS Plan Library, or Plan + Calendar; review weeks, workouts, sports, start date, conflicts, grouped-plan status, and every remote write before confirming
-- **AI write guard** — Coach tool calls can draft plans but cannot upload them; the athlete must use the confirmation card
+- **AI write guard** — Coach tool calls can draft workouts and plans but cannot upload them; the athlete must use the confirmation card
 - **Follow-up questions** — Coach asks one clarifying question at a time with tappable answers instead of guessing; typing an answer still works
 - **Chat history** — per-provider conversations persist across restarts
 

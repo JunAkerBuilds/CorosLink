@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.27] - 2026-08-01
+
+### Added
+
+- **Standalone Coach workout drafts** — draft, review, edit, and save a single workout (not only multi-workout plans), with COROS exercise catalog search, token-aware matching, and stricter Strength/HYROX validation; draft sources persist and restore across chat history ([#103](https://github.com/JunAkerBuilds/CorosLink/pull/103))
+- **Chat model selection** — pick provider/model for supported backends, with settings persisted across sessions ([#102](https://github.com/JunAkerBuilds/CorosLink/pull/102))
+- **Remembered view preferences** — analytics ranges/metrics, tabs, filters, sorting, layouts, map layers, calendar mode, library views, and watch-face catalog filters survive navigation and restart ([#102](https://github.com/JunAkerBuilds/CorosLink/pull/102))
+
+### Changed
+
+- **Training dashboard insights** — richer trend charts, sleep summaries, chart colors/tooltips, empty states, and responsive layout; smoother activity-globe zoom ([#102](https://github.com/JunAkerBuilds/CorosLink/pull/102))
+- **Coach and calendar navigation** — clearer plan/workout review, sidebar/history flow, draft cards, response controls, and editor layouts; broader workout upload destinations and strength/recovery editing ([#102](https://github.com/JunAkerBuilds/CorosLink/pull/102), [#103](https://github.com/JunAkerBuilds/CorosLink/pull/103))
+- Select menus, map recents, and related chrome polish ([#102](https://github.com/JunAkerBuilds/CorosLink/pull/102))
+
+### Fixed
+
+- Generated-plan calendar installs now respect the selected metric/imperial unit system; existing linked workouts keep their saved units ([#102](https://github.com/JunAkerBuilds/CorosLink/pull/102))
+
 ## [0.1.26] - 2026-07-30
 
 ### Added
@@ -441,6 +459,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - GitHub Actions release workflow and installer build documentation
 
+[0.1.27]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.26...v0.1.27
 [0.1.23]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.22...v0.1.23
 [0.1.22]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/JunAkerBuilds/CorosLink/compare/v0.1.20...v0.1.21
