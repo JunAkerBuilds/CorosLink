@@ -379,7 +379,11 @@ export interface CorosLinkApi {
   ) => Promise<TrainingPlanDocument>;
   deleteLocalTrainingPlan: (id: string, confirmed: boolean) => Promise<void>;
   previewTrainingPlanCalendar: (planId: string, startDate: string) => Promise<TrainingPlanCalendarPreview>;
-  addTrainingPlanToCalendar: (previewId: string, confirmed: boolean) => Promise<TrainingPlanCalendarMutationResult>;
+  addTrainingPlanToCalendar: (
+    previewId: string,
+    confirmed: boolean,
+    unitSystem: UnitSystem
+  ) => Promise<TrainingPlanCalendarMutationResult>;
   previewTrainingPlanCalendarRemoval: (planId: string) => Promise<TrainingPlanCalendarPreview>;
   removeTrainingPlanFromCalendar: (previewId: string, confirmed: boolean) => Promise<TrainingPlanCalendarMutationResult>;
   updateWorkoutMetadata: (

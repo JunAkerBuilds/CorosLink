@@ -117,6 +117,11 @@ import {
 import { trackAvatarColor, trackInitial } from "./media/trackAvatar";
 import { useTimeOfDayGreeting } from "./hooks/useTimeOfDayGreeting";
 import {
+  defineSelectionPreference,
+  selectionIsOneOf,
+  useSelectionPreference,
+} from "./preferences/selectionPreferences";
+import {
   getWatchPresentation,
   type WatchFeatureIcon,
   type WatchPresentation,
@@ -132,6 +137,19 @@ type MediaTab =
   | "spotify"
   | "apple-music"
   | "apple-podcasts";
+
+const MEDIA_TAB_PREFERENCE = defineSelectionPreference<MediaTab>({
+  key: "media.activeTab",
+  defaultValue: "library",
+  validate: selectionIsOneOf([
+    "library",
+    "youtube",
+    "youtube-music",
+    "spotify",
+    "apple-music",
+    "apple-podcasts",
+  ]),
+});
 
 const YOUTUBE_HOME_URL = "https://www.youtube.com/";
 const YOUTUBE_DOWNLOAD_CONSOLE_PREFIX = "__COROSLINK_YOUTUBE_DOWNLOAD__";
@@ -322,7 +340,9 @@ export default function App() {
   const [coachPrefill, setCoachPrefill] = useState<string | null>(null);
   const [pendingCoachPlan, setPendingCoachPlan] = useState<TrainingPlanDocument | null>(null);
   const [calendarRefreshToken, setCalendarRefreshToken] = useState(0);
-  const [activeMediaTab, setActiveMediaTab] = useState<MediaTab>("library");
+  const [activeMediaTab, setActiveMediaTab] = useSelectionPreference(
+    MEDIA_TAB_PREFERENCE,
+  );
   const [watchStatus, setWatchStatus] = useState<WatchStatus | null>(null);
   const [transferProgress, setTransferProgress] =
     useState<TrackTransferProgress | null>(null);
@@ -2274,7 +2294,6 @@ export default function App() {
                 onTransfer={handleTransfer}
                 onDeleteDownload={handleDeleteDownload}
                 onOpenLibrary={() => openMediaTab("library")}
-                onOpenTraining={() => setActiveView("training")}
                 onSelectTrainingActivity={handleTrainingHubActivityDetail}
               />
             ) : null}
@@ -2831,7 +2850,6 @@ interface MediaOverviewTabProps {
   onTransfer: (id: string) => void;
   onDeleteDownload: (track: LocalTrack) => void;
   onOpenLibrary: () => void;
-  onOpenTraining: () => void;
   onSelectTrainingActivity: (activity: TrainingHubActivity) => void;
 }
 
@@ -2847,7 +2865,6 @@ function MediaOverviewTab({
   onTransfer,
   onDeleteDownload,
   onOpenLibrary,
-  onOpenTraining,
   onSelectTrainingActivity,
 }: MediaOverviewTabProps) {
   const greeting = useTimeOfDayGreeting();
@@ -3026,8 +3043,6 @@ function MediaOverviewTab({
             activities={trainingActivities}
             connected={trainingConnected}
             detail={trainingActivityDetail}
-            loading={busy?.startsWith("training-detail:") ?? false}
-            onOpenTraining={onOpenTraining}
             onSelectActivity={onSelectTrainingActivity}
           />
         </Suspense>

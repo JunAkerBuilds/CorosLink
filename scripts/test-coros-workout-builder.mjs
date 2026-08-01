@@ -182,6 +182,7 @@ const imperialSwim = buildWorkoutPayload(
 );
 assert.equal(imperialSwim.poolLength, 2286);
 assert.equal(imperialSwim.poolLengthUnit, 4);
+assert.equal(imperialSwim.distanceDisplayUnit, 4);
 assert.equal(imperialSwim.exercises[0].targetValue, 9144);
 assert.equal(imperialSwim.exercises[0].targetDisplayUnit, 4);
 

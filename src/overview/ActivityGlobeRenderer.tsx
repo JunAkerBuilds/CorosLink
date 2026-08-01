@@ -39,6 +39,10 @@ interface ActivityGlobeRendererProps {
 
 export interface ActivityGlobeRendererHandle {
   resetView: (duration?: number) => void;
+  zoomToLocation: (
+    focus: { lat: number; lon: number },
+    duration?: number,
+  ) => number;
 }
 
 interface GlobeView {
@@ -77,6 +81,7 @@ const FRAMING_VERSION = "full-panel-v3";
 const SELECTED_LATITUDE_OFFSET = 6.5;
 const CAMERA_FOCUS_MS = 600;
 const STREET_VIEW_ALTITUDE = 0.42;
+const STREET_TRANSITION_ALTITUDE = 0.36;
 const IDLE_DELAY_MS = 4_200;
 const IDLE_ROTATION_SPEED = 0.08;
 
@@ -330,7 +335,34 @@ const ActivityGlobeRendererComponent = forwardRef<
     [onViewChange, reducedMotion, scheduleIdleRotation, stopIdleRotation],
   );
 
-  useImperativeHandle(forwardedRef, () => ({ resetView }), [resetView]);
+  const zoomToLocation = useCallback(
+    (focus: { lat: number; lon: number }, duration = 1_100) => {
+      const globe = globeRef.current;
+      const animationDuration = reducedMotion ? 0 : duration;
+      if (!globe) {
+        return 0;
+      }
+      streetRequestedRef.current = true;
+      stopIdleRotation();
+      globe.pointOfView(
+        {
+          lat: clampLatitude(focus.lat),
+          lng: focus.lon,
+          altitude: STREET_TRANSITION_ALTITUDE,
+        },
+        animationDuration,
+      );
+      onViewChange(true);
+      return animationDuration;
+    },
+    [onViewChange, reducedMotion, stopIdleRotation],
+  );
+
+  useImperativeHandle(
+    forwardedRef,
+    () => ({ resetView, zoomToLocation }),
+    [resetView, zoomToLocation],
+  );
 
   useEffect(() => {
     const element = containerRef.current;

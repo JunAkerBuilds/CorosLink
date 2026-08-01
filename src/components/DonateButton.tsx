@@ -9,13 +9,13 @@ export function DonateButton() {
       href={DONATE_URL}
       target="_blank"
       rel="noreferrer"
-      aria-label="Donate to support CorosLink"
+      aria-label="Buy me a coffee"
       title="Buy me a coffee"
     >
       <span className="donate-button-art" aria-hidden="true">
         <Coffee className="donate-button-cup" size={17} strokeWidth={2.6} />
       </span>
-      <span className="donate-button-label">Donate</span>
+      <span className="donate-button-label">Buy me a coffee</span>
     </a>
   );
 }

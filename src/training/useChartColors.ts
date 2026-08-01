@@ -3,7 +3,8 @@ import { useTheme } from "../theme/ThemeProvider";
 import {
   getTrainingChartActiveDot,
   getTrainingChartColors,
-  getTrainingChartFillStops
+  getTrainingChartFillStops,
+  getTrainingMetricPalettes
 } from "./chartConfig";
 
 /** Theme-aware chart palette derived from the active app theme. */
@@ -13,7 +14,8 @@ export function useChartColors() {
     () => ({
       colors: getTrainingChartColors(theme),
       fillStops: getTrainingChartFillStops(theme),
-      activeDot: getTrainingChartActiveDot(theme)
+      activeDot: getTrainingChartActiveDot(theme),
+      metrics: getTrainingMetricPalettes(theme)
     }),
     [theme]
   );

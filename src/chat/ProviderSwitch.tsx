@@ -1,11 +1,28 @@
 import { Bot, Sparkles, Terminal } from "lucide-react";
 import type { ChatProvider } from "../../electron/types";
+import { SelectDropdown } from "../components/SelectDropdown";
 
-const OPTIONS = [
-  { value: "chatgpt" as const, label: "ChatGPT", icon: Sparkles },
-  { value: "claude-code" as const, label: "Claude", icon: Terminal },
-  { value: "local" as const, label: "Local model", icon: Bot }
+const OPTIONS: Array<{ value: ChatProvider; label: string }> = [
+  { value: "chatgpt", label: "ChatGPT" },
+  { value: "claude-code", label: "Claude" },
+  { value: "local", label: "Local model" }
 ];
+
+function getProviderTone(provider: ChatProvider) {
+  if (provider === "claude-code") return "claude";
+  if (provider === "local") return "local";
+  return "gpt";
+}
+
+function renderProviderIcon(provider: ChatProvider) {
+  if (provider === "claude-code") {
+    return <Terminal size={14} strokeWidth={2.1} aria-hidden="true" />;
+  }
+  if (provider === "local") {
+    return <Bot size={14} strokeWidth={2.1} aria-hidden="true" />;
+  }
+  return <Sparkles size={14} strokeWidth={2.1} aria-hidden="true" />;
+}
 
 export function ProviderSwitch({
   provider,
@@ -16,42 +33,22 @@ export function ProviderSwitch({
   disabled?: boolean;
   onChange: (provider: ChatProvider) => void;
 }) {
-  const activeIndex = OPTIONS.findIndex((option) => option.value === provider);
+  const selectedLabel =
+    OPTIONS.find((option) => option.value === provider)?.label ?? provider;
+  const tone = getProviderTone(provider);
 
   return (
-    <div
-      className="chat-provider-switch"
-      data-provider={provider}
-      role="radiogroup"
-      aria-label="Coach provider"
-    >
-      <span
-        className="chat-provider-switch-indicator"
-        style={{ transform: `translateX(${Math.max(activeIndex, 0) * 100}%)` }}
-        aria-hidden="true"
-      />
-      {OPTIONS.map((option) => {
-        const Icon = option.icon;
-        const isActive = provider === option.value;
-
-        return (
-          <button
-            key={option.value}
-            type="button"
-            className={isActive ? "active" : ""}
-            role="radio"
-            aria-checked={isActive}
-            onClick={() => onChange(option.value)}
-            disabled={disabled || isActive}
-          >
-            <Icon size={13} aria-hidden="true" />
-            <span>{option.label}</span>
-            {isActive ? (
-              <span className="chat-provider-switch-dot" aria-hidden="true" />
-            ) : null}
-          </button>
-        );
-      })}
-    </div>
+    <SelectDropdown
+      className={`app-select--pill chat-provider-select chat-select--${tone}`}
+      menuClassName={`chat-select-menu chat-provider-menu chat-select-menu--${tone}`}
+      value={provider}
+      options={OPTIONS}
+      onChange={onChange}
+      renderIcon={renderProviderIcon}
+      label="Coach provider"
+      title={`Coach provider: ${selectedLabel}`}
+      disabled={disabled}
+      portal
+    />
   );
 }

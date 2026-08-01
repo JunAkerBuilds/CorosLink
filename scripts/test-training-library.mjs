@@ -359,6 +359,7 @@ assert.throws(() => library.deleteLocalTrainingPlan(installedPlan.id, true), /fu
 let mockCalendar = [];
 let mockIdentity = 0;
 const writeOrder = [];
+const embeddedUnitSystems = [];
 const appendMockOccurrence = (name, happenDay) => {
   mockIdentity += 1;
   mockCalendar.push({
@@ -375,8 +376,10 @@ library.setTrainingPlanCalendarAdapterForTests({
     writeOrder.push(`library:${happenDay}`);
     appendMockOccurrence("Uphill repeats", happenDay);
   },
-  createAndSchedule: async (entry, happenDay) => {
+  createAndSchedule: async (entry, happenDay, unitSystem, saveToLibrary) => {
     writeOrder.push(`embedded:${happenDay}`);
+    embeddedUnitSystems.push(unitSystem);
+    assert.equal(saveToLibrary, false, "plan installs keep embedded workouts out of the library");
     appendMockOccurrence(entry.name, happenDay);
     return {};
   },
@@ -397,8 +400,9 @@ databaseModule.saveTrainingPlanDocument(mutationPlan);
 mockCalendar.push({ planId: "preexisting", idInPlan: "morning", planProgramId: "morning-program", happenDay: "20990803", name: "Morning recovery" });
 const installPreview = await library.previewTrainingPlanCalendar(mutationPlan.id, "2099-08-03");
 assert.equal(installPreview.conflicts[0].existing[0].name, "Morning recovery");
-const installResult = await library.addTrainingPlanToCalendar(installPreview.previewId, true);
+const installResult = await library.addTrainingPlanToCalendar(installPreview.previewId, true, "imperial");
 assert.deepEqual(writeOrder.slice(0, 2), ["library:20990803", "embedded:20990805"], "calendar writes remain serialized in plan order");
+assert.deepEqual(embeddedUnitSystems, ["imperial"], "only embedded workouts are rebuilt with the selected units");
 assert.equal(installResult.scheduledCount, 2);
 assert.equal(installResult.failures.length, 0);
 assert.equal(installResult.plan.calendarInstalls[0].occurrences.length, 2);
@@ -426,14 +430,14 @@ stalePlan.calendarInstalls = [];
 databaseModule.saveTrainingPlanDocument(stalePlan);
 const stalePreview = await library.previewTrainingPlanCalendar(stalePlan.id, "2099-08-03");
 mockCalendar.push({ planId: "calendar-change", idInPlan: "new", planProgramId: "new-program", happenDay: "20990805", name: "Changed elsewhere" });
-await assert.rejects(library.addTrainingPlanToCalendar(stalePreview.previewId, true), /calendar changed/i);
+await assert.rejects(library.addTrainingPlanToCalendar(stalePreview.previewId, true, "imperial"), /calendar changed/i);
 const revisionStalePlan = structuredClone(stalePlan);
 revisionStalePlan.id = "plan:revision-stale-preview";
 databaseModule.saveTrainingPlanDocument(revisionStalePlan);
 const revisionStalePreview = await library.previewTrainingPlanCalendar(revisionStalePlan.id, "2099-08-03");
 revisionStalePlan.entries[0].title = "Changed after preview";
 databaseModule.saveTrainingPlanDocument(revisionStalePlan);
-await assert.rejects(library.addTrainingPlanToCalendar(revisionStalePreview.previewId, true), /plan changed/i);
+await assert.rejects(library.addTrainingPlanToCalendar(revisionStalePreview.previewId, true, "imperial"), /plan changed/i);
 
 mockCalendar = [];
 const partialPlan = structuredClone(generated);
@@ -445,7 +449,8 @@ partialPlan.calendarInstalls = [];
 databaseModule.saveTrainingPlanDocument(partialPlan);
 library.setTrainingPlanCalendarAdapterForTests({
   listScheduled: async (startDay, endDay) => mockCalendar.filter((entry) => entry.happenDay >= startDay && entry.happenDay <= endDay),
-  createAndSchedule: async (entry, happenDay) => {
+  createAndSchedule: async (entry, happenDay, unitSystem) => {
+    assert.equal(unitSystem, "metric", "metric plan installs preserve the selected units");
     if (entry.name === "Trail strength") throw new Error("mock write failure");
     appendMockOccurrence(entry.name, happenDay);
     return {};
@@ -455,7 +460,7 @@ library.setTrainingPlanCalendarAdapterForTests({
   }
 });
 const partialPreview = await library.previewTrainingPlanCalendar(partialPlan.id, "2099-08-03");
-const partialResult = await library.addTrainingPlanToCalendar(partialPreview.previewId, true);
+const partialResult = await library.addTrainingPlanToCalendar(partialPreview.previewId, true, "metric");
 assert.equal(partialResult.scheduledCount, 1);
 assert.equal(partialResult.failures.length, 1);
 assert.equal(partialResult.plan.calendarInstalls[0].state, "partial");

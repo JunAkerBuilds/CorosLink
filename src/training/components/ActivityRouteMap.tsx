@@ -12,6 +12,12 @@ import {
 } from "../../maps/routes/constants";
 import { MapLayerControl } from "../../maps/routes/panels";
 import { useTheme } from "../../theme/ThemeProvider";
+import {
+  defineSelectionPreference,
+  selectionIsArrayOf,
+  selectionIsOneOf,
+  useSelectionPreference
+} from "../../preferences/selectionPreferences";
 
 interface ActivityRouteMapProps {
   track?: TrainingHubActivityTrack;
@@ -27,6 +33,30 @@ const ROUTE_COLOR_PAPER = "#0f7f5f";
 const START_COLOR = "#4da3ff";
 const END_COLOR = "#d89b22";
 const ROUTE_ANIMATION_MS = 2200;
+
+const ACTIVITY_ROUTE_BASE_LAYER_PREFERENCE =
+  defineSelectionPreference<RouteBaseLayer>({
+    key: "training.activityRoute.baseLayer",
+    defaultValue: "outdoors",
+    validate: selectionIsOneOf([
+      "street",
+      "outdoors",
+      "light",
+      "dark",
+      "topo",
+      "satellite"
+    ])
+  });
+
+const ACTIVITY_ROUTE_OVERLAYS_PREFERENCE =
+  defineSelectionPreference<RouteOverlayId[]>({
+    key: "training.activityRoute.overlays",
+    defaultValue: [],
+    validate: selectionIsArrayOf(
+      selectionIsOneOf(["hiking", "cycling", "mtb"]),
+      { unique: true }
+    )
+  });
 
 function easeOutCubic(progress: number): number {
   return 1 - (1 - progress) ** 3;
@@ -355,10 +385,13 @@ function RouteLegend() {
 export function ActivityRouteMap({ track }: ActivityRouteMapProps) {
   const { theme } = useTheme();
   const [expanded, setExpanded] = useState(false);
-  const [baseLayer, setBaseLayer] = useState<RouteBaseLayer>(() =>
+  const [baseLayer, setBaseLayer] = useSelectionPreference(
+    ACTIVITY_ROUTE_BASE_LAYER_PREFERENCE,
     themeBaseLayer(theme)
   );
-  const [overlays, setOverlays] = useState<RouteOverlayId[]>([]);
+  const [overlays, setOverlays] = useSelectionPreference(
+    ACTIVITY_ROUTE_OVERLAYS_PREFERENCE
+  );
   const route = useMemo(
     () => (track?.points ? buildRouteGeometry(track.points) : null),
     [track]

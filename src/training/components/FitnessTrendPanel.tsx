@@ -15,6 +15,22 @@ import {
   type WeeklyActivityMetric
 } from "../weeklyActivity";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
+import {
+  defineSelectionPreference,
+  selectionIsArrayOf,
+  selectionIsOneOf,
+  useSelectionPreference
+} from "../../preferences/selectionPreferences";
+
+const FITNESS_METRICS_PREFERENCE =
+  defineSelectionPreference<WeeklyActivityMetric[]>({
+    key: "training.weeklyMetrics",
+    defaultValue: ["distance"],
+    validate: selectionIsArrayOf(selectionIsOneOf(WEEKLY_ACTIVITY_METRICS), {
+      minLength: 1,
+      unique: true
+    })
+  });
 
 interface FitnessTrendPanelProps {
   snapshot: TrainingHubSnapshot | null;
@@ -165,8 +181,8 @@ export function FitnessTrendPanel({
 }: FitnessTrendPanelProps) {
   const { unitSystem } = useUnitSystem();
   const [barsVisible, setBarsVisible] = useState(false);
-  const [selectedMetrics, setSelectedMetrics] = useState<WeeklyActivityMetric[]>(
-    ["distance"]
+  const [selectedMetrics, setSelectedMetrics] = useSelectionPreference(
+    FITNESS_METRICS_PREFERENCE
   );
   const dayList = useMemo(
     () =>

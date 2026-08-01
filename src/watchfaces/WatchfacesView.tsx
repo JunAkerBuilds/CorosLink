@@ -92,6 +92,11 @@ import multidataElevFace from "../assets/watchfaces/multidata-elev.png";
 import planetFace from "../assets/watchfaces/planet.png";
 import preClassicFace from "../assets/watchfaces/pre-classic.png";
 import snowingFace from "../assets/watchfaces/snowing.png";
+import {
+  defineSelectionPreference,
+  selectionIsOneOf,
+  useSelectionPreference
+} from "../preferences/selectionPreferences";
 import "./watchfaces.css";
 
 const AUTH_WATCH_FACE_PREVIEWS = [
@@ -126,6 +131,42 @@ interface WatchfacesViewProps {
 
 type WatchfaceSurface = "sign-in" | "hub" | "studio";
 type HubTab = "browse" | "projects" | "templates";
+
+const WATCHFACE_HUB_TAB_PREFERENCE = defineSelectionPreference<HubTab>({
+  key: "watchfaces.hubTab",
+  defaultValue: "templates",
+  validate: selectionIsOneOf(["browse", "projects", "templates"])
+});
+
+const WATCHFACE_CATALOG_PREFERENCE =
+  defineSelectionPreference<CorosWatchfaceThemeCatalog>({
+    key: "watchfaces.templateCatalog",
+    defaultValue: "editable",
+    validate: selectionIsOneOf(["editable", "official", "custom"])
+  });
+
+function isShortFilterValue(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 120;
+}
+
+const COMMUNITY_MODEL_PREFERENCE = defineSelectionPreference<string>({
+  key: "watchfaces.community.model",
+  defaultValue: "",
+  validate: isShortFilterValue
+});
+
+const COMMUNITY_STYLE_PREFERENCE = defineSelectionPreference<string>({
+  key: "watchfaces.community.style",
+  defaultValue: "",
+  validate: isShortFilterValue
+});
+
+const COMMUNITY_SORT_PREFERENCE =
+  defineSelectionPreference<"newest" | "title">({
+    key: "watchfaces.community.sort",
+    defaultValue: "newest",
+    validate: selectionIsOneOf(["newest", "title"])
+  });
 
 interface StudioSession {
   id: string;
@@ -199,7 +240,9 @@ export function WatchfacesView({
 }: WatchfacesViewProps) {
   const [status, setStatus] = useState<CorosWatchfaceStatus | null>(null);
   const [surface, setSurface] = useState<WatchfaceSurface>("hub");
-  const [hubTab, setHubTab] = useState<HubTab>("templates");
+  const [hubTab, setHubTab] = useSelectionPreference(
+    WATCHFACE_HUB_TAB_PREFERENCE
+  );
   const [studioSession, setStudioSession] = useState<StudioSession | null>(null);
   const [conversionDraft, setConversionDraft] =
     useState<WatchfaceConversionDraft | null>(null);
@@ -225,8 +268,9 @@ export function WatchfacesView({
   const [backgroundImageId, setBackgroundImageId] = useState("13");
   const [language, setLanguage] = useState("en-US");
   const [maxWatchFaceVersion, setMaxWatchFaceVersion] = useState("5");
-  const [themeCatalog, setThemeCatalog] =
-    useState<CorosWatchfaceThemeCatalog>("editable");
+  const [themeCatalog, setThemeCatalog] = useSelectionPreference(
+    WATCHFACE_CATALOG_PREFERENCE
+  );
   const [watchSerial, setWatchSerial] = useState("x");
   const [modelVersion, setModelVersion] = useState(DEFAULT_MODEL_VERSION);
   const [themes, setThemes] = useState<CorosWatchfaceTheme[]>([]);
@@ -1723,9 +1767,14 @@ function CommunityWatchfaceBrowser({
 }) {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [model, setModel] = useState(connectedModel ?? "");
-  const [style, setStyle] = useState("");
-  const [sort, setSort] = useState<"newest" | "title">("newest");
+  const [model, setModel, modelPreference] = useSelectionPreference(
+    COMMUNITY_MODEL_PREFERENCE,
+    connectedModel ?? ""
+  );
+  const [style, setStyle] = useSelectionPreference(
+    COMMUNITY_STYLE_PREFERENCE
+  );
+  const [sort, setSort] = useSelectionPreference(COMMUNITY_SORT_PREFERENCE);
   const [page, setPage] = useState(1);
   const [catalog, setCatalog] =
     useState<CommunityWatchfaceCatalogPage | null>(null);
@@ -1733,7 +1782,7 @@ function CommunityWatchfaceBrowser({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   const [selected, setSelected] = useState<CommunityWatchface | null>(null);
-  const modelTouchedRef = useRef(false);
+  const modelTouchedRef = useRef(modelPreference.restored);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -1780,6 +1829,30 @@ function CommunityWatchfaceBrowser({
       cancelled = true;
     };
   }, [api, debouncedSearch, model, page, retry, sort, style]);
+
+  const modelAvailable =
+    !model ||
+    !catalog ||
+    catalog.facets.models.some((available) => available === model);
+  const styleAvailable =
+    !style ||
+    !catalog ||
+    catalog.facets.styles.some((available) => available.value === style);
+
+  useEffect(() => {
+    if (!modelAvailable) {
+      modelTouchedRef.current = true;
+      setModel("");
+      setPage(1);
+    }
+  }, [modelAvailable, setModel]);
+
+  useEffect(() => {
+    if (!styleAvailable) {
+      setStyle("");
+      setPage(1);
+    }
+  }, [setStyle, styleAvailable]);
 
   const percent =
     progress?.totalBytes && progress.totalBytes > 0

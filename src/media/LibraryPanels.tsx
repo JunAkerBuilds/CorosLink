@@ -30,6 +30,11 @@ import {
   sumBytes,
 } from "./libraryUtils";
 import { trackAvatarColor, trackInitial } from "./trackAvatar";
+import {
+  defineSelectionPreference,
+  selectionIsOneOf,
+  useSelectionPreference,
+} from "../preferences/selectionPreferences";
 
 type SortDirection = "asc" | "desc";
 type LocalLibrarySortKey = "title" | "size" | "created" | "status";
@@ -53,6 +58,41 @@ const watchSortDefaults: Record<WatchLibrarySortKey, SortDirection> = {
   size: "desc",
   modified: "desc",
 };
+
+function isSortState<Key extends string>(
+  value: unknown,
+  keys: readonly Key[],
+): value is SortState<Key> {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    keys.includes(candidate.key as Key) &&
+    (candidate.direction === "asc" || candidate.direction === "desc")
+  );
+}
+
+const LOCAL_TRACK_FILTER_PREFERENCE =
+  defineSelectionPreference<LocalTrackFilter>({
+    key: "media.library.localFilter",
+    defaultValue: "all",
+    validate: selectionIsOneOf(["all", "pending", "synced"]),
+  });
+
+const LOCAL_TRACK_SORT_PREFERENCE =
+  defineSelectionPreference<SortState<LocalLibrarySortKey>>({
+    key: "media.library.localSort",
+    defaultValue: { key: "created", direction: "desc" },
+    validate: (value): value is SortState<LocalLibrarySortKey> =>
+      isSortState(value, ["title", "size", "created", "status"]),
+  });
+
+const WATCH_TRACK_SORT_PREFERENCE =
+  defineSelectionPreference<SortState<WatchLibrarySortKey>>({
+    key: "media.library.watchSort",
+    defaultValue: { key: "name", direction: "asc" },
+    validate: (value): value is SortState<WatchLibrarySortKey> =>
+      isSortState(value, ["name", "size", "modified"]),
+  });
 
 function nextSortState<Key extends string>(
   current: SortState<Key>,
@@ -312,11 +352,12 @@ export function LocalLibraryPanel({
   onDeleteDownloads,
 }: LocalLibraryPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [trackFilter, setTrackFilter] = useState<LocalTrackFilter>("all");
-  const [sort, setSort] = useState<SortState<LocalLibrarySortKey>>({
-    key: "created",
-    direction: "desc",
-  });
+  const [trackFilter, setTrackFilter] = useSelectionPreference(
+    LOCAL_TRACK_FILTER_PREFERENCE,
+  );
+  const [sort, setSort] = useSelectionPreference(
+    LOCAL_TRACK_SORT_PREFERENCE,
+  );
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const searchTerms = useMemo(
     () => getSearchTerms(deferredSearchQuery),
@@ -798,10 +839,9 @@ export function WatchLibraryPanel({
   onDeleteWatchTracks,
 }: WatchLibraryPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [sort, setSort] = useState<SortState<WatchLibrarySortKey>>({
-    key: "name",
-    direction: "asc",
-  });
+  const [sort, setSort] = useSelectionPreference(
+    WATCH_TRACK_SORT_PREFERENCE,
+  );
   const watchTracks = watchStatus?.tracks ?? [];
   const presentation = getWatchPresentation(watchStatus);
   const deferredSearchQuery = useDeferredValue(searchQuery);

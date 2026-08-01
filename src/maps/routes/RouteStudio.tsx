@@ -43,6 +43,43 @@ import { SKETCH_TEMPLATES } from "./sketchShapes";
 import { useRouteDraw } from "./useRouteDraw";
 import { useRouteSketch } from "./useRouteSketch";
 import { surfaceForActivity, toErrorMessage } from "./utils";
+import {
+  defineSelectionPreference,
+  selectionIsArrayOf,
+  selectionIsOneOf,
+  useSelectionPreference
+} from "../../preferences/selectionPreferences";
+
+const ROUTE_STUDIO_MODE_PREFERENCE =
+  defineSelectionPreference<RouteStudioMode>({
+    key: "maps.routeStudio.mode",
+    defaultValue: "generate",
+    validate: selectionIsOneOf(["generate", "draw", "sketch", "explore"])
+  });
+
+const ROUTE_STUDIO_BASE_LAYER_PREFERENCE =
+  defineSelectionPreference<RouteBaseLayer>({
+    key: "maps.routeStudio.baseLayer",
+    defaultValue: "outdoors",
+    validate: selectionIsOneOf([
+      "street",
+      "outdoors",
+      "light",
+      "dark",
+      "topo",
+      "satellite"
+    ])
+  });
+
+const ROUTE_STUDIO_OVERLAYS_PREFERENCE =
+  defineSelectionPreference<RouteOverlayId[]>({
+    key: "maps.routeStudio.overlays",
+    defaultValue: [],
+    validate: selectionIsArrayOf(
+      selectionIsOneOf(["hiking", "cycling", "mtb"]),
+      { unique: true }
+    )
+  });
 
 const MODE_TABS: Array<{
   id: RouteStudioMode;
@@ -65,7 +102,9 @@ export function RouteStudio({
   onError: (message: string | null) => void;
 }) {
   const { unitSystem } = useUnitSystem();
-  const [mode, setMode] = useState<RouteStudioMode>("generate");
+  const [mode, setMode] = useSelectionPreference(
+    ROUTE_STUDIO_MODE_PREFERENCE
+  );
   const [activityType, setActivityType] = useState<RouteActivityType>("running");
 
   // Generate state
@@ -98,8 +137,12 @@ export function RouteStudio({
   const [fitRequestId, setFitRequestId] = useState(0);
 
   // Map state
-  const [baseLayer, setBaseLayer] = useState<RouteBaseLayer>("outdoors");
-  const [overlays, setOverlays] = useState<RouteOverlayId[]>([]);
+  const [baseLayer, setBaseLayer] = useSelectionPreference(
+    ROUTE_STUDIO_BASE_LAYER_PREFERENCE
+  );
+  const [overlays, setOverlays] = useSelectionPreference(
+    ROUTE_STUDIO_OVERLAYS_PREFERENCE
+  );
 
   const draw = useRouteDraw(api, activityType);
   const sketch = useRouteSketch(api, activityType);

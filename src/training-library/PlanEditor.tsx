@@ -44,6 +44,8 @@ import type { CorosLinkApi } from "../coroslink-api";
 import { WorkoutEditorModal } from "../calendar/WorkoutEditorModal";
 import { SelectDropdown } from "../components/SelectDropdown";
 import { replaceTrainingPlanEntryWorkout } from "../../electron/planWorkoutEditor";
+import { useUnitSystem } from "../units/UnitSystemProvider";
+import { formatDistanceValue } from "../units/units";
 import { Ridge } from "./Ridge";
 import { SportDot } from "./sportTheme";
 
@@ -99,6 +101,7 @@ function mondayOf(value: string): string {
 }
 
 export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offline, onCalendar, onSave, onClose }: PlanEditorProps) {
+  const { unitSystem } = useUnitSystem();
   const [history, setHistory] = useState<TrainingPlanDocument[]>([structuredClone(initialPlan)]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -415,7 +418,7 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
           <dl>
             <div><dt>Workouts</dt><dd>{summary.workouts}</dd></div>
             <div><dt>Duration</dt><dd>{Math.round(summary.durationSeconds / 360) / 10} hr</dd></div>
-            <div><dt>Distance</dt><dd>{Math.round(summary.distanceMeters / 100) / 10} km</dd></div>
+            <div><dt>Distance</dt><dd>{formatDistanceValue(summary.distanceMeters, unitSystem, { digits: 1 })}</dd></div>
             <div><dt>Training load</dt><dd>{Math.round(summary.trainingLoad)}</dd></div>
             <div><dt>Rest days</dt><dd>{summary.restDays}</dd></div>
             <div><dt>Peak week</dt><dd>{summary.peakWeek ?? "-"}</dd></div>

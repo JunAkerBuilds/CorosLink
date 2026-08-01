@@ -27,6 +27,7 @@
     "test:sketch": "npm run build:electron && node scripts/test-sketch-geometry.mjs",
     "test:greetings": "node --experimental-strip-types scripts/test-greetings.mjs",
     "test:sport-colors": "node --experimental-strip-types scripts/test-sport-colors.mjs",
+    "test:selection-preferences": "node --experimental-strip-types scripts/test-selection-preferences.mjs",
     "test:calendar-drag": "node --experimental-strip-types scripts/test-calendar-drag.mjs",
     "test:scheduled-structure": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-scheduled-structure.mjs",
     "test:rpe-load": "node --experimental-strip-types scripts/test-rpe-load.mjs",

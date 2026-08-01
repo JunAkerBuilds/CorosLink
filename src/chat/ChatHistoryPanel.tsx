@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Loader2, PanelLeftClose, Plus, Search } from "lucide-react";
 import type { ChatSessionSummary } from "../../electron/types";
 import { ChatSessionRow } from "./ChatSessionRow";
 import { groupChatSessions } from "./chatSessionGroups";
@@ -8,6 +8,7 @@ export function ChatHistoryPanel({
   sessions,
   activeSessionId,
   busy,
+  onCollapse,
   onNewChat,
   onSelectSession,
   onDeleteSession
@@ -15,6 +16,7 @@ export function ChatHistoryPanel({
   sessions: ChatSessionSummary[];
   activeSessionId: string | null;
   busy?: boolean;
+  onCollapse: () => void;
   onNewChat: () => void;
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
@@ -43,6 +45,17 @@ export function ChatHistoryPanel({
       <div className="chat-history-toolbar">
         <div className="chat-history-header">
           <p className="eyebrow">Conversations</p>
+          <button
+            type="button"
+            className="chat-history-collapse-button"
+            onClick={onCollapse}
+            aria-expanded="true"
+            aria-controls="chat-conversation-sidebar"
+            aria-label="Collapse conversations"
+            title="Collapse conversations"
+          >
+            <PanelLeftClose size={16} aria-hidden="true" />
+          </button>
         </div>
         <button
           type="button"

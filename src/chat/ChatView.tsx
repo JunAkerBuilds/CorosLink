@@ -1,13 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   BookOpen,
+  Bookmark,
+  CalendarDays,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CircleCheck,
   Database,
   ExternalLink,
   FileDown,
   FileText,
+  Info,
   Loader2,
   LogOut,
   MessageCircle,
+  Plus,
   RefreshCw,
   Send,
   Settings2,
@@ -15,6 +23,7 @@ import {
   Square,
   Terminal,
   Trash2,
+  TriangleAlert,
   Upload,
   User
 } from "lucide-react";
@@ -46,6 +55,7 @@ import type {
   CorosMcpStatus,
   McpServerStatus,
   PlanDraftPreview,
+  PlanDraftPreviewEntry,
   PlanWorkoutEntryInput,
   TrainingPlanDocument,
   TrainingPlanDestination,
@@ -57,11 +67,13 @@ import type {
 } from "../../electron/types";
 import { formatWorkoutSport } from "../../electron/workoutCapabilities";
 import { trainingPlanFromCoachDraftPreview } from "../../electron/trainingPlanDomain";
+import { sportTheme } from "../training-library/sportTheme";
 import { ActivityVisualCard } from "./ActivityVisualCard";
 import { FitnessTrendCard } from "./FitnessTrendCard";
 import { HrZoneCard } from "./HrZoneCard";
 import { ChatSettingsModal } from "./ChatSettingsModal";
 import { ChatSidebar } from "./ChatSidebar";
+import { ModelSwitch } from "./ModelSwitch";
 import { ProviderSwitch } from "./ProviderSwitch";
 import {
   fromPersistedEntries,
@@ -80,6 +92,7 @@ import {
 
 const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   provider: "chatgpt",
+  chatgpt: {},
   claudeCode: {
     permissions: {
       recentActivities: true,
@@ -98,6 +111,22 @@ const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   sidebarOpen: true,
   visualizationsEnabled: false
 };
+
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window === "undefined" ? false : window.matchMedia(query).matches
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const handleChange = () => setMatches(media.matches);
+    handleChange();
+    media.addEventListener("change", handleChange);
+    return () => media.removeEventListener("change", handleChange);
+  }, [query]);
+
+  return matches;
+}
 
 function AssistantMarkdown({
   content,
@@ -339,6 +368,126 @@ function formatLegacyPlanPace(
   return formatPlanPaceRange(low, high, unitSystem);
 }
 
+const PLAN_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function planDateFromSchedule(scheduleDate: string): Date | undefined {
+  const match = scheduleDate.match(PLAN_DATE_RE);
+  if (!match) return undefined;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+/** Calendar-badge parts for a scheduled date: weekday / day number / month. */
+function planDateParts(
+  scheduleDate?: string
+): { weekday: string; day: string; month: string } | undefined {
+  if (!scheduleDate) return undefined;
+  const date = planDateFromSchedule(scheduleDate);
+  if (!date) return undefined;
+  return {
+    weekday: new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(date),
+    day: String(date.getDate()),
+    month: new Intl.DateTimeFormat(undefined, { month: "short" }).format(date)
+  };
+}
+
+/** One-line localized label, e.g. "Tue, Aug 4". Falls back to the raw value. */
+function formatPlanDateLabel(scheduleDate: string): string {
+  const date = planDateFromSchedule(scheduleDate);
+  if (!date) return scheduleDate;
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric"
+  }).format(date);
+}
+
+function planEntryScheduleDate(entry: PlanDraftPreviewEntry): string | undefined {
+  if (entry.scheduleDate) return entry.scheduleDate;
+  const sourceDate = entry.source?.schedule_date;
+  if (!sourceDate || !/^\d{8}$/.test(sourceDate)) return undefined;
+  return `${sourceDate.slice(0, 4)}-${sourceDate.slice(4, 6)}-${sourceDate.slice(6, 8)}`;
+}
+
+function localPlanDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function planWeekStart(date: Date): Date {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const daysSinceMonday = (start.getDay() + 6) % 7;
+  start.setDate(start.getDate() - daysSinceMonday);
+  return start;
+}
+
+function formatPlanWeekRange(start: Date): string {
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+  const month = new Intl.DateTimeFormat(undefined, { month: "short" });
+  if (start.getMonth() === end.getMonth()) {
+    return `${month.format(start)} ${start.getDate()}-${end.getDate()}`;
+  }
+  return `${month.format(start)} ${start.getDate()}-${month.format(end)} ${end.getDate()}`;
+}
+
+interface PlanWeekGroup {
+  id: string;
+  label: string;
+  dateRange: string;
+  entries: PlanDraftPreviewEntry[];
+}
+
+function groupPlanEntriesByWeek(entries: PlanDraftPreviewEntry[]): PlanWeekGroup[] {
+  const groups = new Map<string, { start: Date; entries: PlanDraftPreviewEntry[] }>();
+  const unscheduled: PlanDraftPreviewEntry[] = [];
+  const sortedEntries = [...entries].sort((left, right) => {
+    const leftDate = planEntryScheduleDate(left) ?? "9999-99-99";
+    const rightDate = planEntryScheduleDate(right) ?? "9999-99-99";
+    return leftDate.localeCompare(rightDate);
+  });
+
+  for (const entry of sortedEntries) {
+    const scheduleDate = planEntryScheduleDate(entry);
+    const date = scheduleDate ? planDateFromSchedule(scheduleDate) : undefined;
+    if (!date) {
+      unscheduled.push(entry);
+      continue;
+    }
+    const start = planWeekStart(date);
+    const id = localPlanDateKey(start);
+    const existing = groups.get(id);
+    if (existing) {
+      existing.entries.push(entry);
+    } else {
+      groups.set(id, { start, entries: [entry] });
+    }
+  }
+
+  const weeks = [...groups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([id, group], index) => ({
+      id,
+      label: `Week ${index + 1}`,
+      dateRange: formatPlanWeekRange(group.start),
+      entries: group.entries
+    }));
+  if (unscheduled.length > 0) {
+    weeks.push({
+      id: "unscheduled",
+      label: "Unscheduled",
+      dateRange: "No calendar date",
+      entries: unscheduled
+    });
+  }
+  return weeks;
+}
+
+/** Inline style hook that tints a row/chip with the sport's own colour. */
+function planSportStyle(sport: PlanDraftPreviewEntry["sport"]): CSSProperties {
+  return { "--chat-plan-sport": sportTheme(sport).color } as CSSProperties;
+}
+
 function PlanPreviewCard({
   draft,
   uploading,
@@ -353,9 +502,11 @@ function PlanPreviewCard({
   onReview?: () => void;
 }) {
   const { unitSystem } = useUnitSystem();
-  const [destination, setDestination] = useState<TrainingPlanDestination>(
-    "workoutLibrary"
-  );
+  const [destination, setDestination] = useState<
+    Extract<TrainingPlanDestination, "workoutLibrary" | "calendar">
+  >("workoutLibrary");
+  const [selectedWeekId, setSelectedWeekId] = useState<string | null>(null);
+  const weekTabsRef = useRef<HTMLDivElement>(null);
   const uploadedResult =
     uploaded ??
     (draft.uploadResult
@@ -367,37 +518,27 @@ function PlanPreviewCard({
         }
       : undefined);
   const isUploaded = Boolean(uploadedResult || draft.uploadedAt);
-  const rawDates = draft.entries
-    .map((entry) => entry.source?.schedule_date?.replace(/-/g, ""))
-    .filter((date): date is string => Boolean(date && /^\d{8}$/.test(date)))
-    .sort();
-  const firstDate = rawDates[0];
-  const lastDate = rawDates[rawDates.length - 1];
-  const planWeeks = firstDate && lastDate
-    ? Math.max(
-        1,
-        Math.ceil(
-          (new Date(`${lastDate.slice(0, 4)}-${lastDate.slice(4, 6)}-${lastDate.slice(6, 8)}T12:00:00`).valueOf() -
-            new Date(`${firstDate.slice(0, 4)}-${firstDate.slice(4, 6)}-${firstDate.slice(6, 8)}T12:00:00`).valueOf()) /
-            604_800_000 +
-            1 / 7
-        )
-      )
-    : Math.max(1, Math.ceil(draft.entries.length / 7));
+  const planWeeks = groupPlanEntriesByWeek(draft.entries);
+  const scheduledWeekCount = planWeeks.filter(
+    (week) => week.id !== "unscheduled"
+  ).length;
+  const selectedWeek =
+    planWeeks.find((week) => week.id === selectedWeekId) ?? planWeeks[0];
+  const selectedWeekIndex = selectedWeek
+    ? planWeeks.findIndex((week) => week.id === selectedWeek.id)
+    : -1;
   const sports = [
     ...new Set(draft.entries.map((entry) => formatWorkoutSport(entry.sport ?? "run")))
   ];
-  const unavailableNative =
-    destination === "nativePlan" || destination === "nativePlanAndCalendar";
-  const remoteWrites = destination === "localTemplate"
-    ? []
-    : destination === "workoutLibrary"
-      ? draft.entries.map((entry) => `Create workout “${entry.name}” in COROS`)
-      : destination === "calendar"
-        ? draft.entries
-            .filter((entry) => entry.scheduleDate)
-            .map((entry) => `Schedule “${entry.name}” on ${entry.scheduleDate}`)
-        : [];
+  const sportKinds = [...new Set(draft.entries.map((entry) => entry.sport))];
+  const startDate = draft.entries
+    .map(planEntryScheduleDate)
+    .filter((date): date is string => Boolean(date))
+    .sort()[0];
+  const scheduledWorkoutCount = draft.entries.filter((entry) =>
+    Boolean(planEntryScheduleDate(entry))
+  ).length;
+  const unscheduledWorkoutCount = draft.entries.length - scheduledWorkoutCount;
   const destinationLabel: Record<TrainingPlanDestination, string> = {
     workoutLibrary: "COROS Workout Library",
     calendar: "COROS Calendar",
@@ -406,128 +547,388 @@ function PlanPreviewCard({
     nativePlanAndCalendar: "COROS plan + Calendar"
   };
 
+  useEffect(() => {
+    setSelectedWeekId(null);
+  }, [draft.draftId]);
+
+  useEffect(() => {
+    const activeTab = weekTabsRef.current?.querySelector<HTMLElement>(
+      '[role="tab"][aria-selected="true"]'
+    );
+    activeTab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [selectedWeek?.id]);
+
+  const selectAdjacentWeek = (offset: number) => {
+    const nextWeek = planWeeks[selectedWeekIndex + offset];
+    if (nextWeek) setSelectedWeekId(nextWeek.id);
+  };
+
   return (
     <div className="chat-plan-card">
       <div className="chat-plan-card-header">
-        <h4>{draft.name}</h4>
-        <span className="chat-plan-card-summary">{draft.summary}</span>
+        <div className="chat-plan-card-title">
+          <h4>{draft.name}</h4>
+          <span className="chat-plan-card-summary">{draft.summary}</span>
+        </div>
+        {sportKinds.length > 0 ? (
+          <span
+            className="chat-plan-sports"
+            role="img"
+            aria-label={sports.join(", ")}
+          >
+            {sportKinds.slice(0, 4).map((sport, index) => {
+              const SportIcon = sportTheme(sport).icon;
+              return (
+                <span
+                  key={`${sport ?? "unknown"}-${index}`}
+                  className="chat-plan-sport-dot"
+                  style={planSportStyle(sport)}
+                  title={sport ? formatWorkoutSport(sport) : "Workout"}
+                >
+                  <SportIcon size={10} strokeWidth={2.2} aria-hidden="true" />
+                </span>
+              );
+            })}
+          </span>
+        ) : null}
       </div>
-      <div className="chat-plan-table-wrap">
-        <table className="chat-plan-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Workout</th>
-              <th>Sport</th>
-              <th>Volume</th>
-              <th>Type</th>
-              <th>Steps</th>
-            </tr>
-          </thead>
-          <tbody>
-            {draft.entries.map((entry) => (
-              <tr key={entry.key}>
-                <td>{entry.scheduleDate ?? "Library"}</td>
-                <td>{entry.name}</td>
-                <td>{formatWorkoutSport(entry.sport ?? "run")}</td>
-                <td>
-                  {(entry.source
-                    ? formatPlanSourceVolume(entry.source, unitSystem)
-                    : entry.volume) ?? "—"}
-                </td>
-                <td>{entry.workoutType}</td>
-                <td>
-                  {(entry.source
-                    ? formatPlanSourceSteps(entry.source, unitSystem)
-                    : entry.stepsSummary) ?? "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="chat-plan-overview" aria-label="Plan overview">
+        <div className="chat-plan-overview-item">
+          <span>Weeks</span>
+          <strong>{scheduledWeekCount}</strong>
+        </div>
+        <div className="chat-plan-overview-item">
+          <span>Workouts</span>
+          <strong>{draft.entries.length}</strong>
+        </div>
+        <div className="chat-plan-overview-item">
+          <span>Sports</span>
+          <strong title={sports.join(", ")}>{sports.join(", ")}</strong>
+        </div>
+        <div className="chat-plan-overview-item">
+          <span>Starts</span>
+          <strong>{startDate ? formatPlanDateLabel(startDate) : "Not set"}</strong>
+        </div>
       </div>
+      {selectedWeek ? (
+        <section
+          className="chat-plan-week"
+          aria-labelledby={`chat-plan-week-${draft.draftId}-${selectedWeek.id}`}
+        >
+          <div className="chat-plan-week-header">
+            <div>
+              <span>{selectedWeek.label}</span>
+              <h5 id={`chat-plan-week-${draft.draftId}-${selectedWeek.id}`}>
+                {selectedWeek.dateRange}
+              </h5>
+              <small>
+                {selectedWeek.entries.length}{" "}
+                {selectedWeek.entries.length === 1 ? "workout" : "workouts"}
+              </small>
+            </div>
+            {planWeeks.length > 1 ? (
+              <div className="chat-plan-week-stepper" aria-label="Change week">
+                <button
+                  type="button"
+                  onClick={() => selectAdjacentWeek(-1)}
+                  disabled={selectedWeekIndex <= 0}
+                  aria-label="Previous week"
+                  title="Previous week"
+                >
+                  <ChevronLeft size={15} aria-hidden="true" />
+                </button>
+                <span>{selectedWeekIndex + 1} of {planWeeks.length}</span>
+                <button
+                  type="button"
+                  onClick={() => selectAdjacentWeek(1)}
+                  disabled={selectedWeekIndex >= planWeeks.length - 1}
+                  aria-label="Next week"
+                  title="Next week"
+                >
+                  <ChevronRight size={15} aria-hidden="true" />
+                </button>
+              </div>
+            ) : null}
+          </div>
+          {planWeeks.length > 1 ? (
+            <div
+              ref={weekTabsRef}
+              className="chat-plan-week-tabs"
+              role="tablist"
+              aria-label="Plan weeks"
+            >
+              {planWeeks.map((week) => (
+                <button
+                  key={week.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={week.id === selectedWeek.id}
+                  className={week.id === selectedWeek.id ? "is-active" : ""}
+                  onClick={() => setSelectedWeekId(week.id)}
+                >
+                  <strong>{week.label}</strong>
+                  <span>{week.dateRange}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <ul className="chat-plan-entries">
+            {selectedWeek.entries.map((entry) => {
+              const SportIcon = sportTheme(entry.sport).icon;
+              const scheduleDate = planEntryScheduleDate(entry);
+              const dateParts = planDateParts(scheduleDate);
+              const volume =
+                (entry.source
+                  ? formatPlanSourceVolume(entry.source, unitSystem)
+                  : undefined) ?? entry.volume ?? "Not set";
+              const steps =
+                (entry.source
+                  ? formatPlanSourceSteps(entry.source, unitSystem)
+                  : undefined) ?? entry.stepsSummary ?? "No structure provided";
+              return (
+                <li
+                  key={entry.key}
+                  className="chat-plan-entry"
+                  style={planSportStyle(entry.sport)}
+                >
+                  <span
+                    className={`chat-plan-entry-date${dateParts ? "" : " is-undated"}`}
+                    title={scheduleDate ?? "Saved to library only"}
+                  >
+                    {dateParts ? (
+                      <>
+                        <span className="chat-plan-entry-weekday">
+                          {dateParts.weekday}
+                        </span>
+                        <span className="chat-plan-entry-day">{dateParts.day}</span>
+                        <span className="chat-plan-entry-month">
+                          {dateParts.month}
+                        </span>
+                      </>
+                    ) : (
+                      <Bookmark size={14} aria-hidden="true" />
+                    )}
+                  </span>
+                  <span className="chat-plan-entry-main">
+                    <span className="chat-plan-entry-name">{entry.name}</span>
+                    <span className="chat-plan-entry-steps">{steps}</span>
+                  </span>
+                  <span className="chat-plan-entry-meta">
+                    <span className="chat-plan-entry-volume">{volume}</span>
+                    <span className="chat-plan-entry-tags">
+                      <span className="chat-plan-entry-type">
+                        {entry.workoutType}
+                      </span>
+                      <span className="chat-plan-entry-sport">
+                        <SportIcon size={11} strokeWidth={2.2} aria-hidden="true" />
+                        {formatWorkoutSport(entry.sport ?? "run")}
+                      </span>
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : (
+        <div className="chat-plan-empty-week">
+          <Bookmark size={16} aria-hidden="true" />
+          <span>This plan does not contain any workouts yet.</span>
+        </div>
+      )}
       {draft.conflicts.length > 0 ? (
-        <ul className="chat-plan-warnings">
-          {draft.conflicts.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
+        <details
+          className="chat-plan-issues"
+          data-tone="alert"
+          open={draft.conflicts.length <= 3}
+        >
+          <summary>
+            <span>
+              <TriangleAlert size={13} aria-hidden="true" />
+              <strong>
+                {draft.conflicts.length}{" "}
+                {draft.conflicts.length === 1
+                  ? "scheduling conflict"
+                  : "scheduling conflicts"}
+              </strong>
+            </span>
+            <small>Review before saving</small>
+            <ChevronDown size={14} aria-hidden="true" />
+          </summary>
+          <ul className="chat-plan-warnings">
+            {draft.conflicts.map((item) => (
+              <li key={item}>
+                <TriangleAlert size={12} aria-hidden="true" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : null}
       {draft.warnings.length > 0 ? (
-        <ul className="chat-plan-notes">
-          {draft.warnings.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
+        <details
+          className="chat-plan-issues"
+          data-tone="note"
+          open={draft.warnings.length <= 3}
+        >
+          <summary>
+            <span>
+              <Info size={13} aria-hidden="true" />
+              <strong>
+                {draft.warnings.length}{" "}
+                {draft.warnings.length === 1 ? "plan note" : "plan notes"}
+              </strong>
+            </span>
+            <small>Additional plan details</small>
+            <ChevronDown size={14} aria-hidden="true" />
+          </summary>
+          <ul className="chat-plan-notes">
+            {draft.warnings.map((item) => (
+              <li key={item}>
+                <Info size={12} aria-hidden="true" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : null}
       {!isUploaded ? (
-        <div className="chat-plan-confirmation">
-          <label>
-            <span>Destination</span>
-            <select
-              value={destination}
-              onChange={(event) =>
-                setDestination(event.target.value as TrainingPlanDestination)
-              }
-              disabled={uploading}
+        <fieldset className="chat-plan-confirmation" disabled={uploading}>
+          <legend>Where should this plan go?</legend>
+          <div className="chat-plan-destination-options">
+            <label
+              className={`chat-plan-destination-option${
+                destination === "workoutLibrary" ? " is-selected" : ""
+              }`}
             >
-              <option value="workoutLibrary">Workout Library</option>
-              <option value="calendar">Calendar</option>
-              <option value="nativePlan">Plan Library — unavailable</option>
-              <option value="localTemplate">Local template</option>
-              <option value="nativePlanAndCalendar">Plan + Calendar — unavailable</option>
-            </select>
-          </label>
-          <dl className="chat-plan-facts">
-            <div><dt>Weeks</dt><dd>{planWeeks}</dd></div>
-            <div><dt>Workouts</dt><dd>{draft.entries.length}</dd></div>
-            <div><dt>Sports</dt><dd>{sports.join(", ")}</dd></div>
-            <div><dt>Start</dt><dd>{draft.entries.find((entry) => entry.scheduleDate)?.scheduleDate ?? "Not set"}</dd></div>
-            <div><dt>Conflicts</dt><dd>{draft.conflicts.length}</dd></div>
-            <div><dt>Reused</dt><dd>0</dd></div>
-            <div><dt>Grouped COROS plan</dt><dd>{unavailableNative ? "Unavailable" : "No"}</dd></div>
-          </dl>
-          <div className="chat-plan-write-preview">
-            <strong>Writes after confirmation</strong>
-            {unavailableNative ? (
-              <p>Native plan writes remain gated until COROS create/update payloads can be live-verified safely.</p>
-            ) : remoteWrites.length > 0 ? (
-              <ul>
-                {remoteWrites.map((write, index) => <li key={`${write}-${index}`}>{write}</li>)}
-              </ul>
-            ) : (
-              <p>Local database only. No COROS write.</p>
-            )}
+              <input
+                className="sr-only"
+                type="radio"
+                name={`plan-destination-${draft.draftId}`}
+                value="workoutLibrary"
+                checked={destination === "workoutLibrary"}
+                onChange={() => setDestination("workoutLibrary")}
+              />
+              <span className="chat-plan-destination-icon">
+                <BookOpen size={16} aria-hidden="true" />
+              </span>
+              <span className="chat-plan-destination-copy">
+                <strong>Workout Library</strong>
+                <small>Save reusable workouts without adding dates.</small>
+              </span>
+              <CircleCheck
+                className="chat-plan-destination-check"
+                size={16}
+                aria-hidden="true"
+              />
+            </label>
+            <label
+              className={`chat-plan-destination-option${
+                destination === "calendar" ? " is-selected" : ""
+              }${unscheduledWorkoutCount > 0 ? " is-disabled" : ""}`}
+            >
+              <input
+                className="sr-only"
+                type="radio"
+                name={`plan-destination-${draft.draftId}`}
+                value="calendar"
+                checked={destination === "calendar"}
+                onChange={() => setDestination("calendar")}
+                disabled={unscheduledWorkoutCount > 0}
+              />
+              <span className="chat-plan-destination-icon">
+                <CalendarDays size={16} aria-hidden="true" />
+              </span>
+              <span className="chat-plan-destination-copy">
+                <strong>Calendar</strong>
+                <small>
+                  {unscheduledWorkoutCount > 0
+                    ? `${unscheduledWorkoutCount} ${
+                        unscheduledWorkoutCount === 1 ? "workout needs" : "workouts need"
+                      } a date.`
+                    : "Schedule workouts on the dates shown above."}
+                </small>
+              </span>
+              <CircleCheck
+                className="chat-plan-destination-check"
+                size={16}
+                aria-hidden="true"
+              />
+            </label>
           </div>
-        </div>
+          <p
+            className="chat-plan-destination-summary"
+            data-tone={
+              destination === "calendar" && draft.conflicts.length > 0
+                ? "alert"
+                : "ok"
+            }
+          >
+            {destination === "calendar" && draft.conflicts.length > 0 ? (
+              <TriangleAlert size={13} aria-hidden="true" />
+            ) : (
+              <CircleCheck size={13} aria-hidden="true" />
+            )}
+            <span>
+              {destination === "calendar"
+                ? `${scheduledWorkoutCount} ${
+                    scheduledWorkoutCount === 1 ? "workout" : "workouts"
+                  } will be added to your COROS Calendar.`
+                : `${draft.entries.length} ${
+                    draft.entries.length === 1 ? "workout" : "workouts"
+                  } will be saved to your COROS Workout Library.`}
+              {destination === "workoutLibrary"
+                ? " Dates will not be added to Calendar."
+                : draft.conflicts.length > 0
+                  ? ` Review ${draft.conflicts.length} ${
+                      draft.conflicts.length === 1 ? "conflict" : "conflicts"
+                    } before adding.`
+                  : " No scheduling conflicts."}
+            </span>
+          </p>
+        </fieldset>
       ) : null}
       {uploadedResult || isUploaded ? (
         <p className="chat-plan-success">
-          Saved to {destinationLabel[uploadedResult?.destination ?? draft.uploadResult?.destination ?? destination]} —{" "}
-          {uploadedResult?.workoutsScheduled ??
-            draft.uploadResult?.workoutsScheduled ??
-            0}{" "}
-          scheduled,{" "}
-          {uploadedResult?.workoutsCreated ??
-            draft.uploadResult?.workoutsCreated ??
-            0}{" "}
-          saved to library.
+          <CircleCheck size={15} aria-hidden="true" />
+          <span>
+            Saved to {destinationLabel[uploadedResult?.destination ?? draft.uploadResult?.destination ?? destination]}.{" "}
+            {uploadedResult?.workoutsScheduled ??
+              draft.uploadResult?.workoutsScheduled ??
+              0}{" "}
+            scheduled,{" "}
+            {uploadedResult?.workoutsCreated ??
+              draft.uploadResult?.workoutsCreated ??
+              0}{" "}
+            saved to library.
+          </span>
         </p>
       ) : (
         <div className="chat-plan-actions">
-          {onReview ? <button type="button" className="chat-plan-review" onClick={onReview} disabled={uploading}><BookOpen size={14} aria-hidden="true" /> Review &amp; save in Training Library</button> : null}
+          {onReview ? (
+            <button
+              type="button"
+              className="chat-plan-review"
+              onClick={onReview}
+              disabled={uploading}
+              title="Open this plan in the Training Library editor"
+            >
+              <BookOpen size={14} aria-hidden="true" />
+              Edit plan first
+            </button>
+          ) : null}
           <button
             type="button"
             className="chat-plan-upload"
             onClick={() => onUpload(destination)}
-            disabled={uploading || unavailableNative}
+            disabled={uploading}
           >
             {uploading ? (
               <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
             ) : (
               <Upload size={14} aria-hidden="true" />
             )}
-            Confirm {destinationLabel[destination]}
+            {destination === "calendar" ? "Add to Calendar" : "Save to Library"}
           </button>
         </div>
       )}
@@ -692,6 +1093,13 @@ export function ChatView({
   const [mcpRefreshVersion, setMcpRefreshVersion] = useState(0);
   const [mcpBusy, setMcpBusy] = useState(false);
   const [showTools, setShowTools] = useState(false);
+  const [selectedPlanDraftId, setSelectedPlanDraftId] = useState<
+    string | null
+  >(null);
+  const [planPanelExpanded, setPlanPanelExpanded] = useState(false);
+  const [highlightedChatEntryIndex, setHighlightedChatEntryIndex] = useState<
+    number | null
+  >(null);
   const [uploadingDraftId, setUploadingDraftId] = useState<string | null>(null);
   const [uploadedPlans, setUploadedPlans] = useState<
     Record<string, UploadPlanResult>
@@ -721,6 +1129,9 @@ export function ChatView({
   const scrollRef = useRef<HTMLDivElement>(null);
   const mcpRef = useRef<HTMLDivElement>(null);
   const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chatHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -860,6 +1271,10 @@ export function ChatView({
       if (claudePollTimerRef.current) {
         clearTimeout(claudePollTimerRef.current);
         claudePollTimerRef.current = null;
+      }
+      if (chatHighlightTimeoutRef.current) {
+        clearTimeout(chatHighlightTimeoutRef.current);
+        chatHighlightTimeoutRef.current = null;
       }
     };
   }, [api]);
@@ -1291,6 +1706,43 @@ export function ChatView({
     }
   };
 
+  const handleModelChange = async (model: string) => {
+    if (!api || chatSettings.provider === "local") return;
+    const normalizedModel = model.trim() || undefined;
+    const nextSettings: ChatSettings =
+      chatSettings.provider === "claude-code"
+        ? {
+            ...chatSettings,
+            claudeCode: {
+              ...chatSettings.claudeCode,
+              model: normalizedModel
+            }
+          }
+        : {
+            ...chatSettings,
+            chatgpt: {
+              ...chatSettings.chatgpt,
+              model: normalizedModel
+            }
+          };
+
+    setChatSettings(nextSettings);
+    setSavingSettings(true);
+    onError(null);
+    try {
+      const saved = await api.saveChatSettings(nextSettings);
+      setChatSettings(saved);
+    } catch (caught) {
+      onError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not save the selected model."
+      );
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   const updateLocalDraft = (patch: Partial<ChatSettings["local"]>) => {
     setChatSettings((current) => ({
       ...current,
@@ -1692,6 +2144,54 @@ export function ChatView({
     }
   };
 
+  const handleScrollToPlanChat = (draftId: string) => {
+    const planIndex = timeline.findIndex(
+      (entry) => entry.kind === "planDraft" && entry.draft.draftId === draftId
+    );
+    if (planIndex < 0) return;
+
+    let targetIndex = timeline.findIndex(
+      (entry, index) =>
+        index > planIndex &&
+        entry.kind === "message" &&
+        entry.role === "assistant"
+    );
+    if (targetIndex < 0) {
+      for (let index = planIndex - 1; index >= 0; index -= 1) {
+        const entry = timeline[index];
+        if (entry.kind === "message" && entry.role === "assistant") {
+          targetIndex = index;
+          break;
+        }
+      }
+    }
+    if (targetIndex < 0) return;
+
+    const transcript = scrollRef.current;
+    const target = transcript?.querySelector<HTMLElement>(
+      `[data-chat-entry-index="${targetIndex}"]`
+    );
+    if (!transcript || !target) return;
+
+    const transcriptRect = transcript.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const targetTop =
+      transcript.scrollTop +
+      targetRect.top -
+      transcriptRect.top -
+      Math.max(24, (transcript.clientHeight - targetRect.height) / 2);
+
+    transcript.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+    setHighlightedChatEntryIndex(targetIndex);
+    if (chatHighlightTimeoutRef.current) {
+      clearTimeout(chatHighlightTimeoutRef.current);
+    }
+    chatHighlightTimeoutRef.current = setTimeout(() => {
+      setHighlightedChatEntryIndex(null);
+      chatHighlightTimeoutRef.current = null;
+    }, 1800);
+  };
+
   const handleConfirmWorkoutDelete = async (requestId: string) => {
     if (!api || deletingRequestId) return;
     setDeletingRequestId(requestId);
@@ -1782,6 +2282,24 @@ export function ChatView({
   const showLoginGate = isChatGptProvider && !authStatus?.signedIn;
   const showClaudeGate =
     isClaudeProvider && claudeStatus?.state !== "connected";
+  const showPlanPanel = useMediaQuery("(min-width: 1400px)");
+  const planDrafts = timeline.flatMap((entry) =>
+    entry.kind === "planDraft" ? [entry.draft] : []
+  );
+  const latestPlanDraft = planDrafts.at(-1);
+  const selectedPlanDraft =
+    planDrafts.find((draft) => draft.draftId === selectedPlanDraftId) ??
+    latestPlanDraft;
+  const selectedPlanDraftIndex = selectedPlanDraft
+    ? planDrafts.findIndex((draft) => draft.draftId === selectedPlanDraft.draftId)
+    : -1;
+
+  useEffect(() => {
+    setSelectedPlanDraftId(latestPlanDraft?.draftId ?? null);
+    if (latestPlanDraft) {
+      setPlanPanelExpanded(false);
+    }
+  }, [activeSessionId, latestPlanDraft?.draftId]);
 
   const providerSwitch = (
     <ProviderSwitch
@@ -1790,14 +2308,31 @@ export function ChatView({
       onChange={(provider) => void handleProviderChange(provider)}
     />
   );
+  const selectedModel =
+    chatSettings.provider === "claude-code"
+      ? chatSettings.claudeCode.model ?? ""
+      : chatSettings.chatgpt.model ?? "";
+  const providerControls = (
+    <div className="chat-provider-controls">
+      {providerSwitch}
+      <ModelSwitch
+        provider={chatSettings.provider}
+        model={selectedModel}
+        disabled={savingSettings || isBusy}
+        onChange={(model) => void handleModelChange(model)}
+      />
+    </div>
+  );
 
+  const conversationSidebarOpen = chatSettings.sidebarOpen !== false;
   const sidebarProps = {
-    open: true,
+    open: conversationSidebarOpen,
     overlay: false,
     sessions,
     activeSessionId,
     busy: isBusy,
-    onClose: () => {},
+    onClose: () => void handleUpdateChatSettings({ sidebarOpen: false }),
+    onOpen: () => void handleUpdateChatSettings({ sidebarOpen: true }),
     onNewChat: () => void handleNewChat(),
     onSelectSession: (sessionId: string) => void handleSelectSession(sessionId),
     onDeleteSession: (sessionId: string) => void handleDeleteSession(sessionId)
@@ -1934,7 +2469,7 @@ export function ChatView({
               </p>
             </div>
             <div className="chat-composer-toolbar chat-composer-toolbar-login">
-              {providerSwitch}
+              {providerControls}
             </div>
           </div>
         </div>
@@ -1992,7 +2527,7 @@ export function ChatView({
               </p>
             </div>
             <div className="chat-composer-toolbar chat-composer-toolbar-login">
-              {providerSwitch}
+              {providerControls}
             </div>
           </div>
         </div>
@@ -2182,6 +2717,9 @@ export function ChatView({
             }
 
             if (entry.kind === "planDraft") {
+              if (showPlanPanel) {
+                return null;
+              }
               return (
                 <div
                   key={entry.draft.draftId}
@@ -2279,7 +2817,12 @@ export function ChatView({
             return (
               <div
                 key={`message-${index}`}
-                className={`chat-row chat-row-${entry.role}`}
+                className={`chat-row chat-row-${entry.role}${
+                  highlightedChatEntryIndex === index
+                    ? " is-chat-jump-target"
+                    : ""
+                }`}
+                data-chat-entry-index={index}
               >
                 <div className={`chat-avatar chat-avatar-${entry.role}`}>
                   {entry.role === "assistant" ? (
@@ -2353,7 +2896,20 @@ export function ChatView({
       </div>
 
           <div className="chat-composer">
-            <div className="chat-composer-toolbar">{providerSwitch}</div>
+            <div className="chat-composer-toolbar">
+              {providerControls}
+              <button
+                type="button"
+                className="chat-new-chat chat-composer-new-chat"
+                onClick={() => void handleNewChat()}
+                disabled={!api || isBusy}
+                aria-label="Start a new chat"
+                title="Start a new chat"
+              >
+                <Plus size={14} aria-hidden="true" />
+                <span>New chat</span>
+              </button>
+            </div>
             <div className="chat-composer-inner">
               <textarea
                 ref={inputRef}
@@ -2407,6 +2963,157 @@ export function ChatView({
             </p>
           </div>
         </div>
+        {showPlanPanel && selectedPlanDraft ? (
+          <aside
+            className={`chat-plan-panel${
+              planPanelExpanded ? " is-expanded" : " is-list-view"
+            }`}
+            aria-label={
+              planPanelExpanded ? "Training plan details" : "Generated plans"
+            }
+          >
+            {!planPanelExpanded ? (
+              <>
+                <header className="chat-plan-list-header">
+                  <div>
+                    <span className="chat-plan-panel-icon">
+                      <BookOpen size={15} aria-hidden="true" />
+                    </span>
+                    <div>
+                      <strong>Generated plans</strong>
+                      <span>Select a plan to review</span>
+                    </div>
+                  </div>
+                  <strong className="chat-plan-list-count">
+                    {planDrafts.length}
+                  </strong>
+                </header>
+                <ol className="chat-plan-list">
+                  {planDrafts.map((draft, index) => {
+                    const saved = Boolean(
+                      uploadedPlans[draft.draftId] ||
+                        draft.uploadResult ||
+                        draft.uploadedAt
+                    );
+                    const weeks = Math.max(
+                      1,
+                      groupPlanEntriesByWeek(draft.entries).filter(
+                        (week) => week.id !== "unscheduled"
+                      ).length
+                    );
+                    const primarySport = draft.entries[0]?.sport;
+                    const SportIcon = sportTheme(primarySport).icon;
+                    const selected = draft.draftId === selectedPlanDraft.draftId;
+
+                    return (
+                      <li key={draft.draftId}>
+                        <button
+                          type="button"
+                          className={`chat-plan-list-item${
+                            selected ? " is-selected" : ""
+                          }`}
+                          onClick={() => {
+                            setSelectedPlanDraftId(draft.draftId);
+                            setPlanPanelExpanded(true);
+                          }}
+                          aria-label={`Open ${draft.name || `plan ${index + 1}`}`}
+                        >
+                          <span
+                            className="chat-plan-list-sport"
+                            style={planSportStyle(primarySport)}
+                          >
+                            <SportIcon
+                              size={15}
+                              strokeWidth={2}
+                              aria-hidden="true"
+                            />
+                          </span>
+                          <span className="chat-plan-list-copy">
+                            <span className="chat-plan-list-kicker">
+                              Plan {index + 1}
+                            </span>
+                            <strong>{draft.name || "Untitled plan"}</strong>
+                            <span className="chat-plan-list-meta">
+                              <span>
+                                {draft.entries.length}{" "}
+                                {draft.entries.length === 1
+                                  ? "workout"
+                                  : "workouts"}
+                              </span>
+                              <span>
+                                {weeks} {weeks === 1 ? "week" : "weeks"}
+                              </span>
+                              <span data-status={saved ? "saved" : "draft"}>
+                                {saved ? "Saved" : "Draft"}
+                              </span>
+                            </span>
+                          </span>
+                          <ChevronRight size={15} aria-hidden="true" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </>
+            ) : (
+              <>
+                <header className="chat-plan-panel-header">
+                  <div className="chat-plan-panel-heading">
+                    <button
+                      type="button"
+                      className="chat-plan-panel-back"
+                      onClick={() => setPlanPanelExpanded(false)}
+                      aria-label="Back to generated plans"
+                      title="Back to generated plans"
+                    >
+                      <ChevronLeft size={15} aria-hidden="true" />
+                      Plans
+                    </button>
+                    <div className="chat-plan-panel-title is-detail-title">
+                      <div>
+                        <strong title={selectedPlanDraft.name}>
+                          {selectedPlanDraft.name || "Untitled plan"}
+                        </strong>
+                        <span>
+                          Plan {selectedPlanDraftIndex + 1} of {planDrafts.length}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="chat-plan-panel-actions">
+                      <button
+                        type="button"
+                        className="chat-plan-panel-chat-link"
+                        onClick={() =>
+                          handleScrollToPlanChat(selectedPlanDraft.draftId)
+                        }
+                        title="View the generated response in chat"
+                      >
+                        <MessageCircle size={14} aria-hidden="true" />
+                        View in chat
+                      </button>
+                    </div>
+                  </div>
+                </header>
+                <div className="chat-plan-panel-body">
+                  <PlanPreviewCard
+                    key={selectedPlanDraft.draftId}
+                    draft={selectedPlanDraft}
+                    uploading={uploadingDraftId === selectedPlanDraft.draftId}
+                    uploaded={uploadedPlans[selectedPlanDraft.draftId]}
+                    onUpload={(destination) =>
+                      void handleUploadPlanDraft(selectedPlanDraft.draftId, destination)
+                    }
+                    onReview={
+                      onReviewPlan
+                        ? () => handleReviewPlanDraft(selectedPlanDraft)
+                        : undefined
+                    }
+                  />
+                </div>
+              </>
+            )}
+          </aside>
+        ) : null}
       </div>
       <ChatSettingsModal {...settingsModalProps} />
     </div>

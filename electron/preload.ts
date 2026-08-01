@@ -558,8 +558,12 @@ const api = {
     ipcRenderer.invoke("trainingLibrary:deletePlan", id, confirmed),
   previewTrainingPlanCalendar: (planId: string, startDate: string): Promise<TrainingPlanCalendarPreview> =>
     ipcRenderer.invoke("trainingLibrary:previewPlanCalendar", planId, startDate),
-  addTrainingPlanToCalendar: (previewId: string, confirmed: boolean): Promise<TrainingPlanCalendarMutationResult> =>
-    ipcRenderer.invoke("trainingLibrary:addPlanToCalendar", previewId, confirmed),
+  addTrainingPlanToCalendar: (
+    previewId: string,
+    confirmed: boolean,
+    unitSystem: UnitSystem
+  ): Promise<TrainingPlanCalendarMutationResult> =>
+    ipcRenderer.invoke("trainingLibrary:addPlanToCalendar", previewId, confirmed, unitSystem),
   previewTrainingPlanCalendarRemoval: (planId: string): Promise<TrainingPlanCalendarPreview> =>
     ipcRenderer.invoke("trainingLibrary:previewPlanCalendarRemoval", planId),
   removeTrainingPlanFromCalendar: (previewId: string, confirmed: boolean): Promise<TrainingPlanCalendarMutationResult> =>

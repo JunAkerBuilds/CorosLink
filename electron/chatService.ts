@@ -69,6 +69,7 @@ import {
   type ChatApiKeyStore,
   type ChatSettingsStore
 } from "./chatSettingsStore";
+import { getChatGptModelCandidates } from "./chatModels";
 import {
   createChatSession,
   deleteChatSession,
@@ -128,17 +129,6 @@ const LOOPBACK_PORT = 1455;
 const LOOPBACK_REDIRECT_URI = `http://localhost:${LOOPBACK_PORT}/auth/callback`;
 
 const RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
-// Models offered to ChatGPT-plan users via the codex endpoint. OpenAI rotates
-// these often and availability is plan-dependent, so we try them in order and
-// cache the first the account accepts (see resolveModelAndOpenStream). Ordered
-// best-broadly-available first. Adjust here as OpenAI's lineup changes.
-const CHAT_MODEL_CANDIDATES = [
-  "gpt-5.5",
-  "gpt-5.4",
-  "gpt-5.4-mini",
-  "gpt-5-codex"
-];
-
 // Max agent rounds: each round is one model response; if it calls COROS tools
 // we execute them and loop, until it answers with no further tool calls.
 const MAX_TOOL_ROUNDS = 10;
@@ -807,7 +797,8 @@ export async function streamChat(
         effectiveInstructions,
         input,
         tools,
-        controller.signal
+        controller.signal,
+        settings.chatgpt.model
       );
       if ("error" in opened) {
         send("chat:streamError", {
@@ -1180,9 +1171,9 @@ function findChatTool(name: string): CorosMcpTool | undefined {
 // ----- Provider request/response shape (isolated) -----
 
 /**
- * Sends the request, trying candidate models until the account accepts one
- * (the ChatGPT-plan codex endpoint rejects unsupported models with a 400 before
- * any streaming). Caches the working model so later calls skip the probing.
+ * Sends the request with the selected model. Auto mode tries candidates until
+ * the account accepts one (the ChatGPT-plan codex endpoint rejects unsupported
+ * models with a 400 before streaming), then caches the working model.
  */
 async function resolveModelAndOpenStream(
   token: StoredChatToken,
@@ -1190,12 +1181,11 @@ async function resolveModelAndOpenStream(
   instructions: string,
   input: Record<string, unknown>[],
   tools: Record<string, unknown>[],
-  signal: AbortSignal
+  signal: AbortSignal,
+  selectedModel?: string
 ): Promise<{ response: Response } | { error: string; authError: boolean }> {
   const cached = getSetting(SETTINGS.model);
-  const candidates = cached
-    ? [cached, ...CHAT_MODEL_CANDIDATES.filter((model) => model !== cached)]
-    : [...CHAT_MODEL_CANDIDATES];
+  const candidates = getChatGptModelCandidates(selectedModel, cached);
 
   let lastDetail = "";
   for (const model of candidates) {
@@ -1262,7 +1252,9 @@ async function resolveModelAndOpenStream(
   }
 
   return {
-    error: `No supported chat model for this ChatGPT account. ${truncate(lastDetail, 600)}`,
+    error: selectedModel?.trim()
+      ? `The selected model (${selectedModel.trim()}) is not available for this ChatGPT account. ${truncate(lastDetail, 600)}`
+      : `No supported chat model for this ChatGPT account. ${truncate(lastDetail, 600)}`,
     authError: false
   };
 }

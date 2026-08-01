@@ -53,6 +53,7 @@ import type {
   TrainingPlanMetadataPatch,
   TrainingPlanWriteCapabilities,
   TrainingWorkoutMetadata,
+  UnitSystem,
   WorkoutMetadataPatch,
   WorkoutSport
 } from "./types";
@@ -693,7 +694,8 @@ async function captureScheduledIdentity(
 
 export async function addTrainingPlanToCalendar(
   previewId: string,
-  confirmed: boolean
+  confirmed: boolean,
+  unitSystem: UnitSystem
 ): Promise<TrainingPlanCalendarMutationResult> {
   const { record, plan } = await requireCurrentCalendarPreview(previewId, "install", confirmed);
   const projectedPlan = shiftTrainingPlan(plan, record.preview.startDate);
@@ -735,7 +737,7 @@ export async function addTrainingPlanToCalendar(
         await trainingPlanCalendarAdapter.createAndSchedule(
           { ...planEntry.workout, schedule_date: previewEntry.happenDay, save_to_library: false },
           previewEntry.happenDay,
-          "metric",
+          unitSystem,
           false
         );
       } else {

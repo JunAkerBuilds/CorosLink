@@ -32,8 +32,41 @@ import type { CorosLinkApi } from "../coroslink-api";
 import { SelectDropdown } from "../components/SelectDropdown";
 import { formatBytes } from "../media/libraryUtils";
 import { RouteStudio } from "./routes/RouteStudio";
+import {
+  defineSelectionPreference,
+  selectionIsBoolean,
+  selectionIsOneOf,
+  useSelectionPreference
+} from "../preferences/selectionPreferences";
 
 type MapsTab = "coros" | "routes";
+
+interface CorosMapFilterPreference {
+  region: string;
+  landscape: boolean;
+  topo: boolean;
+}
+
+const MAPS_TAB_PREFERENCE = defineSelectionPreference<MapsTab>({
+  key: "maps.activeTab",
+  defaultValue: "coros",
+  validate: selectionIsOneOf(["coros", "routes"])
+});
+
+const COROS_MAP_FILTER_PREFERENCE =
+  defineSelectionPreference<CorosMapFilterPreference>({
+    key: "maps.corosFilters",
+    defaultValue: { region: "all", landscape: true, topo: true },
+    validate: (value): value is CorosMapFilterPreference => {
+      if (typeof value !== "object" || value === null) return false;
+      const candidate = value as Record<string, unknown>;
+      return (
+        typeof candidate.region === "string" &&
+        selectionIsBoolean(candidate.landscape) &&
+        selectionIsBoolean(candidate.topo)
+      );
+    }
+  });
 
 interface MapPackageGroup {
   key: string;
@@ -58,7 +91,9 @@ export function MapsView({
   onMessage,
   onError
 }: MapsViewProps) {
-  const [activeTab, setActiveTab] = useState<MapsTab>("coros");
+  const [activeTab, setActiveTab] = useSelectionPreference(
+    MAPS_TAB_PREFERENCE
+  );
 
   return (
     <div className="maps-view stack">
@@ -128,9 +163,14 @@ function CorosMapsTab({
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [regionFilter, setRegionFilter] = useState("all");
-  const [showLandscape, setShowLandscape] = useState(true);
-  const [showTopo, setShowTopo] = useState(true);
+  const [filters, setFilters] = useSelectionPreference(
+    COROS_MAP_FILTER_PREFERENCE
+  );
+  const {
+    region: regionFilter,
+    landscape: showLandscape,
+    topo: showTopo
+  } = filters;
   const [localSelection, setLocalSelection] =
     useState<CorosMapLocalSelection | null>(null);
   const [downloadJobs, setDownloadJobs] = useState<CorosMapDownloadJob[]>([]);
@@ -427,6 +467,15 @@ function CorosMapsTab({
     [regionOptions]
   );
 
+  useEffect(() => {
+    if (
+      manifest &&
+      !regionFilterOptions.some((option) => option.value === regionFilter)
+    ) {
+      setFilters((current) => ({ ...current, region: "all" }));
+    }
+  }, [manifest, regionFilter, regionFilterOptions, setFilters]);
+
   const packageGroups = useMemo(() => {
     const terms = normalizeSearch(query);
     const groups = new Map<string, MapPackageGroup>();
@@ -701,14 +750,21 @@ function CorosMapsTab({
             label="Region"
             value={regionFilter}
             options={regionFilterOptions}
-            onChange={setRegionFilter}
+            onChange={(region) =>
+              setFilters((current) => ({ ...current, region }))
+            }
           />
 
           <label className="check-row maps-check">
             <input
               type="checkbox"
               checked={showLandscape}
-              onChange={(event) => setShowLandscape(event.target.checked)}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  landscape: event.target.checked
+                }))
+              }
             />
             Landscape
           </label>
@@ -716,7 +772,12 @@ function CorosMapsTab({
             <input
               type="checkbox"
               checked={showTopo}
-              onChange={(event) => setShowTopo(event.target.checked)}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  topo: event.target.checked
+                }))
+              }
             />
             Topo
           </label>
@@ -1319,4 +1380,3 @@ function isInstallTransferCancelled(error: unknown): boolean {
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
-

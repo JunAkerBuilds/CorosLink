@@ -153,12 +153,9 @@ export function AppSidebar({
       return;
     }
 
-    const navRect = nav.getBoundingClientRect();
-    const itemRect = activeItem.getBoundingClientRect();
-
     setIndicator({
-      top: itemRect.top - navRect.top,
-      height: itemRect.height,
+      top: activeItem.offsetTop,
+      height: activeItem.offsetHeight,
       ready: true,
     });
   }, [activeView, coachBusy, expanded, isOpen, overlayMode]);
