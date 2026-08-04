@@ -71,7 +71,8 @@ No guessed payload is sent.
 - Coach tool calls can create a draft but cannot execute a plan upload. Only the
   athlete's confirmation card invokes the write IPC method after a destination
   is selected and the writes/conflicts are displayed.
-- Coach fallbacks are COROS Workout Library, direct COROS Calendar scheduling,
+- Coach plans save as grouped local plans by default. Explicit alternatives are
+  individual COROS Workout Library writes, direct COROS Calendar scheduling,
   and a zero-remote-write local template.
 - Authentication tokens and request headers are never included in plan logs or
   stored raw payloads.

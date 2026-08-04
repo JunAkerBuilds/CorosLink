@@ -33,8 +33,10 @@ function objectArray(value: unknown): RawPlan[] {
 }
 
 function mapEntity(raw: RawPlan): NativeCorosPlanEntity {
+  const id = stringValue(raw.id);
   return {
-    idInPlan: stringValue(raw.idInPlan) ?? stringValue(raw.id) ?? "",
+    id,
+    idInPlan: stringValue(raw.idInPlan) ?? id ?? "",
     planProgramId: stringValue(raw.planProgramId),
     happenDay: stringValue(raw.happenDay),
     dayNo: numberValue(raw.dayNo),

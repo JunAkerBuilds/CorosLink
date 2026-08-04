@@ -185,6 +185,15 @@ assert.equal(
   parseChatTranscriptJson(JSON.stringify([oneOffWorkoutEntry]))[0].draft.uploadResult.destination,
   "calendar"
 );
+const groupedLocalPlanEntry = structuredClone(oneOffWorkoutEntry);
+groupedLocalPlanEntry.draft.artifactType = "plan";
+groupedLocalPlanEntry.draft.uploadResult.destination = "localPlan";
+groupedLocalPlanEntry.draft.uploadResult.localPlanId = "plan:coach:workout-1";
+groupedLocalPlanEntry.draft.uploadResult.groupedPlanCreated = true;
+assert.equal(
+  parseChatTranscriptJson(JSON.stringify([groupedLocalPlanEntry]))[0].draft.uploadResult.destination,
+  "localPlan"
+);
 assert.deepEqual(
   parseChatTranscriptJson(JSON.stringify([oneOffWorkoutEntry]))[0].draft.entries[0].source,
   oneOffWorkoutEntry.draft.entries[0].source

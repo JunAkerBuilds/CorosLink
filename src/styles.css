@@ -21340,6 +21340,10 @@ tr.data-intervals-row-missing {
   gap: 8px;
 }
 
+.chat-plan-destination-option.is-primary {
+  grid-column: 1 / -1;
+}
+
 .chat-plan-destination-option {
   position: relative;
   display: grid;
@@ -21653,6 +21657,10 @@ tr.data-intervals-row-missing {
 
   .chat-plan-destination-options {
     grid-template-columns: 1fr;
+  }
+
+  .chat-plan-destination-option.is-primary {
+    grid-column: auto;
   }
 
   .chat-workout-calendar-date {

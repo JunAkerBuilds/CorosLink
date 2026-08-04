@@ -343,6 +343,7 @@ function parsePlanDraft(value: unknown): PlanDraftPreview | null {
             destination:
               value.uploadResult.destination === "workoutLibrary" ||
               value.uploadResult.destination === "calendar" ||
+              value.uploadResult.destination === "localPlan" ||
               value.uploadResult.destination === "nativePlan" ||
               value.uploadResult.destination === "localTemplate" ||
               value.uploadResult.destination === "nativePlanAndCalendar"

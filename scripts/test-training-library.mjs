@@ -14,6 +14,7 @@ const adapter = await import(distUrl("corosTrainingPlanAdapter.js"));
 const databaseModule = await import(distUrl("database.js"));
 const library = await import(distUrl("trainingLibraryService.js"));
 const planWorkoutEditor = await import(distUrl("planWorkoutEditor.js"));
+const chatWorkoutTools = await import(distUrl("chatWorkoutTools.js"));
 
 const makeWorkout = (name, load, seconds = 1_800) => ({
   key: name.toLowerCase().replaceAll(" ", "-"),
@@ -276,7 +277,7 @@ const rawNative = {
   version: 7,
   unknownFutureField: { keep: true },
   entities: [
-    { idInPlan: "entry-1", planProgramId: "pp-1", dayNo: 0, happenDay: "20260803" }
+    { id: "native-entity-1", idInPlan: "entry-1", planProgramId: "pp-1", dayNo: 0, happenDay: "20260803" }
   ],
   programs: [
     {
@@ -302,6 +303,25 @@ assert.equal(native.programs[0].planDistance, 6_000);
 assert.equal(native.programs[0].planSets, 3);
 assert.equal(native.rawPayload.unknownFutureField.keep, true);
 assert.equal(native.sportTypes[0], 1);
+assert.equal(native.entities[0].id, "native-entity-1");
+
+const duplicateNative = adapter.parseNativeCorosPlan({
+  id: "remote-duplicates",
+  name: "Native duplicate identities",
+  totalDay: 7,
+  entities: [
+    { id: "occurrence-a", idInPlan: "shared", planProgramId: "pp-shared", dayNo: 0, happenDay: "20260803" },
+    { id: "occurrence-b", idInPlan: "shared", planProgramId: "pp-shared", dayNo: 1, happenDay: "20260804" },
+    { id: "occurrence-b", idInPlan: "shared", planProgramId: "pp-shared", dayNo: 1, happenDay: "20260804" },
+    { idInPlan: "shared", planProgramId: "pp-shared", dayNo: 2, happenDay: "20260805" },
+    { id: "raw-unique", idInPlan: "unique", planProgramId: "pp-unique", dayNo: 3, happenDay: "20260806" }
+  ],
+  programs: [
+    { id: "program-shared", idInPlan: "shared", planProgramId: "pp-shared", name: "Repeated run", sportType: 1 },
+    { id: "program-unique", idInPlan: "unique", planProgramId: "pp-unique", name: "Unique run", sportType: 1 }
+  ]
+});
+assert.equal(duplicateNative.entities.length, 5, "the lossless adapter retains exact duplicate source rows");
 
 const day = new Date(2099, 11, 1, 12, 0, 0).valueOf();
 const scheduled = [
@@ -345,6 +365,72 @@ const tableNames = new Set(
   db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name)
 );
 for (const table of expectedTables) assert.equal(tableNames.has(table), true, `${table} was migrated`);
+
+let groupedDraftPreview;
+const groupedDraftResponse = JSON.parse(await chatWorkoutTools.handleChatWorkoutTool(
+  "draft_training_plan",
+  {
+    name: "Grouped Coach Plan",
+    workouts: [
+      { ...makeWorkout("Easy Monday", 35), schedule_date: "20990803" },
+      { ...makeWorkout("Steady Wednesday", 45), schedule_date: "20990805" }
+    ]
+  },
+  {
+    allowUpcomingWorkouts: false,
+    onPlanDraft: (preview) => { groupedDraftPreview = preview; }
+  }
+));
+assert.equal(groupedDraftResponse.ok, true);
+const groupedSaveResult = await chatWorkoutTools.uploadPlanDraftById(
+  groupedDraftPreview.draftId,
+  "metric",
+  "localPlan"
+);
+assert.equal(groupedSaveResult.destination, "localPlan");
+assert.equal(groupedSaveResult.groupedPlanCreated, true);
+assert.deepEqual(groupedSaveResult.remoteWrites, []);
+const persistedGroupedPlan = databaseModule.getTrainingPlanDocument(groupedSaveResult.localPlanId);
+assert.equal(persistedGroupedPlan.name, "Grouped Coach Plan");
+assert.equal(persistedGroupedPlan.source, "coach");
+assert.equal(persistedGroupedPlan.entries.length, 2);
+
+const duplicateNativeDocument = library.nativePlanToDocument(duplicateNative);
+assert.equal(duplicateNativeDocument.entries.length, 4, "exact duplicate native entities are collapsed");
+assert.equal(
+  new Set(duplicateNativeDocument.entries.map((entry) => entry.id)).size,
+  duplicateNativeDocument.entries.length,
+  "duplicate idInPlan values receive unique local entry IDs"
+);
+assert.equal(
+  duplicateNativeDocument.entries.some((entry) => entry.id === "coros:remote-duplicates:entity:occurrence-a"),
+  true,
+  "the raw COROS occurrence ID disambiguates reused idInPlan values"
+);
+assert.equal(
+  duplicateNativeDocument.entries.some((entry) => entry.id.startsWith("coros:remote-duplicates:occurrence:shared:")),
+  true,
+  "a stable fingerprint disambiguates occurrences without a raw ID"
+);
+assert.equal(
+  duplicateNativeDocument.entries.some((entry) => entry.id === "coros:remote-duplicates:unique"),
+  true,
+  "non-colliding plans retain their legacy local identity"
+);
+databaseModule.saveTrainingPlanDocument(duplicateNativeDocument, duplicateNative.rawPayload);
+assert.equal(
+  db.prepare("SELECT COUNT(*) AS count FROM training_plan_workout_links WHERE plan_id = ?").get(duplicateNativeDocument.id).count,
+  4
+);
+
+const invalidDuplicateDocument = structuredClone(first);
+invalidDuplicateDocument.id = "plan:duplicate-entry-guard";
+invalidDuplicateDocument.entries[1].id = invalidDuplicateDocument.entries[0].id;
+assert.throws(
+  () => databaseModule.saveTrainingPlanDocument(invalidDuplicateDocument),
+  /contains duplicate entry IDs/i,
+  "persistence rejects inconsistent documents with an actionable error"
+);
 
 databaseModule.saveTrainingPlanDocument(first, rawNative);
 assert.equal(databaseModule.getTrainingPlanDocument(first.id).name, "Build");

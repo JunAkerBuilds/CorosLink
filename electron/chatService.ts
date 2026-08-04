@@ -1376,7 +1376,8 @@ function withLiveToolInstructions(
         "prescribed HR, pace, effort pace, power, cadence, stroke, weight, RPE, or grade in " +
         "the typed intensity field; do not leave it only in workout prose or the name. " +
         "For draft_training_plan entries intended for calendar placement, include schedule_date " +
-        "(YYYYMMDD). The athlete must confirm the destination and any one-off workout date before upload. " +
+        "(YYYYMMDD). A multi-workout draft is saved as a grouped local Training Plan by default; the athlete may instead choose individual COROS workouts or Calendar. " +
+        "The athlete must confirm the destination and any one-off workout date before saving. " +
         "Use list_scheduled_workouts + delete_workout to stage deletions. " +
         "The athlete confirms via the Delete from COROS button in chat.",
       "",
