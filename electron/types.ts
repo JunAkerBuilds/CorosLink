@@ -2654,6 +2654,7 @@ export type TrainingPlanDifficulty =
 export type TrainingPlanDestination =
   | "workoutLibrary"
   | "calendar"
+  | "localPlan"
   | "nativePlan"
   | "localTemplate"
   | "nativePlanAndCalendar";
@@ -2854,6 +2855,8 @@ export interface NativeCorosPlanSummary {
 }
 
 export interface NativeCorosPlanEntity {
+  /** Stable occurrence ID supplied by COROS. Distinct from the reusable idInPlan. */
+  id?: string;
   idInPlan: string;
   planProgramId?: string;
   happenDay?: string;

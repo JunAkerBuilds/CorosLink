@@ -15,3 +15,5 @@ bin/*/
 /output
 /.work
 /.agents/skills
+/.claude
+/video

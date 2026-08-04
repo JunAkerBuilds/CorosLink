@@ -1945,6 +1945,19 @@ export function saveTrainingPlanDocument(
   document: TrainingPlanDocument,
   rawRemote?: Record<string, unknown>
 ): void {
+  const seenEntryIds = new Set<string>();
+  const duplicateEntryIds = new Set<string>();
+  for (const entry of document.entries) {
+    if (seenEntryIds.has(entry.id)) duplicateEntryIds.add(entry.id);
+    seenEntryIds.add(entry.id);
+  }
+  if (duplicateEntryIds.size > 0) {
+    throw new Error(
+      `Training plan "${document.name}" contains duplicate entry IDs: ${
+        [...duplicateEntryIds].join(", ")
+      }`
+    );
+  }
   const database = requireDatabase();
   database.transaction(() => {
     database

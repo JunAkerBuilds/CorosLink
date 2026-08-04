@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode
+} from "react";
 import {
   BookOpen,
   Bookmark,
@@ -27,7 +37,7 @@ import {
   Upload,
   User
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { CorosLinkApi } from "../coroslink-api";
 import { useUnitSystem } from "../units/UnitSystemProvider";
@@ -128,7 +138,17 @@ function useMediaQuery(query: string): boolean {
   return matches;
 }
 
-function AssistantMarkdown({
+const CHAT_MARKDOWN_REMARK_PLUGINS = [remarkGfm];
+const CHAT_MARKDOWN_COMPONENTS: Components = {
+  // Render links in the user's browser, not inside the app window.
+  a: ({ children, ...props }) => (
+    <a {...props} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  )
+};
+
+const AssistantMarkdown = memo(function AssistantMarkdown({
   content,
   streaming = false
 }: {
@@ -138,23 +158,16 @@ function AssistantMarkdown({
   return (
     <div className={`chat-markdown${streaming ? " chat-markdown-streaming" : ""}`}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          // Render links in the user's browser, not inside the app window.
-          a: ({ children, ...props }) => (
-            <a {...props} target="_blank" rel="noreferrer">
-              {children}
-            </a>
-          )
-        }}
+        remarkPlugins={CHAT_MARKDOWN_REMARK_PLUGINS}
+        components={CHAT_MARKDOWN_COMPONENTS}
       >
         {content}
       </ReactMarkdown>
     </div>
   );
-}
+});
 
-function ThinkingDisclosure({
+const ThinkingDisclosure = memo(function ThinkingDisclosure({
   content,
   live = false
 }: {
@@ -172,7 +185,7 @@ function ThinkingDisclosure({
       </div>
     </details>
   );
-}
+});
 
 function CoachInputCard({
   prompt,
@@ -901,8 +914,8 @@ function PlanPreviewCard({
 }) {
   const { unitSystem } = useUnitSystem();
   const [destination, setDestination] = useState<
-    Extract<TrainingPlanDestination, "workoutLibrary" | "calendar">
-  >("workoutLibrary");
+    Extract<TrainingPlanDestination, "localPlan" | "workoutLibrary" | "calendar">
+  >("localPlan");
   const [selectedWeekId, setSelectedWeekId] = useState<string | null>(null);
   const weekTabsRef = useRef<HTMLDivElement>(null);
   const uploadedResult =
@@ -940,6 +953,7 @@ function PlanPreviewCard({
   const destinationLabel: Record<TrainingPlanDestination, string> = {
     workoutLibrary: "COROS Workout Library",
     calendar: "COROS Calendar",
+    localPlan: "CorosLink Training Library",
     nativePlan: "COROS Plan Library",
     localTemplate: "Local CorosLink template",
     nativePlanAndCalendar: "COROS plan + Calendar"
@@ -1204,8 +1218,34 @@ function PlanPreviewCard({
       ) : null}
       {!isUploaded ? (
         <fieldset className="chat-plan-confirmation" disabled={uploading}>
-          <legend>Where should this plan go?</legend>
+          <legend>How should this plan be saved?</legend>
           <div className="chat-plan-destination-options">
+            <label
+              className={`chat-plan-destination-option is-primary${
+                destination === "localPlan" ? " is-selected" : ""
+              }`}
+            >
+              <input
+                className="sr-only"
+                type="radio"
+                name={`plan-destination-${draft.draftId}`}
+                value="localPlan"
+                checked={destination === "localPlan"}
+                onChange={() => setDestination("localPlan")}
+              />
+              <span className="chat-plan-destination-icon">
+                <BookOpen size={16} aria-hidden="true" />
+              </span>
+              <span className="chat-plan-destination-copy">
+                <strong>Training Plan</strong>
+                <small>Keep these workouts together as one editable plan in CorosLink.</small>
+              </span>
+              <CircleCheck
+                className="chat-plan-destination-check"
+                size={16}
+                aria-hidden="true"
+              />
+            </label>
             <label
               className={`chat-plan-destination-option${
                 destination === "workoutLibrary" ? " is-selected" : ""
@@ -1220,11 +1260,11 @@ function PlanPreviewCard({
                 onChange={() => setDestination("workoutLibrary")}
               />
               <span className="chat-plan-destination-icon">
-                <BookOpen size={16} aria-hidden="true" />
+                <Bookmark size={16} aria-hidden="true" />
               </span>
               <span className="chat-plan-destination-copy">
-                <strong>Workout Library</strong>
-                <small>Save reusable workouts without adding dates.</small>
+                <strong>Individual Workouts</strong>
+                <small>Save each workout separately to the COROS Workout Library.</small>
               </span>
               <CircleCheck
                 className="chat-plan-destination-check"
@@ -1280,20 +1320,23 @@ function PlanPreviewCard({
               <CircleCheck size={13} aria-hidden="true" />
             )}
             <span>
-              {destination === "calendar"
-                ? `${scheduledWorkoutCount} ${
-                    scheduledWorkoutCount === 1 ? "workout" : "workouts"
-                  } will be added to your COROS Calendar.`
-                : `${draft.entries.length} ${
+              {destination === "localPlan"
+                ? `This will be saved as one grouped plan with ${draft.entries.length} ${
                     draft.entries.length === 1 ? "workout" : "workouts"
-                  } will be saved to your COROS Workout Library.`}
-              {destination === "workoutLibrary"
-                ? " Dates will not be added to Calendar."
-                : draft.conflicts.length > 0
-                  ? ` Review ${draft.conflicts.length} ${
-                      draft.conflicts.length === 1 ? "conflict" : "conflicts"
-                    } before adding.`
-                  : " No scheduling conflicts."}
+                  } in your CorosLink Training Library.`
+                : destination === "calendar"
+                  ? `${scheduledWorkoutCount} ${
+                      scheduledWorkoutCount === 1 ? "workout" : "workouts"
+                    } will be added to your COROS Calendar.${
+                      draft.conflicts.length > 0
+                        ? ` Review ${draft.conflicts.length} ${
+                            draft.conflicts.length === 1 ? "conflict" : "conflicts"
+                          } before adding.`
+                        : " No scheduling conflicts."
+                    }`
+                  : `${draft.entries.length} ${
+                      draft.entries.length === 1 ? "workout" : "workouts"
+                    } will be saved individually to your COROS Workout Library. Dates will not be added to Calendar.`}
             </span>
           </p>
         </fieldset>
@@ -1302,15 +1345,13 @@ function PlanPreviewCard({
         <p className="chat-plan-success">
           <CircleCheck size={15} aria-hidden="true" />
           <span>
-            Saved to {destinationLabel[uploadedResult?.destination ?? draft.uploadResult?.destination ?? destination]}.{" "}
-            {uploadedResult?.workoutsScheduled ??
-              draft.uploadResult?.workoutsScheduled ??
-              0}{" "}
-            scheduled,{" "}
-            {uploadedResult?.workoutsCreated ??
-              draft.uploadResult?.workoutsCreated ??
-              0}{" "}
-            saved to library.
+            {(uploadedResult?.destination ?? draft.uploadResult?.destination ?? destination) === "localPlan"
+              ? `Saved as a grouped plan in ${destinationLabel.localPlan}.`
+              : `Saved to ${destinationLabel[uploadedResult?.destination ?? draft.uploadResult?.destination ?? destination]}. ${
+                  uploadedResult?.workoutsScheduled ?? draft.uploadResult?.workoutsScheduled ?? 0
+                } scheduled, ${
+                  uploadedResult?.workoutsCreated ?? draft.uploadResult?.workoutsCreated ?? 0
+                } saved to library.`}
           </span>
         </p>
       ) : (
@@ -1335,10 +1376,18 @@ function PlanPreviewCard({
           >
             {uploading ? (
               <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
+            ) : destination === "localPlan" ? (
+              <BookOpen size={14} aria-hidden="true" />
+            ) : destination === "calendar" ? (
+              <CalendarDays size={14} aria-hidden="true" />
             ) : (
-              <Upload size={14} aria-hidden="true" />
+              <Bookmark size={14} aria-hidden="true" />
             )}
-            {destination === "calendar" ? "Add to Calendar" : "Save to Library"}
+            {destination === "localPlan"
+              ? "Save Plan"
+              : destination === "calendar"
+                ? "Add to Calendar"
+                : "Save Workouts"}
           </button>
         </div>
       )}
@@ -1498,6 +1547,173 @@ function formatLatestActivityExportMessage(
   return `Saved the latest activity ${formatLabel} file${activityName} to:\n\n\`${result.filePath}\``;
 }
 
+interface ChatComposerHandle {
+  focus: () => void;
+  setDraft: (value: string) => void;
+}
+
+interface ChatComposerProps {
+  providerControls: ReactNode;
+  initialDraft: string;
+  apiAvailable: boolean;
+  streaming: boolean;
+  exportingLatestActivity: boolean;
+  waitingForCoachAnswer: boolean;
+  isLocalProvider: boolean;
+  localModelConfigured: boolean;
+  onDraftChange: (value: string) => void;
+  onNewChat: () => void;
+  onSend: (message: string) => Promise<boolean>;
+  onStop: () => void;
+}
+
+const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
+  function ChatComposer(
+    {
+      providerControls,
+      initialDraft,
+      apiAvailable,
+      streaming,
+      exportingLatestActivity,
+      waitingForCoachAnswer,
+      isLocalProvider,
+      localModelConfigured,
+      onDraftChange,
+      onNewChat,
+      onSend,
+      onStop
+    },
+    ref
+  ) {
+    const [draft, setDraft] = useState(initialDraft);
+    const draftRef = useRef(initialDraft);
+    const submittingRef = useRef(false);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const trimmedDraft = draft.trim();
+    const latestActivityFileRequest = isLatestActivityFileRequest(trimmedDraft);
+    const localProviderBlocked =
+      isLocalProvider &&
+      !localModelConfigured &&
+      !latestActivityFileRequest;
+
+    const updateDraft = useCallback(
+      (value: string) => {
+        draftRef.current = value;
+        setDraft(value);
+        onDraftChange(value);
+      },
+      [onDraftChange]
+    );
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        focus: () => textareaRef.current?.focus(),
+        setDraft: updateDraft
+      }),
+      [updateDraft]
+    );
+
+    const submitDraft = async () => {
+      if (
+        !apiAvailable ||
+        !trimmedDraft ||
+        exportingLatestActivity ||
+        localProviderBlocked ||
+        submittingRef.current
+      ) {
+        return;
+      }
+
+      const submittedDraft = draft;
+      submittingRef.current = true;
+      updateDraft("");
+      try {
+        const accepted = await onSend(trimmedDraft);
+        if (!accepted && !draftRef.current) {
+          updateDraft(submittedDraft);
+        }
+      } finally {
+        submittingRef.current = false;
+      }
+    };
+
+    return (
+      <div className="chat-composer">
+        <div className="chat-composer-toolbar">
+          {providerControls}
+          <button
+            type="button"
+            className="chat-new-chat chat-composer-new-chat"
+            onClick={onNewChat}
+            disabled={!apiAvailable || streaming || exportingLatestActivity}
+            aria-label="Start a new chat"
+            title="Start a new chat"
+          >
+            <Plus size={14} aria-hidden="true" />
+            <span>New chat</span>
+          </button>
+        </div>
+        <div className="chat-composer-inner">
+          <textarea
+            ref={textareaRef}
+            className="chat-input"
+            value={draft}
+            onChange={(event) => updateDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing
+              ) {
+                event.preventDefault();
+                void submitDraft();
+              }
+            }}
+            placeholder={
+              waitingForCoachAnswer
+                ? "Type another answer…"
+                : "Ask your coach…"
+            }
+            rows={1}
+            disabled={exportingLatestActivity}
+          />
+          {streaming ? (
+            <button
+              type="button"
+              className="chat-send chat-stop"
+              onClick={onStop}
+              title="Stop"
+            >
+              <Square size={15} aria-hidden="true" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="chat-send"
+              onClick={() => void submitDraft()}
+              disabled={
+                !apiAvailable ||
+                !trimmedDraft ||
+                exportingLatestActivity ||
+                localProviderBlocked
+              }
+              title={
+                localProviderBlocked ? "Enter a local model first" : "Send"
+              }
+            >
+              <Send size={15} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+        <p className="chat-disclaimer">
+          Coach can make mistakes. Verify important training decisions.
+        </p>
+      </div>
+    );
+  }
+);
+
 export function ChatView({
   api,
   onError,
@@ -1529,7 +1745,6 @@ export function ChatView({
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [timeline, setTimeline] = useState<ChatEntry[]>([]);
-  const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [thinkingText, setThinkingText] = useState("");
@@ -1580,18 +1795,28 @@ export function ChatView({
   const chatHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const composerDraftRef = useRef("");
+  const composerRef = useRef<ChatComposerHandle>(null);
+  const handleComposerDraftChange = useCallback((value: string) => {
+    composerDraftRef.current = value;
+  }, []);
 
   useEffect(() => {
-    if (!pendingPrompt) {
+    if (!pendingPrompt || !composerRef.current) {
       return;
     }
-    setInput(pendingPrompt);
+    composerRef.current?.setDraft(pendingPrompt);
     onPendingPromptConsumed?.();
     // Focus after the coach panel becomes visible.
-    requestAnimationFrame(() => inputRef.current?.focus());
+    requestAnimationFrame(() => composerRef.current?.focus());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingPrompt]);
+  }, [
+    pendingPrompt,
+    checkingAuth,
+    authStatus?.signedIn,
+    claudeStatus?.state,
+    chatSettings.provider
+  ]);
 
   const resetEphemeralChatState = () => {
     setUploadedPlans({});
@@ -2406,15 +2631,15 @@ export function ChatView({
   const sendMessage = async (
     trimmed: string,
     answeredPrompt?: { promptId: string; choiceId: string }
-  ) => {
-    if (!api || !trimmed || streaming || exportingLatestActivity) return;
+  ): Promise<boolean> => {
+    if (!api || !trimmed || streaming || exportingLatestActivity) return false;
     if (isLatestActivityFileRequest(trimmed)) {
       await handleLatestActivityFileRequest(trimmed);
-      return;
+      return true;
     }
     if (chatSettings.provider === "local" && !chatSettings.local.model.trim()) {
       onError("Enter a local model before starting the coach.");
-      return;
+      return false;
     }
     if (chatSettings.provider === "local") {
       try {
@@ -2430,7 +2655,7 @@ export function ChatView({
         setLocalApiKey("");
       } catch (caught) {
         onError(caught instanceof Error ? caught.message : "Local settings failed.");
-        return;
+        return false;
       }
     }
     let answeredPromptIndex = answeredPrompt
@@ -2489,7 +2714,6 @@ export function ChatView({
     if (!originalPrompt) {
       persistHistory(activeSessionIdRef.current, nextEntries, true);
     }
-    setInput("");
     setStreaming(true);
     setStreamingText("");
     onError(null);
@@ -2513,10 +2737,7 @@ export function ChatView({
       }
       onError(caught instanceof Error ? caught.message : "Chat request failed.");
     }
-  };
-
-  const handleSend = async () => {
-    await sendMessage(input.trim());
+    return true;
   };
 
   const handleCoachPromptChoice = async (
@@ -2530,7 +2751,7 @@ export function ChatView({
   };
 
   const handleCustomCoachAnswer = () => {
-    inputRef.current?.focus();
+    composerRef.current?.focus();
   };
 
   const handleStop = () => {
@@ -2706,7 +2927,6 @@ export function ChatView({
     ];
     setTimeline(nextEntries);
     persistHistory(activeSessionIdRef.current, nextEntries, true);
-    setInput("");
     setExportingLatestActivity(true);
     onError(null);
 
@@ -2744,13 +2964,6 @@ export function ChatView({
       });
     } finally {
       setExportingLatestActivity(false);
-    }
-  };
-
-  const handleInputKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      void handleSend();
     }
   };
 
@@ -3152,7 +3365,10 @@ export function ChatView({
                     key={suggestion}
                     type="button"
                     className="chat-suggestion"
-                    onClick={() => setInput(suggestion)}
+                    onClick={() => {
+                      composerRef.current?.setDraft(suggestion);
+                      composerRef.current?.focus();
+                    }}
                   >
                     {suggestion}
                   </button>
@@ -3391,73 +3607,21 @@ export function ChatView({
         </div>
       </div>
 
-          <div className="chat-composer">
-            <div className="chat-composer-toolbar">
-              {providerControls}
-              <button
-                type="button"
-                className="chat-new-chat chat-composer-new-chat"
-                onClick={() => void handleNewChat()}
-                disabled={!api || isBusy}
-                aria-label="Start a new chat"
-                title="Start a new chat"
-              >
-                <Plus size={14} aria-hidden="true" />
-                <span>New chat</span>
-              </button>
-            </div>
-            <div className="chat-composer-inner">
-              <textarea
-                ref={inputRef}
-                className="chat-input"
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={handleInputKeyDown}
-                placeholder={
-                  waitingForCoachAnswer
-                    ? "Type another answer…"
-                    : "Ask your coach…"
-                }
-                rows={1}
-                disabled={exportingLatestActivity}
-              />
-              {streaming ? (
-                <button
-                  type="button"
-                  className="chat-send chat-stop"
-                  onClick={handleStop}
-                  title="Stop"
-                >
-                  <Square size={15} aria-hidden="true" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="chat-send"
-                  onClick={() => void handleSend()}
-                  disabled={
-                    !input.trim() ||
-                    exportingLatestActivity ||
-                    (isLocalProvider &&
-                      !localModelConfigured &&
-                      !isLatestActivityFileRequest(input.trim()))
-                  }
-                  title={
-                    isLocalProvider &&
-                    !localModelConfigured &&
-                    !isLatestActivityFileRequest(input.trim())
-                      ? "Enter a local model first"
-                      : "Send"
-                  }
-                >
-                  <Send size={15} aria-hidden="true" />
-                </button>
-              )}
-            </div>
-            <p className="chat-disclaimer">
-              Coach can make mistakes. Verify important training decisions.
-            </p>
-          </div>
+          <ChatComposer
+            ref={composerRef}
+            providerControls={providerControls}
+            initialDraft={composerDraftRef.current}
+            apiAvailable={Boolean(api)}
+            streaming={streaming}
+            exportingLatestActivity={exportingLatestActivity}
+            waitingForCoachAnswer={waitingForCoachAnswer}
+            isLocalProvider={isLocalProvider}
+            localModelConfigured={localModelConfigured}
+            onDraftChange={handleComposerDraftChange}
+            onNewChat={() => void handleNewChat()}
+            onSend={sendMessage}
+            onStop={handleStop}
+          />
         </div>
         {showPlanPanel && selectedPlanDraft ? (
           <aside

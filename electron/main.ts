@@ -4,7 +4,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { listLocalFontFamilies } from "./fontService";
-import { deleteDownload, getDownloadById, initializeDatabase, listDownloads, markDownloadTransferred, clearDownloadTransferredByFileName } from "./database";
+import {
+  clearDownloadTransferredByFileName,
+  deleteDownload,
+  getDownloadById,
+  hasAvailableDownloadForUrl,
+  initializeDatabase,
+  listDownloads,
+  markDownloadTransferred
+} from "./database";
 import {
   downloadAudio,
   downloadCombinedTrack,
@@ -14,6 +22,7 @@ import {
   cancelJob,
   clearCompletedJobs,
   clearJob,
+  clearTerminalJobsForUrl,
   enqueueDownloads,
   listJobs,
   setJobListener
@@ -1190,7 +1199,13 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "downloads:delete",
     (_event, id: string, removeFile: boolean) => {
+      const download = getDownloadById(id);
       deleteDownload(id, removeFile);
+
+      if (download && !hasAvailableDownloadForUrl(download.url)) {
+        clearTerminalJobsForUrl(download.url);
+      }
+
       return listDownloads();
     }
   );

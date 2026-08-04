@@ -217,6 +217,34 @@ export function clearCompletedJobs(): DownloadJob[] {
   return snapshot();
 }
 
+/**
+ * Removes finished queue history for a source that is no longer in the local
+ * library. The library is the durable downloaded-state record; keeping an old
+ * completed job after its file is deleted would make source views continue to
+ * render the item as downloaded.
+ */
+export function clearTerminalJobsForUrl(url: string): DownloadJob[] {
+  let changed = false;
+
+  for (const [id, job] of jobs) {
+    if (
+      job.url === url &&
+      (job.status === "completed" ||
+        job.status === "failed" ||
+        job.status === "cancelled")
+    ) {
+      jobs.delete(id);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    emit();
+  }
+
+  return snapshot();
+}
+
 export function cancelJob(id: string): DownloadJob[] {
   const job = jobs.get(id);
   if (!job) {

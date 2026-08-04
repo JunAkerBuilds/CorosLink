@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Multi-workout Coach drafts now save as grouped, editable CorosLink training plans by default; saving their workouts individually to COROS or adding them directly to Calendar remains explicit.
+
 ## [0.1.27] - 2026-08-01
 
 ### Added

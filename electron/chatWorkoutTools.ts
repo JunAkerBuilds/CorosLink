@@ -39,7 +39,10 @@ import {
   buildDraftWorkoutInputSchema
 } from "./workoutCapabilities";
 import { formatDistanceValue } from "./unitSystem.js";
-import { createTrainingPlan } from "./trainingPlanDomain";
+import {
+  createTrainingPlan,
+  trainingPlanFromCoachDraftPreview
+} from "./trainingPlanDomain";
 import { saveLocalTrainingPlan } from "./trainingLibraryService";
 import {
   EXERCISE_SEARCH_EQUIPMENT,
@@ -751,7 +754,7 @@ async function handleDraftTrainingPlan(
     },
     message: artifactType === "workout"
       ? "Workout draft saved. Tell the athlete to review it, choose Workout Library or Calendar, and confirm. The workout is not a training plan."
-      : "Draft saved. Tell the athlete to review the plan preview and click Upload to COROS when ready. Do not call upload_training_plan until they confirm."
+      : "Draft saved. Tell the athlete to review the plan preview and save it as a grouped Training Plan, or explicitly choose individual COROS workouts or Calendar. Do not call upload_training_plan; the athlete confirms from the card."
   });
 }
 
@@ -1095,7 +1098,21 @@ export async function uploadPlanDraftById(
   }
 
   let result: UploadPlanResult;
-  if (destination === "localTemplate") {
+  if (destination === "localPlan") {
+    const saved = saveLocalTrainingPlan(
+      trainingPlanFromCoachDraftPreview(stored.preview)
+    );
+    result = {
+      planName: saved.name,
+      workoutsCreated: 0,
+      workoutsScheduled: 0,
+      entries: [],
+      destination,
+      localPlanId: saved.id,
+      groupedPlanCreated: true,
+      remoteWrites: []
+    };
+  } else if (destination === "localTemplate") {
     const saved = saveDraftAsLocalTemplate(draftId, stored.plan);
     result = {
       planName: saved.name,

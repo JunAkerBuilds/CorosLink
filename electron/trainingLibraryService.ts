@@ -115,7 +115,75 @@ function sportMixFromNative(plan: NativeCorosPlanDetail): WorkoutSport[] {
     .filter((sport): sport is WorkoutSport => Boolean(sport));
 }
 
-function nativePlanToDocument(plan: NativeCorosPlanDetail): TrainingPlanDocument {
+type NativePlanEntity = NativeCorosPlanDetail["entities"][number];
+
+function nativePlanEntityFingerprint(entity: NativePlanEntity): string {
+  return JSON.stringify([
+    entity.id ?? null,
+    entity.idInPlan,
+    entity.planProgramId ?? null,
+    entity.happenDay ?? null,
+    entity.dayNo ?? null,
+    entity.sortNo ?? null,
+    entity.sortNoInPlan ?? null,
+    entity.sortNoInSchedule ?? null,
+    entity.status ?? null
+  ]);
+}
+
+function nativePlanEntityHash(entity: NativePlanEntity): string {
+  return crypto
+    .createHash("sha256")
+    .update(nativePlanEntityFingerprint(entity))
+    .digest("hex")
+    .slice(0, 16);
+}
+
+function nativePlanEntitiesWithIdentity(plan: NativeCorosPlanDetail): Array<{
+  entity: NativePlanEntity;
+  identityKey: string;
+}> {
+  const seenFingerprints = new Set<string>();
+  const entities = plan.entities.filter((entity) => {
+    if (entity.status === 3) return false;
+    const fingerprint = nativePlanEntityFingerprint(entity);
+    if (seenFingerprints.has(fingerprint)) return false;
+    seenFingerprints.add(fingerprint);
+    return true;
+  });
+  const idInPlanCounts = new Map<string, number>();
+  for (const entity of entities) {
+    idInPlanCounts.set(
+      entity.idInPlan,
+      (idInPlanCounts.get(entity.idInPlan) ?? 0) + 1
+    );
+  }
+  const candidates = entities.map((entity) => ({
+    entity,
+    identityKey:
+      idInPlanCounts.get(entity.idInPlan) === 1
+        ? entity.idInPlan
+        : entity.id
+          ? `entity:${entity.id}`
+          : `occurrence:${entity.idInPlan}:${nativePlanEntityHash(entity)}`
+  }));
+  const candidateCounts = new Map<string, number>();
+  for (const candidate of candidates) {
+    candidateCounts.set(
+      candidate.identityKey,
+      (candidateCounts.get(candidate.identityKey) ?? 0) + 1
+    );
+  }
+  return candidates.map(({ entity, identityKey }) => ({
+    entity,
+    identityKey:
+      candidateCounts.get(identityKey) === 1
+        ? identityKey
+        : `${identityKey}:${nativePlanEntityHash(entity)}`
+  }));
+}
+
+export function nativePlanToDocument(plan: NativeCorosPlanDetail): TrainingPlanDocument {
   const existing = getTrainingPlanDocument(`coros:${plan.remoteId}`);
   const now = new Date().toISOString();
   const programByPlanId = new Map<string, NativeCorosPlanDetail["programs"][number]>();
@@ -129,9 +197,8 @@ function nativePlanToDocument(plan: NativeCorosPlanDetail): TrainingPlanDocument
     .filter((value): value is string => Boolean(value))
     .sort()[0];
   const gridStart = mondayForPlan(firstOccurrence ?? plan.startDay);
-  const entries = plan.entities
-    .filter((entity) => entity.status !== 3)
-    .map((entity, index) => {
+  const entries = nativePlanEntitiesWithIdentity(plan)
+    .map(({ entity, identityKey }, index) => {
       const program =
         programByPlanId.get(entity.idInPlan) ??
         (entity.planProgramId
@@ -145,15 +212,18 @@ function nativePlanToDocument(plan: NativeCorosPlanDetail): TrainingPlanDocument
           )
         : entity.dayNo ?? index;
       const sport = workoutSportFromType(program?.sportType);
+      const usesLegacyIdentity = identityKey === entity.idInPlan;
       return {
-        id: `coros:${plan.remoteId}:${entity.idInPlan}`,
+        id: `coros:${plan.remoteId}:${identityKey}`,
         kind: "workout" as const,
         weekIndex: Math.max(0, Math.floor(dayNo / 7)),
         dayIndex: Math.max(0, dayNo % 7),
         sortOrder: entity.sortNoInSchedule ?? entity.sortNo ?? index,
         title: program?.name ?? "Workout",
         workout: {
-          key: `coros:${entity.idInPlan}`,
+          key: usesLegacyIdentity
+            ? `coros:${entity.idInPlan}`
+            : `coros:${plan.remoteId}:${identityKey}`,
           name: program?.name ?? "Workout",
           description: program?.overview,
           sport,
@@ -285,7 +355,15 @@ export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnaps
   if (nativeResult.status === "fulfilled") {
     nativePlans = nativeResult.value;
     for (const native of nativeResult.value) {
-      saveTrainingPlanDocument(nativePlanToDocument(native), native.rawPayload);
+      try {
+        saveTrainingPlanDocument(nativePlanToDocument(native), native.rawPayload);
+      } catch (error) {
+        partialFailures.push(
+          `Training plan "${native.name}" (${native.remoteId}): ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
     }
   } else {
     partialFailures.push(`Training plans: ${String(nativeResult.reason?.message ?? nativeResult.reason)}`);
@@ -307,7 +385,10 @@ export async function getTrainingLibrarySnapshot(): Promise<TrainingLibrarySnaps
     matches: listTrainingActivityMatches(),
     cachedAt,
     stale: partialFailures.length > 0,
-    offline: partialFailures.length === 3,
+    offline:
+      workoutsResult.status === "rejected" &&
+      nativeResult.status === "rejected" &&
+      scheduleResult.status === "rejected",
     partialFailures,
     nativePlanWrites: getNativePlanWriteCapabilities()
   };
