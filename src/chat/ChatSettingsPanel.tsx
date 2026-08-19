@@ -217,6 +217,11 @@ export function ChatSettingsPanel({
             value={customInstructionsDraft}
             onChange={(event) => setCustomInstructionsDraft(event.target.value)}
             onBlur={commitCustomInstructions}
+            onKeyDown={(event) => {
+              // Escape closes the settings modal via a document listener
+              // before blur can fire; save the draft first.
+              if (event.key === "Escape") commitCustomInstructions();
+            }}
           />
         </label>
         <p className="chat-settings-copy">

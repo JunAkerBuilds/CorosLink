@@ -41,6 +41,7 @@ const {
   `${distUrl("chatResponsesProtocol.js")}?cacheBust=${Date.now()}`
 );
 const {
+  buildBaseCoachInstructions,
   buildCoachInstructions,
   buildCoachSportCapabilityGuide,
   formatCoachDashboard,
@@ -62,6 +63,22 @@ assert.match(coachInstructions, /call search_coros_exercises first/);
 assert.match(coachInstructions, /naming mismatch alone is never a reason/);
 assert.match(coachInstructions, /call the same draft tool again in the same response/);
 assert.match(coachInstructions, /request_coach_input/);
+
+const { MAX_CUSTOM_COACH_INSTRUCTIONS } = await import(
+  `${distUrl("types.js")}?cacheBust=${Date.now()}`
+);
+const baseCoachInstructions = buildBaseCoachInstructions();
+assert.equal(buildCoachInstructions(), baseCoachInstructions);
+assert.equal(buildCoachInstructions("   \n\t"), baseCoachInstructions);
+const customized = buildCoachInstructions("  Only schedule runs on Tue/Thu/Sat.  ");
+assert.ok(customized.startsWith(baseCoachInstructions));
+assert.match(customized, /## Athlete's custom instructions/);
+assert.match(customized, /rules above always win/);
+assert.ok(customized.endsWith("Only schedule runs on Tue/Thu/Sat."));
+assert.equal(
+  buildCoachInstructions("x".repeat(MAX_CUSTOM_COACH_INSTRUCTIONS + 500)),
+  buildCoachInstructions("x".repeat(MAX_CUSTOM_COACH_INSTRUCTIONS))
+);
 
 const interactionTool = getChatInteractionTools()[0];
 assert.equal(interactionTool.name, "request_coach_input");
@@ -704,7 +721,8 @@ const saved = saveChatSettingsToStore(
     hasApiKey: false,
     apiKey: "secret",
     toolsEnabled: false
-  }
+  },
+  customInstructions: "  Keep answers short.  "
   }
 );
 assert.equal(saved.provider, "claude-code");
@@ -729,6 +747,7 @@ assert.equal(saved.local.apiKey, undefined);
 assert.equal(saved.local.hasApiKey, true);
 assert.equal(storedApiKey, "secret");
 assert.equal(storedOpenRouterApiKey, "sk-or-v1-secret");
+assert.equal(saved.customInstructions, "Keep answers short.");
 
 const loaded = readChatSettingsFromStore(
   fakeStore,
@@ -751,5 +770,27 @@ assert.equal(cleared.local.hasApiKey, false);
 assert.equal(storedApiKey, "");
 assert.equal(cleared.openRouter.hasApiKey, false);
 assert.equal(storedOpenRouterApiKey, "");
+
+const cappedCustom = saveChatSettingsToStore(
+  fakeStore,
+  fakeApiKeyStore,
+  fakeOpenRouterApiKeyStore,
+  {
+    ...cleared,
+    customInstructions: "y".repeat(MAX_CUSTOM_COACH_INSTRUCTIONS + 50)
+  }
+);
+assert.equal(cappedCustom.customInstructions.length, MAX_CUSTOM_COACH_INSTRUCTIONS);
+const withoutCustom = saveChatSettingsToStore(
+  fakeStore,
+  fakeApiKeyStore,
+  fakeOpenRouterApiKeyStore,
+  {
+    ...cappedCustom,
+    customInstructions: "   "
+  }
+);
+assert.equal(withoutCustom.customInstructions, undefined);
+assert.equal(settingsValues.has("chat.customInstructions"), false);
 
 console.log("chat service tests passed");
