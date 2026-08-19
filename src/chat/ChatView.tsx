@@ -126,7 +126,8 @@ const DEFAULT_CHAT_SETTINGS: ChatSettings = {
     toolsEnabled: true
   },
   sidebarOpen: true,
-  visualizationsEnabled: false
+  visualizationsEnabled: false,
+  customInstructions: ""
 };
 
 function useMediaQuery(query: string): boolean {

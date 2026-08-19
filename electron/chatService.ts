@@ -141,8 +141,6 @@ const MAX_TOOL_ROUNDS = 10;
 const RESPONSES_ORIGINATOR = "codex_cli_rs";
 const RESPONSES_USER_AGENT = "codex_cli_rs";
 
-const COACH_INSTRUCTIONS = buildCoachInstructions();
-
 // Settings keys (encrypted blob + a plaintext timestamp).
 const SETTINGS = {
   token: "chat.oauthToken",
@@ -665,7 +663,8 @@ export async function streamChat(
       const chatTools = getClaudeCodeTools(settings.claudeCode.permissions);
       const { text: instructions, hasData } = await buildTrainingContext(
         settings.claudeCode.permissions,
-        unitSystem
+        unitSystem,
+        settings.customInstructions
       );
       const effectiveInstructions = withLiveToolInstructions(
         instructions,
@@ -808,7 +807,8 @@ export async function streamChat(
     if (settings.provider === "local") {
       const { text: instructions, hasData } = await buildTrainingContext(
         undefined,
-        unitSystem
+        unitSystem,
+        settings.customInstructions
       );
       const runtimeConfig = getLocalRuntimeConfig(settings.local);
 
@@ -883,7 +883,8 @@ export async function streamChat(
     const token = await getValidToken();
     const { text: instructions, hasData } = await buildTrainingContext(
       undefined,
-      unitSystem
+      unitSystem,
+      settings.customInstructions
     );
 
     // Reconnect a previously-authorized COROS MCP session, then expose its tools
@@ -1558,8 +1559,11 @@ function extractSseData(frame: string): string | null {
 
 async function buildTrainingContext(
   permissions?: ClaudeCodePermissions,
-  unitSystem: UnitSystem = "metric"
+  unitSystem: UnitSystem = "metric",
+  customInstructions?: string
 ): Promise<{ text: string; hasData: boolean }> {
+  // Rebuilt per request so edits to the athlete's custom instructions apply live.
+  const coachInstructions = buildCoachInstructions(customInstructions);
   const unitInstruction =
     `The athlete selected ${unitSystem === "imperial" ? "Imperial" : "Metric"} units. ` +
     `Use ${unitSystem === "imperial" ? "miles, feet, min/mi, mph, pounds, and yards for swims" : "kilometres, metres, min/km, km/h, and kilograms"} in every user-facing answer and tool summary. ` +
@@ -1574,7 +1578,7 @@ async function buildTrainingContext(
     return {
       hasData: false,
       text:
-        `${COACH_INSTRUCTIONS}\n\n${unitInstruction}\n\n` +
+        `${coachInstructions}\n\n${unitInstruction}\n\n` +
         "NOTE: The athlete is not signed in to COROS Training Hub, so no training " +
         "data is available. Encourage them to connect it for personalised advice."
     };
@@ -1595,7 +1599,7 @@ async function buildTrainingContext(
       : Promise.resolve([] as TrainingHubUpcomingWorkout[])
   ]);
 
-  const sections: string[] = [COACH_INSTRUCTIONS, "", unitInstruction, ""];
+  const sections: string[] = [coachInstructions, "", unitInstruction, ""];
   let hasData = false;
 
   if (activities.status === "fulfilled" && activities.value.length > 0) {

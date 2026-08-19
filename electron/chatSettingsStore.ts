@@ -1,4 +1,5 @@
 import type { ChatProvider, ChatSettings } from "./types";
+import { MAX_CUSTOM_COACH_INSTRUCTIONS } from "./types";
 import {
   DEFAULT_LOCAL_CHAT_BASE_URL,
   normalizeLocalChatBaseUrl
@@ -24,7 +25,8 @@ export const CHAT_SETTINGS_KEYS = {
   localApiKey: "chat.local.apiKey",
   localToolsEnabled: "chat.local.toolsEnabled",
   sidebarOpen: "chat.sidebar.open",
-  visualizationsEnabled: "chat.visualizations.enabled"
+  visualizationsEnabled: "chat.visualizations.enabled",
+  customInstructions: "chat.customInstructions"
 } as const;
 
 export interface ChatSettingsStore {
@@ -86,7 +88,9 @@ export function readChatSettingsFromStore(
     },
     sidebarOpen: store.get(CHAT_SETTINGS_KEYS.sidebarOpen) !== "false",
     visualizationsEnabled:
-      store.get(CHAT_SETTINGS_KEYS.visualizationsEnabled) === "true"
+      store.get(CHAT_SETTINGS_KEYS.visualizationsEnabled) === "true",
+    customInstructions:
+      store.get(CHAT_SETTINGS_KEYS.customInstructions) || undefined
   };
 }
 
@@ -173,6 +177,17 @@ export function saveChatSettingsToStore(
       CHAT_SETTINGS_KEYS.visualizationsEnabled,
       settings.visualizationsEnabled ? "true" : "false"
     );
+  }
+
+  if (typeof settings.customInstructions === "string") {
+    const customInstructions = settings.customInstructions
+      .trim()
+      .slice(0, MAX_CUSTOM_COACH_INSTRUCTIONS);
+    if (customInstructions) {
+      store.set(CHAT_SETTINGS_KEYS.customInstructions, customInstructions);
+    } else {
+      store.delete([CHAT_SETTINGS_KEYS.customInstructions]);
+    }
   }
 
   if (settings.local.clearApiKey) {

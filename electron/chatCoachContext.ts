@@ -12,9 +12,25 @@ import type {
   UnitSystem,
   WorkoutSport
 } from "./types";
+import { MAX_CUSTOM_COACH_INSTRUCTIONS } from "./types";
 import { formatDistanceValue } from "./unitSystem.js";
 
-export function buildCoachInstructions(): string {
+export function buildCoachInstructions(customInstructions?: string): string {
+  const base = buildBaseCoachInstructions();
+  const custom = customInstructions?.trim();
+  if (!custom) return base;
+  return (
+    `${base}\n\n` +
+    "## Athlete's custom instructions\n" +
+    "The athlete configured the preferences below. Follow them whenever they do not " +
+    "conflict with the rules above; the rules above always win on tool usage, " +
+    "confirmations, and data accuracy.\n" +
+    custom.slice(0, MAX_CUSTOM_COACH_INSTRUCTIONS)
+  );
+}
+
+/** The default coach prompt, shown verbatim in Settings > Coach instructions. */
+export function buildBaseCoachInstructions(): string {
   return (
     "You are a friendly, knowledgeable multi-sport endurance and strength-training coach built " +
     "into CorosLink. You have access to the athlete's recent COROS training data " +
