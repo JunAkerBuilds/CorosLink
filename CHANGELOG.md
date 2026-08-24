@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.29] - 2026-08-24
+
+### Added
+
+- **OpenRouter Coach provider** — use an encrypted, locally stored OpenRouter API key with model selection, tool-capable model discovery, connection testing, streaming responses, and COROS-aware Coach tools.
+
+### Fixed
+
+- Updated the bundled `yt-dlp` release to 2026.08.19, restoring YouTube and YouTube Music audio downloads affected by YouTube's `android_vr` HTTP 403 change.
+
 ## [0.1.28] - 2026-08-06
 
 ### Fixed
