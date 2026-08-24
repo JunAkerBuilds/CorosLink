@@ -105,6 +105,8 @@ import type {
   LocalChatConfig,
   LocalChatConnectionTest,
   LocalChatDiscovery,
+  OpenRouterConfig,
+  OpenRouterConnectionTest,
   CorosMcpStatus,
   CorosMcpTool,
   McpServerConfig,
@@ -910,6 +912,14 @@ const api = {
     ipcRenderer.invoke("chat:testLocalConnection", config),
   detectLocalChatServers: (apiKey?: string): Promise<LocalChatDiscovery> =>
     ipcRenderer.invoke("chat:detectLocalServers", apiKey),
+  testOpenRouterConnection: (
+    config?: OpenRouterConfig
+  ): Promise<OpenRouterConnectionTest> =>
+    ipcRenderer.invoke("chat:testOpenRouterConnection", config),
+  openOpenRouterKeys: (): Promise<void> =>
+    ipcRenderer.invoke("chat:openOpenRouterKeys"),
+  openOpenRouterModels: (): Promise<void> =>
+    ipcRenderer.invoke("chat:openOpenRouterModels"),
   getClaudeCodeStatus: (): Promise<ClaudeCodeStatus> =>
     ipcRenderer.invoke("chat:getClaudeCodeStatus"),
   connectClaudeCode: (): Promise<ClaudeCodeStatus> =>

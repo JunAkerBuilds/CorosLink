@@ -16,7 +16,7 @@ Override the Python runtime release with `PYTHON_STANDALONE_TAG=<tag>`.
 To use a different yt-dlp version:
 
 ```sh
-YT_DLP_VERSION=2026.06.09 npm run binaries:prepare
+YT_DLP_VERSION=2026.08.19 npm run binaries:prepare
 ```
 
 Set `YT_DLP_VERSION=latest` to query GitHub for the newest release (requires `GITHUB_TOKEN` in CI).

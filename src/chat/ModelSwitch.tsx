@@ -1,4 +1,4 @@
-import { Sparkles, Terminal } from "lucide-react";
+import { Network, Sparkles, Terminal } from "lucide-react";
 import type { ChatProvider } from "../../electron/types";
 import {
   getChatModelOptions,
@@ -12,6 +12,10 @@ function renderChatGptIcon() {
 
 function renderClaudeIcon() {
   return <Terminal size={14} strokeWidth={2.1} aria-hidden="true" />;
+}
+
+function renderOpenRouterIcon() {
+  return <Network size={14} strokeWidth={2.1} aria-hidden="true" />;
 }
 
 export function ModelSwitch({
@@ -35,10 +39,24 @@ export function ModelSwitch({
   )
     ? baseOptions
     : [...baseOptions, { value: model, label: model }];
-  const providerLabel = provider === "claude-code" ? "Claude" : "ChatGPT";
-  const tone = provider === "claude-code" ? "claude" : "gpt";
+  const providerLabel =
+    provider === "claude-code"
+      ? "Claude"
+      : provider === "openrouter"
+        ? "OpenRouter"
+        : "ChatGPT";
+  const tone =
+    provider === "claude-code"
+      ? "claude"
+      : provider === "openrouter"
+        ? "openrouter"
+        : "gpt";
   const renderIcon =
-    provider === "claude-code" ? renderClaudeIcon : renderChatGptIcon;
+    provider === "claude-code"
+      ? renderClaudeIcon
+      : provider === "openrouter"
+        ? renderOpenRouterIcon
+        : renderChatGptIcon;
   const selectedLabel =
     options.find((option) => option.value === model)?.label ?? model;
 

@@ -10,7 +10,7 @@ const execFileAsync = promisify(execFile);
 const gunzipAsync = promisify(gunzip);
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const userAgent = "coroslink";
-const PINNED_YT_DLP_VERSION = "2026.06.09";
+const PINNED_YT_DLP_VERSION = "2026.08.19";
 const PINNED_YTMUSICAPI_VERSION = "1.12.1";
 const BUNDLED_PYTHON_VERSION = "310";
 // Self-contained CPython shipped with the app so users don't need Python

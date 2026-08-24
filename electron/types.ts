@@ -2355,7 +2355,7 @@ export interface CoachInputPrompt {
   answeredAt?: number;
 }
 
-export type ChatProvider = "chatgpt" | "claude-code" | "local";
+export type ChatProvider = "chatgpt" | "claude-code" | "openrouter" | "local";
 
 export type ClaudeCodeConnectionState =
   | "not-installed"
@@ -2421,10 +2421,35 @@ export interface ChatGptConfig {
   model?: string;
 }
 
+export interface OpenRouterConfig {
+  /** OpenRouter model slug, such as openrouter/auto or anthropic/claude-sonnet-4. */
+  model: string;
+  /** True when an encrypted API key is stored; token material is never returned. */
+  hasApiKey: boolean;
+  /** Optional token used only when saving/testing settings; never returned by get. */
+  apiKey?: string;
+  /** Set true when saving to remove the stored OpenRouter API key. */
+  clearApiKey?: boolean;
+}
+
+export interface OpenRouterModelOption {
+  id: string;
+  name: string;
+}
+
+export interface OpenRouterConnectionTest {
+  ok: boolean;
+  message: string;
+  models: OpenRouterModelOption[];
+  /** Masked label returned by OpenRouter; never contains the full key. */
+  keyLabel?: string;
+}
+
 export interface ChatSettings {
   provider: ChatProvider;
   chatgpt: ChatGptConfig;
   claudeCode: ClaudeCodeConfig;
+  openRouter: OpenRouterConfig;
   local: LocalChatConfig;
   sidebarOpen?: boolean;
   /** When true, show activity/fitness/HR chart cards in the transcript. Default false. */

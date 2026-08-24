@@ -104,6 +104,8 @@ import type {
   LocalChatConfig,
   LocalChatConnectionTest,
   LocalChatDiscovery,
+  OpenRouterConfig,
+  OpenRouterConnectionTest,
   CorosMcpStatus,
   CorosMcpTool,
   McpServerConfig,
@@ -582,6 +584,11 @@ export interface CorosLinkApi {
     config?: LocalChatConfig
   ) => Promise<LocalChatConnectionTest>;
   detectLocalChatServers: (apiKey?: string) => Promise<LocalChatDiscovery>;
+  testOpenRouterConnection: (
+    config?: OpenRouterConfig
+  ) => Promise<OpenRouterConnectionTest>;
+  openOpenRouterKeys: () => Promise<void>;
+  openOpenRouterModels: () => Promise<void>;
   getClaudeCodeStatus: () => Promise<ClaudeCodeStatus>;
   connectClaudeCode: () => Promise<ClaudeCodeStatus>;
   testClaudeCodeConnection: () => Promise<ClaudeCodeConnectionTest>;

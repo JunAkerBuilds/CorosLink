@@ -65,6 +65,24 @@ export interface StreamLocalChatOptions {
   onToolCallError: (call: LocalToolCall, message: string) => void;
 }
 
+export interface OpenAiCompatibleChatTransport {
+  /** Fully-qualified, trusted API base URL without a trailing slash. */
+  baseUrl: string;
+  apiKey?: string;
+  requestLabel: string;
+  headers?: Record<string, string>;
+  /** Local runtimes can retry without tools; cloud coaching providers cannot. */
+  allowToolsFallback: boolean;
+}
+
+export type StreamOpenAiCompatibleChatOptions = Omit<
+  StreamLocalChatOptions,
+  "config"
+> & {
+  model: string;
+  toolsEnabled: boolean;
+};
+
 export function normalizeLocalChatBaseUrl(input: string): string {
   const raw = input.trim() || DEFAULT_LOCAL_CHAT_BASE_URL;
   const withProtocol = /^[a-z][a-z\d+\-.]*:\/\//i.test(raw)
@@ -314,15 +332,44 @@ export async function testLocalChatConnectionRequest(
 export async function streamLocalChatCompletion(
   options: StreamLocalChatOptions
 ): Promise<{ fullText: string }> {
-  const baseUrl = normalizeLocalChatBaseUrl(options.config.baseUrl);
-  const model = options.config.model.trim();
+  return streamOpenAiCompatibleChatCompletion(
+    {
+      instructions: options.instructions,
+      fallbackInstructions: options.fallbackInstructions,
+      messages: options.messages,
+      tools: options.tools,
+      maxToolRounds: options.maxToolRounds,
+      signal: options.signal,
+      onToken: options.onToken,
+      onToolsDisabled: options.onToolsDisabled,
+      onToolCall: options.onToolCall,
+      onToolCallStart: options.onToolCallStart,
+      onToolCallError: options.onToolCallError,
+      model: options.config.model,
+      toolsEnabled: options.config.toolsEnabled
+    },
+    {
+      baseUrl: normalizeLocalChatBaseUrl(options.config.baseUrl),
+      apiKey: options.config.apiKey,
+      requestLabel: "Local chat",
+      allowToolsFallback: true
+    }
+  );
+}
+
+export async function streamOpenAiCompatibleChatCompletion(
+  options: StreamOpenAiCompatibleChatOptions,
+  transport: OpenAiCompatibleChatTransport
+): Promise<{ fullText: string }> {
+  const baseUrl = transport.baseUrl.replace(/\/+$/, "");
+  const model = options.model.trim();
   if (!model) {
-    throw new Error("Choose a local model name first.");
+    throw new Error(`Choose a ${transport.requestLabel} model first.`);
   }
 
   let fullText = "";
   let input = buildLocalInputMessages(options.instructions, options.messages);
-  let tools = options.config.toolsEnabled
+  let tools = options.toolsEnabled
     ? buildLocalFunctionTools(options.tools)
     : [];
   let toolsDisabled = false;
@@ -333,7 +380,7 @@ export async function streamLocalChatCompletion(
       model,
       input,
       tools,
-      options.config.apiKey,
+      transport,
       options.signal
     );
 
@@ -483,7 +530,7 @@ async function openLocalChatStream(
   model: string,
   messages: LocalChatCompletionMessage[],
   tools: Record<string, unknown>[],
-  apiKey: string | undefined,
+  transport: OpenAiCompatibleChatTransport,
   signal: AbortSignal
 ): Promise<{ response: Response } | { toolsUnsupported: true }> {
   const request: Record<string, unknown> = {
@@ -500,7 +547,8 @@ async function openLocalChatStream(
     method: "POST",
     signal,
     headers: {
-      ...buildLocalHeaders(apiKey),
+      ...buildLocalHeaders(transport.apiKey),
+      ...transport.headers,
       Accept: "text/event-stream",
       "Content-Type": "application/json"
     },
@@ -512,12 +560,16 @@ async function openLocalChatStream(
   }
 
   const detail = await response.text().catch(() => "");
-  if (tools.length > 0 && isLocalToolsUnsupportedError(response.status, detail)) {
+  if (
+    transport.allowToolsFallback &&
+    tools.length > 0 &&
+    isLocalToolsUnsupportedError(response.status, detail)
+  ) {
     return { toolsUnsupported: true };
   }
 
   throw new Error(
-    `Local chat request failed (${response.status}). ${truncate(detail, 600)}`
+    `${transport.requestLabel} request failed (${response.status}). ${truncate(detail, 600)}`
   );
 }
 
@@ -548,6 +600,10 @@ async function readLocalChatStream(
       } catch {
         continue;
       }
+      const streamError = parseCompatibleChatStreamError(event);
+      if (streamError) {
+        throw new Error(streamError);
+      }
       const delta = parseLocalChatContentDelta(event);
       if (delta) {
         fullDelta += delta;
@@ -558,6 +614,15 @@ async function readLocalChatStream(
   }
 
   return { delta: fullDelta, functionCalls: accumulator.toCalls() };
+}
+
+export function parseCompatibleChatStreamError(event: unknown): string {
+  if (!event || typeof event !== "object") return "";
+  const error = (event as { error?: unknown }).error;
+  if (typeof error === "string") return error;
+  if (!error || typeof error !== "object") return "";
+  const message = (error as { message?: unknown }).message;
+  return typeof message === "string" ? message : "";
 }
 
 function joinLocalEndpoint(baseUrl: string, endpoint: string): string {

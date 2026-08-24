@@ -330,7 +330,7 @@ Month and week views for planned workouts and completed activities on one grid.
 
 Ask training questions with answers grounded in your COROS data.
 
-- **Providers** — ChatGPT (cloud), Claude Code, or local LLMs (Ollama / LM Studio)
+- **Providers** — ChatGPT (cloud), Claude Code, OpenRouter with your own API key, or local LLMs (Ollama / LM Studio)
 - **Model selection & extended thinking** where the provider supports them
 - **Multi-sport workout tools** — draft a single workout or adaptive multi-week plans across Run, Trail Run, Bike, Pool Swim, Strength, Indoor Climb, Bouldering, XC Ski, and HYROX, with COROS exercise catalog search for Strength and HYROX
 - **Destination-aware confirmation** — choose Workout Library, Calendar, local template, COROS Plan Library, or Plan + Calendar; review weeks, workouts, sports, start date, conflicts, grouped-plan status, and every remote write before confirming
@@ -429,6 +429,7 @@ Installers are written to `release/`.
 - **USB cable** to connect your COROS watch for music and map sync
 - **yt-dlp** and **ffmpeg** — bundled in packaged builds; falls back to `PATH` if missing
 - **OpenRouteService API key** (optional) — only needed for Route Builder
+- **OpenRouter API key** (optional) — only needed when OpenRouter is selected for Coach compute
 - **Spotify Developer app** (optional) — only needed for Spotify playlist sync
 - **Google Cloud OAuth app** (optional) — only needed for YouTube Playlists sync
 - **Python 3.10+** and **ytmusicapi** (optional) — only needed for YouTube Music library sync
@@ -445,6 +446,7 @@ Installers are written to `release/`.
 - **Apple Podcasts** — public catalogue searches and RSS feeds are requested directly to discover publicly downloadable episodes; no account credentials are collected
 - **Map cache** — downloaded map packages are stored in a local folder you choose; copied to the watch over USB only
 - **OpenRouteService** — route requests are sent to OpenRouteService when you generate a route (your API key is stored locally)
+- **OpenRouter** — when selected for Coach, coaching prompts and requested COROS tool data are sent through OpenRouter to the model you choose; the API key is encrypted in local app storage
 - **Training Hub** — your COROS email and password are used to authenticate with COROS servers. Activity data is fetched on demand and not synced to any third-party service
 - **No cloud sync** — the app does not run its own backend or upload your files
 

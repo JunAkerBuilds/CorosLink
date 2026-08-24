@@ -5,7 +5,8 @@ import type {
   ChatSettings,
   ClaudeCodeStatus,
   LocalChatConnectionTest,
-  LocalChatDiscovery
+  LocalChatDiscovery,
+  OpenRouterConnectionTest
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { ChatSettingsPanel } from "./ChatSettingsPanel";
@@ -16,11 +17,14 @@ export function ChatSettingsModal({
   chatSettings,
   authStatus,
   claudeStatus,
+  openRouterApiKey,
+  openRouterConnection,
   localApiKey,
   localConnection,
   localDiscovery,
   savingSettings,
   testingLocal,
+  testingOpenRouter,
   detectingLocal,
   signingIn,
   checkingClaude,
@@ -36,6 +40,13 @@ export function ChatSettingsModal({
   onTestClaude,
   onOpenClaudeSetupGuide,
   onUpdateClaudeCode,
+  onOpenRouterApiKeyChange,
+  onUpdateOpenRouterDraft,
+  onTestOpenRouterConnection,
+  onSaveOpenRouterSettings,
+  onClearOpenRouterApiKey,
+  onOpenOpenRouterKeys,
+  onOpenOpenRouterModels,
   onLocalApiKeyChange,
   onUpdateLocalDraft,
   onDetectLocalServers,
@@ -50,11 +61,14 @@ export function ChatSettingsModal({
   chatSettings: ChatSettings;
   authStatus: ChatAuthStatus | null;
   claudeStatus: ClaudeCodeStatus | null;
+  openRouterApiKey: string;
+  openRouterConnection: OpenRouterConnectionTest | null;
   localApiKey: string;
   localConnection: LocalChatConnectionTest | null;
   localDiscovery: LocalChatDiscovery | null;
   savingSettings: boolean;
   testingLocal: boolean;
+  testingOpenRouter: boolean;
   detectingLocal: boolean;
   signingIn: boolean;
   checkingClaude: boolean;
@@ -72,6 +86,15 @@ export function ChatSettingsModal({
   onUpdateClaudeCode: (
     patch: Partial<ChatSettings["claudeCode"]>
   ) => void;
+  onOpenRouterApiKeyChange: (value: string) => void;
+  onUpdateOpenRouterDraft: (
+    patch: Partial<ChatSettings["openRouter"]>
+  ) => void;
+  onTestOpenRouterConnection: () => void;
+  onSaveOpenRouterSettings: () => void;
+  onClearOpenRouterApiKey: () => void;
+  onOpenOpenRouterKeys: () => void;
+  onOpenOpenRouterModels: () => void;
   onLocalApiKeyChange: (value: string) => void;
   onUpdateLocalDraft: (patch: Partial<ChatSettings["local"]>) => void;
   onDetectLocalServers: () => void;
@@ -132,11 +155,14 @@ export function ChatSettingsModal({
             chatSettings={chatSettings}
             authStatus={authStatus}
             claudeStatus={claudeStatus}
+            openRouterApiKey={openRouterApiKey}
+            openRouterConnection={openRouterConnection}
             localApiKey={localApiKey}
             localConnection={localConnection}
             localDiscovery={localDiscovery}
             savingSettings={savingSettings}
             testingLocal={testingLocal}
+            testingOpenRouter={testingOpenRouter}
             detectingLocal={detectingLocal}
             signingIn={signingIn}
             checkingClaude={checkingClaude}
@@ -151,6 +177,13 @@ export function ChatSettingsModal({
             onTestClaude={onTestClaude}
             onOpenClaudeSetupGuide={onOpenClaudeSetupGuide}
             onUpdateClaudeCode={onUpdateClaudeCode}
+            onOpenRouterApiKeyChange={onOpenRouterApiKeyChange}
+            onUpdateOpenRouterDraft={onUpdateOpenRouterDraft}
+            onTestOpenRouterConnection={onTestOpenRouterConnection}
+            onSaveOpenRouterSettings={onSaveOpenRouterSettings}
+            onClearOpenRouterApiKey={onClearOpenRouterApiKey}
+            onOpenOpenRouterKeys={onOpenOpenRouterKeys}
+            onOpenOpenRouterModels={onOpenOpenRouterModels}
             onLocalApiKeyChange={onLocalApiKeyChange}
             onUpdateLocalDraft={onUpdateLocalDraft}
             onDetectLocalServers={onDetectLocalServers}

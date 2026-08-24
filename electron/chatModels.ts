@@ -19,6 +19,11 @@ export const CLAUDE_MODEL_OPTIONS: ChatModelOption[] = [
   { value: "haiku", label: "Claude Haiku" }
 ];
 
+export const OPENROUTER_MODEL_OPTIONS: ChatModelOption[] = [
+  { value: "openrouter/auto", label: "Auto Router" },
+  { value: "openrouter/free", label: "Free Router" }
+];
+
 const CHATGPT_AUTO_MODEL_IDS = [
   "gpt-5.6-sol",
   "gpt-5.6-terra",
@@ -45,7 +50,7 @@ export function getChatGptModelCandidates(
 }
 
 export function getChatModelOptions(provider: string): ChatModelOption[] {
-  return provider === "claude-code"
-    ? CLAUDE_MODEL_OPTIONS
-    : CHATGPT_MODEL_OPTIONS;
+  if (provider === "claude-code") return CLAUDE_MODEL_OPTIONS;
+  if (provider === "openrouter") return OPENROUTER_MODEL_OPTIONS;
+  return CHATGPT_MODEL_OPTIONS;
 }

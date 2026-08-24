@@ -312,9 +312,14 @@ import {
   streamChat,
   testClaudeCodeConnection,
   testLocalChatConnection,
+  testOpenRouterConnection,
   uploadTrainingPlanDraft,
   confirmWorkoutDelete
 } from "./chatService";
+import {
+  OPENROUTER_KEYS_URL,
+  OPENROUTER_MODELS_URL
+} from "./openRouterProvider";
 import {
   hydratePlanDraftStoreFromDatabase,
   pruneDeleteRequestStore,
@@ -348,6 +353,7 @@ import type {
   ChatSettings,
   CorosTrainingPlanDraftInput,
   LocalChatConfig,
+  OpenRouterConfig,
   PersistedChatEntry,
   PlanWorkoutEntryInput,
   RunWorkoutEditorDraft,
@@ -1303,6 +1309,19 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("chat:detectLocalServers", (_event, apiKey?: string) =>
     detectLocalChatServers(apiKey)
+  );
+
+  ipcMain.handle(
+    "chat:testOpenRouterConnection",
+    (_event, config?: OpenRouterConfig) => testOpenRouterConnection(config)
+  );
+
+  ipcMain.handle("chat:openOpenRouterKeys", () =>
+    shell.openExternal(OPENROUTER_KEYS_URL)
+  );
+
+  ipcMain.handle("chat:openOpenRouterModels", () =>
+    shell.openExternal(OPENROUTER_MODELS_URL)
   );
 
   ipcMain.handle("chat:getClaudeCodeStatus", () =>

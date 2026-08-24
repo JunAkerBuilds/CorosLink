@@ -259,7 +259,7 @@ export function initializeDatabase(userDataPath: string): Database.Database {
 
     CREATE TABLE IF NOT EXISTS chat_sessions (
       id TEXT PRIMARY KEY,
-      provider TEXT NOT NULL CHECK(provider IN ('chatgpt', 'claude-code', 'local')),
+      provider TEXT NOT NULL CHECK(provider IN ('chatgpt', 'claude-code', 'openrouter', 'local')),
       title TEXT NOT NULL,
       messages_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -435,7 +435,12 @@ function deriveSessionTitle(messagesJson: string): string {
   return "New chat";
 }
 
-const CHAT_SESSION_PROVIDERS = ["chatgpt", "claude-code", "local"];
+const CHAT_SESSION_PROVIDERS = [
+  "chatgpt",
+  "claude-code",
+  "openrouter",
+  "local"
+];
 
 function migrateChatSessionProviderConstraint(
   database: Database.Database
@@ -461,7 +466,7 @@ function migrateChatSessionProviderConstraint(
 
       CREATE TABLE chat_sessions (
         id TEXT PRIMARY KEY,
-        provider TEXT NOT NULL CHECK(provider IN ('chatgpt', 'claude-code', 'local')),
+        provider TEXT NOT NULL CHECK(provider IN ('chatgpt', 'claude-code', 'openrouter', 'local')),
         title TEXT NOT NULL,
         messages_json TEXT NOT NULL,
         created_at TEXT NOT NULL,
@@ -472,7 +477,7 @@ function migrateChatSessionProviderConstraint(
         SELECT
           id,
           CASE
-            WHEN provider IN ('chatgpt', 'claude-code', 'local') THEN provider
+            WHEN provider IN ('chatgpt', 'claude-code', 'openrouter', 'local') THEN provider
             WHEN provider = 'claude' THEN 'claude-code'
             ELSE 'chatgpt'
           END,

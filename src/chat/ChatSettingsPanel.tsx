@@ -14,7 +14,8 @@ import type {
   ChatSettings,
   ClaudeCodeStatus,
   LocalChatConnectionTest,
-  LocalChatDiscovery
+  LocalChatDiscovery,
+  OpenRouterConnectionTest
 } from "../../electron/types";
 import { McpServersPanel } from "./McpServersPanel";
 import type { CorosLinkApi } from "../coroslink-api";
@@ -34,11 +35,14 @@ export function ChatSettingsPanel({
   chatSettings,
   authStatus,
   claudeStatus,
+  openRouterApiKey,
+  openRouterConnection,
   localApiKey,
   localConnection,
   localDiscovery,
   savingSettings,
   testingLocal,
+  testingOpenRouter,
   detectingLocal,
   signingIn,
   checkingClaude,
@@ -53,6 +57,13 @@ export function ChatSettingsPanel({
   onTestClaude,
   onOpenClaudeSetupGuide,
   onUpdateClaudeCode,
+  onOpenRouterApiKeyChange,
+  onUpdateOpenRouterDraft,
+  onTestOpenRouterConnection,
+  onSaveOpenRouterSettings,
+  onClearOpenRouterApiKey,
+  onOpenOpenRouterKeys,
+  onOpenOpenRouterModels,
   onLocalApiKeyChange,
   onUpdateLocalDraft,
   onDetectLocalServers,
@@ -66,11 +77,14 @@ export function ChatSettingsPanel({
   chatSettings: ChatSettings;
   authStatus: ChatAuthStatus | null;
   claudeStatus: ClaudeCodeStatus | null;
+  openRouterApiKey: string;
+  openRouterConnection: OpenRouterConnectionTest | null;
   localApiKey: string;
   localConnection: LocalChatConnectionTest | null;
   localDiscovery: LocalChatDiscovery | null;
   savingSettings: boolean;
   testingLocal: boolean;
+  testingOpenRouter: boolean;
   detectingLocal: boolean;
   signingIn: boolean;
   checkingClaude: boolean;
@@ -87,6 +101,15 @@ export function ChatSettingsPanel({
   onUpdateClaudeCode: (
     patch: Partial<ChatSettings["claudeCode"]>
   ) => void;
+  onOpenRouterApiKeyChange: (value: string) => void;
+  onUpdateOpenRouterDraft: (
+    patch: Partial<ChatSettings["openRouter"]>
+  ) => void;
+  onTestOpenRouterConnection: () => void;
+  onSaveOpenRouterSettings: () => void;
+  onClearOpenRouterApiKey: () => void;
+  onOpenOpenRouterKeys: () => void;
+  onOpenOpenRouterModels: () => void;
   onLocalApiKeyChange: (value: string) => void;
   onUpdateLocalDraft: (patch: Partial<ChatSettings["local"]>) => void;
   onDetectLocalServers: () => void;
@@ -161,6 +184,142 @@ export function ChatSettingsPanel({
             </button>
           </div>
         )}
+      </section>
+
+      <section className="chat-settings-section chat-openrouter-section">
+        <div className="chat-settings-section-title">
+          <h3>OpenRouter API</h3>
+          <span className="chat-beta-badge">BYOK</span>
+        </div>
+        <p className="chat-settings-copy">
+          Use your OpenRouter account and credits for coaching. CorosLink stores
+          the key encrypted on this computer and only sends it to OpenRouter.
+        </p>
+
+        <div className="chat-local-settings chat-local-settings-panel">
+          <label className="chat-local-field">
+            <span>Model</span>
+            <input
+              value={chatSettings.openRouter.model}
+              onChange={(event) =>
+                onUpdateOpenRouterDraft({ model: event.target.value })
+              }
+              list="chat-openrouter-models"
+              placeholder="openrouter/auto"
+              spellCheck={false}
+            />
+            <datalist id="chat-openrouter-models">
+              {(openRouterConnection?.models ?? []).map((model) => (
+                <option key={model.id} value={model.id} label={model.name} />
+              ))}
+            </datalist>
+          </label>
+          <div className="chat-local-field chat-local-field-key">
+            <label htmlFor="chat-openrouter-api-key">
+              <span>API key</span>
+            </label>
+            <div className="chat-local-key-row">
+              <KeyRound size={14} aria-hidden="true" />
+              <input
+                id="chat-openrouter-api-key"
+                value={openRouterApiKey}
+                onChange={(event) =>
+                  onOpenRouterApiKeyChange(event.target.value)
+                }
+                placeholder={
+                  chatSettings.openRouter.hasApiKey
+                    ? "Saved key"
+                    : "sk-or-v1-…"
+                }
+                type="password"
+                spellCheck={false}
+                autoComplete="off"
+              />
+              {chatSettings.openRouter.hasApiKey ? (
+                <button
+                  type="button"
+                  onClick={onClearOpenRouterApiKey}
+                  disabled={savingSettings}
+                >
+                  Clear
+                </button>
+                ) : null}
+            </div>
+          </div>
+          <div className="chat-local-actions chat-openrouter-actions">
+            <button
+              type="button"
+              className="chat-local-action"
+              onClick={onOpenOpenRouterKeys}
+              disabled={!api}
+            >
+              <ExternalLink size={14} aria-hidden="true" />
+              Get API key
+            </button>
+            <button
+              type="button"
+              className="chat-local-action"
+              onClick={onOpenOpenRouterModels}
+              disabled={!api}
+            >
+              <ExternalLink size={14} aria-hidden="true" />
+              Browse models
+            </button>
+            <button
+              type="button"
+              className="chat-local-action"
+              onClick={onTestOpenRouterConnection}
+              disabled={
+                testingOpenRouter ||
+                busy ||
+                (!openRouterApiKey.trim() &&
+                  !chatSettings.openRouter.hasApiKey)
+              }
+            >
+              {testingOpenRouter ? (
+                <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
+              ) : (
+                <Bot size={14} aria-hidden="true" />
+              )}
+              Test
+            </button>
+            <button
+              type="button"
+              className="chat-local-action primary"
+              onClick={onSaveOpenRouterSettings}
+              disabled={
+                savingSettings ||
+                busy ||
+                !chatSettings.openRouter.model.trim() ||
+                (!openRouterApiKey.trim() &&
+                  !chatSettings.openRouter.hasApiKey)
+              }
+            >
+              {savingSettings ? (
+                <Loader2 className="chat-spinner" size={14} aria-hidden="true" />
+              ) : (
+                <Save size={14} aria-hidden="true" />
+              )}
+              Save
+            </button>
+          </div>
+          {openRouterConnection ? (
+            <p
+              className={
+                openRouterConnection.ok
+                  ? "chat-local-result is-ready"
+                  : "chat-local-result is-error"
+              }
+            >
+              {openRouterConnection.message}
+            </p>
+          ) : null}
+        </div>
+        <p className="chat-settings-copy">
+          Coaching prompts and requested COROS data are sent through OpenRouter
+          to the selected model provider. OpenRouter bills usage to your account.
+          Choose a model with tool calling so workout and activity tools work.
+        </p>
       </section>
 
       <section className="chat-settings-section chat-claude-section">

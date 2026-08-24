@@ -22,9 +22,11 @@ import {
   FileDown,
   FileText,
   Info,
+  KeyRound,
   Loader2,
   LogOut,
   MessageCircle,
+  Network,
   Plus,
   RefreshCw,
   Send,
@@ -62,6 +64,7 @@ import type {
   CoachInputPrompt,
   LocalChatConnectionTest,
   LocalChatDiscovery,
+  OpenRouterConnectionTest,
   CorosMcpStatus,
   McpServerStatus,
   PlanDraftPreview,
@@ -111,6 +114,10 @@ const DEFAULT_CHAT_SETTINGS: ChatSettings = {
       sleepData: false,
       fullActivityFiles: false
     }
+  },
+  openRouter: {
+    model: "openrouter/auto",
+    hasApiKey: false
   },
   local: {
     baseUrl: "http://localhost:11434/v1",
@@ -1731,7 +1738,11 @@ export function ChatView({
   const [signingIn, setSigningIn] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [testingLocal, setTestingLocal] = useState(false);
+  const [testingOpenRouter, setTestingOpenRouter] = useState(false);
   const [detectingLocal, setDetectingLocal] = useState(false);
+  const [openRouterApiKey, setOpenRouterApiKey] = useState("");
+  const [openRouterConnection, setOpenRouterConnection] =
+    useState<OpenRouterConnectionTest | null>(null);
   const [localApiKey, setLocalApiKey] = useState("");
   const [localConnection, setLocalConnection] =
     useState<LocalChatConnectionTest | null>(null);
@@ -2365,6 +2376,7 @@ export function ChatView({
     const nextSettings: ChatSettings = { ...chatSettings, provider };
     setChatSettings(nextSettings);
     setLocalConnection(null);
+    setOpenRouterConnection(null);
     onError(null);
     try {
       const saved = await api.saveChatSettings(nextSettings);
@@ -2391,6 +2403,14 @@ export function ChatView({
               model: normalizedModel
             }
           }
+        : chatSettings.provider === "openrouter"
+          ? {
+              ...chatSettings,
+              openRouter: {
+                ...chatSettings.openRouter,
+                model: normalizedModel ?? "openrouter/auto"
+              }
+            }
         : {
             ...chatSettings,
             chatgpt: {
@@ -2413,6 +2433,103 @@ export function ChatView({
       );
     } finally {
       setSavingSettings(false);
+    }
+  };
+
+  const updateOpenRouterDraft = (
+    patch: Partial<ChatSettings["openRouter"]>
+  ) => {
+    setChatSettings((current) => ({
+      ...current,
+      openRouter: {
+        ...current.openRouter,
+        ...patch
+      }
+    }));
+    setOpenRouterConnection(null);
+  };
+
+  const handleSaveOpenRouterSettings = async () => {
+    if (!api) return;
+    setSavingSettings(true);
+    onError(null);
+    try {
+      const apiKey = openRouterApiKey.trim();
+      const saved = await api.saveChatSettings({
+        ...chatSettings,
+        openRouter: {
+          ...chatSettings.openRouter,
+          apiKey: apiKey || undefined
+        }
+      });
+      setChatSettings(saved);
+      setOpenRouterApiKey("");
+      setOpenRouterConnection((current) => ({
+        ok: true,
+        message: "OpenRouter settings saved.",
+        models: current?.models ?? []
+      }));
+    } catch (caught) {
+      onError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not save OpenRouter settings."
+      );
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleClearOpenRouterApiKey = async () => {
+    if (!api) return;
+    setSavingSettings(true);
+    onError(null);
+    try {
+      const saved = await api.saveChatSettings({
+        ...chatSettings,
+        openRouter: {
+          ...chatSettings.openRouter,
+          clearApiKey: true
+        }
+      });
+      setChatSettings(saved);
+      setOpenRouterApiKey("");
+      setOpenRouterConnection({
+        ok: true,
+        message: "OpenRouter API key cleared.",
+        models: []
+      });
+    } catch (caught) {
+      onError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not clear the OpenRouter API key."
+      );
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleTestOpenRouterConnection = async () => {
+    if (!api || testingOpenRouter) return;
+    setTestingOpenRouter(true);
+    setOpenRouterConnection(null);
+    onError(null);
+    try {
+      const result = await api.testOpenRouterConnection({
+        ...chatSettings.openRouter,
+        apiKey: openRouterApiKey.trim() || undefined
+      });
+      setOpenRouterConnection(result);
+      if (!result.ok) onError(result.message);
+    } catch (caught) {
+      onError(
+        caught instanceof Error
+          ? caught.message
+          : "OpenRouter connection test failed."
+      );
+    } finally {
+      setTestingOpenRouter(false);
     }
   };
 
@@ -2636,6 +2753,35 @@ export function ChatView({
     if (isLatestActivityFileRequest(trimmed)) {
       await handleLatestActivityFileRequest(trimmed);
       return true;
+    }
+    if (
+      chatSettings.provider === "openrouter" &&
+      !chatSettings.openRouter.hasApiKey &&
+      !openRouterApiKey.trim()
+    ) {
+      onError("Add an OpenRouter API key in Coach settings first.");
+      return false;
+    }
+    if (chatSettings.provider === "openrouter") {
+      try {
+        const apiKey = openRouterApiKey.trim();
+        const saved = await api.saveChatSettings({
+          ...chatSettings,
+          openRouter: {
+            ...chatSettings.openRouter,
+            apiKey: apiKey || undefined
+          }
+        });
+        setChatSettings(saved);
+        setOpenRouterApiKey("");
+      } catch (caught) {
+        onError(
+          caught instanceof Error
+            ? caught.message
+            : "OpenRouter settings failed."
+        );
+        return false;
+      }
     }
     if (chatSettings.provider === "local" && !chatSettings.local.model.trim()) {
       onError("Enter a local model before starting the coach.");
@@ -2969,6 +3115,7 @@ export function ChatView({
 
   const isLocalProvider = chatSettings.provider === "local";
   const isClaudeProvider = chatSettings.provider === "claude-code";
+  const isOpenRouterProvider = chatSettings.provider === "openrouter";
   const isChatGptProvider = chatSettings.provider === "chatgpt";
   const localModelConfigured = chatSettings.local.model.trim().length > 0;
   const isBusy = streaming || exportingLatestActivity;
@@ -2981,6 +3128,8 @@ export function ChatView({
   const showLoginGate = isChatGptProvider && !authStatus?.signedIn;
   const showClaudeGate =
     isClaudeProvider && claudeStatus?.state !== "connected";
+  const showOpenRouterGate =
+    isOpenRouterProvider && !chatSettings.openRouter.hasApiKey;
   const showPlanPanel = useMediaQuery("(min-width: 1400px)");
   const planDrafts = timeline.flatMap((entry) =>
     entry.kind === "planDraft" ? [entry.draft] : []
@@ -3015,7 +3164,9 @@ export function ChatView({
   const selectedModel =
     chatSettings.provider === "claude-code"
       ? chatSettings.claudeCode.model ?? ""
-      : chatSettings.chatgpt.model ?? "";
+      : chatSettings.provider === "openrouter"
+        ? chatSettings.openRouter.model
+        : chatSettings.chatgpt.model ?? "";
   const providerControls = (
     <div className="chat-provider-controls">
       {providerSwitch}
@@ -3049,11 +3200,14 @@ export function ChatView({
     chatSettings,
     authStatus,
     claudeStatus,
+    openRouterApiKey,
+    openRouterConnection,
     localApiKey,
     localConnection,
     localDiscovery,
     savingSettings,
     testingLocal,
+    testingOpenRouter,
     detectingLocal,
     signingIn,
     checkingClaude,
@@ -3069,6 +3223,14 @@ export function ChatView({
     onOpenClaudeSetupGuide: () => void api?.openClaudeCodeSetupGuide(),
     onUpdateClaudeCode: (patch: Partial<ChatSettings["claudeCode"]>) =>
       void handleUpdateClaudeCode(patch),
+    onOpenRouterApiKeyChange: setOpenRouterApiKey,
+    onUpdateOpenRouterDraft: updateOpenRouterDraft,
+    onTestOpenRouterConnection: () =>
+      void handleTestOpenRouterConnection(),
+    onSaveOpenRouterSettings: () => void handleSaveOpenRouterSettings(),
+    onClearOpenRouterApiKey: () => void handleClearOpenRouterApiKey(),
+    onOpenOpenRouterKeys: () => void api?.openOpenRouterKeys(),
+    onOpenOpenRouterModels: () => void api?.openOpenRouterModels(),
     onLocalApiKeyChange: setLocalApiKey,
     onUpdateLocalDraft: updateLocalDraft,
     onDetectLocalServers: () => void handleDetectLocalServers(),
@@ -3170,6 +3332,72 @@ export function ChatView({
               </div>
               <p className="chat-login-note">
                 {claudeStatus?.message ?? "Checking for Claude Code…"}
+              </p>
+            </div>
+            <div className="chat-composer-toolbar chat-composer-toolbar-login">
+              {providerControls}
+            </div>
+          </div>
+        </div>
+        <ChatSettingsModal {...settingsModalProps} />
+      </div>
+    );
+  }
+
+  if (showOpenRouterGate) {
+    return (
+      <div className="chat-view chat-view-login">
+        <div className="chat-header">
+          <div className="chat-header-title">
+            <span>Training Coach</span>
+          </div>
+          <div className="chat-header-end">
+            <button
+              type="button"
+              className="chat-settings-button"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Open settings"
+            >
+              <Settings2 size={16} aria-hidden="true" />
+              Settings
+            </button>
+          </div>
+        </div>
+        <div className="chat-layout">
+          <ChatSidebar {...sidebarProps} />
+          <div className="chat-main chat-main-login">
+            <div className="panel chat-login-panel chat-openrouter-login-panel">
+              <Network size={32} aria-hidden="true" />
+              <div className="chat-login-title-row">
+                <h2>Connect OpenRouter</h2>
+                <span className="chat-beta-badge">BYOK</span>
+              </div>
+              <p>
+                Use your OpenRouter API key and model credits for COROS-aware
+                coaching, workout drafting, and activity tools.
+              </p>
+              <div className="chat-login-actions">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => setSettingsOpen(true)}
+                >
+                  <KeyRound size={16} aria-hidden="true" />
+                  Add API key
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => void api?.openOpenRouterKeys()}
+                  disabled={!api}
+                >
+                  <ExternalLink size={16} aria-hidden="true" />
+                  Get a key from OpenRouter
+                </button>
+              </div>
+              <p className="chat-login-note">
+                Your key is encrypted in local app storage and is never added to
+                the chat transcript.
               </p>
             </div>
             <div className="chat-composer-toolbar chat-composer-toolbar-login">

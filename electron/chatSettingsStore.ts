@@ -3,10 +3,13 @@ import {
   DEFAULT_LOCAL_CHAT_BASE_URL,
   normalizeLocalChatBaseUrl
 } from "./localChatProvider";
+import { DEFAULT_OPENROUTER_MODEL } from "./openRouterProvider";
 
 export const CHAT_SETTINGS_KEYS = {
   provider: "chat.provider",
   chatgptModel: "chat.chatgpt.model",
+  openRouterModel: "chat.openRouter.model",
+  openRouterApiKey: "chat.openRouter.apiKey",
   claudeExecutablePath: "chat.claudeCode.executablePath",
   claudeModel: "chat.claudeCode.model",
   claudeLastConnectionStatus: "chat.claudeCode.lastConnectionStatus",
@@ -38,12 +41,19 @@ export interface ChatApiKeyStore {
 
 export function readChatSettingsFromStore(
   store: ChatSettingsStore,
-  apiKeyStore: Pick<ChatApiKeyStore, "hasApiKey">
+  localApiKeyStore: Pick<ChatApiKeyStore, "hasApiKey">,
+  openRouterApiKeyStore: Pick<ChatApiKeyStore, "hasApiKey">
 ): ChatSettings {
   return {
     provider: normalizeProvider(store.get(CHAT_SETTINGS_KEYS.provider)),
     chatgpt: {
       model: store.get(CHAT_SETTINGS_KEYS.chatgptModel) || undefined
+    },
+    openRouter: {
+      model:
+        store.get(CHAT_SETTINGS_KEYS.openRouterModel) ??
+        DEFAULT_OPENROUTER_MODEL,
+      hasApiKey: openRouterApiKeyStore.hasApiKey()
     },
     claudeCode: {
       executablePath:
@@ -71,7 +81,7 @@ export function readChatSettingsFromStore(
       baseUrl:
         store.get(CHAT_SETTINGS_KEYS.localBaseUrl) ?? DEFAULT_LOCAL_CHAT_BASE_URL,
       model: store.get(CHAT_SETTINGS_KEYS.localModel) ?? "",
-      hasApiKey: apiKeyStore.hasApiKey(),
+      hasApiKey: localApiKeyStore.hasApiKey(),
       toolsEnabled: store.get(CHAT_SETTINGS_KEYS.localToolsEnabled) !== "false"
     },
     sidebarOpen: store.get(CHAT_SETTINGS_KEYS.sidebarOpen) !== "false",
@@ -82,7 +92,8 @@ export function readChatSettingsFromStore(
 
 export function saveChatSettingsToStore(
   store: ChatSettingsStore,
-  apiKeyStore: ChatApiKeyStore,
+  localApiKeyStore: ChatApiKeyStore,
+  openRouterApiKeyStore: ChatApiKeyStore,
   settings: ChatSettings
 ): ChatSettings {
   store.set(CHAT_SETTINGS_KEYS.provider, normalizeProvider(settings.provider));
@@ -92,6 +103,11 @@ export function saveChatSettingsToStore(
   } else {
     store.delete([CHAT_SETTINGS_KEYS.chatgptModel]);
   }
+  const openRouterModel = settings.openRouter?.model?.trim();
+  store.set(
+    CHAT_SETTINGS_KEYS.openRouterModel,
+    openRouterModel || DEFAULT_OPENROUTER_MODEL
+  );
   const executablePath = settings.claudeCode?.executablePath?.trim();
   if (executablePath) {
     store.set(CHAT_SETTINGS_KEYS.claudeExecutablePath, executablePath);
@@ -160,19 +176,36 @@ export function saveChatSettingsToStore(
   }
 
   if (settings.local.clearApiKey) {
-    apiKeyStore.clearApiKey();
+    localApiKeyStore.clearApiKey();
   } else if (
     typeof settings.local.apiKey === "string" &&
     settings.local.apiKey.trim()
   ) {
-    apiKeyStore.saveApiKey(settings.local.apiKey.trim());
+    localApiKeyStore.saveApiKey(settings.local.apiKey.trim());
   }
 
-  return readChatSettingsFromStore(store, apiKeyStore);
+  if (settings.openRouter?.clearApiKey) {
+    openRouterApiKeyStore.clearApiKey();
+  } else if (
+    typeof settings.openRouter?.apiKey === "string" &&
+    settings.openRouter.apiKey.trim()
+  ) {
+    openRouterApiKeyStore.saveApiKey(settings.openRouter.apiKey.trim());
+  }
+
+  return readChatSettingsFromStore(
+    store,
+    localApiKeyStore,
+    openRouterApiKeyStore
+  );
 }
 
 function normalizeProvider(value: unknown): ChatProvider {
-  if (value === "local" || value === "claude-code") {
+  if (
+    value === "local" ||
+    value === "claude-code" ||
+    value === "openrouter"
+  ) {
     return value;
   }
   return "chatgpt";

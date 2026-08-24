@@ -18739,6 +18739,17 @@ tr.data-intervals-row-missing {
     rgba(0, 0, 0, 0.16);
 }
 
+.chat-openrouter-section {
+  border-color: rgba(139, 157, 255, 0.26);
+  background:
+    linear-gradient(145deg, rgba(88, 103, 178, 0.09), transparent 50%),
+    rgba(0, 0, 0, 0.16);
+}
+
+.chat-openrouter-actions {
+  flex-wrap: wrap;
+}
+
 .chat-claude-path-row {
   display: flex;
   align-items: center;
@@ -18838,6 +18849,10 @@ tr.data-intervals-row-missing {
 
 .chat-claude-login-panel > svg {
   color: #c4b5fd;
+}
+
+.chat-openrouter-login-panel > svg {
+  color: #a7b4ff;
 }
 
 .chat-claude-login-panel .chat-login-title-row h2 {
@@ -19721,6 +19736,14 @@ tr.data-intervals-row-missing {
   --chat-select-tone-shadow: rgba(217, 119, 87, 0.22);
 }
 
+.chat-select--openrouter,
+.chat-select-menu--openrouter {
+  --chat-select-tone: #8b9dff;
+  --chat-select-tone-strong: #c3cbff;
+  --chat-select-tone-soft: rgba(123, 140, 255, 0.15);
+  --chat-select-tone-shadow: rgba(123, 140, 255, 0.22);
+}
+
 .chat-select--local,
 .chat-select-menu--local {
   --chat-select-tone: #35c4b0;
@@ -19741,6 +19764,12 @@ tr.data-intervals-row-missing {
   --chat-select-tone-soft: rgba(217, 119, 87, 0.15);
 }
 
+.chat-provider-menu .app-select-option[data-value="openrouter"] {
+  --chat-select-tone: #8b9dff;
+  --chat-select-tone-strong: #c3cbff;
+  --chat-select-tone-soft: rgba(123, 140, 255, 0.15);
+}
+
 .chat-provider-menu .app-select-option[data-value="local"] {
   --chat-select-tone: #35c4b0;
   --chat-select-tone-strong: #70e3d3;
@@ -19748,7 +19777,7 @@ tr.data-intervals-row-missing {
 }
 
 .chat-provider-select {
-  width: 138px;
+  width: 148px;
 }
 
 .chat-model-select {
@@ -23555,6 +23584,14 @@ tr.data-intervals-row-missing {
   --chat-select-tone-shadow: rgba(189, 91, 60, 0.18);
 }
 
+:root[data-theme="paper"] .chat-select--openrouter,
+:root[data-theme="paper"] .chat-select-menu--openrouter {
+  --chat-select-tone: #5867b2;
+  --chat-select-tone-strong: #3f4b91;
+  --chat-select-tone-soft: rgba(88, 103, 178, 0.11);
+  --chat-select-tone-shadow: rgba(88, 103, 178, 0.17);
+}
+
 :root[data-theme="paper"] .chat-select--local,
 :root[data-theme="paper"] .chat-select-menu--local {
   --chat-select-tone: #0c7f74;
@@ -23577,6 +23614,14 @@ tr.data-intervals-row-missing {
   --chat-select-tone: #bd5b3c;
   --chat-select-tone-strong: #934329;
   --chat-select-tone-soft: rgba(189, 91, 60, 0.12);
+}
+
+:root[data-theme="paper"]
+  .chat-provider-menu
+  .app-select-option[data-value="openrouter"] {
+  --chat-select-tone: #5867b2;
+  --chat-select-tone-strong: #3f4b91;
+  --chat-select-tone-soft: rgba(88, 103, 178, 0.11);
 }
 
 :root[data-theme="paper"]

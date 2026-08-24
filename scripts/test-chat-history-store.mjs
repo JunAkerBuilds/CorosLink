@@ -298,4 +298,13 @@ saveChatSession(
 assert.equal(listChatSessions("claude-code", db).length, 1);
 assert.equal(listChatSessions("local", db).length, 1);
 
+const openRouter = createChatSession("openrouter", db);
+saveChatSession(
+  openRouter.id,
+  [{ kind: "message", role: "assistant", content: "OpenRouter response." }],
+  db
+);
+assert.equal(listChatSessions("openrouter", db).length, 1);
+assert.equal(listChatSessions("chatgpt", db).length, 2);
+
 console.log("chat history store tests passed");

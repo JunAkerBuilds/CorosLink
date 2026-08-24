@@ -1,15 +1,17 @@
-import { Bot, Sparkles, Terminal } from "lucide-react";
+import { Bot, Network, Sparkles, Terminal } from "lucide-react";
 import type { ChatProvider } from "../../electron/types";
 import { SelectDropdown } from "../components/SelectDropdown";
 
 const OPTIONS: Array<{ value: ChatProvider; label: string }> = [
   { value: "chatgpt", label: "ChatGPT" },
   { value: "claude-code", label: "Claude" },
+  { value: "openrouter", label: "OpenRouter" },
   { value: "local", label: "Local model" }
 ];
 
 function getProviderTone(provider: ChatProvider) {
   if (provider === "claude-code") return "claude";
+  if (provider === "openrouter") return "openrouter";
   if (provider === "local") return "local";
   return "gpt";
 }
@@ -20,6 +22,9 @@ function renderProviderIcon(provider: ChatProvider) {
   }
   if (provider === "local") {
     return <Bot size={14} strokeWidth={2.1} aria-hidden="true" />;
+  }
+  if (provider === "openrouter") {
+    return <Network size={14} strokeWidth={2.1} aria-hidden="true" />;
   }
   return <Sparkles size={14} strokeWidth={2.1} aria-hidden="true" />;
 }

@@ -12,10 +12,17 @@ const {
   isLocalToolsUnsupportedError,
   normalizeLocalToolCall,
   normalizeLocalChatBaseUrl,
+  parseCompatibleChatStreamError,
   parseLocalChatContentDelta,
   streamLocalChatCompletion,
   testLocalChatConnectionRequest
 } = await import(`${distUrl("localChatProvider.js")}?cacheBust=${Date.now()}`);
+const {
+  DEFAULT_OPENROUTER_MODEL,
+  listOpenRouterModelsRequest,
+  streamOpenRouterChatCompletion,
+  testOpenRouterConnectionRequest
+} = await import(`${distUrl("openRouterProvider.js")}?cacheBust=${Date.now()}`);
 const { parseFunctionCallArguments } = await import(
   `${distUrl("chatToolArguments.js")}?cacheBust=${Date.now()}`
 );
@@ -205,6 +212,12 @@ assert.equal(
     choices: [{ delta: { content: "Run easy today." } }]
   }),
   "Run easy today."
+);
+assert.equal(
+  parseCompatibleChatStreamError({
+    error: { message: "OpenRouter upstream provider failed." }
+  }),
+  "OpenRouter upstream provider failed."
 );
 
 const accumulator = new LocalToolCallAccumulator();
@@ -480,6 +493,135 @@ assert.ok("tools" in requests[0]);
 assert.equal("tools" in requests[1], false);
 assert.equal(requests[1].messages[0].content, "SNAPSHOT ONLY");
 
+const openRouterRequests = [];
+globalThis.fetch = async (url, init) => {
+  const href = String(url);
+  openRouterRequests.push({ href, init });
+  if (href.endsWith("/key")) {
+    return new Response(JSON.stringify({ data: { label: "sk-or-v1-test…123" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+  if (href.includes("/models/user")) {
+    return new Response(
+      JSON.stringify({
+        data: [
+          {
+            id: "example/plain-model",
+            name: "Plain model",
+            supported_parameters: ["temperature"]
+          },
+          {
+            id: "example/tool-model",
+            name: "Tool model",
+            supported_parameters: ["tools", "tool_choice"]
+          }
+        ]
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  }
+  if (href.endsWith("/chat/completions")) {
+    return streamResponse([
+      'data: {"choices":[{"delta":{"content":"OpenRouter coach ready."}}]}\n\n',
+      "data: [DONE]\n\n"
+    ]);
+  }
+  return new Response("not found", { status: 404 });
+};
+
+assert.equal(DEFAULT_OPENROUTER_MODEL, "openrouter/auto");
+const openRouterConnection = await testOpenRouterConnectionRequest({
+  model: "openrouter/auto",
+  hasApiKey: false,
+  apiKey: "sk-or-v1-test"
+});
+assert.equal(openRouterConnection.ok, true);
+assert.equal(openRouterConnection.keyLabel, "sk-or-v1-test…123");
+assert.deepEqual(openRouterConnection.models, [
+  { id: "openrouter/auto", name: "Auto Router" },
+  { id: "openrouter/free", name: "Free Router" },
+  { id: "example/tool-model", name: "Tool model" }
+]);
+assert.match(
+  String(openRouterRequests[0].init?.headers?.Authorization),
+  /^Bearer sk-or-v1-test$/
+);
+
+const listedOpenRouterModels = await listOpenRouterModelsRequest(
+  "sk-or-v1-test"
+);
+assert.deepEqual(listedOpenRouterModels, [
+  { id: "openrouter/auto", name: "Auto Router" },
+  { id: "openrouter/free", name: "Free Router" },
+  { id: "example/tool-model", name: "Tool model" }
+]);
+
+let openRouterStreamed = "";
+const openRouterStream = await streamOpenRouterChatCompletion({
+  config: { model: "openrouter/auto", apiKey: "sk-or-v1-test" },
+  instructions: "Coach with COROS tools",
+  messages: [{ role: "user", content: "Plan today" }],
+  tools: [
+    {
+      name: "get_training_load",
+      description: "Get training load",
+      inputSchema: { type: "object", properties: {} }
+    }
+  ],
+  maxToolRounds: 2,
+  signal: new AbortController().signal,
+  onToken: (delta) => {
+    openRouterStreamed += delta;
+  },
+  onToolCall: async () => "",
+  onToolCallStart: () => undefined,
+  onToolCallError: () => undefined
+});
+assert.equal(openRouterStreamed, "OpenRouter coach ready.");
+assert.equal(openRouterStream.fullText, "OpenRouter coach ready.");
+const completionRequest = openRouterRequests.find(({ href }) =>
+  href.endsWith("/chat/completions")
+);
+assert.ok(completionRequest);
+assert.equal(completionRequest.init.headers.Authorization, "Bearer sk-or-v1-test");
+assert.equal(completionRequest.init.headers["X-Title"], "CorosLink");
+const completionBody = JSON.parse(String(completionRequest.init.body));
+assert.equal(completionBody.model, "openrouter/auto");
+assert.equal(completionBody.tools[0].function.name, "get_training_load");
+
+let unsupportedOpenRouterRequests = 0;
+globalThis.fetch = async () => {
+  unsupportedOpenRouterRequests += 1;
+  return new Response("No endpoints found that support tool use", {
+    status: 404
+  });
+};
+await assert.rejects(
+  () =>
+    streamOpenRouterChatCompletion({
+      config: { model: "example/plain-model", apiKey: "sk-or-v1-test" },
+      instructions: "Coach with COROS tools",
+      messages: [{ role: "user", content: "Plan today" }],
+      tools: [
+        {
+          name: "get_training_load",
+          description: "Get training load",
+          inputSchema: { type: "object", properties: {} }
+        }
+      ],
+      maxToolRounds: 2,
+      signal: new AbortController().signal,
+      onToken: () => undefined,
+      onToolCall: async () => "",
+      onToolCallStart: () => undefined,
+      onToolCallError: () => undefined
+    }),
+  /OpenRouter request failed \(404\)/
+);
+assert.equal(unsupportedOpenRouterRequests, 1);
+
 globalThis.fetch = originalFetch;
 
 const { readChatSettingsFromStore, saveChatSettingsToStore } = await import(
@@ -500,6 +642,7 @@ assert.deepEqual(
 
 const settingsValues = new Map();
 let storedApiKey = "";
+let storedOpenRouterApiKey = "";
 const fakeStore = {
   get: (key) => settingsValues.get(key),
   set: (key, value) => {
@@ -518,11 +661,29 @@ const fakeApiKeyStore = {
     storedApiKey = "";
   }
 };
+const fakeOpenRouterApiKeyStore = {
+  hasApiKey: () => Boolean(storedOpenRouterApiKey),
+  saveApiKey: (apiKey) => {
+    storedOpenRouterApiKey = apiKey;
+  },
+  clearApiKey: () => {
+    storedOpenRouterApiKey = "";
+  }
+};
 
-const saved = saveChatSettingsToStore(fakeStore, fakeApiKeyStore, {
+const saved = saveChatSettingsToStore(
+  fakeStore,
+  fakeApiKeyStore,
+  fakeOpenRouterApiKeyStore,
+  {
   provider: "claude-code",
   chatgpt: {
     model: "gpt-5.6-terra"
+  },
+  openRouter: {
+    model: "anthropic/claude-sonnet-4",
+    hasApiKey: false,
+    apiKey: "sk-or-v1-secret"
   },
   claudeCode: {
     model: "sonnet",
@@ -544,9 +705,13 @@ const saved = saveChatSettingsToStore(fakeStore, fakeApiKeyStore, {
     apiKey: "secret",
     toolsEnabled: false
   }
-});
+  }
+);
 assert.equal(saved.provider, "claude-code");
 assert.equal(saved.chatgpt.model, "gpt-5.6-terra");
+assert.equal(saved.openRouter.model, "anthropic/claude-sonnet-4");
+assert.equal(saved.openRouter.hasApiKey, true);
+assert.equal(saved.openRouter.apiKey, undefined);
 assert.equal(saved.claudeCode.executablePath, "/opt/claude/bin/claude");
 assert.equal(saved.claudeCode.model, "sonnet");
 assert.equal(saved.claudeCode.lastConnectionStatus, "connected");
@@ -563,15 +728,28 @@ assert.equal(saved.local.toolsEnabled, false);
 assert.equal(saved.local.apiKey, undefined);
 assert.equal(saved.local.hasApiKey, true);
 assert.equal(storedApiKey, "secret");
+assert.equal(storedOpenRouterApiKey, "sk-or-v1-secret");
 
-const loaded = readChatSettingsFromStore(fakeStore, fakeApiKeyStore);
+const loaded = readChatSettingsFromStore(
+  fakeStore,
+  fakeApiKeyStore,
+  fakeOpenRouterApiKeyStore
+);
 assert.deepEqual(loaded, saved);
 
-const cleared = saveChatSettingsToStore(fakeStore, fakeApiKeyStore, {
-  ...loaded,
-  local: { ...loaded.local, clearApiKey: true }
-});
+const cleared = saveChatSettingsToStore(
+  fakeStore,
+  fakeApiKeyStore,
+  fakeOpenRouterApiKeyStore,
+  {
+    ...loaded,
+    openRouter: { ...loaded.openRouter, clearApiKey: true },
+    local: { ...loaded.local, clearApiKey: true }
+  }
+);
 assert.equal(cleared.local.hasApiKey, false);
 assert.equal(storedApiKey, "");
+assert.equal(cleared.openRouter.hasApiKey, false);
+assert.equal(storedOpenRouterApiKey, "");
 
 console.log("chat service tests passed");

@@ -56,6 +56,10 @@ import {
   type LocalChatRuntimeConfig
 } from "./localChatProvider";
 import {
+  streamOpenRouterChatCompletion,
+  testOpenRouterConnectionRequest
+} from "./openRouterProvider";
+import {
   ClaudeCodeProviderError,
   getClaudeCodeStatus as inspectClaudeCodeStatus,
   launchClaudeCodeLogin,
@@ -88,6 +92,8 @@ import type {
   LocalChatDiscovery,
   LocalChatConfig,
   LocalChatConnectionTest,
+  OpenRouterConfig,
+  OpenRouterConnectionTest,
   ChatMessage,
   PersistedChatEntry,
   StoredChatToken,
@@ -150,13 +156,18 @@ const activeStreams = new Map<string, AbortController>();
 // ----- Provider settings -----
 
 export function getChatSettings(): ChatSettings {
-  return readChatSettingsFromStore(chatSettingsStore, localApiKeyStore);
+  return readChatSettingsFromStore(
+    chatSettingsStore,
+    localApiKeyStore,
+    openRouterApiKeyStore
+  );
 }
 
 export function saveChatSettings(settings: ChatSettings): ChatSettings {
   return saveChatSettingsToStore(
     chatSettingsStore,
     localApiKeyStore,
+    openRouterApiKeyStore,
     settings
   );
 }
@@ -254,6 +265,22 @@ export async function detectLocalChatServers(
   );
 }
 
+export async function testOpenRouterConnection(
+  config?: OpenRouterConfig
+): Promise<OpenRouterConnectionTest> {
+  const saved = getChatSettings().openRouter;
+  return testOpenRouterConnectionRequest({
+    ...saved,
+    ...config,
+    model: config?.model ?? saved.model,
+    hasApiKey: saved.hasApiKey,
+    apiKey:
+      typeof config?.apiKey === "string" && config.apiKey.trim()
+        ? config.apiKey.trim()
+        : readStoredOpenRouterApiKey()
+  });
+}
+
 function getLocalConfig(): LocalChatConfig {
   return getChatSettings().local;
 }
@@ -270,16 +297,20 @@ function getLocalRuntimeConfig(config = getLocalConfig()): LocalChatRuntimeConfi
   };
 }
 
-function storeLocalApiKey(apiKey: string): void {
+function storeEncryptedChatApiKey(
+  settingKey: string,
+  label: string,
+  apiKey: string
+): void {
   if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("Secure local API key storage is not available on this system.");
+    throw new Error(`Secure ${label} API key storage is not available on this system.`);
   }
   const encrypted = safeStorage.encryptString(apiKey).toString("base64");
-  setSetting(CHAT_SETTINGS_KEYS.localApiKey, encrypted);
+  setSetting(settingKey, encrypted);
 }
 
-function readStoredLocalApiKey(): string | undefined {
-  const encoded = getSetting(CHAT_SETTINGS_KEYS.localApiKey);
+function readStoredChatApiKey(settingKey: string): string | undefined {
+  const encoded = getSetting(settingKey);
   if (!encoded || !safeStorage.isEncryptionAvailable()) {
     return undefined;
   }
@@ -290,6 +321,14 @@ function readStoredLocalApiKey(): string | undefined {
   }
 }
 
+function readStoredLocalApiKey(): string | undefined {
+  return readStoredChatApiKey(CHAT_SETTINGS_KEYS.localApiKey);
+}
+
+function readStoredOpenRouterApiKey(): string | undefined {
+  return readStoredChatApiKey(CHAT_SETTINGS_KEYS.openRouterApiKey);
+}
+
 const chatSettingsStore: ChatSettingsStore = {
   get: getSetting,
   set: setSetting,
@@ -298,8 +337,20 @@ const chatSettingsStore: ChatSettingsStore = {
 
 const localApiKeyStore: ChatApiKeyStore = {
   hasApiKey: () => Boolean(getSetting(CHAT_SETTINGS_KEYS.localApiKey)),
-  saveApiKey: storeLocalApiKey,
+  saveApiKey: (apiKey) =>
+    storeEncryptedChatApiKey(CHAT_SETTINGS_KEYS.localApiKey, "local", apiKey),
   clearApiKey: () => deleteSettings([CHAT_SETTINGS_KEYS.localApiKey])
+};
+
+const openRouterApiKeyStore: ChatApiKeyStore = {
+  hasApiKey: () => Boolean(getSetting(CHAT_SETTINGS_KEYS.openRouterApiKey)),
+  saveApiKey: (apiKey) =>
+    storeEncryptedChatApiKey(
+      CHAT_SETTINGS_KEYS.openRouterApiKey,
+      "OpenRouter",
+      apiKey
+    ),
+  clearApiKey: () => deleteSettings([CHAT_SETTINGS_KEYS.openRouterApiKey])
 };
 
 // ----- Auth status -----
@@ -681,6 +732,75 @@ export async function streamChat(
         checkedAt: new Date().toISOString(),
         message: "Claude Code is connected and ready for Coach conversations."
       });
+      send("chat:streamDone", { requestId, fullText });
+      return;
+    }
+
+    if (settings.provider === "openrouter") {
+      const apiKey = readStoredOpenRouterApiKey();
+      if (!apiKey) {
+        throw new Error("Add an OpenRouter API key in Coach settings first.");
+      }
+      const { text: instructions, hasData } = await buildTrainingContext(
+        undefined,
+        unitSystem
+      );
+
+      await ensureAllMcpConnected();
+      const chatTools = getAllChatTools();
+      const effectiveInstructions = withLiveToolInstructions(
+        instructions,
+        chatTools
+      );
+
+      send("chat:streamStart", { requestId });
+      send("chat:streamInfo", {
+        requestId,
+        kind: "context",
+        snapshotIncluded: hasData,
+        mcpEnabled: chatTools.length > 0
+      });
+
+      const result = await streamOpenRouterChatCompletion({
+        config: {
+          model: settings.openRouter.model,
+          apiKey
+        },
+        instructions: effectiveInstructions,
+        fallbackInstructions: instructions,
+        messages,
+        tools: chatTools,
+        maxToolRounds: MAX_TOOL_ROUNDS,
+        signal: controller.signal,
+        onToken: (delta) => {
+          fullText += delta;
+          send("chat:streamToken", { requestId, delta });
+        },
+        onToolCallStart: (call) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "mcp",
+            tool: call.name,
+            status: "call"
+          });
+        },
+        onToolCallError: (call, message) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "mcp",
+            tool: call.name,
+            status: "failed",
+            message
+          });
+        },
+        onToolCall: async (call) => {
+          const tool = findChatTool(call.name);
+          const args = parseFunctionCallArguments(call, tool);
+          console.log("[chat] OpenRouter tool call:", call.name);
+          return executeChatTool(call.name, args, send, requestId, unitSystem);
+        }
+      });
+      fullText = result.fullText;
       send("chat:streamDone", { requestId, fullText });
       return;
     }
