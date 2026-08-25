@@ -21,7 +21,11 @@ import {
   mcpSecretKey,
   updateMcpServer
 } from "./mcpServersStore";
-import { mcpOAuthClientName } from "./mcpOAuthCompatibility";
+import {
+  mcpOAuthClientName,
+  mcpOAuthInvalidationTargets,
+  type McpOAuthInvalidationScope
+} from "./mcpOAuthCompatibility";
 import { prefixToolName, splitToolName } from "./mcpToolNames";
 import type {
   CorosMcpTool,
@@ -213,6 +217,16 @@ class McpOAuthProvider implements OAuthClientProvider {
 
   saveTokens(tokens: OAuthTokens): void {
     writeTokens(this.config.serverId, tokens);
+  }
+
+  invalidateCredentials(scope: McpOAuthInvalidationScope): void {
+    const targets = mcpOAuthInvalidationTargets(scope);
+    const keys = keysFor(this.config.serverId);
+    const storedKeys: string[] = [];
+    if (targets.includes("tokens")) storedKeys.push(keys.tokens);
+    if (targets.includes("clientInformation")) storedKeys.push(keys.clientInfo);
+    if (storedKeys.length > 0) deleteSettings(storedKeys);
+    if (targets.includes("verifier")) this.verifier = "";
   }
 
   saveCodeVerifier(verifier: string): void {

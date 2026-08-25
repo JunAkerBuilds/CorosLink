@@ -902,7 +902,7 @@ export interface CorosWatchfaceDesignState {
   tintIcons: boolean;
   previewComplication: string;
   metricChanges: Record<string, boolean>;
-  metricStyles: Record<string, { color?: string; scale: number; rotation?: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
+  metricStyles: Record<string, { color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Optional native calorie goal arc/bar configuration. */
   kcalProgress?: CorosWatchfaceKcalProgressStyle;
   /** Optional native exercise-goal bar configuration. */
@@ -916,6 +916,8 @@ export interface CorosWatchfaceDesignState {
     /** Clockwise rotation applied inside each firmware sprite canvas. */
     rotation?: number;
     fontFamily?: string;
+    fontWeight?: number;
+    fontStyle?: "normal" | "italic";
     letterSpacing?: number;
     rasterFont?: CorosWatchfaceRasterFont;
     /** Preserve each selectable digit's natural width and expand value rectangles. */
@@ -942,7 +944,7 @@ export interface CorosWatchfaceDesignState {
   controlIconOffsets?: Record<string, { dx: number; dy: number }>;
   /** Converts firmware auto-aligned HH:MM into four independently positioned digits. */
   separateAutoTime?: boolean;
-  timeStyles: Record<string, { color?: string; scale: number; rotation?: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
+  timeStyles: Record<string, { color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Weekday/month/day sizing; absent in projects saved before resizing. */
   dateStyles?: Record<
     string,
@@ -959,6 +961,8 @@ export interface CorosWatchfaceDesignState {
       monthFormat?: "digits" | "labels";
       fontFamily?: string;
       color?: string;
+      fontWeight?: number;
+      fontStyle?: "normal" | "italic";
       letterSpacing?: number;
       rasterFont?: CorosWatchfaceRasterFont;
       /** Legacy weekday/date-day natural-width mode. */

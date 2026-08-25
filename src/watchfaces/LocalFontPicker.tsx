@@ -110,13 +110,10 @@ export function LocalFontPicker({
         onLetterSpacingChange(patch.letterSpacing);
         return;
       }
-      // The typography prop carries this component's effective spacing;
-      // writing it back would pin the design-wide value to it.
-      const { letterSpacing: _componentSpacing, ...shared } = {
-        ...typography,
-        ...patch
-      };
-      onTypographyChange?.(shared);
+      // The typography prop contains inherited effective values. Forward only
+      // the changed field so editing weight does not pin style (or vice versa).
+      const { letterSpacing: _componentSpacing, ...componentPatch } = patch;
+      onTypographyChange?.(componentPatch);
       return;
     }
     onTypographyChange?.({ ...typography, ...patch });

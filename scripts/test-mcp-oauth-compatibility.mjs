@@ -6,7 +6,9 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const modUrl = pathToFileURL(
   path.join(repoRoot, "electron", "mcpOAuthCompatibility.ts")
 );
-const { mcpOAuthClientName } = await import(`${modUrl.href}?c=${Date.now()}`);
+const { mcpOAuthClientName, mcpOAuthInvalidationTargets } = await import(
+  `${modUrl.href}?c=${Date.now()}`
+);
 
 assert.equal(
   mcpOAuthClientName("https://mcp.strava.com/mcp", "Strava"),
@@ -24,5 +26,15 @@ assert.equal(
   mcpOAuthClientName("https://freddy.coach/mcp", "Freddy"),
   "CorosLink"
 );
+
+assert.deepEqual(mcpOAuthInvalidationTargets("tokens"), ["tokens"]);
+assert.deepEqual(mcpOAuthInvalidationTargets("client"), ["clientInformation"]);
+assert.deepEqual(mcpOAuthInvalidationTargets("verifier"), ["verifier"]);
+assert.deepEqual(mcpOAuthInvalidationTargets("discovery"), []);
+assert.deepEqual(mcpOAuthInvalidationTargets("all"), [
+  "clientInformation",
+  "tokens",
+  "verifier"
+]);
 
 console.log("mcp-oauth-compatibility tests passed");
