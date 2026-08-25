@@ -5354,7 +5354,7 @@ export function WatchfaceEditor({
 
   function setMetricStyle(
     metricId: WatchfaceMetricId,
-    patch: { color?: string; scale?: number; rotation?: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
+    patch: { color?: string; scale?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
   ) {
     setDesign((prev) => {
       const current = prev.metricStyles?.[metricId] ?? { scale: 1 };
@@ -5510,7 +5510,7 @@ export function WatchfaceEditor({
 
   function setTimeStyle(
     partId: WatchfaceTimePartId,
-    patch: { color?: string; scale?: number; rotation?: number; fontFamily?: string; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
+    patch: { color?: string; scale?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
   ) {
     setDesign((prev) => {
       const current = prev.timeStyles?.[partId] ?? { scale: 1 };
@@ -5578,6 +5578,8 @@ export function WatchfaceEditor({
       monthFormat?: "digits" | "labels";
       fontFamily?: string;
       color?: string;
+      fontWeight?: number;
+      fontStyle?: "normal" | "italic";
       letterSpacing?: number;
       rasterFont?: CorosWatchfaceDesignState["rasterFont"];
       nativeSize?: boolean;
@@ -9676,7 +9678,7 @@ export function WatchfaceEditor({
             "specific",
             "Typography",
             <div className="wf-property-stack">
-              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setMetricStyle("battery", { fontFamily, rasterFont: undefined })} rasterFont={design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: design.fontWeight ?? 400, fontStyle: design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => patchDesign(typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle("battery", { letterSpacing })} />
+              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setMetricStyle("battery", { fontFamily, rasterFont: undefined })} rasterFont={design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle("battery", typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle("battery", { letterSpacing })} />
               <div className="watchface-position-inputs">
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle("battery", { scale: Math.max(0.01, scale) })} /></label>
                 <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle("battery", { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
@@ -9707,7 +9709,7 @@ export function WatchfaceEditor({
             "Typography",
             <div className="wf-property-stack">
               {layer.timePartId === "autoTime" ? <button type="button" className="secondary-button" onClick={convertAutoTimeToSeparate}>Separate hours and minutes</button> : null}
-              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setTimeStyle(layer.timePartId!, { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: design.fontWeight ?? 400, fontStyle: design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => patchDesign(typography)} onLetterSpacingChange={(letterSpacing) => setTimeStyle(layer.timePartId!, { letterSpacing })} />
+              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setTimeStyle(layer.timePartId!, { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setTimeStyle(layer.timePartId!, typography)} onLetterSpacingChange={(letterSpacing) => setTimeStyle(layer.timePartId!, { letterSpacing })} />
               <div className="watchface-position-inputs">
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setTimeStyle(layer.timePartId!, { scale: Math.max(0.01, scale) })} /></label>
                 <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setTimeStyle(layer.timePartId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
@@ -9830,7 +9832,7 @@ export function WatchfaceEditor({
             "specific",
             "Typography",
             <div className="wf-property-stack">
-              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: design.fontWeight ?? 400, fontStyle: design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => patchDesign(typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
+              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle(layer.metricId!, typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
               <div className="watchface-position-inputs">
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, scale) })} /></label>
                 {supportsWatchfaceSpriteRotation(layer.metricId) ? <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle(layer.metricId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label> : null}
@@ -10029,8 +10031,8 @@ export function WatchfaceEditor({
                 rasterFont={design.rasterFont}
                 rasterFontRequiredText={partId === "weekday" ? "MON" : usesMonthLabels ? "JAN" : undefined}
                 onRasterFontChange={setRasterFont}
-                typography={{ fontWeight: design.fontWeight ?? 400, fontStyle: design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }}
-                onTypographyChange={(typography) => patchDesign(typography)}
+                typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }}
+                onTypographyChange={(typography) => setDateStyle(partId, typography)}
                 onLetterSpacingChange={(letterSpacing) =>
                   setDateStyle(partId, {
                     letterSpacing,
@@ -10465,14 +10467,22 @@ export function WatchfaceEditor({
           rasterFont={design.rasterFont}
           onRasterFontChange={setRasterFont}
           typography={{
-            fontWeight: design.fontWeight ?? 400,
-            fontStyle: design.fontStyle ?? "normal",
+            fontWeight:
+              design.selectableMetricStyle?.fontWeight ??
+              design.fontWeight ??
+              400,
+            fontStyle:
+              design.selectableMetricStyle?.fontStyle ??
+              design.fontStyle ??
+              "normal",
             letterSpacing:
               design.selectableMetricStyle?.letterSpacing ??
               design.letterSpacing ??
               0
           }}
-          onTypographyChange={(typography) => patchDesign(typography)}
+          onTypographyChange={(typography) =>
+            setSelectableMetricStyle(typography)
+          }
           onLetterSpacingChange={(letterSpacing) =>
             setSelectableMetricStyle({ letterSpacing })
           }

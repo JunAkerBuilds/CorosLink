@@ -69,6 +69,7 @@ import {
   rasterFontNativeSpriteSize,
   removeWatchfaceDateFontOverride,
   rebaseNegativeControlChildren,
+  resolveWatchfaceComponentTypography,
   retargetWatchfaceCompositionToAod,
   retargetWatchfaceCompositionToCurrent,
   resizeConfigRectToCanvas,
@@ -98,6 +99,36 @@ assert.equal(watchfaceLayerRequiresFixedSpriteBounds("exercise"), true);
 assert.equal(watchfaceLayerRequiresFixedSpriteBounds("hours"), true);
 assert.equal(watchfaceLayerRequiresFixedSpriteBounds("weather"), false);
 assert.equal(watchfaceLayerRequiresFixedSpriteBounds("sprite:custom"), false);
+
+const componentTypography = resolveWatchfaceComponentTypography(
+  {
+    fontWeight: 700,
+    fontStyle: "italic",
+    letterSpacing: 0.08
+  },
+  {
+    fontWeight: 400,
+    fontStyle: "normal",
+    letterSpacing: -0.04
+  }
+);
+assert.equal(
+  componentTypography.fontWeight,
+  400,
+  "a component font weight should override the face-wide weight"
+);
+assert.equal(
+  componentTypography.fontStyle,
+  "normal",
+  "a component font style should override the face-wide style"
+);
+assert.equal(componentTypography.letterSpacing, -0.04);
+const inheritedComponentTypography = resolveWatchfaceComponentTypography(
+  { fontWeight: 700, fontStyle: "italic" },
+  { letterSpacing: 0.1 }
+);
+assert.equal(inheritedComponentTypography.fontWeight, 700);
+assert.equal(inheritedComponentTypography.fontStyle, "italic");
 
 const rasterFolderSprite = (relativePath, dataUrl = relativePath) => ({
   name: relativePath.split("/").at(-1),
@@ -1112,6 +1143,8 @@ assert.equal(
   removeWatchfaceDateFontOverride({
     scale: 1,
     fontFamily: "Fixture Sans",
+    fontWeight: 300,
+    fontStyle: "italic",
     letterSpacing: 0.08,
     nativeSize: true
   }),

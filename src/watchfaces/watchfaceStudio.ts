@@ -231,15 +231,22 @@ function normalizeSpriteScale(scale: number | undefined): number {
   return Number.isFinite(scale) && scale! > 0 ? scale! : 1;
 }
 
-/** Component styles override the face-wide raster font and sprite spacing. */
-function componentTypography(
+/** Component styles override face-wide typography without affecting other layers. */
+export function resolveWatchfaceComponentTypography(
   typography: WatchfaceTypography,
   style:
-    | { rasterFont?: CorosWatchfaceRasterFont; letterSpacing?: number }
+    | {
+        fontWeight?: number;
+        fontStyle?: "normal" | "italic";
+        rasterFont?: CorosWatchfaceRasterFont;
+        letterSpacing?: number;
+      }
     | undefined
 ): WatchfaceTypography {
   return {
     ...typography,
+    fontWeight: style?.fontWeight ?? typography.fontWeight,
+    fontStyle: style?.fontStyle ?? typography.fontStyle,
     rasterFont: style?.rasterFont ?? typography.rasterFont,
     letterSpacing: style?.letterSpacing ?? typography.letterSpacing
   };
@@ -3368,6 +3375,10 @@ export interface WatchfaceMetricSpriteStyle {
   rotation?: number;
   /** Optional per-layer font; falls back to the design font. */
   fontFamily?: string;
+  /** Font weight for this component only; falls back to the design weight. */
+  fontWeight?: number;
+  /** Font style for this component only; falls back to the design style. */
+  fontStyle?: "normal" | "italic";
   /** Sprite spacing for this component only; falls back to the design value. */
   letterSpacing?: number;
   /** A PNG set scoped to this component rather than the shared face font. */
@@ -3403,6 +3414,10 @@ export interface WatchfaceDateSpriteStyle {
   /** Optional per-layer font; falls back to the design font. */
   fontFamily?: string;
   color?: string;
+  /** Font weight for this component only; falls back to the design weight. */
+  fontWeight?: number;
+  /** Font style for this component only; falls back to the design style. */
+  fontStyle?: "normal" | "italic";
   /** Sprite spacing for this component only; falls back to the design value. */
   letterSpacing?: number;
   /** A PNG set scoped to this date layer rather than the shared face font. */
@@ -3426,6 +3441,8 @@ export function removeWatchfaceDateFontOverride(
   if (!style) return undefined;
   const {
     fontFamily: _fontFamily,
+    fontWeight: _fontWeight,
+    fontStyle: _fontStyle,
     rasterFont: _rasterFont,
     nativeSize: _nativeSize,
     letterSpacing: _letterSpacing,
@@ -4923,7 +4940,7 @@ export async function buildControlTemperatureSpriteReplacements(
     });
   }
   const selectedFont = style.fontFamily ?? fontFamily;
-  const spriteTypography = componentTypography(typography, style);
+  const spriteTypography = resolveWatchfaceComponentTypography(typography, style);
   const rasterized = shouldRenderWatchfaceText("0123456789", selectedFont, spriteTypography);
   const assets = rasterized
     ? []
@@ -5103,7 +5120,7 @@ export async function buildSelectableMetricSpriteComposition(
     });
   }
   const selectedFont = style.fontFamily ?? fontFamily;
-  const spriteTypography = componentTypography(typography, style);
+  const spriteTypography = resolveWatchfaceComponentTypography(typography, style);
   const rasterized = shouldRenderWatchfaceText(
     "0123456789",
     selectedFont,
@@ -5818,7 +5835,7 @@ export async function buildMetricSpriteReplacements(
       }
       const normalizedScale = normalizeSpriteScale(style.scale);
       const metricFontFamily = style.fontFamily ?? fontFamily;
-      const metricTypography = componentTypography(typography, style);
+      const metricTypography = resolveWatchfaceComponentTypography(typography, style);
       source.files.slice(0, 10).forEach((file, digit) => {
         const path = `${resolution.directory}/${METRIC_STUDIO_FOLDERS[metric.id]}/${String(digit).padStart(2, "0")}.png`;
         const existsInTemplate = resolution.spriteFolders.some((folder) =>
@@ -6036,7 +6053,7 @@ export async function buildTimeSpriteReplacements(
       : null;
     if (autoStyle && autoSource) {
       const partFontFamily = autoStyle.fontFamily ?? fontFamily;
-      const partTypography = componentTypography(typography, autoStyle);
+      const partTypography = resolveWatchfaceComponentTypography(typography, autoStyle);
       autoSource.files.slice(0, 10).forEach((file, value) => {
         const canvasSize = timeSpriteCanvasSize(
           file,
@@ -6075,7 +6092,7 @@ export async function buildTimeSpriteReplacements(
         continue;
       }
       const partFontFamily = style.fontFamily ?? fontFamily;
-      const partTypography = componentTypography(typography, style);
+      const partTypography = resolveWatchfaceComponentTypography(typography, style);
       for (const digit of part.digits) {
         const source = findSpriteFolder(resolution, resolution.config[digit.fontKey]);
         if (!source) {
@@ -6284,7 +6301,7 @@ export async function buildDateSpriteComposition(
         continue;
       }
       const partFontFamily = style.fontFamily ?? options.fontFamily;
-      const partTypography = componentTypography(options, style);
+      const partTypography = resolveWatchfaceComponentTypography(options, style);
       const normalizedScale = normalizeSpriteScale(style.scale);
       const monthLabels = part.id === "dateMonth" && dateMonthUsesLabels(source, style);
       const limit = part.kind === "week" ? 7 : monthLabels ? 12 : 10;
@@ -8414,7 +8431,7 @@ export async function drawStudioPreview(
       : undefined;
     const componentColor = options.layerColors?.[planned.componentId];
     const timeFontFamily = timeStyle?.fontFamily ?? options.fontFamily;
-    const timeTypography = componentTypography(options, timeStyle);
+    const timeTypography = resolveWatchfaceComponentTypography(options, timeStyle);
     const timeColor = timeStyle?.color ?? componentColor ?? options.digitColor;
     const canvasSize = timeSpriteCanvasSize(
       file,
@@ -8437,7 +8454,7 @@ export async function drawStudioPreview(
     );
     let image = digitSprites.get(file.path) ?? loaded.get(file.path);
     if (timeStyle || componentColor || rasterizedTime) {
-      const cacheKey = `${file.path}|${timeFontFamily}|${timeColor}|${width}x${height}|${timeTypography.letterSpacing ?? 0}`;
+      const cacheKey = `${file.path}|${timeFontFamily}|${timeColor}|${width}x${height}|${timeTypography.fontWeight ?? 400}|${timeTypography.fontStyle ?? "normal"}|${timeTypography.letterSpacing ?? 0}`;
       image = styledTimeGlyphs.get(cacheKey);
       if (!image) {
         if (rasterizedTime) {
@@ -8508,12 +8525,12 @@ export async function drawStudioPreview(
       const hourSize = timeSpriteCanvasSize(
         hourLowFile,
         hourStyle,
-        componentTypography(options, hourStyle)
+        resolveWatchfaceComponentTypography(options, hourStyle)
       );
       const minuteSize = timeSpriteCanvasSize(
         minuteHighFile,
         minuteStyle,
-        componentTypography(options, minuteStyle)
+        resolveWatchfaceComponentTypography(options, minuteStyle)
       );
       const hourWidth = hourSize.width;
       const hourHeight = hourSize.height;
@@ -8589,7 +8606,7 @@ export async function drawStudioPreview(
   if (weekFile && weekRect) {
     const weekStyle = options.dateStyles?.weekday;
     const weekFontFamily = weekStyle?.fontFamily ?? options.fontFamily;
-    const weekTypography = componentTypography(options, weekStyle);
+    const weekTypography = resolveWatchfaceComponentTypography(options, weekStyle);
     let image = loaded.get(weekFile.path);
     const weekScale = normalizeSpriteScale(weekStyle?.scale);
     const weekCanvas = dateSpriteCanvasSize(
@@ -8719,10 +8736,7 @@ export async function drawStudioPreview(
   if (monthFile && monthRect) {
     const monthStyle = options.dateStyles?.dateMonth;
     const monthFontFamily = monthStyle?.fontFamily ?? options.fontFamily;
-    const monthTypography = {
-      ...options,
-      rasterFont: monthStyle?.rasterFont ?? options.rasterFont
-    };
+    const monthTypography = resolveWatchfaceComponentTypography(options, monthStyle);
     const label = WATCHFACE_MONTH_LABELS[monthIndex] ?? String(monthIndex + 1);
     const canvasSize = dateSpriteCanvasSize(
       resolution,
@@ -9069,7 +9083,7 @@ export async function drawStudioPreview(
       : undefined;
     const glyphFontFamily =
       timeStyle?.fontFamily ?? metricStyle?.fontFamily ?? dateStyle?.fontFamily ?? complicationStyle?.fontFamily ?? options.fontFamily;
-    const glyphTypography = componentTypography(
+    const glyphTypography = resolveWatchfaceComponentTypography(
       options,
       timeStyle ?? metricStyle ?? dateStyle ?? complicationStyle
     );
@@ -9146,7 +9160,7 @@ export async function drawStudioPreview(
         complicationStyle?.color ??
         componentColor ??
         options.digitColor;
-      const cacheKey = `${file.path}|${glyphFontFamily}|${glyphColor}|${styledFile.width}x${styledFile.height}|${glyphTypography.letterSpacing ?? 0}|${dateCanvas?.native ?? false}|${nativeGlyph ? "native" : "bounded"}`;
+      const cacheKey = `${file.path}|${glyphFontFamily}|${glyphColor}|${styledFile.width}x${styledFile.height}|${glyphTypography.fontWeight ?? 400}|${glyphTypography.fontStyle ?? "normal"}|${glyphTypography.letterSpacing ?? 0}|${dateCanvas?.native ?? false}|${nativeGlyph ? "native" : "bounded"}`;
       let image = styledMetricGlyphs.get(cacheKey);
       if (!image) {
         if (

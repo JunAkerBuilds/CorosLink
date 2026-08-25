@@ -10,3 +10,28 @@ export function mcpOAuthClientName(
   }
   return "CorosLink";
 }
+
+export type McpOAuthInvalidationScope =
+  | "all"
+  | "client"
+  | "tokens"
+  | "verifier"
+  | "discovery";
+
+export type McpOAuthInvalidationTarget =
+  | "clientInformation"
+  | "tokens"
+  | "verifier";
+
+export function mcpOAuthInvalidationTargets(
+  scope: McpOAuthInvalidationScope
+): McpOAuthInvalidationTarget[] {
+  if (scope === "all") {
+    return ["clientInformation", "tokens", "verifier"];
+  }
+  if (scope === "client") return ["clientInformation"];
+  if (scope === "tokens") return ["tokens"];
+  if (scope === "verifier") return ["verifier"];
+  // Discovery metadata is not persisted by CorosLink.
+  return [];
+}
