@@ -48,6 +48,12 @@ CorosLink brings music management, watch maps, route planning, and training anal
 
 ## Features
 
+### Google and Apple Calendar sync
+
+Connect your Google account from **Calendar → Calendar sync** or **Settings → Google Calendar**. Choose a calendar, sync planned workouts, and automatically keep additions, edits, moves, and removals up to date every 5 minutes while CorosLink is running. Workouts appear as all-day events for the past 7 days and next 90 days. Sync goes from CorosLink to Google; personal events and completed activities are not imported. See the [setup and sync guide](docs/google-calendar-sync.md).
+
+Choose the **Apple Calendar** tab to connect iCloud with your Apple Account email and an app-specific password. Choose an editable iCloud calendar to sync workouts across your Apple devices, with separate sync and disconnect controls for each provider. Works on macOS, Windows, and Linux. See the [Apple Calendar setup guide](docs/apple-calendar-sync.md).
+
 ### Overview — Dashboard at a glance
 
 Your home screen for watch status, library metrics, and quick actions. See everything about your connected COROS watch in one place.
@@ -431,7 +437,7 @@ Installers are written to `release/`.
 - **OpenRouteService API key** (optional) — only needed for Route Builder
 - **OpenRouter API key** (optional) — only needed when OpenRouter is selected for Coach compute
 - **Spotify Developer app** (optional) — only needed for Spotify playlist sync
-- **Google Cloud OAuth app** (optional) — only needed for YouTube Playlists sync
+- **Google Cloud OAuth app** (optional) — needed for YouTube Playlists or Google Calendar sync
 - **Python 3.10+** and **ytmusicapi** (optional) — only needed for YouTube Music library sync
 - **COROS account** (optional) — only needed for Training Hub
 
@@ -442,6 +448,8 @@ Installers are written to `release/`.
 - **Music and downloads** — stored locally in the Electron user data directory (SQLite database + MP3 files on disk)
 - **Spotify tokens** — stored locally in SQLite after OAuth; never sent anywhere except Spotify
 - **Google OAuth tokens** — stored locally in SQLite after OAuth; used only for YouTube Data API playlist reads
+- **Google Calendar** — separate credentials and tokens encrypted with the system keychain before storage in SQLite. Scheduled workout names, dates, volume, and training load are sent to the Google calendar you select. Calendar sync pauses when the linked COROS account is signed out or changed.
+- **Apple Calendar** — iCloud app-specific passwords are encrypted with the system keychain before storage in SQLite and sent only to Apple’s CalDAV servers. Scheduled workouts are synced to the iCloud calendar you select. Disconnect removes local credentials; app-specific passwords can also be revoked in your Apple Account.
 - **YouTube Music / Apple Music headers** — stored locally and used only to read your library metadata; never sent to CorosLink servers
 - **Apple Podcasts** — public catalogue searches and RSS feeds are requested directly to discover publicly downloadable episodes; no account credentials are collected
 - **Map cache** — downloaded map packages are stored in a local folder you choose; copied to the watch over USB only

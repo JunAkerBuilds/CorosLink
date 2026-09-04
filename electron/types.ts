@@ -2547,7 +2547,7 @@ export interface McpServerConfig {
   authType: McpAuthType;
   scope?: string;
   enabled: boolean;
-  /** Built-in (COROS): non-deletable, url/id immutable, can be disabled. */
+  /** Built-in (COROS): URL/id immutable; can be disabled or removed. */
   builtin: boolean;
   sortOrder: number;
 }

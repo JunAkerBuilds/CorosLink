@@ -376,15 +376,19 @@ export function initializeDatabase(userDataPath: string): Database.Database {
   migrateChatSessionProviderConstraint(db);
   migrateChatTranscriptsToSessions(db);
 
-  // Seed the built-in COROS MCP server so existing users get a registry entry
-  // with the exact resource/scope they already use. Its secrets stay under the
-  // legacy corosMcp.* / mcp.coros.* settings keys.
-  db.prepare(
-    `INSERT INTO mcp_servers (id, name, url, transport, auth_type, scope, enabled, builtin, sort_order)
-     VALUES ('coros', 'COROS', 'https://mcpus.coros.com/mcp', 'streamable-http', 'oauth',
-             'openid mcp.tools offline_access', 1, 1, 0)
-     ON CONFLICT(id) DO NOTHING`
-  ).run();
+  // Seed the default only once, including when upgrading an existing registry.
+  // Remember initialization separately so removing COROS survives a restart.
+  // Preserve existing resource URLs, scopes, enabled states, and credentials.
+  db.transaction(() => {
+    if (getSetting("mcp.defaultsSeeded")) return;
+    db!.prepare(
+      `INSERT INTO mcp_servers (id, name, url, transport, auth_type, scope, enabled, builtin, sort_order)
+       VALUES ('coros', 'COROS', 'https://mcpus.coros.com/mcp', 'streamable-http', 'oauth',
+               'openid mcp.tools offline_access', 1, 1, 0)
+       ON CONFLICT(id) DO NOTHING`
+    ).run();
+    setSetting("mcp.defaultsSeeded", "1");
+  })();
 
   return db;
 }

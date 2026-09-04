@@ -229,15 +229,16 @@ export function removeMcpServer(
   if (!existing) {
     return;
   }
-  if (existing.builtin) {
-    throw new Error(`Built-in MCP server "${id}" cannot be removed.`);
-  }
   db.prepare("DELETE FROM mcp_servers WHERE id = ?").run(id);
   deleteStoredSettings([
     mcpSecretKey(id, "tokens"),
     mcpSecretKey(id, "clientInfo"),
     mcpSecretKey(id, "bearer"),
-    `mcp.${id}.resourceUrl`
+    `mcp.${id}.resourceUrl`,
+    // The original COROS connection predates the generic registry.
+    ...(id === "coros"
+      ? ["corosMcp.tokens", "corosMcp.clientInfo", "corosMcp.resourceUrl"]
+      : [])
   ]);
 }
 
