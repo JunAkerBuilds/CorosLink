@@ -1,3 +1,5 @@
+import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "../electron/calendarSyncTypes";
+import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "../electron/googleCalendarTypes";
 import type {
   ActivityBackupProgress,
   BinaryStatus,
@@ -160,6 +162,21 @@ import type {
 } from "../electron/types";
 
 export interface CorosLinkApi {
+  getAppleCalendarStatus: () => Promise<CalendarConnectionStatus>;
+  connectAppleCalendar: (input: AppleCalendarCredentials) => Promise<CalendarConnectionStatus>;
+  cancelAppleCalendarConnect: () => Promise<void>;
+  disconnectAppleCalendar: () => Promise<CalendarConnectionStatus>;
+  listAppleCalendars: () => Promise<CalendarChoice[]>;
+  updateAppleCalendarSettings: (input: CalendarSyncSettings) => Promise<CalendarConnectionStatus>;
+  syncAppleCalendar: () => Promise<CalendarSyncResult>;
+  getGoogleCalendarStatus: () => Promise<GoogleCalendarStatus>;
+  saveGoogleCalendarConfig: (input: GoogleCalendarConfigInput) => Promise<GoogleCalendarStatus>;
+  connectGoogleCalendar: () => Promise<GoogleCalendarStatus>;
+  cancelGoogleCalendarConnect: () => Promise<void>;
+  disconnectGoogleCalendar: () => Promise<GoogleCalendarStatus>;
+  listGoogleCalendars: () => Promise<GoogleCalendarChoice[]>;
+  updateGoogleCalendarSettings: (input: { calendarId?: string; autoSync?: boolean }) => Promise<GoogleCalendarStatus>;
+  syncGoogleCalendar: () => Promise<GoogleCalendarSyncResult>;
   platform: string;
   getWatchStatus: () => Promise<WatchStatus>;
   getCorosWatchfaceStatus: () => Promise<CorosWatchfaceStatus>;

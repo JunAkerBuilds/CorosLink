@@ -35,6 +35,7 @@ import {
 } from "../training/sportColors";
 import appLogo from "../../build/icon.png";
 import { useUnitSystem } from "../units/UnitSystemProvider";
+import { CalendarConnections } from "../calendar/CalendarConnections";
 
 const ABOUT_LINKS = [
   {
@@ -337,6 +338,8 @@ export function SettingsView({
           ))}
         </div>
       </div>
+
+      <div className="panel"><CalendarConnections api={api} /></div>
 
       <div className="panel settings-units-panel">
         <div className="settings-units-heading">

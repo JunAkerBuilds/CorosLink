@@ -1,4 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "./calendarSyncTypes";
+import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "./googleCalendarTypes";
 import type {
   ActivityBackupProgress,
   BinaryStatus,
@@ -161,6 +163,21 @@ import type {
 } from "./types";
 
 const api = {
+  getAppleCalendarStatus: (): Promise<CalendarConnectionStatus> => ipcRenderer.invoke("appleCalendar:status"),
+  connectAppleCalendar: (input: AppleCalendarCredentials): Promise<CalendarConnectionStatus> => ipcRenderer.invoke("appleCalendar:connect", input),
+  cancelAppleCalendarConnect: (): Promise<void> => ipcRenderer.invoke("appleCalendar:cancelConnect"),
+  disconnectAppleCalendar: (): Promise<CalendarConnectionStatus> => ipcRenderer.invoke("appleCalendar:disconnect"),
+  listAppleCalendars: (): Promise<CalendarChoice[]> => ipcRenderer.invoke("appleCalendar:listCalendars"),
+  updateAppleCalendarSettings: (input: CalendarSyncSettings): Promise<CalendarConnectionStatus> => ipcRenderer.invoke("appleCalendar:updateSettings", input),
+  syncAppleCalendar: (): Promise<CalendarSyncResult> => ipcRenderer.invoke("appleCalendar:sync"),
+  getGoogleCalendarStatus: (): Promise<GoogleCalendarStatus> => ipcRenderer.invoke("googleCalendar:status"),
+  saveGoogleCalendarConfig: (input: GoogleCalendarConfigInput): Promise<GoogleCalendarStatus> => ipcRenderer.invoke("googleCalendar:saveConfig", input),
+  connectGoogleCalendar: (): Promise<GoogleCalendarStatus> => ipcRenderer.invoke("googleCalendar:connect"),
+  cancelGoogleCalendarConnect: (): Promise<void> => ipcRenderer.invoke("googleCalendar:cancelConnect"),
+  disconnectGoogleCalendar: (): Promise<GoogleCalendarStatus> => ipcRenderer.invoke("googleCalendar:disconnect"),
+  listGoogleCalendars: (): Promise<GoogleCalendarChoice[]> => ipcRenderer.invoke("googleCalendar:listCalendars"),
+  updateGoogleCalendarSettings: (input: { calendarId?: string; autoSync?: boolean }): Promise<GoogleCalendarStatus> => ipcRenderer.invoke("googleCalendar:updateSettings", input),
+  syncGoogleCalendar: (): Promise<GoogleCalendarSyncResult> => ipcRenderer.invoke("googleCalendar:sync"),
   // Host OS, so the renderer can reserve space for the macOS traffic lights.
   platform: process.platform,
   getWatchStatus: (): Promise<WatchStatus> =>

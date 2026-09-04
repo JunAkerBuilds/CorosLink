@@ -143,9 +143,25 @@ assert.equal(updateMcpServer("freddy", { scope: "read write" }, db).scope, "read
 assert.equal(updateMcpServer("freddy", { scope: null }, db).scope, undefined);
 assert.throws(() => updateMcpServer("freddy", { id: "renamed" }, db));
 
-// built-in not removable; custom removal deletes its stored secrets
-assert.throws(() => removeMcpServer("coros", db));
+// Removing the default COROS server also clears legacy authorization keys.
 let removedKeys = [];
+removeMcpServer("coros", db, (keys) => {
+  removedKeys = keys;
+});
+assert.equal(getMcpServer("coros", db), undefined);
+assert.equal(getMcpServer("freddy", db).id, "freddy");
+assert.deepEqual(removedKeys, [
+  "mcp.coros.tokens",
+  "mcp.coros.clientInfo",
+  "mcp.coros.bearer",
+  "mcp.coros.resourceUrl",
+  "corosMcp.tokens",
+  "corosMcp.clientInfo",
+  "corosMcp.resourceUrl"
+]);
+removeMcpServer("coros", db, () => assert.fail("Missing server is a no-op"));
+
+// Custom removal still deletes only that server's stored secrets.
 removeMcpServer("freddy", db, (keys) => {
   removedKeys = keys;
 });

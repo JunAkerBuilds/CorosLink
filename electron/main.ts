@@ -1,4 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
+import { googleCalendar, startGoogleCalendarSync, stopGoogleCalendarSync } from "./googleCalendarService";
+import type { GoogleCalendarConfigInput } from "./googleCalendarTypes";
+import { appleCalendar, startAppleCalendarSync, stopAppleCalendarSync } from "./appleCalendarService";
+import type { AppleCalendarCredentials, CalendarSyncSettings } from "./calendarSyncTypes";
 import type { OpenDialogOptions } from "electron";
 import fs from "node:fs";
 import os from "node:os";
@@ -774,6 +778,8 @@ app.whenReady().then(() => {
   prunePlanDraftStore();
   pruneDeleteRequestStore();
   registerIpcHandlers();
+  startGoogleCalendarSync();
+  startAppleCalendarSync();
   setJobListener((jobs) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("youtube:jobsUpdate", jobs);
@@ -821,10 +827,28 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  stopGoogleCalendarSync();
+  stopAppleCalendarSync();
   stopRouteShare();
 });
 
 function registerIpcHandlers(): void {
+  ipcMain.handle("appleCalendar:status", () => appleCalendar.status());
+  ipcMain.handle("appleCalendar:connect", (_event, input: AppleCalendarCredentials) => appleCalendar.connect(input));
+  ipcMain.handle("appleCalendar:cancelConnect", () => appleCalendar.cancelConnect());
+  ipcMain.handle("appleCalendar:disconnect", () => appleCalendar.disconnect());
+  ipcMain.handle("appleCalendar:listCalendars", () => appleCalendar.listCalendars());
+  ipcMain.handle("appleCalendar:updateSettings", (_event, input: CalendarSyncSettings) => appleCalendar.updateSettings(input));
+  ipcMain.handle("appleCalendar:sync", () => appleCalendar.sync());
+  ipcMain.handle("googleCalendar:status", () => googleCalendar.status());
+  ipcMain.handle("googleCalendar:saveConfig", (_event, input: GoogleCalendarConfigInput) => googleCalendar.saveConfig(input));
+  ipcMain.handle("googleCalendar:connect", () => googleCalendar.connect());
+  ipcMain.handle("googleCalendar:cancelConnect", () => googleCalendar.cancelConnect());
+  ipcMain.handle("googleCalendar:disconnect", () => googleCalendar.disconnect());
+  ipcMain.handle("googleCalendar:listCalendars", () => googleCalendar.listCalendars());
+  ipcMain.handle("googleCalendar:updateSettings", (_event, input: { calendarId?: string; autoSync?: boolean }) => googleCalendar.updateSettings(input));
+  ipcMain.handle("googleCalendar:sync", () => googleCalendar.sync());
+
   ipcMain.handle("window:setBackground", (_event, color: string) => {
     applyWindowBackground(color);
   });
@@ -1412,10 +1436,6 @@ function registerIpcHandlers(): void {
   ipcMain.handle("mcp:removeServer", async (_event, id: string) => {
     const existing = getMcpServer(id);
     if (!existing) return;
-    if (existing.builtin) {
-      removeMcpServer(id);
-      return;
-    }
     await disconnectMcpServer(id);
     removeMcpServer(id);
   });

@@ -1,0 +1,185 @@
+.calendar-connection-connection {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.calendar-connection-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.calendar-connection-heading h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.calendar-connection-heading p:not(.eyebrow) {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.calendar-connection-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.calendar-connection-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+  font-size: 12px;
+}
+.calendar-connection-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.calendar-connection-account {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  overflow-wrap: anywhere;
+}
+.calendar-connection-account span {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.calendar-connection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.calendar-connection-destination,
+.calendar-connection-setup,
+.calendar-connection-sync-settings {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+.calendar-connection-connection button {
+  align-self: flex-start;
+}
+.calendar-connection-connection select {
+  width: 100%;
+  padding: 10px 12px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+}
+.calendar-connection-connection select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.calendar-connection-setup {
+  padding-top: 16px;
+  border-top: 1px solid var(--glass-border);
+}
+.calendar-connection-setup h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.calendar-connection-setup a {
+  color: var(--accent);
+  font-size: 13px;
+}
+.calendar-connection-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+.calendar-connection-toggle input {
+  accent-color: var(--accent);
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.calendar-connection-success {
+  color: var(--accent);
+  font-size: 13px;
+  margin: 0;
+}
+:root:not([data-theme="paper"]) .calendar-connection-dialog {
+  /* Calendar actions keep the green accent, but the modal itself should use
+     the app's neutral dark canvas instead of the green-tinted surface token. */
+  --surface: var(--bg-base);
+}
+
+.calendar-connection-dialog {
+  position: fixed;
+  width: min(600px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  margin: auto;
+  padding: 32px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  box-shadow: 0 24px 80px #0006;
+  overflow-y: auto;
+}
+.calendar-connection-dialog::backdrop {
+  background: #0008;
+  backdrop-filter: blur(5px);
+}
+.calendar-connection-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+.calendar-connection-dialog .calendar-connection-heading {
+  padding-right: 18px;
+}
+
+.calendar-connections {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.calendar-provider-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px;
+  margin-right: 20px;
+  align-self: flex-start;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+}
+.calendar-provider-tabs button {
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.calendar-provider-tabs button[aria-pressed="true"] {
+  color: var(--text-primary);
+  background: var(--glass-bg-elevated);
+  box-shadow: var(--shadow-soft);
+}
+.calendar-provider-tabs button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
