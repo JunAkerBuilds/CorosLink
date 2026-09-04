@@ -742,7 +742,8 @@ export async function streamChat(
       }
       const { text: instructions, hasData } = await buildTrainingContext(
         undefined,
-        unitSystem
+        unitSystem,
+        settings.customInstructions
       );
 
       await ensureAllMcpConnected();

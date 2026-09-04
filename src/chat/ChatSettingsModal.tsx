@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Settings2, X } from "lucide-react";
 import type {
   ChatAuthStatus,
@@ -102,22 +102,54 @@ export function ChatSettingsModal({
   onSaveLocalSettings: () => void;
   onClearLocalApiKey: () => void;
   onMcpServersChange: () => void | Promise<void>;
-  onUpdateChatSettings: (patch: Partial<ChatSettings>) => void;
+  onUpdateChatSettings: (patch: Partial<ChatSettings>) => Promise<boolean>;
 }) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!open) {
       return;
     }
 
+    const previousFocus = document.activeElement;
+    const modal = modalRef.current;
+    const focusableElements = () => Array.from(
+      modal?.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex="0"]'
+      ) ?? []
+    ).filter((element) => element.getClientRects().length > 0);
+    focusableElements()[0]?.focus();
+
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.key === "Escape") {
-        onClose();
+        event.preventDefault();
+        closeRef.current();
+      } else if (event.key === "Tab") {
+        const elements = focusableElements();
+        const first = elements[0];
+        const last = elements.at(-1);
+        if (!modal?.contains(document.activeElement) ||
+            (event.shiftKey && document.activeElement === first) ||
+            (!event.shiftKey && document.activeElement === last)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first)?.focus();
+        }
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
+        previousFocus.focus();
+      }
+    };
+  }, [open]);
 
   if (!open) {
     return null;
@@ -125,6 +157,7 @@ export function ChatSettingsModal({
 
   return (
     <div
+      ref={modalRef}
       className="chat-settings-backdrop"
       role="dialog"
       aria-modal="true"

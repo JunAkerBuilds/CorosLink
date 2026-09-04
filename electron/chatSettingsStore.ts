@@ -1,5 +1,5 @@
 import type { ChatProvider, ChatSettings } from "./types";
-import { MAX_CUSTOM_COACH_INSTRUCTIONS } from "./types";
+import { normalizeCustomCoachInstructions } from "./chatCustomInstructions";
 import {
   DEFAULT_LOCAL_CHAT_BASE_URL,
   normalizeLocalChatBaseUrl
@@ -90,7 +90,9 @@ export function readChatSettingsFromStore(
     visualizationsEnabled:
       store.get(CHAT_SETTINGS_KEYS.visualizationsEnabled) === "true",
     customInstructions:
-      store.get(CHAT_SETTINGS_KEYS.customInstructions) || undefined
+      normalizeCustomCoachInstructions(
+        store.get(CHAT_SETTINGS_KEYS.customInstructions)
+      ) || undefined
   };
 }
 
@@ -180,9 +182,9 @@ export function saveChatSettingsToStore(
   }
 
   if (typeof settings.customInstructions === "string") {
-    const customInstructions = settings.customInstructions
-      .trim()
-      .slice(0, MAX_CUSTOM_COACH_INSTRUCTIONS);
+    const customInstructions = normalizeCustomCoachInstructions(
+      settings.customInstructions
+    );
     if (customInstructions) {
       store.set(CHAT_SETTINGS_KEYS.customInstructions, customInstructions);
     } else {

@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   Bot,
   CircleCheck,
@@ -9,8 +7,7 @@ import {
   LogOut,
   RefreshCw,
   Save,
-  Terminal,
-  X
+  Terminal
 } from "lucide-react";
 import type {
   ChatAuthStatus,
@@ -20,7 +17,7 @@ import type {
   LocalChatDiscovery,
   OpenRouterConnectionTest
 } from "../../electron/types";
-import { MAX_CUSTOM_COACH_INSTRUCTIONS } from "../../electron/types";
+import { CoachInstructionsSettings } from "./CoachInstructionsSettings";
 import { McpServersPanel } from "./McpServersPanel";
 import type { CorosLinkApi } from "../coroslink-api";
 
@@ -121,7 +118,7 @@ export function ChatSettingsPanel({
   onSaveLocalSettings: () => void;
   onClearLocalApiKey: () => void;
   onMcpServersChange: () => void | Promise<void>;
-  onUpdateChatSettings: (patch: Partial<ChatSettings>) => void;
+  onUpdateChatSettings: (patch: Partial<ChatSettings>) => Promise<boolean>;
 }) {
   const availableLocalServers =
     localDiscovery?.servers.filter(
@@ -132,41 +129,6 @@ export function ChatSettingsPanel({
       (server) => server.baseUrl === chatSettings.local.baseUrl
     ) ?? availableLocalServers[0];
   const discoveredLocalModels = selectedLocalServer?.models ?? [];
-  const savedCustomInstructions = chatSettings.customInstructions ?? "";
-  const [customInstructionsDraft, setCustomInstructionsDraft] = useState(
-    savedCustomInstructions
-  );
-
-  useEffect(() => {
-    setCustomInstructionsDraft(savedCustomInstructions);
-  }, [savedCustomInstructions]);
-
-  const commitCustomInstructions = () => {
-    const next = customInstructionsDraft.trim();
-    if (next === savedCustomInstructions) return;
-    onUpdateChatSettings({ customInstructions: next });
-  };
-
-  const [baseInstructionsOpen, setBaseInstructionsOpen] = useState(false);
-  const [baseInstructions, setBaseInstructions] = useState<string | null>(null);
-  const [baseInstructionsError, setBaseInstructionsError] = useState<string | null>(
-    null
-  );
-
-  const openBaseInstructions = async () => {
-    setBaseInstructionsOpen(true);
-    if (baseInstructions !== null) return;
-    if (!api) {
-      setBaseInstructionsError("Could not load the base coach instructions.");
-      return;
-    }
-    setBaseInstructionsError(null);
-    try {
-      setBaseInstructions(await api.getBaseCoachInstructions());
-    } catch {
-      setBaseInstructionsError("Could not load the base coach instructions.");
-    }
-  };
 
   return (
     <div className="chat-settings-panel">
@@ -190,52 +152,12 @@ export function ChatSettingsPanel({
         </p>
       </section>
 
-      <section className="chat-settings-section">
-        <h3>Coach instructions</h3>
-        <p className="chat-settings-copy">
-          Extra preferences appended to every coaching prompt — for example your
-          goal race, training days, equipment, or preferred tone.
-        </p>
-        <p className="chat-settings-copy">
-          Your custom instructions will be used in conjunction with the{" "}
-          <button
-            type="button"
-            className="chat-inline-link"
-            onClick={() => void openBaseInstructions()}
-          >
-            Base Coach instructions
-          </button>
-          .
-        </p>
-        <label className="chat-local-field">
-          <span>Custom instructions</span>
-          <textarea
-            className="chat-custom-instructions"
-            rows={5}
-            maxLength={MAX_CUSTOM_COACH_INSTRUCTIONS}
-            placeholder="e.g. I race a marathon in October, I can only run Tue/Thu/Sat, and I have no gym access."
-            value={customInstructionsDraft}
-            onChange={(event) => setCustomInstructionsDraft(event.target.value)}
-            onBlur={commitCustomInstructions}
-            onKeyDown={(event) => {
-              // Escape closes the settings modal via a document listener
-              // before blur can fire; save the draft first.
-              if (event.key === "Escape") commitCustomInstructions();
-            }}
-          />
-        </label>
-        <p className="chat-settings-copy">
-          {customInstructionsDraft.length}/{MAX_CUSTOM_COACH_INSTRUCTIONS} characters.
-          Saved when you click outside the box.
-        </p>
-        {baseInstructionsOpen ? (
-          <BaseCoachInstructionsDialog
-            instructions={baseInstructions}
-            error={baseInstructionsError}
-            onClose={() => setBaseInstructionsOpen(false)}
-          />
-        ) : null}
-      </section>
+      <CoachInstructionsSettings
+        api={api}
+        value={chatSettings.customInstructions ?? ""}
+        disabled={savingSettings || busy}
+        onSave={(customInstructions) => onUpdateChatSettings({ customInstructions })}
+      />
 
       <section className="chat-settings-section">
         <h3>ChatGPT account</h3>
@@ -741,67 +663,5 @@ export function ChatSettingsPanel({
         />
       </section>
     </div>
-  );
-}
-
-function BaseCoachInstructionsDialog({
-  instructions,
-  error,
-  onClose
-}: {
-  instructions: string | null;
-  error: string | null;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    // Capture phase so Escape closes this dialog without also closing the
-    // settings modal, which listens on document in the bubble phase.
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.stopPropagation();
-      onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown, true);
-    return () => document.removeEventListener("keydown", handleKeyDown, true);
-  }, [onClose]);
-
-  return createPortal(
-    <div
-      className="chat-base-instructions-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="chat-base-instructions-title"
-      onClick={onClose}
-    >
-      <div
-        className="panel chat-base-instructions-dialog"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="chat-base-instructions-header">
-          <h4 id="chat-base-instructions-title">Base Coach instructions</h4>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Close base coach instructions"
-            onClick={onClose}
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
-        </header>
-        <div className="chat-base-instructions-body">
-          {error ? (
-            <p className="chat-settings-copy">{error}</p>
-          ) : instructions === null ? (
-            <p className="chat-settings-copy">
-              <Loader2 className="chat-spinner" size={14} aria-hidden="true" />{" "}
-              Loading…
-            </p>
-          ) : (
-            <pre>{instructions}</pre>
-          )}
-        </div>
-      </div>
-    </div>,
-    document.body
   );
 }

@@ -2546,14 +2546,16 @@ export function ChatView({
   };
 
   const handleUpdateChatSettings = async (patch: Partial<ChatSettings>) => {
+    if (!api) return false;
     const nextSettings = { ...chatSettings, ...patch };
-    setChatSettings(nextSettings);
-    if (!api) return;
     try {
       const saved = await api.saveChatSettings(nextSettings);
       setChatSettings(saved);
+      onError(null);
+      return true;
     } catch {
-      // keep local state even if persistence fails
+      onError("Could not save Coach settings. Please try again.");
+      return false;
     }
   };
 
@@ -3240,7 +3242,7 @@ export function ChatView({
     onClearLocalApiKey: () => void handleClearLocalApiKey(),
     onMcpServersChange: refreshMcpStatuses,
     onUpdateChatSettings: (patch: Partial<ChatSettings>) =>
-      void handleUpdateChatSettings(patch)
+      handleUpdateChatSettings(patch)
   };
 
   if (checkingAuth) {

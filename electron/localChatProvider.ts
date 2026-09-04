@@ -400,7 +400,15 @@ export async function streamOpenAiCompatibleChatCompletion(
       options.signal,
       options.onToken
     );
+    // A model response is untrusted even when no tool schemas were sent.
+    // Enforce both explicit disablement and the fallback-to-text state here.
+    if (rawFunctionCalls.length > 0 && tools.length === 0) {
+      throw new Error(`${transport.requestLabel} returned tool calls while tools are disabled.`);
+    }
     const functionCalls = normalizeLocalToolCalls(rawFunctionCalls, options.tools);
+    if (functionCalls.some((call) => !options.tools.some((tool) => tool.name === call.name))) {
+      throw new Error(`${transport.requestLabel} returned a tool that was not offered.`);
+    }
     fullText += delta;
 
     if (functionCalls.length === 0) {
