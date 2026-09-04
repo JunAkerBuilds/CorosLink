@@ -18109,6 +18109,7 @@ tr.data-intervals-row-missing {
   inset: 0;
   z-index: 80;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   background: rgba(4, 7, 6, 0.72);
   padding: 22px;
@@ -18117,7 +18118,7 @@ tr.data-intervals-row-missing {
 .chat-settings-modal {
   display: flex;
   flex-direction: column;
-  width: min(760px, 96vw);
+  width: min(760px, 100%);
   max-height: min(92vh, 900px);
   overflow: hidden;
   padding: 0;
@@ -19028,6 +19029,122 @@ tr.data-intervals-row-missing {
 .chat-local-field input:focus,
 .chat-local-field select:focus {
   border-color: var(--accent);
+}
+
+.chat-coach-instructions-section .chat-settings-copy,
+.chat-coach-instructions-section .chat-local-field span {
+  color: var(--text-secondary);
+}
+
+.chat-custom-instructions {
+  width: 100%;
+  min-height: 124px;
+  max-height: 360px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.chat-custom-instructions::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.chat-custom-instructions:focus-visible,
+.chat-base-instructions summary:focus-visible,
+.chat-base-instructions-body:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.chat-custom-instructions-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-custom-instructions-footer {
+  display: grid;
+  gap: 12px;
+}
+
+.chat-custom-instructions-footer .chat-local-actions {
+  justify-content: flex-end;
+}
+
+.chat-custom-instructions-error {
+  margin: 0;
+  color: var(--error-text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.chat-base-instructions {
+  min-width: 0;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 10px;
+}
+
+.chat-base-instructions summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.chat-base-instructions summary::-webkit-details-marker {
+  display: none;
+}
+
+.chat-base-instructions summary:hover {
+  color: var(--text-primary);
+}
+
+.chat-base-instructions summary svg {
+  flex-shrink: 0;
+  transform: rotate(-90deg);
+}
+
+.chat-base-instructions[open] summary svg {
+  transform: rotate(0);
+}
+
+.chat-base-instructions-status {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.chat-base-instructions-body {
+  max-height: 280px;
+  overflow: auto;
+  margin: 12px 0 0;
+  padding: 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.7;
 }
 
 .chat-local-key-row {

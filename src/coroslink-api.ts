@@ -596,6 +596,7 @@ export interface CorosLinkApi {
   ) => () => void;
   getChatAuthStatus: () => Promise<ChatAuthStatus>;
   getChatSettings: () => Promise<ChatSettings>;
+  getBaseCoachInstructions: () => Promise<string>;
   saveChatSettings: (settings: ChatSettings) => Promise<ChatSettings>;
   testLocalChatConnection: (
     config?: LocalChatConfig

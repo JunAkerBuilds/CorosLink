@@ -921,6 +921,8 @@ const api = {
     ipcRenderer.invoke("chat:getAuthStatus"),
   getChatSettings: (): Promise<ChatSettings> =>
     ipcRenderer.invoke("chat:getSettings"),
+  getBaseCoachInstructions: (): Promise<string> =>
+    ipcRenderer.invoke("chat:getBaseCoachInstructions"),
   saveChatSettings: (settings: ChatSettings): Promise<ChatSettings> =>
     ipcRenderer.invoke("chat:saveSettings", settings),
   testLocalChatConnection: (

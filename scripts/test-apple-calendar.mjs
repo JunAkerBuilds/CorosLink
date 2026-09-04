@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { after, test } from "node:test";
 import { AppleCalendarClient } from "../dist-electron/appleCalendarClient.js";
 import {
@@ -28,7 +29,12 @@ after(() => {
 });
 const credentials = {
   email: "runner@example.com",
-  appPassword: "aaaa-bbbb-cccc-dddd",
+  // Generate dummy credentials for mocked requests; no real account is used.
+  appPassword: Array.from({ length: 4 }, () =>
+    Array.from(randomBytes(4), (byte) =>
+      String.fromCharCode(97 + (byte % 26)),
+    ).join(""),
+  ).join("-"),
 };
 const host = "https://p01-caldav.icloud.com";
 const home = `${host}/123/calendars/`;

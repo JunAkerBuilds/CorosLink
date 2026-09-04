@@ -320,6 +320,7 @@ import {
   uploadTrainingPlanDraft,
   confirmWorkoutDelete
 } from "./chatService";
+import { buildBaseCoachInstructions } from "./chatCoachContext";
 import {
   OPENROUTER_KEYS_URL,
   OPENROUTER_MODELS_URL
@@ -1322,6 +1323,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle("chat:getAuthStatus", () => getChatAuthStatus());
 
   ipcMain.handle("chat:getSettings", () => getChatSettings());
+
+  ipcMain.handle("chat:getBaseCoachInstructions", () =>
+    buildBaseCoachInstructions()
+  );
 
   ipcMain.handle("chat:saveSettings", (_event, settings: ChatSettings) =>
     saveChatSettings(settings)

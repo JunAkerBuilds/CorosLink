@@ -38,7 +38,7 @@
     "test:mcp-servers-store": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-mcp-servers-store.mjs",
     "test:mcp-server-removal": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-mcp-server-removal.mjs",
     "test:intervals-match": "npm run build:electron && node scripts/test-intervals-match.mjs",
-    "test:chat-service": "npm run build:electron && node scripts/test-chat-service.mjs",
+    "test:chat-service": "npm run build:electron && node scripts/test-chat-service.mjs && node scripts/test-chat-instructions-routing.mjs",
     "test:claude-code": "npm run build:electron && node scripts/test-claude-code-provider.mjs",
     "test:chat-history-store": "npm run build:electron && node scripts/test-chat-history-store.mjs",
     "test:chat-activity-tools": "npm run build:electron && node scripts/test-chat-activity-tools.mjs",

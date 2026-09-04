@@ -2449,6 +2449,9 @@ export interface OpenRouterConnectionTest {
   keyLabel?: string;
 }
 
+/** Hard cap on custom coach instructions so a pasted document cannot crowd out the coach prompt. */
+export const MAX_CUSTOM_COACH_INSTRUCTIONS = 4000;
+
 export interface ChatSettings {
   provider: ChatProvider;
   chatgpt: ChatGptConfig;
@@ -2458,6 +2461,8 @@ export interface ChatSettings {
   sidebarOpen?: boolean;
   /** When true, show activity/fitness/HR chart cards in the transcript. Default false. */
   visualizationsEnabled?: boolean;
+  /** Free-form athlete preferences appended to the coach system prompt. */
+  customInstructions?: string;
 }
 
 export interface ChatSessionSummary {

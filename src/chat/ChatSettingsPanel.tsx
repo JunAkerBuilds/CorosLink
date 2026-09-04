@@ -17,6 +17,7 @@ import type {
   LocalChatDiscovery,
   OpenRouterConnectionTest
 } from "../../electron/types";
+import { CoachInstructionsSettings } from "./CoachInstructionsSettings";
 import { McpServersPanel } from "./McpServersPanel";
 import type { CorosLinkApi } from "../coroslink-api";
 
@@ -117,7 +118,7 @@ export function ChatSettingsPanel({
   onSaveLocalSettings: () => void;
   onClearLocalApiKey: () => void;
   onMcpServersChange: () => void | Promise<void>;
-  onUpdateChatSettings: (patch: Partial<ChatSettings>) => void;
+  onUpdateChatSettings: (patch: Partial<ChatSettings>) => Promise<boolean>;
 }) {
   const availableLocalServers =
     localDiscovery?.servers.filter(
@@ -150,6 +151,13 @@ export function ChatSettingsPanel({
           hidden. The coach still responds with text.
         </p>
       </section>
+
+      <CoachInstructionsSettings
+        api={api}
+        value={chatSettings.customInstructions ?? ""}
+        disabled={savingSettings || busy}
+        onSave={(customInstructions) => onUpdateChatSettings({ customInstructions })}
+      />
 
       <section className="chat-settings-section">
         <h3>ChatGPT account</h3>
