@@ -135,7 +135,6 @@ interface LoginResult {
 }
 
 const GLOBAL_BASE_URL = "https://teamapi.coros.com";
-const LOGIN_URL = `${GLOBAL_BASE_URL}/account/login`;
 const RESULT_SUCCESS = "0000";
 const AUTH_ERROR_CODES = new Set(["0101", "0102", "1006"]);
 
@@ -143,25 +142,26 @@ const AUTH_ERROR_CODES = new Set(["0101", "0102", "1006"]);
 const TWO_FACTOR_CODE_TYPE = 20;
 const TWO_FACTOR_CODE_LENGTH = 2;
 const COROS_LOGIN_LANGUAGE = "en-US";
-const COROS_DEV_PREVIEW_COOKIE =
-  "x-app-req-env=202607/; x-app-req-dev=feature-202607-dev; CPL-coros-region=1";
 
+// Region IDs used by the production Training Hub (training.coros.com).
 const REGION_BASE_URLS: Record<string, string> = {
-  "0": "https://teamapi.coros.com",
-  "1": "https://teamapi.coros.com",
-  "2": "https://teameuapi.coros.com",
-  "3": "https://teamapiap.coros.com",
+  "0": GLOBAL_BASE_URL,
+  "1": GLOBAL_BASE_URL,
+  "2": "https://teamcnapi.coros.com",
+  "3": "https://teameuapi.coros.com",
+  "4": "https://teamsgapi.coros.com",
   cn: "https://teamcnapi.coros.com",
-  us: "https://teamapi.coros.com",
+  us: GLOBAL_BASE_URL,
   eu: "https://teameuapi.coros.com",
-  global: "https://teamapi.coros.com"
+  sg: "https://teamsgapi.coros.com",
+  global: GLOBAL_BASE_URL
 };
 
 const REGION_PROBE_URLS = [
-  "https://teamapi.coros.com",
+  GLOBAL_BASE_URL,
   "https://teameuapi.coros.com",
   "https://teamcnapi.coros.com",
-  "https://teamapiap.coros.com"
+  "https://teamsgapi.coros.com"
 ];
 
 const SETTINGS = {
@@ -201,6 +201,7 @@ interface TrainingHubLoginData {
 // A login that stopped at the 2FA challenge. Held in memory between the
 // password step and the code-verify step (never persisted to disk).
 interface PendingTwoFactorLogin {
+  loginAccount: string;
   account: string;
   pwdHash: string;
   loginBaseUrl: string;
@@ -378,7 +379,7 @@ export async function verifyTrainingHubTwoFactor(
 
   finalizeTrainingHubLogin(
     session,
-    pending.account,
+    pending.loginAccount,
     pending.pwdHash,
     pending.remember
   );
@@ -441,11 +442,13 @@ async function beginTrainingHubLogin(
   );
   const regionId =
     loginData.regionId === undefined ? "1" : String(loginData.regionId);
+  const accountBaseUrl =
+    REGION_BASE_URLS[String(loginData.regionId ?? "")] ?? loginBaseUrl;
 
   if (loginData.accessToken) {
     const session = await completeSessionFromLogin(
       loginData,
-      loginBaseUrl,
+      accountBaseUrl,
       regionId
     );
     return { kind: "authenticated", session };
@@ -463,11 +466,14 @@ async function beginTrainingHubLogin(
 
   const challengeAccount = String(loginData.account ?? "").trim() || account;
   const accountType = String(loginData.accountType2fa ?? "").trim() || "2";
-  await requestTwoFactorCode(loginBaseUrl, challengeAccount, accountType);
+  // The password endpoint can return a challenge for an account in another
+  // region. Captcha and verification must follow that region, as the web app does.
+  await requestTwoFactorCode(accountBaseUrl, challengeAccount, accountType);
   pendingTwoFactor = {
+    loginAccount: account,
     account: challengeAccount,
     pwdHash,
-    loginBaseUrl,
+    loginBaseUrl: accountBaseUrl,
     loginTicket,
     appKey,
     accountType,
@@ -478,7 +484,7 @@ async function beginTrainingHubLogin(
         : String(loginData.userId).trim(),
     remember: options.remember
   };
-  return { kind: "twoFactor", account: challengeAccount };
+  return { kind: "twoFactor", account };
 }
 
 // Turn a login/verify response that carries an accessToken into a full session
@@ -494,7 +500,9 @@ async function completeSessionFromLogin(
     throw new Error("COROS login response did not include a usable token.");
   }
 
-  const baseUrl = await resolveTrainingHubBaseUrl(accessToken, loginBaseUrl);
+  const accountBaseUrl =
+    REGION_BASE_URLS[String(loginData.regionId ?? "")] ?? loginBaseUrl;
+  const baseUrl = await resolveTrainingHubBaseUrl(accessToken, accountBaseUrl);
 
   let userId = String(loginData.userId ?? fallbackUserId).trim();
   const accountData = await queryTrainingHubAccount(accessToken, baseUrl);
@@ -536,6 +544,7 @@ async function loginViaAnyBase(
   );
 
   let lastError: unknown;
+  let apiError: CorosPasswordLoginError | undefined;
 
   for (const [loginBaseUrl, loginUrl] of loginTargets) {
     try {
@@ -548,9 +557,20 @@ async function loginViaAnyBase(
       return { loginData, loginBaseUrl };
     } catch (error) {
       lastError = error;
+      // A later region's parameter/transport error must not hide the useful
+      // rejection returned by a server that understood the login request.
+      if (
+        error instanceof CorosPasswordLoginError &&
+        (!apiError || apiError.result === "1031")
+      ) {
+        apiError = error;
+      }
     }
   }
 
+  if (apiError) {
+    throw apiError;
+  }
   if (lastError instanceof Error && lastError.message) {
     throw lastError;
   }
@@ -619,13 +639,14 @@ export function buildCorosLoginHeaders(options?: {
   if (options?.suppressApiWarning) {
     headers["X-No-Warnning"] = "1";
   }
-  // COROS currently gates the new 2FA API response behind its 202607 preview
-  // environment. Only opt into that routing while running `npm run dev`;
-  // packaged builds must follow COROS's normal production rollout.
-  if (process.env.VITE_DEV_SERVER_URL) {
-    headers.Cookie = COROS_DEV_PREVIEW_COOKIE;
-  }
   return headers;
+}
+
+class CorosPasswordLoginError extends Error {
+  constructor(readonly result: string, message: string) {
+    super(`COROS password login failed (${result || "unknown"}): ${message}`);
+    this.name = "CorosPasswordLoginError";
+  }
 }
 
 async function loginAtBase(
@@ -652,7 +673,7 @@ async function loginAtBase(
   const result = String(payload.result ?? payload.apiCode ?? "");
 
   if (result !== RESULT_SUCCESS) {
-    throw new Error(payload.message || "COROS login failed.");
+    throw new CorosPasswordLoginError(result, payload.message || "Unknown error.");
   }
 
   // Success may carry an accessToken (no 2FA) or a loginTicket (2FA required).
@@ -685,7 +706,7 @@ async function requestTwoFactorCode(
   const result = String(payload.result ?? payload.apiCode ?? "");
   if (result !== RESULT_SUCCESS) {
     throw new Error(
-      payload.message || "COROS could not send a verification code."
+      `COROS could not send a verification code (${result || "unknown"}): ${payload.message || "Unknown error."}`
     );
   }
 }
@@ -719,7 +740,9 @@ async function verifyTwoFactorCode(
   const payload = (await response.json()) as TrainingHubApiResponse<TrainingHubLoginData>;
   const result = String(payload.result ?? payload.apiCode ?? "");
   if (result !== RESULT_SUCCESS) {
-    throw new Error(payload.message || "That verification code didn't work.");
+    throw new Error(
+      `COROS verification failed (${result || "unknown"}): ${payload.message || "That verification code didn't work."}`
+    );
   }
   if (!payload.data?.accessToken) {
     throw new Error("COROS verification did not return an access token.");
@@ -6043,11 +6066,7 @@ async function resolveTrainingHubBaseUrl(
     }
   }
 
-  return (
-    REGION_BASE_URLS["1"] ??
-    loginBaseUrl ??
-    GLOBAL_BASE_URL
-  );
+  return loginBaseUrl;
 }
 
 async function probeTrainingHubBaseUrl(

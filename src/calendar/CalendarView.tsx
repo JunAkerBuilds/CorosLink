@@ -47,6 +47,7 @@ import {
   weekRow
 } from "./dateUtils";
 import { useCalendarData } from "./useCalendarData";
+import { CalendarConnectionsDialog } from "./CalendarConnections";
 import { WorkoutEditorModal } from "./WorkoutEditorModal";
 import { WorkoutLibraryModal } from "./WorkoutLibraryModal";
 import {
@@ -159,6 +160,7 @@ export function CalendarView({
   const [addTarget, setAddTarget] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [calendarConnectionOpen, setCalendarConnectionOpen] = useState(false);
   const [editRef, setEditRef] = useState<WorkoutEditRef | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedWorkoutKeys, setSelectedWorkoutKeys] = useState<Set<string>>(
@@ -500,6 +502,9 @@ export function CalendarView({
           {loading ? <span className="calendar-loading">Loading…</span> : null}
         </div>
         <div className="calendar-header-actions">
+          <button className="calendar-nav-button" type="button" onClick={() => setCalendarConnectionOpen(true)}>
+            <CalendarDays size={14} aria-hidden="true" /> Calendar sync
+          </button>
           <button
             type="button"
             className={`calendar-nav-button calendar-select-button ${selectionMode ? "is-active" : ""}`}
@@ -571,6 +576,7 @@ export function CalendarView({
       </header>
 
       {error ? <p className="calendar-error">{error}</p> : null}
+      {calendarConnectionOpen ? <CalendarConnectionsDialog api={api} onClose={() => setCalendarConnectionOpen(false)} /> : null}
 
       {selectionMode ? (
         <div

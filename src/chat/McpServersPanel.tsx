@@ -239,20 +239,18 @@ export function McpServersPanel({
                       Connect
                     </button>
                   )}
-                  {server.builtin ? null : (
-                    <button
-                      type="button"
-                      className="mcp-server-remove"
-                      disabled={busy}
-                      title="Remove server"
-                      aria-label={`Remove ${server.name}`}
-                      onClick={() =>
-                        run(server.id, () => api.removeMcpServer(server.id))
-                      }
-                    >
-                      <Trash2 size={14} aria-hidden="true" />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className="mcp-server-remove"
+                    disabled={busy}
+                    title="Remove server"
+                    aria-label={`Remove ${server.name}`}
+                    onClick={() =>
+                      run(server.id, () => api.removeMcpServer(server.id))
+                    }
+                  >
+                    <Trash2 size={14} aria-hidden="true" />
+                  </button>
                 </div>
               </li>
             );
