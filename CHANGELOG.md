@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.31] - 2026-09-04
+
+### Added
+
+- **Custom Coach instructions** — save goals, training preferences, equipment, and tone across AI providers, and view the built-in Coach instructions in settings. Default tool, confirmation, and data-accuracy rules remain in effect.
+- **Google and Apple Calendar sync** — sync scheduled COROS workouts to a selected Google or iCloud calendar, with automatic updates and connection controls in Calendar and Settings. Google requires OAuth app setup; iCloud requires an app-specific password.
+
+### Fixed
+
+- Improved COROS sign-in compatibility and account integration handling.
+- Removing the built-in COROS MCP connection now clears its saved credentials, including legacy credentials.
+
 ## [0.1.29] - 2026-08-24
 
 ### Added
