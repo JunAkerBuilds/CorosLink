@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.32] - 2026-09-05
+
+### Fixed
+
+- Fixed Watch Face Studio exports failing with “The watch-face archive contains too many files.” Increased the file allowance and removed unused generated sprites while preserving current and always-on display assets ([#112](https://github.com/JunAkerBuilds/CorosLink/issues/112)).
+- Fixed ordinary watch-face DAT/ZIP imports incorrectly hitting the smaller editable-project package limit.
+- Cleared stale Studio error messages on retry and successful exports, and prevented rejected builds from leaving invalid archive files behind.
+
 ## [0.1.31] - 2026-09-04
 
 ### Added
