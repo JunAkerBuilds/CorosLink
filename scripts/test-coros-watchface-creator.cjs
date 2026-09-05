@@ -548,6 +548,10 @@ async function main() {
     firmwareType: "COROS W999",
     watchModel: "apex-4",
     watchFaceVersion: 2,
+    configOverrides: [{
+      path: "watchface_240x240/config.txt",
+      values: { time_hour_high_font: "cl_hh" }
+    }],
     assetReplacements: [
       {
         path: "watchface_240x240/cl_hh/00.png",
@@ -688,7 +692,10 @@ async function main() {
       ["config.txt", "AODconfig.txt"].map((fileName) => ({
         path: `watchface_${size}x${size}/${fileName}`,
         values: {
-          time_center_polygon_icon1: "__COROSLINK_DELETE_CONFIG_KEY__"
+          time_center_polygon_icon1: "__COROSLINK_DELETE_CONFIG_KEY__",
+          ...(size === 390 && fileName === "config.txt"
+            ? { time_hour_high_font: "cl_hh" }
+            : {})
         }
       }))
     )
@@ -1103,6 +1110,131 @@ async function main() {
     "a state folder shared by the fixed battery icon must remain in the archive"
   );
 
+  // Rebuilding an exported face drops only unused CorosLink-owned sprites.
+  // Both authored and synthesized AOD configs must protect their references.
+  const tinyPng = solidPng(1, 1, 0xff);
+  const pruningEntries = fixtureEntries.map((entry) => {
+    if (entry.name === "watchface_800x800/config.txt") {
+      return { ...entry, data: Buffer.from(FIXTURE_CONFIG
+        .replace("[time_hour_high_font]=01", "[time_hour_high_font]=cl_obsolete")
+        .replace("icon\\step.png", "studio\\old_icon\\00.png")) };
+    }
+    if (entry.name === "watchface_800x800/AODconfig.txt") {
+      return { ...entry, data: Buffer.from([
+        "[watchface_id]=0",
+        "[background_icon]=studio\\aod_background\\00.png",
+        "[time_hour_high_font]=cl_shared",
+        "[time_hour_low_font]=a\\cl_aod_only"
+      ].join("\r\n")) };
+    }
+    return entry;
+  });
+  pruningEntries.push({
+    name: "watchface_416x416/config.txt",
+    data: Buffer.from("[watchface_id]=0\r\n[background_icon]=background.png\r\n")
+  });
+  for (const resolution of [800, 416]) {
+    const prefix = `watchface_${resolution}x${resolution}`;
+    for (const folder of ["cl_obsolete", "cl_shared", "cl_aod_only"]) {
+      for (let digit = 0; digit < 10; digit += 1) {
+        pruningEntries.push({ name: `${prefix}/${folder}/0${digit}.png`, data: tinyPng });
+      }
+    }
+    for (const relative of [
+      "studio/aod_background/00.png", "studio/aod_background/01.png",
+      "studio/old_icon/00.png", "weather/00.png", "official_unused/00.png"
+    ]) {
+      pruningEntries.push({ name: `${prefix}/${relative}`, data: tinyPng });
+    }
+  }
+  const pruningPath = path.join(tempRoot, "pruning-source.dat");
+  await fs.writeFile(pruningPath, createStoreZip(pruningEntries));
+  const pruningStarter = await watchfaces.selectCorosWatchfaceArchive(pruningPath);
+  const pruned = await watchfaces.createCorosWatchfaceArchive({
+    sourceArchiveId: pruningStarter.archiveId,
+    backgroundDataUrl: pngDataUrl(tinyPng),
+    configTextReplacements: [{
+      path: "watchface_800x800/config.txt", text: FIXTURE_CONFIG
+    }],
+    configOverrides: [{
+      path: "watchface_800x800/config.txt",
+      values: {
+        time_hour_high_font: "studio\\current_font",
+        control_step_icon: "__COROSLINK_DELETE_CONFIG_KEY__"
+      }
+    }],
+    assetReplacements: ["current_font", "unused_new"].map((folder) => ({
+      path: `watchface_800x800/studio/${folder}/00.png`,
+      dataUrl: pngDataUrl(tinyPng), create: true
+    }))
+  });
+  const prunedOutput = path.join(tempRoot, "pruned.dat");
+  await watchfaces.exportCorosWatchfaceArchive(pruned.archiveId, prunedOutput);
+  const prunedZip = await unzipper.Open.file(prunedOutput);
+  const prunedPaths = new Set(prunedZip.files.map((entry) => entry.path));
+  assert.ok(prunedPaths.has("watchface_800x800/studio/current_font/00.png"));
+  assert.ok(!prunedPaths.has("watchface_800x800/studio/unused_new/00.png"));
+  for (const resolution of [800, 416]) {
+    const prefix = `watchface_${resolution}x${resolution}`;
+    assert.ok(prunedPaths.has(`${prefix}/AODconfig.txt`));
+    for (let digit = 0; digit < 10; digit += 1) {
+      assert.ok(prunedPaths.has(`${prefix}/cl_shared/0${digit}.png`), "AOD font glyphs must survive");
+      assert.ok(prunedPaths.has(`${prefix}/cl_aod_only/0${digit}.png`), "AOD fallback fonts must survive");
+      assert.ok(!prunedPaths.has(`${prefix}/cl_obsolete/0${digit}.png`), "replaced generated fonts should be pruned");
+    }
+    assert.ok(prunedPaths.has(`${prefix}/studio/aod_background/00.png`));
+    assert.ok(!prunedPaths.has(`${prefix}/studio/aod_background/01.png`), "direct image references should not retain unused siblings");
+    assert.ok(!prunedPaths.has(`${prefix}/studio/old_icon/00.png`));
+    assert.ok(prunedPaths.has(`${prefix}/weather/00.png`), "unreferenced official weather assets must survive");
+    assert.ok(prunedPaths.has(`${prefix}/official_unused/00.png`), "other original template assets must survive");
+  }
+  const repeated = await watchfaces.createCorosWatchfaceArchive({
+    sourceArchiveId: pruned.archiveId, backgroundDataUrl: pngDataUrl(tinyPng)
+  });
+  const repeatedOutput = path.join(tempRoot, "pruned-again.dat");
+  await watchfaces.exportCorosWatchfaceArchive(repeated.archiveId, repeatedOutput);
+  assert.deepEqual(
+    new Set((await unzipper.Open.file(repeatedOutput)).files.map((entry) => entry.path)),
+    prunedPaths,
+    "rebuilding the same face must keep its resource inventory stable"
+  );
+
+  // The expanded allowance still has a hard boundary. A failed export must
+  // leave neither an invalid output nor a poisoned source for the next retry.
+  const limitEntries = [...fixtureEntries];
+  while (limitEntries.length < 5_000) {
+    limitEntries.push({ name: `original/${limitEntries.length}.png`, data: tinyPng });
+  }
+  const limitSource = path.join(tempRoot, "limit-source.dat");
+  const limitSourceBytes = createStoreZip(limitEntries);
+  await fs.writeFile(limitSource, limitSourceBytes);
+  const limitStarter = await watchfaces.selectCorosWatchfaceArchive(limitSource);
+  const outputDirectory = path.join(app.getPath("userData"), "watchface-archives");
+  const beforeRejectedBuild = (await fs.readdir(outputDirectory)).sort();
+  await assert.rejects(watchfaces.createCorosWatchfaceArchive({
+    sourceArchiveId: limitStarter.archiveId,
+    backgroundDataUrl: pngDataUrl(tinyPng),
+    assetReplacements: [{
+      path: "watchface_800x800/studio/new_font/00.png",
+      dataUrl: pngDataUrl(tinyPng), create: true
+    }],
+    configOverrides: [{
+      path: "watchface_800x800/config.txt",
+      values: { time_hour_high_font: "studio\\new_font" }
+    }]
+  }), /watch-face archive contains too many files \(5001; maximum 5000\)/);
+  assert.deepEqual((await fs.readdir(outputDirectory)).sort(), beforeRejectedBuild,
+    "rejected builds must not leave generated archives on disk");
+  assert.deepEqual(await fs.readFile(limitSource), limitSourceBytes,
+    "rejected builds must not alter their source template");
+  const recovered = await watchfaces.createCorosWatchfaceArchive({
+    sourceArchiveId: limitStarter.archiveId, backgroundDataUrl: pngDataUrl(tinyPng)
+  });
+  const recoveredOutput = path.join(tempRoot, "recovered.dat");
+  await watchfaces.exportCorosWatchfaceArchive(recovered.archiveId, recoveredOutput);
+  assert.equal((await unzipper.Open.file(recoveredOutput)).files.length, 5_000,
+    "faces above the former 1000-file limit should export successfully on retry");
+
   console.log("COROS watchface creator archive test passed");
 }
 
@@ -1113,5 +1245,5 @@ main()
   })
   .finally(async () => {
     await fs.rm(tempRoot, { recursive: true, force: true });
-    app.quit();
+    app.exit(process.exitCode ?? 0);
   });

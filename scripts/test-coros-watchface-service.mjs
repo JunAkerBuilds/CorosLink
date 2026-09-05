@@ -941,6 +941,33 @@ try {
   assert.equal(selected.watchFaceVersion, 0);
   assert.ok(selected.archiveId.length > 0);
 
+  // DAT files must not inherit the editable project's 100-entry outer limit.
+  const rawEntries = [
+    { name: "info.json", data: Buffer.from('{"o_template_id":250601,"o_diy_version":1}') },
+    { name: "watchface_customize.png", data: Buffer.from("PNG") }
+  ];
+  for (let index = 0; index < 4_999; index += 1) {
+    rawEntries.push({ name: `assets/${index}.png`, data: Buffer.from("PNG") });
+  }
+  for (const count of [101, 1_001, 5_000]) {
+    const rawPath = path.join(tempDirectory, `raw-${count}.dat`);
+    await fs.writeFile(rawPath, createStoreZip(rawEntries.slice(0, count)));
+    assert.equal(await readCorosWatchfaceProjectPackage(rawPath), null);
+    assert.equal((await selectCorosWatchfaceArchive(rawPath)).sourceTemplateId, "250601");
+  }
+  const excessivePath = path.join(tempDirectory, "raw-5001.dat");
+  await fs.writeFile(excessivePath, createStoreZip(rawEntries));
+  await assert.rejects(
+    selectCorosWatchfaceArchive(excessivePath),
+    /watch-face archive contains too many files \(5001; maximum 5000\)/
+  );
+  const unsafePath = path.join(tempDirectory, "unsafe.dat");
+  await fs.writeFile(unsafePath, createStoreZip([
+    ...rawEntries.slice(0, 101),
+    { name: "../escape.png", data: Buffer.from("PNG") }
+  ]));
+  await assert.rejects(selectCorosWatchfaceArchive(unsafePath), /unsafe path/);
+
   const exportedPath = path.join(tempDirectory, "website-face.zip");
   const editableDesign = {
     version: 1,
@@ -980,6 +1007,20 @@ try {
     "editable website ZIP should preserve the original starter archive exactly"
   );
   assert.deepEqual(editablePackage.preview, preview);
+
+  const excessiveProjectPath = path.join(tempDirectory, "excessive-project.zip");
+  await fs.writeFile(excessiveProjectPath, createStoreZip([
+    { name: "coroslink-project.json", data: Buffer.from(JSON.stringify(editablePackage.manifest)) },
+    { name: "starter.dat", data: archive },
+    ...Array.from({ length: 99 }, (_, index) => ({
+      name: `extras/${index}.txt`, data: Buffer.from("x")
+    }))
+  ]));
+  await assert.rejects(
+    readCorosWatchfaceProjectPackage(excessiveProjectPath),
+    /editable watch-face package contains too many files \(101; maximum 100\)/,
+    "actual editable project packages must retain their own inventory limit"
+  );
 
   const finderWrappedPath = path.join(tempDirectory, "finder-wrapped-face.zip");
   await fs.writeFile(

@@ -750,6 +750,7 @@ interface WatchfaceEditorProps {
   ) => void;
   onError: (message: string) => void;
   onNotice: (message: string) => void;
+  onClearMessages: () => void;
 }
 
 interface WatchfaceDragState {
@@ -1065,7 +1066,8 @@ export function WatchfaceEditor({
   onProjectSaved,
   onConvertTarget,
   onError,
-  onNotice
+  onNotice,
+  onClearMessages
 }: WatchfaceEditorProps) {
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const dragPreviewCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -6056,6 +6058,7 @@ export function WatchfaceEditor({
   }
 
   async function exportEditableProject() {
+    onClearMessages();
     if (spriteImportTrackerRef.current.pendingCount > 0) {
       onError("Wait for the sprite import to finish before exporting.");
       return;
@@ -6091,6 +6094,7 @@ export function WatchfaceEditor({
   }
 
   async function createArchive(action: "publish" | "export" = "publish") {
+    onClearMessages();
     if (spriteImportTrackerRef.current.pendingCount > 0) {
       onError("Wait for the sprite import to finish before building.");
       return;

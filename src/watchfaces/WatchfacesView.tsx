@@ -295,6 +295,14 @@ export function WatchfacesView({
   >(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const showStudioError = useCallback((message: string) => {
+    setNotice(null);
+    setError(message);
+  }, []);
+  const showStudioNotice = useCallback((message: string) => {
+    setError(null);
+    setNotice(message);
+  }, []);
 
   const applyDetectedFirmwareType = useCallback((nextFirmwareType: string) => {
     const normalized = nextFirmwareType.trim();
@@ -1005,8 +1013,9 @@ export function WatchfacesView({
           onPublish={openPublish}
           onProjectSaved={handleProjectSaved}
           onConvertTarget={beginWatchConversion}
-          onError={setError}
-          onNotice={setNotice}
+          onError={showStudioError}
+          onNotice={showStudioNotice}
+          onClearMessages={clearMessages}
         />
         <ToastRegion error={error} notice={notice} onDismiss={clearMessages} />
         {publishOpen ? (
