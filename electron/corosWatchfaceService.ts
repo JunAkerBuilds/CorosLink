@@ -117,7 +117,9 @@ const MAX_PROJECT_PACKAGE_BYTES = 100 * 1024 * 1024;
 const MAX_PROJECT_PACKAGE_EXPANDED_BYTES = 130 * 1024 * 1024;
 const MAX_PROJECT_PACKAGE_FILES = 100;
 const MAX_ARCHIVE_EXPANDED_BYTES = 200 * 1024 * 1024;
-const MAX_ARCHIVE_FILES = 1_000;
+// Styled faces retain the template assets alongside separate Current/AOD
+// sprite sets at each resolution. Bound their count independently of bytes.
+const MAX_ARCHIVE_FILES = 5_000;
 const MAX_ARCHIVE_ENTRY_BYTES = 5 * 1024 * 1024;
 const CREATOR_CANVAS_SIZE = 800;
 const MAX_SPRITE_REPLACEMENTS = 800;
@@ -133,6 +135,10 @@ const CONFIG_TEXT_PATH_PATTERN = /^watchface_\d{3,4}x\d{3,4}\/(?:AOD)?config\.tx
 const CONFIG_KEY_PATTERN = /^[a-z0-9_]{1,64}$/i;
 const CREATED_STUDIO_SPRITE_PATTERN =
   /^watchface_(\d{3,4})x\1\/(?:studio\/[a-z0-9_-]{1,64}|cl_[a-z0-9_]{1,32}|weather)\/\d{2}\.png$/i;
+// Only these namespaces belong to CorosLink. Official assets (including
+// weather) may have firmware references outside the editable layout configs.
+const OWNED_STUDIO_SPRITE_PATTERN =
+  /^watchface_(\d{3,4})x\1\/(?:studio\/[a-z0-9_-]{1,64}|cl_[a-z0-9_]{1,32})\/\d{2}\.png$/i;
 const CREATOR_ARTWORK_ENTRY_PATTERN =
   /^(?:watchface_customize\.png|watchface_\d{3,4}x\d{3,4}\/(?:background|watchface_customize|thmb)\.png)$/i;
 // Values stay on one printable-ASCII line, matching the firmware's own syntax.
@@ -938,14 +944,6 @@ export async function readCorosWatchfaceProjectPackage(
     throw new Error("The editable watch-face package must be smaller than 100 MB.");
   }
   const directory = await openTemplateArchive(packagePath);
-  validateArchiveInventory(
-    directory.files,
-    MAX_PROJECT_PACKAGE_FILES,
-    MAX_PROJECT_PACKAGE_EXPANDED_BYTES,
-    MAX_PROJECT_PACKAGE_BYTES,
-    8,
-    "editable watch-face package"
-  );
   const files = directory.files.filter(
     (entry) => entry.type === "File" && !entry.path.startsWith("__MACOSX/")
   );
@@ -959,6 +957,16 @@ export async function readCorosWatchfaceProjectPackage(
   }
   const manifestEntry = manifestEntries[0];
   if (!manifestEntry) return null;
+  // Ordinary DAT/ZIP faces use the watch-face inventory limits. Detect the
+  // project manifest before applying the much smaller outer-package limit.
+  validateArchiveInventory(
+    directory.files,
+    MAX_PROJECT_PACKAGE_FILES,
+    MAX_PROJECT_PACKAGE_EXPANDED_BYTES,
+    MAX_PROJECT_PACKAGE_BYTES,
+    8,
+    "editable watch-face package"
+  );
   // Finder's Compress action commonly wraps selected project files in one
   // enclosing folder. Resolve the remaining required entries relative to the
   // manifest so these otherwise valid packages import like root-level exports.
@@ -1605,9 +1613,14 @@ export async function createCorosWatchfaceArchive(
   const outputDirectory = path.join(app.getPath("userData"), "watchface-archives");
   await fs.promises.mkdir(outputDirectory, { recursive: true });
   const outputPath = path.join(outputDirectory, `${crypto.randomUUID()}.dat`);
-  await fs.promises.writeFile(outputPath, zip);
-
-  const generated = await inspectArchive(outputPath);
+  let generated: SelectedArchive;
+  try {
+    await fs.promises.writeFile(outputPath, zip);
+    generated = await inspectArchive(outputPath);
+  } catch (caught) {
+    await fs.promises.rm(outputPath, { force: true }).catch(() => undefined);
+    throw caught;
+  }
   const selected: SelectedArchive = {
     ...generated,
     fileName: "CorosLink custom face.dat",
@@ -3674,7 +3687,56 @@ async function rewriteTemplateArchive(
       finalPaths.add(aodPath);
     }
   }
-  return createStoreZip(orderedEntries);
+  const finalEntries = removeUnreferencedStudioSprites(orderedEntries);
+  validateArchiveInventory(
+    finalEntries.map((entry) => ({
+      path: entry.name,
+      type: "File",
+      uncompressedSize: entry.data.byteLength
+    })),
+    MAX_ARCHIVE_FILES,
+    MAX_ARCHIVE_EXPANDED_BYTES,
+    MAX_ARCHIVE_ENTRY_BYTES,
+    7,
+    "watch-face archive"
+  );
+  const zip = createStoreZip(finalEntries);
+  if (zip.byteLength > MAX_ARCHIVE_BYTES) {
+    throw new Error("The generated watch-face archive must be smaller than 100 MB.");
+  }
+  return zip;
+}
+
+/** Prune owned sprites only after all overrides and missing AOD configs exist. */
+function removeUnreferencedStudioSprites(
+  entries: { name: string; data: Buffer }[]
+): { name: string; data: Buffer }[] {
+  const references = new Set<string>();
+  for (const entry of entries) {
+    if (!CONFIG_TEXT_PATH_PATTERN.test(entry.name)) continue;
+    const resolutionDirectory = entry.name.split("/", 1)[0]!.toLowerCase();
+    for (const value of Object.values(parseCorosWatchfaceConfig(entry.data.toString("utf8")))) {
+      const relative = value.trim().replace(/\\/g, "/")
+        .replace(/^\.\//, "").replace(/\/+$/, "").toLowerCase();
+      if (!relative || relative === COROS_CONFIG_DELETE_VALUE.toLowerCase()) continue;
+      references.add(`${resolutionDirectory}/${relative}`);
+      // AOD layouts can fall back from a/ to the main resolution assets.
+      if (relative.startsWith("a/")) {
+        references.add(`${resolutionDirectory}/${relative.slice(2)}`);
+      }
+    }
+  }
+  return entries.filter((entry) => {
+    if (!OWNED_STUDIO_SPRITE_PATTERN.test(entry.name)) return true;
+    let candidate = entry.name.toLowerCase();
+    // A direct PNG reference retains that file; a directory reference retains
+    // every state/glyph beneath it. Keep the archive's original entry order.
+    while (candidate.includes("/")) {
+      if (references.has(candidate)) return true;
+      candidate = candidate.slice(0, candidate.lastIndexOf("/"));
+    }
+    return false;
+  });
 }
 
 async function inspectArchive(
@@ -3687,7 +3749,7 @@ async function inspectArchive(
     throw new Error("Choose a watchface archive file.");
   }
   if (stat.size <= 0 || stat.size > MAX_ARCHIVE_BYTES) {
-    throw new Error("The archive must be between 1 byte and 25 MB.");
+    throw new Error("The archive must be between 1 byte and 100 MB.");
   }
 
   const directory = await openTemplateArchive(normalizedPath);
@@ -3773,7 +3835,7 @@ async function inspectArchive(
 }
 
 function validateArchiveInventory(
-  entries: UnzipperFile[],
+  entries: Pick<UnzipperFile, "path" | "type" | "size" | "uncompressedSize">[],
   maxFiles: number,
   maxExpandedBytes: number,
   maxEntryBytes: number,
@@ -3782,7 +3844,9 @@ function validateArchiveInventory(
 ): void {
   const files = entries.filter((entry) => entry.type === "File");
   if (files.length > maxFiles) {
-    throw new Error(`The ${label} contains too many files.`);
+    throw new Error(
+      `The ${label} contains too many files (${files.length}; maximum ${maxFiles}).`
+    );
   }
   let expandedBytes = 0;
   for (const entry of entries) {
