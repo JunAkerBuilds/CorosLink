@@ -1,0 +1,710 @@
+/* Coach is an edge-to-edge graphite workspace. Keep these overrides after
+   the shared desktop styles so its rails and header share one canvas. */
+:root .app .app-body > .content-fill:has(> .content-coach-panel:not(.view-panel-hidden)) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root .app .chat-view {
+  --accent: #c1c7d0;
+  --accent-strong: #edf0f4;
+  --accent-hover: #d9dee5;
+  --accent-2: #a7afb9;
+  --accent-soft: rgba(193, 199, 208, 0.08);
+  --accent-glow: rgba(193, 199, 208, 0.14);
+  --accent-gradient: linear-gradient(135deg, var(--accent), var(--accent-2));
+  --text-on-accent: #202226;
+  --text-primary: #f0f1f3;
+  --text-secondary: #b9bdc5;
+  --text-muted: #a5aab3;
+  --coach-canvas: #141516;
+  --coach-sidebar: #171819;
+  --glass-bg: #1c1d1f;
+  --glass-bg-hover: #252628;
+  --glass-bg-elevated: #202123;
+  --glass-border: #2c2d30;
+  --coach-glass-fill: #1c1d1f;
+  --coach-glass-reflection: transparent;
+  --coach-glass-edge: rgba(228, 233, 242, 0.07);
+  --coach-glass-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --coach-glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  --coach-glass-surface: linear-gradient(145deg, var(--coach-glass-reflection), transparent 48%), var(--coach-glass-fill);
+  --coach-rail-surface: var(--coach-sidebar);
+  --coach-frost: none;
+  --coach-light: transparent;
+  --surface: var(--coach-canvas);
+  --chat-signal: var(--accent);
+  --chat-signal-strong: var(--accent-strong);
+  --chat-signal-soft: var(--accent-soft);
+  --chat-signal-border: var(--glass-border);
+  --chat-signal-glow: transparent;
+  --sidebar-float-gap: 0px;
+  --sidebar-radius: 0px;
+  background: var(--coach-canvas);
+}
+
+:root[data-theme="paper"] .app .chat-view {
+  --accent: #535b69;
+  --accent-strong: #303641;
+  --accent-hover: #404854;
+  --accent-2: #626b79;
+  --accent-soft: rgba(83, 91, 105, 0.07);
+  --accent-glow: rgba(83, 91, 105, 0.14);
+  --text-on-accent: #ffffff;
+  --text-primary: #292e36;
+  --text-secondary: #565e6b;
+  --text-muted: #59626e;
+  --coach-canvas: #f8f9fb;
+  --coach-sidebar: #f0f2f5;
+  --glass-bg: #f0f2f5;
+  --glass-bg-hover: #e7eaf0;
+  --glass-bg-elevated: #ffffff;
+  --glass-border: #d9dee5;
+  --coach-glass-fill: rgba(255, 255, 255, 0.34);
+  --coach-glass-reflection: rgba(255, 255, 255, 0.32);
+  --coach-glass-edge: rgba(114, 126, 145, 0.16);
+  --coach-glass-shadow: 0 12px 32px rgba(43, 52, 67, 0.08);
+  --coach-glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.92), inset 0 -1px 0 rgba(255, 255, 255, 0.4);
+  --coach-light: rgba(170, 182, 204, 0.20);
+  --coach-rail-surface: linear-gradient(165deg, rgba(255, 255, 255, 0.36), transparent 72%), rgba(239, 242, 247, 0.36);
+}
+
+:root .app .chat-view .chat-header {
+  min-height: 66px;
+  padding: 16px 24px;
+  border-bottom-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: var(--coach-frost);
+  -webkit-backdrop-filter: var(--coach-frost);
+}
+
+:root .app .chat-view .chat-header::after,
+:root .app .chat-view .chat-sidebar::before,
+:root .app .chat-view .chat-sidebar::after,
+:root .app .chat-view .chat-empty-icon::before {
+  display: none;
+}
+
+:root .app .chat-header-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+:root .app .chat-header-end {
+  gap: 8px;
+}
+
+:root .app .chat-header :is(.chat-settings-button, .chat-signout, .chat-mcp-pill) {
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+:root .app .chat-header .chat-mcp-pill.connected,
+:root .app .chat-header .chat-mcp-pill.connected:hover:not(:disabled) {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+  color: var(--success-text);
+}
+
+:root .app .chat-header .chat-mcp-pill.connected::before {
+  background: var(--success-dot);
+  box-shadow: none;
+  animation: none;
+}
+
+:root .app .chat-header button:hover:not(:disabled) {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+/* Keep the familiar green selection against the graphite history rail. */
+:root .app .chat-sidebar-shell.is-open {
+  width: 256px;
+  padding: 0;
+}
+
+:root .app .chat-sidebar {
+  --accent: inherit;
+  --accent-strong: inherit;
+  --accent-2: inherit;
+  --accent-hover: inherit;
+  --accent-soft: inherit;
+  --accent-glow: inherit;
+  --accent-gradient: inherit;
+  width: 256px;
+  min-width: 256px;
+  border: 0;
+  border-right: 1px solid var(--coach-glass-edge);
+  border-radius: 0;
+  background: var(--coach-rail-surface);
+  box-shadow: none;
+  backdrop-filter: var(--coach-frost);
+  -webkit-backdrop-filter: var(--coach-frost);
+}
+
+:root .app .chat-sidebar.is-overlay {
+  width: min(280px, 100%);
+  min-width: 0;
+  box-shadow: 16px 0 40px rgba(0, 0, 0, 0.15);
+}
+
+:root .app .chat-history-toolbar {
+  gap: 12px;
+  padding: 18px 16px 14px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root .app .chat-history-header .eyebrow {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 550;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+:root .app .chat-new-chat-sidebar {
+  justify-content: flex-start;
+  gap: 9px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 9px;
+  background: var(--coach-glass-surface);
+  color: var(--text-primary);
+  font-weight: 550;
+  box-shadow: var(--coach-glass-inset);
+}
+
+:root .app .chat-new-chat-sidebar:hover:not(:disabled) {
+  background: var(--glass-bg-hover);
+  color: var(--accent-strong);
+  transform: none;
+}
+
+:root .app .chat-history-search {
+  padding-inline: 10px;
+  border: 1px solid var(--coach-glass-edge);
+  border-radius: 8px;
+  background: var(--coach-glass-fill);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root .app .chat-history-search:focus-within {
+  border-color: var(--accent);
+  background: var(--glass-bg);
+}
+
+:root .app .chat-history-search input {
+  font-size: 12px;
+}
+
+:root .app .chat-view :is(.chat-input, .chat-history-search input)::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+:root .app .chat-session-list {
+  padding: 4px 10px 20px;
+}
+
+:root .app .chat-session-group-label {
+  margin: 10px 12px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 1;
+}
+
+:root .app .chat-session-row {
+  position: relative;
+  min-height: 60px;
+  padding: 11px 12px;
+  border-radius: 9px;
+  border-color: transparent;
+  gap: 6px;
+}
+
+:root .app .chat-session-row:hover:not(.is-disabled) {
+  background: var(--glass-bg);
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+:root .app .chat-session-row.is-active,
+:root .app .chat-session-row.is-active:hover:not(.is-disabled) {
+  border-radius: calc(var(--radius-lg) - 2px);
+  background: var(--sidebar-indicator-bg);
+  border-color: var(--sidebar-indicator-border);
+  box-shadow: var(--sidebar-indicator-shadow);
+}
+
+:root .app .chat-session-row-title {
+  font-size: 12px;
+  font-weight: 550;
+}
+
+:root .app .chat-session-row-preview {
+  font-size: 11px;
+}
+
+:root .app .chat-session-row-time {
+  font-size: 10px;
+}
+
+:root .app .chat-session-row-delete {
+  position: absolute;
+  right: 8px;
+  bottom: 7px;
+  background: var(--coach-sidebar);
+}
+
+/* The empty state stays readable as either sidebar changes width. */
+:root .app .chat-main {
+  container: coach-main / inline-size;
+}
+
+:root .app .chat-thread:has(.chat-empty) {
+  min-height: 100%;
+  max-width: 800px;
+  padding: 32px;
+}
+
+:root .app .chat-empty {
+  width: 100%;
+  max-width: 640px;
+  padding: 12px 0 28px;
+  gap: 0;
+  animation: none;
+}
+
+:root .app .chat-empty-icon {
+  width: 52px;
+  height: 52px;
+  margin-bottom: 24px;
+  border: 1px solid var(--coach-glass-edge);
+  border-radius: 16px;
+  background: var(--coach-glass-surface);
+  color: var(--accent-strong);
+  box-shadow: var(--coach-glass-inset), var(--coach-glass-shadow);
+  backdrop-filter: var(--coach-frost);
+  -webkit-backdrop-filter: var(--coach-frost);
+  animation: none;
+}
+
+:root .app .chat-empty h3 {
+  max-width: 470px;
+  font-size: clamp(25px, 3cqi, 32px);
+  line-height: 1.22;
+  font-weight: 550;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+
+.chat-empty-description {
+  margin: 14px 0 30px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  text-wrap: balance;
+}
+
+:root .app .chat-suggestions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-width: none;
+}
+
+:root .app .chat-suggestion {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 15px;
+  align-items: start;
+  gap: 12px;
+  min-height: 88px;
+  padding: 19px 16px;
+  border: 1px solid var(--coach-glass-edge);
+  border-radius: 12px;
+  background: var(--coach-glass-surface);
+  text-align: left;
+  box-shadow: var(--coach-glass-inset), 0 6px 20px rgba(0, 0, 0, 0.06);
+  animation: none;
+  backdrop-filter: var(--coach-frost);
+  -webkit-backdrop-filter: var(--coach-frost);
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+:root .app .chat-suggestion:hover {
+  border-color: var(--accent);
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--coach-glass-surface);
+  box-shadow: var(--coach-glass-inset), var(--coach-glass-shadow);
+  transform: none;
+}
+
+.chat-suggestion-icon {
+  margin-top: 1px;
+  color: var(--accent);
+}
+
+.chat-suggestion-copy {
+  display: grid;
+  gap: 5px;
+}
+
+.chat-suggestion-copy strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.4;
+}
+
+.chat-suggestion-copy > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.chat-suggestion-arrow {
+  margin-top: 2px;
+  color: var(--text-muted);
+}
+
+.chat-more-suggestions {
+  width: 100%;
+  margin-top: 20px;
+  font-size: 12px;
+}
+
+.chat-more-suggestions summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: fit-content;
+  margin: 0 auto;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  list-style: none;
+  cursor: pointer;
+}
+
+.chat-more-suggestions summary::-webkit-details-marker {
+  display: none;
+}
+
+.chat-more-suggestions summary:hover {
+  color: var(--text-primary);
+}
+
+.chat-more-suggestions[open] summary svg {
+  transform: rotate(180deg);
+}
+
+.chat-more-suggestions-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.chat-more-suggestions-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-more-suggestions-list button:hover {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.chat-more-suggestions-list button svg {
+  flex: none;
+}
+
+/* One composer surface contains the draft and the quieter model controls. */
+:root .app .chat-composer {
+  flex: none;
+  padding: 12px 32px 16px;
+}
+
+:root .app .chat-composer-inner {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--coach-glass-edge);
+  border-radius: 16px;
+  background: var(--coach-glass-surface);
+  box-shadow: var(--coach-glass-inset), var(--coach-glass-shadow);
+  backdrop-filter: var(--coach-frost);
+  -webkit-backdrop-filter: var(--coach-frost);
+}
+
+:root .app .chat-composer-inner:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--coach-glass-inset), 0 0 0 3px var(--accent-soft), var(--coach-glass-shadow);
+}
+
+.chat-composer-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+:root .app .chat-input {
+  min-width: 0;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  outline: none;
+}
+
+:root .app .chat-composer .chat-composer-toolbar {
+  max-width: none;
+  margin: 0;
+  gap: 8px;
+}
+
+:root .app .chat-composer .chat-provider-controls {
+  gap: 4px;
+}
+
+:root .app .chat-composer :is(.chat-provider-select, .chat-model-select) {
+  width: auto;
+  min-width: 0;
+  max-width: 190px;
+  flex: 0 1 auto;
+}
+
+:root .app .chat-composer .app-select-trigger {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  box-shadow: none;
+  transform: none;
+}
+
+:root .app .chat-composer .app-select-trigger:hover,
+:root .app .chat-composer .app-select-trigger[aria-expanded="true"] {
+  border-color: var(--glass-border);
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+  box-shadow: none;
+  transform: none;
+}
+
+:root .app .chat-composer :is(.app-select-icon, .app-select-leading-icon) {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+:root .app .chat-composer-new-chat {
+  flex: none;
+  padding: 5px 8px;
+  border-color: transparent;
+  border-radius: 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+:root .app .chat-send {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--text-on-accent);
+  box-shadow: none;
+}
+
+:root .app .chat-send:hover:not(:disabled) {
+  background: var(--accent-hover);
+  box-shadow: none;
+  transform: none;
+}
+
+:root .app .chat-send:disabled {
+  background: var(--glass-bg-hover);
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+:root .app .chat-send.chat-stop {
+  background: var(--error-text);
+  color: var(--coach-canvas);
+}
+
+:root .app .chat-disclaimer {
+  margin-top: 10px;
+  font-size: 10px;
+}
+
+/* Match the history rail, conversation surfaces, and creations panel. */
+:root .app .chat-view .chat-plan-panel {
+  margin: 0;
+  border: 0;
+  border-left: 1px solid var(--coach-glass-edge);
+  border-radius: 0;
+  background: var(--coach-rail-surface);
+  box-shadow: none;
+  backdrop-filter: var(--coach-frost);
+  -webkit-backdrop-filter: var(--coach-frost);
+}
+
+:root .app .chat-view .chat-plan-list-header {
+  background: transparent;
+  border-bottom-color: transparent;
+}
+
+:root .app .chat-view .chat-row-user > .chat-bubble {
+  border: 1px solid var(--coach-glass-edge);
+  background: var(--coach-glass-surface);
+  box-shadow: var(--coach-glass-inset), 0 4px 16px rgba(0, 0, 0, 0.06);
+  /* The translucent fill and reflections carry depth on long transcripts
+     without allocating a backdrop blur layer for every message. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root .app .chat-view .chat-avatar-assistant,
+:root .app .chat-view .chat-avatar-user {
+  border: 1px solid var(--coach-glass-edge);
+  background: var(--coach-glass-surface);
+  color: var(--text-primary);
+  box-shadow: var(--coach-glass-inset);
+}
+
+:root .app .chat-view .chat-mcp-panel {
+  background: var(--coach-glass-surface);
+  border-color: var(--coach-glass-edge);
+  box-shadow: var(--coach-glass-inset), var(--coach-glass-shadow);
+  backdrop-filter: var(--coach-frost);
+  -webkit-backdrop-filter: var(--coach-frost);
+}
+
+/* Apply the matching reflection to the main navigation only on Coach. */
+:root .app:has(.content-coach-panel:not(.view-panel-hidden)) .app-sidebar {
+  background: linear-gradient(165deg, var(--surface-highlight), transparent 65%), color-mix(in srgb, var(--glass-bg-elevated) 30%, transparent);
+  box-shadow: inset -1px 0 0 var(--glass-border);
+  backdrop-filter: blur(36px);
+  -webkit-backdrop-filter: blur(36px);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root .app .chat-view {
+    --coach-glass-fill: var(--glass-bg);
+    --coach-rail-surface: var(--coach-sidebar);
+    background: var(--coach-canvas);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root .app .chat-view {
+    --coach-glass-fill: var(--glass-bg);
+    --coach-glass-reflection: transparent;
+    --coach-frost: none;
+    --coach-light: transparent;
+    --coach-rail-surface: var(--coach-sidebar);
+    background: var(--coach-canvas);
+  }
+
+  :root .app:has(.content-coach-panel:not(.view-panel-hidden)) .app-sidebar {
+    background: var(--bg-base);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@container coach-main (max-width: 560px) {
+  :root .app .chat-thread:has(.chat-empty) {
+    padding: 28px 20px;
+  }
+
+  :root .app .chat-suggestions,
+  .chat-more-suggestions-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  :root .app .chat-suggestion {
+    min-height: 72px;
+    padding: 14px;
+  }
+
+  :root .app .chat-composer {
+    padding-inline: 20px;
+  }
+}
+
+@container coach-main (max-width: 400px) {
+  :root .app .chat-composer {
+    padding-inline: 12px;
+  }
+
+  :root .app .chat-composer-inner {
+    padding: 12px;
+  }
+
+  .chat-composer-new-chat span {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  :root .app .chat-view .chat-header {
+    flex-wrap: wrap;
+    padding: 12px 16px;
+  }
+
+  :root .app .chat-header-end {
+    gap: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root .app .chat-view *,
+  :root .app .chat-view *::before,
+  :root .app .chat-view *::after {
+    animation: none;
+    transition: none;
+  }
+}

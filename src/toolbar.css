@@ -1,0 +1,403 @@
+/* Tactile window controls: raised utilities, beveled edges, and a status lamp. */
+:root {
+  --toolbar-face: linear-gradient(180deg, #292e33, #202529 52%, #1a1e22);
+  --toolbar-well: linear-gradient(180deg, #181c20, #1d2226);
+  --toolbar-edge: rgba(222, 232, 240, 0.13);
+  --toolbar-highlight: rgba(255, 255, 255, 0.09);
+  --toolbar-shadow: rgba(0, 0, 0, 0.22);
+  --toolbar-lamp: #62dbac;
+  --toolbar-sun: #e9c677;
+  --toolbar-panel: #202428;
+  --toolbar-depth:
+    inset 0 1px 0 var(--toolbar-highlight),
+    inset 0 -1px 0 var(--toolbar-shadow),
+    0 2px 4px var(--toolbar-shadow);
+}
+
+:root[data-theme="paper"] {
+  --toolbar-face: linear-gradient(180deg, #fcfdfa, #f1f3ee 55%, #e6e9e3);
+  --toolbar-well: linear-gradient(180deg, #e3e7df, #edf0e8);
+  --toolbar-edge: rgba(61, 77, 65, 0.2);
+  --toolbar-highlight: rgba(255, 255, 255, 0.9);
+  --toolbar-shadow: rgba(42, 57, 45, 0.1);
+  --toolbar-lamp: #167747;
+  --toolbar-sun: #716842;
+  --toolbar-panel: #f4f6f0;
+}
+
+:root .app .app-header--slim {
+  min-height: 66px;
+  padding-block: 12px;
+  column-gap: 24px;
+}
+
+/* Continue the macOS sidebar material behind the traffic lights. Keep the
+   toolbar above it as the drag region, with the brand just below the controls. */
+@media (min-width: 721px) {
+  :root[data-platform="darwin"] .app {
+    --window-toolbar-height: 66px;
+  }
+
+  :root[data-platform="darwin"] .app .app-header--slim {
+    height: var(--window-toolbar-height);
+    flex-shrink: 0;
+  }
+
+  :root[data-platform="darwin"] .app-sidebar-shell:not(.is-overlay-mode) {
+    margin-top: calc(-1 * var(--window-toolbar-height));
+  }
+
+  :root[data-platform="darwin"] .app .app-sidebar:not(.is-overlay) {
+    padding-top: 48px;
+  }
+
+  :root[data-platform="darwin"] .app .app-sidebar:not(.is-overlay) .app-sidebar-inner {
+    padding-top: 12px;
+  }
+}
+
+.app .app-header-end,
+.app-toolbar-utilities,
+.app-toolbar-watch {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.app .app-header-end {
+  gap: 20px;
+}
+
+.app-toolbar-utilities,
+.app-toolbar-watch {
+  flex-shrink: 0;
+}
+
+.app .app-header .app-toolbar-utilities > .donate-button {
+  flex-shrink: 0;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid #b87616;
+  border-radius: 13px;
+  background: linear-gradient(180deg, #ffe6a0 0%, #ffd16a 44%, #f5b535 48%, #e99a18 100%);
+  box-shadow: inset 0 1px 0 #fff3cb, inset 0 -1px 0 #c17b12,
+    0 2px 3px rgba(0, 0, 0, 0.22), 0 0 14px rgba(245, 181, 53, 0.16);
+  color: #482903;
+  font-size: 12px;
+  font-weight: 700;
+  text-shadow: 0 1px 0 rgba(255, 246, 220, 0.55);
+  -webkit-app-region: no-drag;
+}
+
+.app .app-header .app-toolbar-utilities > .donate-button::before,
+.app .app-header .app-toolbar-utilities > .donate-button::after {
+  display: block;
+}
+
+.app .app-header .app-toolbar-utilities > .donate-button:hover {
+  box-shadow: inset 0 1px 0 #fff3cb, inset 0 -1px 0 #c17b12,
+    0 2px 4px rgba(0, 0, 0, 0.22), 0 0 18px rgba(245, 181, 53, 0.3);
+}
+
+.app .app-header .app-toolbar-utilities > .donate-button:active {
+  box-shadow: inset 0 2px 4px rgba(108, 61, 0, 0.25), 0 1px 0 var(--toolbar-highlight);
+}
+
+.app .app-toolbar-utilities .donate-button-cup {
+  stroke-width: 2.2;
+}
+
+@media (max-width: 1000px) {
+  .app .app-header .app-toolbar-utilities > .donate-button {
+    width: 38px;
+    min-width: 38px;
+    padding: 0;
+    gap: 0;
+  }
+
+  .app .app-toolbar-utilities .donate-button-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 560px) {
+  .app .app-header .app-toolbar-utilities > .donate-button {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+  }
+}
+
+.app-toolbar-watch {
+  gap: 10px;
+  padding-left: 20px;
+  border-left: 1px solid var(--toolbar-edge);
+}
+
+.app .app-header :is(.app-toolbar-utilities > .theme-toggle,
+  .app-toolbar-settings, .toolbar-more-trigger, .app-toolbar-refresh, .app-navigation-toggle) {
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid var(--toolbar-edge);
+  border-radius: 50%;
+  background: var(--toolbar-face);
+  box-shadow: var(--toolbar-depth);
+  color: var(--text-secondary);
+  transition: color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.app .app-header .app-toolbar-utilities > .theme-toggle {
+  color: var(--toolbar-sun);
+}
+
+.app .app-header :is(.theme-toggle, .app-toolbar-settings, .toolbar-more-trigger,
+  .app-toolbar-refresh, .app-navigation-toggle):hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--line-strong);
+  background: var(--toolbar-face);
+  box-shadow: var(--toolbar-depth), 0 0 0 2px var(--surface-highlight);
+}
+
+.app .app-header :is(.app-toolbar-settings[aria-pressed="true"],
+  .toolbar-more-trigger[aria-expanded="true"], .theme-toggle:active,
+  .app-toolbar-settings:active, .toolbar-more-trigger:active,
+  .app-toolbar-refresh:active:not(:disabled), .app-navigation-toggle:active) {
+  color: var(--text-primary);
+  background: var(--toolbar-well);
+  box-shadow: inset 0 2px 4px var(--toolbar-shadow), 0 1px 0 var(--toolbar-highlight);
+}
+
+.app-toolbar-watch-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 170px;
+  height: 38px;
+  padding: 0 13px;
+  border: 1px solid var(--toolbar-edge);
+  border-radius: 13px;
+  background: var(--toolbar-face);
+  box-shadow: var(--toolbar-depth);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.app-toolbar-watch-name > svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.app-toolbar-watch-name > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.app .app-header .watch-status-chip {
+  height: 38px;
+  min-height: 38px;
+  gap: 9px;
+  padding: 0 14px;
+  border: 1px solid var(--toolbar-edge);
+  border-radius: 18px;
+  background: var(--toolbar-well);
+  box-shadow: inset 0 1px 2px var(--toolbar-shadow), 0 1px 0 var(--toolbar-highlight);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.app .app-header .watch-status-chip.connected {
+  border-color: color-mix(in srgb, var(--toolbar-lamp) 35%, var(--toolbar-edge));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--toolbar-lamp) 12%, transparent), transparent), var(--toolbar-well);
+  color: var(--toolbar-lamp);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--toolbar-lamp) 13%, transparent), 0 2px 4px var(--toolbar-shadow);
+}
+
+.app .app-header .status-dot {
+  display: block;
+  width: 7px;
+  height: 7px;
+  background: var(--text-muted);
+  box-shadow: inset 0 1px 1px var(--toolbar-highlight);
+}
+
+.app .app-header .connected .status-dot {
+  background: var(--toolbar-lamp);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4), 0 0 7px color-mix(in srgb, var(--toolbar-lamp) 38%, transparent);
+}
+
+.toolbar-more {
+  position: relative;
+}
+
+.toolbar-more-panel {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  display: grid;
+  gap: 4px;
+  width: 280px;
+  max-height: calc(100dvh - 140px);
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--toolbar-edge);
+  border-radius: 16px;
+  background: var(--toolbar-panel);
+  box-shadow: inset 0 1px 0 var(--toolbar-highlight), 0 12px 32px var(--toolbar-shadow);
+  -webkit-app-region: no-drag;
+}
+
+.app .toolbar-more-panel :is(.startup-view-menu, .resources-menu) {
+  display: flex;
+  flex-direction: column;
+}
+
+.app .app-header .toolbar-more-panel :is(.update-settings-trigger, .donate-button) {
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.app .app-header .toolbar-more-panel :is(.update-settings-trigger, .donate-button):hover {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.app .toolbar-more-panel :is(.startup-view-popover, .resources-popover) {
+  position: static;
+  width: auto;
+  margin: 4px;
+  padding: 8px;
+  border-color: var(--toolbar-edge);
+  border-radius: 10px;
+  background: var(--toolbar-well);
+  box-shadow: none;
+}
+
+.app .toolbar-more-panel :is(.startup-view-option, .resources-link) {
+  font-size: 12px;
+}
+
+.app .toolbar-more-panel .donate-button-art {
+  width: 16px;
+  height: 20px;
+}
+
+.app .toolbar-more-panel .donate-button-label {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+}
+
+.app .toolbar-more-panel .app-select-menu {
+  position: static;
+  width: 100%;
+  min-width: 0;
+  margin-top: 6px;
+}
+
+.app-toolbar-development {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 8px 4px 2px;
+  border-top: 1px solid var(--toolbar-edge);
+}
+
+@media (max-width: 1000px) {
+  .app .app-header-end {
+    gap: 12px;
+  }
+
+  .app-toolbar-watch {
+    padding-left: 12px;
+  }
+}
+
+@media (max-width: 720px) {
+  :root .app .app-header--slim {
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 12px;
+  }
+
+  .app .app-header-context {
+    min-height: 38px;
+  }
+
+  .app .app-header-end {
+    justify-content: space-between;
+    flex-wrap: nowrap;
+  }
+
+  .app-toolbar-watch {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .toolbar-more-panel {
+    position: fixed;
+    top: 62px;
+    right: 12px;
+    width: min(280px, calc(100vw - 24px));
+  }
+}
+
+@media (max-width: 560px) {
+  .app-toolbar-utilities,
+  .app-toolbar-watch {
+    gap: 6px;
+  }
+
+  .app .app-header :is(.app-toolbar-utilities > .theme-toggle,
+    .app-toolbar-settings, .toolbar-more-trigger, .app-toolbar-refresh, .app-navigation-toggle) {
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
+  }
+
+  .app-toolbar-watch-name {
+    display: none;
+  }
+
+  .app .app-header .watch-status-chip {
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
+    justify-content: center;
+    padding: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app .app-header button {
+    transition: none;
+  }
+}

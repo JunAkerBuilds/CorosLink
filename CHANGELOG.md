@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Clarified that activity backups cover activities synced to COROS Training Hub, and added COROS sync troubleshooting guidance on the Data page, including before sign-in. Recovering recordings stored only on the watch still requires the COROS phone app or support ([#107](https://github.com/JunAkerBuilds/CorosLink/issues/107)).
+
 ## [0.1.32] - 2026-09-05
 
 ### Fixed

@@ -70,6 +70,7 @@ export function ChatHistoryPanel({
           <Search size={14} aria-hidden="true" />
           <input
             type="search"
+            aria-label="Search conversations"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search chats"

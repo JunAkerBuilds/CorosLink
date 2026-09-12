@@ -269,7 +269,7 @@ Log in with your COROS account to view training data, fitness scores, and race p
 - **Strength activity detail** — set/rep summary and exercise table with resolved exercise names
 - **Sleep & daily health** — sleep score/stages plus steps and calories from COROS data
 - **FIT file export** via signed download URL
-- **Bulk activity backup** — download your entire activity history (FIT, GPX, TCX, KML, or CSV) to a local folder; re-running only fetches new activities
+- **Bulk activity backup** — download activities already synced to COROS Training Hub (FIT, GPX, TCX, KML, or CSV) to a local folder; re-running skips existing files. Recordings stored only on the watch are excluded; the Data page includes sync troubleshooting guidance.
 - **Push activities to COROS** — import from intervals.icu or add manual activities
 
 <p align="center">
@@ -377,6 +377,8 @@ flowchart LR
 **Route builder** calls OpenRouteService to generate a route, then exports GPX for import through the COROS phone app (Bluetooth sync to the watch).
 
 **Training Hub** authenticates with COROS team APIs to fetch your analytics, activities, and fitness scores. Credentials are sent to COROS servers at login; all other app data stays on your machine.
+
+**Watch-only recordings** cannot currently be listed, downloaded, or repaired by CorosLink. Activity backup reads Training Hub, so a workout must reach your COROS account before it can be exported. If a workout appears on your watch but stays missing from the account, follow [COROS’s unsynced workout guide](https://support.coros.com/hc/en-us/articles/4404797030548-Troubleshooting-Unsynced-Workouts-on-COROS-Devices), also linked from **Data**. Once it appears in Training Hub, run the backup again.
 
 ---
 

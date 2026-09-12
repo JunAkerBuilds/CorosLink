@@ -1,6 +1,10 @@
 import {
-  Activity,
   CalendarDays,
+  ChartNoAxesColumnIncreasing,
+  Compass,
+  Layers,
+  MapPinCheck,
+  MousePointer2,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
@@ -8,13 +12,10 @@ import {
   Flame,
   Footprints,
   Gauge,
-  Hand,
-  LockKeyhole,
   MapPin,
   Mountain,
   Route,
   RotateCcw,
-  Timer,
   ZoomIn,
 } from "lucide-react";
 import {
@@ -805,27 +806,31 @@ export function ActivityGlobeCard({
   const primaryStats = [
     {
       label: "Total distance",
+      icon: Route,
+      tone: "distance",
       value: mapDistance.value,
       unit: mapDistance.unit,
-      icon: Route,
     },
     {
       label: "Training time",
+      icon: Clock3,
+      tone: "time",
       value: mapDuration.value,
       unit: mapDuration.unit,
-      icon: Timer,
     },
     {
       label: "Activities",
+      icon: ChartNoAxesColumnIncreasing,
+      tone: "activities",
       value: overall.count.toLocaleString(),
-      unit: overall.count === 1 ? "activity" : "activities",
-      icon: Activity,
+      unit: "",
     },
     {
       label: "Places visited",
-      value: mapPlaceCount.toLocaleString(),
-      unit: mapPlaceCount === 1 ? "place" : "places",
       icon: MapPin,
+      tone: "places",
+      value: mapPlaceCount.toLocaleString(),
+      unit: "",
     },
   ];
   const secondaryStats = [
@@ -879,7 +884,7 @@ export function ActivityGlobeCard({
       <div className="training-map-main">
         <div className="training-map-information">
           <header className="training-map-header">
-            <p className="training-map-eyebrow">Training map</p>
+            <p className="training-map-eyebrow"><Compass size={17} aria-hidden="true" />Training map</p>
             <h2 id="training-map-title">Where you’ve been</h2>
             <p>Explore every place your training has taken you.</p>
           </header>
@@ -954,20 +959,17 @@ export function ActivityGlobeCard({
               {primaryStats.map((stat, index) => {
                 const Icon = stat.icon;
                 return (
-                  <div
-                    key={stat.label}
-                    className="training-map-primary-stat"
-                    style={{ "--stat-delay": `${index * 45}ms` } as CSSProperties}
-                  >
-                    <dt>
-                      <Icon size={17} aria-hidden="true" />
-                      <span>{stat.label}</span>
-                    </dt>
-                    <dd aria-label={`${stat.value} ${stat.unit}`}>
-                      <strong>{stat.value}</strong>
-                      <span>{stat.unit}</span>
-                    </dd>
-                  </div>
+                <div
+                  key={stat.label}
+                  className={`training-map-primary-stat is-${stat.tone}`}
+                  style={{ "--stat-delay": `${index * 45}ms` } as CSSProperties}
+                >
+                  <dt><span className="training-map-stat-icon"><Icon size={19} aria-hidden="true" /></span><span>{stat.label}</span></dt>
+                  <dd>
+                    <strong>{stat.value}</strong>
+                    {stat.unit ? <span>{stat.unit}</span> : null}
+                  </dd>
+                </div>
                 );
               })}
             </dl>
@@ -977,14 +979,16 @@ export function ActivityGlobeCard({
                   const Icon = stat.icon;
                   return (
                     <div key={stat.label}>
-                      <Icon size={16} aria-hidden="true" />
-                      <span>
-                        <dt>{stat.label}</dt>
-                        <dd aria-label={`${stat.value} ${stat.unit}`}>
-                          <strong>{stat.value}</strong>
-                          {stat.unit ? <small>{stat.unit}</small> : null}
-                        </dd>
-                      </span>
+                      <dt>
+                        <span className="training-map-motion-icon" aria-hidden="true">
+                          <Icon size={18} />
+                        </span>
+                        {stat.label}
+                      </dt>
+                      <dd>
+                        <strong>{stat.value}</strong>
+                        {stat.unit ? <small>{stat.unit}</small> : null}
+                      </dd>
                     </div>
                   );
                 })}
@@ -994,7 +998,7 @@ export function ActivityGlobeCard({
 
           <section
             className="training-map-location"
-            aria-label="Selected location"
+            aria-label={selectedLocation ? "Selected location" : "Location highlights"}
             aria-live="polite"
           >
             {selectedLocation && selectedPlaceLabel ? (
@@ -1010,7 +1014,17 @@ export function ActivityGlobeCard({
                     <h3>{selectedPlaceLabel.city}</h3>
                     <p>{selectedPlaceLabel.country}</p>
                   </div>
-                  <span className="training-map-selected-label">Selected</span>
+                  <button
+                    type="button"
+                    className="training-map-all-places"
+                    onClick={() => {
+                      setSelectedLocationKey(null);
+                      handleResetView();
+                    }}
+                  >
+                    <ChevronLeft size={13} aria-hidden="true" />
+                    All places
+                  </button>
                 </header>
 
                 <dl className="training-map-location-metrics">
@@ -1139,31 +1153,47 @@ export function ActivityGlobeCard({
                   <>
                     <header>
                       <h3>Your training world</h3>
-                      <p>Select a location on the globe to explore your training history.</p>
+                      <p>Choose a place to explore your activities.</p>
                     </header>
                     <dl className="training-map-overview-values">
                       {mostVisited ? (
                         <div>
-                          <dt>Most visited</dt>
+                          <dt><MapPinCheck size={18} aria-hidden="true" />Most visited</dt>
                           <dd>
-                            {(placeLabels[mostVisited.key] ??
-                              coordinateLabel(mostVisited.bucket)).city}
+                            <button
+                              type="button"
+                              onClick={() => selectLocation(mostVisited.bucket)}
+                            >
+                              <strong>
+                                {(placeLabels[mostVisited.key] ??
+                                  coordinateLabel(mostVisited.bucket)).city}
+                              </strong>
+                              <ChevronRight size={14} aria-hidden="true" />
+                            </button>
+                            <small>
+                              {mostVisited.activities.length.toLocaleString()} {mostVisited.activities.length === 1 ? "activity" : "activities"}
+                            </small>
                           </dd>
                         </div>
                       ) : null}
                       {latestPlace ? (
                         <div>
-                          <dt>Most recent</dt>
+                          <dt><Clock3 size={18} aria-hidden="true" />Most recent</dt>
                           <dd>
-                            {(placeLabels[latestPlace.key] ??
-                              coordinateLabel(latestPlace.bucket)).city}
+                            <button
+                              type="button"
+                              onClick={() => selectLocation(latestPlace.bucket)}
+                            >
+                              <strong>
+                                {(placeLabels[latestPlace.key] ??
+                                  coordinateLabel(latestPlace.bucket)).city}
+                              </strong>
+                              <ChevronRight size={14} aria-hidden="true" />
+                            </button>
+                            <small>{formatVisitDate(latestPlace.lastVisited)}</small>
                           </dd>
                         </div>
                       ) : null}
-                      <div>
-                        <dt>Places explored</dt>
-                        <dd>{mapPlaceCount.toLocaleString()}</dd>
-                      </div>
                     </dl>
                   </>
                 )}
@@ -1177,7 +1207,7 @@ export function ActivityGlobeCard({
           aria-label="Interactive training globe"
         >
           <div className="training-map-globe-helper">
-            <Hand size={18} aria-hidden="true" />
+            <MousePointer2 size={18} aria-hidden="true" />
             <span>Drag to explore · Scroll to zoom</span>
           </div>
           <button
@@ -1246,13 +1276,14 @@ export function ActivityGlobeCard({
               </span>
             </div>
             <div>
-              <LockKeyhole size={14} aria-hidden="true" />
+              <Layers size={16} aria-hidden="true" />
               <span>Rendered locally</span>
             </div>
           </div>
 
           {(mapHasVisits || mapHasRoute) ? (
             <div className="training-map-legend" aria-label="Activity intensity from low to high">
+              <strong>Activity density</strong>
               <span>Low</span>
               <i className="is-low" aria-hidden="true" />
               <i className="is-medium" aria-hidden="true" />
@@ -1307,26 +1338,35 @@ export function ActivityGlobeCard({
                   aria-pressed={selected}
                   onClick={() => selectLocation(summary.bucket)}
                 >
-                  <span className="training-map-recent-pin" aria-hidden="true">
-                    <MapPin size={17} />
+                  <span className="training-map-recent-heading">
+                    <span className="training-map-recent-pin" aria-hidden="true">
+                      <MapPin size={17} />
+                    </span>
+                    <span className="training-map-recent-place">
+                      <strong>{label.city}</strong>
+                      <small>{label.country}</small>
+                    </span>
+                    <ChevronRight className="training-map-recent-chevron" size={16} aria-hidden="true" />
                   </span>
-                  <span className="training-map-recent-place">
-                    <strong>{label.city}</strong>
-                    <small>{label.country}</small>
+                  <span className="training-map-recent-details">
+                    <span className="training-map-recent-metrics">
+                      <span>
+                        <strong>{summary.activities.length.toLocaleString()}</strong>
+                        {summary.activities.length === 1 ? "activity" : "activities"}
+                      </span>
+                      <span>
+                        <strong>
+                          {metersToDisplayDistance(summary.distanceMeters, unitSystem).toLocaleString(undefined, {
+                            maximumFractionDigits: 0,
+                          })}
+                        </strong>
+                        {distanceUnit(unitSystem)}
+                      </span>
+                    </span>
+                    <span className="training-map-recent-date" title="Last visited">
+                      {formatVisitDate(summary.lastVisited)}
+                    </span>
                   </span>
-                  <span className="training-map-recent-value">
-                    <strong>{summary.activities.length}</strong>
-                    <small>{summary.activities.length === 1 ? "activity" : "activities"}</small>
-                  </span>
-                  <span className="training-map-recent-value">
-                    <strong>
-                      {metersToDisplayDistance(summary.distanceMeters, unitSystem).toLocaleString(undefined, {
-                        maximumFractionDigits: 0,
-                      })} <small>{distanceUnit(unitSystem)}</small>
-                    </strong>
-                    <small>{formatVisitDate(summary.lastVisited)}</small>
-                  </span>
-                  <ChevronRight className="training-map-recent-chevron" size={16} aria-hidden="true" />
                 </button>
               );
             })}

@@ -78,6 +78,7 @@ export function ChatSidebar({
             .filter(Boolean)
             .join(" ")}
           aria-hidden={!open}
+          inert={!open}
         >
           <div className="chat-sidebar-inner">
             <ChatHistoryPanel

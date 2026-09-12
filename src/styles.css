@@ -11,38 +11,38 @@
   --sport-bike: #e6b800;
   --sport-other: #7fd8cf;
 
-  --bg-base: #05080b;
-  --bg-ambient-green: rgba(47, 190, 145, 0.1);
-  --bg-ambient-teal: rgba(31, 182, 166, 0.07);
-  --bg-ambient-gold: rgba(216, 155, 34, 0.04);
-  --bg-ambient-white: rgba(255, 255, 255, 0.035);
+  --bg-base: #111315;
+  --bg-ambient-green: transparent;
+  --bg-ambient-teal: transparent;
+  --bg-ambient-gold: transparent;
+  --bg-ambient-white: rgba(255, 255, 255, 0.055);
 
-  --glass-bg: rgba(255, 255, 255, 0.06);
-  --glass-bg-hover: rgba(255, 255, 255, 0.09);
-  --glass-bg-elevated: rgba(255, 255, 255, 0.1);
-  --glass-border: rgba(255, 255, 255, 0.12);
-  --glass-blur: 24px;
-  --glass-blur-shell: 40px;
-  --glass-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
-  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --glass-bg: rgba(30, 34, 38, 0.58);
+  --glass-bg-hover: rgba(40, 45, 50, 0.78);
+  --glass-bg-elevated: #2b3036;
+  --glass-border: rgba(225, 230, 235, 0.085);
+  --glass-blur: 20px;
+  --glass-blur-shell: 32px;
+  --glass-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.12);
   --shadow-card: var(--glass-shadow);
-  --shadow-elevated: 0 22px 48px rgba(0, 0, 0, 0.42);
+  --shadow-elevated: 0 20px 56px rgba(0, 0, 0, 0.36);
   --shadow-inset: var(--glass-inset);
 
-  --text-primary: #f5f5f7;
-  --text-secondary: #a1a1a6;
-  --text-muted: #6e6e73;
+  --text-primary: #eef1f3;
+  --text-secondary: #adb5bd;
+  --text-muted: #909aa4;
 
-  --surface: #0c1814;
+  --surface: #1e2226;
 
-  --accent: #2fbe91;
-  --accent-strong: #4fd6a6;
-  --accent-2: #1fb6a6;
-  --accent-hover: #26a37c;
-  --accent-glow: rgba(47, 190, 145, 0.32);
-  --accent-soft: rgba(47, 190, 145, 0.12);
-  --accent-gradient: linear-gradient(135deg, #2fbe91 0%, #1fb6a6 100%);
+  --accent: #53cba1;
+  --accent-strong: #79dcb8;
+  --accent-2: #45b995;
+  --accent-hover: #74d8b4;
+  --accent-glow: rgba(83, 203, 161, 0.12);
+  --accent-soft: rgba(83, 203, 161, 0.09);
+  --accent-gradient: linear-gradient(135deg, #53cba1, #45b995);
   --accent-gold: #d89b22;
 
   --success-bg: rgba(47, 190, 145, 0.15);
@@ -61,54 +61,34 @@
 
   --radius-sm: 8px;
   --radius-md: 12px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
   --radius-pill: 999px;
 
   --sidebar-float-gap: 14px;
-  --sidebar-radius: var(--radius-xl);
-  --sidebar-glass-border: rgba(255, 255, 255, 0.14);
-  --sidebar-glass-highlight: rgba(255, 255, 255, 0.12);
-  --sidebar-glass-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
-    0 22px 54px rgba(0, 0, 0, 0.34),
-    0 8px 20px rgba(0, 0, 0, 0.2);
-  --sidebar-glass-bg:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.11) 0%,
-      rgba(255, 255, 255, 0.04) 26%,
-      transparent 54%
-    ),
-    linear-gradient(220deg, rgba(47, 190, 145, 0.1) 0%, transparent 46%),
-    linear-gradient(180deg, rgba(16, 20, 26, 0.92) 0%, rgba(10, 14, 20, 0.78) 100%);
+  --sidebar-radius: 0px;
+  --sidebar-glass-border: rgba(225, 230, 235, 0.08);
+  --sidebar-glass-highlight: transparent;
+  --sidebar-glass-shadow: none;
+  --sidebar-glass-bg: rgba(17, 19, 21, 0.66);
   --sidebar-overlay-bg: var(--sidebar-glass-bg);
   --sidebar-overlay-shadow: var(--sidebar-glass-shadow);
-  --sidebar-indicator-bg: linear-gradient(
-    135deg,
-    rgba(47, 190, 145, 0.24) 0%,
-    rgba(31, 182, 166, 0.14) 100%
-  );
-  --sidebar-indicator-border: rgba(79, 214, 166, 0.28);
-  --sidebar-indicator-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 8px 22px rgba(47, 190, 145, 0.14);
+  --sidebar-indicator-bg: linear-gradient(110deg, rgba(83, 203, 161, 0.14), rgba(83, 203, 161, 0.07));
+  --sidebar-indicator-border: rgba(83, 203, 161, 0.13);
+  --sidebar-indicator-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
 
-  --font-display: "Space Grotesk", Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   color: var(--text-primary);
   background: var(--bg-base);
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   line-height: 1.5;
   text-rendering: optimizeLegibility;
 }
 
 /*
- * Paper light theme — a subtle warm "paper" palette. Redefines the core tokens
+ * Paper light theme, with soft white surfaces and mineral green neutrals. Redefines the core tokens
  * so everything that reads var(--…) reskins automatically. Hardcoded hex/rgba
  * values that bypass these tokens are handled in the paper-override section at
  * the end of this file.
@@ -116,38 +96,38 @@
 :root[data-theme="paper"] {
   color-scheme: light;
 
-  --bg-base: #f6f3ec; /* warm paper */
-  --bg-ambient-green: rgba(47, 190, 145, 0.06);
-  --bg-ambient-teal: rgba(31, 182, 166, 0.05);
-  --bg-ambient-gold: rgba(216, 155, 34, 0.05);
-  --bg-ambient-white: rgba(255, 255, 255, 0.5); /* light wash, not dark */
+  --bg-base: #eef0ec;
+  --bg-ambient-green: transparent;
+  --bg-ambient-teal: transparent;
+  --bg-ambient-gold: transparent;
+  --bg-ambient-white: rgba(255, 255, 255, 0.6);
 
   /* Glass surfaces become near-white cards on paper */
-  --glass-bg: rgba(255, 255, 255, 0.72);
-  --glass-bg-hover: rgba(255, 255, 255, 0.85);
+  --glass-bg: rgba(255, 255, 255, 0.58);
+  --glass-bg-hover: rgba(240, 243, 240, 0.86);
   --glass-bg-elevated: #ffffff;
-  --glass-border: rgba(38, 34, 28, 0.1);
-  --glass-blur: 24px;
-  --glass-blur-shell: 40px;
-  --glass-shadow: 0 14px 34px rgba(60, 50, 35, 0.12);
-  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  --shadow-soft: 0 4px 14px rgba(60, 50, 35, 0.1), 0 1px 2px rgba(60, 50, 35, 0.06);
-  --shadow-card: 0 1px 2px rgba(60, 50, 35, 0.04), 0 14px 34px rgba(60, 50, 35, 0.09);
-  --shadow-elevated: 0 22px 50px rgba(60, 50, 35, 0.16);
+  --glass-border: rgba(92, 110, 98, 0.13);
+  --glass-blur: 20px;
+  --glass-blur-shell: 32px;
+  --glass-shadow: 0 4px 16px rgba(30, 45, 35, 0.035);
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  --shadow-soft: 0 4px 14px rgba(30, 45, 35, 0.05);
+  --shadow-card: var(--glass-shadow);
+  --shadow-elevated: 0 20px 56px rgba(30, 45, 35, 0.12);
   --shadow-inset: inset 0 1px 0 rgba(38, 34, 28, 0.06);
 
-  --text-primary: #2b2a28; /* soft ink */
-  --text-secondary: #57544e;
-  --text-muted: #8a857c;
+  --text-primary: #242d29; /* soft ink */
+  --text-secondary: #536159;
+  --text-muted: #66756c;
 
   --surface: #ffffff;
 
-  --accent: #12946e; /* teal, darkened for contrast on white */
-  --accent-strong: #0f7f5f;
+  --accent: #147d5d; /* teal, darkened for contrast on white */
+  --accent-strong: #116e51;
   --accent-2: #128a7f;
-  --accent-hover: #0c6f52;
+  --accent-hover: #11664d;
   --accent-glow: rgba(18, 148, 110, 0.22);
-  --accent-soft: rgba(18, 148, 110, 0.12);
+  --accent-soft: rgba(20, 125, 93, 0.07);
   --accent-gradient: linear-gradient(135deg, #17a67d 0%, #128a7f 100%);
   --accent-gold: #b9791a;
 
@@ -165,32 +145,15 @@
   --error-text: #c0392b;
   --error-dot: #dc2626;
 
-  --sidebar-glass-border: rgba(38, 34, 28, 0.08);
-  --sidebar-glass-highlight: rgba(255, 255, 255, 0.42);
-  --sidebar-glass-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.52),
-    0 18px 44px rgba(60, 50, 35, 0.08),
-    0 6px 16px rgba(60, 50, 35, 0.05);
-  --sidebar-glass-bg:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.3) 0%,
-      rgba(255, 255, 255, 0.1) 32%,
-      transparent 58%
-    ),
-    linear-gradient(225deg, rgba(18, 148, 110, 0.05) 0%, transparent 48%),
-    #f6f3ec;
+  --sidebar-glass-border: rgba(92, 110, 98, 0.12);
+  --sidebar-glass-highlight: transparent;
+  --sidebar-glass-shadow: none;
+  --sidebar-glass-bg: rgba(238, 240, 236, 0.54);
   --sidebar-overlay-bg: var(--sidebar-glass-bg);
   --sidebar-overlay-shadow: var(--sidebar-glass-shadow);
-  --sidebar-indicator-bg: linear-gradient(
-    135deg,
-    rgba(18, 148, 110, 0.16) 0%,
-    rgba(18, 138, 127, 0.09) 100%
-  );
-  --sidebar-indicator-border: rgba(18, 148, 110, 0.22);
-  --sidebar-indicator-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.85),
-    0 6px 16px rgba(18, 148, 110, 0.1);
+  --sidebar-indicator-bg: linear-gradient(110deg, rgba(20, 125, 93, 0.11), rgba(20, 125, 93, 0.05));
+  --sidebar-indicator-border: rgba(20, 125, 93, 0.10);
+  --sidebar-indicator-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 
   color: var(--text-primary);
   background: var(--bg-base);
@@ -12641,18 +12604,20 @@ td span {
 }
 
 .training-recovery-ring {
+  --recovery-ring-size: clamp(164px, 15.8vw, 216px);
   position: relative;
-  width: clamp(164px, 15.8vw, 194px);
-  height: clamp(164px, 15.8vw, 194px);
+  width: var(--recovery-ring-size);
+  height: var(--recovery-ring-size);
   overflow: visible;
 }
 
 .training-recovery-ring::before {
   position: absolute;
   inset: 8%;
-  border: 1px solid var(--ring-color);
   border-radius: 50%;
-  box-shadow: 0 0 28px 8px var(--ring-glow);
+  box-shadow:
+    0 0 28px 8px var(--ring-glow),
+    inset 0 0 24px 4px var(--ring-glow);
   content: "";
   opacity: 0;
   pointer-events: none;
@@ -12663,7 +12628,7 @@ td span {
 }
 
 .training-recovery-ring.is-ready::before {
-  opacity: 0.32;
+  opacity: 0.65;
   transform: scale(1);
 }
 
@@ -12678,12 +12643,15 @@ td span {
 
 .training-recovery-ring-progress {
   stroke: var(--ring-color);
+  stroke-width: 8;
+  stroke-linecap: round;
   transition-delay: 0.22s;
 }
 
 .training-recovery-ring .storage-ring-label strong {
-  font-size: clamp(2.6rem, 4vw, 3.2rem);
+  font-size: calc(var(--recovery-ring-size) * 0.25);
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
 }
 
@@ -14265,6 +14233,40 @@ td span {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.45;
+}
+
+.data-sync-help {
+  padding: 16px 20px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.data-sync-help summary {
+  color: var(--text-primary);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.data-sync-help summary:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 4px;
+}
+
+.data-sync-help p,
+.data-sync-help ol {
+  max-width: 760px;
+  margin: 12px 0;
+}
+
+.data-sync-help ol {
+  padding-left: 20px;
+}
+
+.data-sync-help li + li {
+  margin-top: 8px;
 }
 
 .data-tools-grid {
@@ -24148,10 +24150,8 @@ tr.data-intervals-row-missing {
  * near-invisible over the cream page. Make them opaque white cards with a
  * crisper border + warm lift so they separate from the background. */
 :root[data-theme="paper"] .panel:not(.is-disconnected):not(.strength-body-panel) {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.4)),
-    var(--glass-bg-elevated);
-  border-color: rgba(38, 34, 28, 0.12);
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
   box-shadow: var(--shadow-card);
 }
 

@@ -92,12 +92,13 @@ export function ActivityBackupPanel({ api }: { api: CorosLinkApi }) {
     <section className="data-tool-card training-backup-panel">
       <header className="data-tool-header">
         <div className="training-backup-heading">
-          <p className="eyebrow">Local backup</p>
-          <h2>Back up all activities</h2>
+          <p className="eyebrow">Cloud activity backup</p>
+          <h2>Back up Training Hub activities</h2>
           <p className="training-backup-hint">
-            Download your entire COROS activity history to a folder on this
-            computer — one file per activity. Re-running only fetches new
-            activities.
+            Download activities already synced to COROS Training Hub to a folder
+            on this computer, one file per activity. Recordings still only on
+            your watch are excluded. Existing files are skipped when you run
+            the backup again.
           </p>
         </div>
         <div className="training-backup-icon" aria-hidden="true">
@@ -266,7 +267,7 @@ export function ActivityBackupPanel({ api }: { api: CorosLinkApi }) {
                 <strong>
                   {progress.state === "cancelled"
                     ? "Backup stopped"
-                    : "Backup complete"}
+                    : "Training Hub backup complete"}
                 </strong>
                 <div className="training-backup-stats">
                   <span className="badge ready">

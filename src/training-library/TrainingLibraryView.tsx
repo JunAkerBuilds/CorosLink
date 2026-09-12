@@ -47,6 +47,7 @@ import { formatWorkoutSport } from "../../electron/workoutCapabilities";
 import {
   PlanSourceBadge,
   SportMixDots,
+  SportBadge,
   dominantSport,
   planSourceLabel,
   sportAccentStyle
@@ -331,6 +332,7 @@ export function TrainingLibraryView({
       <header className="tl-masthead">
         <div>
           <h1>Training Library</h1>
+          <p className="tl-intro">A little structure. A lot of possibility.</p>
           <p className="tl-census">
             <span>
               <b>{counts.workouts}</b> workouts
@@ -620,7 +622,7 @@ function planView(
       peakWeek: hasLoad ? summary?.peakWeek : undefined,
       unit: hasLoad ? "load" : "sessions",
       variant: hasLoad ? ("load" as const) : ("count" as const),
-      label: `${hasLoad ? "Training load" : "Sessions"} across ${weekly.length} weeks`
+      label: `${hasLoad ? "Training load" : "Sessions"} across ${weekly.length} ${weekly.length === 1 ? "week" : "weeks"}`
     }
   };
 }
@@ -777,12 +779,13 @@ function PlanIndex({
     return <>
       <button
         type="button"
+        title={plan.favorite ? "Remove from favorites" : "Add to favorites"}
         aria-label={plan.favorite ? "Remove from favorites" : "Add to favorites"}
         onClick={() => void update(plan.id, { favorite: !plan.favorite })}
       >
         <Heart size={14} fill={plan.favorite ? "currentColor" : "none"} />
       </button>
-      <button type="button" aria-label={`Duplicate ${plan.name}`} onClick={() => onDuplicate(plan)}>
+      <button type="button" title="Duplicate" aria-label={`Duplicate ${plan.name}`} onClick={() => onDuplicate(plan)}>
         <Copy size={14} />
       </button>
       {noun === "plan" && plan.source !== "coros" && onCalendar ? (
@@ -813,7 +816,13 @@ function PlanIndex({
   };
 
   return (
-    <div className="tl-panel">
+    <div className="tl-panel tl-plan-library">
+      {noun === "template" ? <header className="tl-plan-heading">
+        <div>
+          <h2>Good training, worth repeating.</h2>
+          <p>Keep your favorite structures ready for the next goal.</p>
+        </div>
+      </header> : null}
       <div className="tl-filters">
         <label className="tl-search">
           <Search size={15} />
@@ -864,13 +873,19 @@ function PlanIndex({
               <List size={14} />
             </button>
           </div>
-          <button type="button" className={noun === "plan" && onGenerate ? "ghost-button" : "primary-button"} onClick={onCreate}>
-            <Plus size={14} /> New {noun}
-          </button>
-          {noun === "plan" && onGenerate ? <button type="button" className="primary-button tl-generate-button" onClick={onGenerate}><Sparkles size={14} /> Generate plan</button> : null}
+          <div className="tl-plan-create">
+            <button type="button" className={noun === "plan" && onGenerate ? "ghost-button" : "primary-button"} onClick={onCreate}>
+              <Plus size={15} /> New {noun}
+            </button>
+            {noun === "plan" && onGenerate ? <button type="button" className="primary-button tl-generate-button" onClick={onGenerate}><Sparkles size={15} /> Generate plan</button> : null}
+          </div>
         </div>
       </div>
 
+      <div className="tl-plan-results">
+        <span role="status"><strong>{visible.length}</strong> {noun}{visible.length === 1 ? "" : "s"}{query || scope !== "all" ? " found" : " to explore"}</span>
+        <span>{onCompare ? "Select up to 3 plans to compare" : "Open a template to make it your own"}</span>
+      </div>
       {selected.length ? (
         <div className="tl-bulk" role="toolbar" aria-label={`Actions for selected ${noun}s`}>
           <strong>{selected.length} selected</strong>
@@ -957,28 +972,35 @@ function PlanIndex({
                     ) : null}
                     {activeTrainingPlanCalendarInstall(plan) && activeTrainingPlanCalendarInstall(plan)?.planRevision !== trainingPlanCalendarRevision(plan) ? <i className="tl-flag">Calendar differs</i> : null}
                   </span>
-                  <span className="tl-card-name">{plan.name}</span>
-                  <span className="tl-card-note">
-                    {view.context} · {planStartLabel(plan)}
+                  <span className="tl-card-name" title={plan.name}>{plan.name}</span>
+                  <span className="tl-card-note" title={view.context}>{view.context}</span>
+                  <span className="tl-plan-sports">
+                    {plan.sportMix.slice(0, 3).map((sport) => <SportBadge key={sport} sport={sport} compact />)}
+                    {plan.sportMix.length > 3 ? <span title={plan.sportMix.slice(3).map(formatWorkoutSport).join(", ")}>+{plan.sportMix.length - 3} more</span> : null}
                   </span>
-                  <SportMixDots sports={plan.sportMix} counts={view.sportCounts} />
-                  <Ridge {...view.ridge} />
+                  <span className="tl-plan-profile">
+                    <span className="tl-plan-profile-label">{view.ridge.variant === "load" ? "Weekly training load" : "Sessions per week"}<span>{plan.weekCount} {plan.weekCount === 1 ? "week" : "weeks"}</span></span>
+                    <Ridge {...view.ridge} />
+                  </span>
                   <span className="tl-card-figs">
                     <span>
                       <b>{plan.weekCount}</b>
-                      <small>weeks</small>
+                      <small>{plan.weekCount === 1 ? "week" : "weeks"}</small>
                     </span>
                     <span>
                       <b className={view.sessions ? "" : "is-nil"}>{view.sessions || "—"}</b>
-                      <small>sessions</small>
+                      <small>{view.sessions === 1 ? "session" : "sessions"}</small>
                     </span>
-                    <span>
-                      <b className={view.load ? "" : "is-nil"}>{view.load || "—"}</b>
-                      <small>load</small>
-                    </span>
+                    {view.load > 0 ? <span>
+                      <b>{view.load}</b>
+                      <small>training load</small>
+                    </span> : null}
                   </span>
                 </button>
-                <div className="tl-card-actions">{planActions(plan)}</div>
+                <div className="tl-plan-card-footer">
+                  <span><CalendarClock size={12} aria-hidden="true" />{planStartLabel(plan)}</span>
+                  <div className="tl-card-actions">{planActions(plan)}</div>
+                </div>
               </li>
             );
           })}

@@ -1,0 +1,59 @@
+/* Smoked acrylic: macOS vibrancy, a translucent tint, and fine monochrome grain.
+   Let the native material show through the navigation chrome. The work
+   surface stays opaque so charts, Coach, and dialogs retain their contrast. */
+:root[data-native-sidebar-glass="true"],
+:root[data-native-sidebar-glass="true"] body,
+:root[data-native-sidebar-glass="true"] #root,
+:root[data-native-sidebar-glass="true"] .app {
+  background: transparent;
+}
+
+:root[data-native-sidebar-glass="true"] .app::before {
+  display: none;
+}
+
+/* Fullscreen has no desktop behind the shell to blur. Use a neutral, opaque
+   theme surface so the header, sidebar, and outer gutters share one base. */
+:root[data-native-sidebar-glass="true"][data-window-fullscreen="true"] {
+  background: var(--bg-base);
+}
+
+:root[data-native-sidebar-glass="true"] .app .app-body > .content {
+  background: linear-gradient(155deg, var(--surface-highlight), transparent 40%), var(--bg-base);
+}
+
+:root[data-native-sidebar-glass="true"] .app .app-sidebar,
+:root[data-native-sidebar-glass="true"] .app:has(.content-coach-panel:not(.view-panel-hidden)) .app-sidebar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 55%), color-mix(in srgb, var(--bg-base) 25%, transparent);
+  border: 0;
+  box-shadow: inset -1px 0 0 var(--glass-border);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root[data-native-sidebar-glass="true"] .app .app-sidebar::after {
+  content: "";
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Cpath fill='%23fff' filter='url(%23grain)' d='M0 0h160v160H0z'/%3E%3C/svg%3E");
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-native-sidebar-glass="true"],
+  :root[data-native-sidebar-glass="true"] body,
+  :root[data-native-sidebar-glass="true"] .app,
+  :root[data-native-sidebar-glass="true"] .app .app-sidebar,
+  :root[data-native-sidebar-glass="true"] .app:has(.content-coach-panel:not(.view-panel-hidden)) .app-sidebar {
+    background: var(--bg-base);
+  }
+
+  :root[data-native-sidebar-glass="true"] .app .app-sidebar::after {
+    display: none;
+  }
+}

@@ -5517,3 +5517,271 @@
   .plan-generator-pulse { animation: none; }
   .plan-generator-stages li.is-active .plan-generator-stage-dot::after { animation: none; }
 }
+
+/* Plan browsing: readable summaries and a labeled weekly silhouette. */
+.tl-intro {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.tl-plan-library {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.tl-plan-library > .tl-plan-heading {
+  align-items: center;
+  padding: 8px 0 20px;
+}
+
+.tl-plan-heading h2 {
+  font-size: 21px;
+  letter-spacing: -0.035em;
+}
+
+.tl-plan-heading p {
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.tl-plan-create {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: 4px;
+  padding-left: 12px;
+  border-left: 1px solid var(--tl-rule-soft);
+}
+
+.tl-plan-create :is(.primary-button, .ghost-button) {
+  min-height: 38px;
+  border-radius: 11px;
+}
+
+.tl-plan-library > .tl-filters {
+  margin: 0;
+  padding: 0 0 18px;
+  gap: 12px;
+  border-color: var(--tl-rule-soft);
+}
+
+.tl-plan-library .tl-filters-tail {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 1200px) {
+  .tl-plan-library .tl-filters-tail {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+  .tl-plan-library .tl-plan-create { margin-left: auto; }
+}
+
+@media (max-width: 480px) {
+  .tl-plan-library .tl-plan-create {
+    flex: 1 1 100%;
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+.tl-plan-library .tl-search {
+  flex-basis: 265px;
+  min-height: 36px;
+  border-radius: 10px;
+}
+
+.tl-plan-results {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.tl-plan-results strong { color: var(--text-primary); font-weight: 600; }
+
+.tl-plan-library > .tl-grid {
+  grid-auto-rows: max-content;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+  gap: 18px;
+  padding: 18px 2px 24px;
+}
+
+.tl-plan-library .tl-card {
+  isolation: isolate;
+  border-radius: 17px;
+  border-color: color-mix(in srgb, var(--text-secondary) 20%, transparent);
+  background:
+    linear-gradient(145deg, var(--tl-sheen-lit), var(--tl-sheen-fade) 48%),
+    color-mix(in srgb, var(--tl-card) 62%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(130%);
+  backdrop-filter: blur(24px) saturate(130%);
+  box-shadow:
+    inset 0 1px 0 var(--tl-edge-light),
+    inset 0 -1px 0 var(--tl-well),
+    var(--tl-shadow-card);
+}
+
+/* Diffuse the color layer only: labels and controls stay crisp above it. */
+.tl-plan-library .tl-card::before,
+.tl-plan-library .tl-card[data-accent]::before {
+  inset: -24px;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at 5% 5%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 65%),
+    radial-gradient(ellipse at 100% 90%, color-mix(in srgb, var(--accent-2) 6%, transparent), transparent 60%);
+  filter: blur(22px);
+  opacity: 0.8;
+}
+
+.tl-plan-library .tl-card:hover::before,
+.tl-plan-library .tl-card.is-selected::before {
+  opacity: 1;
+}
+
+/* Sport identity lives in the surface instead of a hard top stripe. */
+.tl-plan-library .tl-card[data-accent]::after {
+  content: none;
+}
+
+.tl-plan-library .tl-card.is-selected,
+.tl-plan-library .tl-card[data-accent].is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .tl-plan-library .tl-card { background-color: var(--tl-card); }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .tl-plan-library .tl-card {
+    background: var(--tl-card);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .tl-plan-library .tl-card::before { display: none; }
+}
+
+.tl-plan-library .tl-card-open { flex: 1 0 auto; padding: 20px 20px 16px; gap: 12px; }
+.tl-plan-library .tl-card-name { font-size: 17px; line-height: 1.4; min-height: 2.8em; }
+.tl-plan-library .tl-card-note { color: var(--text-secondary); font-size: 12px; }
+.tl-plan-library .tl-card > .tl-mark { top: 18px; right: 17px; }
+
+.tl-plan-sports {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-height: 22px;
+  gap: 8px 12px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.tl-plan-sports .tl-sport-badge { font-size: 11px; }
+.tl-plan-sports .tl-sport-badge svg { width: 13px; height: 13px; }
+
+.tl-plan-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  margin-top: auto;
+  padding: 12px 13px;
+  border-radius: 10px;
+  background: var(--tl-well);
+}
+
+.tl-plan-profile-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.tl-plan-profile-label > span { white-space: nowrap; }
+.tl-plan-profile .tl-ridge { height: 44px; margin: 0; gap: 3px; }
+.tl-plan-profile .tl-ridge-bar { flex-basis: 12px; border-radius: 3px 3px 1px 1px; }
+.tl-plan-profile .tl-ridge.is-count .tl-ridge-bar:not(.is-empty) {
+  background: color-mix(in srgb, var(--accent) 48%, var(--text-secondary));
+}
+
+.tl-plan-library .tl-card-figs { gap: 28px; border: 0; padding-top: 1px; }
+.tl-plan-library .tl-card-figs b { font-size: 20px; font-weight: 500; }
+.tl-plan-library .tl-card-figs small { font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--text-secondary); }
+
+.tl-plan-card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  padding: 9px 12px 9px 20px;
+  border-top: 1px solid var(--tl-rule-soft);
+}
+
+.tl-plan-card-footer > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.tl-plan-card-footer .tl-card-actions { position: static; opacity: 1; }
+.tl-plan-card-footer .tl-card-actions button { background: transparent; width: 28px; height: 28px; }
+.tl-plan-card-footer .tl-card-actions button:hover { background: var(--glass-bg-hover); }
+
+@media (max-width: 760px) {
+  .tl-plan-library > .tl-plan-heading { flex-direction: column; align-items: flex-start; padding: 8px 0 18px; gap: 14px; }
+  .tl-plan-library > .tl-filters { margin: 0; }
+  .tl-plan-library .tl-search { flex: 1 1 100%; }
+  .tl-plan-library .tl-filters-tail { margin-left: 0; }
+  .tl-plan-library > .tl-grid { padding: 16px 2px; }
+  .tl-plan-results { padding: 14px 0 0; flex-wrap: wrap; }
+}
+
+/* Inherit the desktop's materials instead of creating another room inside it. */
+:root[data-theme] .training-library-view,
+:root:not([data-theme]) .training-library-view {
+  --surface: inherit;
+  --glass-bg: inherit;
+  --glass-bg-hover: inherit;
+  --glass-bg-elevated: inherit;
+  --glass-border: inherit;
+  --text-primary: inherit;
+  --text-secondary: inherit;
+  --text-muted: inherit;
+  --tl-card: var(--surface);
+  --tl-panel-bg: var(--surface);
+  --tl-source-coach: var(--text-secondary);
+  background: transparent;
+}
+
+.app .app-body > .content:has(> .training-library-view) {
+  padding: 0;
+}
+
+.training-library-view > .tl-sections {
+  border: 0;
+  border-bottom: 1px solid var(--tl-rule-soft);
+  border-radius: 0;
+  padding: 0 0 16px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.tl-plan-library .tl-card[data-accent]:hover {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--glass-border));
+  box-shadow: var(--tl-shadow-card-hover), inset 0 1px 0 var(--tl-edge-light);
+}

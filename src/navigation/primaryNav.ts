@@ -1,18 +1,18 @@
 import {
-  Activity,
-  BookOpen,
-  CalendarDays,
+  ChartLineUp,
+  Books,
+  CalendarDots,
   Database,
-  Dumbbell,
-  Footprints,
-  LayoutGrid,
-  Map as MapIcon,
-  MessageCircle,
-  Music,
-  Settings,
+  Barbell,
+  Sneaker,
+  SquaresFour,
+  MapTrifold,
+  ChatCircleDots,
+  MusicNotes,
+  GearSix,
   Watch,
-  type LucideIcon,
-} from "lucide-react";
+  type Icon,
+} from "@phosphor-icons/react";
 
 export type PrimaryView =
   | "overview"
@@ -31,7 +31,8 @@ export type PrimaryView =
 export interface PrimaryNavItem {
   id: PrimaryView;
   label: string;
-  icon: LucideIcon;
+  icon: Icon;
+  sectionLabel?: string;
   beta?: boolean;
   showActivity?: boolean;
   /** Shown only while the development build's Dev view is active. */
@@ -41,33 +42,33 @@ export interface PrimaryNavItem {
 }
 
 export const PRIMARY_NAV_ITEMS: PrimaryNavItem[] = [
-  { id: "overview", label: "Overview", icon: LayoutGrid },
-  { id: "media", label: "Media", icon: Music },
-  { id: "maps", label: "Maps", icon: MapIcon, beta: true },
+  { id: "overview", label: "Overview", icon: SquaresFour, sectionLabel: "Workspace" },
+  { id: "media", label: "Media", icon: MusicNotes },
+  { id: "maps", label: "Maps", icon: MapTrifold, beta: true },
   { id: "watchfaces", label: "Watch Faces", icon: Watch, beta: true },
-  { id: "training", label: "Training Hub", icon: Activity },
+  { id: "training", label: "Training Hub", icon: ChartLineUp, sectionLabel: "Training" },
   ...(import.meta.env.DEV
     ? [{
         id: "gear" as const,
         label: "Gear",
-        icon: Footprints,
+        icon: Sneaker,
         developmentOnly: true,
       }]
     : []),
-  { id: "library", label: "Training Library", icon: BookOpen },
-  { id: "strength", label: "Strength", icon: Dumbbell, beta: true },
-  { id: "calendar", label: "Calendar", icon: CalendarDays },
+  { id: "library", label: "Training Library", icon: Books },
+  { id: "strength", label: "Strength", icon: Barbell, beta: true },
+  { id: "calendar", label: "Calendar", icon: CalendarDots },
   {
     id: "coach",
     label: "Coach",
-    icon: MessageCircle,
+    icon: ChatCircleDots,
     showActivity: true,
   },
-  { id: "data", label: "Data", icon: Database },
+  { id: "data", label: "Data", icon: Database, sectionLabel: "Manage" },
   {
     id: "settings",
     label: "Settings",
-    icon: Settings,
+    icon: GearSix,
     excludeFromStartup: true,
   },
 ];
@@ -80,5 +81,5 @@ export function visiblePrimaryNavItems(
   );
 }
 
-export const SIDEBAR_EXPANDED_WIDTH = 248;
+export const SIDEBAR_EXPANDED_WIDTH = 232;
 export const SIDEBAR_COLLAPSED_WIDTH = 72;
