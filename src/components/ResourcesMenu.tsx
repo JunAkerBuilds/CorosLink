@@ -84,7 +84,7 @@ const LINK_GROUPS: ResourceGroup[] = [
   },
 ];
 
-export function ResourcesMenu() {
+export function ResourcesMenu({ showLabel = false }: { showLabel?: boolean }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -124,6 +124,7 @@ export function ResourcesMenu() {
         onClick={() => setOpen((value) => !value)}
       >
         <HelpCircle size={16} aria-hidden="true" />
+        {showLabel ? <span>Help & links</span> : null}
       </button>
 
       {open ? (

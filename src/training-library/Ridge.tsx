@@ -48,6 +48,7 @@ export function Ridge({ values, peakWeek, unit, variant, label }: RidgeProps) {
         return (
           <span
             key={index}
+            title={`Week ${index + 1}: ${Math.round(value)} ${unit}`}
             className={`tl-ridge-bar${value > 0 ? "" : " is-empty"}${marked ? " is-peak" : ""}`}
             style={{
               "--tl-bar-height": value > 0 ? `${Math.max(share, MINIMUM_SHARE) * 100}%` : "2px",

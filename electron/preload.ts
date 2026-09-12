@@ -180,6 +180,7 @@ const api = {
   syncGoogleCalendar: (): Promise<GoogleCalendarSyncResult> => ipcRenderer.invoke("googleCalendar:sync"),
   // Host OS, so the renderer can reserve space for the macOS traffic lights.
   platform: process.platform,
+  nativeSidebarGlass: process.platform === "darwin" && process.argv.includes("--coros-native-sidebar-glass"),
   getWatchStatus: (): Promise<WatchStatus> =>
     ipcRenderer.invoke("watch:getStatus"),
   getCorosWatchfaceStatus: (): Promise<CorosWatchfaceStatus> =>

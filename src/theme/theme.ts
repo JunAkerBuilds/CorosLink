@@ -4,8 +4,8 @@ export const THEME_STORAGE_KEY = "coros-theme";
 
 /** Window chrome background — must match --bg-base in styles.css. */
 export const THEME_WINDOW_BACKGROUND: Record<Theme, string> = {
-  dark: "#05080b",
-  paper: "#f6f3ec",
+  dark: "#111315",
+  paper: "#eef0ec",
 };
 
 const DEFAULT_THEME: Theme = "dark";

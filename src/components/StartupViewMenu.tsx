@@ -10,12 +10,14 @@ interface StartupViewMenuProps {
   value: PrimaryView;
   onChange: (view: PrimaryView) => void;
   showDevelopmentItems?: boolean;
+  showLabel?: boolean;
 }
 
 export function StartupViewMenu({
   value,
   onChange,
   showDevelopmentItems = false,
+  showLabel = false,
 }: StartupViewMenuProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -57,6 +59,7 @@ export function StartupViewMenu({
         onClick={() => setOpen((current) => !current)}
       >
         <Star size={16} aria-hidden="true" />
+        {showLabel ? <span>Startup view</span> : null}
       </button>
 
       {open ? (

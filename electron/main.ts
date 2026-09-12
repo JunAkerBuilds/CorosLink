@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, session, shell } from "electron";
 import { googleCalendar, startGoogleCalendarSync, stopGoogleCalendarSync } from "./googleCalendarService";
 import type { GoogleCalendarConfigInput } from "./googleCalendarTypes";
 import { appleCalendar, startAppleCalendarSync, stopAppleCalendarSync } from "./appleCalendarService";
@@ -379,7 +379,7 @@ const legacy614aCarrierSelections = new Map<string, { sourcePath: string }>();
 const MAX_RASTER_FONT_SPRITE_FOLDER_BYTES = 12 * 1024 * 1024;
 
 /** Matches --bg-base in styles.css; updated when the renderer theme changes. */
-const DEFAULT_WINDOW_BACKGROUND = "#05080b";
+const DEFAULT_WINDOW_BACKGROUND = "#111315";
 let currentWindowBackground = DEFAULT_WINDOW_BACKGROUND;
 
 const TRAFFIC_LIGHT_WINDOWED = { x: 18, y: 18 };
@@ -391,8 +391,18 @@ function applyWindowBackground(color: string): void {
   }
 
   currentWindowBackground = color;
+  if (process.platform === "darwin") {
+    // Match the native sidebar material to the app's selected theme.
+    nativeTheme.themeSource = color === DEFAULT_WINDOW_BACKGROUND ? "dark" : "light";
+  }
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.setBackgroundColor(color);
+    // Fullscreen vibrancy can pick up the desktop tint across the exposed shell.
+    // Keep native glass in windowed mode and use the theme color in fullscreen.
+    const useNativeGlass = process.platform === "darwin" && !mainWindow.isFullScreen();
+    if (process.platform === "darwin") {
+      mainWindow.setVibrancy(useNativeGlass ? "sidebar" : null);
+    }
+    mainWindow.setBackgroundColor(useNativeGlass ? "#00000000" : color);
   }
 }
 
@@ -629,17 +639,20 @@ function createWindow(): void {
     minHeight: 640,
     title: "CorosLink",
     ...(iconPath ? { icon: iconPath } : {}),
-    backgroundColor: DEFAULT_WINDOW_BACKGROUND,
+    backgroundColor: process.platform === "darwin" ? "#00000000" : DEFAULT_WINDOW_BACKGROUND,
     // Let the app's own header act as the title bar so the macOS traffic
     // lights sit directly on it instead of a separate OS chrome strip.
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hiddenInset" as const,
-          trafficLightPosition: { x: 18, y: 18 }
+          trafficLightPosition: { x: 18, y: 18 },
+          vibrancy: "sidebar" as const,
+          visualEffectState: "active" as const
         }
       : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
+      additionalArguments: process.platform === "darwin" ? ["--coros-native-sidebar-glass"] : [],
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: true,

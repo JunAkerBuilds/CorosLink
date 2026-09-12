@@ -1,6 +1,7 @@
-import { PanelLeft, PanelLeftClose } from "lucide-react";
+import { SidebarSimple } from "@phosphor-icons/react";
 import { motion } from "motion/react";
 import {
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -105,6 +106,7 @@ function useReducedMotion(): boolean {
 }
 
 export interface AppSidebarProps {
+  footer?: ReactNode;
   activeView: PrimaryView;
   onChange: (view: PrimaryView) => void;
   coachBusy?: boolean;
@@ -117,6 +119,7 @@ export interface AppSidebarProps {
 }
 
 export function AppSidebar({
+  footer,
   activeView,
   onChange,
   coachBusy = false,
@@ -192,6 +195,7 @@ export function AppSidebar({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onOverlayOpenChange(false);
+        document.getElementById("navigation-toggle")?.focus();
       }
     };
 
@@ -203,6 +207,7 @@ export function AppSidebar({
     onChange(view);
     if (overlayMode) {
       onOverlayOpenChange(false);
+      document.getElementById("navigation-toggle")?.focus();
     }
   };
 
@@ -221,6 +226,7 @@ export function AppSidebar({
 
   const sidebarPanel = (
     <motion.aside
+      id="primary-sidebar"
       className={[
         "app-sidebar",
         overlayMode ? "is-overlay" : "",
@@ -230,6 +236,7 @@ export function AppSidebar({
         .filter(Boolean)
         .join(" ")}
       aria-hidden={!isOpen}
+      inert={!isOpen}
       initial={false}
       animate={
         overlayMode
@@ -305,6 +312,7 @@ export function AppSidebar({
                   .filter(Boolean)
                   .join(" ")}
                 aria-current={isActive ? "page" : undefined}
+                aria-label={tooltip}
                 title={!showLabels ? tooltip : undefined}
                 ref={(element) => {
                   if (element) {
@@ -316,7 +324,7 @@ export function AppSidebar({
                 onClick={() => handleSelect(item.id)}
               >
                 <span className="app-sidebar-nav-icon">
-                  <Icon size={18} aria-hidden="true" />
+                  <Icon size={20} weight="regular" aria-hidden="true" />
                   {item.showActivity && coachBusy ? (
                     <span
                       className="primary-tab-activity app-sidebar-nav-activity"
@@ -352,8 +360,9 @@ export function AppSidebar({
           })}
         </nav>
 
-        {!overlayMode ? (
-          <div className="app-sidebar-footer">
+        <div className="app-sidebar-footer">
+          {footer}
+          {!overlayMode ? (
             <button
               type="button"
               className="app-sidebar-toggle"
@@ -362,11 +371,7 @@ export function AppSidebar({
               title={expanded ? "Collapse sidebar" : "Expand sidebar"}
               onClick={handleToggleExpanded}
             >
-              {expanded ? (
-                <PanelLeftClose size={18} aria-hidden="true" />
-              ) : (
-                <PanelLeft size={18} aria-hidden="true" />
-              )}
+              <SidebarSimple size={20} weight="regular" aria-hidden="true" />
               <motion.span
                 className={[
                   "app-sidebar-toggle-label",
@@ -385,8 +390,8 @@ export function AppSidebar({
                 Collapse
               </motion.span>
             </button>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
     </motion.aside>
   );

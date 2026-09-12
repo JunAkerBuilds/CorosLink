@@ -18,6 +18,7 @@ import {
   LogOut,
   Loader2,
   Music,
+  PanelLeft,
   Podcast,
   RefreshCw,
   Search,
@@ -94,6 +95,7 @@ import {
 } from "./components/AppSidebar";
 import { ResourcesMenu } from "./components/ResourcesMenu";
 import { StartupViewMenu } from "./components/StartupViewMenu";
+import { ToolbarMoreMenu } from "./components/ToolbarMoreMenu";
 import { ThemeToggle } from "./theme/ThemeToggle";
 import { WatchConnectionSmokeControls } from "./components/WatchConnectionSmokeControls";
 import type { PrimaryView } from "./navigation/primaryNav";
@@ -2177,81 +2179,103 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header app-header--slim">
-        <div className="app-header-end">
-          <DonateButton />
-          <ThemeToggle />
-          <StartupViewMenu
-            value={startupView}
-            onChange={handleStartupViewChange}
-            showDevelopmentItems={showDevelopmentTools}
-          />
-          <ResourcesMenu />
-          <AppUpdateControls
-            snapshot={appUpdateSnapshot}
-            busy={busy === "update-check"}
-            downloading={busy === "update-download"}
-            onCheck={() => void handleCheckForUpdates()}
-            onDownload={() => void handleDownloadUpdate()}
-            onInstall={handleInstallUpdate}
-            onPreferencesChange={handleUpdatePreferencesChange}
-          />
-          {IS_DEVELOPMENT_BUILD ? (
-            <button
-              className="app-dev-view-toggle"
-              type="button"
-              aria-pressed={showDevelopmentTools}
-              title={
-                showDevelopmentTools
-                  ? "Switch to production view"
-                  : "Switch to developer view"
-              }
-              onClick={handleDevelopmentViewToggle}
-            >
-              {showDevelopmentTools ? "Dev view" : "Prod view"}
-            </button>
-          ) : null}
-          {IS_DEVELOPMENT_BUILD && showDevelopmentTools ? (
-            <button
-              className="app-dev-view-toggle app-dev-update-test"
-              type="button"
-              title="Preview the update changelog prompt"
-              onClick={showDevUpdatePreview}
-            >
-              <Sparkles size={13} aria-hidden="true" />
-              Test update
-            </button>
-          ) : null}
-          {IS_DEVELOPMENT_BUILD && showDevelopmentTools ? (
-            <WatchConnectionSmokeControls
-              api={api}
-              onWatchStatusChange={setWatchStatus}
-              onError={setError}
-            />
-          ) : null}
-          <div
-            className={`watch-status-chip${watchStatus?.connected ? " connected" : ""}`}
-            title={watchStatus?.rootPath ?? "No watch volume found"}
-          >
-            <StatusDot connected={Boolean(watchStatus?.connected)} />
-            <span>
-              {watchStatus?.connected
-                ? (watchStatus.name ?? "Connected")
-                : "No watch"}
-            </span>
-          </div>
+        <div className="app-header-context">
           <button
-            className="icon-button"
+            id="navigation-toggle"
+            className="icon-button app-navigation-toggle"
             type="button"
-            title="Refresh watch and library"
-            onClick={handleRefresh}
-            disabled={busy === "refresh" || !api}
+            aria-label={sidebarOverlayOpen ? "Close navigation" : "Open navigation"}
+            aria-controls="primary-sidebar"
+            aria-expanded={sidebarOverlayOpen}
+            onClick={() => setSidebarOverlayOpen((open) => !open)}
           >
-            <RefreshCw
-              size={18}
-              aria-hidden="true"
-              className={busy === "refresh" ? "spin" : ""}
-            />
+            <PanelLeft size={17} aria-hidden="true" />
           </button>
+        </div>
+        <div className="app-header-end">
+          <div className="app-toolbar-utilities">
+            <DonateButton />
+            <ThemeToggle />
+            <button
+              className="icon-button app-toolbar-settings"
+              type="button"
+              aria-label="Settings"
+              aria-pressed={activeView === "settings"}
+              title="Settings"
+              onClick={() => setActiveView("settings")}
+            >
+              <Settings size={18} aria-hidden="true" />
+            </button>
+            <ToolbarMoreMenu>
+              <StartupViewMenu
+                value={startupView}
+                onChange={handleStartupViewChange}
+                showDevelopmentItems={showDevelopmentTools}
+                showLabel
+              />
+              <ResourcesMenu showLabel />
+              {IS_DEVELOPMENT_BUILD ? (
+                <div className="app-toolbar-development">
+                  <button
+                    className="app-dev-view-toggle"
+                    type="button"
+                    aria-pressed={showDevelopmentTools}
+                    title={showDevelopmentTools ? "Switch to production view" : "Switch to developer view"}
+                    onClick={handleDevelopmentViewToggle}
+                  >
+                    {showDevelopmentTools ? "Dev view" : "Prod view"}
+                  </button>
+                  {showDevelopmentTools ? (
+                    <>
+                      <button
+                        className="app-dev-view-toggle app-dev-update-test"
+                        type="button"
+                        title="Preview the update changelog prompt"
+                        onClick={showDevUpdatePreview}
+                      >
+                        <Sparkles size={13} aria-hidden="true" />
+                        Test update
+                      </button>
+                      <WatchConnectionSmokeControls
+                        api={api}
+                        onWatchStatusChange={setWatchStatus}
+                        onError={setError}
+                      />
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </ToolbarMoreMenu>
+          </div>
+          <div className="app-toolbar-watch">
+            <span className="app-toolbar-watch-name">
+              <Watch size={16} aria-hidden="true" />
+              <span>{watchStatus?.connected ? (watchStatus.name ?? "Watch") : "Watch"}</span>
+            </span>
+            <div
+              className={`watch-status-chip${watchStatus?.connected ? " connected" : ""}`}
+              title={watchStatus?.rootPath ?? "No watch volume found"}
+              role="status"
+              aria-label={watchStatus?.connected ? "Watch connected" : "No watch connected"}
+            >
+              <StatusDot connected={Boolean(watchStatus?.connected)} />
+              <span>{watchStatus?.connected ? "Connected" : "Offline"}</span>
+            </div>
+            <button
+              className="icon-button app-toolbar-refresh"
+              type="button"
+              aria-label="Refresh watch and library"
+              title="Refresh watch and library"
+              onClick={handleRefresh}
+              disabled={busy === "refresh" || !api}
+            >
+              <RefreshCw
+                size={16}
+                aria-hidden="true"
+                className={busy === "refresh" ? "spin" : ""}
+              />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -2266,6 +2290,17 @@ export default function App() {
           onExpandedChange={setSidebarExpanded}
           overlayOpen={sidebarOverlayOpen}
           onOverlayOpenChange={setSidebarOverlayOpen}
+          footer={
+            <AppUpdateControls
+              snapshot={appUpdateSnapshot}
+              busy={busy === "update-check"}
+              downloading={busy === "update-download"}
+              onCheck={() => void handleCheckForUpdates()}
+              onDownload={() => void handleDownloadUpdate()}
+              onInstall={handleInstallUpdate}
+              onPreferencesChange={handleUpdatePreferencesChange}
+            />
+          }
         />
 
         <main
@@ -2630,6 +2665,7 @@ function MediaView({ activeTab, onTabChange, children }: MediaViewProps) {
                 activeTab === tab.id ? "media-tab active" : "media-tab"
               }
               onClick={() => onTabChange(tab.id)}
+              aria-current={activeTab === tab.id ? "page" : undefined}
             >
               {tab.icon}
               {tab.label}
@@ -2906,8 +2942,16 @@ function MediaOverviewTab({
     <div className="dashboard">
       <header className="dashboard-welcome dashboard-block">
         <div>
-          <h1 className="dashboard-greeting">{greeting}</h1>
-          <p className="dashboard-subtitle">{watchPresentation.companion}</p>
+          <p className="dashboard-date">
+            {new Intl.DateTimeFormat(undefined, {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+            }).format(new Date())}
+          </p>
+          <h1 className="dashboard-greeting">
+            {greeting} <span className="dashboard-greeting-wave" aria-hidden="true">👋</span>
+          </h1>
         </div>
       </header>
 
@@ -3011,10 +3055,10 @@ function MediaOverviewTab({
         <section className="panel dashboard-recent dashboard-block">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Recent</p>
-              <h2>
-                {recentDownloads.length} of {downloads.length}
-              </h2>
+              <h2>Recent downloads</h2>
+              <p className="dashboard-recent-count">
+                {recentDownloads.length} of {downloads.length} tracks
+              </p>
             </div>
             {downloads.length > 5 ? (
               <button

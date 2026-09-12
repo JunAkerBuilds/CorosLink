@@ -10,6 +10,8 @@ import {
   type ReactNode
 } from "react";
 import {
+  Activity,
+  ArrowUpRight,
   BookOpen,
   Bookmark,
   CalendarDays,
@@ -21,6 +23,7 @@ import {
   ExternalLink,
   FileDown,
   FileText,
+  HeartPulse,
   Info,
   KeyRound,
   Loader2,
@@ -33,6 +36,7 @@ import {
   Settings2,
   Sparkles,
   Square,
+  Target,
   Terminal,
   Trash2,
   TriangleAlert,
@@ -1648,71 +1652,74 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
 
     return (
       <div className="chat-composer">
-        <div className="chat-composer-toolbar">
-          {providerControls}
-          <button
-            type="button"
-            className="chat-new-chat chat-composer-new-chat"
-            onClick={onNewChat}
-            disabled={!apiAvailable || streaming || exportingLatestActivity}
-            aria-label="Start a new chat"
-            title="Start a new chat"
-          >
-            <Plus size={14} aria-hidden="true" />
-            <span>New chat</span>
-          </button>
-        </div>
         <div className="chat-composer-inner">
-          <textarea
-            ref={textareaRef}
-            className="chat-input"
-            value={draft}
-            onChange={(event) => updateDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (
-                event.key === "Enter" &&
-                !event.shiftKey &&
-                !event.nativeEvent.isComposing
-              ) {
-                event.preventDefault();
-                void submitDraft();
+          <div className="chat-composer-entry">
+            <textarea
+              ref={textareaRef}
+              className="chat-input"
+              aria-label="Message your coach"
+              value={draft}
+              onChange={(event) => updateDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  void submitDraft();
+                }
+              }}
+              placeholder={
+                waitingForCoachAnswer
+                  ? "Type another answer…"
+                  : "Ask your coach…"
               }
-            }}
-            placeholder={
-              waitingForCoachAnswer
-                ? "Type another answer…"
-                : "Ask your coach…"
-            }
-            rows={1}
-            disabled={exportingLatestActivity}
-          />
-          {streaming ? (
+              rows={2}
+              disabled={exportingLatestActivity}
+            />
+            {streaming ? (
+              <button
+                type="button"
+                className="chat-send chat-stop"
+                onClick={onStop}
+                title="Stop"
+              >
+                <Square size={15} aria-hidden="true" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="chat-send"
+                onClick={() => void submitDraft()}
+                disabled={
+                  !apiAvailable ||
+                  !trimmedDraft ||
+                  exportingLatestActivity ||
+                  localProviderBlocked
+                }
+                title={
+                  localProviderBlocked ? "Enter a local model first" : "Send"
+                }
+              >
+                <Send size={15} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          <div className="chat-composer-toolbar">
+            {providerControls}
             <button
               type="button"
-              className="chat-send chat-stop"
-              onClick={onStop}
-              title="Stop"
+              className="chat-new-chat chat-composer-new-chat"
+              onClick={onNewChat}
+              disabled={!apiAvailable || streaming || exportingLatestActivity}
+              aria-label="Start a new chat"
+              title="Start a new chat"
             >
-              <Square size={15} aria-hidden="true" />
+              <Plus size={14} aria-hidden="true" />
+              <span>New chat</span>
             </button>
-          ) : (
-            <button
-              type="button"
-              className="chat-send"
-              onClick={() => void submitDraft()}
-              disabled={
-                !apiAvailable ||
-                !trimmedDraft ||
-                exportingLatestActivity ||
-                localProviderBlocked
-              }
-              title={
-                localProviderBlocked ? "Enter a local model first" : "Send"
-              }
-            >
-              <Send size={15} aria-hidden="true" />
-            </button>
-          )}
+          </div>
         </div>
         <p className="chat-disclaimer">
           Coach can make mistakes. Verify important training decisions.
@@ -3578,33 +3585,80 @@ export function ChatView({
           {timeline.length === 0 && !streaming ? (
             <div className="chat-empty">
               <div className="chat-empty-icon">
-                <Sparkles size={28} aria-hidden="true" />
+                <Sparkles size={26} strokeWidth={1.6} aria-hidden="true" />
               </div>
               <h3>How can I help with your training?</h3>
+              <p className="chat-empty-description">
+                A little insight. A clear plan. Your next step forward.
+              </p>
               <div className="chat-suggestions">
                 {[
-                  "How was my latest activity?",
-                  "Break down my latest workout by lap",
-                  "Create one workout for today and save it to my Workout Library",
-                  "Build a balanced week from my recent training",
-                  "Schedule bike intervals for Saturday",
-                  "Add strength around my endurance sessions",
-                  "Am I recovered enough for a hard session?",
-                  "Download my latest activity FIT file"
-                ].map((suggestion) => (
+                  {
+                    title: "Review my activity",
+                    description: "Find the takeaways from my latest session",
+                    prompt: "How was my latest activity?",
+                    icon: Activity
+                  },
+                  {
+                    title: "Create a workout",
+                    description: "Build a session for today’s goals",
+                    prompt: "Create one workout for today and save it to my Workout Library",
+                    icon: Target
+                  },
+                  {
+                    title: "Plan my week",
+                    description: "Bring some balance to my training",
+                    prompt: "Build a balanced week from my recent training",
+                    icon: CalendarDays
+                  },
+                  {
+                    title: "Check my recovery",
+                    description: "See if I’m ready for a harder session",
+                    prompt: "Am I recovered enough for a hard session?",
+                    icon: HeartPulse
+                  }
+                ].map(({ title, description, prompt, icon: Icon }) => (
                   <button
-                    key={suggestion}
+                    key={title}
                     type="button"
                     className="chat-suggestion"
                     onClick={() => {
-                      composerRef.current?.setDraft(suggestion);
+                      composerRef.current?.setDraft(prompt);
                       composerRef.current?.focus();
                     }}
                   >
-                    {suggestion}
+                    <Icon className="chat-suggestion-icon" size={19} strokeWidth={1.7} aria-hidden="true" />
+                    <span className="chat-suggestion-copy">
+                      <strong>{title}</strong>
+                      <span>{description}</span>
+                    </span>
+                    <ArrowUpRight className="chat-suggestion-arrow" size={15} aria-hidden="true" />
                   </button>
                 ))}
               </div>
+              <details className="chat-more-suggestions">
+                <summary>More ways to get started <ChevronDown size={14} aria-hidden="true" /></summary>
+                <div className="chat-more-suggestions-list">
+                  {[
+                    "Break down my latest workout by lap",
+                    "Schedule bike intervals for Saturday",
+                    "Add strength around my endurance sessions",
+                    "Download my latest activity FIT file"
+                  ].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => {
+                        composerRef.current?.setDraft(suggestion);
+                        composerRef.current?.focus();
+                      }}
+                    >
+                      {suggestion}
+                      <ArrowUpRight size={14} aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+              </details>
             </div>
           ) : null}
 

@@ -178,6 +178,8 @@ export interface CorosLinkApi {
   updateGoogleCalendarSettings: (input: { calendarId?: string; autoSync?: boolean }) => Promise<GoogleCalendarStatus>;
   syncGoogleCalendar: () => Promise<GoogleCalendarSyncResult>;
   platform: string;
+  /** Available only when the native window was created with sidebar vibrancy. */
+  nativeSidebarGlass?: boolean;
   getWatchStatus: () => Promise<WatchStatus>;
   getCorosWatchfaceStatus: () => Promise<CorosWatchfaceStatus>;
   /** Font families installed on this computer, for local watchface rasterization. */
