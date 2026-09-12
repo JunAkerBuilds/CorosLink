@@ -270,6 +270,21 @@ assert.equal(saved.title, "Build a 5K plan");
 assert.equal(saved.preview, "Build a 5K plan");
 assert.equal(saved.messageCount, 1);
 
+const previewDb = createMemoryDatabase();
+const previewSession = createChatSession("chatgpt", previewDb);
+for (const [content, expected] of [
+  ["### Suggested bike workout\n\n**Warm up** for 10 minutes.", "Suggested bike workout Warm up for 10 minutes."],
+  ["> ## Intervals\n- [x] Ride *easy*\n1. Open [the plan](https://example.com/plan)", "Intervals Ride easy Open the plan"],
+  ["```text\nzone_2 at 90%\n```", "zone_2 at 90%"],
+  ["Ride at 90–100% FTP; use workout_id #123.", "Ride at 90–100% FTP; use workout_id #123."],
+  [`### **${"a".repeat(90)}**`, `${"a".repeat(80)}…`]
+]) {
+  const entries = [{ kind: "message", role: "assistant", content }];
+  assert.equal(saveChatSession(previewSession.id, entries, previewDb).preview, expected);
+  assert.equal(listChatSessions("chatgpt", previewDb)[0].preview, expected);
+  assert.deepEqual(getChatSession(previewSession.id, previewDb), entries);
+}
+
 assert.deepEqual(getChatSession(first.id, db), [
   { kind: "message", role: "user", content: "Build a 5K plan" }
 ]);

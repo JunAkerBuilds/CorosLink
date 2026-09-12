@@ -6905,7 +6905,7 @@ body.wf-value-scrubbing * {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: min(1220px, 100%);
+  width: 100%;
   min-height: 74px;
   gap: 28px;
   border: 0;
@@ -7299,7 +7299,7 @@ body.wf-value-scrubbing * {
 }
 
 .watchface-shell--hub .watchface-hub-main {
-  width: min(1220px, 100%);
+  width: 100%;
   gap: 28px;
 }
 
@@ -9457,4 +9457,309 @@ body.wf-value-scrubbing * {
 
 .watchface-shell .wf-properties-tabpanel .wf-aod-empty-inspector {
   padding-inline: var(--wf-pane-inline);
+}
+
+/* The hub fills the desktop workspace without an additional outer card. */
+.app .app-body > .content:has(> .watchface-shell--hub:not(.view-panel-hidden):not(.watchface-shell--signin)) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+:root .watchface-shell--hub:not(.watchface-shell--signin) {
+  padding: 24px clamp(20px, 2.4vw, 40px) 32px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root .watchface-shell--hub .watchface-dashboard-header,
+.watchface-shell--hub .watchface-hub-main {
+  width: 100%;
+  max-width: none;
+}
+
+/* Editor: one continuous workspace, with quiet rails around the artwork. */
+.app .app-body > .content:has(> .watchface-shell--studio:not(.view-panel-hidden)) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+:root .watchface-shell--studio {
+  --wf-canvas: var(--bg-base);
+  --wf-surface: var(--surface);
+  --wf-surface-raised: color-mix(in srgb, var(--surface) 94%, var(--text-primary));
+  --wf-surface-hover: color-mix(in srgb, var(--surface) 88%, var(--text-primary));
+  --wf-border: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+  --wf-border-strong: color-mix(in srgb, var(--text-secondary) 23%, transparent);
+}
+
+.watchface-shell--studio .watchface-editor {
+  border: 0;
+  border-radius: 0;
+}
+
+:root .watchface-shell--studio .wf-command-bar {
+  background: var(--surface);
+  box-shadow: none;
+  border-bottom-color: var(--wf-border);
+  padding-inline: 18px;
+}
+
+:root .watchface-shell--studio :is(.wf-layers-pane, .wf-properties-pane) {
+  background: var(--surface);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--wf-border-strong) transparent;
+}
+
+:root .watchface-shell--studio .wf-pane-heading {
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.watchface-shell--studio .wf-stage {
+  background:
+    radial-gradient(ellipse at 50% 48%, color-mix(in srgb, var(--text-primary) 4%, transparent), transparent 66%),
+    var(--wf-canvas);
+}
+
+.watchface-shell--studio .wf-stage-toolbar {
+  min-height: 52px;
+  gap: 14px;
+  padding: 8px 14px;
+  background: transparent;
+  border-bottom-color: var(--wf-border);
+}
+
+.watchface-shell--studio :is(.wf-zoom-control, .wf-preview-mode-switch, .wf-history-controls) {
+  border-color: transparent;
+  border-radius: 10px;
+  background: var(--glass-bg);
+  box-shadow: none;
+}
+
+.watchface-shell--studio :is(.wf-zoom-control, .wf-preview-mode-switch) button {
+  min-height: 32px;
+  border-radius: 7px;
+}
+
+.watchface-shell--studio .wf-preview-mode-switch button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.watchface-shell--studio .wf-save-state:not(.is-dirty) {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-muted);
+}
+
+.watchface-shell--studio .wf-stage-status {
+  background: transparent;
+  border-top-color: var(--wf-border);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.watchface-shell--studio .wf-stage-ruler { opacity: 0.4; }
+
+.watchface-shell--studio .wf-property-section {
+  border-bottom-color: var(--wf-border);
+}
+
+.watchface-shell--studio .watchface-layer-row {
+  border-radius: 7px;
+}
+
+.watchface-shell--studio .watchface-layer-row.is-selected {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* A compact, collapsible entry point for first-time creators. */
+.watchface-shell .wf-quick-start {
+  border-bottom: 1px solid var(--wf-border);
+  padding: 12px;
+  color: var(--text-primary);
+  font-size: var(--wf-text-sm);
+}
+
+.watchface-shell .wf-quick-start summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.watchface-shell .wf-quick-start-content > p {
+  margin: 10px 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.watchface-shell .wf-quick-start-actions {
+  display: grid;
+  gap: 4px;
+}
+
+.watchface-shell .wf-quick-start-actions button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  border: 1px solid var(--wf-border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: var(--wf-surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.watchface-shell .wf-quick-start-actions button:hover:not(:disabled) {
+  background: var(--wf-surface-hover);
+  border-color: var(--wf-border-strong);
+}
+
+.watchface-shell .wf-quick-start-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.watchface-shell .wf-quick-start :is(button, summary):focus-visible {
+  outline: 2px solid var(--wf-focus);
+  outline-offset: 2px;
+}
+
+.watchface-shell .wf-quick-start-tips {
+  margin-top: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.watchface-shell .wf-quick-start-tips ul {
+  display: grid;
+  gap: 8px;
+  padding-left: 16px;
+  margin: 10px 0 0;
+}
+
+/* Properties: keep everyday edits compact and easy to scan. */
+.watchface-shell .wf-properties-pane .wf-property-section-trigger {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.watchface-shell .wf-layer-opacity-control {
+  grid-template-columns: minmax(0, 1fr) 96px;
+  gap: 6px 10px;
+}
+
+.watchface-shell .wf-layer-opacity-control > span:first-child {
+  grid-column: 1 / -1;
+}
+
+.watchface-shell .wf-background-photo-card {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.watchface-shell .wf-background-photo-card .wf-background-asset-preview {
+  width: 76px;
+  height: 76px;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--wf-border);
+  border-radius: 8px;
+  background-color: var(--wf-surface-raised);
+  background-image: conic-gradient(var(--wf-border) 25%, transparent 0 50%, var(--wf-border) 0 75%, transparent 0);
+  background-size: 12px 12px;
+}
+
+.watchface-shell .wf-background-photo-card .wf-background-asset-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.watchface-shell .wf-background-photo-actions,
+.watchface-shell .wf-photo-zoom {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.watchface-shell .wf-background-photo-actions .secondary-button {
+  min-height: 32px;
+  padding: 6px 8px;
+  font-size: 11px;
+  background: var(--wf-surface-raised);
+  box-shadow: none;
+}
+
+.watchface-shell .wf-photo-remove {
+  display: flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  min-height: 28px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.watchface-shell .wf-photo-remove:hover {
+  color: var(--wf-danger);
+}
+
+.watchface-shell .wf-photo-remove:focus-visible {
+  outline: 2px solid var(--wf-focus);
+  outline-offset: 3px;
+}
+
+.watchface-shell .wf-photo-zoom-slider {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.watchface-shell .wf-photo-zoom-slider input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.watchface-shell .watchface-color-control input[aria-label="Background hex color"] {
+  width: 7ch;
+  min-width: 0;
+  flex: 1;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  font-family: monospace;
 }

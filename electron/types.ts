@@ -902,7 +902,7 @@ export interface CorosWatchfaceDesignState {
   tintIcons: boolean;
   previewComplication: string;
   metricChanges: Record<string, boolean>;
-  metricStyles: Record<string, { color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
+  metricStyles: Record<string, { align?: "left" | "center" | "right"; color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Optional native calorie goal arc/bar configuration. */
   kcalProgress?: CorosWatchfaceKcalProgressStyle;
   /** Optional native exercise-goal bar configuration. */
@@ -911,6 +911,7 @@ export interface CorosWatchfaceDesignState {
   exerciseSeparator?: CorosWatchfaceExerciseSeparatorStyle;
   /** Shared digit style for every value shown in the selectable control slot. */
   selectableMetricStyle?: {
+    align?: "left" | "center" | "right";
     color?: string;
     scale: number;
     /** Clockwise rotation applied inside each firmware sprite canvas. */

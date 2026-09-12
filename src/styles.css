@@ -840,7 +840,6 @@ input::placeholder {
 .app-sidebar-footer {
   margin-top: auto;
   padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .app-sidebar-toggle {
@@ -23576,10 +23575,6 @@ tr.data-intervals-row-missing {
 
 :root[data-theme="paper"] .app-sidebar-nav-item.active .app-sidebar-nav-icon {
   color: var(--accent);
-}
-
-:root[data-theme="paper"] .app-sidebar-footer {
-  border-top-color: rgba(38, 34, 28, 0.07);
 }
 
 :root[data-theme="paper"] .app-sidebar-toggle {

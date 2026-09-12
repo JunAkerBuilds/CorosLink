@@ -332,27 +332,12 @@ export function TrainingLibraryView({
       <header className="tl-masthead">
         <div>
           <h1>Training Library</h1>
-          <p className="tl-intro">A little structure. A lot of possibility.</p>
-          <p className="tl-census">
-            <span>
-              <b>{counts.workouts}</b> workouts
-            </span>
-            <span>
-              <b>{counts.plans}</b> plans
-            </span>
-            <span>
-              <b>{counts.templates}</b> templates
-            </span>
-            <span>
-              <b>{counts.adherence}</b> planned sessions
-            </span>
-          </p>
         </div>
         <div className="tl-masthead-actions">
-          <span className={`tl-state${current.stale || current.offline ? " is-stale" : ""}`}>
+          {current.stale || current.offline ? <span className="tl-state is-stale">
             {current.offline ? <CloudOff size={13} /> : null}
             {stateLabel}
-          </span>
+          </span> : null}
           <button
             type="button"
             className="ghost-button"
@@ -817,12 +802,6 @@ function PlanIndex({
 
   return (
     <div className="tl-panel tl-plan-library">
-      {noun === "template" ? <header className="tl-plan-heading">
-        <div>
-          <h2>Good training, worth repeating.</h2>
-          <p>Keep your favorite structures ready for the next goal.</p>
-        </div>
-      </header> : null}
       <div className="tl-filters">
         <label className="tl-search">
           <Search size={15} />
@@ -830,21 +809,19 @@ function PlanIndex({
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={`Search ${noun}s, goals, and tags`}
+            placeholder={`Search ${noun}s`}
           />
         </label>
-        <div className="tl-chips" role="group" aria-label={`Filter ${noun}s`}>
-          {scopes.map((option) => (
-            <button
-              type="button"
-              key={option.id}
-              aria-pressed={scope === option.id}
-              onClick={() => setScope(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        <SelectDropdown
+          className="tl-quiet-select tl-plan-scope"
+          label={`Filter ${noun}s`}
+          value={scope}
+          options={scopes.map((option) => ({
+            value: option.id,
+            label: option.id === "all" ? `All ${noun}s` : option.label
+          }))}
+          onChange={setScope}
+        />
         <div className="tl-filters-tail">
           <SelectDropdown
             className="tl-quiet-select"
@@ -882,13 +859,14 @@ function PlanIndex({
         </div>
       </div>
 
-      <div className="tl-plan-results">
-        <span role="status"><strong>{visible.length}</strong> {noun}{visible.length === 1 ? "" : "s"}{query || scope !== "all" ? " found" : " to explore"}</span>
-        <span>{onCompare ? "Select up to 3 plans to compare" : "Open a template to make it your own"}</span>
-      </div>
+      {query || scope !== "all" ? <div className="tl-plan-results">
+        <span role="status"><strong>{visible.length}</strong> {noun}{visible.length === 1 ? "" : "s"} found</span>
+        <button type="button" className="ghost-button" onClick={() => { setQuery(""); setScope("all"); }}>Clear filters</button>
+      </div> : null}
       {selected.length ? (
         <div className="tl-bulk" role="toolbar" aria-label={`Actions for selected ${noun}s`}>
           <strong>{selected.length} selected</strong>
+          {onCompare ? <span className="tl-selection-hint">Select 2–3 plans to compare</span> : null}
           {onCompare ? (
             <button
               type="button"

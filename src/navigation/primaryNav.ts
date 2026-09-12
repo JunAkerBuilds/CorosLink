@@ -82,4 +82,5 @@ export function visiblePrimaryNavItems(
 }
 
 export const SIDEBAR_EXPANDED_WIDTH = 232;
-export const SIDEBAR_COLLAPSED_WIDTH = 72;
+// Leave room for all three macOS window controls and their side insets.
+export const SIDEBAR_COLLAPSED_WIDTH = 96;

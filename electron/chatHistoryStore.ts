@@ -881,11 +881,30 @@ export function deriveSessionTitleFromEntries(
   return DEFAULT_SESSION_TITLE;
 }
 
+// Sidebar snippets are plain text; normalize before truncating so Markdown
+// delimiters do not consume the preview or get cut in half.
+function plainTextPreview(content: string): string {
+  return content
+    .replace(/^\s{0,3}(?:`{3,}|~{3,}).*$/gm, "")
+    .replace(/^\s{0,3}(?:[-*_]\s*){3,}$/gm, "")
+    .replace(/^\s{0,3}={3,}\s*$/gm, "")
+    .replace(/^\s{0,3}(?:>\s*)+/gm, "")
+    .replace(/^\s{0,3}#{1,6}\s+(.+?)(?:\s+#+)?\s*$/gm, "$1")
+    .replace(/^\s*(?:[-+*]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/gm, "")
+    .replace(/!?\[([^\]]*)\]\([^\s)]*(?:\s+"[^"]*")?\)/g, "$1")
+    .replace(/(`+)([\s\S]*?)\1/g, "$2")
+    .replace(/(\*\*|__|~~)(?=\S)([\s\S]*?\S)\1/g, "$2")
+    .replace(/(^|[\s(])([*_])(?=\S)([^\n]*?\S)\2(?=$|[\s.,!?:;)])/g, "$1$3")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function derivePreviewFromEntries(entries: PersistedChatEntry[]): string {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
     if (entry.kind === "message" && entry.content.trim()) {
-      const preview = entry.content.trim().replace(/\s+/g, " ");
+      const preview = plainTextPreview(entry.content);
+      if (!preview) continue;
       return preview.length > 80 ? `${preview.slice(0, 80)}…` : preview;
     }
     if (entry.kind === "planDraft") {

@@ -3367,6 +3367,8 @@ export type WatchfaceMetricId =
   | "temperature";
 
 export interface WatchfaceMetricSpriteStyle {
+  /** Absent preserves the template’s horizontal number alignment. */
+  align?: "left" | "center" | "right";
   /** Absent preserves the template sprite color. */
   color?: string;
   /** Scale relative to the source template digit sprites. */
@@ -5050,6 +5052,9 @@ export function buildSelectableMetricStyleOverrides(
             scaleConfigRectValue(rect.value, style.scale) ?? rect.value;
         }
       }
+      for (const rect of implementedRects) {
+        values[rect.key] = alignConfigRectValue(values[rect.key]!, style.align);
+      }
       values[fontKey] = useStudioFolder ? "cl_control" : source.folder;
       if (style.color) values[`${fontKey}_color`] = configHexColor(style.color);
     }
@@ -5702,6 +5707,24 @@ export function buildMetricOverrides(
   return overrides;
 }
 
+/** Changes horizontal alignment without moving the value box or changing vertical flags. */
+export function alignConfigRectValue(value: string, align?: "left" | "center" | "right"): string {
+  if (!align || !parseConfigRect(value)) return value;
+  const match = value.match(/^(\{\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*)(?:,([^}]*))?\}$/);
+  if (!match) return value;
+  const flags = (match[2] ?? "vcenter").split("|").map((flag) => flag.trim())
+    .filter((flag) => flag && !["left", "right", "hcenter"].includes(flag));
+  return `${match[1]},${[align === "center" ? "hcenter" : align, ...flags].join("|")}}`;
+}
+
+/** Returns the first glyph's position for a changing numeric value. */
+export function numberStartX(rect: { x0: number; x1: number }, width: number, configValue?: string): number {
+  const flags = configValue?.match(/,([^,}]*)}\s*$/)?.[1].split("|").map((flag) => flag.trim()) ?? [];
+  if (flags.includes("left")) return rect.x0;
+  if (flags.includes("right")) return rect.x1 - width;
+  return (rect.x0 + rect.x1 - width) / 2;
+}
+
 /** Scales a firmware rect around its center while preserving alignment flags. */
 export function scaleConfigRectValue(value: string, scale: number): string | null {
   const match = value.match(
@@ -5774,7 +5797,7 @@ export function buildMetricStyleOverrides(
         continue;
       }
       for (const [index, part] of parts.entries()) {
-        values[part.rectKey] = rects[index]!;
+        values[part.rectKey] = alignConfigRectValue(rects[index]!, style.align);
       }
       if (useStudioFolders && metric.fontKey) {
         values[metric.fontKey] =
@@ -8052,7 +8075,7 @@ export async function drawStudioPreview(
               ? `control_${complicationPrefix}_${rectSuffix}_rect`
               : `control_${complicationPrefix}_rect`;
           const rect = parseConfigRect(config[key]);
-          return rect ? [{ rect, sampleValue }] : [];
+          return rect ? [{ rect, sampleValue, configValue: config[key] }] : [];
         })
     : [];
   const relativeComplicationRect = relativeComplicationRects[0]?.rect ?? null;
@@ -8148,6 +8171,7 @@ export async function drawStudioPreview(
 
   const numberPlans: {
     rect: { x0: number; y0: number; x1: number; y1: number };
+    configValue?: string;
     source: PreviewDigitSource;
     value: string;
     metricId?: WatchfaceMetricId;
@@ -8199,6 +8223,7 @@ export async function drawStudioPreview(
           x1: part.rect.x1 + controlOrigin.x,
           y1: part.rect.y1 + controlOrigin.y
         },
+        configValue: part.configValue,
         source: complicationSource,
         value: usesStaticBarometer
           ? part.sampleValue.replace(/\D/g, "")
@@ -8223,6 +8248,7 @@ export async function drawStudioPreview(
   if (batteryRect && batterySource) {
     numberPlans.push({
       rect: batteryRect,
+      configValue: config.battery_level_rect,
       source: batterySource,
       value: "82",
       metricId: "battery",
@@ -8266,6 +8292,7 @@ export async function drawStudioPreview(
           rect,
           source,
           value: part.sampleValue,
+          configValue: config[part.rectKey],
           metricId: metric.id
         });
       }
@@ -9270,9 +9297,8 @@ export async function drawStudioPreview(
       : undefined;
     const separatorWidth = separatorImage ? separatorImage.naturalWidth : 0;
     const totalWidth = glyphs.reduce((sum, glyph) => sum + glyph.file.width, 0) + separatorWidth;
-    const centerX = (plan.rect.x0 + plan.rect.x1) / 2;
     const centerY = (plan.rect.y0 + plan.rect.y1) / 2;
-    let x = centerX - totalWidth / 2;
+    let x = numberStartX(plan.rect, totalWidth, plan.configValue);
     const layerId = plan.timePartId ?? plan.metricId ?? plan.datePartId ?? plan.componentId;
     for (const [index, glyph] of glyphs.entries()) {
       if (

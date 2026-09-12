@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
   analogCenterLayoutGroupId,
+  alignConfigRectValue,
+  numberStartX,
   applyConfigOverridesToDetails,
   applyConfigTextEditsToDetails,
   sanitizeWatchfaceAodAlpha,
@@ -3362,6 +3364,33 @@ assert.equal(fullMetricStyle?.values.temperature_font_color, "0x33AA55");
 assert.equal(fullMetricStyle?.values.temperature_font, "13x19");
 assert.equal(fullMetricStyle?.values.control_temperature_font, undefined);
 assert.equal(fullMetricStyle?.values.control_temperature_font_color, undefined);
+// Changing digit counts must leave the chosen edge fixed in preview and firmware.
+for (const align of ["left", "center", "right"]) {
+  const fixed = buildMetricStyleOverrides(withMetrics, {
+    heartRate: { scale: 1, align }, steps: { scale: 1, align }
+  });
+  for (const override of fixed) {
+    for (const value of Object.values(override.values)) {
+      assert.ok(value.endsWith(`${align === "center" ? "hcenter" : align}|vcenter}`));
+    }
+  }
+  const selectable = buildSelectableMetricStyleOverrides(details, { scale: 1, align });
+  assert.ok(selectable.length > 0);
+  for (const override of selectable) {
+    assert.ok(override.values.control_hr_rect.endsWith(`${align === "center" ? "hcenter" : align}|vcenter}`));
+    assert.ok(override.values.control_step_rect.endsWith(`${align === "center" ? "hcenter" : align}|vcenter}`));
+  }
+}
+const numberBox = { x0: 20, x1: 120 };
+for (const width of [10, 30, 50]) {
+  assert.equal(numberStartX(numberBox, width, "{20,0,120,40,left|vcenter}"), 20);
+  assert.equal(numberStartX(numberBox, width, "{20,0,120,40,right|vcenter}") + width, 120);
+  assert.equal(numberStartX(numberBox, width, "{20,0,120,40,hcenter|vcenter}") + width / 2, 70);
+}
+assert.equal(alignConfigRectValue("{20,0,120,40,hcenter|top}", "left"), "{20,0,120,40,left|top}");
+assert.equal(alignConfigRectValue("{20,0,120,40,left|bottom}", "right"), "{20,0,120,40,right|bottom}");
+assert.equal(alignConfigRectValue("{20,0,120,40,left|bottom}"), "{20,0,120,40,left|bottom}");
+assert.equal(alignConfigRectValue("{20,0,120,40}", "left"), "{20,0,120,40,left|vcenter}");
 const metricStyleWithoutColor = buildMetricStyleOverrides(
   withMetrics,
   { temperature: { scale: 1 } },

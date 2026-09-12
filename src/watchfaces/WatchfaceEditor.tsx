@@ -408,6 +408,7 @@ import {
   type EditorLayer
 } from "./watchfaceEditorModel";
 import { WatchfaceInspectorSection } from "./WatchfaceInspectorSection";
+import { WatchfaceQuickStart } from "./WatchfaceQuickStart";
 import {
   watchfaceInspectorSpecificTitle,
   type WatchfaceInspectorSectionId
@@ -3501,6 +3502,23 @@ export function WatchfaceEditor({
     }));
     setSelectedId(`bgel:${element.id}`);
     setSelectedIds([`bgel:${element.id}`]);
+    openQuickStartProperties();
+  }
+
+  function openQuickStartProperties() {
+    setPropertiesTab("selection");
+    setPropertiesOpen(true);
+    setCollapsedInspectorSections((current) => {
+      const next = new Set(current);
+      next.delete("appearance");
+      next.delete("specific");
+      return next;
+    });
+  }
+
+  function selectQuickStartItem(id: string) {
+    selectEditorItem(id);
+    openQuickStartProperties();
   }
 
   function removeElement(id: string) {
@@ -5356,7 +5374,7 @@ export function WatchfaceEditor({
 
   function setMetricStyle(
     metricId: WatchfaceMetricId,
-    patch: { color?: string; scale?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
+    patch: { align?: "left" | "center" | "right"; color?: string; scale?: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceDesignState["rasterFont"] }
   ) {
     setDesign((prev) => {
       const current = prev.metricStyles?.[metricId] ?? { scale: 1 };
@@ -5635,7 +5653,8 @@ export function WatchfaceEditor({
       const selected = await api.chooseCorosWatchfaceArtwork();
       if (selected) {
         setBackgroundArtwork(await downscaleArtwork(selected));
-        onNotice("Artwork added. Select the Background layer to scale it.");
+        selectQuickStartItem("background");
+        onNotice("Artwork added. Adjust its size in Background settings.");
       }
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "Could not load artwork.");
@@ -6660,6 +6679,8 @@ export function WatchfaceEditor({
   const inspectedLayer: EditorLayer | null = selectedElement
     ? backgroundElementLayer(selectedElement)
     : selectedLayer;
+  const quickStartTimeLayer = layers.find((layer) => layer.timePartId && layer.visible)
+    ?? layers.find((layer) => layer.timePartId);
 
   return (
     <section className="watchface-editor wf-studio" aria-label="Watch face studio">
@@ -6857,6 +6878,18 @@ export function WatchfaceEditor({
               ) : null}
             </div> : null}
           </div>
+          {details && previewMode === "current" ? (
+            <WatchfaceQuickStart
+              onBackground={() => selectQuickStartItem("background")}
+              onPhoto={() => void chooseArtwork()}
+              photoDisabled={isPositionLocked("background")}
+              onTime={quickStartTimeLayer
+                ? () => selectQuickStartItem(quickStartTimeLayer.id)
+                : undefined}
+              onText={() => addElement("text")}
+              onShape={() => addElement("rect")}
+            />
+          ) : null}
           {details ? (
             <div className="wf-layer-search">
               <Search size={14} aria-hidden="true" />
@@ -8500,10 +8533,10 @@ export function WatchfaceEditor({
                 {layer.label}
               </strong>
             )}
-            <span className="wf-layer-type-badge">
+            {editorLayerTypeLabel(layer).toLowerCase() !== layer.label.toLowerCase() ? <span className="wf-layer-type-badge">
               {typeIcon}
               {editorLayerTypeLabel(layer)}
-            </span>
+            </span> : null}
           </span>
         </div>
         <div className="wf-properties-identity-actions">
@@ -8573,7 +8606,7 @@ export function WatchfaceEditor({
       "Layer",
       <div className="wf-property-stack">
         <label className="wf-layer-opacity-control">
-          <span>Opacity</span>
+          <span title="Controls the transparency of the entire layer">Layer opacity</span>
           <input
             type="range"
             min="0"
@@ -8828,8 +8861,7 @@ export function WatchfaceEditor({
         ) : (
           <div className="wf-stroke-empty">
             <div>
-              <strong>No stroke applied</strong>
-              <p>Add a stroke to outline this layer&apos;s visible pixels.</p>
+              <p>Add an outline around this layer.</p>
             </div>
             <button
               type="button"
@@ -9596,42 +9628,51 @@ export function WatchfaceEditor({
         <>
           {renderPropertySection(
             "appearance",
-            "Appearance",
+            "Background color",
             <div className="wf-property-stack">
               <label className="field">
-                Background color
+                Color
                 <span className="watchface-color-control">
                   <input type="color" value={backgroundColor.hex} onChange={(event) => patchDesign({ backgroundColor: toRgbaColor(event.target.value, backgroundColor.isTransparent ? 1 : backgroundColor.alpha) })} />
-                  <code>{backgroundColor.isTransparent ? "none" : design.backgroundColor}</code>
-                  <button className="watchface-color-none" type="button" disabled={backgroundColor.isTransparent} onClick={() => patchDesign({ backgroundColor: "transparent" })}>None</button>
+                  <EditableHexColorInput aria-label="Background hex color" value={backgroundColor.hex} onValueChange={(color) => patchDesign({ backgroundColor: toRgbaColor(color, backgroundColor.isTransparent ? 1 : backgroundColor.alpha) })} />
+                  <button className="watchface-color-none" type="button" aria-label="Make background color transparent" disabled={backgroundColor.isTransparent} onClick={() => patchDesign({ backgroundColor: "transparent" })}>Clear</button>
                 </span>
               </label>
               <label className="watchface-inspector-field">
-                <span>Fill opacity</span>
+                <span>Color opacity</span>
                 <span className="wf-input-with-unit">
                   <EditableNumberInput min="0" max="100" step="1" disabled={backgroundColor.isTransparent} value={Math.round(backgroundColor.alpha * 100)} fallback={100} onValueChange={(opacity) => patchDesign({ backgroundColor: toRgbaColor(backgroundColor.hex, opacity / 100) })} />
                   <span>%</span>
                 </span>
               </label>
+              <p className="watchface-studio-summary">Changes only the color behind your photo and watch data.</p>
             </div>
           )}
-          {backgroundArtwork ? renderStrokeInspector("background") : null}
           {renderPropertySection(
             "specific",
-            "Background",
+            "Background photo",
             <div className="wf-property-stack">
+              <div className="wf-background-photo-card">
               <div className={`wf-config-asset-preview wf-background-asset-preview${backgroundVisible ? "" : " is-disabled"}`}>
                 {backgroundArtwork ? <img src={backgroundArtwork.dataUrl} alt="Background artwork preview" /> : <Image size={28} aria-hidden="true" />}
               </div>
-              <button className="secondary-button" type="button" onClick={() => void chooseArtwork()}><ImagePlus size={15} /> {backgroundArtwork ? "Replace artwork" : "Add artwork"}</button>
+              <div className="wf-background-photo-actions">
+                <button className="secondary-button" type="button" onClick={() => void chooseArtwork()}><ImagePlus size={15} /> {backgroundArtwork ? "Replace photo" : "Choose photo"}</button>
+                {backgroundArtwork ? <button className="wf-photo-remove" type="button" onClick={() => setBackgroundArtwork(null)}><Trash2 size={14} /> Remove photo</button> : <p className="watchface-studio-summary">Add an image behind the time.</p>}
+              </div>
+              </div>
               {backgroundArtwork ? (
-                <>
-                  <label className="watchface-inspector-field"><span>Artwork scale</span><span className="wf-input-with-unit"><EditableNumberInput min="1" max="2.25" step="0.01" value={design.zoom} fallback={1} onValueChange={(zoom) => patchDesign({ zoom: Math.max(1, Math.min(2.25, zoom)) })} /><span>×</span></span></label>
-                  <button className="secondary-button wf-danger-action" type="button" onClick={() => setBackgroundArtwork(null)}><Trash2 size={15} /> Remove artwork</button>
-                </>
-              ) : <p className="watchface-studio-summary">Add artwork to place an image behind the live watch elements.</p>}
+                <div className="wf-photo-zoom">
+                  <label className="watchface-inspector-field"><span>Photo zoom</span><span className="wf-input-with-unit"><EditableNumberInput aria-label="Photo zoom" min="1" max="2.25" step="0.01" value={design.zoom} fallback={1} onValueChange={(zoom) => patchDesign({ zoom: Math.max(1, Math.min(2.25, zoom)) })} /><span>×</span></span></label>
+                  <div className="wf-photo-zoom-slider">
+                    <input type="range" aria-label="Adjust photo zoom" min="1" max="2.25" step="0.01" value={design.zoom} onChange={(event) => patchDesign({ zoom: Number(event.target.value) })} />
+                    <button type="button" className="wf-property-icon-button" aria-label="Reset photo zoom" title="Reset photo zoom" disabled={design.zoom === 1} onClick={() => patchDesign({ zoom: 1 })}><RotateCcw size={14} /></button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
+          {backgroundArtwork ? renderStrokeInspector("background") : null}
           {backgroundArtwork ? renderEffectsInspector("background") : null}
         </>
       );
@@ -9682,6 +9723,7 @@ export function WatchfaceEditor({
             "specific",
             "Typography",
             <div className="wf-property-stack">
+        <label className="field">Number alignment<select value={style?.align ?? ""} onChange={(event) => { const align = (event.target.value || undefined) as "left" | "center" | "right" | undefined; setMetricStyle("battery", { align }); }}><option value="">Template default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
               <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setMetricStyle("battery", { fontFamily, rasterFont: undefined })} rasterFont={design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle("battery", typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle("battery", { letterSpacing })} />
               <div className="watchface-position-inputs">
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle("battery", { scale: Math.max(0.01, scale) })} /></label>
@@ -9836,6 +9878,7 @@ export function WatchfaceEditor({
             "specific",
             "Typography",
             <div className="wf-property-stack">
+        <label className="field">Number alignment<select value={style?.align ?? ""} onChange={(event) => { const align = (event.target.value || undefined) as "left" | "center" | "right" | undefined; setMetricStyle(layer.metricId!, { align }); }}><option value="">Template default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
               <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle(layer.metricId!, typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
               <div className="watchface-position-inputs">
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, scale) })} /></label>
@@ -10394,6 +10437,7 @@ export function WatchfaceEditor({
             })}
           </div>
         </section>
+        <label className="field">Number alignment<select value={design.selectableMetricStyle?.align ?? ""} onChange={(event) => { const align = (event.target.value || undefined) as "left" | "center" | "right" | undefined; setSelectableMetricStyle({ align }); }}><option value="">Template default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
         <label className="field">
           Preview data
           <select

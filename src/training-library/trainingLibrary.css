@@ -5552,9 +5552,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-left: 4px;
-  padding-left: 12px;
-  border-left: 1px solid var(--tl-rule-soft);
+  margin-left: 8px;
 }
 
 .tl-plan-create :is(.primary-button, .ghost-button) {
@@ -5564,9 +5562,9 @@
 
 .tl-plan-library > .tl-filters {
   margin: 0;
-  padding: 0 0 18px;
+  padding: 0 0 4px;
   gap: 12px;
-  border-color: var(--tl-rule-soft);
+  border-bottom: 0;
 }
 
 .tl-plan-library .tl-filters-tail {
@@ -5574,7 +5572,7 @@
   gap: 8px;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1000px) {
   .tl-plan-library .tl-filters-tail {
     flex: 1 1 100%;
     margin-left: 0;
@@ -5592,9 +5590,15 @@
 }
 
 .tl-plan-library .tl-search {
-  flex-basis: 265px;
+  flex: 1 1 220px;
+  max-width: 320px;
   min-height: 36px;
   border-radius: 10px;
+}
+
+.tl-selection-hint {
+  color: var(--text-secondary);
+  font-size: 11px;
 }
 
 .tl-plan-results {

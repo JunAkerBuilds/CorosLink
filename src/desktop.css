@@ -283,7 +283,6 @@ summary:focus-visible {
 }
 
 :root .app .app-sidebar-footer {
-  border-top-color: var(--glass-border);
   padding-top: 12px;
 }
 
