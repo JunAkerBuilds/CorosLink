@@ -1344,15 +1344,9 @@ input::placeholder {
 .update-prompt-icon {
   width: 46px;
   height: 46px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   flex: 0 0 auto;
-  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
-  border-radius: 15px;
-  background: var(--accent-gradient);
-  color: #ffffff;
-  box-shadow: 0 12px 28px var(--accent-glow);
+  object-fit: contain;
 }
 
 .update-prompt-eyebrow {
@@ -30852,7 +30846,6 @@ tr.data-intervals-row-missing {
 .settings-about-logo {
   width: 64px;
   height: 64px;
-  border-radius: 16px;
   flex-shrink: 0;
 }
 

@@ -50,6 +50,7 @@ import type {
   WatchModelId,
   WatchStatus
 } from "../../electron/types";
+import { WATCHFACE_AUTOMATION_SCENE_SCHEMA } from "../../electron/watchfaceAutomationTypes";
 import type { CorosLinkApi } from "../coroslink-api";
 import {
   getWatchPresentation,
@@ -76,6 +77,16 @@ import {
   pickWatchPreviewResolution
 } from "./watchfaceStudio";
 import { weatherPreviewUrl } from "./weatherAssets";
+import {
+  clearWatchfaceAutomationEditor,
+  getWatchfaceAutomationEditor,
+  requireAutomationNumber,
+  toWatchfaceAutomationError,
+  WatchfaceAutomationError,
+  type WatchfaceAutomationOpenParams,
+  type WatchfaceAutomationRequest
+} from "./watchfaceAutomation";
+import { getWatchfaceAutomationSchema } from "./watchfaceAutomationSchema";
 import arcFace from "../assets/watchfaces/arc.png";
 import colorHalftoneFace from "../assets/watchfaces/color-halftone.png";
 import copperStateFace from "../assets/watchfaces/copper-state.png";
@@ -252,6 +263,30 @@ export function WatchfacesView({
     useState<CommunityWatchface | null>(null);
   const [queuedCommunitySlug, setQueuedCommunitySlug] = useState<string | null>(null);
   const handledCommunityRequestRef = useRef(0);
+  const automationRequestHandlerRef = useRef<
+    (request: WatchfaceAutomationRequest) => Promise<unknown>
+  >(async () => {
+    throw new Error("The watch-face hub is still loading.");
+  });
+
+  useEffect(() => {
+    const unsubscribe = api.onWatchfaceAutomationRequest((request) => {
+      void automationRequestHandlerRef.current(request).then(
+        (result) => api.respondWatchfaceAutomation({ id: request.id, result }),
+        (caught) =>
+          api.respondWatchfaceAutomation({
+            id: request.id,
+            error: toWatchfaceAutomationError(caught)
+          })
+      );
+    });
+    api.setWatchfaceAutomationReady("hub", true);
+    return () => {
+      api.setWatchfaceAutomationReady("editor", false);
+      api.setWatchfaceAutomationReady("hub", false);
+      unsubscribe();
+    };
+  }, [api]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -528,17 +563,19 @@ export function WatchfacesView({
     initialName: string,
     project?: CorosWatchfaceProject,
     transferredDesign?: CorosWatchfaceDesignState,
-    initiallyDirty = false
+    initiallyDirty = false,
+    automationTarget?: { firmwareType?: string; watchModel?: WatchModelId }
   ) {
-    const targetFirmwareType = firmwareTypeForWatchfaceArchive(
-      archive,
-      project?.firmwareType?.trim() || firmwareType
-    );
+    const targetFirmwareType = automationTarget?.firmwareType?.trim() ||
+      firmwareTypeForWatchfaceArchive(
+        archive,
+        project?.firmwareType?.trim() || firmwareType
+      );
     const firmwareWatchModel = templateWatchModelForFirmware(targetFirmwareType);
     const connectedProfile = watchStatus?.connected
       ? getWatchfaceDeviceProfile(watchStatus.model)
       : undefined;
-    const targetWatchModel = firmwareWatchModel ||
+    const targetWatchModel = automationTarget?.watchModel || firmwareWatchModel ||
       (connectedProfile?.firmwareType.toUpperCase() === targetFirmwareType.toUpperCase()
         ? watchStatus?.model
         : undefined);
@@ -606,13 +643,20 @@ export function WatchfacesView({
     draft: WatchfaceConversionDraft,
     targetFirmwareType: string
   ): string {
+    return convertedProjectName(draft.name, targetFirmwareType);
+  }
+
+  function convertedProjectName(
+    sourceName: string,
+    targetFirmwareType: string
+  ): string {
     const targetModel = templateWatchModelForFirmware(targetFirmwareType);
     const targetLabel = TEMPLATE_WATCH_OPTIONS.find(
       ({ model }) => model === targetModel
     )?.label;
-    if (!targetLabel) return draft.name.slice(0, 80);
+    if (!targetLabel) return sourceName.slice(0, 80);
     const suffix = ` (${targetLabel})`;
-    return `${draft.name.slice(0, Math.max(1, 80 - suffix.length)).trimEnd()}${suffix}`;
+    return `${sourceName.slice(0, Math.max(1, 80 - suffix.length)).trimEnd()}${suffix}`;
   }
 
   function openStudioWithConversion(
@@ -649,6 +693,43 @@ export function WatchfacesView({
           : ""
       }`
     );
+  }
+
+  function openAutomatedConversion({
+    design,
+    name,
+    sourceDirty,
+    targetArchive,
+    firmwareType: requestedFirmwareType,
+    watchModel
+  }: {
+    design: CorosWatchfaceDesignState;
+    name: string;
+    sourceDirty: boolean;
+    targetArchive: CorosWatchfaceArchive;
+    firmwareType?: string;
+    watchModel?: WatchModelId;
+  }) {
+    const prepared = prepareWatchfaceConversion(design);
+    const destinationFirmware = requestedFirmwareType?.trim() ||
+      firmwareTypeForWatchfaceArchive(targetArchive, firmwareType);
+    const convertedName = convertedProjectName(name, destinationFirmware);
+    clearWatchfaceAutomationEditor();
+    api.setWatchfaceAutomationReady("editor", false);
+    openStudio(
+      targetArchive,
+      convertedName,
+      undefined,
+      prepared.design,
+      true,
+      { firmwareType: destinationFirmware, ...(watchModel ? { watchModel } : {}) }
+    );
+    return {
+      opened: true,
+      name: convertedName,
+      targetFirmwareType: destinationFirmware,
+      omittedRawConfigEditCount: prepared.omittedRawConfigEditCount
+    };
   }
 
   function returnToHub() {
@@ -981,6 +1062,147 @@ export function WatchfacesView({
     setNotice(null);
   }
 
+  automationRequestHandlerRef.current = async ({ method, params }) => {
+    if (method === "get_schema") {
+      return {
+        ...WATCHFACE_AUTOMATION_SCENE_SCHEMA,
+        ...getWatchfaceAutomationSchema()
+      };
+    }
+    if (method === "get_context") {
+      const controller = getWatchfaceAutomationEditor();
+      if (controller) return controller.request("get_document", params);
+      return {
+        surface,
+        editorOpen: false,
+        conversionPending: Boolean(conversionDraft)
+      };
+    }
+    if (method === "open") {
+      const input = params as WatchfaceAutomationOpenParams;
+      const controller = getWatchfaceAutomationEditor();
+      if (controller?.status().busy) {
+        throw new WatchfaceAutomationError(
+          "EDITOR_BUSY",
+          "Finish the active editor gesture or import before opening another watch face."
+        );
+      }
+      if (controller?.status().dirty) {
+        if (input.saveChanges) {
+          const current = controller.status();
+          const saved = await controller.request("save", {
+            sessionId: current.sessionId,
+            baseRevision: current.revision
+          });
+          if (
+            saved &&
+            typeof saved === "object" &&
+            (saved as { dirty?: unknown }).dirty === true
+          ) {
+            throw new WatchfaceAutomationError(
+              "DIRTY_DOCUMENT",
+              "New edits were made while saving. Read the document and retry."
+            );
+          }
+        } else if (!input.discardChanges) {
+          throw new WatchfaceAutomationError(
+            "DIRTY_DOCUMENT",
+            "The open watch face has unsaved changes. Pass saveChanges or discardChanges explicitly."
+          );
+        }
+      }
+      const project = input.project;
+      const archive = input.archive ?? project?.archive;
+      if (!archive?.archiveId) {
+        throw new WatchfaceAutomationError(
+          "INVALID_PARAMS",
+          "open requires an archive or a project containing its source archive."
+        );
+      }
+      clearWatchfaceAutomationEditor();
+      api.setWatchfaceAutomationReady("editor", false);
+      openStudio(
+        archive,
+        input.name ?? project?.name ?? archive.fileName.replace(/\.(zip|dat)$/i, ""),
+        project,
+        project?.design,
+        false,
+        {
+          ...(input.firmwareType ? { firmwareType: input.firmwareType } : {}),
+          ...(input.watchModel ? { watchModel: input.watchModel } : {})
+        }
+      );
+      return {
+        opening: true,
+        archiveId: archive.archiveId,
+        name: input.name ?? project?.name ?? archive.fileName
+      };
+    }
+    if (method === "close") {
+      const controller = getWatchfaceAutomationEditor();
+      if (!controller) return { closed: false, reason: "no_open_editor" };
+      const current = controller.status();
+      if (current.busy) {
+        throw new WatchfaceAutomationError(
+          "EDITOR_BUSY",
+          "Finish the active editor gesture or import before closing the watch face."
+        );
+      }
+      if (params.sessionId !== current.sessionId) {
+        throw new WatchfaceAutomationError(
+          "STALE_SESSION",
+          `The editor session changed. Current sessionId is ${current.sessionId}.`
+        );
+      }
+      const baseRevision = requireAutomationNumber(
+        params.baseRevision,
+        "baseRevision"
+      );
+      if (baseRevision !== current.revision) {
+        throw new WatchfaceAutomationError(
+          "REVISION_CONFLICT",
+          `Document revision ${baseRevision} is stale; current revision is ${current.revision}.`,
+          { sessionId: current.sessionId, revision: current.revision }
+        );
+      }
+      if (current.dirty) {
+        if (params.saveChanges === true) {
+          const saved = await controller.request("save", {
+            sessionId: current.sessionId,
+            baseRevision: current.revision
+          });
+          if (
+            saved &&
+            typeof saved === "object" &&
+            (saved as { dirty?: unknown }).dirty === true
+          ) {
+            throw new WatchfaceAutomationError(
+              "DIRTY_DOCUMENT",
+              "New edits were made while saving. Read the document and retry."
+            );
+          }
+        } else if (params.discardChanges !== true) {
+          throw new WatchfaceAutomationError(
+            "DIRTY_DOCUMENT",
+            "The open watch face has unsaved changes. Pass saveChanges or discardChanges explicitly."
+          );
+        }
+      }
+      clearWatchfaceAutomationEditor();
+      api.setWatchfaceAutomationReady("editor", false);
+      returnToHub();
+      return { closed: true, sessionId: current.sessionId };
+    }
+    const controller = getWatchfaceAutomationEditor();
+    if (!controller) {
+      throw new WatchfaceAutomationError(
+        "EDITOR_NOT_READY",
+        "Open a watch face before using editor automation methods."
+      );
+    }
+    return controller.request(method, params);
+  };
+
   if (surface === "studio" && studioSession) {
     return (
       <div
@@ -1013,6 +1235,7 @@ export function WatchfacesView({
           onPublish={openPublish}
           onProjectSaved={handleProjectSaved}
           onConvertTarget={beginWatchConversion}
+          onAutomationConvert={openAutomatedConversion}
           onError={showStudioError}
           onNotice={showStudioNotice}
           onClearMessages={clearMessages}

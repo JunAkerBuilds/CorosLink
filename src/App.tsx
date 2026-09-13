@@ -128,7 +128,7 @@ import {
   type WatchFeatureIcon,
   type WatchPresentation,
 } from "./watchModels";
-import appLogo from "../build/icon.png";
+import appLogo from "../build/icon-animated.svg";
 import changelogMarkdown from "../CHANGELOG.md?raw";
 
 type View = PrimaryView;
@@ -444,6 +444,14 @@ export default function App() {
     },
   );
   const installAcceptedVersionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!api) return;
+    return api.onWatchfaceAutomationActivate(() => {
+      setWatchfacesMounted(true);
+      setActiveView("watchfaces");
+    });
+  }, [api]);
 
   useEffect(() => {
     if (!api) {

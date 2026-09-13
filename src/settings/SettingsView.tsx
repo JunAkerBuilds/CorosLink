@@ -33,9 +33,10 @@ import {
   storeSportColors,
   type SportColorCategory,
 } from "../training/sportColors";
-import appLogo from "../../build/icon.png";
+import appLogo from "../../build/icon-animated.svg";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import { CalendarConnections } from "../calendar/CalendarConnections";
+import { WatchfaceAutomationSettings } from "./WatchfaceAutomationSettings";
 
 const ABOUT_LINKS = [
   {
@@ -340,6 +341,8 @@ export function SettingsView({
       </div>
 
       <div className="panel"><CalendarConnections api={api} /></div>
+
+      <WatchfaceAutomationSettings api={api} />
 
       <div className="panel settings-units-panel">
         <div className="settings-units-heading">

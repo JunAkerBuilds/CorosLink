@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "./calendarSyncTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "./googleCalendarTypes";
 import type {
@@ -163,6 +164,20 @@ import type {
 } from "./types";
 
 const api = {
+  getWatchfaceAutomationStatus: (): Promise<WatchfaceAutomationStatus> => ipcRenderer.invoke("watchfaceAutomation:status"),
+  configureWatchfaceAutomation: (input: { enabled: boolean; port?: number }): Promise<WatchfaceAutomationStatus> => ipcRenderer.invoke("watchfaceAutomation:configure", input),
+  onWatchfaceAutomationActivate: (callback: () => void): (() => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("watchfaceAutomation:activate", listener);
+    return () => ipcRenderer.removeListener("watchfaceAutomation:activate", listener);
+  },
+  onWatchfaceAutomationRequest: (callback: (request: WatchfaceAutomationRequest) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, request: WatchfaceAutomationRequest) => callback(request);
+    ipcRenderer.on("watchfaceAutomation:request", listener);
+    return () => ipcRenderer.removeListener("watchfaceAutomation:request", listener);
+  },
+  respondWatchfaceAutomation: (response: WatchfaceAutomationResponse): void => ipcRenderer.send("watchfaceAutomation:response", response),
+  setWatchfaceAutomationReady: (scope: "hub" | "editor", ready: boolean): void => ipcRenderer.send("watchfaceAutomation:ready", scope, ready),
   getAppleCalendarStatus: (): Promise<CalendarConnectionStatus> => ipcRenderer.invoke("appleCalendar:status"),
   connectAppleCalendar: (input: AppleCalendarCredentials): Promise<CalendarConnectionStatus> => ipcRenderer.invoke("appleCalendar:connect", input),
   cancelAppleCalendarConnect: (): Promise<void> => ipcRenderer.invoke("appleCalendar:cancelConnect"),

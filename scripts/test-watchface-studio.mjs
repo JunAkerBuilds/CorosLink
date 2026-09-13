@@ -1384,6 +1384,33 @@ assert.ok(
   )
 );
 
+const rootAssetDetails = structuredClone(sharedModeDetails);
+Object.assign(rootAssetDetails.resolutions[0].config, {
+  background_icon: "background.png",
+  watchface_thmb_icon: "thmb.png",
+  colon_icon: "colon.png",
+  time_second_high_pos: "",
+  arc_cut_icon_pos: ""
+});
+const rootAssetComposition = {
+  assetReplacements: ["background", "thmb", "colon"].map((name) => ({
+    path: `${sharedModeResolution.directory}/${name}.png`,
+    dataUrl: `template-${name}`
+  })),
+  configOverrides: []
+};
+const rootCurrent = retargetWatchfaceCompositionToCurrent(rootAssetDetails, rootAssetComposition);
+const rootCurrentConfig = applyConfigOverridesToDetails(rootAssetDetails, rootCurrent.configOverrides).resolutions[0].config;
+assert.equal(rootCurrentConfig.background_icon, "background.png", "current background must retain the authored export destination");
+assert.equal(rootCurrentConfig.watchface_thmb_icon, "thmb.png", "current thumbnail must retain the rendered preview destination");
+assert.equal(rootCurrentConfig.time_second_high_pos, "", "empty positions are not root asset references");
+assert.equal(rootCurrentConfig.arc_cut_icon_pos, "");
+assert.equal(rootCurrent.assetReplacements.length, 1);
+assert.match(rootCurrentConfig.colon_icon.replaceAll("\\", "/"), /^studio\/current_colon_[a-z0-9]+\/00\.png$/);
+const rootAod = retargetWatchfaceCompositionToAod(rootAssetDetails, rootAssetComposition);
+assert.equal(rootAod.assetReplacements.length, 3, "AOD must still isolate shared background and icon assets");
+assert.ok(rootAod.configOverrides.every(({ values }) => !("time_second_high_pos" in values)));
+
 const dormantMasterAmPmDetails = {
   ...details,
   resolutions: details.resolutions.map((candidate) =>
@@ -3524,9 +3551,9 @@ assert.deepEqual(
   {
     id: "hours",
     label: "Hour digits",
-    x0: 64,
+    x0: 55,
     y0: 84,
-    x1: 240,
+    x1: 230,
     y1: 180
   },
   "scaled hour bounds should use rendered glyph dimensions and tracking"
@@ -3536,9 +3563,9 @@ assert.deepEqual(
   {
     id: "minutes",
     label: "Minute digits",
-    x0: 259,
+    x0: 267,
     y0: 92,
-    x1: 405,
+    x1: 413,
     y1: 172
   },
   "scaled minute bounds should follow both enlarged glyphs"
@@ -3559,10 +3586,10 @@ const timeTrackingOverrides = buildTimeTrackingOverrides(withMetrics, 0.2);
 const fullTimeTracking = timeTrackingOverrides.find((entry) =>
   entry.path.includes("800x800")
 );
-assert.equal(fullTimeTracking?.values.time_hour_high_pos, "{94,100}");
-assert.equal(fullTimeTracking?.values.time_hour_low_pos, "{166,100}");
-assert.equal(fullTimeTracking?.values.time_minute_high_pos, "{274,100}");
-assert.equal(fullTimeTracking?.values.time_minute_low_pos, "{346,100}");
+assert.equal(fullTimeTracking?.values.time_hour_high_pos, "{87,100}");
+assert.equal(fullTimeTracking?.values.time_hour_low_pos, "{160,100}");
+assert.equal(fullTimeTracking?.values.time_minute_high_pos, "{280,100}");
+assert.equal(fullTimeTracking?.values.time_minute_low_pos, "{353,100}");
 const pngTimeTracking = buildTimeTrackingOverrides(
   withMetrics,
   0,
@@ -3591,10 +3618,10 @@ const pngTimeTracking = buildTimeTrackingOverrides(
     }
   }
 ).find((entry) => entry.path.includes("800x800"));
-assert.equal(pngTimeTracking?.values.time_hour_high_pos, "{92,100}");
-assert.equal(pngTimeTracking?.values.time_hour_low_pos, "{168,100}");
-assert.equal(pngTimeTracking?.values.time_minute_high_pos, "{288,100}");
-assert.equal(pngTimeTracking?.values.time_minute_low_pos, "{332,100}");
+assert.equal(pngTimeTracking?.values.time_hour_high_pos, "{84,100}");
+assert.equal(pngTimeTracking?.values.time_hour_low_pos, "{160,100}");
+assert.equal(pngTimeTracking?.values.time_minute_high_pos, "{280,100}");
+assert.equal(pngTimeTracking?.values.time_minute_low_pos, "{324,100}");
 const dateStyleOverrides = buildDateStyleOverrides(
   withMetrics,
   {
@@ -4158,7 +4185,7 @@ try {
     nativeControlComposition.configOverrides.find(({ path }) =>
       path.includes("800x800")
     )?.values.control_hr_rect,
-    "{206,0,242,64,hcenter|vcenter}",
+    "{208,0,241,64,hcenter|vcenter}",
     "native selectable export geometry should follow the rendered digit width"
   );
 

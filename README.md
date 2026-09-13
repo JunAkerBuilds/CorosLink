@@ -478,6 +478,8 @@ npm run dev
 
 The dev command starts Vite at `http://127.0.0.1:5173/` and launches Electron. `npm run rebuild` prepares native SQLite bindings for Electron. `npm run dev` automatically runs `binaries:prepare` before Electron starts, downloading the pinned `yt-dlp` release and copying the `ffmpeg-static` binary into `bin/<platform>-<arch>/`. You can also run `binaries:prepare` manually if you only need to refresh media tools.
 
+The icon's editable vector source is `build/icon.svg`, with transparent space outside its rounded frame. Run `npm run icons:generate` after changing it to regenerate the animated SVG used in the sidebar and About panel, the desktop PNG, and the website PNG. On macOS this also generates the ICNS. The sync arrows rotate once every six seconds and stop when reduced motion is enabled; operating-system icons use the static artwork.
+
 To prepare Windows x64 media binaries from any platform:
 
 ```sh

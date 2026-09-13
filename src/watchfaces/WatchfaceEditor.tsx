@@ -1,3 +1,5 @@
+import { glyphBaselineMovements, visibleGlyphBounds } from "./watchfaceGlyphLayout";
+import { WatchfaceExportPreview } from "./WatchfaceExportPreview";
 import {
   Fragment,
   type ComponentProps,
@@ -507,6 +509,21 @@ import {
   type WatchfaceStaticSeparatorId,
   type WatchfaceTimePartId
 } from "./watchfaceStudio";
+import type { WatchfaceAutomationDiagnostic } from "./watchfaceAutomationSchema";
+import { resolveWatchfacePlacementScene } from "./watchfaceAutomationPlacement";
+import {
+  applyWatchfaceAutomationCommands,
+  validateWatchfaceAutomationDocument,
+  type WatchfaceAutomationMode
+} from "./watchfaceAutomationCommands";
+import {
+  registerWatchfaceAutomationEditor,
+  requireAutomationNumber,
+  requireAutomationString,
+  WatchfaceAutomationError,
+  type WatchfaceAutomationConversionInput,
+  type WatchfaceAutomationEditorController
+} from "./watchfaceAutomation";
 import {
   getWeatherCapability,
   weatherPreviewDataUrl
@@ -749,6 +766,14 @@ interface WatchfaceEditorProps {
     name: string,
     sourceDirty: boolean
   ) => void;
+  onAutomationConvert: (
+    input: WatchfaceAutomationConversionInput
+  ) => {
+    opened: boolean;
+    name: string;
+    targetFirmwareType: string;
+    omittedRawConfigEditCount: number;
+  };
   onError: (message: string) => void;
   onNotice: (message: string) => void;
   onClearMessages: () => void;
@@ -1066,6 +1091,7 @@ export function WatchfaceEditor({
   onArchiveCreated,
   onProjectSaved,
   onConvertTarget,
+  onAutomationConvert,
   onError,
   onNotice,
   onClearMessages
@@ -1134,6 +1160,11 @@ export function WatchfaceEditor({
     createWatchfaceEditorHistory(initialValue)
   );
   const historyRef = useRef(history);
+  const automationRevisionRef = useRef(0);
+  const lastSaveWasCurrentRef = useRef(false);
+  const automationControllerRef = useRef<WatchfaceAutomationEditorController | null>(
+    null
+  );
   const [checkpoint, setCheckpoint] = useState(() =>
     createWatchfaceEditorCheckpoint(history, sessionId, {
       dirty: initiallyDirty
@@ -1143,6 +1174,10 @@ export function WatchfaceEditor({
   const projectName = history.present.value.projectName;
   const [selectedId, setSelectedId] = useState<string>("background");
   const [selectedIds, setSelectedIds] = useState<string[]>(["background"]);
+  const automationSelectionRef = useRef({
+    selectedId: "background",
+    selectedIds: ["background"]
+  });
   const previousPreviewModeRef = useRef<WatchfacePreviewMode>("current");
   const selectionByModeRef = useRef<
     Record<WatchfacePreviewMode, { selectedId: string; selectedIds: string[] }>
@@ -1159,6 +1194,9 @@ export function WatchfaceEditor({
   } | null>(null);
   const [backgroundDataUrl, setBackgroundDataUrl] = useState("");
   const [previewMode, setPreviewMode] = useState<WatchfacePreviewMode>("current");
+  const automationModeRef = useRef<WatchfacePreviewMode>("current");
+  const [automationPreviewComplication, setAutomationPreviewComplication] =
+    useState<WatchfaceComplicationId | null>(null);
   const design = useMemo(
     () => resolveWatchfaceModeDesign(rootDesign, previewMode),
     [rootDesign, previewMode]
@@ -1168,9 +1206,12 @@ export function WatchfaceEditor({
   const [exporting, setExporting] = useState(false);
   const [previewingExport, setPreviewingExport] = useState(false);
   const [exportPreviewImages, setExportPreviewImages] = useState<{
-    current: string;
-    aod: string;
+    archive: CorosWatchfaceArchive;
+    name: string;
+    details: CorosWatchfaceTemplateDetails;
   } | null>(null);
+  const closeExportPreview = useCallback(() => setExportPreviewImages(null), []);
+  const [aligningGlyphs, setAligningGlyphs] = useState(false);
   const [saving, setSaving] = useState(false);
   const spriteImportTrackerRef = useRef(new WatchfaceSpriteImportTracker());
   const [pendingSpriteImportCount, setPendingSpriteImportCount] = useState(0);
@@ -1198,6 +1239,7 @@ export function WatchfaceEditor({
   );
   const [stageZoom, setStageZoom] = useState<"fit" | number>("fit");
   const [watchPreviewDirectory, setWatchPreviewDirectory] = useState("");
+  const automationResolutionRef = useRef("");
   const [placementMenuOpen, setPlacementMenuOpen] = useState(false);
   const [placementPreferences, setPlacementPreferences] =
     useState<WatchfacePlacementPreferences>(() =>
@@ -1216,6 +1258,9 @@ export function WatchfaceEditor({
   const canUndo = canUndoWatchfaceEditorHistory(history);
   const canRedo = canRedoWatchfaceEditorHistory(history);
   const spriteImportPending = pendingSpriteImportCount > 0;
+  automationModeRef.current = previewMode;
+  automationResolutionRef.current = watchPreviewDirectory;
+  automationSelectionRef.current = { selectedId, selectedIds };
 
   const beginSpriteImport = useCallback((target: string): number | null => {
     if (!mountedRef.current) return null;
@@ -1249,6 +1294,14 @@ export function WatchfaceEditor({
   };
 
   function applyHistory(next: typeof history) {
+    const previous = historyRef.current;
+    if (
+      next !== previous &&
+      (next.present.value !== previous.present.value ||
+        next.present.revision !== previous.present.revision)
+    ) {
+      automationRevisionRef.current += 1;
+    }
     historyRef.current = next;
     setHistoryState(next);
   }
@@ -1520,6 +1573,7 @@ export function WatchfaceEditor({
   useEffect(() => {
     const reset = resetWatchfaceEditorHistory(initialValue, historyRef.current);
     historyRef.current = reset;
+    automationRevisionRef.current = 0;
     setHistoryState(reset);
     setCheckpoint(
       createWatchfaceEditorCheckpoint(reset, sessionId, {
@@ -1529,6 +1583,10 @@ export function WatchfaceEditor({
     setProjectId(initialProjectId);
     setSelectedId("background");
     setSelectedIds(["background"]);
+    automationSelectionRef.current = {
+      selectedId: "background",
+      selectedIds: ["background"]
+    };
     previousPreviewModeRef.current = "current";
     selectionByModeRef.current = {
       current: { selectedId: "background", selectedIds: ["background"] },
@@ -1537,7 +1595,10 @@ export function WatchfaceEditor({
     setHoveredId(null);
     setBackgroundDataUrl("");
     setPreviewMode("current");
+    automationModeRef.current = "current";
+    setAutomationPreviewComplication(null);
     setDetails(null);
+    setExportPreviewImages(null);
     setConfigTextBaselines({});
     setConfigEditorDirectory("");
     setPlacementMenuOpen(false);
@@ -1852,8 +1913,15 @@ export function WatchfaceEditor({
     ]
   );
   const previewStudioOptions = useMemo(
-    () => ({ ...studioOptions, previewMode, deferProgressArcs: true }),
-    [studioOptions, previewMode]
+    () => ({
+      ...studioOptions,
+      previewMode,
+      deferProgressArcs: true,
+      ...(automationPreviewComplication
+        ? { previewComplication: automationPreviewComplication }
+        : {})
+    }),
+    [automationPreviewComplication, studioOptions, previewMode]
   );
   const detailsWithConfigEdits = useMemo(
     () =>
@@ -2013,6 +2081,7 @@ export function WatchfaceEditor({
 
   useEffect(() => {
     setWatchPreviewDirectory("");
+    automationResolutionRef.current = "";
   }, [sessionId]);
 
   useEffect(() => {
@@ -2678,6 +2747,35 @@ export function WatchfaceEditor({
       ),
       items
     );
+  }
+
+  async function alignGlyphBaselines() {
+    const items = selectedLayoutItems();
+    if (items.length < 2 || aligningGlyphs) return;
+    const snapshot = historyRef.current.present.value.design;
+    setAligningGlyphs(true);
+    try {
+      const measured = [];
+      for (const item of items) {
+        const isolated = isolateDragDesigns({ kind: "layout", targetId: item.layerIds[0]!,
+          startX: 0, startY: 0, baseX: 0, baseY: 0, snapId: item.id,
+          baseBounds: item.bounds, selectionIds: item.layerIds });
+        const frame = await renderDragFrame({ ...isolated.moving, layerStrokes: {}, layerEffects: {} });
+        const bounds = visibleGlyphBounds(frame);
+        if (bounds) measured.push({ id: item.id,
+          top: bounds.top * previewHeight / frame.height,
+          bottom: bounds.bottom * previewHeight / frame.height,
+          colon: item.layerIds.every((id) => {
+            const layer = layers.find((candidate) => candidate.id === id);
+            return layer?.staticSeparatorId === "colon" || /colon/i.test(layer?.label ?? "");
+          }) });
+      }
+      if (mountedRef.current && previewSessionRef.current === sessionId && historyRef.current.present.value.design === snapshot && automationModeRef.current === previewMode) {
+        applyLayoutMovements(glyphBaselineMovements(measured), items);
+      }
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : "Could not measure glyph baselines.");
+    } finally { setAligningGlyphs(false); }
   }
 
   function distributeSelection(direction: WatchfaceDistribution) {
@@ -5942,7 +6040,9 @@ export function WatchfaceEditor({
     rootDesignSnapshot: CorosWatchfaceDesignState,
     mode: WatchfacePreviewMode = "current",
     snapshotBackgroundDataUrl?: string,
-    outputSize = 800
+    outputSize = 800,
+    resolutionDirectory = watchPreviewDirectory,
+    scenario?: { dateTime?: string; values?: Record<string, string> }
   ): Promise<string> {
     if (!details) {
       throw new Error("The editor is still loading. Try again in a moment.");
@@ -5963,7 +6063,7 @@ export function WatchfaceEditor({
     const snapshotBaseResolution = pickPreviewResolution(snapshotPreviewDetails);
     const snapshotTargetResolution =
       snapshotPreviewDetails?.resolutions.find(
-        (resolution) => resolution.directory === watchPreviewDirectory
+        (resolution) => resolution.directory === resolutionDirectory
       ) ??
       (snapshotPreviewDetails
         ? pickWatchPreviewResolution(snapshotPreviewDetails)
@@ -5992,6 +6092,10 @@ export function WatchfaceEditor({
     const exportOptions: WatchfaceStudioOptions = {
       ...snapshotOptions,
       previewMode: mode,
+      ...(scenario?.dateTime
+        ? { previewDate: new Date(scenario.dateTime) }
+        : {}),
+      ...(scenario?.values ? { previewValues: scenario.values } : {}),
       batteryIconResolutionScale: resolutionScale,
       effectResolutionScale: resolutionScale,
       nativeSpriteResolutionScale: resolutionScale,
@@ -6061,14 +6165,15 @@ export function WatchfaceEditor({
       onError("Wait for the sprite import to finish before previewing.");
       return;
     }
-    const designSnapshot = historyRef.current.present.value.design;
+    const previewSession = sessionId;
     setPreviewingExport(true);
     try {
-      const [current, aod] = await Promise.all([
-        renderExportPreview(designSnapshot, "current"),
-        renderExportPreview(designSnapshot, "aod")
-      ]);
-      setExportPreviewImages({ current, aod });
+      const built = await createArchive("preview");
+      if (!built) return;
+      const compiledDetails = await api.describeCorosWatchfaceTemplate(built.archive.archiveId);
+      if (mountedRef.current && previewSessionRef.current === previewSession) {
+        setExportPreviewImages({ ...built, details: compiledDetails });
+      }
     } catch (caught) {
       onError(caught instanceof Error ? caught.message : "Could not render the export preview.");
     } finally {
@@ -6112,15 +6217,30 @@ export function WatchfaceEditor({
     }
   }
 
-  async function createArchive(action: "publish" | "export" = "publish") {
+  async function createArchive(
+    action: "publish" | "export" | "automation" | "preview" = "publish",
+    requestedName?: string
+  ): Promise<{ archive: CorosWatchfaceArchive; name: string } | null> {
     onClearMessages();
     if (spriteImportTrackerRef.current.pendingCount > 0) {
+      if (action === "automation") {
+        throw new WatchfaceAutomationError(
+          "EDITOR_BUSY",
+          "Wait for the sprite import to finish before building."
+        );
+      }
       onError("Wait for the sprite import to finish before building.");
-      return;
+      return null;
     }
     if (!details || !backgroundDataUrl) {
+      if (action === "automation") {
+        throw new WatchfaceAutomationError(
+          "EDITOR_NOT_READY",
+          "The editor is still loading."
+        );
+      }
       onError("The editor is still loading. Try again in a moment.");
-      return;
+      return null;
     }
     const editorSnapshot = historyRef.current.present.value;
     const designSnapshot = editorSnapshot.design;
@@ -6295,42 +6415,50 @@ export function WatchfaceEditor({
           : {}),
         ...(minWatchFaceVersion !== undefined ? { minWatchFaceVersion } : {})
       });
-      onArchiveCreated?.(archive);
-      const name = editorSnapshot.projectName.trim() || "Custom watch face";
+      if (action !== "preview") onArchiveCreated?.(archive);
+      const name = requestedName?.trim() ||
+        editorSnapshot.projectName.trim() ||
+        "Custom watch face";
       if (action === "export") {
         const result = await api.exportCorosWatchfaceArchive({
           archiveId: archive.archiveId,
           name
         });
         if (result.saved) onNotice(`Exported final watch-face ZIP for “${name}”.`);
-      } else {
+      } else if (action === "publish") {
         onPublish(archive, name);
         onNotice("Watch face prepared for COROS.");
       }
+      return { archive, name };
     } catch (caught) {
+      if (action === "automation") throw caught;
       onError(caught instanceof Error ? caught.message : "Could not build the archive.");
+      return null;
     } finally {
       setCreating(false);
     }
   }
 
-  async function saveProject(): Promise<boolean> {
+  async function saveProject(
+    reportErrors = true
+  ): Promise<CorosWatchfaceProject | null> {
     if (spriteImportTrackerRef.current.pendingCount > 0) {
-      onError("Wait for the sprite import to finish before saving.");
-      return false;
+      if (reportErrors) onError("Wait for the sprite import to finish before saving.");
+      return null;
     }
     const editorSnapshot = historyRef.current.present.value;
     const designSnapshot = editorSnapshot.design;
     const name = editorSnapshot.projectName.trim();
     if (!name) {
-      onError("Name your project before saving.");
-      return false;
+      if (reportErrors) onError("Name your project before saving.");
+      return null;
     }
     if (name.length > 80) {
-      onError("Project names can contain up to 80 characters.");
-      return false;
+      if (reportErrors) onError("Project names can contain up to 80 characters.");
+      return null;
     }
     setSaving(true);
+    lastSaveWasCurrentRef.current = false;
     try {
       let previewDataUrl: string | undefined;
       try {
@@ -6365,16 +6493,20 @@ export function WatchfaceEditor({
         applyHistory(savedHistory);
         setCheckpoint(createWatchfaceEditorCheckpoint(savedHistory, sessionId));
       }
+      lastSaveWasCurrentRef.current = snapshotIsStillCurrent;
       onProjectSaved?.(saved);
       onNotice(
         snapshotIsStillCurrent
           ? `Saved project “${saved.name}”.`
           : `Saved project “${saved.name}”; newer edits remain unsaved.`
       );
-      return snapshotIsStillCurrent;
+      return saved;
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : "Could not save the project.");
-      return false;
+      if (reportErrors) {
+        onError(caught instanceof Error ? caught.message : "Could not save the project.");
+      }
+      if (!reportErrors) throw caught;
+      return null;
     } finally {
       setSaving(false);
     }
@@ -6649,6 +6781,604 @@ export function WatchfaceEditor({
     cropSpriteId
   ]);
 
+  function automationBusy(): boolean {
+    return Boolean(
+      historyRef.current.transactionBase ||
+      dragRef.current ||
+      spriteImportTrackerRef.current.pendingCount > 0 ||
+      loadingSprite ||
+      saving ||
+      creating
+    );
+  }
+
+  function automationPreviewScenario(value: unknown):
+    | { dateTime?: string; values?: Record<string, string> }
+    | undefined {
+    if (value === undefined) return undefined;
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new WatchfaceAutomationError("INVALID_PARAMS", "scenario must be an object.");
+    }
+    const raw = value as Record<string, unknown>;
+    const scenario: { dateTime?: string; values?: Record<string, string> } = {};
+    if (raw.dateTime !== undefined) {
+      const dateTime = requireAutomationString(raw.dateTime, "scenario.dateTime");
+      if (dateTime.length > 64 || !Number.isFinite(Date.parse(dateTime))) {
+        throw new WatchfaceAutomationError(
+          "INVALID_PARAMS",
+          "scenario.dateTime must be a valid ISO date-time string."
+        );
+      }
+      scenario.dateTime = dateTime;
+    }
+    if (raw.values !== undefined) {
+      if (!raw.values || typeof raw.values !== "object" || Array.isArray(raw.values)) {
+        throw new WatchfaceAutomationError("INVALID_PARAMS", "scenario.values must be an object of strings.");
+      }
+      const entries = Object.entries(raw.values);
+      if (entries.length > 64) {
+        throw new WatchfaceAutomationError("INVALID_PARAMS", "scenario.values supports at most 64 entries.");
+      }
+      scenario.values = Object.fromEntries(
+        entries.map(([key, entry]) => {
+          if (key.length > 80 || typeof entry !== "string" || entry.length > 160) {
+            throw new WatchfaceAutomationError(
+              "INVALID_PARAMS",
+              "scenario value keys and strings must use supported lengths."
+            );
+          }
+          return [key, entry];
+        })
+      );
+    }
+    return scenario;
+  }
+
+  function assertAutomationSession(
+    params: Record<string, unknown>,
+    requireRevision = false
+  ): void {
+    const requestedSessionId = requireAutomationString(
+      params.sessionId,
+      "sessionId"
+    );
+    if (requestedSessionId !== sessionId) {
+      throw new WatchfaceAutomationError(
+        "STALE_SESSION",
+        `The editor session changed. Current sessionId is ${sessionId}.`,
+        { sessionId, revision: automationRevisionRef.current }
+      );
+    }
+    if (requireRevision) {
+      const baseRevision = requireAutomationNumber(
+        params.baseRevision,
+        "baseRevision"
+      );
+      if (baseRevision !== automationRevisionRef.current) {
+        throw new WatchfaceAutomationError(
+          "REVISION_CONFLICT",
+          `Document revision ${baseRevision} is stale; current revision is ${automationRevisionRef.current}.`,
+          { sessionId, revision: automationRevisionRef.current }
+        );
+      }
+    }
+  }
+
+  function automationDiagnostics(value = historyRef.current.present.value) {
+    return validateWatchfaceAutomationDocument(
+      value,
+      details
+        ? { details, mode: automationModeRef.current }
+        : { mode: automationModeRef.current }
+    );
+  }
+
+  function automationView(
+    mode: WatchfacePreviewMode = automationModeRef.current
+  ) {
+    const selection = automationSelectionRef.current;
+    const viewDesign = resolveWatchfaceModeDesign(
+      historyRef.current.present.value.design,
+      mode
+    );
+    return {
+      mode,
+      resolution:
+        automationResolutionRef.current || previewResolution?.directory || null,
+      previewComplication:
+        automationPreviewComplication ?? viewDesign.previewComplication,
+      selectedId: selection.selectedId,
+      selectedIds: [...selection.selectedIds]
+    };
+  }
+
+  function automationLayers(
+    value = historyRef.current.present.value,
+    mode: WatchfacePreviewMode = automationModeRef.current
+  ): Array<EditorLayer & {
+    elementKind?: CorosWatchfaceBackgroundElement["kind"];
+    placement?: ReturnType<typeof resolveWatchfacePlacementScene>["layers"][number];
+    boundsReference?: { width: number; height: number; unit: "pixels" };
+  }> {
+    if (!details) return [];
+    const modeDesign = resolveWatchfaceModeDesign(value.design, mode);
+    const modeDetails = detailsForCompositionMode(
+      applyConfigTextEditsToDetails(details, value.design.configTextEdits),
+      mode
+    );
+    const nativeReference = pickPreviewResolution(modeDetails);
+    const placements = new Map(resolveWatchfacePlacementScene(details, modeDesign, mode).layers.map((layer) => [layer.id, layer]));
+    const nativeLayers = deriveEditorLayers(modeDetails, modeDesign)
+      .filter((layer) => watchfaceEditorLayerIsListed(layer, mode, modeDesign))
+      .map((layer) => ({
+        ...layer,
+        boundsReference: {
+          width: nativeReference?.width ?? 800,
+          height: nativeReference?.height ?? 800,
+          unit: "pixels" as const
+        }
+      }));
+    const elementLayers = (modeDesign.backgroundElements ?? []).map((element) => {
+      const layer = backgroundElementLayer(element);
+      const bounds = backgroundElementSnapBounds(element);
+      return {
+        ...layer,
+        elementKind: element.kind,
+        bounds: {
+          id: layer.id,
+          label: layer.label,
+          ...bounds
+        },
+        boundsReference: { width: 800, height: 800, unit: "pixels" as const }
+      };
+    });
+    return [...nativeLayers, ...elementLayers].map((layer) => ({ ...layer, placement: placements.get(layer.id) }));
+  }
+
+  function automationLayerLock(
+    layer: EditorLayer & { placement?: { movable: boolean; movementKey: string | null } },
+    value = historyRef.current.present.value,
+    mode: WatchfacePreviewMode = automationModeRef.current
+  ) {
+    const modeDesign = resolveWatchfaceModeDesign(value.design, mode);
+    // Visibility and styling are individual-layer edits. Group/shared-position
+    // locks are represented separately by placement.movable.
+    const explicitlyLocked = (modeDesign.lockedLayerIds ?? []).includes(layer.id);
+    const readOnly =
+      !layer.canHide &&
+      !Object.values(layer.capabilities).some((capability) => capability === true);
+    return { locked: explicitlyLocked || readOnly, readOnly };
+  }
+
+  function automationDocument() {
+    const current = historyRef.current;
+    const currentValue = current.present.value;
+    const currentLayers = automationLayers(currentValue);
+    const placementReference = details ? pickPreviewResolution(detailsForCompositionMode(
+      applyConfigTextEditsToDetails(details, currentValue.design.configTextEdits), automationModeRef.current
+    )) : null;
+    const resolutionCapabilities = (details?.resolutions ?? []).map((resolution) => ({
+      directory: resolution.directory,
+      width: resolution.width,
+      height: resolution.height,
+      hasCurrentConfig: Object.keys(resolution.config).length > 0,
+      hasAodConfig: Object.keys(resolution.aodConfig).length > 0
+    }));
+    return {
+      sessionId,
+      revision: automationRevisionRef.current,
+      dirty: isWatchfaceEditorHistoryDirty(current, checkpoint, sessionId),
+      busy: automationBusy(),
+      project: {
+        ...(projectId ? { projectId } : {}),
+        name: currentValue.projectName
+      },
+      archive: structuredClone(starterArchive),
+      target: {
+        firmwareType: targetFirmwareType,
+        watchModel: targetWatchModel
+      },
+      view: automationView(),
+      capabilities: {
+        aod: Boolean(details && hasWatchfaceAod(details)),
+        placement: {
+          width: placementReference?.width ?? 800,
+          height: placementReference?.height ?? 800,
+          unit: "pixels",
+          origin: "top-left",
+          nativeOffsetRounding: "nearest-integer",
+          bounds: "rotation-aware axis-aligned bounds; text uses rendered font metrics; decorative effects excluded"
+        },
+        resolutions: resolutionCapabilities,
+        nativeResolutions: structuredClone(details?.resolutions ?? []),
+        layers: currentLayers.map((layer) => ({
+          ...layer,
+          ...automationLayerLock(layer, currentValue)
+        })),
+        schemaVersion: 1,
+        schemaResource: "watchface://automation/schema"
+      },
+      advanced: {
+        configTextBaselines: structuredClone(configTextBaselines)
+      },
+      design: structuredClone(currentValue.design),
+      diagnostics: automationDiagnostics(currentValue),
+      canUndo: canUndoWatchfaceEditorHistory(current),
+      canRedo: canRedoWatchfaceEditorHistory(current)
+    };
+  }
+
+  async function handleAutomationRequest(
+    method: string,
+    params: Record<string, unknown>
+  ): Promise<unknown> {
+    if (method === "get_document") return automationDocument();
+
+    if (method === "apply_commands") {
+      assertAutomationSession(params, true);
+      if (automationBusy()) {
+        throw new WatchfaceAutomationError(
+          "EDITOR_BUSY",
+          "Finish the active gesture or sprite import before applying commands."
+        );
+      }
+      if (!details) {
+        throw new WatchfaceAutomationError("EDITOR_NOT_READY", "Template details are still loading.");
+      }
+      if (!Array.isArray(params.commands)) {
+        throw new WatchfaceAutomationError("INVALID_PARAMS", "commands must be an array.");
+      }
+      const mode = params.mode === undefined
+        ? automationModeRef.current
+        : params.mode === "aod"
+          ? "aod"
+          : "current";
+      if (!hasWatchfaceAod(details) && (
+        mode === "aod" || params.commands.some((command) =>
+          typeof command === "object" && command !== null &&
+          "op" in command && command.op === "set_mode_overrides" &&
+          "overrides" in command && command.overrides !== null
+        )
+      )) {
+        throw new WatchfaceAutomationError("UNSUPPORTED_MODE", "This template has no always-on display mode.");
+      }
+      const result = applyWatchfaceAutomationCommands(
+        historyRef.current.present.value,
+        params.commands,
+        { details, mode }
+      );
+      applyHistory(recordWatchfaceEditorHistory(historyRef.current, result.value));
+      if (result.changedLayerIds.length > 0) {
+        const updatedLayers = automationLayers(result.value, mode);
+        const validIds = result.changedLayerIds.filter((id: string) =>
+          updatedLayers.some((layer) => layer.id === id)
+        );
+        if (validIds.length > 0) {
+          automationSelectionRef.current = {
+            selectedId: validIds.at(-1)!,
+            selectedIds: validIds
+          };
+          setSelectedIds(validIds);
+          setSelectedId(validIds.at(-1)!);
+        } else if (
+          result.changedLayerIds.some((id: string) =>
+            automationSelectionRef.current.selectedIds.includes(id)
+          )
+        ) {
+          automationSelectionRef.current = {
+            selectedId: "background",
+            selectedIds: ["background"]
+          };
+          setSelectedIds(["background"]);
+          setSelectedId("background");
+        }
+      }
+      return {
+        sessionId,
+        revision: automationRevisionRef.current,
+        dirty: isWatchfaceEditorHistoryDirty(
+          historyRef.current,
+          checkpoint,
+          sessionId
+        ),
+        changedLayerIds: result.changedLayerIds,
+        diagnostics: result.diagnostics
+      };
+    }
+
+    if (method === "undo" || method === "redo") {
+      assertAutomationSession(params, true);
+      if (automationBusy()) {
+        throw new WatchfaceAutomationError("EDITOR_BUSY", "Finish the active edit before changing history.");
+      }
+      const current = historyRef.current;
+      const available = method === "undo"
+        ? canUndoWatchfaceEditorHistory(current)
+        : canRedoWatchfaceEditorHistory(current);
+      if (available) {
+        applyHistory(
+          method === "undo"
+            ? undoWatchfaceEditorHistory(current)
+            : redoWatchfaceEditorHistory(current)
+        );
+      }
+      const next = historyRef.current;
+      return {
+        sessionId,
+        revision: automationRevisionRef.current,
+        dirty: isWatchfaceEditorHistoryDirty(next, checkpoint, sessionId),
+        canUndo: canUndoWatchfaceEditorHistory(next),
+        canRedo: canRedoWatchfaceEditorHistory(next)
+      };
+    }
+
+    if (method === "select") {
+      assertAutomationSession(params);
+      if (automationBusy()) {
+        throw new WatchfaceAutomationError("EDITOR_BUSY", "Finish the active edit before changing selection.");
+      }
+      const requestedIds = params.layerIds ?? params.ids;
+      const ids = Array.isArray(requestedIds)
+        ? requestedIds.map((id, index) => requireAutomationString(id, `layerIds[${index}]`))
+        : [requireAutomationString(params.id, "id")];
+      if (ids.length === 0) {
+        throw new WatchfaceAutomationError("INVALID_PARAMS", "Select at least one layer.");
+      }
+      const knownIds = new Set([
+        "background",
+        ...automationLayers().map((layer) => layer.id)
+      ]);
+      const unknown = ids.filter((id) => !knownIds.has(id));
+      if (unknown.length > 0) {
+        throw new WatchfaceAutomationError(
+          "UNKNOWN_LAYER",
+          `Unknown layer${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}`
+        );
+      }
+      setSelectedIds(ids);
+      setSelectedId(ids.at(-1)!);
+      automationSelectionRef.current = {
+        selectedId: ids.at(-1)!,
+        selectedIds: ids
+      };
+      return { sessionId, revision: automationRevisionRef.current, view: { ...automationView(), selectedId: ids.at(-1)!, selectedIds: ids } };
+    }
+
+    if (method === "set_view") {
+      assertAutomationSession(params);
+      if (automationBusy()) {
+        throw new WatchfaceAutomationError("EDITOR_BUSY", "Finish the active edit before changing the editor view.");
+      }
+      const mode: WatchfaceAutomationMode = params.mode === undefined
+        ? automationModeRef.current
+        : params.mode === "aod"
+          ? "aod"
+          : "current";
+      if (mode === "aod" && (!details || !hasWatchfaceAod(details))) {
+        throw new WatchfaceAutomationError("UNSUPPORTED_MODE", "This template has no always-on display mode.");
+      }
+      let resolution = automationResolutionRef.current;
+      if (params.resolution !== undefined) {
+        const requestedResolution = typeof params.resolution === "string"
+          ? requireAutomationString(params.resolution, "resolution")
+          : requireAutomationNumber(params.resolution, "resolution");
+        const match = details?.resolutions.find((candidate) =>
+          typeof requestedResolution === "string"
+            ? candidate.directory === requestedResolution
+            : candidate.width === requestedResolution
+        );
+        if (!match) {
+          throw new WatchfaceAutomationError("UNKNOWN_RESOLUTION", `Unknown resolution width ${requestedResolution}.`);
+        }
+        resolution = match.directory;
+        setWatchPreviewDirectory(resolution);
+      }
+      if (params.previewComplication !== undefined) {
+        const complication = requireAutomationString(
+          params.previewComplication,
+          "previewComplication"
+        );
+        const available = details
+          ? getAvailableComplications(details).find(
+              (candidate) => candidate.id === complication
+            )
+          : undefined;
+        if (!available) {
+          throw new WatchfaceAutomationError(
+            "UNKNOWN_COMPLICATION",
+            `Preview complication ${complication} is not available in this template.`
+          );
+        }
+        setAutomationPreviewComplication(available.id);
+      }
+      setPreviewMode(mode);
+      automationModeRef.current = mode;
+      automationResolutionRef.current = resolution;
+      const nextView = automationView(mode);
+      return {
+        sessionId,
+        revision: automationRevisionRef.current,
+        view: {
+          ...nextView,
+          mode,
+          resolution: resolution || null,
+          previewComplication:
+            typeof params.previewComplication === "string"
+              ? params.previewComplication
+              : nextView.previewComplication
+        }
+      };
+    }
+
+    if (method === "render_preview") {
+      assertAutomationSession(params);
+      if (automationBusy()) {
+        throw new WatchfaceAutomationError("EDITOR_BUSY", "Finish the active edit before rendering.");
+      }
+      const mode: WatchfacePreviewMode = params.mode === undefined
+        ? automationModeRef.current
+        : params.mode === "aod"
+          ? "aod"
+          : "current";
+      if (mode === "aod" && (!details || !hasWatchfaceAod(details))) {
+        throw new WatchfaceAutomationError("UNSUPPORTED_MODE", "This template has no always-on display mode.");
+      }
+      const requestedResolution = params.resolution === undefined
+        ? automationResolutionRef.current
+        : typeof params.resolution === "string"
+          ? requireAutomationString(params.resolution, "resolution")
+          : requireAutomationNumber(params.resolution, "resolution");
+      const targetResolution = typeof requestedResolution === "number"
+        ? details?.resolutions.find((candidate) => candidate.width === requestedResolution)
+        : details?.resolutions.find(
+            (candidate) => candidate.directory === requestedResolution
+          ) ?? pickWatchPreviewResolution(details!);
+      if (!targetResolution) {
+        throw new WatchfaceAutomationError("UNKNOWN_RESOLUTION", "No preview resolution is available.");
+      }
+      const size = params.size === undefined
+        ? targetResolution.width
+        : Math.max(64, Math.min(1600, Math.round(requireAutomationNumber(params.size, "size"))));
+      const snapshotRevision = automationRevisionRef.current;
+      const designSnapshot = historyRef.current.present.value.design;
+      const dataUrl = await renderExportPreview(
+        designSnapshot,
+        mode,
+        undefined,
+        size,
+        targetResolution.directory,
+        automationPreviewScenario(params.scenario)
+      );
+      return {
+        sessionId,
+        revision: snapshotRevision,
+        mode,
+        resolution: targetResolution.directory,
+        width: size,
+        height: size,
+        mimeType: "image/png",
+        dataUrl
+      };
+    }
+
+    if (method === "validate") {
+      assertAutomationSession(params);
+      const diagnostics = automationDiagnostics();
+      return {
+        sessionId,
+        revision: automationRevisionRef.current,
+        valid: !diagnostics.some(
+          (diagnostic: WatchfaceAutomationDiagnostic) =>
+            diagnostic.severity === "error"
+        ),
+        diagnostics
+      };
+    }
+
+    if (method === "save") {
+      assertAutomationSession(params, true);
+      if (automationBusy()) {
+        throw new WatchfaceAutomationError("EDITOR_BUSY", "Finish the active edit before saving.");
+      }
+      if (params.name !== undefined) {
+        const name = requireAutomationString(params.name, "name").trim();
+        if (name.length > 80) {
+          throw new WatchfaceAutomationError("INVALID_PARAMS", "name can contain up to 80 characters.");
+        }
+        setProjectName(name);
+      }
+      const saved = await saveProject(false);
+      if (!saved) throw new WatchfaceAutomationError("SAVE_FAILED", "The project could not be saved.");
+      return {
+        sessionId,
+        revision: automationRevisionRef.current,
+        dirty: !lastSaveWasCurrentRef.current,
+        project: saved
+      };
+    }
+
+    if (method === "export_project") {
+      assertAutomationSession(params);
+      if (automationBusy()) {
+        throw new WatchfaceAutomationError("EDITOR_BUSY", "Finish the active edit before exporting.");
+      }
+      const value = historyRef.current.present.value;
+      const name = value.projectName.trim() || "Custom watch face";
+      return {
+        name,
+        design: structuredClone(value.design),
+        sourceArchiveId: starterArchive.archiveId,
+        ...(targetFirmwareType ? { firmwareType: targetFirmwareType } : {}),
+        previewDataUrl: await renderExportPreview(value.design, "current")
+      };
+    }
+
+    if (method === "build_archive") {
+      assertAutomationSession(params, true);
+      if (automationBusy()) {
+        throw new WatchfaceAutomationError("EDITOR_BUSY", "Finish the active edit before building.");
+      }
+      const snapshotRevision = automationRevisionRef.current;
+      const requestedName = params.name === undefined
+        ? undefined
+        : requireAutomationString(params.name, "name").trim();
+      const built = await createArchive("automation", requestedName);
+      if (!built) throw new WatchfaceAutomationError("BUILD_FAILED", "The archive could not be built.");
+      return { ...built, sessionId, revision: snapshotRevision };
+    }
+
+    if (method === "convert") {
+      assertAutomationSession(params, true);
+      if (automationBusy()) {
+        throw new WatchfaceAutomationError("EDITOR_BUSY", "Finish the active edit before converting.");
+      }
+      const targetArchive = params.targetArchive as CorosWatchfaceArchive | undefined;
+      if (!targetArchive?.archiveId) {
+        throw new WatchfaceAutomationError("INVALID_PARAMS", "convert requires targetArchive.");
+      }
+      const value = historyRef.current.present.value;
+      return onAutomationConvert({
+        design: structuredClone(value.design),
+        name: typeof params.name === "string" ? params.name : value.projectName,
+        sourceDirty: isWatchfaceEditorHistoryDirty(historyRef.current, checkpoint, sessionId),
+        targetArchive,
+        ...(typeof params.firmwareType === "string" ? { firmwareType: params.firmwareType } : {}),
+        ...(typeof params.watchModel === "string" ? { watchModel: params.watchModel as WatchModelId } : {})
+      });
+    }
+
+    throw new WatchfaceAutomationError("METHOD_NOT_FOUND", `Unknown editor method ${method}.`);
+  }
+
+  automationControllerRef.current = {
+    status: () => ({
+      sessionId,
+      revision: automationRevisionRef.current,
+      dirty: isWatchfaceEditorHistoryDirty(historyRef.current, checkpoint, sessionId),
+      busy: automationBusy()
+    }),
+    request: handleAutomationRequest
+  };
+
+  const automationEditorReady = Boolean(details && backgroundDataUrl);
+  useEffect(() => {
+    if (!automationEditorReady) {
+      api.setWatchfaceAutomationReady("editor", false);
+      return;
+    }
+    const proxy: WatchfaceAutomationEditorController = {
+      status: () => automationControllerRef.current!.status(),
+      request: (method, params) =>
+        automationControllerRef.current!.request(method, params)
+    };
+    const unregister = registerWatchfaceAutomationEditor(proxy);
+    api.setWatchfaceAutomationReady("editor", true);
+    return () => {
+      api.setWatchfaceAutomationReady("editor", false);
+      unregister();
+    };
+  }, [api, automationEditorReady, sessionId]);
+
   const layerSearch = layerQuery.trim().toLowerCase();
   const layerMatchesSearch = (label: string) =>
     !layerSearch || label.toLowerCase().includes(layerSearch);
@@ -6765,7 +7495,7 @@ export function WatchfaceEditor({
                   </span>
                   <span className="wf-export-option-copy">
                     <strong>Preview export</strong>
-                    <small>Review the final render</small>
+                    <small>Inspect compiled pixels at 100%</small>
                   </span>
                 </button>
                 <button
@@ -7355,6 +8085,7 @@ export function WatchfaceEditor({
               <button type="button" title="Align top" aria-label="Align top" onClick={() => alignSelection("top")}><AlignVerticalJustifyStart size={15} /></button>
               <button type="button" title="Align vertical centers" aria-label="Align vertical centers" onClick={() => alignSelection("center-y")}><AlignVerticalJustifyCenter size={15} /></button>
               <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignSelection("bottom")}><AlignVerticalJustifyEnd size={15} /></button>
+              <button type="button" title="Align visible glyph baselines; center colons beside the tallest glyphs" aria-label="Align glyph baselines" disabled={aligningGlyphs || selectedLayoutItems().length < 2} onClick={() => void alignGlyphBaselines()}>Baseline</button>
               <span aria-hidden="true" />
               <button type="button" title="Distribute horizontal spacing" aria-label="Distribute horizontal spacing" disabled={selectedLayoutItems().length < 3} onClick={() => distributeSelection("horizontal")}><AlignHorizontalSpaceBetween size={15} /></button>
               <button type="button" title="Distribute vertical spacing" aria-label="Distribute vertical spacing" disabled={selectedLayoutItems().length < 3} onClick={() => distributeSelection("vertical")}><AlignVerticalSpaceBetween size={15} /></button>
@@ -7989,87 +8720,11 @@ export function WatchfaceEditor({
       ) : null}
 
       {exportPreviewImages ? (
-        <div className="wf-modal-backdrop" role="presentation">
-          <section
-            className="wf-modal wf-export-preview-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="wf-export-preview-title"
-          >
-            <header className="wf-export-preview-header">
-              <div>
-                <h2 id="wf-export-preview-title">Export preview</h2>
-                <p>This is rendered by the same path used when you send the face to COROS.</p>
-              </div>
-              <span>{watchCoordinateWidth} × {watchCoordinateHeight}</span>
-            </header>
-            <div className="wf-export-preview-grid">
-              <article>
-                <div className="wf-export-preview-label">
-                  <strong>COROS app</strong>
-                  <span>Archive preview</span>
-                </div>
-                <div className="wf-export-phone-preview">
-                  <img src={exportPreviewImages.current} alt="COROS app archive preview" />
-                </div>
-                <p>The exact 800 × 800 <code>watchface_customize.png</code> included in the archive, rendered from Current.</p>
-              </article>
-              <article>
-                <div className="wf-export-preview-label">
-                  <strong>Current</strong>
-                  <span>On-watch display</span>
-                </div>
-                <div className="wf-export-watch-preview">
-                  <img src={exportPreviewImages.current} alt="Current on-watch preview" />
-                </div>
-                <p>How Current is cropped on the selected watch display.</p>
-              </article>
-              <article>
-                <div className="wf-export-preview-label">
-                  <strong>Always-on</strong>
-                  <span>{supportsAod ? "AODconfig.txt" : "Uses Current"}</span>
-                </div>
-                <div className="wf-export-watch-preview">
-                  <img src={exportPreviewImages.aod} alt="Always-on display preview" />
-                </div>
-                <p>
-                  {supportsAod
-                    ? "The independent always-on layout rendered from AODconfig.txt."
-                    : "This template has no separate AODconfig.txt, so Current remains visible."}
-                </p>
-              </article>
-            </div>
-            <div className="wf-modal-actions">
-              <button type="button" className="secondary-button" onClick={() => setExportPreviewImages(null)}>
-                Close
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={spriteImportPending || exporting}
-                onClick={() => {
-                  setExportPreviewImages(null);
-                  void exportEditableProject();
-                }}
-              >
-                {exporting ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
-                Export editable ZIP
-              </button>
-              <button
-                type="button"
-                className="primary-button"
-                disabled={spriteImportPending || creating}
-                onClick={() => {
-                  setExportPreviewImages(null);
-                  void createArchive();
-                }}
-              >
-                {creating ? <Loader2 className="spin" size={15} /> : <Send size={15} />}
-                Send to COROS
-              </button>
-            </div>
-          </section>
-        </div>
+        <WatchfaceExportPreview api={api} {...exportPreviewImages}
+          complication={design.previewComplication as WatchfaceComplicationId}
+          onClose={closeExportPreview}
+          onError={onError}
+          onPublish={onPublish} />
       ) : null}
 
       {leaveOpen ? (
@@ -9724,7 +10379,7 @@ export function WatchfaceEditor({
             "Typography",
             <div className="wf-property-stack">
         <label className="field">Number alignment<select value={style?.align ?? ""} onChange={(event) => { const align = (event.target.value || undefined) as "left" | "center" | "right" | undefined; setMetricStyle("battery", { align }); }}><option value="">Template default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
-              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setMetricStyle("battery", { fontFamily, rasterFont: undefined })} rasterFont={design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle("battery", typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle("battery", { letterSpacing })} />
+              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setMetricStyle("battery", { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle("battery", typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle("battery", { letterSpacing })} />
               <div className="watchface-position-inputs">
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle("battery", { scale: Math.max(0.01, scale) })} /></label>
                 <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle("battery", { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
@@ -9755,7 +10410,7 @@ export function WatchfaceEditor({
             "Typography",
             <div className="wf-property-stack">
               {layer.timePartId === "autoTime" ? <button type="button" className="secondary-button" onClick={convertAutoTimeToSeparate}>Separate hours and minutes</button> : null}
-              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setTimeStyle(layer.timePartId!, { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setTimeStyle(layer.timePartId!, typography)} onLetterSpacingChange={(letterSpacing) => setTimeStyle(layer.timePartId!, { letterSpacing })} />
+              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setTimeStyle(layer.timePartId!, { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setTimeStyle(layer.timePartId!, typography)} onLetterSpacingChange={(letterSpacing) => setTimeStyle(layer.timePartId!, { letterSpacing })} />
               <div className="watchface-position-inputs">
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setTimeStyle(layer.timePartId!, { scale: Math.max(0.01, scale) })} /></label>
                 <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setTimeStyle(layer.timePartId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
@@ -9879,7 +10534,7 @@ export function WatchfaceEditor({
             "Typography",
             <div className="wf-property-stack">
         <label className="field">Number alignment<select value={style?.align ?? ""} onChange={(event) => { const align = (event.target.value || undefined) as "left" | "center" | "right" | undefined; setMetricStyle(layer.metricId!, { align }); }}><option value="">Template default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
-              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={design.rasterFont} onRasterFontChange={setRasterFont} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle(layer.metricId!, typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
+              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle(layer.metricId!, typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
               <div className="watchface-position-inputs">
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, scale) })} /></label>
                 {supportsWatchfaceSpriteRotation(layer.metricId) ? <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle(layer.metricId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label> : null}
@@ -10075,9 +10730,9 @@ export function WatchfaceEditor({
                   }
                   setDateStyle(partId, { fontFamily, rasterFont: undefined, ...(supportsNativeSize ? { nativeSize: true } : {}), ...(partId === "dateMonth" ? { monthFormat: undefined } : {}) });
                 }}
-                rasterFont={design.rasterFont}
+                rasterFont={style?.rasterFont ?? design.rasterFont}
                 rasterFontRequiredText={partId === "weekday" ? "MON" : usesMonthLabels ? "JAN" : undefined}
-                onRasterFontChange={setRasterFont}
+                onRasterFontChange={(rasterFont) => setDateStyle(partId, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })}
                 typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }}
                 onTypographyChange={(typography) => setDateStyle(partId, typography)}
                 onLetterSpacingChange={(letterSpacing) =>
@@ -10512,8 +11167,8 @@ export function WatchfaceEditor({
               nativeSize: Boolean(fontFamily)
             })
           }
-          rasterFont={design.rasterFont}
-          onRasterFontChange={setRasterFont}
+          rasterFont={design.selectableMetricStyle?.rasterFont ?? design.rasterFont}
+          onRasterFontChange={(rasterFont) => setSelectableMetricStyle({ rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })}
           typography={{
             fontWeight:
               design.selectableMetricStyle?.fontWeight ??

@@ -368,6 +368,32 @@ async function main() {
     "A PNG shared by config and AODconfig should only be described once"
   );
 
+  // Direct icons may use the same numbered filenames as font/state folders.
+  const numberedIconEntries = fixtureEntries.map((entry) => {
+    if (entry.name.endsWith('/config.txt')) return { ...entry, data: Buffer.from(FIXTURE_CONFIG + [
+      '', '[control_sunset_icon]=studio\\sunset\\00.png',
+      '[am_icon]=studio\\ampm\\00.png', '[pm_icon]=studio/ampm/01.png',
+      '[arc_cut_icon]=01/00.png'
+    ].join('\r\n')) };
+    if (entry.name.endsWith('/AODconfig.txt')) return { ...entry, data: Buffer.from(FIXTURE_AOD_CONFIG +
+      '\r\n[control_sunset_icon]=studio/aod_sunset/00.png\r\n[am_icon]=studio/ampm/00.png') };
+    return entry;
+  });
+  const numberedIcons = ['studio/sunset/00.png', 'studio/ampm/00.png', 'studio/ampm/01.png', 'studio/aod_sunset/00.png'];
+  for (const name of [...numberedIcons, 'studio/unused/00.png']) {
+    numberedIconEntries.push({ name: `watchface_800x800/${name}`, data: sourceIcon });
+  }
+  const numberedIconPath = path.join(tempRoot, 'numbered-icons.dat');
+  await fs.writeFile(numberedIconPath, createStoreZip(numberedIconEntries));
+  const numberedArchive = await watchfaces.selectCorosWatchfaceArchive(numberedIconPath);
+  const numberedResolution = (await watchfaces.describeCorosWatchfaceTemplate(numberedArchive.archiveId)).resolutions[0];
+  for (const name of [...numberedIcons, '01/00.png']) {
+    const matches = numberedResolution.icons.filter((file) => file.path === `watchface_800x800/${name}`);
+    assert.equal(matches.length, 1, `Direct numbered PNG ${name} must be discovered exactly once`);
+  }
+  assert.equal(numberedResolution.icons.some((file) => file.path.includes('/unused/')), false, 'Unreferenced numbered sprites are not standalone icons');
+  assert.equal(numberedResolution.spriteFolders.find((folder) => folder.folder === '01').files.length, 10, 'Direct icon references must preserve digit folder discovery');
+
   // --- Template asset export ---------------------------------------------
   const [stepAsset] = await watchfaces.loadCorosWatchfaceTemplateAssets(
     starter.archiveId,

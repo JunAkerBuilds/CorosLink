@@ -569,6 +569,8 @@ export interface CorosWatchfaceConfigAssetOverride {
  * top-to-bottom in equally sized cells; `glyphs` maps those cells to text.
  */
 export interface CorosWatchfaceRasterFont {
+  /** Shared visible height and baseline, as fractions of the PNG cell height. */
+  glyphLayout?: { height: number; baseline: number };
   /** Friendly name shown in the font selector and saved with the project. */
   label: string;
   /** PNG data URL for the full glyph atlas. */
@@ -902,7 +904,7 @@ export interface CorosWatchfaceDesignState {
   tintIcons: boolean;
   previewComplication: string;
   metricChanges: Record<string, boolean>;
-  metricStyles: Record<string, { align?: "left" | "center" | "right"; color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
+  metricStyles: Record<string, { solidAlpha?: boolean; align?: "left" | "center" | "right"; color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Optional native calorie goal arc/bar configuration. */
   kcalProgress?: CorosWatchfaceKcalProgressStyle;
   /** Optional native exercise-goal bar configuration. */
@@ -911,6 +913,8 @@ export interface CorosWatchfaceDesignState {
   exerciseSeparator?: CorosWatchfaceExerciseSeparatorStyle;
   /** Shared digit style for every value shown in the selectable control slot. */
   selectableMetricStyle?: {
+    /** Export solid glyph pixels after all resizing and effects. */
+    solidAlpha?: boolean;
     align?: "left" | "center" | "right";
     color?: string;
     scale: number;
@@ -945,11 +949,13 @@ export interface CorosWatchfaceDesignState {
   controlIconOffsets?: Record<string, { dx: number; dy: number }>;
   /** Converts firmware auto-aligned HH:MM into four independently positioned digits. */
   separateAutoTime?: boolean;
-  timeStyles: Record<string, { color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
+  timeStyles: Record<string, { solidAlpha?: boolean; color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Weekday/month/day sizing; absent in projects saved before resizing. */
   dateStyles?: Record<
     string,
     {
+      /** Export solid glyph pixels after all resizing and effects. */
+      solidAlpha?: boolean;
       scale: number;
       /** Clockwise rotation applied inside each firmware sprite canvas. */
       rotation?: number;
