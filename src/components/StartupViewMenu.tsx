@@ -36,6 +36,7 @@ export function StartupViewMenu({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setOpen(false);
+        containerRef.current?.querySelector("button")?.focus();
       }
     };
 
@@ -48,7 +49,15 @@ export function StartupViewMenu({
   }, [open]);
 
   return (
-    <div className="startup-view-menu" ref={containerRef}>
+    <div
+      className="startup-view-menu"
+      ref={containerRef}
+      onBlur={(event) => {
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) {
+          setOpen(false);
+        }
+      }}
+    >
       <button
         className="update-settings-trigger startup-view-trigger"
         type="button"
@@ -58,7 +67,7 @@ export function StartupViewMenu({
         title={`Startup view: ${activeLabel}`}
         onClick={() => setOpen((current) => !current)}
       >
-        <Star size={16} aria-hidden="true" />
+        <Star size={18} aria-hidden="true" />
         {showLabel ? <span>Startup view</span> : null}
       </button>
 
@@ -81,6 +90,7 @@ export function StartupViewMenu({
                   onClick={() => {
                     onChange(id);
                     setOpen(false);
+                    containerRef.current?.querySelector("button")?.focus();
                   }}
                 >
                   <Icon size={15} aria-hidden="true" />

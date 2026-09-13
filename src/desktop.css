@@ -1188,6 +1188,12 @@ summary:focus-visible {
   display: none;
 }
 
+:root .app .app-sidebar.is-collapsed .app-sidebar-footer .update-settings-trigger {
+  justify-content: center;
+  padding-inline: 0;
+  gap: 0;
+}
+
 .update-settings-popover--sidebar {
   position: fixed;
   top: auto;

@@ -2214,15 +2214,14 @@ export default function App() {
             >
               <Settings size={18} aria-hidden="true" />
             </button>
-            <ToolbarMoreMenu>
-              <StartupViewMenu
-                value={startupView}
-                onChange={handleStartupViewChange}
-                showDevelopmentItems={showDevelopmentTools}
-                showLabel
-              />
-              <ResourcesMenu showLabel />
-              {IS_DEVELOPMENT_BUILD ? (
+            <StartupViewMenu
+              value={startupView}
+              onChange={handleStartupViewChange}
+              showDevelopmentItems={showDevelopmentTools}
+            />
+            <ResourcesMenu />
+            {IS_DEVELOPMENT_BUILD ? (
+              <ToolbarMoreMenu>
                 <div className="app-toolbar-development">
                   <button
                     className="app-dev-view-toggle"
@@ -2252,8 +2251,8 @@ export default function App() {
                     </>
                   ) : null}
                 </div>
-              ) : null}
-            </ToolbarMoreMenu>
+              </ToolbarMoreMenu>
+            ) : null}
           </div>
           <div className="app-toolbar-watch">
             <span className="app-toolbar-watch-name">

@@ -144,7 +144,8 @@
 }
 
 .app .app-header :is(.app-toolbar-utilities > .theme-toggle,
-  .app-toolbar-settings, .toolbar-more-trigger, .app-toolbar-refresh, .app-navigation-toggle) {
+  .app-toolbar-settings, .startup-view-trigger, .resources-menu-trigger,
+  .toolbar-more-trigger, .app-toolbar-refresh, .app-navigation-toggle) {
   width: 38px;
   height: 38px;
   min-height: 38px;
@@ -163,7 +164,8 @@
 }
 
 .app .app-header :is(.theme-toggle, .app-toolbar-settings, .toolbar-more-trigger,
-  .app-toolbar-refresh, .app-navigation-toggle):hover:not(:disabled) {
+  .startup-view-trigger, .resources-menu-trigger, .app-toolbar-refresh,
+  .app-navigation-toggle):hover:not(:disabled) {
   color: var(--text-primary);
   border-color: var(--line-strong);
   background: var(--toolbar-face);
@@ -171,7 +173,9 @@
 }
 
 .app .app-header :is(.app-toolbar-settings[aria-pressed="true"],
+  .startup-view-trigger[aria-expanded="true"], .resources-menu-trigger[aria-expanded="true"],
   .toolbar-more-trigger[aria-expanded="true"], .theme-toggle:active,
+  .startup-view-trigger:active, .resources-menu-trigger:active,
   .app-toolbar-settings:active, .toolbar-more-trigger:active,
   .app-toolbar-refresh:active:not(:disabled), .app-navigation-toggle:active) {
   color: var(--text-primary);
@@ -243,6 +247,19 @@
 
 .toolbar-more {
   position: relative;
+}
+
+.app .app-header :is(.startup-view-popover, .resources-popover) {
+  top: calc(100% + 12px);
+  width: 280px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 86px);
+  overflow-y: auto;
+  border-color: var(--toolbar-edge);
+  border-radius: 16px;
+  background: var(--toolbar-panel);
+  box-shadow: inset 0 1px 0 var(--toolbar-highlight), 0 12px 32px var(--toolbar-shadow);
+  -webkit-app-region: no-drag;
 }
 
 .toolbar-more-panel {
@@ -362,7 +379,8 @@
     border-left: 0;
   }
 
-  .toolbar-more-panel {
+  .toolbar-more-panel,
+  .app .app-header :is(.startup-view-popover, .resources-popover) {
     position: fixed;
     top: 62px;
     right: 12px;
@@ -377,7 +395,8 @@
   }
 
   .app .app-header :is(.app-toolbar-utilities > .theme-toggle,
-    .app-toolbar-settings, .toolbar-more-trigger, .app-toolbar-refresh, .app-navigation-toggle) {
+    .app-toolbar-settings, .startup-view-trigger, .resources-menu-trigger,
+    .toolbar-more-trigger, .app-toolbar-refresh, .app-navigation-toggle) {
     width: 34px;
     height: 34px;
     min-height: 34px;

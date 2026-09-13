@@ -101,6 +101,7 @@ export function ResourcesMenu({ showLabel = false }: { showLabel?: boolean }) {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setOpen(false);
+        containerRef.current?.querySelector("button")?.focus();
       }
     };
 
@@ -113,9 +114,17 @@ export function ResourcesMenu({ showLabel = false }: { showLabel?: boolean }) {
   }, [open]);
 
   return (
-    <div className="resources-menu" ref={containerRef}>
+    <div
+      className="resources-menu"
+      ref={containerRef}
+      onBlur={(event) => {
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) {
+          setOpen(false);
+        }
+      }}
+    >
       <button
-        className="update-settings-trigger"
+        className="update-settings-trigger resources-menu-trigger"
         type="button"
         aria-label="Help & links"
         aria-haspopup="menu"
@@ -123,7 +132,7 @@ export function ResourcesMenu({ showLabel = false }: { showLabel?: boolean }) {
         title="Help & links"
         onClick={() => setOpen((value) => !value)}
       >
-        <HelpCircle size={16} aria-hidden="true" />
+        <HelpCircle size={18} aria-hidden="true" />
         {showLabel ? <span>Help & links</span> : null}
       </button>
 
@@ -140,7 +149,10 @@ export function ResourcesMenu({ showLabel = false }: { showLabel?: boolean }) {
                   target="_blank"
                   rel="noreferrer"
                   role="menuitem"
-                  onClick={() => setOpen(false)}
+                  onClick={() => {
+                    setOpen(false);
+                    containerRef.current?.querySelector("button")?.focus();
+                  }}
                 >
                   <Icon size={15} aria-hidden="true" />
                   <span className="resources-link-label">{label}</span>
