@@ -1584,7 +1584,7 @@ export async function importRouteFromGpx(
   // multi-second-to-multi-minute wait behind an indeterminate spinner. A single-file
   // import keeps today's reverse-geocoded label; a batch falls back to coordinates,
   // the same format labelForWaypoint itself already falls back to on failure.
-  const isBatchImport = parsed.length > 1;
+  const isBatchImport = result.filePaths.length > 1;
 
   for (const { fileName, route } of parsed) {
     try {
