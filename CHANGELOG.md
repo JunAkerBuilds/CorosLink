@@ -7,8 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.33] - 2026-09-13
+
+### Added
+
+- **Watch-face automation for external AI clients** — enable the local MCP connection in Settings → External AI to create and edit watch faces in the live Studio, import artwork and raster fonts, arrange layers, preview Current/AOD modes, validate, save, and export. Command batches support undo/redo and reject stale edits ([#117](https://github.com/JunAkerBuilds/CorosLink/pull/117)).
+- **Compiled watch-face export preview** — inspect the generated archive at native resolution with Current/AOD and sample-value controls, plus clipping and overlap diagnostics before export or COROS transfer.
+
+### Changed
+
+- Refreshed the desktop interface, navigation, toolbars, activity globe, and Coach composer and suggestions, with updated CorosLink branding and app icons ([#115](https://github.com/JunAkerBuilds/CorosLink/pull/115), [#117](https://github.com/JunAkerBuilds/CorosLink/pull/117)).
+- Improved training-plan library cards, sport badges, weekly load previews, filters, result counts, and comparison guidance.
+- Refined Watch Face Studio editing, layout and alignment controls, raster-font height and baseline controls, and quick-start guidance.
+
 ### Fixed
 
+- Preserved raster-glyph pixels when changing spacing, corrected exported text bounds, and included directly referenced numbered PNG icons in compiled previews.
+- Removed Markdown formatting from Coach history snippets and corrected the update-control alignment in the collapsed sidebar.
 - Clarified that activity backups cover activities synced to COROS Training Hub, and added COROS sync troubleshooting guidance on the Data page, including before sign-in. Recovering recordings stored only on the watch still requires the COROS phone app or support ([#107](https://github.com/JunAkerBuilds/CorosLink/issues/107)).
 
 ## [0.1.32] - 2026-09-05
