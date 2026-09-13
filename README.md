@@ -177,7 +177,7 @@ Browse, cache, and install COROS map data to your watch over USB.
 Generate GPX routes and send them to your phone for import into the COROS app.
 
 - **Generate loop or point-to-point routes** with an OpenRouteService API key
-- **Import GPX files** from Strava, Komoot, or anywhere else — loaded as saved routes with distance, elevation, and loop detection
+- **Import GPX files** from Strava, Komoot, or anywhere else — select one or many at once, loaded as saved routes with distance, elevation, and loop detection; a bad file in the batch is reported without blocking the rest
 - **Sport presets** — running, walking, hiking, road cycling, and mountain biking — plus elevation preference
 - **Interactive map preview** with start pin, fit route, and layer themes
 - **Route stats** — distance, estimated time and pace, ascent/descent, and elevation profile

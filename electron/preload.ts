@@ -19,6 +19,7 @@ import type {
   DrawnRoutePayload,
   GenerateRouteRequest,
   GeneratedRoute,
+  GpxImportSummary,
   LocalTrack,
   RouteActivityType,
   RouteApiKeyValidation,
@@ -878,7 +879,7 @@ const api = {
     ipcRenderer.invoke("maps:saveDrawnRoute", payload),
   importRouteGpx: (
     activityType?: RouteActivityType
-  ): Promise<GeneratedRoute | null> =>
+  ): Promise<GpxImportSummary | null> =>
     ipcRenderer.invoke("maps:importRouteGpx", activityType),
   exportGeneratedRoute: (id: string): Promise<string | null> =>
     ipcRenderer.invoke("maps:exportGeneratedRoute", id),

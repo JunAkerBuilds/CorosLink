@@ -28,6 +28,8 @@ import type {
   DrawnRoutePayload,
   GenerateRouteRequest,
   GeneratedRoute,
+  GpxImportFailure,
+  GpxImportSummary,
   RouteActivityType,
   RouteApiKeyValidation,
   RouteBackend,
@@ -1517,44 +1519,96 @@ export function buildRouteFromGpxContent(
   };
 }
 
+interface ParsedGpxFile {
+  filePath: string;
+  fileName: string;
+  route: GeneratedRoute;
+}
+
 /**
- * Asks the user for a GPX file, converts it into a saved route (with a
- * CorosLink-format GPX on disk so export/share work), and returns it.
- * Resolves null when the dialog is cancelled.
+ * Reads and parses a batch of GPX files into unlabeled, unpersisted routes.
+ * Split out from importRouteFromGpx so multi-file parsing/error-aggregation is
+ * testable without a real file dialog or network geocoding calls. Exported for
+ * tests.
+ */
+export async function readGpxRouteFiles(
+  filePaths: string[],
+  activityType: RouteActivityType = "running"
+): Promise<{ parsed: ParsedGpxFile[]; failures: GpxImportFailure[] }> {
+  const parsed: ParsedGpxFile[] = [];
+  const failures: GpxImportFailure[] = [];
+
+  for (const filePath of filePaths) {
+    const fileName = path.basename(filePath);
+    try {
+      const content = await fs.promises.readFile(filePath, "utf8");
+      const fallbackName = path.basename(filePath, path.extname(filePath));
+      const route = buildRouteFromGpxContent(content, fallbackName, activityType);
+      parsed.push({ filePath, fileName, route });
+    } catch (caught) {
+      failures.push({
+        fileName,
+        message: caught instanceof Error ? caught.message : String(caught)
+      });
+    }
+  }
+
+  return { parsed, failures };
+}
+
+/**
+ * Asks the user for one or more GPX files, converts each into a saved route
+ * (with a CorosLink-format GPX on disk so export/share work), and returns the
+ * imported routes plus any per-file failures. A bad file among a good batch
+ * does not abort the rest. Resolves null when the dialog is cancelled.
  */
 export async function importRouteFromGpx(
   activityType: RouteActivityType = "running"
-): Promise<GeneratedRoute | null> {
+): Promise<GpxImportSummary | null> {
   const result = await dialog.showOpenDialog({
     title: "Import GPX route",
     filters: [{ name: "GPX", extensions: ["gpx"] }],
-    properties: ["openFile"]
+    properties: ["openFile", "multiSelections"]
   });
-  if (result.canceled || !result.filePaths[0]) {
+  if (result.canceled || result.filePaths.length === 0) {
     return null;
   }
 
-  const filePath = result.filePaths[0];
-  const content = await fs.promises.readFile(filePath, "utf8");
-  const fallbackName = path.basename(filePath, path.extname(filePath));
-  const route = buildRouteFromGpxContent(content, fallbackName, activityType);
+  const { parsed, failures } = await readGpxRouteFiles(
+    result.filePaths,
+    activityType
+  );
+  const routes: GeneratedRoute[] = [];
 
-  // Best-effort readable labels; coordinates remain as fallback.
-  const startLabel = await labelForWaypoint({
-    lat: route.points[0]!.lat!,
-    lon: route.points[0]!.lon!
-  });
-  const lastPoint = route.points[route.points.length - 1]!;
-  const endLabel =
-    route.mode === "loop"
-      ? undefined
-      : await labelForWaypoint({ lat: lastPoint.lat!, lon: lastPoint.lon! });
+  for (const { fileName, route } of parsed) {
+    try {
+      // Best-effort readable labels; coordinates remain as fallback.
+      const startLabel = await labelForWaypoint({
+        lat: route.points[0]!.lat!,
+        lon: route.points[0]!.lon!
+      });
+      const lastPoint = route.points[route.points.length - 1]!;
+      const endLabel =
+        route.mode === "loop"
+          ? undefined
+          : await labelForWaypoint({ lat: lastPoint.lat!, lon: lastPoint.lon! });
 
-  return persistRoute({
-    ...route,
-    startLocation: startLabel,
-    destinationLocation: endLabel
-  });
+      routes.push(
+        await persistRoute({
+          ...route,
+          startLocation: startLabel,
+          destinationLocation: endLabel
+        })
+      );
+    } catch (caught) {
+      failures.push({
+        fileName,
+        message: caught instanceof Error ? caught.message : String(caught)
+      });
+    }
+  }
+
+  return { routes, failures };
 }
 
 export function deleteGeneratedRoute(id: string): boolean {

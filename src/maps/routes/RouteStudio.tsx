@@ -401,16 +401,36 @@ export function RouteStudio({
     onError(null);
     onMessage(null);
     try {
-      const route = await api.importRouteGpx(activityType);
-      if (!route) {
+      const summary = await api.importRouteGpx(activityType);
+      if (!summary) {
         return;
       }
-      setRoutes(await api.listGeneratedRoutes());
-      setPreviewRoute(route);
-      setActiveSavedId(route.id);
-      setMode("generate");
-      setFitRequestId((id) => id + 1);
-      onMessage(`Imported "${route.name}".`);
+      const { routes: imported, failures } = summary;
+      if (imported.length > 0) {
+        setRoutes(await api.listGeneratedRoutes());
+        const lastRoute = imported[imported.length - 1]!;
+        setPreviewRoute(lastRoute);
+        setActiveSavedId(lastRoute.id);
+        setMode("generate");
+        setFitRequestId((id) => id + 1);
+      }
+
+      if (failures.length === 0) {
+        onMessage(
+          imported.length === 1
+            ? `Imported "${imported[0]!.name}".`
+            : `Imported ${imported.length} routes.`
+        );
+      } else {
+        const failureList = failures.map((failure) => failure.fileName).join(", ");
+        if (imported.length === 0) {
+          onError(`Could not import ${failureList}: ${failures[0]!.message}`);
+        } else {
+          onMessage(
+            `Imported ${imported.length} route${imported.length === 1 ? "" : "s"}; ${failures.length} failed (${failureList}).`
+          );
+        }
+      }
     } catch (caught) {
       onError(toErrorMessage(caught));
     } finally {
@@ -556,7 +576,7 @@ export function RouteStudio({
           className="route-saved-toggle route-import-toggle"
           onClick={() => void handleImportGpx()}
           disabled={importing}
-          title="Import a GPX file as a route"
+          title="Import one or more GPX files as routes"
         >
           {importing ? (
             <Loader2 size={16} className="spin" aria-hidden="true" />

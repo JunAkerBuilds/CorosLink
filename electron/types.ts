@@ -1691,6 +1691,16 @@ export interface GeneratedRoute {
   gpxPath?: string;
 }
 
+export interface GpxImportFailure {
+  fileName: string;
+  message: string;
+}
+
+export interface GpxImportSummary {
+  routes: GeneratedRoute[];
+  failures: GpxImportFailure[];
+}
+
 export interface SpotifyConfig {
   clientId: string;
   clientSecret: string;

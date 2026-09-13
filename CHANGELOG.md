@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Multi-select GPX import** — Route Studio's Import GPX dialog now accepts multiple files in one selection instead of one at a time; a bad file in the batch is reported without blocking the rest.
+
 ### Fixed
 
 - Clarified that activity backups cover activities synced to COROS Training Hub, and added COROS sync troubleshooting guidance on the Data page, including before sign-in. Recovering recordings stored only on the watch still requires the COROS phone app or support ([#107](https://github.com/JunAkerBuilds/CorosLink/issues/107)).
