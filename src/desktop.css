@@ -191,7 +191,8 @@ summary:focus-visible {
 :root .app .app-sidebar-brand .brand-mark {
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: 0;
+  overflow: visible;
   box-shadow: none;
 }
 

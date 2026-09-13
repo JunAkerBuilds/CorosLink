@@ -2294,9 +2294,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  /* The command bar and the side panels each own a stacking context because
-   * both use backdrop-filter. Lift the bar above the later-painted panels so
-   * its Export dropdown is not covered. Kept below the mobile sheet panels. */
+  /* Keep Export above the isolated side panels, below the mobile sheets. */
   position: relative;
   z-index: 3;
   min-width: 0;
@@ -2468,6 +2466,8 @@
 }
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-pane, .watchface-editor-layers, .watchface-editor-inspector) {
+  /* Contain sticky headers even when the theme removes backdrop-filter. */
+  isolation: isolate;
   min-width: 0;
   min-height: 0;
   overflow: auto;
@@ -9762,4 +9762,44 @@ body.wf-value-scrubbing * {
   border: 0;
   background: transparent;
   font-family: monospace;
+}
+
+.watchface-shell .wf-export-preview-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.watchface-shell .wf-export-preview-controls label { display: grid; gap: 6px; }
+.watchface-shell .wf-export-pixel-scroll {
+  overflow: auto;
+  max-height: 58vh;
+  background: #111;
+  border: 1px solid var(--wf-border);
+}
+.watchface-shell .wf-export-pixel-scroll img {
+  display: block;
+  max-width: none;
+  max-height: none;
+  margin: 16px auto;
+  image-rendering: pixelated;
+}
+.watchface-shell .wf-export-pixel-checks { margin: 16px 0; }
+.watchface-shell .wf-export-pixel-checks p { color: var(--text-muted); font-size: var(--wf-text-sm); }
+
+.watchface-shell .wf-export-preview-modal .wf-modal-actions {
+  position: sticky;
+  bottom: -26px;
+  background: var(--wf-surface-raised);
+  padding: 14px 0;
+  border-top: 1px solid var(--wf-border);
+}
+.watchface-shell .wf-export-preview-controls select {
+  min-height: 34px;
+  padding: 5px 10px;
+  border: 1px solid var(--wf-border-strong);
+  border-radius: var(--wf-control-radius);
+  background: var(--wf-surface);
+  color: var(--text-primary);
+  font: inherit;
 }

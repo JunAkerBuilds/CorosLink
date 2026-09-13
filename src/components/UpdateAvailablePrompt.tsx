@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
+import appLogo from "../../build/icon-animated.svg";
 import type { AppUpdateSnapshot } from "../../electron/types";
 
 const DISMISSED_UPDATE_VERSION_KEY =
@@ -150,9 +151,14 @@ export function UpdateAvailablePrompt({
         aria-describedby="update-prompt-description"
       >
         <header className="update-prompt-header">
-          <span className="update-prompt-icon" aria-hidden="true">
-            <Sparkles size={22} />
-          </span>
+          <img
+            className="update-prompt-icon"
+            src={appLogo}
+            alt=""
+            width={46}
+            height={46}
+            aria-hidden="true"
+          />
           <div>
             <p className="update-prompt-eyebrow">Update available</p>
             <h2 id="update-prompt-title">CorosLink {visibleVersion}</h2>

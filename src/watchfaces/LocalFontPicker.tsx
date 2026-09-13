@@ -483,9 +483,26 @@ export function LocalFontPicker({
           Font shape inherited from template
         </p>
       ) : null}
+      {rasterFontIsActive && rasterFont && onRasterFontChange ? (
+        <div className="watchface-typography-controls">
+          {(["height", "baseline"] as const).map((key) => (
+            <label key={key} className="watchface-typography-tracking">
+              {key === "height" ? "Glyph height" : "Baseline"}
+              <span>{Math.round((rasterFont.glyphLayout?.[key] ?? (key === "height" ? 0.94 : 0.97)) * 100)}%</span>
+              <input type="range" min="0.1" max="1" step="0.01" disabled={disabled}
+                value={rasterFont.glyphLayout?.[key] ?? (key === "height" ? 0.94 : 0.97)}
+                onChange={(event) => onRasterFontChange({ ...rasterFont, glyphLayout: {
+                  height: rasterFont.glyphLayout?.height ?? 0.94,
+                  baseline: rasterFont.glyphLayout?.baseline ?? 0.97,
+                  [key]: Number(event.target.value)
+                } })} />
+            </label>
+          ))}
+        </div>
+      ) : null}
       {typography && rasterFontIsActive ? (
         <p className="watchface-typography-hint">
-          The PNG atlas keeps its supplied glyph shapes; sprite spacing still applies.
+          Spacing changes transparent digit cells. Time spacing keeps the digits beside the colon anchored.
         </p>
       ) : null}
 

@@ -102,6 +102,21 @@ export interface WatchfaceSnapTarget {
   visible?: boolean;
 }
 
+/** Minimal canvas surface needed to measure renderer-matching text bounds. */
+export interface WatchfaceTextMeasurementContext {
+  font: string;
+  textAlign: CanvasTextAlign;
+  textBaseline: CanvasTextBaseline;
+  measureText(text: string): Pick<
+    TextMetrics,
+    | "width"
+    | "actualBoundingBoxLeft"
+    | "actualBoundingBoxRight"
+    | "actualBoundingBoxAscent"
+    | "actualBoundingBoxDescent"
+  >;
+}
+
 export type WatchfaceSnapGuideKind =
   | "face-center"
   | "face-edge"
@@ -229,7 +244,8 @@ export function scaleWatchfaceBounds(
 
 /** Rotation-aware bounds for freeform elements authored in 800px space. */
 export function backgroundElementSnapBounds(
-  element: CorosWatchfaceBackgroundElement
+  element: CorosWatchfaceBackgroundElement,
+  measurementContext?: WatchfaceTextMeasurementContext | null
 ): WatchfaceEditorBounds {
   if (element.kind === "line") {
     const radians = (element.rotation * Math.PI) / 180;
@@ -246,13 +262,11 @@ export function backgroundElementSnapBounds(
     };
   }
   if (element.kind === "text") {
-    const width = Math.max(element.text.length, 1) * element.fontSize * 0.64;
-    const height = element.fontSize * 1.4;
-    return rotationAwareCenterBounds(
+    const localBounds = backgroundTextLocalBounds(element, measurementContext);
+    return rotationAwareLocalBounds(
       element.x,
       element.y,
-      width,
-      height,
+      localBounds,
       element.rotation
     );
   }
@@ -263,6 +277,90 @@ export function backgroundElementSnapBounds(
     element.height,
     element.rotation
   );
+}
+
+function backgroundTextLocalBounds(
+  element: Extract<CorosWatchfaceBackgroundElement, { kind: "text" }>,
+  suppliedContext: WatchfaceTextMeasurementContext | null | undefined
+): WatchfaceEditorBounds {
+  const context =
+    suppliedContext === undefined ? createTextMeasurementContext() : suppliedContext;
+  if (context) {
+    context.font = backgroundTextFont(element);
+    context.textAlign = element.align;
+    context.textBaseline = "middle";
+    const metrics = context.measureText(element.text);
+    const measured = {
+      x0: -metrics.actualBoundingBoxLeft,
+      y0: -metrics.actualBoundingBoxAscent,
+      x1: metrics.actualBoundingBoxRight,
+      y1: metrics.actualBoundingBoxDescent
+    };
+    if (Object.values(measured).every(Number.isFinite)) {
+      return normalizedBounds(measured);
+    }
+  }
+
+  // Node and non-canvas callers get deterministic bounds without requiring a DOM.
+  const width = Math.max(element.text.length, 1) * element.fontSize * 0.64;
+  const height = element.fontSize * 1.4;
+  const x0 =
+    element.align === "left"
+      ? 0
+      : element.align === "right"
+        ? -width
+        : -width / 2;
+  return { x0, y0: -height / 2, x1: x0 + width, y1: height / 2 };
+}
+
+function backgroundTextFont(
+  element: Extract<CorosWatchfaceBackgroundElement, { kind: "text" }>
+): string {
+  const family = element.fontFamily
+    ? `"${element.fontFamily.replace(/["\\]/g, "")}"`
+    : "system-ui, sans-serif";
+  return `${element.weight} ${element.fontSize}px ${family}`;
+}
+
+function createTextMeasurementContext(): WatchfaceTextMeasurementContext | null {
+  if (typeof document === "undefined") return null;
+  return document.createElement("canvas").getContext("2d");
+}
+
+function normalizedBounds(bounds: WatchfaceEditorBounds): WatchfaceEditorBounds {
+  return {
+    x0: Math.min(bounds.x0, bounds.x1),
+    y0: Math.min(bounds.y0, bounds.y1),
+    x1: Math.max(bounds.x0, bounds.x1),
+    y1: Math.max(bounds.y0, bounds.y1)
+  };
+}
+
+function rotationAwareLocalBounds(
+  x: number,
+  y: number,
+  bounds: WatchfaceEditorBounds,
+  rotation: number
+): WatchfaceEditorBounds {
+  const radians = (rotation * Math.PI) / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  const corners = [
+    [bounds.x0, bounds.y0],
+    [bounds.x1, bounds.y0],
+    [bounds.x1, bounds.y1],
+    [bounds.x0, bounds.y1]
+  ] as const;
+  const rotated = corners.map(([localX, localY]) => ({
+    x: x + localX * cosine - localY * sine,
+    y: y + localX * sine + localY * cosine
+  }));
+  return {
+    x0: Math.min(...rotated.map((point) => point.x)),
+    y0: Math.min(...rotated.map((point) => point.y)),
+    x1: Math.max(...rotated.map((point) => point.x)),
+    y1: Math.max(...rotated.map((point) => point.y))
+  };
 }
 
 function rotationAwareCenterBounds(

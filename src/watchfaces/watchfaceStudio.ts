@@ -1,3 +1,4 @@
+import { renderAlignedRasterGlyph, spaceWatchfaceGlyph } from "./watchfaceGlyphLayout.ts";
 import type {
   CorosWatchfaceArtwork,
   CorosWatchfaceAssetReplacement,
@@ -47,6 +48,15 @@ export interface WatchfaceTypography {
 }
 
 export interface WatchfaceStudioOptions extends WatchfaceTypography {
+  /** Inspect already-compiled PNGs at native resolution without reprocessing alpha. */
+  compiledPixels?: boolean;
+  compiledClipRect?: { x0: number; y0: number; x1: number; y1: number };
+  onCompiledSprite?: (layer: string, image: CanvasImageSource, x: number, y: number, width: number, height: number, clip?: { x0: number; y0: number; x1: number; y1: number }) => void;
+  onCompiledRect?: (layer: string, width: number, height: number, rect: { x0: number; y0: number; x1: number; y1: number }) => void;
+  /** Optional fixed clock used by external design previews; never changes the watch clock. */
+  previewDate?: Date;
+  /** Representative numeric metric values, keyed by fixed/selectable metric id. */
+  previewValues?: Record<string, string>;
   /** Enables firmware-faithful rendering rules for the selected display mode. */
   previewMode?: WatchfacePreviewMode;
   /** Empty string keeps the template's original digit bitmaps. */
@@ -484,7 +494,15 @@ function retargetWatchfaceCompositionToOwnedMode<
     const matchedKeys = Object.entries(resolution.config).flatMap(
       ([key, value]) => {
         const normalized = normalizedConfigAsset(value);
-        return normalized === sourceFolder || normalized === relativePath
+        // Empty deletion values are not references to the resolution root.
+        // Matching them rewrote hidden positions into bogus asset paths.
+        if (!normalized) return [];
+        // Electron replaces these root assets with the flattened authored
+        // background/preview. Cloning a tinted template bitmap here redirects
+        // config.txt away from that replacement and exports a blank backdrop.
+        if (mode === "current" &&
+            ["background_icon", "watchface_thmb_icon"].includes(key)) return [];
+        return (sourceFolder && normalized === sourceFolder) || normalized === relativePath
           ? [{ key, direct: normalized === relativePath }]
           : [];
       }
@@ -1993,8 +2011,15 @@ const AMPM_SPRITE_FILES = { am: "studio/ampm/00.png", pm: "studio/ampm/01.png" }
 const AMPM_CONFIG_VALUES = { am: "studio\\ampm\\00.png", pm: "studio\\ampm\\01.png" };
 
 function findAmPmIcons(
-  resolution: CorosWatchfaceResolutionDetails
+  resolution: CorosWatchfaceResolutionDetails,
+  compiled = false
 ): { am: CorosWatchfaceSpriteFile; pm: CorosWatchfaceSpriteFile } | null {
+  if (compiled) {
+    const files = [...resolution.icons, ...resolution.spriteFolders.flatMap((folder) => folder.files)];
+    const find = (key: string) => files.find((file) => file.path === `${resolution.directory}/${resolution.config[key]?.replace(/\\/g, "/")}`);
+    const am = find("am_icon"), pm = find("pm_icon");
+    return am && pm ? { am, pm } : null;
+  }
   const lookup = (name: string) =>
     resolution.icons.find(
       (icon) =>
@@ -2213,6 +2238,10 @@ export async function renderRasterFontSprite(
   color: string,
   typography: WatchfaceTypography = {}
 ): Promise<string> {
+  if (/^\d$/.test(text) || rasterFont.glyphLayout) {
+    const aligned = await renderAlignedRasterGlyph(text, width, height, rasterFont, color);
+    if (aligned) return aligned;
+  }
   const glyphs = normalizeRasterFontGlyphs(rasterFont.glyphs);
   const characters = [...text.toUpperCase()];
   if (!rasterFontSupportsText(rasterFont, text) || characters.length === 0) {
@@ -2462,6 +2491,12 @@ export async function renderNativeWatchfaceTextSprite(
     `${fontStyle} ${fontWeight} ${fontSize}px ${quoteFontFamily(fontFamily)}`;
   setCanvasLetterSpacing(measureContext, fontSize * letterSpacing);
   const metrics = measureContext.measureText(text);
+  if (/^\d$/.test(text)) {
+    setCanvasLetterSpacing(measureContext, 0);
+    const family = [..."0123456789"].map((digit) => measureContext.measureText(digit));
+    const cellWidth = Math.ceil(Math.max(...family.map((metric) => textInkMetrics(metric).width)) / 0.96) + 2;
+    return renderDigitSprite(text, cellWidth, targetHeight, fontFamily, color, { ...typography, letterSpacing: 0 });
+  }
   const padding = Math.max(1, Math.ceil(targetHeight * 0.03));
   const ink = textInkMetrics(metrics);
   const width = Math.max(1, Math.ceil(ink.width + padding * 2));
@@ -2494,6 +2529,10 @@ async function renderNativeRasterFontSprite(
   color: string,
   typography: WatchfaceTypography
 ): Promise<string> {
+  if (/^\d$/.test(text) || rasterFont.glyphLayout) {
+    const aligned = await renderAlignedRasterGlyph(text, undefined, height, rasterFont, color);
+    if (aligned) return aligned;
+  }
   const normalizedText = text.toUpperCase();
   const directSprite =
     rasterFont.sprites?.[normalizedText] ??
@@ -2792,6 +2831,8 @@ export function renderDigitSprite(
   const fontWeight = normalizeFontWeight(typography.fontWeight);
   const fontStyle = typography.fontStyle === "italic" ? "italic" : "normal";
   const letterSpacing = Math.max(-0.35, Math.min(0.25, typography.letterSpacing ?? 0));
+  const numeric = /^\d$/.test(text);
+  const familyMetrics = () => [..."0123456789"].map((digit) => context.measureText(digit));
   let fontSize = Math.floor(height * 0.92);
   context.textBaseline = "alphabetic";
   context.fillStyle = color;
@@ -2799,23 +2840,28 @@ export function renderDigitSprite(
     // Use the font's Regular face by default, matching what desktop editors
     // such as Word show when a family is chosen without applying Bold.
     context.font = `${fontStyle} ${fontWeight} ${fontSize}px ${quoteFontFamily(fontFamily)}`;
-    setCanvasLetterSpacing(context, fontSize * letterSpacing);
+    setCanvasLetterSpacing(context, numeric ? 0 : fontSize * letterSpacing);
     const metrics = context.measureText(text);
     const ink = textInkMetrics(metrics);
     const glyphHeight =
       metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-    if (ink.width <= width * 0.96 && glyphHeight <= height * 0.96) {
+    const family = numeric ? familyMetrics() : [metrics];
+    const fitWidth = Math.max(...family.map((metric) => textInkMetrics(metric).width));
+    const fitHeight = Math.max(...family.map((metric) => metric.actualBoundingBoxAscent)) +
+      Math.max(...family.map((metric) => metric.actualBoundingBoxDescent));
+    if ((numeric ? fitWidth : ink.width) <= width * 0.96 && (numeric ? fitHeight : glyphHeight) <= height * 0.96) {
       break;
     }
   }
   const metrics = context.measureText(text);
   const ink = textInkMetrics(metrics);
-  const glyphHeight =
-    metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+  const family = numeric ? familyMetrics() : [metrics];
+  const ascent = Math.max(...family.map((metric) => metric.actualBoundingBoxAscent));
+  const descent = Math.max(...family.map((metric) => metric.actualBoundingBoxDescent));
   context.fillText(
     text,
     (width - ink.width) / 2 + ink.left,
-    (height - glyphHeight) / 2 + metrics.actualBoundingBoxAscent
+    (height - ascent - descent) / 2 + ascent
   );
   return canvas.toDataURL("image/png");
 }
@@ -3133,6 +3179,32 @@ export async function applyWatchfaceDataUrlOpacity(
   return canvas.toDataURL("image/png");
 }
 
+/** Hard-edged glyph coverage, without the edge dithering used for AOD. */
+export function solidifyWatchfaceFontAlpha(pixels: Uint8ClampedArray): void {
+  for (let index = 0; index < pixels.length; index += 4) {
+    if (pixels[index + 3]! >= 128) pixels[index + 3] = 255;
+    else pixels.fill(0, index, index + 4);
+  }
+}
+
+/** Apply only after the final resize/effect pass, which can reintroduce alpha. */
+export async function renderWatchfaceSolidFontSprite(dataUrl: string): Promise<string> {
+  const image = await loadStudioImage(dataUrl, false);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, image.naturalWidth);
+  canvas.height = Math.max(1, image.naturalHeight);
+  const context = canvas.getContext("2d", {
+    colorSpace: "display-p3",
+    willReadFrequently: true
+  });
+  if (!context) throw new Error("Could not render solid watch-face glyphs.");
+  context.drawImage(image, 0, 0);
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  solidifyWatchfaceFontAlpha(imageData.data);
+  context.putImageData(imageData, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
 /** Produces the exact binary-alpha PNG used by AOD preview and export. */
 export async function renderWatchfaceAodSafeSprite(
   dataUrl: string
@@ -3367,6 +3439,8 @@ export type WatchfaceMetricId =
   | "temperature";
 
 export interface WatchfaceMetricSpriteStyle {
+  /** Export this component with solid glyph pixels after resizing and effects. */
+  solidAlpha?: boolean;
   /** Absent preserves the template’s horizontal number alignment. */
   align?: "left" | "center" | "right";
   /** Absent preserves the template sprite color. */
@@ -3402,6 +3476,8 @@ export type WatchfaceTimeStyles = Partial<
 export type WatchfaceDatePartId = "weekday" | "dateMonth" | "dateDay";
 
 export interface WatchfaceDateSpriteStyle {
+  /** Export this component with solid glyph pixels after resizing and effects. */
+  solidAlpha?: boolean;
   /** Legacy artwork zoom used by projects saved before exact dimensions. */
   scale: number;
   /** Clockwise rotation applied inside each firmware sprite canvas. */
@@ -3499,6 +3575,10 @@ export function rasterFontNativeSpriteSize(
 ): { width: number; height: number } | null {
   if (!rasterFont) return null;
   const normalizedText = text.toUpperCase();
+  if (/^\d$/.test(normalizedText) && rasterFont.spriteSizes?.[normalizedText]) {
+    const sizes = Object.entries(rasterFont.spriteSizes).filter(([key]) => /^\d$/.test(key)).map(([, size]) => size);
+    return { width: Math.max(...sizes.map((size) => size.width)), height: Math.max(...sizes.map((size) => size.height)) };
+  }
   const direct = rasterFont.spriteSizes?.[normalizedText];
   if (direct?.width && direct.height) {
     return { width: direct.width, height: direct.height };
@@ -4963,12 +5043,9 @@ export async function buildControlTemperatureSpriteReplacements(
     return {
       path: job.path,
       create: job.create,
-      dataUrl: await rotateSpriteInCanvas(
-        rendered,
-        job.width,
-        job.height,
-        style.rotation
-      )
+      dataUrl: await spaceWatchfaceGlyph(await rotateSpriteInCanvas(
+        rendered, job.width, job.height, style.rotation
+      ), spriteTypography.letterSpacing)
     };
   }));
 }
@@ -5152,12 +5229,9 @@ export async function buildSelectableMetricSpriteComposition(
         return {
           path: job.path,
           create: job.create,
-          dataUrl: await rotateSpriteInCanvas(
-            rendered,
-            job.width,
-            job.height,
-            style.rotation
-          )
+          dataUrl: await spaceWatchfaceGlyph(await rotateSpriteInCanvas(
+            rendered, job.width, job.height, style.rotation
+          ), spriteTypography.letterSpacing)
         };
       })),
       configOverrides: []
@@ -5171,7 +5245,7 @@ export async function buildSelectableMetricSpriteComposition(
   for (const job of jobs) {
     const sourceDataUrl = byPath.get(job.source.path)?.dataUrl;
     if (!rasterized && !sourceDataUrl) continue;
-    const dataUrl = rasterized
+    const unspacedDataUrl = rasterized
       ? await renderNativeWatchfaceTextSprite(
           String(job.digit),
           job.targetHeight,
@@ -5185,6 +5259,7 @@ export async function buildSelectableMetricSpriteComposition(
           style.color,
           Boolean(style.color)
         );
+    const dataUrl = await spaceWatchfaceGlyph(unspacedDataUrl, spriteTypography.letterSpacing);
     const image = await loadStudioImage(dataUrl);
     const group = nativeGroups.get(job.groupKey) ?? [];
     group.push({
@@ -5916,7 +5991,7 @@ export async function buildMetricSpriteReplacements(
       job.height,
       job.rotation
     );
-    replacements.push({ path: job.path, dataUrl, create: job.create });
+    replacements.push({ path: job.path, dataUrl: await spaceWatchfaceGlyph(dataUrl, job.typography.letterSpacing), create: job.create });
   }
   return replacements;
 }
@@ -6009,6 +6084,13 @@ export function buildTimeStyleOverrides(
  * from (or toward) each other to make the editor's digit-spacing setting real
  * both in preview and in the final archive.
  */
+export function timeTrackingOffset(part: string | undefined, slot: string | undefined, height: number, tracking: number): number {
+  const gap = Math.round(height * Math.max(-0.35, Math.min(0.25, tracking)));
+  if (part === "hours") return slot === "high" ? -gap : 0;
+  if (part === "minutes") return slot === "low" ? gap : 0;
+  return Math.round(gap / 2) * (slot === "high" ? -1 : slot === "low" ? 1 : 0);
+}
+
 export function buildTimeTrackingOverrides(
   details: CorosWatchfaceTemplateDetails,
   letterSpacing: number,
@@ -6035,9 +6117,8 @@ export function buildTimeTrackingOverrides(
         if (!position || !sample) {
           continue;
         }
-        const offset = Math.round((sample.height * scale * partSpacing) / 2);
-        const direction = digit.slot === "high" ? -1 : 1;
-        values[digit.posKey] = `{${position.x + direction * offset},${position.y}}`;
+        const offset = timeTrackingOffset(part.id, digit.slot, sample.height * scale, partSpacing);
+        values[digit.posKey] = `{${position.x + offset},${position.y}}`;
       }
     }
     if (Object.keys(values).length > 0) {
@@ -6063,6 +6144,7 @@ export async function buildTimeSpriteReplacements(
     height: number;
     contentWidth: number;
     contentHeight: number;
+    tracking?: number;
     color?: string;
     rotation?: number;
     fontFamily: string;
@@ -6087,6 +6169,7 @@ export async function buildTimeSpriteReplacements(
           source: file,
           path: `${resolution.directory}/${timeStudioFolder("autoTime", "high")}/${String(value).padStart(2, "0")}.png`,
           digit: value,
+          tracking: partTypography.letterSpacing,
           width: canvasSize.width,
           height: canvasSize.height,
           contentWidth: Math.max(
@@ -6191,7 +6274,7 @@ export async function buildTimeSpriteReplacements(
       job.height,
       job.rotation
     );
-    replacements.push({ path: job.path, dataUrl, create: true });
+    replacements.push({ path: job.path, dataUrl: await spaceWatchfaceGlyph(dataUrl, job.tracking), create: true });
   }
   return replacements;
 }
@@ -6409,7 +6492,7 @@ export async function buildDateSpriteComposition(
     }
     if (job.nativeSize) {
       const targetHeight = Math.max(1, Math.round(job.height * job.zoom));
-      const dataUrl = job.rasterized
+      const unspacedDataUrl = job.rasterized
         ? await renderNativeWatchfaceTextSprite(
             job.kind === "week"
               ? WEEKDAY_LABELS[job.value] ?? String(job.value)
@@ -6433,6 +6516,7 @@ export async function buildDateSpriteComposition(
             job.kind === "week" ? job.typography.letterSpacing : 0,
             job.kind === "week" ? job.text.length : 0
           );
+      const dataUrl = /^\d$/.test(job.text) ? await spaceWatchfaceGlyph(unspacedDataUrl, job.typography.letterSpacing) : unspacedDataUrl;
       const image = await loadStudioImage(dataUrl);
       const group = nativeGroups.get(job.groupKey) ?? [];
       group.push({
@@ -6497,7 +6581,7 @@ export async function buildDateSpriteComposition(
     );
     replacements.push({
       path: job.path,
-      dataUrl,
+      dataUrl: /^\d$/.test(job.text) ? await spaceWatchfaceGlyph(dataUrl, job.typography.letterSpacing) : dataUrl,
       create: job.create,
       ...(job.exactCanvas ? { allowDimensionOverride: true } : {})
     });
@@ -7180,13 +7264,9 @@ export function computeLayoutGroupBounds(
             timeStyle?.letterSpacing ?? geometry.letterSpacing ?? 0
           )
         );
-        const slotDirection = key.includes("_high_")
-          ? -1
-          : key.includes("_low_")
-            ? 1
-            : 0;
-        const trackingOffset =
-          Math.round((size.height * tracking) / 2) * slotDirection;
+        const trackingOffset = timeTrackingOffset(group.id,
+          key.includes("_high_") ? "high" : key.includes("_low_") ? "low" : undefined,
+          size.height, tracking);
         const drawX = pos.x + trackingOffset;
         x0 = Math.min(x0, drawX);
         y0 = Math.min(y0, pos.y);
@@ -7441,11 +7521,12 @@ function drawStudioLayerImage(
   rotateSprite = true,
   additionalOpacityLayerId?: string
 ): void {
+  if (options.compiledPixels) options.onCompiledSprite?.(layerId ?? "sprite", image, x, y, width, height, options.compiledClipRect);
   const renderAodSafeAlpha = (
     source: CanvasImageSource,
     alpha = 1
   ): CanvasImageSource => {
-    if (options.previewMode !== "aod") return source;
+    if (options.previewMode !== "aod" || options.compiledPixels) return source;
     const sized = source as {
       naturalWidth?: number;
       naturalHeight?: number;
@@ -7812,7 +7893,8 @@ export async function drawStudioPreview(
   if (!options.deferProgressArcs) {
     renderWatchfaceProgressLayers(context, canvas.width, resolution, options);
   }
-  const now = new Date();
+  const now = options.previewDate && Number.isFinite(options.previewDate.getTime())
+    ? options.previewDate : new Date();
   const weekdayIndex = corosWeekdayIndex(now.getDay());
   const hour = String(now.getHours()).padStart(2, "0");
   const minute = String(now.getMinutes()).padStart(2, "0");
@@ -7893,7 +7975,7 @@ export async function drawStudioPreview(
     wantedSprites.set(layer.source.path, { color: analogIconColor });
   }
 
-  const ampmIcons = options.ampmStyle?.enabled ? findAmPmIcons(resolution) : null;
+  const ampmIcons = options.ampmStyle?.enabled ? findAmPmIcons(resolution, options.compiledPixels) : null;
   const ampmFile = ampmIcons
     ? now.getHours() < 12
       ? ampmIcons.am
@@ -8068,14 +8150,17 @@ export async function drawStudioPreview(
     ? (usesStaticBarometer
         ? [{ rectSuffix: null, sampleValue: complication.sampleValue }]
         : complication.valueParts ?? [{ rectSuffix: null, sampleValue: complication.sampleValue }])
-        .flatMap(({ rectSuffix, sampleValue }) => {
+        .flatMap(({ rectSuffix, sampleValue }, partIndex) => {
           const key = complication.id === "battery"
             ? "control_battery_level_rect"
             : rectSuffix
               ? `control_${complicationPrefix}_${rectSuffix}_rect`
               : `control_${complicationPrefix}_rect`;
           const rect = parseConfigRect(config[key]);
-          return rect ? [{ rect, sampleValue, configValue: config[key] }] : [];
+          const provided = options.previewValues?.[complication.id];
+          const previewValue = provided === undefined ? sampleValue
+            : rectSuffix ? provided.split(/[:.]/)[partIndex] ?? sampleValue : provided;
+          return rect ? [{ rect, sampleValue: previewValue, configValue: config[key] }] : [];
         })
     : [];
   const relativeComplicationRect = relativeComplicationRects[0]?.rect ?? null;
@@ -8199,6 +8284,7 @@ export async function drawStudioPreview(
         rect,
         source,
         value: `${hour}${minute}`,
+        configValue: config.autoalign_time_rect,
         timePartId: "autoTime",
         componentId: "autoTime",
         ...(separatorFile
@@ -8250,7 +8336,7 @@ export async function drawStudioPreview(
       rect: batteryRect,
       configValue: config.battery_level_rect,
       source: batterySource,
-      value: "82",
+      value: options.previewValues?.battery ?? "82",
       metricId: "battery",
       componentId: "battery"
     });
@@ -8279,19 +8365,20 @@ export async function drawStudioPreview(
       continue;
     }
     if (rect && source) {
-      numberPlans.push({ rect, source, value, datePartId });
+      numberPlans.push({ rect, configValue: config[rectKey], source, value, datePartId });
     }
   }
   for (const metric of WATCHFACE_FIXED_METRICS) {
+    if (metric.id === "battery") continue; // Already planned above with its preview value.
     const source = metricFontFolder(resolution, metric);
     if (!source) continue;
-    for (const part of fixedMetricValueParts(metric)) {
+    for (const [partIndex, part] of fixedMetricValueParts(metric).entries()) {
       const rect = parseConfigRect(config[part.rectKey]);
       if (rect) {
         numberPlans.push({
           rect,
           source,
-          value: part.sampleValue,
+          value: options.previewValues?.[metric.id]?.split(/[:.]/)[partIndex] ?? part.sampleValue,
           configValue: config[part.rectKey],
           metricId: metric.id
         });
@@ -8471,9 +8558,7 @@ export async function drawStudioPreview(
       -0.35,
       Math.min(0.25, timeTypography.letterSpacing ?? 0)
     );
-    const trackingOffset = planned.slot
-      ? Math.round((height * tracking) / 2) * (planned.slot === "high" ? -1 : 1)
-      : 0;
+    const trackingOffset = timeTrackingOffset(planned.partId, planned.slot, height, tracking);
     const rasterizedTime = shouldRenderWatchfaceText(
       String(planned.digit),
       timeFontFamily,
@@ -9019,7 +9104,7 @@ export async function drawStudioPreview(
       false,
       complication?.id === "battery" ? "controlBatteryIcon" : undefined
     );
-  } else if (complication?.id === "barometer" && complicationIconPos) {
+  } else if (!options.compiledPixels && complication?.id === "barometer" && complicationIconPos) {
     const fallback = virtualControlIconCanvasSize(resolution);
     const image = await loadStudioImage(
       config.control_barometer_icon
@@ -9047,7 +9132,7 @@ export async function drawStudioPreview(
       "complication",
       false
     );
-  } else if (complication?.id === "battery" && complicationIconPos) {
+  } else if (!options.compiledPixels && complication?.id === "battery" && complicationIconPos) {
     // Some watches offer Battery as a firmware control even though the source
     // template contains no battery control PNG. Draw a preview-only glyph so
     // the editor still represents the on-watch selector without exporting an
@@ -9271,11 +9356,18 @@ export async function drawStudioPreview(
           image = loaded.get(file.path);
         }
         if (image) {
+          if (Math.abs(glyphTypography.letterSpacing ?? 0) >= 0.001) {
+            const cell = document.createElement("canvas");
+            cell.width = nativeGlyph ? image.naturalWidth : styledFile.width;
+            cell.height = nativeGlyph ? image.naturalHeight : styledFile.height;
+            cell.getContext("2d")!.drawImage(image, 0, 0, cell.width, cell.height);
+            image = await loadStudioImage(await spaceWatchfaceGlyph(cell.toDataURL("image/png"), glyphTypography.letterSpacing));
+          }
           styledMetricGlyphs.set(cacheKey, image);
         }
       }
       if (image) {
-        if (nativeGlyph) {
+        if (nativeGlyph || Math.abs(glyphTypography.letterSpacing ?? 0) >= 0.001) {
           styledFile = {
             ...file,
             width: image.naturalWidth,
@@ -9300,6 +9392,20 @@ export async function drawStudioPreview(
     const centerY = (plan.rect.y0 + plan.rect.y1) / 2;
     let x = numberStartX(plan.rect, totalWidth, plan.configValue);
     const layerId = plan.timePartId ?? plan.metricId ?? plan.datePartId ?? plan.componentId;
+    if (options.compiledPixels) {
+      options.onCompiledRect?.(layerId ?? "value", totalWidth, Math.max(...glyphs.map((glyph) => glyph.file.height)), plan.rect);
+      context.save();
+      context.beginPath();
+      context.rect(plan.rect.x0 * scale, plan.rect.y0 * scale, (plan.rect.x1 - plan.rect.x0) * scale, (plan.rect.y1 - plan.rect.y0) * scale);
+      context.clip();
+    }
+    const numberOptions = options.compiledPixels ? { ...options, compiledClipRect: plan.rect } : options;
+    const glyphY = (height: number) => {
+      const flags = plan.configValue?.split(/[,|}]/) ?? [];
+      if (flags.includes("bottom")) return plan.rect.y1 - height;
+      if (flags.includes("top")) return plan.rect.y0;
+      return centerY - height / 2;
+    };
     for (const [index, glyph] of glyphs.entries()) {
       if (
         index === (plan.separator?.index ?? 2) &&
@@ -9314,7 +9420,7 @@ export async function drawStudioPreview(
           separatorImage.naturalWidth * scale,
           separatorImage.naturalHeight * scale,
           scale,
-          options,
+          numberOptions,
           layerId,
           false
         );
@@ -9324,15 +9430,16 @@ export async function drawStudioPreview(
         context,
         glyph.image,
         x * scale,
-        (centerY - glyph.file.height / 2) * scale,
+        Math.round(glyphY(glyph.file.height)) * scale,
         glyph.file.width * scale,
         glyph.file.height * scale,
         scale,
-        options,
+        numberOptions,
         layerId
       );
       x += glyph.file.width;
     }
+    if (options.compiledPixels) context.restore();
   }
 
   if (
@@ -9351,7 +9458,7 @@ export async function drawStudioPreview(
           controlValueSeparatorFile,
           separatorColor
         )
-      : complication?.id === "barometer" && config.control_point_icon
+      : !options.compiledPixels && complication?.id === "barometer" && config.control_point_icon
         ? await loadStudioImage(
             renderControlPointIcon(
               controlPointCanvasSize(resolution).width,
