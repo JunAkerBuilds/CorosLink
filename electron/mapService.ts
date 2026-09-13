@@ -1579,19 +1579,26 @@ export async function importRouteFromGpx(
     activityType
   );
   const routes: GeneratedRoute[] = [];
+  // Nominatim throttles every request to ~1.1s apart (electron/routing/nominatim.ts),
+  // so reverse-geocoding each file in a multi-file batch would serialize into a
+  // multi-second-to-multi-minute wait behind an indeterminate spinner. A single-file
+  // import keeps today's reverse-geocoded label; a batch falls back to coordinates,
+  // the same format labelForWaypoint itself already falls back to on failure.
+  const isBatchImport = parsed.length > 1;
 
   for (const { fileName, route } of parsed) {
     try {
-      // Best-effort readable labels; coordinates remain as fallback.
-      const startLabel = await labelForWaypoint({
-        lat: route.points[0]!.lat!,
-        lon: route.points[0]!.lon!
-      });
+      const startPoint = { lat: route.points[0]!.lat!, lon: route.points[0]!.lon! };
+      const startLabel = isBatchImport
+        ? `${startPoint.lat.toFixed(4)}, ${startPoint.lon.toFixed(4)}`
+        : await labelForWaypoint(startPoint);
       const lastPoint = route.points[route.points.length - 1]!;
       const endLabel =
         route.mode === "loop"
           ? undefined
-          : await labelForWaypoint({ lat: lastPoint.lat!, lon: lastPoint.lon! });
+          : isBatchImport
+            ? `${lastPoint.lat!.toFixed(4)}, ${lastPoint.lon!.toFixed(4)}`
+            : await labelForWaypoint({ lat: lastPoint.lat!, lon: lastPoint.lon! });
 
       routes.push(
         await persistRoute({
