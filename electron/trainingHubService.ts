@@ -2821,9 +2821,13 @@ export async function uploadNativeTrainingPlan(
     .sort();
   const planStartDay = scheduledDays[0];
 
-  if (options.activate && !planStartDay) {
+  if (
+    options.activate &&
+    (!planStartDay ||
+      resolvedDraft.workouts.some((workout) => !workout.schedule_date))
+  ) {
     throw new Error(
-      "A COROS Plan can only be activated on the Calendar once at least one workout has a date."
+      "A COROS Plan can only be activated on the Calendar once every workout has a date."
     );
   }
 
