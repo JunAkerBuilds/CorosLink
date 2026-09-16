@@ -19,6 +19,7 @@ import type {
   DrawnRoutePayload,
   GenerateRouteRequest,
   GeneratedRoute,
+  GpxImportSummary,
   LocalTrack,
   RouteActivityType,
   RouteApiKeyValidation,
@@ -584,7 +585,7 @@ export interface CorosLinkApi {
   saveDrawnRoute: (payload: DrawnRoutePayload) => Promise<GeneratedRoute>;
   importRouteGpx: (
     activityType?: RouteActivityType
-  ) => Promise<GeneratedRoute | null>;
+  ) => Promise<GpxImportSummary | null>;
   exportGeneratedRoute: (id: string) => Promise<string | null>;
   deleteGeneratedRoute: (id: string) => Promise<boolean>;
   startRouteShare: (id: string) => Promise<RouteShareSession>;

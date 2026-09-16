@@ -419,9 +419,8 @@ assert.ok(Math.abs(freehand.distanceMeters - 2 * latDegreeMeters) < 80);
 assert.equal(freehand.ascentMeters, undefined);
 
 // ---- GPX import ----
-const { parseGpxRoute, buildRouteFromGpxContent } = await import(
-  `${serviceUrl.href}?gpxImport=${Date.now()}`
-);
+const { parseGpxRoute, buildRouteFromGpxContent, readGpxRouteFiles } =
+  await import(`${serviceUrl.href}?gpxImport=${Date.now()}`);
 
 const loopGpx = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="Strava" xmlns="http://www.topografix.com/GPX/1/1">
@@ -470,5 +469,34 @@ assert.throws(
   () => buildRouteFromGpxContent("<gpx></gpx>", "empty", "running"),
   /No track or route points/
 );
+
+// ---- Multi-file GPX import: a bad file among good ones must not
+// abort the batch, and every file's outcome is reported back. ----
+const batchDir = fs.mkdtempSync(path.join(os.tmpdir(), "coroslink-gpx-batch-"));
+try {
+  const goodPathA = path.join(batchDir, "monday.gpx");
+  const goodPathB = path.join(batchDir, "tuesday.gpx");
+  const badPath = path.join(batchDir, "corrupt.gpx");
+  fs.writeFileSync(goodPathA, loopGpx);
+  fs.writeFileSync(goodPathB, courseGpx);
+  fs.writeFileSync(badPath, "<gpx></gpx>");
+
+  const { parsed, failures } = await readGpxRouteFiles(
+    [goodPathA, badPath, goodPathB],
+    "running"
+  );
+
+  assert.equal(parsed.length, 2);
+  assert.equal(parsed[0].fileName, "monday.gpx");
+  assert.equal(parsed[0].route.name, "Harbour & Park Loop");
+  assert.equal(parsed[1].fileName, "tuesday.gpx");
+  assert.equal(parsed[1].route.mode, "point-to-point");
+
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].fileName, "corrupt.gpx");
+  assert.match(failures[0].message, /No track or route points/);
+} finally {
+  fs.rmSync(batchDir, { recursive: true, force: true });
+}
 
 console.log("Maps service tests passed.");

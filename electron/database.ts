@@ -1138,7 +1138,7 @@ function toGeneratedRoute(row: GeneratedRouteRow): GeneratedRoute {
   };
 }
 
-export function listGeneratedRoutes(limit = 20): GeneratedRoute[] {
+export function listGeneratedRoutes(): GeneratedRoute[] {
   const rows = requireDatabase()
     .prepare(
       `SELECT id, name, created_at, start_location, destination_location,
@@ -1146,10 +1146,9 @@ export function listGeneratedRoutes(limit = 20): GeneratedRoute[] {
               mode, activity_type, surface_preference, avoid_highways,
               elevation_preference, points_json, bounds_json, gpx_path
        FROM generated_routes
-       ORDER BY created_at DESC
-       LIMIT ?`
+       ORDER BY created_at DESC, rowid DESC`
     )
-    .all(limit) as GeneratedRouteRow[];
+    .all() as GeneratedRouteRow[];
 
   return rows.map(toGeneratedRoute);
 }

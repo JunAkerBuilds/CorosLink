@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Multi-select GPX import** — Route Studio's Import GPX dialog now accepts multiple files in one selection instead of one at a time; a bad file in the batch is reported without blocking the rest.
+
+### Fixed
+
+- Saved Routes now includes the full route library after large GPX imports, with consistent ordering for routes imported together.
+- GPX imports preserve long route titles, remove incomplete saves, and show each failed file's reason alongside successful imports.
+
 ## [0.1.33] - 2026-09-13
 
 ### Added
