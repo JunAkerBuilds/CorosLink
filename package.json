@@ -1,6 +1,6 @@
 {
   "name": "coroslink",
-  "version": "0.1.33",
+  "version": "0.1.34",
   "private": true,
   "description": "Unofficial COROS Pace Pro companion — media, watch sync, and training analytics.",
   "author": "CorosLink Contributors",
@@ -28,6 +28,8 @@
     "test:greetings": "node --experimental-strip-types scripts/test-greetings.mjs",
     "test:sport-colors": "node --experimental-strip-types scripts/test-sport-colors.mjs",
     "test:selection-preferences": "node --experimental-strip-types scripts/test-selection-preferences.mjs",
+    "test:calendar-sync-status": "node --experimental-strip-types scripts/test-calendar-sync-status.mjs",
+    "test:sleep-duration": "node --experimental-strip-types scripts/test-sleep-duration.mjs",
     "test:calendar-drag": "node --experimental-strip-types scripts/test-calendar-drag.mjs",
     "test:google-calendar": "npm run build:electron && node --test scripts/test-google-calendar.mjs",
     "test:apple-calendar": "npm run build:electron && node --test scripts/test-apple-calendar.mjs",

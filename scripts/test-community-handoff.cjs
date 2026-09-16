@@ -7,6 +7,7 @@ const { app, BrowserWindow, ipcMain, nativeImage } = require("electron");
 const root = path.resolve(__dirname, "..");
 const temporaryRoot = path.join(os.tmpdir(), `coroslink-handoff-${process.pid}`);
 app.setPath("userData", path.join(temporaryRoot, "user-data"));
+app.on("window-all-closed", () => {});
 
 async function until(read, accept, label) {
   const deadline = Date.now() + 20_000;
@@ -64,7 +65,7 @@ async function main() {
   let stage = "starting renderer";
   const watchdog = setTimeout(() => { console.error(`Handoff test stalled: ${stage}`, errors); app.exit(1); }, 90_000);
   try {
-    vite = await createServer({ root, cacheDir: path.join(temporaryRoot, "vite-cache"), server: { host: "127.0.0.1", port: 0, hmr: false }, logLevel: "error" });
+    vite = await createServer({ root, cacheDir: path.join(temporaryRoot, "vite-cache"), server: { host: "127.0.0.1", port: 0, strictPort: false, hmr: false }, logLevel: "error" });
     await vite.listen();
     window = new BrowserWindow({ show: false, webPreferences: { preload: path.join(root, "dist-electron/preload.js"), sandbox: false, contextIsolation: true, backgroundThrottling: false } });
     let rendererReady = false;

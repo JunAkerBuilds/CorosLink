@@ -7,14 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.34] - 2026-09-15
+
 ### Added
 
-- **Multi-select GPX import** — Route Studio's Import GPX dialog now accepts multiple files in one selection instead of one at a time; a bad file in the batch is reported without blocking the rest.
+- **Copyable error reports** — Settings → Error logs now provides local error history, report previews, copy, refresh, and clear controls. Reports include app/system versions, timestamps, and underlying network errors to help diagnose failures such as COROS mobile sign-in. Common credentials and personal details are redacted before saving; logs are bounded to 200 errors, seven days, and 512 KB ([usage guide](docs/error-logs.md)).
+- **Multi-select GPX import** — Route Studio's Import GPX dialog accepts multiple files in one selection; a bad file is reported without blocking the rest ([#116](https://github.com/JunAkerBuilds/CorosLink/pull/116)).
+
+### Changed
+
+- Refreshed Training Hub summary cards, activity tables, chart styling, and sleep presentation. Sleep-duration summaries preserve missing nights and compare complete seven-day periods.
+- Consolidated Google and Apple Calendar connection controls in Settings and added clearer Sync now, Syncing, and Synced states in Calendar.
 
 ### Fixed
 
-- Saved Routes now includes the full route library after large GPX imports, with consistent ordering for routes imported together.
-- GPX imports preserve long route titles, remove incomplete saves, and show each failed file's reason alongside successful imports.
+- Fixed iCloud calendar reads rejected with HTTP 412, skipped collection metadata safely, and retried concurrent event updates against the latest ETag while preserving unrelated events.
+- Calendar sync status now tracks pending CorosLink schedule changes across views and app restarts.
+- Watch-face AOD previews now use the watch's black background and apply export-compatible edge cleanup. Disabling AM/PM also clears stale references across resolutions.
+- Improved watch-face click/drag handling and protected unsaved designs when opening community faces from website links. Same-document and subframe navigation no longer interrupts the handoff.
+- Saved Routes now includes the full library after large GPX imports. Imports preserve long titles, remove incomplete saves, and show each failed file's reason alongside successful imports.
 
 ## [0.1.33] - 2026-09-13
 
