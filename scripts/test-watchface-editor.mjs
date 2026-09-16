@@ -1021,6 +1021,117 @@ assert.deepEqual(
   }),
   { x0: 98, y0: 98, x1: 102, y1: 142 }
 );
+assert.deepEqual(
+  backgroundElementSnapBounds({
+    id: "rect",
+    kind: "rect",
+    x: 100,
+    y: 100,
+    width: 40,
+    height: 20,
+    rotation: 0,
+    cornerRadius: 0,
+    fill: "#ffffff"
+  }),
+  { x0: 80, y0: 90, x1: 120, y1: 110 },
+  "shape snap bounds retain their centered geometry"
+);
+
+const measuredTextCalls = [];
+const measuredTextContext = {
+  font: "",
+  textAlign: "start",
+  textBaseline: "alphabetic",
+  measureText(text) {
+    measuredTextCalls.push({
+      text,
+      font: this.font,
+      align: this.textAlign,
+      baseline: this.textBaseline
+    });
+    const width = 30;
+    const left =
+      this.textAlign === "left"
+        ? 0
+        : this.textAlign === "right"
+          ? width
+          : width / 2;
+    return {
+      width,
+      actualBoundingBoxLeft: left,
+      actualBoundingBoxRight: width - left,
+      actualBoundingBoxAscent: 8,
+      actualBoundingBoxDescent: 2
+    };
+  }
+};
+const measuredTextElement = {
+  id: "measured-text",
+  kind: "text",
+  x: 100,
+  y: 50,
+  rotation: 0,
+  text: "Bounds",
+  fontFamily: "Acme\"\\Display",
+  fontSize: 20,
+  color: "#ffffff",
+  weight: 700,
+  align: "left"
+};
+assert.deepEqual(
+  backgroundElementSnapBounds(measuredTextElement, measuredTextContext),
+  { x0: 100, y0: 42, x1: 130, y1: 52 },
+  "left-aligned text uses measured ink bounds from its anchor"
+);
+assert.deepEqual(
+  backgroundElementSnapBounds(
+    { ...measuredTextElement, align: "center" },
+    measuredTextContext
+  ),
+  { x0: 85, y0: 42, x1: 115, y1: 52 },
+  "center-aligned text uses measured ink bounds around its anchor"
+);
+assert.deepEqual(
+  backgroundElementSnapBounds(
+    {
+      ...measuredTextElement,
+      align: "right",
+      fontFamily: "Second Family",
+      weight: 400
+    },
+    measuredTextContext
+  ),
+  { x0: 70, y0: 42, x1: 100, y1: 52 },
+  "right-aligned text uses measured ink bounds ending at its anchor"
+);
+assert.deepEqual(
+  backgroundElementSnapBounds(
+    { ...measuredTextElement, rotation: 90 },
+    measuredTextContext
+  ),
+  { x0: 98, y0: 50, x1: 108, y1: 80 },
+  "text ink bounds rotate around the renderer's text anchor"
+);
+assert.deepEqual(measuredTextCalls[0], {
+  text: "Bounds",
+  font: '700 20px "AcmeDisplay"',
+  align: "left",
+  baseline: "middle"
+});
+assert.equal(
+  measuredTextCalls[2].font,
+  '400 20px "Second Family"',
+  "font metrics are refreshed from the current element on every measurement"
+);
+
+const fallbackTextBounds = backgroundElementSnapBounds(
+  { ...measuredTextElement, align: "right", rotation: 33 },
+  null
+);
+assert.ok(
+  Object.values(fallbackTextBounds).every(Number.isFinite),
+  "the no-DOM text fallback remains finite"
+);
 
 const centerSnap = snapWatchfaceBounds({
   movingBounds: { x0: 351, y0: 350, x1: 451, y1: 450 },

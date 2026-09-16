@@ -1,0 +1,178 @@
+import assert from "node:assert/strict";
+import { loadWatchfaceTestModules } from "./load-watchface-test-modules.mjs";
+const [{
+  WatchfaceAutomationCommandError,
+  applyWatchfaceAutomationCommands
+}] = await loadWatchfaceTestModules(["/src/watchfaces/watchfaceAutomationCommands.ts"]);
+
+const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB";
+const completePng = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+XyT5WQAAAABJRU5ErkJggg==";
+const details = { archiveId: "fixture", resolutions: [] };
+const baseDesign = {
+  version: 1,
+  accentColor: "#51e0b5",
+  backgroundColor: "#000000",
+  artwork: null,
+  artworkVisible: true,
+  zoom: 1,
+  fontFamily: "Arial",
+  digitColor: "#ffffff",
+  tintLabels: false,
+  tintIcons: false,
+  previewComplication: "",
+  metricChanges: {},
+  metricStyles: {},
+  timeStyles: {},
+  staticSeparators: {
+    colon: { enabled: false, x: 400, y: 320, size: 64, color: "#ffffff" },
+    dateSlash: { enabled: false, x: 400, y: 240, size: 48, color: "#ffffff" }
+  },
+  layoutOffsets: {},
+  linkedLayerGroups: [],
+  editorGroups: [],
+  editorGuides: [],
+  lockedLayerIds: [],
+  layerVisibility: {},
+  layerOpacities: {},
+  layerColors: {},
+  designSprites: [{
+    id: "hero", name: "Hero", dataUrl: png,
+    sourceWidth: 64, sourceHeight: 64, width: 64, height: 64,
+    x: 100, y: 100, scale: 1, rotation: 0
+  }],
+  artworkLayerOrder: ["sprite:hero"],
+  backgroundElements: [{
+    id: "label", kind: "text", x: 200, y: 200, rotation: 0,
+    text: "HELLO", fontFamily: "Arial", fontSize: 32,
+    color: "#ffffff", weight: 700, align: "center"
+  }]
+};
+
+function value() {
+  return { projectName: "Fixture", design: structuredClone(baseDesign) };
+}
+
+function apply(commands, mode = "current", source = value()) {
+  return applyWatchfaceAutomationCommands(source, commands, { details, mode });
+}
+
+function rejects(commands, code, source = value(), mode = "current") {
+  assert.throws(
+    () => apply(commands, mode, source),
+    (error) => error instanceof WatchfaceAutomationCommandError &&
+      error.diagnostics.some((item) => item.code === code)
+  );
+}
+
+const solidFontStyles = apply([
+  { op: "set", path: "/design/metricStyles/exercise", value: { scale: 0.55, solidAlpha: true } },
+  { op: "set", path: "/design/dateStyles", value: { dateDay: { scale: 1, solidAlpha: true } } },
+  { op: "set", path: "/design/selectableMetricStyle", value: { scale: 0.82, solidAlpha: true } }
+]);
+assert.equal(solidFontStyles.value.design.metricStyles.exercise.solidAlpha, true);
+assert.equal(solidFontStyles.value.design.dateStyles.dateDay.solidAlpha, true);
+assert.equal(solidFontStyles.value.design.selectableMetricStyle.solidAlpha, true);
+assert.equal(baseDesign.metricStyles.exercise, undefined);
+
+// Wide generic patches cover native/editor fields while retaining immutable input.
+const original = value();
+const patched = apply([
+  { op: "set", path: "/projectName", value: "Automated" },
+  { op: "merge", path: "/design", value: {
+    archiveWatchFaceVersion: 4,
+    stripBlankConfigKeys: true,
+    fontStyle: "italic",
+    letterSpacing: 0.04,
+    separateAutoTime: true,
+    controlBarometerMode: "directional"
+  } },
+  { op: "set", path: "/design/layerOpacities/sprite:hero", value: 0.5 }
+]);
+assert.equal(patched.value.projectName, "Automated");
+assert.equal(patched.value.design.archiveWatchFaceVersion, 4);
+assert.equal(patched.value.design.layerOpacities["sprite:hero"], 0.5);
+assert.equal(original.projectName, "Fixture");
+assert.equal(original.design.layerOpacities["sprite:hero"], undefined);
+
+// A failed later command rolls back the entire batch and reports its index.
+rejects([
+  { op: "set", path: "/projectName", value: "Would leak" },
+  { op: "set", path: "/design/noSuchField", value: true }
+], "design.unknown_field", original);
+assert.equal(original.projectName, "Fixture");
+
+// Locks reject pointer and semantic edits until an explicit unlock command.
+const locked = apply([{ op: "set_locked", id: "sprite:hero", locked: true }]).value;
+rejects([{ op: "move_layer", id: "sprite:hero", dx: 5, dy: 2 }], "layer.locked", locked);
+const unlockedMove = apply([
+  { op: "set_locked", id: "sprite:hero", locked: false },
+  { op: "move_layer", id: "sprite:hero", dx: 5, dy: 2 }
+], "current", locked);
+assert.equal(unlockedMove.value.design.designSprites[0].x, 105);
+
+// Semantic add/group/duplicate/remove operations preserve references.
+const organized = apply([
+  { op: "add_element", element: {
+    id: "box", kind: "rect", x: 400, y: 400, rotation: 0,
+    width: 100, height: 80, cornerRadius: 8, fill: "#ff0000"
+  } },
+  { op: "group", id: "g1", name: "Artwork", layerIds: ["sprite:hero", "bgel:box"] },
+  { op: "duplicate_element", id: "box", newId: "box-copy", offset: 10 },
+  { op: "add_guide", guide: { id: "center", axis: "x", position: 400 } },
+  { op: "update_guide", id: "center", patch: { position: 420 } }
+]);
+assert.deepEqual(organized.value.design.editorGroups[0].layerIds, ["sprite:hero", "bgel:box"]);
+assert.equal(organized.value.design.backgroundElements.at(-1).x, 410);
+assert.equal(organized.value.design.editorGuides[0].position, 420);
+rejects([{ op: "remove_sprite", id: "missing" }], "layer.missing");
+
+// AOD edits are isolated from Current and reset without corrupting root state.
+const withAod = apply([{
+  op: "set_mode_overrides", mode: "aod", copyFrom: "current",
+  overrides: { backgroundColor: "#101010" }
+}]).value;
+const aodEdit = apply([{ op: "set", path: "/design/digitColor", value: "#222222" }], "aod", withAod).value;
+assert.equal(aodEdit.design.digitColor, "#ffffff");
+assert.equal(aodEdit.design.modeDesigns.aod.digitColor, "#222222");
+const reset = apply([{ op: "set_mode_overrides", mode: "aod", overrides: null }], "aod", aodEdit).value;
+assert.equal(reset.design.modeDesigns, undefined);
+assert.equal(reset.design.digitColor, "#ffffff");
+
+// Unsafe keys, non-finite geometry and malformed references are rejected.
+rejects([{ op: "set", path: "/design/__proto__/polluted", value: true }], "pointer.dangerous");
+rejects([{ op: "update_sprite", id: "hero", patch: { x: Number.POSITIVE_INFINITY } }], "number.nonfinite");
+rejects([{ op: "set", path: "/design/artworkLayerOrder", value: ["sprite:missing"] }], "order.reference");
+rejects([{ op: "update_sprite", id: "hero", patch: { mystery: true } }], "sprite.unknown_field");
+
+const fontApplied = apply([{
+  op: "import_raster_font",
+  folder: { label: "Digits", sprites: [{ name: "00.png", relativePath: "00.png", dataUrl: completePng, sizeBytes: 70 }] },
+  target: { kind: "time", id: "hours" },
+  tint: true
+}]);
+assert.equal(fontApplied.value.design.timeStyles.hours.rasterFont.sprites["0"], completePng);
+assert.equal(fontApplied.value.design.timeStyles.hours.rasterFont.tint, true);
+
+for (const [mutate, code] of [
+  [(design) => { design.metricStyles = null; }, "style.record"],
+  [(design) => { design.rasterFont = null; }, "font.invalid"],
+  [(design) => { design.layerStrokes = { "sprite:hero": [{ id: "bad" }] }; }, "boolean.invalid"],
+  [(design) => { design.layerEffects = { "sprite:hero": { kind: "local", effects: [{ kind: "outer-shadow" }] } }; }, "string.invalid"],
+  [(design) => { design.tintLabels = "yes"; }, "boolean.invalid"]
+]) {
+  const corrupt = value(); mutate(corrupt.design);
+  rejects([{ op: "set", path: "/projectName", value: "Still invalid" }], code, corrupt);
+}
+
+const cssColors = apply([
+  { op: "set", path: "/design/backgroundColor", value: "transparent" },
+  { op: "set", path: "/design/accentColor", value: "rgba(12, 34, 56, 0.5)" }
+]);
+assert.equal(cssColors.value.design.backgroundColor, "transparent");
+const blank = value(); blank.projectName = "";
+assert.equal(apply([{ op: "set", path: "/projectName", value: "Repaired" }], "current", blank).value.projectName, "Repaired");
+
+rejects([{ op: "replace_design", design: locked.design }], "layer.locked", locked);
+rejects([{ op: "merge", path: "/design", value: { lockedLayerIds: [] } }], "pointer.protected");
+
+console.log("watchface automation command tests passed");

@@ -68,6 +68,7 @@ async function main() {
           makeDefaultDesign,
           renderDesignBackground
         } = await import("/src/watchfaces/watchfaceBackground.ts");
+        const { buildSolidFontSpriteReplacements } = await import("/src/watchfaces/watchfaceCompose.ts");
 
         const makeSource = () => {
           const canvas = document.createElement("canvas");
@@ -360,7 +361,41 @@ async function main() {
         nativeSpriteCanvas.height = 800;
         nativeSpriteCanvas.getContext("2d").drawImage(nativeSpriteImage, 0, 0);
 
+        const fontSource = document.createElement("canvas");
+        fontSource.width = 7;
+        fontSource.height = 1;
+        const fontContext = fontSource.getContext("2d", { willReadFrequently: true });
+        const fontPixels = fontContext.createImageData(7, 1);
+        [0, 1, 127, 128, 129, 254, 255].forEach((alpha, index) => {
+          fontPixels.data.set([0, 255, 0, alpha], index * 4);
+        });
+        fontContext.putImageData(fontPixels, 0, 0);
+        const fontDataUrl = fontSource.toDataURL("image/png");
+        const fontPaths = ["cl_exercise/00.png", "cl_date_day/00.png", "cl_control/00.png",
+          "cl_hh/00.png", "cl_weekday/00.png", "background.png", "studio/aod_cl_exercise/00.png"];
+        const fontReplacements = fontPaths.map(path => ({
+          path: "watchface_416x416/" + path, dataUrl: fontDataUrl, create: true
+        }));
+        const solidFonts = await buildSolidFontSpriteReplacements({
+          metricStyles: { exercise: { scale: 1, solidAlpha: true } },
+          timeStyles: {},
+          dateStyles: { dateDay: { scale: 1, solidAlpha: true } },
+          selectableMetricStyle: { scale: 1, solidAlpha: true }
+        }, fontReplacements);
+        const solidFontResults = await Promise.all(solidFonts.map(async (replacement, index) => {
+          const decoded = await loadStudioImage(replacement.dataUrl, false);
+          const canvas = document.createElement("canvas");
+          canvas.width = decoded.naturalWidth;
+          canvas.height = decoded.naturalHeight;
+          canvas.getContext("2d").drawImage(decoded, 0, 0);
+          return { size: [canvas.width, canvas.height],
+            alpha: Array.from({ length: 7 }, (_, x) => pixel(canvas, x, 0)[3]),
+            solidPixel: pixel(canvas, 3, 0),
+            unchanged: replacement === fontReplacements[index] };
+        }));
+
         return {
+          solidFonts: solidFontResults,
           outside: {
             padding: outside.padding,
             size: [outside.canvas.width, outside.canvas.height],
@@ -496,6 +531,16 @@ async function main() {
       [20, 20],
       "config image asset shadows preserve firmware anchor dimensions"
     );
+    results.solidFonts.forEach((font, index) => {
+      assert.deepEqual(font.size, [7, 1], "solid fonts preserve exported dimensions");
+      if (index < 3) {
+        assert.deepEqual(font.alpha, [0, 0, 0, 255, 255, 255, 255], "small-font coverage is solid without dithering");
+        assert.ok(font.solidPixel[0] < 20 && font.solidPixel[1] === 255 && font.solidPixel[2] === 0,
+          "solid font color survives the P3/sRGB conversion");
+      } else {
+        assert.equal(font.unchanged, true, "unselected fonts, backgrounds, and AOD remain untouched");
+      }
+    });
     assert.ok(
       results.layerOpacity[3] >= 88 && results.layerOpacity[3] <= 90,
       "layer opacity multiplies exported PNG alpha"

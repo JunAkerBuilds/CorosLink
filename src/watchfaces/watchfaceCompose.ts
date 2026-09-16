@@ -46,6 +46,7 @@ import {
   rasterFontSupportsText,
   rebaseNegativeControlChildren,
   renderWatchfaceAodSafeSprite,
+  renderWatchfaceSolidFontSprite,
   type WatchfaceAssetLoader,
   type WatchfaceDateStyles,
   type WatchfaceMetricStyles,
@@ -180,6 +181,23 @@ const EFFECT_FOLDER_LAYER: Array<[RegExp, string]> = [
 
 function effectLayerForReplacement(path: string): string | null {
   return EFFECT_FOLDER_LAYER.find(([pattern]) => pattern.test(path))?.[1] ?? null;
+}
+
+/** Opt-in per component: preserve ordinary alpha and artwork on other layers. */
+export async function buildSolidFontSpriteReplacements(
+  design: CorosWatchfaceDesignState,
+  replacements: CorosWatchfaceAssetReplacement[]
+): Promise<CorosWatchfaceAssetReplacement[]> {
+  return Promise.all(replacements.map(async (replacement) => {
+    const layerId = effectLayerForReplacement(replacement.path);
+    const style = layerId === "complication"
+      ? design.selectableMetricStyle
+      : layerId
+        ? design.metricStyles?.[layerId] ?? design.timeStyles?.[layerId] ?? design.dateStyles?.[layerId]
+        : undefined;
+    if (!style?.solidAlpha || !/\/\d{2}\.png$/i.test(replacement.path)) return replacement;
+    return { ...replacement, dataUrl: await renderWatchfaceSolidFontSprite(replacement.dataUrl) };
+  }));
 }
 
 interface EffectedReplacementResult {
@@ -880,7 +898,8 @@ export async function composeWatchfaceReplacements(
         : undefined;
 
   return {
-    assetReplacements: effectedAssets.replacements,
+    // Keep this after all scaling, rotation, opacity, and decoration passes.
+    assetReplacements: await buildSolidFontSpriteReplacements(design, effectedAssets.replacements),
     configOverrides,
     ...(minimumWatchFaceVersion !== undefined
       ? { minWatchFaceVersion: minimumWatchFaceVersion }

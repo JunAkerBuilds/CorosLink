@@ -29,6 +29,7 @@ import {
 import { deriveDesignDetails } from "./watchfaceCompose";
 import { getWeatherCapability } from "./weatherAssets";
 import { rotatedCenterBounds } from "./watchfaceEditorGeometry";
+import { backgroundElementSnapBounds } from "./watchfaceEditorSnapping";
 import { watchfaceDesignSpriteName } from "./watchfaceSpriteTransform";
 import {
   listWatchfaceEditorConfigAssets,
@@ -496,8 +497,22 @@ export function deriveEditorLayers(
   ] as const) {
     const separator = design.staticSeparators?.[staticSeparatorId];
     const visible = Boolean(separator?.enabled);
-    const width = separator ? Math.max(24, separator.size * 0.65) : 24;
-    const height = separator ? Math.max(24, separator.size * 1.15) : 24;
+    const separatorBounds = separator
+      ? backgroundElementSnapBounds({
+          id,
+          kind: "text",
+          x: separator.x,
+          y: separator.y,
+          rotation: 0,
+          visible: true,
+          text: staticSeparatorId === "colon" ? ":" : "/",
+          fontFamily: separator.fontFamily ?? design.fontFamily,
+          fontSize: Math.round(separator.size),
+          weight: 700,
+          align: "center",
+          color: separator.color
+        })
+      : null;
     staticSeparatorLayers.push({
       id,
       kind: "separators",
@@ -506,14 +521,11 @@ export function deriveEditorLayers(
       visible,
       canHide: true,
       present: true,
-      bounds: visible && separator
+      bounds: visible && separatorBounds
         ? {
             id,
             label,
-            x0: separator.x - width / 2,
-            y0: separator.y - height / 2,
-            x1: separator.x + width / 2,
-            y1: separator.y + height / 2
+            ...separatorBounds
           }
         : null,
       capabilities: {

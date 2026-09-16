@@ -11,6 +11,7 @@ import {
   storeCorosCredentials
 } from "./corosCredentialStore";
 import { createStoreZip } from "./zipStore";
+import { fitGeneratedWatchfaceFontRects } from "./watchfaceExportFontBounds";
 import type {
   CorosWatchfaceArchive,
   CorosWatchfaceArtwork,
@@ -2278,6 +2279,11 @@ async function discoverSpriteAssets(
       continue;
     }
     const relative = entry.path.slice(prefix.length);
+    // Generated icons use studio/<name>/00.png too. Keep direct config
+    // references discoverable even when the folder is not a complete font.
+    if (directlyReferencedPngs.has(relative)) {
+      addIconEntry(entry);
+    }
     const spriteMatch = relative.match(/^(.+)\/(\d{2})\.png$/i);
     if (spriteMatch) {
       const folder = spriteMatch[1]!;
@@ -2286,10 +2292,7 @@ async function discoverSpriteAssets(
       folderFiles.set(folder, numbered);
       continue;
     }
-    if (
-      /^(a\/)?icon\/[^/]+\.png$/i.test(relative) ||
-      directlyReferencedPngs.has(relative)
-    ) {
+    if (/^(a\/)?icon\/[^/]+\.png$/i.test(relative)) {
       addIconEntry(entry);
     }
   }
@@ -3687,7 +3690,9 @@ async function rewriteTemplateArchive(
       finalPaths.add(aodPath);
     }
   }
-  const finalEntries = removeUnreferencedStudioSprites(orderedEntries);
+  const finalEntries = removeUnreferencedStudioSprites(
+    fitGeneratedWatchfaceFontRects(orderedEntries)
+  );
   validateArchiveInventory(
     finalEntries.map((entry) => ({
       path: entry.name,

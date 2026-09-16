@@ -8,6 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { listLocalFontFamilies } from "./fontService";
+import { registerWatchfaceAutomation } from "./watchfaceAutomation";
 import {
   clearDownloadTransferredByFileName,
   deleteDownload,
@@ -366,6 +367,7 @@ import type {
 } from "./types";
 
 let mainWindow: BrowserWindow | undefined;
+let watchfaceAutomation: ReturnType<typeof registerWatchfaceAutomation> | undefined;
 let rendererReady = false;
 let pendingCommunityWatchfaceOpen: CommunityWatchfaceOpenRequest | undefined;
 let pendingCorosBluetoothSelection:
@@ -666,9 +668,11 @@ function createWindow(): void {
   });
   mainWindow.webContents.on("did-start-loading", () => {
     rendererReady = false;
+    watchfaceAutomation?.resetRenderer();
   });
   mainWindow.on("closed", () => {
     rendererReady = false;
+    watchfaceAutomation?.resetRenderer();
     mainWindow = undefined;
   });
   configureCorosBluetoothSelection(mainWindow);
@@ -791,6 +795,7 @@ app.whenReady().then(() => {
   prunePlanDraftStore();
   pruneDeleteRequestStore();
   registerIpcHandlers();
+  watchfaceAutomation = registerWatchfaceAutomation(() => mainWindow);
   startGoogleCalendarSync();
   startAppleCalendarSync();
   setJobListener((jobs) => {
@@ -820,6 +825,7 @@ app.whenReady().then(() => {
   });
   void cleanupCommunityWatchfaceImports();
   createWindow();
+  void watchfaceAutomation.restore();
   applyAppIcon();
 
   // Silently restore previously-authorized MCP sessions (COROS + any other
@@ -840,6 +846,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  void watchfaceAutomation?.stop();
   stopGoogleCalendarSync();
   stopAppleCalendarSync();
   stopRouteShare();

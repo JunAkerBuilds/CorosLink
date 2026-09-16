@@ -1,4 +1,5 @@
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "../electron/calendarSyncTypes";
+import type { WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "../electron/googleCalendarTypes";
 import type {
   ActivityBackupProgress,
@@ -163,6 +164,12 @@ import type {
 } from "../electron/types";
 
 export interface CorosLinkApi {
+  getWatchfaceAutomationStatus: () => Promise<WatchfaceAutomationStatus>;
+  configureWatchfaceAutomation: (input: { enabled: boolean; port?: number }) => Promise<WatchfaceAutomationStatus>;
+  onWatchfaceAutomationActivate: (callback: () => void) => () => void;
+  onWatchfaceAutomationRequest: (callback: (request: WatchfaceAutomationRequest) => void) => () => void;
+  respondWatchfaceAutomation: (response: WatchfaceAutomationResponse) => void;
+  setWatchfaceAutomationReady: (scope: "hub" | "editor", ready: boolean) => void;
   getAppleCalendarStatus: () => Promise<CalendarConnectionStatus>;
   connectAppleCalendar: (input: AppleCalendarCredentials) => Promise<CalendarConnectionStatus>;
   cancelAppleCalendarConnect: () => Promise<void>;

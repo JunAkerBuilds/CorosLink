@@ -1,0 +1,18 @@
+.wf-automation-settings { display: grid; gap: 16px; }
+.wf-automation-heading { display: flex; align-items: center; gap: 14px; }
+.wf-automation-heading > div { flex: 1; }
+.wf-automation-heading h2 { margin: 0 0 5px; font-size: 18px; }
+.wf-automation-settings p { margin: 0; line-height: 1.6; }
+.wf-automation-heading p, .wf-automation-description, .wf-automation-setup p { color: var(--text-secondary); font-size: 13px; }
+.wf-automation-state { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.wf-automation-state > span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-secondary); }
+.wf-automation-state > .is-enabled { background: var(--accent); }
+.wf-automation-connection { display: grid; gap: 16px; max-width: 740px; }
+.wf-automation-token { display: flex; align-items: end; gap: 10px; }
+.wf-automation-token > label { flex: 1; min-width: 0; }
+.wf-automation-setup { display: grid; gap: 10px; justify-items: start; }
+.wf-automation-example { padding: 12px 14px; background: var(--surface); border-radius: 8px; font-size: 13px; }
+.wf-automation-advanced { color: var(--text-secondary); font-size: 13px; }
+.wf-automation-advanced > label { max-width: 220px; margin-top: 12px; }
+.wf-automation-error { color: var(--danger, #e76868); font-size: 13px; }
+@media (max-width: 700px) { .wf-automation-heading { flex-wrap: wrap; } .wf-automation-token { align-items: stretch; flex-direction: column; } }
