@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Saved Routes now pages through 20 lightweight summaries at a time and loads geometry only for the selected preview, keeping large route libraries accessible without loading every track on each refresh.
+
 ## [0.1.34] - 2026-09-15
 
 ### Added

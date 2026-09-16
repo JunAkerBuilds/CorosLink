@@ -191,6 +191,7 @@ import {
   listCachedCorosMaps,
   listCorosMapDownloadJobs,
   listGeneratedRoutes,
+  getGeneratedRouteDetails,
   openCorosMapDownload,
   routeWaypoints,
   saveDrawnRoute,
@@ -2071,7 +2072,8 @@ function registerIpcHandlers(): void {
     (_event, config: RouteBuilderConfig) => saveRouteBuilderConfig(config)
   );
 
-  ipcMain.handle("maps:listGeneratedRoutes", () => listGeneratedRoutes());
+  ipcMain.handle("maps:listGeneratedRoutes", (_event, offset?: number) => listGeneratedRoutes(offset));
+  ipcMain.handle("maps:getGeneratedRoute", (_event, id: string) => getGeneratedRouteDetails(id));
 
   ipcMain.handle("maps:geocodeRouteLocation", (_event, query: string) =>
     geocodeRouteLocation(query)

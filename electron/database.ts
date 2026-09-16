@@ -7,6 +7,7 @@ import Database from "better-sqlite3";
 import type {
   CachedCorosMapPackage,
   GeneratedRoute,
+  GeneratedRoutePage,
   LocalTrack,
   NativeCorosPlanDetail,
   SpotifySyncTrack,
@@ -202,6 +203,9 @@ export function initializeDatabase(userDataPath: string): Database.Database {
       gpx_path TEXT,
       activity_type TEXT
     );
+
+    CREATE INDEX IF NOT EXISTS idx_generated_routes_created_at
+      ON generated_routes(created_at);
 
     CREATE TABLE IF NOT EXISTS training_activities (
       activity_id TEXT PRIMARY KEY,
@@ -1138,19 +1142,42 @@ function toGeneratedRoute(row: GeneratedRouteRow): GeneratedRoute {
   };
 }
 
-export function listGeneratedRoutes(): GeneratedRoute[] {
-  const rows = requireDatabase()
+export function listGeneratedRoutes(offset = 0): GeneratedRoutePage {
+  if (!Number.isSafeInteger(offset) || offset < 0) {
+    throw new Error("Saved-route offset must be a non-negative integer.");
+  }
+  const database = requireDatabase();
+  const pageSize = 20;
+  const { total } = database.prepare("SELECT COUNT(*) AS total FROM generated_routes")
+    .get() as { total: number };
+  // Deleting the last item on the last page moves back to the preceding page.
+  const lastOffset = Math.max(0, Math.ceil(total / pageSize) - 1) * pageSize;
+  const pageOffset = Math.min(Math.floor(offset / pageSize) * pageSize, lastOffset);
+  const rows = database
     .prepare(
-      `SELECT id, name, created_at, start_location, destination_location,
-              distance_meters, duration_seconds, ascent_meters, descent_meters,
-              mode, activity_type, surface_preference, avoid_highways,
-              elevation_preference, points_json, bounds_json, gpx_path
+      `SELECT id, name, created_at, distance_meters, mode, activity_type, surface_preference
        FROM generated_routes
-       ORDER BY created_at DESC, rowid DESC`
+       ORDER BY created_at DESC, rowid DESC
+       LIMIT ? OFFSET ?`
     )
-    .all() as GeneratedRouteRow[];
+    .all(pageSize, pageOffset) as Pick<GeneratedRouteRow,
+      "id" | "name" | "created_at" | "distance_meters" | "mode" | "activity_type" | "surface_preference"
+    >[];
 
-  return rows.map(toGeneratedRoute);
+  return {
+    routes: rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      createdAt: row.created_at,
+      distanceMeters: row.distance_meters,
+      mode: row.mode,
+      activityType: (row.activity_type as GeneratedRoute["activityType"] | null) ??
+        (row.surface_preference === "trail" ? "hiking" : "walking")
+    })),
+    total,
+    offset: pageOffset,
+    pageSize
+  };
 }
 
 export function getGeneratedRoute(id: string): GeneratedRoute | undefined {

@@ -28,6 +28,7 @@ import type {
   DrawnRoutePayload,
   GenerateRouteRequest,
   GeneratedRoute,
+  GeneratedRoutePage,
   GpxImportFailure,
   GpxImportSummary,
   RouteActivityType,
@@ -1000,8 +1001,12 @@ function resolveRouteBackend(): RouteBackend {
   return configured === "ors" && hasKey ? "ors" : "keyless";
 }
 
-export function listGeneratedRoutes(): GeneratedRoute[] {
-  return listSavedGeneratedRoutes();
+export function listGeneratedRoutes(offset = 0): GeneratedRoutePage {
+  return listSavedGeneratedRoutes(offset);
+}
+
+export function getGeneratedRouteDetails(id: string): GeneratedRoute | null {
+  return getGeneratedRoute(id) ?? null;
 }
 
 /**

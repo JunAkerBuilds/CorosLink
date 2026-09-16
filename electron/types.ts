@@ -1702,6 +1702,18 @@ export interface GpxImportFailure {
   message: string;
 }
 
+/** Metadata for the saved-route drawer; geometry is fetched only for preview. */
+export type GeneratedRouteSummary = Pick<GeneratedRoute,
+  "id" | "name" | "createdAt" | "distanceMeters" | "mode" | "activityType"
+>;
+
+export interface GeneratedRoutePage {
+  routes: GeneratedRouteSummary[];
+  total: number;
+  offset: number;
+  pageSize: number;
+}
+
 export interface GpxImportSummary {
   routes: GeneratedRoute[];
   failures: GpxImportFailure[];

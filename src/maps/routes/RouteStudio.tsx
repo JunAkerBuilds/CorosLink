@@ -11,11 +11,13 @@ import {
   Telescope,
   X
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ActivityPaceBaselines,
   DrawnRoutePayload,
   GeneratedRoute,
+  GeneratedRoutePage,
+  GeneratedRouteSummary,
   GenerateRouteRequest,
   RouteActivityType,
   RouteBackend,
@@ -123,8 +125,31 @@ export function RouteStudio({
   const [generating, setGenerating] = useState(false);
 
   // Shared / preview state
-  const [previewRoute, setPreviewRoute] = useState<GeneratedRoute | null>(null);
-  const [routes, setRoutes] = useState<GeneratedRoute[]>([]);
+  const [previewRoute, setPreviewRouteState] = useState<GeneratedRoute | null>(null);
+  const [routePage, setRoutePage] = useState<GeneratedRoutePage>({
+    routes: [], total: 0, offset: 0, pageSize: 20
+  });
+  const [loadingRoutes, setLoadingRoutes] = useState(false);
+  const [selectingRouteId, setSelectingRouteId] = useState<string | null>(null);
+  const pageRequestId = useRef(0);
+  const previewRequestId = useRef(0);
+  const setPreviewRoute = useCallback((route: GeneratedRoute | null) => {
+    previewRequestId.current += 1;
+    setSelectingRouteId(null);
+    setPreviewRouteState(route);
+  }, []);
+  const refreshRoutes = useCallback(async (offset = 0) => {
+    const requestId = ++pageRequestId.current;
+    setLoadingRoutes(true);
+    try {
+      const page = await api.listGeneratedRoutes(offset);
+      if (requestId !== pageRequestId.current) return null;
+      setRoutePage(page);
+      return page;
+    } finally {
+      if (requestId === pageRequestId.current) setLoadingRoutes(false);
+    }
+  }, [api]);
   const [activeSavedId, setActiveSavedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [savingDraw, setSavingDraw] = useState(false);
@@ -149,13 +174,14 @@ export function RouteStudio({
   const [savingSketch, setSavingSketch] = useState(false);
 
   useEffect(() => {
-    void api
-      .listGeneratedRoutes()
-      .then((next) => {
-        setRoutes(next);
-        if (next[0]) {
-          setPreviewRoute(next[0]);
-          setActiveSavedId(next[0].id);
+    const previewVersion = previewRequestId.current;
+    void refreshRoutes()
+      .then(async (page) => {
+        if (!page?.routes[0] || previewVersion !== previewRequestId.current) return;
+        const route = await api.getGeneratedRoute(page.routes[0].id);
+        if (previewVersion === previewRequestId.current) {
+          setPreviewRoute(route);
+          setActiveSavedId(route?.id ?? null);
         }
       })
       .catch((caught) => onError(toErrorMessage(caught)));
@@ -163,7 +189,11 @@ export function RouteStudio({
       .getActivityPaceBaselines()
       .then(setPaceBaselines)
       .catch(() => setPaceBaselines({}));
-  }, [api, onError]);
+    return () => {
+      pageRequestId.current += 1;
+      previewRequestId.current += 1;
+    };
+  }, [api, onError, refreshRoutes, setPreviewRoute]);
 
   // Tear down the LAN share server when leaving the studio.
   useEffect(() => {
@@ -306,7 +336,7 @@ export function RouteStudio({
       const route = await api.generateRoute(request);
       setPreviewRoute(route);
       setActiveSavedId(route.id);
-      setRoutes(await api.listGeneratedRoutes());
+      await refreshRoutes();
       setFitRequestId((id) => id + 1);
       onMessage(regenerate ? "Generated a fresh loop." : "Route ready.");
     } catch (caught) {
@@ -337,7 +367,7 @@ export function RouteStudio({
         unitSystem
       };
       const route = await api.saveDrawnRoute(payload);
-      setRoutes(await api.listGeneratedRoutes());
+      await refreshRoutes();
       setPreviewRoute(route);
       setActiveSavedId(route.id);
       draw.clear();
@@ -382,7 +412,7 @@ export function RouteStudio({
         unitSystem
       };
       const route = await api.saveDrawnRoute(payload);
-      setRoutes(await api.listGeneratedRoutes());
+      await refreshRoutes();
       setPreviewRoute(route);
       setActiveSavedId(route.id);
       sketch.clear();
@@ -407,7 +437,7 @@ export function RouteStudio({
       }
       const { routes: imported, failures } = summary;
       if (imported.length > 0) {
-        setRoutes(await api.listGeneratedRoutes());
+        await refreshRoutes();
         const lastRoute = imported[imported.length - 1]!;
         setPreviewRoute(lastRoute);
         setActiveSavedId(lastRoute.id);
@@ -437,15 +467,27 @@ export function RouteStudio({
     }
   }
 
-  function handleSelectSaved(route: GeneratedRoute) {
-    setPreviewRoute(route);
-    setActiveSavedId(route.id);
-    setMode("generate");
-    setDrawerOpen(false);
-    setFitRequestId((id) => id + 1);
+  async function handleSelectSaved(summary: GeneratedRouteSummary) {
+    const requestId = ++previewRequestId.current;
+    setSelectingRouteId(summary.id);
+    onError(null);
+    try {
+      const route = await api.getGeneratedRoute(summary.id);
+      if (requestId !== previewRequestId.current) return;
+      if (!route) throw new Error("Saved route was not found. Refresh the route list and try again.");
+      setPreviewRoute(route);
+      setActiveSavedId(route.id);
+      setMode("generate");
+      setDrawerOpen(false);
+      setFitRequestId((id) => id + 1);
+    } catch (caught) {
+      if (requestId === previewRequestId.current) onError(toErrorMessage(caught));
+    } finally {
+      if (requestId === previewRequestId.current) setSelectingRouteId(null);
+    }
   }
 
-  async function handleExport(route: GeneratedRoute) {
+  async function handleExport(route: GeneratedRouteSummary) {
     setBusyId(route.id);
     onError(null);
     try {
@@ -460,7 +502,7 @@ export function RouteStudio({
     }
   }
 
-  async function handleShare(route: GeneratedRoute) {
+  async function handleShare(route: GeneratedRouteSummary) {
     onError(null);
     try {
       const session = await api.startRouteShare(route.id);
@@ -475,16 +517,20 @@ export function RouteStudio({
     await api.stopRouteShare().catch(() => undefined);
   }
 
-  async function handleDelete(route: GeneratedRoute) {
+  async function handleDelete(route: GeneratedRouteSummary) {
     onError(null);
     try {
       await api.deleteGeneratedRoute(route.id);
-      const next = await api.listGeneratedRoutes();
-      setRoutes(next);
-      if (activeSavedId === route.id) {
-        setPreviewRoute(next[0] ?? null);
-        setActiveSavedId(next[0]?.id ?? null);
+      // Invalidate an in-flight preview of this route before it can reappear.
+      if (selectingRouteId === route.id) {
+        previewRequestId.current += 1;
+        setSelectingRouteId(null);
       }
+      if (activeSavedId === route.id) {
+        setPreviewRoute(null);
+        setActiveSavedId(null);
+      }
+      await refreshRoutes(routePage.offset);
       onMessage("Route deleted.");
     } catch (caught) {
       onError(toErrorMessage(caught));
@@ -591,7 +637,7 @@ export function RouteStudio({
         >
           <FolderOpen size={16} aria-hidden="true" />
           Saved
-          {routes.length > 0 ? <span className="badge">{routes.length}</span> : null}
+          {routePage.total > 0 ? <span className="badge">{routePage.total}</span> : null}
         </button>
       </div>
 
@@ -721,11 +767,14 @@ export function RouteStudio({
 
       <SavedRoutesDrawer
         open={drawerOpen}
-        routes={routes}
+        page={routePage}
+        loading={loadingRoutes}
+        selectingId={selectingRouteId}
+        onPageChange={(offset) => void refreshRoutes(offset).catch((caught) => onError(toErrorMessage(caught)))}
         activeId={activeSavedId}
         busyId={busyId}
         onClose={() => setDrawerOpen(false)}
-        onSelect={handleSelectSaved}
+        onSelect={(route) => void handleSelectSaved(route)}
         onExport={(route) => void handleExport(route)}
         onShare={(route) => void handleShare(route)}
         onDelete={(route) => void handleDelete(route)}

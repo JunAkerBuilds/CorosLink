@@ -7,7 +7,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { GeneratedRoute } from "../../../electron/types";
+import type { GeneratedRoutePage, GeneratedRouteSummary } from "../../../electron/types";
 import { formatDate } from "../../media/libraryUtils";
 import { ROUTE_ACTIVITY_OPTIONS } from "./constants";
 import { activityTypeLabel, formatDistance } from "./utils";
@@ -19,7 +19,10 @@ const DELETE_CONFIRM_MS = 3000;
 
 export function SavedRoutesDrawer({
   open,
-  routes,
+  page,
+  loading,
+  selectingId,
+  onPageChange,
   activeId,
   busyId,
   onClose,
@@ -29,15 +32,19 @@ export function SavedRoutesDrawer({
   onDelete
 }: {
   open: boolean;
-  routes: GeneratedRoute[];
+  page: GeneratedRoutePage;
+  loading: boolean;
+  selectingId: string | null;
+  onPageChange: (offset: number) => void;
   activeId: string | null;
   busyId: string | null;
   onClose: () => void;
-  onSelect: (route: GeneratedRoute) => void;
-  onExport: (route: GeneratedRoute) => void;
-  onShare: (route: GeneratedRoute) => void;
-  onDelete: (route: GeneratedRoute) => void;
+  onSelect: (route: GeneratedRouteSummary) => void;
+  onExport: (route: GeneratedRouteSummary) => void;
+  onShare: (route: GeneratedRouteSummary) => void;
+  onDelete: (route: GeneratedRouteSummary) => void;
 }) {
+  const { routes, total, offset, pageSize } = page;
   const { unitSystem } = useUnitSystem();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -55,7 +62,7 @@ export function SavedRoutesDrawer({
       <div className="route-drawer-head">
         <div>
           <p className="eyebrow">Saved routes</p>
-          <h3>{routes.length} route{routes.length === 1 ? "" : "s"}</h3>
+          <h3>{total} route{total === 1 ? "" : "s"}</h3>
         </div>
         <button
           type="button"
@@ -67,14 +74,14 @@ export function SavedRoutesDrawer({
         </button>
       </div>
 
-      {routes.length === 0 ? (
+      {loading && routes.length === 0 ? <p role="status">Loading saved routes…</p> : routes.length === 0 ? (
         <div className="route-drawer-empty">
           <RouteIcon size={28} aria-hidden="true" />
           <p>No saved routes yet.</p>
           <small>Generate or draw a route, then save it to see it here.</small>
         </div>
       ) : (
-        <ul className="route-drawer-list">
+        <ul key={offset} className="route-drawer-list" aria-busy={loading}>
           {routes.map((route) => {
             const busy = busyId === route.id;
             const confirming = confirmDeleteId === route.id;
@@ -93,9 +100,11 @@ export function SavedRoutesDrawer({
                 <button
                   type="button"
                   className="route-card-main"
+                  disabled={loading || selectingId === route.id}
                   onClick={() => onSelect(route)}
                 >
                   <strong className="route-card-name">{route.name}</strong>
+                  {selectingId === route.id ? <span role="status">Loading preview…</span> : null}
                   <span className="route-card-meta">
                     {formatDistance(route.distanceMeters, unitSystem)} {distanceUnit(unitSystem)} ·{" "}
                     {activityTypeLabel(route.activityType)} ·{" "}
@@ -157,6 +166,15 @@ export function SavedRoutesDrawer({
           })}
         </ul>
       )}
+      {total > 0 ? (
+        <nav className="route-drawer-pagination" aria-label="Saved route pages">
+          <button type="button" className="button ghost" disabled={loading || offset === 0}
+            onClick={() => onPageChange(offset - pageSize)}>Previous</button>
+          <span role="status">{loading ? "Loading…" : `${offset + 1}–${offset + routes.length} of ${total}`}</span>
+          <button type="button" className="button ghost" disabled={loading || offset + routes.length >= total}
+            onClick={() => onPageChange(offset + pageSize)}>Next</button>
+        </nav>
+      ) : null}
     </aside>
   );
 }

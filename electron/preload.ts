@@ -21,6 +21,7 @@ import type {
   DrawnRoutePayload,
   GenerateRouteRequest,
   GeneratedRoute,
+  GeneratedRoutePage,
   GpxImportSummary,
   LocalTrack,
   RouteActivityType,
@@ -876,8 +877,10 @@ const api = {
     config: RouteBuilderConfig
   ): Promise<RouteBuilderConfig> =>
     ipcRenderer.invoke("maps:saveRouteBuilderConfig", config),
-  listGeneratedRoutes: (): Promise<GeneratedRoute[]> =>
-    ipcRenderer.invoke("maps:listGeneratedRoutes"),
+  listGeneratedRoutes: (offset?: number): Promise<GeneratedRoutePage> =>
+    ipcRenderer.invoke("maps:listGeneratedRoutes", offset),
+  getGeneratedRoute: (id: string): Promise<GeneratedRoute | null> =>
+    ipcRenderer.invoke("maps:getGeneratedRoute", id),
   geocodeRouteLocation: (query: string): Promise<RouteGeocodeResult> =>
     ipcRenderer.invoke("maps:geocodeRouteLocation", query),
   searchRouteLocations: (query: string): Promise<RouteGeocodeResult[]> =>

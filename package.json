@@ -19,6 +19,7 @@
     "smoke:watch": "npm run build:electron && node scripts/smoke-watch-service.mjs",
     "test:watch-models": "npm run build:electron && node scripts/test-watch-models.mjs",
     "test:maps": "npm run build:electron && node scripts/test-maps.mjs && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-gpx-import.cjs",
+    "test:saved-routes-ui": "npm run build:electron && electron scripts/test-saved-routes-ui.cjs",
     "test:apple-podcasts": "npm run build:electron && node scripts/test-apple-podcasts.mjs",
     "test:combined-download-cache": "npm run build:electron && node scripts/test-combined-download-cache.mjs",
     "test:download-progress": "npm run build:electron && node scripts/test-download-progress.mjs",

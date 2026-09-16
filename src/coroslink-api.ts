@@ -20,6 +20,7 @@ import type {
   DrawnRoutePayload,
   GenerateRouteRequest,
   GeneratedRoute,
+  GeneratedRoutePage,
   GpxImportSummary,
   LocalTrack,
   RouteActivityType,
@@ -574,7 +575,8 @@ export interface CorosLinkApi {
   saveRouteBuilderConfig: (
     config: RouteBuilderConfig
   ) => Promise<RouteBuilderConfig>;
-  listGeneratedRoutes: () => Promise<GeneratedRoute[]>;
+  listGeneratedRoutes: (offset?: number) => Promise<GeneratedRoutePage>;
+  getGeneratedRoute: (id: string) => Promise<GeneratedRoute | null>;
   geocodeRouteLocation: (query: string) => Promise<RouteGeocodeResult>;
   searchRouteLocations: (query: string) => Promise<RouteGeocodeResult[]>;
   reverseGeocodeRouteLocation: (

@@ -64,14 +64,36 @@ function storedFiles() {
   return fs.readdirSync(path.join(userData, "routes")).sort();
 }
 
+function allRouteSummaries() {
+  const summaries = [];
+  let page = service.listGeneratedRoutes();
+  while (true) {
+    assert.equal(page.pageSize, 20);
+    assert.ok(page.routes.length <= 20);
+    for (const summary of page.routes) {
+      assert.equal("points" in summary, false);
+      assert.equal("bounds" in summary, false);
+      assert.equal("gpxPath" in summary, false);
+    }
+    summaries.push(...page.routes);
+    if (page.offset + page.routes.length >= page.total) break;
+    const next = service.listGeneratedRoutes(page.offset + page.pageSize);
+    assert.ok(next.offset > page.offset, "pagination must advance");
+    page = next;
+  }
+  assert.equal(summaries.length, page.total);
+  assert.equal(new Set(summaries.map(route => route.id)).size, summaries.length);
+  return summaries;
+}
+
 async function run() {
   db = database.initializeDatabase(userData);
   if (reload) {
     const expected = JSON.parse(fs.readFileSync(path.join(root, "expected.json"), "utf8"));
-    const listed = service.listGeneratedRoutes();
+    const listed = allRouteSummaries();
     assert.deepEqual(listed.map((route) => route.id), expected);
     for (const route of listed) {
-      assert.ok(fs.existsSync(route.gpxPath));
+      assert.ok(fs.existsSync(service.getGeneratedRouteDetails(route.id).gpxPath));
     }
     return;
   }
@@ -83,7 +105,7 @@ async function run() {
 
   assert.equal(await importFiles([first], true), null);
   assert.equal(await importFiles([]), null);
-  assert.equal(service.listGeneratedRoutes().length, 0);
+  assert.equal(service.listGeneratedRoutes().total, 0);
   const mixed = await importFiles([first, corrupt, missing, last]);
   assert.deepEqual(mixed.routes.map((route) => route.name), ["First route", "Last route"]);
   assert.deepEqual(mixed.failures.map((failure) => failure.fileName), ["corrupt.gpx", "missing.gpx"]);
@@ -167,14 +189,18 @@ async function run() {
 
   // The P2 regression: both an existing library and every route from a batch
   // larger than 20 must remain listed, including after reopening the database.
-  const existingIds = service.listGeneratedRoutes().map((route) => route.id);
+  for (const offset of [-1, 0.5, NaN, Infinity, "20", null, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => service.listGeneratedRoutes(offset), /non-negative integer/);
+  }
+  assert.equal(service.getGeneratedRouteDetails("missing"), null);
+  const existingIds = allRouteSummaries().map((route) => route.id);
   const files = Array.from({ length: 25 }, (_, index) =>
     fixture(`batch-${index}.gpx`, `Batch ${index}`)
   );
   const batch = await importFiles(files);
   assert.equal(batch.routes.length, 25);
   assert.deepEqual(batch.failures, []);
-  const all = service.listGeneratedRoutes();
+  const all = allRouteSummaries();
   assert.equal(all.length, existingIds.length + 25);
   assert.deepEqual(new Set(all.map((route) => route.id)), new Set([
     ...existingIds, ...batch.routes.map((route) => route.id)
@@ -184,8 +210,21 @@ async function run() {
   const sameTime = "2099-01-01T00:00:00.000Z";
   const setTime = db.prepare("UPDATE generated_routes SET created_at = ? WHERE id = ?");
   for (const route of batch.routes) setTime.run(sameTime, route.id);
-  const ordered = service.listGeneratedRoutes().map((route) => route.id);
+  const ordered = allRouteSummaries().map((route) => route.id);
   assert.deepEqual(ordered.slice(0, 25), batch.routes.map((route) => route.id).reverse());
+  // Listing must not parse geometry at all, even if a stored track is damaged.
+  const damagedId = batch.routes[0].id;
+  const originalGeometry = db.prepare("SELECT points_json FROM generated_routes WHERE id = ?").get(damagedId).points_json;
+  db.prepare("UPDATE generated_routes SET points_json = 'invalid JSON' WHERE id = ?").run(damagedId);
+  assert.equal(allRouteSummaries().length, all.length);
+  db.prepare("UPDATE generated_routes SET points_json = ? WHERE id = ?").run(originalGeometry, damagedId);
+  assert.deepEqual(service.getGeneratedRouteDetails(damagedId).points, batch.routes[0].points);
+  const plan = db.prepare(`EXPLAIN QUERY PLAN SELECT id, name, created_at, distance_meters,
+    mode, activity_type, surface_preference FROM generated_routes
+    ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?`).all(20, 0);
+  assert.ok(plan.some(step => step.detail.includes("idx_generated_routes_created_at")));
+  assert.ok(plan.every(step => !step.detail.includes("TEMP B-TREE")), "listing must use the ordering index");
+  assert.equal(service.listGeneratedRoutes(1_000_000).offset, 20);
   fs.writeFileSync(path.join(root, "expected.json"), JSON.stringify(ordered));
   const reopened = spawnSync(process.execPath, [__filename, "--reload", root], {
     encoding: "utf8", timeout: 30_000
@@ -193,14 +232,15 @@ async function run() {
   assert.equal(reopened.status, 0, `${reopened.error ?? ""}\n${reopened.stdout}\n${reopened.stderr}`);
 
   // A route beyond the former limit is still actionable, not just counted.
-  const olderRoute = service.listGeneratedRoutes().find((route) => route.id === existingIds.at(-1));
+  const olderSummary = allRouteSummaries().find((route) => route.id === existingIds.at(-1));
+  const olderRoute = service.getGeneratedRouteDetails(olderSummary.id);
   assert.ok(olderRoute);
   exportPath = path.join(root, "exported.gpx");
   assert.equal(await service.exportGeneratedRoute(olderRoute.id), exportPath);
   assert.equal(fs.readFileSync(exportPath, "utf8"), fs.readFileSync(olderRoute.gpxPath, "utf8"));
   assert.equal(service.deleteGeneratedRoute(olderRoute.id), true);
   assert.equal(database.getGeneratedRoute(olderRoute.id), undefined);
-  assert.equal(service.listGeneratedRoutes().length, all.length - 1);
+  assert.equal(service.listGeneratedRoutes().total, all.length - 1);
   for (let attempt = 0; attempt < 100 && fs.existsSync(olderRoute.gpxPath); attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
@@ -209,6 +249,31 @@ async function run() {
   for (const [filePath, content] of inputs) {
     assert.equal(fs.readFileSync(filePath, "utf8"), content, "source GPX must stay unchanged");
   }
+  // Removing every item on a later page returns the preceding page, not an empty drawer.
+  for (const summary of service.listGeneratedRoutes(20).routes) {
+    db.prepare("DELETE FROM generated_routes WHERE id = ?").run(summary.id);
+  }
+  const clamped = service.listGeneratedRoutes(20);
+  assert.equal(clamped.offset, 0);
+  assert.equal(clamped.routes.length, 20);
+  // A growing library must not grow the default IPC response or parse tracks.
+  const insertSummaryFixture = db.prepare(`INSERT INTO generated_routes
+    (id, name, created_at, start_location, distance_meters, mode, activity_type,
+     surface_preference, avoid_highways, elevation_preference, points_json)
+    VALUES (?, ?, '2100-01-01', 'Start', 1000, 'loop', 'running', 'road', 0, 'any', ?)`);
+  const unreadGeometry = "unparsed geometry ".repeat(1000);
+  db.transaction(() => {
+    for (let index = 0; index < 1000; index += 1) {
+      insertSummaryFixture.run(`large-${index}`, `Large library ${index}`, unreadGeometry);
+    }
+  })();
+  const largePage = service.listGeneratedRoutes();
+  assert.equal(largePage.total, 1020);
+  assert.equal(largePage.routes.length, 20);
+  assert.ok(Buffer.byteLength(JSON.stringify(largePage)) < 8000);
+  assert.equal(allRouteSummaries().length, 1020);
+  db.exec("DELETE FROM generated_routes");
+  assert.deepEqual(service.listGeneratedRoutes(20), { routes: [], total: 0, offset: 0, pageSize: 20 });
   console.log("GPX integration tests passed (large batches, restart, export/delete, failures, safe storage).");
 }
 
