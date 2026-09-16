@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Saved Routes now includes the full route library after large GPX imports, with consistent ordering for routes imported together.
+- GPX imports preserve long route titles, remove incomplete saves, and show each failed file's reason alongside successful imports.
 - Clarified that activity backups cover activities synced to COROS Training Hub, and added COROS sync troubleshooting guidance on the Data page, including before sign-in. Recovering recordings stored only on the watch still requires the COROS phone app or support ([#107](https://github.com/JunAkerBuilds/CorosLink/issues/107)).
 
 ## [0.1.32] - 2026-09-05

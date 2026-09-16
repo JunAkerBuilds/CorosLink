@@ -1295,8 +1295,19 @@ export async function saveDrawnRoute(
 /** Builds GPX, writes it to disk, and stores the route in the database. */
 async function persistRoute(route: GeneratedRoute): Promise<GeneratedRoute> {
   const gpx = buildRouteGpx(route);
-  const gpxPath = await writeRouteGpx(route.id, route.name, gpx);
-  return addGeneratedRoute({ ...route, gpxPath });
+  const directory = path.join(app.getPath("userData"), "routes");
+  await fs.promises.mkdir(directory, { recursive: true });
+  // Titles come from imported files and can exceed filesystem filename limits.
+  // Keep the full title in GPX/SQLite and use the route UUID for local storage.
+  const gpxPath = path.join(directory, `${route.id}.gpx`);
+  try {
+    await fs.promises.writeFile(gpxPath, gpx, "utf8");
+    return addGeneratedRoute({ ...route, gpxPath });
+  } catch (caught) {
+    // A failed write or database insert must not leave an orphaned GPX behind.
+    await fs.promises.rm(gpxPath, { force: true }).catch(() => undefined);
+    throw caught;
+  }
 }
 
 /** Resolves free text or a coordinate pin to a labelled point (keyless). */
@@ -1520,13 +1531,12 @@ export function buildRouteFromGpxContent(
 }
 
 interface ParsedGpxFile {
-  filePath: string;
   fileName: string;
   route: GeneratedRoute;
 }
 
 /**
- * Reads and parses a batch of GPX files into unlabeled, unpersisted routes.
+ * Reads and parses a batch of GPX files into unpersisted routes with coordinate labels.
  * Split out from importRouteFromGpx so multi-file parsing/error-aggregation is
  * testable without a real file dialog or network geocoding calls. Exported for
  * tests.
@@ -1544,7 +1554,7 @@ export async function readGpxRouteFiles(
       const content = await fs.promises.readFile(filePath, "utf8");
       const fallbackName = path.basename(filePath, path.extname(filePath));
       const route = buildRouteFromGpxContent(content, fallbackName, activityType);
-      parsed.push({ filePath, fileName, route });
+      parsed.push({ fileName, route });
     } catch (caught) {
       failures.push({
         fileName,
@@ -2380,21 +2390,6 @@ function boundsForPoints(
     minLon: Math.min(...lons),
     maxLon: Math.max(...lons)
   };
-}
-
-async function writeRouteGpx(
-  routeId: string,
-  routeName: string,
-  gpx: string
-): Promise<string> {
-  const directory = path.join(app.getPath("userData"), "routes");
-  await fs.promises.mkdir(directory, { recursive: true });
-  const gpxPath = path.join(
-    directory,
-    `${routeId}-${sanitizeFileName(routeName)}.gpx`
-  );
-  await fs.promises.writeFile(gpxPath, gpx, "utf8");
-  return gpxPath;
 }
 
 function sanitizeFileName(fileName: string): string {

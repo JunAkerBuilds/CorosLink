@@ -470,7 +470,7 @@ assert.throws(
   /No track or route points/
 );
 
-// ---- Multi-file GPX import (issue #5): a bad file among good ones must not
+// ---- Multi-file GPX import: a bad file among good ones must not
 // abort the batch, and every file's outcome is reported back. ----
 const batchDir = fs.mkdtempSync(path.join(os.tmpdir(), "coroslink-gpx-batch-"));
 try {
@@ -482,7 +482,7 @@ try {
   fs.writeFileSync(badPath, "<gpx></gpx>");
 
   const { parsed, failures } = await readGpxRouteFiles(
-    [goodPathA, goodPathB, badPath],
+    [goodPathA, badPath, goodPathB],
     "running"
   );
 

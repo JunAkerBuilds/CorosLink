@@ -415,21 +415,20 @@ export function RouteStudio({
         setFitRequestId((id) => id + 1);
       }
 
-      if (failures.length === 0) {
+      if (imported.length > 0) {
         onMessage(
           imported.length === 1
             ? `Imported "${imported[0]!.name}".`
             : `Imported ${imported.length} routes.`
         );
-      } else {
-        const failureList = failures.map((failure) => failure.fileName).join(", ");
-        if (imported.length === 0) {
-          onError(`Could not import ${failureList}: ${failures[0]!.message}`);
-        } else {
-          onMessage(
-            `Imported ${imported.length} route${imported.length === 1 ? "" : "s"}; ${failures.length} failed (${failureList}).`
-          );
-        }
+      }
+      if (failures.length > 0) {
+        const failureDetails = failures
+          .map(({ fileName, message }) => `${fileName}: ${message}`)
+          .join("; ");
+        onError(
+          `Could not import ${failures.length} file${failures.length === 1 ? "" : "s"}. ${failureDetails}`
+        );
       }
     } catch (caught) {
       onError(toErrorMessage(caught));
