@@ -40,28 +40,35 @@ Remote plan logic stays in `corosTrainingPlanAdapter.ts` and
 `trainingLibraryService.ts`; React does not call COROS endpoints. Snapshot
 refresh is explicit and shared across tabs to avoid per-card API waterfalls.
 
-Native plan edits currently fork to a local copy. This prevents a local change
-from claiming to overwrite COROS when native update semantics have not been
-verified. Local plan/template edits, duplication, date shifting, week
-operations, comparison, and metadata changes remain fully available.
+Native plan edits in the Training Plan Library UI still fork to a local copy
+rather than push back through `/training/plan/update` — that UI flow hasn't
+been built yet, independent of the fact that update semantics are now
+verified (see below). Local plan/template edits, duplication, date shifting,
+week operations, comparison, and metadata changes remain fully available.
 
 ## Verified COROS surface
 
-As of 2026-07-29:
+As of 2026-09-12 (issue #4):
 
 - Verified existing flows: workout program query/detail/calculate/add/update/
   delete and calendar query/update.
-- Verified read-only native plan discovery: `POST /training/plan/query`.
-- Verified read-only native plan detail: `GET /training/plan/detail` with `id`
-  and `supportRestExercise=1`.
-- Observed in the first-party bundle but not live-write-verified:
-  `/training/plan/add`, `update`, `copy`, `delete`,
-  `/training/schedule/executeSubPlan`, and
-  `/training/schedule/quitSubPlan`.
+- Verified native plan discovery: `POST /training/plan/query`.
+- Verified native plan detail: `GET /training/plan/detail` with `id` and
+  `supportRestExercise=1`.
+- Verified native plan writes: `/training/plan/add`, `update`, `copy`,
+  `delete`, `/training/schedule/executeSubPlan`, and
+  `/training/schedule/quitSubPlan` — see
+  [`docs/coros-plan-write-api.md`](coros-plan-write-api.md) for the captured
+  request/response shapes and
+  `scripts/verify-coros-plan-write-api.mjs` for the cleanup-safe live check.
 
-All native writes are feature-gated. The reason is returned as typed capability
-data and shown in both the Training Plan Library and Coach confirmation card.
-No guessed payload is sent.
+Coach's "COROS Plan" and "COROS Plan on Calendar" destinations use
+`uploadNativeTrainingPlan`/`activateNativeTrainingPlan` to create (and
+optionally activate) a grouped native plan. No other native-plan UI flow
+(editing, duplicating, or deleting a plan already in the COROS Plan Library)
+has been wired up yet, even though the underlying write functions
+(`updateNativeTrainingPlan`, `copyNativeTrainingPlan`,
+`deleteNativeTrainingPlan`) exist and are exercised by the verifier.
 
 ## Safety and fallbacks
 
@@ -72,14 +79,16 @@ No guessed payload is sent.
   athlete's confirmation card invokes the write IPC method after a destination
   is selected and the writes/conflicts are displayed.
 - Coach plans save as grouped local plans by default. Explicit alternatives are
-  individual COROS Workout Library writes, direct COROS Calendar scheduling,
-  and a zero-remote-write local template.
+  individual COROS Workout Library writes, direct COROS Calendar scheduling, a
+  zero-remote-write local template, or a grouped native COROS Plan (optionally
+  activated straight onto the Calendar).
 - Authentication tokens and request headers are never included in plan logs or
   stored raw payloads.
-- Native write verification must remain opt-in and isolated. A future verifier
-  must create uniquely named temporary data and remove activation, calendar,
-  plan, and workout artifacts in `finally` before any write capability is
-  enabled.
+- Native write verification is opt-in and isolated:
+  `npm run verify:coros-plan-write-api` creates a uniquely named temporary
+  plan and removes its activation, calendar, and library artifacts in
+  `finally`, with a defensive by-name sweep so a failed assertion midway
+  through can't strand a plan on the account.
 
 ## Tests
 

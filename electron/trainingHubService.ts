@@ -85,6 +85,7 @@ import {
   buildWorkoutPayloadFromEntry,
   resetProgramForCreate,
   validatePlanDraft,
+  COROS_DISTANCE_UNIT_KILOMETERS,
   type CorosWorkoutCalculation,
   type CorosTrainingPlanDraft,
   type PlanWorkoutEntry
@@ -2772,6 +2773,208 @@ export async function uploadTrainingPlan(
     workoutsScheduled,
     entries
   };
+}
+
+function planDayOffset(startDay: string, day: string): number {
+  const toOrdinal = (value: string) =>
+    Date.UTC(
+      Number(value.slice(0, 4)),
+      Number(value.slice(4, 6)) - 1,
+      Number(value.slice(6, 8))
+    );
+  return Math.max(0, Math.round((toOrdinal(day) - toOrdinal(startDay)) / 86_400_000));
+}
+
+/**
+ * Create a native COROS Training Plan Library entry that bundles every
+ * workout in the draft into one grouped Plan, instead of writing each as a
+ * separate library/calendar entry. Verified against a live Training Hub
+ * session for /training/plan/add, /training/plan/detail, and (when
+ * `activate` is set) /training/schedule/executeSubPlan — see
+ * docs/coros-plan-write-api.md. Run `npm run verify:coros-plan-write-api`
+ * after changing this before trusting it against a real account.
+ */
+export async function uploadNativeTrainingPlan(
+  draftInput: CorosTrainingPlanDraftInput,
+  unitSystem: UnitSystem = "metric",
+  options: { activate?: boolean } = {}
+): Promise<UploadPlanResult> {
+  const draft: CorosTrainingPlanDraft = {
+    name: draftInput.name,
+    workouts: draftInput.workouts.map(toPlanWorkoutEntry)
+  };
+
+  const validation = validatePlanDraft(draft);
+  if (!validation.ok) {
+    throw new Error(validation.errors.join(" "));
+  }
+
+  const exerciseResolution = await resolveTrainingPlanExercises(draft);
+  if (exerciseResolution.issues.length > 0) {
+    throw new Error(exerciseResolution.issues.map((issue) => issue.message).join(" "));
+  }
+  const resolvedDraft = exerciseResolution.draft;
+
+  const scheduledDays = resolvedDraft.workouts
+    .map((workout) => workout.schedule_date)
+    .filter((day): day is string => Boolean(day))
+    .sort();
+  const planStartDay = scheduledDays[0];
+
+  if (options.activate && !planStartDay) {
+    throw new Error(
+      "A COROS Plan can only be activated on the Calendar once at least one workout has a date."
+    );
+  }
+
+  const auth = getStoredAuth();
+  if (!auth) {
+    throw new Error("Log in to COROS Training Hub first.");
+  }
+
+  const context = parseWorkoutEditorContext(
+    await loadWorkoutEditorAccount(),
+    unitSystem
+  );
+
+  const entries: UploadPlanResultEntry[] = [];
+  const programs: Record<string, unknown>[] = [];
+  const entities: Record<string, unknown>[] = [];
+  let maxDayNo = 0;
+  let pbVersion = 2;
+
+  for (const [index, workout] of resolvedDraft.workouts.entries()) {
+    const idInPlan = index + 1;
+    const payload = buildWorkoutPayloadFromEntry(workout, context);
+    const calculated = await calculateWorkoutProgram(payload);
+    pbVersion = Math.max(pbVersion, toOptionalNumber(calculated.pbVersion) ?? 2);
+    programs.push({ ...calculated, idInPlan });
+
+    const dayNo =
+      planStartDay && workout.schedule_date
+        ? planDayOffset(planStartDay, workout.schedule_date)
+        : index;
+    maxDayNo = Math.max(maxDayNo, dayNo);
+
+    // Plan Library entities carry placeholder identity only — happenDay is
+    // set on activation (executeSubPlan), not at create time.
+    entities.push({
+      happenDay: "",
+      idInPlan,
+      dayNo,
+      sortNo: idInPlan,
+      sortNoInPlan: idInPlan,
+      sortNoInSchedule: 1
+    });
+
+    entries.push({
+      key: workout.key,
+      name: workout.name,
+      scheduled: false,
+      savedToLibrary: false
+    });
+  }
+
+  const totalDay = maxDayNo + 1;
+  const weeks = Math.max(1, Math.ceil(totalDay / 7));
+
+  const planPayload = {
+    name: draft.name,
+    overview: "",
+    entities,
+    programs,
+    weekStages: [],
+    maxIdInPlan: programs.length,
+    totalDay,
+    // The plan-level `unit` field is NOT the same enum as a step's
+    // distanceDisplayUnit (1=km, 2=m, 3=mi, 4=yd, 5=ft) — live-tested
+    // 2026-09-12: sending the imperial value (3) here made COROS's own web
+    // app crash opening the plan (`getDistanceInfo` indexed a lookup table
+    // with an unrecognized key). 1 is confirmed safe; per-program distance
+    // display below is unaffected and still follows the athlete's own units.
+    unit: COROS_DISTANCE_UNIT_KILOMETERS,
+    // No cover image chosen; unconfirmed whether COROS requires a non-empty
+    // default here — verify:coros-plan-write-api will surface it if so.
+    sourceId: "",
+    sourceUrl: "",
+    minWeeks: weeks,
+    maxWeeks: weeks,
+    region: auth.regionId,
+    pbVersion,
+    versionObjects: entities.map((entity) => ({
+      id: (entity as { idInPlan: number }).idInPlan,
+      status: 1
+    }))
+  };
+
+  const rawId = await writeNativeTrainingPlanEndpoint<string | number>(
+    "/training/plan/add",
+    { body: planPayload }
+  );
+  const planId = String(rawId ?? "").trim();
+  if (!planId) {
+    throw new Error("COROS did not return a plan ID.");
+  }
+
+  if (options.activate && planStartDay) {
+    await activateNativeTrainingPlan(planId, planStartDay);
+  }
+
+  return {
+    planName: draft.name,
+    workoutsCreated: 0,
+    workoutsScheduled: options.activate ? programs.length : 0,
+    entries,
+    nativePlanId: planId,
+    remoteWrites: [
+      `Create COROS Plan "${draft.name}" with ${programs.length} workout${
+        programs.length === 1 ? "" : "s"
+      }`,
+      ...(options.activate ? [`Activate plan on Calendar starting ${planStartDay}`] : [])
+    ]
+  };
+}
+
+export async function activateNativeTrainingPlan(
+  planId: string,
+  startDay: string
+): Promise<void> {
+  if (!/^\d{8}$/.test(startDay)) {
+    throw new Error("startDay must be YYYYMMDD.");
+  }
+  await writeNativeTrainingPlanEndpoint("/training/schedule/executeSubPlan", {
+    params: { startDay, subPlanId: planId },
+    body: {}
+  });
+}
+
+export async function deactivateNativeTrainingPlan(planId: string): Promise<void> {
+  await writeNativeTrainingPlanEndpoint("/training/schedule/quitSubPlan", {
+    params: { subPlanId: planId }
+  });
+}
+
+export async function deleteNativeTrainingPlan(planId: string): Promise<void> {
+  await writeNativeTrainingPlanEndpoint("/training/plan/delete", { body: [planId] });
+}
+
+export async function updateNativeTrainingPlan(
+  plan: Record<string, unknown>
+): Promise<void> {
+  await writeNativeTrainingPlanEndpoint("/training/plan/update", { body: plan });
+}
+
+export async function copyNativeTrainingPlan(
+  sourcePlan: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const raw = await writeNativeTrainingPlanEndpoint<Record<string, unknown>>(
+    "/training/plan/copy",
+    { body: sourcePlan }
+  );
+  if (!raw || typeof raw !== "object") {
+    throw new Error("COROS did not return the copied plan.");
+  }
+  return raw;
 }
 
 export async function createLibraryWorkout(
@@ -5931,7 +6134,7 @@ async function trainingHubGet<T>(
 /**
  * Narrow read-only bridge for the native training-plan adapter. Keeping the
  * allowlist here prevents plan discovery from becoming a generic raw API
- * escape hatch or accidentally issuing an unverified write.
+ * escape hatch.
  */
 export async function readNativeTrainingPlanEndpoint<T>(
   path: "/training/plan/query" | "/training/plan/detail",
@@ -5947,6 +6150,30 @@ export async function readNativeTrainingPlanEndpoint<T>(
     return trainingHubGet<T>(path, options.params);
   }
   throw new Error("Unsupported native training-plan read operation.");
+}
+
+/**
+ * Narrow write bridge for the native training-plan adapter. All six paths
+ * are live-verified against a real Training Hub session (see
+ * docs/coros-plan-write-api.md); keeping the allowlist here prevents native
+ * plan writes from becoming a generic raw API escape hatch.
+ */
+export async function writeNativeTrainingPlanEndpoint<T>(
+  path:
+    | "/training/plan/add"
+    | "/training/plan/update"
+    | "/training/plan/copy"
+    | "/training/plan/delete"
+    | "/training/schedule/executeSubPlan"
+    | "/training/schedule/quitSubPlan",
+  options: { body?: unknown; params?: Record<string, string | number> } = {}
+): Promise<T> {
+  return trainingHubFetch<T>(path, {
+    method: "POST",
+    params: options.params,
+    ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
+    allowEmptyData: true
+  });
 }
 
 interface TrainingHubRequestOptions extends RequestInit {

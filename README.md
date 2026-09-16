@@ -315,10 +315,10 @@ workout through a complete multi-week cycle.
 - **Offline-aware sync** — cached data remains visible when one or more COROS
   reads fail, with explicit local/synced/pending/conflicted/failed/stale states
 
-Native COROS plan discovery and detail reads are active. Native grouped-plan
-writes remain visibly gated until the undocumented create/update/activation
-contract can be verified without guessing; local templates and the existing
-individual Workout Library/Calendar writes remain available.
+Native COROS plan discovery, detail reads, and grouped-plan writes
+(create/update/copy/delete/activate/deactivate) are all live-verified; local
+templates and the existing individual Workout Library/Calendar writes remain
+available alongside them.
 
 ---
 

@@ -66,6 +66,7 @@
     "test:workout-intensity-codec": "npm run build:electron && node scripts/test-workout-intensity-codec.mjs",
     "test:training-library": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-training-library.mjs && node scripts/test-coros-workout-builder.mjs && node scripts/test-workout-intensity-codec.mjs",
     "verify:coach-workout-api": "npm run build:electron && node scripts/verify-coach-workout-api.mjs",
+    "verify:coros-plan-write-api": "npm run build:electron && node scripts/verify-coros-plan-write-api.mjs",
     "test:training-hub-write": "npm run build:electron && node scripts/test-training-hub-write.mjs",
     "test:diagnostics": "npm run build:electron && node scripts/test-diagnostics.mjs",
     "test:diagnostics-ui": "npm run build:electron && electron scripts/test-diagnostics-ui.cjs",

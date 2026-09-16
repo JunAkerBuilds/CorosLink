@@ -1,9 +1,9 @@
 # COROS Training Plan Write API (internal)
 
-Reverse-engineered from the COROS Training Hub web app. The workout-program and
-calendar contracts below have been verified against the live API. Native
-Training Plan Library support has only been verified for reads as of
-2026-07-29. These endpoints are **undocumented** and may change.
+Reverse-engineered from the COROS Training Hub web app. The workout-program,
+calendar, and native Training Plan Library contracts below have all been
+verified against the live API (native plan writes as of 2026-09-12).
+These endpoints are **undocumented** and may change.
 
 All requests use the existing Training Hub session (`accesstoken` + `yfheader`
 with `userId`) against the regional `teamapi*.coros.com` host.
@@ -27,44 +27,89 @@ through the athlete's authenticated Training Hub session.
 | `/training/exercise/query` | GET | Resolve Strength and HYROX exercise IDs/names |
 | `/training/schedule/query` | GET | Read calendar (`startDate`, `endDate`, `supportRestExercise=1`) |
 | `/training/schedule/update` | POST | Add, edit, or delete calendar entries (`status: 1`, `2`, or `3`) |
-| `/training/plan/query` | POST | List native COROS Training Plan Library records; read verified |
-| `/training/plan/detail` | GET | Read native plan detail (`id`, `supportRestExercise=1`); read verified |
+| `/training/plan/query` | POST | List native COROS Training Plan Library records (`{}` for library, `{statusList:[1]}` or `{statusList:[1,2]}` for active instances) |
+| `/training/plan/detail` | GET | Read native plan detail (`id`, `supportRestExercise=1`) |
+| `/training/plan/add` | POST | Create a grouped native plan; returns the new plan ID string |
+| `/training/plan/update` | POST | Update a grouped native plan while retaining identity fields |
+| `/training/plan/copy` | POST | Duplicate a grouped native plan; returns the full new plan object |
+| `/training/plan/delete` | POST | Delete grouped native plan(s), body `["<planId>"]` |
+| `/training/schedule/executeSubPlan` | POST | Activate a native plan onto the calendar (`?startDay=YYYYMMDD&subPlanId=<planId>`) |
+| `/training/schedule/quitSubPlan` | POST | Remove an activated plan's future calendar entries (`?subPlanId=<activePlanId>`) |
 
 ## Native COROS Training Plan Library
 
-CorosLink keeps native plans behind `corosTrainingPlanAdapter.ts`, separate
-from individual `/training/program/*` workout operations. The adapter maps the
-known plan, entity, program, and week-stage fields into typed models while
-retaining the complete raw payload for forward-compatible, lossless caching.
+CorosLink keeps native plans behind `corosTrainingPlanAdapter.ts` (reads) and
+`trainingHubService.ts`'s `uploadNativeTrainingPlan` /
+`activateNativeTrainingPlan` / `deactivateNativeTrainingPlan` /
+`deleteNativeTrainingPlan` / `updateNativeTrainingPlan` /
+`copyNativeTrainingPlan` (writes), separate from individual
+`/training/program/*` workout operations. All six write endpoints route
+through the `writeNativeTrainingPlanEndpoint` allowlist, the write-side
+counterpart to the existing read-only `readNativeTrainingPlanEndpoint` — both
+exist to keep native plan I/O from becoming a generic raw API escape hatch.
 
-The 2026-07-29 first-party Training Hub bundle references these additional
-operations:
+All six endpoints (`add`, `update`, `copy`, `delete`, `executeSubPlan`,
+`quitSubPlan`) were live-verified on 2026-09-12 against a real Training Hub
+session by capturing and replaying the native web app's own create,
+duplicate, delete, update, activate, and deactivate flows. Findings:
 
-| Path | Method | Observed first-party purpose | CorosLink status |
-|---|---|---|---|
-| `/training/plan/add` | POST | Create grouped plan | Feature-gated; write payload not live verified |
-| `/training/plan/update` | POST | Update grouped plan | Feature-gated; concurrency/write behavior not live verified |
-| `/training/plan/copy` | POST | Duplicate grouped plan | Feature-gated; write payload not live verified |
-| `/training/plan/delete` | POST | Delete grouped plan | Feature-gated; delete/active-plan behavior not live verified |
-| `/training/schedule/executeSubPlan` | POST | Activate/schedule a plan | Feature-gated; activation payload not live verified |
-| `/training/schedule/quitSubPlan` | POST | Remove active plan | Feature-gated; cleanup semantics not live verified |
+- **`plan/add`** — request carries `name`, `overview`, `entities[]` with
+  placeholder identity (`{happenDay:"", idInPlan, sortNo, dayNo, sortNoInPlan,
+  sortNoInSchedule}` — no real IDs), `programs[]` as fully calculated program
+  objects (each run through `/training/program/calculate` first), plus
+  `weekStages: []`, `maxIdInPlan`, `totalDay`, `unit`, `sourceId`/`sourceUrl`,
+  `minWeeks`/`maxWeeks`, `region`, `pbVersion`, and one `versionObjects` entry
+  per entity (`{id: idInPlan, status: 1}`). The response `data` is the new
+  plan ID string, same convention as `/training/program/add`. The server
+  assigns real `id`, `entities[].id`, `planId`, `planProgramId`, and exercise
+  IDs — confirmed via a follow-up `plan/detail` read.
+  **The plan-level `unit` field is not the same enum as a step's
+  `distanceDisplayUnit`** (1=km, 2=m, 3=mi, 4=yd, 5=ft): a real 19-week,
+  133-workout plan created with the imperial step value (`unit: 3`) made
+  COROS's own web app crash opening the plan (`getDistanceInfo` indexed a
+  lookup table with a key it didn't define, live-tested 2026-09-12 against a
+  real account). `unit: 1` is confirmed safe by the same test; per-program
+  distance display is unaffected and still follows the athlete's own units.
+  `uploadNativeTrainingPlan` always sends `1` at the plan level now.
+- **`plan/update`** — the complete plan object from a prior `plan/detail`,
+  edited in place with every identity field sent back unchanged. Response is
+  bare (`{apiCode, message, result}`, no body); a `plan/detail` re-read is
+  what proves the edit landed.
+- **`plan/copy`** — request body is the complete source plan object (as
+  returned by `plan/detail`); response is a new plan with `originId` set to
+  the source's ID and every identity field reassigned. No manual ID-clearing
+  needed — round-trip the full object.
+- **`plan/delete`** — request body is `["<planId>"]`; response is bare, no
+  `versionObjects` envelope (simpler than the calendar delete).
+- **`schedule/executeSubPlan?startDay=YYYYMMDD&subPlanId=<libraryPlanId>`**
+  (activate) — bodyless POST (`{}`), all identity in query params. The server
+  does **not** mutate the library plan in place: it creates a **new plan
+  instance** with a fresh `id`, sets `originId`/`sourcePlanId` back to the
+  library plan's ID, `status: 1` / `executeStatus: 1`, `startDay` to the
+  requested date, and materializes `programs[]` onto the calendar as
+  `schedule` entities at `happenDay = startDay` (+ offset for multi-day
+  plans). The original library plan is untouched and still separately
+  queryable. `plan/query` needs `{"statusList":[1]}` (active) or
+  `{"statusList":[1,2]}` (active+completed) to see activated instances — the
+  default/no-filter query returns library (category 0) plans only.
+- **`schedule/quitSubPlan?subPlanId=<activePlanId>`** (deactivate) — bodyless
+  POST, no query body at all. Removes the plan's **not-yet-happened** calendar
+  entries; already-past-but-incomplete days are left in place (pruning, not
+  rewriting history).
 
-The bundle assembles plan-create data from fields including `name`, `overview`,
-`entities`, `programs`, `weekStages`, `maxIdInPlan`, `totalDay`, `unit`,
-`sourceId`, `sourceUrl`, `minWeeks`, `maxWeeks`, `region`, `pbVersion`, and
-`versionObjects`. That observation is not sufficient evidence to send a write:
-required defaults, identity allocation, version checks, and cleanup behavior
-remain uncertain. CorosLink therefore does not guess these payloads.
+CorosLink's own `uploadNativeTrainingPlan` (in `trainingHubService.ts`)
+assembles the create payload from a Coach-generated plan draft: each workout
+is calculated independently, `dayNo` is derived from the workouts' relative
+schedule dates (or sequential index if undated), and `pbVersion` is the max
+across all embedded programs. `sourceId`/`sourceUrl` (the plan's cover-image
+reference) are sent empty since CorosLink has no thumbnail to offer; this is
+the one field whose default has not been independently captured — rerun
+`verify:coros-plan-write-api` if COROS starts rejecting an empty value.
 
-Native plan query and detail were checked with a saved Training Hub session and
-no credentials or sensitive headers were logged. Some active-plan detail
+Native plan query and detail were checked with a saved Training Hub session
+and no credentials or sensitive headers were logged. Some active-plan detail
 responses omit `programs`; the adapter merges detail-only fields with the full
 grouped arrays returned by `/training/plan/query`.
-
-Until a cleanup-safe, explicitly opted-in verifier proves the complete
-create/read/update/activate/remove/delete lifecycle, the UI exposes the exact
-limitation and preserves the verified alternatives: local grouped templates,
-individual Workout Library writes, and direct calendar scheduling.
 
 ## Create library workout
 
@@ -252,18 +297,32 @@ For each unique workout definition:
 One-off calendar workouts can skip the library step and embed the program
 directly in the schedule update payload.
 
-CorosLink's Coach “plan” is a local, confirmation-gated draft. The athlete must
-choose Workout Library, Calendar, local CorosLink template, COROS Plan Library,
-or Plan + Calendar on the card. The native grouped choices remain disabled
-while their writes are unverified. The active alternatives write individual
-workouts, write dated calendar occurrences, or save only to local SQLite. An AI
-tool call cannot execute the upload path.
+CorosLink's Coach “plan” is a local, confirmation-gated draft. The athlete
+chooses Training Plan (local), Individual Workouts, Calendar, COROS Plan, or
+COROS Plan on Calendar on the card. The last two bundle every workout in the
+draft into one native COROS Plan Library entry via `uploadNativeTrainingPlan`
+— "COROS Plan on Calendar" additionally activates it with
+`activateNativeTrainingPlan` once created. An AI tool call drives the same
+`uploadPlanDraftById` path as the UI's confirm button.
 
 ## Fixtures
 
-See `scripts/fixtures/coros-plan-write/` for redacted request/response samples.
-For a cleanup-safe live contract check, run `npm run verify:coach-workout-api`
-while a COROS session is saved in CorosLink. The verifier creates, schedules,
-edits, reads back, checks library/calendar isolation for Run, then creates,
-round-trips, edits, and deletes a representative workout for every supported
-sport. All temporary artifacts are deleted in `finally`.
+See `scripts/fixtures/coros-plan-write/` for redacted request/response
+samples, including the native plan endpoints (`plan-add-response.json`,
+`plan-update-response.json`, `plan-delete-response.json`,
+`execute-sub-plan-response.json`, `quit-sub-plan-response.json`).
+
+For a cleanup-safe live contract check of individual workouts, run
+`npm run verify:coach-workout-api` while a COROS session is saved in
+CorosLink. The verifier creates, schedules, edits, reads back, checks
+library/calendar isolation for Run, then creates, round-trips, edits, and
+deletes a representative workout for every supported sport. All temporary
+artifacts are deleted in `finally`.
+
+For a cleanup-safe live contract check of the native Plan Library, run
+`npm run verify:coros-plan-write-api` the same way. The verifier builds a
+representative two-week, four-workout plan and exercises
+create → read-back → activate → deactivate → delete against
+`/training/plan/*` and `/training/schedule/{executeSubPlan,quitSubPlan}`,
+sweeping the account by probe name in `finally` so a failed assertion midway
+through can't strand a plan on the account.

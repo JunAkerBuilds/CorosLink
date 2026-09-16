@@ -177,9 +177,9 @@ const DISTANCE_TARGET_TYPES = new Set([5]);
 const TIME_TARGET_TYPES = new Set([2]);
 
 // COROS targetDisplayUnit: 1=km, 2=m, 3=mi, 4=yd, 5=ft.
-const COROS_DISTANCE_UNIT_KILOMETERS = 1;
+export const COROS_DISTANCE_UNIT_KILOMETERS = 1;
 const COROS_DISTANCE_UNIT_METERS = 2;
-const COROS_DISTANCE_UNIT_MILES = 3;
+export const COROS_DISTANCE_UNIT_MILES = 3;
 const COROS_DISTANCE_UNIT_YARDS = 4;
 const COROS_DISTANCE_UNIT_FEET = 5;
 // COROS intensityDisplayUnit: 1=min/km, 2=min/mi.
