@@ -21,6 +21,7 @@ interface TrainingActivityTableProps {
   sportTypes: TrainingHubSportType[];
   selectedActivityId: string | null;
   busy: string | null;
+  exportDisabled?: boolean;
   onLoadDetail: (activity: TrainingHubActivity) => void;
   onExportFile: (
     activity: TrainingHubActivity,
@@ -48,6 +49,7 @@ interface ExportMenuProps {
   activity: TrainingHubActivity;
   activityName: string;
   busy: string | null;
+  disabled?: boolean;
   onExportFile: (
     activity: TrainingHubActivity,
     fileType: TrainingHubActivityFileType
@@ -58,6 +60,7 @@ function ExportMenu({
   activity,
   activityName,
   busy,
+  disabled = false,
   onExportFile
 }: ExportMenuProps) {
   const [menuPosition, setMenuPosition] = useState<{
@@ -136,10 +139,10 @@ function ExportMenu({
         className="icon-button training-action-button"
         type="button"
         aria-label={`Export ${activityName}`}
-        title="Export activity file"
+        title={disabled ? "Sample activities cannot be exported" : "Export activity file"}
         aria-haspopup="menu"
         aria-expanded={open}
-        disabled={isExporting}
+        disabled={disabled || isExporting}
         onClick={(event) => {
           event.stopPropagation();
           toggleMenu();
@@ -197,6 +200,7 @@ export function TrainingActivityTable({
   sportTypes,
   selectedActivityId,
   busy,
+  exportDisabled = false,
   onLoadDetail,
   onExportFile
 }: TrainingActivityTableProps) {
@@ -276,6 +280,7 @@ export function TrainingActivityTable({
                       activity={activity}
                       activityName={activityName}
                       busy={busy}
+                      disabled={exportDisabled}
                       onExportFile={onExportFile}
                     />
                   </div>

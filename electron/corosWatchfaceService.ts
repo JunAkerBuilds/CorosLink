@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { annotateDiagnosticRequest } from "./diagnosticsLog";
 import fs from "node:fs";
 import path from "node:path";
 import { app, nativeImage, safeStorage } from "electron";
@@ -4031,6 +4032,8 @@ async function mobileRequest<T>(
     method: options.method,
     headers,
     ...(options.body !== undefined ? { body: options.body } : {})
+  }).catch((error: unknown) => {
+    throw annotateDiagnosticRequest(error, options.method, `${baseUrl}${endpoint}`);
   });
   const raw = await response.text();
   if (!response.ok) {

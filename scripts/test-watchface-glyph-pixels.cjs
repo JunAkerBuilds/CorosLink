@@ -60,7 +60,12 @@ async function verifyPixels() {
   }, aodConfig: { background_icon: 'background.png', time_hour_high_pos: '{200,160}', time_hour_high_font: 'digits' },
     spriteFolders: [{ folder: 'digits', kind: 'digits', files }], icons: [ { path: `${root}/am.png`, width: 12, height: 8 }, { path: `${root}/pm.png`, width: 12, height: 8 } ] };
   const details = { archiveId: 'compiled-fixture', resolutions: [resolution] };
-  const load = async (paths) => paths.map((p) => sources.get(p)).filter(Boolean);
+  // Match the IPC loader: absent PNGs reject the entire request.
+  const load = async (paths) => paths.map((p) => {
+    const source = sources.get(p);
+    if (!source) throw new Error(`The template does not contain the requested image: ${p}`);
+    return source;
+  });
   const output = await compiled.renderCompiledWatchfacePreview(details, resolution, 'current', load, { date: new Date(2026, 8, 13, 20, 58), values: { steps: '88888' } });
   const actual = await inspect(output.dataUrl);
   const px = (x,y) => [...actual.canvas.getContext('2d').getImageData(x,y,1,1).data];
@@ -71,6 +76,77 @@ async function verifyPixels() {
   check(px(161,230)[0] === 0, 'Compiled value rendering must clip to firmware rectangle');
   const aod = await inspect((await compiled.renderCompiledWatchfacePreview(details, resolution, 'aod', load)).dataUrl);
   check(aod.canvas.getContext('2d').getImageData(204,163,1,1).data[0] === 255, 'AOD must use its own compiled coordinates without dimming again');
+  // COROS compiles dynamic AOD fields but skips the background entirely.
+  // A light editor backdrop used to conceal black-on-black time digits.
+  const brightBackground = png(416, 416, 0, 0, 416, 416, '#ffffff');
+  const aodFrame = document.createElement('canvas'); aodFrame.width = 416; aodFrame.height = 416;
+  const aodDetails = studio.detailsForCompositionMode(details, 'aod');
+  const aodOptions = { fontFamily: '', digitColor: '#ffffff', accentColor: '#ffffff', tintIcons: false, tintLabels: false, previewMode: 'aod' };
+  await studio.drawStudioPreview(aodFrame, brightBackground, aodDetails, aodOptions, load);
+  check([...aodFrame.getContext('2d').getImageData(208,208,1,1).data].join(',') === '0,0,0,255', 'AOD editor must omit a light background');
+  await studio.drawStudioPreview(aodFrame, brightBackground, aodDetails, { ...aodOptions, previewMode: 'current' }, load);
+  check(aodFrame.getContext('2d').getImageData(208,208,1,1).data[0] === 255, 'Current must retain the authored light background');
+  const absentAodBackground = { ...resolution, aodConfig: { ...resolution.aodConfig, background_icon: 'missing.png', bg_color: '0xffffff' } };
+  const noBackground = await inspect((await compiled.renderCompiledWatchfacePreview(details, absentAodBackground, 'aod', load)).dataUrl);
+  check(noBackground.canvas.getContext('2d').getImageData(208,208,1,1).data[0] === 0, 'Compiled AOD must ignore absent background PNGs and bg_color');
+  check(noBackground.canvas.getContext('2d').getImageData(204,163,1,1).data[0] === 255, 'AOD digits must survive without a background PNG');
+  const mipLoad = async (paths) => (await load(paths)).map((asset) => asset.path.endsWith('/background.png') ? { ...asset, dataUrl: brightBackground } : asset);
+  const mip = await inspect((await compiled.renderCompiledWatchfacePreview(details, { ...resolution, aodConfig: {} }, 'aod', mipLoad)).dataUrl);
+  check(mip.canvas.getContext('2d').getImageData(208,208,1,1).data[0] === 255, 'A watch without a separate AOD must keep its Current background');
+  // Caption overlays used a separate draw path that skipped AOD cleanup.
+  // Keep faint isolated strokes in Current, but match the exported AOD mask
+  // at both physical and master resolutions, including layer opacity.
+  const { buildAodSafeSpriteReplacements } = await import('/src/watchfaces/watchfaceCompose.ts');
+  const caption = document.createElement('canvas'); caption.width = 32; caption.height = 24;
+  const captionContext = caption.getContext('2d');
+  captionContext.fillStyle = '#b8b8b8'; captionContext.fillRect(4,4,3,16);
+  captionContext.globalAlpha = .45; captionContext.fillRect(20,4,1,16);
+  captionContext.fillRect(7,4,1,16);
+  const captionUrl = caption.toDataURL();
+  for (const size of [416,800]) for (const opacity of [1,.99]) {
+    const overlayRoot = `watchface_${size}x${size}`;
+    const overlayPath = `${overlayRoot}/studio/caption/00.png`;
+    const overlayResolution = { directory: overlayRoot, width: size, height: size, config: {
+      time_center_polygon_icon1: 'studio/caption/00.png', time_center_pos: `{${size/2},${size/2}}`
+    }, aodConfig: {}, spriteFolders: [], icons: [{ path: overlayPath, width: 32, height: 24 }] };
+    const overlayDetails = { archiveId: 'thin-caption', resolutions: [overlayResolution] };
+    const overlayOptions = { ...aodOptions, layerOpacities: { 'configAsset:config:time_center_polygon_icon1': opacity } };
+    const overlayLoad = async () => [{ path: overlayPath, width: 32, height: 24, dataUrl: captionUrl }];
+    const preview = document.createElement('canvas'); preview.width = size; preview.height = size;
+    await studio.drawStudioPreview(preview, '', overlayDetails, overlayOptions, overlayLoad);
+    const [exported] = await buildAodSafeSpriteReplacements([{ path: overlayPath, dataUrl: await studio.applyWatchfaceDataUrlOpacity(captionUrl, opacity) }]);
+    const exportedLoad = async () => [{ path: overlayPath, width: 32, height: 24, dataUrl: exported.dataUrl }];
+    const exportedFrame = document.createElement('canvas'); exportedFrame.width = size; exportedFrame.height = size;
+    await studio.drawStudioPreview(exportedFrame, '', overlayDetails, { ...aodOptions, compiledPixels: true }, exportedLoad);
+    const region = canvas => [...canvas.getContext('2d').getImageData(size/2-16,size/2-12,32,24).data];
+    check(JSON.stringify(region(preview)) === JSON.stringify(region(exportedFrame)), `AOD overlay preview must match exported edge pixels at ${size}px, opacity ${opacity}`);
+    check(preview.getContext('2d').getImageData(size/2+4,size/2,1,1).data[0] === 0, 'AOD overlay must remove an isolated faint stroke');
+    await studio.drawStudioPreview(preview, sources.get(`${root}/background.png`).dataUrl, overlayDetails, { ...overlayOptions, previewMode: 'current' }, overlayLoad);
+    check(preview.getContext('2d').getImageData(size/2+4,size/2,1,1).data[0] > 30, 'Current overlay must retain its soft thin stroke');
+  }
+  // SATISFY has no AM/PM support in its 800px master, but the 416px AOD
+  // still references missing a/icon/am.png and pm.png. Export with AM/PM
+  // disabled must remove those references before the strict preview load.
+  const { composeWatchfaceReplacements } = await import('/src/watchfaces/watchfaceCompose.ts');
+  const { makeDefaultDesign } = await import('/src/watchfaces/watchfaceBackground.ts');
+  const staleAodDetails = { ...details, resolutions: [
+    { directory: 'watchface_800x800', width: 800, height: 800, config: {}, aodConfig: {}, icons: [], spriteFolders: [] },
+    { ...resolution, config: { ...resolution.aodConfig, am_icon: 'a\\icon\\am.png', pm_icon: 'a\\icon\\pm.png', am_pm_icon_pos: '{0,0}' }, aodConfig: {}, icons: [] }
+  ] };
+  const disabledAmPmDesign = { ...makeDefaultDesign(), fontFamily: '', tintIcons: false, tintLabels: false, ampmIndicator: { enabled: false, x: 0, y: 0, scale: 1 } };
+  let stalePreviewError = '';
+  try {
+    const stale = staleAodDetails.resolutions[1];
+    await compiled.renderCompiledWatchfacePreview(staleAodDetails, { ...stale, aodConfig: stale.config }, 'aod', load);
+  } catch (error) { stalePreviewError = error.message; }
+  check(stalePreviewError.includes('a/icon/am.png'), 'The original dangling AM/PM fixture must reproduce the missing-image failure');
+  const composition = await composeWatchfaceReplacements(staleAodDetails, disabledAmPmDesign, load);
+  const cleanedDetails = studio.applyConfigOverridesToDetails(staleAodDetails, composition.configOverrides);
+  const cleaned = cleanedDetails.resolutions.find((item) => item.width === 416);
+  check(!cleaned.config.am_icon && !cleaned.config.pm_icon && !cleaned.config.am_pm_icon_pos, 'Disabled AM/PM must clear dangling paths even without master-resolution support');
+  const cleanAod = { ...cleaned, aodConfig: cleaned.config };
+  const cleanedPreview = await inspect((await compiled.renderCompiledWatchfacePreview(cleanedDetails, cleanAod, 'aod', load)).dataUrl);
+  check(cleanedPreview.canvas.getContext('2d').getImageData(204,163,1,1).data[0] === 255, 'The cleaned AOD export must render with the strict IPC asset loader');
   // Generated direct PNG references can be numbered, even in single-file
   // folders which older archive descriptions omit from both asset lists.
   for (const [name, color] of [['sunset', '#ffff00'], ['sunrise', '#ff00ff'], ['aod_sunset', '#00ffff'], ['am', '#0000ff'], ['pm', '#00ff00']]) {
@@ -120,7 +196,7 @@ async function verifyPixels() {
   check(metrics.length === 10 && metrics.every((entry) => entry.width === 26 && entry.height === 30), 'Metric export must store spacing in each digit advance cell');
   const previewCanvas = document.createElement('canvas'); previewCanvas.width=416; previewCanvas.height=416;
   await studio.drawStudioPreview(previewCanvas, sources.get(`${root}/background.png`).dataUrl, details, { fontFamily:'', digitColor:'#ffffff', accentColor:'#ffffff', tintIcons:false, tintLabels:false, metricStyles:styles }, load);
-  return { dataUrl: output.dataUrl, checks: output.checks, tests: 26 };
+  return { dataUrl: output.dataUrl, checks: output.checks, tests: 41 };
 }
 
 (async () => {
@@ -133,7 +209,7 @@ async function verifyPixels() {
     window = new BrowserWindow({ show:false, webPreferences:{ contextIsolation:true, sandbox:true } });
     await window.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/__glyph_test`);
     const results = await window.webContents.executeJavaScript(`(${verifyPixels.toString()})()`);
-    assert.equal(results.tests,26);
+    assert.equal(results.tests,41);
     await fs.writeFile('/tmp/coroslink-export-pixel-test.png', Buffer.from(results.dataUrl.split(',')[1], 'base64'));
     console.log('Watchface glyph and compiled pixel tests passed', results.checks);
   } catch(error) { console.error(error); exitCode=1; }

@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { TrainingSummaryTiles } from "./TrainingSummaryTiles";
 import { recoveryTone } from "../parsers";
 import type { TrainingSummaryMetrics } from "../types";
 
@@ -84,13 +83,6 @@ export function RecoveryRing({ summary }: RecoveryRingProps) {
         </div>
 
         <p className="training-ring-message">{message}</p>
-
-        <TrainingSummaryTiles
-          summary={summary}
-          layout="stack"
-          metrics={["load", "heart", "steps", "calories"]}
-          className="training-ring-metrics"
-        />
       </div>
     </section>
   );

@@ -108,11 +108,11 @@ const DARK_METRIC_PALETTES: Record<TrainingMetricKey, TrainingMetricPalette> = {
     stops: { top: "#74c08f", mid: "#2d9a74", bottom: "#2d9a74" }
   },
   sleep: {
-    stroke: "#7ab8ff",
-    halo: "rgba(122, 184, 255, 0.3)",
-    soft: "rgba(122, 184, 255, 0.15)",
-    chip: "#aacfff",
-    stops: { top: "#7ab8ff", mid: "#4a7fd6", bottom: "#4a7fd6" }
+    stroke: "#a495ff",
+    halo: "rgba(164, 149, 255, 0.3)",
+    soft: "rgba(164, 149, 255, 0.1)",
+    chip: "#c4baff",
+    stops: { top: "#a495ff", mid: "#8575d8", bottom: "#66579d" }
   }
 };
 
@@ -139,11 +139,11 @@ const PAPER_METRIC_PALETTES: Record<TrainingMetricKey, TrainingMetricPalette> = 
     stops: { top: "#12946e", mid: "#0f7f5f", bottom: "#0f7f5f" }
   },
   sleep: {
-    stroke: "#3d6fd6",
-    halo: "rgba(61, 111, 214, 0.24)",
-    soft: "rgba(61, 111, 214, 0.12)",
-    chip: "#2f56ab",
-    stops: { top: "#4a80e0", mid: "#3d6fd6", bottom: "#3d6fd6" }
+    stroke: "#7860c7",
+    halo: "rgba(120, 96, 199, 0.24)",
+    soft: "rgba(120, 96, 199, 0.1)",
+    chip: "#6145a9",
+    stops: { top: "#9276df", mid: "#7860c7", bottom: "#7860c7" }
   }
 };
 

@@ -50,7 +50,7 @@ CorosLink brings music management, watch maps, route planning, and training anal
 
 ### Google and Apple Calendar sync
 
-Connect your Google account from **Calendar → Calendar sync** or **Settings → Google Calendar**. Choose a calendar, sync planned workouts, and automatically keep additions, edits, moves, and removals up to date every 5 minutes while CorosLink is running. Workouts appear as all-day events for the past 7 days and next 90 days. Sync goes from CorosLink to Google; personal events and completed activities are not imported. See the [setup and sync guide](docs/google-calendar-sync.md).
+Connect your Google account from **Settings → Google Calendar**. Choose a calendar, sync planned workouts, and automatically keep additions, edits, moves, and removals up to date every 5 minutes while CorosLink is running. Use **Calendar → Sync now** to sync connected calendars immediately. Workouts appear as all-day events for the past 7 days and next 90 days. Sync goes from CorosLink to Google; personal events and completed activities are not imported. See the [setup and sync guide](docs/google-calendar-sync.md).
 
 Choose the **Apple Calendar** tab to connect iCloud with your Apple Account email and an app-specific password. Choose an editable iCloud calendar to sync workouts across your Apple devices, with separate sync and disconnect controls for each provider. Works on macOS, Windows, and Linux. See the [Apple Calendar setup guide](docs/apple-calendar-sync.md).
 

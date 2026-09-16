@@ -156,7 +156,9 @@ export class ICloudCalDav {
             : response.status === 403
               ? "iCloud denied calendar access. Choose a calendar you can edit."
               : response.status === 412
-                ? "An iCloud event changed during sync. Sync again to use its latest version."
+                ? ["PUT", "DELETE"].includes(method)
+                  ? "An iCloud event changed during sync. Sync again to use its latest version."
+                  : "iCloud could not read this calendar. Try syncing again or choose another calendar."
                 : response.status === 429
                   ? "iCloud is temporarily rate limited. Try syncing again later."
                   : response.status === 404
@@ -275,23 +277,33 @@ export class ICloudCalDav {
   ): Promise<ICloudCalendarEvent[]> {
     if (!/^[a-f0-9]{64}$/.test(source))
       throw new Error("Invalid calendar account identity.");
-    const body = `<?xml version="1.0" encoding="utf-8"?><c:calendar-query ${XML_NS}><d:prop><d:getetag/><c:calendar-data/></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"><c:prop-filter name="UID"><c:text-match collation="i;octet">coroslink-${source}-</c:text-match></c:prop-filter></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>`;
+    // iCloud rejects UID property filters with HTTP 412. Reconciliation checks
+    // source identity and ownership locally after this complete VEVENT read.
+    const body = `<?xml version="1.0" encoding="utf-8"?><c:calendar-query ${XML_NS}><d:prop><d:getetag/><c:calendar-data/></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"/></c:comp-filter></c:filter></c:calendar-query>`;
     const result = await this.request(calendarId, "REPORT", body, {
       Depth: "1",
     });
-    return parseDavResponses(await this.readBody(result.response)).map(
+    return parseDavResponses(await this.readBody(result.response)).flatMap(
       (row) => {
+        // iCloud includes the collection's ETag without calendar-data. Only
+        // this successful collection row can be skipped as metadata.
+        const href = iCloudCalendarUrl(row.href, calendarId).href;
+        if (
+          !row.failed &&
+          href.replace(/\/$/, "") === calendarId.replace(/\/$/, "")
+        )
+          return [];
         const etag = text(row.props.getetag).trim();
         const data = text(row.props["calendar-data"]);
         if (row.failed || !etag || !data)
           throw new Error(
             "iCloud returned an incomplete event list. Sync stopped before making changes.",
           );
-        return {
-          href: calendarResourceUrl(row.href, calendarId).href,
+        return [{
+          href: calendarResourceUrl(href, calendarId).href,
           etag,
           data,
-        };
+        }];
       },
     );
   }

@@ -1,6 +1,8 @@
 # Google Calendar sync
 
-Open **Calendar → Calendar sync** or **Settings → Google Calendar**. Connect your COROS account in Training Hub first.
+Open **Settings → Google Calendar**. Connect your COROS account in Training Hub first. Once connected, use **Calendar → Sync now** to sync immediately.
+
+The Calendar button shows **Synced** when all connected calendars have completed sync without pending CorosLink schedule changes. It shows **Syncing…** during sync and returns to **Sync now** after schedule changes or a sync failure.
 
 1. Complete **Google app setup** if this installation has no configured Google OAuth client.
 2. Click **Connect Google Calendar** and sign in using your normal browser. Allow calendar access.

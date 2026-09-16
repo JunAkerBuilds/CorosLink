@@ -10481,6 +10481,53 @@ td span {
   overflow-x: clip;
 }
 
+.training-preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  background: var(--glass-bg);
+}
+
+.training-preview-toolbar p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.training-preview-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  padding: 6px 12px;
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.training-preview-toggle:hover,
+.training-preview-toggle[aria-checked="true"] {
+  border-color: #9b7bff;
+  background: color-mix(in srgb, #9b7bff 20%, var(--glass-bg));
+  color: var(--text-primary);
+}
+
+.training-preview-toggle:focus-visible {
+  outline: 2px solid #9b7bff;
+  outline-offset: 3px;
+}
+
 .training-summary-tiles {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -10805,8 +10852,12 @@ td span {
   height: 100%;
 }
 
-.training-intelligence-grid > .training-ring-panel {
+.training-recovery-column {
   grid-area: recovery;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 14px;
+  min-width: 0;
 }
 
 .training-intelligence-grid > .training-fitness-panel {
@@ -10828,88 +10879,126 @@ td span {
 }
 
 .training-stat-card.is-widget {
-  display: grid;
-  grid-template-areas:
-    "icon label"
-    "value value"
-    "detail detail";
-  grid-template-columns: auto minmax(0, 1fr);
-  align-content: start;
-  gap: 8px 10px;
-  min-height: 104px;
-  padding: 14px 15px 12px;
-  border: 1px solid var(--stat-border, rgba(255, 255, 255, 0.08));
-  border-radius: 14px;
-  background: var(--stat-surface, rgba(255, 255, 255, 0.03));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  display: block;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--stat-accent) 19%, #30393c);
+  border-radius: 16px;
+  background:
+    radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--stat-accent) 14%, transparent), transparent 65%),
+    linear-gradient(135deg, #202a2d, #1d252a);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.06),
+    0 3px 10px rgba(0, 0, 0, 0.1);
   overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.training-stat-card.is-widget::before {
+.training-stat-card.is-widget::before,
+.training-stat-card.is-widget::after {
   content: none;
 }
 
-.training-stat-card.is-widget::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    90% 80% at 0% 0%,
-    color-mix(in srgb, var(--stat-accent) 18%, transparent),
-    transparent 68%
-  );
-  pointer-events: none;
-}
-
-.training-stat-card.is-widget:hover {
-  border-color: var(--stat-border-hover, rgba(255, 255, 255, 0.16));
+.training-stat-card.is-widget:hover,
+.training-stat-card.is-widget[open] {
+  border-color: color-mix(in srgb, var(--stat-accent) 42%, #30393c);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    0 10px 28px rgba(0, 0, 0, 0.18);
-  transform: translateY(-1px);
+    inset 0 1px 1px rgba(255, 255, 255, 0.08),
+    0 4px 14px rgba(0, 0, 0, 0.16);
+  transform: none;
 }
 
-.training-stat-card.is-widget > * {
-  position: relative;
-  z-index: 1;
+.training-stat-card__summary {
+  display: grid;
+  grid-template-columns: minmax(max-content, 0.85fr) minmax(0, 1.15fr);
+  grid-template-areas: "header header" "reading chart";
+  align-items: end;
+  gap: 15px 10px;
+  min-height: 132px;
+  padding: 16px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.training-stat-card__summary::-webkit-details-marker {
+  display: none;
+}
+
+.training-stat-card__summary:focus-visible {
+  outline: 2px solid var(--stat-accent);
+  outline-offset: -4px;
+  border-radius: 15px;
+}
+
+.training-stat-card__header {
+  grid-area: header;
+  display: flex;
+  contain: inline-size;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .training-stat-card.is-widget .training-stat-card__icon {
-  grid-area: icon;
-  grid-row: auto;
-  width: 28px;
-  height: 28px;
-  border: none;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 1px solid color-mix(in srgb, var(--stat-accent) 34%, transparent);
   border-radius: 50%;
-  background: var(--stat-icon-bg);
+  background: color-mix(in srgb, var(--stat-accent) 22%, transparent);
   color: var(--stat-icon-color);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--stat-accent) 22%, transparent);
+  box-shadow:
+    inset 0 1px 3px color-mix(in srgb, var(--stat-accent) 22%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--stat-accent) 5%, transparent);
+}
+
+.training-stat-card.is-widget .training-stat-card__icon svg {
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--stat-accent) 40%, transparent));
+  stroke-width: 2.2px;
+}
+
+.training-stat-card.is-widget.tone-heart .training-stat-card__icon svg,
+.training-stat-card.is-widget.tone-load .training-stat-card__icon svg {
+  fill: currentColor;
 }
 
 .training-stat-card.is-widget .training-stat-card__label {
-  grid-area: label;
   align-self: center;
-  overflow: hidden;
+  min-width: 0;
   color: var(--text-secondary);
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  line-height: 1.2;
-  text-overflow: ellipsis;
+  font-weight: 750;
+  letter-spacing: 0.075em;
+  line-height: 1.25;
   text-transform: uppercase;
-  white-space: nowrap;
+}
+
+.training-stat-card__chevron {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--text-muted);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.training-stat-card[open] .training-stat-card__chevron {
+  color: var(--stat-icon-color);
+  transform: rotate(90deg);
+}
+
+.training-stat-card__reading {
+  grid-area: reading;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
 }
 
 .training-stat-card.is-widget .training-stat-card__value {
-  grid-area: value;
-  grid-row: auto;
-  grid-column: auto;
-  align-self: auto;
+  grid-area: auto;
   color: var(--text-primary);
-  font-size: clamp(1.45rem, 2vw, 1.75rem);
+  font-size: clamp(1.6rem, 2.15vw, 2rem);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.045em;
   line-height: 1;
 }
 
@@ -10919,21 +11008,117 @@ td span {
 }
 
 .training-stat-card.is-widget .training-stat-card__detail {
-  grid-area: detail;
-  display: inline-flex;
-  align-self: start;
-  width: fit-content;
-  max-width: 100%;
-  overflow: hidden;
-  border-radius: var(--radius-pill);
-  background: rgba(0, 0, 0, 0.18);
-  color: var(--text-muted);
-  padding: 3px 8px;
-  font-size: 10px;
-  font-weight: 600;
+  display: block;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 550;
   line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.training-stat-card__chart {
+  grid-area: chart;
+  display: grid;
+  align-items: end;
+  min-width: 0;
+  height: 52px;
+  color: var(--stat-accent);
+}
+
+.training-stat-card__chart svg {
+  display: block;
+  width: 100%;
+  height: 52px;
+  overflow: visible;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--stat-accent) 22%, transparent));
+}
+
+.training-stat-card__chart-empty {
+  align-self: center;
+  color: var(--text-muted);
+  font-size: 9px;
+  text-align: right;
+}
+
+.training-stat-card__history {
+  margin: 0 16px;
+  border-top: 1px solid var(--stat-border);
+  padding: 12px 0 14px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.training-stat-card__history p {
+  margin: 0 0 8px;
+}
+
+.training-stat-card__history-label {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.training-stat-card__history dl {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.training-stat-card__history dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.training-stat-card__history dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.training-summary-tiles.is-stack {
+  align-items: start;
+  container-type: inline-size;
+}
+
+@container (max-width: 370px) {
+  .training-stat-card__summary {
+    gap: 14px 6px;
+    padding: 13px 11px;
+  }
+
+  .training-stat-card__header {
+    gap: 7px;
+  }
+
+  .training-stat-card.is-widget .training-stat-card__icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .training-stat-card.is-widget .training-stat-card__label {
+    font-size: 9px;
+    letter-spacing: 0.045em;
+  }
+
+  .training-stat-card.is-widget .training-stat-card__value {
+    font-size: 1.5rem;
+  }
+
+  .training-stat-card__chevron {
+    width: 12px;
+  }
+}
+
+@container (max-width: 280px) {
+  .training-stat-card.is-widget {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .training-stat-card__chevron {
+    transition: none;
+  }
 }
 
 .training-intelligence .training-stat-card.is-widget {
@@ -11230,7 +11415,9 @@ td span {
 /* ── Sleep summary panel ───────────────────────────────────────────── */
 .sleep-panel {
   --sleep-tone: rgba(120, 146, 255, 0.72);
+  --sleep-scenery-overlay: linear-gradient(180deg, rgba(21, 27, 32, 0.86), rgba(21, 27, 32, 0.76) 46%, rgba(21, 27, 32, 0.96));
   container: sleep-summary / inline-size;
+  isolation: isolate;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   align-content: start;
@@ -11244,6 +11431,19 @@ td span {
     radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--sleep-tone) 16%, transparent), transparent 58%),
     rgba(255, 255, 255, 0.034);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+.sleep-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background:
+    var(--sleep-scenery-overlay),
+    url("./assets/training/sleep-night.png") center / cover no-repeat;
+  filter: saturate(0.65);
+  pointer-events: none;
 }
 
 .sleep-panel.tone-low {
@@ -11270,17 +11470,41 @@ td span {
 }
 
 .sleep-panel-header h2 {
-  margin: 4px 0 0;
+  margin: 12px 0 0;
   color: var(--text-primary);
   font-size: clamp(1.05rem, 1.4vw, 1.2rem);
   font-weight: 700;
   letter-spacing: -0.03em;
 }
 
+.sleep-panel-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.sleep-panel-moon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(112, 76, 222, 0.45);
+  color: #c4adff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
 .sleep-panel-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   width: 34px;
   height: 34px;
   border-radius: 999px;
@@ -12590,7 +12814,7 @@ td span {
 .training-ring-content {
   display: grid;
   justify-items: center;
-  align-content: start;
+  align-content: center;
   gap: clamp(13px, 1.8vh, 19px);
   height: 100%;
   overflow: visible;
@@ -12666,24 +12890,12 @@ td span {
   text-wrap: balance;
 }
 
-.training-ring-metrics.training-summary-tiles.is-stack {
-  display: grid;
-  width: 100%;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  min-width: 0;
+.training-recovery-stats.training-summary-tiles.is-stack {
+  gap: 14px;
 }
 
-.training-ring-metrics .training-stat-card {
+.training-recovery-stats .training-stat-card {
   animation: none;
-}
-
-.training-ring-metrics .training-stat-card.is-widget {
-  min-height: 90px;
-  padding: 12px 13px 10px;
-}
-
-.training-ring-metrics .training-stat-card.is-widget .training-stat-card__value {
-  font-size: clamp(1.35rem, 1.85vw, 1.58rem);
 }
 
 .training-chart-grid {
@@ -12720,9 +12932,182 @@ td span {
   --chart-curve-glow: rgba(116, 192, 143, 0.3);
 }
 
-.training-chart-panel[data-metric="sleep"] {
-  --chart-panel-tint: rgba(122, 184, 255, 0.09);
-  --chart-curve-glow: rgba(122, 184, 255, 0.32);
+.training-chart-panel.sleep-duration-card {
+  container: sleep-duration / inline-size;
+  align-content: start;
+  gap: 24px;
+  background:
+    radial-gradient(ellipse at 0% 0%, rgba(111, 125, 151, 0.075), transparent 65%),
+    linear-gradient(135deg, #1b2529, #182024);
+  border-color: rgba(157, 168, 189, 0.12);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.035);
+}
+
+.sleep-duration-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sleep-duration-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 25%, rgba(147, 119, 255, 0.3), rgba(110, 83, 219, 0.14));
+  color: #b4a3ff;
+}
+
+.sleep-duration-icon svg {
+  fill: currentColor;
+  stroke-width: 1.7px;
+}
+
+.sleep-duration-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sleep-duration-title h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.3;
+}
+
+.sleep-duration-header > div > p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.sleep-duration-info {
+  position: relative;
+  color: var(--text-muted);
+}
+
+.sleep-duration-info summary {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  list-style: none;
+  cursor: pointer;
+}
+
+.sleep-duration-info summary::-webkit-details-marker {
+  display: none;
+}
+
+.sleep-duration-info summary:hover,
+.sleep-duration-info[open] summary {
+  background: var(--glass-bg);
+  color: var(--text-primary);
+}
+
+.sleep-duration-info summary:focus-visible {
+  outline: 2px solid #a495ff;
+  outline-offset: 2px;
+}
+
+.sleep-duration-info > p {
+  position: absolute;
+  top: 28px;
+  right: -10px;
+  z-index: 5;
+  width: min(240px, calc(100cqw - 54px));
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sleep-duration-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.sleep-duration-average,
+.sleep-duration-comparison {
+  display: grid;
+  gap: 7px;
+}
+
+.sleep-duration-average > strong {
+  color: var(--text-primary);
+  font-size: clamp(32px, 6.5cqw, 40px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.055em;
+  line-height: 1;
+}
+
+.sleep-duration-average > span,
+.sleep-duration-comparison > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.sleep-duration-comparison {
+  border-left: 1px solid var(--glass-border);
+  padding-left: 16px;
+}
+
+.sleep-duration-comparison > strong {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-secondary);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.sleep-duration-comparison.is-up > strong {
+  color: var(--success-text);
+}
+
+.sleep-duration-chart {
+  height: clamp(210px, 25vh, 300px);
+}
+
+.sleep-duration-axis-label text {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+@container sleep-duration (max-width: 360px) {
+  .sleep-duration-axis-label text {
+    font-size: 10px;
+  }
+
+  .sleep-duration-summary {
+    gap: 12px;
+  }
+
+  .sleep-duration-comparison {
+    padding-left: 12px;
+  }
+}
+
+:root[data-theme="paper"] .sleep-duration-icon {
+  color: #7959c3;
 }
 
 .training-chart-panel .recharts-area-curve {
@@ -13007,20 +13392,6 @@ td span {
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-
-.training-load-profile-header .eyebrow {
-  margin: 0;
-}
-
-.training-load-profile-header h2 {
-  margin: 2px 0 0;
-  font-size: 1.15rem;
-}
-
-.training-load-profile-header h2 span {
-  opacity: 0.6;
-  font-weight: 500;
 }
 
 /* Standalone grid (not a .training-chart-grid) so the grouped max-width
@@ -24196,6 +24567,15 @@ tr.data-intervals-row-missing {
   backdrop-filter: none;
 }
 
+:root[data-theme="paper"] .sleep-panel {
+  --sleep-scenery-overlay: linear-gradient(180deg, rgba(245, 247, 252, 0.92), rgba(237, 242, 252, 0.82) 52%, rgba(233, 239, 248, 0.9));
+}
+
+:root[data-theme="paper"] .sleep-panel-moon {
+  background: rgba(112, 76, 222, 0.14);
+  color: #6944bd;
+}
+
 :root[data-theme="paper"] .sleep-stage-bar,
 :root[data-theme="paper"] .sleep-stage-bar::before {
   background: rgba(38, 34, 28, 0.08);
@@ -24317,8 +24697,30 @@ tr.data-intervals-row-missing {
   box-shadow: var(--shadow-soft);
 }
 
-:root[data-theme="paper"] .training-stat-card.is-widget .training-stat-card__detail {
-  background: rgba(38, 34, 28, 0.06);
+:root[data-theme="paper"] .training-stat-card.is-widget {
+  background:
+    radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--stat-accent) 10%, transparent), transparent 65%),
+    var(--glass-bg-elevated);
+}
+
+:root[data-theme="paper"] .training-stat-card.is-widget.tone-load {
+  --stat-accent: #b9671b;
+  --stat-icon-color: #a7530e;
+}
+
+:root[data-theme="paper"] .training-stat-card.is-widget.tone-heart {
+  --stat-accent: #bd3d80;
+  --stat-icon-color: #ad2d70;
+}
+
+:root[data-theme="paper"] .training-stat-card.is-widget.tone-steps {
+  --stat-accent: #087d9c;
+  --stat-icon-color: #086c87;
+}
+
+:root[data-theme="paper"] .training-stat-card.is-widget.tone-calories {
+  --stat-accent: #7953bd;
+  --stat-icon-color: #6943ad;
 }
 
 /* --- Training Hub: tables --------------------------------------------------

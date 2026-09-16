@@ -2,6 +2,7 @@ import { safeStorage, shell } from "electron";
 import { getSetting, setSetting } from "./database";
 import {
   getTrainingHubStatus,
+  getScheduledWorkoutRevision,
   listScheduledWorkoutEntries,
 } from "./trainingHubService";
 import {
@@ -51,6 +52,7 @@ export const googleCalendar = new GoogleCalendarClient({
     return status.authenticated ? status.userId : undefined;
   },
   listWorkouts: listScheduledWorkoutEntries,
+  sourceRevision: getScheduledWorkoutRevision,
   openUrl: (url) => shell.openExternal(url),
   config: {
     clientId: process.env.COROSLINK_GOOGLE_CALENDAR_CLIENT_ID ?? "",

@@ -261,7 +261,9 @@ export function WatchfacesView({
     useState<CommunityWatchfaceDownloadProgress | null>(null);
   const [communityConfirmFace, setCommunityConfirmFace] =
     useState<CommunityWatchface | null>(null);
-  const [queuedCommunitySlug, setQueuedCommunitySlug] = useState<string | null>(null);
+  const [queuedCommunityRequest, setQueuedCommunityRequest] = useState<
+    (CommunityWatchfaceOpenRequest & { requestId: number }) | null
+  >(null);
   const handledCommunityRequestRef = useRef(0);
   const automationRequestHandlerRef = useRef<
     (request: WatchfaceAutomationRequest) => Promise<unknown>
@@ -425,10 +427,7 @@ export function WatchfacesView({
     onCommunityOpenRequestHandled();
     setHubTab("browse");
     if (surface === "studio") {
-      setQueuedCommunitySlug(communityOpenRequest.slug);
-      setNotice(
-        "A website watch face is waiting. Save or discard your current work, then return to Browse to open it."
-      );
+      setQueuedCommunityRequest(communityOpenRequest);
       return;
     }
     setSurface("hub");
@@ -738,9 +737,9 @@ export function WatchfacesView({
     setPublishOpen(false);
     setShareLink(null);
     clearMessages();
-    if (queuedCommunitySlug) {
-      const slug = queuedCommunitySlug;
-      setQueuedCommunitySlug(null);
+    if (queuedCommunityRequest) {
+      const { slug } = queuedCommunityRequest;
+      setQueuedCommunityRequest(null);
       setHubTab("browse");
       queueMicrotask(() => void prepareCommunityImport(slug));
     }
@@ -1211,12 +1210,6 @@ export function WatchfacesView({
         }`}
         aria-hidden={!active}
       >
-        {queuedCommunitySlug ? (
-          <div className="watchface-community-queued" role="status">
-            A website watch face is waiting. Return to Browse when you are ready
-            to open it.
-          </div>
-        ) : null}
         <WatchfaceEditor
           key={studioSession.id}
           api={api}
@@ -1231,6 +1224,8 @@ export function WatchfacesView({
           initiallyDirty={studioSession.initiallyDirty}
           showDevelopmentTools={IS_DEVELOPMENT_BUILD && showDevelopmentTools}
           onBack={returnToHub}
+          backRequestId={queuedCommunityRequest?.requestId}
+          onBackCancelled={() => setQueuedCommunityRequest(null)}
           onArchiveCreated={setBuiltArchive}
           onPublish={openPublish}
           onProjectSaved={handleProjectSaved}

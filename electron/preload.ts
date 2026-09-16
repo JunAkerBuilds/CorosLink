@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { DiagnosticsSnapshot, RendererDiagnosticError } from "./diagnosticsTypes";
 import type { WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "./calendarSyncTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "./googleCalendarTypes";
@@ -906,6 +907,10 @@ const api = {
     ipcRenderer.invoke("maps:stopRouteShare"),
   validateRouteApiKey: (apiKey: string): Promise<RouteApiKeyValidation> =>
     ipcRenderer.invoke("maps:validateRouteApiKey", apiKey),
+  getDiagnostics: (): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke("diagnostics:get"),
+  copyDiagnostics: (): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke("diagnostics:copy"),
+  clearDiagnostics: (): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke("diagnostics:clear"),
+  reportRendererError: (error: RendererDiagnosticError): void => ipcRenderer.send("diagnostics:rendererError", error),
   getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:getInfo"),
   openAppStorageLocation: (id: string): Promise<void> =>
     ipcRenderer.invoke("app:openStorageLocation", id),

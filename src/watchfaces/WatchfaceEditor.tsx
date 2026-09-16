@@ -758,6 +758,8 @@ interface WatchfaceEditorProps {
   initiallyDirty?: boolean;
   showDevelopmentTools?: boolean;
   onBack: () => void;
+  backRequestId?: number;
+  onBackCancelled?: () => void;
   onPublish: (archive: CorosWatchfaceArchive, name: string) => void;
   onArchiveCreated?: (archive: CorosWatchfaceArchive) => void;
   onProjectSaved?: (project: CorosWatchfaceProject) => void;
@@ -793,6 +795,8 @@ interface WatchfaceDragState {
   targetId: string;
   startX: number;
   startY: number;
+  /** Selection stays still until the pointer moves far enough in screen pixels. */
+  pendingPointer?: { clientX: number; clientY: number };
   baseX: number;
   baseY: number;
   snapId: string;
@@ -887,6 +891,7 @@ function isSpriteTransformDrag(
 }
 
 const PREVIEW_SIZE = 520;
+const DRAG_START_THRESHOLD = 3;
 const PROJECT_THUMBNAIL_SIZE = 416;
 
 function maskCanvasToCircle(canvas: HTMLCanvasElement): void {
@@ -1087,6 +1092,8 @@ export function WatchfaceEditor({
   initiallyDirty = false,
   showDevelopmentTools = false,
   onBack,
+  backRequestId,
+  onBackCancelled,
   onPublish,
   onArchiveCreated,
   onProjectSaved,
@@ -1915,13 +1922,13 @@ export function WatchfaceEditor({
   const previewStudioOptions = useMemo(
     () => ({
       ...studioOptions,
-      previewMode,
+      previewMode: supportsAod ? previewMode : ("current" as const),
       deferProgressArcs: true,
       ...(automationPreviewComplication
         ? { previewComplication: automationPreviewComplication }
         : {})
     }),
-    [automationPreviewComplication, studioOptions, previewMode]
+    [automationPreviewComplication, studioOptions, previewMode, supportsAod]
   );
   const detailsWithConfigEdits = useMemo(
     () =>
@@ -3102,7 +3109,7 @@ export function WatchfaceEditor({
       studioOptionsForResolution(
         {
           ...toStudioOptions(frameDesign),
-          previewMode,
+          previewMode: supportsAod ? previewMode : "current",
           previewComplicationContent
         },
         frameDetails
@@ -4325,6 +4332,36 @@ export function WatchfaceEditor({
     return { dx: rawDx + result.dx, dy: rawDy + result.dy };
   }
 
+  function startElementDrag(
+    event: React.PointerEvent<Element>,
+    drag: WatchfaceDragState
+  ) {
+    drag.pendingPointer = { clientX: event.clientX, clientY: event.clientY };
+    dragRef.current = drag;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function activateElementDrag(
+    drag: WatchfaceDragState,
+    pointer: { clientX: number; clientY: number }
+  ): boolean {
+    const origin = drag.pendingPointer;
+    if (!origin) return true;
+    if (Math.hypot(pointer.clientX - origin.clientX, pointer.clientY - origin.clientY) < DRAG_START_THRESHOLD) {
+      return false;
+    }
+    // Selecting a layer can change the stage layout. Keep the movement anchored
+    // to the original screen position using the current canvas dimensions.
+    const start = toResolutionPoint(origin);
+    if (!start) return false;
+    drag.startX = start.x;
+    drag.startY = start.y;
+    delete drag.pendingPointer;
+    beginDesignTransaction();
+    prepareDragVisual(drag);
+    return true;
+  }
+
   function handlePointerDown(event: React.PointerEvent<Element>) {
     if (!canEditActiveMode || event.button !== 0) return;
     const point = toResolutionPoint(event);
@@ -4350,11 +4387,10 @@ export function WatchfaceEditor({
     ) {
       const movementIds = movableIdsForGesture("complication");
       if (!selectedIds.includes("complication")) selectEditorItem("complication");
-      beginDesignTransaction();
       const iconOffset = design.controlIconOffsets?.[
         selectorIconTarget.complicationId
       ] ?? { dx: 0, dy: 0 };
-      dragRef.current = {
+      startElementDrag(event, {
         kind: "selectorIcon",
         targetId: selectorIconTarget.complicationId,
         startX: point.x,
@@ -4364,9 +4400,7 @@ export function WatchfaceEditor({
         snapId: `selectorIcon:${selectorIconTarget.complicationId}`,
         baseBounds: selectorIconTarget,
         selectionIds: movementIds
-      };
-      prepareDragVisual(dragRef.current);
-      event.currentTarget.setPointerCapture(event.pointerId);
+      });
       return;
     }
 
@@ -4390,8 +4424,7 @@ export function WatchfaceEditor({
         const hitId = `bgel:${bgHit.id}`;
         const movementIds = movableIdsForGesture(hitId);
         if (!selectedIds.includes(hitId)) selectEditorItem(hitId);
-        beginDesignTransaction();
-        dragRef.current = {
+        startElementDrag(event, {
           kind: "bgElement",
           targetId: bgHit.id,
           startX: point.x,
@@ -4405,9 +4438,7 @@ export function WatchfaceEditor({
             previewHeight / BACKGROUND_SPACE
           ),
           selectionIds: movementIds
-        };
-        prepareDragVisual(dragRef.current);
-        event.currentTarget.setPointerCapture(event.pointerId);
+        });
         return;
       }
     }
@@ -4419,8 +4450,7 @@ export function WatchfaceEditor({
     const movementIds = movableIdsForGesture(liveHit.id);
     if (!selectedIds.includes(liveHit.id)) selectEditorItem(liveHit.id);
     if (liveHit.weatherIndicator && design.weatherIndicator) {
-      beginDesignTransaction();
-      dragRef.current = {
+      startElementDrag(event, {
         kind: "weather",
         targetId: "weather",
         startX: point.x,
@@ -4430,14 +4460,11 @@ export function WatchfaceEditor({
         snapId: liveHit.id,
         baseBounds: liveHit.bounds!,
         selectionIds: movementIds
-      };
-      prepareDragVisual(dragRef.current);
-      event.currentTarget.setPointerCapture(event.pointerId);
+      });
       return;
     }
     if (liveHit.ampmIndicator && design.ampmIndicator) {
-      beginDesignTransaction();
-      dragRef.current = {
+      startElementDrag(event, {
         kind: "ampm",
         targetId: "ampm",
         startX: point.x,
@@ -4447,15 +4474,12 @@ export function WatchfaceEditor({
         snapId: liveHit.id,
         baseBounds: liveHit.bounds!,
         selectionIds: movementIds
-      };
-      prepareDragVisual(dragRef.current);
-      event.currentTarget.setPointerCapture(event.pointerId);
+      });
       return;
     }
     if (liveHit.staticSeparatorId) {
-      beginDesignTransaction();
       const separator = design.staticSeparators[liveHit.staticSeparatorId];
-      dragRef.current = {
+      startElementDrag(event, {
         kind: "staticSeparator",
         targetId: liveHit.staticSeparatorId,
         startX: point.x,
@@ -4465,16 +4489,13 @@ export function WatchfaceEditor({
         snapId: liveHit.id,
         baseBounds: liveHit.bounds!,
         selectionIds: movementIds
-      };
-      prepareDragVisual(dragRef.current);
-      event.currentTarget.setPointerCapture(event.pointerId);
+      });
       return;
     }
     if (liveHit.kind === "customSprite" && liveHit.spriteId) {
       const sprite = (design.designSprites ?? []).find((s) => s.id === liveHit.spriteId);
       if (sprite) {
-        beginDesignTransaction();
-        dragRef.current = {
+        startElementDrag(event, {
           kind: "sprite",
           targetId: sprite.id,
           startX: point.x,
@@ -4484,16 +4505,13 @@ export function WatchfaceEditor({
           snapId: liveHit.id,
           baseBounds: liveHit.bounds!,
           selectionIds: movementIds
-        };
-        prepareDragVisual(dragRef.current);
-        event.currentTarget.setPointerCapture(event.pointerId);
+        });
       }
       return;
     }
     if (liveHit.capabilities.position && liveHit.layoutGroupId) {
-      beginDesignTransaction();
       const offset = design.layoutOffsets?.[liveHit.layoutGroupId] ?? { dx: 0, dy: 0 };
-      dragRef.current = {
+      startElementDrag(event, {
         kind: "layout",
         targetId: liveHit.layoutGroupId,
         startX: point.x,
@@ -4503,9 +4521,7 @@ export function WatchfaceEditor({
         snapId: liveHit.id,
         baseBounds: liveHit.bounds!,
         selectionIds: movementIds
-      };
-      prepareDragVisual(dragRef.current);
-      event.currentTarget.setPointerCapture(event.pointerId);
+      });
     }
   }
 
@@ -4983,6 +4999,7 @@ export function WatchfaceEditor({
       );
       return;
     }
+    if (!activateElementDrag(drag, pointer)) return;
     if (isSpriteTransformDrag(drag)) {
       previewSpriteTransform(drag, point, event.shiftKey, event.altKey);
       return;
@@ -5007,6 +5024,13 @@ export function WatchfaceEditor({
     }
     const drag = dragRef.current;
     if (drag) {
+      if (drag.pendingPointer && (event.type !== "pointerup" || !activateElementDrag(drag, event))) {
+        dragRef.current = null;
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+        return;
+      }
       if (isSpriteTransformDrag(drag)) {
         if (event.type === "pointerup") {
           const point = toResolutionPoint(event);
@@ -6091,7 +6115,7 @@ export function WatchfaceEditor({
         : 1;
     const exportOptions: WatchfaceStudioOptions = {
       ...snapshotOptions,
-      previewMode: mode,
+      previewMode: hasWatchfaceAod(details) ? mode : "current",
       ...(scenario?.dateTime
         ? { previewDate: new Date(scenario.dateTime) }
         : {}),
@@ -6513,12 +6537,21 @@ export function WatchfaceEditor({
   }
 
   function requestBack() {
-    if (isDirty) {
+    if (isDirty || saving || spriteImportPending) {
       setLeaveOpen(true);
     } else {
       onBack();
     }
   }
+
+  const handledBackRequestRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (backRequestId === undefined || handledBackRequestRef.current === backRequestId) return;
+    handledBackRequestRef.current = backRequestId;
+    // Website links follow the same leave guard as the Projects button.
+    // A clean editor can switch immediately; an active edit needs a decision.
+    requestBack();
+  }, [backRequestId, isDirty, saving, spriteImportPending, onBack]);
 
   function deleteSelected() {
     const ids = new Set(selectedIds.filter((id) => !isMovementLockedForId(id)));
@@ -8076,6 +8109,12 @@ export function WatchfaceEditor({
               </span>
             )}
           </div>
+          {previewMode === "aod" && supportsAod ? (
+            <p className="watchface-studio-summary">
+              Always-on uses a black screen. Background images are omitted; custom
+              captions need a separate AOD overlay. Use light colors for digits.
+            </p>
+          ) : null}
           {canEditActiveMode && selectedMovableIds.some((id) => !isPositionLocked(id)) ? (
             <div className="wf-contextual-align-bar" role="toolbar" aria-label="Align and distribute selection">
               <button type="button" title="Align left" aria-label="Align left" onClick={() => alignSelection("left")}><AlignHorizontalJustifyStart size={15} /></button>
@@ -8730,12 +8769,14 @@ export function WatchfaceEditor({
       {leaveOpen ? (
         <div className="wf-modal-backdrop" role="presentation">
           <section className="wf-modal" role="dialog" aria-modal="true" aria-labelledby="wf-unsaved-title">
-            <h2 id="wf-unsaved-title">Save changes?</h2>
-            <p>Your latest edits have not been saved to this project.</p>
+            <h2 id="wf-unsaved-title">{backRequestId !== undefined ? "Open selected watch face?" : "Save changes?"}</h2>
+            <p>{backRequestId !== undefined
+              ? "Save or discard your current edits before opening the watch face from the website."
+              : "Your latest edits have not been saved to this project."}</p>
             <div className="wf-modal-actions">
-              <button className="secondary-button" type="button" onClick={() => setLeaveOpen(false)}>Cancel</button>
+              <button className="secondary-button" type="button" onClick={() => { setLeaveOpen(false); onBackCancelled?.(); }}>Cancel</button>
               <button className="secondary-button danger-button" type="button" onClick={onBack}>Discard</button>
-              <button className="primary-button" type="button" disabled={saving || spriteImportPending} onClick={() => void saveProject().then((saved) => { if (saved) onBack(); })}>
+              <button className="primary-button" type="button" disabled={saving || spriteImportPending} onClick={() => void saveProject().then((saved) => { if (saved && lastSaveWasCurrentRef.current) onBack(); })}>
                 {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />} Save
               </button>
             </div>

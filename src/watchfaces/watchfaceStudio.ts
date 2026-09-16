@@ -2093,13 +2093,10 @@ export function buildAmPmOverrides(
     return [];
   }
   return details.resolutions.flatMap((resolution) => {
-    if (!resolutionSupportsAmPm(resolution)) {
-      return [];
-    }
     if (!style.enabled) {
-      // Restore the dormant form templates ship with, but only when the
-      // template arrived active; otherwise leave the config untouched.
-      return (resolution.config["am_icon"] ?? "") !== ""
+      // Disabling must also clear stale references in resolutions whose AM/PM
+      // PNGs are missing. Only enabling the indicator requires usable sprites.
+      return AMPM_CONFIG_KEYS.some((key) => Boolean(resolution.config[key]))
         ? [
             {
               path: `${resolution.directory}/config.txt`,
@@ -2107,6 +2104,9 @@ export function buildAmPmOverrides(
             }
           ]
         : [];
+    }
+    if (!resolutionSupportsAmPm(resolution)) {
+      return [];
     }
     const scale = resolution.width / base.width;
     return [
@@ -7881,13 +7881,21 @@ export async function drawStudioPreview(
   }
   const scale = canvas.width / resolution.width;
   context.clearRect(0, 0, canvas.width, canvas.height);
-  context.drawImage(
-    await loadPreviewBackground(backgroundDataUrl),
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
+  // COROS BuildAodWatchface omits SetBackground (including bg_color).
+  // Showing the flattened artwork here made black AOD digits look readable
+  // in Studio even though they disappear against the watch's black screen.
+  if (options.previewMode === "aod") {
+    context.fillStyle = "#000000";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  } else {
+    context.drawImage(
+      await loadPreviewBackground(backgroundDataUrl),
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+  }
 
   const config = resolution.config;
   if (!options.deferProgressArcs) {
@@ -8495,7 +8503,14 @@ export async function drawStudioPreview(
           )
         ).dataUrl
       : await applyWatchfaceDataUrlOpacity(opaqueDataUrl, assetOpacity);
-    const image = await loadStudioImage(renderedDataUrl);
+    // Analog hands and fixed caption overlays bypass drawStudioLayerImage.
+    // Apply the export's alpha cleanup here, after sizing and decorations,
+    // so their thin edges don't look smoother in the editor than in AOD.
+    const aodOverlay = options.previewMode === "aod" &&
+      !options.compiledPixels && analogCenterLayoutGroupId(configKey);
+    const image = await loadStudioImage(aodOverlay
+      ? await renderWatchfaceAodSafeSprite(renderedDataUrl)
+      : renderedDataUrl);
     configuredAssetImages.set(cacheKey, image);
     return image;
   };
@@ -9537,13 +9552,15 @@ export async function drawStudioPreview(
     const width = image.naturalWidth * scale;
     const height = image.naturalHeight * scale;
     context.save();
-    context.globalAlpha *= resolveWatchfaceLayerOpacity(
-      options,
-      `configAsset:${watchfaceConfigAssetId(
-        options.configAssetScope ?? "config",
-        layer.configKey
-      )}`
-    );
+    if (options.previewMode !== "aod") {
+      context.globalAlpha *= resolveWatchfaceLayerOpacity(
+        options,
+        `configAsset:${watchfaceConfigAssetId(
+          options.configAssetScope ?? "config",
+          layer.configKey
+        )}`
+      );
+    }
     context.translate(layer.center.x * scale, layer.center.y * scale);
     if (layer.rotationDegrees !== null) {
       context.rotate((layer.rotationDegrees * Math.PI) / 180);

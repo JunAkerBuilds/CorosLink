@@ -1788,6 +1788,16 @@ export async function listScheduledWorkoutEntries(
   return parseScheduledWorkoutEntries(raw);
 }
 
+function scheduledWorkoutRevisionKey(userId: string): string {
+  return `calendar.scheduleRevision.${crypto.createHash("sha256").update(userId).digest("hex")}`;
+}
+
+/** Persist across views and restarts; every schedule writer uses the same revision. */
+export function getScheduledWorkoutRevision(): string | undefined {
+  const userId = getTrainingHubStatus().userId;
+  return userId ? getSetting(scheduledWorkoutRevisionKey(userId)) : undefined;
+}
+
 export async function removeScheduledWorkout(entry: {
   planId: string;
   idInPlan: string;
@@ -6042,10 +6052,14 @@ async function executeTrainingHubRequest<T>(
     headers["Content-Type"] = "application/json";
   }
 
-  return fetchJson<T>(url.toString(), {
+  const result = await fetchJson<T>(url.toString(), {
     ...requestOptions,
     headers
   }, { allowEmptyData, contextPath: path });
+  if (path === "/training/schedule/update" && requestOptions.method === "POST") {
+    setSetting(scheduledWorkoutRevisionKey(auth.userId), crypto.randomUUID());
+  }
+  return result;
 }
 
 async function resolveTrainingHubBaseUrl(

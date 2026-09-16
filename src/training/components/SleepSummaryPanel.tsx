@@ -264,7 +264,12 @@ export function SleepSummaryPanel({
     <section className={`panel sleep-panel tone-${tone}`}>
       <div className="sleep-panel-header">
         <div>
-          <p className="eyebrow">Sleep</p>
+          <p className="sleep-panel-label">
+            <span className="sleep-panel-moon" aria-hidden="true">
+              <MoonStar size={20} />
+            </span>
+            Sleep
+          </p>
           <h2>{latest ? formatSleepNightLabel(latest) : "Last night"}</h2>
         </div>
         <span className="sleep-panel-icon" aria-hidden="true">

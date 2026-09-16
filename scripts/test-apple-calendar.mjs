@@ -124,8 +124,11 @@ function serverFixture() {
     }
     if (init.method === "REPORT") {
       if (reportFailure) return new Response(reportFailure, { status: 207 });
-      assert.ok(init.body.includes(`coroslink-${calendarHash("coros-1")}-`));
+      // iCloud rejects UID property filters, even though CalDAV defines them.
+      if (init.body.includes("prop-filter"))
+        return new Response(null, { status: 412 });
       return xmlResponse(
+        row(calendar, "<d:getetag>&quot;collection&quot;</d:getetag>") +
         [...resources]
           .map(([href, resource]) =>
             row(
@@ -158,7 +161,10 @@ function serverFixture() {
         : new Response(null, { status: 404 });
     }
     if (init.method === "DELETE") {
-      assert.equal(init.headers["If-Match"], resources.get(url.href)?.etag);
+      const current = resources.get(url.href);
+      if (!current) return new Response(null, { status: 404 });
+      if (init.headers["If-Match"] !== current.etag)
+        return new Response(null, { status: 412 });
       resources.delete(url.href);
       return new Response(null, { status: 204 });
     }
@@ -292,6 +298,30 @@ test("idempotent sync moves and edits events with conditional requests", async (
   assert.equal(puts[1].headers["If-Match"], '"v1"');
 });
 
+test("iCloud event queries omit unsupported UID filters and skip collection metadata", async () => {
+  const f = serverFixture();
+  putFixture(f, managedEvent());
+  const events = await f.dav.listEvents(calendar, calendarHash("coros-1"));
+  assert.equal(events.length, 1);
+  assert.equal(events[0].href, appleWorkoutHref(calendar, managedEvent().key));
+  const query = f.calls[0];
+  assert.equal(query.method, "REPORT");
+  assert.ok(query.body.includes('name="VEVENT"'));
+  assert.ok(!query.body.includes("prop-filter"));
+  assert.ok(!query.body.includes("text-match"));
+});
+
+test("a rejected calendar read is not reported as an event version conflict", async () => {
+  serverFixture();
+  globalThis.fetch = async () => new Response(null, { status: 412 });
+  const dav = new ICloudCalDav(credentials, new AbortController().signal);
+  await assert.rejects(
+    dav.listEvents(calendar, calendarHash("coros-1")),
+    (error) => error instanceof ICloudCalendarError &&
+      error.status === 412 && /could not read this calendar/.test(error.message),
+  );
+});
+
 test("removal preserves personal events, copies, other accounts and history", async () => {
   const f = serverFixture();
   const current = managedEvent();
@@ -312,6 +342,166 @@ test("removal preserves personal events, copies, other accounts and history", as
   );
 });
 
+test("a concurrent update reloads the event and retries with its latest version", async () => {
+  const f = serverFixture();
+  const event = managedEvent();
+  const href = appleWorkoutHref(calendar, event.key);
+  putFixture(f, event);
+  putFixture(f, managedEvent("coros-1", workout("removed")));
+  f.afterRequest((url, init) => {
+    if (init.method !== "PUT") return;
+    f.afterRequest(undefined);
+    f.resources.set(url.href, {
+      data: serializeAppleWorkout({ ...event, sequence: 7 }),
+      etag: '"latest"',
+    });
+  });
+  const changed = { ...workout(), name: "Changed" };
+  assert.deepEqual(await syncAppleWorkoutEvents(syncInput(f, [changed])), {
+    created: 0,
+    updated: 1,
+    deleted: 1,
+    unchanged: 0,
+  });
+  assert.deepEqual(
+    f.calls.map((call) => call.method),
+    ["REPORT", "PUT", "GET", "PUT", "DELETE"],
+  );
+  const puts = f.calls.filter((call) => call.method === "PUT");
+  assert.equal(puts[0].headers["If-Match"], '"initial"');
+  assert.equal(puts[1].headers["If-Match"], '"latest"');
+  const saved = parseAppleWorkout(f.resources.get(href).data, event.source);
+  assert.equal(saved.summary, "Changed");
+  assert.equal(saved.sequence, 8);
+});
+
+test("a conflict already resolved by another writer needs no further update", async () => {
+  const f = serverFixture();
+  const changed = { ...workout(), name: "Changed" };
+  const event = managedEvent("coros-1", changed);
+  putFixture(f, managedEvent());
+  f.afterRequest((url, init) => {
+    if (init.method !== "PUT") return;
+    f.afterRequest(undefined);
+    f.resources.set(url.href, {
+      data: serializeAppleWorkout({ ...event, sequence: 4 }),
+      etag: '"latest"',
+    });
+  });
+  assert.deepEqual(await syncAppleWorkoutEvents(syncInput(f, [changed])), {
+    created: 0,
+    updated: 0,
+    deleted: 0,
+    unchanged: 1,
+  });
+  assert.deepEqual(
+    f.calls.map((call) => call.method),
+    ["REPORT", "PUT", "GET"],
+  );
+});
+
+test("concurrent deletion retries use the latest version and respect the sync window", async () => {
+  for (const day of ["20260904", "20261001"]) {
+    const f = serverFixture();
+    putFixture(f, managedEvent());
+    f.afterRequest((url, init) => {
+      if (init.method !== "DELETE") return;
+      f.afterRequest(undefined);
+      f.resources.set(url.href, {
+        data: serializeAppleWorkout(
+          managedEvent("coros-1", workout("w1", day)),
+        ),
+        etag: '"latest"',
+      });
+    });
+    const result = await syncAppleWorkoutEvents(syncInput(f, []));
+    const inRange = day === "20260904";
+    assert.equal(result.deleted, inRange ? 1 : 0);
+    assert.equal(f.resources.size, inRange ? 0 : 1);
+    const deletes = f.calls.filter((call) => call.method === "DELETE");
+    assert.equal(deletes.length, inRange ? 2 : 1);
+    if (inRange) assert.equal(deletes[1].headers["If-Match"], '"latest"');
+  }
+});
+
+test("events disappearing during conflict recovery are recreated or already removed", async () => {
+  for (const method of ["PUT", "DELETE"]) {
+    const f = serverFixture();
+    putFixture(f, managedEvent());
+    f.afterRequest((url, init) => {
+      if (init.method === method) {
+        if (method === "PUT") {
+          f.afterRequest(undefined);
+          f.resources.delete(url.href);
+        } else {
+          f.resources.get(url.href).etag = '"latest"';
+        }
+      } else if (init.method === "GET") {
+        f.afterRequest(undefined);
+        f.resources.delete(url.href);
+      }
+    });
+    const entries =
+      method === "PUT" ? [{ ...workout(), name: "Changed" }] : [];
+    const result = await syncAppleWorkoutEvents(syncInput(f, entries));
+    assert.equal(result.created, method === "PUT" ? 1 : 0);
+    assert.equal(result.deleted, method === "DELETE" ? 1 : 0);
+    assert.equal(f.resources.size, method === "PUT" ? 1 : 0);
+    if (method === "PUT")
+      assert.equal(f.calls.at(-1).headers["If-None-Match"], "*");
+  }
+});
+
+test("conflict recovery refuses foreign or newly recurring events before retrying a write", async () => {
+  for (const method of ["PUT", "DELETE"]) {
+    for (const recurring of [false, true]) {
+      const f = serverFixture();
+      const event = managedEvent();
+      const href = appleWorkoutHref(calendar, event.key);
+      const data = serializeAppleWorkout({
+        ...event,
+        uid: recurring ? event.uid : "unrelated",
+      }).replace(
+        "END:VEVENT",
+        recurring ? "RRULE:FREQ=DAILY\r\nEND:VEVENT" : "END:VEVENT",
+      );
+      putFixture(f, event);
+      f.afterRequest((url, init) => {
+        if (init.method !== method) return;
+        f.afterRequest(undefined);
+        f.resources.set(url.href, { data, etag: '"latest"' });
+      });
+      await assert.rejects(
+        syncAppleWorkoutEvents(
+          syncInput(f,
+            method === "PUT" ? [{ ...workout(), name: "Changed" }] : [],
+          ),
+        ),
+        recurring ? /repeating event/ : /unrelated/,
+      );
+      assert.equal(f.resources.get(href).data, data);
+      assert.equal(f.calls.filter((call) => call.method === method).length, 1);
+    }
+  }
+});
+
+test("persistent deletion conflicts stop after bounded retries", async () => {
+  const f = serverFixture();
+  putFixture(f, managedEvent());
+  let version = 0;
+  f.afterRequest((url, init) => {
+    if (init.method === "DELETE")
+      f.resources.get(url.href).etag = `"conflict-${++version}"`;
+  });
+  await assert.rejects(
+    syncAppleWorkoutEvents(syncInput(f, [])),
+    /changed during sync/,
+  );
+  assert.equal(f.resources.size, 1);
+  assert.equal(f.calls.filter((call) => call.method === "DELETE").length, 3);
+  assert.equal(f.calls.filter((call) => call.method === "GET").length, 2);
+});
+
 test("failed reads, malformed data and concurrent updates prevent cleanup", async () => {
   const f = serverFixture();
   putFixture(f, managedEvent());
@@ -321,6 +511,8 @@ test("failed reads, malformed data and concurrent updates prevent cleanup", asyn
     syncAppleWorkoutEvents(syncInput(f, [{ ...workout(), name: "Changed" }])),
     /changed during sync/,
   );
+  assert.equal(f.calls.filter((call) => call.method === "PUT").length, 3);
+  assert.equal(f.calls.filter((call) => call.method === "GET").length, 2);
   assert.equal(f.calls.filter((call) => call.method === "DELETE").length, 0);
   f.failReport('<d:multistatus xmlns:d="DAV:"><d:response>');
   await assert.rejects(
@@ -382,6 +574,7 @@ function clientFixture() {
   let state = {},
     userId = "coros-1",
     secure = true,
+    sourceRevision,
     readOverride;
   const client = new AppleCalendarClient({
     read: () => structuredClone(state),
@@ -392,6 +585,7 @@ function clientFixture() {
       if (!secure) throw new Error("Secure storage unavailable");
     },
     sourceUserId: () => userId,
+    sourceRevision: () => sourceRevision,
     listWorkouts: async (start, end) => {
       if (readOverride) return readOverride(start, end);
       const day = shiftCalendarDay(calendarSyncRange().startDay, 8);
@@ -404,6 +598,9 @@ function clientFixture() {
     state: () => state,
     setUser: (value) => {
       userId = value;
+    },
+    setSourceRevision: (value) => {
+      sourceRevision = value;
     },
     setSecure: (value) => {
       secure = value;
@@ -435,6 +632,53 @@ test("client connects, selects a calendar, syncs and never exposes the password 
   assert.equal(f.calls.length, calls);
   await f.client.disconnect();
   assert.deepEqual(f.state(), {});
+  assert.equal(f.resources.size, 1);
+});
+
+test("Apple sync status tracks schedule changes, including changes during sync", async () => {
+  const f = clientFixture();
+  await f.client.connect(credentials);
+  await f.client.updateSettings({ calendarId: calendar });
+  assert.equal(f.client.status().needsSync, true);
+  await f.client.sync();
+  assert.equal(f.client.status().needsSync, false);
+  f.setSourceRevision("edited");
+  assert.equal(f.client.status().needsSync, true);
+  f.afterRequest((_url, init) => {
+    if (init.method === "REPORT") f.setSourceRevision("edited-during-sync");
+  });
+  await f.client.sync();
+  assert.equal(f.client.status().needsSync, true);
+  f.afterRequest(undefined);
+  await f.client.sync();
+  assert.equal(f.client.status().needsSync, false);
+  await f.client.connect(credentials);
+  assert.equal(f.client.status().needsSync, false);
+});
+
+test("client records successful conflict recovery and clears the prior sync error", async () => {
+  const f = clientFixture();
+  await f.client.connect(credentials);
+  await f.client.updateSettings({ calendarId: calendar });
+  await f.client.sync();
+  const day = shiftCalendarDay(calendarSyncRange().startDay, 8);
+  const changed = { ...workout("w", day), name: "Changed" };
+  f.setRead(async (start, end) => day >= start && day <= end ? [changed] : []);
+  const lastSyncedAt = f.state().lastSyncedAt;
+  f.failPut(412);
+  await assert.rejects(f.client.sync(), /changed during sync/);
+  assert.equal(f.state().lastSyncedAt, lastSyncedAt);
+  assert.match(f.client.status().error, /changed during sync/);
+  f.failPut(undefined);
+  f.afterRequest((url, init) => {
+    if (init.method !== "PUT") return;
+    f.afterRequest(undefined);
+    f.resources.get(url.href).etag = '"latest"';
+  });
+  assert.equal((await f.client.sync()).updated, 1);
+  assert.equal(f.client.status().error, undefined);
+  assert.equal(f.client.status().syncing, false);
+  assert.ok(f.state().lastSyncedAt);
   assert.equal(f.resources.size, 1);
 });
 

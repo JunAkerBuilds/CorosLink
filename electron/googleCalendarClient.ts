@@ -26,6 +26,7 @@ export interface GoogleCalendarState {
   calendar?: GoogleCalendarChoice;
   autoSync?: boolean;
   lastSyncedAt?: string;
+  syncedSourceRevision?: string;
   error?: string;
 }
 
@@ -34,6 +35,7 @@ interface Dependencies {
   write: (state: GoogleCalendarState) => void;
   ensureSecureStorage: () => void;
   sourceUserId: () => string | undefined;
+  sourceRevision?: () => string | undefined;
   listWorkouts: (
     start: string,
     end: string,
@@ -68,6 +70,8 @@ export class GoogleCalendarClient {
       syncing: this.syncing,
       connecting: this.connecting,
       lastSyncedAt: state.lastSyncedAt,
+      needsSync: !state.lastSyncedAt ||
+        state.syncedSourceRevision !== this.dependencies.sourceRevision?.(),
       error: state.error,
       accountMatches: Boolean(
         state.corosUserId &&
@@ -165,6 +169,7 @@ export class GoogleCalendarClient {
                 calendar: before.calendar,
                 autoSync: before.autoSync,
                 lastSyncedAt: before.lastSyncedAt,
+                syncedSourceRevision: before.syncedSourceRevision,
               }
             : {}),
         });
@@ -394,6 +399,7 @@ export class GoogleCalendarClient {
           throw new Error(
             "Calendar sync is paused. Sign in to the linked COROS account or reconnect Google Calendar.",
           );
+        const sourceRevision = this.dependencies.sourceRevision?.();
         const range = calendarSyncRange();
         const workouts = await readCalendarWorkouts({
           userId,
@@ -414,6 +420,7 @@ export class GoogleCalendarClient {
         this.dependencies.write({
           ...this.dependencies.read(),
           lastSyncedAt: new Date().toISOString(),
+          syncedSourceRevision: sourceRevision,
           error: undefined,
         });
         return result;

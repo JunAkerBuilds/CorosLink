@@ -36,6 +36,7 @@ import {
 import appLogo from "../../build/icon-animated.svg";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import { CalendarConnections } from "../calendar/CalendarConnections";
+import { DiagnosticsSettings } from "./DiagnosticsSettings";
 import { WatchfaceAutomationSettings } from "./WatchfaceAutomationSettings";
 
 const ABOUT_LINKS = [
@@ -339,6 +340,8 @@ export function SettingsView({
           ))}
         </div>
       </div>
+
+      <DiagnosticsSettings api={api} />
 
       <div className="panel"><CalendarConnections api={api} /></div>
 

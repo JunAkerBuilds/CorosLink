@@ -1,3 +1,4 @@
+import type { DiagnosticsSnapshot, RendererDiagnosticError } from "../electron/diagnosticsTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "../electron/calendarSyncTypes";
 import type { WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "../electron/googleCalendarTypes";
@@ -591,6 +592,10 @@ export interface CorosLinkApi {
   startRouteShare: (id: string) => Promise<RouteShareSession>;
   stopRouteShare: () => Promise<void>;
   validateRouteApiKey: (apiKey: string) => Promise<RouteApiKeyValidation>;
+  getDiagnostics: () => Promise<DiagnosticsSnapshot>;
+  copyDiagnostics: () => Promise<DiagnosticsSnapshot>;
+  clearDiagnostics: () => Promise<DiagnosticsSnapshot>;
+  reportRendererError: (error: RendererDiagnosticError) => void;
   getAppInfo: () => Promise<AppInfo>;
   openAppStorageLocation: (id: string) => Promise<void>;
   getAppUpdateStatus: () => Promise<AppUpdateSnapshot>;

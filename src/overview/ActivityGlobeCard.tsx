@@ -2,7 +2,6 @@ import {
   CalendarDays,
   ChartNoAxesColumnIncreasing,
   Compass,
-  Layers,
   MapPinCheck,
   MousePointer2,
   ChevronLeft,
@@ -1274,10 +1273,6 @@ export function ActivityGlobeCard({
                   ? "Mapping GPS activity"
                   : `${routes.length.toLocaleString()} GPS ${routes.length === 1 ? "route" : "routes"}`}
               </span>
-            </div>
-            <div>
-              <Layers size={16} aria-hidden="true" />
-              <span>Rendered locally</span>
             </div>
           </div>
 

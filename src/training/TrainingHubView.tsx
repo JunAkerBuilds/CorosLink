@@ -7,6 +7,7 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
+  FlaskConical,
   ArrowLeft,
   Globe2,
   KeyRound,
@@ -28,6 +29,7 @@ import { RacePredictorCards } from "./components/RacePredictorCards";
 import { RecoveryRing } from "./components/RecoveryRing";
 import { SleepSummaryPanel } from "./components/SleepSummaryPanel";
 import { TrainingHeatmapPanel } from "./components/TrainingHeatmapPanel";
+import { TrainingSummaryTiles } from "./components/TrainingSummaryTiles";
 import { TrainingActivityTable } from "./components/TrainingActivityTable";
 import { TrainingTrendCharts } from "./components/TrainingTrendChart";
 import {
@@ -37,9 +39,71 @@ import {
 import { UpcomingWorkoutsPanel } from "./components/UpcomingWorkoutsPanel";
 import { Vo2MaxWidget } from "./components/Vo2MaxWidget";
 import type { TrainingHubViewProps } from "./types";
+import type { TrainingHubActivity } from "../../electron/types";
+import { createTrainingHubSampleData, type TrainingHubSampleData } from "./sampleData";
 import loginPageBackground from "../../public/assets/training-hub/Login-page-bg.png";
 
-export function TrainingHubView({
+export function TrainingHubView(props: TrainingHubViewProps) {
+  return import.meta.env.DEV
+    ? <TrainingHubPreview {...props} />
+    : <TrainingHubContent {...props} />;
+}
+
+function TrainingHubPreview(props: TrainingHubViewProps) {
+  const [sample, setSample] = useState<TrainingHubSampleData | null>(null);
+  const [selectedSample, setSelectedSample] = useState<TrainingHubActivity | null>(null);
+  const selectedActivity = selectedSample ?? sample?.activities[0] ?? null;
+  const previewProps: TrainingHubViewProps = sample ? {
+    ...props,
+    snapshot: sample.snapshot,
+    activities: sample.activities,
+    sportTypes: sample.sportTypes,
+    upcomingWorkouts: sample.upcomingWorkouts,
+    selectedActivity,
+    activityDetail: selectedActivity
+      ? sample.activityDetails.get(selectedActivity.activityId) ?? null
+      : null,
+    busy: null,
+    sleepConnecting: false,
+    rpeBackfill: null,
+    onLoadDetail: setSelectedSample,
+    onExportFile: () => {},
+    onRefresh: () => {},
+    onLogout: () => {}
+  } : props;
+
+  return (
+    <div className="stack">
+      <div className="training-preview-toolbar">
+        <p role="status">
+          {sample
+            ? "Showing sample data across the whole Training Hub."
+            : "Preview the whole Training Hub with sample data."}
+        </p>
+        <button
+          type="button"
+          className="training-preview-toggle"
+          role="switch"
+          aria-checked={sample !== null}
+          onClick={() => {
+            setSelectedSample(null);
+            setSample(current => current ? null : createTrainingHubSampleData());
+          }}
+        >
+          <FlaskConical size={14} aria-hidden="true" />
+          Sample data
+        </button>
+      </div>
+      <TrainingHubContent
+        key={sample ? "sample" : "live"}
+        {...previewProps}
+        sampleMode={sample !== null}
+      />
+    </div>
+  );
+}
+
+function TrainingHubContent({
   api,
   status,
   email,
@@ -68,9 +132,10 @@ export function TrainingHubView({
   onLogout,
   onRefresh,
   onLoadDetail,
-  onExportFile
-}: TrainingHubViewProps) {
-  const connected = Boolean(status?.authenticated);
+  onExportFile,
+  sampleMode = false
+}: TrainingHubViewProps & { sampleMode?: boolean }) {
+  const connected = sampleMode || Boolean(status?.authenticated);
   const canReconnect =
     !connected && Boolean(status?.rememberCredentials) && Boolean(status?.email);
   const reconnecting = busy === "training-reconnect";
@@ -117,14 +182,14 @@ export function TrainingHubView({
                   aria-hidden="true"
                 />
                 <span className="training-connection-label">
-                  COROS account connected
+                  {sampleMode ? "Training Hub preview" : "COROS account connected"}
                 </span>
                 <span className="badge ready">
-                  <ShieldCheck size={12} aria-hidden="true" />
-                  Authenticated
+                  {sampleMode ? <FlaskConical size={12} aria-hidden="true" /> : <ShieldCheck size={12} aria-hidden="true" />}
+                  {sampleMode ? "Sample data" : "Authenticated"}
                 </span>
               </div>
-              <div className="training-connection-actions settings-actions">
+              {!sampleMode ? <div className="training-connection-actions settings-actions">
                 <button
                   className="training-details-button"
                   type="button"
@@ -159,9 +224,9 @@ export function TrainingHubView({
                   <LogOut size={15} aria-hidden="true" />
                   Disconnect
                 </button>
-              </div>
+              </div> : null}
             </div>
-            {showConnectionDetails ? (
+            {!sampleMode && showConnectionDetails ? (
               <div className="training-connection-meta">
                 <span className="training-connection-meta-item">
                   <User size={14} aria-hidden="true" />
@@ -466,7 +531,17 @@ export function TrainingHubView({
               ) : null}
             </div>
             <div className="training-intelligence-grid">
-              <RecoveryRing summary={summary} />
+              <div className="training-recovery-column">
+                <RecoveryRing summary={summary} />
+                <TrainingSummaryTiles
+                  summary={summary}
+                  trendPoints={snapshot?.trendPoints}
+                  healthRecords={snapshot?.dailyHealth?.records}
+                  layout="stack"
+                  metrics={["load", "heart", "steps", "calories"]}
+                  className="training-recovery-stats"
+                />
+              </div>
               <FitnessTrendPanel snapshot={snapshot} activities={activities} />
               <SleepSummaryPanel
                 sleep={snapshot?.sleep}
@@ -484,7 +559,7 @@ export function TrainingHubView({
               rpeBackfill={rpeBackfill}
             />
           </div>
-          <TrainingTrendCharts points={snapshot?.trendPoints ?? []} />
+          <TrainingTrendCharts points={snapshot?.trendPoints ?? []} sleepRecords={snapshot?.sleep?.records} />
           <TrainingZoneDistributionCharts
             lthrZones={snapshot?.dashboard?.lthrZones ?? []}
             activities={activities}
@@ -522,6 +597,7 @@ export function TrainingHubView({
                   sportTypes={sportTypes}
                   selectedActivityId={selectedActivity?.activityId ?? null}
                   busy={busy}
+                  exportDisabled={sampleMode}
                   onLoadDetail={onLoadDetail}
                   onExportFile={onExportFile}
                 />

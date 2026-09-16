@@ -55,13 +55,14 @@ export async function renderCompiledWatchfacePreview(
   loadAssets: WatchfaceAssetLoader,
   scenario: { date?: Date; complication?: WatchfaceComplicationId; values?: Record<string, string> } = {}
 ): Promise<CompiledWatchfacePreview> {
-  const config = mode === "aod" && Object.keys(resolution.aodConfig ?? {}).length
+  const usesAod = mode === "aod" && Object.keys(resolution.aodConfig ?? {}).length > 0;
+  const config = usesAod
     ? resolution.aodConfig! : resolution.config;
   const canvas = document.createElement("canvas");
   canvas.width = resolution.width; canvas.height = resolution.height;
   const backgroundPath = `${resolution.directory}/${(config.background_icon || "background.png").replace(/\\/g, "/")}`;
-  const [background] = await loadAssets([backgroundPath]);
-  if (!background) throw new Error(`The compiled archive is missing ${backgroundPath}.`);
+  const [background] = usesAod ? [] : await loadAssets([backgroundPath]);
+  if (!usesAod && !background) throw new Error(`The compiled archive is missing ${backgroundPath}.`);
   // Older archive descriptions omit directly referenced numbered PNGs such as
   // studio/sunset/00.png. Resolve the active config's exact paths, including
   // those in font folders, without guessing icons from folder names.
@@ -69,8 +70,9 @@ export async function renderCompiledWatchfacePreview(
   const spriteFiles = new Map(resolution.spriteFolders.flatMap((folder) => folder.files).map((file) => [file.path, file]));
   const referencedPaths = [...new Set(Object.values(config)
     .filter((value) => /\.png$/i.test(value))
-    .map((value) => `${resolution.directory}/${value.replace(/\\/g, "/")}`))];
-  icons.set(background.path, background);
+    .map((value) => `${resolution.directory}/${value.replace(/\\/g, "/")}`))]
+    .filter((path) => !usesAod || path !== backgroundPath);
+  if (background) icons.set(background.path, background);
   for (const path of referencedPaths) {
     const file = spriteFiles.get(path);
     if (!icons.has(path) && file) icons.set(path, file);
@@ -83,11 +85,11 @@ export async function renderCompiledWatchfacePreview(
   }
   const checks = createCompiledPixelChecks(canvas.width, canvas.height);
   const ampmPos = parseConfigPos(config.am_pm_icon_pos);
-  await drawStudioPreview(canvas, background.dataUrl, {
+  await drawStudioPreview(canvas, background?.dataUrl ?? "", {
     ...details, resolutions: [{ ...resolution, config, icons: [...icons.values()] }]
   }, {
     fontFamily: "", digitColor: "#ffffff", accentColor: "#ffffff",
-    tintLabels: false, tintIcons: false, previewMode: mode,
+    tintLabels: false, tintIcons: false, previewMode: usesAod ? "aod" : "current",
     ...(ampmPos && config.am_icon && config.pm_icon ? { ampmStyle: { enabled: true, ...ampmPos, scale: 1 } } : {}),
     compiledPixels: true, previewDate: scenario.date ?? new Date(2026, 8, 13, 10, 8, 36),
     previewComplication: scenario.complication, previewValues: scenario.values,

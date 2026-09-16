@@ -1,16 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   Activity,
+  ArrowDown,
   ArrowDownRight,
+  ArrowUp,
   ArrowUpRight,
   Gauge,
   HeartPulse,
+  Info,
   MoonStar
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   ComposedChart,
   Line,
@@ -19,17 +24,20 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import type { TooltipContentProps } from "recharts";
+import type { TooltipContentProps, XAxisTickContentProps } from "recharts";
+import type { TrainingHubSleepRecord } from "../../../electron/types";
 import {
   trainingChartMargin,
   trainingChartTooltipStyle
 } from "../chartConfig";
 import type { TrainingMetricPalette } from "../chartConfig";
 import { useChartColors } from "../useChartColors";
+import { buildSleepDurationSummary } from "../sleepDuration";
 import type { TrainingTrendPoint } from "../types";
 
 interface TrainingTrendChartsProps {
   points: TrainingTrendPoint[];
+  sleepRecords?: TrainingHubSleepRecord[];
 }
 
 type ChartValueFormatter = (value: number) => string;
@@ -123,8 +131,9 @@ function TrendChartTooltip({
   active,
   payload,
   label,
-  valueFormatter
-}: TooltipContentProps & { valueFormatter?: ChartValueFormatter }) {
+  valueFormatter,
+  color
+}: TooltipContentProps & { valueFormatter?: ChartValueFormatter; color?: string }) {
   if (!active || !payload?.length) {
     return null;
   }
@@ -133,7 +142,7 @@ function TrendChartTooltip({
     (payload[0]?.payload as TrainingTrendPoint | undefined)?.date,
     label
   );
-  const accentColor = payload[0]?.color ?? "var(--accent)";
+  const accentColor = color ?? payload[0]?.color ?? "var(--accent)";
 
   return (
     <div className="training-chart-tooltip">
@@ -148,7 +157,7 @@ function TrendChartTooltip({
       ) : null}
       <ul className="training-chart-tooltip-rows">
         {payload.map((entry) => {
-          const dotColor = entry.color ?? "var(--accent)";
+          const dotColor = color ?? entry.color ?? "var(--accent)";
           return (
             <li
               className="training-chart-tooltip-row"
@@ -346,7 +355,90 @@ function TrendChartAxes({
   );
 }
 
-export function TrainingTrendCharts({ points }: TrainingTrendChartsProps) {
+function SleepDurationCard({ points, sleepRecords, reducedMotion }: TrainingTrendChartsProps & { reducedMotion: boolean }) {
+  const gradientId = useId();
+  const { colors, metrics } = useChartColors();
+  const summary = buildSleepDurationSummary(points, sleepRecords);
+  const change = summary.changePercent === undefined ? undefined : Math.round(summary.changePercent);
+  const yMax = Math.max(720, ...summary.days.map((day) => Math.ceil((day.sleepMinutes ?? 0) / 180) * 180));
+  const ticks = Array.from({ length: yMax / 180 + 1 }, (_, index) => index * 180);
+
+  return (
+    <section className="panel training-chart-panel sleep-duration-card" data-metric="sleep">
+      <header className="sleep-duration-header">
+        <span className="sleep-duration-icon" aria-hidden="true"><MoonStar size={24} /></span>
+        <div>
+          <div className="sleep-duration-title">
+            <h2>Sleep Duration</h2>
+            <details className="sleep-duration-info">
+              <summary aria-label="About the sleep duration chart"><Info size={15} /></summary>
+              <p>Average main sleep per night. Naps and incomplete sessions are excluded. The comparison appears when both seven-day periods have all seven readings.</p>
+            </details>
+          </div>
+          <p>Last 7 days</p>
+        </div>
+      </header>
+      {summary.average !== undefined ? (
+        <>
+          <div className="sleep-duration-summary">
+            <div className="sleep-duration-average">
+              <strong>{formatSleepDuration(summary.average)}</strong>
+              <span>{summary.nights === 7 ? "Average per night" : `Average · ${summary.nights} ${summary.nights === 1 ? "night" : "nights"}`}</span>
+            </div>
+            {change !== undefined ? (
+              <div className={`sleep-duration-comparison${change > 0 ? " is-up" : ""}`}>
+                <strong>
+                  {change > 0 ? <ArrowUp size={17} aria-hidden="true" /> : change < 0 ? <ArrowDown size={17} aria-hidden="true" /> : null}
+                  <span aria-label={`${Math.abs(change)} percent ${change > 0 ? "more" : change < 0 ? "less" : "change in"} sleep`}>{Math.abs(change)}%</span>
+                </strong>
+                <span>vs previous 7 days</span>
+              </div>
+            ) : null}
+          </div>
+          <div className="training-chart-shell sleep-duration-chart">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={summary.days} margin={{ top: 8, right: 2, bottom: 0, left: 0 }} barCategoryGap="29%">
+                <defs>
+                  <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={metrics.sleep.stops.top} stopOpacity={0.98} />
+                    <stop offset="55%" stopColor={metrics.sleep.stops.mid} stopOpacity={0.7} />
+                    <stop offset="100%" stopColor={metrics.sleep.stops.bottom} stopOpacity={0.32} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke={colors.grid} vertical={false} strokeDasharray="3 3" />
+                <XAxis dataKey="date" height={46} tickLine={false} interval={0}
+                  axisLine={{ stroke: colors.grid }}
+                  tick={({ x, y, index }: XAxisTickContentProps) => {
+                    const day = summary.days[index];
+                    return (
+                      <g transform={`translate(${x},${y})`} className="sleep-duration-axis-label">
+                        <text y={14} textAnchor="middle" fill={colors.text}>{day?.weekday}</text>
+                        <text y={32} textAnchor="middle" fill={colors.text}>{day?.shortDate}</text>
+                      </g>
+                    );
+                  }}
+                />
+                <YAxis domain={[0, yMax]} ticks={ticks} tickFormatter={formatSleepAxisTick}
+                  width={30} axisLine={false} tickLine={false} tick={{ fill: colors.text, fontSize: 11 }} />
+                <Tooltip cursor={{ fill: metrics.sleep.soft, stroke: "none" }}
+                  content={(props) => <TrendChartTooltip {...props} valueFormatter={formatSleepDuration} color={metrics.sleep.stroke} />} />
+                <Bar dataKey="sleepMinutes" name="Sleep duration" fill={`url(#${gradientId})`}
+                  stroke={metrics.sleep.stroke} strokeOpacity={0.2} radius={[5, 5, 0, 0]} maxBarSize={36}
+                  activeBar={{ strokeOpacity: 0.65 }} isAnimationActive={!reducedMotion} animationDuration={900} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      ) : (
+        <EmptyChartNotice icon={MoonStar} palette={metrics.sleep} title="No sleep data">
+          Sync sleep sessions from COROS to see duration trends.
+        </EmptyChartNotice>
+      )}
+    </section>
+  );
+}
+
+export function TrainingTrendCharts({ points, sleepRecords }: TrainingTrendChartsProps) {
   const reducedMotion = usePrefersReducedMotion();
   const { colors, metrics } = useChartColors();
 
@@ -368,7 +460,6 @@ export function TrainingTrendCharts({ points }: TrainingTrendChartsProps) {
   const hrvPoints = points.filter(
     (point) => point.avgSleepHrv !== undefined || point.sleepHrvBase !== undefined
   );
-  const sleepPoints = points.filter((point) => point.sleepMinutes !== undefined);
 
   return (
     <div className="training-chart-grid">
@@ -551,62 +642,7 @@ export function TrainingTrendCharts({ points }: TrainingTrendChartsProps) {
         )}
       </section>
 
-      <section className="panel training-chart-panel" data-metric="sleep">
-        <div className="section-heading compact training-chart-heading">
-          <div>
-            <p className="eyebrow">Sleep Duration · hours</p>
-            <h2>Last 7 days</h2>
-          </div>
-          {sleepPoints.length > 0 ? (
-            <ChartLatestStat
-              points={sleepPoints}
-              dataKey="sleepMinutes"
-              palette={metrics.sleep}
-              formatValue={formatSleepDuration}
-              formatDelta={formatSleepDuration}
-            />
-          ) : null}
-        </div>
-        {sleepPoints.length > 0 ? (
-          <div className="training-chart-shell">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={sleepPoints} margin={trainingChartMargin}>
-                <defs>
-                  <ChartAreaGradient
-                    id="sleepDurationFill"
-                    stops={metrics.sleep.stops}
-                  />
-                </defs>
-                <TrendChartAxes
-                  tooltipValueFormatter={formatSleepDuration}
-                  yAxisTickFormatter={formatSleepAxisTick}
-                  yAxisWidth={42}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="sleepMinutes"
-                  name="Sleep duration"
-                  stroke={metrics.sleep.stroke}
-                  fill="url(#sleepDurationFill)"
-                  strokeWidth={2.5}
-                  dot={metricDot(metrics.sleep)}
-                  activeDot={metricActiveDot(metrics.sleep)}
-                  isAnimationActive={!reducedMotion}
-                  animationDuration={900}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <EmptyChartNotice
-            icon={MoonStar}
-            palette={metrics.sleep}
-            title="No sleep data"
-          >
-            Sync sleep sessions from COROS to see duration trends.
-          </EmptyChartNotice>
-        )}
-      </section>
+      <SleepDurationCard points={points} sleepRecords={sleepRecords} reducedMotion={reducedMotion} />
     </div>
   );
 }

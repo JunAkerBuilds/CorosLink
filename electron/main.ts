@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, session, shell } from "electron";
+import { app, BrowserWindow, dialog, nativeTheme, session, shell } from "electron";
+import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow } from "./diagnosticsService";
 import { googleCalendar, startGoogleCalendarSync, stopGoogleCalendarSync } from "./googleCalendarService";
 import type { GoogleCalendarConfigInput } from "./googleCalendarTypes";
 import { appleCalendar, startAppleCalendarSync, stopAppleCalendarSync } from "./appleCalendarService";
@@ -9,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { listLocalFontFamilies } from "./fontService";
 import { registerWatchfaceAutomation } from "./watchfaceAutomation";
+import { onWatchfaceRendererNavigation } from "./watchfaceRendererLifecycle";
 import {
   clearDownloadTransferredByFileName,
   deleteDownload,
@@ -662,11 +664,13 @@ function createWindow(): void {
     }
   });
 
+  observeDiagnosticWindow(mainWindow);
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
   });
-  mainWindow.webContents.on("did-start-loading", () => {
+  onWatchfaceRendererNavigation(mainWindow.webContents, () => {
     rendererReady = false;
     watchfaceAutomation?.resetRenderer();
   });
@@ -745,6 +749,7 @@ if (!hasSingleInstanceLock) {
 
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return;
+  initializeDiagnostics(() => mainWindow);
   if (process.defaultApp && process.argv[1]) {
     app.setAsDefaultProtocolClient("coroslink", process.execPath, [
       path.resolve(process.argv[1])

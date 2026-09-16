@@ -12,6 +12,8 @@ export interface CalendarConnectionStatus {
   syncing: boolean;
   connecting: boolean;
   lastSyncedAt?: string;
+  /** The schedule has changed since the last completed sync. */
+  needsSync?: boolean;
   error?: string;
   accountMatches: boolean;
 }

@@ -166,6 +166,69 @@ async function main() {
     await tool("redo", identity());
     document = await tool("get_document");
     assert.equal(document.design.backgroundElements.length, 2);
+    // A selection click near a snap target must never change the document.
+    await tool("apply_commands", { ...identity(), commands: [
+      { op: "add_element", element: { id: "click-probe", kind: "rect", x: 396, y: 350, width: 100, height: 40, rotation: 0, cornerRadius: 0, fill: "#ffffff" } }
+    ] });
+    document = await tool("get_document");
+    const beforeClick = document;
+    const canvasPointAt = (x, y) => window.webContents.executeJavaScript(`(() => {
+      const rect = document.querySelector('.watchface-preview-overlay').getBoundingClientRect();
+      return { x: Math.round(rect.left + rect.width * ${x} / 800), y: Math.round(rect.top + rect.height * ${y} / 800), width: rect.width };
+    })()`);
+    const pointerEvent = (type, point, modifiers = []) => window.webContents.sendInputEvent({ type, x: point.x, y: point.y, button: "left", clickCount: 1, modifiers });
+    const paint = () => window.webContents.executeJavaScript("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    let canvasPoint = await canvasPointAt(396, 350);
+    pointerEvent("mouseDown", canvasPoint);
+    pointerEvent("mouseUp", canvasPoint);
+    document = await tool("get_document");
+    assert.equal(document.view.selectedId, "bgel:click-probe", "click selects the shape");
+    assert.deepEqual(document.design, beforeClick.design, "click near the center guide does not snap or move the shape");
+    assert.equal(document.revision, beforeClick.revision, "selection does not create an undo entry");
+
+    // The threshold uses screen pixels even after zooming, with or without snap.
+    for (const zoom of ["100%", "Zoom out"]) {
+      await window.webContents.executeJavaScript(`Array.from(document.querySelectorAll('.wf-zoom-control button')).find(button => button.textContent === ${JSON.stringify(zoom)} || button.getAttribute('aria-label') === ${JSON.stringify(zoom)}).click()`);
+      await paint();
+      for (const modifiers of [[], ["alt"]]) {
+        canvasPoint = await canvasPointAt(396, 350);
+        pointerEvent("mouseDown", canvasPoint, modifiers);
+        pointerEvent("mouseMove", { ...canvasPoint, x: canvasPoint.x + 2 }, modifiers);
+        await paint();
+        assert.notEqual(await window.webContents.executeJavaScript("document.querySelector('.watchface-preview-drag').style.visibility"), "visible", "click jitter does not start a drag preview");
+        pointerEvent("mouseUp", { ...canvasPoint, x: canvasPoint.x + 2 }, modifiers);
+        document = await tool("get_document");
+        assert.deepEqual(document.design, beforeClick.design, "minor pointer jitter leaves all positions unchanged");
+        assert.equal(document.revision, beforeClick.revision);
+      }
+    }
+
+    canvasPoint = await canvasPointAt(396, 350);
+    pointerEvent("mouseDown", canvasPoint);
+    pointerEvent("mouseMove", { ...canvasPoint, y: canvasPoint.y + 20 });
+    await paint();
+    pointerEvent("mouseUp", { ...canvasPoint, y: canvasPoint.y + 20 });
+    document = await tool("get_document");
+    assert.equal(document.design.backgroundElements.find(item => item.id === "click-probe").x, 400, "intentional dragging still snaps to the center guide");
+    await tool("undo", identity());
+    document = await tool("get_document");
+    assert.deepEqual(document.design, beforeClick.design, "one undo restores the entire drag");
+
+    // A fast release still commits its final position without a pointermove.
+    canvasPoint = await canvasPointAt(396, 350);
+    pointerEvent("mouseDown", canvasPoint, ["alt"]);
+    pointerEvent("mouseUp", { ...canvasPoint, x: canvasPoint.x + 20, y: canvasPoint.y + 16 }, ["alt"]);
+    document = await tool("get_document");
+    const draggedProbe = document.design.backgroundElements.find(item => item.id === "click-probe");
+    assert.equal(draggedProbe.x, Math.round(396 + 20 * 800 / canvasPoint.width), "Alt-drag uses the final horizontal pointer displacement");
+    assert.equal(draggedProbe.y, Math.round(350 + 16 * 800 / canvasPoint.width), "Alt-drag uses the final vertical pointer displacement");
+    await tool("undo", identity());
+    document = await tool("get_document");
+    assert.deepEqual(document.design, beforeClick.design);
+    await tool("undo", identity());
+    document = await tool("get_document");
+    assert.equal(document.design.backgroundElements.length, 2, "undo after selection removes the added shape");
+    await window.webContents.executeJavaScript("Array.from(document.querySelectorAll('.wf-zoom-control button')).find(button => button.textContent === 'Fit').click()");
     // Exercise geometric spacing through the real external protocol, then undo
     // the temporary probes so the exported face remains the authored scene.
     await tool("apply_commands", { ...identity(), commands: [

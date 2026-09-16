@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { installRendererDiagnostics } from "./diagnostics";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { applyTheme, readStoredTheme } from "./theme/theme";
 import { applySportColors, readStoredSportColors } from "./training/sportColors";
@@ -10,6 +11,8 @@ import "./desktop.css";
 import "./chat/coach.css";
 import "./native-sidebar.css";
 import "./toolbar.css";
+
+installRendererDiagnostics(window.corosLink);
 
 // Older running preload builds and non-macOS windows retain the opaque fallback.
 if (window.corosLink?.nativeSidebarGlass) {

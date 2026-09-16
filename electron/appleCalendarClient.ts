@@ -17,6 +17,7 @@ export interface AppleCalendarState {
   calendar?: CalendarChoice;
   autoSync?: boolean;
   lastSyncedAt?: string;
+  syncedSourceRevision?: string;
   error?: string;
 }
 
@@ -25,6 +26,7 @@ interface Dependencies {
   write: (state: AppleCalendarState) => void;
   ensureSecureStorage: () => void;
   sourceUserId: () => string | undefined;
+  sourceRevision?: () => string | undefined;
   listWorkouts: (
     start: string,
     end: string,
@@ -48,6 +50,8 @@ export class AppleCalendarClient {
       syncing: this.syncing,
       connecting: this.connecting,
       lastSyncedAt: state.lastSyncedAt,
+      needsSync: !state.lastSyncedAt ||
+        state.syncedSourceRevision !== this.dependencies.sourceRevision?.(),
       error: state.error,
       accountMatches: Boolean(
         state.corosUserId &&
@@ -130,7 +134,11 @@ export class AppleCalendarClient {
           corosUserId: userId,
           calendar,
           ...(calendar
-            ? { autoSync: before.autoSync, lastSyncedAt: before.lastSyncedAt }
+            ? {
+                autoSync: before.autoSync,
+                lastSyncedAt: before.lastSyncedAt,
+                syncedSourceRevision: before.syncedSourceRevision,
+              }
             : {}),
           error: calendars.length
             ? undefined
@@ -230,6 +238,7 @@ export class AppleCalendarClient {
         if (!state.calendar)
           throw new Error("Choose an iCloud calendar to start syncing.");
         const userId = state.corosUserId!;
+        const sourceRevision = this.dependencies.sourceRevision?.();
         const range = calendarSyncRange();
         const workouts = await readCalendarWorkouts({
           userId,
@@ -249,6 +258,7 @@ export class AppleCalendarClient {
         this.dependencies.write({
           ...this.dependencies.read(),
           lastSyncedAt: new Date().toISOString(),
+          syncedSourceRevision: sourceRevision,
           error: undefined,
         });
         return result;

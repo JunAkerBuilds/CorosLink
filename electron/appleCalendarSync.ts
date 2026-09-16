@@ -196,6 +196,14 @@ function matches(
   );
 }
 
+type RemoteWorkout = {
+  resource: ICloudCalendarEvent;
+  event: AppleWorkoutEvent;
+};
+const MAX_CONFLICT_RETRIES = 2;
+const isMissingEvent = (error: unknown): boolean =>
+  error instanceof ICloudCalendarError && [404, 410].includes(error.status);
+
 /** The DAV adapter also lets tests exercise real reconciliation without an iCloud account. */
 export async function syncAppleWorkoutEvents(input: {
   userId: string;
@@ -220,16 +228,33 @@ export async function syncAppleWorkoutEvents(input: {
         sequence: 0,
       });
   }
-  const existing = new Map<
-    string,
-    { resource: ICloudCalendarEvent; event: AppleWorkoutEvent }
-  >();
+  const existing = new Map<string, RemoteWorkout>();
   for (const resource of await dav.listEvents(calendarId, source)) {
     const event = parseAppleWorkout(resource.data, source);
     // User-created copies and foreign events never become managed resources.
     if (event && resource.href === appleWorkoutHref(calendarId, event.key))
       existing.set(event.key, { resource, event });
   }
+  const readCurrentWorkout = async (
+    key: string,
+  ): Promise<RemoteWorkout | undefined> => {
+    let resource: ICloudCalendarEvent;
+    try {
+      resource = await dav.getEvent(
+        calendarId,
+        appleWorkoutHref(calendarId, key),
+      );
+    } catch (error) {
+      if (isMissingEvent(error)) return undefined;
+      throw error;
+    }
+    const event = parseAppleWorkout(resource.data, source);
+    if (!event || event.uid !== appleWorkoutUid(source, key))
+      throw new Error(
+        "An unrelated iCloud event uses this workout address. Sync stopped without changing it.",
+      );
+    return { resource, event };
+  };
   const result: CalendarSyncResult = {
     created: 0,
     updated: 0,
@@ -239,54 +264,66 @@ export async function syncAppleWorkoutEvents(input: {
   for (const event of desired.values()) {
     let remote = existing.get(event.key);
     const href = appleWorkoutHref(calendarId, event.key);
-    if (!remote) {
+    for (let conflicts = 0; ; conflicts++) {
+      if (remote && matches(remote.event, event)) {
+        result.unchanged++;
+        break;
+      }
       try {
-        await dav.putEvent(calendarId, href, serializeAppleWorkout(event));
-        result.created++;
-        continue;
+        await dav.putEvent(
+          calendarId,
+          href,
+          serializeAppleWorkout({
+            ...event,
+            sequence: remote ? remote.event.sequence + 1 : 0,
+          }),
+          remote?.resource.etag,
+        );
+        if (remote) result.updated++;
+        else result.created++;
+        break;
       } catch (error) {
-        if (!(error instanceof ICloudCalendarError) || error.status !== 412)
+        if (
+          !(error instanceof ICloudCalendarError) ||
+          error.status !== 412 ||
+          conflicts >= MAX_CONFLICT_RETRIES
+        )
           throw error;
-        // The previous insert may have completed before its response was lost.
-        const resource = await dav.getEvent(calendarId, href);
-        const parsed = parseAppleWorkout(resource.data, source);
-        if (!parsed || parsed.uid !== event.uid)
-          throw new Error(
-            "An unrelated iCloud event uses this workout address. Sync stopped without changing it.",
-          );
-        remote = { resource, event: parsed };
+        // Another writer or a lost insert response can invalidate our snapshot.
+        // Recheck ownership and content before retrying with the current ETag.
+        remote = await readCurrentWorkout(event.key);
       }
     }
-    if (matches(remote.event, event)) {
-      result.unchanged++;
-      continue;
-    }
-    await dav.putEvent(
-      calendarId,
-      href,
-      serializeAppleWorkout({ ...event, sequence: remote.event.sequence + 1 }),
-      remote.resource.etag,
-    );
-    result.updated++;
   }
   // Never clean up after partial source reads, malformed remote responses, or failed upserts.
-  for (const [key, remote] of existing) {
-    if (
-      desired.has(key) ||
-      remote.event.day < startDay ||
-      remote.event.day > endDay
-    )
-      continue;
-    try {
-      await dav.deleteEvent(calendarId, remote.resource);
-    } catch (error) {
-      if (
-        !(error instanceof ICloudCalendarError) ||
-        ![404, 410].includes(error.status)
-      )
-        throw error;
+  for (const [key, listed] of existing) {
+    if (desired.has(key)) continue;
+    let remote: RemoteWorkout | undefined = listed;
+    for (let conflicts = 0; ; conflicts++) {
+      if (!remote) {
+        result.deleted++;
+        break;
+      }
+      if (remote.event.day < startDay || remote.event.day > endDay)
+        break;
+      try {
+        await dav.deleteEvent(calendarId, remote.resource);
+        result.deleted++;
+        break;
+      } catch (error) {
+        if (isMissingEvent(error)) {
+          result.deleted++;
+          break;
+        }
+        if (
+          !(error instanceof ICloudCalendarError) ||
+          error.status !== 412 ||
+          conflicts >= MAX_CONFLICT_RETRIES
+        )
+          throw error;
+        remote = await readCurrentWorkout(key);
+      }
     }
-    result.deleted++;
   }
   return result;
 }

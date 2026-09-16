@@ -2,6 +2,7 @@ import { safeStorage } from "electron";
 import { getSetting, setSetting } from "./database";
 import {
   getTrainingHubStatus,
+  getScheduledWorkoutRevision,
   listScheduledWorkoutEntries,
 } from "./trainingHubService";
 import {
@@ -50,6 +51,7 @@ export const appleCalendar = new AppleCalendarClient({
     return status.authenticated ? status.userId : undefined;
   },
   listWorkouts: listScheduledWorkoutEntries,
+  sourceRevision: getScheduledWorkoutRevision,
 });
 
 let timer: ReturnType<typeof setInterval> | undefined;

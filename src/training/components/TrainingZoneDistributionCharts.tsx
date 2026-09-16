@@ -987,12 +987,6 @@ export function TrainingZoneDistributionCharts({
 
   return (
     <section className="training-load-profile">
-      <div className="training-load-profile-header">
-        <p className="eyebrow">Load Profile</p>
-        <h2>
-          Distribution <span>(4 Weeks)</span>
-        </h2>
-      </div>
       <div className="training-zone-grid">
         <ZoneDistributionPanel
           title="Threshold Heart Rate"

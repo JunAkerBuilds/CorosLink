@@ -228,6 +228,7 @@ function clientFixture() {
     autoSync: true,
   };
   let sourceUser = "coros-1";
+  let sourceRevision;
   let sourceFailure = false;
   let sourceRead;
   let authorize;
@@ -270,6 +271,7 @@ function clientFixture() {
     },
     ensureSecureStorage: () => {},
     sourceUserId: () => sourceUser,
+    sourceRevision: () => sourceRevision,
     listWorkouts: async (start, end) => {
       if (sourceRead) return sourceRead(start, end);
       if (sourceFailure) throw new Error("COROS offline");
@@ -292,6 +294,9 @@ function clientFixture() {
     },
     setSource: (value) => {
       sourceUser = value;
+    },
+    setSourceRevision: (value) => {
+      sourceRevision = value;
     },
     failSource: () => {
       sourceFailure = true;
@@ -328,6 +333,27 @@ test("refresh tokens, writable calendar selection, persisted automatic sync and 
   assert.equal(f.calls.length, before);
   assert.equal((await f.client.sync()).unchanged, 1);
   assert.equal(f.client.status().syncing, false);
+});
+
+test("Google sync status tracks schedule changes, including changes during sync", async () => {
+  const f = clientFixture();
+  assert.equal(f.client.status().needsSync, true);
+  await f.client.sync();
+  assert.equal(f.client.status().needsSync, false);
+  f.setSourceRevision("edited");
+  assert.equal(f.client.status().needsSync, true);
+  const day = shiftCalendarDay(calendarSyncRange().startDay, 8);
+  f.setSourceRead(async (start, end) => {
+    f.setSourceRevision("edited-during-sync");
+    return day >= start && day <= end ? [workout("w1", day)] : [];
+  });
+  await f.client.sync();
+  assert.equal(f.client.status().needsSync, true);
+  f.setSourceRead(undefined);
+  await f.client.sync();
+  assert.equal(f.client.status().needsSync, false);
+  await f.client.connect();
+  assert.equal(f.client.status().needsSync, false);
 });
 
 test("source failure and account switching never write Google events", async () => {

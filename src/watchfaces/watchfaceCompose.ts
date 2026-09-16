@@ -622,6 +622,11 @@ export async function composeWatchfaceReplacements(
   const ampmStyle = design.ampmIndicator;
   const ampmSupported = Boolean(getAmPmCapability(details) && ampmStyle);
   const ampmActive = Boolean(ampmSupported && ampmStyle?.enabled);
+  // A disabled indicator must clear every resolution, even when the master
+  // template lacks AM/PM support or a smaller AOD tree has dangling paths.
+  const ampmOverrides = ampmStyle && (!ampmStyle.enabled || ampmSupported)
+    ? buildAmPmOverrides(details, ampmStyle)
+    : [];
   const weatherStyle = design.weatherIndicator;
   const controlTemperatureActive = isControlComplicationEnabled(
     details,
@@ -820,7 +825,7 @@ export async function composeWatchfaceReplacements(
   const decorationPositionDetails = applyConfigOverridesToDetails(
     configAssetPositionDetails,
     mergeConfigOverrides(
-      ampmSupported ? buildAmPmOverrides(details, ampmStyle!) : [],
+      ampmOverrides,
       weatherStyle ? buildWeatherOverrides(details, weatherStyle) : []
     )
   );
@@ -856,7 +861,7 @@ export async function composeWatchfaceReplacements(
         design.controlIconOffsets ?? {}
       ),
       buildStaticSeparatorOverrides(details, design.staticSeparators),
-      ampmSupported ? buildAmPmOverrides(details, ampmStyle!) : [],
+      ampmOverrides,
       weatherStyle ? buildWeatherOverrides(details, weatherStyle) : [],
       // Snap the fixed temperature element beside the weather icon. Reads the
       // rect size from metricDetails (post buildMetricOverrides) and repositions

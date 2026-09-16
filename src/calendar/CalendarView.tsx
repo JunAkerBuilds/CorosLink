@@ -1,6 +1,7 @@
 import {
   BookOpen,
   CalendarDays,
+  Check,
   ChevronLeft,
   ChevronRight,
   ListChecks,
@@ -8,7 +9,8 @@ import {
   Trash2,
   X
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { CalendarConnectionStatus } from "../../electron/calendarSyncTypes";
 import type {
   TrainingHubActivity,
   TrainingHubScheduledWorkoutEntry,
@@ -47,7 +49,7 @@ import {
   weekRow
 } from "./dateUtils";
 import { useCalendarData } from "./useCalendarData";
-import { CalendarConnectionsDialog } from "./CalendarConnections";
+import { calendarSyncButtonState } from "./calendarSyncStatus";
 import { WorkoutEditorModal } from "./WorkoutEditorModal";
 import { WorkoutLibraryModal } from "./WorkoutLibraryModal";
 import {
@@ -160,13 +162,77 @@ export function CalendarView({
   const [addTarget, setAddTarget] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
-  const [calendarConnectionOpen, setCalendarConnectionOpen] = useState(false);
+  const [calendarSyncing, setCalendarSyncing] = useState(false);
+  const [calendarStatuses, setCalendarStatuses] = useState<CalendarConnectionStatus[] | null>(null);
   const [editRef, setEditRef] = useState<WorkoutEditRef | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedWorkoutKeys, setSelectedWorkoutKeys] = useState<Set<string>>(
     () => new Set()
   );
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const statuses = await Promise.all([
+          api.getGoogleCalendarStatus(),
+          api.getAppleCalendarStatus()
+        ]);
+        if (!cancelled) setCalendarStatuses(statuses);
+      } catch {
+        if (!cancelled) setCalendarStatuses(null);
+      }
+    };
+    setCalendarStatuses(null);
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 3_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [api, calendarSyncing, mutating, refreshToken, status?.userId]);
+
+  const calendarSyncState = calendarSyncButtonState(calendarStatuses, calendarSyncing);
+
+  const handleSyncCalendars = useCallback(async () => {
+    if (calendarSyncing) return;
+    setCalendarSyncing(true);
+    onError(null);
+    onMessage(null);
+    try {
+      const providers = [
+        { name: "Google Calendar", getStatus: api.getGoogleCalendarStatus, sync: api.syncGoogleCalendar },
+        { name: "Apple Calendar", getStatus: api.getAppleCalendarStatus, sync: api.syncAppleCalendar }
+      ];
+      const results = await Promise.allSettled(providers.map(async (provider) => {
+        const connection = await provider.getStatus();
+        if (!connection.connected || !connection.calendar) return null;
+        if (!connection.accountMatches)
+          throw new Error(`${provider.name} sync is paused. Sign in to the linked COROS account or reconnect the calendar in Settings.`);
+        if (connection.syncing || connection.connecting)
+          return `${provider.name} sync is already running.`;
+        const result = await provider.sync();
+        return `${provider.name} synced: ${result.created} added, ${result.updated} updated, ${result.deleted} removed.`;
+      }));
+      const messages = results.flatMap((result) =>
+        result.status === "fulfilled" && result.value ? [result.value] : []
+      );
+      const errors = results.flatMap((result) =>
+        result.status === "rejected"
+          ? [result.reason instanceof Error
+              ? result.reason.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "")
+              : "Calendar sync failed. Try again."]
+          : []
+      );
+      if (messages.length) onMessage(messages.join(" "));
+      if (errors.length) onError(errors.join(" "));
+      else if (!messages.length)
+        onError("Connect a calendar and choose a destination in Settings to start syncing.");
+    } finally {
+      setCalendarSyncing(false);
+    }
+  }, [api, calendarSyncing, onError, onMessage]);
 
   const anchorYear = anchor.getFullYear();
   const anchorMonth = anchor.getMonth();
@@ -502,8 +568,19 @@ export function CalendarView({
           {loading ? <span className="calendar-loading">Loading…</span> : null}
         </div>
         <div className="calendar-header-actions">
-          <button className="calendar-nav-button" type="button" onClick={() => setCalendarConnectionOpen(true)}>
-            <CalendarDays size={14} aria-hidden="true" /> Calendar sync
+          <button
+            className="calendar-nav-button"
+            type="button"
+            onClick={() => void handleSyncCalendars()}
+            disabled={calendarSyncState === "syncing" || mutating}
+            aria-busy={calendarSyncState === "syncing"}
+          >
+            {calendarSyncState === "synced" && !mutating ? (
+              <Check size={14} aria-hidden="true" />
+            ) : (
+              <RefreshCw size={14} className={calendarSyncState === "syncing" ? "spin" : undefined} aria-hidden="true" />
+            )}
+            {calendarSyncState === "syncing" ? "Syncing…" : calendarSyncState === "synced" && !mutating ? "Synced" : "Sync now"}
           </button>
           <button
             type="button"
@@ -576,7 +653,6 @@ export function CalendarView({
       </header>
 
       {error ? <p className="calendar-error">{error}</p> : null}
-      {calendarConnectionOpen ? <CalendarConnectionsDialog api={api} onClose={() => setCalendarConnectionOpen(false)} /> : null}
 
       {selectionMode ? (
         <div

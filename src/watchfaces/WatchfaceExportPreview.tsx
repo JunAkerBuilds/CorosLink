@@ -86,6 +86,7 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
           <strong>{result.checks.length ? `${result.checks.length} checks to review` : "No clipping or pixel overlaps found in the sampled live sprites."}</strong>
           {result.checks.length > 0 ? <ul>{result.checks.map((check) => <li key={check}>{check}</li>)}</ul> : null}
           <p>Checks cover sampled live sprites and value rectangles. Review artwork baked into the background visually; the watch may render firmware controls differently.</p>
+          {mode === "aod" && supportsAod ? <p>AOD shows the exported pixels. Brightness and thin-stroke visibility may differ on the watch.</p> : null}
         </div>
       </>}
       <div className="wf-modal-actions">

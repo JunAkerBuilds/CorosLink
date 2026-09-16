@@ -1,0 +1,15 @@
+.diagnostics-settings { display: grid; gap: 14px; }
+.diagnostics-heading { display: flex; align-items: center; gap: 14px; }
+.diagnostics-heading > div { flex: 1; min-width: 0; }
+.diagnostics-heading h2 { margin: 0 0 5px; font-size: 18px; }
+.diagnostics-settings p { margin: 0; line-height: 1.6; font-size: 13px; }
+.diagnostics-heading p, .diagnostics-description, .diagnostics-toolbar { color: var(--text-secondary); }
+.diagnostics-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; }
+.diagnostics-toolbar > div { display: flex; gap: 8px; }
+.diagnostics-preview { min-width: 0; font-size: 13px; }
+.diagnostics-preview summary { cursor: pointer; width: fit-content; }
+.diagnostics-preview textarea { display: block; box-sizing: border-box; width: 100%; height: 260px; min-height: 160px; resize: vertical; margin-top: 12px; padding: 14px; border: 1px solid var(--glass-border); border-radius: 8px; background: var(--bg-base); color: var(--text-primary); font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.diagnostics-error { color: var(--danger, #e76868); }
+.diagnostics-notice { color: var(--text-secondary); }
+.diagnostics-notice:empty { display: none; }
+@media (max-width: 700px) { .diagnostics-heading { flex-wrap: wrap; } .diagnostics-heading > div { flex-basis: calc(100% - 40px); } }
