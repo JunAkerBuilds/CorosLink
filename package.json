@@ -30,6 +30,7 @@
     "test:greetings": "node --experimental-strip-types scripts/test-greetings.mjs",
     "test:sport-colors": "node --experimental-strip-types scripts/test-sport-colors.mjs",
     "test:selection-preferences": "node --experimental-strip-types scripts/test-selection-preferences.mjs",
+    "test:calendar-event-timing": "npm run build:electron && node --test scripts/test-calendar-event-timing.mjs scripts/test-apple-calendar.mjs scripts/test-google-calendar.mjs && electron scripts/test-calendar-event-settings.cjs",
     "test:calendar-sync-status": "node --experimental-strip-types scripts/test-calendar-sync-status.mjs",
     "test:sleep-duration": "node --experimental-strip-types scripts/test-sleep-duration.mjs",
     "test:calendar-drag": "node --experimental-strip-types scripts/test-calendar-drag.mjs",

@@ -1,3 +1,5 @@
+import { validateCalendarEventTiming } from "./calendarEventTiming";
+import type { CalendarEventTiming } from "./calendarSyncTypes";
 import type {
   AppleCalendarCredentials,
   CalendarChoice,
@@ -16,6 +18,7 @@ export interface AppleCalendarState {
   corosUserId?: string;
   calendar?: CalendarChoice;
   autoSync?: boolean;
+  eventTiming?: CalendarEventTiming;
   lastSyncedAt?: string;
   syncedSourceRevision?: string;
   error?: string;
@@ -47,6 +50,7 @@ export class AppleCalendarClient {
       accountEmail: state.credentials?.email,
       calendar: state.calendar,
       autoSync: Boolean(state.autoSync),
+      eventTiming: validateCalendarEventTiming(state.eventTiming),
       syncing: this.syncing,
       connecting: this.connecting,
       lastSyncedAt: state.lastSyncedAt,
@@ -136,6 +140,7 @@ export class AppleCalendarClient {
           ...(calendar
             ? {
                 autoSync: before.autoSync,
+                eventTiming: before.eventTiming,
                 lastSyncedAt: before.lastSyncedAt,
                 syncedSourceRevision: before.syncedSourceRevision,
               }
@@ -199,6 +204,9 @@ export class AppleCalendarClient {
     return this.run(async (signal) => {
       const dav = this.dav(signal);
       let state = this.dependencies.read();
+      if (!input) throw new Error("Invalid calendar sync preference.");
+      const eventTiming = validateCalendarEventTiming(input.eventTiming ?? state.eventTiming);
+      const timingChanged = JSON.stringify(eventTiming) !== JSON.stringify(validateCalendarEventTiming(state.eventTiming));
       if (input?.calendarId !== undefined) {
         const calendar = (await dav.listCalendars(state.homeUrl!)).find(
           (calendar) => calendar.id === input.calendarId,
@@ -223,6 +231,8 @@ export class AppleCalendarClient {
       this.dependencies.write({
         ...state,
         autoSync: input.autoSync ?? state.autoSync,
+        eventTiming,
+        lastSyncedAt: timingChanged ? undefined : state.lastSyncedAt,
         error: undefined,
       });
       return this.status();
@@ -252,6 +262,7 @@ export class AppleCalendarClient {
           calendarId: state.calendar.id,
           ...range,
           workouts,
+          eventTiming: state.eventTiming,
           dav,
         });
         signal.throwIfAborted();

@@ -12,15 +12,31 @@ No Apple developer account or OAuth app setup is needed. The connection uses iCl
 
 ## What syncs
 
-- Scheduled COROS workouts become all-day events for the past 7 days and next 90 days. COROS supplies a scheduled date without a start time, so the events are marked as free time.
+- Scheduled COROS workouts become all-day events by default, or timed blocks when enabled, for the past 7 days and next 90 days. Events are marked as free time.
 - Automatic sync checks every 5 minutes while CorosLink is running. **Sync now** refreshes immediately.
 - The Calendar button shows **Synced** when all connected calendars have completed sync without pending CorosLink schedule changes, and **Syncing…** during sync. Schedule changes switch it back to **Sync now**.
-- Make workout additions, edits, moves, and removals in CorosLink. This is a one-way sync to iCloud; changes made in Apple Calendar do not update COROS and can be replaced at the next sync.
+- Make workout additions, edits, moves, and removals in CorosLink. This is a one-way sync to iCloud; changes made in Apple Calendar do not update COROS. Timed-event moves and resizes are preserved as described below; workout titles and descriptions remain managed by CorosLink.
 - Personal events, manually copied events, workouts from other COROS accounts, and history outside the sync window are preserved. Completed activities are not exported.
 - Changing the destination calendar or disconnecting leaves previously synced events in the old calendar.
 - Sync pauses when a different COROS account signs in. Sign back in to the linked account, or disconnect and reconnect Apple Calendar to link the new account.
 
 Google and Apple connections are independent. Each has its own destination, automatic-sync preference, last-sync time, and disconnect control. Selecting the same underlying calendar through more than one provider can create separate copies; choose one connection for each destination.
+
+## Timed workout blocks
+
+Open **Settings → Account settings → Calendar**, choose Apple or Google Calendar, and find **Workout events** after selecting a destination calendar.
+
+- Keep **All-day events** (the default), or select **Timed workout blocks**.
+- Choose a default start time, time zone, and fallback duration (1–1440 minutes). Defaults are 18:00, your computer’s time zone, and 60 minutes.
+- Click **Save event preferences and sync**. Existing workouts are updated in place, without creating duplicates. Apple and Google keep separate preferences.
+
+Timed blocks use the server-calculated COROS workout duration (`planDuration` or `duration`). Fully timed workouts can also use their step durations, including repeats; a program without steps can use `estimatedTime`. The latter can contain only the timed portion of a mixed workout, so it is not used for mixed steps. Distance, open-ended, or mixed workouts without a complete estimate use your fallback; the event description labels it clearly. Timed recovery steps alone are never treated as the whole workout.
+
+Move or resize a timed event in Apple or Google Calendar to fit your work shifts. Sync preserves those times, even when you move it to another day. A changed workout estimate adjusts the length while keeping the moved start time, unless you manually resized the event. These calendar edits do not reschedule the workout in COROS.
+
+Changing the event format, start time, time zone, or fallback duration reapplies the defaults to workouts within the sync window. Changing a workout’s scheduled date in CorosLink also reapplies its time. Deleting a workout in CorosLink still removes its linked event, even if that event was moved in the calendar. Existing events remain marked as free time; this feature does not change availability or reminders.
+
+The selected time zone is saved, so travel or changing the computer’s zone does not silently move workouts. Daylight-saving offsets are calculated for each workout date. A start in a missing spring-forward hour moves forward by the gap; a repeated fall-back time uses its first occurrence. Durations measure elapsed time and can cross midnight.
 
 ## Credentials and failure handling
 
@@ -43,6 +59,8 @@ iCloud rejects CalDAV UID property filters with HTTP 412, so CorosLink reads the
 - **Keychain error:** unlock your keychain or enable a supported Linux secret store, then restart CorosLink.
 
 ## Verification
+
+Run `npm run test:calendar-event-timing` for both providers’ timing behavior, duration selection, DST handling, calendar moves/resizes, settings persistence, and the desktop settings UI.
 
 Run `npm run test:apple-calendar`. The isolated tests cover CalDAV discovery, permissions, credential routing, iCalendar escaping and UTF-8 folding, idempotency, moves, deletion boundaries, ETag conflicts, retries, account changes, revoked passwords, cancellation, and partial failures. Run `npm run test:google-calendar` to check the shared code against Google sync too.
 

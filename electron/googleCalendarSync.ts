@@ -10,14 +10,16 @@ export {
 } from "./calendarSyncUtils";
 import type { TrainingHubScheduledWorkoutEntry } from "./types";
 import type { GoogleCalendarSyncResult } from "./googleCalendarTypes";
+import type { CalendarEventTiming } from "./calendarSyncTypes";
+import { calendarWallTime, reconcileCalendarTiming } from "./calendarEventTiming";
 
 export interface GoogleWorkoutEvent {
   id: string;
   summary?: string;
   description?: string;
   status?: string;
-  start?: { date?: string; dateTime?: string };
-  end?: { date?: string; dateTime?: string };
+  start?: { date?: string; dateTime?: string; timeZone?: string };
+  end?: { date?: string; dateTime?: string; timeZone?: string };
   extendedProperties?: { private?: Record<string, string> };
 }
 
@@ -40,23 +42,51 @@ export const calendarPath = (calendarId: string) =>
 export function workoutGoogleEvent(
   userId: string,
   workout: TrainingHubScheduledWorkoutEntry,
+  settings?: CalendarEventTiming,
 ): GoogleWorkoutEvent {
-  const data = workoutCalendarData(userId, workout);
+  const data = workoutCalendarData(userId, workout, settings);
   return {
     id: `cl${data.key}`,
     summary: data.summary,
     description: data.description,
-    start: { date: isoCalendarDay(data.day) },
-    end: { date: isoCalendarDay(data.endDay) },
+    start: data.startTime ? { dateTime: data.startTime } : { date: isoCalendarDay(data.day) },
+    end: data.endTime ? { dateTime: data.endTime } : { date: isoCalendarDay(data.endDay) },
     extendedProperties: {
       private: {
         corosLinkSource: data.source,
         corosLinkKey: data.key,
         corosLinkDay: data.day,
+        ...(data.timingKey ? {
+          corosLinkTiming: data.timingKey,
+          corosLinkDuration: String(data.durationSeconds),
+        } : {}),
       },
     },
   };
 }
+
+function googleEventTime(value: GoogleWorkoutEvent["start"]): string | undefined {
+  if (!value?.dateTime) return undefined;
+  const text = value.dateTime;
+  const instant = /(?:Z|[+-]\d{2}:\d{2})$/i.test(text) ? Date.parse(text)
+    : value.timeZone && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(text)
+      ? calendarWallTime(text.slice(0, 10), text.slice(11), value.timeZone) : NaN;
+  return Number.isFinite(instant) ? new Date(instant).toISOString() : undefined;
+}
+
+function keepCalendarTime(remote: GoogleWorkoutEvent, desired: GoogleWorkoutEvent): GoogleWorkoutEvent {
+  const timing = (event: GoogleWorkoutEvent) => ({
+    startTime: googleEventTime(event.start), endTime: googleEventTime(event.end),
+    timingKey: event.extendedProperties?.private?.corosLinkTiming,
+    durationSeconds: Number(event.extendedProperties?.private?.corosLinkDuration) || undefined,
+  });
+  const resolved = reconcileCalendarTiming(timing(remote), timing(desired));
+  return resolved.startTime ? { ...desired, start: { dateTime: resolved.startTime }, end: { dateTime: resolved.endTime } } : desired;
+}
+
+const sameDate = (a: GoogleWorkoutEvent["start"], b: GoogleWorkoutEvent["start"]) =>
+  b?.dateTime ? Boolean(googleEventTime(a)) && googleEventTime(a) === googleEventTime(b)
+    : a?.date === b?.date && !a?.dateTime;
 
 function matches(
   remote: GoogleWorkoutEvent,
@@ -65,10 +95,10 @@ function matches(
   return (
     remote.summary === desired.summary &&
     remote.description === desired.description &&
-    remote.start?.date === desired.start?.date &&
-    remote.end?.date === desired.end?.date &&
-    !remote.start?.dateTime &&
-    !remote.end?.dateTime &&
+    sameDate(remote.start, desired.start) &&
+    sameDate(remote.end, desired.end) &&
+    (remote.extendedProperties?.private?.corosLinkTiming || undefined) === desired.extendedProperties?.private?.corosLinkTiming &&
+    (remote.extendedProperties?.private?.corosLinkDuration || undefined) === desired.extendedProperties?.private?.corosLinkDuration &&
     remote.extendedProperties?.private?.corosLinkDay ===
       desired.extendedProperties?.private?.corosLinkDay
   );
@@ -81,12 +111,13 @@ export async function syncWorkoutEvents(input: {
   startDay: string;
   endDay: string;
   workouts: TrainingHubScheduledWorkoutEntry[];
+  eventTiming?: CalendarEventTiming;
   request: CalendarRequest;
 }): Promise<GoogleCalendarSyncResult> {
   const { userId, calendarId, startDay, endDay, workouts, request } = input;
   const desired = new Map<string, GoogleWorkoutEvent>();
   for (const workout of workouts) {
-    const event = workoutGoogleEvent(userId, workout);
+    const event = workoutGoogleEvent(userId, workout, input.eventTiming);
     if (workout.happenDay >= startDay && workout.happenDay <= endDay)
       desired.set(event.id, event);
   }
@@ -147,16 +178,21 @@ export async function syncWorkoutEvents(input: {
         }
       }
     }
-    if (matches(remote, event) && remote.status !== "cancelled")
+    const resolved = remote.status === "cancelled" ? event : keepCalendarTime(remote, event);
+    if (matches(remote, resolved) && remote.status !== "cancelled")
       result.unchanged++;
     else {
       await request(`${base}/${encodeURIComponent(remote.id)}`, "PATCH", {
         summary: event.summary,
         description: event.description,
         status: "confirmed",
-        start: { ...event.start, dateTime: null, timeZone: null },
-        end: { ...event.end, dateTime: null, timeZone: null },
-        extendedProperties: event.extendedProperties,
+        start: { date: null, dateTime: null, timeZone: null, ...resolved.start },
+        end: { date: null, dateTime: null, timeZone: null, ...resolved.end },
+        extendedProperties: { private: {
+          ...remote.extendedProperties?.private,
+          corosLinkTiming: null, corosLinkDuration: null,
+          ...event.extendedProperties?.private,
+        } },
       });
       result.updated++;
     }

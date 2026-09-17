@@ -1,3 +1,5 @@
+import { validateCalendarEventTiming } from "./calendarEventTiming";
+import type { CalendarEventTiming, CalendarSyncSettings } from "./calendarSyncTypes";
 import { calendarSyncRange, readCalendarWorkouts } from "./calendarSyncUtils";
 import {
   authorizeGoogleCalendar,
@@ -25,6 +27,7 @@ export interface GoogleCalendarState {
   corosUserId?: string;
   calendar?: GoogleCalendarChoice;
   autoSync?: boolean;
+  eventTiming?: CalendarEventTiming;
   lastSyncedAt?: string;
   syncedSourceRevision?: string;
   error?: string;
@@ -67,6 +70,7 @@ export class GoogleCalendarClient {
       accountEmail: state.accountEmail,
       calendar: state.calendar,
       autoSync: Boolean(state.autoSync),
+      eventTiming: validateCalendarEventTiming(state.eventTiming),
       syncing: this.syncing,
       connecting: this.connecting,
       lastSyncedAt: state.lastSyncedAt,
@@ -168,6 +172,7 @@ export class GoogleCalendarClient {
             ? {
                 calendar: before.calendar,
                 autoSync: before.autoSync,
+                eventTiming: before.eventTiming,
                 lastSyncedAt: before.lastSyncedAt,
                 syncedSourceRevision: before.syncedSourceRevision,
               }
@@ -351,12 +356,12 @@ export class GoogleCalendarClient {
     });
   }
 
-  updateSettings(input: {
-    calendarId?: string;
-    autoSync?: boolean;
-  }): Promise<GoogleCalendarStatus> {
+  updateSettings(input: CalendarSyncSettings): Promise<GoogleCalendarStatus> {
     return this.run(async (signal) => {
       let state = this.dependencies.read();
+      if (!input) throw new Error("Invalid calendar sync preference.");
+      const eventTiming = validateCalendarEventTiming(input.eventTiming ?? state.eventTiming);
+      const timingChanged = JSON.stringify(eventTiming) !== JSON.stringify(validateCalendarEventTiming(state.eventTiming));
       if (!state.tokens) throw new Error("Connect Google Calendar first.");
       if (input.calendarId !== undefined) {
         if (typeof input.calendarId !== "string" || !input.calendarId)
@@ -379,6 +384,8 @@ export class GoogleCalendarClient {
       this.dependencies.write({
         ...state,
         autoSync: input.autoSync ?? state.autoSync,
+        eventTiming,
+        lastSyncedAt: timingChanged ? undefined : state.lastSyncedAt,
         error: undefined,
       });
       return this.status();
@@ -413,6 +420,7 @@ export class GoogleCalendarClient {
           calendarId: state.calendar.id,
           ...range,
           workouts,
+          eventTiming: state.eventTiming,
           request: (path, method, body) =>
             this.request(path, signal, method, body),
         });

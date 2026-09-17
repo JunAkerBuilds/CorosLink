@@ -767,3 +767,78 @@ test("source failures and a changed account during network reads never write eve
     0,
   );
 });
+
+const timedPreferences = { mode: "timed", startTime: "18:00", timeZone: "America/Toronto", fallbackDurationMinutes: 60 };
+test("Apple timed events migrate in place, preserve moved times, alarms, location and manual duration", async () => {
+  const f = serverFixture();
+  const entry = {...workout(), rawProgram:{estimatedTime:2700}};
+  const input=syncInput(f,[entry]);
+  await syncAppleWorkoutEvents(input);
+  const href=[...f.resources.keys()][0];
+  const timedInput={...input,eventTiming:timedPreferences};
+  assert.equal((await syncAppleWorkoutEvents(timedInput)).updated,1);
+  assert.equal(f.resources.size,1);
+  assert.match(f.resources.get(href).data,/DTSTART:20260904T220000Z/);
+  assert.match(f.resources.get(href).data,/DTEND:20260904T224500Z/);
+  assert.equal((await syncAppleWorkoutEvents(timedInput)).unchanged,1);
+  f.resources.get(href).data=f.resources.get(href).data.replace("DTSTART:20260904T220000Z",'DTSTART;TZID="America/Toronto":20260905T090000').replace("DTEND:20260904T224500Z",'DTEND;TZID="America/Toronto":20260905T094500').replace("END:VEVENT","LOCATION:My gym\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nDESCRIPTION:Reminder\r\nEND:VALARM\r\nEND:VEVENT");
+  assert.equal((await syncAppleWorkoutEvents(timedInput)).unchanged,1);
+  entry.rawProgram.estimatedTime=3600;
+  entry.name="Longer run";
+  assert.equal((await syncAppleWorkoutEvents(timedInput)).updated,1);
+  assert.match(f.resources.get(href).data,/DTSTART:20260905T130000Z/);
+  assert.match(f.resources.get(href).data,/DTEND:20260905T140000Z/);
+  assert.match(f.resources.get(href).data,/LOCATION:My gym/);
+  assert.match(f.resources.get(href).data,/BEGIN:VALARM\r\nACTION:DISPLAY/);
+  f.resources.get(href).data=f.resources.get(href).data.replace("DTEND:20260905T140000Z","DTEND:20260905T143000Z");
+  entry.rawProgram.estimatedTime=4500;
+  await syncAppleWorkoutEvents(timedInput);
+  assert.match(f.resources.get(href).data,/DTEND:20260905T143000Z/);
+  assert.equal((await syncAppleWorkoutEvents(timedInput)).unchanged,1);
+  entry.happenDay="20260906";
+  await syncAppleWorkoutEvents(timedInput);
+  assert.match(f.resources.get(href).data,/DTSTART:20260906T220000Z/);
+  assert.equal((await syncAppleWorkoutEvents(input)).updated,1);
+  assert.match(f.resources.get(href).data,/DTSTART;VALUE=DATE:20260906/);
+  assert.doesNotMatch(f.resources.get(href).data,/X-COROSLINK-TIMING/);
+  assert.equal((await syncAppleWorkoutEvents(input)).unchanged,1);
+});
+
+test("Apple timing settings survive reconnect and are used by sync; invalid input never replaces them", async () => {
+  const f=clientFixture();
+  await f.client.connect(credentials);
+  await f.client.updateSettings({calendarId:calendar});
+  await f.client.sync();
+  assert.equal(f.client.status().eventTiming.mode,"all-day");
+  await f.client.updateSettings({eventTiming:timedPreferences});
+  assert.deepEqual(f.state().eventTiming,timedPreferences);
+  assert.equal(f.client.status().needsSync,true);
+  assert.equal(f.state().lastSyncedAt,undefined);
+  await f.client.sync();
+  assert.match([...f.resources.values()][0].data,/DTSTART:\d{8}T\d{6}Z/);
+  await f.client.connect(credentials);
+  assert.deepEqual(f.client.status().eventTiming,timedPreferences);
+  await assert.rejects(f.client.updateSettings({eventTiming:{...timedPreferences,fallbackDurationMinutes:0}}),/fallback duration/);
+  assert.deepEqual(f.state().eventTiming,timedPreferences);
+});
+
+test("Apple accepts duration-based timed events and preserves a move made during a conflicting update", async () => {
+  const f = serverFixture();
+  const entry = {...workout(),rawProgram:{duration:3600}};
+  const input = {...syncInput(f,[entry]),eventTiming:timedPreferences};
+  await syncAppleWorkoutEvents(input);
+  const href = [...f.resources.keys()][0];
+  f.resources.get(href).data = f.resources.get(href).data.replace("DTEND:20260904T230000Z","DURATION:PT1H");
+  assert.equal((await syncAppleWorkoutEvents(input)).unchanged,1);
+  entry.name="Updated workout";
+  f.afterRequest((url,init) => {
+    if (init.method !== "PUT") return;
+    f.afterRequest(undefined);
+    f.resources.set(href,{data:f.resources.get(href).data.replace("DTSTART:20260904T220000Z","DTSTART:20260905T130000Z"),etag:'"moved"'});
+  });
+  assert.equal((await syncAppleWorkoutEvents(input)).updated,1);
+  assert.match(f.resources.get(href).data,/DTSTART:20260905T130000Z/);
+  assert.match(f.resources.get(href).data,/DTEND:20260905T140000Z/);
+  assert.doesNotMatch(f.resources.get(href).data,/\r\nDURATION:/);
+  assert.equal((await syncAppleWorkoutEvents(input)).unchanged,1);
+});

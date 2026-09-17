@@ -185,7 +185,7 @@ export interface CorosLinkApi {
   cancelGoogleCalendarConnect: () => Promise<void>;
   disconnectGoogleCalendar: () => Promise<GoogleCalendarStatus>;
   listGoogleCalendars: () => Promise<GoogleCalendarChoice[]>;
-  updateGoogleCalendarSettings: (input: { calendarId?: string; autoSync?: boolean }) => Promise<GoogleCalendarStatus>;
+  updateGoogleCalendarSettings: (input: CalendarSyncSettings) => Promise<GoogleCalendarStatus>;
   syncGoogleCalendar: () => Promise<GoogleCalendarSyncResult>;
   platform: string;
   /** Available only when the native window was created with sidebar vibrancy. */

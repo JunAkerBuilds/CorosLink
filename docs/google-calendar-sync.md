@@ -8,9 +8,25 @@ The Calendar button shows **Synced** when all connected calendars have completed
 2. Click **Connect Google Calendar** and sign in using your normal browser. Allow calendar access.
 3. Choose a calendar you can edit and click **Start syncing**.
 
-Scheduled workouts appear as all-day events for the past 7 days and next 90 days. Automatic sync runs every 5 minutes while CorosLink is running; **Sync now** refreshes immediately. Workouts are marked as free time because COROS provides a scheduled date without a start time.
+Scheduled workouts appear as all-day events by default, or timed blocks when enabled, for the past 7 days and next 90 days. Automatic sync runs every 5 minutes while CorosLink is running; **Sync now** refreshes immediately. Workouts remain marked as free time.
 
-This sync goes from CorosLink to Google Calendar. Add, move, edit, and remove workouts in CorosLink. Changes in Google Calendar do not update COROS and may be replaced on the next sync. Completed activities and personal Google events are not imported. Only events tagged as this COROS account's CorosLink workouts are changed or removed. Older history is preserved. Switching destination calendars or disconnecting leaves existing events in the previous calendar.
+This sync goes from CorosLink to Google Calendar. Add, move, edit, and remove workouts in CorosLink. Changes in Google Calendar do not update COROS. Timed-event moves and resizes are preserved as described below; workout titles and descriptions remain managed by CorosLink. Completed activities and personal Google events are not imported. Only events tagged as this COROS account's CorosLink workouts are changed or removed. Older history is preserved. Switching destination calendars or disconnecting leaves existing events in the previous calendar.
+
+## Timed workout blocks
+
+Open **Settings → Account settings → Calendar**, choose Apple or Google Calendar, and find **Workout events** after selecting a destination calendar.
+
+- Keep **All-day events** (the default), or select **Timed workout blocks**.
+- Choose a default start time, time zone, and fallback duration (1–1440 minutes). Defaults are 18:00, your computer’s time zone, and 60 minutes.
+- Click **Save event preferences and sync**. Existing workouts are updated in place, without creating duplicates. Apple and Google keep separate preferences.
+
+Timed blocks use the server-calculated COROS workout duration (`planDuration` or `duration`). Fully timed workouts can also use their step durations, including repeats; a program without steps can use `estimatedTime`. The latter can contain only the timed portion of a mixed workout, so it is not used for mixed steps. Distance, open-ended, or mixed workouts without a complete estimate use your fallback; the event description labels it clearly. Timed recovery steps alone are never treated as the whole workout.
+
+Move or resize a timed event in Apple or Google Calendar to fit your work shifts. Sync preserves those times, even when you move it to another day. A changed workout estimate adjusts the length while keeping the moved start time, unless you manually resized the event. These calendar edits do not reschedule the workout in COROS.
+
+Changing the event format, start time, time zone, or fallback duration reapplies the defaults to workouts within the sync window. Changing a workout’s scheduled date in CorosLink also reapplies its time. Deleting a workout in CorosLink still removes its linked event, even if that event was moved in the calendar. Existing events remain marked as free time; this feature does not change availability or reminders.
+
+The selected time zone is saved, so travel or changing the computer’s zone does not silently move workouts. Daylight-saving offsets are calculated for each workout date. A start in a missing spring-forward hour moves forward by the gap; a repeated fall-back time uses its first occurrence. Durations measure elapsed time and can cross midnight.
 
 ## OAuth setup
 
@@ -38,5 +54,7 @@ The requested scopes identify the Google email address, list available calendars
 - **Partial sync:** retry with **Sync now**. Stable event IDs prevent duplicate inserts after interrupted responses; removals run only after source reads and updates succeed.
 
 ## Verification
+
+Run `npm run test:calendar-event-timing` for both providers’ timing behavior, duration selection, DST handling, calendar moves/resizes, settings persistence, and the desktop settings UI.
 
 `npm run test:google-calendar` covers OAuth callbacks, PKCE, cancellation, token refresh, scope denial, account isolation, pagination, workout edits and moves, deletion boundaries, interrupted syncs, and repeat-run idempotency using isolated fake accounts and API responses. Live Google sign-in requires configured OAuth credentials and an account's consent.

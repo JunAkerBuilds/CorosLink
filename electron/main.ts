@@ -872,7 +872,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle("googleCalendar:cancelConnect", () => googleCalendar.cancelConnect());
   ipcMain.handle("googleCalendar:disconnect", () => googleCalendar.disconnect());
   ipcMain.handle("googleCalendar:listCalendars", () => googleCalendar.listCalendars());
-  ipcMain.handle("googleCalendar:updateSettings", (_event, input: { calendarId?: string; autoSync?: boolean }) => googleCalendar.updateSettings(input));
+  ipcMain.handle("googleCalendar:updateSettings", (_event, input: CalendarSyncSettings) => googleCalendar.updateSettings(input));
   ipcMain.handle("googleCalendar:sync", () => googleCalendar.sync());
 
   ipcMain.handle("window:setBackground", (_event, color: string) => {

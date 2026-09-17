@@ -1,5 +1,6 @@
 import type { TrainingHubScheduledWorkoutEntry } from "./types";
-import type { CalendarSyncResult } from "./calendarSyncTypes";
+import type { CalendarEventTiming, CalendarSyncResult } from "./calendarSyncTypes";
+import { calendarWallTime, reconcileCalendarTiming } from "./calendarEventTiming";
 import {
   calendarHash,
   isoCalendarDay,
@@ -54,12 +55,14 @@ export function foldCalendarLine(line: string): string {
 export function serializeAppleWorkout(
   event: AppleWorkoutEvent,
   now = new Date(),
+  previousData?: string,
 ): string {
   const timestamp = now
     .toISOString()
     .replace(/[-:]/g, "")
     .replace(/\.\d{3}Z$/, "Z");
-  return [
+  const utc = (value: string) => new Date(value).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
     "PRODID:-//CorosLink//Workout Sync//EN",
@@ -69,8 +72,9 @@ export function serializeAppleWorkout(
     `DTSTAMP:${timestamp}`,
     `LAST-MODIFIED:${timestamp}`,
     `SEQUENCE:${event.sequence}`,
-    `DTSTART;VALUE=DATE:${event.day}`,
-    `DTEND;VALUE=DATE:${event.endDay}`,
+    ...(event.startTime && event.endTime ? [
+      `DTSTART:${utc(event.startTime)}`, `DTEND:${utc(event.endTime)}`,
+    ] : [`DTSTART;VALUE=DATE:${event.day}`, `DTEND;VALUE=DATE:${event.endDay}`]),
     `SUMMARY:${escapeText(event.summary)}`,
     `DESCRIPTION:${escapeText(event.description)}`,
     "STATUS:CONFIRMED",
@@ -78,17 +82,44 @@ export function serializeAppleWorkout(
     `X-COROSLINK-SOURCE:${event.source}`,
     `X-COROSLINK-KEY:${event.key}`,
     `X-COROSLINK-DAY:${event.day}`,
+    ...(event.timingKey ? [
+      `X-COROSLINK-TIMING:${event.timingKey}`,
+      `X-COROSLINK-DURATION:${event.durationSeconds}`,
+    ] : []),
     "END:VEVENT",
     "END:VCALENDAR",
     "",
-  ]
-    .map(foldCalendarLine)
-    .join("\r\n");
+  ];
+  if (!previousData) return lines.map(foldCalendarLine).join("\r\n");
+  // A DAV PUT replaces the whole resource. Keep user alarms, location, notes
+  // on other properties, and timezone definitions when updating our fields.
+  const owned = new Set(["DTSTAMP", "LAST-MODIFIED", "SEQUENCE", "DTSTART", "DTEND", "DURATION",
+    "SUMMARY", "DESCRIPTION", "STATUS", "X-COROSLINK-SOURCE", "X-COROSLINK-KEY",
+    "X-COROSLINK-DAY", "X-COROSLINK-TIMING", "X-COROSLINK-DURATION"]);
+  const name = (line: string) => line.split(/[;:]/, 1)[0].toUpperCase();
+  const replacement = lines.filter(line => owned.has(name(line)));
+  let inEvent = false, depth = 0;
+  const updated: string[] = [];
+  for (const line of previousData.replace(/\r?\n[ \t]/g, "").split(/\r?\n/)) {
+    if (line === "END:VEVENT") {
+      updated.push(...replacement);
+      inEvent = false;
+    }
+    if (inEvent) {
+      if (line.startsWith("BEGIN:")) depth++;
+      if (!depth && owned.has(name(line))) continue;
+      if (line.startsWith("END:")) depth--;
+    }
+    if (line === "BEGIN:VEVENT") inEvent = true;
+    updated.push(line);
+  }
+  return updated.map(foldCalendarLine).join("\r\n");
 }
 
 export function parseAppleWorkout(
   data: string,
   source: string,
+  timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone,
 ): AppleWorkoutEvent | undefined {
   const lines = data.replace(/\r?\n[ \t]/g, "").split(/\r?\n/);
   const properties = new Map<string, { params: string; value: string }>();
@@ -122,7 +153,7 @@ export function parseAppleWorkout(
     const key = name.toUpperCase();
     if (properties.has(key)) malformed = true;
     properties.set(key, {
-      params: params.join(";").toUpperCase(),
+      params: params.join(";"),
       value: line.slice(colon + 1),
     });
   }
@@ -163,22 +194,47 @@ export function parseAppleWorkout(
     sequence >= 2_147_483_647
   )
     throw new Error("An iCloud event has an invalid revision.");
-  // A changed event date/time is compared against the COROS day on the next sync.
+  const isDate = (name: string) => /(?:^|;)VALUE=DATE(?:;|$)/i.test(properties.get(name)?.params ?? "");
+  const dateTime = (name: string): string | undefined => {
+    if (isDate(name)) return undefined;
+    const value = get(name);
+    if (!value) return undefined;
+    if (!/^\d{8}T(?:[01]\d|2[0-3])[0-5]\d[0-5]\dZ?$/.test(value))
+      throw new Error("An iCloud workout has an invalid event time.");
+    const date = isoCalendarDay(value.slice(0, 8));
+    const time = `${value.slice(9, 11)}:${value.slice(11, 13)}:${value.slice(13, 15)}`;
+    const zone = /(?:^|;)TZID=(?:"([^"]+)"|([^;]+))/i.exec(properties.get(name)?.params ?? "");
+    return new Date(value.endsWith("Z") ? Date.parse(`${date}T${time}Z`)
+      : calendarWallTime(date, time, zone?.[1] ?? zone?.[2] ?? timeZone)).toISOString();
+  };
+  const startTime = dateTime("DTSTART");
+  let endTime = dateTime("DTEND");
+  if (startTime && properties.has("DURATION")) {
+    const duration = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(get("DURATION"));
+    const seconds = duration ? Number(duration[1] || 0) * 3600 + Number(duration[2] || 0) * 60 + Number(duration[3] || 0) : 0;
+    if (endTime || !Number.isSafeInteger(seconds) || seconds <= 0 || seconds > 7 * 86400)
+      throw new Error("An iCloud workout has an unsupported duration. Set its end time in Apple Calendar before syncing.");
+    endTime = new Date(Date.parse(startTime) + seconds * 1000).toISOString();
+  }
   return {
     source,
     key,
     uid,
     day,
-    endDay: properties.get("DTEND")?.params.includes("VALUE=DATE")
+    endDay: isDate("DTEND")
       ? get("DTEND")
       : "",
     summary: unescapeText(get("SUMMARY")),
     description: unescapeText(get("DESCRIPTION")),
     sequence,
-    actualStart: properties.get("DTSTART")?.params.includes("VALUE=DATE")
+    actualStart: isDate("DTSTART")
       ? get("DTSTART")
       : "",
     cancelled: get("STATUS") === "CANCELLED",
+    startTime,
+    endTime,
+    timingKey: get("X-COROSLINK-TIMING") || undefined,
+    durationSeconds: Number(get("X-COROSLINK-DURATION")) || undefined,
   };
 }
 
@@ -188,9 +244,11 @@ function matches(
 ): boolean {
   return (
     !remote.cancelled &&
-    remote.actualStart === desired.day &&
+    (desired.startTime ? remote.startTime === desired.startTime && remote.endTime === desired.endTime
+      : remote.actualStart === desired.day && remote.endDay === desired.endDay) &&
+    remote.timingKey === desired.timingKey &&
+    remote.durationSeconds === desired.durationSeconds &&
     remote.day === desired.day &&
-    remote.endDay === desired.endDay &&
     remote.summary === desired.summary &&
     remote.description === desired.description
   );
@@ -211,6 +269,7 @@ export async function syncAppleWorkoutEvents(input: {
   startDay: string;
   endDay: string;
   workouts: TrainingHubScheduledWorkoutEntry[];
+  eventTiming?: CalendarEventTiming;
   dav: Pick<
     ICloudCalDav,
     "listEvents" | "getEvent" | "putEvent" | "deleteEvent"
@@ -220,7 +279,7 @@ export async function syncAppleWorkoutEvents(input: {
   const source = calendarHash(userId);
   const desired = new Map<string, AppleWorkoutEvent>();
   for (const workout of input.workouts) {
-    const data = workoutCalendarData(userId, workout);
+    const data = workoutCalendarData(userId, workout, input.eventTiming);
     if (data.day >= startDay && data.day <= endDay)
       desired.set(data.key, {
         ...data,
@@ -230,7 +289,7 @@ export async function syncAppleWorkoutEvents(input: {
   }
   const existing = new Map<string, RemoteWorkout>();
   for (const resource of await dav.listEvents(calendarId, source)) {
-    const event = parseAppleWorkout(resource.data, source);
+    const event = parseAppleWorkout(resource.data, source, input.eventTiming?.timeZone);
     // User-created copies and foreign events never become managed resources.
     if (event && resource.href === appleWorkoutHref(calendarId, event.key))
       existing.set(event.key, { resource, event });
@@ -248,7 +307,7 @@ export async function syncAppleWorkoutEvents(input: {
       if (isMissingEvent(error)) return undefined;
       throw error;
     }
-    const event = parseAppleWorkout(resource.data, source);
+    const event = parseAppleWorkout(resource.data, source, input.eventTiming?.timeZone);
     if (!event || event.uid !== appleWorkoutUid(source, key))
       throw new Error(
         "An unrelated iCloud event uses this workout address. Sync stopped without changing it.",
@@ -265,7 +324,9 @@ export async function syncAppleWorkoutEvents(input: {
     let remote = existing.get(event.key);
     const href = appleWorkoutHref(calendarId, event.key);
     for (let conflicts = 0; ; conflicts++) {
-      if (remote && matches(remote.event, event)) {
+      const resolved = remote && !remote.event.cancelled
+        ? { ...event, ...reconcileCalendarTiming(remote.event, event) } : event;
+      if (remote && matches(remote.event, resolved)) {
         result.unchanged++;
         break;
       }
@@ -274,9 +335,9 @@ export async function syncAppleWorkoutEvents(input: {
           calendarId,
           href,
           serializeAppleWorkout({
-            ...event,
+            ...resolved,
             sequence: remote ? remote.event.sequence + 1 : 0,
-          }),
+          }, new Date(), remote?.resource.data),
           remote?.resource.etag,
         );
         if (remote) result.updated++;

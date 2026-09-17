@@ -574,3 +574,55 @@ test("partial grants and absent offline access fail before connecting", async ()
     /offline access/,
   );
 });
+
+const timedPreferences = { mode: "timed", startTime: "18:00", timeZone: "America/Toronto", fallbackDurationMinutes: 60 };
+test("Google timed events migrate in place, preserve calendar moves/resizes and update estimates", async () => {
+  const entry = { ...workout(), rawProgram: { estimatedTime: 2700 } };
+  const api = fakeCalendar();
+  const input = syncInput(api, [entry]);
+  await syncWorkoutEvents(input);
+  const id = [...api.events.keys()][0];
+  const timedInput = {...input, eventTiming: timedPreferences};
+  assert.equal((await syncWorkoutEvents(timedInput)).updated, 1);
+  assert.equal(api.events.size,1);
+  assert.equal(api.events.get(id).start.dateTime,"2026-09-04T22:00:00.000Z");
+  assert.equal(api.events.get(id).end.dateTime,"2026-09-04T22:45:00.000Z");
+  assert.equal((await syncWorkoutEvents(timedInput)).unchanged,1);
+  const moved = api.events.get(id);
+  moved.start = {dateTime:"2026-09-05T09:00:00",timeZone:"America/Toronto"};
+  moved.end = {dateTime:"2026-09-05T09:45:00-04:00",timeZone:"America/Toronto"};
+  assert.equal((await syncWorkoutEvents(timedInput)).unchanged,1);
+  entry.rawProgram.estimatedTime=3600;
+  entry.name="Longer run";
+  assert.equal((await syncWorkoutEvents(timedInput)).updated,1);
+  assert.equal(api.events.get(id).start.dateTime,"2026-09-05T13:00:00.000Z");
+  assert.equal(api.events.get(id).end.dateTime,"2026-09-05T14:00:00.000Z");
+  api.events.get(id).end.dateTime="2026-09-05T14:30:00Z";
+  entry.rawProgram.estimatedTime=4500;
+  await syncWorkoutEvents(timedInput);
+  assert.equal(api.events.get(id).end.dateTime,"2026-09-05T14:30:00.000Z");
+  assert.equal((await syncWorkoutEvents(timedInput)).unchanged,1);
+  assert.equal((await syncWorkoutEvents({...timedInput,eventTiming:{...timedPreferences,startTime:"07:00"}})).updated,1);
+  assert.equal(api.events.get(id).start.dateTime,"2026-09-04T11:00:00.000Z");
+  assert.equal((await syncWorkoutEvents(input)).updated,1);
+  assert.equal(api.events.get(id).start.date,"2026-09-04");
+  assert.equal(api.events.get(id).start.dateTime,null);
+  assert.equal((await syncWorkoutEvents(input)).unchanged,1);
+});
+
+test("Google settings persist timing, invalidate sync status and reject invalid values", async () => {
+  const f = clientFixture();
+  await f.client.updateSettings({calendarId:"primary"});
+  await f.client.sync();
+  assert.equal(f.client.status().eventTiming.mode,"all-day");
+  await f.client.updateSettings({eventTiming:timedPreferences});
+  assert.deepEqual(f.state.eventTiming,timedPreferences);
+  assert.equal(f.client.status().needsSync,true);
+  assert.equal(f.state.lastSyncedAt,undefined);
+  await f.client.sync();
+  assert.ok([...f.api.events.values()][0].start.dateTime);
+  await f.client.connect();
+  assert.deepEqual(f.client.status().eventTiming,timedPreferences);
+  await assert.rejects(f.client.updateSettings({eventTiming:{...timedPreferences,startTime:"25:00"}}),/valid start time/);
+  assert.deepEqual(f.state.eventTiming,timedPreferences);
+});

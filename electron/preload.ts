@@ -194,7 +194,7 @@ const api = {
   cancelGoogleCalendarConnect: (): Promise<void> => ipcRenderer.invoke("googleCalendar:cancelConnect"),
   disconnectGoogleCalendar: (): Promise<GoogleCalendarStatus> => ipcRenderer.invoke("googleCalendar:disconnect"),
   listGoogleCalendars: (): Promise<GoogleCalendarChoice[]> => ipcRenderer.invoke("googleCalendar:listCalendars"),
-  updateGoogleCalendarSettings: (input: { calendarId?: string; autoSync?: boolean }): Promise<GoogleCalendarStatus> => ipcRenderer.invoke("googleCalendar:updateSettings", input),
+  updateGoogleCalendarSettings: (input: CalendarSyncSettings): Promise<GoogleCalendarStatus> => ipcRenderer.invoke("googleCalendar:updateSettings", input),
   syncGoogleCalendar: (): Promise<GoogleCalendarSyncResult> => ipcRenderer.invoke("googleCalendar:sync"),
   // Host OS, so the renderer can reserve space for the macOS traffic lights.
   platform: process.platform,

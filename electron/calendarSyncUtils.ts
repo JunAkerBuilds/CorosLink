@@ -1,5 +1,7 @@
 import type { TrainingHubScheduledWorkoutEntry } from "./types";
 import { createHash } from "node:crypto";
+import type { CalendarEventTiming } from "./calendarSyncTypes";
+import { calendarWallTime, expectedWorkoutSeconds, validateCalendarEventTiming, type CalendarTimedEvent } from "./calendarEventTiming";
 
 export const calendarHash = (value: string): string =>
   createHash("sha256").update(value).digest("hex");
@@ -7,6 +9,7 @@ export const calendarHash = (value: string): string =>
 export function workoutCalendarData(
   userId: string,
   workout: TrainingHubScheduledWorkoutEntry,
+  settings?: CalendarEventTiming,
 ) {
   if (
     !workout.planId ||
@@ -17,8 +20,22 @@ export function workoutCalendarData(
       "A workout is missing its calendar identity. Calendar sync stopped.",
     );
   }
-  isoCalendarDay(workout.happenDay);
+  const day = isoCalendarDay(workout.happenDay);
+  const timing = validateCalendarEventTiming(settings);
+  const timed: CalendarTimedEvent = {};
+  let durationNote: string | undefined;
+  if (timing.mode === "timed") {
+    const estimate = expectedWorkoutSeconds(workout);
+    const seconds = estimate ?? timing.fallbackDurationMinutes * 60;
+    const start = calendarWallTime(day, timing.startTime, timing.timeZone);
+    timed.startTime = new Date(start).toISOString();
+    timed.endTime = new Date(start + seconds * 1000).toISOString();
+    timed.durationSeconds = seconds;
+    timed.timingKey = calendarHash(JSON.stringify([workout.happenDay, timing]));
+    durationNote = `${estimate ? "Expected duration" : "Fallback duration (no complete workout estimate)"}: ${Math.round(seconds / 60 * 10) / 10} minutes.`;
+  }
   return {
+    ...timed,
     source: calendarHash(userId),
     key: calendarHash(
       JSON.stringify([userId, workout.planId, workout.idInPlan]),
@@ -27,7 +44,10 @@ export function workoutCalendarData(
     endDay: shiftCalendarDay(workout.happenDay, 1),
     summary: workout.name || "Planned workout",
     description: [
-      "Scheduled with CorosLink. Edit this workout in CorosLink to keep it in sync.",
+      timing.mode === "timed"
+        ? "Scheduled with CorosLink. Move or resize this event in your calendar to fit your schedule. Calendar edits do not update your COROS training plan. Changing timing defaults or the workout's planned date reapplies its time."
+        : "Scheduled with CorosLink. Edit this workout in CorosLink to keep it in sync.",
+      durationNote,
       workout.volume,
       Number.isFinite(workout.trainingLoad)
         ? `Training load: ${workout.trainingLoad}`
