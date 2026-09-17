@@ -3435,6 +3435,7 @@ export interface UploadPlanResult {
   entries: UploadPlanResultEntry[];
   destination?: TrainingPlanDestination;
   localPlanId?: string;
+  nativePlanId?: string;
   groupedPlanCreated?: boolean;
   remoteWrites?: string[];
 }

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Native COROS Plan destinations** — Coach's plan confirmation card can now bundle a generated plan into one grouped native COROS Plan Library entry, optionally activated straight onto the Calendar, instead of only writing individual library/calendar entries. All six native plan write endpoints (`add`, `update`, `copy`, `delete`, `executeSubPlan`, `quitSubPlan`) are live-verified; see [`docs/coros-plan-write-api.md`](docs/coros-plan-write-api.md).
+
 ### Fixed
 
 - Saved Routes now pages through 20 lightweight summaries at a time and loads geometry only for the selected preview, keeping large route libraries accessible without loading every track on each refresh.
