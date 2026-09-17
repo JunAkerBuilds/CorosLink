@@ -181,6 +181,7 @@ function activeLayerIds(design: CorosWatchfaceDesignState, context: WatchfaceAut
     }
   }
   for (const sprite of design.designSprites) ids.add(`sprite:${sprite.id}`);
+  for (const id of Object.keys(design.nativeData ?? {})) ids.add(`native:${id}`);
   for (const element of design.backgroundElements ?? []) ids.add(`bgel:${element.id}`);
   return ids;
 }
@@ -212,6 +213,10 @@ function affectedLayerIds(command: JsonObject, design: CorosWatchfaceDesignState
   const segments = decodePointer(command.path, index);
   if (segments[0] !== "design") return [];
   if (segments.length === 1) return [...(design.lockedLayerIds ?? [])];
+  if (segments[1] === "nativeData") return segments[2]
+    ? [`native:${segments[2]}`]
+    : [...new Set([...Object.keys(design.nativeData ?? {}), ...Object.keys(isObject(command.value) ? command.value : {})])].map(id => `native:${id}`);
+  if (segments[1] === "weatherIndicator") return ["weather"];
   if (segments[1] === "designSprites" && segments[2] !== undefined) {
     const sprite = design.designSprites[Number(segments[2])];
     return sprite ? [`sprite:${sprite.id}`] : [];

@@ -1,0 +1,1553 @@
+{
+  "source": {
+    "xapk": "COROS_4.9.9_APKPure (1).xapk",
+    "package": "com.yf.smart.coros.dist",
+    "versionName": "4.9.9",
+    "versionCode": "409090200",
+    "compiler": "config.arm64_v8a.apk!/lib/arm64-v8a/libw4-watchface.so",
+    "sha256": "0ae044c6507cb37357799db49bfe71cc2bf6490d045ea825a8c42676041b925c"
+  },
+  "baseline": {
+    "path": "/Users/aker/Downloads/watchface-harness-libs/libw4-watchface.so",
+    "version": "unknown",
+    "sha256": "7273be2fd0e1985ad8c912677fd6a1add1eb57a9d1e0e3726913e4b7edba1cb2"
+  },
+  "method": "Static ELF string comparison, AArch64 ADRP/ADD or ADR cross-references inside WFTemplateParser::LoadConfig, and decoded embedded watchface.proto FileDescriptorProto. Addresses are virtual addresses in the new library. Not runtime/on-watch validation. Counts refer to configuration-related key strings, not unique user data points.",
+  "addedLoadConfigKeys": {
+    "airplane_icon": [
+      "0x1b0b40"
+    ],
+    "baro_font": [
+      "0x1e9314"
+    ],
+    "baro_icon": [
+      "0x1e90b4"
+    ],
+    "baro_icon_pos": [
+      "0x1e8f6c"
+    ],
+    "baro_rect": [
+      "0x1e91d4"
+    ],
+    "battery_level_percent_icon": [
+      "0x1b1c38"
+    ],
+    "chart_bar_interval": [
+      "0x1e5b84"
+    ],
+    "chart_bar_mask": [
+      "0x1e5ea8"
+    ],
+    "chart_bar_mask_pos": [
+      "0x1e5e88"
+    ],
+    "chart_bar_nodata_mask": [
+      "0x1e75b4"
+    ],
+    "chart_bar_nodata_mask_pos": [
+      "0x1e759c"
+    ],
+    "chart_bar_width": [
+      "0x1e5a88"
+    ],
+    "chart_baro": [
+      "0x1e5f70"
+    ],
+    "chart_colon_icon": [
+      "0x1e6fb0"
+    ],
+    "chart_curves_lower_color": [
+      "0x1e66a8"
+    ],
+    "chart_curves_upper_color": [
+      "0x1e65b4"
+    ],
+    "chart_curves_width": [
+      "0x1e679c"
+    ],
+    "chart_dgree_icon": [
+      "0x1e70d4"
+    ],
+    "chart_elevation": [
+      "0x1e6cbc"
+    ],
+    "chart_fish_bg": [
+      "0x1e6014"
+    ],
+    "chart_fish_bg_pos": [
+      "0x1e6000"
+    ],
+    "chart_fish_end_hour_rect": [
+      "0x1e62ac"
+    ],
+    "chart_fish_end_minute_rect": [
+      "0x1e63b4"
+    ],
+    "chart_fish_font": [
+      "0x1e64bc"
+    ],
+    "chart_fish_start_hour_rect": [
+      "0x1e6088"
+    ],
+    "chart_fish_start_minute_rect": [
+      "0x1e61a4"
+    ],
+    "chart_item3_bg": [
+      "0x1e7480"
+    ],
+    "chart_item3_bg_pos": [
+      "0x1e7460"
+    ],
+    "chart_item3_mask": [
+      "0x1e7520"
+    ],
+    "chart_item3_mask_pos": [
+      "0x1e74fc"
+    ],
+    "chart_kcal": [
+      "0x1e6d20"
+    ],
+    "chart_moon_icon": [
+      "0x1e6b38"
+    ],
+    "chart_moon_icon_pos": [
+      "0x1e6b14"
+    ],
+    "chart_moon_percent": [
+      "0x1e6bac"
+    ],
+    "chart_moonrise": [
+      "0x1e6a48"
+    ],
+    "chart_moonrise_icon": [
+      "0x1e6a78"
+    ],
+    "chart_moonset_icon": [
+      "0x1e6a90"
+    ],
+    "chart_negasign_icon": [
+      "0x1e71f8"
+    ],
+    "chart_percent_icon": [
+      "0x1e731c"
+    ],
+    "chart_point_icon": [
+      "0x1e6e28"
+    ],
+    "chart_pos": [
+      "0x1e58ec"
+    ],
+    "chart_rect": [
+      "0x1e5980"
+    ],
+    "chart_selected_bar_color": [
+      "0x1e5c80"
+    ],
+    "chart_stamina": [
+      "0x1e6c68"
+    ],
+    "chart_step": [
+      "0x1e6d70"
+    ],
+    "chart_stress": [
+      "0x1e6bfc"
+    ],
+    "chart_sun_angle": [
+      "0x1e69f8"
+    ],
+    "chart_sun_icon": [
+      "0x1e6974"
+    ],
+    "chart_sun_icon_pos": [
+      "0x1e6958"
+    ],
+    "chart_sunrise": [
+      "0x1e689c"
+    ],
+    "chart_sunrise_icon": [
+      "0x1e68c4"
+    ],
+    "chart_sunset_icon": [
+      "0x1e68d4"
+    ],
+    "chart_tide": [
+      "0x1e5f20"
+    ],
+    "chart_unselected_bar_color": [
+      "0x1e5d74"
+    ],
+    "control_airplane_icon": [
+      "0x1e18b0"
+    ],
+    "control_number_date_year_font": [
+      "0x1e1b58"
+    ],
+    "control_number_date_year_font_color": [
+      "0x1e1c44"
+    ],
+    "control_number_date_year_rect": [
+      "0x1e1a10"
+    ],
+    "control_percent_icon": [
+      "0x1e15ec"
+    ],
+    "control_sleep_mode_icon": [
+      "0x1e176c"
+    ],
+    "fish_2nd_color": [
+      "0x1e5678"
+    ],
+    "fish_arc_center_pos": [
+      "0x1e51c4"
+    ],
+    "fish_pointer_icon": [
+      "0x1e5760"
+    ],
+    "fish_radius": [
+      "0x1e52c0"
+    ],
+    "fish_recommend_color": [
+      "0x1e5590"
+    ],
+    "fish_start_angle": [
+      "0x1e53b0"
+    ],
+    "fish_time_mask": [
+      "0x1e50c8"
+    ],
+    "fish_time_mask_pos": [
+      "0x1e4f80"
+    ],
+    "fish_width": [
+      "0x1e54a0"
+    ],
+    "lunar_date_rect": [
+      "0x1cf994"
+    ],
+    "sedentary_icon_dir": [
+      "0x1b4da8"
+    ],
+    "sedentary_icon_pos": [
+      "0x1b4c58"
+    ],
+    "sleep_hrv_level_icon": [
+      "0x1e8ebc"
+    ],
+    "sleep_hrv_level_pos": [
+      "0x1e8d84"
+    ],
+    "sleep_mode_icon": [
+      "0x1b0c8c"
+    ],
+    "sleep_score_font": [
+      "0x1ed624"
+    ],
+    "sleep_score_icon": [
+      "0x1ed37c"
+    ],
+    "sleep_score_icon_pos": [
+      "0x1ed234"
+    ],
+    "sleep_score_level_cs_icon": [
+      "0x1ee364"
+    ],
+    "sleep_score_level_de_icon": [
+      "0x1eda30"
+    ],
+    "sleep_score_level_en_icon": [
+      "0x1ed8a8"
+    ],
+    "sleep_score_level_es_icon": [
+      "0x1edaf4"
+    ],
+    "sleep_score_level_fr_icon": [
+      "0x1edbb8"
+    ],
+    "sleep_score_level_id_icon": [
+      "0x1ee428"
+    ],
+    "sleep_score_level_it_icon": [
+      "0x1ee054"
+    ],
+    "sleep_score_level_ja_icon": [
+      "0x1edecc"
+    ],
+    "sleep_score_level_kr_icon": [
+      "0x1ee118"
+    ],
+    "sleep_score_level_pl_icon": [
+      "0x1edd44"
+    ],
+    "sleep_score_level_pos": [
+      "0x1ed788"
+    ],
+    "sleep_score_level_pt_icon": [
+      "0x1edf90"
+    ],
+    "sleep_score_level_ru_icon": [
+      "0x1ee1dc"
+    ],
+    "sleep_score_level_th_icon": [
+      "0x1ede08"
+    ],
+    "sleep_score_level_vi_icon": [
+      "0x1ee2a0"
+    ],
+    "sleep_score_level_zh_icon": [
+      "0x1ed96c"
+    ],
+    "sleep_score_level_zh_tw_icon": [
+      "0x1edc7c"
+    ],
+    "sleep_score_rect": [
+      "0x1ed4d8"
+    ],
+    "stamina_font": [
+      "0x1e81c0"
+    ],
+    "stamina_icon": [
+      "0x1e7f60"
+    ],
+    "stamina_icon_pos": [
+      "0x1e7e18"
+    ],
+    "stamina_level_icon": [
+      "0x1e85bc"
+    ],
+    "stamina_level_pos": [
+      "0x1e8478"
+    ],
+    "stamina_percent_icon": [
+      "0x1e831c"
+    ],
+    "stamina_rect": [
+      "0x1e8080"
+    ],
+    "stress_font": [
+      "0x1e8a40"
+    ],
+    "stress_icon": [
+      "0x1e87e0"
+    ],
+    "stress_icon_pos": [
+      "0x1e8698"
+    ],
+    "stress_level_icon": [
+      "0x1e8cc4"
+    ],
+    "stress_level_icon_pos": [
+      "0x1e8b9c"
+    ],
+    "stress_rect": [
+      "0x1e8900"
+    ],
+    "sunrise_progress": [
+      "0x1ecf94"
+    ],
+    "sunriseset_colon_icon": [
+      "0x1ecd3c"
+    ],
+    "sunriseset_font": [
+      "0x1ecc40"
+    ],
+    "sunriseset_hour_rect": [
+      "0x1eca00"
+    ],
+    "sunriseset_icon_pos": [
+      "0x1ec6e0"
+    ],
+    "sunriseset_minute_rect": [
+      "0x1ecb20"
+    ],
+    "sunriseset_progress_pos": [
+      "0x1ece90"
+    ],
+    "sunriseset_sunrise_icon": [
+      "0x1ec808"
+    ],
+    "sunriseset_sunset_icon": [
+      "0x1ec904"
+    ],
+    "sunset_progress": [
+      "0x1ed0ac"
+    ],
+    "today_bike_font": [
+      "0x1ea508"
+    ],
+    "today_bike_icon": [
+      "0x1ea268"
+    ],
+    "today_bike_icon_pos": [
+      "0x1ea100"
+    ],
+    "today_bike_rect": [
+      "0x1ea3a8"
+    ],
+    "today_bike_unit_icon": [
+      "0x1ea684"
+    ],
+    "today_elev_font": [
+      "0x1eab54"
+    ],
+    "today_elev_icon": [
+      "0x1ea8b4"
+    ],
+    "today_elev_icon_pos": [
+      "0x1ea74c"
+    ],
+    "today_elev_rect": [
+      "0x1ea9f4"
+    ],
+    "today_elev_unit_icon": [
+      "0x1eacd0"
+    ],
+    "today_run_font": [
+      "0x1e9878"
+    ],
+    "today_run_icon": [
+      "0x1e95d8"
+    ],
+    "today_run_icon_pos": [
+      "0x1e9470"
+    ],
+    "today_run_rect": [
+      "0x1e9718"
+    ],
+    "today_run_unit_icon": [
+      "0x1e99f4"
+    ],
+    "today_swim_font": [
+      "0x1e9ebc"
+    ],
+    "today_swim_icon": [
+      "0x1e9c1c"
+    ],
+    "today_swim_icon_pos": [
+      "0x1e9ab4"
+    ],
+    "today_swim_rect": [
+      "0x1e9d5c"
+    ],
+    "today_swim_unit_icon": [
+      "0x1ea038"
+    ],
+    "watchface_default_theme_color": [
+      "0x1afbc8"
+    ],
+    "weather_aqi_font": [
+      "0x1e4c20"
+    ],
+    "weather_aqi_icon": [
+      "0x1e4a44"
+    ],
+    "weather_aqi_icon_pos": [
+      "0x1e48fc"
+    ],
+    "weather_aqi_level_icon": [
+      "0x1e4ec0"
+    ],
+    "weather_aqi_level_pos": [
+      "0x1e4d7c"
+    ],
+    "weather_aqi_rect": [
+      "0x1e4ae0"
+    ],
+    "weather_dark_icon_dir": [
+      "0x1e1fc8"
+    ],
+    "weather_dgree_icon": [
+      "0x1e24ac"
+    ],
+    "weather_direction_icon_dir": [
+      "0x1e3578"
+    ],
+    "weather_direction_icon_pos": [
+      "0x1e3450"
+    ],
+    "weather_humidity_font": [
+      "0x1e3fd0"
+    ],
+    "weather_humidity_icon": [
+      "0x1e3de4"
+    ],
+    "weather_humidity_icon_pos": [
+      "0x1e3c9c"
+    ],
+    "weather_humidity_percent_icon": [
+      "0x1e412c"
+    ],
+    "weather_humidity_rect": [
+      "0x1e3e90"
+    ],
+    "weather_icon_dir": [
+      "0x1e1ecc"
+    ],
+    "weather_icon_pos": [
+      "0x1e1da4"
+    ],
+    "weather_negasign_icon": [
+      "0x1e2350"
+    ],
+    "weather_rainfall_font": [
+      "0x1e39e4"
+    ],
+    "weather_rainfall_icon": [
+      "0x1e37f8"
+    ],
+    "weather_rainfall_icon_pos": [
+      "0x1e36b0"
+    ],
+    "weather_rainfall_percent_icon": [
+      "0x1e3b40"
+    ],
+    "weather_rainfall_rect": [
+      "0x1e38a4"
+    ],
+    "weather_temp_font": [
+      "0x1e2218"
+    ],
+    "weather_temp_max_font": [
+      "0x1e2a1c"
+    ],
+    "weather_temp_max_min_dgree_icon": [
+      "0x1e2f10"
+    ],
+    "weather_temp_max_min_negasign_icon": [
+      "0x1e2db4"
+    ],
+    "weather_temp_max_rect": [
+      "0x1e28f4"
+    ],
+    "weather_temp_min_font": [
+      "0x1e27bc"
+    ],
+    "weather_temp_min_rect": [
+      "0x1e2694"
+    ],
+    "weather_temp_rect": [
+      "0x1e20f0"
+    ],
+    "weather_temp_separator_icon": [
+      "0x1e2c7c"
+    ],
+    "weather_temp_separator_icon_pos": [
+      "0x1e2b54"
+    ],
+    "weather_uv_font": [
+      "0x1e45b4"
+    ],
+    "weather_uv_icon": [
+      "0x1e43d0"
+    ],
+    "weather_uv_icon_pos": [
+      "0x1e4288"
+    ],
+    "weather_uv_level_icon": [
+      "0x1e4838"
+    ],
+    "weather_uv_level_pos": [
+      "0x1e4710"
+    ],
+    "weather_uv_rect": [
+      "0x1e4474"
+    ],
+    "weather_wind_font": [
+      "0x1e32f4"
+    ],
+    "weather_wind_icon": [
+      "0x1e310c"
+    ],
+    "weather_wind_icon_pos": [
+      "0x1e2fc4"
+    ],
+    "weather_wind_rect": [
+      "0x1e31b4"
+    ],
+    "week_bike_font": [
+      "0x1ebe2c"
+    ],
+    "week_bike_icon": [
+      "0x1ebb8c"
+    ],
+    "week_bike_icon_pos": [
+      "0x1eba24"
+    ],
+    "week_bike_rect": [
+      "0x1ebccc"
+    ],
+    "week_bike_unit_icon": [
+      "0x1ebfa8"
+    ],
+    "week_elev_font": [
+      "0x1ec470"
+    ],
+    "week_elev_icon": [
+      "0x1ec1d0"
+    ],
+    "week_elev_icon_pos": [
+      "0x1ec068"
+    ],
+    "week_elev_rect": [
+      "0x1ec310"
+    ],
+    "week_elev_unit_icon": [
+      "0x1ec608"
+    ],
+    "week_run_font": [
+      "0x1eb1a0"
+    ],
+    "week_run_icon": [
+      "0x1eaf00"
+    ],
+    "week_run_icon_pos": [
+      "0x1ead98"
+    ],
+    "week_run_rect": [
+      "0x1eb040"
+    ],
+    "week_run_unit_icon": [
+      "0x1eb31c"
+    ],
+    "week_swim_font": [
+      "0x1eb7e8"
+    ],
+    "week_swim_icon": [
+      "0x1eb548"
+    ],
+    "week_swim_icon_pos": [
+      "0x1eb3e0"
+    ],
+    "week_swim_rect": [
+      "0x1eb688"
+    ],
+    "week_swim_unit_icon": [
+      "0x1eb964"
+    ],
+    "week_tl_font": [
+      "0x1e7a9c"
+    ],
+    "week_tl_icon": [
+      "0x1e783c"
+    ],
+    "week_tl_icon_pos": [
+      "0x1e76f4"
+    ],
+    "week_tl_level_icon": [
+      "0x1e7d3c"
+    ],
+    "week_tl_level_pos": [
+      "0x1e7bf8"
+    ],
+    "week_tl_rect": [
+      "0x1e795c"
+    ]
+  },
+  "addedMessagesAndFields": {
+    "WFHead": {
+      "newMessage": false,
+      "addedFields": [
+        {
+          "number": 13,
+          "name": "default_theme",
+          "type": "TYPE_INT32"
+        }
+      ]
+    },
+    "WFStatusInfo": {
+      "newMessage": false,
+      "addedFields": [
+        {
+          "number": 5,
+          "name": "battery_percent_icon",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 6,
+          "name": "sedentary",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 7,
+          "name": "sleep_mode_icon",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 8,
+          "name": "airplane_icon",
+          "type": ".watchface.WFIconOffset"
+        }
+      ]
+    },
+    "WFControl": {
+      "newMessage": false,
+      "addedFields": [
+        {
+          "number": 6,
+          "name": "percent_icon",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 7,
+          "name": "number_date_year",
+          "type": ".watchface.WFRectNumberValue"
+        },
+        {
+          "number": 8,
+          "name": "sleep_mode_icon",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 9,
+          "name": "airplane_icon",
+          "type": ".watchface.WFIconOffset"
+        }
+      ]
+    },
+    "WFWeatherInfo": {
+      "newMessage": true,
+      "addedFields": [
+        {
+          "number": 1,
+          "name": "weather",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 2,
+          "name": "dark_icon_offset",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 3,
+          "name": "temperature",
+          "type": ".watchface.WFRectNumberValue"
+        },
+        {
+          "number": 4,
+          "name": "negative_sign",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 5,
+          "name": "degree_unit",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 6,
+          "name": "wind",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 7,
+          "name": "direction",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 8,
+          "name": "min_temperature",
+          "type": ".watchface.WFRectNumberValue"
+        },
+        {
+          "number": 9,
+          "name": "max_temperature",
+          "type": ".watchface.WFRectNumberValue"
+        },
+        {
+          "number": 10,
+          "name": "temperature_separator",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 11,
+          "name": "min_max_negative_sign",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 12,
+          "name": "min_max_degree_unit",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 13,
+          "name": "rainfall",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 14,
+          "name": "rainfall_percent_icon",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 15,
+          "name": "humidity",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 16,
+          "name": "humidity_percent_icon",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 17,
+          "name": "uv",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 18,
+          "name": "uv_level",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 19,
+          "name": "aqi",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 20,
+          "name": "aqi_level",
+          "type": ".watchface.WFPositionIcon"
+        }
+      ]
+    },
+    "WFFishInfo": {
+      "newMessage": true,
+      "addedFields": [
+        {
+          "number": 1,
+          "name": "fish",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 2,
+          "name": "center",
+          "type": ".watchface.WFPoint"
+        },
+        {
+          "number": 3,
+          "name": "radius",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 4,
+          "name": "start_angle",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 5,
+          "name": "width",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 6,
+          "name": "recommend_color",
+          "type": "TYPE_UINT32"
+        },
+        {
+          "number": 7,
+          "name": "secondary_color",
+          "type": "TYPE_UINT32"
+        },
+        {
+          "number": 8,
+          "name": "pointer_icon",
+          "type": ".watchface.WFIconOffset"
+        }
+      ]
+    },
+    "WFChartFishTimeInfo": {
+      "newMessage": true,
+      "addedFields": [
+        {
+          "number": 1,
+          "name": "background",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 2,
+          "name": "start_hour",
+          "type": ".watchface.WFRect"
+        },
+        {
+          "number": 3,
+          "name": "start_minute",
+          "type": ".watchface.WFRect"
+        },
+        {
+          "number": 4,
+          "name": "end_hour",
+          "type": ".watchface.WFRect"
+        },
+        {
+          "number": 5,
+          "name": "end_minute",
+          "type": ".watchface.WFRect"
+        },
+        {
+          "number": 6,
+          "name": "font_offset",
+          "type": ".watchface.WFIconOffset"
+        }
+      ]
+    },
+    "WFChartRiseSetInfo": {
+      "newMessage": true,
+      "addedFields": [
+        {
+          "number": 1,
+          "name": "icon",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 2,
+          "name": "time",
+          "type": ".watchface.WFRectNumberValue"
+        }
+      ]
+    },
+    "WFChartInfo": {
+      "newMessage": true,
+      "addedFields": [
+        {
+          "number": 1,
+          "name": "background",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 2,
+          "name": "chart_rect",
+          "type": ".watchface.WFRect"
+        },
+        {
+          "number": 3,
+          "name": "bar_width",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 4,
+          "name": "bar_interval",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 5,
+          "name": "selected_bar_color",
+          "type": "TYPE_UINT32"
+        },
+        {
+          "number": 6,
+          "name": "unselected_bar_color",
+          "type": "TYPE_UINT32"
+        },
+        {
+          "number": 7,
+          "name": "bar_mask",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 8,
+          "name": "tide",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 9,
+          "name": "barometer",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 10,
+          "name": "fish_time",
+          "type": ".watchface.WFChartFishTimeInfo"
+        },
+        {
+          "number": 11,
+          "name": "curves_upper_color",
+          "type": "TYPE_UINT32"
+        },
+        {
+          "number": 12,
+          "name": "curves_lower_color",
+          "type": "TYPE_UINT32"
+        },
+        {
+          "number": 13,
+          "name": "curves_width",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 14,
+          "name": "sunrise_set",
+          "type": ".watchface.WFChartRiseSetInfo"
+        },
+        {
+          "number": 15,
+          "name": "sun",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 16,
+          "name": "sun_angle",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 17,
+          "name": "moonrise_set",
+          "type": ".watchface.WFChartRiseSetInfo"
+        },
+        {
+          "number": 18,
+          "name": "moon",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 19,
+          "name": "moon_percent",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 20,
+          "name": "stress",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 21,
+          "name": "stamina",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 22,
+          "name": "elevation",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 23,
+          "name": "kcal",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 24,
+          "name": "step",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 25,
+          "name": "heart_rate",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 26,
+          "name": "point_icon",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 27,
+          "name": "colon_icon",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 28,
+          "name": "degree_icon",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 29,
+          "name": "negative_sign",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 30,
+          "name": "item3_background",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 31,
+          "name": "item3_mask",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 32,
+          "name": "bar_no_data_mask",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 33,
+          "name": "percent_icon",
+          "type": ".watchface.WFIconOffset"
+        }
+      ]
+    },
+    "WFMetricValue": {
+      "newMessage": true,
+      "addedFields": [
+        {
+          "number": 1,
+          "name": "content",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 2,
+          "name": "unit_offset",
+          "type": ".watchface.WFIconOffset"
+        }
+      ]
+    },
+    "WFTrainingLoadInfo": {
+      "newMessage": true,
+      "addedFields": [
+        {
+          "number": 1,
+          "name": "content",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 2,
+          "name": "level",
+          "type": ".watchface.WFPositionIcon"
+        }
+      ]
+    },
+    "WFStaminaInfo": {
+      "newMessage": true,
+      "addedFields": [
+        {
+          "number": 1,
+          "name": "content",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 2,
+          "name": "percent_icon",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 3,
+          "name": "level",
+          "type": ".watchface.WFPositionIcon"
+        }
+      ]
+    },
+    "WFStressInfo": {
+      "newMessage": true,
+      "addedFields": [
+        {
+          "number": 1,
+          "name": "content",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 2,
+          "name": "level",
+          "type": ".watchface.WFPositionIcon"
+        }
+      ]
+    },
+    "WFSunriseSetInfo": {
+      "newMessage": true,
+      "addedFields": [
+        {
+          "number": 1,
+          "name": "icon",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 2,
+          "name": "time",
+          "type": ".watchface.WFRectNumberValue"
+        },
+        {
+          "number": 3,
+          "name": "colon_icon",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 4,
+          "name": "progress_pos",
+          "type": ".watchface.WFPoint"
+        },
+        {
+          "number": 5,
+          "name": "sunrise_progress",
+          "type": ".watchface.WFIconOffset"
+        },
+        {
+          "number": 6,
+          "name": "sunset_progress",
+          "type": ".watchface.WFIconOffset"
+        }
+      ]
+    },
+    "WFSleepScoreInfo": {
+      "newMessage": true,
+      "addedFields": [
+        {
+          "number": 1,
+          "name": "content",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 2,
+          "name": "level_pos",
+          "type": ".watchface.WFPoint"
+        },
+        {
+          "number": 3,
+          "name": "level_icon",
+          "type": ".watchface.WFSleepScoreInfo.LevelIconEntry"
+        }
+      ]
+    },
+    "WFExtendedStatusInfo": {
+      "newMessage": true,
+      "addedFields": [
+        {
+          "number": 1,
+          "name": "week_training_load",
+          "type": ".watchface.WFTrainingLoadInfo"
+        },
+        {
+          "number": 2,
+          "name": "stamina",
+          "type": ".watchface.WFStaminaInfo"
+        },
+        {
+          "number": 3,
+          "name": "stress",
+          "type": ".watchface.WFStressInfo"
+        },
+        {
+          "number": 4,
+          "name": "sleep_hrv_level",
+          "type": ".watchface.WFPositionIcon"
+        },
+        {
+          "number": 5,
+          "name": "barometer",
+          "type": ".watchface.WFIconValue"
+        },
+        {
+          "number": 6,
+          "name": "today_run",
+          "type": ".watchface.WFMetricValue"
+        },
+        {
+          "number": 7,
+          "name": "today_swim",
+          "type": ".watchface.WFMetricValue"
+        },
+        {
+          "number": 8,
+          "name": "today_bike",
+          "type": ".watchface.WFMetricValue"
+        },
+        {
+          "number": 9,
+          "name": "today_elevation",
+          "type": ".watchface.WFMetricValue"
+        },
+        {
+          "number": 10,
+          "name": "week_run",
+          "type": ".watchface.WFMetricValue"
+        },
+        {
+          "number": 11,
+          "name": "week_swim",
+          "type": ".watchface.WFMetricValue"
+        },
+        {
+          "number": 12,
+          "name": "week_bike",
+          "type": ".watchface.WFMetricValue"
+        },
+        {
+          "number": 13,
+          "name": "week_elevation",
+          "type": ".watchface.WFMetricValue"
+        },
+        {
+          "number": 14,
+          "name": "sunrise_set",
+          "type": ".watchface.WFSunriseSetInfo"
+        },
+        {
+          "number": 15,
+          "name": "sleep_score",
+          "type": ".watchface.WFSleepScoreInfo"
+        }
+      ]
+    },
+    "Watchface": {
+      "newMessage": false,
+      "addedFields": [
+        {
+          "number": 11,
+          "name": "weather",
+          "type": ".watchface.WFWeatherInfo"
+        },
+        {
+          "number": 12,
+          "name": "fish",
+          "type": ".watchface.WFFishInfo"
+        },
+        {
+          "number": 13,
+          "name": "extended_status",
+          "type": ".watchface.WFExtendedStatusInfo"
+        },
+        {
+          "number": 14,
+          "name": "lunar_date_rect",
+          "type": ".watchface.WFRect"
+        },
+        {
+          "number": 15,
+          "name": "chart",
+          "type": ".watchface.WFChartInfo"
+        }
+      ]
+    },
+    "SystemStatus": {
+      "newMessage": false,
+      "addedFields": [
+        {
+          "number": 36,
+          "name": "weather_is_day",
+          "type": "TYPE_BOOL"
+        },
+        {
+          "number": 37,
+          "name": "weather_index",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 38,
+          "name": "temperature_min",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 39,
+          "name": "temperature_max",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 40,
+          "name": "temperature_unit",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 41,
+          "name": "wind",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 42,
+          "name": "wind_direction",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 43,
+          "name": "rainfall_probability",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 44,
+          "name": "humidity",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 45,
+          "name": "uv",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 46,
+          "name": "uv_level",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 47,
+          "name": "aqi",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 48,
+          "name": "weather_aqi_level",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 49,
+          "name": "training_load",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 50,
+          "name": "training_load_level",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 51,
+          "name": "stamina",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 52,
+          "name": "stamina_level",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 53,
+          "name": "stress",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 54,
+          "name": "stress_level",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 55,
+          "name": "sleep_hrv_level",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 56,
+          "name": "sleep_score",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 57,
+          "name": "sleep_score_level",
+          "type": "TYPE_INT32"
+        },
+        {
+          "number": 58,
+          "name": "chart_index",
+          "type": "TYPE_INT32"
+        }
+      ]
+    }
+  },
+  "versionEnum": {
+    "WF_VERSION_0": 0,
+    "WF_VERSION_LUNAR": 1,
+    "WF_VERSION_FISH": 2,
+    "WF_VERSION_EXT_STATUS": 3,
+    "WF_VERSION_EXT_DATE": 4,
+    "WF_VERSION_SUN_PROGRESS": 5,
+    "WF_VERSION_SLEEP_SCORE": 6
+  },
+  "newSystemStatusFields": [
+    {
+      "number": 36,
+      "name": "weather_is_day",
+      "type": "TYPE_BOOL"
+    },
+    {
+      "number": 37,
+      "name": "weather_index",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 38,
+      "name": "temperature_min",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 39,
+      "name": "temperature_max",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 40,
+      "name": "temperature_unit",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 41,
+      "name": "wind",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 42,
+      "name": "wind_direction",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 43,
+      "name": "rainfall_probability",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 44,
+      "name": "humidity",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 45,
+      "name": "uv",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 46,
+      "name": "uv_level",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 47,
+      "name": "aqi",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 48,
+      "name": "weather_aqi_level",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 49,
+      "name": "training_load",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 50,
+      "name": "training_load_level",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 51,
+      "name": "stamina",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 52,
+      "name": "stamina_level",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 53,
+      "name": "stress",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 54,
+      "name": "stress_level",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 55,
+      "name": "sleep_hrv_level",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 56,
+      "name": "sleep_score",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 57,
+      "name": "sleep_score_level",
+      "type": "TYPE_INT32"
+    },
+    {
+      "number": 58,
+      "name": "chart_index",
+      "type": "TYPE_INT32"
+    }
+  ]
+}

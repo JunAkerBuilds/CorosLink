@@ -105,6 +105,7 @@ import {
   saveStartupView,
 } from "./navigation/startupView";
 import { SettingsView } from "./settings/SettingsView";
+import type { AccountDestination } from "./settings/AccountsSettings";
 import { DataView } from "./data/DataView";
 import {
   LibrarySyncLayout,
@@ -316,6 +317,21 @@ interface YouTubeDownloadItem {
 export default function App() {
   const api: CorosLinkApi | undefined = window.corosLink;
   const [activeView, setActiveView] = useState<View>(readStartupView);
+  const [returnToAccountSettings, setReturnToAccountSettings] = useState(false);
+  const [accountSetupView, setAccountSetupView] = useState<View | null>(null);
+  const [coachAccountSetupRequest, setCoachAccountSetupRequest] = useState(0);
+  function openAccountSetup(destination: AccountDestination) {
+    const isFeature = destination === "training" || destination === "strength" || destination === "coach";
+    const view = isFeature ? destination : "media";
+    if (!isFeature) setActiveMediaTab(destination);
+    if (destination === "coach") setCoachAccountSetupRequest((value) => value + 1);
+    setReturnToAccountSettings(true);
+    setAccountSetupView(view);
+    setActiveView(view);
+  }
+  useEffect(() => {
+    if (accountSetupView && activeView !== accountSetupView) setAccountSetupView(null);
+  }, [activeView, accountSetupView]);
   const [startupView, setStartupView] = useState<View>(readStartupView);
   const [sidebarExpanded, setSidebarExpanded] = useState(
     createInitialSidebarExpanded,
@@ -2323,6 +2339,19 @@ export default function App() {
           <BridgeMissing />
         ) : (
           <>
+            {accountSetupView === activeView ? (
+              <button
+                type="button"
+                className="settings-subpage-back account-setup-return"
+                onClick={() => {
+                  setAccountSetupView(null);
+                  setActiveView("settings");
+                }}
+              >
+                <ArrowLeft size={16} aria-hidden="true" />
+                Back to accounts
+              </button>
+            ) : null}
             {activeView === "overview" ? (
               <MediaOverviewTab
                 downloads={downloads}
@@ -2527,6 +2556,7 @@ export default function App() {
             {activeView === "strength" ? (
               <Suspense fallback={<DeferredSurfaceFallback label="strength" />}>
                 <LazyStrengthView
+                  initialAccountSetup={accountSetupView === "strength"}
                   api={api}
                   status={trainingHubStatus}
                   showDevelopmentTools={
@@ -2545,6 +2575,8 @@ export default function App() {
             ) : null}
             {activeView === "settings" ? (
               <SettingsView
+                initialAccountScreen={returnToAccountSettings}
+                onOpenAccount={openAccountSetup}
                 api={api}
                 updateSnapshot={appUpdateSnapshot}
                 updateBusy={busy === "update-check"}
@@ -2583,6 +2615,7 @@ export default function App() {
                   fallback={<DeferredSurfaceFallback label="Coach" />}
                 >
                   <LazyChatView
+                    accountSetupRequest={coachAccountSetupRequest}
                     api={api}
                     onError={setError}
                     onPlanUploaded={() => {

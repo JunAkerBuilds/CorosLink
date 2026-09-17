@@ -259,6 +259,7 @@ assert.deepEqual(WATCHFACE_INSPECTOR_DEFAULT_OPEN, {
   layer: true,
   transform: true,
   appearance: true,
+  assets: true,
   stroke: true,
   specific: true,
   effects: false,

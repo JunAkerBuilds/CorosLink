@@ -1,3 +1,4 @@
+import { composeNativeData } from "./nativeData";
 import type {
   CorosWatchfaceAssetReplacement,
   CorosWatchfaceConfigOverride,
@@ -71,8 +72,7 @@ import {
 } from "./watchfaceEffectPadding.ts";
 import {
   buildWeatherOverrides,
-  buildWeatherSpriteReplacements,
-  buildWeatherTemperaturePlacementOverrides
+  buildWeatherSpriteReplacements
 } from "./weatherAssets.ts";
 
 /**
@@ -176,7 +176,7 @@ const EFFECT_FOLDER_LAYER: Array<[RegExp, string]> = [
   [/\/cl_date_day\//, "dateDay"],
   [/\/cl_control\//, "complication"],
   [/\/studio\/ampm\//, "ampm"],
-  [/\/weather\//, "weather"]
+  [/\/weather2?\//, "weather"]
 ];
 
 function effectLayerForReplacement(path: string): string | null {
@@ -507,13 +507,7 @@ export function deriveDesignDetails(
   const previewDetails = applyConfigOverridesToDetails(
     laidOutDetails,
     mergeConfigOverrides(
-      buildLayerVisibilityOverrides(laidOutDetails, design.layerVisibility ?? {}),
-      design.weatherIndicator
-        ? buildWeatherTemperaturePlacementOverrides(
-            laidOutDetails,
-            design.weatherIndicator
-          )
-        : []
+      buildLayerVisibilityOverrides(laidOutDetails, design.layerVisibility ?? {})
     )
   );
   return {
@@ -628,6 +622,7 @@ export async function composeWatchfaceReplacements(
     ? buildAmPmOverrides(details, ampmStyle)
     : [];
   const weatherStyle = design.weatherIndicator;
+  const nativeDataComposition = await composeNativeData(details, design.nativeData);
   const controlTemperatureActive = isControlComplicationEnabled(
     details,
     design,
@@ -772,7 +767,8 @@ export async function composeWatchfaceReplacements(
     ampmActive ? await buildAmPmSpriteReplacements(details, ampmStyle!, loadAssets) : [],
     weatherStyle?.enabled
       ? await buildWeatherSpriteReplacements(details, weatherStyle)
-      : []
+      : [],
+    nativeDataComposition.assetReplacements
   );
 
   const timeStyleOverrides = timeStyleActive
@@ -863,12 +859,6 @@ export async function composeWatchfaceReplacements(
       buildStaticSeparatorOverrides(details, design.staticSeparators),
       ampmOverrides,
       weatherStyle ? buildWeatherOverrides(details, weatherStyle) : [],
-      // Snap the fixed temperature element beside the weather icon. Reads the
-      // rect size from metricDetails (post buildMetricOverrides) and repositions
-      // it, so it must merge after metricOverrides to win.
-      weatherStyle
-        ? buildWeatherTemperaturePlacementOverrides(metricDetails, weatherStyle)
-        : [],
       // Retain synthesized fixed-asset keys (notably battery_icon_dir/pos).
       // The final positioned pass sees those keys in its intermediate details
       // and therefore correctly avoids emitting them a second time.
@@ -887,20 +877,22 @@ export async function composeWatchfaceReplacements(
         design.configAssetOverrides ?? {},
         true
       ),
-      buildDisabledControlComplicationOverrides(details, design)
+      buildDisabledControlComplicationOverrides(details, design),
+      nativeDataComposition.configOverrides
     )
   );
 
   const requiresModernControlVersion =
-    Boolean(weatherStyle?.enabled) ||
     controlTemperatureActive ||
     controlBarometerActive;
-  const minimumWatchFaceVersion =
+  const controlMinimumWatchFaceVersion =
     controlBarometerActive && controlBarometerMode === "static"
       ? MODERN_CONTROL_WATCHFACE_VERSION
       : requiresModernControlVersion
         ? MODERN_CONTROL_WATCHFACE_VERSION
         : undefined;
+
+  const minimumWatchFaceVersion = Math.max(controlMinimumWatchFaceVersion ?? 0, nativeDataComposition.minWatchFaceVersion) || undefined;
 
   return {
     // Keep this after all scaling, rotation, opacity, and decoration passes.

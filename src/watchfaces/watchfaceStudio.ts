@@ -3028,8 +3028,12 @@ export function scaledBatterySpriteCanvasSize(
 }
 
 /** Representative normal-charge state used consistently by preview and bounds. */
-export function batteryPreviewStateIndex(stateCount: number): number {
-  return Math.min(8, Math.max(0, stateCount - 1));
+export function batteryPreviewStateIndex(stateCount: number, percentage?: number): number {
+  if (percentage === undefined || !Number.isFinite(percentage)) return Math.min(8, Math.max(0, stateCount - 1));
+  // Normal charge artwork occupies the first ten states. Extra frames in
+  // imported sets are special modes, not additional charge levels.
+  const levels = Math.max(1, Math.min(10, stateCount));
+  return Math.min(levels - 1, Math.floor(Math.max(0, Math.min(100, percentage)) / 100 * levels));
 }
 
 /** Rotates artwork around the center of its fixed firmware sprite canvas. */
@@ -3864,7 +3868,7 @@ export const WATCHFACE_FIXED_METRICS: WatchfaceFixedMetricDefinition[] = [
   },
   {
     id: "temperature",
-    label: "Temperature",
+    label: "Sensor temperature",
     rectKey: "temperature_rect",
     fontKey: "temperature_font",
     fontColorKey: "temperature_font_color",
@@ -4012,7 +4016,7 @@ export const WATCHFACE_COMPLICATIONS: WatchfaceComplicationDefinition[] = [
     ]
   },
   { id: "battery", label: "Battery", controlPrefix: "battery", sampleValue: "82" },
-  { id: "temperature", label: "Temperature", controlPrefix: "temperature", sampleValue: "18" }
+  { id: "temperature", label: "Sensor temperature", controlPrefix: "temperature", sampleValue: "18" }
 ];
 
 export type WatchfaceMetricChanges = Partial<Record<WatchfaceMetricId, boolean>>;
@@ -6820,7 +6824,7 @@ export const WATCHFACE_LAYOUT_GROUPS: WatchfaceLayoutGroup[] = [
   },
   {
     id: "temperature",
-    label: "Temperature",
+    label: "Sensor temperature",
     patterns: [/^temperature_rect$/]
   }
 ];
@@ -8042,7 +8046,7 @@ export async function drawStudioPreview(
     .filter(([key]) => /^\d+$/.test(key))
     .sort(([left], [right]) => Number(left) - Number(right));
   const importedBatteryState =
-    importedBatteryStates[batteryPreviewStateIndex(importedBatteryStates.length)] ??
+    importedBatteryStates[batteryPreviewStateIndex(importedBatteryStates.length, options.previewValues?.battery === undefined ? undefined : Number(options.previewValues.battery))] ??
     (batteryOverride?.replacement ? ["0", batteryOverride.replacement] as const : null);
   const batteryFolderName = config.battery_icon_dir?.replace(/\\/g, "/");
   const batteryFolder =
@@ -8054,7 +8058,7 @@ export async function drawStudioPreview(
   // Prefer a normal high-charge state; the last entries can represent special
   // charging/low-power states in COROS's 12-image battery sets.
   const batteryFileIndex = batteryFolder
-    ? batteryPreviewStateIndex(batteryFolder.files.length)
+    ? batteryPreviewStateIndex(batteryFolder.files.length, options.previewValues?.battery === undefined ? undefined : Number(options.previewValues.battery))
     : Number(importedBatteryState?.[0] ?? 0);
   const batteryReplacement =
     batteryOverride?.stateReplacements?.[String(batteryFileIndex)] ??
@@ -8088,7 +8092,7 @@ export async function drawStudioPreview(
     .sort(([left], [right]) => Number(left) - Number(right));
   const importedControlBatteryState =
     importedControlBatteryStates[
-      batteryPreviewStateIndex(importedControlBatteryStates.length)
+      batteryPreviewStateIndex(importedControlBatteryStates.length, options.previewValues?.battery === undefined ? undefined : Number(options.previewValues.battery))
     ] ??
     (controlBatteryOverride?.replacement
       ? ["0", controlBatteryOverride.replacement] as const
@@ -8110,7 +8114,7 @@ export async function drawStudioPreview(
     ) ??
     null;
   const controlBatteryFileIndex = controlBatteryFolder
-    ? batteryPreviewStateIndex(controlBatteryFolder.files.length)
+    ? batteryPreviewStateIndex(controlBatteryFolder.files.length, options.previewValues?.battery === undefined ? undefined : Number(options.previewValues.battery))
     : Number(importedControlBatteryState?.[0] ?? 0);
   const controlBatteryReplacement =
     controlBatteryOverride?.stateReplacements?.[

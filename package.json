@@ -17,6 +17,7 @@
     "build:electron": "tsc -p tsconfig.electron.json",
     "build:renderer": "tsc -p tsconfig.json --noEmit && vite build",
     "smoke:watch": "npm run build:electron && node scripts/smoke-watch-service.mjs",
+    "test:watch-detection": "npm run build:electron && node scripts/test-watch-detection.mjs",
     "test:watch-models": "npm run build:electron && node scripts/test-watch-models.mjs",
     "test:maps": "npm run build:electron && node scripts/test-maps.mjs && cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/test-gpx-import.cjs",
     "test:saved-routes-ui": "npm run build:electron && electron scripts/test-saved-routes-ui.cjs",

@@ -14,6 +14,9 @@ import { fallbackBytesForModel, resolveWatchModel } from "./watchModels";
 
 const execFileAsync = promisify(execFile);
 const INSTALLER_VOLUME_PATTERN = /desktop|setup|installer|\.dmg/i;
+// Match the whole label: a backup drive named "COROS Backup" or
+// "APEX archives" must not become a write/delete target.
+const WATCH_VOLUME_PATTERN = /^(?:COROS(?: WATCH)?|(?:COROS )?(?:PACE(?: ?(?:PRO|[234]))?|NOMAD|VERTIX ?2(?: ?S)?|APEX(?: ?(?:2(?: ?PRO)?|4|PRO))?))$/i;
 const ORIGINAL_COROS_WATCH_PATH = process.env.COROS_WATCH_PATH;
 // Throttle progress callbacks so a fast local copy doesn't flood IPC, while a
 // slow copy to the watch still ticks often enough to look responsive.
@@ -144,6 +147,7 @@ let activeWatchConnectionSmokeOptionId: WatchConnectionSmokeOptionId = "auto";
 interface RawVolume {
   name: string;
   rootPath: string;
+  explicit?: boolean;
 }
 
 interface StorageStats {
@@ -169,7 +173,7 @@ export function invalidateWatchStatusCache(): void {
 export async function getWatchStatus(): Promise<WatchStatus> {
   try {
     const volumes = await listVolumes();
-    const volumeKey = volumes.map((volume) => volume.rootPath).join("\n");
+    const volumeKey = JSON.stringify(volumes);
     if (
       cachedWatchStatus &&
       cachedWatchStatus.volumeKey === volumeKey &&
@@ -410,6 +414,14 @@ async function findDriveCandidates(
       continue;
     }
 
+    const normalizedName = volume.name
+      .trim()
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ");
+    if (!volume.explicit && !WATCH_VOLUME_PATTERN.test(normalizedName)) {
+      continue;
+    }
+
     const musicPath = path.join(volume.rootPath, "Music");
     const mapPath = path.join(volume.rootPath, "map");
     const hasMusicFolder = isDirectory(musicPath);
@@ -446,7 +458,8 @@ async function listVolumes(): Promise<RawVolume[]> {
     return [
       {
         name: path.basename(explicitWatchPath) || "COROS Watch",
-        rootPath: explicitWatchPath
+        rootPath: explicitWatchPath,
+        explicit: true
       }
     ];
   }

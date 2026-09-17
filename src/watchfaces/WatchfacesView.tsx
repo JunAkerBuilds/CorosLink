@@ -1,3 +1,4 @@
+import { drawNativeDataPreview } from "./nativeData";
 import {
   type CSSProperties,
   type FormEvent,
@@ -76,7 +77,7 @@ import {
   pickPreviewResolution,
   pickWatchPreviewResolution
 } from "./watchfaceStudio";
-import { weatherPreviewUrl } from "./weatherAssets";
+import { weatherPreviewDataUrl, drawWeatherTemperaturePreview } from "./weatherAssets";
 import {
   clearWatchfaceAutomationEditor,
   getWatchfaceAutomationEditor,
@@ -2804,9 +2805,11 @@ function renderProjectPreview(
       },
       loadAssets
     );
+    await drawNativeDataPreview(canvas, resolution.width, loadedProject.design.nativeData);
     const weather = loadedProject.design.weatherIndicator;
     if (weather?.enabled) {
-      const url = weatherPreviewUrl(resolution.width);
+      if (!loadedProject.design.nativeData?.weather_temp) await drawWeatherTemperaturePreview(canvas, resolution.width, weather);
+      const url = await weatherPreviewDataUrl(resolution.width, weather.color, weather);
       if (url) {
         const image = await loadStudioImage(url);
         const context = canvas.getContext("2d");

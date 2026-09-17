@@ -173,6 +173,88 @@ only at the trusted editor dispatch boundary. Assets are content-addressed,
 integrity-checked, private to CorosLink's user-data directory, and bounded by
 count and size limits.
 
+## Native data and component customization
+
+`get_schema.nativeData` lists all 25 Weather, Astronomy, Health, Training and
+chart field definitions, 12 chart sources, default styles, available components,
+artwork roles and valid state indices. The live document includes the supported
+IDs under `capabilities.nativeData`; each configured native layer also reports
+its component edit paths, effective styles and whether its position is editable.
+This includes labels/arrows, digits, units, symbols, state artwork, solar progress,
+graph styling, decimal points, backgrounds, masks and missing-data artwork.
+
+Create a field by setting `/design/nativeData/<id>` to the catalog's defaults,
+then change the desired values. If `nativeData` is absent, first initialize it
+to `{}`. Keep existing fields when adding another one. Generic pointer parents
+must exist; `merge` merges only one level. For example, after initializing the
+map, this adds a customized training-load layer (adjust coordinates to the
+document's master canvas):
+
+```json
+{
+  "op": "set",
+  "path": "/design/nativeData/week_tl",
+  "value": {
+    "enabled": true, "x": 100, "y": 200, "scale": 1, "color": "#ffffff",
+    "assetTexts": { "icon": { "0": "LOAD" } },
+    "parts": {
+      "icon": { "width": 80, "height": 48, "color": "#00ff00" },
+      "value": { "x": 90, "width": 120, "height": 48 }
+    }
+  }
+}
+```
+
+`native:<id>` is the semantic layer ID for positioning, visibility, grouping and
+locks. Parts use offsets and dimensions in master pixels before the layer scale.
+Native colors must be six-digit RGB hex. `parts.<part>.enabled` hides one part;
+`set_visibility` hides the whole layer. Units, symbols and decimal points have
+firmware-controlled positions. Native edits respect locks and form an undo step
+with the rest of their command batch.
+
+For images, import a **PNG** with `import_asset`, then put its `{assetId}` under
+`assets.<role>.<stateIndex>`. State keys are unpadded, such as `"0"`; numbered
+folder files such as `00.png` map to that key. The same references work under
+`weatherIndicator.assets` for the original SIMPLE defaults. Unspecified images
+keep their defaults. Imported images override `assetTexts` for that state.
+Use `unset` on existing optional `assets`, `assetTexts`, `parts` or `chartStyle`
+overrides to restore defaults; preserve the required layer fields.
+
+For `nativeData.chart`, use `chartSource`, `parts.plot` and `chartStyle` for
+geometry, bar colors and bar width/gap. There is one chart
+slot per mode. Previews always use bars; legacy `previewType: "curve"` and line
+appearance settings are retained for compatibility but cannot enable lines.
+Firmware chooses the live representation. The `decimal` component is a numeric decimal point.
+Charts are experimental. Bar rendering has been reported on PACE Pro, while
+history selection and live updates remain unverified. `chartSource` selects
+the numeric/icon field written to the shared chart block, not a verified
+selector for the watch's plotted history. Do not report live chart support
+from a successful preview, validation or ZIP export. For bars, use bar width,
+gap and selected/unselected colors; curve styling does not control bars.
+PACE Pro testing reports that Back changes the chart while the number remains
+absent. Cycling is not a verified fix for missing chart numbers. A separate
+metric layer supplies an independent value and will not follow chart changes.
+The catalog exposes `lineGraphAvailability` and the AQI field's `availability`
+with status `unavailable` and label `Not available right now`, matching the UI.
+`chartPreviewTypes` contains only `bars`; the editor has no selectable line option.
+These report the current PACE Pro testing limitations; they do not remove
+saved layers, block editing or establish permanent firmware incompatibility.
+Minimum/maximum temperature share unit/minus artwork; minimum supplies it when
+both are enabled. A configured `weather_temp` takes over the weather companion's
+temperature slot; remove that field to return control to the companion.
+**Current weather** (`nativeData.weather_temp`) displays weather temperature independently of the watch's
+sensor temperature (`metricChanges.temperature`, `metricStyles.temperature`
+and the `temperature` selectable control). The sensor reading can be affected
+by body heat; do not treat it as weather or core body temperature. Simulation
+uses separate `values.weather_temp` and `values.temperature` keys, with no
+fallback or synchronization between them.
+
+Pass `mode: "aod"` to `apply_commands` with the same `/design` paths to edit AOD
+independently, when the template supports it. Render both modes, validate and
+build after editing. Device support and live behavior still need on-watch tests.
+After updating CorosLink, restart the app and reconnect the MCP client if needed,
+then fetch `get_schema` again to refresh cached tool/schema information.
+
 ## Hide and show layers
 
 Use `set_visibility` with a semantic layer id from `get_document` and a boolean
@@ -234,3 +316,59 @@ resolution.
 `publish` uses the signed-in COROS mobile session to create the official phone
 handoff. The user still claims the result in the COROS mobile app and sends it to
 the watch. Raw device installation is outside this MCP surface.
+
+## Preview simulation
+
+The editor's **Simulation** control previews battery charge (number and normal
+icon states), clock time, the full calendar including year/month/day/weekday,
+activity samples, weather artwork and temperature, native health/training data,
+and chart samples. Playback supports real time, one minute, one hour, or one day
+per real second. Rollover presets cover midnight, New Year, and leap day.
+
+Simulation belongs to the editor view, not the design. It never adds undo history,
+changes the project dirty flag, or changes the live-data bindings/assets in a saved
+project or export. Opening another document resets it. Year drives the calendar;
+only fields present in the template are drawn. This is a sample-data preview, not
+firmware emulation; battery artwork uses approximate charge levels and excludes
+extra charging/special-state frames. Native astronomy and chart values are manual
+samples, not calculations based on location or recorded sensor history.
+
+`get_document.view.simulation` returns the current state.
+`get_schema.simulation` and `get_document.capabilities.simulation` describe its
+supported values and limits. `set_view` patches simulation controls, without
+requiring or incrementing a design revision:
+
+```json
+{
+  "sessionId": "SESSION_ID",
+  "simulation": {
+    "enabled": true,
+    "playing": false,
+    "speed": 1,
+    "dateTime": "2028-02-29T23:59:58",
+    "values": {
+      "battery": "5",
+      "steps": "88888",
+      "weather_temp": "-18",
+      "week_tl": "420",
+      "chart_stress": "28"
+    },
+    "weather": { "condition": 8, "night": true },
+    "chartHistory": [0.2, 0.5, 0.4, 0.8]
+  }
+}
+```
+
+`values` replaces the entire current sample map; use `{}` to restore design
+samples. Omitted control properties retain their current settings. Disabling
+simulation also pauses playback. `dateTime` accepts ISO date-times from 1900
+through 9999; no offset means local time, and explicit offsets convert to local
+time. State fields use integer asset indices. Chart history contains 2–120
+normalized sample heights between 0 and 1. Battery and progress percentages are
+0–100. Values on absent/hidden fields do not create layers.
+
+`render_preview` uses the active simulation by default. An explicit `scenario`
+object overrides it for that one image, with the same `dateTime`, `values`,
+`weather`, and `chartHistory` properties. Pass `scenario: {}` for ordinary sample
+values. The response includes the scenario used. These overrides also apply to
+native data and weather, including previews in AOD mode when those layers exist.

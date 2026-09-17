@@ -77,6 +77,7 @@ interface StrengthViewProps {
   onOpenTraining: () => void;
   /** Dev view unlocks the generated sample history. */
   showDevelopmentTools?: boolean;
+  initialAccountSetup?: boolean;
 }
 
 const WINDOW_OPTIONS = [
@@ -429,7 +430,8 @@ export function StrengthView({
   api,
   status,
   onOpenTraining,
-  showDevelopmentTools = false
+  showDevelopmentTools = false,
+  initialAccountSetup = false
 }: StrengthViewProps) {
   const { unitSystem } = useUnitSystem();
   const corosConnected = Boolean(status?.authenticated);
@@ -443,7 +445,7 @@ export function StrengthView({
   );
   const [hevyStatus, setHevyStatus] = useState<HevyStatus | null>(null);
   const [hevyStatusLoading, setHevyStatusLoading] = useState(true);
-  const [hevyDialogOpen, setHevyDialogOpen] = useState(false);
+  const [hevyDialogOpen, setHevyDialogOpen] = useState(initialAccountSetup);
   const [hevyApiKey, setHevyApiKey] = useState("");
   const [hevyBusy, setHevyBusy] = useState(false);
   const [hevyDialogError, setHevyDialogError] = useState<string | null>(null);

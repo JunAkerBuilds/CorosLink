@@ -2664,6 +2664,75 @@
   background: var(--wf-surface-hover);
 }
 
+/* Layer picker uses the browser's top layer, above scrolling panes and canvas tools. */
+.watchface-shell .watchface-add-sprite {
+  min-height: 32px;
+  padding: 0 10px;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--wf-add-button-ink, #08261c);
+  font-weight: 750;
+}
+.watchface-shell .watchface-add-sprite:is(:hover, [aria-expanded="true"]):not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: var(--wf-add-button-ink, #08261c);
+}
+:root[data-theme="paper"] .watchface-shell .watchface-add-sprite { --wf-add-button-ink: #ffffff; }
+.watchface-shell .wf-layer-picker {
+  position: fixed;
+  inset: auto;
+  right: auto;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  gap: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-radius: 12px;
+  background: linear-gradient(var(--wf-surface-raised), var(--wf-surface-raised)), var(--wf-canvas);
+  box-shadow: var(--shadow-elevated);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.watchface-shell .wf-layer-picker:not(:popover-open) { display: none; }
+.watchface-shell .wf-layer-picker:popover-open { display: flex; }
+.watchface-shell .wf-layer-picker > :not(.wf-layer-picker-results) { flex-shrink: 0; }
+.watchface-shell .wf-layer-picker-heading { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px 14px; }
+.watchface-shell .wf-layer-picker-heading strong { font-size: 13px; font-weight: 700; }
+.watchface-shell .wf-layer-picker-heading button,
+.watchface-shell .wf-layer-picker-search button { min-height: 24px; width: 24px; padding: 0; justify-content: center; color: var(--text-secondary); }
+.watchface-shell .wf-layer-picker-artwork { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 0 12px 12px; }
+.watchface-shell .wf-layer-picker-artwork button { justify-content: center; flex-direction: column; min-height: 54px; gap: 5px; padding: 8px 4px; border: 1px solid var(--wf-border); background: var(--wf-surface); font-size: 11px; font-weight: 600; }
+.watchface-shell .wf-layer-picker-artwork .wf-add-image { grid-column: span 2; flex-direction: row; gap: 8px; }
+.watchface-shell .wf-layer-picker-artwork button:is(:hover, :focus-visible):not(:disabled) { border-color: var(--wf-accent-border); background: var(--accent-soft); color: var(--accent-strong); }
+.watchface-shell .wf-layer-picker-data-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 14px 10px; border-top: 1px solid var(--wf-border); }
+.watchface-shell .wf-layer-picker-data-heading strong { font-size: 12px; }
+.watchface-shell .wf-layer-picker-data-heading > span { font-size: 10px; color: var(--text-secondary); }
+.watchface-shell .wf-layer-picker-search { display: flex; flex-shrink: 0; align-items: center; gap: 7px; margin: 0 12px; padding: 0 9px; min-height: 34px; border: 1px solid var(--wf-border); border-radius: 7px; background: var(--wf-surface); color: var(--text-secondary); }
+.watchface-shell .wf-layer-picker-search:focus-within { border-color: var(--wf-accent-border); box-shadow: 0 0 0 2px var(--accent-soft); }
+.watchface-shell .wf-layer-picker-search input { width: 100%; min-width: 0; min-height: 32px; border: 0; outline: 0; box-shadow: none; padding: 0; border-radius: 0; background: transparent; color: var(--text-primary); font: inherit; font-size: 11px; }
+.watchface-shell .wf-layer-picker-search input::-webkit-search-cancel-button { display: none; }
+.watchface-shell .wf-layer-picker-filters { display: flex; flex-wrap: nowrap; gap: 0; margin: 8px 12px 0; border-bottom: 1px solid var(--wf-border); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: var(--wf-border-strong) transparent; }
+.watchface-shell .wf-layer-picker-filters button { flex: 0 0 auto; justify-content: center; min-height: 34px; padding: 0 10px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; font-size: 11px; white-space: nowrap; color: var(--text-secondary); }
+.watchface-shell .wf-layer-picker-filters button[aria-selected="true"] { background: transparent; border-bottom-color: var(--accent); color: var(--accent-strong); font-weight: 650; }
+.watchface-shell .wf-layer-picker-filters button:focus-visible { outline-offset: -3px; }
+.watchface-shell .wf-layer-picker-results { min-height: 80px; overflow-y: auto; overscroll-behavior: contain; flex: 1 1 auto; padding: 0 6px 8px; scrollbar-width: thin; }
+.watchface-shell .wf-layer-picker-results h3 { display: flex; align-items: center; gap: 6px; padding: 10px 8px 5px; margin: 0; color: var(--text-secondary); font-size: 10px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+.watchface-shell .wf-layer-picker-results h3 > span { margin-left: auto; font-variant-numeric: tabular-nums; opacity: .65; }
+.watchface-shell .wf-layer-picker-results section > button { width: 100%; min-height: 33px; gap: 8px; padding: 6px 8px; font-size: 12px; line-height: 1.4; }
+.watchface-shell .wf-layer-picker-results section > button > span:first-child { flex: 1; }
+.watchface-shell .wf-layer-picker-option-label { display: grid; gap: 2px; min-width: 0; text-align: left; }
+.watchface-shell .wf-layer-picker-availability { color: var(--text-secondary); font-size: 10px; font-weight: 400; line-height: 1.4; }
+.watchface-shell .wf-layer-picker-notice { margin: 2px 8px 6px; color: var(--text-secondary); font-size: 10px; line-height: 1.4; }
+.watchface-shell .wf-layer-picker-plus { flex-shrink: 0; color: var(--text-secondary); opacity: .5; }
+.watchface-shell .wf-layer-picker-results section > button:is(:hover, :focus-visible) { background: var(--accent-soft); color: var(--accent-strong); }
+.watchface-shell .wf-layer-picker-added { display: inline-flex; flex-shrink: 0; align-items: center; gap: 3px; color: var(--accent-strong); font-size: 10px; }
+.watchface-shell .wf-layer-picker-empty { display: grid; justify-items: center; gap: 8px; padding: 18px 8px; color: var(--text-secondary); font-size: 11px; text-align: center; }
+.watchface-shell .wf-layer-picker-empty strong { color: var(--text-primary); font-size: 12px; }
+.watchface-shell .wf-layer-picker-empty button { min-height: 28px; color: var(--accent-strong); font-size: 11px; }
+.watchface-shell .wf-layer-picker-footer { flex-shrink: 0; padding: 10px 14px; border-top: 1px solid var(--wf-border); color: var(--text-secondary); font-size: 10px; line-height: 1.5; }
+
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-export-popover) {
   z-index: 30;
   width: 276px;
@@ -3049,6 +3118,7 @@
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-stage, .watchface-editor-stage) {
   display: grid;
   position: relative;
+  isolation: isolate;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -3069,7 +3139,8 @@
 
 :is(.watchfaces-view, .wf-watchfaces, .watchface-shell) :where(.wf-stage-toolbar, .watchface-stage-toolbar) {
   display: flex;
-  z-index: 2;
+  /* Toolbar popovers must sit above the contextual alignment bar (7). */
+  z-index: 8;
   align-items: center;
   justify-content: flex-start;
   min-height: 48px;
@@ -3394,6 +3465,9 @@
 
 .watchface-shell .watchface-preview-stack {
   position: relative;
+  /* Fit mode removes the transform, so explicitly contain canvas overlays,
+     selection outlines and rulers instead of relying on that transform. */
+  isolation: isolate;
 }
 
 .watchface-shell .wf-preview-resolution {
@@ -3590,7 +3664,10 @@
 .watchface-shell .wf-contextual-align-bar {
   position: absolute;
   z-index: 7;
-  top: 58px;
+  /* Anchor to the preview row so a wrapped toolbar cannot cover these tools. */
+  grid-row: 2;
+  grid-column: 1;
+  top: 8px;
   left: 50%;
   display: flex;
   align-items: center;

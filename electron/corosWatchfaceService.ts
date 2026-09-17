@@ -1,3 +1,4 @@
+import { NATIVE_DATA_CONFIG_KEYS } from "./watchfaceNativeCatalog";
 import crypto from "node:crypto";
 import { annotateDiagnosticRequest } from "./diagnosticsLog";
 import fs from "node:fs";
@@ -124,19 +125,20 @@ const MAX_ARCHIVE_EXPANDED_BYTES = 200 * 1024 * 1024;
 const MAX_ARCHIVE_FILES = 5_000;
 const MAX_ARCHIVE_ENTRY_BYTES = 5 * 1024 * 1024;
 const CREATOR_CANVAS_SIZE = 800;
-const MAX_SPRITE_REPLACEMENTS = 800;
+// Current + AOD data layers, fonts and weather sprites across four resolutions.
+const MAX_SPRITE_REPLACEMENTS = 4096;
 const MAX_SPRITE_BYTES = 2 * 1024 * 1024;
 const MAX_TEMPLATE_ASSET_BYTES = 5 * 1024 * 1024;
 const MAX_TOTAL_SPRITE_BYTES = 20 * 1024 * 1024;
 const MAX_TEMPLATE_ASSET_REQUESTS = 800;
 const MAX_CONFIG_OVERRIDE_FILES = 8;
-const MAX_CONFIG_OVERRIDE_KEYS = 200;
+const MAX_CONFIG_OVERRIDE_KEYS = 512;
 const MAX_CONFIG_TEXT_REPLACEMENTS = 8;
 const PROJECT_PREVIEW_FILE_NAME = "preview.png";
 const CONFIG_TEXT_PATH_PATTERN = /^watchface_\d{3,4}x\d{3,4}\/(?:AOD)?config\.txt$/i;
 const CONFIG_KEY_PATTERN = /^[a-z0-9_]{1,64}$/i;
 const CREATED_STUDIO_SPRITE_PATTERN =
-  /^watchface_(\d{3,4})x\1\/(?:studio\/[a-z0-9_-]{1,64}|cl_[a-z0-9_]{1,32}|weather)\/\d{2}\.png$/i;
+  /^watchface_(\d{3,4})x\1\/(?:studio\/[a-z0-9_-]{1,64}|cl_[a-z0-9_]{1,32}|weather2?)\/\d{2}\.png$/i;
 // Only these namespaces belong to CorosLink. Official assets (including
 // weather) may have firmware references outside the editable layout configs.
 const OWNED_STUDIO_SPRITE_PATTERN =
@@ -1809,6 +1811,7 @@ export function applyCorosWatchfaceConfigOverrides(
     pending.delete(key);
   }
   const appendableKeys = new Set([
+    ...NATIVE_DATA_CONFIG_KEYS,
     "watchface_id",
     // Independent AOD artwork may add a flattened background to a valid
     // color-only AODconfig that did not originally declare a PNG.
@@ -1819,6 +1822,12 @@ export function applyCorosWatchfaceConfigOverrides(
     "rect_control1_pos",
     "weather_icon_pos",
     "weather_icon_dir",
+    "weather_dark_icon_dir",
+    "weather_temp_rect",
+    "weather_temp_font",
+    "weather_negasign_icon",
+    "weather_dgree_icon",
+    "weather_temp_max_min_dgree_icon",
     "battery_icon_pos",
     "battery_icon_dir",
     "battery_level_rect",
@@ -2301,13 +2310,13 @@ async function discoverSpriteAssets(
   const spriteFolders: CorosWatchfaceSpriteFolder[] = [];
   const stateFolders = new Set(
     configs.flatMap((config) => Object.entries(config))
-      .filter(([key, value]) => /_icon_dir$/.test(key) && Boolean(value))
+      .filter(([key, value]) => (/_icon_dir$/.test(key) || key === "weather_temp_max_min_dgree_icon") && Boolean(value))
       .map(([, value]) => value.replace(/\\/g, "/").replace(/^\.\//, ""))
   );
   for (const [folder, numbered] of folderFiles) {
     const plainFolder = folder.replace(/^a\//, "");
     const kind = stateFolders.has(folder) || stateFolders.has(plainFolder) ||
-      /^(?:battery|weather|cl_battery_icon)$/i.test(plainFolder)
+      /^(?:battery|weather|cl_battery_icon|cl_nd_(?![a-z0-9_]*_d$)[a-z0-9_]+)$/i.test(plainFolder)
       ? "state"
       : classifySpriteFolder(numbered);
     if (!kind) {

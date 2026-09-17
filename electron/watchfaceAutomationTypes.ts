@@ -223,7 +223,7 @@ export const WATCHFACE_AUTOMATION_SCENE_SCHEMA = {
       "controlBarometerMode", "controlBatteryEnabled", "controlSunriseEnabled",
       "controlSunsetEnabled", "controlFloorEnabled", "controlTemperatureEnabled",
       "controlIconOffsets", "separateAutoTime", "timeStyles", "dateStyles",
-      "staticSeparators", "ampmIndicator", "weatherIndicator", "layoutOffsets"
+      "staticSeparators", "ampmIndicator", "weatherIndicator", "nativeData", "layoutOffsets"
     ],
     editor: [
       "linkedLayerGroups", "editorGroups", "editorGuides", "lockedLayerIds",
@@ -236,9 +236,11 @@ export const WATCHFACE_AUTOMATION_SCENE_SCHEMA = {
     alternateModes:
       "modeDesigns.aod may override any visual/editor field above and adds backgroundEdited.",
     imageFields:
-      "artwork, designSprites[].dataUrl, configAssetOverrides replacements, rasterFont.dataUrl/sprites, and AOD equivalents are returned as opaque {assetId} refs. Pass those refs unchanged in commands."
+      "artwork, designSprites[].dataUrl, configAssetOverrides replacements, rasterFont.dataUrl/sprites, weatherIndicator.assets, nativeData.*.assets, and AOD equivalents are returned as opaque {assetId} refs. Pass those refs unchanged in commands."
   },
   objectShapes: {
+    nativeData:
+      "nativeData in get_schema catalogs every addable field, chart source, default style, component, artwork role and state index. get_document capabilities.nativeData lists supported IDs; each configured native layer includes effective component styles and edit paths. Set /design/nativeData/<id> to a complete style to add; use set/merge/unset for parts, assetTexts, assets and chartStyle. Use native:<id> for placement and visibility. Image overrides require PNG asset references. Use mode:'aod' and the same paths for AOD. One slot per field and one chart per mode; live graph representation is firmware-controlled.",
     placementCapabilities:
       "{width,height,unit:'pixels'} defines the authoritative placement canvas. Width and height come from the template's largest native resolution.",
     layerPlacement:

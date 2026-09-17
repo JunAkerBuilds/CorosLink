@@ -1,3 +1,6 @@
+import { WATCHFACE_SIMULATION_CAPABILITIES } from "./watchfaceSimulation";
+import { getNativeDataAutomationCatalog } from "./nativeDataAutomation";
+import { NATIVE_DATA_BY_ID, NATIVE_CHART_SOURCES, NATIVE_ASSET_ROLES, NATIVE_PARTS, nativeAssetCount } from "../../electron/watchfaceNativeCatalog";
 import type {
   CorosWatchfaceDesignState,
   CorosWatchfaceTemplateDetails
@@ -57,12 +60,29 @@ const WATCHFACE_SCHEMA_DEFINITIONS = {
   exerciseSeparator: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "size", "scale", "color"], properties: { enabled: { type: "boolean" }, x: { type: "number" }, y: { type: "number" }, size: { type: "number", exclusiveMinimum: 0 }, scale: { type: "number", exclusiveMinimum: 0 }, color: { $ref: "#/$defs/color" }, artwork: { anyOf: [{ $ref: "#/$defs/artwork" }, { type: "null" }] } } },
   staticSeparator: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "size", "color"], properties: { enabled: { type: "boolean" }, x: { type: "number" }, y: { type: "number" }, size: { type: "number", exclusiveMinimum: 0 }, color: { $ref: "#/$defs/color" }, fontFamily: { type: "string" } } },
   indicator: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "scale"], properties: { enabled: { type: "boolean" }, x: { type: "number" }, y: { type: "number" }, scale: { type: "number", exclusiveMinimum: 0 }, color: { $ref: "#/$defs/color" }, fontFamily: { type: "string" } } },
+  weatherIndicator: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "scale"], properties: { enabled: { type: "boolean" }, x: { type: "number" }, y: { type: "number" }, scale: { type: "number", exclusiveMinimum: 0 }, color: { $ref: "#/$defs/color" }, temperatureEnabled: { type: "boolean" }, assets: { type: "object", additionalProperties: false, properties: Object.fromEntries(["day", "night", "digits", "symbols", "units"].map(key => [key, { type: "object", additionalProperties: { $ref: "#/$defs/pngImageValue" } }])) } } },
+  pngImageValue: { allOf: [{ $ref: "#/$defs/imageValue" }, { if: { type: "string" }, then: { pattern: "^data:image/png;base64," } }], description: "PNG artwork, passed as a reusable assetId or hydrated PNG data URL." },
+  nativeColor: { type: "string", pattern: "^#[0-9a-fA-F]{6}$", description: "Six-digit RGB hex color supported by the native compiler." },
+  nativeDataMap: { type: "object", propertyNames: { enum: [...NATIVE_DATA_BY_ID.keys()] }, additionalProperties: { $ref: "#/$defs/nativeDataStyle" } },
+  nativeDataStyle: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "scale", "color"], properties: {
+    enabled: {type:"boolean"}, x:{type:"number"}, y:{type:"number"}, scale:{type:"number",minimum:0.1,maximum:4}, color:{$ref:"#/$defs/nativeColor"}, fontFamily:{type:"string"}, previewValue:{type:"string",maxLength:6}, chartSource:{enum:NATIVE_CHART_SOURCES.map(source=>source.id)}, chartWidth:{type:"number",minimum:80,maximum:700}, chartHeight:{type:"number",minimum:40,maximum:500},
+    assets:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_ASSET_ROLES.map(role=>[role,{type:"object",propertyNames:{pattern:"^(0|[1-9][0-9]?)$"},additionalProperties:{$ref:"#/$defs/pngImageValue"}}]))},
+    assetTexts:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_ASSET_ROLES.map(role=>[role,{type:"object",additionalProperties:{type:"string",maxLength:32}}]))},
+    parts:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_PARTS.map(part=>[part,{$ref:"#/$defs/nativeDataPart"}]))},
+    chartStyle:{$ref:"#/$defs/nativeChartStyle"}
+  } },
+  nativeDataPart:{type:"object",additionalProperties:false,properties:{
+    enabled:{type:"boolean"},x:{type:"number",minimum:0,maximum:1600},y:{type:"number",minimum:0,maximum:1600},width:{type:"number",minimum:4,maximum:800},height:{type:"number",minimum:4,maximum:800},color:{$ref:"#/$defs/nativeColor"},fontFamily:{type:"string",maxLength:256}
+  }},
+  nativeChartStyle:{type:"object",additionalProperties:false,properties:{
+    lineWidth:{type:"number",minimum:1,maximum:40},barWidth:{type:"number",minimum:1,maximum:80},barGap:{type:"number",minimum:0,maximum:80},upperColor:{$ref:"#/$defs/nativeColor"},lowerColor:{$ref:"#/$defs/nativeColor"},selectedBarColor:{$ref:"#/$defs/nativeColor"},unselectedBarColor:{$ref:"#/$defs/nativeColor"},previewType:{enum:["curve","bars"],description:"Bars-only preview. The legacy curve value is accepted for existing projects but also renders as bars. Firmware chooses the live representation."}
+  }},
   configAssetOverride: { type: "object", additionalProperties: false, properties: { enabled: { type: "boolean" }, scale: { type: "number", exclusiveMinimum: 0 }, nativeSize: { type: "boolean" }, replacement: { $ref: "#/$defs/artwork" }, stateReplacements: { type: "object", additionalProperties: { $ref: "#/$defs/artwork" } } } },
   effectStyle: { type: "object", additionalProperties: false, required: ["id", "name", "effects"], properties: { id: { type: "string" }, name: { type: "string" }, effects: { type: "array", items: { $ref: "#/$defs/shadow" } } } },
   effectBinding: { oneOf: [{ type: "object", additionalProperties: false, required: ["kind", "effects"], properties: { kind: { const: "local" }, effects: { type: "array", items: { $ref: "#/$defs/shadow" } } } }, { type: "object", additionalProperties: false, required: ["kind", "styleId"], properties: { kind: { const: "style" }, styleId: { type: "string" } } }] },
   modeDesign: { type: "object", additionalProperties: false, properties: {
     backgroundColor: { $ref: "#/$defs/color" }, accentColor: { $ref: "#/$defs/color" }, artwork: { anyOf: [{ $ref: "#/$defs/artwork" }, { type: "null" }] }, artworkVisible: { type: "boolean" }, zoom: { type: "number", exclusiveMinimum: 0 }, fontFamily: { type: "string" }, rasterFont: { $ref: "#/$defs/rasterFont" }, fontWeight: { type: "number" }, fontStyle: { enum: ["normal", "italic"] }, letterSpacing: { type: "number" }, digitColor: { $ref: "#/$defs/color" }, tintLabels: { type: "boolean" }, tintIcons: { type: "boolean" }, previewComplication: { type: "string" },
-    metricChanges: { type: "object", additionalProperties: { type: "boolean" } }, metricStyles: { type: "object", additionalProperties: { $ref: "#/$defs/typography" } }, kcalProgress: { $ref: "#/$defs/kcalProgress" }, exerciseProgress: { $ref: "#/$defs/exerciseProgress" }, exerciseSeparator: { $ref: "#/$defs/exerciseSeparator" }, selectableMetricStyle: { $ref: "#/$defs/typography" }, controlComplicationEnabled: { type: "object", additionalProperties: { type: "boolean" } }, controlBarometerMode: { enum: ["static", "directional"] }, controlIconOffsets: { type: "object", additionalProperties: { $ref: "#/$defs/offset" } }, separateAutoTime: { type: "boolean" }, timeStyles: { type: "object", additionalProperties: { $ref: "#/$defs/typography" } }, dateStyles: { type: "object", additionalProperties: { $ref: "#/$defs/dateTypography" } }, staticSeparators: { type: "object", additionalProperties: false, required: ["colon", "dateSlash"], properties: { colon: { $ref: "#/$defs/staticSeparator" }, dateSlash: { $ref: "#/$defs/staticSeparator" } } }, ampmIndicator: { $ref: "#/$defs/indicator" }, weatherIndicator: { $ref: "#/$defs/indicator" }, layoutOffsets: { type: "object", additionalProperties: { $ref: "#/$defs/offset" } },
+    metricChanges: { type: "object", additionalProperties: { type: "boolean" } }, metricStyles: { type: "object", additionalProperties: { $ref: "#/$defs/typography" } }, kcalProgress: { $ref: "#/$defs/kcalProgress" }, exerciseProgress: { $ref: "#/$defs/exerciseProgress" }, exerciseSeparator: { $ref: "#/$defs/exerciseSeparator" }, selectableMetricStyle: { $ref: "#/$defs/typography" }, controlComplicationEnabled: { type: "object", additionalProperties: { type: "boolean" } }, controlBarometerMode: { enum: ["static", "directional"] }, controlIconOffsets: { type: "object", additionalProperties: { $ref: "#/$defs/offset" } }, separateAutoTime: { type: "boolean" }, timeStyles: { type: "object", additionalProperties: { $ref: "#/$defs/typography" } }, dateStyles: { type: "object", additionalProperties: { $ref: "#/$defs/dateTypography" } }, staticSeparators: { type: "object", additionalProperties: false, required: ["colon", "dateSlash"], properties: { colon: { $ref: "#/$defs/staticSeparator" }, dateSlash: { $ref: "#/$defs/staticSeparator" } } }, ampmIndicator: { $ref: "#/$defs/indicator" }, weatherIndicator: { $ref: "#/$defs/weatherIndicator" }, nativeData: {$ref:"#/$defs/nativeDataMap"}, layoutOffsets: { type: "object", additionalProperties: { $ref: "#/$defs/offset" } },
     linkedLayerGroups: { type: "array", items: { type: "array", items: { type: "string" } } }, editorGroups: { type: "array", items: { $ref: "#/$defs/group" } }, editorGuides: { type: "array", items: { $ref: "#/$defs/guide" } }, lockedLayerIds: { type: "array", items: { type: "string" } }, effectStyles: { type: "array", items: { $ref: "#/$defs/effectStyle" } }, layerEffects: { type: "object", additionalProperties: { $ref: "#/$defs/effectBinding" } }, layerStrokes: { type: "object", additionalProperties: { type: "array", items: { $ref: "#/$defs/stroke" } } }, layerVisibility: { type: "object", additionalProperties: { type: "boolean" } }, layerOpacities: { type: "object", additionalProperties: { type: "number", minimum: 0, maximum: 1 } }, layerColors: { type: "object", additionalProperties: { $ref: "#/$defs/color" } }, configAssetOverrides: { type: "object", additionalProperties: { $ref: "#/$defs/configAssetOverride" } }, designSprites: { type: "array", items: { $ref: "#/$defs/sprite" } }, artworkLayerOrder: { type: "array", items: { type: "string" } }, backgroundElements: { type: "array", items: { $ref: "#/$defs/backgroundElement" } }, backgroundEdited: { type: "boolean" }
   } },
   backgroundElement: { oneOf: [
@@ -135,7 +155,7 @@ export const WATCHFACE_AUTOMATION_DOCUMENT_JSON_SCHEMA = {
         dateStyles: { type: "object", additionalProperties: { $ref: "#/$defs/dateTypography" } },
         staticSeparators: { type: "object", additionalProperties: false, required: ["colon", "dateSlash"], properties: { colon: { $ref: "#/$defs/staticSeparator" }, dateSlash: { $ref: "#/$defs/staticSeparator" } } },
         ampmIndicator: { $ref: "#/$defs/indicator" },
-        weatherIndicator: { $ref: "#/$defs/indicator" },
+        weatherIndicator: { $ref: "#/$defs/weatherIndicator" }, nativeData: {$ref:"#/$defs/nativeDataMap"},
         layoutOffsets: { type: "object", additionalProperties: { $ref: "#/$defs/offset" } },
         linkedLayerGroups: { type: "array", items: { type: "array", items: { type: "string" } } },
         editorGroups: { type: "array", items: { $ref: "#/$defs/group" } },
@@ -237,7 +257,9 @@ export function getWatchfaceAutomationSchema() {
   return {
     document: WATCHFACE_AUTOMATION_DOCUMENT_JSON_SCHEMA,
     commands: WATCHFACE_AUTOMATION_COMMAND_JSON_SCHEMA,
-    scalar
+    scalar,
+    simulation: WATCHFACE_SIMULATION_CAPABILITIES,
+    nativeData: getNativeDataAutomationCatalog()
   } as const;
 }
 
@@ -249,7 +271,7 @@ const MODE_KEYS = new Set([
   "tintIcons", "previewComplication", "metricChanges", "metricStyles", "kcalProgress",
   "exerciseProgress", "exerciseSeparator", "selectableMetricStyle", "controlComplicationEnabled",
   "controlBarometerMode", "controlIconOffsets", "separateAutoTime", "timeStyles", "dateStyles",
-  "staticSeparators", "ampmIndicator", "weatherIndicator", "layoutOffsets", "linkedLayerGroups",
+  "staticSeparators", "ampmIndicator", "weatherIndicator", "nativeData", "layoutOffsets", "linkedLayerGroups",
   "editorGroups", "editorGuides", "lockedLayerIds", "effectStyles", "layerEffects", "layerStrokes",
   "layerVisibility", "layerOpacities", "layerColors", "configAssetOverrides", "designSprites",
   "artworkLayerOrder", "backgroundElements", "backgroundEdited"
@@ -301,6 +323,10 @@ function validateImage(value: unknown, diagnostics: WatchfaceAutomationDiagnosti
 
 function requireColor(value: unknown, diagnostics: WatchfaceAutomationDiagnostic[], path: string): void {
   if (typeof value !== "string" || value.length > 64 || !colorPattern.test(value)) issue(diagnostics, "color.invalid", "Expected a supported CSS color.", path);
+}
+
+function requireNativeColor(value: unknown, diagnostics: WatchfaceAutomationDiagnostic[], path: string): void {
+  if (typeof value !== "string" || !/^#[0-9a-fA-F]{6}$/.test(value)) issue(diagnostics, "native.color", "Native data colors must be six-digit RGB hex, for example #ffffff.", path);
 }
 
 function validateModeObject(mode: unknown, diagnostics: WatchfaceAutomationDiagnostic[], path: string): void {
@@ -430,7 +456,79 @@ function validateAdvancedCollections(design: Record<string, unknown>, diagnostic
   if (design.kcalProgress !== undefined) { const value = design.kcalProgress; if (!objectOf(value)) issue(diagnostics, "progress.invalid", "kcalProgress must be an object.", `${base}/kcalProgress`); else { allowedKeys(value, ["referenceWidth", "referenceHeight", "arcEnabled", "rectEnabled", "arcColor", "rectColor", "previewPercent", "arc", "rect"], diagnostics, `${base}/kcalProgress`); bool(value.arcEnabled, diagnostics, `${base}/kcalProgress/arcEnabled`); bool(value.rectEnabled, diagnostics, `${base}/kcalProgress/rectEnabled`); requireColor(value.arcColor, diagnostics, `${base}/kcalProgress/arcColor`); requireColor(value.rectColor, diagnostics, `${base}/kcalProgress/rectColor`); finite(value.previewPercent, diagnostics, `${base}/kcalProgress/previewPercent`, { minimum: 0, maximum: 100 }); validateArc(value.arc, `${base}/kcalProgress/arc`); validateRect(value.rect, `${base}/kcalProgress/rect`); } }
   if (design.exerciseProgress !== undefined) { const value = design.exerciseProgress; if (!objectOf(value)) issue(diagnostics, "progress.invalid", "exerciseProgress must be an object.", `${base}/exerciseProgress`); else { allowedKeys(value, ["referenceWidth", "referenceHeight", "enabled", "arcEnabled", "color", "previewPercent", "arc", "rect"], diagnostics, `${base}/exerciseProgress`); bool(value.enabled, diagnostics, `${base}/exerciseProgress/enabled`); bool(value.arcEnabled, diagnostics, `${base}/exerciseProgress/arcEnabled`); requireColor(value.color, diagnostics, `${base}/exerciseProgress/color`); finite(value.previewPercent, diagnostics, `${base}/exerciseProgress/previewPercent`, { minimum: 0, maximum: 100 }); validateArc(value.arc, `${base}/exerciseProgress/arc`); validateRect(value.rect, `${base}/exerciseProgress/rect`); } }
   if (design.exerciseSeparator !== undefined) { const value = design.exerciseSeparator; if (!objectOf(value)) issue(diagnostics, "separator.invalid", "exerciseSeparator must be an object.", `${base}/exerciseSeparator`); else { allowedKeys(value, ["enabled", "x", "y", "size", "scale", "color", "artwork"], diagnostics, `${base}/exerciseSeparator`); bool(value.enabled, diagnostics, `${base}/exerciseSeparator/enabled`); for (const field of ["x", "y"] as const) finite(value[field], diagnostics, `${base}/exerciseSeparator/${field}`); for (const field of ["size", "scale"] as const) finite(value[field], diagnostics, `${base}/exerciseSeparator/${field}`, { positive: true }); requireColor(value.color, diagnostics, `${base}/exerciseSeparator/color`); if (value.artwork !== undefined && value.artwork !== null) validateArtwork(value.artwork, diagnostics, `${base}/exerciseSeparator/artwork`); } }
-  for (const field of ["ampmIndicator", "weatherIndicator"] as const) if (design[field] !== undefined) { const value = design[field]; if (!objectOf(value)) issue(diagnostics, "indicator.invalid", `${field} must be an object.`, `${base}/${field}`); else { allowedKeys(value, ["enabled", "x", "y", "scale", "color", "fontFamily"], diagnostics, `${base}/${field}`); bool(value.enabled, diagnostics, `${base}/${field}/enabled`); finite(value.x, diagnostics, `${base}/${field}/x`); finite(value.y, diagnostics, `${base}/${field}/y`); finite(value.scale, diagnostics, `${base}/${field}/scale`, { positive: true }); if (value.color !== undefined) requireColor(value.color, diagnostics, `${base}/${field}/color`); if (value.fontFamily !== undefined) text(value.fontFamily, diagnostics, `${base}/${field}/fontFamily`, 256); } }
+  if (design.nativeData !== undefined) {
+    if (!objectOf(design.nativeData)) issue(diagnostics,"native.invalid","Native data must be an object map.",`${base}/nativeData`);
+    else for (const [id, style] of Object.entries(design.nativeData)) {
+      const path = `${base}/nativeData/${id}`;
+      if (!NATIVE_DATA_BY_ID.has(id) || !objectOf(style)) {issue(diagnostics,"native.invalid","Unknown or invalid native data field.",path);continue;}
+      allowedKeys(style,["enabled","x","y","scale","color","fontFamily","chartSource","chartWidth","chartHeight","previewValue","assets","assetTexts","parts","chartStyle"],diagnostics,path);
+      bool(style.enabled,diagnostics,`${path}/enabled`);finite(style.x,diagnostics,`${path}/x`);finite(style.y,diagnostics,`${path}/y`);finite(style.scale,diagnostics,`${path}/scale`,{minimum:0.1,maximum:4});requireNativeColor(style.color,diagnostics,`${path}/color`);
+      if(style.chartWidth!==undefined)finite(style.chartWidth,diagnostics,`${path}/chartWidth`,{minimum:80,maximum:700});
+      if(style.chartHeight!==undefined)finite(style.chartHeight,diagnostics,`${path}/chartHeight`,{minimum:40,maximum:500});
+      if(style.fontFamily!==undefined)text(style.fontFamily,diagnostics,`${path}/fontFamily`,256);
+      if(style.previewValue!==undefined)text(style.previewValue,diagnostics,`${path}/previewValue`,6);
+      if(style.chartSource!==undefined&&!NATIVE_CHART_SOURCES.some(source=>source.id===style.chartSource))issue(diagnostics,"native.chart","Unknown chart source.",path);
+      for (const property of ["assets","assetTexts"] as const) {
+        const sets = style[property];
+        if (sets === undefined) continue;
+        if (!objectOf(sets)) { issue(diagnostics,"native.assets","Expected numbered artwork sets.",`${path}/${property}`); continue; }
+        allowedKeys(sets,NATIVE_ASSET_ROLES,diagnostics,`${path}/${property}`);
+        for (const [role,states] of Object.entries(sets)) {
+          if (!objectOf(states)) { issue(diagnostics,"native.assets","Expected numbered artwork.",`${path}/${property}/${role}`); continue; }
+          for (const [state,value] of Object.entries(states)) {
+            const location = `${path}/${property}/${role}/${state}`;
+            if (!/^(0|[1-9]\d?)$/.test(state) || Number(state) >= nativeAssetCount(id,role)) issue(diagnostics,"native.assets","Invalid artwork state.",location);
+            if (property === "assetTexts") text(value,diagnostics,location,32);
+            else if (typeof value !== "string" || !value.startsWith("data:image/png;base64,")) issue(diagnostics,"native.assets","Expected a PNG image.",location);
+          }
+        }
+      }
+      if (style.parts !== undefined) {
+        if (!objectOf(style.parts)) issue(diagnostics,"native.parts","Expected component styles.",`${path}/parts`);
+        else {
+          allowedKeys(style.parts,NATIVE_PARTS,diagnostics,`${path}/parts`);
+          for (const [name,part] of Object.entries(style.parts)) {
+            const location = `${path}/parts/${name}`;
+            if (!objectOf(part)) { issue(diagnostics,"native.parts","Invalid component style.",location); continue; }
+            allowedKeys(part,["enabled","x","y","width","height","color","fontFamily"],diagnostics,location);
+            if (part.enabled !== undefined) bool(part.enabled,diagnostics,`${location}/enabled`);
+            for (const key of ["x","y"] as const) if (part[key] !== undefined) finite(part[key],diagnostics,`${location}/${key}`,{minimum:0,maximum:1600});
+            for (const key of ["width","height"] as const) if (part[key] !== undefined) finite(part[key],diagnostics,`${location}/${key}`,{minimum:4,maximum:800});
+            if (part.color !== undefined) requireNativeColor(part.color,diagnostics,`${location}/color`);
+            if (part.fontFamily !== undefined) text(part.fontFamily,diagnostics,`${location}/fontFamily`,256);
+          }
+        }
+      }
+      if (style.chartStyle !== undefined) {
+        const chart = style.chartStyle, location = `${path}/chartStyle`;
+        if (!objectOf(chart)) issue(diagnostics,"native.chart","Invalid graph style.",location);
+        else {
+          allowedKeys(chart,["lineWidth","barWidth","barGap","upperColor","lowerColor","selectedBarColor","unselectedBarColor","previewType"],diagnostics,location);
+          for (const key of ["lineWidth","barWidth","barGap"] as const) if (chart[key] !== undefined) finite(chart[key],diagnostics,`${location}/${key}`,{minimum:key==="barGap"?0:1,maximum:key==="lineWidth"?40:80});
+          for (const key of ["upperColor","lowerColor","selectedBarColor","unselectedBarColor"] as const) if (chart[key] !== undefined) requireNativeColor(chart[key],diagnostics,`${location}/${key}`);
+          if (chart.previewType !== undefined && !["curve","bars"].includes(String(chart.previewType))) issue(diagnostics,"native.chart","Invalid preview plot.",`${location}/previewType`);
+        }
+      }
+    }
+  }
+  const weather = design.weatherIndicator;
+  if (objectOf(weather)) {
+    if (weather.temperatureEnabled !== undefined) bool(weather.temperatureEnabled, diagnostics, `${base}/weatherIndicator/temperatureEnabled`);
+    if (weather.assets !== undefined) {
+      if (!objectOf(weather.assets)) issue(diagnostics, "weather.assets", "Weather assets must be an object.", `${base}/weatherIndicator/assets`);
+      else {
+        allowedKeys(weather.assets, ["day", "night", "digits", "symbols", "units"], diagnostics, `${base}/weatherIndicator/assets`);
+        for (const [set, states] of Object.entries(weather.assets)) {
+          const limit = set === "day" || set === "night" ? 41 : set === "digits" ? 10 : 2;
+          if (!objectOf(states)) { issue(diagnostics, "weather.states", "Expected numbered PNG states.", `${base}/weatherIndicator/assets/${set}`); continue; }
+          for (const [state, url] of Object.entries(states)) {
+            if (!/^(0|[1-9]\d?)$/.test(state) || Number(state) >= limit || typeof url !== "string" || !url.startsWith("data:image/png;base64,")) issue(diagnostics, "weather.state", "Use a valid numbered PNG state.", `${base}/weatherIndicator/assets/${set}/${state}`);
+          }
+        }
+      }
+    }
+  }
+  for (const field of ["ampmIndicator", "weatherIndicator"] as const) if (design[field] !== undefined) { const value = design[field]; if (!objectOf(value)) issue(diagnostics, "indicator.invalid", `${field} must be an object.`, `${base}/${field}`); else { allowedKeys(value, ["enabled", "x", "y", "scale", "color", ...(field === "weatherIndicator" ? ["temperatureEnabled", "assets"] : ["fontFamily"])], diagnostics, `${base}/${field}`); bool(value.enabled, diagnostics, `${base}/${field}/enabled`); finite(value.x, diagnostics, `${base}/${field}/x`); finite(value.y, diagnostics, `${base}/${field}/y`); finite(value.scale, diagnostics, `${base}/${field}/scale`, { positive: true }); if (value.color !== undefined) requireColor(value.color, diagnostics, `${base}/${field}/color`); if (value.fontFamily !== undefined) text(value.fontFamily, diagnostics, `${base}/${field}/fontFamily`, 256); } }
 }
 
 export function validateWatchfaceAutomationDocument(

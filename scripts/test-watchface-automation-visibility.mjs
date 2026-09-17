@@ -210,6 +210,26 @@ function jsonValue(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+assert.equal(
+  deriveEditorLayers(details, baseDesign).find(layer => layer.id === "temperature")?.label,
+  "Sensor temperature",
+  "sensor temperature stays available independently of weather temperature"
+);
+const legacyTemperatureDetails = structuredClone(details);
+Object.assign(legacyTemperatureDetails.resolutions[0].config, {
+  temperature_rect: "{35,300,95,328,0}",
+  temperature_font: "digits"
+});
+assert.equal(
+  deriveEditorLayers(legacyTemperatureDetails, baseDesign).find(layer => layer.id === "temperature")?.label,
+  "Sensor temperature",
+  "imported fixed temperature stays editable with a distinct label"
+);
+for (const enabled of [true, false]) {
+  const savedLegacyDesign = { ...baseDesign, metricChanges: { ...baseDesign.metricChanges, temperature: enabled } };
+  assert.equal(editorLayer(savedLegacyDesign, "temperature").visible, enabled, "saved legacy temperature remains recoverable, including when hidden");
+}
+
 // The command boundary also synchronizes legacy groups and materializes its
 // optional global keys. Compare round trips with that canonical form.
 const canonicalBaseDesign = activeDesign(apply([{

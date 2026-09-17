@@ -133,6 +133,9 @@ function applyLayerVisibility(
     };
   }
 
+  if (layer.nativeDataId && design.nativeData?.[layer.nativeDataId]) {
+    return {...design, nativeData: {...design.nativeData, [layer.nativeDataId]: {...design.nativeData[layer.nativeDataId], enabled: visible}}};
+  }
   if (layer.weatherIndicator) {
     const capability = getWeatherCapability(details);
     if (!capability) {
@@ -141,6 +144,7 @@ function applyLayerVisibility(
     return {
       ...design,
       weatherIndicator: {
+        ...design.weatherIndicator,
         enabled: visible,
         x: design.weatherIndicator?.x ?? capability.defaultPos.x,
         y: design.weatherIndicator?.y ?? capability.defaultPos.y,

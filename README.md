@@ -370,7 +370,7 @@ flowchart LR
   TeamAPI --> Dashboard[Training Hub]
 ```
 
-**Music sync** does not use an official COROS SDK. The app detects your watch when it mounts as a USB drive with a `Music` folder, then copies MP3 files directly.
+**Music sync** does not use an official COROS SDK. Automatic detection requires a COROS or recognized watch-model volume name and a `Music` or `map` folder, then copies MP3 files directly. A generic drive with a `Music` folder is not treated as a watch. For a renamed watch, restore its COROS/model volume name or explicitly select its root with the `COROS_WATCH_PATH` environment variable. Volume names are a detection heuristic, not hardware verification.
 
 **Map install** downloads official packages from COROS map servers, caches them locally, and copies them to your watch's map folder over USB.
 

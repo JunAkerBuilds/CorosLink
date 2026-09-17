@@ -1,3 +1,4 @@
+import { NATIVE_DATA_BY_ID, NATIVE_CHART_SOURCES, nativeDataSize } from "./nativeData";
 import type {
   CorosWatchfaceDesignState,
   CorosWatchfaceTemplateDetails
@@ -105,6 +106,7 @@ export interface EditorLayer {
   ampmIndicator?: true;
   /** Set for the dynamic 41-state weather sprite folder. */
   weatherIndicator?: true;
+  nativeDataId?: string;
   visible: boolean;
   /** Whether the user may hide/remove this layer. */
   canHide: boolean;
@@ -457,10 +459,7 @@ export function deriveEditorLayers(
       layers.push({
         id: groupId,
         kind: "metric",
-        label:
-          metricId === "temperature"
-            ? "Temperature (always visible)"
-            : capability.label,
+        label: capability.label,
         layoutGroupId: groupId,
         metricId,
         visible,
@@ -581,6 +580,18 @@ export function deriveEditorLayers(
     };
     const dateSlashIndex = layers.findIndex((layer) => layer.id === "staticDateSlash");
     layers.splice(dateSlashIndex >= 0 ? dateSlashIndex + 1 : 2, 0, ampmLayer);
+  }
+
+  for (const [id, style] of Object.entries(design.nativeData ?? {})) {
+    const field = NATIVE_DATA_BY_ID.get(id);
+    if (!field) continue;
+    const label = field.kind === "chart" ? `${NATIVE_CHART_SOURCES.find(source => source.id === style.chartSource)?.label ?? "Native"} chart` : field.label;
+    const size = nativeDataSize(id, style);
+    layers.splice(1, 0, { id: `native:${id}`, nativeDataId: id, kind: "metric", label,
+      visible: style.enabled, canHide: true, present: true,
+      bounds: style.enabled ? { id: `native:${id}`, label, x0: style.x, y0: style.y, x1: style.x + size.width, y1: style.y + size.height } : null,
+      capabilities: { position: true, color: true, scale: true, font: field.kind !== "state" }
+    });
   }
 
   const weatherCapability = getWeatherCapability(details);

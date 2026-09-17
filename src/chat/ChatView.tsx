@@ -267,6 +267,7 @@ interface ChatViewProps {
   /** Text preloaded into the composer (e.g. "Ask Coach" from the calendar). */
   pendingPrompt?: string | null;
   onPendingPromptConsumed?: () => void;
+  accountSetupRequest?: number;
 }
 
 function canonicalPlanDistanceMeters(source: PlanWorkoutEntryInput): number {
@@ -1736,7 +1737,8 @@ export function ChatView({
   onReviewPlan,
   onActivityChange,
   pendingPrompt,
-  onPendingPromptConsumed
+  onPendingPromptConsumed,
+  accountSetupRequest = 0
 }: ChatViewProps) {
   const { unitSystem } = useUnitSystem();
   const [authStatus, setAuthStatus] = useState<ChatAuthStatus | null>(null);
@@ -1763,6 +1765,9 @@ export function ChatView({
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => {
+    if (accountSetupRequest > 0) setSettingsOpen(true);
+  }, [accountSetupRequest]);
   const [timeline, setTimeline] = useState<ChatEntry[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState("");

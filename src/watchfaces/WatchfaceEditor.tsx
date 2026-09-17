@@ -1,3 +1,11 @@
+import { WatchfaceAddMenu } from "./WatchfaceAddMenu";
+import { WatchfaceSimulationPanel } from "./WatchfaceSimulationPanel";
+import { useWatchfaceSimulation } from "./useWatchfaceSimulation";
+import { WATCHFACE_SIMULATION_CAPABILITIES, activeSimulationScenario, createWatchfaceSimulation, parseWatchfacePreviewScenario, patchWatchfaceSimulation, simulationStudioOptions, type WatchfacePreviewScenario } from "./watchfaceSimulation";
+import { WatchfaceColorInput, flushWatchfaceColorInputs } from "./WatchfaceColorInput";
+import { NativeDataInspector } from "./NativeDataInspector";
+import { describeNativeDataComponents } from "./nativeDataAutomation";
+import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, nativeDataSize } from "./nativeData";
 import { glyphBaselineMovements, visibleGlyphBounds } from "./watchfaceGlyphLayout";
 import { WatchfaceExportPreview } from "./WatchfaceExportPreview";
 import {
@@ -195,72 +203,7 @@ function EditableHexColorInput({
   );
 }
 
-/**
- * Native color swatch tuned for a live overlay preview. The browser fires
- * `onChange` continuously while dragging in the picker. Each event repaints the
- * lightweight preview via `onPreview` (imperative, no React state), and the
- * expensive design-state commit (`onValueChange`, which re-renders the editor)
- * runs only once the drag settles — after `COLOR_COMMIT_SETTLE_MS` of quiet or
- * on blur. That keeps a fast smooth drag entirely off the React render path.
- */
-const COLOR_COMMIT_SETTLE_MS = 140;
-function ThrottledColorInput({
-  value,
-  onValueChange,
-  onPreview,
-  onBlur,
-  ...props
-}: Omit<ComponentProps<"input">, "type" | "value" | "defaultValue" | "onChange"> & {
-  value: string;
-  onValueChange: (value: string) => void;
-  /** Called on every drag event for cheap, state-free live feedback. */
-  onPreview?: (value: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  const editingRef = useRef(false);
-  const latestRef = useRef(value);
-  const timerRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    if (!editingRef.current) setDraft(value);
-  }, [value]);
-  useEffect(
-    () => () => {
-      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    },
-    []
-  );
-
-  const commit = () => {
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    editingRef.current = false;
-    onValueChange(latestRef.current);
-  };
-
-  return (
-    <input
-      {...props}
-      type="color"
-      value={draft}
-      onChange={(event) => {
-        const next = event.target.value;
-        editingRef.current = true;
-        latestRef.current = next;
-        setDraft(next);
-        onPreview?.(next);
-        if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-        timerRef.current = window.setTimeout(commit, COLOR_COMMIT_SETTLE_MS);
-      }}
-      onBlur={(event) => {
-        commit();
-        onBlur?.(event);
-      }}
-    />
-  );
-}
 import {
   AlignHorizontalJustifyCenter,
   AlignHorizontalJustifyEnd,
@@ -526,7 +469,10 @@ import {
 } from "./watchfaceAutomation";
 import {
   getWeatherCapability,
-  weatherPreviewDataUrl
+  weatherPreviewDataUrl,
+  drawWeatherTemperaturePreview,
+  WEATHER_ASSET_COUNTS,
+  type WeatherAssetSet
 } from "./weatherAssets";
 import { CustomPngFontPanel } from "./CustomPngFontPanel";
 import { LocalFontPicker } from "./LocalFontPicker";
@@ -791,6 +737,7 @@ interface WatchfaceDragState {
     | "staticSeparator"
     | "ampm"
     | "weather"
+    | "nativeData"
     | "selectorIcon";
   targetId: string;
   startX: number;
@@ -838,6 +785,8 @@ interface WatchfacePreviewRenderRequest {
   details: CorosWatchfaceTemplateDetails;
   options: ReturnType<typeof toStudioOptions>;
   weather: CorosWatchfaceDesignState["weatherIndicator"];
+  nativeData: CorosWatchfaceDesignState["nativeData"];
+  scenario?: WatchfacePreviewScenario;
   previewWidth: number;
   loadAssets: WatchfaceAssetLoader;
   dragCommitId: number | null;
@@ -1202,6 +1151,7 @@ export function WatchfaceEditor({
   const [backgroundDataUrl, setBackgroundDataUrl] = useState("");
   const [previewMode, setPreviewMode] = useState<WatchfacePreviewMode>("current");
   const automationModeRef = useRef<WatchfacePreviewMode>("current");
+  const { simulation, simulationRef, updateSimulation, simulationScenario } = useWatchfaceSimulation();
   const [automationPreviewComplication, setAutomationPreviewComplication] =
     useState<WatchfaceComplicationId | null>(null);
   const design = useMemo(
@@ -1223,7 +1173,6 @@ export function WatchfaceEditor({
   const spriteImportTrackerRef = useRef(new WatchfaceSpriteImportTracker());
   const [pendingSpriteImportCount, setPendingSpriteImportCount] = useState(0);
   const [leaveOpen, setLeaveOpen] = useState(false);
-  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [layersOpen, setLayersOpen] = useState(false);
@@ -1582,6 +1531,7 @@ export function WatchfaceEditor({
     historyRef.current = reset;
     automationRevisionRef.current = 0;
     setHistoryState(reset);
+    updateSimulation(createWatchfaceSimulation());
     setCheckpoint(
       createWatchfaceEditorCheckpoint(reset, sessionId, {
         dirty: initiallyDirty
@@ -1922,13 +1872,14 @@ export function WatchfaceEditor({
   const previewStudioOptions = useMemo(
     () => ({
       ...studioOptions,
+      ...simulationStudioOptions(simulationScenario),
       previewMode: supportsAod ? previewMode : ("current" as const),
       deferProgressArcs: true,
       ...(automationPreviewComplication
         ? { previewComplication: automationPreviewComplication }
         : {})
     }),
-    [automationPreviewComplication, studioOptions, previewMode, supportsAod]
+    [automationPreviewComplication, studioOptions, previewMode, supportsAod, simulationScenario]
   );
   const detailsWithConfigEdits = useMemo(
     () =>
@@ -2019,12 +1970,12 @@ export function WatchfaceEditor({
       renderWatchfaceProgressLayers(context, canvas.width, previewResolution, {
         kcalProgressStyle,
         exerciseProgressStyle,
-        kcalProgressPreviewPercent: design.kcalProgress?.previewPercent,
-        exerciseProgressPreviewPercent: design.exerciseProgress?.previewPercent,
+        kcalProgressPreviewPercent: simulationScenario?.values?.kcalProgress !== undefined ? Number(simulationScenario.values.kcalProgress) : design.kcalProgress?.previewPercent,
+        exerciseProgressPreviewPercent: simulationScenario?.values?.exerciseProgress !== undefined ? Number(simulationScenario.values.exerciseProgress) : design.exerciseProgress?.previewPercent,
         accentColor: design.accentColor
       });
     },
-    [previewResolution, design.kcalProgress, design.exerciseProgress, design.accentColor]
+    [previewResolution, design.kcalProgress, design.exerciseProgress, design.accentColor, simulationScenario?.values]
   );
   useEffect(() => {
     paintArcOverlay();
@@ -2494,7 +2445,7 @@ export function WatchfaceEditor({
           layer.kind === "customSprite" ||
           layer.staticSeparatorId ||
           layer.ampmIndicator ||
-          layer.weatherIndicator)
+          layer.weatherIndicator || layer.nativeDataId)
     );
   }
 
@@ -2943,6 +2894,7 @@ export function WatchfaceEditor({
     );
     const movesAmPm = movingLayers.some((layer) => layer.ampmIndicator);
     const movesWeather = movingLayers.some((layer) => layer.weatherIndicator);
+    const movingNativeIds = new Set(movingLayers.map(layer => layer.nativeDataId).filter(Boolean));
     const movesExercise = movingIdSet.has("exercise");
     const hiddenLayerVisibility = { ...design.layerVisibility };
     for (const layer of layers) {
@@ -2981,6 +2933,7 @@ export function WatchfaceEditor({
         movesAmPm && design.ampmIndicator
           ? { ...design.ampmIndicator, enabled: false }
           : design.ampmIndicator,
+      nativeData: Object.fromEntries(Object.entries(design.nativeData ?? {}).map(([id, style]) => [id, {...style, enabled: style.enabled && !movingNativeIds.has(id)}])),
       weatherIndicator:
         movesWeather && design.weatherIndicator
           ? { ...design.weatherIndicator, enabled: false }
@@ -3036,6 +2989,7 @@ export function WatchfaceEditor({
       ampmIndicator: design.ampmIndicator
         ? { ...design.ampmIndicator, enabled: movesAmPm }
         : undefined,
+      nativeData: Object.fromEntries(Object.entries(design.nativeData ?? {}).map(([id, style]) => [id, {...style, enabled: style.enabled && movingNativeIds.has(id)}])),
       weatherIndicator: design.weatherIndicator
         ? { ...design.weatherIndicator, enabled: movesWeather }
         : undefined,
@@ -3109,6 +3063,7 @@ export function WatchfaceEditor({
       studioOptionsForResolution(
         {
           ...toStudioOptions(frameDesign),
+          ...simulationStudioOptions(simulationScenario),
           previewMode: supportsAod ? previewMode : "current",
           previewComplicationContent
         },
@@ -3116,10 +3071,14 @@ export function WatchfaceEditor({
       ),
       loadAssets
     );
+    await drawNativeDataPreview(frame, previewWidth, frameDesign.nativeData, simulationScenario);
     if (frameDesign.weatherIndicator?.enabled) {
+      if (!frameDesign.nativeData?.weather_temp) await drawWeatherTemperaturePreview(frame, previewWidth, frameDesign.weatherIndicator, simulationScenario?.values?.weather_temp);
       const url = await weatherPreviewDataUrl(
         previewWidth,
-        frameDesign.weatherIndicator.color
+        frameDesign.weatherIndicator.color,
+        frameDesign.weatherIndicator,
+        simulationScenario?.weather
       );
       if (url) {
         const image = await loadStudioImage(url);
@@ -3726,10 +3685,14 @@ export function WatchfaceEditor({
               studioOptionsForResolution(next.options, next.details),
               next.loadAssets
             );
+            await drawNativeDataPreview(frame, next.previewWidth, next.nativeData, next.scenario);
             if (next.weather?.enabled) {
+              if (!next.nativeData?.weather_temp) await drawWeatherTemperaturePreview(frame, next.previewWidth, next.weather, next.scenario?.values?.weather_temp);
               const url = await weatherPreviewDataUrl(
                 next.previewWidth,
-                next.weather.color
+                next.weather.color,
+                next.weather,
+                next.scenario?.weather
               );
               if (url) {
                 const image = await loadStudioImage(url);
@@ -3809,7 +3772,9 @@ export function WatchfaceEditor({
       backgroundDataUrl: previewBackgroundDataUrl,
       details: renderedPreviewDetails,
       options: previewStudioOptions,
+      scenario: simulationScenario,
       weather: previewMode === "current" ? design.weatherIndicator : undefined,
+      nativeData: design.nativeData,
       previewWidth,
       loadAssets,
       dragCommitId: dragVisualRef.current?.awaitingCommitId ?? null
@@ -3818,7 +3783,9 @@ export function WatchfaceEditor({
     renderedPreviewDetails,
     previewBackgroundDataUrl,
     previewStudioOptions,
+    simulationScenario,
     design.weatherIndicator,
+    design.nativeData,
     previewMode,
     previewWidth,
     loadAssets,
@@ -4449,6 +4416,11 @@ export function WatchfaceEditor({
     }
     const movementIds = movableIdsForGesture(liveHit.id);
     if (!selectedIds.includes(liveHit.id)) selectEditorItem(liveHit.id);
+    if (liveHit.nativeDataId && design.nativeData?.[liveHit.nativeDataId]) {
+      const style = design.nativeData[liveHit.nativeDataId];
+      startElementDrag(event, {kind: "nativeData", targetId: liveHit.nativeDataId, startX: point.x, startY: point.y, baseX: style.x, baseY: style.y, snapId: liveHit.id, baseBounds: liveHit.bounds!, selectionIds: movementIds});
+      return;
+    }
     if (liveHit.weatherIndicator && design.weatherIndicator) {
       startElementDrag(event, {
         kind: "weather",
@@ -4589,6 +4561,12 @@ export function WatchfaceEditor({
         Math.max(0, Math.min(previewHeight - height, drag.baseY + movement.dy))
       );
       return { dx: x - drag.baseX, dy: y - drag.baseY };
+    }
+    if (drag.kind === "nativeData") {
+      const style = design.nativeData?.[drag.targetId];
+      if (!style) return {dx:0,dy:0};
+      const size = nativeDataSize(drag.targetId, style);
+      return {dx: Math.max(0, Math.min(previewWidth - size.width, drag.baseX + movement.dx)) - drag.baseX, dy: Math.max(0, Math.min(previewHeight - size.height, drag.baseY + movement.dy)) - drag.baseY};
     }
     if (drag.kind === "weather") {
       const capability = details ? getWeatherCapability(details) : null;
@@ -4776,6 +4754,7 @@ export function WatchfaceEditor({
       });
       return;
     }
+    if (drag.kind === "nativeData") { updateNativeData(drag.targetId, {x: drag.baseX + movement.dx, y: drag.baseY + movement.dy}); return; }
     if (drag.kind === "weather") {
       const capability = details ? getWeatherCapability(details) : null;
       const style = design.weatherIndicator;
@@ -4904,6 +4883,12 @@ export function WatchfaceEditor({
             y: Math.round(Math.max(0, Math.min(previewHeight - height, next.ampmIndicator.y + movement.dy)))
           }
         };
+        continue;
+      }
+      if (layer.nativeDataId && next.nativeData?.[layer.nativeDataId]) {
+        const style = next.nativeData[layer.nativeDataId];
+        const size = nativeDataSize(layer.nativeDataId, style);
+        next = {...next, nativeData: {...next.nativeData, [layer.nativeDataId]: {...style, x:Math.max(0,Math.min(previewWidth-size.width,style.x+movement.dx)), y:Math.max(0,Math.min(previewHeight-size.height,style.y+movement.dy))}}};
         continue;
       }
       if (layer.weatherIndicator && next.weatherIndicator) {
@@ -5471,6 +5456,31 @@ export function WatchfaceEditor({
     }));
   }
 
+  function updateNativeData(id: string, patch: Partial<NonNullable<CorosWatchfaceDesignState["nativeData"]>[string]>) {
+    if (isPositionLocked(`native:${id}`)) return;
+    setDesign(prev => ({ ...prev, nativeData: { ...prev.nativeData, [id]: { ...defaultNativeDataStyle(id), ...prev.nativeData?.[id], ...patch } } }));
+  }
+
+  function addNativeData(value: string) {
+    const [id, chartSource] = value.split(":");
+    if (!id) return;
+    const existing = design.nativeData?.[id];
+    if (existing?.enabled && (!chartSource || (existing.chartSource ?? "chart_stress") === chartSource)) {
+      selectQuickStartItem(`native:${id}`);
+      return;
+    }
+    const initialStyle = defaultNativeDataStyle(id);
+    const size = nativeDataSize(id, initialStyle);
+    initialStyle.x = Math.max(0, Math.round((previewWidth - size.width) / 2));
+    initialStyle.y = Math.max(0, Math.round((previewHeight - size.height) / 2));
+    setDesign(prev => ({ ...prev,
+      ...(id === "weather_temp" && prev.weatherIndicator ? {weatherIndicator: {...prev.weatherIndicator, temperatureEnabled: false}} : {}),
+      nativeData: { ...prev.nativeData, [id]: { ...initialStyle, ...prev.nativeData?.[id], enabled: true, ...(chartSource ? {chartSource} : {}) } }
+    }));
+    selectEditorItem(`native:${id}`);
+    openQuickStartProperties();
+  }
+
   function updateWeatherIndicator(
     patch: Partial<NonNullable<CorosWatchfaceDesignState["weatherIndicator"]>>
   ) {
@@ -5484,11 +5494,15 @@ export function WatchfaceEditor({
         };
     setDesign((prev) => ({
       ...prev,
+      ...(safePatch.temperatureEnabled === true ? {
+        nativeData: Object.fromEntries(Object.entries(prev.nativeData ?? {}).filter(([id]) => id !== "weather_temp"))
+      } : {}),
       weatherIndicator: {
         enabled: prev.weatherIndicator?.enabled ?? false,
         x: prev.weatherIndicator?.x ?? 0,
         y: prev.weatherIndicator?.y ?? 0,
         scale: prev.weatherIndicator?.scale ?? 1,
+        ...prev.weatherIndicator,
         ...safePatch
       }
     }));
@@ -6066,7 +6080,7 @@ export function WatchfaceEditor({
     snapshotBackgroundDataUrl?: string,
     outputSize = 800,
     resolutionDirectory = watchPreviewDirectory,
-    scenario?: { dateTime?: string; values?: Record<string, string> }
+    scenario?: WatchfacePreviewScenario
   ): Promise<string> {
     if (!details) {
       throw new Error("The editor is still loading. Try again in a moment.");
@@ -6116,10 +6130,7 @@ export function WatchfaceEditor({
     const exportOptions: WatchfaceStudioOptions = {
       ...snapshotOptions,
       previewMode: hasWatchfaceAod(details) ? mode : "current",
-      ...(scenario?.dateTime
-        ? { previewDate: new Date(scenario.dateTime) }
-        : {}),
-      ...(scenario?.values ? { previewValues: scenario.values } : {}),
+      ...simulationStudioOptions(scenario),
       batteryIconResolutionScale: resolutionScale,
       effectResolutionScale: resolutionScale,
       nativeSpriteResolutionScale: resolutionScale,
@@ -6142,10 +6153,14 @@ export function WatchfaceEditor({
       exportOptions,
       loadAssets
     );
+    await drawNativeDataPreview(archivePreview, snapshotBaseResolution?.width ?? previewWidth, designSnapshot.nativeData, scenario);
     if (designSnapshot.weatherIndicator?.enabled) {
+      if (!designSnapshot.nativeData?.weather_temp) await drawWeatherTemperaturePreview(archivePreview, snapshotBaseResolution?.width ?? previewWidth, designSnapshot.weatherIndicator, scenario?.values?.weather_temp);
       const url = await weatherPreviewDataUrl(
         snapshotBaseResolution?.width ?? previewWidth,
-        designSnapshot.weatherIndicator.color
+        designSnapshot.weatherIndicator.color,
+        designSnapshot.weatherIndicator,
+        scenario?.weather
       );
       if (url) {
         const image = await loadStudioImage(url);
@@ -6666,6 +6681,10 @@ export function WatchfaceEditor({
       });
       return;
     }
+    if (selectedLayer.nativeDataId && design.nativeData?.[selectedLayer.nativeDataId]) {
+      const style = design.nativeData[selectedLayer.nativeDataId]; const size = nativeDataSize(selectedLayer.nativeDataId, style);
+      updateNativeData(selectedLayer.nativeDataId, {x: Math.max(0,Math.min(previewWidth-size.width,style.x+dx)), y:Math.max(0,Math.min(previewHeight-size.height,style.y+dy))});return;
+    }
     if (selectedLayer.weatherIndicator && design.weatherIndicator) {
       const capability = details ? getWeatherCapability(details) : null;
       const width = (capability?.size.width ?? 0) * design.weatherIndicator.scale;
@@ -6825,46 +6844,10 @@ export function WatchfaceEditor({
     );
   }
 
-  function automationPreviewScenario(value: unknown):
-    | { dateTime?: string; values?: Record<string, string> }
-    | undefined {
+  function automationPreviewScenario(value: unknown): WatchfacePreviewScenario | undefined {
     if (value === undefined) return undefined;
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      throw new WatchfaceAutomationError("INVALID_PARAMS", "scenario must be an object.");
-    }
-    const raw = value as Record<string, unknown>;
-    const scenario: { dateTime?: string; values?: Record<string, string> } = {};
-    if (raw.dateTime !== undefined) {
-      const dateTime = requireAutomationString(raw.dateTime, "scenario.dateTime");
-      if (dateTime.length > 64 || !Number.isFinite(Date.parse(dateTime))) {
-        throw new WatchfaceAutomationError(
-          "INVALID_PARAMS",
-          "scenario.dateTime must be a valid ISO date-time string."
-        );
-      }
-      scenario.dateTime = dateTime;
-    }
-    if (raw.values !== undefined) {
-      if (!raw.values || typeof raw.values !== "object" || Array.isArray(raw.values)) {
-        throw new WatchfaceAutomationError("INVALID_PARAMS", "scenario.values must be an object of strings.");
-      }
-      const entries = Object.entries(raw.values);
-      if (entries.length > 64) {
-        throw new WatchfaceAutomationError("INVALID_PARAMS", "scenario.values supports at most 64 entries.");
-      }
-      scenario.values = Object.fromEntries(
-        entries.map(([key, entry]) => {
-          if (key.length > 80 || typeof entry !== "string" || entry.length > 160) {
-            throw new WatchfaceAutomationError(
-              "INVALID_PARAMS",
-              "scenario value keys and strings must use supported lengths."
-            );
-          }
-          return [key, entry];
-        })
-      );
-    }
-    return scenario;
+    try { return parseWatchfacePreviewScenario(value); }
+    catch (error) { throw new WatchfaceAutomationError("INVALID_PARAMS", error instanceof Error ? error.message : "Invalid preview scenario."); }
   }
 
   function assertAutomationSession(
@@ -6920,6 +6903,7 @@ export function WatchfaceEditor({
         automationResolutionRef.current || previewResolution?.directory || null,
       previewComplication:
         automationPreviewComplication ?? viewDesign.previewComplication,
+      simulation: { ...simulationRef.current, values: { ...simulationRef.current.values } },
       selectedId: selection.selectedId,
       selectedIds: [...selection.selectedIds]
     };
@@ -6986,6 +6970,7 @@ export function WatchfaceEditor({
   function automationDocument() {
     const current = historyRef.current;
     const currentValue = current.present.value;
+    const modeDesign = resolveWatchfaceModeDesign(currentValue.design, automationModeRef.current);
     const currentLayers = automationLayers(currentValue);
     const placementReference = details ? pickPreviewResolution(detailsForCompositionMode(
       applyConfigTextEditsToDetails(details, currentValue.design.configTextEdits), automationModeRef.current
@@ -7023,13 +7008,27 @@ export function WatchfaceEditor({
           bounds: "rotation-aware axis-aligned bounds; text uses rendered font metrics; decorative effects excluded"
         },
         resolutions: resolutionCapabilities,
+        simulation: WATCHFACE_SIMULATION_CAPABILITIES,
+        nativeData: {
+          schemaPath: "nativeData",
+          fieldIds: NATIVE_DATA_FIELDS.map(field => field.id),
+          chartSources: NATIVE_CHART_SOURCES.map(source => source.id),
+          slotsPerField: 1,
+          chartSlots: 1
+        },
         nativeResolutions: structuredClone(details?.resolutions ?? []),
         layers: currentLayers.map((layer) => ({
           ...layer,
+          ...(layer.nativeDataId && modeDesign.nativeData?.[layer.nativeDataId] ? {
+            nativeData: {
+              path: `/design/nativeData/${layer.nativeDataId}`,
+              components: describeNativeDataComponents(layer.nativeDataId, modeDesign.nativeData[layer.nativeDataId])
+            }
+          } : {}),
           ...automationLayerLock(layer, currentValue)
         })),
         schemaVersion: 1,
-        schemaResource: "watchface://automation/schema"
+        schemaResource: "coroslink://watchface/scene-schema"
       },
       advanced: {
         configTextBaselines: structuredClone(configTextBaselines)
@@ -7045,6 +7044,7 @@ export function WatchfaceEditor({
     method: string,
     params: Record<string, unknown>
   ): Promise<unknown> {
+    flushWatchfaceColorInputs();
     if (method === "get_document") return automationDocument();
 
     if (method === "apply_commands") {
@@ -7182,6 +7182,11 @@ export function WatchfaceEditor({
       if (automationBusy()) {
         throw new WatchfaceAutomationError("EDITOR_BUSY", "Finish the active edit before changing the editor view.");
       }
+      let nextSimulation = simulationRef.current;
+      if (params.simulation !== undefined) {
+        try { nextSimulation = patchWatchfaceSimulation(nextSimulation, params.simulation); }
+        catch (error) { throw new WatchfaceAutomationError("INVALID_PARAMS", error instanceof Error ? error.message : "Invalid simulation."); }
+      }
       const mode: WatchfaceAutomationMode = params.mode === undefined
         ? automationModeRef.current
         : params.mode === "aod"
@@ -7224,6 +7229,7 @@ export function WatchfaceEditor({
         }
         setAutomationPreviewComplication(available.id);
       }
+      if (params.simulation !== undefined) updateSimulation(nextSimulation);
       setPreviewMode(mode);
       automationModeRef.current = mode;
       automationResolutionRef.current = resolution;
@@ -7274,13 +7280,16 @@ export function WatchfaceEditor({
         : Math.max(64, Math.min(1600, Math.round(requireAutomationNumber(params.size, "size"))));
       const snapshotRevision = automationRevisionRef.current;
       const designSnapshot = historyRef.current.present.value.design;
+      const scenario = params.scenario === undefined
+        ? activeSimulationScenario(simulationRef.current)
+        : automationPreviewScenario(params.scenario);
       const dataUrl = await renderExportPreview(
         designSnapshot,
         mode,
         undefined,
         size,
         targetResolution.directory,
-        automationPreviewScenario(params.scenario)
+        scenario
       );
       return {
         sessionId,
@@ -7289,6 +7298,7 @@ export function WatchfaceEditor({
         resolution: targetResolution.directory,
         width: size,
         height: size,
+        scenario: scenario ?? null,
         mimeType: "image/png",
         dataUrl
       };
@@ -7619,27 +7629,14 @@ export function WatchfaceEditor({
                   : layers.length + activeBackgroundElements.length}
               </span>
             </div>
-            {canEditActiveMode ? <div className="wf-add-menu">
-              <button
-                type="button"
-                className="watchface-add-sprite"
-                aria-expanded={addMenuOpen}
-                onClick={() => setAddMenuOpen((open) => !open)}
-              >
-                <ImagePlus size={14} /> Add
-              </button>
-              {addMenuOpen ? (
-                <div className="wf-add-popover" role="menu">
-                  <button type="button" role="menuitem" disabled={loadingSprite || (design.designSprites ?? []).length >= MAX_DESIGN_SPRITES} onClick={() => { setAddMenuOpen(false); void chooseSprite(); }}>
-                    <Image size={15} /> Image
-                  </button>
-                  <button type="button" role="menuitem" onClick={() => { setAddMenuOpen(false); addElement("rect"); }}><Square size={15} /> Rectangle</button>
-                  <button type="button" role="menuitem" onClick={() => { setAddMenuOpen(false); addElement("ellipse"); }}><Circle size={15} /> Ellipse</button>
-                  <button type="button" role="menuitem" onClick={() => { setAddMenuOpen(false); addElement("line"); }}><Minus size={15} /> Line</button>
-                  <button type="button" role="menuitem" onClick={() => { setAddMenuOpen(false); addElement("text"); }}><Type size={15} /> Text</button>
-                </div>
-              ) : null}
-            </div> : null}
+            {canEditActiveMode ? <WatchfaceAddMenu
+              key={`${sessionId}:${previewMode}`}
+              design={design}
+              imageDisabled={loadingSprite || (design.designSprites ?? []).length >= MAX_DESIGN_SPRITES}
+              onAddImage={() => void chooseSprite()}
+              onAddElement={addElement}
+              onAddData={addNativeData}
+            /> : null}
           </div>
           {details && previewMode === "current" ? (
             <WatchfaceQuickStart
@@ -8003,6 +8000,7 @@ export function WatchfaceEditor({
                 </select>
               </label>
             ) : null}
+            <WatchfaceSimulationPanel simulation={simulation} onChange={updateSimulation} design={design} />
             {canEditActiveMode ? <div className="wf-placement-menu" ref={placementMenuRef}>
               <button
                 className={`wf-placement-trigger${
@@ -8440,6 +8438,7 @@ export function WatchfaceEditor({
             className="wf-properties-tabpanel"
             id={`wf-properties-panel-${sessionId}`}
             role="tabpanel"
+            key={`${previewMode}:${propertiesTab}:${selectedId}`}
             aria-labelledby={`wf-properties-tab-${propertiesTab}-${sessionId}`}
           >
           {propertiesTab === "selection" ? (
@@ -9101,7 +9100,7 @@ export function WatchfaceEditor({
         <label className="field">
           Progress color
           <span className="watchface-color-control">
-            <ThrottledColorInput
+            <WatchfaceColorInput
               value={exerciseProgress.color}
               onPreview={(exerciseColor) =>
                 paintArcOverlay({ exerciseColor })
@@ -9265,6 +9264,7 @@ export function WatchfaceEditor({
   }
 
   function renderLayerSection(layer: EditorLayer) {
+    if (layer.nativeDataId) return null;
     const sprite = layer.spriteId
       ? (design.designSprites ?? []).find(
           (candidate) => candidate.id === layer.spriteId
@@ -9500,13 +9500,10 @@ export function WatchfaceEditor({
                     className="wf-stroke-swatch"
                     style={paintPreview(stroke)}
                   >
-                    <input
-                      type="color"
+                    <WatchfaceColorInput
                       value={primaryColor(stroke)}
                       aria-label="Stroke color"
-                      onChange={(event) =>
-                        patchPrimaryColor(stroke, event.target.value)
-                      }
+                      onValueChange={(color) => patchPrimaryColor(stroke, color)}
                     />
                   </span>
                   <EditableHexColorInput
@@ -9661,17 +9658,14 @@ export function WatchfaceEditor({
                         <label className="field" key={stop}>
                           {stop === "from" ? "From" : "To"}
                           <span className="watchface-color-control">
-                            <input
-                              type="color"
+                            <WatchfaceColorInput
                               value={selectedGradient[stop]}
-                              onChange={(event) =>
-                                patchStroke(selectedStroke.id, {
+                              onValueChange={(color) => patchStroke(selectedStroke.id, {
                                   paint: {
                                     ...selectedGradient,
-                                    [stop]: event.target.value
+                                    [stop]: color
                                   }
-                                })
-                              }
+                                })}
                             />
                             <code>
                               {selectedGradient[stop]
@@ -9906,7 +9900,7 @@ export function WatchfaceEditor({
             <label className="field">
               Color
               <span className="watchface-color-control">
-                <input type="color" value={effect.color} onChange={(event) => patchEffect(effect.id, { color: event.target.value })} />
+                <WatchfaceColorInput value={effect.color} onValueChange={(color) => patchEffect(effect.id, { color })} />
                 <code>{effect.color}</code>
               </span>
             </label>
@@ -9972,6 +9966,7 @@ export function WatchfaceEditor({
 
   function toggleLayerVisibility(layer: EditorLayer) {
     if (isPositionLocked(layer.id)) return;
+    if (layer.nativeDataId) { updateNativeData(layer.nativeDataId, {enabled: !layer.visible}); return; }
     if (layer.configAssetId) {
       const reference = configAssetsById.get(layer.configAssetId);
       if (reference) updateConfigAsset(reference, { enabled: !layer.visible });
@@ -10288,6 +10283,23 @@ export function WatchfaceEditor({
   }
 
   function renderInspectorBody(layer: EditorLayer) {
+    if (layer.nativeDataId && design.nativeData?.[layer.nativeDataId]) {
+      return renderPropertySection("appearance", layer.label,
+        <NativeDataInspector
+          key={`${previewMode}:${layer.nativeDataId}`}
+          id={layer.nativeDataId}
+          style={design.nativeData[layer.nativeDataId]}
+          coordinateScale={watchCoordinateWidth / previewWidth}
+          api={api}
+          disabled={isPositionLocked(layer.id) || spriteImportPending}
+          onPatch={patch => updateNativeData(layer.nativeDataId!, patch)}
+          onError={onError}
+          onImportStart={beginSpriteImport}
+          onImportFinish={finishSpriteImport}
+          isImportCurrent={isSpriteImportCurrent}
+        />
+      );
+    }
     if (layer.configAssetId) {
       const reference = configAssetsById.get(layer.configAssetId);
       return reference ? renderConfigAssetInspector(reference, layer) : null;
@@ -10329,7 +10341,7 @@ export function WatchfaceEditor({
               <label className="field">
                 Color
                 <span className="watchface-color-control">
-                  <input type="color" value={backgroundColor.hex} onChange={(event) => patchDesign({ backgroundColor: toRgbaColor(event.target.value, backgroundColor.isTransparent ? 1 : backgroundColor.alpha) })} />
+                  <WatchfaceColorInput value={backgroundColor.hex} onValueChange={(color) => patchDesign({ backgroundColor: toRgbaColor(color, backgroundColor.isTransparent ? 1 : backgroundColor.alpha) })} />
                   <EditableHexColorInput aria-label="Background hex color" value={backgroundColor.hex} onValueChange={(color) => patchDesign({ backgroundColor: toRgbaColor(color, backgroundColor.isTransparent ? 1 : backgroundColor.alpha) })} />
                   <button className="watchface-color-none" type="button" aria-label="Make background color transparent" disabled={backgroundColor.isTransparent} onClick={() => patchDesign({ backgroundColor: "transparent" })}>Clear</button>
                 </span>
@@ -10411,7 +10423,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">Tint color<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setMetricStyle("battery", { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearMetricColor("battery")}><XCircle size={14} /></button></span></label>,
+            <label className="field">Tint color<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setMetricStyle("battery", { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearMetricColor("battery")}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -10442,7 +10454,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">Tint color<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setTimeStyle(layer.timePartId!, { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearTimeColor(layer.timePartId!)}><XCircle size={14} /></button></span></label>,
+            <label className="field">Tint color<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setTimeStyle(layer.timePartId!, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearTimeColor(layer.timePartId!)}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -10493,11 +10505,12 @@ export function WatchfaceEditor({
       return (
         <>
           {renderPositionReadout(layer)}
+          {layer.metricId === "temperature" && <p className="watchface-studio-summary">The watch's thermometer supplies this value and can be affected by body heat. Add Current weather under Weather for weather data.</p>}
           {renderPropertySection(
             "appearance",
             "Appearance",
             <div className="wf-property-stack">
-              <label className="field">Tint color<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setMetricStyle(layer.metricId!, { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearMetricColor(layer.metricId!)}><XCircle size={14} /></button></span></label>
+              <label className="field">Tint color<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setMetricStyle(layer.metricId!, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearMetricColor(layer.metricId!)}><XCircle size={14} /></button></span></label>
               {exerciseSeparator ? (
                 <details className="wf-nested-disclosure" open>
                   <summary>Exercise separator</summary>
@@ -10515,12 +10528,9 @@ export function WatchfaceEditor({
                     <label className="field">
                       Separator color
                       <span className="watchface-color-control">
-                        <input
-                          type="color"
+                        <WatchfaceColorInput
                           value={exerciseSeparator.color}
-                          onChange={(event) =>
-                            updateExerciseSeparator({ color: event.target.value })
-                          }
+                          onValueChange={(color) => updateExerciseSeparator({ color })}
                         />
                         <code>{exerciseSeparator.color}</code>
                       </span>
@@ -10612,7 +10622,7 @@ export function WatchfaceEditor({
                   <label className="field">
                     Arc color
                     <span className="watchface-color-control">
-                      <ThrottledColorInput
+                      <WatchfaceColorInput
                         value={progress.arcColor}
                         onPreview={(arcColor) =>
                           paintArcOverlay({ kcalArcColor: arcColor })
@@ -10627,7 +10637,7 @@ export function WatchfaceEditor({
                   <label className="field">
                     Bar color
                     <span className="watchface-color-control">
-                      <ThrottledColorInput
+                      <WatchfaceColorInput
                         value={progress.rectColor}
                         onPreview={(rectColor) =>
                           paintArcOverlay({ kcalRectColor: rectColor })
@@ -10751,7 +10761,7 @@ export function WatchfaceEditor({
           {renderPropertySection(
             "appearance",
             "Appearance",
-            <label className="field">Tint color<span className="watchface-color-control"><input type="color" value={style?.color ?? design.digitColor} onChange={(event) => setDateStyle(partId, { color: event.target.value })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearDateColor(partId)}><XCircle size={14} /></button></span></label>,
+            <label className="field">Tint color<span className="watchface-color-control"><WatchfaceColorInput value={style?.color ?? design.digitColor} onValueChange={(color) => setDateStyle(partId, { color })} /><code>{style?.color ?? design.digitColor}</code><button type="button" className="watchface-color-none" disabled={!style?.color} aria-label="Remove tint" title="Remove tint" onClick={() => clearDateColor(partId)}><XCircle size={14} /></button></span></label>,
             { disabled: isPositionLocked(layer.id) }
           )}
           {renderStrokeInspector(layer.id)}
@@ -10886,7 +10896,7 @@ export function WatchfaceEditor({
             "Appearance",
             <div className="wf-property-stack">
               <label className="watchface-studio-toggle"><input type="checkbox" checked={Boolean(sprite.tintColor)} onChange={(event) => updateSprite(sprite.id, { tintColor: event.target.checked ? design.accentColor : null })} />Tint image</label>
-              {sprite.tintColor ? <label className="field">Tint color<span className="watchface-color-control"><input type="color" value={sprite.tintColor} onChange={(event) => updateSprite(sprite.id, { tintColor: event.target.value })} /><code>{sprite.tintColor}</code><button type="button" className="watchface-color-none" aria-label="Remove tint" title="Remove tint" onClick={() => updateSprite(sprite.id, { tintColor: null })}><XCircle size={14} /></button></span></label> : null}
+              {sprite.tintColor ? <label className="field">Tint color<span className="watchface-color-control"><WatchfaceColorInput value={sprite.tintColor} onValueChange={(color) => updateSprite(sprite.id, { tintColor: color })} /><code>{sprite.tintColor}</code><button type="button" className="watchface-color-none" aria-label="Remove tint" title="Remove tint" onClick={() => updateSprite(sprite.id, { tintColor: null })}><XCircle size={14} /></button></span></label> : null}
             </div>,
             { disabled: locked }
           )}
@@ -10949,17 +10959,14 @@ export function WatchfaceEditor({
               <label className="field">
                 Tint color
                 <span className="watchface-color-control">
-                  <input
-                    type="color"
+                  <WatchfaceColorInput
                     value={
                       design.layerColors?.[layer.layoutGroupId] ??
                       (layer.kind === "separators"
                         ? design.accentColor
                         : design.digitColor)
                     }
-                    onChange={(event) =>
-                      setLayerColor(layer.layoutGroupId!, event.target.value)
-                    }
+                    onValueChange={(color) => setLayerColor(layer.layoutGroupId!, color)}
                   />
                   <code>
                     {design.layerColors?.[layer.layoutGroupId] ??
@@ -11251,12 +11258,9 @@ export function WatchfaceEditor({
         <label className="field">
           Selectable value tint
           <span className="watchface-color-control">
-            <input
-              type="color"
+            <WatchfaceColorInput
               value={design.selectableMetricStyle?.color ?? design.digitColor}
-              onChange={(event) =>
-                setSelectableMetricStyle({ color: event.target.value })
-              }
+              onValueChange={(color) => setSelectableMetricStyle({ color })}
             />
             <code>{design.selectableMetricStyle?.color ?? design.digitColor}</code>
             <button
@@ -11356,9 +11360,9 @@ export function WatchfaceEditor({
           </div>
         ) : null}
         <p className="watchface-studio-summary">
-          Temperature exports only through control_temperature_* and
-          control_negative_sign_icon. Move this Selectable metric layer to
-          position the control slot on the face.
+          Move this Selectable metric layer to position its icon and value together.
+          Sensor temperature uses the watch's thermometer and can be affected by
+          body heat. Add Current weather under Weather for weather data.
         </p>
           </>
         ) : (
@@ -11619,10 +11623,9 @@ export function WatchfaceEditor({
           <label className="field">
             Tint color
             <span className="watchface-color-control">
-              <input
-                type="color"
+              <WatchfaceColorInput
                 value={separator.color}
-                onChange={(event) => updateStaticSeparator(separatorId, { color: event.target.value })}
+                onValueChange={(color) => updateStaticSeparator(separatorId, { color })}
               />
               <code>{separator.color}</code>
               <button
@@ -11777,10 +11780,9 @@ export function WatchfaceEditor({
           <label className="field">
             Tint color
             <span className="watchface-color-control">
-              <input
-                type="color"
+              <WatchfaceColorInput
                 value={indicator.color ?? design.digitColor}
-                onChange={(event) => updateAmPmIndicator({ color: event.target.value })}
+                onValueChange={(color) => updateAmPmIndicator({ color })}
               />
               <code>{indicator.color ?? "Template colors"}</code>
               <button
@@ -11837,6 +11839,35 @@ export function WatchfaceEditor({
         )}
       </>
     );
+  }
+
+  async function chooseWeatherSpriteFolder(set: WeatherAssetSet) {
+    const importId = beginSpriteImport(`weather-folder:${set}`);
+    if (importId === null) return;
+    try {
+      const folder = await api.chooseCorosWatchfaceRasterFontFolder();
+      if (!folder) return;
+      const states: Record<string, string> = {};
+      for (const sprite of folder.sprites) {
+        if (sprite.relativePath.replace(/\\/g, "/").includes("/")) continue;
+        const match = /^(\d{1,2})\.png$/i.exec(sprite.name);
+        if (!match) continue;
+        const index = Number(match[1]);
+        if (index >= WEATHER_ASSET_COUNTS[set]) throw new Error(`Use states 00–${String(WEATHER_ASSET_COUNTS[set] - 1).padStart(2, "0")} for ${set}.`);
+        if (states[index]) throw new Error(`Duplicate weather state ${index}.`);
+        await loadStudioImage(sprite.dataUrl);
+        states[index] = sprite.dataUrl;
+      }
+      if (!Object.keys(states).length) throw new Error("Select a folder with numbered PNGs such as 00.png.");
+      if (!isSpriteImportCurrent(importId)) return;
+      setDesign(prev => ({ ...prev, weatherIndicator: {
+        enabled: true, x: 0, y: 0, scale: 1, ...prev.weatherIndicator,
+        assets: { ...prev.weatherIndicator?.assets, [set]: states }
+      } }));
+      onNotice(`Imported ${Object.keys(states).length} ${set} sprites. Other states keep the SIMPLE defaults.`);
+    } catch (error) {
+      if (isSpriteImportCurrent(importId)) onError(error instanceof Error ? error.message : "Could not import weather sprites.");
+    } finally { finishSpriteImport(importId); }
   }
 
   function renderWeatherInspector() {
@@ -11939,10 +11970,9 @@ export function WatchfaceEditor({
           <label className="field">
             Tint color
             <span className="watchface-color-control">
-              <input
-                type="color"
+              <WatchfaceColorInput
                 value={indicator.color ?? design.accentColor}
-                onChange={(event) => updateWeatherIndicator({ color: event.target.value })}
+                onValueChange={(color) => updateWeatherIndicator({ color })}
               />
               <code>{indicator.color ?? "Template colors"}</code>
               <button
@@ -11959,6 +11989,15 @@ export function WatchfaceEditor({
           </label>,
           { disabled: isPositionLocked("weather") }
         )}
+        {renderPropertySection("assets", "Weather assets", <div className="wf-property-stack">
+          <label className="field"><span><input type="checkbox" checked={indicator.temperatureEnabled !== false} onChange={event => updateWeatherIndicator({ temperatureEnabled: event.target.checked })} /> Show current weather</span></label>
+          <p className="watchface-studio-summary">SIMPLE's day and night icons, temperature digits, and symbols are included by default. Import numbered PNGs to replace any states.</p>
+          {([ ["day", "Day icons"], ["night", "Night icons"], ["digits", "Temperature digits"], ["symbols", "Minus / degree"], ["units", "Celsius / Fahrenheit"] ] as const).map(([set, label]) => <div key={set} className="wf-config-asset-actions">
+            <button type="button" className="secondary-button" disabled={spriteImportPending} onClick={() => void chooseWeatherSpriteFolder(set)}><ImagePlus size={15} /> {label}</button>
+            {indicator.assets?.[set] && <button type="button" className="secondary-button" disabled={spriteImportPending} onClick={() => { const assets = { ...indicator.assets }; delete assets[set]; updateWeatherIndicator({ assets }); }}><RotateCcw size={15} /> Restore defaults</button>}
+          </div>)}
+          <p className="watchface-studio-summary">Icons: 00–40. Digits: 00–09. Symbols: 00 minus, 01 degree. Units: 00 °C, 01 °F. The preview uses 18°; the watch supplies live weather.</p>
+        </div>, { disabled: isPositionLocked("weather") })}
         {renderStrokeInspector("weather")}
         {renderPropertySection(
           "specific",
@@ -12063,12 +12102,12 @@ export function WatchfaceEditor({
                 </label>
                 {element.gradient ? (
                   <>
-                    <label className="field">From<span className="watchface-color-control"><input type="color" value={element.gradient.from} onChange={(event) => set({ gradient: { ...element.gradient!, from: event.target.value } })} /><code>{element.gradient.from}</code></span></label>
-                    <label className="field">To<span className="watchface-color-control"><input type="color" value={element.gradient.to} onChange={(event) => set({ gradient: { ...element.gradient!, to: event.target.value } })} /><code>{element.gradient.to}</code></span></label>
+                    <label className="field">From<span className="watchface-color-control"><WatchfaceColorInput value={element.gradient.from} onValueChange={(color) => set({ gradient: { ...element.gradient!, from: color } })} /><code>{element.gradient.from}</code></span></label>
+                    <label className="field">To<span className="watchface-color-control"><WatchfaceColorInput value={element.gradient.to} onValueChange={(color) => set({ gradient: { ...element.gradient!, to: color } })} /><code>{element.gradient.to}</code></span></label>
                     <label className="watchface-inspector-field"><span>Gradient angle</span><EditableNumberInput min="0" max="360" step="1" value={element.gradient.angle} fallback={0} onValueChange={(angle) => set({ gradient: { ...element.gradient!, angle: normalizeWatchfaceRotation(angle) } })} /></label>
                   </>
                 ) : (
-                  <label className="field">Fill<span className="watchface-color-control"><input type="color" value={element.fill} onChange={(event) => set({ fill: event.target.value })} /><code>{element.fill}</code></span></label>
+                  <label className="field">Fill<span className="watchface-color-control"><WatchfaceColorInput value={element.fill} onValueChange={(color) => set({ fill: color })} /><code>{element.fill}</code></span></label>
                 )}
                 {element.kind === "rect" ? (
                   <label className="watchface-inspector-field"><span>Corner radius</span><EditableNumberInput min="0" max="200" step="1" value={element.cornerRadius} fallback={0} onValueChange={(cornerRadius) => set({ cornerRadius: Math.max(0, cornerRadius) })} /></label>
@@ -12077,12 +12116,12 @@ export function WatchfaceEditor({
             ) : null}
             {element.kind === "line" ? (
               <>
-                <label className="field">Color<span className="watchface-color-control"><input type="color" value={element.color} onChange={(event) => set({ color: event.target.value })} /><code>{element.color}</code></span></label>
+                <label className="field">Color<span className="watchface-color-control"><WatchfaceColorInput value={element.color} onValueChange={(color) => set({ color })} /><code>{element.color}</code></span></label>
                 <label className="watchface-inspector-field"><span>Thickness</span><EditableNumberInput min="1" max="60" step="1" value={element.strokeWidth} fallback={1} onValueChange={(strokeWidth) => set({ strokeWidth: Math.max(1, strokeWidth) })} /></label>
               </>
             ) : null}
             {element.kind === "text" ? (
-              <label className="field">Color<span className="watchface-color-control"><input type="color" value={element.color} onChange={(event) => set({ color: event.target.value })} /><code>{element.color}</code></span></label>
+              <label className="field">Color<span className="watchface-color-control"><WatchfaceColorInput value={element.color} onValueChange={(color) => set({ color })} /><code>{element.color}</code></span></label>
             ) : null}
           </div>,
           { disabled: locked }

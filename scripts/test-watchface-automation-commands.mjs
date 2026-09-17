@@ -175,4 +175,25 @@ assert.equal(apply([{ op: "set", path: "/projectName", value: "Repaired" }], "cu
 rejects([{ op: "replace_design", design: locked.design }], "layer.locked", locked);
 rejects([{ op: "merge", path: "/design", value: { lockedLayerIds: [] } }], "pointer.protected");
 
+// Native data participates in command discovery, locking and validation.
+const nativeStyle = { enabled: true, x: 40, y: 60, scale: 1, color: "#ffffff" };
+const nativeAdded = apply([{ op: "set", path: "/design/nativeData", value: { week_tl: nativeStyle } }]);
+assert.deepEqual(nativeAdded.changedLayerIds, ["native:week_tl"]);
+const nativeLocked = apply([{ op: "set_locked", id: "native:week_tl", locked: true }], "current", nativeAdded.value).value;
+for (const command of [
+  { op: "set", path: "/design/nativeData/week_tl/color", value: "#ff0000" },
+  { op: "unset", path: "/design/nativeData/week_tl" },
+  { op: "set", path: "/design/nativeData", value: {} },
+  { op: "merge", path: "/design/nativeData", value: { week_tl: { ...nativeStyle, enabled: false } } }
+]) rejects([command], "layer.locked", nativeLocked);
+rejects([{ op: "set", path: "/design/nativeData/week_tl/color", value: "red" }], "native.color", nativeAdded.value);
+rejects([{ op: "set", path: "/design/nativeData/unknown", value: nativeStyle }], "native.invalid", nativeAdded.value);
+rejects([{ op: "set", path: "/design/nativeData/week_tl/assets", value: { icon: { "00": completePng } } }], "native.assets", nativeAdded.value);
+const nativeCustomized = apply([{ op: "merge", path: "/design/nativeData/week_tl", value: {
+  parts: { icon: { width: 80, color: "#00ff00" } }, assetTexts: { icon: { "0": "LOAD" } }, assets: { digits: { "0": completePng } }
+} }], "current", nativeAdded.value);
+assert.deepEqual(nativeCustomized.changedLayerIds, ["native:week_tl"]);
+assert.equal(nativeCustomized.value.design.nativeData.week_tl.assetTexts.icon["0"], "LOAD");
+assert.equal(nativeAdded.value.design.nativeData.week_tl.assetTexts, undefined);
+
 console.log("watchface automation command tests passed");

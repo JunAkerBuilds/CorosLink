@@ -55,7 +55,7 @@ function editorToolDefinitions(assetStore: WatchfaceAutomationAssetStore): ToolD
   return [
     {
       name: "get_schema", title: "Get watch-face scene schema", readOnly: true,
-      description: "Read the complete editable scene and command schema before authoring a face.",
+      description: "Read the complete editable scene and command schema before authoring a face, including the nativeData catalog of Weather, Astronomy, Health and Training fields, chart sources, component defaults and artwork state indices.",
       method: "get_schema", schema: {}
     },
     {
@@ -65,13 +65,13 @@ function editorToolDefinitions(assetStore: WatchfaceAutomationAssetStore): ToolD
     },
     {
       name: "get_document", title: "Inspect watch-face document", readOnly: true,
-      description: "Read the live editable watch-face, revision, semantic layers, selection, target resolutions and capabilities. Placement capabilities define the master-pixel frame; each layer reports rendered bounds, movability and its physical movement key. Image data is returned as reusable assetId references.",
+      description: "Read the live editable watch-face, revision, semantic layers, selection, target resolutions and capabilities. Placement capabilities define the master-pixel frame; each layer reports rendered bounds, movability and its physical movement key. Native data layers include editable component paths and effective styles. Image data is returned as reusable assetId references.",
       method: WATCHFACE_AUTOMATION_METHODS.getDocument,
       schema: { includeDiagnostics: z.boolean().optional() }
     },
     {
       name: "apply_commands", title: "Edit watch face",
-      description: "Atomically apply semantic or JSON-pointer scene commands as one undo step. Use the placement frame and layer placement metadata from get_document for move_layer, place_layers, align_layers and distribute_layers. Pass the exact sessionId and revision from get_document. Asset fields accept {assetId} from import_asset or get_document.",
+      description: "Atomically apply semantic or JSON-pointer scene commands as one undo step. Use the placement frame and layer placement metadata from get_document for move_layer, place_layers, align_layers and distribute_layers. Add/edit native fields through /design/nativeData using the get_schema catalog: parts, text labels, artwork and graph styles. Pass the exact sessionId and revision from get_document. Asset fields accept {assetId} from import_asset or get_document; native/weather artwork requires PNG.",
       method: WATCHFACE_AUTOMATION_METHODS.applyCommands,
       schema: {
         ...sessionFields,
@@ -102,18 +102,27 @@ function editorToolDefinitions(assetStore: WatchfaceAutomationAssetStore): ToolD
     },
     {
       name: "set_view", title: "Set watch-face editor view",
-      description: "Switch Current/AOD mode, preview resolution or selected complication without changing the design revision.",
+      description: "Switch Current/AOD mode, resolution, selected complication or simulation without changing the design revision. Simulation is editor-only; values replace the current sample value map. See get_schema.simulation.",
       method: WATCHFACE_AUTOMATION_METHODS.setView,
       schema: {
         sessionId: sessionFields.sessionId,
         mode: z.enum(["current", "aod"]).optional(),
         resolution: z.union([z.string().min(1).max(80), z.number().int().min(100).max(2000)]).optional().describe("Resolution directory id or width returned by get_document."),
-        previewComplication: z.string().max(100).optional()
+        previewComplication: z.string().max(100).optional(),
+        simulation: z.object({
+          enabled: z.boolean().optional(),
+          playing: z.boolean().optional(),
+          speed: z.union([z.literal(1), z.literal(60), z.literal(3600), z.literal(86400)]).optional(),
+          dateTime: z.string().max(64).optional(),
+          values: z.record(z.string(), z.string().max(160)).optional(),
+          weather: z.object({ condition: z.number().int().min(0).max(40), night: z.boolean() }).optional(),
+          chartHistory: z.array(z.number().min(0).max(1)).min(2).max(120).optional()
+        }).optional()
       }
     },
     {
       name: "render_preview", title: "Render watch-face preview", readOnly: true,
-      description: "Render the actual Current or AOD scene at a supported resolution. Returns a visible PNG plus an assetId reference and diagnostics.",
+      description: "Render the Current or AOD scene at a supported resolution. Uses active editor simulation unless scenario is provided; scenario:{} uses normal sample data. Scenario supports dateTime, values, weather and chartHistory (see get_schema.simulation). Returns PNG and an assetId. Simulation does not affect saved projects or exports.",
       method: WATCHFACE_AUTOMATION_METHODS.renderPreview,
       schema: {
         sessionId: sessionFields.sessionId,

@@ -5,6 +5,7 @@ export type WatchfaceInspectorSectionId =
   | "layer"
   | "transform"
   | "appearance"
+  | "assets"
   | "stroke"
   | "specific"
   | "effects"
@@ -35,6 +36,7 @@ export const WATCHFACE_INSPECTOR_DEFAULT_OPEN: Readonly<
   layer: true,
   transform: true,
   appearance: true,
+  assets: true,
   stroke: true,
   specific: true,
   effects: false,

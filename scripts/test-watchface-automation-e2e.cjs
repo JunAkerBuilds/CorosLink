@@ -119,12 +119,327 @@ async function main() {
     assert.equal((await tool("get_context")).editorOpen, false);
     const schema = await tool("get_schema");
     assert.ok(schema);
+    assert.equal(schema.nativeData.fields.length,25);
+    assert.equal(schema.nativeData.chartSources.length,12);
+    assert.equal(schema.document.$defs.nativeDataStyle.properties.assets.properties.icon.additionalProperties.$ref,'#/$defs/pngImageValue');
+    assert.equal(schema.document.$defs.weatherIndicator.properties.assets.properties.day.additionalProperties.$ref,'#/$defs/pngImageValue');
+    const nativeDefaults=id=>schema.nativeData.fields.find(field=>field.id===id).defaults;
+    assert.deepEqual(schema.nativeData.chartSources.find(source=>source.id==='chart_moon').components.find(part=>part.id==='states').stateIndices,Array.from({length:30},(_,i)=>String(i)));
     const imported = await tool("import_archive", { path: fixture });
     const sourceArchive = imported.archive ?? imported;
     await tool("open", { archive: sourceArchive.archiveId, name: "Automation E2E", firmwareType: "COROS W332", watchModel: "pace-pro" });
     let document = await tool("get_document");
     const editorElement = await window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-editor"))');
     assert.equal(editorElement, true, "opening through MCP mounts the real editor");
+    // Simulation is view state: exercise its visible controls and MCP parity.
+    const beforeSimulation = structuredClone(document);
+    assert.equal(schema.simulation.editorOnly, true);
+    await tool("select", {sessionId:document.sessionId, id:"hours"});
+    await window.webContents.executeJavaScript("document.querySelector('.wf-placement-trigger').click()");
+    const guidesWereVisible = await window.webContents.executeJavaScript(`(() => {
+      const input=[...document.querySelectorAll('.wf-placement-popover label')].find(label=>label.textContent.includes('Show center and safe-area guides')).querySelector('input');
+      const checked=input.checked;if(!checked)input.click();return checked;
+    })()`);
+    await window.webContents.executeJavaScript("document.querySelector('.wf-placement-trigger').click()");
+    await window.webContents.executeJavaScript("document.querySelector('.wf-simulation-trigger').click()");
+    await until(() => window.webContents.executeJavaScript("Boolean(document.querySelector('.wf-simulation-panel'))"), Boolean, "simulation panel");
+    assert.ok(await window.webContents.executeJavaScript(`(() => {
+      const panel=document.querySelector('.wf-simulation-panel').getBoundingClientRect();
+      const stage=document.querySelector('.wf-stage').getBoundingClientRect();
+      const placement=document.querySelector('.wf-placement-trigger').getBoundingClientRect();
+      return panel.left>=stage.left && panel.right<=stage.right && placement.right<=stage.right && panel.bottom<=stage.bottom;
+    })()`), "Simulation panel and Placement remain inside the stage when the toolbar wraps");
+    await window.webContents.executeJavaScript("document.querySelector('.wf-simulation-enable input').click()");
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.enabled, true);
+    const setSimulationInput = async (label, value, select = false) => window.webContents.executeJavaScript(`(() => {
+      const input = document.querySelector('[aria-label="${label}"]');
+      Object.getOwnPropertyDescriptor(${select ? 'HTMLSelectElement' : 'HTMLInputElement'}.prototype, 'value').set.call(input, ${JSON.stringify(value)});
+      input.dispatchEvent(new Event('${select ? 'change' : 'input'}', {bubbles:true}));
+    })()`);
+    await setSimulationInput("Simulation date", "2028-02-28");
+    await setSimulationInput("Simulation time", "23:59:59");
+    await window.webContents.executeJavaScript("[...document.querySelectorAll('.wf-simulation-panel button')].find(button => button.textContent === '+1 second').click()");
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.dateTime, "2028-02-29T00:00:00", "Visible date/time controls roll into leap day");
+    await setSimulationInput("Simulated battery (%)", "0");
+    await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Simulated battery (%)"]').dispatchEvent(new FocusEvent('focusout', {bubbles:true}))`);
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.values.battery, "0");
+    const simulatedEmpty = await rawTool("render_preview", {sessionId: document.sessionId});
+    await setSimulationInput("Simulation preset", "fullBattery", true);
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.values.battery, "100");
+    const simulatedFull = await rawTool("render_preview", {sessionId: document.sessionId});
+    assert.notEqual(simulatedEmpty.content.find(part=>part.type==='image').data, simulatedFull.content.find(part=>part.type==='image').data, "Battery simulation changes the real preview");
+    const explicitEmpty = await rawTool("render_preview", {sessionId: document.sessionId, scenario: {dateTime: document.view.simulation.dateTime, values:{battery:"0"}}});
+    assert.equal(simulatedEmpty.content.find(part=>part.type==='image').data, explicitEmpty.content.find(part=>part.type==='image').data, "Explicit MCP scenarios override active simulation");
+    await window.webContents.executeJavaScript("document.querySelector('.wf-simulation-panel details').open = true");
+    for (const [label, value] of [["Simulated sensor temperature", "32"], ["Simulated current weather", "-8"]]) {
+      await setSimulationInput(label, value);
+      await window.webContents.executeJavaScript(`document.querySelector('[aria-label="${label}"]').dispatchEvent(new FocusEvent('focusout', {bubbles:true}))`);
+    }
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.values.temperature, "32", "Weather input must not overwrite sensor temperature");
+    assert.equal(document.view.simulation.values.weather_temp, "-8", "Weather temperature has its own simulation value");
+    await setSimulationInput("Simulated sensor temperature", "30");
+    await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Simulated sensor temperature"]').dispatchEvent(new FocusEvent('focusout', {bubbles:true}))`);
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.values.weather_temp, "-8", "Sensor input must not overwrite weather temperature");
+    await window.webContents.executeJavaScript("document.querySelector('.wf-simulation-panel details').open = false");
+    await tool("set_view", {sessionId: document.sessionId, simulation:{enabled:true, playing:true, speed:1, dateTime:"2026-12-31T23:59:59"}});
+    document = await until(() => tool("get_document"), value => value.view.simulation.dateTime.startsWith("2027-01-01"), "playback across new year");
+    await window.webContents.executeJavaScript("[...document.querySelectorAll('.wf-simulation-panel button')].find(button => button.textContent === 'Pause').click()");
+    document = await tool("get_document");
+    const pausedTime = document.view.simulation.dateTime;
+    await window.webContents.executeJavaScript("new Promise(resolve=>setTimeout(resolve,1200))");
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.dateTime, pausedTime, "Pause stops playback");
+    assert.equal(document.revision, beforeSimulation.revision);
+    assert.equal(document.dirty, beforeSimulation.dirty);
+    assert.equal(document.canUndo, beforeSimulation.canUndo);
+    assert.deepEqual(document.design, beforeSimulation.design, "Simulation never modifies the saved design");
+    const invalidSimulation = await rawTool("set_view", {sessionId:document.sessionId, simulation:{dateTime:"2027-02-29T12:00:00"}});
+    assert.ok(invalidSimulation.isError, "Invalid calendar dates are rejected through MCP");
+    window.showInactive();
+    await window.webContents.executeJavaScript("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+    const panelCaptureRect = await window.webContents.executeJavaScript(`(() => {
+      const panel=document.querySelector('.wf-simulation-panel').getBoundingClientRect();
+      // Exclude rounded corners/shadow; the interior must fully cover the canvas.
+      return {x:Math.ceil(panel.x+16),y:Math.ceil(panel.y+16),width:Math.floor(panel.width-32),height:Math.floor(panel.height-32)};
+    })()`);
+    const withSelection = await window.webContents.capturePage(panelCaptureRect);
+    assert.ok(await window.webContents.executeJavaScript(`(() => {
+      const bar=document.querySelector('.wf-contextual-align-bar');
+      const toolbar=document.querySelector('.wf-stage-toolbar');
+      return !!bar && !!document.querySelector('.wf-stage-ruler') && Number(getComputedStyle(toolbar).zIndex)>Number(getComputedStyle(bar).zIndex) && bar.getBoundingClientRect().top>=toolbar.getBoundingClientRect().bottom;
+    })()`), "Simulation toolbar sits above the active alignment toolbar");
+    await window.webContents.executeJavaScript(`document.querySelectorAll('.watchface-preview-stack, .wf-contextual-align-bar').forEach(el=>el.style.visibility='hidden');new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+    const withoutSelection = await window.webContents.capturePage(panelCaptureRect);
+    await fs.writeFile(path.join(temporaryRoot, "simulation-panel-with-guides.png"),withSelection.toPNG());
+    await fs.writeFile(path.join(temporaryRoot, "simulation-panel-without-guides.png"),withoutSelection.toPNG());
+    const beforePixels=withSelection.toBitmap(), afterPixels=withoutSelection.toBitmap();
+    assert.equal(beforePixels.length, afterPixels.length);
+    // GPU text antialiasing can shift a few channel levels when another layer hides.
+    const maxDifference=beforePixels.reduce((max,value,index)=>Math.max(max,Math.abs(value-afterPixels[index])),0);
+    assert.ok(maxDifference<=4, `Watch artwork, guides and selected outlines cannot paint through the simulation panel (max channel difference ${maxDifference})`);
+    await window.webContents.executeJavaScript(`document.querySelectorAll('.watchface-preview-stack, .wf-contextual-align-bar').forEach(el=>el.style.removeProperty('visibility'));new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+    await fs.writeFile(path.join(temporaryRoot, "simulation-panel.png"), (await window.webContents.capturePage()).toPNG());
+    window.hide();
+    await window.webContents.executeJavaScript("[...document.querySelectorAll('.wf-simulation-panel button')].find(button => button.textContent === 'Reset simulation').click()");
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.enabled, false);
+    assert.equal(document.view.simulation.playing, false);
+    assert.deepEqual(document.view.simulation.values, {});
+    await window.webContents.executeJavaScript("document.querySelector('[aria-label=\"Close simulation\"]').click()");
+    await tool("select", {sessionId:document.sessionId, id:"background"});
+    if (!guidesWereVisible) {
+      await window.webContents.executeJavaScript("document.querySelector('.wf-placement-trigger').click()");
+      await window.webContents.executeJavaScript(`[...document.querySelectorAll('.wf-placement-popover label')].find(label=>label.textContent.includes('Show center and safe-area guides')).querySelector('input').click()`);
+      await window.webContents.executeJavaScript("document.querySelector('.wf-placement-trigger').click()");
+    }
+    // Browse, search and dismiss the new Add picker before creating layers.
+    await window.webContents.executeJavaScript("document.querySelector('.watchface-add-sprite').click()");
+    await until(() => window.webContents.executeJavaScript(`document.querySelector('.wf-layer-picker').matches(':popover-open') && document.activeElement===document.querySelector('[aria-label="Search data fields"]')`), Boolean, "searchable Add picker");
+    assert.ok(await window.webContents.executeJavaScript(`(() => {
+      const r=document.querySelector('.wf-layer-picker').getBoundingClientRect();
+      return r.left>=0&&r.right<=innerWidth&&r.top>=0&&Math.abs(r.bottom-(innerHeight-12))<=1;
+    })()`), "All expands the Add picker to the available window height with a safe bottom margin");
+    window.showInactive();
+    await window.webContents.executeJavaScript("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+    await fs.writeFile(path.join(temporaryRoot, "add-menu.png"), (await window.webContents.capturePage()).toPNG());
+    window.hide();
+    await window.webContents.executeJavaScript(`[...document.querySelectorAll('.wf-layer-picker-filters button')].find(button=>button.textContent==='Charts').click()`);
+    assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('.wf-layer-picker-results [data-add-option]').length"),12,"Category filter shows every chart source");
+    await until(() => window.webContents.executeJavaScript("document.querySelector('.wf-layer-picker').getBoundingClientRect().height<=581"), Boolean, "individual categories use a compact picker");
+    await until(() => window.webContents.executeJavaScript(`(() => {
+      const strip=document.querySelector('[role="tablist"][aria-label="Data categories"]');
+      const selected=strip.querySelector('[role="tab"][aria-selected="true"]');
+      const bounds=selected.getBoundingClientRect(), viewport=strip.getBoundingClientRect();
+      return selected.textContent==='Charts' && bounds.left>=viewport.left-1 && bounds.right<=viewport.right+1 && document.querySelector('[role="tabpanel"]').getAttribute('aria-labelledby')===selected.id;
+    })()`), Boolean, "active chart tab scrolls into view");
+    await window.webContents.executeJavaScript(`document.querySelector('[role="tab"][aria-selected="true"]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}))`);
+    assert.equal(await window.webContents.executeJavaScript("document.activeElement.textContent"),"Astronomy","Arrow keys activate and focus adjacent tabs");
+    assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('.wf-layer-picker-results [data-add-option]').length"),1);
+    await window.webContents.executeJavaScript(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true}))`);
+    assert.equal(await window.webContents.executeJavaScript("document.querySelector('[role=tab][aria-selected=true]').textContent"),"All");
+    await until(() => window.webContents.executeJavaScript(`Math.abs(document.querySelector('.wf-layer-picker').getBoundingClientRect().bottom-(innerHeight-12))<=1`), Boolean, "returning to All expands the picker again");
+    assert.equal(await window.webContents.executeJavaScript("document.activeElement.textContent"),"All","resizing the picker preserves keyboard focus on the selected tab");
+    await window.webContents.executeJavaScript(`[...document.querySelectorAll('.wf-layer-picker-filters button')].find(button=>button.textContent==='All').click()`);
+    await setSimulationInput("Search data fields", "sleep");
+    assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('.wf-layer-picker-results [data-add-option]').length"),2);
+    await setSimulationInput("Search data fields", "no-such-field");
+    assert.equal(await window.webContents.executeJavaScript("document.querySelector('.wf-layer-picker-empty strong').textContent"),"No matching data fields");
+    await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Search data fields"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+    assert.equal(await window.webContents.executeJavaScript("document.querySelector('.wf-layer-picker').matches(':popover-open')"),false);
+    await window.webContents.executeJavaScript("document.querySelector('.watchface-add-sprite').click()");
+    await window.webContents.executeJavaScript(`document.querySelector('.watchface-add-sprite').click()`);
+    assert.equal(await window.webContents.executeJavaScript("document.querySelector('.wf-layer-picker').matches(':popover-open')"),false,"Add button toggles the picker closed");
+    // Exercise the visible Add menu, inspector and the native-data export path.
+    const nativeIdentity = () => ({ sessionId: document.sessionId, baseRevision: document.revision });
+    for (const value of ["weather_temp", "sleep_score", "week_tl", "sunriseset", "chart:chart_stress"]) {
+      await window.webContents.executeJavaScript("document.querySelector('.watchface-add-sprite').click()");
+      await until(() => window.webContents.executeJavaScript("Boolean(document.querySelector('.wf-layer-picker:popover-open'))"), Boolean, "native data menu");
+      await window.webContents.executeJavaScript(`document.querySelector('[data-native-data="${value}"]').click()`);
+      document = await tool("get_document");
+      assert.equal(document.design.nativeData[value.split(":")[0]].enabled, true);
+      assert.equal(document.view.selectedId, `native:${value.split(":")[0]}`);
+    }
+    const beforeExistingField = document.revision;
+    await window.webContents.executeJavaScript("document.querySelector('.watchface-add-sprite').click()");
+    await until(() => window.webContents.executeJavaScript("Boolean(document.querySelector('.wf-layer-picker:popover-open'))"), Boolean, "existing native fields");
+    assert.equal(await window.webContents.executeJavaScript(`document.querySelector('[data-native-data="sleep_score"]').textContent.includes('On face')`), true);
+    await setSimulationInput("Search data fields", "sleep score");
+    await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Search data fields"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))`);
+    document = await tool("get_document");
+    assert.equal(document.revision,beforeExistingField,"Selecting an existing data field does not create an undo entry");
+    assert.equal(document.view.selectedId,"native:sleep_score");
+    await tool("apply_commands", { ...nativeIdentity(), commands: [
+      {op:"place_layers",layerIds:["native:weather_temp"],x:180,y:500},
+      {op:"set_visibility",id:"native:week_tl",visible:false}
+    ] });
+    document = await tool("get_document");
+    assert.equal(document.design.nativeData.week_tl.enabled,false);
+    assert.ok(document.capabilities.layers.find(layer=>layer.id==="native:weather_temp").placement.movable);
+    await tool("undo",nativeIdentity());
+    document = await tool("get_document");
+    assert.equal(document.design.nativeData.week_tl.enabled,true);
+    await tool("select",{sessionId:document.sessionId,id:"native:week_tl"});
+    await until(()=>window.webContents.executeJavaScript(`Boolean(document.querySelector('input[aria-label="Label / symbol text"]'))`),Boolean,"native label editor");
+    await window.webContents.executeJavaScript(`(() => { const input=document.querySelector('input[aria-label="Label / symbol text"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'LOAD'); input.dispatchEvent(new Event('input',{bubbles:true})); })()`);
+    document=await tool("get_document");
+    assert.equal(document.design.nativeData.week_tl.assetTexts.icon['0'],'LOAD','Typing replaces the generated TL label');
+    const beforeColorDrag=document;
+    const colorDragTiming=await window.webContents.executeJavaScript(`(() => {
+      const input=document.querySelector('input[aria-label="Default color"]');
+      const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+      const start=performance.now();
+      for(let i=0;i<120;i++) { set.call(input,'#'+(0x102000+i).toString(16)); input.dispatchEvent(new Event('input',{bubbles:true})); }
+      return performance.now()-start;
+    })()`);
+    document=await until(()=>tool('get_document'),value=>value.design.nativeData.week_tl.color==='#102077','settled color picker');
+    console.log(`Color drag: 120 inputs, ${Math.round(colorDragTiming)} ms dispatch, ${document.revision-beforeColorDrag.revision} editor revisions`);
+    assert.equal(document.revision-beforeColorDrag.revision,1,'A continuous color drag commits once instead of re-rendering the editor for every input');
+    await tool('undo',nativeIdentity()); document=await tool('get_document');
+    assert.equal(document.design.nativeData.week_tl.color,beforeColorDrag.design.nativeData.week_tl.color,'One undo restores the color before the drag');
+    const setColorInput=(color,eventType='input')=>window.webContents.executeJavaScript(`(() => {
+      const input=document.querySelector('input[aria-label="Default color"]');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(color)});
+      input.dispatchEvent(new Event(${JSON.stringify(eventType)},{bubbles:true}));
+    })()`);
+    await setColorInput('#abcdef');
+    // Read after the timer, so this path verifies settling without an MCP flush.
+    await window.webContents.executeJavaScript('new Promise(resolve=>setTimeout(resolve,220))');
+    document=await tool('get_document');
+    assert.equal(document.design.nativeData.week_tl.color,'#abcdef');
+    assert.equal(await window.webContents.executeJavaScript(`document.querySelector('input[aria-label="Default color"]').value`),'#abcdef');
+    await setColorInput('#fedcba','change');
+    document=await tool('get_document');
+    const afterNativeChange=document.revision;
+    assert.equal(document.design.nativeData.week_tl.color,'#fedcba','Native picker completion commits its final value');
+    await window.webContents.executeJavaScript(`document.querySelector('input[aria-label="Default color"]').dispatchEvent(new FocusEvent('focusout',{bubbles:true})); new Promise(resolve=>setTimeout(resolve,220))`);
+    document=await tool('get_document');
+    assert.equal(document.revision,afterNativeChange,'Blur and old timers do not create duplicate color commits');
+    await tool('undo',nativeIdentity()); document=await tool('get_document');
+    assert.equal(document.design.nativeData.week_tl.color,'#abcdef');
+    await window.webContents.executeJavaScript(`document.querySelector('input[aria-label="Default color"]').dispatchEvent(new FocusEvent('focusout',{bubbles:true}))`);
+    document=await tool('get_document');
+    assert.equal(document.design.nativeData.week_tl.color,'#abcdef','Blur after undo cannot restore a stale draft');
+    await setColorInput('#112233');
+    await tool('select',{sessionId:document.sessionId,id:'native:chart'});
+    document=await tool('get_document');
+    assert.equal(document.design.nativeData.week_tl.color,'#112233','Switching layers flushes the original color target');
+    assert.equal(document.design.nativeData.chart.color,'#ffffff','Pending colors never leak onto a newly selected layer');
+    await tool('select',{sessionId:document.sessionId,id:'native:week_tl'});
+    await setColorInput('#445566');
+    // A programmatic click has no pointerdown/blur; still flush before its action.
+    await window.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).find(button=>button.textContent==='Restore component defaults').click()`);
+    document=await tool('get_document');
+    assert.equal(document.design.nativeData.week_tl.color,'#445566','Other UI actions preserve a pending color');
+    await tool('undo',nativeIdentity()); document=await tool('get_document');
+    await window.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).find(button=>button.textContent==='Restore component defaults').click()`);
+    document=await tool("get_document");
+    assert.equal(document.design.nativeData.week_tl.assetTexts?.icon,undefined,'Restoring a component removes its custom text');
+    assert.equal(await window.webContents.executeJavaScript(`document.querySelector('input[aria-label="Label / symbol text"]').value`),'TL');
+    await tool("undo",nativeIdentity());
+    document=await tool("get_document");
+    assert.equal(document.design.nativeData.week_tl.assetTexts.icon['0'],'LOAD','Component reset is undoable');
+    await tool("select",{sessionId:document.sessionId,id:"native:chart"});
+    await window.webContents.executeJavaScript(`(() => { const select=document.querySelector('select[aria-label="Customize component"]'); select.value='plot'; select.dispatchEvent(new Event('change',{bubbles:true})); })()`);
+    await until(()=>window.webContents.executeJavaScript(`Boolean(document.querySelector('input[aria-label="Bar width"]'))`),Boolean,"graph controls");
+    assert.ok(await window.webContents.executeJavaScript(`(() => {
+      const type=document.querySelector('select[aria-label="Graph type"]');
+      return type.disabled && type.value==='bars' && [...type.options].every(option=>option.value==='bars')
+        && !document.querySelector('input[aria-label="Line thickness"]')
+        && !document.querySelector('input[aria-label="Upper curve"]')
+        && !document.querySelector('input[aria-label="Lower curve"]');
+    })()`),'Only bar graphs are available in the inspector');
+    const graphToggleSize=await window.webContents.executeJavaScript(`(() => { const box=document.querySelector('input[aria-label="Show Graph"]').getBoundingClientRect(); return {width:box.width,height:box.height}; })()`);
+    assert.ok(graphToggleSize.width<=20&&graphToggleSize.height<=20,'Graph visibility checkbox fits the inspector');
+    await window.webContents.executeJavaScript(`document.querySelector('input[aria-label="Show Graph"]').click()`);
+    document=await tool("get_document");
+    assert.equal(document.design.nativeData.chart.parts.plot.enabled,false,'The graph can be hidden independently');
+    await window.webContents.executeJavaScript(`document.querySelector('input[aria-label="Show Graph"]').click()`);
+    await window.webContents.executeJavaScript(`(() => { const input=document.querySelector('input[aria-label="Bar width"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'6'); input.dispatchEvent(new Event('input',{bubbles:true})); })()`);
+    document=await tool("get_document");
+    assert.ok(document.design.nativeData.chart.chartStyle.barWidth>6,'Bar width converts displayed watch pixels to master pixels');
+    const nativeOutput=await tool("build_archive",nativeIdentity());
+    assert.equal((nativeOutput.archive??nativeOutput).watchFaceVersion,6);
+    await window.webContents.executeJavaScript("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    await fs.writeFile('/tmp/coroslink-native-data-editor.png',(await window.webContents.capturePage()).toPNG());
+    // Exercise the actual external MCP mutation path for all new controls.
+    const nativeArtwork=await tool("import_asset",{path:imagePath});
+    await tool("apply_commands",{...nativeIdentity(),commands:[
+      {op:"set",path:"/design/nativeData/weather_humidity",value:{...nativeDefaults('weather_humidity'),x:60,y:80}},
+      {op:"set",path:"/design/nativeData/today_run",value:{...nativeDefaults('today_run'),x:60,y:180}},
+      {op:"set",path:"/design/nativeData/sleep_hrv_level",value:{...nativeDefaults('sleep_hrv_level'),x:60,y:280}},
+      {op:"merge",path:"/design/nativeData/week_tl",value:{assetTexts:{icon:{'0':'MCP TL'}},assets:{icon:{'0':{assetId:nativeArtwork.assetId}}},parts:{icon:{width:90,height:48,color:'#ff0000'}}}},
+      {op:"merge",path:"/design/nativeData/sunriseset",value:{assetTexts:{icon:{'0':'RISE','1':'SET'}},assets:{progress:{'0':{assetId:nativeArtwork.assetId}}}}},
+      {op:"merge",path:"/design/nativeData/chart",value:{chartSource:'chart_stamina',parts:{plot:{enabled:true,width:300,height:100},mask:{enabled:true}},chartStyle:{lineWidth:7,upperColor:'#00ff00',lowerColor:'#ff00ff',selectedBarColor:'#ffff00',unselectedBarColor:'#0000ff',barWidth:12,barGap:6,previewType:'bars'},assets:{mask:{'0':{assetId:nativeArtwork.assetId}}}}},
+      {op:"set",path:"/design/weatherIndicator",value:{enabled:true,x:500,y:100,scale:1,temperatureEnabled:true,assets:{day:{'0':{assetId:nativeArtwork.assetId}}}}}
+    ]});
+    document=await tool("get_document");
+    const nativeEdited=document;
+    assert.equal(document.design.nativeData.week_tl.assets.icon['0'].assetId,nativeArtwork.assetId,'Native artwork refs survive hydration and externalization');
+    assert.equal(document.design.weatherIndicator.assets.day['0'].assetId,nativeArtwork.assetId);
+    const graphParts=document.capabilities.layers.find(layer=>layer.id==='native:chart').nativeData.components;
+    assert.equal(graphParts.find(part=>part.id==='plot').effectiveStyle.width,300);
+    assert.equal(graphParts.find(part=>part.id==='decimal').positionEditable,false);
+    assert.equal(document.capabilities.nativeData.fieldIds.length,25);
+    const resource=await client.readResource({uri:document.capabilities.schemaResource});
+    assert.equal(JSON.parse(resource.contents[0].text).nativeData.fields.length,25,'Advertised schema resource resolves');
+    await tool("undo",nativeIdentity()); document=await tool("get_document");
+    assert.equal(document.design.nativeData.today_run,undefined);
+    await tool("redo",nativeIdentity()); document=await tool("get_document");
+    assert.deepEqual(document.design,nativeEdited.design);
+    await tool("apply_commands",{...nativeIdentity(),commands:[{op:'set_locked',id:'native:week_tl',locked:true}]});
+    document=await tool("get_document");
+    const lockedNativeRevision=document.revision;
+    const lockedNativeEdit=await rawTool("apply_commands",{...nativeIdentity(),commands:[{op:'set',path:'/design/nativeData/week_tl/assetTexts/icon/0',value:'LOCKED'}]});
+    assert.equal(lockedNativeEdit.isError,true);
+    document=await tool("get_document"); assert.equal(document.revision,lockedNativeRevision);
+    await tool("apply_commands",{...nativeIdentity(),commands:[{op:'set_locked',id:'native:week_tl',locked:false},{op:'unset',path:'/design/nativeData/week_tl/assets/icon'},{op:'unset',path:'/design/nativeData/week_tl/assetTexts/icon'}]});
+    document=await tool("get_document");
+    assert.equal(document.design.nativeData.week_tl.assets.icon,undefined,'MCP can restore generated artwork');
+    await tool("apply_commands",{...nativeIdentity(),mode:'aod',commands:[{op:'set',path:'/design/nativeData',value:{week_tl:{...nativeDefaults('week_tl'),assetTexts:{icon:{'0':'AOD'}}}}}]});
+    document=await tool("get_document");
+    assert.equal(document.design.modeDesigns.aod.nativeData.week_tl.assetTexts.icon['0'],'AOD');
+    assert.equal(document.design.nativeData.week_tl.assetTexts.icon,undefined,'AOD customization stays independent');
+    await tool("set_view",{sessionId:document.sessionId,mode:'aod'});
+    document=await tool("get_document");
+    assert.equal(document.capabilities.layers.find(layer=>layer.id==='native:week_tl').nativeData.components[0].assetRole,'icon');
+    await tool("render_preview",{sessionId:document.sessionId,mode:'aod'});
+    await tool("set_view",{sessionId:document.sessionId,mode:'current'});
+    await tool("render_preview",{sessionId:document.sessionId,mode:'current'});
+    await tool("validate",{sessionId:document.sessionId});
+    const mcpNativeArchive=await tool("build_archive",nativeIdentity());
+    assert.equal((mcpNativeArchive.archive??mcpNativeArchive).watchFaceVersion,6);
+    await tool("apply_commands",{...nativeIdentity(),mode:'aod',commands:[{op:'set',path:'/design/nativeData',value:{}}]});
+    document=await tool("get_document");
+    await tool("apply_commands",{...nativeIdentity(),commands:[{op:'unset',path:'/design/weatherIndicator'}]});
+    document=await tool("get_document");
+    await tool("apply_commands",{...nativeIdentity(),commands:[{op:"set",path:"/design/nativeData",value:{}}]});
+    document = await tool("get_document");
     const image = await tool("import_asset", { path: imagePath });
     const rasterFolder = await tool("import_asset", { path: rasterFolderPath, kind: "raster_font_folder" });
     const changes = [

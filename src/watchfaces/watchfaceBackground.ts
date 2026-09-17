@@ -149,6 +149,7 @@ export function makeDefaultDesign(): CorosWatchfaceDesignState {
     },
     ampmIndicator: { ...DEFAULT_AMPM_STYLE },
     weatherIndicator: undefined,
+    nativeData: {},
     layoutOffsets: {},
     linkedLayerGroups: [],
     editorGroups: [],

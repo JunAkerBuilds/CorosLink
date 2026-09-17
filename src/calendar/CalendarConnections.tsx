@@ -40,9 +40,11 @@ type ConnectionStatus = CalendarConnectionStatus &
 function CalendarConnection({
   api,
   provider,
+  suggestedEmail,
 }: {
   api: CorosLinkApi;
   provider: CalendarProvider;
+  suggestedEmail?: string;
 }) {
   const isGoogle = provider === "google";
   const providerName = isGoogle ? "Google Calendar" : "Apple Calendar";
@@ -476,6 +478,11 @@ function CalendarConnection({
                     onChange={(event) => setAppleEmail(event.target.value)}
                   />
                 </label>
+                {suggestedEmail && appleEmail !== suggestedEmail ? (
+                  <button type="button" className="secondary-button account-email-suggestion" disabled={working} onClick={() => setAppleEmail(suggestedEmail)}>
+                    Use COROS email · {suggestedEmail}
+                  </button>
+                ) : null}
                 <label className="field">
                   App-specific password
                   <input
@@ -617,8 +624,8 @@ function CalendarConnection({
   );
 }
 
-export function CalendarConnections({ api }: { api: CorosLinkApi }) {
-  const [provider, setProvider] = useState<CalendarProvider>("google");
+export function CalendarConnections({ api, initialProvider = "google", suggestedEmail }: { api: CorosLinkApi; initialProvider?: CalendarProvider; suggestedEmail?: string }) {
+  const [provider, setProvider] = useState<CalendarProvider>(initialProvider);
   return (
     <div className="calendar-connections">
       <div className="calendar-connections-header">
@@ -647,7 +654,7 @@ export function CalendarConnections({ api }: { api: CorosLinkApi }) {
           </button>
         </div>
       </div>
-      <CalendarConnection key={provider} api={api} provider={provider} />
+      <CalendarConnection key={provider} api={api} provider={provider} suggestedEmail={suggestedEmail} />
     </div>
   );
 }

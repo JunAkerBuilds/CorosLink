@@ -866,6 +866,49 @@ export interface CorosWatchfaceExerciseSeparatorStyle {
   artwork?: CorosWatchfaceArtwork | null;
 }
 
+/** Authored native 4.9.9 data layer, in master-preview pixels. */
+export type CorosWatchfaceNativeAssetRole = "digits" | "icon" | "states" | "unit" | "symbols" | "progress" | "decimal" | "background" | "mask" | "noDataMask";
+export type CorosWatchfaceNativePart = "value" | Exclude<CorosWatchfaceNativeAssetRole, "digits"> | "plot";
+export interface CorosWatchfaceNativePartStyle {
+  enabled?: boolean;
+  /** Offset from the layer origin, before its scale. */
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  color?: string;
+  fontFamily?: string;
+}
+
+export interface CorosWatchfaceNativeDataStyle {
+  enabled: boolean;
+  x: number;
+  y: number;
+  scale: number;
+  color: string;
+  fontFamily?: string;
+  /** Chart data-field prefix; not a verified selector for the watch's plotted history. */
+  chartSource?: string;
+  chartWidth?: number;
+  chartHeight?: number;
+  previewValue?: string;
+  parts?: Partial<Record<CorosWatchfaceNativePart, CorosWatchfaceNativePartStyle>>;
+  /** Optional text for individual generated sprites. PNG overrides take precedence. */
+  assetTexts?: Partial<Record<CorosWatchfaceNativeAssetRole, Record<string, string>>>;
+  assets?: Partial<Record<CorosWatchfaceNativeAssetRole, Record<string, string>>>;
+  chartStyle?: {
+    lineWidth?: number;
+    upperColor?: string;
+    lowerColor?: string;
+    selectedBarColor?: string;
+    unselectedBarColor?: string;
+    barWidth?: number;
+    barGap?: number;
+    /** Bars-only preview. Legacy "curve" values are preserved but render as bars. */
+    previewType?: "curve" | "bars";
+  };
+}
+
 export interface CorosWatchfaceDesignState {
   version: 1;
   /**
@@ -903,6 +946,7 @@ export interface CorosWatchfaceDesignState {
   tintLabels: boolean;
   tintIcons: boolean;
   previewComplication: string;
+  nativeData?: Record<string, CorosWatchfaceNativeDataStyle>;
   metricChanges: Record<string, boolean>;
   metricStyles: Record<string, { solidAlpha?: boolean; align?: "left" | "center" | "right"; color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Optional native calorie goal arc/bar configuration. */
@@ -1005,6 +1049,10 @@ export interface CorosWatchfaceDesignState {
     scale: number;
     /** Optional tint applied to all weather states. */
     color?: string;
+    /** Native current temperature above the weather icon; defaults to enabled. */
+    temperatureEnabled?: boolean;
+    /** Optional numbered PNG overrides; missing states retain bundled SIMPLE assets. */
+    assets?: Partial<Record<"day" | "night" | "digits" | "symbols" | "units", Record<string, string>>>;
   };
   layoutOffsets: Record<string, { dx: number; dy: number }>;
   /**
@@ -1086,6 +1134,7 @@ export type CorosWatchfaceModeDesignState = Partial<
     | "staticSeparators"
     | "ampmIndicator"
     | "weatherIndicator"
+    | "nativeData"
     | "layoutOffsets"
     | "linkedLayerGroups"
     | "editorGroups"

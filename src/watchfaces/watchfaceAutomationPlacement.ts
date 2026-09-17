@@ -57,7 +57,7 @@ export class WatchfacePlacementError extends Error {
 
 function movementKeyForLayer(layer: ReturnType<typeof deriveEditorLayers>[number]): string | null {
   if (layer.kind === "customSprite") return layer.id;
-  if (layer.staticSeparatorId || layer.ampmIndicator || layer.weatherIndicator) {
+  if (layer.staticSeparatorId || layer.ampmIndicator || layer.weatherIndicator || layer.nativeDataId) {
     return layer.id;
   }
   if (layer.layoutGroupId && layer.capabilities.position) {
@@ -436,6 +436,11 @@ export function moveWatchfacePlacementLayers(
         }
       };
       continue;
+    }
+    if (key.startsWith("native:")) {
+      const id = key.slice(7), style = next.nativeData?.[id];
+      if (!style) placementFail("placement.unsupported", "Native data layer is missing.");
+      next = {...next, nativeData: {...next.nativeData, [id]: {...style, x: style.x + requested.dx, y: style.y + requested.dy}}}; continue;
     }
     if (key === "weather") {
       const bounds = scene.layers.find((layer) => layer.id === "weather")?.bounds;

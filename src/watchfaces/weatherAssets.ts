@@ -8,7 +8,6 @@ import {
   COROS_CONFIG_DELETE_VALUE,
   loadStudioImage,
   parseConfigPos,
-  parseConfigRect,
   pickPreviewResolution,
   resizeAndTintSprite
 } from "./watchfaceStudio";
@@ -21,44 +20,41 @@ export interface WatchfaceWeatherStyle {
   scale: number;
   /** Optional tint applied consistently to all 41 states. */
   color?: string;
+  temperatureEnabled?: boolean;
+  assets?: Partial<Record<WeatherAssetSet, Record<string, string>>>;
 }
 
-const weather416 = import.meta.glob(
-  "../assets/watchfaces/weather/416/*.png",
-  { eager: true, query: "?url", import: "default" }
-) as Record<string, string>;
-const weather800 = import.meta.glob(
-  "../assets/watchfaces/weather/800/*.png",
+const bundled = import.meta.glob(
+  "../assets/watchfaces/weather/simple/**/*.png",
   { eager: true, query: "?url", import: "default" }
 ) as Record<string, string>;
 
-function orderedUrls(files: Record<string, string>): string[] {
-  return Object.entries(files)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([, url]) => url);
+export type WeatherAssetSet = "day" | "night" | "digits" | "symbols" | "units";
+const sourceFolders: Record<WeatherAssetSet, string> = {
+  day: "weather", night: "weather2", digits: "38x38", symbols: "symbols", units: "dgree_unit"
+};
+const outputFolders: Record<WeatherAssetSet, string> = {
+  day: "weather", night: "weather2", digits: "cl_weather_temp", symbols: "cl_weather_symbols", units: "cl_weather_units"
+};
+export const WEATHER_ASSET_COUNTS: Record<WeatherAssetSet, number> = {
+  day: 41, night: 41, digits: 10, symbols: 2, units: 2
+};
+
+export function weatherAssetUrl(set: WeatherAssetSet, index: number, style?: WatchfaceWeatherStyle): string {
+  return style?.assets?.[set]?.[String(index)] ??
+    bundled[`../assets/watchfaces/weather/simple/${sourceFolders[set]}/${String(index).padStart(2, "0")}.png`] ?? "";
 }
 
-const urls416 = orderedUrls(weather416);
-const urls800 = orderedUrls(weather800);
-
-/**
- * Existing weather-enabled templates dictate their own frame dimensions. For
- * example, the decoded PLANET and GO FISHING binaries both target 416px
- * screens but use 76px and 42px frames respectively. Keep an existing weather
- * folder's dimensions exact; only use our bundled-art dimensions when adding
- * weather to a template that does not already have the feature.
- */
+// SIMPLE uses an 89px square icon on its 800px design canvas.
 function weatherSpriteSize(resolution: CorosWatchfaceResolutionDetails): number {
-  const folder = resolution.spriteFolders.find(
-    (item) =>
-      item.folder.replace(/^a\//i, "").toLowerCase() === "weather" &&
-      item.files.length === 41 &&
-      item.files.every((file) => file.width === file.height)
-  );
-  if (folder?.files[0]) {
-    return folder.files[0].width;
-  }
-  return resolution.width >= 800 ? 123 : 64;
+  return Math.max(1, Math.round(89 * resolution.width / 800));
+}
+
+export function weatherTemperatureGeometry(width: number, style: WatchfaceWeatherStyle) {
+  const scale = width / 800 * style.scale;
+  // Keep temperature attached above the icon, matching SIMPLE's layout.
+  return { x: Math.max(0, Math.min(width - 138 * scale, style.x + 10 * scale)),
+    y: Math.max(0, style.y - 89 * scale), scale };
 }
 
 export function getWeatherCapability(details: CorosWatchfaceTemplateDetails): {
@@ -103,12 +99,27 @@ export function buildWeatherOverrides(
     const values = style.enabled
       ? {
           weather_icon_pos: `{${Math.round(style.x * scale)},${Math.round(style.y * scale)}}`,
-          weather_icon_dir: "weather"
+          weather_icon_dir: "weather",
+          weather_dark_icon_dir: "weather2"
         }
       : {
           weather_icon_pos: COROS_CONFIG_DELETE_VALUE,
-          weather_icon_dir: COROS_CONFIG_DELETE_VALUE
+          weather_icon_dir: COROS_CONFIG_DELETE_VALUE,
+          weather_dark_icon_dir: COROS_CONFIG_DELETE_VALUE
         };
+    const temperature = weatherTemperatureGeometry(resolution.width, {
+      ...style, x: style.x * scale, y: style.y * scale
+    });
+    const temperatureValues: Record<string, string> = style.enabled && style.temperatureEnabled !== false
+      ? {
+          weather_temp_rect: `{${Math.round(temperature.x)},${Math.round(temperature.y)},${Math.round(temperature.x + 84 * temperature.scale)},${Math.round(temperature.y + 95 * temperature.scale)},left|vcenter}`,
+          weather_temp_font: "cl_weather_temp",
+          weather_negasign_icon: "cl_weather_symbols\\00.png",
+          weather_dgree_icon: "cl_weather_symbols\\01.png",
+          weather_temp_max_min_dgree_icon: "cl_weather_units"
+        }
+      : Object.fromEntries(["weather_temp_rect", "weather_temp_font", "weather_negasign_icon", "weather_dgree_icon", "weather_temp_max_min_dgree_icon"].map(key => [key, COROS_CONFIG_DELETE_VALUE]));
+    Object.assign(values, temperatureValues);
     const hasWeatherKeys = (config: Record<string, string>) =>
       Object.prototype.hasOwnProperty.call(config, "weather_icon_pos") ||
       Object.prototype.hasOwnProperty.call(config, "weather_icon_dir");
@@ -116,7 +127,7 @@ export function buildWeatherOverrides(
 
     // AODconfig uses the same weather source folder. COROS compiles it into a
     // separate dimmed 41-frame table, so do not add a second `a/weather` tree.
-    if (style.enabled || hasWeatherKeys(resolution.config)) {
+    if (style.enabled || hasWeatherKeys(resolution.config) || resolution.config.weather_temp_rect) {
       overrides.push({
         path: `${resolution.directory}/config.txt`,
         values
@@ -124,7 +135,7 @@ export function buildWeatherOverrides(
     }
     if (
       Object.keys(resolution.aodConfig).length > 0 &&
-      (style.enabled || hasWeatherKeys(resolution.aodConfig))
+      (style.enabled || hasWeatherKeys(resolution.aodConfig) || Boolean(resolution.aodConfig.weather_temp_rect))
     ) {
       overrides.push({
         path: `${resolution.directory}/AODconfig.txt`,
@@ -135,129 +146,58 @@ export function buildWeatherOverrides(
   });
 }
 
-/**
- * Auto-places the fixed temperature element beside the weather icon when both
- * are enabled. `buildMetricOverrides` emits `temperature_rect` at a default
- * spot; this reads that existing rect (for its size and alignment) and moves it
- * to sit just right of the weather icon, vertically centered on it. It targets
- * only resolutions where the fixed temperature is active, and no-ops otherwise,
- * so it never invents a temperature element the design did not ask for.
- */
-export function buildWeatherTemperaturePlacementOverrides(
-  details: CorosWatchfaceTemplateDetails,
-  style: WatchfaceWeatherStyle
-): CorosWatchfaceConfigOverride[] {
-  if (!style.enabled) {
-    return [];
-  }
-  const base = pickPreviewResolution(details);
-  if (!base) {
-    return [];
-  }
-  const overrides: CorosWatchfaceConfigOverride[] = [];
-  for (const resolution of details.resolutions) {
-    const rawValue = resolution.config.temperature_rect;
-    const rect = parseConfigRect(rawValue);
-    if (!rect) {
-      // Temperature is not active on this resolution; leave it untouched.
-      continue;
-    }
-    const resScale = resolution.width / base.width;
-    const iconSize = weatherSpriteSize(resolution) * style.scale;
-    const iconX = style.x * resScale;
-    const iconY = style.y * resScale;
-    const width = rect.x1 - rect.x0;
-    const height = rect.y1 - rect.y0;
-    const gap = Math.max(2, Math.round(iconSize * 0.12));
-    const x0 = Math.max(
-      0,
-      Math.min(Math.round(iconX + iconSize + gap), resolution.width - width)
-    );
-    const y0 = Math.max(
-      0,
-      Math.min(
-        Math.round(iconY + iconSize / 2 - height / 2),
-        resolution.height - height
-      )
-    );
-    const suffix =
-      rawValue?.match(
-        /^\{\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*((?:,[^}]*)?)\}$/
-      )?.[1] || ",hcenter|vcenter";
-    overrides.push({
-      path: `${resolution.directory}/config.txt`,
-      values: {
-        temperature_rect: `{${x0},${y0},${x0 + width},${y0 + height}${suffix}}`
-      }
-    });
-  }
-  return overrides;
+export function weatherPreviewUrl(_width: number, style?: WatchfaceWeatherStyle, sample?: { condition: number; night: boolean }): string {
+  return weatherAssetUrl(sample?.night ? "night" : "day", sample?.condition ?? 0, style);
 }
 
-async function imageUrlToDataUrl(url: string, edge: number): Promise<string> {
-  const image = await loadStudioImage(url);
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(edge));
-  canvas.height = Math.max(1, Math.round(edge));
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("Weather sprite rendering is unavailable in this window.");
-  }
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/png");
-}
-
-export function weatherPreviewUrl(width: number): string {
-  return (width >= 800 ? urls800 : urls416)[0] ?? "";
-}
-
-export async function weatherPreviewDataUrl(
-  width: number,
-  color?: string
-): Promise<string> {
-  const url = weatherPreviewUrl(width);
-  if (!url || !color) return url;
-  const edge = width >= 800 ? 123 : 64;
+export async function weatherPreviewDataUrl(width: number, color?: string, style?: WatchfaceWeatherStyle, sample?: { condition: number; night: boolean }): Promise<string> {
+  const url = weatherPreviewUrl(width, style, sample);
+  const edge = Math.max(1, Math.round(89 * width / 800));
   return resizeAndTintSprite(url, edge, edge, color);
+}
+
+/** Preview uses the same raster digits and placement as the exported native field. */
+export async function drawWeatherTemperaturePreview(canvas: HTMLCanvasElement, width: number, style: WatchfaceWeatherStyle, value = "18"): Promise<void> {
+  if (!style.enabled || style.temperatureEnabled === false) return;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const geometry = weatherTemperatureGeometry(width, style);
+  const previewScale = canvas.width / width;
+  const scale = geometry.scale * previewScale;
+  let x = geometry.x * previewScale;
+  const temperature = Number.isFinite(Number(value)) ? Math.max(-999, Math.min(999, Math.round(Number(value)))) : 18;
+  const glyphs: Array<[WeatherAssetSet, number, number]> = [...String(temperature)].map(char => char === "-" ? ["symbols", 0, 54] : ["digits", Number(char), 42]);
+  glyphs.push(["symbols", 1, 54]);
+  for (const [set, index, glyphWidth] of glyphs) {
+    const url = await resizeAndTintSprite(weatherAssetUrl(set, index, style), Math.max(1, Math.round(glyphWidth * scale)), Math.max(1, Math.round(95 * scale)), style.color);
+    const image = await loadStudioImage(url);
+    context.drawImage(image, x, geometry.y * previewScale);
+    x += glyphWidth * scale;
+  }
 }
 
 export async function buildWeatherSpriteReplacements(
   details: CorosWatchfaceTemplateDetails,
   style: WatchfaceWeatherStyle
 ): Promise<CorosWatchfaceAssetReplacement[]> {
-  if (!style.enabled) {
-    return [];
-  }
+  if (!style.enabled) return [];
   const replacements: CorosWatchfaceAssetReplacement[] = [];
   for (const resolution of details.resolutions) {
-    const urls = resolution.width >= 800 ? urls800 : urls416;
-    if (urls.length !== 41) {
-      throw new Error("The stored weather set must contain exactly 41 sprites.");
+    const scale = resolution.width / 800 * style.scale;
+    for (const set of Object.keys(sourceFolders) as WeatherAssetSet[]) {
+      if (style.temperatureEnabled === false && !["day", "night"].includes(set)) continue;
+      for (let index = 0; index < WEATHER_ASSET_COUNTS[set]; index++) {
+        const url = weatherAssetUrl(set, index, style);
+        if (!url) throw new Error(`Missing ${set} weather asset ${index}.`);
+        // Custom artwork uses the same firmware frame as the default sprite.
+        const original = await loadStudioImage(weatherAssetUrl(set, index));
+        const dataUrl = await resizeAndTintSprite(url,
+          Math.max(1, Math.round(original.naturalWidth * scale)),
+          Math.max(1, Math.round(original.naturalHeight * scale)), style.color);
+        const path = `${resolution.directory}/${outputFolders[set]}/${String(index).padStart(2, "0")}.png`;
+        replacements.push({ path, dataUrl, create: !resolution.icons.some(file => file.path === path) && !resolution.spriteFolders.some(folder => folder.files.some(file => file.path === path)) });
+      }
     }
-    const edge = weatherSpriteSize(resolution) * style.scale;
-    const dataUrls = await Promise.all(
-      urls.map(async (url) => {
-        const dataUrl = await imageUrlToDataUrl(url, edge);
-        return style.color
-          ? resizeAndTintSprite(dataUrl, Math.round(edge), Math.round(edge), style.color)
-          : dataUrl;
-      })
-    );
-    dataUrls.forEach((dataUrl, index) => {
-      const path = `${resolution.directory}/weather/${String(index).padStart(2, "0")}.png`;
-      replacements.push({
-        path,
-        dataUrl,
-        // A weather-enabled starter already has these assets. Replace them
-        // in place; marking them as new makes archive validation reject the
-        // collision before COROS gets a chance to compile the face.
-        create: !resolution.spriteFolders.some((folder) =>
-          folder.files.some((file) => file.path === path)
-        )
-      });
-    });
   }
   return replacements;
 }
