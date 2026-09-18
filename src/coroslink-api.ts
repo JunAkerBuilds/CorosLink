@@ -134,6 +134,8 @@ import type {
   CorosWatchfaceArchiveExportInput,
   CorosWatchfaceArtwork,
   CorosWatchfaceCreatorInput,
+  CorosWatchfaceConversionInput,
+  CorosWatchfaceConversionResult,
   CorosWatchfaceExistingShareInput,
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceProject,
@@ -245,6 +247,7 @@ export interface CorosLinkApi {
   ) => Promise<CorosLegacy614aCarrierExportResult>;
   chooseCorosWatchfaceArtwork: () => Promise<CorosWatchfaceArtwork | null>;
   chooseCorosWatchfaceRasterFontFolder: () => Promise<CorosWatchfaceRasterFontFolder | null>;
+  convertCorosWatchfaceArchive: (input: CorosWatchfaceConversionInput) => Promise<CorosWatchfaceConversionResult>;
   createCorosWatchfaceArchive: (
     input: CorosWatchfaceCreatorInput
   ) => Promise<CorosWatchfaceArchive>;

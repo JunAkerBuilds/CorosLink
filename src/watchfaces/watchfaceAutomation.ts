@@ -55,7 +55,7 @@ export interface WatchfaceAutomationConversionInput {
   design: CorosWatchfaceDesignState;
   name: string;
   sourceDirty: boolean;
-  targetArchive: CorosWatchfaceArchive;
+  targetArchive?: CorosWatchfaceArchive;
   firmwareType?: string;
   watchModel?: WatchModelId;
 }

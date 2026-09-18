@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Activity, ChartNoAxesCombined, Check, ChevronDown, Circle, CloudSun, Image, Minus, MoonStar, Plus, Search, Square, TrendingUp, Type, X } from "lucide-react";
 import type { CorosWatchfaceBackgroundElement, CorosWatchfaceDesignState } from "../../electron/types";
-import { NATIVE_CHART_LINE_AVAILABILITY, NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS } from "../../electron/watchfaceNativeCatalog";
 
 const categories = ["All", "Weather", "Health", "Training", "Astronomy", "Charts"] as const;
 type Category = typeof categories[number];
@@ -127,7 +127,6 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddEleme
           const Icon = categoryIcons[group];
           return <section key={group} aria-label={group}>
             <h3><Icon size={13} aria-hidden="true" />{group}{group === "Charts" && " · Experimental"}<span>{options.length}</span></h3>
-            {group === "Charts" && <p className="wf-layer-picker-notice">Line graphs — {NATIVE_CHART_LINE_AVAILABILITY.label}</p>}
             {options.map(option => {
               const [field, source] = option.id.split(":");
               const existing = design.nativeData?.[field];

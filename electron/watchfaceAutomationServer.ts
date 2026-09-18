@@ -170,11 +170,11 @@ function editorToolDefinitions(assetStore: WatchfaceAutomationAssetStore): ToolD
     },
     {
       name: "convert", title: "Convert watch-face template",
-      description: "Convert the open design onto another already-selected compatible starter archive. This opens a new editor session.",
+      description: "Convert the open design by watchModel, preserving its layout, fonts, assets, raw edits and AOD. The destination carrier is selected automatically. Opens a new editor session after success.",
       method: WATCHFACE_AUTOMATION_METHODS.convert,
       schema: {
         ...sessionFields,
-        targetArchive: z.string().min(1).max(200),
+        targetArchive: z.string().min(1).max(200).optional(),
         name: z.string().max(80).optional(),
         firmwareType: z.string().max(120).optional(),
         watchModel: z.string().max(80).optional()

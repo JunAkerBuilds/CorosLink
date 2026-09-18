@@ -9,6 +9,12 @@ export interface PreparedWatchfaceConversion {
   omittedRawConfigEditCount: number;
 }
 
+/** Electron wraps rejected IPC calls, so match the service's sign-in messages. */
+export function isWatchfaceSignInRequired(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Sign in to your COROS mobile account\b|Your COROS mobile session expired\./i.test(message);
+}
+
 /**
  * Archive resolution profiles describe canvas dimensions, not device identity.
  * Only trust firmware carried by the archive; otherwise keep the model the user
@@ -22,22 +28,23 @@ export function firmwareTypeForWatchfaceArchive(
 }
 
 /**
- * Keeps a lossless source snapshot for cancellation and removes only raw
- * archive-path edits from the portable copy. Semantic Studio edits are authored
- * against the shared 800px master and can be recomposed on the target template.
+ * Only clear raw edits after the archive converter has incorporated them into
+ * the new baseline. Visual state stays editable in the shared 800px master.
  */
 export function prepareWatchfaceConversion(
-  design: CorosWatchfaceDesignState
+  design: CorosWatchfaceDesignState,
+  options: { rawEditsApplied?: boolean; generatedAod?: boolean } = {}
 ): PreparedWatchfaceConversion {
   const sourceDesign = structuredClone(design);
   const portableDesign = structuredClone(sourceDesign);
-  const omittedRawConfigEditCount = Object.keys(
-    portableDesign.configTextEdits ?? {}
-  ).length;
-  delete portableDesign.configTextEdits;
+  if (options.rawEditsApplied) delete portableDesign.configTextEdits;
+  if (options.generatedAod && !portableDesign.modeDesigns?.aod) {
+    const { version, modeDesigns, configTextEdits, archiveWatchFaceVersion, stripBlankConfigKeys, ...visual } = structuredClone(portableDesign);
+    portableDesign.modeDesigns = { aod: { ...visual, backgroundEdited: true } };
+  }
   return {
     design: portableDesign,
     sourceDesign,
-    omittedRawConfigEditCount
+    omittedRawConfigEditCount: 0
   };
 }

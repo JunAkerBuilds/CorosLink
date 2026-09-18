@@ -1,4 +1,5 @@
 import { WatchfaceAddMenu } from "./WatchfaceAddMenu";
+import { recoverWatchfaceDesign } from "./recoveredWatchfaceDesign";
 import { WatchfaceSimulationPanel } from "./WatchfaceSimulationPanel";
 import { useWatchfaceSimulation } from "./useWatchfaceSimulation";
 import { WATCHFACE_SIMULATION_CAPABILITIES, activeSimulationScenario, createWatchfaceSimulation, parseWatchfacePreviewScenario, patchWatchfaceSimulation, simulationStudioOptions, type WatchfacePreviewScenario } from "./watchfaceSimulation";
@@ -261,7 +262,10 @@ import {
   MousePointerSquareDashed,
   X,
   XCircle,
-  MoonStar
+  MoonStar,
+  Watch,
+  Maximize2,
+  Minimize2
 } from "lucide-react";
 import {
   resizeWatchfaceDimensions,
@@ -694,6 +698,7 @@ function drawWeatherPreviewLayer(
 interface WatchfaceEditorProps {
   api: CorosLinkApi;
   active: boolean;
+  conversionBusy?: boolean;
   sessionId: string;
   starterArchive: CorosWatchfaceArchive;
   targetFirmwareType?: string;
@@ -716,12 +721,12 @@ interface WatchfaceEditorProps {
   ) => void;
   onAutomationConvert: (
     input: WatchfaceAutomationConversionInput
-  ) => {
+  ) => Promise<{
     opened: boolean;
     name: string;
     targetFirmwareType: string;
     omittedRawConfigEditCount: number;
-  };
+  }>;
   onError: (message: string) => void;
   onNotice: (message: string) => void;
   onClearMessages: () => void;
@@ -1047,6 +1052,7 @@ export function WatchfaceEditor({
   onArchiveCreated,
   onProjectSaved,
   onConvertTarget,
+  conversionBusy = false,
   onAutomationConvert,
   onError,
   onNotice,
@@ -1088,6 +1094,8 @@ export function WatchfaceEditor({
   const dragPreparationIdRef = useRef(0);
   const dragCommitIdRef = useRef(0);
   const placementMenuRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLElement>(null);
+  const [stageFullscreen, setStageFullscreen] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const assetCacheRef = useRef(new Map<string, CorosWatchfaceTemplateAsset>());
   const dragRef = useRef<WatchfaceDragState | null>(null);
@@ -1152,6 +1160,49 @@ export function WatchfaceEditor({
   const [previewMode, setPreviewMode] = useState<WatchfacePreviewMode>("current");
   const automationModeRef = useRef<WatchfacePreviewMode>("current");
   const { simulation, simulationRef, updateSimulation, simulationScenario } = useWatchfaceSimulation();
+
+  // Full-screen editor: an in-window view that hides the app header and
+  // sidebar so the whole studio (panes, command bar, stage) fills the window.
+  // OS fullscreen is asked for on top of that; the view works the same when
+  // the window declines.
+  useEffect(() => {
+    if (!stageFullscreen) return;
+    document.documentElement.dataset.editorFullscreen = "true";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || document.fullscreenElement) return;
+      setStageFullscreen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      delete document.documentElement.dataset.editorFullscreen;
+    };
+  }, [stageFullscreen]);
+  useEffect(() => {
+    // Leaving OS fullscreen (Esc, the green button) also leaves the canvas view.
+    const sync = () => {
+      if (!document.fullscreenElement) setStageFullscreen(false);
+    };
+    document.addEventListener("fullscreenchange", sync);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      if (document.fullscreenElement === editorRef.current) void document.exitFullscreen().catch(() => {});
+    };
+  }, []);
+  const toggleStageFullscreen = () => {
+    if (stageFullscreen) {
+      setStageFullscreen(false);
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+      return;
+    }
+    setStageFullscreen(true);
+    const editor = editorRef.current;
+    if (editor && document.fullscreenEnabled) {
+      editor.requestFullscreen({ navigationUI: "hide" }).catch((error: unknown) => {
+        console.warn("[watchface-studio] OS fullscreen unavailable; using the in-window full-screen view.", error);
+      });
+    }
+  };
   const [automationPreviewComplication, setAutomationPreviewComplication] =
     useState<WatchfaceComplicationId | null>(null);
   const design = useMemo(
@@ -1599,7 +1650,7 @@ export function WatchfaceEditor({
           }
         }
         if (hasWatchfaceAod(described) && !initialDesign?.modeDesigns?.aod) {
-          const preferred = pickWatchPreviewResolution(described);
+          const preferred = pickWatchPreviewResolution(described, targetWatchModel ?? targetFirmwareType);
           const aodResolutions = [
             ...(preferred ? [preferred] : []),
             ...described.resolutions.filter(
@@ -1625,6 +1676,11 @@ export function WatchfaceEditor({
             }
           }
         }
+        const recoverAssets = starterArchive.recoveredFromCompiled && !initialDesign;
+        const recoveredCurrent = recoverAssets
+          ? await recoverWatchfaceDesign(described, loadAssets) : undefined;
+        const recoveredAod = recoverAssets && hasWatchfaceAod(described)
+          ? await recoverWatchfaceDesign(detailsForCompositionMode(described, "aod"), loadAssets) : undefined;
         if (cancelled) return;
 
         const baselines: Record<string, string> = {};
@@ -1732,7 +1788,7 @@ export function WatchfaceEditor({
         }
         if (hasWatchfaceAod(described) && !nextDesign.modeDesigns?.aod) {
           const sourceResolution =
-            pickWatchPreviewResolution(described) ??
+            pickWatchPreviewResolution(described, targetWatchModel ?? targetFirmwareType) ??
             described.resolutions.find(
               (resolution) => Object.keys(resolution.aodConfig).length > 0
             );
@@ -1771,6 +1827,12 @@ export function WatchfaceEditor({
             }
           };
         }
+        if (recoveredCurrent) {
+          nextDesign = { ...nextDesign, ...recoveredCurrent };
+          if (recoveredAod && nextDesign.modeDesigns?.aod) {
+            nextDesign = { ...nextDesign, modeDesigns: { aod: { ...nextDesign.modeDesigns.aod, ...recoveredAod } } };
+          }
+        }
         const initialized = {
           ...current,
           present: {
@@ -1801,7 +1863,8 @@ export function WatchfaceEditor({
     loadAssets,
     onError,
     sessionId,
-    starterArchive.archiveId
+    starterArchive.archiveId,
+    starterArchive.recoveredFromCompiled
   ]);
 
   const backgroundDesign = useMemo(
@@ -1983,8 +2046,8 @@ export function WatchfaceEditor({
   const watchPreviewResolution = useMemo(
     () => previewDetails?.resolutions.find(
       (resolution) => resolution.directory === watchPreviewDirectory
-    ) ?? (previewDetails ? pickWatchPreviewResolution(previewDetails) : null),
-    [previewDetails, watchPreviewDirectory]
+    ) ?? (previewDetails ? pickWatchPreviewResolution(previewDetails, targetWatchModel ?? targetFirmwareType) : null),
+    [previewDetails, watchPreviewDirectory, targetWatchModel, targetFirmwareType]
   );
   const renderedPreviewDetails = useMemo(
     () => previewDetails && watchPreviewResolution
@@ -2049,9 +2112,9 @@ export function WatchfaceEditor({
         (resolution) => resolution.directory === current
       )
         ? current
-        : pickWatchPreviewResolution(previewDetails)?.directory ?? ""
+        : pickWatchPreviewResolution(previewDetails, targetWatchModel ?? targetFirmwareType)?.directory ?? ""
     );
-  }, [previewDetails]);
+  }, [previewDetails, targetWatchModel, targetFirmwareType]);
 
   useEffect(() => {
     if (!watchPreviewDirectory) return;
@@ -5738,6 +5801,9 @@ export function WatchfaceEditor({
       fontStyle?: "normal" | "italic";
       letterSpacing?: number;
       rasterFont?: CorosWatchfaceDesignState["rasterFont"];
+      overwriteAllLanguages?: boolean;
+      /** Additional language prefixes to replace when all languages is off. */
+      overwriteLanguages?: string[];
       nativeSize?: boolean;
     }
   ) {
@@ -6104,7 +6170,7 @@ export function WatchfaceEditor({
         (resolution) => resolution.directory === resolutionDirectory
       ) ??
       (snapshotPreviewDetails
-        ? pickWatchPreviewResolution(snapshotPreviewDetails)
+        ? pickWatchPreviewResolution(snapshotPreviewDetails, targetWatchModel ?? targetFirmwareType)
         : null);
     const exportDetails =
       snapshotPreviewDetails && snapshotTargetResolution
@@ -6834,6 +6900,7 @@ export function WatchfaceEditor({
   ]);
 
   function automationBusy(): boolean {
+    if (conversionBusy) return true;
     return Boolean(
       historyRef.current.transactionBase ||
       dragRef.current ||
@@ -7271,7 +7338,7 @@ export function WatchfaceEditor({
         ? details?.resolutions.find((candidate) => candidate.width === requestedResolution)
         : details?.resolutions.find(
             (candidate) => candidate.directory === requestedResolution
-          ) ?? pickWatchPreviewResolution(details!);
+          ) ?? pickWatchPreviewResolution(details!, targetWatchModel ?? targetFirmwareType);
       if (!targetResolution) {
         throw new WatchfaceAutomationError("UNKNOWN_RESOLUTION", "No preview resolution is available.");
       }
@@ -7376,8 +7443,8 @@ export function WatchfaceEditor({
         throw new WatchfaceAutomationError("EDITOR_BUSY", "Finish the active edit before converting.");
       }
       const targetArchive = params.targetArchive as CorosWatchfaceArchive | undefined;
-      if (!targetArchive?.archiveId) {
-        throw new WatchfaceAutomationError("INVALID_PARAMS", "convert requires targetArchive.");
+      if (!targetArchive?.archiveId && !params.watchModel && !params.firmwareType) {
+        throw new WatchfaceAutomationError("INVALID_PARAMS", "convert requires watchModel.");
       }
       const value = historyRef.current.present.value;
       return onAutomationConvert({
@@ -7456,7 +7523,7 @@ export function WatchfaceEditor({
     ?? layers.find((layer) => layer.timePartId);
 
   return (
-    <section className="watchface-editor wf-studio" aria-label="Watch face studio">
+    <section ref={editorRef} className={`watchface-editor wf-studio${stageFullscreen ? " is-editor-fullscreen" : ""}`} aria-label="Watch face studio" inert={conversionBusy}>
       <header className="watchface-editor-topbar wf-command-bar">
         <button className="wf-icon-button wf-back-button" type="button" onClick={requestBack}>
           <ArrowLeft size={18} aria-hidden="true" />
@@ -7559,7 +7626,7 @@ export function WatchfaceEditor({
                   className="is-convert"
                   type="button"
                   role="menuitem"
-                  disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
+                  disabled={saving || spriteImportPending || creating || exporting || previewingExport || !backgroundDataUrl}
                   onClick={() => {
                     setExportMenuOpen(false);
                     const snapshot = historyRef.current.present.value;
@@ -7949,13 +8016,22 @@ export function WatchfaceEditor({
         </aside>
 
         <main className="watchface-editor-stage wf-stage">
-          <div className="wf-stage-toolbar" aria-label="Preview controls">
+          <div className="wf-stage-toolbar wf-stage-toolbar--floating" role="toolbar" aria-label="Preview controls">
             <div className="wf-zoom-control">
               <button type="button" aria-pressed={stageZoom === "fit"} onClick={() => setStageZoom("fit")}>Fit</button>
-              <button type="button" aria-pressed={stageZoom === 1} onClick={() => setStageZoom(1)}>100%</button>
               <button type="button" aria-label="Zoom out" onClick={() => setStageZoom((zoom) => Math.max(0.6, (zoom === "fit" ? 1 : zoom) - 0.1))}><Minus size={15} aria-hidden="true" /></button>
+              <button
+                type="button"
+                className="wf-zoom-value"
+                aria-pressed={stageZoom === 1}
+                title="Reset zoom to 100%"
+                onClick={() => setStageZoom(1)}
+              >
+                {stageZoom === "fit" ? "100%" : `${Math.round(stageZoom * 100)}%`}
+              </button>
               <button type="button" aria-label="Zoom in" onClick={() => setStageZoom((zoom) => Math.min(1.4, (zoom === "fit" ? 1 : zoom) + 0.1))}><Plus size={15} aria-hidden="true" /></button>
             </div>
+            <span className="wf-toolbar-divider" aria-hidden="true" />
             <div className="wf-preview-mode-switch" role="group" aria-label="Watch display preview">
               <button
                 type="button"
@@ -7975,9 +8051,11 @@ export function WatchfaceEditor({
                 <MoonStar size={14} aria-hidden="true" /> Always-on
               </button>
             </div>
+            <span className="wf-toolbar-divider" aria-hidden="true" />
             {previewDetails && previewDetails.resolutions.length > 1 ? (
-              <label className="wf-preview-resolution">
-                Watch preview
+              <label className="wf-preview-resolution" title="Watch preview">
+                <Watch size={14} aria-hidden="true" />
+                <span className="sr-only">Watch preview</span>
                 <select
                   value={watchPreviewResolution?.directory ?? ""}
                   onChange={(event) => setWatchPreviewDirectory(event.target.value)}
@@ -8001,6 +8079,7 @@ export function WatchfaceEditor({
               </label>
             ) : null}
             <WatchfaceSimulationPanel simulation={simulation} onChange={updateSimulation} design={design} />
+            <span className="wf-toolbar-divider" aria-hidden="true" />
             {canEditActiveMode ? <div className="wf-placement-menu" ref={placementMenuRef}>
               <button
                 className={`wf-placement-trigger${
@@ -8106,6 +8185,17 @@ export function WatchfaceEditor({
                 {supportsAod ? "AODconfig.txt" : "Current face stays on"}
               </span>
             )}
+            <span className="wf-toolbar-divider" aria-hidden="true" />
+            <button
+              type="button"
+              className="wf-stage-fullscreen"
+              aria-pressed={stageFullscreen}
+              aria-label={stageFullscreen ? "Exit full screen" : "Open the editor in full screen"}
+              title={stageFullscreen ? "Exit full screen (Esc)" : "Full screen"}
+              onClick={toggleStageFullscreen}
+            >
+              {stageFullscreen ? <Minimize2 size={15} aria-hidden="true" /> : <Maximize2 size={15} aria-hidden="true" />}
+            </button>
           </div>
           {previewMode === "aod" && supportsAod ? (
             <p className="watchface-studio-summary">
@@ -10769,6 +10859,43 @@ export function WatchfaceEditor({
             "specific",
             "Typography",
             <div className="wf-property-stack">
+              {partId === "weekday" ? (
+                <div className="wf-weekday-languages">
+                  <label className="field">
+                    Apply weekday labels to
+                    <select
+                      value={style?.overwriteAllLanguages ? "all" : style?.overwriteLanguages ? "selected" : "english"}
+                      onChange={(event) => setDateStyle(partId, {
+                        overwriteAllLanguages: event.target.value === "all",
+                        overwriteLanguages: event.target.value === "selected" ? style?.overwriteLanguages ?? [] : undefined
+                      })}
+                    >
+                      <option value="english">English only</option>
+                      <option value="all">All languages</option>
+                      <option value="selected">Specific languages</option>
+                    </select>
+                  </label>
+                  {!style?.overwriteAllLanguages && style?.overwriteLanguages ? (
+                    <div className="wf-weekday-language-options" role="group" aria-label="Additional weekday languages">
+                      {[...new Set((details?.resolutions ?? []).flatMap((resolution) => Object.keys(resolution.config)
+                        .filter((key) => key.endsWith("_date_week_font") && !key.startsWith("control_"))
+                        .map((key) => key.replace(/_date_week_font$/, ""))))]
+                        .filter((language) => language !== "english").sort().map((language) => (
+                          <label key={language}>
+                            <input type="checkbox" checked={style.overwriteLanguages!.includes(language)}
+                              onChange={(event) => setDateStyle(partId, { overwriteLanguages: event.target.checked
+                                ? [...style.overwriteLanguages!, language]
+                                : style.overwriteLanguages!.filter((value) => value !== language) })} />
+                            <span>{({ chinese: "Chinese (Simplified)", chinese_tw: "Chinese (Traditional)", germany: "German",
+                              spanish: "Spanish", french: "French", japanese: "Japanese", thai: "Thai", polish: "Polish",
+                              portugal: "Portuguese", italian: "Italian" } as Record<string, string>)[language] ?? language}</span>
+                          </label>
+                        ))}
+                    </div>
+                  ) : null}
+                  <small>English always uses your custom labels. Other languages are preserved unless selected.</small>
+                </div>
+              ) : null}
               <LocalFontPicker
                 api={api}
                 label="Font"
@@ -11402,8 +11529,11 @@ export function WatchfaceEditor({
       "transform",
       "Transform",
       <div className="watchface-inspector-position">
-        <div className="wf-position-heading">
-          <span>{title}</span>
+        <div
+          className="wf-position-heading"
+          title={`${title}. Coordinates use the selected watch display.`}
+        >
+          <span>Position</span>
           <Info
             size={13}
             aria-label="Coordinates use the selected watch display"
@@ -11411,6 +11541,7 @@ export function WatchfaceEditor({
         </div>
         <fieldset
           className="wf-position-controls"
+          aria-label={title}
           disabled={isMovementLockedForId(id)}
         >
           {children}

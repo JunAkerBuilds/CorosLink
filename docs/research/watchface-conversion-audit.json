@@ -1,0 +1,1799 @@
+{
+  "auditedAt": "2026-09-17T15:53:01.225Z",
+  "uniquePackages": 102,
+  "targetFamilies": [
+    {
+      "model": "pace-pro",
+      "display": "amoled",
+      "sizes": [
+        416,
+        800
+      ]
+    },
+    {
+      "model": "pace-4",
+      "display": "amoled",
+      "sizes": [
+        390,
+        800
+      ]
+    },
+    {
+      "model": "pace-3",
+      "display": "mip",
+      "sizes": [
+        240,
+        260,
+        280,
+        800
+      ]
+    }
+  ],
+  "conversions": 306,
+  "failedPackages": 0,
+  "templates": [
+    {
+      "id": "250601",
+      "name": "1",
+      "packageUrl": "https://s3.coros.com/watchface_template/202605/17798096122WZ436GYVDJK5QCU2NLG.zip",
+      "resolutions": [
+        "watchface_416x416/AODconfig.txt",
+        "watchface_416x416/config.txt",
+        "watchface_800x800/AODconfig.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 1427,
+      "maxConvertedBytes": 2634122,
+      "failures": []
+    },
+    {
+      "id": "140001",
+      "name": "BOLD",
+      "packageUrl": "https://s3.coros.com/watchface_template/202605/1779808467BHXY667TP2H0EK3YN8XQ.zip",
+      "resolutions": [
+        "watchface_416x416/AODconfig.txt",
+        "watchface_416x416/config.txt",
+        "watchface_800x800/AODconfig.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 1427,
+      "maxConvertedBytes": 2634122,
+      "failures": []
+    },
+    {
+      "id": "260430",
+      "name": "PAPER CLIP",
+      "packageUrl": "https://s3.coros.com/watchface_template/202604/17774583423GOTONRK9N012E9R5X8Z.zip",
+      "resolutions": [
+        "watchface_416x416/AODconfig.txt",
+        "watchface_416x416/config.txt",
+        "watchface_800x800/AODconfig.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 1139,
+      "maxConvertedBytes": 3456005,
+      "failures": []
+    },
+    {
+      "id": "251134",
+      "name": "SLENDER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202511/176423916791W8T6F1F024FCR5MQ87.zip",
+      "resolutions": [
+        "watchface_416x416/AODconfig.txt",
+        "watchface_416x416/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1807,
+      "maxConvertedBytes": 3953357,
+      "failures": []
+    },
+    {
+      "id": "251132",
+      "name": "SLENDER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202511/17642379527OYITU0WRP519LMSVED0.zip",
+      "resolutions": [
+        "watchface_416x416/AODconfig.txt",
+        "watchface_416x416/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1807,
+      "maxConvertedBytes": 5979094,
+      "failures": []
+    },
+    {
+      "id": "251130",
+      "name": "SLENDER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202511/17642313658PXPSBXKL0JWPEDX035K.zip",
+      "resolutions": [
+        "watchface_416x416/AODconfig.txt",
+        "watchface_416x416/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1035,
+      "maxConvertedBytes": 4140161,
+      "failures": []
+    },
+    {
+      "id": "251128",
+      "name": "SLENDER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202511/1764231049NPYVSAZ24JK97FDG7FLV.zip",
+      "resolutions": [
+        "watchface_416x416/AODconfig.txt",
+        "watchface_416x416/config.txt",
+        "watchface_800x800/AODconfig.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 559,
+      "maxConvertedBytes": 2169324,
+      "failures": []
+    },
+    {
+      "id": "250507",
+      "name": "TOP PART2",
+      "packageUrl": "https://s3.coros.com/watchface_template/202505/1746517687HIRKR6OSD3MVDWPY8WQE.zip",
+      "resolutions": [
+        "watchface_416x416/AODconfig.txt",
+        "watchface_416x416/config.txt",
+        "watchface_800x800/AODconfig.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 575,
+      "maxConvertedBytes": 694304,
+      "failures": []
+    },
+    {
+      "id": "250506",
+      "name": "TOP PART",
+      "packageUrl": "https://s3.coros.com/watchface_template/202505/1746517652X6C1P4QORD8R8VFZQDH6.zip",
+      "resolutions": [
+        "watchface_416x416/AODconfig.txt",
+        "watchface_416x416/config.txt",
+        "watchface_800x800/AODconfig.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 575,
+      "maxConvertedBytes": 690420,
+      "failures": []
+    },
+    {
+      "id": "140002",
+      "name": "BOLD2",
+      "packageUrl": "https://s3.coros.com/watchface_template/202503/1741942009M1KL5XSBCPWYIACOH8VQ.zip",
+      "resolutions": [
+        "watchface_800x800/AODconfig.txt",
+        "watchface_800x800/config.txt",
+        "watchface_416x416/AODconfig.txt",
+        "watchface_416x416/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 471,
+      "maxConvertedBytes": 1003766,
+      "failures": []
+    },
+    {
+      "id": "150006",
+      "name": "MELLOW",
+      "packageUrl": "https://s3.coros.com/watchface_template/202410/1730184643FV37WDODFQQARIKH0IB4.zip",
+      "resolutions": [
+        "watchface_416x416/config.txt",
+        "watchface_416x416/AODconfig.txt",
+        "watchface_800x800/config.txt",
+        "watchface_800x800/AODconfig.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 395,
+      "maxConvertedBytes": 1235432,
+      "failures": []
+    },
+    {
+      "id": "150002",
+      "name": "BOLD2",
+      "packageUrl": "https://s3.coros.com/watchface_template/202410/1730184274VP4CU5Q2B79YTW6VXC7H.zip",
+      "resolutions": [
+        "watchface_416x416/config.txt",
+        "watchface_416x416/AODconfig.txt",
+        "watchface_800x800/config.txt",
+        "watchface_800x800/AODconfig.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 723,
+      "maxConvertedBytes": 1351817,
+      "failures": []
+    },
+    {
+      "id": "150003",
+      "name": "BOLD",
+      "packageUrl": "https://s3.coros.com/watchface_template/202410/1730184199N1V7APZ0FSOU4OBTV0AI.zip",
+      "resolutions": [
+        "watchface_416x416/config.txt",
+        "watchface_416x416/AODconfig.txt",
+        "watchface_800x800/config.txt",
+        "watchface_800x800/AODconfig.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 723,
+      "maxConvertedBytes": 1243578,
+      "failures": []
+    },
+    {
+      "id": "140010",
+      "name": "BOLD",
+      "packageUrl": "https://s3.coros.com/watchface_template/202510/17618118899EOB30P4X93AARTTC765.zip",
+      "resolutions": [
+        "watchface_390x390/AODconfig.txt",
+        "watchface_390x390/config.txt",
+        "watchface_800x800/AODconfig.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 1135,
+      "maxConvertedBytes": 2388586,
+      "failures": []
+    },
+    {
+      "id": "260429",
+      "name": "PAPER CLIP",
+      "packageUrl": "https://s3.coros.com/watchface_template/202604/1777458260PO3ZAVKBWEZLXAMR2P5Y.zip",
+      "resolutions": [
+        "watchface_390x390/AODconfig.txt",
+        "watchface_390x390/config.txt",
+        "watchface_800x800/AODconfig.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 1139,
+      "maxConvertedBytes": 3456005,
+      "failures": []
+    },
+    {
+      "id": "251133",
+      "name": "SLENDER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202511/1764239139WQV0RALK9RQ4JDMWBS4M.zip",
+      "resolutions": [
+        "watchface_390x390/AODconfig.txt",
+        "watchface_390x390/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1807,
+      "maxConvertedBytes": 4044130,
+      "failures": []
+    },
+    {
+      "id": "251131",
+      "name": "SLENDER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202511/1764237916UIBED2UPXQZWKUII7A8T.zip",
+      "resolutions": [
+        "watchface_390x390/AODconfig.txt",
+        "watchface_390x390/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1807,
+      "maxConvertedBytes": 6125005,
+      "failures": []
+    },
+    {
+      "id": "251129",
+      "name": "SLENDER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202511/17642313032GDNEVU6FOQMBZ2NNCTG.zip",
+      "resolutions": [
+        "watchface_390x390/AODconfig.txt",
+        "watchface_390x390/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1035,
+      "maxConvertedBytes": 4240508,
+      "failures": []
+    },
+    {
+      "id": "251127",
+      "name": "SLENDER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202511/1764230876AZOSDDD6QV7AXSK6SMSF.zip",
+      "resolutions": [
+        "watchface_800x800/AODconfig.txt",
+        "watchface_800x800/config.txt",
+        "watchface_390x390/AODconfig.txt",
+        "watchface_390x390/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 559,
+      "maxConvertedBytes": 2169324,
+      "failures": []
+    },
+    {
+      "id": "140021",
+      "name": "MELLOW",
+      "packageUrl": "https://s3.coros.com/watchface_template/202510/1761812255TNR33UU42RNNGKIKTQSQ.zip",
+      "resolutions": [
+        "watchface_390x390/AODconfig.txt",
+        "watchface_390x390/config.txt",
+        "watchface_800x800/AODconfig.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 395,
+      "maxConvertedBytes": 1235432,
+      "failures": []
+    },
+    {
+      "id": "140020",
+      "name": "BOLD 2",
+      "packageUrl": "https://s3.coros.com/watchface_template/202510/1761812202WB4SM98PIL67CX8RC83X.zip",
+      "resolutions": [
+        "watchface_390x390/AODconfig.txt",
+        "watchface_390x390/config.txt",
+        "watchface_800x800/AODconfig.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 723,
+      "maxConvertedBytes": 1360816,
+      "failures": []
+    },
+    {
+      "id": "140015",
+      "name": "BOLD 2",
+      "packageUrl": "https://s3.coros.com/watchface_template/202510/17618120589MWR9PHC50095JTO96IF.zip",
+      "resolutions": [
+        "watchface_800x800/AODconfig.txt",
+        "watchface_800x800/config.txt",
+        "watchface_390x390/AODconfig.txt",
+        "watchface_390x390/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 471,
+      "maxConvertedBytes": 1003766,
+      "failures": []
+    },
+    {
+      "id": "14001",
+      "name": "BOLD",
+      "packageUrl": "https://s3.coros.com/watchface_template/202510/1761810294CEW8LY3URCNVD60CGHKH.zip",
+      "resolutions": [
+        "watchface_390x390/AODconfig.txt",
+        "watchface_390x390/config.txt",
+        "watchface_800x800/AODconfig.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": true,
+      "maxConvertedFiles": 471,
+      "maxConvertedBytes": 1114540,
+      "failures": []
+    },
+    {
+      "id": "260902",
+      "name": "SIMPLE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202609/1789555772EKADBTYVIQTJEFO8ZJE9.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 794,
+      "maxConvertedBytes": 2054505,
+      "failures": []
+    },
+    {
+      "id": "260526",
+      "name": "BOLD 3",
+      "packageUrl": "https://s3.coros.com/watchface_template/202605/1779806662IPAFLJ8TN9MJVODIVGYF.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 430,
+      "maxConvertedBytes": 853999,
+      "failures": []
+    },
+    {
+      "id": "260515",
+      "name": "LOWER DOWN",
+      "packageUrl": "https://s3.coros.com/watchface_template/202605/1778830863N9U169QRNBSLW8N1Z5VP.zip",
+      "resolutions": [
+        "config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 554,
+      "maxConvertedBytes": 1309412,
+      "failures": []
+    },
+    {
+      "id": "129999",
+      "name": "BOLD3",
+      "packageUrl": "https://s3.coros.com/watchface_template/202605/1778496591JOHW3S1FC5GMDC8325FH.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 430,
+      "maxConvertedBytes": 853999,
+      "failures": []
+    },
+    {
+      "id": "251227",
+      "name": "SERIF",
+      "packageUrl": "https://s3.coros.com/watchface_template/202512/17668030259OG2WO5Y69TTOKEDPIYK.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 690,
+      "maxConvertedBytes": 2680543,
+      "failures": []
+    },
+    {
+      "id": "251226",
+      "name": "DIVIDED",
+      "packageUrl": "https://s3.coros.com/watchface_template/202512/17667418954K5R4E7VTI4X76M1HGUR.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt",
+        "watchface_260x260/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 530,
+      "maxConvertedBytes": 1740794,
+      "failures": []
+    },
+    {
+      "id": "10195022",
+      "name": "SLENDER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202511/17642391085QLO4X77VVNF04ROQ6BF.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 518,
+      "maxConvertedBytes": 884294,
+      "failures": []
+    },
+    {
+      "id": "10222282",
+      "name": "SLENDER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202511/17642378823YVKFOE9EC0HLREC079O.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 518,
+      "maxConvertedBytes": 1602451,
+      "failures": []
+    },
+    {
+      "id": "10044812",
+      "name": "SLENDER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202511/1764235298M5IJFEGTXVN3WG4WFQRY.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt",
+        "watchface_218x218/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 514,
+      "maxConvertedBytes": 803685,
+      "failures": []
+    },
+    {
+      "id": "10167762",
+      "name": "SLENDER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202511/17642348669ECYNEG6USDBN7EAUUIV.zip",
+      "resolutions": [
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 522,
+      "maxConvertedBytes": 1576407,
+      "failures": []
+    },
+    {
+      "id": "130009",
+      "name": "SYMMETRY",
+      "packageUrl": "https://s3.coros.com/watchface_template/202404/17134223244VJ1SYH3UQ4HJXAUXX99.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 666,
+      "maxConvertedBytes": 2398617,
+      "failures": []
+    },
+    {
+      "id": "130008",
+      "name": "SYMMETRY",
+      "packageUrl": "https://s3.coros.com/watchface_template/202404/1713422295CS2WI7APKM0HMOESQB2D.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 666,
+      "maxConvertedBytes": 2284621,
+      "failures": []
+    },
+    {
+      "id": "130005",
+      "name": "SYMMETRY",
+      "packageUrl": "https://s3.coros.com/watchface_template/202404/1713422265VK4RNGNRBXAHJY5M7X78.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 666,
+      "maxConvertedBytes": 2147410,
+      "failures": []
+    },
+    {
+      "id": "3015",
+      "name": "BOLD2",
+      "packageUrl": "https://s3.coros.com/watchface_template/202401/170589112019DGJP7IRQH7KN0ZYMMI.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 510,
+      "maxConvertedBytes": 991766,
+      "failures": []
+    },
+    {
+      "id": "3014",
+      "name": "BOLD2",
+      "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891100IBR3TPNTIJDZW76UCLL3.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 510,
+      "maxConvertedBytes": 799406,
+      "failures": []
+    },
+    {
+      "id": "3013",
+      "name": "BOLD2",
+      "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891078CEP8QPDCFH6567MIGPHI.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 510,
+      "maxConvertedBytes": 831445,
+      "failures": []
+    },
+    {
+      "id": "3012",
+      "name": "BOLD2",
+      "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891056M5PUOH7RRD9VZR7ODR15.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 510,
+      "maxConvertedBytes": 1213736,
+      "failures": []
+    },
+    {
+      "id": "3011",
+      "name": "BOLD2",
+      "packageUrl": "https://s3.coros.com/watchface_template/202401/1705891036MCK6B02DXFY1YNSHY9GH.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 510,
+      "maxConvertedBytes": 1204200,
+      "failures": []
+    },
+    {
+      "id": "3010",
+      "name": "BOLD",
+      "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890907R0XX4Z4QQ7POLY2RO2B7.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 450,
+      "maxConvertedBytes": 771056,
+      "failures": []
+    },
+    {
+      "id": "3009",
+      "name": "BOLD",
+      "packageUrl": "https://s3.coros.com/watchface_template/202401/17058908897TMP56259NHRYRW0T8NT.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 450,
+      "maxConvertedBytes": 748901,
+      "failures": []
+    },
+    {
+      "id": "3008",
+      "name": "BOLD",
+      "packageUrl": "https://s3.coros.com/watchface_template/202401/17058908698C841RPSQLJPSJNX9SNZ.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 450,
+      "maxConvertedBytes": 768288,
+      "failures": []
+    },
+    {
+      "id": "3007",
+      "name": "BOLD",
+      "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890850EBV53IEIXAN9LL7VLVNU.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 450,
+      "maxConvertedBytes": 1266544,
+      "failures": []
+    },
+    {
+      "id": "3006",
+      "name": "BOLD",
+      "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890826I8O11B61FZ5WMA0VFSXQ.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 450,
+      "maxConvertedBytes": 1253194,
+      "failures": []
+    },
+    {
+      "id": "2620",
+      "name": "EUROPEAN RETRO",
+      "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890676Q8KK43AICQ2W0IUK9NSK.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 474,
+      "maxConvertedBytes": 1206985,
+      "failures": []
+    },
+    {
+      "id": "2720",
+      "name": "EUROPEAN RETRO",
+      "packageUrl": "https://s3.coros.com/watchface_template/202401/1705890655QA2QP1UYA7O1A6E463NQ.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 474,
+      "maxConvertedBytes": 1163994,
+      "failures": []
+    },
+    {
+      "id": "2321",
+      "name": "EUROPEAN RETRO",
+      "packageUrl": "https://s3.coros.com/watchface_template/202401/17058906214X1NKCABSBP05VJIIJ0E.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 478,
+      "maxConvertedBytes": 1361993,
+      "failures": []
+    },
+    {
+      "id": "116400",
+      "name": "PAPER CLIP",
+      "packageUrl": "https://s3.coros.com/watchface_template/202401/1704709219XMESM5BJ31I8G1143FV0.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1174,
+      "maxConvertedBytes": 2178934,
+      "failures": []
+    },
+    {
+      "id": "130004",
+      "name": "SERIF",
+      "packageUrl": "https://s3.coros.com/watchface_template/202312/1702978976UECVBFZSSSUJ89HDZ03G.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 634,
+      "maxConvertedBytes": 1427714,
+      "failures": []
+    },
+    {
+      "id": "130003",
+      "name": "SERIF",
+      "packageUrl": "https://s3.coros.com/watchface_template/202312/17029789510EPWBMG2Q47GNIOL45M7.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 634,
+      "maxConvertedBytes": 1224616,
+      "failures": []
+    },
+    {
+      "id": "130002",
+      "name": "SERIF",
+      "packageUrl": "https://s3.coros.com/watchface_template/202312/1702978926Y9XUG3FQOKC1JA2A4TEX.zip",
+      "resolutions": [
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt",
+        "watchface_240x240/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 634,
+      "maxConvertedBytes": 2388117,
+      "failures": []
+    },
+    {
+      "id": "130000",
+      "name": "SERIF",
+      "packageUrl": "https://s3.coros.com/watchface_template/202312/170297886482JVKNIQ41KWVBC000D8.zip",
+      "resolutions": [
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt",
+        "watchface_240x240/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 634,
+      "maxConvertedBytes": 1411226,
+      "failures": []
+    },
+    {
+      "id": "121001",
+      "name": "DIAMOND",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1693300339G6FWJMJST5Z3WOLICXQJ.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 882,
+      "maxConvertedBytes": 3321020,
+      "failures": []
+    },
+    {
+      "id": "121000",
+      "name": "DIAMOND",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1693297259NF23T25A53POXJMXD31S.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 926,
+      "maxConvertedBytes": 3055185,
+      "failures": []
+    },
+    {
+      "id": "120064",
+      "name": "DIFFUSE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1692084305RXFLJJMN3I23F1R95JQ8.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 6,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 790,
+      "maxConvertedBytes": 3823423,
+      "failures": []
+    },
+    {
+      "id": "120063",
+      "name": "DIFFUSE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/16920842502ETNRB9138GMQ6TO1C8I.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 6,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 802,
+      "maxConvertedBytes": 5524379,
+      "failures": []
+    },
+    {
+      "id": "120062",
+      "name": "DIFFUSE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/16920841978DA3TI6JSBIBC6BSWGP2.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 6,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 790,
+      "maxConvertedBytes": 4508749,
+      "failures": []
+    },
+    {
+      "id": "120061",
+      "name": "DIFFUSE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/16920841434ZBRAL0EW768LH9K9WPT.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 6,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 818,
+      "maxConvertedBytes": 3811444,
+      "failures": []
+    },
+    {
+      "id": "120060",
+      "name": "DIFFUSE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1692084093IKVSBSFR7YE88WK73CWW.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 6,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 734,
+      "maxConvertedBytes": 2780106,
+      "failures": []
+    },
+    {
+      "id": "120054",
+      "name": "AROUND",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017798F08XENGD3SEVUL2R5T7O.zip",
+      "resolutions": [
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt",
+        "watchface_240x240/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 502,
+      "maxConvertedBytes": 979636,
+      "failures": []
+    },
+    {
+      "id": "120053",
+      "name": "AROUND",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017779EH82FVIV46DIEXV4DIRW.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 546,
+      "maxConvertedBytes": 1184898,
+      "failures": []
+    },
+    {
+      "id": "120052",
+      "name": "AROUND",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017757YWP9DXUD4ADD1QHFMLCK.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 662,
+      "maxConvertedBytes": 2102183,
+      "failures": []
+    },
+    {
+      "id": "120051",
+      "name": "AROUND",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017735ZU7OIDPS7O6BLO0NQWMB.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 634,
+      "maxConvertedBytes": 1040948,
+      "failures": []
+    },
+    {
+      "id": "120050",
+      "name": "AROUND",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1692017714G0QX4UYCKZWL81Z9810E.zip",
+      "resolutions": [
+        "watchface_260x260/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 618,
+      "maxConvertedBytes": 2631077,
+      "failures": []
+    },
+    {
+      "id": "120025",
+      "name": "DIVIDED",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1691474242X16GQUEDG4UBFQLDM4M5.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 754,
+      "maxConvertedBytes": 1504850,
+      "failures": []
+    },
+    {
+      "id": "120023",
+      "name": "DIVIDED",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1691474191N1VQQBKI7Z930H00EI5S.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 730,
+      "maxConvertedBytes": 1408778,
+      "failures": []
+    },
+    {
+      "id": "120021",
+      "name": "DIVIDED",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1691473807Y78TP7NFH2DCM5B4342I.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 754,
+      "maxConvertedBytes": 1373351,
+      "failures": []
+    },
+    {
+      "id": "120020",
+      "name": "DIVIDED",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1691473776PQD2HXDQ68NCTLIQB4TL.zip",
+      "resolutions": [
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 0,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 754,
+      "maxConvertedBytes": 2227765,
+      "failures": []
+    },
+    {
+      "id": "120014",
+      "name": "STANDARD",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/16911423275JXBNARFK0LY7FA5LZSF.zip",
+      "resolutions": [
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 2,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 906,
+      "maxConvertedBytes": 2199225,
+      "failures": []
+    },
+    {
+      "id": "120013",
+      "name": "STANDARD",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1691142297TSJXKNPMF870MOQL8LKW.zip",
+      "resolutions": [
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 2,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 910,
+      "maxConvertedBytes": 2291535,
+      "failures": []
+    },
+    {
+      "id": "120012",
+      "name": "STANDARD",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/169114227330ZXTRZBAL6B5RN55R2W.zip",
+      "resolutions": [
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 2,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1010,
+      "maxConvertedBytes": 4145323,
+      "failures": []
+    },
+    {
+      "id": "120011",
+      "name": "STANDARD",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1691142244RUMVVSWDO3BSGYD2N3P4.zip",
+      "resolutions": [
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 2,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 990,
+      "maxConvertedBytes": 2295650,
+      "failures": []
+    },
+    {
+      "id": "120010",
+      "name": "STANDARD",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/16911422188OON78C8TFNL43HQ2G3C.zip",
+      "resolutions": [
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 2,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 986,
+      "maxConvertedBytes": 2966525,
+      "failures": []
+    },
+    {
+      "id": "116373",
+      "name": "PAPER CLIP",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979964Z9LMB3QXXBDH4I49UTDR.zip",
+      "resolutions": [
+        "watchface_260x260/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 6,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1434,
+      "maxConvertedBytes": 5749879,
+      "failures": []
+    },
+    {
+      "id": "116374",
+      "name": "PAPER CLIP",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979931SKRPTWJ8YA45Y5CDDDUM.zip",
+      "resolutions": [
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 6,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1338,
+      "maxConvertedBytes": 3510374,
+      "failures": []
+    },
+    {
+      "id": "116371",
+      "name": "PAPER CLIP",
+      "packageUrl": "https://s3.coros.com/watchface_template/202308/1690979881PC4L2A31WGALPTDCUIR0.zip",
+      "resolutions": [
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 6,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1354,
+      "maxConvertedBytes": 4795535,
+      "failures": []
+    },
+    {
+      "id": "116364",
+      "name": "PAPER CLIP",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1690802341M2OJ55SJV6OGXA947JAL.zip",
+      "resolutions": [
+        "watchface_218x218/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_280x280/config.txt",
+        "watchface_800??800/config.txt",
+        "watchface_240x240/config.txt"
+      ],
+      "normalizedFolderNames": true,
+      "discardedDeviceBuilds": 6,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1390,
+      "maxConvertedBytes": 3372214,
+      "failures": []
+    },
+    {
+      "id": "1023987",
+      "name": "CENTER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943688K6JTH6JINIIFEY2JDICV.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 890,
+      "maxConvertedBytes": 2592286,
+      "failures": []
+    },
+    {
+      "id": "1026346",
+      "name": "MAGAZINE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943660ZR5TKZ596NI8ER244JIH.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 10,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 802,
+      "maxConvertedBytes": 3391192,
+      "failures": []
+    },
+    {
+      "id": "1006240",
+      "name": "CENTER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943659KPC4XELYUMZB0VO7EV6C.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 770,
+      "maxConvertedBytes": 1654287,
+      "failures": []
+    },
+    {
+      "id": "1021261",
+      "name": "CENTER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943635AAZH25H3ZEOW4SHVIZ42.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 838,
+      "maxConvertedBytes": 3323088,
+      "failures": []
+    },
+    {
+      "id": "1003514",
+      "name": "CENTER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943616XEF40I8XR7AU67TTMLBY.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 850,
+      "maxConvertedBytes": 1928340,
+      "failures": []
+    },
+    {
+      "id": "1018536",
+      "name": "CENTER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689943602JIUCM8I2DBBIQNZPRPX9.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1090,
+      "maxConvertedBytes": 5153620,
+      "failures": []
+    },
+    {
+      "id": "1019927",
+      "name": "LARGE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422981PFXHA63NY55GITT3LE6.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 954,
+      "maxConvertedBytes": 2479203,
+      "failures": []
+    },
+    {
+      "id": "1018110",
+      "name": "LARGE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942278LSNWXX6OOH7DLDRTJR6D.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1194,
+      "maxConvertedBytes": 2241174,
+      "failures": []
+    },
+    {
+      "id": "1004848",
+      "name": "MELLOW",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942270I81YZR1ZZV221PZKQE1K.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1358,
+      "maxConvertedBytes": 2999091,
+      "failures": []
+    },
+    {
+      "id": "1000363",
+      "name": "LARGE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942261ZK5UZ7IM1GXQC9I2XH6X.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 954,
+      "maxConvertedBytes": 2086384,
+      "failures": []
+    },
+    {
+      "id": "1019869",
+      "name": "MELLOW",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942252MKK6XJNU3CNLEIGUSI1X.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1346,
+      "maxConvertedBytes": 2294961,
+      "failures": []
+    },
+    {
+      "id": "1015384",
+      "name": "LARGE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942246ZZAKQYBXYT2Z2M817T3Q.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 958,
+      "maxConvertedBytes": 2032604,
+      "failures": []
+    },
+    {
+      "id": "1030405",
+      "name": "LARGE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422292Y6Y2GVIUFDMVWYDS2AH.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 958,
+      "maxConvertedBytes": 2564197,
+      "failures": []
+    },
+    {
+      "id": "1002123",
+      "name": "MELLOW",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/16899422251HFCS9UCWNNV6YQW2LFI.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1334,
+      "maxConvertedBytes": 2522747,
+      "failures": []
+    },
+    {
+      "id": "1017144",
+      "name": "MELLOW",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942207VQNKOVS45MEVU4RA69J0.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1390,
+      "maxConvertedBytes": 2522943,
+      "failures": []
+    },
+    {
+      "id": "1032165",
+      "name": "MELLOW",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942183WZ6SU6EPCYX3PPWV6J2V.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1426,
+      "maxConvertedBytes": 3227813,
+      "failures": []
+    },
+    {
+      "id": "1001755",
+      "name": "SLENDER",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942070GVZGI2KIWI1EGZW6GONJ.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt",
+        "watchface_218×218/config.txt"
+      ],
+      "normalizedFolderNames": true,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 770,
+      "maxConvertedBytes": 2167556,
+      "failures": []
+    },
+    {
+      "id": "1029439",
+      "name": "DIAMOND",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/16899420475JGLKD9IR4Q90Z3AN9HU.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_800×800/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt"
+      ],
+      "normalizedFolderNames": true,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1442,
+      "maxConvertedBytes": 3182928,
+      "failures": []
+    },
+    {
+      "id": "1031797",
+      "name": "MAGAZINE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942036CYYQJ4OQ2VLN4ZTCZLIF.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 798,
+      "maxConvertedBytes": 3122381,
+      "failures": []
+    },
+    {
+      "id": "1014050",
+      "name": "MAGAZINE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/16899420148IQ78JAL6MHB6GNZXJYQ.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 10,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 926,
+      "maxConvertedBytes": 2987316,
+      "failures": []
+    },
+    {
+      "id": "1026713",
+      "name": "DIAMOND",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689942011DKKPKAGOH5XEULU5RYZA.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_800×800/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt"
+      ],
+      "normalizedFolderNames": true,
+      "discardedDeviceBuilds": 8,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1446,
+      "maxConvertedBytes": 3473747,
+      "failures": []
+    },
+    {
+      "id": "1029071",
+      "name": "MAGAZINE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689941998T33BZQ8NX8VF804651QM.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 10,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 1042,
+      "maxConvertedBytes": 4024638,
+      "failures": []
+    },
+    {
+      "id": "1011325",
+      "name": "MAGAZINE",
+      "packageUrl": "https://s3.coros.com/watchface_template/202307/1689941980NO05N9I5HR7EQG40JHBU.zip",
+      "resolutions": [
+        "watchface_280x280/config.txt",
+        "watchface_218x218/config.txt",
+        "watchface_240x240/config.txt",
+        "watchface_260x260/config.txt",
+        "watchface_800x800/config.txt"
+      ],
+      "normalizedFolderNames": false,
+      "discardedDeviceBuilds": 10,
+      "hasMasterAod": false,
+      "maxConvertedFiles": 938,
+      "maxConvertedBytes": 2959460,
+      "failures": []
+    }
+  ]
+}

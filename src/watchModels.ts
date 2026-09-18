@@ -153,7 +153,7 @@ const MODEL_PRESENTATION: Record<
     capacityLabel: "32 GB Nomad capacity fallback",
     fallbackBytes: NOMAD_BYTES,
     features: [
-      { icon: "display", label: "Bright AMOLED Display" },
+      { icon: "display", label: "Always-On MIP Display" },
       { icon: "weight", label: "Rugged Trail Build" },
       { icon: "battery", label: "Multi-Day GPS Battery" },
     ],

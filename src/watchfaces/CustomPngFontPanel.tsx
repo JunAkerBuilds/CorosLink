@@ -1,4 +1,4 @@
-import { ImagePlus } from "lucide-react";
+import { CircleAlert, Files, FolderOpen, LayoutGrid, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type {
   CorosWatchfaceRasterFont,
@@ -34,6 +34,73 @@ interface CustomPngFontPanelProps {
 const DEFAULT_RASTER_GLYPHS = "0123456789";
 const MAX_RASTER_FONT_BYTES = 5 * 1024 * 1024;
 const WEEKDAY_LABELS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+const PREVIEW_CELL_HEIGHT = 34;
+
+type GlyphPreviewCell =
+  | { key: string; kind: "sprite"; src: string }
+  | { key: string; kind: "atlas"; style: Record<string, string> }
+  | { key: string; kind: "missing" };
+
+/**
+ * One cell per digit plus any imported label, so the person can see at a
+ * glance which glyphs the PNG set actually provides.
+ */
+function glyphPreviewCells(font: CorosWatchfaceRasterFont): GlyphPreviewCell[] {
+  const glyphs = normalizeRasterFontGlyphs(font.glyphs);
+  const columns = Math.max(1, font.columns);
+  const rows = Math.max(1, Math.ceil(glyphs.length / columns));
+  const atlas = font.dataUrl && glyphs.length > 0 && font.atlasSize ? font.atlasSize : null;
+  const cellWidth = atlas ? atlas.width / columns : 0;
+  const cellHeight = atlas ? atlas.height / rows : 0;
+  const scale = atlas && cellHeight > 0 ? PREVIEW_CELL_HEIGHT / cellHeight : 1;
+  const keys = [
+    ...DEFAULT_RASTER_GLYPHS,
+    ...[...glyphs].filter((glyph) => !DEFAULT_RASTER_GLYPHS.includes(glyph)),
+    ...Object.keys(font.labels ?? {}),
+    ...Object.keys(font.sprites ?? {})
+  ];
+  const seen = new Set<string>();
+  return keys.flatMap((key): GlyphPreviewCell[] => {
+    const normalized = key.toUpperCase();
+    if (seen.has(normalized)) return [];
+    seen.add(normalized);
+    const sprite = font.sprites?.[normalized] ?? font.labels?.[normalized];
+    if (sprite) return [{ key: normalized, kind: "sprite" as const, src: sprite }];
+    const index = glyphs.indexOf(normalized);
+    if (atlas && index >= 0) {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      return [{
+        key: normalized,
+        kind: "atlas" as const,
+        style: {
+          width: `${Math.max(12, Math.round(cellWidth * scale))}px`,
+          height: `${PREVIEW_CELL_HEIGHT}px`,
+          backgroundImage: `url(${font.dataUrl})`,
+          backgroundSize: `${atlas.width * scale}px ${atlas.height * scale}px`,
+          backgroundPosition: `${-column * cellWidth * scale}px ${-row * cellHeight * scale}px`
+        }
+      }];
+    }
+    return [{ key: normalized, kind: "missing" as const }];
+  });
+}
+
+function describeRasterFontSource(font: CorosWatchfaceRasterFont): string {
+  const spriteCount = Object.keys(font.sprites ?? {}).length;
+  const labelCount = Object.keys(font.labels ?? {}).length;
+  const glyphCount = normalizeRasterFontGlyphs(font.glyphs).length;
+  const parts: string[] = [];
+  if (glyphCount > 0 && font.dataUrl) {
+    parts.push(
+      `Sheet · ${glyphCount} glyph${glyphCount === 1 ? "" : "s"} in ${font.columns} column${font.columns === 1 ? "" : "s"}` +
+        (font.atlasSize ? ` · ${font.atlasSize.width} × ${font.atlasSize.height} px` : "")
+    );
+  }
+  if (spriteCount > 0) parts.push(`${spriteCount} individual PNG${spriteCount === 1 ? "" : "s"}`);
+  if (labelCount > 0) parts.push(`${labelCount} label${labelCount === 1 ? "" : "s"}`);
+  return parts.join(" · ") || "PNG set";
+}
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -381,25 +448,40 @@ export function CustomPngFontPanel({
   }
 
   const controlsDisabled = importDisabled || importing;
+  const hasAtlasLayout = Boolean(activeRasterFont?.dataUrl) &&
+    normalizeRasterFontGlyphs(activeRasterFont?.glyphs ?? "").length > 0;
+  const previewCells = activeRasterFont ? glyphPreviewCells(activeRasterFont) : [];
+  const missingDigits = previewCells.filter(
+    (cell) => cell.kind === "missing" && DEFAULT_RASTER_GLYPHS.includes(cell.key)
+  ).length;
+  const isMonthComponent = scope === "component" && componentLabel === "Date month";
+  const isWeekdayComponent = scope === "component" && componentLabel === "Weekday";
+  const namingHint = isMonthComponent
+    ? "Name files 00.png–11.png or JAN.png–DEC.png"
+    : isWeekdayComponent
+      ? "Name files MON.png–SUN.png (or 00.png–06.png)"
+      : "Name files 00.png–09.png";
 
-  return (
-    <section className="watchface-raster-font-panel" aria-label="Custom PNG font">
-      <div>
-        <strong>Custom PNG font</strong>
-        <span>Choose whether this PNG set belongs to one component or the whole face.</span>
-      </div>
-      {supportsComponentScope ? (
-        <label className="field">
-          Apply PNG sprites to
-          <select disabled={controlsDisabled} value={scope} onChange={(event) => setScope(event.target.value as "component" | "all")}>
-            <option value="component">This component{componentLabel ? ` (${componentLabel})` : ""}</option>
-            <option value="all">All text components</option>
-          </select>
-        </label>
-      ) : null}
-      <label className="watchface-raster-font-upload">
-        <ImagePlus size={15} aria-hidden="true" />
-        <span>{activeRasterFont ? "Replace PNG atlas" : "Upload PNG atlas"}</span>
+  const sourceButtons = (compact: boolean) => (
+    <div className={`wf-png-font-sources${compact ? " is-compact" : ""}`}>
+      <button
+        className="wf-png-font-source"
+        type="button"
+        disabled={controlsDisabled}
+        onClick={() => void chooseRasterSpriteFolder()}
+      >
+        <span className="wf-png-font-source-icon" aria-hidden="true"><FolderOpen size={16} /></span>
+        <span className="wf-png-font-source-copy">
+          <strong>{compact ? "Folder…" : "Folder of PNGs"}{!compact ? <em>Recommended</em> : null}</strong>
+          {!compact ? <span>One file per glyph. {namingHint}.</span> : null}
+        </span>
+      </button>
+      <label className={`wf-png-font-source${controlsDisabled ? " is-disabled" : ""}`}>
+        <span className="wf-png-font-source-icon" aria-hidden="true"><LayoutGrid size={16} /></span>
+        <span className="wf-png-font-source-copy">
+          <strong>{compact ? "Sheet…" : "Sprite sheet"}</strong>
+          {!compact ? <span>All glyphs in one PNG grid. You set the column count and glyph order next.</span> : null}
+        </span>
         <input
           type="file"
           accept="image/png"
@@ -407,18 +489,12 @@ export function CustomPngFontPanel({
           onChange={(event) => void chooseRasterFont(event.currentTarget.files?.[0])}
         />
       </label>
-      <button
-        className="watchface-raster-font-upload"
-        type="button"
-        disabled={controlsDisabled}
-        onClick={() => void chooseRasterSpriteFolder()}
-      >
-        <ImagePlus size={15} aria-hidden="true" />
-        <span>Import PNG sprite folder</span>
-      </button>
-      <label className="watchface-raster-font-upload">
-        <ImagePlus size={15} aria-hidden="true" />
-        <span>Import individual PNG sprites</span>
+      <label className={`wf-png-font-source${controlsDisabled ? " is-disabled" : ""}`}>
+        <span className="wf-png-font-source-icon" aria-hidden="true"><Files size={16} /></span>
+        <span className="wf-png-font-source-copy">
+          <strong>{compact ? "Files…" : "Individual files"}</strong>
+          {!compact ? <span>Pick a few PNGs to add or replace single glyphs. Same names as a folder.</span> : null}
+        </span>
         <input
           type="file"
           accept="image/png"
@@ -427,91 +503,191 @@ export function CustomPngFontPanel({
           onChange={(event) => void chooseIndividualSprites(event.currentTarget.files)}
         />
       </label>
-      {activeRasterFont ? (
-        <div className="watchface-raster-font-fields">
-          <label>
-            Font label
-            <input
+    </div>
+  );
+
+  return (
+    <section className="wf-png-font" aria-label="Custom PNG font">
+      <div className="wf-png-font-head">
+        <strong>Custom PNG font</strong>
+        <span>Draw the digits yourself and use the PNGs instead of a font.</span>
+      </div>
+
+      {supportsComponentScope ? (
+        <div className="wf-png-font-scope">
+          <div className="wf-png-font-segmented" role="group" aria-label="Where this PNG set applies">
+            <button
+              type="button"
+              aria-pressed={scope === "component"}
               disabled={controlsDisabled}
-              value={activeRasterFont.label}
-              onChange={(event) => updateRasterFont({ label: event.target.value })}
-              placeholder="My pixel font"
-            />
-          </label>
-          <label>
-            Columns
-            <input
+              onClick={() => setScope("component")}
+            >
+              {componentLabel ?? "This layer"} only
+            </button>
+            <button
+              type="button"
+              aria-pressed={scope === "all"}
               disabled={controlsDisabled}
-              type="number"
-              min="1"
-              max="64"
-              value={activeRasterFont.columns}
-              onChange={(event) =>
-                updateRasterFont({
-                  columns: Math.max(1, Math.min(64, Number(event.target.value) || 1))
-                })
-              }
-            />
-          </label>
-          <label className="watchface-raster-font-glyphs">
-            Glyph labels (left-to-right, then top-to-bottom)
-            <input
-              disabled={controlsDisabled}
-              value={activeRasterFont.glyphs}
-              onChange={(event) =>
-                updateRasterFont({ glyphs: normalizeRasterFontGlyphs(event.target.value) })
-              }
-              placeholder="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            />
-          </label>
-          <label className="watchface-raster-font-tint">
-            <input
-              type="checkbox"
-              disabled={controlsDisabled}
-              checked={activeRasterFont.tint}
-              onChange={(event) => updateRasterFont({ tint: event.target.checked })}
-            />
-            Apply selected digit color (overrides PNG colors)
-          </label>
-          <button
-            className="secondary-button"
-            type="button"
-            disabled={controlsDisabled}
-            onClick={() => setActiveRasterFont(undefined)}
-          >
-            Remove PNG font
-          </button>
+              onClick={() => setScope("all")}
+            >
+              Whole face
+            </button>
+          </div>
+          <span>
+            {scope === "component"
+              ? `Only ${componentLabel ?? "this layer"} uses this set. Other layers keep their fonts.`
+              : "Every text layer on the face shares this one set."}
+            {scope === "component" && rasterFont ? " A whole-face set is also installed." : ""}
+            {scope === "all" && componentRasterFont ? ` ${componentLabel ?? "This layer"} has its own set that takes priority.` : ""}
+          </span>
         </div>
       ) : null}
-      {activeRasterFont && rasterFontHasDigits &&
-        scope === "component" && componentLabel === "Date month" ? (
-        <p className="watchface-raster-font-status">
-          This PNG set provides 0–9 digits. Date Month will export as a numeric month (1–12).
+
+      {!activeRasterFont ? (
+        sourceButtons(false)
+      ) : (
+        <>
+          <div className="wf-png-font-preview" aria-label="Imported glyphs">
+            <div className="wf-png-font-strip">
+              {previewCells.map((cell) => (
+                <span
+                  className={`wf-png-font-cell${cell.kind === "missing" ? " is-missing" : ""}`}
+                  key={cell.key}
+                  title={cell.kind === "missing" ? `No PNG for ${cell.key} yet` : cell.key}
+                >
+                  {cell.kind === "sprite" ? (
+                    <img src={cell.src} alt="" draggable={false} />
+                  ) : cell.kind === "atlas" ? (
+                    <i style={cell.style} aria-hidden="true" />
+                  ) : (
+                    <i className="wf-png-font-cell-empty" aria-hidden="true" />
+                  )}
+                  <small>{cell.key}</small>
+                </span>
+              ))}
+            </div>
+            <span className="wf-png-font-summary">{describeRasterFontSource(activeRasterFont)}</span>
+          </div>
+
+          {missingDigits > 0 && !isMonthComponent && !isWeekdayComponent ? (
+            <p className="wf-png-font-note is-warning">
+              <CircleAlert size={13} aria-hidden="true" />
+              {missingDigits === 10
+                ? "No digits yet. Add PNGs for 0–9 before this set can replace the live digits."
+                : `${missingDigits} digit${missingDigits === 1 ? "" : "s"} missing. Add the dashed ones with “Files…” below.`}
+            </p>
+          ) : null}
+
+          <div className="wf-png-font-fields">
+            <label className="wf-png-font-row">
+              <span>Name</span>
+              <input
+                disabled={controlsDisabled}
+                value={activeRasterFont.label}
+                onChange={(event) => updateRasterFont({ label: event.target.value })}
+                placeholder="My pixel font"
+              />
+            </label>
+            {hasAtlasLayout ? (
+              <>
+                <label className="wf-png-font-row">
+                  <span>Columns</span>
+                  <input
+                    className="wf-png-font-number"
+                    disabled={controlsDisabled}
+                    type="number"
+                    min="1"
+                    max="64"
+                    value={activeRasterFont.columns}
+                    onChange={(event) =>
+                      updateRasterFont({
+                        columns: Math.max(1, Math.min(64, Number(event.target.value) || 1))
+                      })
+                    }
+                  />
+                </label>
+                <label className="wf-png-font-row">
+                  <span title="One character per cell, left to right, then top to bottom">Glyph order</span>
+                  <input
+                    className="wf-png-font-mono"
+                    disabled={controlsDisabled}
+                    value={activeRasterFont.glyphs}
+                    onChange={(event) =>
+                      updateRasterFont({ glyphs: normalizeRasterFontGlyphs(event.target.value) })
+                    }
+                    placeholder="0123456789"
+                  />
+                </label>
+                <p className="wf-png-font-note">Order matches the sheet: left to right, then the next row.</p>
+              </>
+            ) : null}
+            <label className="wf-png-font-row wf-png-font-row--toggle">
+              <span>Use layer color</span>
+              <input
+                type="checkbox"
+                disabled={controlsDisabled}
+                checked={activeRasterFont.tint}
+                onChange={(event) => updateRasterFont({ tint: event.target.checked })}
+              />
+            </label>
+            <p className="wf-png-font-note">
+              {activeRasterFont.tint
+                ? "The PNGs are recolored to match the digit color."
+                : "The PNGs keep their own colors. Turn on to recolor them with the digit color."}
+            </p>
+          </div>
+
+          <div className="wf-png-font-replace">
+            <span>Replace with</span>
+            {sourceButtons(true)}
+            <button
+              className="wf-png-font-remove"
+              type="button"
+              disabled={controlsDisabled}
+              onClick={() => setActiveRasterFont(undefined)}
+            >
+              <Trash2 size={13} aria-hidden="true" /> Remove
+            </button>
+          </div>
+        </>
+      )}
+
+      {activeRasterFont && rasterFontHasDigits && isMonthComponent ? (
+        <p className="wf-png-font-note">
+          This set has 0–9, so the month shows as a number (1–12).
         </p>
       ) : null}
       {activeRasterFont && !rasterFontHasDigits ? (
         rasterFontHasMonth && componentLabel === "Date month" ? (
-          <p className="watchface-raster-font-status">
-            This PNG set provides JAN–DEC labels. Date Month will export as a 12-image month set.
+          <p className="wf-png-font-note">
+            This set has JAN–DEC labels, so the month shows as a 12-image set.
           </p>
         ) : rasterFontHasWeekday || rasterFontHasMonth ? (
-          <p className="watchface-raster-font-status">
-            This PNG set provides date labels and leaves numeric fields unchanged.
+          <p className="wf-png-font-note">
+            This set provides date labels and leaves numeric fields unchanged.
           </p>
-        ) : (
-          <p className="watchface-raster-font-warning">
-            Add all of 0123456789 to the glyph labels before this PNG font can replace live watchface digits.
-          </p>
-        )
+        ) : null
       ) : null}
-      {error ? <p className="watchface-raster-font-warning">{error}</p> : null}
-      {status ? <p className="watchface-raster-font-status">{status}</p> : null}
+      {error ? (
+        <p className="wf-png-font-note is-warning" role="alert">
+          <CircleAlert size={13} aria-hidden="true" /> {error}
+        </p>
+      ) : null}
       {importing ? (
-        <p className="watchface-raster-font-status">Importing sprites…</p>
+        <p className="wf-png-font-note is-status" role="status">Importing…</p>
+      ) : status ? (
+        <p className="wf-png-font-note is-status" role="status">{status}</p>
       ) : null}
-      <p>
-        PNG colors are preserved by default. Import individual sprites named 00.png–09.png or by label (for example MON.png or JAN.png); each is retained independently and takes priority over the atlas. Month components accept either a 00.png–09.png digit folder (numeric month) or 00.png–11.png / JAN.png-style labels for JAN–DEC.
-      </p>
+
+      <details className="wf-png-font-rules">
+        <summary>File naming rules</summary>
+        <ul>
+          <li>Digits: <code>00.png</code> – <code>09.png</code>.</li>
+          <li>Weekdays: <code>MON.png</code> – <code>SUN.png</code>, or <code>00.png</code> – <code>06.png</code>.</li>
+          <li>Months: <code>JAN.png</code> – <code>DEC.png</code>, or <code>00.png</code> – <code>11.png</code>. A 0–9 digit folder gives a numeric month instead.</li>
+          <li>Individual files take priority over a sheet, so you can fix one glyph without re-importing everything.</li>
+        </ul>
+      </details>
     </section>
   );
 }

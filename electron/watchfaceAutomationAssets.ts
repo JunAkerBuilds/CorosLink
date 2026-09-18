@@ -221,19 +221,19 @@ export class WatchfaceAutomationAssetStore {
   }
 
   async externalizeDataImages<T>(value: T): Promise<T> {
-    const budget = { count: 0, bytes: 0, nodes: 0, stringBytes: 0 };
+    const budget = { count: 0, bytes: 0, nodes: 0, stringBytes: 0, images: new Map<string, Promise<WatchfaceAutomationAssetRef>>() };
     return this.transform(value, false, budget, 0) as Promise<T>;
   }
 
   async hydrateAssetRefs<T>(value: T): Promise<T> {
-    const budget = { count: 0, bytes: 0, nodes: 0, stringBytes: 0 };
+    const budget = { count: 0, bytes: 0, nodes: 0, stringBytes: 0, images: new Map<string, Promise<WatchfaceAutomationAssetRef>>() };
     return this.transform(value, true, budget, 0) as Promise<T>;
   }
 
   private async transform(
     value: unknown,
     hydrate: boolean,
-    budget: { count: number; bytes: number; nodes: number; stringBytes: number },
+    budget: { count: number; bytes: number; nodes: number; stringBytes: number; images: Map<string, Promise<WatchfaceAutomationAssetRef>> },
     depth: number
   ): Promise<unknown> {
     if (depth > MAX_DEPTH) throw new Error("The automation payload is nested too deeply.");
@@ -249,13 +249,18 @@ export class WatchfaceAutomationAssetStore {
     if (!hydrate && typeof value === "string") {
       budget.stringBytes += Buffer.byteLength(value, "utf8");
       if (budget.stringBytes > MAX_PAYLOAD_STRING_BYTES) throw new Error("The automation payload contains too much text.");
+      const existing = budget.images.get(value);
+      if (existing) return existing;
       const image = parseDataImage(value);
       if (!image) return value;
       budget.count += 1;
       budget.bytes += image.bytes.length;
       assertTransformBudget(budget);
-      const stored = await this.store(image.bytes, image.mimeType);
-      return { assetId: stored.assetId } satisfies WatchfaceAutomationAssetRef;
+      // Shared digit/unit sprites appear in multiple fields and capabilities.
+      // Store and budget each outgoing image once; input expansion remains bounded.
+      const stored = this.store(image.bytes, image.mimeType).then(asset => ({ assetId: asset.assetId }));
+      budget.images.set(value, stored);
+      return stored;
     }
     if (hydrate && typeof value === "string") {
       budget.stringBytes += Buffer.byteLength(value, "utf8");

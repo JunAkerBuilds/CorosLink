@@ -80,6 +80,7 @@ import {
 } from "../src/watchfaces/watchfaceEditorSnapping.ts";
 import {
   firmwareTypeForWatchfaceArchive,
+  isWatchfaceSignInRequired,
   prepareWatchfaceConversion
 } from "../src/watchfaces/watchfaceConversion.ts";
 import {
@@ -478,6 +479,10 @@ assert.equal(
   "COROS W336",
   "an archive-declared target firmware should win"
 );
+assert.equal(isWatchfaceSignInRequired(new Error("Error invoking remote method 'watchfaces:convertArchive': Error: Sign in to your COROS mobile account before publishing.")), true);
+assert.equal(isWatchfaceSignInRequired(new Error("Sign in to your COROS mobile account to continue.")), true);
+assert.equal(isWatchfaceSignInRequired(new Error("Your COROS mobile session expired. Sign in again.")), true);
+assert.equal(isWatchfaceSignInRequired(new Error("COROS mobile request failed (HTTP 500).")), false);
 const conversionSource = {
   version: 1,
   metricChanges: { heartRate: true },
@@ -486,8 +491,18 @@ const conversionSource = {
     "watchface_800x800/AODconfig.txt": "[watchface_id]=1"
   }
 };
-const preparedConversion = prepareWatchfaceConversion(conversionSource);
-assert.equal(preparedConversion.omittedRawConfigEditCount, 2);
+assert.deepEqual(prepareWatchfaceConversion(conversionSource).design.configTextEdits,
+  conversionSource.configTextEdits, "raw edits survive until the archive converter consumes them");
+const aodConversion = prepareWatchfaceConversion({ ...conversionSource,
+  layoutOffsets: { hours: { dx: 33, dy: -17 } },
+  nativeData: { stress: { x: 50, y: 80 } },
+  editorGroups: [{ id: "time", name: "Time", layerIds: ["hours", "minutes"] }]
+}, { rawEditsApplied: true, generatedAod: true });
+assert.deepEqual(aodConversion.design.modeDesigns.aod.layoutOffsets, { hours: { dx: 33, dy: -17 } });
+assert.deepEqual(aodConversion.design.modeDesigns.aod.nativeData, { stress: { x: 50, y: 80 } });
+assert.equal(aodConversion.design.modeDesigns.aod.configTextEdits, undefined);
+const preparedConversion = prepareWatchfaceConversion(conversionSource, { rawEditsApplied: true });
+assert.equal(preparedConversion.omittedRawConfigEditCount, 0);
 assert.equal(preparedConversion.design.configTextEdits, undefined);
 assert.deepEqual(
   preparedConversion.sourceDesign.configTextEdits,

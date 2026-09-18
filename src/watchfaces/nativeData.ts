@@ -1,7 +1,7 @@
 import type { CorosWatchfaceAssetReplacement, CorosWatchfaceConfigOverride, CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceTemplateDetails } from "../../electron/types";
-import { NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeFieldKeys } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartGroup, nativeChartSourceKeys, nativeFieldKeys, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
 import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
-import { isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRolePart } from "./nativeDataParts";
+import { isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRolePart, nativeRoleIndices, nativeStateCount } from "./nativeDataParts";
 import type { WatchfacePreviewScenario } from "./watchfaceSimulation";
 export { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS, NATIVE_DATA_BY_ID } from "../../electron/watchfaceNativeCatalog";
 export type NativeData = Record<string, Style>;
@@ -40,7 +40,7 @@ function canvasImage(width: number, height: number, draw: (context: CanvasRender
 /** The same sprite renderer feeds the editor, thumbnail and native export. */
 export async function nativeDataAsset(id: string, style: Style, role: Role, index: number, scale = 1): Promise<string> {
   const part = nativePart(id, style, nativeRolePart(role));
-  const width = (role === "digits" ? part.width / 4 : part.width) * scale;
+  const width = (role === "digits" ? part.digitWidth : part.width) * scale;
   const height = part.height * scale;
   if (!part.enabled) return canvasImage(width, height, () => undefined);
   const replacement = style.assets?.[role]?.[String(index)];
@@ -88,22 +88,32 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
     const ratio = resolution.width / base.width;
     const existing = new Set([...resolution.icons.map(file => file.path), ...resolution.spriteFolders.flatMap(folder => folder.files.map(file => file.path))]);
     const written = new Set<string>();
+    // Clear every field's keys before writing any, so a later field's blanket
+    // deletion (the chart owns all chart_* keys) cannot erase an earlier write.
     for (const [id, style] of Object.entries(data)) {
       const field = NATIVE_DATA_BY_ID.get(id);
       if (!field) throw new Error(`Unknown native data field: ${id}`);
-      for (const key of nativeFieldKeys(field)) values[key] = COROS_CONFIG_DELETE_VALUE;
       if (field.kind === "chart") {
-        values.chart_bg = COROS_CONFIG_DELETE_VALUE;
-        for (const key of Object.keys(resolution.config)) if (key.startsWith("chart_")) values[key] = COROS_CONFIG_DELETE_VALUE;
-      }
+        // The layer owns the shared graph and its selected readout. Readouts of
+        // other chart groups already in the template (recovered official faces)
+        // are alternatives the watch cycles through, so they stay; only this
+        // editor's own earlier output for another source is cleared.
+        for (const key of [...NATIVE_CHART_SHARED_KEYS, ...nativeChartSourceKeys(style.chartSource ?? "chart_stress")]) values[key] = COROS_CONFIG_DELETE_VALUE;
+        for (const { id: source } of NATIVE_CHART_SOURCES) {
+          if (nativeChartSourceKeys(source).some(key => /^cl_nd_/.test(resolution.config[key] ?? ""))) for (const key of nativeChartSourceKeys(source)) values[key] = COROS_CONFIG_DELETE_VALUE;
+        }
+      } else for (const key of nativeFieldKeys(field)) values[key] = COROS_CONFIG_DELETE_VALUE;
+      if (style.enabled) minWatchFaceVersion = Math.max(minWatchFaceVersion, field.version);
+    }
+    for (const [id, style] of Object.entries(data)) {
+      const field = NATIVE_DATA_BY_ID.get(id)!;
       if (!style.enabled) continue;
-      minWatchFaceVersion = Math.max(minWatchFaceVersion, field.version);
       const scale = ratio * style.scale;
       const part = (key: Part) => nativePart(id, style, key);
       const point = (key: Part) => `{${Math.round((style.x + part(key).x * style.scale) * ratio)},${Math.round((style.y + part(key).y * style.scale) * ratio)}}`;
       const rect = (key: Part, dx = 0, width = part(key).width) => {
         const p = part(key), x = style.x * ratio, y = style.y * ratio;
-        return `{${Math.round(x + (p.x + dx) * scale)},${Math.round(y + p.y * scale)},${Math.round(x + (p.x + dx + width) * scale)},${Math.round(y + (p.y + p.height) * scale)},left|vcenter}`;
+        return `{${Math.round(x + (p.x + dx) * scale)},${Math.round(y + p.y * scale)},${Math.round(x + (p.x + dx + width) * scale)},${Math.round(y + (p.y + p.height) * scale)},${p.align === "center" ? "hcenter" : p.align}|vcenter}`;
       };
       const folders: Record<Role, string> = {
         digits: `cl_nd_${id}_d`, icon: `cl_nd_${id}_i`, states: `cl_nd_${id}`, unit: `cl_nd_${id}_u`, symbols: `cl_nd_${id}_s`, progress: `cl_nd_${id}_p`, decimal: `cl_nd_${id}_m`, background: `cl_nd_${id}_bg`, mask: `cl_nd_${id}_mask`, noDataMask: `cl_nd_${id}_nodata`
@@ -133,10 +143,15 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
       if (field.kind === "state") {
         if (part("states").enabled) {
           values[field.stateKey!] = folders.states;
-          values[id === "weather_direction" ? "weather_direction_icon_pos" : `${id}_pos`] = point("states");
-          for (let i = 0; i < field.stateCount!; i++) await sprite("states", i);
+          values[nativeStatePositionKey(field)] = point("states");
+          for (let i = 0; i < nativeStateCount(id, style); i++) await sprite("states", i);
         }
       } else if (field.kind === "number") {
+        if (field.stateKey && part("states").enabled) {
+          values[`${id}_level_pos`] = point("states");
+          values[field.stateKey] = folders.states;
+          for (const index of nativeRoleIndices(id, style, "states")) await sprite("states", index);
+        }
         if (part("value").enabled) {
           values[`${id}_rect`] = rect("value"); values[`${id}_font`] = await font();
           if (field.percentKey || field.unitKey) {
@@ -196,13 +211,45 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         }
         if (part("value").enabled && source !== "chart_moon") {
           values.chart_point_icon = await sprite("decimal");
-          for (const [i, key] of ["chart_negasign_icon", "chart_dgree_icon", "chart_percent_icon", "chart_colon_icon"].entries()) values[key] = await sprite("symbols", i);
+          for (const [i, key] of ["chart_negasign_icon", "chart_dgree_icon", "chart_percent_icon", "chart_colon_icon"].entries()) {
+            // The solar-angle readout supplies the shared degree artwork when present.
+            if (key === "chart_dgree_icon" && data.chart_sun_angle?.enabled) continue;
+            values[key] = await sprite("symbols", i);
+          }
         }
       }
     }
     if (Object.keys(values).length) configOverrides.push({ path: `${resolution.directory}/config.txt`, values });
   }
   return { assetReplacements, configOverrides, minWatchFaceVersion };
+}
+
+/**
+ * Layers the watch shows only in some Back-button chart groups. The preview
+ * follows the chart layer's group; without a chart layer everything draws.
+ * Suppression only applies where the alternatives actually share a slot.
+ */
+export function nativeLayerHiddenByChartGroup(id: string, data: NativeData): boolean {
+  const chart = data.chart?.enabled ? data.chart : undefined;
+  const group = nativeChartGroup(chart ? chart.chartSource ?? "chart_stress" : undefined);
+  if (!group) return false;
+  const bounds = (key: string) => {
+    const style = data[key];
+    if (!style?.enabled) return null;
+    const size = nativeDataSize(key, style);
+    return { x0: style.x, y0: style.y, x1: style.x + size.width, y1: style.y + size.height };
+  };
+  const collides = (a: string, b: string) => {
+    const p = bounds(a), q = bounds(b);
+    return Boolean(p && q && p.x0 < q.x1 && q.x0 < p.x1 && p.y0 < q.y1 && q.y0 < p.y1);
+  };
+  if (id === "chart_sun_angle") return group !== "sun";
+  if (id === "weather_temp") return group === "sun" && collides("weather_temp", "chart_sun_angle");
+  // NOMAD keeps min/max temperature and wind in one row; COROS lists wind and
+  // direction in every group except general daily data.
+  if (id === "weather_temp_min" || id === "weather_temp_max") return group !== "general" && collides(id, "weather_wind");
+  if (id === "weather_wind" || id === "weather_direction") return group === "general" && (collides("weather_wind", "weather_temp_min") || collides("weather_wind", "weather_temp_max"));
+  return false;
 }
 
 const SAMPLE_HISTORY = [0.42, 0.51, 0.37, 0.63, 0.58, 0.75, 0.54, 0.68, 0.61, 0.46, 0.52, 0.35];
@@ -212,7 +259,7 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
   const ratio = canvas.width / width;
   const history = scenario?.chartHistory ?? SAMPLE_HISTORY;
   for (const [id, style] of Object.entries(data)) {
-    const field = NATIVE_DATA_BY_ID.get(id); if (!style.enabled || !field) continue;
+    const field = NATIVE_DATA_BY_ID.get(id); if (!style.enabled || !field || nativeLayerHiddenByChartGroup(id, data)) continue;
     const scale = style.scale * ratio, x = style.x * ratio, y = style.y * ratio;
     const part = (key: Part) => nativePart(id, style, key);
     const draw = async (role: Role, index = 0, dx = part(nativeRolePart(role)).x, dy = part(nativeRolePart(role)).y, sourceStyle = style) => {
@@ -223,14 +270,23 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
     const value = scenario?.values?.[id === "chart" ? source : id] ?? scenario?.values?.[id] ?? nativeDataPreviewValue(id, style);
     if (id === "chart" && part("background").enabled) await draw("background");
     if (available.includes("states") && part("states").enabled) {
-      await draw("states", Math.max(0, Math.min((moon ? 30 : field.stateCount!) - 1, Math.trunc(Number(value)) || 0)));
+      // PLANET has eleven stamina frames, from empty (0) to full (100%). UV
+      // level artwork is categorical (DASHBOARD: unknown, low, moderate, high,
+      // very high, extreme), so the sample index maps through the WHO bands.
+      const uv = Number(value);
+      const state = id === "stamina" ? Math.floor(Number(value) / 10)
+        : id === "weather_uv" ? (!Number.isFinite(uv) || uv < 0 ? 0 : uv < 3 ? 1 : uv < 6 ? 2 : uv < 8 ? 3 : uv < 11 ? 4 : 5)
+        : Math.trunc(Number(value));
+      await draw("states", Math.max(0, Math.min((moon ? 30 : nativeStateCount(id, style)) - 1, state || 0)));
     }
     if (available.includes("icon") && part("icon").enabled) await draw("icon");
     if (available.includes("value") && part("value").enabled) {
-      const digits = part("value"), digitWidth = digits.width / 4;
-      let dx = digits.x;
+      const digits = part("value"), digitWidth = digits.digitWidth;
       const time = isNativeTime(id, style);
-      for (const char of value.slice(0, time ? 5 : 4)) {
+      const characters = value.slice(0, time ? 5 : 6);
+      const textWidth = [...characters].reduce((sum, char) => sum + (/\d/.test(char) ? digitWidth : char === "." ? part("decimal").width : part("symbols").width), 0);
+      let dx = digits.x + (digits.align === "right" ? digits.width - textWidth : digits.align === "center" ? (digits.width - textWidth) / 2 : 0);
+      for (const char of characters) {
         if (/\d/.test(char)) { await draw("digits", Number(char), dx, digits.y); dx += digitWidth; }
         else if (char === ".") {
           await draw("decimal", 0, dx, digits.y); dx += part("decimal").width;
@@ -251,16 +307,45 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
     if (plot.enabled) {
       ctx.save();
       ctx.beginPath(); ctx.rect(x + plot.x * scale, y + plot.y * scale, plot.width * scale, plot.height * scale); ctx.clip();
-      // Line previews are disabled, including legacy projects saved as "curve".
-      const barWidth = chart?.barWidth ?? 8, gap = chart?.barGap ?? 4;
-      const count = Math.ceil(plot.width / (barWidth + gap));
-      for (let i = 0; i < count; i++) {
-        const h = history[i % history.length] * plot.height;
-        ctx.fillStyle = i === Math.floor(count / 2) ? chart?.selectedBarColor ?? plot.color : chart?.unselectedBarColor ?? "#555555";
-        ctx.fillRect(x + (plot.x + i * (barWidth + gap)) * scale, y + (plot.y + plot.height - h) * scale, barWidth * scale, h * scale);
+      if (chart?.previewType === "curve") {
+        // Sample curve using the exported line appearance. Rise/set sources draw
+        // a day arc around a horizon like official sun/moon groups; other
+        // sources trace the sample history. Upper/lower colors split at the
+        // horizon or the plot's midline.
+        const upper = chart.upperColor ?? plot.color, lower = chart.lowerColor ?? "#555555", lineWidth = Math.max(1, chart.lineWidth ?? 2) * scale;
+        const px = (t: number) => x + (plot.x + t * plot.width) * scale, py = (v: number) => y + (plot.y + (1 - v) * plot.height) * scale;
+        const arc = isNativeTime(id, style), split = arc ? 0.45 : 0.5;
+        const curve = (t: number) => arc ? split + Math.cos((t - 0.5) * Math.PI * 2) * 0.42 : (() => {
+          const position = t * (history.length - 1), index = Math.floor(position), next = Math.min(history.length - 1, index + 1);
+          return history[index] + (history[next] - history[index]) * (position - index);
+        })();
+        if (arc) { ctx.strokeStyle = lower; ctx.lineWidth = Math.max(1, scale); ctx.beginPath(); ctx.moveTo(px(0), py(split)); ctx.lineTo(px(1), py(split)); ctx.stroke(); }
+        ctx.lineWidth = lineWidth; ctx.lineCap = "round"; ctx.lineJoin = "round";
+        const steps = Math.max(2, Math.round(plot.width / 2));
+        for (const [color, above] of [[lower, false], [upper, true]] as const) {
+          ctx.strokeStyle = color; ctx.beginPath();
+          let drawing = false;
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps, v = curve(t);
+            if ((v >= split) === above) { if (drawing) ctx.lineTo(px(t), py(v)); else { ctx.moveTo(px(t), py(v)); drawing = true; } }
+            else drawing = false;
+          }
+          ctx.stroke();
+        }
+        const progress = Math.max(0, Math.min(1, scenario?.chartProgress ?? 0.3));
+        ctx.fillStyle = plot.color; ctx.beginPath(); ctx.arc(px(progress), py(curve(progress)), Math.max(3 * scale, lineWidth * 1.5), 0, Math.PI * 2); ctx.fill();
+      } else {
+        const barWidth = chart?.barWidth ?? 8, gap = chart?.barGap ?? 4;
+        const count = Math.ceil(plot.width / (barWidth + gap));
+        for (let i = 0; i < count; i++) {
+          const h = history[i % history.length] * plot.height;
+          ctx.fillStyle = i === Math.floor(count / 2) ? chart?.selectedBarColor ?? plot.color : chart?.unselectedBarColor ?? "#555555";
+          ctx.fillRect(x + (plot.x + i * (barWidth + gap)) * scale, y + (plot.y + plot.height - h) * scale, barWidth * scale, h * scale);
+        }
       }
       ctx.restore();
     }
-    if (part("mask").enabled) await draw("mask");
+    // chart_bar_mask marks the selected bar; official curve groups draw no marker.
+    if (part("mask").enabled && chart?.previewType !== "curve") await draw("mask");
   }
 }

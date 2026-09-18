@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import pngjs from "pngjs";
+import { readLayoutHeaders } from "./lib/coros-bin-layout.mjs";
 
 const { PNG } = pngjs;
 const inputPath = process.argv[2] ? path.resolve(process.argv[2]) : undefined;
@@ -45,6 +46,7 @@ function findBitmapBlocks(buffer) {
     }
 
     const dataOffset = offset + 14 + frameCount * 4;
+    if (dataOffset > buffer.length) continue;
     const frameEnds = [];
     let previousEnd = 0;
     let valid = true;
@@ -96,84 +98,30 @@ function bitmapReference(block) {
   };
 }
 
-/**
- * COROS's 416px layout has a stable pair of feature records at 0xc40/0xc80.
- * Comparing the weather-only GO FISHING binary with the weather+temperature
- * PLANET binary identifies the fields below. The compiled file has no INI
- * names, so this describes on-watch slots rather than source config keys.
- */
+// Weather day/night pointers share a position in each mode's own header.
+// AOD comes from header[0x322], never from the adjacent dark-weather pointer.
 function decodeWeatherAndTemperatureSlots(buffer, blocks) {
-  const NORMAL_WEATHER_RECORD = 0xc40;
-  const AOD_WEATHER_RECORD = 0xc80;
-  const minimumLayoutBytes = AOD_WEATHER_RECORD + 0x16;
-  if (buffer.length < minimumLayoutBytes) {
-    return undefined;
-  }
-
-  const blocksByOffset = new Map(blocks.map((block) => [block.offset, block]));
-  const weatherTable = (pointer) => {
-    const block = blocksByOffset.get(pointer);
-    return block && block.frameCount === 41 && block.width === block.height
-      ? bitmapReference(block)
-      : undefined;
-  };
-  const bitmap = (pointer) => {
-    const block = blocksByOffset.get(pointer);
+  let headers;
+  try { headers = readLayoutHeaders(buffer); } catch { return undefined; }
+  const byOffset = new Map(blocks.map((block) => [block.offset, block]));
+  const bitmap = (field) => {
+    const block = byOffset.get(buffer.readUInt32LE(field));
     return block ? bitmapReference(block) : undefined;
   };
-
-  const normalWeather = weatherTable(
-    buffer.readUInt32LE(NORMAL_WEATHER_RECORD + 0x12)
-  );
-  const aodWeather = weatherTable(
-    buffer.readUInt32LE(AOD_WEATHER_RECORD + 0x12)
-  );
-  const temperatureDigits = bitmap(
-    buffer.readUInt32LE(NORMAL_WEATHER_RECORD + 0x20)
-  );
-  const temperatureSign = bitmap(
-    buffer.readUInt32LE(NORMAL_WEATHER_RECORD + 0x24)
-  );
-  const temperatureSuffix = bitmap(
-    buffer.readUInt32LE(NORMAL_WEATHER_RECORD + 0x28)
-  );
-  const temperatureRect = {
-    x0: buffer.readUInt16LE(NORMAL_WEATHER_RECORD + 0x16),
-    y0: buffer.readUInt16LE(NORMAL_WEATHER_RECORD + 0x18),
-    x1: buffer.readUInt16LE(NORMAL_WEATHER_RECORD + 0x1a),
-    y1: buffer.readUInt16LE(NORMAL_WEATHER_RECORD + 0x1c)
-  };
-  const hasTemperatureRect = Object.values(temperatureRect).some((value) => value !== 0);
-  const temperature =
-    hasTemperatureRect && temperatureDigits?.frameCount === 10
-      ? {
-          rect: temperatureRect,
-          digits: temperatureDigits,
-          ...(temperatureSign ? { sign: temperatureSign } : {}),
-          ...(temperatureSuffix ? { suffix: temperatureSuffix } : {})
-        }
-      : undefined;
-
-  if (!normalWeather && !aodWeather && !temperature) {
-    return undefined;
-  }
+  const position = (base) => ({ x: buffer.readInt32LE(base + 0xc4a), y: buffer.readInt32LE(base + 0xc4e) });
+  const normal = bitmap(0xc52);
+  const night = bitmap(0xc92);
+  const aodHeader = headers.find((header) => header.mode === "aod");
+  const aod = aodHeader && bitmap(aodHeader.offset + 0xc52);
+  const digits = bitmap(0xc60);
+  const rect = { x0: buffer.readInt16LE(0xc56), y0: buffer.readInt16LE(0xc58),
+    x1: buffer.readInt16LE(0xc5a), y1: buffer.readInt16LE(0xc5c) };
+  const temperature = digits && rect.x1 > rect.x0 && rect.y1 > rect.y0
+    ? { rect, digits, sign: bitmap(0xc64), suffix: bitmap(0xc68) } : undefined;
+  if (!normal && !night && !aod && !temperature) return undefined;
   return {
-    ...(normalWeather || aodWeather
-      ? {
-          weather: {
-            ...(normalWeather
-              ? {
-                  position: {
-                    x: buffer.readUInt16LE(NORMAL_WEATHER_RECORD + 0x0a),
-                    y: buffer.readUInt16LE(NORMAL_WEATHER_RECORD + 0x0e)
-                  },
-                  normal: normalWeather
-                }
-              : {}),
-            ...(aodWeather ? { aod: aodWeather } : {})
-          }
-        }
-      : {}),
+    ...(normal || night || aod ? { weather: { position: position(0), normal, night,
+      ...(aod ? { aod: { ...aod, position: position(aodHeader.offset) } } : {}) } } : {}),
     ...(temperature ? { temperature } : {})
   };
 }
@@ -194,9 +142,8 @@ const manifest = {
 };
 
 // The pre-bitmap region is COROS's compiled element/layout table. Keep it for
-// further reverse engineering. Only the weather/temperature slots above have
-// been decoded by differential analysis; this is not enough to recreate a
-// source config.txt from the compiled binary.
+// further reverse engineering. For additional partial layout recovery, run
+// decompile-coros-watchface-layout.mjs; unknown records remain preserved.
 await fs.writeFile(path.join(outputPath, manifest.layoutFile), bytes.subarray(0, manifest.layoutBytes));
 
 for (const [blockIndex, block] of blocks.entries()) {
@@ -227,7 +174,13 @@ for (const [blockIndex, block] of blocks.entries()) {
       const indexes = decoded.subarray(0, pixelCount);
       const palette = decoded.subarray(pixelCount);
       for (let pixel = 0; pixel < pixelCount; pixel += 1) {
-        const paletteOffset = indexes[pixel] * 4;
+        // COROS stores its 256-entry LUT as a transposed 16x16 table.
+        // Pixel indices stay sequential; swap their nibbles for the lookup.
+        // Confirmed in 4.9.9 Bitmap::ToLut256Buffer (0x168a48) and
+        // Bitmap::ToQuantLut256Buffer (0x168c60). A linear lookup corrupts
+        // both color and alpha, producing faded or speckled glyphs.
+        const index = indexes[pixel];
+        const paletteOffset = (((index & 0x0f) << 4) | (index >>> 4)) * 4;
         const outputOffset = pixel * 4;
         png.data[outputOffset] = palette[paletteOffset];
         png.data[outputOffset + 1] = palette[paletteOffset + 1];

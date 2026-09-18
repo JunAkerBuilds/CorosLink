@@ -1,5 +1,4 @@
 import { WatchfaceColorInput } from "./WatchfaceColorInput";
-import { NATIVE_CHART_LINE_AVAILABILITY } from "../../electron/watchfaceNativeCatalog";
 import { useEffect, useRef, useState } from "react";
 import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceNativePartStyle } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
@@ -113,6 +112,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
     {definition.kind === "chart" && <p className="watchface-studio-summary" role="note"><strong>Experimental charts.</strong> This preview uses sample data. {style.chartSource !== "chart_moon" && "Line graphs are not available right now."}</p>}
     {definition.kind === "chart" && style.chartSource !== "chart_moon" && <p className="watchface-studio-summary" role="note">Chart numbers may stay blank on PACE Pro even when Back changes the graph. The sample number here does not confirm watch support. A separate metric layer can show a value, but will not follow chart changes.</p>}
     {definition.availability && <p className="watchface-studio-summary" role="note"><strong>AQI — {definition.availability.label}.</strong> {definition.availability.message}</p>}
+    {definition.note && <p className="watchface-studio-summary" role="note">{definition.note}</p>}
     <div className="watchface-position-inputs">
       {numberControl("X",style.x,x=>onPatch({x}),0,1600,true)}
       {numberControl("Y",style.y,y=>onPatch({y}),0,1600,true)}
@@ -131,21 +131,28 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
       </>}
       {numberControl(partKey === "value" ? "Number width" : "Width",component.width,width=>patchPart({width}),4,800,true)}
       {numberControl("Height",component.height,height=>patchPart({height}),4,800,true)}
+      {partKey === "value" && numberControl("Digit width",component.digitWidth,digitWidth=>patchPart({digitWidth}),1,800,true)}
     </div>
+    {partKey === "value" && <label className="field">Number alignment<select aria-label="Number alignment" value={component.align} onChange={event=>patchPart({align:event.target.value as "left" | "center" | "right"})}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>}
     {colorControl("Component color",component.color,color=>patchPart({color}))}
     {role && <LocalFontPicker api={api} label="Component font" value={style.parts?.[partKey]?.fontFamily ?? ""} emptyLabel="Use default font" disabled={disabled || busy} onChange={fontFamily=>patchPart({fontFamily:fontFamily || undefined})} />}
     {!nativePartHasPosition(partKey) && <p className="watchface-studio-summary">The watch places this component beside the live value. Its size and artwork are editable.</p>}
 
     {partKey === "plot" && <>
-      <p className="watchface-studio-summary" role="note"><strong>Line graphs — {NATIVE_CHART_LINE_AVAILABILITY.label}.</strong> {NATIVE_CHART_LINE_AVAILABILITY.message}</p>
-      <div className="watchface-position-inputs">
-        {numberControl("Bar width",style.chartStyle?.barWidth ?? 8,barWidth=>patchChart({barWidth}),1,80,true)}
-        {numberControl("Bar gap",style.chartStyle?.barGap ?? 4,barGap=>patchChart({barGap}),0,80,true)}
-      </div>
-      {colorControl("Selected bar",style.chartStyle?.selectedBarColor ?? component.color,selectedBarColor=>patchChart({selectedBarColor}))}
-      {colorControl("Other bars",style.chartStyle?.unselectedBarColor ?? "#555555",unselectedBarColor=>patchChart({unselectedBarColor}))}
-      <label className="field">Graph type<select aria-label="Graph type" value="bars" disabled><option value="bars">Bar graph</option></select></label>
-      <p className="watchface-studio-summary">The preview uses bars. Adjust Bar width, Bar gap, Selected bar and Other bars to customize their appearance.</p>
+      <label className="field">Graph type<select aria-label="Graph type" value={style.chartStyle?.previewType ?? "bars"} onChange={event=>patchChart({previewType:event.target.value as "curve" | "bars"})}><option value="bars">Bar graph</option><option value="curve">Line graph</option></select></label>
+      {(style.chartStyle?.previewType ?? "bars") === "curve" ? <>
+        <div className="watchface-position-inputs">{numberControl("Line thickness",style.chartStyle?.lineWidth ?? 2,lineWidth=>patchChart({lineWidth}),1,40,true)}</div>
+        {colorControl("Upper curve",style.chartStyle?.upperColor ?? component.color,upperColor=>patchChart({upperColor}))}
+        {colorControl("Lower curve",style.chartStyle?.lowerColor ?? "#555555",lowerColor=>patchChart({lowerColor}))}
+      </> : <>
+        <div className="watchface-position-inputs">
+          {numberControl("Bar width",style.chartStyle?.barWidth ?? 8,barWidth=>patchChart({barWidth}),1,80,true)}
+          {numberControl("Bar gap",style.chartStyle?.barGap ?? 4,barGap=>patchChart({barGap}),0,80,true)}
+        </div>
+        {colorControl("Selected bar",style.chartStyle?.selectedBarColor ?? component.color,selectedBarColor=>patchChart({selectedBarColor}))}
+        {colorControl("Other bars",style.chartStyle?.unselectedBarColor ?? "#555555",unselectedBarColor=>patchChart({unselectedBarColor}))}
+      </>}
+      <p className="watchface-studio-summary">Graph type only changes this preview. Bar and line appearance are both exported; the watch draws each chart group's live history in its own representation.</p>
     </>}
     {role && <>
       {indices.length > 1 && <label className="field">Artwork state<select aria-label="Artwork state" value={index} onChange={event=>setSelectedIndex(Number(event.target.value))}>{indices.map(i=><option key={i} value={i}>{String(i).padStart(2,"0")} · {SPRITE_LABELS[role]?.[i] ?? (role === "digits" ? `Digit ${i}` : `State ${i}`)}</option>)}</select></label>}

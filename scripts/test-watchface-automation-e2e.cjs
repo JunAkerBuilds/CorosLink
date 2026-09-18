@@ -36,18 +36,47 @@ async function main() {
   const { registerWatchfaceAutomation } = require("../dist-electron/watchfaceAutomation.js");
   const service = require("../dist-electron/corosWatchfaceService.js");
   initializeDatabase(app.getPath("userData"));
+  let authenticated = false;
+  let conversionAuthError = null;
+  let manualLoginAttempts = 0;
+  let savedLoginAttempts = 0;
+  let restoreCarrierAfterLogin = async () => {};
+  const accountStatus = () => ({ authenticated, secureStorageAvailable: true, savedCredentialsAvailable: true, savedEmail: "saved@example.test", suggestedRegion: "us" });
 
   // These are the production preload/service IPC contracts used by the real
   // editor. The automation endpoint and broker are registered unchanged.
   const handlers = {
     // Keep account/keychain access outside this offline editing test.
-    "watchfaces:getStatus": () => ({ authenticated: false, secureStorageAvailable: false, savedCredentialsAvailable: false, suggestedRegion: "us" }),
+    "watchfaces:getStatus": accountStatus,
+    "watchfaces:listThemes": () => [],
+    "watchfaces:login": async (_, email, password, region, remember) => {
+      assert.equal(email, "conversion@example.test");
+      assert.equal(password, "test-password");
+      assert.equal(region, "eu");
+      assert.equal(remember, true);
+      manualLoginAttempts++;
+      if (manualLoginAttempts === 1) throw new Error("The email or password is incorrect.");
+      await restoreCarrierAfterLogin();
+      authenticated = true;
+      return accountStatus();
+    },
+    "watchfaces:loginSaved": (_, region) => {
+      assert.equal(region, "eu");
+      savedLoginAttempts++;
+      conversionAuthError = null;
+      authenticated = true;
+      return accountStatus();
+    },
     "watchfaces:listProjects": () => service.listCorosWatchfaceProjects(),
     "watchfaces:saveProject": (_, input) => service.saveCorosWatchfaceProject(input),
     "watchfaces:loadProject": (_, id) => service.loadCorosWatchfaceProject(id),
     "watchfaces:describeTemplate": (_, id) => service.describeCorosWatchfaceTemplate(id),
     "watchfaces:loadTemplateAssets": (_, id, paths) => service.loadCorosWatchfaceTemplateAssets(id, paths),
     "watchfaces:loadTemplateConfigTexts": (_, id) => service.loadCorosWatchfaceTemplateConfigTexts(id),
+    "watchfaces:convertArchive": (_, input) => {
+      if (conversionAuthError) throw new Error(conversionAuthError);
+      return service.convertCorosWatchfaceArchive(input);
+    },
     "watchfaces:createArchive": (_, input) => service.createCorosWatchfaceArchive(input),
     "watchfaces:cacheProjectPreview": (_, id, preview) => service.cacheCorosWatchfaceProjectPreview(id, preview),
     "watchfaces:listLocalFontFamilies": () => ["Arial", "Helvetica"]
@@ -66,6 +95,13 @@ async function main() {
     entries.push({ name: `${directory}/config.txt`, data: Buffer.from(config.join("\r\n")) }, { name: `${directory}/AODconfig.txt`, data: Buffer.from(config.join("\r\n")) }, { name: `${directory}/background.png`, data: solidPng(resolution, resolution, 0) }, { name: `${directory}/thmb.png`, data: solidPng(80, 80, 0) });
     for (let digit = 0; digit < 10; digit++) entries.push({ name: `${directory}/01/0${digit}.png`, data: solidPng(Math.round(60*k), Math.round(95*k), 50 + digit*20) });
   }
+  const carrierCache = path.join(app.getPath("userData"), "watchface-conversion-carriers");
+  await fs.mkdir(carrierCache, { recursive: true });
+  await fs.writeFile(path.join(carrierCache, "pace-4.zip"), createStoreZip(entries.map(entry => ({ ...entry, name: entry.name.replace("416x416", "390x390") }))));
+  await fs.writeFile(path.join(carrierCache, "pace-pro.zip"), createStoreZip(entries));
+  const mipCarrier = [...entries.filter(entry => !entry.name.startsWith("watchface_416x416/") && !entry.name.endsWith("/AODconfig.txt"))];
+  for (const size of [240, 260, 280]) mipCarrier.push(...entries.filter(entry => entry.name.startsWith("watchface_416x416/") && !entry.name.endsWith("/AODconfig.txt")).map(entry => ({ ...entry, name: entry.name.replace("416x416", `${size}x${size}`) })));
+  await fs.writeFile(path.join(carrierCache, "pace-3.zip"), createStoreZip(mipCarrier));
   const fixture = path.join(temporaryRoot, "starter.dat");
   const currentOnlyFixture = path.join(temporaryRoot, "current-only.dat");
   const imagePath = path.join(temporaryRoot, "artwork.png");
@@ -119,7 +155,7 @@ async function main() {
     assert.equal((await tool("get_context")).editorOpen, false);
     const schema = await tool("get_schema");
     assert.ok(schema);
-    assert.equal(schema.nativeData.fields.length,25);
+    assert.equal(schema.nativeData.fields.length,27);
     assert.equal(schema.nativeData.chartSources.length,12);
     assert.equal(schema.document.$defs.nativeDataStyle.properties.assets.properties.icon.additionalProperties.$ref,'#/$defs/pngImageValue');
     assert.equal(schema.document.$defs.weatherIndicator.properties.assets.properties.day.additionalProperties.$ref,'#/$defs/pngImageValue');
@@ -260,7 +296,7 @@ async function main() {
     })()`), Boolean, "active chart tab scrolls into view");
     await window.webContents.executeJavaScript(`document.querySelector('[role="tab"][aria-selected="true"]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}))`);
     assert.equal(await window.webContents.executeJavaScript("document.activeElement.textContent"),"Astronomy","Arrow keys activate and focus adjacent tabs");
-    assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('.wf-layer-picker-results [data-add-option]').length"),1);
+    assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('.wf-layer-picker-results [data-add-option]').length"),2,"Astronomy lists sunrise/sunset progress and the chart solar angle");
     await window.webContents.executeJavaScript(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true}))`);
     assert.equal(await window.webContents.executeJavaScript("document.querySelector('[role=tab][aria-selected=true]').textContent"),"All");
     await until(() => window.webContents.executeJavaScript(`Math.abs(document.querySelector('.wf-layer-picker').getBoundingClientRect().bottom-(innerHeight-12))<=1`), Boolean, "returning to All expands the picker again");
@@ -369,11 +405,14 @@ async function main() {
     await until(()=>window.webContents.executeJavaScript(`Boolean(document.querySelector('input[aria-label="Bar width"]'))`),Boolean,"graph controls");
     assert.ok(await window.webContents.executeJavaScript(`(() => {
       const type=document.querySelector('select[aria-label="Graph type"]');
-      return type.disabled && type.value==='bars' && [...type.options].every(option=>option.value==='bars')
-        && !document.querySelector('input[aria-label="Line thickness"]')
-        && !document.querySelector('input[aria-label="Upper curve"]')
-        && !document.querySelector('input[aria-label="Lower curve"]');
-    })()`),'Only bar graphs are available in the inspector');
+      return !type.disabled && type.value==='bars' && [...type.options].map(option=>option.value).join()==='bars,curve';
+    })()`),'Bar and line graphs are both offered in the inspector');
+    await window.webContents.executeJavaScript(`(() => { const select=document.querySelector('select[aria-label="Graph type"]'); select.value='curve'; select.dispatchEvent(new Event('change',{bubbles:true})); })()`);
+    await until(()=>window.webContents.executeJavaScript(`Boolean(document.querySelector('input[aria-label="Line thickness"]') && document.querySelector('input[aria-label="Upper curve"]') && document.querySelector('input[aria-label="Lower curve"]'))`),Boolean,"line graph controls");
+    document=await tool("get_document");
+    assert.equal(document.design.nativeData.chart.chartStyle.previewType,'curve','Line graph preview is selectable');
+    await window.webContents.executeJavaScript(`(() => { const select=document.querySelector('select[aria-label="Graph type"]'); select.value='bars'; select.dispatchEvent(new Event('change',{bubbles:true})); })()`);
+    await until(()=>window.webContents.executeJavaScript(`Boolean(document.querySelector('input[aria-label="Bar width"]'))`),Boolean,"bar graph controls");
     const graphToggleSize=await window.webContents.executeJavaScript(`(() => { const box=document.querySelector('input[aria-label="Show Graph"]').getBoundingClientRect(); return {width:box.width,height:box.height}; })()`);
     assert.ok(graphToggleSize.width<=20&&graphToggleSize.height<=20,'Graph visibility checkbox fits the inspector');
     await window.webContents.executeJavaScript(`document.querySelector('input[aria-label="Show Graph"]').click()`);
@@ -405,9 +444,9 @@ async function main() {
     const graphParts=document.capabilities.layers.find(layer=>layer.id==='native:chart').nativeData.components;
     assert.equal(graphParts.find(part=>part.id==='plot').effectiveStyle.width,300);
     assert.equal(graphParts.find(part=>part.id==='decimal').positionEditable,false);
-    assert.equal(document.capabilities.nativeData.fieldIds.length,25);
+    assert.equal(document.capabilities.nativeData.fieldIds.length,27);
     const resource=await client.readResource({uri:document.capabilities.schemaResource});
-    assert.equal(JSON.parse(resource.contents[0].text).nativeData.fields.length,25,'Advertised schema resource resolves');
+    assert.equal(JSON.parse(resource.contents[0].text).nativeData.fields.length,27,'Advertised schema resource resolves');
     await tool("undo",nativeIdentity()); document=await tool("get_document");
     assert.equal(document.design.nativeData.today_run,undefined);
     await tool("redo",nativeIdentity()); document=await tool("get_document");
@@ -782,12 +821,104 @@ async function main() {
     assert.ok(importedProject, "close with save persists the document");
     await tool("open", { project: importedProject.projectId });
     document = await tool("get_document");
+    const dialogRevision = document.revision;
+    const dialogSession = document.sessionId;
+    await window.webContents.executeJavaScript(`document.querySelector('.wf-export-button').click()`);
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".wf-export-popover .is-convert"))'), Boolean, "conversion menu");
+    await window.webContents.executeJavaScript('document.querySelector(".wf-export-popover .is-convert").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog"))'), Boolean, "watch-only conversion picker");
+    assert.equal(await window.webContents.executeJavaScript('document.querySelectorAll(".watchface-convert-dialog select").length'), 1);
+    assert.equal(await window.webContents.executeJavaScript('document.querySelectorAll(".watchface-template-browser").length'), 0);
+    window.showInactive();
+    await fs.writeFile(path.join(temporaryRoot, "watch-conversion.png"), (await window.webContents.capturePage()).toPNG());
+    window.hide();
+    await window.webContents.executeJavaScript(`document.querySelector('.watchface-convert-dialog .secondary-button').click()`);
+    document = await tool("get_document");
+    assert.equal(document.revision, dialogRevision, "cancelling conversion preserves edits and history");
+    assert.equal(document.sessionId, dialogSession, "conversion picker keeps the original editor mounted");
     const previousSession = document.sessionId;
-    await tool("convert", { ...identity(), targetArchive: sourceArchive.archiveId, firmwareType: "COROS W336", watchModel: "pace-4" });
+    const originalDesign = structuredClone(document.design);
+    // Exercise the real service's missing-session error on a first-use cache miss.
+    const pace4CarrierPath = path.join(carrierCache, "pace-4.zip");
+    const pace4Carrier = await fs.readFile(pace4CarrierPath);
+    await fs.unlink(pace4CarrierPath);
+    restoreCarrierAfterLogin = () => fs.writeFile(pace4CarrierPath, pace4Carrier);
+    await window.webContents.executeJavaScript(`document.querySelector('.wf-export-button').click()`);
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".wf-export-popover .is-convert"))'), Boolean, "conversion menu");
+    await window.webContents.executeJavaScript('document.querySelector(".wf-export-popover .is-convert").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog .primary-button"))'), Boolean, "convert button");
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .primary-button").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog input[type=password]"))'), Boolean, "conversion sign-in dialog");
+    assert.match(await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog").textContent'), /Sign in to download support for PACE 4/);
+    assert.equal(await window.webContents.executeJavaScript('document.activeElement === document.querySelector(".watchface-convert-dialog select")'), true, "focus moves into sign-in");
+    assert.equal(await window.webContents.executeJavaScript('(() => { const dialog = document.querySelector(".watchface-convert-dialog"); const back = dialog.querySelector(".watchface-modal-actions button"); return back.getBoundingClientRect().bottom <= dialog.getBoundingClientRect().bottom; })()'), true, "sign-in actions fit in the dialog");
+    window.showInactive();
+    await fs.writeFile(path.join(temporaryRoot, "watch-conversion-sign-in.png"), (await window.webContents.capturePage()).toPNG());
+    window.hide();
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .watchface-modal-actions button").click()');
+    assert.equal(await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog select").value'), "pace-4", "leaving sign-in preserves the selected watch");
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .secondary-button").click()');
+    document = await tool("get_document");
+    assert.equal(document.sessionId, previousSession, "cancelling sign-in keeps the original editor");
+    assert.equal(document.revision, dialogRevision);
+    assert.deepEqual(document.design, originalDesign);
+    await window.webContents.executeJavaScript('document.querySelector(".wf-export-button").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".wf-export-popover .is-convert"))'), Boolean, "conversion menu after cancelled sign-in");
+    await window.webContents.executeJavaScript('document.querySelector(".wf-export-popover .is-convert").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog .primary-button"))'), Boolean, "convert button after cancelled sign-in");
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .primary-button").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog input[type=password]"))'), Boolean, "sign-in after retrying conversion");
+    await window.webContents.executeJavaScript(`(() => {
+      const form = document.querySelector('.watchface-convert-dialog form');
+      for (const [type, value] of [['email', 'conversion@example.test'], ['password', 'test-password']]) {
+        const input = form.querySelector('input[type=' + type + ']');
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      const region = form.querySelector('select');
+      region.value = 'eu'; region.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog form").requestSubmit()');
+    await until(() => window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog [role=alert]")?.textContent ?? ""'), text => text.includes("email or password is incorrect"), "inline login error");
+    assert.equal(await window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog input[type=password]"))'), true, "failed login keeps the sign-in form open");
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog form").requestSubmit()');
+    await until(async () => { const response = await rawTool("get_context"); return JSON.parse(response.content.find(part => part.type === "text").text); }, result => typeof result.sessionId === "string" && result.sessionId !== previousSession && !result.busy, "converted editor");
+    assert.equal(manualLoginAttempts, 2);
     document = await tool("get_document");
     assert.notEqual(document.sessionId, previousSession);
     assert.equal(document.target.watchModel, "pace-4");
     assert.equal(document.design.backgroundElements.find(item => item.id === "label").text, "TRAIL");
+    assert.deepEqual(document.design, originalDesign, "conversion preserves all scene styles, assets, groups, offsets and data fields");
+    await tool("render_preview", { sessionId: document.sessionId, mode: "current", resolution: 390 });
+    await tool("render_preview", { sessionId: document.sessionId, mode: "aod", resolution: 390 });
+    await tool("build_archive", identity());
+    // A stale authenticated status must also open sign-in when COROS expires it.
+    conversionAuthError = "Your COROS mobile session expired. Sign in again.";
+    const beforeSavedLoginSession = document.sessionId;
+    await window.webContents.executeJavaScript('document.querySelector(".wf-export-button").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".wf-export-popover .is-convert"))'), Boolean, "MIP conversion menu");
+    await window.webContents.executeJavaScript('document.querySelector(".wf-export-popover .is-convert").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog select"))'), Boolean, "MIP watch picker");
+    await window.webContents.executeJavaScript(`(() => { const select = document.querySelector('.watchface-convert-dialog select'); select.value = 'pace-3'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .primary-button").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog .watchface-saved-login button"))'), Boolean, "saved account sign-in");
+    assert.match(await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog").textContent'), /download support for PACE 3/);
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .watchface-saved-login button").click()');
+    await until(async () => { const response = await rawTool("get_context"); return JSON.parse(response.content.find(part => part.type === "text").text); }, result => typeof result.sessionId === "string" && result.sessionId !== beforeSavedLoginSession && !result.busy, "conversion resumed after saved login");
+    assert.equal(savedLoginAttempts, 1);
+    document = await tool("get_document");
+    assert.equal(document.capabilities.aod, false);
+    assert.equal(document.target.watchModel, "pace-3");
+    assert.deepEqual(document.design, originalDesign, "MIP retains the dormant AOD design");
+    await tool("render_preview", { sessionId: document.sessionId, resolution: 240 });
+    await tool("build_archive", identity());
+    authenticated = false;
+    await tool("convert", { ...identity(), watchModel: "pace-pro" });
+    document = await tool("get_document");
+    assert.equal(document.capabilities.aod, true);
+    assert.deepEqual(document.design, originalDesign, "round trip restores the whole editable scene");
+    await tool("save", identity());
+    document = await tool("get_document");
     await tool("close", { ...identity(), discardChanges: true });
     const currentOnly = await tool("import_archive", { path: currentOnlyFixture });
     await tool("open", { archive: currentOnly.archiveId });

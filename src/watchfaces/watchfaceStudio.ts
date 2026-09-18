@@ -1,4 +1,5 @@
 import { renderAlignedRasterGlyph, spaceWatchfaceGlyph } from "./watchfaceGlyphLayout.ts";
+import { getWatchfaceTarget } from "../../electron/watchfaceTargets.ts";
 import type {
   CorosWatchfaceArtwork,
   CorosWatchfaceAssetReplacement,
@@ -3491,6 +3492,10 @@ export interface WatchfaceDateSpriteStyle {
   height?: number;
   /** Imported PNG dimensions preserve their proportions unless unlocked. */
   aspectLocked?: boolean;
+  /** Use the custom weekday labels for every watch language. Defaults to false. */
+  overwriteAllLanguages?: boolean;
+  /** Additional language prefixes to replace when all languages is off. */
+  overwriteLanguages?: string[];
   /** Date-month rendering mode; absent preserves the starter's format. */
   monthFormat?: "digits" | "labels";
   /** Optional per-layer font; falls back to the design font. */
@@ -3532,6 +3537,8 @@ export function removeWatchfaceDateFontOverride(
     ...remaining
   } = style;
   const hasIndependentEdits =
+    remaining.overwriteAllLanguages !== undefined ||
+    remaining.overwriteLanguages !== undefined ||
     remaining.scale !== 1 ||
     remaining.color !== undefined ||
     remaining.rotation !== undefined ||
@@ -6626,7 +6633,63 @@ export async function buildDateSpriteComposition(
       });
     }
   }
-  return { replacements, configOverrides };
+  return applyWeekdayLanguageOverrides(details, styles, { replacements, configOverrides });
+}
+
+/** Copy the composed weekday into firmware-native locale folders only when opted in. */
+export function applyWeekdayLanguageOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  styles: WatchfaceDateStyles,
+  composition: WatchfaceDateSpriteComposition
+): WatchfaceDateSpriteComposition {
+  const allLanguages = styles.weekday?.overwriteAllLanguages === true;
+  const selected = new Set(styles.weekday?.overwriteLanguages ?? []);
+  if (!allLanguages && selected.size === 0) return composition;
+  selected.add("english");
+  const replacements = new Map(composition.replacements.map((asset) => [asset.path, asset]));
+  const configOverrides = [...composition.configOverrides];
+  const styledRects = buildDateStyleOverrides(details, styles, true);
+  for (const resolution of details.resolutions) {
+    const path = `${resolution.directory}/config.txt`;
+    const rect = [...styledRects, ...composition.configOverrides]
+      .filter((override) => override.path === path)
+      .reduce((value, override) => override.values.english_date_week_rect ?? value,
+        resolution.config.english_date_week_rect);
+    const weekdays = Array.from({ length: 7 }, (_, index) =>
+      replacements.get(`${resolution.directory}/cl_weekday/${String(index).padStart(2, "0")}.png`));
+    if (!rect || weekdays.some((asset) => !asset)) continue;
+    const values: Record<string, string> = {};
+    for (const [fontKey, font] of Object.entries(resolution.config)) {
+      if (!fontKey.endsWith("_date_week_font") || fontKey.startsWith("control_")) continue;
+      const language = fontKey.replace(/_date_week_font$/, "");
+      if (!allLanguages && !selected.has(language)) continue;
+      const folder = findSpriteFolder(resolution, font);
+      if (!folder || folder.files.length < 7) continue;
+      // Avoid modifying an unselected language that shares this font folder.
+      const sharedWithUnselected = !allLanguages && Object.entries(resolution.config).some(
+        ([key, value]) => key.endsWith("_date_week_font") && value === font &&
+          !selected.has(key.replace(/_date_week_font$/, ""))
+      );
+      const targetFont = sharedWithUnselected ? `cl_weekday_${language}` : font;
+      weekdays.forEach((asset, index) => {
+        const target = folder.files[index]!;
+        const targetPath = sharedWithUnselected
+          ? `${resolution.directory}/${targetFont}/${String(index).padStart(2, "0")}.png`
+          : target.path;
+        replacements.set(targetPath, {
+          path: targetPath, dataUrl: asset!.dataUrl, allowDimensionOverride: true,
+          ...(sharedWithUnselected ? { create: true } : {})
+        });
+      });
+      values[fontKey] = targetFont;
+      values[fontKey.replace(/_font$/, "_rect")] = rect;
+      // The composed PNG already contains its color.
+      const colorKey = `${fontKey}_color`;
+      if (colorKey in resolution.config) values[colorKey] = "";
+    }
+    if (Object.keys(values).length) configOverrides.push({ path, values });
+  }
+  return { replacements: [...replacements.values()], configOverrides };
 }
 
 /** Generates isolated date sprites in the template's firmware-native canvases. */
@@ -7415,9 +7478,13 @@ export function pickPreviewResolution(
  * switch to any other tree in Studio.
  */
 export function pickWatchPreviewResolution(
-  details: CorosWatchfaceTemplateDetails
+  details: CorosWatchfaceTemplateDetails,
+  modelOrFirmware?: string
 ): CorosWatchfaceResolutionDetails | null {
   const resolutions = [...details.resolutions];
+  const target = getWatchfaceTarget(modelOrFirmware);
+  const native = target && resolutions.find(resolution => resolution.width === target.previewSize);
+  if (native) return native;
   const widths = new Set(resolutions.map((resolution) => resolution.width));
   if (widths.has(240) && widths.has(260) && widths.has(800)) {
     return resolutions.find((resolution) => resolution.width === 260) ?? null;
@@ -8280,6 +8347,7 @@ export async function drawStudioPreview(
       file: CorosWatchfaceSpriteFile;
       index?: number;
     };
+    suffix?: { configKey: string; file: CorosWatchfaceSpriteFile };
   }[] = [];
   if (autoAlignedTime) {
     const rect = parseConfigRect(config.autoalign_time_rect);
@@ -8344,13 +8412,18 @@ export async function drawStudioPreview(
     config["battery_level_font"]
   );
   if (batteryRect && batterySource) {
+    const percentPath = config.battery_level_percent_icon?.replace(/\\/g, "/").replace(/^\.\//, "");
+    const percentFile = percentPath
+      ? resolution.icons.find(file => file.path === `${resolution.directory}/${percentPath}`) : undefined;
+    if (percentFile) wantedSprites.set(percentFile.path, { color: null });
     numberPlans.push({
       rect: batteryRect,
       configValue: config.battery_level_rect,
       source: batterySource,
       value: options.previewValues?.battery ?? "82",
       metricId: "battery",
-      componentId: "battery"
+      componentId: "battery",
+      ...(percentFile ? { suffix: { configKey: "battery_level_percent_icon", file: percentFile } } : {})
     });
   }
   const dateFields: [string, string, string, WatchfaceDatePartId][] = [
@@ -9459,6 +9532,16 @@ export async function drawStudioPreview(
       x += glyph.file.width;
     }
     if (options.compiledPixels) context.restore();
+    // COROS stores the percent image separately from the numeric rectangle.
+    // Keep it attached to the value, outside the digit clipping region.
+    const suffixImage = plan.suffix
+      ? await configuredAssetImage(plan.suffix.configKey, plan.suffix.file,
+          componentColor ?? metricStyle?.color ?? (options.tintLabels ? options.digitColor : null))
+      : undefined;
+    if (suffixImage) drawStudioLayerImage(
+      context, suffixImage, x * scale, Math.round(glyphY(suffixImage.naturalHeight)) * scale,
+      suffixImage.naturalWidth * scale, suffixImage.naturalHeight * scale, scale, options, layerId
+    );
   }
 
   if (

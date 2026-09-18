@@ -504,6 +504,9 @@ assert.equal(
   260,
   "240/260/800 MIP bundles should preview the APEX 4 46 mm tree by default"
 );
+for (const [watch, size] of [["pace-3", 240], ["nomad", 260], ["vertix-2", 280], ["vertix-2s", 280]]) {
+  assert.equal(pickWatchPreviewResolution(apexPreviewDetails, watch)?.width, size, `${watch} uses its own native preview size`);
+}
 assert.deepEqual(
   detailsForPreviewResolution(apexPreviewDetails, "watchface_240x240")
     .resolutions.map(({ width }) => width),
@@ -2670,7 +2673,7 @@ assert.deepEqual(
     { id: "calories", label: "Calories", active: false },
     { id: "exercise", label: "Exercise", active: false },
     { id: "elevation", label: "Elevation", active: false },
-    { id: "temperature", label: "Temperature", active: false }
+    { id: "temperature", label: "Sensor temperature", active: false }
   ]
 );
 const sparseMetricDetails = {
@@ -2707,7 +2710,7 @@ assert.deepEqual(
     { id: "calories", label: "Calories", active: false },
     { id: "exercise", label: "Exercise", active: false },
     { id: "elevation", label: "Elevation", active: false },
-    { id: "temperature", label: "Temperature", active: false }
+    { id: "temperature", label: "Sensor temperature", active: false }
   ],
   "every fixed metric should remain available when a template omits its config keys"
 );

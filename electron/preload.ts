@@ -135,6 +135,8 @@ import type {
   CorosWatchfaceArchiveExportInput,
   CorosWatchfaceArtwork,
   CorosWatchfaceCreatorInput,
+  CorosWatchfaceConversionInput,
+  CorosWatchfaceConversionResult,
   CorosWatchfaceExistingShareInput,
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceProject,
@@ -296,6 +298,8 @@ const api = {
     ipcRenderer.invoke("watchfaces:chooseArtwork"),
   chooseCorosWatchfaceRasterFontFolder: (): Promise<CorosWatchfaceRasterFontFolder | null> =>
     ipcRenderer.invoke("watchfaces:chooseRasterFontFolder"),
+  convertCorosWatchfaceArchive: (input: CorosWatchfaceConversionInput): Promise<CorosWatchfaceConversionResult> =>
+    ipcRenderer.invoke("watchfaces:convertArchive", input),
   createCorosWatchfaceArchive: (
     input: CorosWatchfaceCreatorInput
   ): Promise<CorosWatchfaceArchive> =>

@@ -45,7 +45,7 @@ const WATCHFACE_SCHEMA_DEFINITIONS = {
   imageSize: { type: "object", additionalProperties: false, required: ["width", "height"], properties: { width: { type: "number", exclusiveMinimum: 0 }, height: { type: "number", exclusiveMinimum: 0 } } },
   rasterFont: { type: "object", additionalProperties: false, required: ["label", "dataUrl", "glyphs", "columns", "tint"], properties: { label: { type: "string" }, dataUrl: { $ref: "#/$defs/imageValue" }, glyphs: { type: "string" }, columns: { type: "integer", minimum: 1, maximum: 512 }, labels: { type: "object", additionalProperties: { $ref: "#/$defs/imageValue" } }, sprites: { type: "object", additionalProperties: { $ref: "#/$defs/imageValue" } }, spriteSizes: { type: "object", additionalProperties: { $ref: "#/$defs/imageSize" } }, atlasSize: { $ref: "#/$defs/imageSize" }, glyphLayout: { type: "object", additionalProperties: false, required: ["height", "baseline"], properties: { height: { type: "number", minimum: 0.1, maximum: 1 }, baseline: { type: "number", minimum: 0.1, maximum: 1 } } }, tint: { type: "boolean" } } },
   typography: { type: "object", additionalProperties: false, required: ["scale"], properties: { solidAlpha: { type: "boolean" }, align: { enum: ["left", "center", "right"] }, color: { $ref: "#/$defs/color" }, scale: { type: "number", exclusiveMinimum: 0 }, rotation: { type: "number" }, fontFamily: { type: "string" }, fontWeight: { type: "number", minimum: 1, maximum: 1000 }, fontStyle: { enum: ["normal", "italic"] }, letterSpacing: { type: "number" }, rasterFont: { $ref: "#/$defs/rasterFont" }, nativeSize: { type: "boolean" } } },
-  dateTypography: { type: "object", additionalProperties: false, required: ["scale"], properties: { solidAlpha: { type: "boolean" }, align: { enum: ["left", "center", "right"] }, color: { $ref: "#/$defs/color" }, scale: { type: "number", exclusiveMinimum: 0 }, rotation: { type: "number" }, width: { type: "number", exclusiveMinimum: 0 }, height: { type: "number", exclusiveMinimum: 0 }, aspectLocked: { type: "boolean" }, monthFormat: { enum: ["digits", "labels"] }, fontFamily: { type: "string" }, fontWeight: { type: "number", minimum: 1, maximum: 1000 }, fontStyle: { enum: ["normal", "italic"] }, letterSpacing: { type: "number" }, rasterFont: { $ref: "#/$defs/rasterFont" }, nativeSize: { type: "boolean" } } },
+  dateTypography: { type: "object", additionalProperties: false, required: ["scale"], properties: { solidAlpha: { type: "boolean" }, align: { enum: ["left", "center", "right"] }, color: { $ref: "#/$defs/color" }, scale: { type: "number", exclusiveMinimum: 0 }, rotation: { type: "number" }, width: { type: "number", exclusiveMinimum: 0 }, height: { type: "number", exclusiveMinimum: 0 }, aspectLocked: { type: "boolean" }, overwriteAllLanguages: { type: "boolean" }, overwriteLanguages: { type: "array", uniqueItems: true, items: { type: "string", pattern: "^[a-z_]+$" } }, monthFormat: { enum: ["digits", "labels"] }, fontFamily: { type: "string" }, fontWeight: { type: "number", minimum: 1, maximum: 1000 }, fontStyle: { enum: ["normal", "italic"] }, letterSpacing: { type: "number" }, rasterFont: { $ref: "#/$defs/rasterFont" }, nativeSize: { type: "boolean" } } },
   offset: { type: "object", additionalProperties: false, required: ["dx", "dy"], properties: { dx: { type: "number" }, dy: { type: "number" } } },
   guide: { type: "object", additionalProperties: false, required: ["id", "axis", "position"], properties: { id: { type: "string" }, axis: { enum: ["x", "y"] }, position: { type: "number" } } },
   group: { type: "object", additionalProperties: false, required: ["id", "name", "layerIds"], properties: { id: { type: "string" }, name: { type: "string" }, layerIds: { type: "array", minItems: 2, uniqueItems: true, items: { type: "string" } } } },
@@ -65,14 +65,14 @@ const WATCHFACE_SCHEMA_DEFINITIONS = {
   nativeColor: { type: "string", pattern: "^#[0-9a-fA-F]{6}$", description: "Six-digit RGB hex color supported by the native compiler." },
   nativeDataMap: { type: "object", propertyNames: { enum: [...NATIVE_DATA_BY_ID.keys()] }, additionalProperties: { $ref: "#/$defs/nativeDataStyle" } },
   nativeDataStyle: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "scale", "color"], properties: {
-    enabled: {type:"boolean"}, x:{type:"number"}, y:{type:"number"}, scale:{type:"number",minimum:0.1,maximum:4}, color:{$ref:"#/$defs/nativeColor"}, fontFamily:{type:"string"}, previewValue:{type:"string",maxLength:6}, chartSource:{enum:NATIVE_CHART_SOURCES.map(source=>source.id)}, chartWidth:{type:"number",minimum:80,maximum:700}, chartHeight:{type:"number",minimum:40,maximum:500},
+    enabled: {type:"boolean"}, x:{type:"number"}, y:{type:"number"}, scale:{type:"number",minimum:0.1,maximum:4}, color:{$ref:"#/$defs/nativeColor"}, fontFamily:{type:"string"}, previewValue:{type:"string",maxLength:6}, chartSource:{enum:NATIVE_CHART_SOURCES.map(source=>source.id)}, chartWidth:{type:"number",minimum:80,maximum:700}, chartHeight:{type:"number",minimum:40,maximum:500}, stateCount:{type:"integer",minimum:1,maximum:64},
     assets:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_ASSET_ROLES.map(role=>[role,{type:"object",propertyNames:{pattern:"^(0|[1-9][0-9]?)$"},additionalProperties:{$ref:"#/$defs/pngImageValue"}}]))},
     assetTexts:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_ASSET_ROLES.map(role=>[role,{type:"object",additionalProperties:{type:"string",maxLength:32}}]))},
     parts:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_PARTS.map(part=>[part,{$ref:"#/$defs/nativeDataPart"}]))},
     chartStyle:{$ref:"#/$defs/nativeChartStyle"}
   } },
   nativeDataPart:{type:"object",additionalProperties:false,properties:{
-    enabled:{type:"boolean"},x:{type:"number",minimum:0,maximum:1600},y:{type:"number",minimum:0,maximum:1600},width:{type:"number",minimum:4,maximum:800},height:{type:"number",minimum:4,maximum:800},color:{$ref:"#/$defs/nativeColor"},fontFamily:{type:"string",maxLength:256}
+    enabled:{type:"boolean"},x:{type:"number",minimum:0,maximum:1600},y:{type:"number",minimum:0,maximum:1600},width:{type:"number",minimum:4,maximum:800},height:{type:"number",minimum:4,maximum:800},color:{$ref:"#/$defs/nativeColor"},fontFamily:{type:"string",maxLength:256},digitWidth:{type:"number",minimum:1,maximum:800},align:{enum:["left","center","right"]}
   }},
   nativeChartStyle:{type:"object",additionalProperties:false,properties:{
     lineWidth:{type:"number",minimum:1,maximum:40},barWidth:{type:"number",minimum:1,maximum:80},barGap:{type:"number",minimum:0,maximum:80},upperColor:{$ref:"#/$defs/nativeColor"},lowerColor:{$ref:"#/$defs/nativeColor"},selectedBarColor:{$ref:"#/$defs/nativeColor"},unselectedBarColor:{$ref:"#/$defs/nativeColor"},previewType:{enum:["curve","bars"],description:"Bars-only preview. The legacy curve value is accepted for existing projects but also renders as bars. Firmware chooses the live representation."}
@@ -393,7 +393,7 @@ function validateRasterFont(value: unknown, diagnostics: WatchfaceAutomationDiag
 
 function validateTypography(value: unknown, diagnostics: WatchfaceAutomationDiagnostic[], path: string, date = false): void {
   if (!objectOf(value)) return issue(diagnostics, "style.invalid", "Typography style must be an object.", path);
-  allowedKeys(value, ["solidAlpha", "align", "color", "scale", "rotation", "fontFamily", "fontWeight", "fontStyle", "letterSpacing", "rasterFont", "nativeSize", ...(date ? ["width", "height", "aspectLocked", "monthFormat"] : [])], diagnostics, path);
+  allowedKeys(value, ["solidAlpha", "align", "color", "scale", "rotation", "fontFamily", "fontWeight", "fontStyle", "letterSpacing", "rasterFont", "nativeSize", ...(date ? ["width", "height", "aspectLocked", "monthFormat", "overwriteAllLanguages", "overwriteLanguages"] : [])], diagnostics, path);
   finite(value.scale, diagnostics, `${path}/scale`, { positive: true, maximum: 100 });
   if (value.rotation !== undefined) finite(value.rotation, diagnostics, `${path}/rotation`);
   if (value.align !== undefined && !["left", "center", "right"].includes(String(value.align))) issue(diagnostics, "enum.align", "align must be left, center, or right.", `${path}/align`);
@@ -403,7 +403,12 @@ function validateTypography(value: unknown, diagnostics: WatchfaceAutomationDiag
   if (value.fontStyle !== undefined && !["normal", "italic"].includes(String(value.fontStyle))) issue(diagnostics, "enum.font_style", "fontStyle must be normal or italic.", `${path}/fontStyle`);
   if (value.letterSpacing !== undefined) finite(value.letterSpacing, diagnostics, `${path}/letterSpacing`, { minimum: -10, maximum: 10 });
   if (value.rasterFont !== undefined) validateRasterFont(value.rasterFont, diagnostics, `${path}/rasterFont`);
-  for (const field of ["solidAlpha", "nativeSize", "aspectLocked"] as const) if (value[field] !== undefined) bool(value[field], diagnostics, `${path}/${field}`);
+  for (const field of ["solidAlpha", "nativeSize", "aspectLocked", "overwriteAllLanguages"] as const) if (value[field] !== undefined) bool(value[field], diagnostics, `${path}/${field}`);
+  if (value.overwriteLanguages !== undefined && (!Array.isArray(value.overwriteLanguages) ||
+    value.overwriteLanguages.some((language) => typeof language !== "string" || !/^[a-z_]+$/.test(language)) ||
+    new Set(value.overwriteLanguages).size !== value.overwriteLanguages.length)) {
+    issue(diagnostics, "style.languages", "Expected unique language prefixes.", `${path}/overwriteLanguages`);
+  }
   for (const field of ["width", "height"] as const) if (value[field] !== undefined) finite(value[field], diagnostics, `${path}/${field}`, { positive: true, maximum: 16384 });
   if (value.monthFormat !== undefined && !["digits", "labels"].includes(String(value.monthFormat))) issue(diagnostics, "enum.month_format", "monthFormat must be digits or labels.", `${path}/monthFormat`);
 }
@@ -461,10 +466,11 @@ function validateAdvancedCollections(design: Record<string, unknown>, diagnostic
     else for (const [id, style] of Object.entries(design.nativeData)) {
       const path = `${base}/nativeData/${id}`;
       if (!NATIVE_DATA_BY_ID.has(id) || !objectOf(style)) {issue(diagnostics,"native.invalid","Unknown or invalid native data field.",path);continue;}
-      allowedKeys(style,["enabled","x","y","scale","color","fontFamily","chartSource","chartWidth","chartHeight","previewValue","assets","assetTexts","parts","chartStyle"],diagnostics,path);
+      allowedKeys(style,["enabled","x","y","scale","color","fontFamily","chartSource","chartWidth","chartHeight","stateCount","previewValue","assets","assetTexts","parts","chartStyle"],diagnostics,path);
       bool(style.enabled,diagnostics,`${path}/enabled`);finite(style.x,diagnostics,`${path}/x`);finite(style.y,diagnostics,`${path}/y`);finite(style.scale,diagnostics,`${path}/scale`,{minimum:0.1,maximum:4});requireNativeColor(style.color,diagnostics,`${path}/color`);
       if(style.chartWidth!==undefined)finite(style.chartWidth,diagnostics,`${path}/chartWidth`,{minimum:80,maximum:700});
       if(style.chartHeight!==undefined)finite(style.chartHeight,diagnostics,`${path}/chartHeight`,{minimum:40,maximum:500});
+      if(style.stateCount!==undefined&&(typeof style.stateCount!=="number"||!Number.isInteger(style.stateCount)||style.stateCount<1||style.stateCount>64))issue(diagnostics,"native.invalid","State count must be a whole number from 1 to 64.",`${path}/stateCount`);
       if(style.fontFamily!==undefined)text(style.fontFamily,diagnostics,`${path}/fontFamily`,256);
       if(style.previewValue!==undefined)text(style.previewValue,diagnostics,`${path}/previewValue`,6);
       if(style.chartSource!==undefined&&!NATIVE_CHART_SOURCES.some(source=>source.id===style.chartSource))issue(diagnostics,"native.chart","Unknown chart source.",path);
@@ -490,12 +496,14 @@ function validateAdvancedCollections(design: Record<string, unknown>, diagnostic
           for (const [name,part] of Object.entries(style.parts)) {
             const location = `${path}/parts/${name}`;
             if (!objectOf(part)) { issue(diagnostics,"native.parts","Invalid component style.",location); continue; }
-            allowedKeys(part,["enabled","x","y","width","height","color","fontFamily"],diagnostics,location);
+            allowedKeys(part,["enabled","x","y","width","height","color","fontFamily","digitWidth","align"],diagnostics,location);
             if (part.enabled !== undefined) bool(part.enabled,diagnostics,`${location}/enabled`);
             for (const key of ["x","y"] as const) if (part[key] !== undefined) finite(part[key],diagnostics,`${location}/${key}`,{minimum:0,maximum:1600});
             for (const key of ["width","height"] as const) if (part[key] !== undefined) finite(part[key],diagnostics,`${location}/${key}`,{minimum:4,maximum:800});
             if (part.color !== undefined) requireNativeColor(part.color,diagnostics,`${location}/color`);
             if (part.fontFamily !== undefined) text(part.fontFamily,diagnostics,`${location}/fontFamily`,256);
+            if (part.digitWidth !== undefined) finite(part.digitWidth,diagnostics,`${location}/digitWidth`,{minimum:1,maximum:800});
+            if (part.align !== undefined && !["left","center","right"].includes(part.align as string)) issue(diagnostics,"native.parts","Unknown number alignment.",`${location}/align`);
           }
         }
       }

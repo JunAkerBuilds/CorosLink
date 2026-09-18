@@ -123,6 +123,7 @@ import { normalizeUnitSystem } from "./unitSystem.js";
 import {
   cacheCorosWatchfaceProjectPreview,
   createCorosWatchfaceArchive,
+  convertCorosWatchfaceArchive,
   createCorosWatchfaceShareLink,
   duplicateCorosWatchfaceProject,
   describeCorosWatchfaceTemplate,
@@ -225,6 +226,7 @@ import type {
 import type {
   CorosLegacy614aCarrierPatchInput,
   CorosWatchfaceCreatorInput,
+  CorosWatchfaceConversionInput,
   CorosWatchfaceExistingShareInput,
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceArchiveExportInput,
@@ -1100,6 +1102,9 @@ function registerIpcHandlers(): void {
       : loadRasterFontSpriteFolder(folderPath);
   });
 
+  ipcMain.handle("watchfaces:convertArchive", (_event, input: CorosWatchfaceConversionInput) =>
+    convertCorosWatchfaceArchive(input)
+  );
   ipcMain.handle(
     "watchfaces:createArchive",
     (_event, input: CorosWatchfaceCreatorInput) =>

@@ -221,10 +221,18 @@ Use `unset` on existing optional `assets`, `assetTexts`, `parts` or `chartStyle`
 overrides to restore defaults; preserve the required layer fields.
 
 For `nativeData.chart`, use `chartSource`, `parts.plot` and `chartStyle` for
-geometry, bar colors and bar width/gap. There is one chart
-slot per mode. Previews always use bars; legacy `previewType: "curve"` and line
-appearance settings are retained for compatibility but cannot enable lines.
-Firmware chooses the live representation. The `decimal` component is a numeric decimal point.
+geometry, bar colors, bar width/gap, line thickness and curve colors. There is
+one chart slot per mode. `chartStyle.previewType` (`"bars"` or `"curve"`) only
+selects the sample preview; both appearance sets are exported and firmware
+chooses the live representation per chart group. Official faces draw the
+sunrise, moonrise, barometer and tide groups as curves and the health/training
+groups as bars. Readouts of other chart groups that a recovered official face
+already declares are kept on export; the layer replaces only the shared graph
+and its selected source. The preview follows the chart layer's group:
+`chart_sun_angle` draws only in the sun group, and `weather_temp`,
+`weather_temp_min`/`max`, `weather_wind` and `weather_direction` are hidden
+only where they share a slot with that group's alternative, while staying
+enabled and exported. The `decimal` component is a numeric decimal point.
 Charts are experimental. Bar rendering has been reported on PACE Pro, while
 history selection and live updates remain unverified. `chartSource` selects
 the numeric/icon field written to the shared chart block, not a verified
@@ -282,6 +290,14 @@ Call `get_context` first to learn whether Watch Face Studio already has an open,
 possibly dirty document. The live-editor tools are `get_document`,
 `apply_commands`, `select`, `undo`, `redo`, `set_view`, `render_preview`,
 `validate`, `save`, `close`, `open`, and `convert`.
+
+`convert` accepts `watchModel` (for example, `pace-3`) with the live `sessionId`
+and `baseRevision`. It selects device support automatically and preserves the
+source layout, fonts, artwork, raw edits and separate AOD state through MIP
+transitions. `targetArchive` remains an optional preselected device carrier;
+it must match the destination. Conversion opens a new session only after the
+archive is ready. Read `get_document` again before further edits. See
+[watch conversion](watchface-conversion.md) for supported devices and validation.
 Project and host tools include `list_projects`, `list_templates`, `load_template`, `list_fonts`,
 `duplicate_project`, `delete_project`, `import_archive`, `import_asset`,
 `export_project`, `build_archive`, `export_archive`, and `publish`.
@@ -354,7 +370,8 @@ requiring or incrementing a design revision:
       "chart_stress": "28"
     },
     "weather": { "condition": 8, "night": true },
-    "chartHistory": [0.2, 0.5, 0.4, 0.8]
+    "chartHistory": [0.2, 0.5, 0.4, 0.8],
+    "chartProgress": 0.3
   }
 }
 ```
@@ -364,11 +381,12 @@ samples. Omitted control properties retain their current settings. Disabling
 simulation also pauses playback. `dateTime` accepts ISO date-times from 1900
 through 9999; no offset means local time, and explicit offsets convert to local
 time. State fields use integer asset indices. Chart history contains 2–120
-normalized sample heights between 0 and 1. Battery and progress percentages are
+normalized sample heights between 0 and 1; `chartProgress` (0–1) places the
+marker along a line-graph preview. Battery and progress percentages are
 0–100. Values on absent/hidden fields do not create layers.
 
 `render_preview` uses the active simulation by default. An explicit `scenario`
 object overrides it for that one image, with the same `dateTime`, `values`,
-`weather`, and `chartHistory` properties. Pass `scenario: {}` for ordinary sample
+`weather`, `chartHistory` and `chartProgress` properties. Pass `scenario: {}` for ordinary sample
 values. The response includes the scenario used. These overrides also apply to
 native data and weather, including previews in AOD mode when those layers exist.

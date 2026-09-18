@@ -162,10 +162,10 @@ export class WatchfaceAutomationService {
       }
 
       case "convert": {
-        const targetArchiveId = requiredString(params.targetArchive, "targetArchive");
+        const targetArchiveId = optionalString(params.targetArchive);
         return this.rendererDispatch("convert", {
           ...params,
-          targetArchive: this.requireArchive(targetArchiveId)
+          ...(targetArchiveId ? { targetArchive: this.requireArchive(targetArchiveId) } : {})
         });
       }
 

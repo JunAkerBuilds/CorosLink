@@ -1,3 +1,4 @@
+import { WATCHFACE_TARGETS, getWatchfaceTarget } from "../../electron/watchfaceTargets";
 import { drawNativeDataPreview } from "./nativeData";
 import {
   type CSSProperties,
@@ -10,13 +11,17 @@ import {
 } from "react";
 import {
   ArrowRight,
+  ArrowUpRight,
   Check,
   ChevronDown,
   Clipboard,
+  Clock,
   Copy,
   Download,
   ExternalLink,
+  History,
   KeyRound,
+  Layers,
   LayoutGrid,
   Loader2,
   LogOut,
@@ -68,6 +73,7 @@ import { deriveDesignDetails, toStudioOptions } from "./watchfaceCompose";
 import { createWatchfaceEditorSessionId } from "./watchfaceEditorHistory";
 import {
   firmwareTypeForWatchfaceArchive,
+  isWatchfaceSignInRequired,
   prepareWatchfaceConversion
 } from "./watchfaceConversion";
 import {
@@ -194,11 +200,8 @@ interface StudioSession {
 interface WatchfaceConversionDraft {
   design: CorosWatchfaceDesignState;
   name: string;
-  sourceDesign: CorosWatchfaceDesignState;
   sourceDirty: boolean;
   sourceFirmwareType: string;
-  sourceSession: StudioSession;
-  omittedRawConfigEditCount: number;
 }
 
 const DEFAULT_FIRMWARE_TYPE = "COROS W332";
@@ -213,18 +216,7 @@ const COMMUNITY_MODEL_BY_WATCH: Partial<Record<WatchModelId, string>> = {
   "vertix-2s": "VERTIX 2S"
 };
 
-const TEMPLATE_WATCH_OPTIONS: ReadonlyArray<{
-  model: WatchModelId;
-  label: string;
-}> = [
-  { model: "pace-pro", label: "PACE Pro" },
-  { model: "pace-4", label: "PACE 4" },
-  { model: "pace-3", label: "PACE 3" },
-  { model: "nomad", label: "NOMAD" },
-  { model: "vertix-2", label: "VERTIX 2" },
-  { model: "vertix-2s", label: "VERTIX 2S" },
-  { model: "apex-4", label: "APEX 4" }
-];
+const TEMPLATE_WATCH_OPTIONS = WATCHFACE_TARGETS;
 
 function templateWatchModelForFirmware(firmwareType: string): WatchModelId | "" {
   const normalized = firmwareType.trim().toUpperCase();
@@ -258,6 +250,9 @@ export function WatchfacesView({
   const [studioSession, setStudioSession] = useState<StudioSession | null>(null);
   const [conversionDraft, setConversionDraft] =
     useState<WatchfaceConversionDraft | null>(null);
+  const [conversionBusy, setConversionBusy] = useState(false);
+  const [conversionSignInWatch, setConversionSignInWatch] = useState<WatchModelId | null>(null);
+  const conversionBusyRef = useRef(false);
   const [communityProgress, setCommunityProgress] =
     useState<CommunityWatchfaceDownloadProgress | null>(null);
   const [communityConfirmFace, setCommunityConfirmFace] =
@@ -318,6 +313,7 @@ export function WatchfacesView({
   const [downloadingThemeUrl, setDownloadingThemeUrl] = useState<string | null>(
     null
   );
+  const [openingThemeUrl, setOpeningThemeUrl] = useState<string | null>(null);
   const [sharingThemeId, setSharingThemeId] = useState<string | null>(null);
 
   const [builtArchive, setBuiltArchive] =
@@ -494,7 +490,7 @@ export function WatchfacesView({
 
   async function handleLogin(
     event: FormEvent<HTMLFormElement>,
-    destination: "hub" | "publish" = "hub"
+    destination: "hub" | "publish" | "conversion" = "hub"
   ) {
     event.preventDefault();
     setBusy("login");
@@ -510,6 +506,7 @@ export function WatchfacesView({
       setPassword("");
       if (destination === "hub") setSurface("hub");
       setNotice("COROS mobile session connected.");
+      if (destination === "conversion") await resumeConversionAfterLogin();
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -518,7 +515,7 @@ export function WatchfacesView({
     }
   }
 
-  async function handleSavedLogin(destination: "hub" | "publish" = "hub") {
+  async function handleSavedLogin(destination: "hub" | "publish" | "conversion" = "hub") {
     setBusy("login");
     clearMessages();
     try {
@@ -529,6 +526,7 @@ export function WatchfacesView({
       setPassword("");
       if (destination === "hub") setSurface("hub");
       setNotice("COROS mobile session connected with your saved account.");
+      if (destination === "conversion") await resumeConversionAfterLogin();
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -605,6 +603,7 @@ export function WatchfacesView({
     setShareLink(null);
     setPublishOpen(false);
     setConversionDraft(null);
+    setConversionSignInWatch(null);
     setSurface("studio");
     clearMessages();
   }
@@ -615,35 +614,14 @@ export function WatchfacesView({
     sourceDirty: boolean
   ) {
     if (!studioSession) return;
-    const prepared = prepareWatchfaceConversion(design);
+    setConversionSignInWatch(null);
     setConversionDraft({
-      design: prepared.design,
+      design: structuredClone(design),
       name: name.trim() || "Custom watch face",
-      sourceDesign: prepared.sourceDesign,
       sourceDirty,
-      sourceFirmwareType: studioSession.targetFirmwareType,
-      sourceSession: studioSession,
-      omittedRawConfigEditCount: prepared.omittedRawConfigEditCount
+      sourceFirmwareType: studioSession.targetFirmwareType
     });
-    setStudioSession(null);
-    setBuiltArchive(null);
-    setShareLink(null);
-    setPublishOpen(false);
-    setHubTab("templates");
-    setThemes([]);
-    setThemesLoaded(false);
-    setSurface("hub");
-    setError(null);
-    setNotice(
-      "Choose the destination watch, browse its templates, then use a compatible starter."
-    );
-  }
-
-  function conversionProjectName(
-    draft: WatchfaceConversionDraft,
-    targetFirmwareType: string
-  ): string {
-    return convertedProjectName(draft.name, targetFirmwareType);
+    clearMessages();
   }
 
   function convertedProjectName(
@@ -655,81 +633,76 @@ export function WatchfacesView({
       ({ model }) => model === targetModel
     )?.label;
     if (!targetLabel) return sourceName.slice(0, 80);
+    let baseName = sourceName;
+    let previousTarget;
+    while ((previousTarget = TEMPLATE_WATCH_OPTIONS.find(option => baseName.endsWith(` (${option.label})`)))) {
+      baseName = baseName.slice(0, -(` (${previousTarget.label})`.length));
+    }
     const suffix = ` (${targetLabel})`;
-    return `${sourceName.slice(0, Math.max(1, 80 - suffix.length)).trimEnd()}${suffix}`;
+    return `${(baseName || sourceName).slice(0, Math.max(1, 80 - suffix.length)).trimEnd()}${suffix}`;
   }
 
-  function openStudioWithConversion(
-    archive: CorosWatchfaceArchive,
-    fallbackName: string
-  ) {
-    if (!conversionDraft) {
-      openStudio(archive, fallbackName);
-      return;
+  async function openAutomatedConversion({
+    design, name, targetArchive, firmwareType: requestedFirmwareType, watchModel
+  }: import("./watchfaceAutomation").WatchfaceAutomationConversionInput) {
+    if (!studioSession || conversionBusyRef.current) throw new Error("A conversion is already in progress.");
+    const target = getWatchfaceTarget(watchModel ?? requestedFirmwareType ?? targetArchive?.firmwareType);
+    if (!target) throw new Error("Choose a supported destination watch.");
+    if (requestedFirmwareType && target.firmwareType.toUpperCase() !== requestedFirmwareType.trim().toUpperCase()) {
+      throw new Error("The destination watch and firmware do not match.");
     }
-    const targetFirmwareType = firmwareTypeForWatchfaceArchive(
-      archive,
-      firmwareType
-    );
-    const sourceFirmwareType = conversionDraft.sourceFirmwareType.trim();
-    if (targetFirmwareType.toUpperCase() === sourceFirmwareType.toUpperCase()) {
-      setError("Choose a starter for a different watch model to convert this face.");
-      setNotice(null);
-      return;
+    if (target.firmwareType.toUpperCase() === studioSession.targetFirmwareType.toUpperCase()) {
+      throw new Error("Choose a different destination watch.");
     }
-    const nextName = conversionProjectName(conversionDraft, targetFirmwareType);
-    const design = conversionDraft.design;
-    openStudio(archive, nextName, undefined, design, true);
-    setNotice(
-      `Converted “${conversionDraft.name}” to ${
-        TEMPLATE_WATCH_OPTIONS.find(
-          ({ model }) => model === templateWatchModelForFirmware(targetFirmwareType)
-        )?.label ?? targetFirmwareType
-      }. Review Current and Always-on previews before sending.${
-        conversionDraft.omittedRawConfigEditCount > 0
-          ? ` ${conversionDraft.omittedRawConfigEditCount} raw config edit${
-              conversionDraft.omittedRawConfigEditCount === 1 ? " was" : "s were"
-            } omitted because target layout files are different.`
-          : ""
-      }`
-    );
+    conversionBusyRef.current = true;
+    setConversionBusy(true);
+    try {
+      const converted = await api.convertCorosWatchfaceArchive({
+        sourceArchiveId: studioSession.archive.archiveId,
+        watchModel: target.model,
+        ...(targetArchive ? { targetArchiveId: targetArchive.archiveId } : {}),
+        configTextEdits: design.configTextEdits
+      });
+      const prepared = prepareWatchfaceConversion(design, { rawEditsApplied: true, generatedAod: converted.generatedAod });
+      const convertedName = convertedProjectName(name, target.firmwareType);
+      clearWatchfaceAutomationEditor();
+      api.setWatchfaceAutomationReady("editor", false);
+      openStudio(converted.archive, convertedName, undefined, prepared.design, true,
+        { firmwareType: target.firmwareType, watchModel: target.model });
+      setNotice(`Converted to ${target.label}. ${target.display === "mip"
+        ? "Current stays visible on MIP; your separate AOD design is retained for AMOLED."
+        : converted.generatedAod ? "An editable Always-on layout was created from Current. Review it before sending."
+        : "Current and Always-on layouts are preserved."}`);
+      return { opened: true, name: convertedName, targetFirmwareType: target.firmwareType,
+        omittedRawConfigEditCount: 0, appliedRawConfigEditCount: converted.appliedRawConfigEditCount };
+    } finally {
+      conversionBusyRef.current = false;
+      setConversionBusy(false);
+    }
   }
 
-  function openAutomatedConversion({
-    design,
-    name,
-    sourceDirty,
-    targetArchive,
-    firmwareType: requestedFirmwareType,
-    watchModel
-  }: {
-    design: CorosWatchfaceDesignState;
-    name: string;
-    sourceDirty: boolean;
-    targetArchive: CorosWatchfaceArchive;
-    firmwareType?: string;
-    watchModel?: WatchModelId;
-  }) {
-    const prepared = prepareWatchfaceConversion(design);
-    const destinationFirmware = requestedFirmwareType?.trim() ||
-      firmwareTypeForWatchfaceArchive(targetArchive, firmwareType);
-    const convertedName = convertedProjectName(name, destinationFirmware);
-    clearWatchfaceAutomationEditor();
-    api.setWatchfaceAutomationReady("editor", false);
-    openStudio(
-      targetArchive,
-      convertedName,
-      undefined,
-      prepared.design,
-      true,
-      { firmwareType: destinationFirmware, ...(watchModel ? { watchModel } : {}) }
-    );
-    return {
-      opened: true,
-      name: convertedName,
-      targetFirmwareType: destinationFirmware,
-      omittedRawConfigEditCount: prepared.omittedRawConfigEditCount
-    };
+  async function convertToWatch(watchModel: WatchModelId) {
+    if (!conversionDraft) return;
+    clearMessages();
+    try {
+      await openAutomatedConversion({ design: conversionDraft.design, name: conversionDraft.name,
+        sourceDirty: conversionDraft.sourceDirty, watchModel });
+    } catch (caught) {
+      if (isWatchfaceSignInRequired(caught)) {
+        setConversionSignInWatch(watchModel);
+        setPassword("");
+        void api.getCorosWatchfaceStatus().then(setStatus).catch(() => undefined);
+        return;
+      }
+      setError(toErrorMessage(caught));
+    }
+  }
+
+  async function resumeConversionAfterLogin() {
+    if (!conversionSignInWatch) return;
+    const watchModel = conversionSignInWatch;
+    setConversionSignInWatch(null);
+    await convertToWatch(watchModel);
   }
 
   function returnToHub() {
@@ -785,7 +758,7 @@ export function WatchfacesView({
     try {
       const selected = await api.chooseCorosWatchfaceArchive();
       if (!selected) return;
-      openStudioWithConversion(
+      openStudio(
         selected,
         selected.editableProject?.name ??
           (selected.fileName.replace(/\.(zip|dat)$/i, "") ||
@@ -931,7 +904,7 @@ export function WatchfacesView({
   }, [busy, connected, hubTab, status, surface, themesLoaded]);
 
   async function handleDownloadTheme(theme: CorosWatchfaceTheme) {
-    if (!theme.packageUrl) return;
+    if (!theme.packageUrl || openingThemeUrl || downloadingThemeUrl) return;
     setDownloadingThemeUrl(theme.packageUrl);
     clearMessages();
     try {
@@ -940,8 +913,8 @@ export function WatchfacesView({
         name: theme.name,
         firmwareType: theme.firmwareType?.trim() || firmwareType
       });
-      if (download.usableAsTemplate && download.archive) {
-        openStudioWithConversion(download.archive, theme.name);
+      if (themeCatalog !== "official" && download.usableAsTemplate && download.archive) {
+        openStudio(download.archive, theme.name);
       } else {
         setNotice(
           download.entries?.length
@@ -955,6 +928,28 @@ export function WatchfacesView({
       setError(toErrorMessage(caught));
     } finally {
       setDownloadingThemeUrl(null);
+    }
+  }
+
+  async function handleOpenOfficialTheme(theme: CorosWatchfaceTheme) {
+    if (!theme.packageUrl || openingThemeUrl || downloadingThemeUrl) return;
+    setOpeningThemeUrl(theme.packageUrl);
+    clearMessages();
+    try {
+      const result = await api.downloadCorosWatchfaceTheme({
+        packageUrl: theme.packageUrl,
+        name: theme.name,
+        firmwareType: theme.firmwareType?.trim() || firmwareType,
+        templateId: theme.id,
+        openInEditor: true
+      });
+      if (!result.usableAsTemplate || !result.archive) throw new Error(result.message);
+      openStudio(result.archive, theme.name);
+      setNotice(result.message);
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setOpeningThemeUrl(null);
     }
   }
 
@@ -1214,7 +1209,8 @@ export function WatchfacesView({
         <WatchfaceEditor
           key={studioSession.id}
           api={api}
-          active={active}
+          active={active && !conversionDraft && !conversionBusy}
+          conversionBusy={conversionBusy || Boolean(conversionDraft)}
           sessionId={studioSession.id}
           starterArchive={studioSession.archive}
           targetFirmwareType={studioSession.targetFirmwareType}
@@ -1236,6 +1232,29 @@ export function WatchfacesView({
           onNotice={showStudioNotice}
           onClearMessages={clearMessages}
         />
+        {conversionDraft ? (
+          <WatchfaceConversionDialog name={conversionDraft.name} sourceFirmwareType={conversionDraft.sourceFirmwareType}
+            busy={conversionBusy || busy === "login"} error={error}
+            signIn={conversionSignInWatch ? {
+              email, password, region, rememberCredentials,
+              secureStorageAvailable: status?.secureStorageAvailable ?? false,
+              savedCredentialsAvailable: status?.savedCredentialsAvailable ?? false,
+              savedEmail: status?.savedEmail,
+              loginBusy: busy === "login",
+              onEmailChange: setEmail,
+              onPasswordChange: setPassword,
+              onRememberCredentialsChange: setRememberCredentials,
+              onRegionChange: (nextRegion) => { setRegion(nextRegion); setRegionTouched(true); },
+              onLogin: (event) => void handleLogin(event, "conversion"),
+              onSavedLogin: () => void handleSavedLogin("conversion")
+            } : undefined}
+            onCancel={() => {
+              if (conversionSignInWatch) { setConversionSignInWatch(null); setPassword(""); }
+              else setConversionDraft(null);
+              clearMessages();
+            }}
+            onConvert={watchModel => void convertToWatch(watchModel)} />
+        ) : null}
         <ToastRegion error={error} notice={notice} onDismiss={clearMessages} />
         {publishOpen ? (
           <PublishDialog
@@ -1456,47 +1475,6 @@ export function WatchfacesView({
         </main>
       ) : (
         <main className="watchface-hub-main">
-          {conversionDraft ? (
-            <section className="watchface-conversion-banner" role="status">
-              <span className="watchface-conversion-icon" aria-hidden="true">
-                <Repeat2 size={18} />
-              </span>
-              <div>
-                <strong>Convert “{conversionDraft.name}”</strong>
-                <span>
-                  Select the destination watch below, browse, then choose a
-                  compatible starter. You can also import a local destination
-                  .dat or ZIP from the header.
-                </span>
-                {conversionDraft.omittedRawConfigEditCount > 0 ? (
-                  <span className="watchface-conversion-warning">
-                    {conversionDraft.omittedRawConfigEditCount} advanced raw
-                    config edit{conversionDraft.omittedRawConfigEditCount === 1 ? "" : "s"}
-                    {" "}cannot transfer because the destination uses different
-                    layout files. The original project keeps them.
-                  </span>
-                ) : null}
-              </div>
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={busy !== null}
-                onClick={() => {
-                  const draft = conversionDraft;
-                  openStudio(
-                    draft.sourceSession.archive,
-                    draft.name,
-                    draft.sourceSession.project,
-                    draft.sourceDesign,
-                    draft.sourceDirty
-                  );
-                  setNotice("Watch conversion cancelled. Your original project is open.");
-                }}
-              >
-                Cancel
-              </button>
-            </section>
-          ) : null}
           {IS_DEVELOPMENT_BUILD && showDevelopmentTools ? (
             <>
               <DeviceInfoPanel api={api} />
@@ -1557,6 +1535,7 @@ export function WatchfacesView({
               visibleThemes={visibleThemes}
               themesLoaded={themesLoaded}
               downloadingThemeUrl={downloadingThemeUrl}
+              openingThemeUrl={openingThemeUrl}
               sharingThemeId={sharingThemeId}
               onSignIn={() => setSurface("sign-in")}
               onCatalogChange={(nextCatalog) => {
@@ -1576,6 +1555,7 @@ export function WatchfacesView({
               onSearchChange={setThemeSearch}
               onSubmit={handleLoadThemes}
               onUseTheme={(theme) => void handleDownloadTheme(theme)}
+              onOpenOfficialTheme={(theme) => void handleOpenOfficialTheme(theme)}
               onShareTheme={(theme) => void handleShareTheme(theme)}
             />
           )}
@@ -2427,11 +2407,22 @@ function ProjectsDashboard({
             onDuplicate={() => onDuplicate(featuredProject)}
             onDelete={() => onDelete(featuredProject)}
           />
-          <section className="watchface-recent-section" aria-labelledby="projects-title">
-            <div className="watchface-section-heading">
-              <h2 id="projects-title">Recent projects</h2>
+          <ProjectsLibraryStrip projects={projects} featuredProject={featuredProject} />
+          <section className="wf-hub-section" aria-labelledby="projects-title">
+            <div className="wf-hub-section-bar">
+              <div className="wf-hub-heading">
+                <span className="wf-hub-emblem" aria-hidden="true">
+                  <span className="wf-hub-emblem-plate" />
+                  <History size={22} />
+                </span>
+                <h2 id="projects-title">
+                  Recent projects
+                  <HubHeadingUnderline />
+                </h2>
+                <span className="wf-hub-caption">Sorted by last edited</span>
+              </div>
             </div>
-            <div className="watchface-project-grid">
+            <div className="wf-hub-grid">
               {projects.map((project) => (
                 <ProjectCard
                   api={api}
@@ -2493,28 +2484,30 @@ function ContinueDesigningCard({
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
+  const model = projectWatchModelLabel(project);
   return (
-    <article className="watchface-featured-card">
-      <span className="watchface-featured-label">Continue designing</span>
-      <ProjectOverflowMenu
-        projectName={project.name}
-        disabled={disabled}
-        onOpen={onOpen}
-        onDuplicate={onDuplicate}
-        onDelete={onDelete}
-      />
-      <div className="watchface-featured-layout">
-        <div className="watchface-featured-stage">
-          <WatchFacePreview api={api} project={project} />
+    <article className="wf-hub-hero" aria-labelledby="featured-project-title">
+      <div className="wf-hub-hero-copy">
+        <p className="wf-hub-eyebrow">Continue designing</p>
+        <h2 id="featured-project-title" className="wf-hub-hero-title" title={project.name}>
+          {project.name}
+        </h2>
+        <div className="wf-hub-chips">
+          {model ? (
+            <span className="wf-hub-chip">
+              <Watch size={14} aria-hidden="true" /> {model}
+            </span>
+          ) : null}
+          <span className="wf-hub-chip" title={`Template ${project.sourceTemplateId}`}>
+            <Layers size={14} aria-hidden="true" /> Template {project.sourceTemplateId}
+          </span>
+          <span className="wf-hub-chip" title={formatExactUpdatedAt(project.updatedAt)}>
+            <Clock size={14} aria-hidden="true" /> Updated {formatRelativeUpdatedAt(project.updatedAt)}
+          </span>
         </div>
-        <div className="watchface-featured-copy">
-          <h2 title={project.name}>{project.name}</h2>
-          <p>Template {project.sourceTemplateId}</p>
-          <p title={formatExactUpdatedAt(project.updatedAt)}>
-            Updated {formatRelativeUpdatedAt(project.updatedAt)}
-          </p>
+        <div className="wf-hub-hero-actions">
           <button
-            className="primary-button watchface-featured-open"
+            className="primary-button wf-hub-hero-open"
             type="button"
             disabled={disabled}
             onClick={onOpen}
@@ -2524,9 +2517,76 @@ function ContinueDesigningCard({
             ) : null}
             Open editor <ArrowRight size={16} aria-hidden="true" />
           </button>
+          <button
+            className="wf-hub-text-link"
+            type="button"
+            disabled={disabled}
+            onClick={onDuplicate}
+          >
+            <Copy size={15} aria-hidden="true" /> Duplicate
+          </button>
         </div>
       </div>
+      <div className="wf-hub-hero-stage" aria-hidden="true">
+        <span className="wf-hub-hero-halo" />
+        <WatchFacePreview api={api} project={project} />
+      </div>
+      <ProjectOverflowMenu
+        projectName={project.name}
+        disabled={disabled}
+        onOpen={onOpen}
+        onDuplicate={onDuplicate}
+        onDelete={onDelete}
+      />
     </article>
+  );
+}
+
+/** Watch model the project's starter template targets, when the summary records one. */
+function projectWatchModelLabel(project: CorosWatchfaceProjectSummary): string | null {
+  if (!project.firmwareType) return null;
+  const model = templateWatchModelForFirmware(project.firmwareType);
+  return TEMPLATE_WATCH_OPTIONS.find((option) => option.model === model)?.label ?? null;
+}
+
+function ProjectsLibraryStrip({
+  projects,
+  featuredProject
+}: {
+  projects: CorosWatchfaceProjectSummary[];
+  featuredProject: CorosWatchfaceProjectSummary;
+}) {
+  const models = new Set(
+    projects.map(projectWatchModelLabel).filter((label): label is string => label !== null)
+  );
+  return (
+    <div className="wf-hub-strip" aria-label="About your library">
+      <span>
+        <Layers size={16} aria-hidden="true" />
+        {projects.length} {projects.length === 1 ? "project" : "projects"}
+      </span>
+      {models.size > 0 ? (
+        <span>
+          <Watch size={16} aria-hidden="true" />
+          {models.size === 1
+            ? [...models][0]
+            : `${models.size} watch models`}
+        </span>
+      ) : null}
+      <span title={formatExactUpdatedAt(featuredProject.updatedAt)}>
+        <Clock size={16} aria-hidden="true" />
+        Last edited {formatRelativeUpdatedAt(featuredProject.updatedAt)}
+      </span>
+    </div>
+  );
+}
+
+/** Hand-drawn underline shared with the Faces website's section headings. */
+function HubHeadingUnderline() {
+  return (
+    <svg className="wf-hub-underline" viewBox="0 0 180 12" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M4 8 C18 8 20 3 29 6 S46 6 60 6 S77 5 91 6 S109 4 120 6 S143 4 155 5 S169 5 176 5" />
+    </svg>
   );
 }
 
@@ -2545,24 +2605,34 @@ function ProjectCard({
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
+  const model = projectWatchModelLabel(project);
   return (
-    <article className="watchface-project-card">
+    <article className="wf-hub-card">
       <button
-        className="watchface-project-card-open"
+        className="wf-hub-card-open"
         type="button"
         aria-label={`Open ${project.name}`}
         disabled={disabled}
         onClick={onOpen}
       >
-        <span className="watchface-project-card-stage">
+        <span className="wf-hub-card-visual">
           <WatchFacePreview api={api} project={project} />
         </span>
-        <span className="watchface-project-card-copy">
+        <span className="wf-hub-card-meta">
           <strong title={project.name}>{project.name}</strong>
+          <span>{model ?? "COROS watch face"}</span>
+        </span>
+        <span className="wf-hub-card-footer">
           <span title={formatExactUpdatedAt(project.updatedAt)}>
-            Updated {formatRelativeUpdatedAt(project.updatedAt)}
+            <Clock size={13} aria-hidden="true" />
+            {formatRelativeUpdatedAt(project.updatedAt)}
           </span>
-          <span>Template {project.sourceTemplateId}</span>
+          <span className="wf-hub-card-template" title={`Template ${project.sourceTemplateId}`}>
+            #{project.sourceTemplateId}
+          </span>
+        </span>
+        <span className="wf-hub-card-arrow" aria-hidden="true">
+          <ArrowUpRight size={16} />
         </span>
       </button>
       <ProjectOverflowMenu
@@ -2585,13 +2655,14 @@ function CreateProjectCard({
 }) {
   return (
     <button
-      className="watchface-create-card"
+      className="wf-hub-create"
       type="button"
       disabled={disabled}
       onClick={onCreate}
     >
-      <span aria-hidden="true"><Plus size={23} /></span>
+      <span className="wf-hub-create-icon" aria-hidden="true"><Plus size={22} /></span>
       <strong>Create watch face</strong>
+      <span>Start from an official template</span>
     </button>
   );
 }
@@ -2690,10 +2761,11 @@ function ProjectsDashboardSkeleton() {
   return (
     <div className="watchface-dashboard-skeleton" aria-label="Loading projects" aria-busy="true">
       <div className="watchface-featured-skeleton">
-        <span />
         <div />
+        <span />
       </div>
       <div className="watchface-project-grid-skeleton">
+        <div />
         <div />
         <div />
         <div />
@@ -2926,6 +2998,7 @@ interface TemplatesPanelProps {
   visibleThemes: CorosWatchfaceTheme[];
   themesLoaded: boolean;
   downloadingThemeUrl: string | null;
+  openingThemeUrl: string | null;
   sharingThemeId: string | null;
   onSignIn: () => void;
   onCatalogChange: (catalog: CorosWatchfaceThemeCatalog) => void;
@@ -2938,6 +3011,7 @@ interface TemplatesPanelProps {
   onSearchChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onUseTheme: (theme: CorosWatchfaceTheme) => void;
+  onOpenOfficialTheme: (theme: CorosWatchfaceTheme) => void;
   onShareTheme: (theme: CorosWatchfaceTheme) => void;
 }
 
@@ -3190,12 +3264,12 @@ function TemplatesPanel(props: TemplatesPanelProps) {
                         <span>v{theme.watchFaceVersion}</span>
                       ) : null}
                     </div>
-                    <div className="watchface-template-actions">
+                    <div className={`watchface-template-actions${props.catalog === "official" ? " watchface-template-actions--official" : ""}`}>
                       {theme.packageUrl ? (
                         <button
                           className="secondary-button"
                           type="button"
-                          disabled={props.busy !== null || props.downloadingThemeUrl !== null}
+                          disabled={props.busy !== null || props.downloadingThemeUrl !== null || props.openingThemeUrl !== null}
                           onClick={() => props.onUseTheme(theme)}
                         >
                           {props.downloadingThemeUrl === theme.packageUrl ? (
@@ -3207,6 +3281,21 @@ function TemplatesPanel(props: TemplatesPanelProps) {
                         </button>
                       ) : props.catalog !== "custom" ? (
                         <span className="watchface-template-unavailable">Unavailable</span>
+                      ) : null}
+                      {props.catalog === "official" && theme.packageUrl ? (
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          disabled={props.busy !== null || props.downloadingThemeUrl !== null || props.openingThemeUrl !== null}
+                          onClick={() => props.onOpenOfficialTheme(theme)}
+                        >
+                          {props.openingThemeUrl === theme.packageUrl ? (
+                            <Loader2 className="spin" size={14} aria-hidden="true" />
+                          ) : (
+                            <Pencil size={14} aria-hidden="true" />
+                          )}
+                          {props.openingThemeUrl === theme.packageUrl ? "Opening…" : "Open in editor"}
+                        </button>
                       ) : null}
                       {props.catalog === "custom" ? (
                         <button
@@ -3253,14 +3342,7 @@ function TemplatesPanel(props: TemplatesPanelProps) {
   );
 }
 
-interface PublishDialogProps {
-  archive: CorosWatchfaceArchive | null;
-  name: string;
-  firmwareType: string;
-  backgroundImageId: string;
-  language: string;
-  shareLink: CorosWatchfaceShareLink | null;
-  connected: boolean;
+interface WatchfaceSignInFormProps {
   email: string;
   password: string;
   region: CorosWatchfaceRegion;
@@ -3268,18 +3350,136 @@ interface PublishDialogProps {
   savedCredentialsAvailable: boolean;
   savedEmail?: string;
   rememberCredentials: boolean;
-  busy: boolean;
   loginBusy: boolean;
-  onNameChange: (value: string) => void;
-  onFirmwareTypeChange: (value: string) => void;
-  onBackgroundImageIdChange: (value: string) => void;
-  onLanguageChange: (value: string) => void;
   onEmailChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
   onRememberCredentialsChange: (value: boolean) => void;
   onRegionChange: (value: CorosWatchfaceRegion) => void;
   onLogin: (event: FormEvent<HTMLFormElement>) => void;
   onSavedLogin: () => void;
+}
+
+function WatchfaceSignInForm(props: WatchfaceSignInFormProps) {
+  return (
+    <form
+      className="watchface-publish-form watchface-publish-login"
+      onSubmit={props.onLogin}
+    >
+      {props.savedCredentialsAvailable && props.savedEmail ? (
+        <>
+          <div className="watchface-saved-login">
+            <div>
+              <span>Saved COROS account</span>
+              <strong>{props.savedEmail}</strong>
+              <small>
+                Sign in with the account saved on this computer.
+              </small>
+            </div>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={props.loginBusy}
+              onClick={props.onSavedLogin}
+            >
+              {props.loginBusy ? (
+                <Loader2 className="spin" size={16} aria-hidden="true" />
+              ) : (
+                <KeyRound size={16} aria-hidden="true" />
+              )}
+              Use saved account
+            </button>
+          </div>
+          <div className="watchface-auth-divider">
+            <span>or use another account</span>
+          </div>
+        </>
+      ) : null}
+      <label className="field">
+        Account region
+        <select
+          autoFocus
+          disabled={props.loginBusy}
+          value={props.region}
+          onChange={(event) =>
+            props.onRegionChange(event.target.value as CorosWatchfaceRegion)
+          }
+        >
+          {REGION_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        Email
+        <input
+          type="email"
+          disabled={props.loginBusy}
+          autoComplete="username"
+          value={props.email}
+          onChange={(event) => props.onEmailChange(event.target.value)}
+          required
+        />
+      </label>
+      <label className="field">
+        Password
+        <input
+          type="password"
+          disabled={props.loginBusy}
+          autoComplete="current-password"
+          value={props.password}
+          onChange={(event) => props.onPasswordChange(event.target.value)}
+          required
+        />
+      </label>
+      {props.secureStorageAvailable ? (
+        <label className="watchface-auth-remember">
+          <input
+            type="checkbox"
+            checked={props.rememberCredentials}
+            onChange={(event) =>
+              props.onRememberCredentialsChange(event.target.checked)
+            }
+            disabled={props.loginBusy}
+          />
+          <span>
+            Save this COROS account
+            <small>
+              Reuse it for Training Hub or future watch-face sign-ins.
+            </small>
+          </span>
+        </label>
+      ) : null}
+      <button
+        className="primary-button watchface-publish-submit"
+        type="submit"
+        disabled={props.loginBusy}
+      >
+        {props.loginBusy ? (
+          <Loader2 className="spin" size={16} aria-hidden="true" />
+        ) : (
+          <KeyRound size={16} aria-hidden="true" />
+        )}
+        Connect and continue
+      </button>
+    </form>
+  );
+}
+
+interface PublishDialogProps extends WatchfaceSignInFormProps {
+  archive: CorosWatchfaceArchive | null;
+  name: string;
+  firmwareType: string;
+  backgroundImageId: string;
+  language: string;
+  shareLink: CorosWatchfaceShareLink | null;
+  connected: boolean;
+  busy: boolean;
+  onNameChange: (value: string) => void;
+  onFirmwareTypeChange: (value: string) => void;
+  onBackgroundImageIdChange: (value: string) => void;
+  onLanguageChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onCopy: () => void;
   onClose: () => void;
@@ -3362,106 +3562,7 @@ function PublishDialog(props: PublishDialogProps) {
               <h2 id="watchface-publish-title">{props.name}</h2>
               <p>Connect your COROS account to send this watch face.</p>
             </div>
-            <form
-              className="watchface-publish-form watchface-publish-login"
-              onSubmit={props.onLogin}
-            >
-              {props.savedCredentialsAvailable && props.savedEmail ? (
-                <>
-                  <div className="watchface-saved-login">
-                    <div>
-                      <span>Saved COROS account</span>
-                      <strong>{props.savedEmail}</strong>
-                      <small>
-                        Use it to create the separate mobile upload session.
-                      </small>
-                    </div>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      disabled={props.loginBusy}
-                      onClick={props.onSavedLogin}
-                    >
-                      {props.loginBusy ? (
-                        <Loader2 className="spin" size={16} aria-hidden="true" />
-                      ) : (
-                        <KeyRound size={16} aria-hidden="true" />
-                      )}
-                      Use saved account
-                    </button>
-                  </div>
-                  <div className="watchface-auth-divider">
-                    <span>or use another account</span>
-                  </div>
-                </>
-              ) : null}
-              <label className="field">
-                Account region
-                <select
-                  autoFocus
-                  value={props.region}
-                  onChange={(event) =>
-                    props.onRegionChange(event.target.value as CorosWatchfaceRegion)
-                  }
-                >
-                  {REGION_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                Email
-                <input
-                  type="email"
-                  autoComplete="username"
-                  value={props.email}
-                  onChange={(event) => props.onEmailChange(event.target.value)}
-                  required
-                />
-              </label>
-              <label className="field">
-                Password
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={props.password}
-                  onChange={(event) => props.onPasswordChange(event.target.value)}
-                  required
-                />
-              </label>
-              {props.secureStorageAvailable ? (
-                <label className="watchface-auth-remember">
-                  <input
-                    type="checkbox"
-                    checked={props.rememberCredentials}
-                    onChange={(event) =>
-                      props.onRememberCredentialsChange(event.target.checked)
-                    }
-                    disabled={props.loginBusy}
-                  />
-                  <span>
-                    Save this COROS account
-                    <small>
-                      Reuse it for Training Hub or future watch-face sign-ins.
-                    </small>
-                  </span>
-                </label>
-              ) : null}
-              <button
-                className="primary-button watchface-publish-submit"
-                type="submit"
-                disabled={props.loginBusy}
-              >
-                {props.loginBusy ? (
-                  <Loader2 className="spin" size={16} aria-hidden="true" />
-                ) : (
-                  <KeyRound size={16} aria-hidden="true" />
-                )}
-                Connect and continue
-              </button>
-            </form>
+            <WatchfaceSignInForm {...props} />
             <p className="watchface-publish-auth-note">
               The archive is already built and stays open if you close this window.
               Your password is only used to create the COROS upload session.
@@ -3543,6 +3644,79 @@ function PublishDialog(props: PublishDialogProps) {
           </>
         )}
       </section>
+    </div>
+  );
+}
+
+function WatchfaceConversionDialog({ name, sourceFirmwareType, busy, error, signIn, onCancel, onConvert }: {
+  name: string; sourceFirmwareType: string; busy: boolean; error: string | null;
+  signIn?: WatchfaceSignInFormProps;
+  onCancel: () => void; onConvert: (model: WatchModelId) => void;
+}) {
+  const options = WATCHFACE_TARGETS.filter(target => target.firmwareType.toUpperCase() !== sourceFirmwareType.toUpperCase());
+  const [model, setModel] = useState<WatchModelId>(options[0]!.model);
+  const target = getWatchfaceTarget(model)!;
+  const dialog = useRef<HTMLDivElement>(null);
+  const signingIn = Boolean(signIn);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    dialog.current?.querySelector<HTMLSelectElement>("select")?.focus();
+    return () => {
+      if (previous?.isConnected) previous.focus();
+      else document.querySelector<HTMLButtonElement>(".wf-export-button")?.focus();
+    };
+  }, []);
+  useEffect(() => {
+    dialog.current?.querySelector<HTMLSelectElement>("select")?.focus();
+  }, [signingIn]);
+  return (
+    <div className="watchface-modal-backdrop" role="presentation" onKeyDown={event => {
+      event.stopPropagation();
+      if (event.key === "Escape" && !busy) onCancel();
+      if (event.key === "Tab") {
+        const controls = [...(dialog.current?.querySelectorAll<HTMLElement>("button:not(:disabled), select:not(:disabled), input:not(:disabled)") ?? [])];
+        const first = controls[0], last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    }}>
+      <div ref={dialog} className="watchface-modal watchface-convert-dialog" role="dialog" aria-modal="true" aria-labelledby="watchface-convert-title" aria-busy={busy}>
+        <h2 id="watchface-convert-title">{signIn ? "Sign in to COROS" : "Change watch"}</h2>
+        {signIn ? (
+          <>
+            <p>Sign in to download support for {target.label}. Your design stays open, and conversion continues automatically.</p>
+            {error ? <p role="alert">{error}</p> : null}
+            <WatchfaceSignInForm {...signIn} />
+            {!signIn.secureStorageAvailable ? (
+              <p className="watchface-auth-warning">Secure storage is unavailable. This session will be cleared when CorosLink closes.</p>
+            ) : null}
+            <div className="watchface-modal-actions">
+              <button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>Back to watch selection</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p>Bring “{name}” to another watch. Your layout, fonts, artwork and data fields stay editable.</p>
+            <label className="field">Destination watch
+              <select value={model} disabled={busy} onChange={event => setModel(event.target.value as WatchModelId)}>
+                {options.map(option => <option key={option.model} value={option.model}>{option.label}</option>)}
+              </select>
+            </label>
+            <p className="watchface-convert-detail">{target.display === "mip"
+              ? "MIP keeps Current visible at all times. Your separate Always-on design is retained for switching back to AMOLED. Colors and fine detail may look different on the watch."
+              : "Current and Always-on remain separate. If your face has no Always-on layout, one is created from Current for you to edit."}</p>
+            <p className="watchface-convert-detail">{target.previewSize} × {target.previewSize} preview{target.model === "apex-4" ? " · Includes 42 mm and 46 mm sizes" : ""}. First use downloads device support from COROS.</p>
+            {error ? <p role="alert">{error}</p> : null}
+            <div className="watchface-modal-actions">
+              <button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>Cancel</button>
+              <button className="primary-button" type="button" disabled={busy} onClick={() => onConvert(model)}>
+                {busy ? <Loader2 className="spin" size={16} /> : <Repeat2 size={16} />}
+                {busy ? "Converting…" : `Convert to ${target.label}`}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -3780,5 +3954,7 @@ function formatExpiry(value: string): string {
 }
 
 function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Watch-face request failed.";
+  return error instanceof Error
+    ? error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "")
+    : "Watch-face request failed.";
 }

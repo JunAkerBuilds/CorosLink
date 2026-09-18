@@ -288,12 +288,29 @@ export interface CorosWatchfaceArchive {
   diyVersion: number;
   /** Effective `o_wf_ver` declared by info.json (defaults to 0 when absent). */
   watchFaceVersion: number;
+  /** Editable starter reconstructed from a compiled official face. */
+  recoveredFromCompiled?: boolean;
   /** Target firmware family retained from template selection/import. */
   firmwareType?: string;
   /** Detected from resolution folders, independent of COROS's firmware ID. */
   resolutionProfile: CorosWatchfaceResolutionProfile;
   /** Portable CorosLink project metadata bundled with an editable website ZIP. */
   editableProject?: CorosWatchfaceEditableProject;
+}
+
+export interface CorosWatchfaceConversionInput {
+  sourceArchiveId: string;
+  watchModel: WatchModelId;
+  /** Optional preselected carrier for automation/backwards compatibility. */
+  targetArchiveId?: string;
+  configTextEdits?: Record<string, string>;
+}
+
+export interface CorosWatchfaceConversionResult {
+  archive: CorosWatchfaceArchive;
+  appliedRawConfigEditCount: number;
+  generatedAod: boolean;
+  display: "mip" | "amoled";
 }
 
 export interface CorosWatchfaceProjectExportResult {
@@ -530,6 +547,10 @@ export interface CorosWatchfaceThemeDownload {
 
 export interface CorosWatchfaceThemeDownloadInput {
   packageUrl: string;
+  /** Recover compiled official packages as local editable starter archives. */
+  openInEditor?: boolean;
+  /** Catalog identity, kept as text to avoid precision loss. */
+  templateId?: string;
   /** Display name used for the downloaded archive, usually the theme name. */
   name?: string;
   /** Firmware family used to query the catalog that returned this template. */
@@ -878,6 +899,9 @@ export interface CorosWatchfaceNativePartStyle {
   height?: number;
   color?: string;
   fontFamily?: string;
+  /** Preserve a recovered glyph's width independently of its value rectangle. */
+  digitWidth?: number;
+  align?: "left" | "center" | "right";
 }
 
 export interface CorosWatchfaceNativeDataStyle {
@@ -889,6 +913,8 @@ export interface CorosWatchfaceNativeDataStyle {
   fontFamily?: string;
   /** Chart data-field prefix; not a verified selector for the watch's plotted history. */
   chartSource?: string;
+  /** State-table size when recovered artwork defines fewer frames than the catalog default. */
+  stateCount?: number;
   chartWidth?: number;
   chartHeight?: number;
   previewValue?: string;
@@ -1008,6 +1034,10 @@ export interface CorosWatchfaceDesignState {
       height?: number;
       /** Imported PNG dimensions preserve their proportions unless unlocked. */
       aspectLocked?: boolean;
+      /** Use the custom weekday labels for every watch language. Defaults to false. */
+      overwriteAllLanguages?: boolean;
+      /** Additional language prefixes to replace when all languages is off. */
+      overwriteLanguages?: string[];
       /** Date-month rendering mode; absent preserves the starter's format. */
       monthFormat?: "digits" | "labels";
       fontFamily?: string;
