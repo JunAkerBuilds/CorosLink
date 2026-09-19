@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.36] - 2026-09-19
+
+### Added
+
+- Recover official COROS compiled watch faces into Watch Face Studio and export edited designs back to the watch. The decoder now handles 260px MIP and 416px AMOLED layouts, indexed, RGBA, and MIP bitmap frames, and more native fields including barometer, sunrise/sunset, sleep, and today's and this week's run, swim, and bike metrics.
+- Added live sprite previews for template PNG sets, state folders, and raster-font glyphs, plus number alignment controls and a selectable-metric asset inspector.
+
+### Changed
+
+- Recovered official faces convert by baking the final scene for the destination watch, so they open cleanly as a fresh starter instead of carrying a non-native scene into an 800px master.
+- Distributable watch-face packages are standardized to match the website validator, stripping recovery blobs and non-standard entries while preserving the editable asset tree.
+
+### Fixed
+
+- Preserved a starter archive's own weather and native-data sprites during recovery and conversion instead of replacing them with generated defaults.
+- Kept template previews stable while editing a design, and hid selectable control-slot icons from the layer list where they are edited in the metric panel.
+
 ## [0.1.35] - 2026-09-16
 
 ### Added
