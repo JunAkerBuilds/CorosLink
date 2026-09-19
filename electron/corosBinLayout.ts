@@ -24,29 +24,120 @@ export interface CorosBinChart {
 interface BitmapLink { index: number; offset: number | string }
 type PositionedField = [string, number, number, string, string];
 
-// Read-only recovery of the 614A layout family. Offsets were checked against
-// WFBinExporter in COROS 4.9.9 and official PLANET v4 / NOMAD v2 binaries. This is a
-// partial format decoder, not a claim that unknown records can be recompiled.
-// NOMAD uses a 0x11a0 header with the same mapped record offsets. Keep its
-// additional fields as raw data/unmapped references rather than guessing roles.
-const PROFILES = new Set([0x1164, 0x11a0, 0x1202]);
+// Read-only recovery of COROS's compiled layout family. Offsets were checked
+// against WFBinExporter in COROS 4.9.9 and official PLANET v4 / NOMAD v2 /
+// DASHBOARD v4 binaries. This is a partial format decoder, not a claim that
+// unknown records can be recompiled. Every generation shares one record table
+// that simply ends earlier in older/smaller headers: 0xbaa (260px MIP v0, after
+// the date tables), 0xfd8 (416px v2, after the chart block), 0x1164 (v4),
+// 0x11a0 (NOMAD v2) and 0x1202 (4.9.9 exporter). Records past a header's end
+// do not exist and are skipped rather than guessed.
 export const hex = (value: number) => `0x${value.toString(16)}`;
+/** The magic is the screen size reversed plus a variant letter: `614A` = A416, `062R` = R260. */
+export function parseCorosFaceMagic(magic: string): { size: number; variant: "A" | "R" } | null {
+  const match = magic.match(/^(\d)(\d)(\d)([AR])$/);
+  if (!match) return null;
+  const size = Number(`${match[3]}${match[2]}${match[1]}`);
+  return size >= 200 && size <= 800 ? { size, variant: match[4] as "A" | "R" } : null;
+}
+const MIN_HEADER = 0x340, MAX_HEADER = 0x2000;
 
 export function readLayoutHeaders(bytes: Buffer) {
+  const magic = bytes.length >= 4 ? bytes.toString("latin1", 0, 4) : "";
+  const face = parseCorosFaceMagic(magic);
   const header = (offset: number, mode: "normal" | "aod") => {
-    if (offset < 0 || offset + 0x13c > bytes.length || bytes.toString("latin1", offset, offset + 4) !== "614A") {
+    if (offset < 0 || offset + MIN_HEADER > bytes.length || !face || bytes.toString("latin1", offset, offset + 4) !== magic) {
       throw new Error(`Invalid ${mode} layout header at ${hex(offset)}.`);
     }
-    const length = bytes.readUInt16LE(offset + 0x138);
-    if (!PROFILES.has(length)) throw new Error(`Unsupported layout size ${hex(length)}; refusing to guess offsets.`);
+    // Version-0 headers leave the size field empty; the background bitmap is
+    // always the first block, so its pointer marks the end of that header.
+    const declared = bytes.readUInt16LE(offset + 0x138);
+    const length = declared || (mode === "normal" ? bytes.readUInt32LE(offset + 0x1a) : 0);
+    if (length < MIN_HEADER || length > MAX_HEADER) throw new Error(`Unsupported layout size ${hex(length)}; refusing to guess offsets.`);
     if (offset + length > bytes.length) throw new Error(`Truncated ${mode} layout.`);
-    return { mode, offset, length, version: bytes[offset + 0x13a] };
+    return { mode, offset, length, version: bytes[offset + 0x13a], magic, width: face.size, height: face.size, variant: face.variant };
   };
   const normal = header(0, "normal");
-  const aodOffset = bytes.readUInt32LE(0x322);
+  const aodOffset = normal.length >= 0x326 ? bytes.readUInt32LE(0x322) : 0;
   if (!aodOffset) return [normal];
   if (aodOffset < normal.length) throw new Error("AOD header overlaps the normal header.");
   return [normal, header(aodOffset, "aod")];
+}
+
+export interface CorosBitmapBlock {
+  index: number; offset: number; width: number; height: number;
+  /** 0x2002: palette/RGBA frames (416px AMOLED); 0x0802: one A2R2G2B2 byte per pixel (MIP). */
+  encoding: number; version: number; frameCount: number; dataOffset: number; frameEnds: number[];
+}
+
+/** Locate bitmap blocks after the layout headers. Both encodings share the RLE stream. */
+export function findCorosBitmapBlocks(buffer: Buffer, start = 0): CorosBitmapBlock[] {
+  const blocks: CorosBitmapBlock[] = [];
+  let decodedBytes = 0;
+  for (let offset = start; offset + 14 <= buffer.length; offset++) {
+    const width = buffer.readUInt16LE(offset), height = buffer.readUInt16LE(offset + 2), encoding = buffer.readUInt16LE(offset + 4);
+    const frameCount = buffer[offset + 6], version = buffer[offset + 7];
+    if (!width || width > 800 || !height || height > 800 || !frameCount || frameCount > 64) continue;
+    // 0x2002 blocks: six reserved bytes then u32 frame ends; 0x0802 blocks: four reserved bytes then u16 ends.
+    const mip = encoding === 0x0802;
+    if (!(encoding === 0x2002 && [1, 3].includes(version)) && !(mip && version === 0)) continue;
+    const reserved = mip ? 4 : 6, entry = mip ? 2 : 4;
+    if (buffer.subarray(offset + 8, offset + 8 + reserved).some(Boolean)) continue;
+    const dataOffset = offset + 8 + reserved + frameCount * entry;
+    if (dataOffset > buffer.length) continue;
+    const frameEnds: number[] = [];
+    for (let i = 0; i < frameCount; i++) {
+      const at = offset + 8 + reserved + i * entry;
+      const end = mip ? buffer.readUInt16LE(at) : buffer.readUInt32LE(at);
+      if (end <= (frameEnds.at(-1) ?? 0) || dataOffset + end > buffer.length) break;
+      frameEnds.push(end);
+    }
+    if (frameEnds.length !== frameCount) continue;
+    decodedBytes += width * height * 4 * frameCount;
+    if (decodedBytes > 256 * 1024 * 1024 || blocks.length >= 512) throw new Error("This face contains too much image data to open in the editor.");
+    blocks.push({ index: blocks.length, offset, width, height, encoding, frameCount, version, dataOffset, frameEnds });
+    offset = dataOffset + frameEnds.at(-1)! - 1;
+  }
+  return blocks;
+}
+
+/** Decode one frame to straight (non-premultiplied) RGBA. */
+export function decodeCorosBitmapFrame(bytes: Buffer, block: CorosBitmapBlock, frame: number): Buffer {
+  if (!Number.isInteger(frame) || frame < 0 || frame >= block.frameCount) throw new Error("Invalid bitmap frame.");
+  const encoded = bytes.subarray(block.dataOffset + (block.frameEnds[frame - 1] ?? 0), block.dataOffset + block.frameEnds[frame]);
+  const pixels = block.width * block.height;
+  const mip = block.encoding === 0x0802;
+  const decoded = Buffer.alloc(mip ? pixels : block.version === 3 ? pixels * 4 : pixels + 1024);
+  let cursor = 0;
+  for (let i = 0; i < encoded.length; i++) {
+    const control = encoded[i];
+    const count = control >= 0xc0 ? control & 0x3f : 1;
+    if (control >= 0xc0 && i + 1 >= encoded.length) throw new Error("Truncated watchface image.");
+    const value = control >= 0xc0 ? encoded[++i] : control;
+    if (!count || cursor + count > decoded.length) throw new Error("Invalid watchface image data.");
+    decoded.fill(value, cursor, cursor + count);
+    cursor += count;
+  }
+  if (cursor !== decoded.length) throw new Error("Incomplete watchface image data.");
+  if (mip) {
+    // MIP panels are 64-colour: aa rr gg bb per byte, alpha 0 opaque … 3 transparent.
+    const rgba = Buffer.alloc(pixels * 4);
+    for (let pixel = 0; pixel < pixels; pixel++) {
+      const value = decoded[pixel];
+      rgba[pixel * 4] = ((value >> 4) & 3) * 85; rgba[pixel * 4 + 1] = ((value >> 2) & 3) * 85;
+      rgba[pixel * 4 + 2] = (value & 3) * 85; rgba[pixel * 4 + 3] = (3 - ((value >> 6) & 3)) * 85;
+    }
+    return rgba;
+  }
+  if (block.version === 3) return decoded;
+  const rgba = Buffer.alloc(pixels * 4);
+  for (let pixel = 0; pixel < pixels; pixel++) {
+    const index = decoded[pixel];
+    // COROS stores the LUT transposed: logical index 1 lives in slot 16.
+    const palette = pixels + (((index & 15) << 4) | (index >>> 4)) * 4;
+    decoded.copy(rgba, pixel * 4, palette, palette + 4);
+  }
+  return rgba;
 }
 
 // [id, position offset, bitmap pointer offset, position config key, asset key]
@@ -79,9 +170,25 @@ const ICONS: PositionedField[] = [
   ["todayElevation.icon", 0x10ce, 0x10d6, "today_elev_icon_pos", "today_elev_icon"],
   ["weekElevation.icon", 0x1146, 0x114e, "week_elev_icon_pos", "week_elev_icon"],
   ["weekLoad.icon", 0xfd8, 0xfe0, "week_tl_icon_pos", "week_tl_icon"],
+  ["weekLoad.states", 0xff2, 0xffa, "week_tl_level_pos", "week_tl_level_icon"],
   ["stamina.icon", 0xffe, 0x1006, "stamina_icon_pos", "stamina_icon"],
   ["stamina.states", 0x101c, 0x1024, "stamina_level_pos", "stamina_level_icon"],
-  ["stress.icon", 0x1028, 0x1030, "stress_icon_pos", "stress_icon"]
+  ["stress.icon", 0x1028, 0x1030, "stress_icon_pos", "stress_icon"],
+  // SetExtendedStatus continues in WFExtendedStatusInfo field order: stress
+  // level, sleep HRV level, barometer, today's and weekly run/swim/bike
+  // (WFMetricValue = icon + value + unit), sunrise/sunset progress at 0x1164
+  // (two icons, hour/minute rects, font, colon, progress) and sleep score.
+  // RUBY HORIZON's barometer column (0x105a–0x1070) confirmed the block.
+  ["stress.states", 0x1042, 0x104a, "stress_level_icon_pos", "stress_level_icon"],
+  ["sleepHrv.states", 0x104e, 0x1056, "sleep_hrv_level_pos", "sleep_hrv_level_icon"],
+  ["barometer.icon", 0x105a, 0x1062, "baro_icon_pos", "baro_icon"],
+  ...([["today_run", 0x1074], ["today_swim", 0x1092], ["today_bike", 0x10b0], ["week_run", 0x10ec], ["week_swim", 0x110a], ["week_bike", 0x1128]] as const)
+    .map(([key, pos]) => [`${key.replace(/_(\w)/, (_, c: string) => c.toUpperCase())}.icon`, pos, pos + 8, `${key}_icon_pos`, `${key}_icon`] as PositionedField),
+  ["sunriseset.icon", 0x1164, 0x116c, "sunriseset_icon_pos", "sunriseset_sunrise_icon"],
+  ["sunriseset.setIcon", 0x1164, 0x1170, "sunriseset_icon_pos", "sunriseset_sunset_icon"],
+  ["sunriseset.progress", 0x1190, 0x1198, "sunriseset_progress_pos", "sunrise_progress"],
+  ["sunriseset.setProgress", 0x1190, 0x119c, "sunriseset_progress_pos", "sunset_progress"],
+  ["sleepScore.icon", 0x11a0, 0x11a8, "sleep_score_icon_pos", "sleep_score_icon"]
 ];
 // [id, rectangle offset, font pointer offset, rectangle config key, font key]
 const NUMBERS: PositionedField[] = [
@@ -122,7 +229,13 @@ const NUMBERS: PositionedField[] = [
   ["weekElevation.value", 0x1152, 0x115c, "week_elev_rect", "week_elev_font"],
   ["weekLoad.value", 0xfe4, 0xfee, "week_tl_rect", "week_tl_font"],
   ["stamina.value", 0x100a, 0x1014, "stamina_rect", "stamina_font"],
-  ["stress.value", 0x1034, 0x103e, "stress_rect", "stress_font"]
+  ["stress.value", 0x1034, 0x103e, "stress_rect", "stress_font"],
+  ["barometer.value", 0x1066, 0x1070, "baro_rect", "baro_font"],
+  ...([["today_run", 0x1074], ["today_swim", 0x1092], ["today_bike", 0x10b0], ["week_run", 0x10ec], ["week_swim", 0x110a], ["week_bike", 0x1128]] as const)
+    .map(([key, pos]) => [`${key.replace(/_(\w)/, (_, c: string) => c.toUpperCase())}.value`, pos + 12, pos + 22, `${key}_rect`, `${key}_font`] as PositionedField),
+  ["sunriseset.hour", 0x1174, 0x1188, "sunriseset_hour_rect", "sunriseset_font"],
+  ["sunriseset.minute", 0x117e, 0x1188, "sunriseset_minute_rect", "sunriseset_font"],
+  ["sleepScore.value", 0x11ac, 0x11b6, "sleep_score_rect", "sleep_score_font"]
 ];
 const RESOURCES: [string, number, string][] = [
   ["thumbnail", 0x1e, "watchface_thmb_icon"],
@@ -142,6 +255,7 @@ const RESOURCES: [string, number, string][] = [
   ["colon", 0x134, "colon_icon"],
   ["date.chinese.monthIcon", 0x19c, "chinese_month_icon"],
   ["control.colon", 0x4c6, "control_colon_icon"],
+  ["control.percent", 0x4ca, "control_percent_icon"],
   ["control.negativeSign", 0x392, "control_negative_sign_icon"],
   ["weather.minus", 0xc64, "weather_negasign_icon"],
   ["weather.unit", 0xc68, "weather_dgree_icon"],
@@ -151,9 +265,19 @@ const RESOURCES: [string, number, string][] = [
   ["weather.humidityPercent", 0xcfe, "weather_humidity_percent_icon"],
   ["todayElevation.unit", 0x10e8, "today_elev_unit_icon"],
   ["weekElevation.unit", 0x1160, "week_elev_unit_icon"],
+  ["todayRun.unit", 0x108e, "today_run_unit_icon"], ["todaySwim.unit", 0x10ac, "today_swim_unit_icon"], ["todayBike.unit", 0x10ca, "today_bike_unit_icon"],
+  ["weekRun.unit", 0x1106, "week_run_unit_icon"], ["weekSwim.unit", 0x1124, "week_swim_unit_icon"], ["weekBike.unit", 0x1142, "week_bike_unit_icon"],
+  ["sunriseset.colon", 0x118c, "sunriseset_colon_icon"],
   ["stamina.percent", 0x1018, "stamina_percent_icon"]
 ];
+// SetControl looks items up by WF_DATA_TYPE: HR (5) at 0x3c4, floor (6) at
+// 0x3e0, elevation (7), sunrise (8), sunset (9), step (10), kcal (11) and
+// exercise (12) follow as 28-byte records (position, icon, rect, font, tint).
 const CONTROLS: [string, number, number, number][] = [
+  ["temperature", 0x376, 0x382, 0x38c],
+  ["barometer", 0x39e, 0x3aa, 0x3be],
+  ["hr", 0x3c4, 0x3d0, 0x3da],
+  ["floor", 0x3e0, 0x3ec, 0x3f6],
   ["elevation", 0x3fc, 0x408, 0x412],
   ["step", 0x464, 0x470, 0x47a],
   ["kcal", 0x480, 0x48c, 0x496]
@@ -213,20 +337,28 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
     const { offset: base, length } = header;
     const elements: CorosBinElement[] = [];
     const pointerFields = new Set();
-    const u32 = (offset: number) => bytes.readUInt32LE(base + offset);
-    const point = (offset: number): CorosBinPoint => ({ x: bytes.readInt32LE(base + offset), y: bytes.readInt32LE(base + offset + 4) });
+    // Shorter headers end before later record blocks; reads past the header
+    // (or the file) yield zero so the element is skipped, never guessed.
+    const inHeader = (absolute: number, size: number) => absolute >= base && absolute + size <= base + length;
+    const safe = <T,>(absolute: number, size: number, read: () => T, fallback: T): T => absolute >= 0 && absolute + size <= bytes.length ? read() : fallback;
+    const u32 = (offset: number) => safe(base + offset, 4, () => bytes.readUInt32LE(base + offset), 0);
+    const point = (offset: number): CorosBinPoint => ({
+      x: safe(base + offset, 4, () => bytes.readInt32LE(base + offset), 0),
+      y: safe(base + offset + 4, 4, () => bytes.readInt32LE(base + offset + 4), 0)
+    });
     const rectangle = (absolute: number): CorosBinRect => {
-      const align = bytes[absolute + 8];
+      const align = safe(absolute + 8, 1, () => bytes[absolute + 8], 0);
+      const i16 = (at: number) => safe(at, 2, () => bytes.readInt16LE(at), 0);
       return {
-        x0: bytes.readInt16LE(absolute), y0: bytes.readInt16LE(absolute + 2),
-        x1: bytes.readInt16LE(absolute + 4), y1: bytes.readInt16LE(absolute + 6),
+        x0: i16(absolute), y0: i16(absolute + 2), x1: i16(absolute + 4), y1: i16(absolute + 6),
         align,
         horizontal: align & 4 ? "right" : align & 2 ? "center" : "left",
         vertical: align & 32 ? "bottom" : align & 16 ? "center" : "top"
       };
     };
-    const reference = (absolute: number): CorosBinReference | null => {
-      pointerFields.add(absolute - base);
+    const reference = (absolute: number, indirect = false): CorosBinReference | null => {
+      if (indirect ? absolute < 0 || absolute + 4 > bytes.length : !inHeader(absolute, 4)) return null;
+      if (!indirect) pointerFields.add(absolute - base);
       const pointer = bytes.readUInt32LE(absolute);
       if (!pointer) return null;
       const bitmap = bitmapMap.get(pointer);
@@ -235,7 +367,8 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
     };
     const add = (id: string, kind: CorosBinElement["kind"], geometry: Pick<CorosBinElement, "position" | "rect" | "geometryOffset" | "control" | "chart" | "indirectFieldOffset">,
       absolutePointer: number, config: CorosBinElement["config"] | undefined, evidence = "compiler", note?: string) => {
-      const asset = reference(absolutePointer);
+      if (geometry.geometryOffset !== undefined && !geometry.indirectFieldOffset && !inHeader(geometry.geometryOffset, kind === "number" ? 10 : 8)) return;
+      const asset = reference(absolutePointer, Boolean(geometry.indirectFieldOffset));
       if (!asset) return;
       const active = asset.group !== null && (kind !== "number" || Boolean(geometry.rect && geometry.rect.x1 > geometry.rect.x0 && geometry.rect.y1 > geometry.rect.y0));
       elements.push({ id, kind, ...geometry, asset, active, evidence, ...(note ? { note } : {}), ...(config ? { config } : {}) });
@@ -249,13 +382,21 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
     for (const [id, ptr, assetKey] of RESOURCES) {
       add(id, "resource", {}, base + ptr, { asset: assetKey });
     }
-    const controlOrigin = point(0x33a);
+    const controlOrigin = inHeader(base + 0x33a, 8) ? point(0x33a) : { x: 0, y: 0 };
     for (const [name, pos, rect, font] of CONTROLS) {
       add(`control.${name}.icon`, "icon", { position: point(pos), geometryOffset: base + pos, control: name }, base + pos + 8,
         { position: `control_${name}_icon_pos`, asset: `control_${name}_icon` });
       add(`control.${name}.value`, "number", { rect: rectangle(base + rect), geometryOffset: base + rect, control: name }, base + font,
         { rect: `control_${name}_rect`, asset: `control_${name}_font` });
     }
+    // WF_DT_BATTERY (2) at 0x35a keeps the level table and value under its own
+    // key names; the barometer item carries a second (decimal) rectangle.
+    add("control.battery.states", "icon", { position: point(0x35a), geometryOffset: base + 0x35a, control: "battery" }, base + 0x362,
+      { position: "control_battery_icon_pos", asset: "control_battery_icon_dir" });
+    add("control.battery.value", "number", { rect: rectangle(base + 0x366), geometryOffset: base + 0x366, control: "battery" }, base + 0x370,
+      { rect: "control_battery_level_rect", asset: "control_battery_level_font" });
+    add("control.barometer.decimal", "number", { rect: rectangle(base + 0x3b4), geometryOffset: base + 0x3b4, control: "barometer" }, base + 0x3be,
+      { rect: "control_barometer_decimal_rect", asset: "control_barometer_font" });
     for (const [name, pos, hour, minute, font] of [["sunrise", 0x418, 0x424, 0x42e, 0x438], ["sunset", 0x43e, 0x44a, 0x454, 0x45e], ["exercise", 0x49c, 0x4a8, 0x4b2, 0x4bc]] as const) {
       add(`control.${name}.icon`, "icon", { position: point(pos), geometryOffset: base + pos, control: name }, base + pos + 8,
         { position: `control_${name}_icon_pos`, asset: `control_${name}_icon` });
@@ -264,9 +405,12 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
           { rect: `control_${name}_${part}_rect`, asset: `control_${name}_font` });
       }
     }
-    for (const [language, rect] of [["english", 0x50e], ["chinese", 0x51e]] as const) {
-      add(`control.date.${language}.week`, "number", { rect: rectangle(base + rect), geometryOffset: base + rect, control: "date" }, base + rect + 10,
-        { rect: `control_${language}_date_week_rect`, asset: `control_${language}_date_week_font` });
+    for (const [language, part, rect] of [
+      ["english", "month", 0x4ce], ["chinese", "month", 0x4de], ["english", "day", 0x4ee], ["chinese", "day", 0x4fe],
+      ["english", "week", 0x50e], ["chinese", "week", 0x51e]
+    ] as const) {
+      add(`control.date.${language}.${part}`, "number", { rect: rectangle(base + rect), geometryOffset: base + rect, control: "date" }, base + rect + 10,
+        { rect: `control_${language}_date_${part}_rect`, asset: `control_${language}_date_${part}_font` });
     }
     // SetControl's per-language date records (Map::at keys 5–13 in the
     // disassembly). German/Spanish/French weekday fonts sit at 0x58c/0x59c/0x5cc
@@ -310,7 +454,7 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
     for (const [id, ptr, assetKey] of CHART_RESOURCES) add(id, "resource", {}, base + ptr, { asset: assetKey });
     const chartRect = rectangle(base + 0xdd0);
     const rawColors = { selectedBar: u32(0xdde), unselectedBar: u32(0xde2), curvesUpper: u32(0xe5e), curvesLower: u32(0xe62) };
-    const chart: CorosBinChart | undefined = chartRect.x1 > chartRect.x0 && chartRect.y1 > chartRect.y0 ? {
+    const chart: CorosBinChart | undefined = inHeader(base + 0xdc4, 0xfd8 - 0xdc4) && chartRect.x1 > chartRect.x0 && chartRect.y1 > chartRect.y0 ? {
       rect: chartRect, barWidth: bytes.readUInt16LE(base + 0xdda), barInterval: bytes.readUInt16LE(base + 0xddc), curvesWidth: bytes[base + 0xe66],
       selectedBarColor: expandChartColor(rawColors.selectedBar), unselectedBarColor: expandChartColor(rawColors.unselectedBar),
       curvesUpperColor: expandChartColor(rawColors.curvesUpper), curvesLowerColor: expandChartColor(rawColors.curvesLower), rawColors
@@ -319,7 +463,7 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
     // as unknown, but their arc/rotation geometry is not reconstructed.
     add("fish.icon", "icon", { position: point(FISH), geometryOffset: base + FISH }, base + FISH + 8, { position: "fish_time_mask_pos", asset: "fish_time_mask" });
     add("fish.pointer", "resource", {}, base + FISH + 34, { asset: "fish_pointer_icon" });
-    const pointerCenter = point(0x2f8);
+    const pointerCenter = inHeader(base + 0x2f8, 8) ? point(0x2f8) : { x: 0, y: 0 };
     // Official AOD headers retain some shared icons while clearing all their
     // value rectangles. Keep the links, but don't activate a control from a
     // resource pointer alone. An icon at (0,0) with a live value stays active.
@@ -346,7 +490,7 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
     }
     // SetStatus writes this 34-byte auxiliary record separately from the header.
     // WF_DATA_TYPE_HR == 5, WFRectNumberValue begins at record+0; font at +10.
-    const heartRatePointer = u32(0x316);
+    const heartRatePointer = inHeader(base + 0x316, 4) ? u32(0x316) : 0;
     if (heartRatePointer) {
       if (heartRatePointer < layoutEnd || heartRatePointer + 34 > bytes.length) {
         warnings.push(`${header.mode}: invalid indirect heart-rate record ${hex(heartRatePointer)}.`);
@@ -358,7 +502,7 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
     // Present in official PLANET, but no writer for this record was found in
     // 4.9.9. Retain exact geometry and all three pointers; do not invent INI keys.
     const dateFonts = [0x6b4, 0x6b8, 0x6bc].map((off) => reference(base + off));
-    if (dateFonts.some(Boolean)) {
+    if (inHeader(base + 0x6aa, 10) && dateFonts.some(Boolean)) {
       elements.push({ id: "date.combined", kind: "combinedDate", rect: rectangle(base + 0x6aa), geometryOffset: base + 0x6aa,
         assets: dateFonts, active: dateFonts.every((a) => a?.group !== null && a != null), evidence: "inferred-from-official-PLANET",
         note: "Month/day/separator roles and formatting are inferred. Native config keys and runtime date ordering remain unknown." });
@@ -385,10 +529,11 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
     };
   });
   return {
-    schemaVersion: 1, format: "COROS-614A-partial", screen: { width: 416, height: 416 },
+    schemaVersion: 1, format: `COROS-${headers[0].magic}-partial`, screen: { width: headers[0].width, height: headers[0].height },
+    magic: headers[0].magic, variant: headers[0].variant,
     completeness: "partial", byteOrder: "little-endian", pointerBase: "absolute-file-offset",
     limitations: [
-      "Only mapped 614A header sizes 0x1164, 0x11a0 and 0x1202 are accepted; other resolutions/formats require separate profiles.",
+      "Header sizes 0xbaa–0x1202 share one record table; records beyond a header's end are skipped, never guessed.",
       "Unknown records, analog pointer rotation, fishing arcs, lunar data and auto-alignment are not reconstructed.",
       "Chart readouts are decoded as alternatives; the plotted history and the runtime chart group are supplied by the watch.",
       "Preview values, active control choice, state-frame selection and theme appearance are samples, not recovered runtime state.",

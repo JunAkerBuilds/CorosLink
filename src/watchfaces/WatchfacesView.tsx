@@ -90,6 +90,7 @@ import {
   requireAutomationNumber,
   toWatchfaceAutomationError,
   WatchfaceAutomationError,
+  type WatchfaceAutomationConversionInput,
   type WatchfaceAutomationOpenParams,
   type WatchfaceAutomationRequest
 } from "./watchfaceAutomation";
@@ -202,6 +203,7 @@ interface WatchfaceConversionDraft {
   name: string;
   sourceDirty: boolean;
   sourceFirmwareType: string;
+  bakeForWatch?: WatchfaceAutomationConversionInput["bakeForWatch"];
 }
 
 const DEFAULT_FIRMWARE_TYPE = "COROS W332";
@@ -611,7 +613,8 @@ export function WatchfacesView({
   function beginWatchConversion(
     design: CorosWatchfaceDesignState,
     name: string,
-    sourceDirty: boolean
+    sourceDirty: boolean,
+    bakeForWatch?: WatchfaceAutomationConversionInput["bakeForWatch"]
   ) {
     if (!studioSession) return;
     setConversionSignInWatch(null);
@@ -619,7 +622,8 @@ export function WatchfacesView({
       design: structuredClone(design),
       name: name.trim() || "Custom watch face",
       sourceDirty,
-      sourceFirmwareType: studioSession.targetFirmwareType
+      sourceFirmwareType: studioSession.targetFirmwareType,
+      ...(bakeForWatch ? { bakeForWatch } : {})
     });
     clearMessages();
   }
@@ -643,8 +647,8 @@ export function WatchfacesView({
   }
 
   async function openAutomatedConversion({
-    design, name, targetArchive, firmwareType: requestedFirmwareType, watchModel
-  }: import("./watchfaceAutomation").WatchfaceAutomationConversionInput) {
+    design, name, targetArchive, firmwareType: requestedFirmwareType, watchModel, bakeForWatch
+  }: WatchfaceAutomationConversionInput) {
     if (!studioSession || conversionBusyRef.current) throw new Error("A conversion is already in progress.");
     const target = getWatchfaceTarget(watchModel ?? requestedFirmwareType ?? targetArchive?.firmwareType);
     if (!target) throw new Error("Choose a supported destination watch.");
@@ -657,6 +661,20 @@ export function WatchfacesView({
     conversionBusyRef.current = true;
     setConversionBusy(true);
     try {
+      if (bakeForWatch) {
+        // Recovered official faces are rebuilt from their native tree for the
+        // destination; the finished archive becomes the new project's starter.
+        if (targetArchive) throw new Error("Recovered official faces convert with the destination watch's own COROS template.");
+        const baked = await bakeForWatch({ firmwareType: target.firmwareType, watchModel: target.model }, name);
+        const bakedName = convertedProjectName(name, target.firmwareType);
+        clearWatchfaceAutomationEditor();
+        api.setWatchfaceAutomationReady("editor", false);
+        openStudio(baked, bakedName, undefined, undefined, true,
+          { firmwareType: target.firmwareType, watchModel: target.model });
+        setNotice(`Converted to ${target.label}. Your edits are baked into this new starter; keep editing and save it as a project.`);
+        return { opened: true, name: bakedName, targetFirmwareType: target.firmwareType,
+          omittedRawConfigEditCount: 0, appliedRawConfigEditCount: 0 };
+      }
       const converted = await api.convertCorosWatchfaceArchive({
         sourceArchiveId: studioSession.archive.archiveId,
         watchModel: target.model,
@@ -686,7 +704,8 @@ export function WatchfacesView({
     clearMessages();
     try {
       await openAutomatedConversion({ design: conversionDraft.design, name: conversionDraft.name,
-        sourceDirty: conversionDraft.sourceDirty, watchModel });
+        sourceDirty: conversionDraft.sourceDirty, watchModel,
+        ...(conversionDraft.bakeForWatch ? { bakeForWatch: conversionDraft.bakeForWatch } : {}) });
     } catch (caught) {
       if (isWatchfaceSignInRequired(caught)) {
         setConversionSignInWatch(watchModel);
@@ -1234,6 +1253,7 @@ export function WatchfacesView({
         />
         {conversionDraft ? (
           <WatchfaceConversionDialog name={conversionDraft.name} sourceFirmwareType={conversionDraft.sourceFirmwareType}
+            bakes={Boolean(conversionDraft.bakeForWatch)}
             busy={conversionBusy || busy === "login"} error={error}
             signIn={conversionSignInWatch ? {
               email, password, region, rememberCredentials,
@@ -3648,8 +3668,8 @@ function PublishDialog(props: PublishDialogProps) {
   );
 }
 
-function WatchfaceConversionDialog({ name, sourceFirmwareType, busy, error, signIn, onCancel, onConvert }: {
-  name: string; sourceFirmwareType: string; busy: boolean; error: string | null;
+function WatchfaceConversionDialog({ name, sourceFirmwareType, bakes, busy, error, signIn, onCancel, onConvert }: {
+  name: string; sourceFirmwareType: string; bakes: boolean; busy: boolean; error: string | null;
   signIn?: WatchfaceSignInFormProps;
   onCancel: () => void; onConvert: (model: WatchModelId) => void;
 }) {
@@ -3696,7 +3716,9 @@ function WatchfaceConversionDialog({ name, sourceFirmwareType, busy, error, sign
           </>
         ) : (
           <>
-            <p>Bring “{name}” to another watch. Your layout, fonts, artwork and data fields stay editable.</p>
+            <p>{bakes
+              ? `Bring “${name}” to another watch. This recovered official face is rebuilt from its native layout with your edits applied, then opens as a new starter you can keep editing.`
+              : `Bring “${name}” to another watch. Your layout, fonts, artwork and data fields stay editable.`}</p>
             <label className="field">Destination watch
               <select value={model} disabled={busy} onChange={event => setModel(event.target.value as WatchModelId)}>
                 {options.map(option => <option key={option.model} value={option.model}>{option.label}</option>)}

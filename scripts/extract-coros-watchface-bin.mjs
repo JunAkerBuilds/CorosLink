@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import pngjs from "pngjs";
-import { readLayoutHeaders } from "./lib/coros-bin-layout.mjs";
+import { decodeCorosBitmapFrame, findCorosBitmapBlocks, parseCorosFaceMagic, readLayoutHeaders } from "./lib/coros-bin-layout.mjs";
 
 const { PNG } = pngjs;
 const inputPath = process.argv[2] ? path.resolve(process.argv[2]) : undefined;
@@ -20,72 +20,9 @@ if (!inputPath || !outputPath) {
 }
 
 const bytes = await fs.readFile(inputPath);
-if (bytes.length < 4 || bytes.subarray(0, 4).toString("latin1") !== "614A") {
-  throw new Error("This is not a supported COROS compiled watch-face binary (missing 614A magic).");
-}
-
-function findBitmapBlocks(buffer) {
-  const blocks = [];
-
-  for (let offset = 0; offset + 18 <= buffer.length; offset += 1) {
-    const width = buffer.readUInt16LE(offset);
-    const height = buffer.readUInt16LE(offset + 2);
-    const encoding = buffer.readUInt16LE(offset + 4);
-    const frameCount = buffer[offset + 6];
-    const version = buffer[offset + 7];
-
-    if (
-      width < 1 || width > 800 ||
-      height < 1 || height > 800 ||
-      encoding !== 0x2002 ||
-      frameCount < 1 || frameCount > 64 ||
-      ![1, 3].includes(version) ||
-      buffer.subarray(offset + 8, offset + 14).some((value) => value !== 0)
-    ) {
-      continue;
-    }
-
-    const dataOffset = offset + 14 + frameCount * 4;
-    if (dataOffset > buffer.length) continue;
-    const frameEnds = [];
-    let previousEnd = 0;
-    let valid = true;
-
-    for (let frame = 0; frame < frameCount; frame += 1) {
-      const end = buffer.readUInt32LE(offset + 14 + frame * 4);
-      if (end <= previousEnd || dataOffset + end > buffer.length) {
-        valid = false;
-        break;
-      }
-      frameEnds.push(end);
-      previousEnd = end;
-    }
-
-    if (!valid) continue;
-    blocks.push({ offset, width, height, encoding, version, frameCount, dataOffset, frameEnds });
-    offset = dataOffset + previousEnd - 1;
-  }
-
-  return blocks;
-}
-
-function decodeRle(encoded) {
-  const decoded = [];
-
-  for (let index = 0; index < encoded.length; index += 1) {
-    const control = encoded[index];
-    if (control >= 0xc0) {
-      if (index + 1 >= encoded.length) throw new Error("Truncated RLE run.");
-      const value = encoded[index + 1];
-      const count = control & 0x3f;
-      for (let repeat = 0; repeat < count; repeat += 1) decoded.push(value);
-      index += 1;
-    } else {
-      decoded.push(control);
-    }
-  }
-
-  return Buffer.from(decoded);
+const magic = bytes.length >= 4 ? bytes.subarray(0, 4).toString("latin1") : "";
+if (!parseCorosFaceMagic(magic)) {
+  throw new Error("This is not a supported COROS compiled watch-face binary (expected a size/variant magic such as 614A or 062R).");
 }
 
 function bitmapReference(block) {
@@ -93,6 +30,7 @@ function bitmapReference(block) {
     offset: `0x${block.offset.toString(16)}`,
     width: block.width,
     height: block.height,
+    encoding: `0x${block.encoding.toString(16)}`,
     frameCount: block.frameCount,
     version: block.version
   };
@@ -103,6 +41,7 @@ function bitmapReference(block) {
 function decodeWeatherAndTemperatureSlots(buffer, blocks) {
   let headers;
   try { headers = readLayoutHeaders(buffer); } catch { return undefined; }
+  if (headers[0].length < 0xc9a) return undefined; // No weather block in this header generation.
   const byOffset = new Map(blocks.map((block) => [block.offset, block]));
   const bitmap = (field) => {
     const block = byOffset.get(buffer.readUInt32LE(field));
@@ -127,11 +66,13 @@ function decodeWeatherAndTemperatureSlots(buffer, blocks) {
 }
 
 await fs.mkdir(outputPath, { recursive: true });
-const blocks = findBitmapBlocks(bytes);
+const layoutEnd = (() => { try { return Math.max(...readLayoutHeaders(bytes).map((h) => h.offset + h.length)); } catch { return 0; } })();
+const blocks = findCorosBitmapBlocks(bytes, layoutEnd);
 const featureSlots = decodeWeatherAndTemperatureSlots(bytes, blocks);
 const manifest = {
   source: inputPath,
-  magic: "614A",
+  magic,
+  screen: parseCorosFaceMagic(magic).size,
   sizeBytes: bytes.length,
   layoutBytes: blocks[0]?.offset ?? bytes.length,
   layoutFile: "layout.bin",
@@ -156,38 +97,11 @@ for (const [blockIndex, block] of blocks.entries()) {
   for (let frame = 0; frame < block.frameCount; frame += 1) {
     const frameEnd = block.frameEnds[frame];
     const encoded = bytes.subarray(block.dataOffset + previousEnd, block.dataOffset + frameEnd);
-    const decoded = decodeRle(encoded);
-    const pixelCount = block.width * block.height;
-    const expectedLength =
-      block.version === 3 ? pixelCount * 4 : pixelCount + 256 * 4;
-    if (decoded.length !== expectedLength) {
-      throw new Error(
-        `Unexpected decoded size at 0x${block.offset.toString(16)}, frame ${frame}: ` +
-        `${decoded.length} bytes instead of ${expectedLength}.`
-      );
-    }
-
+    // Shared with the app: transposed 256-entry LUT for 0x2002 frames
+    // (4.9.9 Bitmap::ToLut256Buffer at 0x168a48), direct RGBA for version 3,
+    // and A2R2G2B2 bytes for MIP 0x0802 frames.
     const png = new PNG({ width: block.width, height: block.height });
-    if (block.version === 3) {
-      decoded.copy(png.data);
-    } else {
-      const indexes = decoded.subarray(0, pixelCount);
-      const palette = decoded.subarray(pixelCount);
-      for (let pixel = 0; pixel < pixelCount; pixel += 1) {
-        // COROS stores its 256-entry LUT as a transposed 16x16 table.
-        // Pixel indices stay sequential; swap their nibbles for the lookup.
-        // Confirmed in 4.9.9 Bitmap::ToLut256Buffer (0x168a48) and
-        // Bitmap::ToQuantLut256Buffer (0x168c60). A linear lookup corrupts
-        // both color and alpha, producing faded or speckled glyphs.
-        const index = indexes[pixel];
-        const paletteOffset = (((index & 0x0f) << 4) | (index >>> 4)) * 4;
-        const outputOffset = pixel * 4;
-        png.data[outputOffset] = palette[paletteOffset];
-        png.data[outputOffset + 1] = palette[paletteOffset + 1];
-        png.data[outputOffset + 2] = palette[paletteOffset + 2];
-        png.data[outputOffset + 3] = palette[paletteOffset + 3];
-      }
-    }
+    decodeCorosBitmapFrame(bytes, block, frame).copy(png.data);
 
     const fileName = `frame-${String(frame).padStart(2, "0")}.png`;
     await fs.writeFile(path.join(groupPath, fileName), PNG.sync.write(png));

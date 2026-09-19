@@ -58,6 +58,15 @@ export interface WatchfaceAutomationConversionInput {
   targetArchive?: CorosWatchfaceArchive;
   firmwareType?: string;
   watchModel?: WatchModelId;
+  /**
+   * Supplied by the editor for recovered official faces: bakes the scene into
+   * a final archive built for the destination watch, which then opens as a
+   * fresh starter, because such faces have no 800px master to carry a scene.
+   */
+  bakeForWatch?: (
+    target: { firmwareType: string; watchModel: WatchModelId },
+    name: string
+  ) => Promise<CorosWatchfaceArchive>;
 }
 
 let editorController: WatchfaceAutomationEditorController | null = null;

@@ -1,5 +1,5 @@
 import { Check, ChevronDown, Info, Loader2, Search, Type, X } from "lucide-react";
-import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CorosWatchfaceRasterFont } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
@@ -27,6 +27,8 @@ interface LocalFontPickerProps {
    */
   onLetterSpacingChange?: (letterSpacing: number) => void;
   disabled?: boolean;
+  /** The glyphs this choice draws with, shown directly under the picker. */
+  preview?: ReactNode;
 }
 
 interface FontPickerPopoverPosition {
@@ -58,7 +60,8 @@ export function LocalFontPicker({
   typography,
   onTypographyChange,
   onLetterSpacingChange,
-  disabled = false
+  disabled = false,
+  preview
 }: LocalFontPickerProps) {
   const [open, setOpen] = useState(false);
   const [families, setFamilies] = useState<string[] | null>(null);
@@ -432,6 +435,8 @@ export function LocalFontPicker({
           : null}
       </div>
 
+      {preview}
+
       {typography && onTypographyChange ? (
         <div className="watchface-typography-controls">
           <label>
@@ -498,6 +503,22 @@ export function LocalFontPicker({
                 } })} />
             </label>
           ))}
+          {rasterFont.glyphLayout ? (
+            <p className="watchface-typography-hint">
+              <button
+                type="button"
+                className="text-button"
+                disabled={disabled}
+                onClick={() => {
+                  // Without a layout, PNGs at the cell size are copied as authored.
+                  const { glyphLayout: _layout, ...automatic } = rasterFont;
+                  onRasterFontChange(automatic);
+                }}
+              >
+                Reset fit
+              </button>
+            </p>
+          ) : null}
         </div>
       ) : null}
       {typography && rasterFontIsActive ? (

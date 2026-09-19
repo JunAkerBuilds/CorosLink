@@ -3958,7 +3958,13 @@ globalThis.document = {
       fillText: (text) => {
         renderedText = text;
       },
-      drawImage: () => {}
+      drawImage: () => {},
+      getImageData: (_x, _y, width, height) => ({
+        width,
+        height,
+        data: new Uint8ClampedArray(Math.max(0, width * height) * 4)
+      }),
+      putImageData: () => {}
     };
     const canvas = {
       width: 0,
@@ -3967,6 +3973,7 @@ globalThis.document = {
       toDataURL: () =>
         `data:image/png;base64,W${canvas.width}H${canvas.height}T${renderedText}`
     };
+    context.canvas = canvas;
     return canvas;
   }
 };

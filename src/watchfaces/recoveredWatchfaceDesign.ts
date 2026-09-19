@@ -8,6 +8,7 @@ import type {
 } from "../../electron/types";
 import { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
 import { parseConfigPos, parseConfigRect, pickPreviewResolution } from "./watchfaceStudio";
+import { nativeDataSize } from "./nativeData";
 import { getWeatherCapability } from "./weatherAssets";
 
 /** Hydrate original sprites instead of the editor's generated weather/data defaults. */
@@ -112,6 +113,14 @@ export async function recoverWatchfaceDesign(
   }
   const chart = await recoverChart(config, source, sprites);
   if (chart) nativeData.chart = chart;
+  // RUBY HORIZON declares an icon-less air-quality value on top of its UV
+  // column. Live AQI is unavailable in current PACE Pro testing, so start that
+  // alternative disabled instead of painting it over the UV artwork.
+  const aqi = nativeData.weather_aqi, uv = nativeData.weather_uv;
+  if (aqi?.enabled && uv?.enabled && !aqi.parts?.icon?.enabled) {
+    const bounds = (style: CorosWatchfaceNativeDataStyle) => { const size = nativeDataSize("weather_uv", style); return { x0: style.x, y0: style.y, x1: style.x + size.width, y1: style.y + size.height }; };
+    if (overlaps(bounds(aqi), bounds(uv))) aqi.enabled = false;
+  }
   // Official faces keep alternatives in one slot: wind beside min/max
   // temperature, and NOMAD's solar angle over the weather temperature. With a
   // chart layer the watch cycles them by chart group (COROS documents the

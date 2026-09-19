@@ -3,9 +3,11 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
+const unzipper = createRequire(import.meta.url)("unzipper");
 const distUrl = (file) =>
   pathToFileURL(path.join(repoRoot, "dist-electron", file)).href;
 
@@ -36,6 +38,9 @@ const {
   selectCorosWatchfaceArchive,
   validateConfigTextReplacements
 } = await import(`${distUrl("corosWatchfaceService.js")}?cacheBust=${Date.now()}`);
+const { standardizeWatchfacePackage } = await import(
+  `${distUrl("watchfaceDistribution.js")}?cacheBust=${Date.now()}`
+);
 const { createStoreZip } = await import(
   `${distUrl("zipStore.js")}?cacheBust=${Date.now()}`
 );
@@ -926,11 +931,19 @@ try {
     {
       name: "info.json",
       data: Buffer.from(
-        JSON.stringify({ o_template_id: 250601, o_diy_version: 1 }),
+        JSON.stringify({
+          m_name: "STANDARD",
+          m_app: "watchface_800x800",
+          m_preview: "watchface_customize.png",
+          o_template_id: 250601,
+          o_diy_version: 1
+        }),
         "utf8"
       )
     },
-    { name: "watchface_customize.png", data: Buffer.from("PNG") }
+    { name: "watchface_customize.png", data: Buffer.from("PNG") },
+    { name: "watchface_800x800/config.txt", data: Buffer.from("[watchface_id]=1\r\n") },
+    { name: "watchface_800x800/background.png", data: Buffer.from("PNG") }
   ]);
   await fs.writeFile(archivePath, archive);
 
@@ -1007,6 +1020,98 @@ try {
     "editable website ZIP should preserve the original starter archive exactly"
   );
   assert.deepEqual(editablePackage.preview, preview);
+
+  // A recovered official face keeps its firmware blob and layout record in the
+  // local starter, and older recoveries lack the DIY manifest fields. The
+  // website validator rejects both, so the share ZIP must carry a standard DAT.
+  const recoveredInfo = '{"m_name":"TIDY","o_template_id":479445384664563712,"o_diy_version":1,"o_wf_ver":4,"coroslinkRecovery":{"partial":true,"unmappedBitmapReferences":0}}';
+  const recoveredPath = path.join(tempDirectory, "recovered.dat");
+  await fs.writeFile(recoveredPath, createStoreZip([
+    { name: "info.json", data: Buffer.from(recoveredInfo, "utf8") },
+    { name: "watchface_customize.png", data: Buffer.from("PNG") },
+    { name: "watchface_416×416/config.txt", data: Buffer.from("[watchface_id]=1\r\n") },
+    { name: "watchface_416×416/AODconfig.txt", data: Buffer.from("[watchface_id]=1\r\n") },
+    { name: "watchface_416×416/background.png", data: Buffer.from("PNG") },
+    { name: "watchface_416×416/recovered/group-02/00.png", data: Buffer.from("PNG") },
+    { name: "watchface_416×416/.DS_Store", data: Buffer.from("finder") },
+    { name: "recovery/source.bin", data: Buffer.from("original firmware") },
+    { name: "recovery/layout.json", data: Buffer.from("{}") },
+    { name: "__MACOSX/._info.json", data: Buffer.from("macOS metadata") }
+  ]));
+  const recoveredSelected = await selectCorosWatchfaceArchive(recoveredPath);
+  assert.equal(recoveredSelected.recoveredFromCompiled, true);
+  const recoveredExportPath = path.join(tempDirectory, "recovered-face.zip");
+  await exportCorosWatchfaceProject(
+    {
+      sourceArchiveId: recoveredSelected.archiveId,
+      name: "Tidy red",
+      firmwareType: "COROS W332",
+      design: editableDesign,
+      previewDataUrl: `data:image/png;base64,${preview.toString("base64")}`
+    },
+    recoveredExportPath
+  );
+  const recoveredPackage = await readCorosWatchfaceProjectPackage(recoveredExportPath);
+  assert.ok(recoveredPackage);
+  const sharedStarterPath = path.join(tempDirectory, "shared-starter.dat");
+  await fs.writeFile(sharedStarterPath, recoveredPackage.starterArchive);
+  const sharedEntries = await unzipper.Open.file(sharedStarterPath);
+  assert.deepEqual(
+    sharedEntries.files.map((entry) => entry.path).sort(),
+    [
+      "info.json",
+      "watchface_416x416/AODconfig.txt",
+      "watchface_416x416/background.png",
+      "watchface_416x416/config.txt",
+      "watchface_416x416/recovered/group-02/00.png",
+      "watchface_customize.png"
+    ],
+    "shared starter must hold only website-standard entries"
+  );
+  const sharedInfoRaw = (await sharedEntries.files.find((entry) => entry.path === "info.json").buffer()).toString("utf8");
+  assert.match(sharedInfoRaw, /"o_template_id":479445384664563712/, "template ID must survive as raw digits");
+  const sharedInfo = JSON.parse(sharedInfoRaw);
+  assert.equal(sharedInfo.m_app, "watchface_416x416");
+  assert.equal(sharedInfo.m_preview, "watchface_customize.png");
+  assert.equal(sharedInfo.m_name, "TIDY");
+  assert.equal(sharedInfo.coroslinkRecovery.partial, true, "native re-export marker must survive sharing");
+  const sharedSelected = await selectCorosWatchfaceArchive(sharedStarterPath);
+  assert.equal(sharedSelected.sourceTemplateId, "479445384664563712");
+  assert.equal(sharedSelected.recoveredFromCompiled, true);
+
+  // Pure standardizer: conforming input reports no change; m_app tracks a
+  // real root; missing m_name falls back to the project name.
+  const conforming = standardizeWatchfacePackage([
+    { name: "info.json", data: Buffer.from('{"m_name":"A","m_app":"watchface_800x800","m_preview":"watchface_customize.png","o_template_id":1,"o_diy_version":1}') },
+    { name: "watchface_customize.png", data: Buffer.from("PNG") },
+    { name: "watchface_800x800/config.txt", data: Buffer.from("") },
+    { name: "watchface_800x800/watchface.bin", data: Buffer.from("cached build") },
+    { name: "watchface_800x800/digits/Thumbs.db", data: Buffer.from("cache") },
+    { name: "watchface_800x800/digits/PDF/0.pdf", data: Buffer.from("pdf") }
+  ], ["watchface_800x800/", "watchface_800x800/digits/"]);
+  assert.equal(conforming.changed, false);
+  assert.deepEqual(conforming.removed, []);
+  const staleApp = standardizeWatchfacePackage([
+    { name: "info.json", data: Buffer.from('{"m_app":"watchface_800x800","m_preview":"thmb.png","o_template_id":7,"o_diy_version":1}') },
+    { name: "watchface_customize.png", data: Buffer.from("PNG") },
+    { name: "watchface_416x416/config.txt", data: Buffer.from("") },
+    { name: "watchface_240x240/config.txt", data: Buffer.from("") }
+  ], ["watchface_800x800/"], "Fallback name");
+  assert.equal(staleApp.changed, true);
+  assert.deepEqual(JSON.parse(staleApp.entries[0].data.toString("utf8")), {
+    m_name: "Fallback name",
+    m_app: "watchface_416x416",
+    m_preview: "watchface_customize.png",
+    o_template_id: 7,
+    o_diy_version: 1
+  });
+  const strayDirectory = standardizeWatchfacePackage([
+    { name: "info.json", data: Buffer.from('{"m_name":"A","m_app":"watchface_800x800","m_preview":"watchface_customize.png","o_template_id":1,"o_diy_version":1}') },
+    { name: "watchface_customize.png", data: Buffer.from("PNG") },
+    { name: "watchface_800x800/config.txt", data: Buffer.from("") }
+  ], ["__MACOSX/"]);
+  assert.equal(strayDirectory.changed, true, "Finder directory records force a rebuild");
+  assert.deepEqual(strayDirectory.removed, []);
 
   const excessiveProjectPath = path.join(tempDirectory, "excessive-project.zip");
   await fs.writeFile(excessiveProjectPath, createStoreZip([

@@ -88,6 +88,31 @@ the previous device's small output. This avoids cumulative blur and coordinate
 rounding. Dormant AOD references also participate in export asset retention so
 the MIP exporter cannot prune resources needed by a subsequent AMOLED conversion.
 
+## Recovered official faces
+
+An official catalog face opened through recovery has only the tree it was
+decoded from (for example `watchface_416x416` next to `recovery/source.bin`),
+never an 800px master, so its scene cannot be carried live onto another watch.
+Converting one therefore takes the export route: the editor composes the scene
+into the native tree exactly as **Send to watch** does, and the recovered
+exporter scales that composed tree straight to the destination's sizes with the
+destination's official carrier supplying the template identity, thumbnails and
+watchface IDs. The finished archive opens as a new, unsaved project whose
+starter already contains the edits; positions, fonts and replaced artwork are
+part of the new baseline rather than pending edits, and the project keeps being
+editable from there. The physical tree is scaled directly from the native
+layout (416 → 390 for PACE 4, for instance), while the 800px master of the new
+archive is an enlargement, as in every recovered export. `Convert to another
+watch` shows this difference in its dialog, and `convert` in automation rejects
+a preselected `targetArchive` for these faces. Downloaded compiled catalog
+packages themselves still cannot be converted; open them through recovery first.
+
+The converted archive is not itself flagged as recovered, but it carries the
+face's own weather icons and native-data sprites. Studio hydrates such sprites
+from any starter that has them, the way recovery does, so the icons, their
+authored size and the temperature geometry stay the original ones instead of
+being replaced by the editor's generated weather defaults on reopen and export.
+
 ## Verification and limits
 
 The audit exercises all 102 packages against each of the three archive families
@@ -101,8 +126,9 @@ first-use sign-in, failed login, saved-account login after session expiry,
 automatic conversion after login,
 scene preservation, previews, archive builds and automation's model-only API.
 
-Run `npm run test:watchface-conversion`, `npm run test:watchface-editor`,
-`npm run test:watchface-studio`, and `npm run test:watchface-automation-e2e`.
+Run `npm run test:watchface-conversion`, `npm run test:recovered-watchface-conversion`,
+`npm run test:watchface-editor`, `npm run test:watchface-studio`, and
+`npm run test:watchface-automation-e2e`.
 The optional `scripts/audit-watchface-conversion.cjs` accepts a downloaded
 template inventory and writes the per-package audit report.
 
@@ -112,4 +138,5 @@ master artwork is preserved without destructive palette conversion. A newly
 generated AMOLED AOD should be reviewed for power use. Newer native data fields
 remain subject to destination firmware support. Sources without a usable 800px
 master, unknown raw geometry, and archives containing unrecognized compiled `.pb`/`.bin` data
-are rejected rather than silently losing content; use their editable source.
+are rejected rather than silently losing content; use their editable source, or
+recovery for an official compiled face.

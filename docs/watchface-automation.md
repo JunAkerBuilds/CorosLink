@@ -296,7 +296,9 @@ and `baseRevision`. It selects device support automatically and preserves the
 source layout, fonts, artwork, raw edits and separate AOD state through MIP
 transitions. `targetArchive` remains an optional preselected device carrier;
 it must match the destination. Conversion opens a new session only after the
-archive is ready. Read `get_document` again before further edits. See
+archive is ready. Read `get_document` again before further edits. A recovered
+official face instead bakes the scene into an archive built for the destination
+and opens it as a fresh starter; `targetArchive` is rejected for those. See
 [watch conversion](watchface-conversion.md) for supported devices and validation.
 Project and host tools include `list_projects`, `list_templates`, `load_template`, `list_fonts`,
 `duplicate_project`, `delete_project`, `import_archive`, `import_asset`,

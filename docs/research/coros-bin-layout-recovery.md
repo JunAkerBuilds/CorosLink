@@ -57,11 +57,29 @@ It was compared with the official PLANET `614A` v4 binary, SHA-256
 `3dbef479746f6c4e10c72670ff5cb26efe2b1bb65cdb7ca081b777f1eb74595b`.
 The library was inspected as data, not executed.
 
-Only `614A` / 416×416 headers of size `0x1164`, `0x11a0` and `0x1202` are accepted.
-The first two sizes were tested against official binaries; the last is confirmed by
-the 4.9.9 exporter and a synthetic header test, not an official v6 round trip.
+The magic is the screen size reversed plus a variant letter: `614A` = A416
+(AMOLED PACE Pro / APEX 4 catalogs at 416px) and `062R` = R260 (the 260px
+faces served for MIP watches such as APEX 4 46 mm and NOMAD). Every
+generation shares one record table that simply ends earlier in older or
+smaller headers: `0xbaa` (260px v0, after the date tables), `0xfd8` (416px v2
+DAWN / JOY HOL, after the chart block), `0x1164` (v4), `0x11a0` (NOMAD v2)
+and `0x1202` (4.9.9 exporter). A version-0 header leaves `0x138` empty, so
+the background pointer at `0x1a` (always the first bitmap) marks its end.
+Records that would sit beyond a header's end are skipped, never guessed.
 This is deliberately a partial format decoder. Unknown bytes are preserved, not
 silently converted into guessed source keys.
+
+## MIP bitmaps (`0x0802`)
+
+AMOLED blocks are `w u16, h u16, 0x2002, n u8, ver u8, six reserved bytes,
+n × u32 frame ends` with palette (version 1) or RGBA (version 3) frames. MIP
+blocks are `w, h, 0x0802, n, 0, four reserved bytes, n × u16 frame ends`
+and the same `0xC0|count` RLE stream, but each decoded byte is one pixel:
+`aa rr gg bb`, alpha 0 opaque … 3 transparent, channels × 85. Values ≥ 0xC0
+(transparent white is 0xff) are encoded as one-byte runs. SIMPLE BLACK 02
+(`062R`, 35 KB) decodes to its 260×260 dial, 197×197 thumbnail, 37×53 clock
+font, 45×28 weekday set and 12-frame battery table, all matching the
+embedded thumbnail; the app opens it as a `watchface_260x260` starter.
 
 ## Header structure
 
@@ -88,11 +106,19 @@ by alignment flags. `(0,0)` is a valid position and does not disable an icon.
 | `0x31e` | auto-align record pointer, not decoded | `SetAutoAlign` at `0x184d78` |
 | `0x322` | AOD header pointer | `Finish` at `0x17b784` |
 | `0x33a` | selectable control origin | `SetControl` at `0x185120` |
+| `0x35a` … `0x4c0` | selectable battery (level table + value), temperature, barometer (integer + decimal rects), HR, floor, elevation, sunrise, sunset, step, kcal, exercise, keyed by `WF_DATA_TYPE` | `SetControl`, `Map<int, WFIconValue>::at` |
+| `0x4c6` / `0x4ca` | selectable colon / percent glyphs | `SetControl` |
+| `0x4ce` … `0x51e` | selectable English/Chinese month, day, week | `SetControl` |
 | `0xc4a` / `0xc52` | weather position / daytime images | `SetWeather` at `0x18d3d4` |
 | `0xc56` / `0xc60` | temperature rectangle / digit images | `SetWeather` |
 | `0xc92` | nighttime weather images | `SetWeather`, `WFWeatherInfo.dark_icon_offset` |
 | `0x100a` / `0x1014` | stamina value rectangle / font | `SetExtendedStatus` at `0x1909d4` |
 | `0x101c` / `0x1024` | stamina state position / images | `SetExtendedStatus` |
+| `0xff2`, `0x1042`, `0x104e` | training-load, stress and sleep-HRV level icons | `SetExtendedStatus` |
+| `0x105a` … `0x1070` | barometer icon / value (RUBY HORIZON's fourth weather column) | `SetExtendedStatus`, store at `0x1070` |
+| `0x1074` … `0x1146` | today's and weekly run / swim / bike / elevation (`WFMetricValue`, 30 bytes each) | `SetExtendedStatus` |
+| `0x1164` … `0x119c` | sunrise/sunset progress: position, rise/set icons, hour/minute rects, font, colon, progress | `SetExtendedStatus`; ends exactly at NOMAD's `0x11a0` |
+| `0x11a0` … | sleep score icon / value (only in `0x1202` headers) | `SetExtendedStatus` |
 
 Alignment bits: left=1, horizontal center=2, right=4, top=8, vertical center=16,
 bottom=32. The decoder preserves the raw flag as well as interpreted alignment.
@@ -271,6 +297,15 @@ its selected source. Slot-sharing alternatives (temperature vs. solar angle,
 wind vs. min/max) all stay enabled and exported; the preview draws the ones
 the chart layer's group would show. Without a chart layer the importer falls
 back to disabling the overlapping alternatives.
+## Coverage
+
+With the control, extended-status and MIP additions, every local official
+binary decodes without unclassified bitmap references: PLANET, MULTIDATA ELEV,
+NOMAD, DASHBOARD, RUBY HORIZON, DAWN, JOY HOL, FEARLESS, PLUMP, AQUA BLOCK,
+STREAMLINE2, GO FISHING (416px) and SIMPLE BLACK 02 (260px MIP). RUBY HORIZON
+also declares an icon-less AQI value over its UV column; the importer starts
+that alternative disabled because live AQI is unavailable on PACE Pro.
+
 ## Seconds hand
 
 NOMAD's 54×416 chevron strip (group 16) is `WFClockPointerGroup.second` with

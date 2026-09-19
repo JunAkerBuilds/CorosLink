@@ -88,6 +88,7 @@
     "test:watchface-studio": "node --experimental-strip-types scripts/test-watchface-studio.mjs",
     "test:watchface-weekday-languages": "node --experimental-strip-types scripts/test-watchface-weekday-languages.mjs",
     "test:watchface-conversion": "npm run build:electron && electron scripts/test-watchface-conversion.cjs",
+    "test:recovered-watchface-conversion": "npm run build:electron && electron scripts/test-recovered-watchface-conversion.cjs && node scripts/test-recovered-watchface-hydration.mjs",
     "test:coros-bin-layout": "node scripts/test-coros-bin-layout.mjs && node scripts/test-coros-watchface-bin-extraction.mjs",
     "test:official-watchface-editor": "npm run build:electron && electron scripts/test-official-watchface-editor.cjs",
     "test:watchface-editor": "node --experimental-strip-types scripts/test-watchface-editor.mjs",

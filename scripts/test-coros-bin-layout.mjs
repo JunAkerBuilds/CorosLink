@@ -106,8 +106,11 @@ assert(decodeCorosLayout(badBitmap, blocks).warnings.some((w) => w.includes("unr
 assert.throws(() => readLayoutHeaders(bytes.subarray(0, AOD + 100)), /Invalid aod/);
 const overlap = Buffer.from(bytes); overlap.writeUInt32LE(4, 0x322);
 assert.throws(() => readLayoutHeaders(overlap), /overlaps/);
-const unknown = Buffer.from(bytes); unknown.writeUInt16LE(0x1000, 0x138);
-assert.throws(() => readLayoutHeaders(unknown), /Unsupported layout size/);
+for (const size of [0x100, 0x3000]) {
+  const unknown = Buffer.from(bytes); unknown.writeUInt16LE(size, 0x138);
+  assert.throws(() => readLayoutHeaders(unknown), /Unsupported layout size/);
+}
+assert.throws(() => readLayoutHeaders(Buffer.from("614Bxxxxxxxx".padEnd(0x400, "\0"))), /Invalid normal/);
 const single = Buffer.alloc(0x1202); single.write("614A"); single.writeUInt16LE(0x1202, 0x138);
 assert.equal(readLayoutHeaders(single).length, 1);
 assert.equal(readLayoutHeaders(single)[0].length, 0x1202);
@@ -128,7 +131,7 @@ for (const [base, version] of [[0, 2], [nomadAod, 0]]) {
   nomad.writeUInt32LE(nomadData + (base ? 64 : 0), base + 0x1b8);
 }
 nomad.writeUInt32LE(nomadAod, 0x322);
-nomad.writeUInt32LE(nomadData, nomadHeader - 4); // Unknown trailing bitmap link.
+nomad.writeUInt32LE(nomadData, 0xb00); // A bitmap link outside the schema is retained.
 const nomadLayout = decodeCorosLayout(nomad, [{ index: 0, offset: nomadData }, { index: 1, offset: nomadData + 64 }]);
 assert.deepEqual(nomadLayout.modes.map(m => [m.offset, m.length, m.version]), [[0, nomadHeader, 2], [nomadAod, nomadHeader, 0]]);
 for (const [index, mode] of nomadLayout.modes.entries()) {
@@ -136,7 +139,27 @@ for (const [index, mode] of nomadLayout.modes.entries()) {
   assert.deepEqual(clock.position, { x: 59, y: 116 });
   assert.equal(clock.asset.group, index);
 }
-assert(nomadLayout.modes[0].unmappedBitmapReferences.some(r => r.relativeOffset === nomadHeader - 4));
+assert(nomadLayout.modes[0].unmappedBitmapReferences.some(r => r.relativeOffset === 0xb00));
 assert.equal(nomadLayout.modes[0].rawHeaderHex, nomad.subarray(0, nomadHeader).toString("hex"));
 assert.throws(() => readLayoutHeaders(nomad.subarray(0, nomadData - 1)), /Truncated aod/);
-console.log("COROS layout: signed geometry, alignment, day/night/AOD separation, indirect HR, chart block, dormant resources, unknown links and bounds checks passed.");
+// 260px MIP faces ("062R") use the same record table but a version-0 header
+// without a size field: the background pointer ends it, and records that would
+// sit beyond it (weather, chart) are skipped instead of read from bitmap data.
+const mipHeader = 0xbaa, mipData = mipHeader; // the background block starts exactly at the header end
+const mip = Buffer.alloc(mipData + 256);
+mip.write("062R", 0, "latin1");
+mip.writeUInt32LE(mipData, 0x1a); // background bitmap = first block = header end
+mip.writeInt32LE(25, 0x1b0); mip.writeInt32LE(102, 0x1b4); mip.writeUInt32LE(mipData + 64, 0x1b8);
+mip.writeUInt32LE(mipData + 128, 0x664); mip.writeInt16LE(10, 0x65a); mip.writeInt16LE(10, 0x65c); mip.writeInt16LE(60, 0x65e); mip.writeInt16LE(30, 0x660);
+mip.writeUInt32LE(mipData + 64, 0xc52); // would be a weather icon in a longer header
+const mipLayout = decodeCorosLayout(mip, [{ index: 0, offset: mipData }, { index: 1, offset: mipData + 64 }, { index: 2, offset: mipData + 128 }]);
+assert.deepEqual([mipLayout.screen.width, mipLayout.magic, mipLayout.variant, mipLayout.modes.length], [260, "062R", "R", 1]);
+assert.deepEqual([mipLayout.modes[0].length, mipLayout.modes[0].version], [mipHeader, 0]);
+assert.deepEqual(mipLayout.modes[0].elements.find(e => e.id === "time.hour_high").position, { x: 25, y: 102 });
+assert.equal(mipLayout.modes[0].elements.find(e => e.id === "date.germany.week").asset.group, 2);
+assert.equal(mipLayout.modes[0].elements.find(e => e.id === "weather.day"), undefined, "records past the header end are not decoded");
+assert.equal(mipLayout.modes[0].chart, undefined);
+assert.equal(mipLayout.modes[0].unmappedBitmapReferences.length, 0);
+assert.equal(mipLayout.modes[0].rawHeaderHex.length, mipHeader * 2);
+assert.throws(() => readLayoutHeaders(mip.subarray(0, mipHeader - 1)), /Truncated normal/);
+console.log("COROS layout: signed geometry, alignment, day/night/AOD separation, indirect HR, chart block, dormant resources, unknown links, MIP headers and bounds checks passed.");

@@ -11655,7 +11655,7 @@ body.wf-value-scrubbing * {
 }
 
 /* Any other field with more than one control keeps the stacked layout. */
-:root .watchface-shell--studio .wf-properties-pane .wf-property-section .field:has(> :nth-child(2)):not(.watchface-zoom-control, .watchface-font-picker) {
+:root .watchface-shell--studio .wf-properties-pane .wf-property-section .field:has(> :nth-child(2)):not(.watchface-zoom-control, .watchface-font-picker, .wf-number-align-field) {
   grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
@@ -11894,7 +11894,7 @@ body.wf-value-scrubbing * {
   min-width: 0;
 }
 
-:root .watchface-shell--studio .wf-properties-pane .watchface-font-picker > :is(.watchface-typography-controls, .watchface-typography-hint) {
+:root .watchface-shell--studio .wf-properties-pane .watchface-font-picker > :is(.watchface-typography-controls, .watchface-typography-hint, .wf-sprite-preview, .wf-sprite-strip-empty) {
   grid-column: 1 / -1;
 }
 
@@ -12081,7 +12081,8 @@ body.wf-value-scrubbing * {
 .watchface-shell .wf-png-font-head span,
 .watchface-shell .wf-png-font-scope > span,
 .watchface-shell .wf-png-font-note,
-.watchface-shell .wf-png-font-summary {
+.watchface-shell .wf-sprite-strip-summary,
+.watchface-shell .wf-sprite-strip-empty {
   margin: 0;
   color: var(--text-muted);
   font-size: 11.5px;
@@ -12263,16 +12264,28 @@ body.wf-value-scrubbing * {
   color: var(--accent-strong);
 }
 
-/* Glyph preview: every digit (and label) the set provides, missing ones dashed. */
-.watchface-shell .wf-png-font-preview {
+/* Sprite strip: every glyph, state, or icon a layer draws with, one cell each.
+   Shared by PNG-set imports, template fonts, battery states, and weather sets. */
+.watchface-shell .wf-sprite-preview {
   display: grid;
+  min-width: 0;
   gap: 6px;
 }
 
-.watchface-shell .wf-png-font-strip {
+.watchface-shell .wf-sprite-strip-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-sprite-strip {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
   border: 1px solid var(--glass-border);
   border-radius: 10px;
   background:
@@ -12284,41 +12297,42 @@ body.wf-value-scrubbing * {
   padding: 8px;
 }
 
-.watchface-shell .wf-png-font-cell {
+.watchface-shell .wf-sprite-cell {
   display: grid;
+  flex: 0 0 auto;
   justify-items: center;
   gap: 3px;
   min-width: 26px;
 }
 
-.watchface-shell .wf-png-font-cell > i {
+.watchface-shell .wf-sprite-cell > i {
   display: block;
   background-repeat: no-repeat;
   image-rendering: pixelated;
 }
 
-.watchface-shell .wf-png-font-cell > img {
+.watchface-shell .wf-sprite-cell > img {
   display: block;
   width: auto;
   height: 34px;
   image-rendering: pixelated;
 }
 
-.watchface-shell .wf-png-font-cell-empty {
+.watchface-shell .wf-sprite-cell-empty {
   width: 20px;
   height: 34px;
   border: 1px dashed color-mix(in srgb, var(--warning-text) 60%, transparent);
   border-radius: 4px;
 }
 
-.watchface-shell .wf-png-font-cell small {
+.watchface-shell .wf-sprite-cell small {
   color: var(--text-muted);
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 9.5px;
   line-height: 1;
 }
 
-.watchface-shell .wf-png-font-cell.is-missing small {
+.watchface-shell .wf-sprite-cell.is-missing small {
   color: var(--warning-text);
 }
 
@@ -12486,4 +12500,265 @@ body.wf-value-scrubbing * {
   color: var(--text-secondary);
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 11px;
+}
+
+/* Imported cells replace a template sprite; mark them so the mix is visible. */
+.watchface-shell .wf-sprite-cell.is-replaced > img,
+.watchface-shell .wf-sprite-cell.is-replaced > i {
+  outline: 1px solid color-mix(in srgb, var(--accent-strong) 70%, transparent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.watchface-shell .wf-sprite-cell.is-replaced small {
+  color: var(--accent-strong);
+}
+
+.watchface-shell .wf-sprite-strip-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+/* A local font has no sprites yet: sample the digits export will rasterize. */
+.watchface-shell .wf-sprite-strip--sample {
+  display: block;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Control-slot assets live beside the Selectable metric instead of in the
+   Template assets list: the chosen data type's icon, then the shared
+   colon and negative sign as compact rows. */
+.watchface-shell .wf-slot-asset {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--wf-border);
+  padding-top: 10px;
+}
+
+.watchface-shell .wf-slot-asset-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 560;
+}
+
+.watchface-shell .wf-slot-asset-heading .wf-layer-state {
+  margin-left: auto;
+}
+
+.watchface-shell .wf-slot-asset-heading .watchface-studio-toggle {
+  margin: 0;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.watchface-shell .wf-slot-asset-list {
+  display: grid;
+  gap: 6px;
+}
+
+.watchface-shell .wf-slot-asset-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--wf-border);
+  border-radius: var(--wf-control-radius);
+  background: var(--wf-surface-raised);
+  padding: 6px 6px 6px 6px;
+}
+
+.watchface-shell .wf-slot-asset-row.is-disabled .wf-slot-asset-thumb,
+.watchface-shell .wf-slot-asset-row.is-disabled .wf-slot-asset-copy {
+  opacity: 0.45;
+}
+
+.watchface-shell .wf-slot-asset-thumb {
+  display: grid;
+  width: 44px;
+  height: 34px;
+  overflow: hidden;
+  border-radius: 5px;
+  background:
+    linear-gradient(45deg, color-mix(in srgb, var(--text-primary) 5%, transparent) 25%, transparent 25% 75%, color-mix(in srgb, var(--text-primary) 5%, transparent) 75%),
+    linear-gradient(45deg, color-mix(in srgb, var(--text-primary) 5%, transparent) 25%, transparent 25% 75%, color-mix(in srgb, var(--text-primary) 5%, transparent) 75%),
+    var(--wf-bezel-face);
+  background-position: 0 0, 6px 6px;
+  background-size: 12px 12px, 12px 12px, auto;
+  color: var(--text-muted);
+  place-items: center;
+}
+
+.watchface-shell .wf-slot-asset-thumb img {
+  display: block;
+  max-width: 40px;
+  max-height: 30px;
+  image-rendering: pixelated;
+}
+
+.watchface-shell .wf-slot-asset-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.watchface-shell .wf-slot-asset-copy strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-slot-asset-copy span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-slot-asset-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.watchface-shell .wf-slot-asset-row-actions .wf-property-icon-button {
+  color: var(--text-secondary);
+}
+
+.watchface-shell .wf-slot-asset-row-actions .wf-property-icon-button[aria-pressed="true"] {
+  color: var(--text-muted);
+}
+
+/* Each selectable data type shows its slot icon in the toggle list, so every
+   control icon is visible at a glance before one is chosen for editing. */
+.watchface-shell .wf-selectable-component-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 26px;
+  overflow: hidden;
+  border-radius: 5px;
+  background:
+    linear-gradient(45deg, color-mix(in srgb, var(--text-primary) 5%, transparent) 25%, transparent 25% 75%, color-mix(in srgb, var(--text-primary) 5%, transparent) 75%),
+    linear-gradient(45deg, color-mix(in srgb, var(--text-primary) 5%, transparent) 25%, transparent 25% 75%, color-mix(in srgb, var(--text-primary) 5%, transparent) 75%),
+    var(--wf-bezel-face);
+  background-position: 0 0, 6px 6px;
+  background-size: 12px 12px, 12px 12px, auto;
+  color: var(--text-muted);
+  font-style: normal;
+  place-items: center;
+}
+
+.watchface-shell .wf-selectable-component-icon.is-empty {
+  opacity: 0.55;
+}
+
+.watchface-shell .wf-selectable-component-icon img {
+  display: block;
+  max-width: 26px;
+  max-height: 22px;
+  image-rendering: pixelated;
+}
+
+.watchface-shell .wf-selectable-component > span {
+  flex: 1 1 auto;
+}
+
+/* Number alignment: Auto + left/center/right as joined segments on the
+   inspector's quiet track, so it reads like a text-align tool, not a menu. */
+.watchface-shell .wf-number-align-field {
+  display: grid;
+  grid-template-columns: var(--wf-label-w, 88px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.watchface-shell .wf-number-align {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  min-height: var(--wf-field-h, 30px);
+  gap: 2px;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: var(--wf-insp-control, color-mix(in srgb, var(--text-primary) 4.5%, transparent));
+  padding: 2px;
+  box-sizing: border-box;
+}
+
+.watchface-shell .wf-number-align > button {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0 6px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.watchface-shell .wf-number-align > button:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-number-align > button[aria-pressed="true"] {
+  background: var(--wf-insp-raised, var(--glass-bg-elevated));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 22%);
+  color: var(--text-primary);
+}
+
+.watchface-shell .wf-number-align > button:focus-visible {
+  outline: 1px solid var(--wf-focus);
+  outline-offset: -1px;
+}
+
+.watchface-shell .wf-number-align > button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* "Auto" is a word beside three glyphs: size it to its text and separate it
+   with a hairline drawn from --text-muted so it survives the paper theme. */
+.watchface-shell .wf-number-align > .wf-number-align-auto {
+  position: relative;
+  flex: 0 0 auto;
+  margin-right: 5px;
+  padding: 0 9px;
+}
+
+.watchface-shell .wf-number-align > .wf-number-align-auto::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: -4px;
+  bottom: 5px;
+  width: 1px;
+  background: color-mix(in srgb, var(--text-muted) 40%, transparent);
+  pointer-events: none;
 }

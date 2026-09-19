@@ -29,7 +29,7 @@ await fs.writeFile(path.join(outputPath, "source.bin"), bytes);
 
 // Standard numbered filenames let the editor recognize digit and state sets.
 // Names are generated; no original source filenames survive in this format.
-const resolution = "watchface_416x416";
+const resolution = `watchface_${layout.screen.width}x${layout.screen.height}`;
 layout.assets = [];
 for (const block of manifest.blocks) {
   const folder = `assets/group-${String(block.index).padStart(2, "0")}`;

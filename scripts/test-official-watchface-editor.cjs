@@ -48,12 +48,18 @@ async function main() {
     Buffer.from([200, 40, 10, 255, 3, 70, 110, 128]), "palette transpose and straight alpha survive the production PNG encoder");
   assert.deepEqual(await entry("recovery/source.bin"), fixture());
   assert.match((await entry("watchface_416x416/AODconfig.txt")).toString(), /\{60,270\}/);
-  assert.equal(JSON.parse((await entry("info.json")).toString()).o_template_id, "90071992547409931");
+  const recoveredInfo = JSON.parse((await entry("info.json")).toString());
+  assert.equal(recoveredInfo.o_template_id, "90071992547409931");
+  // The website validator requires the DIY manifest fields official templates carry.
+  assert.equal(recoveredInfo.m_app, "watchface_416x416");
+  assert.equal(recoveredInfo.m_preview, "watchface_customize.png");
   assert.throws(() => recoverCompiledCorosWatchface(Buffer.from("unknown"), "bad"), /cannot be opened/);
   const malformed = fixture(); malformed.writeUInt32LE(10, 0x322);
   assert.throws(() => recoverCompiledCorosWatchface(malformed, "bad"), /cannot be opened/);
 
   const source = process.argv[2] ? await fs.readFile(process.argv[2]) : fixture();
+  // The magic is the screen size reversed plus a variant letter (614A = 416px AMOLED, 062R = 260px MIP).
+  const nativeSize = Number([...source.toString("latin1", 0, 3)].reverse().join(""));
   const sourceName = process.argv[2] ? path.basename(process.argv[2], ".bin").replace(/-[a-f0-9]{8}$/i, "") : "Fixture";
   const { initializeDatabase } = require("../dist-electron/database.js");
   initializeDatabase(app.getPath("userData"));
@@ -157,7 +163,8 @@ async function main() {
     const doc = await until(getDoc, value => value?.capabilities?.layers?.length > 0);
     assert(doc.capabilities.layers.some(layer => layer.id === "hours"), "Recovered clock is editable, not a flattened thumbnail");
     const request = (method, params) => js(`import('/src/watchfaces/watchfaceAutomation.ts').then(m=>m.getWatchfaceAutomationEditor().request(${JSON.stringify(method)},${JSON.stringify(params)}))`);
-    if (doc.design.nativeData?.stamina?.assets?.states) {
+    const faceId = source.readUInt32LE(4);
+    if (faceId === 1000001120 && doc.design.nativeData?.stamina?.assets?.states) { // PLANET
       assert(doc.capabilities.layers.some(layer => layer.id === "dateMonth"), "Combined month becomes an editable date layer");
       assert(doc.capabilities.layers.some(layer => layer.id === "dateDay"), "Combined day becomes an editable date layer");
       const stamina = doc.design.nativeData.stamina;
@@ -217,14 +224,16 @@ async function main() {
       assert(resolution.config.today_elev_unit_icon && resolution.config.week_elev_unit_icon);
     }
     const rendered = [];
-    for (const mode of ["current", "aod"]) {
-      const preview = await request("render_preview", { sessionId: doc.sessionId, mode, resolution: 416, size: 416 });
+    const hasAod = source.readUInt16LE(0x138) >= 0x326 && source.readUInt32LE(0x322) !== 0;
+    for (const mode of hasAod ? ["current", "aod"] : ["current"]) {
+      const preview = await request("render_preview", { sessionId: doc.sessionId, mode, resolution: nativeSize, size: nativeSize });
       const png = Buffer.from(preview.dataUrl.split(",")[1], "base64");
-      assert.equal(PNG.sync.read(png).width, 416);
+      assert.equal(PNG.sync.read(png).width, nativeSize);
       await fs.writeFile(path.join(temp, `${mode}.png`), png);
       rendered.push(png);
     }
-    assert.notDeepEqual(rendered[0], rendered[1], "Current and AOD use distinct recovered layouts");
+    if (hasAod) assert.notDeepEqual(rendered[0], rendered[1], "Current and AOD use distinct recovered layouts");
+    else assert.equal(doc.capabilities.layers.some(layer => layer.id === "hours"), true, "MIP faces have no AOD but keep an editable clock");
     const validation = await request("validate", { sessionId: doc.sessionId });
     assert.equal(validation.valid, true, JSON.stringify(validation.diagnostics));
     const finalBuild = await request("build_archive", { sessionId: doc.sessionId, baseRevision: doc.revision });
@@ -267,7 +276,23 @@ async function main() {
     assert(saved.project?.projectId, "Recovered face can be saved as an editable project");
     const reopened = await service.loadCorosWatchfaceProject(saved.project.projectId);
     assert(reopened.archive.recoveredFromCompiled);
-    if (process.argv[2]) {
+    const hasWeather = source.readUInt16LE(0x138) >= 0xc9a && source.readUInt32LE(0xc52) !== 0;
+    if (process.argv[2] && !hasWeather) {
+      // Older/MIP faces stop before the weather block: the clock, date, battery
+      // and selectable control must still round-trip through a saved project.
+      assert.equal(reopened.design.weatherIndicator?.enabled ?? false, false);
+      assert(reopened.design.nativeData === undefined || !Object.values(reopened.design.nativeData).some(style => style.enabled), "No weather layers are invented");
+      // This offline carrier targets PACE Pro, so a 260px MIP layout is scaled to its 416px tree.
+      const exportedConfig = service.parseCorosWatchfaceConfig((await files.get("watchface_416x416/config.txt").buffer()).toString());
+      if (nativeSize === 260) {
+        const scale = 416 / 260;
+        assert.equal(exportedConfig.time_hour_high_pos, `{${Math.round(source.readInt32LE(0x1b0) * scale)},${Math.round(source.readInt32LE(0x1b4) * scale)}}`, "MIP clock scales from its native position");
+        assert.match(exportedConfig.time_hour_high_font, /^recovered\\group-\d\d$/);
+        assert.match(exportedConfig.control_hr_rect ?? "", /^\{/, "Selectable heart rate survives export");
+        assert.equal(exportedConfig.weather_icon_dir, undefined, "No weather keys are invented for a header without a weather block");
+      }
+    }
+    if (process.argv[2] && hasWeather) {
       assert(Object.keys(reopened.design.weatherIndicator.assets.day).length > 0, "Original weather assets survive saving");
       assert.equal(reopened.design.weatherIndicator.temperatureEnabled, false);
       assert(reopened.design.nativeData.weather_temp, "Temperature is recovered");
@@ -313,6 +338,15 @@ async function main() {
         assert.equal(exportedConfig.fish_pointer_icon, undefined, "No stray fish pointer without a fishing display");
       } else {
         assert(reopened.design.nativeData.weather_temp.enabled);
+      }
+      if (source.readUInt32LE(0x1062) && source.readUInt16LE(0x138) >= 0x1074) {
+        // RUBY HORIZON: extended-status barometer column, UV level artwork and
+        // an icon-less AQI value declared over the UV column.
+        const baro = reopened.design.nativeData.baro;
+        assert(baro?.enabled && baro.parts.icon.enabled, "Barometer readout and icon are recovered");
+        assert.deepEqual([baro.x + baro.parts.icon.x, baro.y + baro.parts.icon.y, baro.x + baro.parts.value.x], [source.readInt32LE(0x105a), source.readInt32LE(0x105e), source.readInt16LE(0x1066)]);
+        assert(reopened.design.nativeData.weather_uv?.enabled && reopened.design.nativeData.weather_uv.parts.states.enabled, "UV level artwork is recovered");
+        assert.equal(reopened.design.nativeData.weather_aqi?.enabled, false, "The icon-less AQI alternative over the UV column starts disabled");
       }
       if (source.readUInt32LE(0x3e)) {
         // DASHBOARD: WFStatusInfo.sedentary ring and a level-only UV arc.

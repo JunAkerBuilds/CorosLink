@@ -14,6 +14,11 @@ import {
   createRasterFontFolderReplacement,
   type RasterSpriteFolderComponentKind
 } from "./watchfaceRasterFolder";
+import {
+  describeRasterFontSource,
+  rasterFontStripCells,
+  WatchfaceSpriteStrip
+} from "./WatchfaceSpriteStrip";
 
 interface CustomPngFontPanelProps {
   api: CorosLinkApi;
@@ -34,73 +39,6 @@ interface CustomPngFontPanelProps {
 const DEFAULT_RASTER_GLYPHS = "0123456789";
 const MAX_RASTER_FONT_BYTES = 5 * 1024 * 1024;
 const WEEKDAY_LABELS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
-const PREVIEW_CELL_HEIGHT = 34;
-
-type GlyphPreviewCell =
-  | { key: string; kind: "sprite"; src: string }
-  | { key: string; kind: "atlas"; style: Record<string, string> }
-  | { key: string; kind: "missing" };
-
-/**
- * One cell per digit plus any imported label, so the person can see at a
- * glance which glyphs the PNG set actually provides.
- */
-function glyphPreviewCells(font: CorosWatchfaceRasterFont): GlyphPreviewCell[] {
-  const glyphs = normalizeRasterFontGlyphs(font.glyphs);
-  const columns = Math.max(1, font.columns);
-  const rows = Math.max(1, Math.ceil(glyphs.length / columns));
-  const atlas = font.dataUrl && glyphs.length > 0 && font.atlasSize ? font.atlasSize : null;
-  const cellWidth = atlas ? atlas.width / columns : 0;
-  const cellHeight = atlas ? atlas.height / rows : 0;
-  const scale = atlas && cellHeight > 0 ? PREVIEW_CELL_HEIGHT / cellHeight : 1;
-  const keys = [
-    ...DEFAULT_RASTER_GLYPHS,
-    ...[...glyphs].filter((glyph) => !DEFAULT_RASTER_GLYPHS.includes(glyph)),
-    ...Object.keys(font.labels ?? {}),
-    ...Object.keys(font.sprites ?? {})
-  ];
-  const seen = new Set<string>();
-  return keys.flatMap((key): GlyphPreviewCell[] => {
-    const normalized = key.toUpperCase();
-    if (seen.has(normalized)) return [];
-    seen.add(normalized);
-    const sprite = font.sprites?.[normalized] ?? font.labels?.[normalized];
-    if (sprite) return [{ key: normalized, kind: "sprite" as const, src: sprite }];
-    const index = glyphs.indexOf(normalized);
-    if (atlas && index >= 0) {
-      const column = index % columns;
-      const row = Math.floor(index / columns);
-      return [{
-        key: normalized,
-        kind: "atlas" as const,
-        style: {
-          width: `${Math.max(12, Math.round(cellWidth * scale))}px`,
-          height: `${PREVIEW_CELL_HEIGHT}px`,
-          backgroundImage: `url(${font.dataUrl})`,
-          backgroundSize: `${atlas.width * scale}px ${atlas.height * scale}px`,
-          backgroundPosition: `${-column * cellWidth * scale}px ${-row * cellHeight * scale}px`
-        }
-      }];
-    }
-    return [{ key: normalized, kind: "missing" as const }];
-  });
-}
-
-function describeRasterFontSource(font: CorosWatchfaceRasterFont): string {
-  const spriteCount = Object.keys(font.sprites ?? {}).length;
-  const labelCount = Object.keys(font.labels ?? {}).length;
-  const glyphCount = normalizeRasterFontGlyphs(font.glyphs).length;
-  const parts: string[] = [];
-  if (glyphCount > 0 && font.dataUrl) {
-    parts.push(
-      `Sheet · ${glyphCount} glyph${glyphCount === 1 ? "" : "s"} in ${font.columns} column${font.columns === 1 ? "" : "s"}` +
-        (font.atlasSize ? ` · ${font.atlasSize.width} × ${font.atlasSize.height} px` : "")
-    );
-  }
-  if (spriteCount > 0) parts.push(`${spriteCount} individual PNG${spriteCount === 1 ? "" : "s"}`);
-  if (labelCount > 0) parts.push(`${labelCount} label${labelCount === 1 ? "" : "s"}`);
-  return parts.join(" · ") || "PNG set";
-}
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -450,9 +388,9 @@ export function CustomPngFontPanel({
   const controlsDisabled = importDisabled || importing;
   const hasAtlasLayout = Boolean(activeRasterFont?.dataUrl) &&
     normalizeRasterFontGlyphs(activeRasterFont?.glyphs ?? "").length > 0;
-  const previewCells = activeRasterFont ? glyphPreviewCells(activeRasterFont) : [];
+  const previewCells = activeRasterFont ? rasterFontStripCells(activeRasterFont) : [];
   const missingDigits = previewCells.filter(
-    (cell) => cell.kind === "missing" && DEFAULT_RASTER_GLYPHS.includes(cell.key)
+    (cell) => cell.missing && DEFAULT_RASTER_GLYPHS.includes(cell.key)
   ).length;
   const isMonthComponent = scope === "component" && componentLabel === "Date month";
   const isWeekdayComponent = scope === "component" && componentLabel === "Weekday";
@@ -547,27 +485,11 @@ export function CustomPngFontPanel({
         sourceButtons(false)
       ) : (
         <>
-          <div className="wf-png-font-preview" aria-label="Imported glyphs">
-            <div className="wf-png-font-strip">
-              {previewCells.map((cell) => (
-                <span
-                  className={`wf-png-font-cell${cell.kind === "missing" ? " is-missing" : ""}`}
-                  key={cell.key}
-                  title={cell.kind === "missing" ? `No PNG for ${cell.key} yet` : cell.key}
-                >
-                  {cell.kind === "sprite" ? (
-                    <img src={cell.src} alt="" draggable={false} />
-                  ) : cell.kind === "atlas" ? (
-                    <i style={cell.style} aria-hidden="true" />
-                  ) : (
-                    <i className="wf-png-font-cell-empty" aria-hidden="true" />
-                  )}
-                  <small>{cell.key}</small>
-                </span>
-              ))}
-            </div>
-            <span className="wf-png-font-summary">{describeRasterFontSource(activeRasterFont)}</span>
-          </div>
+          <WatchfaceSpriteStrip
+            label="Imported glyphs"
+            cells={previewCells}
+            summary={describeRasterFontSource(activeRasterFont)}
+          />
 
           {missingDigits > 0 && !isMonthComponent && !isWeekdayComponent ? (
             <p className="wf-png-font-note is-warning">

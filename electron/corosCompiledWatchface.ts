@@ -1,64 +1,10 @@
 import { deflateSync } from "node:zlib";
 import { createHash } from "node:crypto";
-import { chartConfigValues, decodeCorosLayout, formatConfigPos, formatConfigRect, readLayoutHeaders, type CorosBinLayout } from "./corosBinLayout";
+import { chartConfigValues, decodeCorosBitmapFrame, decodeCorosLayout, findCorosBitmapBlocks, formatConfigPos, formatConfigRect, parseCorosFaceMagic, readLayoutHeaders, type CorosBinLayout, type CorosBitmapBlock } from "./corosBinLayout";
 import { createStoreZip } from "./zipStore";
 
-interface BitmapBlock {
-  index: number; offset: number; width: number; height: number;
-  version: number; frameCount: number; dataOffset: number; frameEnds: number[];
-}
-
-export function findCorosBitmapBlocks(buffer: Buffer, start = 0): BitmapBlock[] {
-  const blocks: BitmapBlock[] = [];
-  let decodedBytes = 0;
-  for (let offset = start; offset + 18 <= buffer.length; offset++) {
-    const width = buffer.readUInt16LE(offset), height = buffer.readUInt16LE(offset + 2);
-    const frameCount = buffer[offset + 6], version = buffer[offset + 7];
-    if (!width || width > 800 || !height || height > 800 || buffer.readUInt16LE(offset + 4) !== 0x2002 ||
-      !frameCount || frameCount > 64 || ![1, 3].includes(version) || buffer.subarray(offset + 8, offset + 14).some(Boolean)) continue;
-    const dataOffset = offset + 14 + frameCount * 4;
-    if (dataOffset > buffer.length) continue;
-    const frameEnds: number[] = [];
-    for (let i = 0; i < frameCount; i++) {
-      const end = buffer.readUInt32LE(offset + 14 + i * 4);
-      if (end <= (frameEnds.at(-1) ?? 0) || dataOffset + end > buffer.length) break;
-      frameEnds.push(end);
-    }
-    if (frameEnds.length !== frameCount) continue;
-    decodedBytes += width * height * 4 * frameCount;
-    if (decodedBytes > 256 * 1024 * 1024 || blocks.length >= 512) throw new Error("This face contains too much image data to open in the editor.");
-    blocks.push({ index: blocks.length, offset, width, height, frameCount, version, dataOffset, frameEnds });
-    offset = dataOffset + frameEnds.at(-1)! - 1;
-  }
-  return blocks;
-}
-
-export function decodeCorosBitmapFrame(bytes: Buffer, block: BitmapBlock, frame: number): Buffer {
-  if (!Number.isInteger(frame) || frame < 0 || frame >= block.frameCount) throw new Error("Invalid bitmap frame.");
-  const encoded = bytes.subarray(block.dataOffset + (block.frameEnds[frame - 1] ?? 0), block.dataOffset + block.frameEnds[frame]);
-  const pixels = block.width * block.height;
-  const decoded = Buffer.alloc(block.version === 3 ? pixels * 4 : pixels + 1024);
-  let cursor = 0;
-  for (let i = 0; i < encoded.length; i++) {
-    const control = encoded[i];
-    const count = control >= 0xc0 ? control & 0x3f : 1;
-    if (control >= 0xc0 && i + 1 >= encoded.length) throw new Error("Truncated watchface image.");
-    const value = control >= 0xc0 ? encoded[++i] : control;
-    if (!count || cursor + count > decoded.length) throw new Error("Invalid watchface image data.");
-    decoded.fill(value, cursor, cursor + count);
-    cursor += count;
-  }
-  if (cursor !== decoded.length) throw new Error("Incomplete watchface image data.");
-  if (block.version === 3) return decoded;
-  const rgba = Buffer.alloc(pixels * 4);
-  for (let pixel = 0; pixel < pixels; pixel++) {
-    const index = decoded[pixel];
-    // COROS stores the LUT transposed: logical index 1 lives in slot 16.
-    const palette = pixels + (((index & 15) << 4) | (index >>> 4)) * 4;
-    decoded.copy(rgba, pixel * 4, palette, palette + 4);
-  }
-  return rgba;
-}
+type BitmapBlock = CorosBitmapBlock;
+export { findCorosBitmapBlocks, decodeCorosBitmapFrame };
 
 // Encode straight RGBA directly. nativeImage's platform bitmap byte order and
 // premultiplied alpha are inappropriate for these compiler payloads.
@@ -156,7 +102,7 @@ function recoveredConfig(mode: CorosBinLayout["modes"][number], blocks: BitmapBl
 
 /** Build an ordinary editable starter; the source binary is retained as data. */
 export function recoverCompiledCorosWatchface(bytes: Buffer, name: string, templateId?: string) {
-  if (bytes.toString("latin1", 0, 4) !== "614A") {
+  if (!parseCorosFaceMagic(bytes.length >= 4 ? bytes.toString("latin1", 0, 4) : "")) {
     throw new Error("This official face's format cannot be opened in the editor yet. You can still download it.");
   }
   let headers;
@@ -169,7 +115,8 @@ export function recoverCompiledCorosWatchface(bytes: Buffer, name: string, templ
     throw new Error("No editable layout could be recovered from this official face.");
   }
   const entries: { name: string; data: Buffer }[] = [];
-  const directory = "watchface_416x416";
+  const { width, height } = layout.screen;
+  const directory = `watchface_${width}x${height}`;
   const thumbnail = layout.modes[0].elements.find((e) => e.id === "thumbnail")?.asset?.group;
   let preview: Buffer | undefined;
   for (const block of blocks) {
@@ -199,14 +146,16 @@ export function recoverCompiledCorosWatchface(bytes: Buffer, name: string, templ
     }
     entries.push({ name: `${directory}/background.png`, data: encodeCorosRgbaPng(block.width, block.height, rgba) });
   } else {
-    entries.push({ name: `${directory}/background.png`, data: encodeCorosRgbaPng(416, 416, Buffer.alloc(416 * 416 * 4)) });
+    entries.push({ name: `${directory}/background.png`, data: encodeCorosRgbaPng(width, height, Buffer.alloc(width * height * 4)) });
   }
   const unmapped = layout.modes.reduce((sum, mode) => sum + mode.unmappedBitmapReferences.length, 0);
   const recovery = { partial: true, unmappedBitmapReferences: unmapped,
     message: "Opened an editable copy. Some elements and behavior may differ from the official face." };
   const id = templateId && /^[1-9]\d{0,19}$/.test(templateId) ? templateId : String(layout.modes[0].id || 1);
-  entries.push({ name: "info.json", data: Buffer.from(JSON.stringify({ m_name: name, o_template_id: id, o_diy_version: 1,
-    o_wf_ver: Math.max(...headers.map((h) => h.version)), coroslinkRecovery: recovery })) });
+  // m_app and m_preview are the DIY manifest fields official templates carry;
+  // the website's upload validator requires both.
+  entries.push({ name: "info.json", data: Buffer.from(JSON.stringify({ m_name: name, m_app: directory, m_preview: "watchface_customize.png",
+    o_template_id: id, o_diy_version: 1, o_wf_ver: Math.max(...headers.map((h) => h.version)), coroslinkRecovery: recovery })) });
   entries.push({ name: "watchface_customize.png", data: preview! });
   for (const mode of layout.modes) entries.push({ name: `${directory}/${mode.mode === "aod" ? "AODconfig.txt" : "config.txt"}`, data: Buffer.from(recoveredConfig(mode, blocks, bytes)) });
   entries.push({ name: "recovery/source.bin", data: bytes });

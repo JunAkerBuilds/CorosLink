@@ -6,6 +6,7 @@ import { NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeDataAsset, nativeDataPre
 import { nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRoleIndices } from "./nativeDataParts";
 import { loadStudioImage, resizeAndTintSprite } from "./watchfaceStudio";
 import { LocalFontPicker } from "./LocalFontPicker";
+import { WatchfaceNumberAlignControl } from "./WatchfaceNumberAlignControl";
 
 const PART_LABELS: Record<Part, string> = {
   icon: "Label / icon", value: "Number / time", states: "State artwork", unit: "Units", symbols: "Symbols", progress: "Sun / moon progress",
@@ -133,7 +134,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
       {numberControl("Height",component.height,height=>patchPart({height}),4,800,true)}
       {partKey === "value" && numberControl("Digit width",component.digitWidth,digitWidth=>patchPart({digitWidth}),1,800,true)}
     </div>
-    {partKey === "value" && <label className="field">Number alignment<select aria-label="Number alignment" value={component.align} onChange={event=>patchPart({align:event.target.value as "left" | "center" | "right"})}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>}
+    {partKey === "value" && <WatchfaceNumberAlignControl value={component.align} disabled={disabled || busy} onChange={align=>patchPart({align:align ?? "left"})} />}
     {colorControl("Component color",component.color,color=>patchPart({color}))}
     {role && <LocalFontPicker api={api} label="Component font" value={style.parts?.[partKey]?.fontFamily ?? ""} emptyLabel="Use default font" disabled={disabled || busy} onChange={fontFamily=>patchPart({fontFamily:fontFamily || undefined})} />}
     {!nativePartHasPosition(partKey) && <p className="watchface-studio-summary">The watch places this component beside the live value. Its size and artwork are editable.</p>}

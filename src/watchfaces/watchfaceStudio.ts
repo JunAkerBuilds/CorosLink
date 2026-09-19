@@ -1,4 +1,4 @@
-import { renderAlignedRasterGlyph, spaceWatchfaceGlyph } from "./watchfaceGlyphLayout.ts";
+import { drawSpritePreservingCore, renderAlignedRasterGlyph, spaceWatchfaceGlyph } from "./watchfaceGlyphLayout.ts";
 import { getWatchfaceTarget } from "../../electron/watchfaceTargets.ts";
 import type {
   CorosWatchfaceArtwork,
@@ -2413,7 +2413,8 @@ async function renderRasterImageSprite(
   }
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
-  context.drawImage(
+  drawSpritePreservingCore(
+    context,
     image,
     sourceX,
     sourceY,
@@ -2930,7 +2931,18 @@ export async function resizeAndTintSprite(
   if (!context) {
     throw new Error("Sprite tinting is unavailable in this window.");
   }
-  context.drawImage(image, 0, 0, width, height);
+  drawSpritePreservingCore(
+    context,
+    image,
+    0,
+    0,
+    image.naturalWidth,
+    image.naturalHeight,
+    0,
+    0,
+    width,
+    height
+  );
   if (color) {
     context.globalCompositeOperation = "source-in";
     context.fillStyle = color;

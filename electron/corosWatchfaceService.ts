@@ -14,8 +14,10 @@ import {
 } from "./corosCredentialStore";
 import { createStoreZip } from "./zipStore";
 import { recoverCompiledCorosWatchface } from "./corosCompiledWatchface";
+import { parseCorosFaceMagic } from "./corosBinLayout";
 import { fitGeneratedWatchfaceFontRects } from "./watchfaceExportFontBounds";
 import { convertWatchfaceEntries, prepareRecoveredWatchfaceExport, normalizeConversionPath, RETAINED_AOD_CONFIG } from "./watchfaceArchiveConversion";
+import { standardizeWatchfacePackage } from "./watchfaceDistribution";
 import { getWatchfaceTarget, type WatchfaceTarget } from "./watchfaceTargets";
 import type {
   CorosWatchfaceArchive,
@@ -521,7 +523,7 @@ export async function downloadCorosWatchfaceTheme(
       sizeBytes: bytes.length,
       usableAsTemplate: false,
       savedPath: rawPath,
-      message: bytes.toString("latin1", 0, 4) === "614A"
+      message: parseCorosFaceMagic(bytes.toString("latin1", 0, 4))
         ? `Downloaded ${safeName} to ${rawPath}.`
         : `COROS answered with ${describeUnknownPayload(bytes, contentType)}. A raw copy was saved to ${rawPath} for analysis.`
     };
@@ -628,10 +630,11 @@ function describeUnknownPayload(bytes: Buffer, contentType: string): string {
     .subarray(0, 60)
     .toString("latin1")
     .replace(/[^\x20-\x7e]/g, ".");
-  // "614A" (bytes reversed to "A416") is COROS's compiled on-watch watchface
-  // binary: a layout table of element records plus encoded bitmap blobs. It is
-  // read-only firmware content, not the DIY ZIP the creator and upload use.
-  const isCompiledFace = bytes.length >= 4 && bytes.subarray(0, 4).toString("latin1") === "614A";
+  // "614A" (bytes reversed to "A416") or "062R" (R260) is COROS's compiled
+  // on-watch watchface binary: a layout table of element records plus encoded
+  // bitmap blobs. It is read-only firmware content, not the DIY ZIP the creator
+  // and upload use.
+  const isCompiledFace = bytes.length >= 4 && Boolean(parseCorosFaceMagic(bytes.subarray(0, 4).toString("latin1")));
   const kind = isCompiledFace
     ? "COROS's compiled on-watch watchface format (not an editable DIY template)"
     : printable.trimStart().startsWith("<")
@@ -921,9 +924,34 @@ export async function selectCorosWatchfaceArchive(
 }
 
 /**
+ * Rebuilds a starter only when the website validator would reject it as-is
+ * (editor recovery blobs, missing DIY manifest fields, stray entries). A
+ * conforming starter is copied byte for byte.
+ */
+async function distributableStarterArchive(
+  archivePath: string,
+  fallbackName: string
+): Promise<Buffer> {
+  const bytes = await fs.promises.readFile(archivePath);
+  const unzipper = require("unzipper") as UnzipperModule;
+  const directory = await unzipper.Open.buffer(bytes);
+  const files = await Promise.all(
+    directory.files
+      .filter((entry) => entry.type === "File")
+      .map(async (entry) => ({ name: entry.path, data: await entry.buffer() }))
+  );
+  const directories = directory.files
+    .filter((entry) => entry.type === "Directory")
+    .map((entry) => entry.path);
+  const standardized = standardizeWatchfacePackage(files, directories, fallbackName);
+  return standardized.changed ? createStoreZip(standardized.entries) : bytes;
+}
+
+/**
  * Build a portable project ZIP for website distribution. The original starter
  * is kept separate from the design state so importing and exporting again does
- * not apply layout changes twice.
+ * not apply layout changes twice. The starter itself is reduced to the
+ * website's DAT standard so the upload validator accepts it.
  */
 export async function exportCorosWatchfaceProject(
   input: CorosWatchfaceProjectExportInput,
@@ -957,7 +985,7 @@ export async function exportCorosWatchfaceProject(
       name: "coroslink-project.json",
       data: Buffer.from(JSON.stringify(manifest), "utf8")
     },
-    { name: "starter.dat", data: await fs.promises.readFile(source.path) },
+    { name: "starter.dat", data: await distributableStarterArchive(source.path, name) },
     { name: "preview.png", data: preview }
   ]);
   if (projectZip.byteLength > MAX_PROJECT_PACKAGE_BYTES) {
@@ -1649,10 +1677,13 @@ export async function createCorosWatchfaceArchive(
   }
 
   const requestedFirmwareType = normalizeOptionalFirmwareType(input.firmwareType);
+  // A recovered official face is scaled from its native tree at export, so it
+  // can be built for any supported watch, not only the one it was decoded from.
   if (
     requestedFirmwareType &&
     source.firmwareType &&
-    requestedFirmwareType.toUpperCase() !== source.firmwareType.toUpperCase()
+    requestedFirmwareType.toUpperCase() !== source.firmwareType.toUpperCase() &&
+    !verifiedSource.recoveredFromCompiled
   ) {
     throw new Error(
       `This starter template was selected for ${source.firmwareType}, not ${requestedFirmwareType}. Browse templates again for the connected watch.`
