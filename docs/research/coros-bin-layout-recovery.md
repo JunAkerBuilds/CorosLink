@@ -72,7 +72,17 @@ silently converted into guessed source keys.
 ## MIP bitmaps (`0x0802`)
 
 AMOLED blocks are `w u16, h u16, 0x2002, n u8, ver u8, six reserved bytes,
-n × u32 frame ends` with palette (version 1) or RGBA (version 3) frames. MIP
+n × u32 frame ends` with palette (version 1) or RGBA (version 3) frames. The
+encoding word can also be `0x3002`: DIGITAL (100000545) stores its normal-mode
+hour/minute (59×94×10) and seconds (44×73×10) fonts that way while its AOD
+clock font, and every other block on the face, is `0x2002`. The frames decode
+byte-for-byte the same (indexed pixels + 1024-byte LUT, same teal palette as
+the face's `0x2002` fonts), so the extra bit is a flag the watch acts on, not
+a pixel format; its meaning is not yet identified. Skipping those blocks left
+the recovered face with a colon and no digits. TWILIGHT's exercise control
+icon (83×86) uses `0x1800` with version 2: uncompressed RGB888, exactly
+w×h×3 bytes, no alpha and no RLE (the 0x02 low byte on the other words is
+presumably the RLE flag). MIP
 blocks are `w, h, 0x0802, n, 0, four reserved bytes, n × u16 frame ends`
 and the same `0xC0|count` RLE stream, but each decoded byte is one pixel:
 `aa rr gg bb`, alpha 0 opaque … 3 transparent, channels × 85. Values ≥ 0xC0
@@ -80,6 +90,24 @@ and the same `0xC0|count` RLE stream, but each decoded byte is one pixel:
 (`062R`, 35 KB) decodes to its 260×260 dial, 197×197 thumbnail, 37×53 clock
 font, 45×28 weekday set and 12-frame battery table, all matching the
 embedded thumbnail; the app opens it as a `watchface_260x260` starter.
+The MIP NOMAD (`062R` and `082R`) seconds hand — the bezel chevron on a
+screen-height canvas, 34×260 / 37×280 — keeps `0x0f` in the frame-count byte
+over a single u16 frame end followed directly by RLE data; the AMOLED NOMAD
+stores the same hand as an ordinary one-frame `0x2002` block.
+
+### Blocks the scan does not recognize
+
+`findCorosBitmapBlocks` scans linearly for the header shapes above. It then
+takes every u32 in the layout headers that lands on a well-formed block the
+scan skipped and admits it only when every frame decodes to exactly the
+declared size (`viaPointer`, with a `note` when the frame-count byte had to be
+read as one frame). This is what keeps a new flag bit like `0x3002` from
+silently dropping an element again: the pointer vouches for the offset and the
+exact-length decode vouches for the format. Blocks whose frames do not decode
+stay unresolved, `decodeCorosLayout` warns about each one, and the app's
+recovery message counts them. Across the 27 distinct official faces cached on
+2026-09-19, the pass adds nothing beyond DIGITAL's two fonts, TWILIGHT's icon
+and the two MIP NOMAD hands, and removes nothing.
 
 ## Header structure
 

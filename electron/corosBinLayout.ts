@@ -21,7 +21,7 @@ export interface CorosBinChart {
   /** Stored words before any RGB222 expansion, for exact retention. */
   rawColors: { selectedBar: number; unselectedBar: number; curvesUpper: number; curvesLower: number };
 }
-interface BitmapLink { index: number; offset: number | string }
+interface BitmapLink { index: number; offset: number | string; encoding?: number | string; viaPointer?: boolean; note?: string }
 type PositionedField = [string, number, number, string, string];
 
 // Read-only recovery of COROS's compiled layout family. Offsets were checked
@@ -66,47 +66,119 @@ export function readLayoutHeaders(bytes: Buffer) {
 
 export interface CorosBitmapBlock {
   index: number; offset: number; width: number; height: number;
-  /** 0x2002: palette/RGBA frames (416px AMOLED); 0x0802: one A2R2G2B2 byte per pixel (MIP). */
+  /**
+   * Encoding word. 0x2002 (416px AMOLED) and 0x3002 (DIGITAL's normal-mode
+   * clock fonts) share RLE palette (version 1) / RGBA (version 3) frames;
+   * 0x1800 is uncompressed RGB888 (version 2, TWILIGHT's exercise icon);
+   * 0x0802 is RLE with one A2R2G2B2 byte per pixel (MIP, version 0). Any
+   * other word reaches the editor only through `viaPointer`.
+   */
   encoding: number; version: number; frameCount: number; dataOffset: number; frameEnds: number[];
+  /** A layout pointer vouched for this block; the linear scan did not recognize its header. */
+  viaPointer?: true;
+  /** Why the header alone was not enough, for the layout warnings. */
+  note?: string;
 }
+type BitmapBlockShape = Omit<CorosBitmapBlock, "index" | "viaPointer" | "note">;
 
-/** Locate bitmap blocks after the layout headers. Both encodings share the RLE stream. */
-export function findCorosBitmapBlocks(buffer: Buffer, start = 0): CorosBitmapBlock[] {
-  const blocks: CorosBitmapBlock[] = [];
-  let decodedBytes = 0;
-  for (let offset = start; offset + 14 <= buffer.length; offset++) {
-    const width = buffer.readUInt16LE(offset), height = buffer.readUInt16LE(offset + 2), encoding = buffer.readUInt16LE(offset + 4);
-    const frameCount = buffer[offset + 6], version = buffer[offset + 7];
-    if (!width || width > 800 || !height || height > 800 || !frameCount || frameCount > 64) continue;
-    // 0x2002 blocks: six reserved bytes then u32 frame ends; 0x0802 blocks: four reserved bytes then u16 ends.
-    const mip = encoding === 0x0802;
-    if (!(encoding === 0x2002 && [1, 3].includes(version)) && !(mip && version === 0)) continue;
-    const reserved = mip ? 4 : 6, entry = mip ? 2 : 4;
-    if (buffer.subarray(offset + 8, offset + 8 + reserved).some(Boolean)) continue;
+/**
+ * Parse one block header at `offset`. Frame layout follows the version: 0 is
+ * MIP (four reserved bytes, u16 ends), 1/2/3 AMOLED (six reserved bytes, u32
+ * ends). MIP hand sprites (NOMAD 062R/082R seconds hand) keep 0x0f in the
+ * frame-count byte over a single u16 end; a hand is one frame, and the lenient
+ * path tries that reading when the declared table does not fit.
+ */
+function readBitmapBlockAt(buffer: Buffer, offset: number, knownEncodingsOnly: boolean): (BitmapBlockShape & { note?: string }) | null {
+  if (offset < 0 || offset + 14 > buffer.length) return null;
+  const width = buffer.readUInt16LE(offset), height = buffer.readUInt16LE(offset + 2), encoding = buffer.readUInt16LE(offset + 4);
+  const declared = buffer[offset + 6], version = buffer[offset + 7];
+  if (!width || width > 800 || !height || height > 800 || !declared || declared > 64) return null;
+  // 0x3002 decodes byte-for-byte like 0x2002 (indexed pixels + 256-entry LUT); only the flag word differs.
+  const known = ((encoding === 0x2002 || encoding === 0x3002) && (version === 1 || version === 3))
+    || (encoding === 0x1800 && version === 2) || (encoding === 0x0802 && version === 0);
+  if (knownEncodingsOnly ? !known : ![0, 1, 2, 3].includes(version)) return null;
+  const mip = version === 0;
+  const reserved = mip ? 4 : 6, entry = mip ? 2 : 4;
+  if (buffer.subarray(offset + 8, offset + 8 + reserved).some(Boolean)) return null;
+  const table = (frameCount: number): BitmapBlockShape | null => {
     const dataOffset = offset + 8 + reserved + frameCount * entry;
-    if (dataOffset > buffer.length) continue;
+    if (dataOffset > buffer.length) return null;
     const frameEnds: number[] = [];
     for (let i = 0; i < frameCount; i++) {
       const at = offset + 8 + reserved + i * entry;
       const end = mip ? buffer.readUInt16LE(at) : buffer.readUInt32LE(at);
-      if (end <= (frameEnds.at(-1) ?? 0) || dataOffset + end > buffer.length) break;
+      if (end <= (frameEnds.at(-1) ?? 0) || dataOffset + end > buffer.length) return null;
       frameEnds.push(end);
     }
-    if (frameEnds.length !== frameCount) continue;
-    decodedBytes += width * height * 4 * frameCount;
+    return { offset, width, height, encoding, frameCount, version, dataOffset, frameEnds };
+  };
+  const block = table(declared);
+  if (block || knownEncodingsOnly || !mip || declared === 1) return block;
+  const hand = table(1);
+  return hand && { ...hand, note: `header declares ${declared} frames over a single frame table; read as one frame` };
+}
+
+function everyFrameDecodes(buffer: Buffer, block: BitmapBlockShape): boolean {
+  try {
+    for (let frame = 0; frame < block.frameCount; frame++) decodeCorosBitmapFrame(buffer, block, frame);
+    return true;
+  } catch { return false; }
+}
+
+/**
+ * Locate bitmap blocks after the layout headers, which occupy [0, start).
+ * The linear scan admits only the encoding words this decoder has met. A u32
+ * in the headers that lands on a well-formed block the scan skipped is then
+ * admitted once every frame proves to decode: a new flag bit must not silently
+ * drop an element the way 0x3002 once dropped DIGITAL's clock digits.
+ */
+export function findCorosBitmapBlocks(buffer: Buffer, start = 0): CorosBitmapBlock[] {
+  const blocks: CorosBitmapBlock[] = [];
+  let decodedBytes = 0;
+  const admit = (block: BitmapBlockShape & { note?: string }, viaPointer = false) => {
+    decodedBytes += block.width * block.height * 4 * block.frameCount;
     if (decodedBytes > 256 * 1024 * 1024 || blocks.length >= 512) throw new Error("This face contains too much image data to open in the editor.");
-    blocks.push({ index: blocks.length, offset, width, height, encoding, frameCount, version, dataOffset, frameEnds });
-    offset = dataOffset + frameEnds.at(-1)! - 1;
+    blocks.push({ index: blocks.length, ...block, ...(viaPointer ? { viaPointer: true } : {}) });
+  };
+  for (let offset = start; offset + 14 <= buffer.length; offset++) {
+    const block = readBitmapBlockAt(buffer, offset, true);
+    if (!block) continue;
+    admit(block);
+    offset = block.dataOffset + block.frameEnds.at(-1)! - 1;
   }
+  const blockEnd = (block: BitmapBlockShape) => block.dataOffset + block.frameEnds.at(-1)!;
+  const covered = (at: number) => blocks.some((b) => at >= b.offset && at < blockEnd(b));
+  const tried = new Set<number>();
+  for (let field = 0; field + 4 <= start; field++) {
+    const pointer = buffer.readUInt32LE(field);
+    if (pointer < start || pointer + 14 > buffer.length || tried.has(pointer) || covered(pointer)) continue;
+    tried.add(pointer);
+    const block = readBitmapBlockAt(buffer, pointer, false);
+    if (!block || !everyFrameDecodes(buffer, block)) continue;
+    // Scan hits inside the vouched block were false positives from its RLE stream.
+    for (let i = blocks.length - 1; i >= 0; i--) if (blocks[i].offset > block.offset && blocks[i].offset < blockEnd(block)) blocks.splice(i, 1);
+    admit(block, true);
+  }
+  blocks.sort((a, b) => a.offset - b.offset);
+  blocks.forEach((block, index) => { block.index = index; });
   return blocks;
 }
 
-/** Decode one frame to straight (non-premultiplied) RGBA. */
-export function decodeCorosBitmapFrame(bytes: Buffer, block: CorosBitmapBlock, frame: number): Buffer {
+export function decodeCorosBitmapFrame(bytes: Buffer, block: BitmapBlockShape, frame: number): Buffer {
   if (!Number.isInteger(frame) || frame < 0 || frame >= block.frameCount) throw new Error("Invalid bitmap frame.");
   const encoded = bytes.subarray(block.dataOffset + (block.frameEnds[frame - 1] ?? 0), block.dataOffset + block.frameEnds[frame]);
   const pixels = block.width * block.height;
-  const mip = block.encoding === 0x0802;
+  if (block.version === 2) {
+    // Uncompressed RGB888 (encoding 0x1800): three bytes per pixel, no alpha, no RLE.
+    if (encoded.length !== pixels * 3) throw new Error("Invalid watchface image data.");
+    const rgba = Buffer.alloc(pixels * 4);
+    for (let pixel = 0; pixel < pixels; pixel++) {
+      encoded.copy(rgba, pixel * 4, pixel * 3, pixel * 3 + 3);
+      rgba[pixel * 4 + 3] = 255;
+    }
+    return rgba;
+  }
+  const mip = block.version === 0; // Only MIP (0x0802) blocks are version 0.
   const decoded = Buffer.alloc(mip ? pixels : block.version === 3 ? pixels * 4 : pixels + 1024);
   let cursor = 0;
   for (let i = 0; i < encoded.length; i++) {
@@ -333,6 +405,11 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
   const bitmapMap = new Map(blocks.map((b) => [Number(b.offset), b]));
   const layoutEnd = Math.max(...headers.map((h) => h.offset + h.length));
   const warnings: string[] = [];
+  for (const block of blocks) {
+    if (!block.viaPointer) continue;
+    const encoding = typeof block.encoding === "number" ? hex(block.encoding) : block.encoding ?? "unknown";
+    warnings.push(`bitmap block ${hex(Number(block.offset))} (encoding ${encoding}${block.note ? `; ${block.note}` : ""}) was not recognized by the scan; admitted because a layout pointer references it and every frame decodes.`);
+  }
   const modes = headers.map((header) => {
     const { offset: base, length } = header;
     const elements: CorosBinElement[] = [];

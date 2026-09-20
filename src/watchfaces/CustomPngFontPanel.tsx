@@ -1,4 +1,5 @@
-import { CircleAlert, Files, FolderOpen, LayoutGrid, Trash2 } from "lucide-react";
+import { CircleAlert, Files, FolderOpen, LayoutGrid, Sparkles, Trash2 } from "lucide-react";
+import { OfficialAssetBrowser, officialAssetToSpriteFolder } from "./OfficialAssetBrowser";
 import { useEffect, useRef, useState } from "react";
 import type {
   CorosWatchfaceRasterFont,
@@ -22,6 +23,8 @@ import {
 
 interface CustomPngFontPanelProps {
   api: CorosLinkApi;
+  /** Target watch; enables browsing the official COROS digit fonts. */
+  firmwareType?: string;
   /** The shared face-wide PNG set. */
   rasterFont?: CorosWatchfaceRasterFont;
   onRasterFontChange: (font: CorosWatchfaceRasterFont | undefined) => void;
@@ -30,6 +33,11 @@ interface CustomPngFontPanelProps {
   componentLabel?: string;
   onComponentRasterFontChange?: (font: CorosWatchfaceRasterFont | undefined) => void;
   onActivate?: () => void;
+  /**
+   * The set the font picker above this panel already previews; the panel skips
+   * its own strip while that same set is the one being edited.
+   */
+  previewedFont?: CorosWatchfaceRasterFont;
   importDisabled?: boolean;
   onImportStart?: (target: string) => number | null;
   onImportFinish?: (importId: number) => void;
@@ -150,12 +158,14 @@ async function readRasterSpriteFolder(
 
 export function CustomPngFontPanel({
   api,
+  firmwareType,
   rasterFont,
   onRasterFontChange,
   componentRasterFont,
   componentLabel,
   onComponentRasterFontChange,
   onActivate,
+  previewedFont,
   importDisabled = false,
   onImportStart,
   onImportFinish,
@@ -163,6 +173,7 @@ export function CustomPngFontPanel({
 }: CustomPngFontPanelProps) {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [officialBrowserOpen, setOfficialBrowserOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const mountedRef = useRef(false);
   const importRevisionRef = useRef(0);
@@ -268,13 +279,13 @@ export function CustomPngFontPanel({
     }
   }
 
-  async function chooseRasterSpriteFolder() {
+  async function chooseRasterSpriteFolder(preset?: CorosWatchfaceRasterFontFolder) {
     const request = beginImport();
     if (!request) return;
     try {
-      setStatus("Reading PNG sprite folder…");
+      setStatus(preset ? "Importing official font…" : "Reading PNG sprite folder…");
       setError(null);
-      const folder = await api.chooseCorosWatchfaceRasterFontFolder();
+      const folder = preset ?? await api.chooseCorosWatchfaceRasterFontFolder();
       if (!folder) {
         if (importCanCommit(request.importId, request.revision)) setStatus(null);
         return;
@@ -406,6 +417,18 @@ export function CustomPngFontPanel({
         className="wf-png-font-source"
         type="button"
         disabled={controlsDisabled}
+        onClick={() => setOfficialBrowserOpen(true)}
+      >
+        <span className="wf-png-font-source-icon" aria-hidden="true"><Sparkles size={16} /></span>
+        <span className="wf-png-font-source-copy">
+          <strong>{compact ? "Official…" : "Official COROS font"}</strong>
+          {!compact ? <span>Digit sets unpacked from the official face catalog.</span> : null}
+        </span>
+      </button>
+      <button
+        className="wf-png-font-source"
+        type="button"
+        disabled={controlsDisabled}
         onClick={() => void chooseRasterSpriteFolder()}
       >
         <span className="wf-png-font-source-icon" aria-hidden="true"><FolderOpen size={16} /></span>
@@ -448,7 +471,9 @@ export function CustomPngFontPanel({
     <section className="wf-png-font" aria-label="Custom PNG font">
       <div className="wf-png-font-head">
         <strong>Custom PNG font</strong>
-        <span>Draw the digits yourself and use the PNGs instead of a font.</span>
+        {activeRasterFont
+          ? null
+          : <span>Draw the digits yourself and use the PNGs instead of a font.</span>}
       </div>
 
       {supportsComponentScope ? (
@@ -485,11 +510,13 @@ export function CustomPngFontPanel({
         sourceButtons(false)
       ) : (
         <>
-          <WatchfaceSpriteStrip
-            label="Imported glyphs"
-            cells={previewCells}
-            summary={describeRasterFontSource(activeRasterFont)}
-          />
+          {activeRasterFont === previewedFont ? null : (
+            <WatchfaceSpriteStrip
+              label="Imported glyphs"
+              cells={previewCells}
+              summary={describeRasterFontSource(activeRasterFont)}
+            />
+          )}
 
           {missingDigits > 0 && !isMonthComponent && !isWeekdayComponent ? (
             <p className="wf-png-font-note is-warning">
@@ -610,6 +637,18 @@ export function CustomPngFontPanel({
           <li>Individual files take priority over a sheet, so you can fix one glyph without re-importing everything.</li>
         </ul>
       </details>
+      {officialBrowserOpen ? (
+        <OfficialAssetBrowser
+          api={api}
+          firmwareType={firmwareType}
+          mode="font"
+          fontKind={scope === "component" && componentLabel === "Weekday" ? "weekday" : scope === "component" && componentLabel === "Date month" ? "month" : "digits"}
+          defaultRole={scope !== "component" || /hour|minute|second/i.test(componentLabel ?? "") ? "time" : /battery/i.test(componentLabel ?? "") ? "battery" : /temp|weather/i.test(componentLabel ?? "") ? "weather" : ""}
+          title={componentLabel ? `Official font for ${componentLabel}` : "Official COROS fonts"}
+          onClose={() => setOfficialBrowserOpen(false)}
+          onPick={(frames) => chooseRasterSpriteFolder(officialAssetToSpriteFolder(frames))}
+        />
+      ) : null}
     </section>
   );
 }

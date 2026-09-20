@@ -8,6 +8,8 @@ export interface TrainingChartColors {
   accentGlow: string;
   accentSoft: string;
   gold: string;
+  /** Distinct fourth hue for multi-series Coach charts. */
+  blue: string;
   grid: string;
   text: string;
   cursor: string;
@@ -38,6 +40,7 @@ const DARK_CHART_COLORS: TrainingChartColors = {
   accentGlow: "#6ee7a8",
   accentSoft: "rgba(45, 154, 116, 0.25)",
   gold: "#d89b22",
+  blue: "#6aa6f5",
   grid: "rgba(255, 255, 255, 0.05)",
   text: "#a1a1a6",
   cursor: "rgba(255, 255, 255, 0.1)",
@@ -53,6 +56,7 @@ const PAPER_CHART_COLORS: TrainingChartColors = {
   accentGlow: "#0f7f5f",
   accentSoft: "rgba(18, 148, 110, 0.2)",
   gold: "#b9791a",
+  blue: "#2f6fd6",
   grid: "rgba(38, 34, 28, 0.08)",
   text: "#57544e",
   cursor: "rgba(38, 34, 28, 0.08)",

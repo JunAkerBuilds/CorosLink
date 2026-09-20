@@ -263,6 +263,7 @@ Log in with your COROS account to view training data, fitness scores, and race p
 - **Summary tiles** for Stamina, Recovery, Training Load, and Resting HR
 - **Recovery readiness ring** with stamina overlay
 - **7-day charts** for Training Load and HRV vs Baseline
+- **Coach charts** — charts pinned from the Coach live here and re-resolve against fresh data on every refresh
 - **EvoLab fitness scores** — Aerobic Endurance, Lactate Threshold, Anaerobic Endurance and Capacity
 - **Race predictor** with estimated finish times by distance
 - **Recent activities table** with a detail panel for laps, HR, elevation, and more
@@ -270,6 +271,7 @@ Log in with your COROS account to view training data, fitness scores, and race p
 - **Sleep & daily health** — sleep score/stages plus steps and calories from COROS data
 - **FIT file export** via signed download URL
 - **Bulk activity backup** — download activities already synced to COROS Training Hub (FIT, GPX, TCX, KML, or CSV) to a local folder; re-running skips existing files. Recordings stored only on the watch are excluded; the Data page includes sync troubleshooting guidance.
+- **Local activity index** — Data page control to index the last 90 days, the last year, or your whole history of FIT files for the Coach's local analysis tools, with live progress and a resumable, incremental crawl
 - **Push activities to COROS** — import from intervals.icu or add manual activities
 
 <p align="center">
@@ -338,6 +340,10 @@ Ask training questions with answers grounded in your COROS data.
 
 - **Providers** — ChatGPT (cloud), Claude Code, OpenRouter with your own API key, or local LLMs (Ollama / LM Studio)
 - **Model selection & extended thinking** where the provider supports them
+- **Charts on request** — ask "how did my HRV respond around hard blocks this month?" and the coach draws it: up to six series bound to daily metrics (load, HRV vs baseline, resting HR, sleep score and duration, RPE load) over a 7–90 day window, with shaded training blocks, summary tiles, and a second axis for mixed units
+- **Pin to Training Hub** — keep any coach chart on the Training Hub; metric-bound charts refresh with live data every time the hub reloads
+- **Longer fitness trends** — `get_fitness_trends` takes a `days` window (up to 90) and adds sleep score and weekly summaries, so the coach reasons over a training block instead of just the last week
+- **Deep analysis from FIT files, no daily cap** — a local index of full-resolution activity files powers `get_activity_splits` (per-km/mile pacing, HR, power, cadence, elevation, negative-split check, aerobic decoupling, normalized power), `get_power_curve` (best power 1 s–2 h with a 20-minute FTP estimate), `get_best_efforts` (fastest 400 m–marathon found inside any run), `find_similar_routes` (GPS fingerprint match for repeat loops), and `compare_activities` (route similarity, time gained or lost at every 10%, split-by-split). Files download once into the app's cache; the coach indexes on demand and can index a window with `sync_activity_index`
 - **Multi-sport workout tools** — draft a single workout or adaptive multi-week plans across Run, Trail Run, Bike, Pool Swim, Strength, Indoor Climb, Bouldering, XC Ski, and HYROX, with COROS exercise catalog search for Strength and HYROX
 - **Destination-aware confirmation** — choose Workout Library, Calendar, local template, COROS Plan Library, or Plan + Calendar; review weeks, workouts, sports, start date, conflicts, grouped-plan status, and every remote write before confirming
 - **AI write guard** — Coach tool calls can draft workouts and plans but cannot upload them; the athlete must use the confirmation card

@@ -439,6 +439,7 @@ export function LocalFontPicker({
 
       {typography && onTypographyChange ? (
         <div className="watchface-typography-controls">
+          {rasterFontIsActive ? null : <>
           <label>
             Weight
             <select
@@ -468,6 +469,7 @@ export function LocalFontPicker({
               <option value="italic">Italic</option>
             </select>
           </label>
+          </>}
           <label className="watchface-typography-tracking">
             Sprite spacing <span>{Math.round(letterSpacing * 100)}%</span>
             <input

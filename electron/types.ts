@@ -545,6 +545,75 @@ export interface CorosWatchfaceThemeDownload {
   message: string;
 }
 
+/** One deduplicated bitmap set from the official COROS face catalog. */
+export interface CorosOfficialAsset {
+  /** Content hash shared by identical sets across faces and resolutions. */
+  id: string;
+  category: string;
+  /** Present for digit fonts: what the source face used the font for. */
+  role?: string;
+  width: number;
+  height: number;
+  frames: number;
+  configKeys: string[];
+  /** Purpose tags derived from the config keys (day/night, hours/minutes…). */
+  tags: { id: string; label: string }[];
+  /** Up to three source face names plus the total count. */
+  faces: string[];
+  faceCount: number;
+  /** Sprite-strip preview of every frame. */
+  strip: { width: number; height: number; dataUrl: string };
+}
+
+export interface CorosOfficialAssetLibraryStatus {
+  firmwareType: string;
+  state: "idle" | "building" | "ready" | "error";
+  facesDone: number;
+  facesTotal: number;
+  assetCount: number;
+  message?: string;
+}
+
+export interface CorosOfficialAssetQuery {
+  firmwareType: string;
+  category?: string;
+  role?: string;
+  /** Free text matched against face names, config keys and WxH. */
+  query?: string;
+  /** Restrict to single images or multi-frame sets. */
+  frames?: "single" | "multi";
+  /** Exact frame count, e.g. 10 for digit fonts, 7 for weekday labels, 12 for months. */
+  frameCount?: number;
+  /** Only sets a source face bound to this config key, e.g. weather_dark_icon_dir for night icons. */
+  configKey?: string;
+  /** Only sets carrying this purpose tag id (see officialAssetTags), e.g. "night". */
+  tag?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface CorosOfficialAssetPage {
+  status: CorosOfficialAssetLibraryStatus;
+  categories: { id: string; label: string; count: number }[];
+  roles: { id: string; label: string; count: number }[];
+  /** Purpose tags present in the current category, for the sidebar. */
+  tags: { id: string; label: string; count: number }[];
+  total: number;
+  page: number;
+  pageSize: number;
+  assets: CorosOfficialAsset[];
+}
+
+/** Every frame of one set as PNG data URLs, in stored order. */
+export interface CorosOfficialAssetFrames {
+  id: string;
+  category: string;
+  label: string;
+  width: number;
+  height: number;
+  frames: string[];
+}
+
 export interface CorosWatchfaceThemeDownloadInput {
   packageUrl: string;
   /** Recover compiled official packages as local editable starter archives. */
@@ -1958,6 +2027,44 @@ export type ActivityBackupState =
   | "error";
 
 /** Live progress for a bulk activity backup run. */
+// ----- Local FIT index -----
+
+export type FitIndexSyncState =
+  | "listing"
+  | "indexing"
+  | "done"
+  | "cancelled"
+  | "error";
+
+export interface FitIndexProgress {
+  state: FitIndexSyncState;
+  /** Activities considered for this run (0 while listing). */
+  total: number;
+  /** Files downloaded and indexed during this run. */
+  completed: number;
+  /** Already indexed before this run. */
+  skipped: number;
+  failed: number;
+  currentName?: string;
+  error?: string;
+}
+
+export interface FitIndexStatus {
+  /** Activities with a parsed summary in the local index. */
+  indexed: number;
+  /** Bytes used by cached .fit files. */
+  cacheBytes: number;
+  cacheDir: string;
+  syncing: boolean;
+  progress: FitIndexProgress | null;
+  lastSyncAt?: string;
+}
+
+export interface FitIndexSyncOptions {
+  /** Only activities that started within this many days; omit for everything. */
+  sinceDays?: number;
+}
+
 export interface ActivityBackupProgress {
   state: ActivityBackupState;
   folder: string;
@@ -2767,6 +2874,11 @@ export type ChatStreamInfo =
     }
   | {
       requestId: string;
+      kind: "coachChart";
+      preview: CoachChartPreview;
+    }
+  | {
+      requestId: string;
       kind: "coachPrompt";
       prompt: CoachInputPrompt;
     };
@@ -3117,6 +3229,114 @@ export interface TrainingTrendPoint {
   rhr?: number;
   sleepMinutes?: number;
   sleepScore?: number;
+  trainingLoadRatio?: number;
+  staminaLevel?: number;
+}
+
+// ----- Coach charts (AI-authored, declarative) -----
+
+/** Daily metric a chart series can bind to; CorosLink resolves the values. */
+export type CoachChartMetricKey =
+  | "trainingLoad"
+  | "rpeLoad"
+  | "avgSleepHrv"
+  | "sleepHrvBase"
+  | "rhr"
+  | "sleepScore"
+  | "sleepMinutes"
+  | "trainingLoadRatio"
+  | "staminaLevel";
+
+export type CoachChartSeriesKind = "line" | "area" | "bar";
+export type CoachChartAxis = "left" | "right";
+export type CoachChartColor =
+  | "load"
+  | "hrv"
+  | "sleep"
+  | "rpe"
+  | "gold"
+  | "blue"
+  | "accent"
+  | "muted";
+
+export interface CoachChartSeriesSpec {
+  label: string;
+  kind?: CoachChartSeriesKind;
+  axis?: CoachChartAxis;
+  color?: CoachChartColor;
+  dashed?: boolean;
+  /** Bind to a daily metric over the chart window; resolved by CorosLink. */
+  metric?: CoachChartMetricKey;
+  /** Inline values aligned with the x axis; null marks a gap. */
+  values?: (number | null)[];
+}
+
+export interface CoachChartRangeSpec {
+  /** Start label or date (YYYY-MM-DD / YYYYMMDD), inclusive. */
+  from: string;
+  /** End label or date, inclusive. */
+  to: string;
+  label?: string;
+}
+
+export interface CoachChartTileSpec {
+  label: string;
+  value: string;
+  caption?: string;
+}
+
+/** What the model sends to render_chart. */
+export interface CoachChartSpec {
+  title: string;
+  subtitle?: string;
+  /** Window for bound metrics (7–90 days). Default 30. */
+  days?: number;
+  /** X-axis labels for inline-only charts. Ignored when a series is bound. */
+  labels?: string[];
+  series: CoachChartSeriesSpec[];
+  ranges?: CoachChartRangeSpec[];
+  tiles?: CoachChartTileSpec[];
+  leftAxisLabel?: string;
+  rightAxisLabel?: string;
+  note?: string;
+}
+
+export interface CoachChartResolvedSeries {
+  key: string;
+  label: string;
+  kind: CoachChartSeriesKind;
+  axis: CoachChartAxis;
+  color: CoachChartColor;
+  dashed: boolean;
+  metric?: CoachChartMetricKey;
+  values: (number | null)[];
+}
+
+export interface CoachChartResolvedRange {
+  fromIndex: number;
+  toIndex: number;
+  label?: string;
+}
+
+/** Fully resolved chart the renderer can draw without further lookups. */
+export interface CoachChartPreview {
+  previewId: string;
+  spec: CoachChartSpec;
+  labels: string[];
+  /** YYYYMMDD per point when the x axis is a date window. */
+  dates?: string[];
+  series: CoachChartResolvedSeries[];
+  ranges: CoachChartResolvedRange[];
+  tiles: CoachChartTileSpec[];
+  resolvedAt: string;
+  /** True when at least one series is metric-bound and can be refreshed. */
+  live: boolean;
+}
+
+export interface PinnedCoachChart {
+  id: string;
+  preview: CoachChartPreview;
+  pinnedAt: string;
 }
 
 export interface ActivityVisualLapPoint {
@@ -3675,7 +3895,8 @@ export type PersistedChatEntry =
   | { kind: "activityVisual"; preview: ActivityVisualPreview }
   | { kind: "activityHrTrend"; preview: ActivityHrTrendPreview }
   | { kind: "fitnessTrend"; preview: FitnessTrendPreview }
-  | { kind: "hrZoneSummary"; preview: HrZonePreview };
+  | { kind: "hrZoneSummary"; preview: HrZonePreview }
+  | { kind: "coachChart"; preview: CoachChartPreview };
 
 export interface IntervalsStatus {
   connected: boolean;

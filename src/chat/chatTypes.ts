@@ -1,6 +1,7 @@
 import type {
   ActivityVisualPreview,
   ChatMessage,
+  CoachChartPreview,
   CoachInputPrompt,
   FitnessTrendPreview,
   HrZonePreview,
@@ -56,6 +57,11 @@ export interface ChatHrZoneEntry {
   preview: HrZonePreview;
 }
 
+export interface ChatCoachChartEntry {
+  kind: "coachChart";
+  preview: CoachChartPreview;
+}
+
 export interface ChatToolNoticeEntry {
   kind: "toolNotice";
   message: string;
@@ -69,8 +75,13 @@ export type ChatEntry =
   | ChatActivityVisualEntry
   | ChatFitnessTrendEntry
   | ChatHrZoneEntry
+  | ChatCoachChartEntry
   | ChatToolNoticeEntry;
 
+/**
+ * Automatic visuals that the "show charts" setting can hide. Coach charts are
+ * excluded on purpose: the athlete asked for them explicitly.
+ */
 export function isChatVisualEntry(
   entry: ChatEntry
 ): entry is ChatActivityVisualEntry | ChatFitnessTrendEntry | ChatHrZoneEntry {
@@ -181,6 +192,23 @@ export function upsertHrZoneEntry(
   return [...entries, { kind: "hrZoneSummary", preview }];
 }
 
+export function upsertCoachChartEntry(
+  entries: ChatEntry[],
+  preview: CoachChartPreview
+): ChatEntry[] {
+  const index = entries.findIndex(
+    (entry) =>
+      entry.kind === "coachChart" &&
+      entry.preview.previewId === preview.previewId
+  );
+  if (index >= 0) {
+    const next = [...entries];
+    next[index] = { kind: "coachChart", preview };
+    return next;
+  }
+  return [...entries, { kind: "coachChart", preview }];
+}
+
 export function toWireMessages(entries: ChatEntry[]): ChatMessage[] {
   return entries.flatMap((entry): ChatMessage[] => {
     if (entry.kind === "message") {
@@ -224,6 +252,9 @@ function persistVisualEntry(entry: ChatEntry): PersistedChatEntry | null {
   }
   if (entry.kind === "hrZoneSummary") {
     return { kind: "hrZoneSummary", preview: entry.preview };
+  }
+  if (entry.kind === "coachChart") {
+    return { kind: "coachChart", preview: entry.preview };
   }
   if (entry.kind === "toolNotice") {
     return {
@@ -299,6 +330,10 @@ export function fromPersistedEntries(entries: PersistedChatEntry[]): ChatEntry[]
     }
     if (entry.kind === "hrZoneSummary") {
       result.push({ kind: "hrZoneSummary", preview: entry.preview });
+      continue;
+    }
+    if (entry.kind === "coachChart") {
+      result.push({ kind: "coachChart", preview: entry.preview });
       continue;
     }
     result.push({

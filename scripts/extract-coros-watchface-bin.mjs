@@ -32,7 +32,9 @@ function bitmapReference(block) {
     height: block.height,
     encoding: `0x${block.encoding.toString(16)}`,
     frameCount: block.frameCount,
-    version: block.version
+    version: block.version,
+    ...(block.viaPointer ? { viaPointer: true } : {}),
+    ...(block.note ? { note: block.note } : {})
   };
 }
 
@@ -97,9 +99,9 @@ for (const [blockIndex, block] of blocks.entries()) {
   for (let frame = 0; frame < block.frameCount; frame += 1) {
     const frameEnd = block.frameEnds[frame];
     const encoded = bytes.subarray(block.dataOffset + previousEnd, block.dataOffset + frameEnd);
-    // Shared with the app: transposed 256-entry LUT for 0x2002 frames
+    // Shared with the app: transposed 256-entry LUT for 0x2002/0x3002 frames
     // (4.9.9 Bitmap::ToLut256Buffer at 0x168a48), direct RGBA for version 3,
-    // and A2R2G2B2 bytes for MIP 0x0802 frames.
+    // raw RGB888 for version 2, and A2R2G2B2 bytes for MIP 0x0802 frames.
     const png = new PNG({ width: block.width, height: block.height });
     decodeCorosBitmapFrame(bytes, block, frame).copy(png.data);
 

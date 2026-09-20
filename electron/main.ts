@@ -151,6 +151,12 @@ import {
   selectCorosWatchfaceArchive
 } from "./corosWatchfaceService";
 import {
+  ensureCorosOfficialAssetLibrary,
+  getCorosOfficialAssetLibraryStatus,
+  listCorosOfficialAssets,
+  readCorosOfficialAssetFrames
+} from "./corosOfficialAssetService";
+import {
   cleanupCommunityWatchfaceImports,
   getCommunityWatchface,
   importCommunityWatchface,
@@ -235,12 +241,14 @@ import type {
   CorosWatchfaceRegion,
   CorosWatchfaceThemeDownloadInput,
   CorosWatchfaceThemeListInput,
+  CorosOfficialAssetQuery,
   CorosBatteryQueryInput,
   CorosGearSaveInput,
   CorosBluetoothDeviceChoice,
   WatchTransferProgress
 } from "./types";
 import type { CommunityWatchfaceOpenRequest } from "./types";
+import type { CoachChartPreview, FitIndexSyncOptions } from "./types";
 import {
   MULTIDATA_ELEV_416_PROFILE,
   inspectLegacy614aCarrier,
@@ -326,6 +334,18 @@ import {
   uploadTrainingPlanDraft,
   confirmWorkoutDelete
 } from "./chatService";
+import {
+  listPinnedCoachCharts,
+  pinCoachChart,
+  refreshPinnedCoachChart,
+  unpinCoachChart
+} from "./coachChartService";
+import {
+  cancelFitIndexSync,
+  getFitIndexStatus,
+  setFitIndexProgressListener,
+  startFitIndexSync
+} from "./fitIndexService";
 import { buildBaseCoachInstructions } from "./chatCoachContext";
 import {
   OPENROUTER_KEYS_URL,
@@ -826,6 +846,11 @@ app.whenReady().then(() => {
       mainWindow.webContents.send("trainingHub:backupProgress", progress);
     }
   });
+  setFitIndexProgressListener((progress) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("fitIndex:progress", progress);
+    }
+  });
   setCommunityWatchfaceProgressListener((progress) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("watchfaces:communityDownloadProgress", progress);
@@ -958,6 +983,19 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("watchfaces:importShareLink", (_event, shareUrl: string) =>
     importCorosWatchfaceShareLink(shareUrl)
+  );
+
+  ipcMain.handle("watchfaces:officialAssets:ensure", (_event, input: { firmwareType: string; rebuild?: boolean }) =>
+    ensureCorosOfficialAssetLibrary(input)
+  );
+  ipcMain.handle("watchfaces:officialAssets:status", (_event, input: { firmwareType: string }) =>
+    getCorosOfficialAssetLibraryStatus(input)
+  );
+  ipcMain.handle("watchfaces:officialAssets:list", (_event, input: CorosOfficialAssetQuery) =>
+    listCorosOfficialAssets(input)
+  );
+  ipcMain.handle("watchfaces:officialAssets:frames", (_event, input: { firmwareType: string; id: string }) =>
+    readCorosOfficialAssetFrames(input)
   );
 
   ipcMain.handle("watchfaces:listCommunity", (_event, input) =>
@@ -1499,6 +1537,15 @@ function registerIpcHandlers(): void {
     confirmWorkoutDelete(requestId)
   );
 
+  ipcMain.handle("coachCharts:list", () => listPinnedCoachCharts());
+  ipcMain.handle("coachCharts:pin", (_event, preview: CoachChartPreview) =>
+    pinCoachChart(preview)
+  );
+  ipcMain.handle("coachCharts:unpin", (_event, id: string) => unpinCoachChart(id));
+  ipcMain.handle("coachCharts:refresh", (_event, id: string) =>
+    refreshPinnedCoachChart(id)
+  );
+
   ipcMain.handle(
     "trainingHub:uploadTrainingPlan",
     (_event, draft: CorosTrainingPlanDraftInput, unitSystem?: UnitSystem) =>
@@ -1821,6 +1868,12 @@ function registerIpcHandlers(): void {
   ipcMain.handle("trainingHub:cancelActivityBackup", () =>
     cancelActivityBackup()
   );
+
+  ipcMain.handle("fitIndex:getStatus", () => getFitIndexStatus());
+  ipcMain.handle("fitIndex:startSync", (_event, options?: FitIndexSyncOptions) =>
+    startFitIndexSync(options ?? {})
+  );
+  ipcMain.handle("fitIndex:cancelSync", () => cancelFitIndexSync());
 
   ipcMain.handle("trainingHub:getActivityBackupProgress", () =>
     getActivityBackupProgress()

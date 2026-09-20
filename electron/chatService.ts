@@ -38,6 +38,12 @@ import {
   type ChatAnalyticsToolName
 } from "./chatAnalyticsTools";
 import {
+  getChatFitTools,
+  handleChatFitTool,
+  isChatFitTool,
+  type ChatFitToolName
+} from "./chatFitTools";
+import {
   getChatInteractionTools,
   handleChatInteractionTool,
   isChatInteractionTool,
@@ -1108,6 +1114,7 @@ function getAllChatTools(): CorosMcpTool[] {
     ...getAllMcpTools(),
     ...getChatActivityTools(),
     ...getChatAnalyticsTools(),
+    ...getChatFitTools(),
     ...getChatWorkoutTools(),
     ...getChatInteractionTools()
   ];
@@ -1157,6 +1164,9 @@ export function getClaudeCodeTools(
   const analyticsTools = permissions.trainingMetrics
     ? getChatAnalyticsTools()
     : [];
+  // Local FIT analysis reads full-resolution activity files, so it sits behind
+  // the same switch as sending FIT files to Claude.
+  const fitTools = permissions.fullActivityFiles ? getChatFitTools() : [];
   const workoutTools = getChatWorkoutTools().filter((tool) => {
     if (
       tool.name === "upload_training_plan" ||
@@ -1176,6 +1186,7 @@ export function getClaudeCodeTools(
     ...remoteTools,
     ...activityTools,
     ...analyticsTools,
+    ...fitTools,
     ...workoutTools,
     ...getChatInteractionTools()
   ];
@@ -1266,6 +1277,32 @@ async function executeChatTool(
             preview
           });
         },
+        onCoachChart: (preview) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "coachChart",
+            preview
+          });
+        },
+        unitSystem
+      });
+    } catch (caught) {
+      const message =
+        caught instanceof Error ? caught.message : String(caught);
+      send("chat:streamInfo", {
+        requestId,
+        kind: "mcp",
+        tool: name,
+        status: "failed",
+        message
+      });
+      throw caught;
+    }
+  }
+  if (isChatFitTool(name)) {
+    try {
+      return await handleChatFitTool(name as ChatFitToolName, args, {
+        requestId,
         unitSystem
       });
     } catch (caught) {
@@ -1425,6 +1462,7 @@ function withLiveToolInstructions(
   }
   const activityTools = tools.filter((tool) => isChatActivityTool(tool.name));
   const analyticsTools = tools.filter((tool) => isChatAnalyticsTool(tool.name));
+  const fitTools = tools.filter((tool) => isChatFitTool(tool.name));
   const interactionTools = tools.filter((tool) =>
     isChatInteractionTool(tool.name)
   );
@@ -1433,6 +1471,7 @@ function withLiveToolInstructions(
       !isChatWorkoutTool(tool.name) &&
       !isChatActivityTool(tool.name) &&
       !isChatAnalyticsTool(tool.name) &&
+      !isChatFitTool(tool.name) &&
       !isChatInteractionTool(tool.name)
   );
   const corosMcpTools = mcpTools.filter((tool) =>
@@ -1454,11 +1493,40 @@ function withLiveToolInstructions(
     );
   }
   if (analyticsTools.length > 0) {
+    const names = new Set(analyticsTools.map((tool) => tool.name));
+    const guidance = [
+      `Training analytics tools: ${analyticsTools.map((tool) => tool.name).join(", ")}.`
+    ];
+    if (names.has("get_fitness_trends")) {
+      guidance.push(
+        "Use get_fitness_trends with `days` (7–90) for daily load, resting HR, HRV vs baseline, and sleep score; " +
+          "pick a window that covers the period the athlete is asking about (a month or a training block, not just 7 days)."
+      );
+    }
+    if (names.has("get_hr_zone_summary")) {
+      guidance.push("Use get_hr_zone_summary for threshold heart rate zone distribution.");
+    }
+    if (names.has("render_chart")) {
+      guidance.push(
+        "Use render_chart when the athlete asks to see, chart, graph, compare, or visualize something, " +
+          "or when a multi-week pattern (HRV around hard blocks, sleep vs load, RHR drift) reads better as a picture. " +
+          "Bind series to metrics (`metric`) rather than retyping numbers; use inline `values` only for derived series " +
+          "and match the window length. Shade training blocks with `ranges` and add per-block `tiles`. " +
+          "Put series with different units on separate axes. After the chart renders, give 2–4 concise takeaways."
+      );
+    }
+    guidance.push("Inline charts are shown automatically when these tools return data.");
+    sections.push(guidance.join(" "));
+  }
+  if (fitTools.length > 0) {
     sections.push(
-      `Training analytics tools: ${analyticsTools.map((tool) => tool.name).join(", ")}. ` +
-        "Use get_fitness_trends for 7-day load, resting HR, and HRV recovery trends. " +
-        "Use get_hr_zone_summary for threshold heart rate zone distribution. " +
-        "Inline charts are shown automatically when these tools return data."
+      `Local FIT analysis tools: ${fitTools.map((tool) => tool.name).join(", ")}. ` +
+        "These read full-resolution activity files cached on this computer, with no daily file limits. " +
+        "Use get_activity_splits for pacing, fade, negative splits, cardiac drift, or normalized power on one activity; " +
+        "get_power_curve for FTP and best power by duration; get_best_efforts for fastest 5k/10k/etc. inside runs; " +
+        "find_similar_routes then compare_activities for repeat loops and where time was gained or lost. " +
+        "When a result says activities are not indexed yet, call sync_activity_index once (tell the athlete it is downloading files) and retry. " +
+        "Chart the numbers these tools return with render_chart when a picture helps (power curve, splits, checkpoint deltas)."
     );
   }
   if (corosMcpTools.length > 0) {

@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.37] - 2026-09-20
+
+### Added
+
+- Coach can now draw charts on request with a new `render_chart` tool: up to six series bound to daily metrics (training load, HRV vs baseline, resting HR, sleep score and duration, RPE load, load ratio, stamina) over a 7–90 day window, or inline values for derived series, with shaded training blocks, summary tiles, dual axes, and a footnote. Charts render inline in the chat and persist in history.
+- Pin any coach chart to the Training Hub. Metric-bound charts refresh with live data on open and on every hub refresh; a Refresh/Unpin control lives on each card.
+- `get_fitness_trends` accepts a `days` window (7–90, default 7), includes sleep score and duration, and appends weekly averages for windows longer than two weeks.
+- Local FIT analysis for the Coach: a dependency-free FIT decoder and a local activity index (SQLite + cached `.fit` files under the app data folder) back six new tools — `get_activity_splits`, `get_power_curve`, `get_best_efforts`, `find_similar_routes`, `compare_activities`, and `sync_activity_index`. Splits, aerobic decoupling, normalized power, power curves with an FTP estimate, best efforts inside any activity, GPS route fingerprints, and checkpoint-by-checkpoint comparisons are computed on this computer with no daily file limits; only derived numbers reach the model.
+- Data page: a Local activity index panel to index the last 90 days, the last year, or the full history in the background, with progress, cancel, cache size, and last-sync time. The cache also appears under Settings storage locations.
+- The Claude Code "Full activity files" permission is now live and gates the local FIT tools.
+- Watch Face Studio can browse the artwork inside every official COROS face: an **Official** entry in the Add menu, an **Official COROS font** source in the Custom PNG font panel, and **Official** buttons next to template images and battery sprite folders open a library of digit fonts, battery states, weather glyphs, icons and backgrounds unpacked from the official catalog. The library is prebuilt and hosted: the app downloads a small per-model index and fetches previews and frames only as you browse and pick, caching them under the app data folder. When the hosted library is unreachable the app builds it locally from the catalog with your signed-in COROS account instead. Identical sets are deduplicated and every set is grouped by what the source face used it for.
+
+### Changed
+
+- Coach-requested charts are shown even when the "show charts and activity visuals" setting is off; that toggle now only hides automatic visuals.
+- The Fitness trends chat card shows the actual window length instead of a fixed "Last 7 days".
+
+### Fixed
+
+- Opening the official DIGITAL face in Studio now recovers its hour, minute and seconds digits. The face stores its normal-mode clock fonts with bitmap encoding `0x3002` (same frames as `0x2002` plus a flag bit), which the decoder had skipped, leaving only the colon.
+- Official-face recovery no longer drops an element just because its image block carries a header the scanner has not met: any block a layout pointer references is admitted once every frame decodes to its declared size, and elements that still cannot be decoded are counted in the "Opened an editable copy" message instead of vanishing. This also recovers TWILIGHT's Exercise icon (uncompressed RGB888) and the seconds hand on the MIP NOMAD faces.
+- Automatic watch detection now recognizes APEX 4 volumes labeled `APEX 4 42MM` or `APEX 4 46MM`, accepts recognized new watches before their media folders exist, and preserves the watch's `Map` folder casing for installs.
+
 ## [0.1.36] - 2026-09-19
 
 ### Added

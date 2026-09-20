@@ -1,4 +1,4 @@
-import { type CSSProperties, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowRightFromLine,
@@ -22,6 +22,7 @@ import {
   RefreshCw
 } from "lucide-react";
 import { ActivityDetailPanel } from "./components/ActivityDetailPanel";
+import { CoachChartsPanel } from "./components/CoachChartsPanel";
 import { FitnessScoresPanel } from "./components/FitnessScoresPanel";
 import { FitnessTrendPanel } from "./components/FitnessTrendPanel";
 import { PersonalRecordsPanel } from "./components/PersonalRecordsPanel";
@@ -136,6 +137,19 @@ function TrainingHubContent({
   sampleMode = false
 }: TrainingHubViewProps & { sampleMode?: boolean }) {
   const connected = sampleMode || Boolean(status?.authenticated);
+  // Counts completed hub refreshes so pinned live charts re-resolve alongside them.
+  const [hubRefreshCount, setHubRefreshCount] = useState(0);
+  const wasRefreshingRef = useRef(false);
+  useEffect(() => {
+    if (busy === "training-refresh") {
+      wasRefreshingRef.current = true;
+      return;
+    }
+    if (wasRefreshingRef.current) {
+      wasRefreshingRef.current = false;
+      setHubRefreshCount((count) => count + 1);
+    }
+  }, [busy]);
   const canReconnect =
     !connected && Boolean(status?.rememberCredentials) && Boolean(status?.email);
   const reconnecting = busy === "training-reconnect";
@@ -560,6 +574,9 @@ function TrainingHubContent({
             />
           </div>
           <TrainingTrendCharts points={snapshot?.trendPoints ?? []} sleepRecords={snapshot?.sleep?.records} />
+          {sampleMode ? null : (
+            <CoachChartsPanel api={api} refreshToken={hubRefreshCount} />
+          )}
           <TrainingZoneDistributionCharts
             lthrZones={snapshot?.dashboard?.lthrZones ?? []}
             activities={activities}

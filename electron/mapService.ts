@@ -528,7 +528,7 @@ export async function installCachedCorosMaps(
       totalFiles += selection.fileCount;
     }
 
-    const installedPath = path.join(status.rootPath, "map");
+    const installedPath = status.mapPath ?? path.join(status.rootPath, "Map");
     const batchLabel =
       cachedPackages.length === 1
         ? cachedPackages[0]!.title
@@ -847,7 +847,7 @@ export async function installCorosMapFolder(
       );
     }
 
-    const installedPath = path.join(status.rootPath, "map");
+    const installedPath = status.mapPath ?? path.join(status.rootPath, "Map");
     assertNotSameOrNested(selection.mapPath, installedPath);
     const label = options.label ?? path.basename(selection.sourcePath);
 

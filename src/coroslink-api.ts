@@ -107,6 +107,11 @@ import type {
   ChatStreamDone,
   ChatStreamError,
   ChatStreamInfo,
+  CoachChartPreview,
+  FitIndexProgress,
+  FitIndexStatus,
+  FitIndexSyncOptions,
+  PinnedCoachChart,
   LocalChatConfig,
   LocalChatConnectionTest,
   LocalChatDiscovery,
@@ -153,6 +158,10 @@ import type {
   CorosWatchfaceThemeDownload,
   CorosWatchfaceThemeDownloadInput,
   CorosWatchfaceThemeListInput,
+  CorosOfficialAssetFrames,
+  CorosOfficialAssetLibraryStatus,
+  CorosOfficialAssetPage,
+  CorosOfficialAssetQuery,
   CorosBatteryQueryInput,
   CorosBatteryReport,
   CorosGearCatalog,
@@ -226,6 +235,18 @@ export interface CorosLinkApi {
   importCorosWatchfaceShareLink: (
     shareUrl: string
   ) => Promise<CorosWatchfaceShareImport>;
+  ensureCorosOfficialAssetLibrary: (
+    input: { firmwareType: string; rebuild?: boolean }
+  ) => Promise<CorosOfficialAssetLibraryStatus>;
+  getCorosOfficialAssetLibraryStatus: (
+    input: { firmwareType: string }
+  ) => Promise<CorosOfficialAssetLibraryStatus>;
+  listCorosOfficialAssets: (
+    input: CorosOfficialAssetQuery
+  ) => Promise<CorosOfficialAssetPage>;
+  readCorosOfficialAssetFrames: (
+    input: { firmwareType: string; id: string }
+  ) => Promise<CorosOfficialAssetFrames>;
   listCommunityWatchfaces: (
     input: CommunityWatchfaceCatalogQuery
   ) => Promise<CommunityWatchfaceCatalogPage>;
@@ -674,6 +695,14 @@ export interface CorosLinkApi {
     scheduleDate?: string
   ) => Promise<UploadPlanResult>;
   confirmWorkoutDelete: (requestId: string) => Promise<DeleteWorkoutResult>;
+  getFitIndexStatus: () => Promise<FitIndexStatus>;
+  startFitIndexSync: (options?: FitIndexSyncOptions) => Promise<FitIndexProgress>;
+  cancelFitIndexSync: () => Promise<FitIndexProgress | null>;
+  onFitIndexProgress: (callback: (progress: FitIndexProgress) => void) => () => void;
+  listPinnedCoachCharts: () => Promise<PinnedCoachChart[]>;
+  pinCoachChart: (preview: CoachChartPreview) => Promise<PinnedCoachChart>;
+  unpinCoachChart: (id: string) => Promise<void>;
+  refreshPinnedCoachChart: (id: string) => Promise<PinnedCoachChart | null>;
   setWindowBackground: (color: string) => Promise<void>;
   isWindowFullscreen: () => Promise<boolean>;
   onWindowFullscreenChange: (callback: (fullscreen: boolean) => void) => () => void;

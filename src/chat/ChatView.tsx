@@ -64,6 +64,7 @@ import type {
   ChatSessionSummary,
   ChatSettings,
   ClaudeCodeStatus,
+  CoachChartPreview,
   CoachInputChoice,
   CoachInputPrompt,
   LocalChatConnectionTest,
@@ -86,6 +87,7 @@ import { formatWorkoutSport } from "../../electron/workoutCapabilities";
 import { trainingPlanFromCoachDraftPreview } from "../../electron/trainingPlanDomain";
 import { sportTheme } from "../training-library/sportTheme";
 import { ActivityVisualCard } from "./ActivityVisualCard";
+import { CoachChartCard } from "./CoachChartCard";
 import { FitnessTrendCard } from "./FitnessTrendCard";
 import { HrZoneCard } from "./HrZoneCard";
 import { ChatSettingsModal } from "./ChatSettingsModal";
@@ -97,6 +99,7 @@ import {
   toPersistedEntries,
   toWireMessages,
   upsertActivityVisualEntry,
+  upsertCoachChartEntry,
   upsertCoachPromptEntry,
   upsertFitnessTrendEntry,
   upsertHrZoneEntry,
@@ -1797,6 +1800,65 @@ export function ChatView({
   const [deletedWorkouts, setDeletedWorkouts] = useState<
     Record<string, DeleteWorkoutResult>
   >({});
+  // previewId -> pinned chart id, so cards know whether they live on the Training Hub.
+  const [pinnedChartIds, setPinnedChartIds] = useState<Record<string, string>>({});
+  const [pinningPreviewId, setPinningPreviewId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!api) return;
+    let cancelled = false;
+    void api
+      .listPinnedCoachCharts()
+      .then((charts) => {
+        if (cancelled) return;
+        setPinnedChartIds(
+          Object.fromEntries(charts.map((chart) => [chart.preview.previewId, chart.id]))
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [api]);
+
+  const pinCoachChart = useCallback(
+    async (preview: CoachChartPreview) => {
+      if (!api) return;
+      setPinningPreviewId(preview.previewId);
+      onError(null);
+      try {
+        const pinned = await api.pinCoachChart(preview);
+        setPinnedChartIds((prev) => ({ ...prev, [preview.previewId]: pinned.id }));
+      } catch (caught) {
+        onError(caught instanceof Error ? caught.message : "Could not pin the chart.");
+      } finally {
+        setPinningPreviewId(null);
+      }
+    },
+    [api, onError]
+  );
+
+  const unpinCoachChart = useCallback(
+    async (previewId: string) => {
+      const pinnedId = pinnedChartIds[previewId];
+      if (!api || !pinnedId) return;
+      setPinningPreviewId(previewId);
+      onError(null);
+      try {
+        await api.unpinCoachChart(pinnedId);
+        setPinnedChartIds((prev) => {
+          const next = { ...prev };
+          delete next[previewId];
+          return next;
+        });
+      } catch (caught) {
+        onError(caught instanceof Error ? caught.message : "Could not unpin the chart.");
+      } finally {
+        setPinningPreviewId(null);
+      }
+    },
+    [api, onError, pinnedChartIds]
+  );
 
   // Ref so the push-event handlers filter on the current request without
   // being recreated (and re-subscribed) on every keystroke.
@@ -2138,6 +2200,9 @@ export function ChatView({
           if (chatSettings.visualizationsEnabled) {
             setTimeline((prev) => upsertHrZoneEntry(prev, payload.preview));
           }
+        } else if (payload.kind === "coachChart") {
+          // Explicitly requested by the coach, so not subject to the visuals toggle.
+          setTimeline((prev) => upsertCoachChartEntry(prev, payload.preview));
         } else if (payload.kind === "coachPrompt") {
           pendingCoachPromptsRef.current = [
             ...pendingCoachPromptsRef.current.filter(
@@ -3811,6 +3876,29 @@ export function ChatView({
                   </div>
                   <div className="chat-bubble chat-bubble-plan">
                     <HrZoneCard preview={entry.preview} />
+                  </div>
+                </div>
+              );
+            }
+
+            if (entry.kind === "coachChart") {
+              const previewId = entry.preview.previewId;
+              return (
+                <div
+                  key={previewId}
+                  className="chat-row chat-row-assistant"
+                >
+                  <div className="chat-avatar chat-avatar-assistant">
+                    <Sparkles size={16} aria-hidden="true" />
+                  </div>
+                  <div className="chat-bubble chat-bubble-plan chat-bubble-chart">
+                    <CoachChartCard
+                      preview={entry.preview}
+                      pinned={Boolean(pinnedChartIds[previewId])}
+                      busy={pinningPreviewId === previewId}
+                      onPin={() => void pinCoachChart(entry.preview)}
+                      onUnpin={() => void unpinCoachChart(previewId)}
+                    />
                   </div>
                 </div>
               );

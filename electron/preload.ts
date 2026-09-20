@@ -108,6 +108,11 @@ import type {
   ChatStreamDone,
   ChatStreamError,
   ChatStreamInfo,
+  CoachChartPreview,
+  FitIndexProgress,
+  FitIndexStatus,
+  FitIndexSyncOptions,
+  PinnedCoachChart,
   LocalChatConfig,
   LocalChatConnectionTest,
   LocalChatDiscovery,
@@ -154,6 +159,10 @@ import type {
   CorosWatchfaceThemeDownload,
   CorosWatchfaceThemeDownloadInput,
   CorosWatchfaceThemeListInput,
+  CorosOfficialAssetFrames,
+  CorosOfficialAssetLibraryStatus,
+  CorosOfficialAssetPage,
+  CorosOfficialAssetQuery,
   CorosBatteryQueryInput,
   CorosBatteryReport,
   CorosGearCatalog,
@@ -252,6 +261,22 @@ const api = {
     shareUrl: string
   ): Promise<CorosWatchfaceShareImport> =>
     ipcRenderer.invoke("watchfaces:importShareLink", shareUrl),
+  ensureCorosOfficialAssetLibrary: (
+    input: { firmwareType: string; rebuild?: boolean }
+  ): Promise<CorosOfficialAssetLibraryStatus> =>
+    ipcRenderer.invoke("watchfaces:officialAssets:ensure", input),
+  getCorosOfficialAssetLibraryStatus: (
+    input: { firmwareType: string }
+  ): Promise<CorosOfficialAssetLibraryStatus> =>
+    ipcRenderer.invoke("watchfaces:officialAssets:status", input),
+  listCorosOfficialAssets: (
+    input: CorosOfficialAssetQuery
+  ): Promise<CorosOfficialAssetPage> =>
+    ipcRenderer.invoke("watchfaces:officialAssets:list", input),
+  readCorosOfficialAssetFrames: (
+    input: { firmwareType: string; id: string }
+  ): Promise<CorosOfficialAssetFrames> =>
+    ipcRenderer.invoke("watchfaces:officialAssets:frames", input),
   listCommunityWatchfaces: (
     input: CommunityWatchfaceCatalogQuery
   ): Promise<CommunityWatchfaceCatalogPage> =>
@@ -1081,6 +1106,32 @@ const api = {
     ),
   confirmWorkoutDelete: (requestId: string): Promise<DeleteWorkoutResult> =>
     ipcRenderer.invoke("chat:confirmWorkoutDelete", requestId),
+  getFitIndexStatus: (): Promise<FitIndexStatus> =>
+    ipcRenderer.invoke("fitIndex:getStatus"),
+  startFitIndexSync: (options?: FitIndexSyncOptions): Promise<FitIndexProgress> =>
+    ipcRenderer.invoke("fitIndex:startSync", options),
+  cancelFitIndexSync: (): Promise<FitIndexProgress | null> =>
+    ipcRenderer.invoke("fitIndex:cancelSync"),
+  onFitIndexProgress: (
+    callback: (progress: FitIndexProgress) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      progress: FitIndexProgress
+    ) => {
+      callback(progress);
+    };
+    ipcRenderer.on("fitIndex:progress", listener);
+    return () => ipcRenderer.removeListener("fitIndex:progress", listener);
+  },
+  listPinnedCoachCharts: (): Promise<PinnedCoachChart[]> =>
+    ipcRenderer.invoke("coachCharts:list"),
+  pinCoachChart: (preview: CoachChartPreview): Promise<PinnedCoachChart> =>
+    ipcRenderer.invoke("coachCharts:pin", preview),
+  unpinCoachChart: (id: string): Promise<void> =>
+    ipcRenderer.invoke("coachCharts:unpin", id),
+  refreshPinnedCoachChart: (id: string): Promise<PinnedCoachChart | null> =>
+    ipcRenderer.invoke("coachCharts:refresh", id),
   setWindowBackground: (color: string): Promise<void> =>
     ipcRenderer.invoke("window:setBackground", color),
   isWindowFullscreen: (): Promise<boolean> =>

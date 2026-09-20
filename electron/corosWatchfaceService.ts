@@ -450,16 +450,21 @@ export async function listCorosWatchfaceThemes(
  * Downloads an official source-template package and validates it as a DIY
  * starter. Only URLs returned by the catalog in this session may be fetched.
  */
-export async function downloadCorosWatchfaceTheme(
-  input: CorosWatchfaceThemeDownloadInput
-): Promise<CorosWatchfaceThemeDownload> {
-  const session = requireSession();
-  const packageUrl = typeof input?.packageUrl === "string" ? input.packageUrl : "";
-  const firmwareType = normalizeOptionalFirmwareType(input?.firmwareType);
+/**
+ * Fetches a catalog package's bytes. Shared by the download command and the
+ * official asset library, which caches binaries without saving to Downloads.
+ */
+export async function fetchCorosWatchfaceThemePackage(packageUrl: string): Promise<Buffer> {
   if (!knownThemePackageUrls.has(packageUrl)) {
     throw new Error("Load the template catalog first, then choose a listed template.");
   }
+  return (await fetchThemePackage(packageUrl, requireSession())).bytes;
+}
 
+async function fetchThemePackage(
+  packageUrl: string,
+  session: StoredMobileSession
+): Promise<{ bytes: Buffer; contentType: string }> {
   // The mobile client also carries the token as a query parameter; some
   // resource endpoints ignore the header alone.
   const first = await fetchThemeResource(
@@ -488,6 +493,20 @@ export async function downloadCorosWatchfaceTheme(
       // Leave the original bytes for the diagnostic below.
     }
   }
+  return { bytes, contentType };
+}
+
+export async function downloadCorosWatchfaceTheme(
+  input: CorosWatchfaceThemeDownloadInput
+): Promise<CorosWatchfaceThemeDownload> {
+  const session = requireSession();
+  const packageUrl = typeof input?.packageUrl === "string" ? input.packageUrl : "";
+  const firmwareType = normalizeOptionalFirmwareType(input?.firmwareType);
+  if (!knownThemePackageUrls.has(packageUrl)) {
+    throw new Error("Load the template catalog first, then choose a listed template.");
+  }
+
+  const { bytes, contentType } = await fetchThemePackage(packageUrl, session);
 
   const safeName = (input.name ?? "COROS watchface")
     .replace(/[\u0000-\u001f\u007f/\\:*?"<>|]/g, "")

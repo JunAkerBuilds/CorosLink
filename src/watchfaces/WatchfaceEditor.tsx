@@ -235,6 +235,7 @@ import {
   Group,
   GripVertical,
   ImagePlus,
+  Sparkles,
   Info,
   Layers,
   Link2,
@@ -275,7 +276,10 @@ import {
   type WatchfaceDimensions
 } from "./watchfaceDimensions";
 import type {
+  CorosOfficialAssetFrames,
   CorosWatchfaceArchive,
+  CorosWatchfaceRasterFontFolder,
+  CorosWatchfaceArtwork,
   CorosWatchfaceBackgroundElement,
   CorosWatchfaceBackgroundEllipse,
   CorosWatchfaceBackgroundLine,
@@ -479,10 +483,14 @@ import {
   weatherPreviewDataUrl,
   drawWeatherTemperaturePreview,
   WEATHER_ASSET_COUNTS,
+  WEATHER_ICON_SETS,
+  WEATHER_TEMPERATURE_SETS,
   weatherAssetUrl,
-  type WeatherAssetSet
+  type WeatherAssetSet,
+  type WeatherAssetSetInfo
 } from "./weatherAssets";
 import { CustomPngFontPanel } from "./CustomPngFontPanel";
+import { OfficialAssetBrowser, officialAssetToSpriteFolder, type OfficialAssetBrowserMode } from "./OfficialAssetBrowser";
 import { LocalFontPicker } from "./LocalFontPicker";
 import {
   TemplateSpriteStrip,
@@ -579,6 +587,20 @@ import {
   resizeWatchfaceCanvasBackings
 } from "./watchfaceInteractiveRenderer";
 import { WatchfacePointerController } from "./watchfacePointerController";
+
+/** Display names for the `<language>_date_week_font` prefixes COROS archives use. */
+const WEEKDAY_LANGUAGE_NAMES: Record<string, string> = {
+  chinese: "Chinese (Simplified)",
+  chinese_tw: "Chinese (Traditional)",
+  germany: "German",
+  spanish: "Spanish",
+  french: "French",
+  japanese: "Japanese",
+  thai: "Thai",
+  polish: "Polish",
+  portugal: "Portuguese",
+  italian: "Italian"
+};
 
 function LinkedDimensionInputs({
   width,
@@ -1240,6 +1262,16 @@ export function WatchfaceEditor({
   const spriteImportTrackerRef = useRef(new WatchfaceSpriteImportTracker());
   const [pendingSpriteImportCount, setPendingSpriteImportCount] = useState(0);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  /** Open official COROS asset browser and where its pick goes. */
+  const [officialBrowser, setOfficialBrowser] = useState<{
+    mode: OfficialAssetBrowserMode;
+    title: string;
+    defaultCategory?: string;
+    defaultRole?: string;
+    frameCount?: number;
+    configKey?: string;
+    onPick: (frames: CorosOfficialAssetFrames, frameIndex?: number) => void | Promise<void>;
+  } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [layersOpen, setLayersOpen] = useState(false);
@@ -1310,6 +1342,7 @@ export function WatchfaceEditor({
   ), []);
 
   const rasterFolderImportProps = {
+    firmwareType: targetFirmwareType,
     importDisabled: spriteImportPending,
     onImportStart: beginSpriteImport,
     onImportFinish: finishSpriteImport,
@@ -5343,9 +5376,9 @@ export function WatchfaceEditor({
     });
   }
 
-  async function chooseConfigAsset(reference: WatchfaceConfigAssetReference) {
+  async function chooseConfigAsset(reference: WatchfaceConfigAssetReference, preset?: CorosWatchfaceArtwork) {
     try {
-      const selected = await api.chooseCorosWatchfaceArtwork();
+      const selected = preset ?? await api.chooseCorosWatchfaceArtwork();
       if (!selected) return;
       updateConfigAsset(reference, {
         enabled: true,
@@ -5363,14 +5396,15 @@ export function WatchfaceEditor({
   async function chooseBatterySpriteFolder(
     overrideId:
       | "config:battery_icon"
-      | "config:control_battery_icon" = "config:battery_icon"
+      | "config:control_battery_icon" = "config:battery_icon",
+    preset?: CorosWatchfaceRasterFontFolder
   ) {
     if (spriteImportTrackerRef.current.pendingCount > 0) return;
     const importId = beginSpriteImport(`battery-folder:${overrideId}`);
     if (importId === null) return;
     const canCommit = () => isSpriteImportCurrent(importId);
     try {
-      const folder = await api.chooseCorosWatchfaceRasterFontFolder();
+      const folder = preset ?? await api.chooseCorosWatchfaceRasterFontFolder();
       if (!folder) return;
       const decoded = await Promise.all(folder.sprites.map(async (sprite) => {
         // The shared PNG-folder picker is recursive for custom fonts. Battery
@@ -6119,14 +6153,74 @@ export function WatchfaceEditor({
     }
   }
 
-  async function chooseSprite() {
+  /** One frame of a picked official set as importable artwork. */
+  function officialFrameArtwork(frames: CorosOfficialAssetFrames, frameIndex = 0): CorosWatchfaceArtwork {
+    return { dataUrl: frames.frames[frameIndex] ?? frames.frames[0], width: frames.width, height: frames.height };
+  }
+
+  function browseOfficialImage() {
+    setOfficialBrowser({
+      mode: "image",
+      title: "Official COROS images",
+      onPick: (frames, frameIndex) => chooseSprite(officialFrameArtwork(frames, frameIndex))
+    });
+  }
+
+  /** Which library category a template image key belongs to, so the browser opens on the right chip. */
+  function officialCategoryForConfigKey(configKey: string): string | undefined {
+    const key = configKey.toLowerCase();
+    if (/weather/.test(key)) return "weather";
+    if (/battery/.test(key)) return "battery";
+    if (/bluetooth|no_disturb|sleep_mode|airplane|sedentary/.test(key)) return "status";
+    if (/^time_|colon|am_icon|pm_icon|_hour_icon|_minute_icon|_second_icon|center_polygon|arc_cut/.test(key)) return "clock";
+    if (/background|thmb/.test(key)) return "backgrounds";
+    if (/sunrise|sunset|sun_|moon/.test(key)) return "sun-moon";
+    if (/negative|percent|unit|dgree|degree/.test(key)) return "glyphs";
+    if (/stamina|stress|sleep|baro/.test(key)) return "health";
+    if (/chart/.test(key)) return "charts";
+    if (/control_|step|kcal|exercise|elev|floor|_hr_|heart/.test(key)) return "training";
+    return undefined;
+  }
+
+  function browseOfficialConfigAsset(reference: WatchfaceConfigAssetReference) {
+    setOfficialBrowser({
+      mode: "image",
+      title: `Official image for ${reference.label}`,
+      defaultCategory: officialCategoryForConfigKey(reference.configKey),
+      onPick: (frames, frameIndex) => chooseConfigAsset(reference, officialFrameArtwork(frames, frameIndex))
+    });
+  }
+
+  function browseOfficialBatterySprites(overrideId: "config:battery_icon" | "config:control_battery_icon" = "config:battery_icon") {
+    setOfficialBrowser({
+      mode: "sprites",
+      title: "Official battery sprites",
+      defaultCategory: "battery",
+      onPick: (frames) => chooseBatterySpriteFolder(overrideId, officialAssetToSpriteFolder(frames))
+    });
+  }
+
+  /** Day/night weather folders are 41-state sets; the temperature digits are a 10-frame weather font. */
+  function browseOfficialWeatherSprites(set: WeatherAssetSet) {
+    setOfficialBrowser({
+      mode: "sprites",
+      title: set === "digits" ? "Official temperature digits" : `Official ${set} weather icons`,
+      defaultCategory: set === "digits" ? "fonts" : "weather",
+      defaultRole: set === "digits" ? "weather" : undefined,
+      frameCount: WEATHER_ASSET_COUNTS[set],
+      configKey: set === "day" ? "weather_icon_dir" : set === "night" ? "weather_dark_icon_dir" : "weather_temp_font",
+      onPick: (frames) => chooseWeatherSpriteFolder(set, officialAssetToSpriteFolder(frames))
+    });
+  }
+
+  async function chooseSprite(preset?: CorosWatchfaceArtwork) {
     if ((design.designSprites ?? []).length >= MAX_DESIGN_SPRITES) {
       onError(`A design can contain up to ${MAX_DESIGN_SPRITES} imported images.`);
       return;
     }
     setLoadingSprite(true);
     try {
-      const selected = await api.chooseCorosWatchfaceArtwork();
+      const selected = preset ?? await api.chooseCorosWatchfaceArtwork();
       if (!selected) {
         return;
       }
@@ -7762,6 +7856,7 @@ export function WatchfaceEditor({
               design={design}
               imageDisabled={loadingSprite || (design.designSprites ?? []).length >= MAX_DESIGN_SPRITES}
               onAddImage={() => void chooseSprite()}
+              onAddOfficialImage={browseOfficialImage}
               onAddElement={addElement}
               onAddData={addNativeData}
             /> : null}
@@ -8916,6 +9011,20 @@ export function WatchfaceEditor({
           onPublish={onPublish} />
       ) : null}
 
+      {officialBrowser ? (
+        <OfficialAssetBrowser
+          api={api}
+          firmwareType={targetFirmwareType}
+          mode={officialBrowser.mode}
+          defaultCategory={officialBrowser.defaultCategory}
+          defaultRole={officialBrowser.defaultRole}
+          frameCount={officialBrowser.frameCount}
+          configKey={officialBrowser.configKey}
+          title={officialBrowser.title}
+          onPick={officialBrowser.onPick}
+          onClose={() => setOfficialBrowser(null)}
+        />
+      ) : null}
       {leaveOpen ? (
         <div className="wf-modal-backdrop" role="presentation">
           <section className="wf-modal" role="dialog" aria-modal="true" aria-labelledby="wf-unsaved-title">
@@ -9278,7 +9387,7 @@ export function WatchfaceEditor({
           </span>
         </label>
         <label className="watchface-inspector-field">
-          <span>Preview completion</span>
+          <span>Preview fill</span>
           <span className="wf-input-with-unit">
             <EditableNumberInput
               min="0"
@@ -9338,7 +9447,7 @@ export function WatchfaceEditor({
             </select>
           </label>
         </details>
-        <p className="muted">
+        <p className="watchface-studio-summary">
           COROS supplies the live exercise-goal percentage. Current settings
           mirror to Always-on until you customize that mode.
         </p>
@@ -10199,12 +10308,13 @@ export function WatchfaceEditor({
         <div className={`wf-config-asset-preview${enabled ? "" : " is-disabled"}`}>{previewDataUrl ? <img src={previewDataUrl} alt={`${reference.label} preview`} /> : <Image size={24} aria-hidden="true" />}</div>
         <div className="wf-config-asset-actions">
           <button type="button" className="secondary-button" onClick={() => void chooseConfigAsset(reference)}><ImagePlus size={15} /> {override?.replacement ? "Replace again" : previewDataUrl ? "Replace image" : "Import image"}</button>
+          <button type="button" className="secondary-button" onClick={() => browseOfficialConfigAsset(reference)}><Sparkles size={15} /> Official</button>
           {override?.replacement ? <button type="button" className="secondary-button" onClick={() => restoreConfigAsset(reference)}><RotateCcw size={15} /> Restore original</button> : null}
         </div>
         {override?.replacement ? (
           <>
             {supportsNativeSize ? <label className="watchface-studio-toggle"><input type="checkbox" checked={nativeSize} onChange={(event) => updateConfigAsset(reference, { nativeSize: event.target.checked })} />Native PNG size</label> : null}
-            <label className="watchface-inspector-field"><span>{nativeSize ? "Native size scale" : "Artwork zoom"}</span><span className="wf-input-with-unit"><EditableNumberInput min="0.1" step="0.01" value={artworkZoom} fallback={1} onValueChange={(scale) => updateConfigAsset(reference, { scale: Math.max(0.1, scale) })} /><span>×</span></span></label>
+            <label className="watchface-inspector-field"><span>{nativeSize ? "Native scale" : "Artwork zoom"}</span><span className="wf-input-with-unit"><EditableNumberInput min="0.1" step="0.01" value={artworkZoom} fallback={1} onValueChange={(scale) => updateConfigAsset(reference, { scale: Math.max(0.1, scale) })} /><span>×</span></span></label>
           </>
         ) : null}
       </div>
@@ -10423,6 +10533,15 @@ export function WatchfaceEditor({
                 <ImagePlus size={15} />
                 {stateCount > 0 ? "Replace sprite folder" : "Import sprite folder"}
               </button>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={spriteImportPending}
+                onClick={() => browseOfficialBatterySprites("config:control_battery_icon")}
+              >
+                <Sparkles size={15} />
+                Official sprites
+              </button>
               {stateCount > 0 ? (
                 <button
                   className="secondary-button"
@@ -10473,20 +10592,24 @@ export function WatchfaceEditor({
 
   function renderInspectorBody(layer: EditorLayer) {
     if (layer.nativeDataId && design.nativeData?.[layer.nativeDataId]) {
-      return renderPropertySection("appearance", layer.label,
-        <NativeDataInspector
-          key={`${previewMode}:${layer.nativeDataId}`}
-          id={layer.nativeDataId}
-          style={design.nativeData[layer.nativeDataId]}
-          coordinateScale={watchCoordinateWidth / previewWidth}
-          api={api}
-          disabled={isPositionLocked(layer.id) || spriteImportPending}
-          onPatch={patch => updateNativeData(layer.nativeDataId!, patch)}
-          onError={onError}
-          onImportStart={beginSpriteImport}
-          onImportFinish={finishSpriteImport}
-          isImportCurrent={isSpriteImportCurrent}
-        />
+      return (
+        <>
+          {renderNativeDataPositionPanel(layer, layer.nativeDataId, design.nativeData[layer.nativeDataId])}
+          <NativeDataInspector
+            key={`${previewMode}:${layer.nativeDataId}`}
+            id={layer.nativeDataId}
+            style={design.nativeData[layer.nativeDataId]}
+            coordinateScale={watchCoordinateWidth / previewWidth}
+            api={api}
+            disabled={isPositionLocked(layer.id) || spriteImportPending}
+            renderSection={renderPropertySection}
+            onPatch={patch => updateNativeData(layer.nativeDataId!, patch)}
+            onError={onError}
+            onImportStart={beginSpriteImport}
+            onImportFinish={finishSpriteImport}
+            isImportCurrent={isSpriteImportCurrent}
+          />
+        </>
       );
     }
     if (layer.configAssetId) {
@@ -10590,6 +10713,7 @@ export function WatchfaceEditor({
               {renderBatteryStateStrip("config:battery_icon", "Battery states")}
               <div className="wf-config-asset-actions">
                 <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => void chooseBatterySpriteFolder()}><ImagePlus size={15} /> {stateCount > 0 ? "Replace sprite folder" : "Import sprite folder"}</button>
+                <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => browseOfficialBatterySprites()}><Sparkles size={15} /> Official sprites</button>
                 {stateCount > 0 ? <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => restoreBatteryIcon()}><RotateCcw size={15} /> Restore template</button> : null}
               </div>
               <label className="watchface-inspector-field"><span>Icon scale</span><EditableNumberInput min="0.1" step="0.01" value={iconScale} fallback={1} onValueChange={setBatteryIconScale} /></label>
@@ -10627,7 +10751,7 @@ export function WatchfaceEditor({
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle("battery", { scale: Math.max(0.01, scale) })} /></label>
                 <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle("battery", { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               </div>
-              <details className="wf-nested-disclosure"><summary>Custom PNG font</summary><CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} componentLabel="Battery data" onActivate={() => setMetricStyle("battery", { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont })} /></details>
+              <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel="Battery data" onActivate={() => setMetricStyle("battery", { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont })} />
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
@@ -10658,7 +10782,7 @@ export function WatchfaceEditor({
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setTimeStyle(layer.timePartId!, { scale: Math.max(0.01, scale) })} /></label>
                 <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setTimeStyle(layer.timePartId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               </div>
-              <details className="wf-nested-disclosure"><summary>Custom PNG font</summary><CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} componentLabel={layer.label} onActivate={() => setTimeStyle(layer.timePartId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont })} /></details>
+              <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setTimeStyle(layer.timePartId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont })} />
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
@@ -10716,7 +10840,7 @@ export function WatchfaceEditor({
                       />
                     </label>
                     <label className="field">
-                      Separator color
+                      Color
                       <span className="watchface-color-control">
                         <WatchfaceColorInput
                           value={exerciseSeparator.color}
@@ -10739,7 +10863,7 @@ export function WatchfaceEditor({
                         />
                       </div>
                     ) : (
-                      <p className="muted">Using a generated colon glyph.</p>
+                      <p className="watchface-studio-summary">Using a generated colon glyph.</p>
                     )}
                     <div className="wf-config-asset-actions">
                       <button
@@ -10760,7 +10884,7 @@ export function WatchfaceEditor({
                         </button>
                       ) : null}
                     </div>
-                    <p className="muted">
+                    <p className="watchface-studio-summary">
                       This separator is flattened into the face artwork and follows Exercise when the metric moves.
                     </p>
                   </div>
@@ -10780,7 +10904,7 @@ export function WatchfaceEditor({
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, scale) })} /></label>
                 {supportsWatchfaceSpriteRotation(layer.metricId) ? <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle(layer.metricId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label> : null}
               </div>
-              <details className="wf-nested-disclosure"><summary>Custom PNG font</summary><CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} componentLabel={layer.label} onActivate={() => setMetricStyle(layer.metricId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont })} /></details>
+              <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setMetricStyle(layer.metricId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont })} />
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
@@ -10840,7 +10964,7 @@ export function WatchfaceEditor({
                     </span>
                   </label>
                   <label className="watchface-inspector-field">
-                    <span>Preview completion</span>
+                    <span>Preview fill</span>
                     <span className="wf-input-with-unit">
                       <EditableNumberInput
                         min="0"
@@ -10894,7 +11018,7 @@ export function WatchfaceEditor({
                       </select>
                     </label>
                   </details>
-                  <p className="muted">
+                  <p className="watchface-studio-summary">
                     COROS supplies the live goal percentage on the watch. Current settings mirror to Always-on until you customize that mode.
                   </p>
                 </div>
@@ -10945,6 +11069,24 @@ export function WatchfaceEditor({
       const nativeHeight = sourceSizes.length > 0
         ? Math.max(...sourceSizes.map((size) => size.height))
         : 1;
+      const sizeOverridden =
+        style?.width !== undefined || style?.height !== undefined;
+      // Custom weekday labels always replace the English set; the other
+      // locale folders in the archive are only touched when opted in.
+      const languageMode: "english" | "all" | "selected" =
+        style?.overwriteAllLanguages
+          ? "all"
+          : style?.overwriteLanguages
+            ? "selected"
+            : "english";
+      const selectedLanguages = style?.overwriteLanguages ?? [];
+      const weekdayLanguages = partId === "weekday"
+        ? [...new Set((details?.resolutions ?? []).flatMap((resolution) =>
+            Object.keys(resolution.config)
+              .filter((key) => key.endsWith("_date_week_font") && !key.startsWith("control_"))
+              .map((key) => key.replace(/_date_week_font$/, ""))
+          ))].filter((language) => language !== "english").sort()
+        : [];
       return (
         <>
           {renderPositionReadout(layer)}
@@ -10959,43 +11101,6 @@ export function WatchfaceEditor({
             "specific",
             "Typography",
             <div className="wf-property-stack">
-              {partId === "weekday" ? (
-                <div className="wf-weekday-languages">
-                  <label className="field">
-                    Apply weekday labels to
-                    <select
-                      value={style?.overwriteAllLanguages ? "all" : style?.overwriteLanguages ? "selected" : "english"}
-                      onChange={(event) => setDateStyle(partId, {
-                        overwriteAllLanguages: event.target.value === "all",
-                        overwriteLanguages: event.target.value === "selected" ? style?.overwriteLanguages ?? [] : undefined
-                      })}
-                    >
-                      <option value="english">English only</option>
-                      <option value="all">All languages</option>
-                      <option value="selected">Specific languages</option>
-                    </select>
-                  </label>
-                  {!style?.overwriteAllLanguages && style?.overwriteLanguages ? (
-                    <div className="wf-weekday-language-options" role="group" aria-label="Additional weekday languages">
-                      {[...new Set((details?.resolutions ?? []).flatMap((resolution) => Object.keys(resolution.config)
-                        .filter((key) => key.endsWith("_date_week_font") && !key.startsWith("control_"))
-                        .map((key) => key.replace(/_date_week_font$/, ""))))]
-                        .filter((language) => language !== "english").sort().map((language) => (
-                          <label key={language}>
-                            <input type="checkbox" checked={style.overwriteLanguages!.includes(language)}
-                              onChange={(event) => setDateStyle(partId, { overwriteLanguages: event.target.checked
-                                ? [...style.overwriteLanguages!, language]
-                                : style.overwriteLanguages!.filter((value) => value !== language) })} />
-                            <span>{({ chinese: "Chinese (Simplified)", chinese_tw: "Chinese (Traditional)", germany: "German",
-                              spanish: "Spanish", french: "French", japanese: "Japanese", thai: "Thai", polish: "Polish",
-                              portugal: "Portuguese", italian: "Italian" } as Record<string, string>)[language] ?? language}</span>
-                          </label>
-                        ))}
-                    </div>
-                  ) : null}
-                  <small>English always uses your custom labels. Other languages are preserved unless selected.</small>
-                </div>
-              ) : null}
               <LocalFontPicker
                 api={api}
                 label="Font"
@@ -11030,8 +11135,51 @@ export function WatchfaceEditor({
                   })
                 }
               />
-              <div className="field">
-                Native PNG size
+              {partId === "weekday" ? (
+                <div className="wf-weekday-languages">
+                  <label className="field">
+                    Languages
+                    <select
+                      value={languageMode}
+                      onChange={(event) => setDateStyle(partId, {
+                        overwriteAllLanguages: event.target.value === "all",
+                        overwriteLanguages: event.target.value === "selected" ? selectedLanguages : undefined
+                      })}
+                    >
+                      <option value="english">English only</option>
+                      <option value="all">All languages</option>
+                      <option value="selected">Choose languages</option>
+                    </select>
+                  </label>
+                  {languageMode === "selected" ? (
+                    <div className="wf-weekday-language-options" role="group" aria-label="Additional weekday languages">
+                      {weekdayLanguages.map((language) => (
+                        <label key={language}>
+                          <input
+                            type="checkbox"
+                            checked={selectedLanguages.includes(language)}
+                            onChange={(event) => setDateStyle(partId, {
+                              overwriteLanguages: event.target.checked
+                                ? [...selectedLanguages, language]
+                                : selectedLanguages.filter((value) => value !== language)
+                            })}
+                          />
+                          <span>{WEEKDAY_LANGUAGE_NAMES[language] ?? language}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
+                  <p className="watchface-typography-hint">
+                    {languageMode === "all"
+                      ? "Every watch language shows these labels."
+                      : languageMode === "selected"
+                        ? "Checked languages get these labels too."
+                        : "Other watch languages keep the template's labels."}
+                  </p>
+                </div>
+              ) : null}
+              <div className="field wf-sprite-size">
+                <span>Size</span>
                 <LinkedDimensionInputs
                   width={style?.width ?? nativeWidth}
                   height={style?.height ?? nativeHeight}
@@ -11046,28 +11194,44 @@ export function WatchfaceEditor({
                     setDateStyle(partId, { aspectLocked })
                   }
                 />
-                <button type="button" className="watchface-color-none" disabled={style?.width === undefined && style?.height === undefined} onClick={() => setDateStyle(partId, { width: undefined, height: undefined })}>Use imported size</button>
               </div>
+              {sizeOverridden ? (
+                <p className="watchface-typography-hint wf-sprite-size-hint">
+                  {sourceSizes.length > 0 ? <span>Imported at {nativeWidth} × {nativeHeight} px</span> : null}
+                  <button
+                    type="button"
+                    className="wf-native-part-reset"
+                    onClick={() => setDateStyle(partId, { width: undefined, height: undefined })}
+                  >
+                    {sourceSizes.length > 0 ? "Reset" : "Use imported size"}
+                  </button>
+                </p>
+              ) : null}
               <label className="watchface-inspector-field"><span>Rotation</span><EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setDateStyle(partId, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
-              <details className="wf-nested-disclosure">
-                <summary>Custom PNG font</summary>
-                <CustomPngFontPanel
-                  api={api}
-                  {...rasterFolderImportProps}
-                  rasterFont={design.rasterFont}
-                  componentRasterFont={style?.rasterFont}
-                  componentLabel={layer.label}
-                  onActivate={() => setDateStyle(partId, { fontFamily: "" })}
-                  onRasterFontChange={setRasterFont}
-                  onComponentRasterFontChange={(rasterFont) => {
-                    if (!rasterFont) {
-                      restoreDateTemplateFont(partId);
-                      return;
-                    }
-                    setDateStyle(partId, { rasterFont, ...(supportsNativeSize ? { nativeSize: true } : {}), ...(partId === "dateMonth" ? { monthFormat: WATCHFACE_MONTH_LABELS.every((label) => rasterFontSupportsText(rasterFont, label)) ? "labels" : rasterFontSupportsText(rasterFont, "0123456789") ? "digits" : undefined } : {}) });
-                  }}
-                />
-              </details>
+              <CustomPngFontPanel
+                api={api}
+                {...rasterFolderImportProps}
+                rasterFont={design.rasterFont}
+                componentRasterFont={style?.rasterFont}
+                previewedFont={
+                  // The picker previews the set only when it covers this part's labels.
+                  (() => {
+                    const font = style?.rasterFont ?? design.rasterFont;
+                    const required = partId === "weekday" ? "MON" : usesMonthLabels ? "JAN" : undefined;
+                    return font && (!required || rasterFontSupportsText(font, required)) ? font : undefined;
+                  })()
+                }
+                componentLabel={layer.label}
+                onActivate={() => setDateStyle(partId, { fontFamily: "" })}
+                onRasterFontChange={setRasterFont}
+                onComponentRasterFontChange={(rasterFont) => {
+                  if (!rasterFont) {
+                    restoreDateTemplateFont(partId);
+                    return;
+                  }
+                  setDateStyle(partId, { rasterFont, ...(supportsNativeSize ? { nativeSize: true } : {}), ...(partId === "dateMonth" ? { monthFormat: WATCHFACE_MONTH_LABELS.every((label) => rasterFontSupportsText(rasterFont, label)) ? "labels" : rasterFontSupportsText(rasterFont, "0123456789") ? "digits" : undefined } : {}) });
+                }}
+              />
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
@@ -11154,7 +11318,7 @@ export function WatchfaceEditor({
                 <label>Skew X<EditableNumberInput min="-80" max="80" step="1" value={normalizeWatchfaceSkew(sprite.skewX)} fallback={0} onValueChange={(skewX) => updateSprite(sprite.id, { skewX: normalizeWatchfaceSkew(skewX) })} /></label>
                 <label>Skew Y<EditableNumberInput min="-80" max="80" step="1" value={normalizeWatchfaceSkew(sprite.skewY)} fallback={0} onValueChange={(skewY) => updateSprite(sprite.id, { skewY: normalizeWatchfaceSkew(skewY) })} /></label>
               </div>
-              <label className="field">Transform origin<select value={(() => { const origin = normalizeWatchfaceTransformOrigin(sprite.origin); return `${origin.x},${origin.y}`; })()} onChange={(event) => { const [x, y] = event.target.value.split(",").map(Number); updateSprite(sprite.id, { origin: normalizeWatchfaceTransformOrigin({ x, y }) }); }}><option value="0,0">Top left</option><option value="0.5,0">Top center</option><option value="1,0">Top right</option><option value="0,0.5">Center left</option><option value="0.5,0.5">Center</option><option value="1,0.5">Center right</option><option value="0,1">Bottom left</option><option value="0.5,1">Bottom center</option><option value="1,1">Bottom right</option></select></label>
+              <label className="field">Origin<select value={(() => { const origin = normalizeWatchfaceTransformOrigin(sprite.origin); return `${origin.x},${origin.y}`; })()} onChange={(event) => { const [x, y] = event.target.value.split(",").map(Number); updateSprite(sprite.id, { origin: normalizeWatchfaceTransformOrigin({ x, y }) }); }}><option value="0,0">Top left</option><option value="0.5,0">Top center</option><option value="1,0">Top right</option><option value="0,0.5">Center left</option><option value="0.5,0.5">Center</option><option value="1,0.5">Center right</option><option value="0,1">Bottom left</option><option value="0.5,1">Bottom center</option><option value="1,1">Bottom right</option></select></label>
               <div className={`wf-crop-controls${cropSpriteId === sprite.id ? " is-active" : ""}`}>
                 <div className="wf-crop-heading"><strong>Crop</strong>{cropSpriteId === sprite.id ? <span>Enter applies, Esc cancels</span> : null}</div>
                 {cropSpriteId === sprite.id ? (
@@ -11528,6 +11692,7 @@ export function WatchfaceEditor({
           {...rasterFolderImportProps}
           rasterFont={design.rasterFont}
           componentRasterFont={design.selectableMetricStyle?.rasterFont}
+          previewedFont={design.selectableMetricStyle?.rasterFont ?? design.rasterFont}
           componentLabel="Selectable metric"
           onActivate={() =>
             setSelectableMetricStyle({ fontFamily: "" })
@@ -12055,6 +12220,85 @@ export function WatchfaceEditor({
     );
   }
 
+  /** Native data shares Hour digits' Transform panel: position, align, nudge, plus the layer's own scale. */
+  function renderNativeDataPositionPanel(
+    layer: EditorLayer,
+    id: string,
+    style: NonNullable<CorosWatchfaceDesignState["nativeData"]>[string]
+  ) {
+    const size = nativeDataSize(id, style);
+    const maxX = Math.max(0, previewWidth - size.width);
+    const maxY = Math.max(0, previewHeight - size.height);
+    const setPosition = (x: number, y: number) => {
+      if (isMovementLockedForId(layer.id)) return;
+      updateNativeData(id, {
+        x: Math.round(Math.max(0, Math.min(maxX, x))),
+        y: Math.round(Math.max(0, Math.min(maxY, y)))
+      });
+    };
+    const alignX = (position: "start" | "center" | "end") =>
+      setPosition(position === "start" ? 0 : position === "end" ? maxX : maxX / 2, style.y);
+    const alignY = (position: "start" | "center" | "end") =>
+      setPosition(style.x, position === "start" ? 0 : position === "end" ? maxY : maxY / 2);
+    return renderPositionPanel(layer.id, "Watch screen position", <>
+        <div className="watchface-position-inputs">
+          <label>
+            X
+            <input
+              type="number"
+              min="0"
+              max={watchCoordinateWidth}
+              value={toWatchCoordinate(style.x)}
+              onChange={(event) => setPosition(fromWatchCoordinate(Number(event.target.value) || 0), style.y)}
+            />
+          </label>
+          <label>
+            Y
+            <input
+              type="number"
+              min="0"
+              max={watchCoordinateHeight}
+              value={toWatchCoordinate(style.y)}
+              onChange={(event) => setPosition(style.x, fromWatchCoordinate(Number(event.target.value) || 0))}
+            />
+          </label>
+        </div>
+        <span>Align to face</span>
+        <div className="wf-align-icon-grid" role="group" aria-label="Align layer to face">
+          <button type="button" title="Align left" aria-label="Align left" onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
+          <button type="button" title="Align horizontal center" aria-label="Align horizontal center" onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
+          <button type="button" title="Align right" aria-label="Align right" onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
+          <button type="button" title="Align top" aria-label="Align top" onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
+          <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
+          <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
+        </div>
+        <span>Nudge</span>
+        <div className="watchface-nudge-pad">
+          <button type="button" onClick={() => setPosition(style.x - fromWatchCoordinate(1), style.y)} aria-label="Nudge left"><ArrowLeft size={13} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setPosition(style.x + fromWatchCoordinate(1), style.y)} aria-label="Nudge right"><ArrowRight size={13} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setPosition(style.x, style.y - fromWatchCoordinate(1))} aria-label="Nudge up"><ArrowUp size={13} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setPosition(style.x, style.y + fromWatchCoordinate(1))} aria-label="Nudge down"><ArrowDown size={13} aria-hidden="true" /></button>
+        </div>
+        <span>Scale</span>
+        <span className="wf-input-with-unit wf-position-scale">
+          <EditableNumberInput
+            aria-label="Layer scale"
+            min="0.1"
+            max="4"
+            step="0.05"
+            value={style.scale}
+            fallback={1}
+            onValueChange={(scale) => updateNativeData(id, { scale: Math.max(0.1, Math.min(4, scale)) })}
+          />
+          <span>×</span>
+        </span>
+      </>,
+      <p className="watchface-studio-summary">
+        The watch draws this data live. Drag it on the face to reposition it.
+      </p>
+    );
+  }
+
   function renderStaticSeparatorInspector(separatorId: WatchfaceStaticSeparatorId) {
     const separator = design.staticSeparators[separatorId];
     const faceWidth = previewResolution?.width ?? previewWidth;
@@ -12363,11 +12607,11 @@ export function WatchfaceEditor({
     );
   }
 
-  async function chooseWeatherSpriteFolder(set: WeatherAssetSet) {
+  async function chooseWeatherSpriteFolder(set: WeatherAssetSet, preset?: CorosWatchfaceRasterFontFolder) {
     const importId = beginSpriteImport(`weather-folder:${set}`);
     if (importId === null) return;
     try {
-      const folder = await api.chooseCorosWatchfaceRasterFontFolder();
+      const folder = preset ?? await api.chooseCorosWatchfaceRasterFontFolder();
       if (!folder) return;
       const states: Record<string, string> = {};
       for (const sprite of folder.sprites) {
@@ -12511,41 +12755,89 @@ export function WatchfaceEditor({
           </label>,
           { disabled: isPositionLocked("weather") }
         )}
-        {renderPropertySection("assets", "Weather assets", <div className="wf-property-stack">
-          <label className="field"><span><input type="checkbox" checked={indicator.temperatureEnabled !== false} onChange={event => updateWeatherIndicator({ temperatureEnabled: event.target.checked })} /> Show current weather</span></label>
-          <p className="watchface-studio-summary">SIMPLE's day and night icons, temperature digits, and symbols are included by default. Import numbered PNGs to replace any states.</p>
-          {([ ["day", "Day icons"], ["night", "Night icons"], ["digits", "Temperature digits"], ["symbols", "Minus / degree"], ["units", "Celsius / Fahrenheit"] ] as const).map(([set, label]) => {
-            const imported = Object.keys(indicator.assets?.[set] ?? {}).length;
-            const cells = Array.from({ length: WEATHER_ASSET_COUNTS[set] }, (_, index) => ({
+        {renderPropertySection("assets", "Artwork", (() => {
+          const temperatureOn = indicator.temperatureEnabled !== false;
+          const importedCount = (set: WeatherAssetSet) => Object.keys(indicator.assets?.[set] ?? {}).length;
+          const restoreSet = (set: WeatherAssetSet) => {
+            const assets = { ...indicator.assets };
+            delete assets[set];
+            updateWeatherIndicator({ assets });
+          };
+          const renderSet = ({ set, label, hint, official }: WeatherAssetSetInfo) => {
+            const count = WEATHER_ASSET_COUNTS[set];
+            const imported = importedCount(set);
+            const custom = imported > 0;
+            const cells = Array.from({ length: count }, (_, index) => ({
               key: `${set}:${index}`,
               label: String(index).padStart(2, "0"),
               src: weatherAssetUrl(set, index, indicator) || undefined,
               replaced: Boolean(indicator.assets?.[set]?.[String(index)])
             }));
-            const strip = (
-              <WatchfaceSpriteStrip
-                label={`${label} states`}
-                cells={cells}
-                summary={imported > 0
-                  ? `${imported} of ${cells.length} states imported · others keep the SIMPLE defaults`
-                  : `${cells.length} SIMPLE default states`}
-              />
+            const status = !custom
+              ? "SIMPLE default"
+              : imported === count
+                ? `All ${count} states replaced`
+                : `${imported} of ${count} replaced`;
+            return (
+              <section key={set} className={`wf-weather-set${custom ? " is-custom" : ""}`} aria-label={`${label} artwork`}>
+                <div className="wf-weather-set-head">
+                  <strong>{label}</strong>
+                  <span className="wf-weather-set-badge">{custom ? "Custom" : "Default"}</span>
+                  {custom ? (
+                    <button
+                      type="button"
+                      className="wf-property-icon-button"
+                      aria-label={`Restore SIMPLE default ${label.toLowerCase()}`}
+                      title="Restore SIMPLE default"
+                      disabled={spriteImportPending}
+                      onClick={() => restoreSet(set)}
+                    >
+                      <RotateCcw size={14} />
+                    </button>
+                  ) : null}
+                </div>
+                <WatchfaceSpriteStrip label={`${label} states`} cells={cells} summary={`${status} · ${hint}`} />
+                <div className="wf-weather-set-actions">
+                  <button type="button" className="secondary-button" disabled={spriteImportPending} onClick={() => void chooseWeatherSpriteFolder(set)}>
+                    <ImagePlus size={15} /> Import PNG folder
+                  </button>
+                  {official ? (
+                    <button type="button" className="secondary-button" disabled={spriteImportPending} onClick={() => browseOfficialWeatherSprites(set)}>
+                      <Sparkles size={15} /> Official library
+                    </button>
+                  ) : null}
+                </div>
+              </section>
             );
-            return <div key={set} className="wf-property-stack">
-              <div className="wf-config-asset-actions">
-                <button type="button" className="secondary-button" disabled={spriteImportPending} onClick={() => void chooseWeatherSpriteFolder(set)}><ImagePlus size={15} /> {label}</button>
-                {indicator.assets?.[set] && <button type="button" className="secondary-button" disabled={spriteImportPending} onClick={() => { const assets = { ...indicator.assets }; delete assets[set]; updateWeatherIndicator({ assets }); }}><RotateCcw size={15} /> Restore defaults</button>}
+          };
+          return (
+            <div className="wf-weather-assets">
+              <p className="watchface-studio-summary">Every set starts with SIMPLE's built-in artwork. Replace a set with your own numbered PNGs or one from the official COROS library; states you leave out keep the default.</p>
+              <div className="wf-weather-group">
+                <div className="wf-weather-group-head"><span>Condition icon</span></div>
+                {WEATHER_ICON_SETS.map(renderSet)}
               </div>
-              {cells.length > 12 ? (
-                <details className="wf-nested-disclosure" open={imported > 0}>
-                  <summary>{label} · {cells.length} states{imported > 0 ? ` · ${imported} imported` : ""}</summary>
-                  {strip}
-                </details>
-              ) : strip}
-            </div>;
-          })}
-          <p className="watchface-studio-summary">Icons: 00–40. Digits: 00–09. Symbols: 00 minus, 01 degree. Units: 00 °C, 01 °F. The preview uses 18°; the watch supplies live weather.</p>
-        </div>, { disabled: isPositionLocked("weather") })}
+              <div className="wf-weather-group">
+                <div className="wf-weather-group-head">
+                  <span>Temperature</span>
+                  <label className="watchface-studio-toggle">
+                    <input type="checkbox" checked={temperatureOn} onChange={(event) => updateWeatherIndicator({ temperatureEnabled: event.target.checked })} />
+                    <span>Show reading</span>
+                  </label>
+                </div>
+                {temperatureOn
+                  ? WEATHER_TEMPERATURE_SETS.map(renderSet)
+                  : <p className="watchface-studio-summary">Only the condition icon is shown. Turn the reading on to edit its digits and symbols.</p>}
+              </div>
+            </div>
+          );
+        })(), {
+          disabled: isPositionLocked("weather"),
+          status: (() => {
+            const custom = [...WEATHER_ICON_SETS, ...WEATHER_TEMPERATURE_SETS].filter(({ set }) => Object.keys(indicator.assets?.[set] ?? {}).length > 0).length;
+            return custom > 0 ? `${custom} custom` : undefined;
+          })()
+        })}
         {renderStrokeInspector("weather")}
         {renderPropertySection(
           "specific",
@@ -12571,7 +12863,7 @@ export function WatchfaceEditor({
           "advanced",
           "Advanced",
           <p className="watchface-studio-summary">
-            The editor previews the sunny state. The watch swaps among all 41 weather states.
+            The editor previews the sunny state at 18°. The watch shows live conditions and temperature.
           </p>,
           { disabled: isPositionLocked("weather") }
         )}

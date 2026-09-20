@@ -53,7 +53,9 @@ export function FitnessTrendCard({ preview }: FitnessTrendCardProps) {
       <div className="chat-visual-card-header">
         <div>
           <h4>Fitness trends</h4>
-          <span className="chat-visual-card-subtitle">Last 7 days</span>
+          <span className="chat-visual-card-subtitle">
+            Last {preview.trendPoints.length} days
+          </span>
         </div>
       </div>
 

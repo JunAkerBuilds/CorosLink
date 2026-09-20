@@ -25,7 +25,7 @@ interface WatchfaceNumberAlignControlProps {
 
 /** Segmented left/center/right picker for sprite-number alignment. */
 export function WatchfaceNumberAlignControl({
-  label = "Number alignment",
+  label = "Alignment",
   value,
   onChange,
   allowTemplateDefault = false,

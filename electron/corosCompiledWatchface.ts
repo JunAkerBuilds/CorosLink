@@ -149,8 +149,14 @@ export function recoverCompiledCorosWatchface(bytes: Buffer, name: string, templ
     entries.push({ name: `${directory}/background.png`, data: encodeCorosRgbaPng(width, height, Buffer.alloc(width * height * 4)) });
   }
   const unmapped = layout.modes.reduce((sum, mode) => sum + mode.unmappedBitmapReferences.length, 0);
-  const recovery = { partial: true, unmappedBitmapReferences: unmapped,
-    message: "Opened an editable copy. Some elements and behavior may differ from the official face." };
+  // A record whose image never resolved is dropped from the face; say so
+  // instead of letting a clock or readout vanish without a trace.
+  const layoutEnd = Math.max(...headers.map((h) => h.offset + h.length));
+  const unresolved = new Set(layout.modes.flatMap((mode) => mode.elements
+    .filter((e) => e.asset && e.asset.group === null && e.asset.pointer >= layoutEnd).map((e) => e.asset!.pointer)));
+  const recovery = { partial: true, unmappedBitmapReferences: unmapped, unresolvedBitmapPointers: unresolved.size,
+    message: "Opened an editable copy. Some elements and behavior may differ from the official face."
+      + (unresolved.size ? ` ${unresolved.size} image ${unresolved.size === 1 ? "set" : "sets"} could not be decoded, so the elements that use ${unresolved.size === 1 ? "it were" : "them were"} left out.` : "") };
   const id = templateId && /^[1-9]\d{0,19}$/.test(templateId) ? templateId : String(layout.modes[0].id || 1);
   // m_app and m_preview are the DIY manifest fields official templates carry;
   // the website's upload validator requires both.
