@@ -16,7 +16,7 @@ import { createStoreZip } from "./zipStore";
 import { recoverCompiledCorosWatchface } from "./corosCompiledWatchface";
 import { parseCorosFaceMagic } from "./corosBinLayout";
 import { fitGeneratedWatchfaceFontRects } from "./watchfaceExportFontBounds";
-import { convertWatchfaceEntries, prepareRecoveredWatchfaceExport, normalizeConversionPath, RETAINED_AOD_CONFIG } from "./watchfaceArchiveConversion";
+import { convertWatchfaceEntries, type WatchfaceConversionEntry, prepareRecoveredWatchfaceExport, normalizeConversionPath, RETAINED_AOD_CONFIG } from "./watchfaceArchiveConversion";
 import { standardizeWatchfacePackage } from "./watchfaceDistribution";
 import { getWatchfaceTarget, type WatchfaceTarget } from "./watchfaceTargets";
 import type {
@@ -1580,36 +1580,97 @@ export async function loadCorosWatchfaceArtwork(
   };
 }
 
-/** Resolve a carrier once per device and keep it available for offline conversion. */
-async function conversionCarrier(target: WatchfaceTarget): Promise<SelectedArchive> {
+/**
+ * Every `[key]=` a template declares — blank values included. COROS's compiler
+ * fills the slots its template owns and drops keys the template never declared,
+ * so this list is the template's capability surface, not just its content.
+ */
+async function declaredConfigKeys(archivePath: string): Promise<Set<string>> {
+  const directory = await openTemplateArchive(archivePath);
+  const keys = new Set<string>();
+  for (const entry of directory.files) {
+    if (entry.type !== "File" || !/^watchface_\d+x\d+\/(?:AOD)?config\.txt$/i.test(entry.path)) continue;
+    const text = (await entry.buffer()).toString("utf8");
+    for (const match of text.matchAll(/^[\t ]*\[([a-z0-9_]+)\][\t ]*=/gim)) keys.add(match[1]!.toLowerCase());
+  }
+  return keys;
+}
+function configKeysOf(entries: WatchfaceConversionEntry[]): Set<string> {
+  const keys = new Set<string>();
+  for (const entry of entries) {
+    if (!/^watchface_\d+x\d+\/(?:AOD)?config\.txt$/i.test(normalizeConversionPath(entry.name))) continue;
+    for (const match of entry.data.toString("utf8").matchAll(/^[\t ]*\[([a-z0-9_]+)\][\t ]*=[\t ]*\S/gim)) keys.add(match[1]!.toLowerCase());
+  }
+  return keys;
+}
+interface CarrierCacheMeta { scanned: boolean; keys: string[] }
+
+/**
+ * Resolve a carrier once per device and keep it available for offline
+ * conversion. The carrier contributes the exported face's template identity,
+ * and COROS compiles only what that template natively supports: a PACE Pro
+ * STANDARD carrier declares no weather, metric or progress-arc slots, so a
+ * recovered face built on it loses those elements on the watch even though the
+ * archive carries the keys and artwork. `wanted` therefore steers the choice
+ * toward the template that declares the most of what this face actually uses.
+ */
+async function conversionCarrier(target: WatchfaceTarget, wanted: Set<string> = new Set()): Promise<SelectedArchive> {
   const cacheDirectory = path.join(app.getPath("userData"), "watchface-conversion-carriers");
   const cachePath = path.join(cacheDirectory, `${target.model}.zip`);
+  const metaPath = path.join(cacheDirectory, `${target.model}.carrier.json`);
+  const usable = (archive: SelectedArchive) =>
+    target.sizes.every(size => archive.resolutionDirectories.includes(`watchface_${size}x${size}`));
+  let cached: SelectedArchive | undefined;
   try {
-    const cached = await inspectArchive(cachePath);
-    if (target.sizes.every(size => cached.resolutionDirectories.includes(`watchface_${size}x${size}`))) {
-      return { ...cached, firmwareType: target.firmwareType };
-    }
+    const inspected = await inspectArchive(cachePath);
+    if (usable(inspected)) cached = { ...inspected, firmwareType: target.firmwareType };
   } catch { /* Fetch the device's official carrier on first use. */ }
-  const themes = await listCorosWatchfaceThemes({ firmwareType: target.firmwareType, catalog: "editable" });
-  const ranked = themes.filter(theme => theme.packageUrl).sort((a, b) => {
-    const rank = (name: string) => /^(BOLD|SIMPLE)$/i.test(name) ? 0 : 1;
-    return rank(a.name) - rank(b.name) || (a.id ?? "").localeCompare(b.id ?? "");
-  });
-  for (const theme of ranked.slice(0, 5)) {
-    const downloaded = await downloadCorosWatchfaceTheme({ packageUrl: theme.packageUrl!, name: theme.name, firmwareType: target.firmwareType });
-    if (!downloaded.archive) continue;
-    const selected = requireSelectedArchive(downloaded.archive.archiveId);
-    if (!target.sizes.every(size => selected.resolutionDirectories.includes(`watchface_${size}x${size}`))) continue;
-    await fs.promises.mkdir(cacheDirectory, { recursive: true });
-    await fs.promises.copyFile(selected.path, cachePath);
-    return selected;
+  if (cached) {
+    let meta: CarrierCacheMeta | undefined;
+    try { meta = JSON.parse(await fs.promises.readFile(metaPath, "utf8")) as CarrierCacheMeta; } catch { /* Pre-capability cache. */ }
+    const keys = new Set(meta?.keys ?? [...(await declaredConfigKeys(cachePath))]);
+    // A scanned carrier is already the best the catalog offered; only an
+    // unscanned one is worth replacing when this face needs more than it has.
+    if (meta?.scanned || [...wanted].every(key => keys.has(key))) return cached;
   }
-  throw new Error(`COROS did not provide a complete ${target.label} conversion template. Your source project is unchanged.`);
+  const scan = async () => {
+    const themes = await listCorosWatchfaceThemes({ firmwareType: target.firmwareType, catalog: "editable" });
+    const ranked = themes.filter(theme => theme.packageUrl).sort((a, b) => {
+      const rank = (name: string) => /^(BOLD|SIMPLE)$/i.test(name) ? 0 : 1;
+      return rank(a.name) - rank(b.name) || (a.id ?? "").localeCompare(b.id ?? "");
+    });
+    let best: { archive: SelectedArchive; keys: Set<string>; covered: number } | undefined;
+    for (const theme of ranked.slice(0, 8)) {
+      const downloaded = await downloadCorosWatchfaceTheme({ packageUrl: theme.packageUrl!, name: theme.name, firmwareType: target.firmwareType });
+      if (!downloaded.archive) continue;
+      const selected = requireSelectedArchive(downloaded.archive.archiveId);
+      if (!usable(selected)) continue;
+      const keys = await declaredConfigKeys(selected.path);
+      const covered = [...wanted].filter(key => keys.has(key)).length;
+      if (!best || covered > best.covered) best = { archive: selected, keys, covered };
+      if (best.covered === wanted.size) break;
+    }
+    if (!best) throw new Error(`COROS did not provide a complete ${target.label} conversion template. Your source project is unchanged.`);
+    await fs.promises.mkdir(cacheDirectory, { recursive: true });
+    await fs.promises.copyFile(best.archive.path, cachePath);
+    await fs.promises.writeFile(metaPath, JSON.stringify({ scanned: true, keys: [...best.keys] } satisfies CarrierCacheMeta));
+    return best.archive;
+  };
+  try {
+    return await scan();
+  } catch (error) {
+    // Offline, or COROS refused the catalog: a cached carrier still converts.
+    if (cached) return cached;
+    throw error;
+  }
 }
 
 async function prepareRecoveredExportZip(bytes: Buffer, target: WatchfaceTarget, preview: Electron.NativeImage): Promise<Buffer> {
-  const carrier = await conversionCarrier(target);
   const unzipper = require("unzipper") as UnzipperModule;
+  const sourceKeys = configKeysOf(await Promise.all((await unzipper.Open.buffer(bytes)).files
+    .filter(entry => entry.type === "File" && /config\.txt$/i.test(entry.path))
+    .map(async entry => ({ name: entry.path, data: await entry.buffer() }))));
+  const carrier = await conversionCarrier(target, sourceKeys);
   const [sourceDirectory, carrierDirectory] = await Promise.all([
     unzipper.Open.buffer(bytes), openTemplateArchive(carrier.path)
   ]);
@@ -1641,17 +1702,21 @@ export async function convertCorosWatchfaceArchive(
   const rawEdits = Object.fromEntries(validateConfigTextReplacements(
     Object.entries(input.configTextEdits ?? {}).map(([path, text]) => ({ path, text }))
   ));
-  const carrier = input.targetArchiveId ? requireSelectedArchive(input.targetArchiveId) : await conversionCarrier(target);
+  const readEntries = async (archivePath: string) => {
+    const archive = await openTemplateArchive(archivePath);
+    return Promise.all(archive.files.filter(entry => entry.type === "File").map(async entry => ({ name: entry.path, data: await entry.buffer() })));
+  };
+  // A conversion also keeps only the carrier's native capabilities, so it picks
+  // by the source's own keys unless the caller named a destination template.
+  const carrier = input.targetArchiveId
+    ? requireSelectedArchive(input.targetArchiveId)
+    : await conversionCarrier(target, configKeysOf(await readEntries(source.path)));
   if (carrier.firmwareType && carrier.firmwareType.toUpperCase() !== target.firmwareType.toUpperCase()) {
     throw new Error("The destination template belongs to a different watch.");
   }
   if (!target.sizes.every(size => carrier.resolutionDirectories.includes(`watchface_${size}x${size}`))) {
     throw new Error(`The destination template does not contain every ${target.label} resolution.`);
   }
-  const readEntries = async (archivePath: string) => {
-    const archive = await openTemplateArchive(archivePath);
-    return Promise.all(archive.files.filter(entry => entry.type === "File").map(async entry => ({ name: entry.path, data: await entry.buffer() })));
-  };
   const [sourceEntries, carrierEntries] = await Promise.all([readEntries(source.path), readEntries(carrier.path)]);
   const converted = convertWatchfaceEntries(sourceEntries, carrierEntries, target, rawEdits);
   validateArchiveInventory(converted.entries.map(entry => ({ path: entry.name, type: "File", uncompressedSize: entry.data.length })), MAX_ARCHIVE_FILES, MAX_ARCHIVE_EXPANDED_BYTES, MAX_ARCHIVE_ENTRY_BYTES, 7, "converted watch-face archive");

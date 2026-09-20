@@ -95,6 +95,13 @@ export interface WatchfaceStudioOptions extends WatchfaceTypography {
    * off so the arcs are baked into the final image.
    */
   deferProgressArcs?: boolean;
+  /**
+   * Leaves the composite transparent instead of painting the background (or
+   * AOD black). The editor pairs it with `deferProgressArcs`: background and
+   * arcs live on canvases underneath, so sprites such as PARTICLES's
+   * `arc_cut_icon` cover the arc exactly as the firmware draws them.
+   */
+  transparentBackground?: boolean;
   /** Shared bitmap style for values shown in the selectable control slot. */
   complicationStyle?: WatchfaceMetricSpriteStyle;
   /** Scales a Studio-created standalone battery folder from authoring size. */
@@ -7967,7 +7974,9 @@ export async function drawStudioPreview(
   // COROS BuildAodWatchface omits SetBackground (including bg_color).
   // Showing the flattened artwork here made black AOD digits look readable
   // in Studio even though they disappear against the watch's black screen.
-  if (options.previewMode === "aod") {
+  if (options.transparentBackground) {
+    // Painted by the editor's own background canvas beneath the arc overlay.
+  } else if (options.previewMode === "aod") {
     context.fillStyle = "#000000";
     context.fillRect(0, 0, canvas.width, canvas.height);
   } else {

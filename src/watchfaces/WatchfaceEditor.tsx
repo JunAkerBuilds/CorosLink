@@ -1099,6 +1099,7 @@ export function WatchfaceEditor({
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const dragPreviewCanvasRef = useRef<HTMLCanvasElement>(null);
   const arcOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewStackRef = useRef<HTMLDivElement>(null);
   const componentDragBoundsRef = useRef<SVGRectElement>(null);
@@ -1996,6 +1997,7 @@ export function WatchfaceEditor({
       ...simulationStudioOptions(simulationScenario),
       previewMode: supportsAod ? previewMode : ("current" as const),
       deferProgressArcs: true,
+      transparentBackground: true,
       ...(automationPreviewComplication
         ? { previewComplication: automationPreviewComplication }
         : {})
@@ -2506,6 +2508,33 @@ export function WatchfaceEditor({
     visibleEditorGroups.flatMap((group) => group.layerIds)
   );
   const previewBackgroundDataUrl = backgroundDataUrl;
+  // The background sits on its own canvas under the arc overlay, and the face
+  // composite above both is transparent, so sprites cover the arcs the way the
+  // firmware layers them (PARTICLES's arc_cut_icon segments its calorie ring).
+  useEffect(() => {
+    const canvas = backgroundCanvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+    if (!context) return;
+    let cancelled = false;
+    const paint = async () => {
+      if (previewStudioOptions.previewMode === "aod") {
+        context.fillStyle = "#000000";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
+      if (!previewBackgroundDataUrl) {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
+      const image = await loadStudioImage(previewBackgroundDataUrl);
+      if (cancelled) return;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    };
+    void paint();
+    return () => { cancelled = true; };
+  }, [previewBackgroundDataUrl, previewStudioOptions.previewMode]);
   const selectedElementId = selectedId.startsWith("bgel:")
     ? selectedId.slice("bgel:".length)
     : null;
@@ -8412,7 +8441,13 @@ export function WatchfaceEditor({
                 </div>
               </>
             ) : null}
-            <canvas ref={previewCanvasRef} className="watchface-studio-preview" width={PREVIEW_SIZE} height={PREVIEW_SIZE} />
+            <canvas
+              ref={backgroundCanvasRef}
+              className="watchface-preview-background"
+              width={PREVIEW_SIZE}
+              height={PREVIEW_SIZE}
+              aria-hidden="true"
+            />
             <canvas
               ref={arcOverlayCanvasRef}
               className="watchface-preview-arc"
@@ -8420,6 +8455,7 @@ export function WatchfaceEditor({
               height={PREVIEW_SIZE}
               aria-hidden="true"
             />
+            <canvas ref={previewCanvasRef} className="watchface-studio-preview is-layered" width={PREVIEW_SIZE} height={PREVIEW_SIZE} />
             <canvas
               ref={dragPreviewCanvasRef}
               className="watchface-preview-drag"

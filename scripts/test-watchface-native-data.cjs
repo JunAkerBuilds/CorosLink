@@ -90,6 +90,7 @@ async function renderNativeData(details) {
   const hidden=await native.composeNativeData(details,{week_tl:{...customData.week_tl,parts:{icon:{enabled:false}}},chart:{...customData.chart,parts:{plot:{enabled:false}}}});
   const hiddenKeys=hidden.configOverrides[0].values;
   check(hiddenKeys.week_tl_icon===studio.COROS_CONFIG_DELETE_VALUE&&hiddenKeys.week_tl_font!==studio.COROS_CONFIG_DELETE_VALUE,'Hiding label keeps the live value');
+  check(hidden.configOverrides.find(o=>o.path==='watchface_800x800/config.txt').values.week_tl_icon_pos==='{80,100}','Hidden label still writes the icon position the parser gates the value on');
   check(hiddenKeys.chart_rect===studio.COROS_CONFIG_DELETE_VALUE&&hiddenKeys.chart_stress_font!==studio.COROS_CONFIG_DELETE_VALUE,'Hiding graph keeps the live value');
   Object.assign(design.nativeData,customData);
   check(!validateWatchfaceAutomationDocument({design,projectName:'Customized'}, {details}).some(d=>d.severity==='error'),'Custom component settings pass validation');

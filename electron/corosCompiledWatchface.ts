@@ -1,6 +1,6 @@
 import { deflateSync } from "node:zlib";
 import { createHash } from "node:crypto";
-import { chartConfigValues, decodeCorosBitmapFrame, decodeCorosLayout, findCorosBitmapBlocks, formatConfigPos, formatConfigRect, parseCorosFaceMagic, readLayoutHeaders, type CorosBinLayout, type CorosBitmapBlock } from "./corosBinLayout";
+import { chartConfigValues, progressArcConfigValues, decodeCorosBitmapFrame, decodeCorosLayout, findCorosBitmapBlocks, formatConfigPos, formatConfigRect, parseCorosFaceMagic, readLayoutHeaders, type CorosBinLayout, type CorosBitmapBlock } from "./corosBinLayout";
 import { createStoreZip } from "./zipStore";
 
 type BitmapBlock = CorosBitmapBlock;
@@ -65,6 +65,9 @@ function recoveredConfig(mode: CorosBinLayout["modes"][number], blocks: BitmapBl
   if (mode.elements.some(element => element.active && element.config?.asset.startsWith("chart_"))) {
     for (const [key, value] of chartConfigValues(mode.chart)) values.set(key, value);
   }
+  // The calorie goal arc is firmware-drawn: without these keys the recovered
+  // face keeps only its static backdrop, and the goal ring stops moving.
+  for (const [key, value] of progressArcConfigValues(mode.kcalProgressArc)) values.set(key, value);
   if (mode.pointerCenter) values.set("time_center_pos", formatConfigPos(mode.pointerCenter));
   // The combined date has no known 4.9.9 config binding. Translate its original
   // fonts into ordinary editable month/day fields, leaving the original record

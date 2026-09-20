@@ -130,6 +130,8 @@ by alignment flags. `(0,0)` is a valid position and does not disable an icon.
 | `0x052` / `0x056` | sleep-mode / airplane icons | `SetStatus` at `0x17da9c` / `0x17dae0` |
 | `0x2f0` … `0x308` | centre polygon icons, hour/minute/second hand images; centre at `0x2f8` | `SetPoint` at `0x184c94`–`0x184be8` |
 | `0x316` | pointer to auxiliary heart-rate record | `SetStatus`, store at `0x17dbfc` |
+| `0x092` / `0x0a2` / `0x0de` | step, elevation and calorie value rectangles with their fonts | official artwork: TWILIGHT labels `0x0a2` ALTITUDE and `0x0de` KCAL |
+| `0x0ee` | calorie goal arc: centre, radii, start/end angle, stroke width, trailing color word | official PARTICLES's bottom arc; exported as `kcal_progress_arc` |
 | `0xd02` … `0xd4a` | UV value/icon, UV level, AQI value/icon, AQI level | `SetWeather` at `0x18ecc8`–`0x18f188` |
 | `0x31e` | auto-align record pointer, not decoded | `SetAutoAlign` at `0x184d78` |
 | `0x322` | AOD header pointer | `Finish` at `0x17b784` |
@@ -159,7 +161,24 @@ night weather in normal mode, and no AOD weather.
 The auxiliary heart-rate record is 34 bytes. Its first 10 bytes contain a
 rectangle/alignment, followed by a font pointer. PLANET points to `0x1f2348`,
 giving rectangle `{280,240,335,269,left|vcenter}` and the same digit table used by
-exercise time. Looking only at the older inline HR slot misses this field.
+exercise time. This is the only heart rate a face has: `0x0de`, once read as a
+second (legacy) HR slot, is the calorie value. Five cached official faces settle
+it — TWILIGHT, MODULE and KHATA print `KCAL` beside `0x0de`, and COLOR PALETTE
+and Wahoo 2 draw a flame there — and TWILIGHT likewise labels `0x0a2` `ALTITUDE`,
+so the elevation value sits there rather than at `0x0c6`. Reading `0x0de` as a
+heart rate made both records write `heartreate_level_*`, and the auxiliary record
+silently won, so the recovered face lost its calorie readout altogether.
+`0x0c6` keeps a rectangle and a small integer with no bitmap pointer (COLOR
+PALETTE's calorie progress bar under its step count); it stays undecoded.
+
+The calorie goal arc at `0x0ee` is eight int16s: centre, radii, start and end
+angle, stroke width, then a word read as an rgb222 color. PARTICLES stores
+`{208,208,195,195,-138,-41,10}` with `0x15`, which is its bottom arc exactly. It
+is written back as the DIY `kcal_progress_arc` (with the remainder flag set,
+matching artwork that bakes the full-length gradient into the backdrop) plus
+`kcal_progress_arc_color`. Without it the recovered face keeps only the static
+`arc_cut_icon` track and the goal ring stops moving on the watch. The flag and
+the color reading are inferred from the artwork, not from the compiler.
 
 ## PLANET result
 

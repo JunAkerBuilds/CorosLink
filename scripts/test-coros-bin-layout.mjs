@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { chartConfigValues, decodeCorosLayout, expandChartColor, readLayoutHeaders } from "./lib/coros-bin-layout.mjs";
+import { chartConfigValues, decodeCorosLayout, expandChartColor, progressArcConfigValues, readLayoutHeaders } from "./lib/coros-bin-layout.mjs";
 
 const HEADER = 0x1164;
 const AOD = HEADER + 48; // Deliberately not adjacent: follow the pointer.
@@ -29,6 +29,13 @@ pointer(0x404, 0);
 rect(0x408, [0, 0, 40, 20]);
 pointer(0x412, 3);
 pointer(AOD + 0x420, 0); // Dormant AOD sunrise, no value geometry.
+// Step, elevation and calorie values, then the calorie goal arc. Official
+// faces label 0xa2 ALTITUDE and 0xde KCAL; the heart rate is the indirect
+// record at 0x316, so no rectangle may reach heartreate_level_rect twice.
+rect(0x92, [337, 220, 405, 241]); pointer(0x9c, 3);
+rect(0xa2, [32, 233, 124, 262]); pointer(0xac, 3);
+rect(0xde, [305, 305, 375, 327]); pointer(0xe8, 3);
+[208, 208, 195, 195, -138, -41, 10, 0x15].forEach((n, i) => bytes.writeInt16LE(n, 0xee + i * 2));
 bytes.writeUInt32LE(DATA, 0x316);
 rect(DATA, [280, 240, 335, 269], 17);
 pointer(DATA + 10, 3);
@@ -66,6 +73,15 @@ assert.equal(get("aod", "control.sunrise.icon").active, false);
 assert.equal(get("normal", "heartRate").geometryOffset, DATA);
 assert.equal(get("normal", "heartRate").rect.x0, 280);
 assert.equal(get("normal", "heartRate").asset.group, 3);
+assert.equal(get("normal", "steps").config.rect, "step_rect");
+assert.deepEqual([get("normal", "elevation").config.rect, get("normal", "elevation").rect.x0], ["elevation_rect", 32]);
+assert.deepEqual([get("normal", "calories").config.rect, get("normal", "calories").rect.x0], ["kcal_rect", 305]);
+assert.equal(get("normal", "heartRate.legacy"), undefined, "0xde is the calorie value, not a second heart rate");
+assert.equal(get("normal", "elevation").config.asset, "elevation_font");
+assert.deepEqual(Object.fromEntries(progressArcConfigValues(result.modes[0].kcalProgressArc)), {
+  kcal_progress_arc: "{208,208,195,195,-138,-41,10,1}", kcal_progress_arc_color: "0x555555"
+}, "the calorie goal arc survives as its DIY keys");
+assert.equal(result.modes[1].kcalProgressArc, undefined, "an empty arc record produces nothing");
 assert(result.modes[0].unmappedBitmapReferences.some((r) => r.fieldOffset === 0xb00));
 assert.deepEqual(result.modes[0].unmappedBitmapReferences.map((r) => r.fieldOffset), [0xb00], "every chart, fish and pointer link is classified");
 const chart = result.modes[0].chart;
@@ -162,4 +178,4 @@ assert.equal(mipLayout.modes[0].chart, undefined);
 assert.equal(mipLayout.modes[0].unmappedBitmapReferences.length, 0);
 assert.equal(mipLayout.modes[0].rawHeaderHex.length, mipHeader * 2);
 assert.throws(() => readLayoutHeaders(mip.subarray(0, mipHeader - 1)), /Truncated normal/);
-console.log("COROS layout: signed geometry, alignment, day/night/AOD separation, indirect HR, chart block, dormant resources, unknown links, MIP headers and bounds checks passed.");
+console.log("COROS layout: signed geometry, alignment, day/night/AOD separation, indirect HR, calorie value and goal arc, chart block, dormant resources, unknown links, MIP headers and bounds checks passed.");

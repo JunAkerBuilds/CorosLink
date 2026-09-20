@@ -127,8 +127,17 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         return `${folder}\\${file}`;
       };
       const font = async () => { for (let i = 0; i < 10; i++) await sprite("digits", i); return folders.digits; };
+      // The 4.9.9 parser reads each icon+value block only when its `_icon_pos`
+      // key exists (LoadConfig 0x1e7e38 for stamina, 0x1e42a8 for UV, likewise
+      // wind, rain, humidity, AQI, training load, stress, barometer, activity
+      // totals and sunrise/sunset). A missing `_icon` key is skipped on its own,
+      // so a hidden icon still writes the position, or the value never reaches
+      // the watch. The chart helpers look every key up independently.
       const icon = async (prefix: string, riseKey?: string, setKey?: string) => {
-        if (!part("icon").enabled) return;
+        if (!part("icon").enabled) {
+          if (part("value").enabled) values[`${prefix}_icon_pos`] = point("icon");
+          return;
+        }
         values[`${prefix}_icon_pos`] = point("icon");
         values[riseKey ?? `${prefix}_icon`] = await sprite("icon");
         if (setKey) values[setKey] = await sprite("icon", 1);

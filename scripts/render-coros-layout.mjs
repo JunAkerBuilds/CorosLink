@@ -11,7 +11,8 @@ export async function renderLayoutPreviews(layout, root) {
   const samples = {
     time: "06:23:35", month: "4", day: "17", weekdayFrame: 0,
     battery: "100", batteryFrame: 10, stamina: "100", staminaFrame: 10,
-    heartRate: "68", temperature: "27", weatherFrame: 0, wind: "3", windDirectionFrame: 1,
+    heartRate: "68", calories: "500", steps: "8035", elevation: "800",
+    temperature: "27", weatherFrame: 0, wind: "3", windDirectionFrame: 1,
     control: "sunset", controlHour: "19", controlMinute: "23",
     // NOMAD cycles chart_index % 5 groups; the catalog thumbnail shows the sun group.
     chartGroup: "sunrise", chartHour: "19", chartMinute: "20", sunAngle: "36", sunProgress: 0.3, modes: []
@@ -58,7 +59,7 @@ export async function renderLayoutPreviews(layout, root) {
     const digits = async (element, value) => Promise.all([...value].map((digit) => frame(element.asset, Number(digit))));
     const values = {
       "battery.value": samples.battery, "stamina.value": samples.stamina,
-      heartRate: samples.heartRate, "heartRate.legacy": samples.heartRate,
+      heartRate: samples.heartRate, calories: samples.calories, steps: samples.steps, elevation: samples.elevation,
       "weather.temperature": samples.temperature, "weather.wind": samples.wind, "exercise.hours": "00", "exercise.minutes": "00",
       "control.sunset.hour": samples.controlHour, "control.sunset.minute": samples.controlMinute,
       "chart.sunrise.hour": samples.chartHour, "chart.sunrise.minute": samples.chartMinute, "chart.sunAngle.value": samples.sunAngle

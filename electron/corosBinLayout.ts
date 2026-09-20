@@ -21,6 +21,20 @@ export interface CorosBinChart {
   /** Stored words before any RGB222 expansion, for exact retention. */
   rawColors: { selectedBar: number; unselectedBar: number; curvesUpper: number; curvesLower: number };
 }
+/**
+ * The calorie goal arc the firmware sweeps over its backdrop, stored right
+ * after the calorie value as eight int16s. Official PARTICLES keeps its bottom
+ * arc here: centre (208,208), radius 195, −138°…−41°, ten pixels wide. Angles
+ * use the same clock convention as the DIY `kcal_progress_arc` key. The
+ * trailing word is read as an rgb222 color; that reading and the remainder
+ * ("background") direction come from the official artwork, not the compiler.
+ */
+export interface CorosBinProgressArc {
+  centerX: number; centerY: number; radiusX: number; radiusY: number;
+  startAngle: number; endAngle: number; strokeWidth: number;
+  /** Stored trailing word, kept exactly as found. */
+  rawColor: number; color: number;
+}
 interface BitmapLink { index: number; offset: number | string; encoding?: number | string; viaPointer?: boolean; note?: string }
 type PositionedField = [string, number, number, string, string];
 
@@ -267,9 +281,14 @@ const NUMBERS: PositionedField[] = [
   ["battery.value", 0x6a, 0x74, "battery_level_rect", "battery_level_font"],
   ["temperature.legacy", 0x7e, 0x88, "temperature_rect", "temperature_font"],
   ["steps", 0x92, 0x9c, "step_rect", "step_font"],
-  ["calories", 0xa2, 0xac, "kcal_rect", "kcal_font"],
-  ["elevation", 0xc6, 0xd0, "elevation_rect", "elevation_font"],
-  ["heartRate.legacy", 0xde, 0xe8, "heartreate_level_rect", "heartreate_level_font"],
+  // Read against the official artwork rather than record order: TWILIGHT
+  // labels 0xa2 "ALTITUDE" and 0xde "KCAL"; COLOR PALETTE, KHATA, MODULE and
+  // Wahoo 2 also draw calories at 0xde. The heart rate is the auxiliary
+  // record at 0x316, so 0xde is not a second (legacy) HR slot. 0xc6 carries a
+  // rectangle and a small integer with no bitmap pointer (COLOR PALETTE's
+  // calorie progress bar); no config key is invented for it.
+  ["elevation", 0xa2, 0xac, "elevation_rect", "elevation_font"],
+  ["calories", 0xde, 0xe8, "kcal_rect", "kcal_font"],
   ["exercise.hours", 0xfe, 0x112, "exercise_hour_rect", "exercise_font"],
   ["exercise.minutes", 0x108, 0x112, "exercise_minute_rect", "exercise_font"],
   ["date.english.month", 0x13c, 0x146, "english_date_month_rect", "english_date_month_font"],
@@ -536,6 +555,16 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
       selectedBarColor: expandChartColor(rawColors.selectedBar), unselectedBarColor: expandChartColor(rawColors.unselectedBar),
       curvesUpperColor: expandChartColor(rawColors.curvesUpper), curvesLowerColor: expandChartColor(rawColors.curvesLower), rawColors
     } : undefined;
+    // Calorie goal arc at 0xee, between the calorie value and the exercise
+    // time. A radius, a sweep and a stroke width must all be present; nothing
+    // is drawn from a partially empty record.
+    const arcWords = inHeader(base + 0xee, 16)
+      ? Array.from({ length: 8 }, (_, i) => bytes.readInt16LE(base + 0xee + i * 2)) : [];
+    const [centerX, centerY, radiusX, radiusY, startAngle, endAngle, strokeWidth, rawColor] = arcWords;
+    const kcalProgressArc: CorosBinProgressArc | undefined =
+      arcWords.length === 8 && radiusX > 0 && radiusY > 0 && strokeWidth > 0 && startAngle !== endAngle
+        ? { centerX, centerY, radiusX, radiusY, startAngle, endAngle, strokeWidth, rawColor, color: expandChartColor(rawColor) }
+        : undefined;
     // Fishing arc and clock pointers: retain the links so they are not reported
     // as unknown, but their arc/rotation geometry is not reconstructed.
     add("fish.icon", "icon", { position: point(FISH), geometryOffset: base + FISH }, base + FISH + 8, { position: "fish_time_mask_pos", asset: "fish_time_mask" });
@@ -600,6 +629,7 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
       themeColorOff: Boolean(flags & 1), pointLayer: (flags >> 1) & 1, timeFormat: (flags >> 2) & 3, defaultTheme: flags >> 4,
       backgroundColorPacked: bytes[base + 0x22], controlOrigin,
       ...(chart ? { chart } : {}),
+      ...(kcalProgressArc ? { kcalProgressArc } : {}),
       ...(elements.some((e) => e.active && /^time\.(hour|minute|second)Hand$/.test(e.id)) ? { pointerCenter } : {}),
       elements, unmappedBitmapReferences,
       rawHeaderHex: bytes.subarray(base, base + length).toString("hex")
@@ -624,6 +654,20 @@ export type CorosBinLayout = ReturnType<typeof decodeCorosLayout>;
 export function formatConfigPos(p: CorosBinPoint): string { return `{${p.x},${p.y}}`; }
 export function formatConfigRect(r: CorosBinRect): string {
   return `{${r.x0},${r.y0},${r.x1},${r.y1},${r.horizontal === "center" ? "hcenter" : r.horizontal}|${r.vertical === "center" ? "vcenter" : r.vertical}}`;
+}
+/**
+ * The DIY keys for a recovered calorie goal arc. The trailing `1` marks the
+ * remainder arc: official faces bake the full-length goal gradient into their
+ * backdrop and let the firmware cover what is still unearned, which is what
+ * PARTICLES's grey bottom segment is. Studio's Goal progress inspector can
+ * flip that and recolor the arc.
+ */
+export function progressArcConfigValues(arc: CorosBinProgressArc | undefined): [string, string][] {
+  if (!arc) return [];
+  return [
+    ["kcal_progress_arc", `{${arc.centerX},${arc.centerY},${arc.radiusX},${arc.radiusY},${arc.startAngle},${arc.endAngle},${arc.strokeWidth},1}`],
+    ["kcal_progress_arc_color", `0x${arc.color.toString(16).padStart(6, "0")}`]
+  ];
 }
 /** Shared graph geometry/styling keys, in the editor's 0xRRGGBB color notation. */
 export function chartConfigValues(chart: CorosBinChart | undefined): [string, string][] {
