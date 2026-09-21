@@ -8088,7 +8088,8 @@ body.wf-value-scrubbing * {
   gap: 12px;
 }
 
-.watchface-community-tools label {
+.watchface-community-tools label,
+.watchface-community-model {
   display: grid;
   gap: 7px;
   color: var(--text-muted);
@@ -8097,7 +8098,8 @@ body.wf-value-scrubbing * {
 }
 
 .watchface-community-tools input,
-.watchface-community-tools select {
+.watchface-community-tools select,
+.watchface-community-model select {
   width: 100%;
   height: 44px;
   border: 1px solid var(--wf-border);

@@ -1514,7 +1514,7 @@ export function WatchfacesView({
               }
               disabled={busy !== null}
               progress={communityProgress}
-              onOpen={(face) => void prepareCommunityImport(face.slug)}
+              onOpen={(face, model) => void prepareCommunityImport(face.slug, false, model)}
             />
           ) : hubTab === "projects" ? (
             <ProjectsDashboard
@@ -1986,7 +1986,7 @@ function CommunityWatchfaceBrowser({
   connectedModel?: string;
   disabled: boolean;
   progress: CommunityWatchfaceDownloadProgress | null;
-  onOpen: (face: CommunityWatchface) => void;
+  onOpen: (face: CommunityWatchface, model: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -2005,6 +2005,36 @@ function CommunityWatchfaceBrowser({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   const [selected, setSelected] = useState<CommunityWatchface | null>(null);
+  const [faceModels, setFaceModels] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setFaceModels({});
+  }, [model]);
+
+  function selectedModel(face: CommunityWatchface): string {
+    return [faceModels[face.id], model, connectedModel, face.models[0]]
+      .find((candidate) => candidate !== undefined && face.models.includes(candidate)) ?? "";
+  }
+
+  function modelSelector(face: CommunityWatchface) {
+    return (
+      <label className="watchface-community-model">
+        <span>Watch type</span>
+        <select
+          aria-label={`Watch type for ${face.title}`}
+          value={selectedModel(face)}
+          disabled={disabled}
+          onChange={(event) => setFaceModels((current) => ({
+            ...current,
+            [face.id]: event.target.value
+          }))}
+        >
+          {face.models.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+      </label>
+    );
+  }
+
   const modelTouchedRef = useRef(modelPreference.restored);
 
   useEffect(() => {
@@ -2222,12 +2252,12 @@ function CommunityWatchfaceBrowser({
                   <div className="watchface-community-tags">
                     {face.tags.slice(0, 2).map((tag) => <span key={tag}>{tag}</span>)}
                   </div>
-                  <p>{face.models.slice(0, 2).join(" · ")}</p>
+                  {modelSelector(face)}
                   <button
                     className="primary-button"
                     type="button"
                     disabled={disabled}
-                    onClick={() => onOpen(face)}
+                    onClick={() => onOpen(face, selectedModel(face))}
                   >
                     {progress?.slug === face.slug ? (
                       <Loader2 className="spin" size={15} aria-hidden="true" />
@@ -2303,15 +2333,13 @@ function CommunityWatchfaceBrowser({
               <h2 id="community-face-title">{selected.title}</h2>
               <p>by {selected.creatorName}</p>
               <p>{selected.description}</p>
-              <div className="watchface-community-tags">
-                {selected.models.map((item) => <span key={item}>{item}</span>)}
-              </div>
+              {modelSelector(selected)}
               <small>{formatCommunityBytes(selected.packageBytes)} reviewed package</small>
               <button
                 className="primary-button"
                 type="button"
                 disabled={disabled}
-                onClick={() => onOpen(selected)}
+                onClick={() => onOpen(selected, selectedModel(selected))}
               >
                 <Download size={16} aria-hidden="true" /> Open in Studio
               </button>

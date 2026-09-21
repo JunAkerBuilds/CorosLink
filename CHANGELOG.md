@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.38] - 2026-09-21
+
+### Fixed
+
+- Community watch-face cards and details now let you select a watch type and open the matching package in Studio. Changing the top Watch model filter resets card selections to that model, with individual overrides still available.
+
 ## [0.1.37] - 2026-09-20
 
 ### Added
