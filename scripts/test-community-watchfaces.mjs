@@ -35,4 +35,12 @@ assert.equal(
   null
 );
 
+assert.deepEqual(
+  parseCommunityWatchfaceDeepLink("coroslink://watchfaces/ridge-line?model=PACE+4"),
+  { slug: "ridge-line", model: "PACE 4" }
+);
+for (const query of ["model=unknown", "model=", "model=PACE+4&model=PACE+Pro", "model=PACE+4&download=https://attacker.test"]) {
+  assert.equal(parseCommunityWatchfaceDeepLink(`coroslink://watchfaces/ridge-line?${query}`), null);
+}
+
 console.log("Community watchface service tests passed");

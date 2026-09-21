@@ -248,8 +248,8 @@ export interface CorosLinkApi {
   listCommunityWatchfaces: (
     input: CommunityWatchfaceCatalogQuery
   ) => Promise<CommunityWatchfaceCatalogPage>;
-  getCommunityWatchface: (slug: string) => Promise<CommunityWatchface>;
-  importCommunityWatchface: (slug: string) => Promise<CommunityWatchfaceImport>;
+  getCommunityWatchface: (slug: string, model?: string) => Promise<CommunityWatchface>;
+  importCommunityWatchface: (slug: string, model?: string) => Promise<CommunityWatchfaceImport>;
   consumeCommunityWatchfaceOpenRequest: () =>
     Promise<CommunityWatchfaceOpenRequest | null>;
   onCommunityWatchfaceOpenRequest: (

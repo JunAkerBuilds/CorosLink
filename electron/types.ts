@@ -355,6 +355,7 @@ export interface CommunityWatchfaceDownloadProgress {
 
 export interface CommunityWatchfaceOpenRequest {
   slug: string;
+  model?: string;
 }
 
 export interface CorosWatchfacePublishInput {

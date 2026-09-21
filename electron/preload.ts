@@ -279,10 +279,10 @@ const api = {
     input: CommunityWatchfaceCatalogQuery
   ): Promise<CommunityWatchfaceCatalogPage> =>
     ipcRenderer.invoke("watchfaces:listCommunity", input),
-  getCommunityWatchface: (slug: string): Promise<CommunityWatchface> =>
-    ipcRenderer.invoke("watchfaces:getCommunity", slug),
-  importCommunityWatchface: (slug: string): Promise<CommunityWatchfaceImport> =>
-    ipcRenderer.invoke("watchfaces:importCommunity", slug),
+  getCommunityWatchface: (slug: string, model?: string): Promise<CommunityWatchface> =>
+    ipcRenderer.invoke("watchfaces:getCommunity", slug, model),
+  importCommunityWatchface: (slug: string, model?: string): Promise<CommunityWatchfaceImport> =>
+    ipcRenderer.invoke("watchfaces:importCommunity", slug, model),
   consumeCommunityWatchfaceOpenRequest:
     (): Promise<CommunityWatchfaceOpenRequest | null> =>
       ipcRenderer.invoke("watchfaces:consumeCommunityOpenRequest"),

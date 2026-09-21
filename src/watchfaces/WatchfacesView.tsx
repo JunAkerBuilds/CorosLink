@@ -428,7 +428,7 @@ export function WatchfacesView({
       return;
     }
     setSurface("hub");
-    void prepareCommunityImport(communityOpenRequest.slug);
+    void prepareCommunityImport(communityOpenRequest.slug, false, communityOpenRequest.model);
   }, [
     communityOpenRequest,
     onCommunityOpenRequestHandled,
@@ -729,22 +729,23 @@ export function WatchfacesView({
     setShareLink(null);
     clearMessages();
     if (queuedCommunityRequest) {
-      const { slug } = queuedCommunityRequest;
+      const { slug, model } = queuedCommunityRequest;
       setQueuedCommunityRequest(null);
       setHubTab("browse");
-      queueMicrotask(() => void prepareCommunityImport(slug));
+      queueMicrotask(() => void prepareCommunityImport(slug, false, model));
     }
   }
 
   async function prepareCommunityImport(
     slug: string,
-    compatibilityConfirmed = false
+    compatibilityConfirmed = false,
+    model?: string
   ) {
     setBusy("community");
     setCommunityProgress(null);
     clearMessages();
     try {
-      const face = await api.getCommunityWatchface(slug);
+      const face = await api.getCommunityWatchface(slug, model);
       const connectedModel = watchStatus?.model
         ? COMMUNITY_MODEL_BY_WATCH[watchStatus.model]
         : undefined;
@@ -758,7 +759,7 @@ export function WatchfacesView({
         setCommunityConfirmFace(face);
         return;
       }
-      const imported = await api.importCommunityWatchface(face.slug);
+      const imported = await api.importCommunityWatchface(face.slug, model);
       setCommunityConfirmFace(null);
       openStudio(imported.archive, imported.face.title);
     } catch (caught) {
@@ -1595,7 +1596,7 @@ export function WatchfacesView({
           busy={busy === "community"}
           onCancel={() => setCommunityConfirmFace(null)}
           onConfirm={() =>
-            void prepareCommunityImport(communityConfirmFace.slug, true)
+            void prepareCommunityImport(communityConfirmFace.slug, true, new URL(communityConfirmFace.downloadUrl).searchParams.get("model") ?? undefined)
           }
         />
       ) : null}

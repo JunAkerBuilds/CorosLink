@@ -996,11 +996,11 @@ function registerIpcHandlers(): void {
   ipcMain.handle("watchfaces:listCommunity", (_event, input) =>
     listCommunityWatchfaces(input)
   );
-  ipcMain.handle("watchfaces:getCommunity", (_event, slug: string) =>
-    getCommunityWatchface(slug)
+  ipcMain.handle("watchfaces:getCommunity", (_event, slug: string, model?: string) =>
+    getCommunityWatchface(slug, model)
   );
-  ipcMain.handle("watchfaces:importCommunity", (_event, slug: string) =>
-    importCommunityWatchface(slug)
+  ipcMain.handle("watchfaces:importCommunity", (_event, slug: string, model?: string) =>
+    importCommunityWatchface(slug, model)
   );
   ipcMain.handle("watchfaces:consumeCommunityOpenRequest", () => {
     rendererReady = true;
