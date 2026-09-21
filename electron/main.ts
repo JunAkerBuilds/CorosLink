@@ -230,7 +230,6 @@ import type {
   ManualActivityInput
 } from "./types";
 import type {
-  CorosLegacy614aCarrierPatchInput,
   CorosWatchfaceCreatorInput,
   CorosWatchfaceConversionInput,
   CorosWatchfaceExistingShareInput,
@@ -249,11 +248,6 @@ import type {
 } from "./types";
 import type { CommunityWatchfaceOpenRequest } from "./types";
 import type { CoachChartPreview, FitIndexSyncOptions } from "./types";
-import {
-  MULTIDATA_ELEV_416_PROFILE,
-  inspectLegacy614aCarrier,
-  patchLegacy614aFeatures
-} from "./legacy614a";
 import {
   deleteWatchTrack,
   getWatchConnectionSmokeOption,
@@ -376,6 +370,8 @@ import {
   setMcpBearer,
   updateMcpServer
 } from "./mcpServersStore";
+import { getTrainingHealthInsight } from "./healthInsightsService";
+import type { HealthInsightKind } from "./healthInsightsTypes";
 import { getTrainingDailyHealthData } from "./dailyHealthDataService";
 import { getTrainingSleepData } from "./sleepDataService";
 import type {
@@ -402,7 +398,6 @@ let pendingCorosBluetoothSelection:
     }
   | undefined;
 
-const legacy614aCarrierSelections = new Map<string, { sourcePath: string }>();
 const MAX_RASTER_FONT_SPRITE_FOLDER_BYTES = 12 * 1024 * 1024;
 
 /** Matches --bg-base in styles.css; updated when the renderer theme changes. */
@@ -1034,75 +1029,6 @@ function registerIpcHandlers(): void {
       ? null
       : selectCorosWatchfaceArchive(archivePath);
   });
-
-  ipcMain.handle("watchfaces:chooseLegacy614aCarrier", async () => {
-    const options: OpenDialogOptions = {
-      title: "Choose the original MULTIDATA ELEV legacy carrier",
-      properties: ["openFile"],
-      filters: [{ name: "COROS legacy watchface BIN", extensions: ["bin"] }]
-    };
-    const result =
-      mainWindow && !mainWindow.isDestroyed()
-        ? await dialog.showOpenDialog(mainWindow, options)
-        : await dialog.showOpenDialog(options);
-    const sourcePath = result.filePaths[0];
-    if (result.canceled || !sourcePath) return null;
-
-    const reference = await fs.promises.readFile(sourcePath);
-    // This validates the exact file hash in addition to its 614A shape. A
-    // previously patched carrier, another model, or a similar lookalike BIN
-    // cannot become the base for another edit.
-    const carrier = inspectLegacy614aCarrier(reference, MULTIDATA_ELEV_416_PROFILE);
-    const selectionId = `legacy614a-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    legacy614aCarrierSelections.set(selectionId, { sourcePath });
-    return {
-      selectionId,
-      inspection: {
-        profile: "multidata-elev-416" as const,
-        profileName: carrier.profileName,
-        fileName: path.basename(sourcePath),
-        watchFaceId: carrier.watchFaceId,
-        sizeBytes: carrier.sizeBytes,
-        payloadCrc16: carrier.payloadCrc16,
-        fullFileCrc16: carrier.fullFileCrc16,
-        weatherSpriteSize: carrier.weatherSpriteSize,
-        weatherPosition: carrier.weatherPosition,
-        temperatureRect: carrier.temperatureRect
-      }
-    };
-  });
-
-  ipcMain.handle(
-    "watchfaces:exportLegacy614aCarrier",
-    async (_event, selectionId: string, patch: CorosLegacy614aCarrierPatchInput) => {
-      const selection = legacy614aCarrierSelections.get(selectionId);
-      if (!selection) {
-        throw new Error("Choose and validate the original MULTIDATA ELEV carrier again before exporting.");
-      }
-      const reference = await fs.promises.readFile(selection.sourcePath);
-      const output = patchLegacy614aFeatures(reference, patch, MULTIDATA_ELEV_416_PROFILE);
-      const saveOptions = {
-        title: "Export guarded MULTIDATA carrier",
-        defaultPath: "MULTIDATA-ELEV-SLENDER-614A.bin",
-        filters: [{ name: "COROS legacy watchface BIN", extensions: ["bin"] }]
-      };
-      const result =
-        mainWindow && !mainWindow.isDestroyed()
-          ? await dialog.showSaveDialog(mainWindow, saveOptions)
-          : await dialog.showSaveDialog(saveOptions);
-      if (result.canceled || !result.filePath) {
-        return { saved: false, watchFaceId: MULTIDATA_ELEV_416_PROFILE.watchFaceId };
-      }
-      // Never overwrite the downloaded public reference or another export by
-      // mistake. The user can choose a fresh filename in the save dialog.
-      await fs.promises.writeFile(result.filePath, output, { flag: "wx" });
-      return {
-        saved: true,
-        filePath: result.filePath,
-        watchFaceId: MULTIDATA_ELEV_416_PROFILE.watchFaceId
-      };
-    }
-  );
 
   ipcMain.handle("watchfaces:chooseArtwork", async () => {
     const options: OpenDialogOptions = {
@@ -1923,6 +1849,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("trainingHub:getSleepData", (_event, days?: number) =>
     getTrainingSleepData(mainWindow, days ?? 7)
+  );
+
+  ipcMain.handle("trainingHub:getHealthInsight", (_event, kind: HealthInsightKind, days?: number) =>
+    getTrainingHealthInsight(kind, days ?? 7)
   );
 
   ipcMain.handle("trainingHub:getDailyHealthData", (_event, days?: number) =>

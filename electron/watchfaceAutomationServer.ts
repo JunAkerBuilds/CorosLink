@@ -26,6 +26,10 @@ const TOOL_TIMEOUT_MS = 120_000;
 const SESSION_IDLE_MS = 30 * 60_000;
 const MAX_SESSIONS = 16;
 
+const WATCHFACE_LEGIBILITY_GUIDANCE =
+  "Required before saving or exporting a newly authored face: inspect text at the smallest supported device resolution, with render_preview resolution and size both set to that native width; an enlarged master-canvas preview is insufficient. Measure visible glyphs, not transparent sprite padding. For a 416px display, start small metric/date digits around 12x17 visible pixels with continuous 1-2px strokes and clear spacing; this is a design target, not a firmware minimum or a guarantee. Thin italic digits around 9x13px need enlargement or stroke simplification. Test all digits 0-9, maximum-width values, weekdays and battery states for clipping and legibility. Enable solidAlpha:true on small timeStyles, metricStyles or dateStyles components to make final exported glyph coverage binary; inspect the exported PNGs after resizing because thresholding can erase thin strokes. nativeData assets have no solidAlpha setting: inspect and normalize their final-size glyph alpha separately. Render Current and AOD, build and inspect every exported resolution, and distinguish preview/schema validation from actual on-watch verification.";
+
+
 type Dispatch = (method: string, params: Record<string, unknown>) => Promise<unknown>;
 
 interface Session {
@@ -394,12 +398,14 @@ export class WatchfaceAutomationServer {
     const server = new McpServer(
       { name: "coroslink-watchface-studio", version: "1.0.0" },
       { capabilities: { resources: {} }, instructions:
-        "Inspect the scene schema and live document before editing. Use capabilities.placement and each layer's placement metadata for movement; do not assume an 800 x 800 canvas. Use sessionId and baseRevision for mutations. Apply coherent edits atomically, read the resulting document, render both Current and AOD, validate, then save. Build the archive to verify all device resolutions. Publishing requires the user's explicit authorization." }
+        "Inspect the scene schema and live document before editing. Use capabilities.placement and each layer's placement metadata for movement; do not assume an 800 x 800 canvas. Use sessionId and baseRevision for mutations. Apply coherent edits atomically, read the resulting document, render both Current and AOD, validate, then save. Build the archive to verify all device resolutions. Publishing requires the user's explicit authorization. " + WATCHFACE_LEGIBILITY_GUIDANCE }
     );
     for (const definition of editorToolDefinitions(this.assets)) {
       server.registerTool(definition.name, {
         title: definition.title,
-        description: definition.description,
+        description: ["get_schema", "apply_commands", "import_asset", "render_preview", "validate", "build_archive", "save"].includes(definition.name)
+          ? `${definition.description} ${WATCHFACE_LEGIBILITY_GUIDANCE}`
+          : definition.description,
         inputSchema: definition.schema,
         annotations: {
           readOnlyHint: definition.readOnly === true,

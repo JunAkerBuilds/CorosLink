@@ -65,8 +65,6 @@ import {
 } from "../watchModels";
 import { BatteryHistoryPanel } from "./BatteryHistoryPanel";
 import { DeviceInfoPanel } from "./DeviceInfoPanel";
-import { LegacyCarrierEditorPanel } from "./LegacyCarrierEditorPanel";
-import { RawBinInstallerPanel } from "./RawBinInstallerPanel";
 import { WatchfaceEditor } from "./WatchfaceEditor";
 import { renderDesignBackground } from "./watchfaceBackground";
 import { deriveDesignDetails, toStudioOptions } from "./watchfaceCompose";
@@ -1496,11 +1494,7 @@ export function WatchfacesView({
       ) : (
         <main className="watchface-hub-main">
           {IS_DEVELOPMENT_BUILD && showDevelopmentTools ? (
-            <>
-              <DeviceInfoPanel api={api} />
-              <LegacyCarrierEditorPanel api={api} />
-              <RawBinInstallerPanel api={api} />
-            </>
+            <DeviceInfoPanel api={api} />
           ) : null}
 
           <WatchFacesTabs

@@ -28,11 +28,13 @@ export function RacePredictorCards({ racePredictor }: RacePredictorCardsProps) {
           <h2>Estimated finish times</h2>
           {runningLevel !== undefined && Number.isFinite(runningLevel) ? (
             <p className="training-race-level">
-              Running level {Math.round(runningLevel)}
+              Running level<strong>{Math.round(runningLevel)}</strong>
             </p>
           ) : null}
         </div>
-        <Timer size={22} aria-hidden="true" />
+        <span className="training-panel-icon" aria-hidden="true">
+          <Timer />
+        </span>
       </header>
 
       {scores.length > 0 ? (

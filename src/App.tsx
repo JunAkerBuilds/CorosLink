@@ -119,6 +119,7 @@ import {
 } from "./media/libraryUtils";
 import { trackAvatarColor, trackInitial } from "./media/trackAvatar";
 import { useTimeOfDayGreeting } from "./hooks/useTimeOfDayGreeting";
+import { OverviewWeatherCard } from "./overview/OverviewWeatherCard";
 import {
   defineSelectionPreference,
   selectionIsOneOf,
@@ -2993,6 +2994,7 @@ function MediaOverviewTab({
             {greeting} <span className="dashboard-greeting-wave" aria-hidden="true">👋</span>
           </h1>
         </div>
+        <OverviewWeatherCard />
       </header>
 
       <div

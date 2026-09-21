@@ -59,6 +59,34 @@ change to the new revision. `undo`, `redo`, `convert`, and other document
 mutations also require the current editor session and revision. Selection and
 view changes use the session but do not advance the document revision.
 
+## Required native-resolution legibility review
+
+The MCP initialization instructions and authoring, import, preview, validation,
+save and build tool descriptions require agents to review typography at the
+smallest supported device resolution before delivering a face. Set both
+`render_preview.resolution` and `size` to that native width. A large master-canvas
+preview does not show what survives downsampling.
+
+- Measure visible glyph bounds, excluding transparent padding. On a 416px
+  display, start metric/date digits around 12×17 visible pixels with continuous
+  1–2px strokes and clear spacing. This is a design target, not a firmware
+  minimum. Thin italic digits around 9×13px should be enlarged or simplified.
+- Inspect all digits, maximum-width values, weekdays and battery states. Check
+  counters, gaps, clipping and contrast against the actual background.
+- Set `solidAlpha: true` on the relevant `timeStyles`, `metricStyles` or
+  `dateStyles` component for small raster digits. The export pass converts alpha
+  to 0/255 at a cutoff of 128 after resizing. Check the resulting PNGs: solid
+  alpha cannot recover a stroke that was too thin to survive that cutoff.
+- `nativeData` assets do not expose `solidAlpha`. Inspect and normalize those
+  glyphs at the final device size separately; later resizing can reintroduce
+  partial transparency.
+- Review Current and AOD and inspect every exported resolution. A passing schema
+  validation or desktop preview is not a claim of on-watch verification.
+
+These instructions guide agents; they do not add an automatic pixel-size rejection
+or guarantee that all firmware renders identically. Reconnect the MCP client after
+restarting the updated CorosLink app so it receives the new tool descriptions.
+
 ## Editing model
 
 Paths in generic commands use RFC 6901 JSON Pointer syntax rooted at the live

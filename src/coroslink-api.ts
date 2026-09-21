@@ -1,3 +1,4 @@
+import type { HealthInsightKind, HealthInsightResult } from "../electron/healthInsightsTypes";
 import type { DiagnosticsSnapshot, RendererDiagnosticError } from "../electron/diagnosticsTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "../electron/calendarSyncTypes";
 import type { WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
@@ -130,9 +131,6 @@ import type {
   ManualActivityInput
 } from "../electron/types";
 import type {
-  CorosLegacy614aCarrierExportResult,
-  CorosLegacy614aCarrierPatchInput,
-  CorosLegacy614aCarrierSelection,
   CorosWatchfaceArchive,
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceProjectExportResult,
@@ -261,11 +259,6 @@ export interface CorosLinkApi {
     callback: (progress: CommunityWatchfaceDownloadProgress) => void
   ) => () => void;
   chooseCorosWatchfaceArchive: () => Promise<CorosWatchfaceArchive | null>;
-  chooseLegacy614aCarrier: () => Promise<CorosLegacy614aCarrierSelection | null>;
-  exportLegacy614aCarrier: (
-    selectionId: string,
-    patch: CorosLegacy614aCarrierPatchInput
-  ) => Promise<CorosLegacy614aCarrierExportResult>;
   chooseCorosWatchfaceArtwork: () => Promise<CorosWatchfaceArtwork | null>;
   chooseCorosWatchfaceRasterFontFolder: () => Promise<CorosWatchfaceRasterFontFolder | null>;
   convertCorosWatchfaceArchive: (input: CorosWatchfaceConversionInput) => Promise<CorosWatchfaceConversionResult>;
@@ -547,6 +540,7 @@ export interface CorosLinkApi {
   getActivityPaceBaselines: () => Promise<ActivityPaceBaselines>;
   getUpcomingWorkouts: (days?: number) => Promise<TrainingHubUpcomingWorkout[]>;
   getTrainingSleepData: (days?: number) => Promise<TrainingHubSleepSummary>;
+  getTrainingHealthInsight: (kind: HealthInsightKind, days?: number) => Promise<HealthInsightResult>;
   getTrainingDailyHealthData: (
     days?: number
   ) => Promise<TrainingHubDailyHealthSummary>;

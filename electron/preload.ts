@@ -1,3 +1,4 @@
+import type { HealthInsightKind, HealthInsightResult } from "./healthInsightsTypes";
 import { contextBridge, ipcRenderer } from "electron";
 import type { DiagnosticsSnapshot, RendererDiagnosticError } from "./diagnosticsTypes";
 import type { WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
@@ -131,9 +132,6 @@ import type {
   ManualActivityInput
 } from "./types";
 import type {
-  CorosLegacy614aCarrierExportResult,
-  CorosLegacy614aCarrierPatchInput,
-  CorosLegacy614aCarrierSelection,
   CorosWatchfaceArchive,
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceProjectExportResult,
@@ -312,13 +310,6 @@ const api = {
   },
   chooseCorosWatchfaceArchive: (): Promise<CorosWatchfaceArchive | null> =>
     ipcRenderer.invoke("watchfaces:chooseArchive"),
-  chooseLegacy614aCarrier: (): Promise<CorosLegacy614aCarrierSelection | null> =>
-    ipcRenderer.invoke("watchfaces:chooseLegacy614aCarrier"),
-  exportLegacy614aCarrier: (
-    selectionId: string,
-    patch: CorosLegacy614aCarrierPatchInput
-  ): Promise<CorosLegacy614aCarrierExportResult> =>
-    ipcRenderer.invoke("watchfaces:exportLegacy614aCarrier", selectionId, patch),
   chooseCorosWatchfaceArtwork: (): Promise<CorosWatchfaceArtwork | null> =>
     ipcRenderer.invoke("watchfaces:chooseArtwork"),
   chooseCorosWatchfaceRasterFontFolder: (): Promise<CorosWatchfaceRasterFontFolder | null> =>
@@ -807,6 +798,8 @@ const api = {
     ipcRenderer.invoke("trainingHub:getUpcomingWorkouts", days),
   getTrainingSleepData: (days?: number): Promise<TrainingHubSleepSummary> =>
     ipcRenderer.invoke("trainingHub:getSleepData", days),
+  getTrainingHealthInsight: (kind: HealthInsightKind, days?: number): Promise<HealthInsightResult> =>
+    ipcRenderer.invoke("trainingHub:getHealthInsight", kind, days),
   getTrainingDailyHealthData: (
     days?: number
   ): Promise<TrainingHubDailyHealthSummary> =>

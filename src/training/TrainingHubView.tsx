@@ -28,6 +28,7 @@ import { FitnessTrendPanel } from "./components/FitnessTrendPanel";
 import { PersonalRecordsPanel } from "./components/PersonalRecordsPanel";
 import { RacePredictorCards } from "./components/RacePredictorCards";
 import { RecoveryRing } from "./components/RecoveryRing";
+import { HealthInsightsPanel } from "./components/HealthInsightsPanel";
 import { SleepSummaryPanel } from "./components/SleepSummaryPanel";
 import { TrainingHeatmapPanel } from "./components/TrainingHeatmapPanel";
 import { TrainingSummaryTiles } from "./components/TrainingSummaryTiles";
@@ -573,6 +574,8 @@ function TrainingHubContent({
               rpeBackfill={rpeBackfill}
             />
           </div>
+          <HealthInsightsPanel api={api} refreshToken={hubRefreshCount} sampleMode={sampleMode} />
+
           <TrainingTrendCharts points={snapshot?.trendPoints ?? []} sleepRecords={snapshot?.sleep?.records} />
           {sampleMode ? null : (
             <CoachChartsPanel api={api} refreshToken={hubRefreshCount} />

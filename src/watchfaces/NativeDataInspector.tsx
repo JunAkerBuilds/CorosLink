@@ -18,6 +18,27 @@ const SPRITE_LABELS: Partial<Record<Role, string[]>> = {
   icon: ["Main / rise icon", "Set icon"], unit: ["Primary / metric unit", "Alternate / imperial unit"], symbols: ["Minus", "Degree", "Percent", "Colon"], progress: ["Sunrise progress", "Sunset progress"]
 };
 
+/** Keep a draft so typing a minus sign or clearing the field is not reset. */
+function ComponentOffsetInput({ label, value, coordinateScale, onChange }: {
+  label: string; value: number; coordinateScale: number; onChange: (value: number) => void;
+}) {
+  const displayed = Math.round(value * coordinateScale);
+  const [draft, setDraft] = useState<string | null>(null);
+  const limit = Math.floor(1600 * coordinateScale);
+  return <label>{label}<input aria-label={label} type="number" min={-limit} max={limit} step={1}
+    value={draft ?? displayed}
+    onFocus={() => setDraft(String(displayed))}
+    onChange={event => {
+      const raw = event.target.value;
+      setDraft(raw);
+      if (raw === "" || !Number.isFinite(Number(raw))) return;
+      onChange(Math.max(-limit, Math.min(limit, Number(raw))) / coordinateScale);
+    }}
+    onBlur={() => setDraft(null)}
+    onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }}
+  /></label>;
+}
+
 function SpritePreview({ id, style, role, index }: { id: string; style: Style; role: Role; index: number }) {
   const [url, setUrl] = useState("");
   useEffect(() => {
@@ -167,8 +188,8 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
         {!nativePartHasPosition(partKey) && <p className="watchface-studio-summary">The watch places this beside the number; only its size and artwork change.</p>}
         <div className="watchface-position-inputs">
           {nativePartHasPosition(partKey) && <>
-            {numberControl("Offset X",component.x,x=>patchPart({x}),0,1600,true)}
-            {numberControl("Offset Y",component.y,y=>patchPart({y}),0,1600,true)}
+            <ComponentOffsetInput key={`${id}:${partKey}:x`} label="Offset X" value={component.x} coordinateScale={coordinateScale} onChange={x=>patchPart({x})} />
+            <ComponentOffsetInput key={`${id}:${partKey}:y`} label="Offset Y" value={component.y} coordinateScale={coordinateScale} onChange={y=>patchPart({y})} />
           </>}
           {numberControl("Width",component.width,width=>patchPart({width}),4,800,true)}
           {numberControl("Height",component.height,height=>patchPart({height}),4,800,true)}

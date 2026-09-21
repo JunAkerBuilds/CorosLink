@@ -73,7 +73,9 @@ export function FitnessScoresPanel({
             <p className="eyebrow">Fitness Scores</p>
             <h2>Not loaded</h2>
           </div>
-          <BarChart3 size={22} aria-hidden="true" />
+          <span className="training-panel-icon" aria-hidden="true">
+          <BarChart3 />
+        </span>
         </header>
         <p className="training-empty-chart">Fitness scores could not be loaded.</p>
       </section>
@@ -125,7 +127,9 @@ export function FitnessScoresPanel({
           <p className="eyebrow">Fitness Scores</p>
           <h2>{scores.length > 0 ? "Running fitness" : "Threshold profile"}</h2>
         </div>
-        <BarChart3 size={22} aria-hidden="true" />
+        <span className="training-panel-icon" aria-hidden="true">
+          <BarChart3 />
+        </span>
       </header>
 
       {scores.length > 0 ? (

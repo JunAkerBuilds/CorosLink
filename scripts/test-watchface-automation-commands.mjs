@@ -190,10 +190,14 @@ rejects([{ op: "set", path: "/design/nativeData/week_tl/color", value: "red" }],
 rejects([{ op: "set", path: "/design/nativeData/unknown", value: nativeStyle }], "native.invalid", nativeAdded.value);
 rejects([{ op: "set", path: "/design/nativeData/week_tl/assets", value: { icon: { "00": completePng } } }], "native.assets", nativeAdded.value);
 const nativeCustomized = apply([{ op: "merge", path: "/design/nativeData/week_tl", value: {
-  parts: { icon: { width: 80, color: "#00ff00" } }, assetTexts: { icon: { "0": "LOAD" } }, assets: { digits: { "0": completePng } }
+  parts: { icon: { x: -120, y: -64, width: 80, color: "#00ff00" } }, assetTexts: { icon: { "0": "LOAD" } }, assets: { digits: { "0": completePng } }
 } }], "current", nativeAdded.value);
 assert.deepEqual(nativeCustomized.changedLayerIds, ["native:week_tl"]);
 assert.equal(nativeCustomized.value.design.nativeData.week_tl.assetTexts.icon["0"], "LOAD");
 assert.equal(nativeAdded.value.design.nativeData.week_tl.assetTexts, undefined);
+assert.equal(nativeCustomized.value.design.nativeData.week_tl.parts.icon.x, -120);
+assert.equal(nativeCustomized.value.design.nativeData.week_tl.parts.icon.y, -64);
+assert.equal(nativeCustomized.value.design.nativeData.week_tl.x, nativeStyle.x);
+assert.equal(nativeCustomized.value.design.nativeData.week_tl.y, nativeStyle.y);
 
 console.log("watchface automation command tests passed");

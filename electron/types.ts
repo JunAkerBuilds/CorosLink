@@ -111,40 +111,6 @@ export interface CorosWatchfaceStatus {
   suggestedRegion: CorosWatchfaceRegion;
 }
 
-/** The only carrier currently approved for the guarded legacy editor. */
-export type CorosLegacy614aCarrierProfile = "multidata-elev-416";
-
-export interface CorosLegacy614aCarrierInspection {
-  profile: CorosLegacy614aCarrierProfile;
-  profileName: string;
-  fileName: string;
-  watchFaceId: number;
-  sizeBytes: number;
-  payloadCrc16: number;
-  fullFileCrc16: number;
-  weatherSpriteSize: number;
-  weatherPosition: { x: number; y: number };
-  temperatureRect: { x0: number; y0: number; x1: number; y1: number };
-}
-
-/** Opaque main-process handle returned after an exact reference is inspected. */
-export interface CorosLegacy614aCarrierSelection {
-  selectionId: string;
-  inspection: CorosLegacy614aCarrierInspection;
-}
-
-/** Safe normal-display geometry only. Carrier identity and resources are locked. */
-export interface CorosLegacy614aCarrierPatchInput {
-  weatherPosition: { x: number; y: number };
-  temperatureRect: { x0: number; y0: number; x1: number; y1: number };
-}
-
-export interface CorosLegacy614aCarrierExportResult {
-  saved: boolean;
-  filePath?: string;
-  watchFaceId: number;
-}
-
 /** A source-template, on-watch, or user-created watchface catalog. */
 export type CorosWatchfaceThemeCatalog = "editable" | "official" | "custom";
 

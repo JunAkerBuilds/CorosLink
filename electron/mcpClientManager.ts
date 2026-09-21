@@ -26,6 +26,7 @@ import {
   mcpOAuthInvalidationTargets,
   type McpOAuthInvalidationScope
 } from "./mcpOAuthCompatibility";
+import { discoverTools } from "./mcpToolDiscovery";
 import { prefixToolName, splitToolName } from "./mcpToolNames";
 import type {
   CorosMcpTool,
@@ -532,15 +533,6 @@ function ensureCurrentResource(server: McpServerConfig): void {
     return;
   }
   clearStoredCredentials(server.id);
-}
-
-async function discoverTools(client: Client): Promise<CorosMcpTool[]> {
-  const result = await client.listTools();
-  return (result.tools ?? []).map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    inputSchema: tool.inputSchema as Record<string, unknown>
-  }));
 }
 
 async function refreshTools(server: McpServerConfig): Promise<void> {

@@ -6337,14 +6337,6 @@ body.wf-value-scrubbing * {
   scrollbar-width: thin;
 }
 
-.watchface-raw-installer {
-  margin-top: 18px;
-}
-
-.legacy-carrier-editor {
-  margin-top: 18px;
-}
-
 .coros-device-info {
   margin-top: 18px;
 }
@@ -6683,129 +6675,7 @@ body.wf-value-scrubbing * {
   margin-top: 1px;
 }
 
-.legacy-carrier-reference {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 16px;
-  padding: 11px 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--wf-border));
-  border-radius: var(--wf-control-radius);
-  background: color-mix(in srgb, var(--accent) 7%, var(--wf-surface));
-}
-
-.legacy-carrier-reference > svg {
-  flex: 0 0 auto;
-  color: var(--accent);
-}
-
-.legacy-carrier-reference > div {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.legacy-carrier-reference strong,
-.legacy-carrier-reference span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.legacy-carrier-reference > div span {
-  color: var(--text-secondary);
-  font-size: var(--wf-text-xs);
-}
-
-.legacy-carrier-lock {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: auto;
-  color: var(--accent);
-  font-size: var(--wf-text-xs);
-  font-variant-numeric: tabular-nums;
-}
-
-.legacy-carrier-layout {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--wf-border);
-}
-
-.legacy-carrier-layout-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.legacy-carrier-layout-heading > div {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.legacy-carrier-layout-heading > div svg {
-  color: var(--accent);
-}
-
-.legacy-carrier-layout .text-button {
-  appearance: none;
-  border: 0;
-  padding: 0;
-  color: var(--accent);
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--wf-text-sm);
-}
-
-.legacy-carrier-layout .text-button:hover:not(:disabled) {
-  color: var(--accent-strong);
-  text-decoration: underline;
-}
-
-.legacy-carrier-layout .text-button:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-
-.legacy-carrier-coordinate-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.legacy-carrier-coordinate-grid .field {
-  gap: 5px;
-  font-size: var(--wf-text-xs);
-}
-
-.legacy-carrier-coordinate-grid input {
-  min-width: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.legacy-carrier-layout .watchface-studio-summary {
-  margin-top: 10px;
-}
-
 @media (max-width: 680px) {
-  .legacy-carrier-reference {
-    flex-wrap: wrap;
-  }
-
-  .legacy-carrier-lock {
-    width: 100%;
-    margin-left: 27px;
-  }
-
-  .legacy-carrier-coordinate-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .coros-device-info-details,
   .coros-device-info-services {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6821,21 +6691,12 @@ body.wf-value-scrubbing * {
   }
 }
 
-.watchface-raw-installer .watchface-hub-section-heading {
-  align-items: flex-start;
-  gap: 20px;
-}
-
 .watchface-raw-installer-kicker {
   color: var(--accent);
   font-size: var(--wf-text-xs);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-
-.watchface-raw-installer h2 {
-  margin-top: 5px;
 }
 
 .watchface-raw-installer-actions {
@@ -6865,10 +6726,6 @@ body.wf-value-scrubbing * {
   margin: 16px 0 0;
 }
 
-.watchface-raw-installer-file-input {
-  display: none;
-}
-
 .watchface-raw-installer-devices {
   display: flex;
   flex-wrap: wrap;
@@ -6880,22 +6737,6 @@ body.wf-value-scrubbing * {
 
 .watchface-raw-installer-devices > span {
   flex-basis: 100%;
-}
-
-.watchface-raw-installer-progress {
-  height: 6px;
-  margin-top: 14px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--text-secondary) 20%, transparent);
-}
-
-.watchface-raw-installer-progress span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent);
-  transition: width 160ms ease;
 }
 
 /* Watch Faces project dashboard */
@@ -6917,6 +6758,10 @@ body.wf-value-scrubbing * {
     var(--text-primary) 10%
   );
   --wf-dashboard-border: var(--glass-border);
+  /* The hub is a definite-height scroll grid. With no free space, `auto` rows
+     shrink to their minimum contribution, which for the header is its
+     min-height, so the stacked (narrow) header overflowed into the content. */
+  grid-auto-rows: max-content;
   gap: 0;
   border: 0;
   border-radius: 0;
