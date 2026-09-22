@@ -72,7 +72,12 @@ async function main() {
     await js(`window.corosLink = undefined; window.dispatchEvent(new Event('coroslink:carto-settings-changed')); void 0`);
     await until(() => js(`Array.from(document.querySelectorAll('dialog .activity-route-base-tile img.leaflet-tile')).every(tile => new URL(tile.src).hostname.endsWith('.tile.openstreetmap.org'))`), Boolean, 'key removal falls back to OSM');
     await click('[aria-label="Close expanded map"]');
-    await click('[aria-label="Close activity details"]');
+    // Wait for the native close event before reopening: removing [open] happens
+    // earlier, and a queued close event can otherwise close the next dialog.
+    await js(`new Promise(resolve => {
+      document.querySelector('dialog[open]').addEventListener('close', () => resolve(true), { once: true });
+      document.querySelector('[aria-label="Close activity details"]').click();
+    })`);
     await until(() => count('dialog[open]'), n => n === 0, 'close detail');
     await js(`localStorage.setItem('coroslink.selection.v1.training.activityRoute.baseLayer', JSON.stringify('dark')); void 0`);
     await click('.activity-card-body');
