@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.40] - 2026-09-22
+
+### Added
+
+- Configure a personal CARTO basemap API key in Settings, with setup documentation.
+
+### Changed
+
+- Improved responsive dashboard sizing and training activity layouts.
+- Centralized account and map API settings for easier configuration.
+
+### Fixed
+
+- Watch Face Studio can export added Bluetooth and Do Not Disturb indicators when the original template does not define their icon or position settings.
+
 ## [0.1.39] - 2026-09-21
 
 ### Added

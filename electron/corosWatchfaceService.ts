@@ -2062,6 +2062,14 @@ export function applyCorosWatchfaceConfigOverrides(
     // not originally declare. The renderer only emits this fixed allow-list;
     // arbitrary missing keys remain rejected below.
     "rect_control1_pos",
+    // Studio offers these standalone status states even when the template
+    // omits them. Custom artwork also synthesizes their shared position.
+    "bluetooth_icon_pos",
+    "bluetooth_on_icon",
+    "bluetooth_off_icon",
+    "no_disturb_icon_pos",
+    "no_disturb_on_icon",
+    "no_disturb_off_icon",
     "weather_icon_pos",
     "weather_icon_dir",
     "weather_dark_icon_dir",

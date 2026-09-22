@@ -233,6 +233,29 @@ assert.equal(
   "[time_hour_high_pos]={1,2}\r\n[weather_icon_pos]={187,57}\r\n[weather_icon_dir]=weather\r\n",
   "confirmed optional weather keys should be appended without changing CRLF"
 );
+for (const newline of ["\n", "\r\n"]) {
+  const statusOverrides = {
+    bluetooth_off_icon: "studio\\bluetooth_off\\00.png",
+    bluetooth_icon_pos: "{72,273}",
+    bluetooth_on_icon: "studio\\bluetooth_on\\00.png",
+    no_disturb_on_icon: "studio\\dnd_on\\00.png",
+    no_disturb_off_icon: "studio\\dnd_off\\00.png",
+    no_disturb_icon_pos: "{64,64}"
+  };
+  const baseline = `[time_hour_high_pos]={1,2}${newline}`;
+  const result = applyCorosWatchfaceConfigOverrides(baseline, statusOverrides);
+  assert.equal(
+    result,
+    baseline + Object.entries(statusOverrides)
+      .map(([key, value]) => `[${key}]=${value}${newline}`).join(""),
+    "Studio status icons and positions must export when absent from the template"
+  );
+  assert.equal(
+    applyCorosWatchfaceConfigOverrides(result, statusOverrides),
+    result,
+    "reapplying status overrides must not duplicate declarations"
+  );
+}
 const configWithSynthesizedBattery = applyCorosWatchfaceConfigOverrides(
   configWithoutWeather,
   {
