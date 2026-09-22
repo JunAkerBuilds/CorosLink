@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, FileDown, Loader2 } from "lucide-react";
+import { Activity, Bike, ChevronDown, Dumbbell, FileDown, Loader2, MoreVertical } from "lucide-react";
+import { PersonSimpleRun, PersonSimpleSwim, PersonSimpleWalk } from "@phosphor-icons/react";
+import { activityCategory } from "../activityCollection";
 import type { KeyboardEvent } from "react";
 import {
   TRAINING_HUB_EXPORT_FORMATS,
@@ -29,16 +31,15 @@ interface TrainingActivityTableProps {
   ) => void;
 }
 
-function sportChipClass(sportType: number): string {
-  const palette = sportType % 5;
-  return `sport-chip sport-chip-${palette}`;
-}
+const sportIcons = { run: PersonSimpleRun, ride: Bike, swim: PersonSimpleSwim,
+  walk: PersonSimpleWalk, strength: Dumbbell, other: Activity, all: Activity };
 
 function handleRowKeyDown(
   event: KeyboardEvent<HTMLTableRowElement>,
   activity: TrainingHubActivity,
   onLoadDetail: (activity: TrainingHubActivity) => void
 ) {
+  if (event.target !== event.currentTarget) return;
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
     onLoadDetail(activity);
@@ -50,22 +51,29 @@ interface ExportMenuProps {
   activityName: string;
   busy: string | null;
   disabled?: boolean;
+  compact?: boolean;
+  /** Renders a labelled pill trigger instead of the icon-only button. */
+  label?: string;
   onExportFile: (
     activity: TrainingHubActivity,
     fileType: TrainingHubActivityFileType
   ) => void;
 }
 
-function ExportMenu({
+export function ExportMenu({
   activity,
   activityName,
   busy,
   disabled = false,
+  compact = false,
+  label,
   onExportFile
 }: ExportMenuProps) {
   const [menuPosition, setMenuPosition] = useState<{
-    top: number;
-    right: number;
+    top?: number;
+    bottom?: number;
+    left?: number;
+    right?: number;
   } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -126,17 +134,40 @@ function ExportMenu({
       return;
     }
 
+    // Right-align under table action columns; left-align for triggers on the
+    // left side of the viewport (the dialog footer) so the menu stays on screen.
     setMenuPosition({
       top: rect.bottom + 6,
-      right: window.innerWidth - rect.right
+      ...(rect.left < window.innerWidth / 2
+        ? { left: rect.left }
+        : { right: window.innerWidth - rect.right })
     });
   }
+
+  // A menu that would run off the bottom of the viewport (e.g. from a dialog
+  // footer) flips to open upward once its real height is known.
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    const button = buttonRef.current;
+    if (!open || menuPosition?.top === undefined || !menu || !button) {
+      return;
+    }
+    if (menu.getBoundingClientRect().bottom > window.innerHeight - 8) {
+      const { top: _top, ...anchor } = menuPosition;
+      setMenuPosition({
+        ...anchor,
+        bottom: window.innerHeight - button.getBoundingClientRect().top + 6
+      });
+    }
+  }, [open, menuPosition]);
 
   return (
     <div className="training-export-menu" ref={containerRef}>
       <button
         ref={buttonRef}
-        className="icon-button training-action-button"
+        className={label
+          ? "secondary-button training-export-button"
+          : `icon-button training-action-button${compact ? " activity-card-menu" : ""}`}
         type="button"
         aria-label={`Export ${activityName}`}
         title={disabled ? "Sample activities cannot be exported" : "Export activity file"}
@@ -150,9 +181,10 @@ function ExportMenu({
       >
         {isExporting ? (
           <Loader2 className="spin" size={17} aria-hidden="true" />
-        ) : (
+        ) : compact ? <MoreVertical size={18} aria-hidden="true" /> : (
           <>
             <FileDown size={17} aria-hidden="true" />
+            {label ? <span>{label}</span> : null}
             <ChevronDown size={13} aria-hidden="true" />
           </>
         )}
@@ -164,7 +196,7 @@ function ExportMenu({
               ref={menuRef}
               className="training-export-dropdown"
               role="menu"
-              style={{ top: menuPosition.top, right: menuPosition.right }}
+              style={{ top: menuPosition.top, bottom: menuPosition.bottom, left: menuPosition.left, right: menuPosition.right }}
             >
               <p className="training-export-dropdown-title">Export as</p>
               {TRAINING_HUB_EXPORT_FORMATS.map((format) => (
@@ -188,7 +220,8 @@ function ExportMenu({
                 </button>
               ))}
             </div>,
-            document.body
+            // Inside a modal <dialog> the body is inert, so the menu must live in the dialog's top layer.
+            containerRef.current?.closest("dialog") ?? document.body
           )
         : null}
     </div>
@@ -219,19 +252,21 @@ export function TrainingActivityTable({
 
   return (
     <div className="table-shell training-activity-table-shell">
-      <table>
+      <table aria-label="Activities">
         <thead>
           <tr>
-            <th>Activity</th>
-            <th>When</th>
-            <th>Time</th>
-            <th>Dist</th>
+            <th scope="col">Activity</th>
+            <th scope="col">Date & time</th>
+            <th scope="col">Duration</th>
+            <th scope="col">Distance</th>
             <th aria-label="Export" />
           </tr>
         </thead>
         <tbody>
           {activities.map((activity, index) => {
             const sportName = resolveSportName(activity, sportTypeMap);
+            const category = activityCategory(activity.sportType);
+            const SportIcon = sportIcons[category];
             const activityName =
               activity.name || sportName || `Activity ${index + 1}`;
             const isSelected = selectedActivityId === activity.activityId;
@@ -240,7 +275,7 @@ export function TrainingActivityTable({
 
             return (
               <tr
-                className={`training-table-row${
+                className={`training-table-row activity-sport-${category}${
                   isSelected ? " is-selected" : ""
                 }${isLoadingDetail ? " is-loading" : ""}`}
                 key={activity.activityId || `${activity.sportType}-${index}`}
@@ -254,11 +289,14 @@ export function TrainingActivityTable({
                 }
               >
                 <td className="training-activity-cell">
+                  <div className="training-activity-identity">
+                    <span className="training-activity-sport-icon"><SportIcon size={21} aria-hidden="true" /></span>
                   <div className="training-activity-name">
                     <strong title={activityName}>{activityName}</strong>
-                    <span className={sportChipClass(activity.sportType)}>
+                    <span className="sport-chip">
                       {sportName}
                     </span>
+                  </div>
                   </div>
                 </td>
                 <td className="training-activity-when">

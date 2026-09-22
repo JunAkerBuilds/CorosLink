@@ -21,7 +21,7 @@ export function sampleHealthInsight(kind: HealthInsightKind, days: number): Heal
       series: [series("average", "Sleep HRV average", [54, 58, 51, 57, 60, 65, 62], "ms")]
     };
     case "healthCheck": return { ...base,
-      metrics: [{ key: "heartRate", label: "Heart rate", value: 58, unit: "bpm" }, { key: "hrv", label: "HRV", value: 64, unit: "ms" }, { key: "respiratoryRate", label: "Respiratory rate", value: 14, unit: "breaths/min" }, { key: "spo2", label: "Blood oxygen", value: 98, unit: "%" }],
+      metrics: [{ key: "heartRate", label: "Heart rate", value: 58, unit: "bpm" }, { key: "hrv", label: "HRV", value: 64, unit: "ms" }, { key: "stress", label: "Stress", value: 28 }, { key: "level", label: "Stress level", value: "Low" }, { key: "respiratoryRate", label: "Respiratory rate", value: 14, unit: "breaths/min" }, { key: "spo2", label: "Blood oxygen", value: 98, unit: "%" }],
       series: [series("heartRate", "Heart rate", [61, 60, 64, 62, 59, 57, 58], "bpm"), series("spo2", "Blood oxygen", [98, 97, 98, 99, 98, 99, 98], "%")]
     };
     case "cycle": return { ...base,

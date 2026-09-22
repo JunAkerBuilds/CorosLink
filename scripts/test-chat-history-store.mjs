@@ -64,6 +64,17 @@ function createMemoryDatabase() {
 assert.deepEqual(parseChatTranscriptJson("not-json"), []);
 assert.deepEqual(parseChatTranscriptJson("{}"), []);
 
+// Official COROS review cards survive history reloads with their save state.
+for (const state of ['pending', 'saving', 'saved', 'uncertain']) {
+  const entry = { kind: 'corosAction', preview: {
+    requestId: 'review-1', title: 'Review workout', summary: 'Easy run tomorrow',
+    destination: 'Calendar', date: '20260922', details: ['Training: 30 min · Heart rate zone 2'],
+    createdAt: 1_790_000_000_000, state, message: 'Fixture status'
+  } };
+  assert.deepEqual(parseChatTranscriptJson(JSON.stringify([entry])), [entry]);
+}
+assert.deepEqual(parseChatTranscriptJson('[{"kind":"corosAction","preview":{"state":"saved"}}]'), []);
+
 // Coach charts round-trip with their resolved series, ranges, and tiles.
 const coachChartEntry = {
   kind: "coachChart",

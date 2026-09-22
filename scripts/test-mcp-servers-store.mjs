@@ -155,9 +155,11 @@ assert.deepEqual(removedKeys, [
   "mcp.coros.clientInfo",
   "mcp.coros.bearer",
   "mcp.coros.resourceUrl",
+  "mcp.coros.authorizationId",
   "corosMcp.tokens",
   "corosMcp.clientInfo",
-  "corosMcp.resourceUrl"
+  "corosMcp.resourceUrl",
+  "corosMcp.authorizationId"
 ]);
 removeMcpServer("coros", db, () => assert.fail("Missing server is a no-op"));
 
@@ -170,7 +172,8 @@ assert.deepEqual(removedKeys, [
   "mcp.freddy.tokens",
   "mcp.freddy.clientInfo",
   "mcp.freddy.bearer",
-  "mcp.freddy.resourceUrl"
+  "mcp.freddy.resourceUrl",
+  "mcp.freddy.authorizationId"
 ]);
 
 console.log("mcp-servers-store tests passed");

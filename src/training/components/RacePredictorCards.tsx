@@ -1,3 +1,6 @@
+import type { ChartCardSize } from "../widgetSizing";
+import "../chartSizing.css";
+import "../profileSizing.css";
 import { Timer } from "lucide-react";
 import type { TrainingHubRacePredictor } from "../../../electron/types";
 import {
@@ -8,6 +11,7 @@ import {
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 
 interface RacePredictorCardsProps {
+  size?: ChartCardSize;
   racePredictor: TrainingHubRacePredictor | null;
 }
 
@@ -15,13 +19,13 @@ function hasPace(value?: number): value is number {
   return value !== undefined && Number.isFinite(value) && value > 0;
 }
 
-export function RacePredictorCards({ racePredictor }: RacePredictorCardsProps) {
+export function RacePredictorCards({ racePredictor, size }: RacePredictorCardsProps) {
   const { unitSystem } = useUnitSystem();
   const scores = racePredictor?.runScoreList ?? [];
   const runningLevel = racePredictor?.staminaLevel;
 
   return (
-    <section className="panel training-race-panel">
+    <section className="panel training-race-panel" data-chart-size={size}>
       <header className="training-race-header">
         <div className="training-race-heading">
           <p className="eyebrow">Race Predictor</p>

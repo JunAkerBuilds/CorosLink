@@ -1,3 +1,4 @@
+import { strengthEditPreviewSchema } from "./workoutEditService";
 import crypto from "node:crypto";
 import {
   deleteChatSessionRow,
@@ -33,6 +34,7 @@ import type {
   TrainingHubThresholdZone,
   TrainingHubTrackPoint,
   TrainingTrendPoint,
+  CoachCorosActionPreview,
   WorkoutDeletePreview
 } from "./types";
 import { migrateActivityHrTrendPreview } from "./chatActivityTools";
@@ -867,6 +869,28 @@ function parseCoachChartPreview(value: unknown): CoachChartPreview | null {
 function parseEntry(value: unknown): PersistedChatEntry | null {
   if (!isRecord(value)) {
     return null;
+  }
+
+  if (value.kind === "workoutEdit") {
+    const parsed = strengthEditPreviewSchema.safeParse(value.preview);
+    return parsed.success ? { kind: "workoutEdit", preview: parsed.data } : null;
+  }
+
+  if (value.kind === "corosAction") {
+    const p = value.preview;
+    if (!isRecord(p) || typeof p.requestId !== "string" || typeof p.title !== "string" ||
+      typeof p.summary !== "string" || typeof p.createdAt !== "number" ||
+      !["Workout Library", "Calendar", "Training Plan"].includes(String(p.destination)) ||
+      !["pending", "saving", "saved", "uncertain"].includes(String(p.state)) || !Array.isArray(p.details)) return null;
+    const preview: CoachCorosActionPreview = {
+      requestId: p.requestId, title: p.title, summary: p.summary, createdAt: p.createdAt,
+      destination: p.destination as CoachCorosActionPreview["destination"],
+      state: p.state as CoachCorosActionPreview["state"],
+      details: p.details.filter((line): line is string => typeof line === "string"),
+      ...(typeof p.date === "string" ? { date: p.date } : {}),
+      ...(typeof p.message === "string" ? { message: p.message } : {})
+    };
+    return { kind: "corosAction", preview };
   }
 
   if (value.kind === "planDraft") {

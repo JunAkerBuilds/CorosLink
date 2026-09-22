@@ -1,3 +1,4 @@
+import { isWorkoutEditTool } from "./workoutEditService";
 import { BrowserWindow, safeStorage, shell } from "electron";
 import crypto from "node:crypto";
 import http from "node:http";
@@ -14,9 +15,12 @@ import {
   callMcpTool,
   ensureAllMcpConnected,
   getAllMcpTools,
+  getMcpAuthorizationKey,
   getMcpServerCachedTools
 } from "./mcpClientManager";
 import { prefixToolName } from "./mcpToolNames";
+import { claudeCanUseCorosTool, coachMcpTools, corosCoachRoutingInstructions, isCorosWorkoutWrite } from "./coachCorosTools";
+import { createCorosActionService } from "./coachCorosActions";
 import {
   getChatWorkoutTools,
   handleChatWorkoutTool,
@@ -222,7 +226,9 @@ export function listChatSessionsForProvider(provider: ChatProvider) {
 }
 
 export function getChatSessionEntries(id: string) {
-  return getChatSession(id);
+  return getChatSession(id).map(entry => entry.kind === "corosAction"
+    ? { ...entry, preview: corosActions.restore(entry.preview) }
+    : entry);
 }
 
 export function createChatSessionForProvider(provider: ChatProvider) {
@@ -1111,7 +1117,7 @@ export async function confirmWorkoutDelete(
 
 function getAllChatTools(): CorosMcpTool[] {
   return [
-    ...getAllMcpTools(),
+    ...coachMcpTools(getAllMcpTools()),
     ...getChatActivityTools(),
     ...getChatAnalyticsTools(),
     ...getChatFitTools(),
@@ -1120,41 +1126,14 @@ function getAllChatTools(): CorosMcpTool[] {
   ];
 }
 
-const CLAUDE_REMOTE_READ_TOOLS: Record<
-  keyof ClaudeCodePermissions,
-  readonly string[]
-> = {
-  recentActivities: [
-    "get_recent_activities",
-    "get_activity_details",
-    "get_activity_detail"
-  ],
-  trainingMetrics: [
-    "get_training_metrics",
-    "get_fitness_metrics",
-    "get_recovery_metrics",
-    "get_training_load"
-  ],
-  upcomingWorkouts: ["get_upcoming_workouts", "get_training_calendar"],
-  sleepData: ["get_sleep_summary", "get_sleep_data"],
-  fullActivityFiles: []
-};
-
 export function getClaudeCodeTools(
   permissions: ClaudeCodePermissions
 ): CorosMcpTool[] {
-  const remoteAllowedNames = new Set<string>();
-  for (const [permission, names] of Object.entries(CLAUDE_REMOTE_READ_TOOLS)) {
-    if (permissions[permission as keyof ClaudeCodePermissions]) {
-      for (const name of names) remoteAllowedNames.add(name);
-    }
-  }
-
   // COROS remote tools are permission-gated by their (unprefixed) names, then
   // exposed prefixed. Other MCP servers the user configured are exposed in full.
   const remoteTools = [
     ...getMcpServerCachedTools("coros")
-      .filter((tool) => remoteAllowedNames.has(tool.name))
+      .filter((tool) => claudeCanUseCorosTool(tool.name, permissions))
       .map((tool) => ({ ...tool, name: prefixToolName("coros", tool.name) })),
     ...getAllMcpTools().filter((tool) => !tool.name.startsWith("coros__"))
   ];
@@ -1168,6 +1147,7 @@ export function getClaudeCodeTools(
   // the same switch as sending FIT files to Claude.
   const fitTools = permissions.fullActivityFiles ? getChatFitTools() : [];
   const workoutTools = getChatWorkoutTools().filter((tool) => {
+    if (isWorkoutEditTool(tool.name)) return permissions.upcomingWorkouts;
     if (
       tool.name === "upload_training_plan" ||
       tool.name === "list_scheduled_workouts" ||
@@ -1183,13 +1163,27 @@ export function getClaudeCodeTools(
   });
 
   return [
-    ...remoteTools,
+    ...coachMcpTools(remoteTools),
     ...activityTools,
     ...analyticsTools,
     ...fitTools,
     ...workoutTools,
     ...getChatInteractionTools()
   ];
+}
+
+const corosActions = createCorosActionService({
+  tools: getAllMcpTools,
+  call: callMcpTool,
+  load: () => getSetting("chat.corosActions"),
+  save: value => setSetting("chat.corosActions", value),
+  connectionKey: () => getMcpAuthorizationKey("coros"),
+  canConfirm: claude => !claude || getChatSettings().claudeCode.permissions.upcomingWorkouts
+});
+
+export async function confirmCoachCorosAction(requestId: string) {
+  await ensureAllMcpConnected();
+  return corosActions.confirm(requestId);
 }
 
 async function executeChatTool(
@@ -1200,6 +1194,14 @@ async function executeChatTool(
   unitSystem: UnitSystem,
   claudePermissions?: ClaudeCodePermissions
 ): Promise<string> {
+  if (claudePermissions && name.startsWith("coros__") && !claudeCanUseCorosTool(name.slice(7), claudePermissions)) {
+    throw new Error("This COROS tool is disabled in Coach settings.");
+  }
+  if (isCorosWorkoutWrite(name)) {
+    const preview = await corosActions.stage(name, args, Boolean(claudePermissions), unitSystem);
+    send("chat:streamInfo", { requestId, kind: "corosAction", preview });
+    return JSON.stringify({ status: "awaiting_confirmation", preview, action: "The review card is ready. Wait for the athlete to click Save to COROS. Nothing has been saved yet." });
+  }
   if (isChatInteractionTool(name)) {
     return handleChatInteractionTool(
       name as ChatInteractionToolName,
@@ -1222,6 +1224,7 @@ async function executeChatTool(
           draft: preview
         });
       },
+      onWorkoutEdit: preview => send("chat:streamInfo", { requestId, kind: "workoutEdit", preview }),
       onWorkoutDelete: (preview) => {
         send("chat:streamInfo", {
           requestId,
@@ -1531,8 +1534,9 @@ function withLiveToolInstructions(
   }
   if (corosMcpTools.length > 0) {
     sections.push(
+      corosCoachRoutingInstructions(tools),
       `COROS MCP tools: ${corosMcpTools.map((tool) => tool.name).join(", ")}. ` +
-        "Use these for sleep, HRV, recovery, and other MCP-only metrics. " +
+        "Use these for live health/recovery and the official workout workflows described above. " +
         "For lap splits and interval breakdowns, prefer get_activity_detail."
     );
   }
@@ -1545,13 +1549,26 @@ function withLiveToolInstructions(
         "Do not assume these tools return COROS data."
     );
   }
+  if (otherMcpTools.some((tool) => tool.name.startsWith("hevy__"))) {
+    sections.push(
+      "Hevy tools (hevy__ prefix) manage the connected Hevy account. " +
+        "For requests targeting Hevy, use these tools rather than COROS authoring or calendar tools. " +
+        "Use routines for future reusable workout prescriptions; create completed workouts only from actual athlete-provided results, never invented sets or times. " +
+        "Look up exercise templates and existing routines/workouts before editing; use their exact Hevy IDs. " +
+        "Follow the live tool schemas and descriptions, including units and whether an update replaces content. " +
+        "Read the current content before replacement and preserve exercises, sets, notes, and metadata the athlete did not ask to change. " +
+        "Write only when the athlete requests that change; clarify an ambiguous destination or missing required values first. " +
+        "Report success only after a successful tool result. Do not claim deletion or other capabilities absent from the connected tools. " +
+        "Hevy MCP changes are live in Hevy; the Strength dashboard uses a separate sync and may need refreshing."
+    );
+  }
   if (planTools.length > 0) {
     sections.push(
       "",
       "## Workout and training plan tools",
       `Authoring tools: ${planTools.map((tool) => tool.name).join(", ")}. ` +
-        "Use draft_workout for exactly one standalone workout. Its card lets the athlete choose Workout Library or Calendar; set calendar_date only when the athlete names a date. " +
-        "Use draft_training_plan only for multi-day or multi-week schedules. Never wrap a one-off workout in a plan. " +
+        "Use draft_workout for exactly one standalone workout when using the local authoring route described above. Its card lets the athlete choose Workout Library or Calendar; set calendar_date only when the athlete names a date. " +
+        "Use draft_training_plan only for multi-day or multi-week local schedules. Never wrap a one-off workout in a plan. " +
         "Before drafting Strength or HYROX workouts, call search_coros_exercises once with all intended " +
         "exercise queries, or with target muscles, movement patterns, and known equipment; then use the " +
         "returned exact exercise IDs and names. A COROS naming mismatch alone never requires an athlete question. " +

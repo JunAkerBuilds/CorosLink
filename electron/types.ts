@@ -1,3 +1,4 @@
+import type { StrengthEditPreview } from "./workoutEditTypes";
 export type BinaryName = "yt-dlp" | "ffmpeg";
 
 /** User-selected measurement system for CorosLink presentation and writes. */
@@ -2791,6 +2792,8 @@ export interface ChatStreamError {
  * calls the model makes mid-stream.
  */
 export type ChatStreamInfo =
+  | { requestId: string; kind: "workoutEdit"; preview: StrengthEditPreview }
+  | { requestId: string; kind: "corosAction"; preview: CoachCorosActionPreview }
   | {
       requestId: string;
       kind: "context";
@@ -3853,8 +3856,22 @@ export interface WorkoutDeletePreview {
   summary: string;
 }
 
+export interface CoachCorosActionPreview {
+  requestId: string;
+  title: string;
+  summary: string;
+  destination: "Workout Library" | "Calendar" | "Training Plan";
+  date?: string;
+  details: string[];
+  createdAt: number;
+  state: "pending" | "saving" | "saved" | "uncertain";
+  message?: string;
+}
+
 /** Persisted coach timeline entry (messages plus inline action cards). */
 export type PersistedChatEntry =
+  | { kind: "workoutEdit"; preview: StrengthEditPreview }
+  | { kind: "corosAction"; preview: CoachCorosActionPreview }
   | PersistedChatMessageEntry
   | { kind: "coachPrompt"; prompt: CoachInputPrompt }
   | { kind: "planDraft"; draft: PlanDraftPreview }

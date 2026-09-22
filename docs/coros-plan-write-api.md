@@ -10,8 +10,8 @@ with `userId`) against the regional `teamapi*.coros.com` host.
 
 This is the private API used by the first-party Training Hub web app. It is not
 the partner-only COROS OpenAPI training-plan push API, and it is not the COROS
-MCP service. The COROS MCP is currently read-only; CorosLink performs writes
-through the athlete's authenticated Training Hub session.
+MCP service. The official COROS MCP supports a subset of workout authoring. CorosLink's
+strength writes use the athlete's authenticated Training Hub session.
 
 ## Endpoints
 

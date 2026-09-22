@@ -1,3 +1,4 @@
+import { WorkoutAutomationSettings } from "./WorkoutAutomationSettings";
 import {
   ArrowLeft,
   Bike,
@@ -368,6 +369,7 @@ export function SettingsView({
       ) : null}
 
       <WatchfaceAutomationSettings api={api} />
+      <WorkoutAutomationSettings api={api} />
 
       <div className="panel settings-units-panel">
         <div className="settings-units-heading">

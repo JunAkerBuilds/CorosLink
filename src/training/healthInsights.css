@@ -10,21 +10,51 @@
 .health-segmented button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-glow); }
 .health-segmented button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-.health-insight-card { display: flex; flex-direction: column; min-width: 0; padding: 22px; }
-.health-insight-heading { align-items: flex-start; }
-.health-insight-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.health-insight-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
-.health-insight-heading h3 { font-size: 15px; margin: 0; }
-.health-insight-heading p { margin: 3px 0 0; color: var(--text-muted); font-size: 12px; }
+/* Card chrome follows the dashboard's other instruments (sleep, VO2, stat tiles): one identity hue
+   per kind lights the top-left corner, tints the hairline and icon badge, and casts a soft ambient glow. */
+.health-insight-card {
+  --insight-tone: var(--accent);
+  --insight-tone-soft: color-mix(in srgb, var(--insight-tone) 14%, transparent);
+  --insight-tone-edge: color-mix(in srgb, var(--insight-tone) 30%, transparent);
+  position: relative; isolation: isolate; display: flex; flex-direction: column; min-width: 0;
+  padding: clamp(16px, 1.55vw, 21px);
+  border: 1px solid color-mix(in srgb, var(--insight-tone) 18%, var(--glass-border));
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(120% 72% at 0% 0%, var(--insight-tone-soft), transparent 62%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.042), rgba(255, 255, 255, 0.014) 56%),
+    var(--glass-bg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 42px rgba(0, 0, 0, 0.2),
+    0 0 24px color-mix(in srgb, var(--insight-tone) 9%, transparent);
+}
+.health-insight-stress { --insight-tone: #e0a93a; }
+.health-insight-sleepHrv { --insight-tone: #a495ff; }
+.health-insight-healthCheck { --insight-tone: #f47a86; }
+.health-insight-cycle { --insight-tone: #f0a1c8; }
+.health-insight-heading { align-items: center; flex-wrap: wrap; gap: 12px; }
+.health-insight-title { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.health-insight-icon {
+  display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex-shrink: 0;
+  border: 1px solid var(--insight-tone-edge); border-radius: 50%;
+  background: color-mix(in srgb, var(--insight-tone) 16%, transparent); color: var(--insight-tone);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 22px color-mix(in srgb, var(--insight-tone) 24%, transparent);
+}
+.health-insight-icon svg { stroke-width: 2.2px; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--insight-tone) 45%, transparent)); }
+.health-insight-heading h3 { margin: 0; color: var(--text-secondary); font-size: 10.5px; font-weight: 750; letter-spacing: 0.075em; line-height: 1.25; text-transform: uppercase; }
+.health-insight-heading p { margin: 4px 0 0; color: var(--text-muted); font-size: 11.5px; }
+/* The health check headlines its latest reading time instead (see .health-check-summary), like the sleep card's date. */
+.health-insight-healthCheck .health-insight-title p { display: none; }
 .health-insight-heading > button { padding: 7px; min-height: 0; flex-shrink: 0; }
 .health-cycle-toggle { align-self: flex-start; margin-top: 16px; }
-.health-insight-body { display: flex; flex: 1; flex-direction: column; gap: 14px; margin-top: 18px; }
+.health-insight-body { display: flex; flex: 1; flex-direction: column; gap: 12px; margin-top: 16px; }
 .health-insight-body[hidden] { display: none; }
 
 /* Hero: latest value with COROS' own label, then compact period statistics. */
 .health-insight-hero { display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
 .health-insight-primary { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.health-insight-value { font-size: 38px; line-height: 1; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.health-insight-value { font-size: 38px; line-height: 1; font-weight: 700; letter-spacing: -0.045em; font-variant-numeric: tabular-nums; }
 .health-insight-value small { margin-left: 5px; color: var(--text-muted); font-size: 14px; font-weight: 500; letter-spacing: 0; }
 .health-insight-caption { color: var(--text-muted); font-size: 12px; }
 .health-insight-badge { align-self: flex-start; margin-top: 3px; padding: 3px 9px; border: 1px solid var(--glass-border); border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
@@ -32,9 +62,9 @@
 .health-insight-badge.is-watch { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning-text); }
 .health-insight-badge.is-alert { background: var(--error-bg); border-color: var(--error-border); color: var(--error-text); }
 .health-insight-stats { display: grid; grid-auto-flow: column; gap: 4px; margin: 0; }
-.health-insight-stats > div { min-width: 64px; padding: 8px 12px; border-radius: 10px; background: var(--glass-bg); border: 1px solid var(--glass-border); }
-.health-insight-stats dt { color: var(--text-muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
-.health-insight-stats dd { margin: 0; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.health-insight-stats > div { min-width: 64px; padding: 8px 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--insight-tone) 14%, var(--glass-border)); background: linear-gradient(135deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05); }
+.health-insight-stats dt { color: var(--text-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.health-insight-stats dd { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 
 /* Summary-only values that have no chart of their own. */
 .health-insight-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
@@ -53,14 +83,14 @@
 .health-insight-legend { display: flex; flex-wrap: wrap; gap: 14px; margin: -6px 0 0; color: var(--text-muted); font-size: 11px; }
 .health-insight-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .health-insight-legend i { display: inline-block; width: 14px; height: 8px; border-radius: 2px; }
-.health-insight-legend i.is-range { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-glow); }
+.health-insight-legend i.is-range { background: color-mix(in srgb, var(--insight-tone) 14%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--insight-tone) 30%, transparent); }
 .health-insight-legend i.is-baseline { height: 0; border-top: 2px dashed var(--text-muted); border-radius: 0; }
 
 .health-insight-state { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 26px 16px; border-radius: 10px; border: 1px dashed var(--glass-border); color: var(--text-muted); text-align: center; }
 .health-insight-state p { margin: 0; font-size: 13px; line-height: 1.55; max-width: 34ch; }
 .health-insight-state .secondary-button { margin-top: 4px; }
 .health-insight-message { color: var(--text-muted); font-size: 13px; line-height: 1.6; padding: 10px 0; }
-.health-insight-source { color: var(--text-muted); font-size: 11px; margin: auto 0 0; }
+.health-insight-source { margin: auto 0 0; color: var(--text-muted); font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
 .health-insight-note { color: var(--text-muted); font-size: 12px; line-height: 1.55; }
 .health-insight-note p { margin: 0 0 4px; }
 .health-insight-report, .health-insight-error { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
@@ -68,9 +98,111 @@
 .health-insight-report { max-height: 320px; overflow: auto; }
 .health-insight-report table { border-collapse: collapse; width: 100%; }
 .health-insight-report td, .health-insight-report th { text-align: left; padding: 6px; }
+/* Health check: the five readings a watch check takes in one sitting, one tile per vital.
+   Each tile is its own small instrument and doubles as the selector for the trend below. */
+/* Headline is the latest check's time (the sleep card does the same with its night), caption counts the period. */
+.health-check-summary { display: flex; flex-direction: column; gap: 3px; margin: 0; min-width: 0; }
+.health-check-summary strong { color: var(--text-primary); font-size: clamp(1.05rem, 1.4vw, 1.2rem); font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.health-check-summary span { color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.health-vitals { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px; }
+/* Tiles borrow the daily stat cards' language: corner tint, round icon badge, tracked label, heavy numeral. */
+.health-vital {
+  --vital-soft: color-mix(in srgb, var(--vital) 11%, transparent);
+  --vital-edge: color-mix(in srgb, var(--vital) 45%, transparent);
+  position: relative; display: flex; flex-direction: column; gap: 10px; min-width: 0; margin: 0; padding: 13px 13px 12px;
+  border: 1px solid color-mix(in srgb, var(--vital) 19%, var(--glass-border)); border-radius: 14px;
+  background:
+    radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--vital) 13%, transparent), transparent 65%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.06), 0 3px 10px rgba(0, 0, 0, 0.1);
+  color: var(--text-primary); font: inherit; text-align: left; cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.health-vital:hover:not(:disabled) { border-color: var(--vital-edge); box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08), 0 4px 14px rgba(0, 0, 0, 0.16); transform: translateY(-1px); }
+.health-vital[aria-pressed="true"] {
+  border-color: var(--vital-edge);
+  background:
+    radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--vital) 22%, transparent), transparent 70%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08), 0 0 0 1px color-mix(in srgb, var(--vital) 28%, transparent), 0 0 22px color-mix(in srgb, var(--vital) 18%, transparent);
+}
+.health-vital:disabled { cursor: default; }
+.health-vital:focus-visible { outline: 2px solid var(--vital); outline-offset: 2px; }
+.health-vital-head { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--text-secondary); font-size: 9.5px; font-weight: 750; letter-spacing: 0.06em; line-height: 1.25; text-transform: uppercase; overflow-wrap: anywhere; }
+.health-vital-icon {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 24px; height: 24px;
+  border: 1px solid color-mix(in srgb, var(--vital) 34%, transparent); border-radius: 50%;
+  background: color-mix(in srgb, var(--vital) 22%, transparent); color: var(--vital);
+  box-shadow: inset 0 1px 3px color-mix(in srgb, var(--vital) 22%, transparent), 0 0 0 2px color-mix(in srgb, var(--vital) 5%, transparent);
+}
+.health-vital-icon svg { transform-origin: center; stroke-width: 2.2px; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--vital) 40%, transparent)); }
+.health-vital.is-heartRate .health-vital-icon svg { fill: currentColor; }
+.health-vital-value { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px; font-size: 27px; line-height: 1; font-weight: 700; letter-spacing: -0.045em; font-variant-numeric: tabular-nums; }
+.health-vital-value small { color: var(--text-muted); font-size: 11px; font-weight: 600; letter-spacing: 0; }
+.health-vital-instrument { display: block; height: 30px; }
+.health-vital-foot { color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.health-vital-foot.is-level { color: var(--vital); font-weight: 700; }
+
+.health-sparkline { display: block; width: 100%; height: 100%; overflow: visible; }
+.health-sparkline-fill { fill: var(--vital); fill-opacity: 0.14; }
+.health-sparkline-line { fill: none; stroke: var(--vital); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.health-sparkline-dot { fill: none; stroke: var(--vital); stroke-width: 5; stroke-linecap: round; }
+.health-sparkline-reference { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 3 3; stroke-opacity: 0.7; }
+
+/* COROS' four stress bands; the reported band is lit, the score (when present) is the marker. */
+.health-stress-bands { position: relative; display: flex; gap: 2px; height: 9px; margin-top: 11px; }
+.health-stress-bands i { flex: 1; border-radius: 3px; background: var(--vital); opacity: 0.2; transition: opacity 0.2s ease; }
+.health-stress-bands i.is-lit { opacity: 1; }
+.health-stress-marker { position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--text-primary); box-shadow: 0 0 0 1.5px var(--surface); }
+
+.health-check-trend { display: flex; flex-direction: column; gap: 4px; }
+.health-check-trend-title { margin: 0; color: var(--text-muted); font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.health-vital-hint { margin: 0; padding: 11px 14px; border: 1px dashed var(--glass-border); border-radius: 10px; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+
+/* The heart beats at the measured bpm and the breathing mark inhales at the measured rate. */
+@keyframes health-heartbeat { 0%, 50%, 100% { transform: scale(1); } 12% { transform: scale(1.22); } 24% { transform: scale(1); } 36% { transform: scale(1.12); } }
+@keyframes health-breath { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.2); opacity: 1; } }
+@media (prefers-reduced-motion: no-preference) {
+  .health-vital.is-heartRate .health-vital-icon svg { animation: health-heartbeat var(--beat, 1s) ease-in-out infinite; }
+  .health-vital.is-respiratoryRate .health-vital-icon svg { animation: health-breath var(--breath, 4s) ease-in-out infinite; }
+}
+
+/* Paper: deeper identity inks, hairlines cut from ink (glass borders vanish on white), no neon glows. */
+:root[data-theme="paper"] .health-insight-stress { --insight-tone: #a8721a; }
+:root[data-theme="paper"] .health-insight-sleepHrv { --insight-tone: #6f56c9; }
+:root[data-theme="paper"] .health-insight-healthCheck { --insight-tone: #c43d4d; }
+:root[data-theme="paper"] .health-insight-cycle { --insight-tone: #b8437f; }
+:root[data-theme="paper"] .health-insight-card {
+  --insight-tone-soft: color-mix(in srgb, var(--insight-tone) 9%, transparent);
+  border-color: color-mix(in srgb, var(--insight-tone) 16%, color-mix(in srgb, var(--text-muted) 24%, transparent));
+  background: radial-gradient(120% 72% at 0% 0%, var(--insight-tone-soft), transparent 62%), var(--glass-bg-elevated);
+  box-shadow: var(--glass-inset), var(--shadow-soft);
+}
+:root[data-theme="paper"] .health-insight-icon { box-shadow: none; }
+:root[data-theme="paper"] .health-insight-icon svg, :root[data-theme="paper"] .health-vital-icon svg { filter: none; }
+:root[data-theme="paper"] .health-vital {
+  border-color: color-mix(in srgb, var(--vital) 22%, color-mix(in srgb, var(--text-muted) 24%, transparent));
+  background: radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--vital) 9%, transparent), transparent 65%), var(--surface);
+  box-shadow: var(--glass-inset), 0 2px 8px rgba(30, 45, 35, 0.05);
+}
+:root[data-theme="paper"] .health-vital:hover:not(:disabled) { box-shadow: var(--glass-inset), var(--shadow-soft); }
+:root[data-theme="paper"] .health-vital[aria-pressed="true"] { border-color: var(--vital); background: radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--vital) 14%, transparent), transparent 70%), var(--surface); box-shadow: var(--glass-inset), 0 0 0 1px color-mix(in srgb, var(--vital) 24%, transparent); }
+:root[data-theme="paper"] .health-insight-stats > div { border-color: color-mix(in srgb, var(--text-muted) 24%, transparent); background: var(--surface); box-shadow: none; }
+:root[data-theme="paper"] .health-vital-hint { border-color: color-mix(in srgb, var(--text-muted) 32%, transparent); }
+
 @media (max-width: 900px) { .health-insights-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 520px) {
   .health-insights-heading { align-items: flex-start; flex-direction: column; }
   .health-insight-card { padding: 16px; }
   .health-insight-stats { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
 }
+
+/* Keep each period control inside its card, independent of dashboard controls. */
+.health-insight-period { display: flex; justify-content: flex-end; min-width: 0; margin-left: auto; flex-shrink: 0; }
+.health-insight-card .health-segmented { max-width: 100%; flex-wrap: wrap; border-radius: 10px; }
+.health-insight-card .health-segmented button { min-height: 30px; padding: 5px 11px; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); }
+.health-insight-card .health-segmented button:hover:not(:disabled) { background: var(--glass-bg-hover); color: var(--text-primary); }
+.health-insight-card .health-segmented button[aria-pressed="true"] { background: color-mix(in srgb, var(--insight-tone) 16%, transparent); color: var(--text-primary); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--insight-tone) 28%, transparent); }
+
+/* A single exported card keeps the same width outside the dashboard wrapper. */
+.health-insights.is-single .health-insights-grid { grid-template-columns: minmax(0, 1fr); }

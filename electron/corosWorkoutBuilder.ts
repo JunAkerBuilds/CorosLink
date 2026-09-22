@@ -313,6 +313,16 @@ export function parsePace(pace: string): {
   throw new Error(`Could not parse pace string: ${pace}`);
 }
 
+export function normalizeWorkoutStepKind(kind: RunStepKind | undefined): RunStepKind {
+  const kindKey = String(kind ?? "training")
+    .trim()
+    .toLowerCase();
+  if (!(kindKey in RUN_KIND_ALIASES)) {
+    throw new Error(`Unsupported run step kind: ${kind}`);
+  }
+  return RUN_KIND_ALIASES[kindKey]!;
+}
+
 function normalizeRunStep(step: RunWorkoutStep): RunWorkoutStep {
   const normalized = { ...step };
   const hasLegacyIntensity = [
@@ -331,13 +341,7 @@ function normalizeRunStep(step: RunWorkoutStep): RunWorkoutStep {
   if (step.intensity && hasLegacyIntensity) {
     throw new Error("A step cannot contain both typed intensity and legacy raw COROS intensity fields.");
   }
-  const kindKey = String(normalized.kind ?? "training")
-    .trim()
-    .toLowerCase();
-  if (!(kindKey in RUN_KIND_ALIASES)) {
-    throw new Error(`Unsupported run step kind: ${step.kind}`);
-  }
-  normalized.kind = RUN_KIND_ALIASES[kindKey]!;
+  normalized.kind = normalizeWorkoutStepKind(normalized.kind);
 
   if (normalized.target_type) {
     const targetKey = normalized.target_type.trim().toLowerCase();
@@ -579,9 +583,9 @@ function buildRunExercise(
   }
   if (
     (sport === "strength" || (sport === "hyrox" && normalized.exercise_kind !== undefined)) &&
-    kind === "training" &&
-    !normalized.exercise_id &&
-    !normalized.exercise_name
+    editorKind === "training" &&
+    !normalized.exercise_id?.trim().replace(/^0$/, "") &&
+    !normalized.exercise_name?.trim()
   ) {
     throw new Error(`${capability.label} training steps require exercise_id or exercise_name.`);
   }

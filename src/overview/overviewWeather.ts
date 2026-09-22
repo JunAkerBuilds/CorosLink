@@ -36,7 +36,7 @@ const REVERSE_GEOCODE_ENDPOINT =
 
 const LOCATION_OPTIONS: PositionOptions = {
   enableHighAccuracy: false,
-  timeout: 15_000,
+  timeout: 8_000,
   maximumAge: 10 * 60 * 1000
 };
 
@@ -120,23 +120,39 @@ export function isOverviewWeatherFresh(
   );
 }
 
-function requestPosition(): Promise<{ lat: number; lon: number }> {
+interface ResolvedPosition {
+  lat: number;
+  lon: number;
+  /** Locality when the position came with one (IP lookup), else undefined. */
+  place?: string;
+}
+
+class DeviceLocationError extends Error {
+  readonly code: number;
+
+  constructor(message: string, code: number) {
+    super(message);
+    this.code = code;
+  }
+}
+
+function requestDevicePosition(): Promise<ResolvedPosition> {
   const geolocation =
     typeof navigator === "undefined" ? undefined : navigator.geolocation;
   if (!geolocation) {
-    return Promise.reject(new Error("Location services are not available."));
+    return Promise.reject(new DeviceLocationError("Location services are not available.", 2));
   }
   return new Promise((resolve, reject) => {
     geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
         if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-          reject(new Error("Location services returned invalid coordinates."));
+          reject(new DeviceLocationError("Location services returned invalid coordinates.", 2));
           return;
         }
         resolve({ lat: latitude, lon: longitude });
       },
-      (error) => reject(new Error(describeLocationError(error))),
+      (error) => reject(new DeviceLocationError(describeLocationError(error), error.code)),
       LOCATION_OPTIONS
     );
   });
@@ -152,6 +168,57 @@ function describeLocationError(error: GeolocationPositionError): string {
       return "Location request timed out.";
     default:
       return "Could not get your current location.";
+  }
+}
+
+/**
+ * Coarse position from the caller's IP. Electron's Chromium resolves precise
+ * positions through Google's network-location API, which needs an API key the
+ * app does not ship, so on many machines `getCurrentPosition` only ever times
+ * out. City-level accuracy is plenty for local weather.
+ */
+async function requestIpPosition(signal: AbortSignal): Promise<ResolvedPosition> {
+  const url = new URL(REVERSE_GEOCODE_ENDPOINT);
+  url.searchParams.set("localityLanguage", "en");
+  const response = await fetch(url, { signal });
+  if (!response.ok) {
+    throw new Error(`Location lookup responded with ${response.status}.`);
+  }
+  const payload = (await response.json()) as {
+    latitude?: number;
+    longitude?: number;
+    city?: string;
+    locality?: string;
+    principalSubdivision?: string;
+  };
+  if (
+    typeof payload.latitude !== "number" ||
+    typeof payload.longitude !== "number" ||
+    !Number.isFinite(payload.latitude) ||
+    !Number.isFinite(payload.longitude)
+  ) {
+    throw new Error("Location lookup returned no position.");
+  }
+  return {
+    lat: payload.latitude,
+    lon: payload.longitude,
+    place:
+      payload.city || payload.locality || payload.principalSubdivision || undefined
+  };
+}
+
+async function requestPosition(signal: AbortSignal): Promise<ResolvedPosition> {
+  try {
+    return await requestDevicePosition();
+  } catch (deviceError) {
+    if (!(deviceError instanceof DeviceLocationError) || ![2, 3].includes(deviceError.code)) {
+      throw deviceError;
+    }
+    try {
+      return await requestIpPosition(signal);
+    } catch {
+      throw deviceError;
+    }
   }
 }
 
@@ -252,10 +319,11 @@ export async function loadOverviewWeather(
     return cached;
   }
 
-  const { lat, lon } = await requestPosition();
+  const position = await requestPosition(signal);
+  const { lat, lon } = position;
   const [forecast, place] = await Promise.all([
     fetchForecast(lat, lon, signal),
-    fetchPlaceName(lat, lon, signal)
+    position.place ? Promise.resolve(position.place) : fetchPlaceName(lat, lon, signal)
   ]);
   const snapshot: OverviewWeatherSnapshot = {
     fetchedAt: Date.now(),

@@ -158,6 +158,30 @@ export function getTrainingMetricPalettes(
   return theme === "paper" ? PAPER_METRIC_PALETTES : DARK_METRIC_PALETTES;
 }
 
+/** The five readings a COROS Health Check takes in one sitting. */
+export type HealthVitalKey = "heartRate" | "hrv" | "stress" | "respiratoryRate" | "spo2";
+
+const DARK_VITAL_COLORS: Record<HealthVitalKey, string> = {
+  heartRate: "#f47a86",
+  hrv: "#53cba1",
+  stress: "#e0a93a",
+  respiratoryRate: "#7fb2f5",
+  spo2: "#a495ff"
+};
+
+const PAPER_VITAL_COLORS: Record<HealthVitalKey, string> = {
+  heartRate: "#c43d4d",
+  hrv: "#147d5d",
+  stress: "#a8721a",
+  respiratoryRate: "#2f6fd6",
+  spo2: "#6f56c9"
+};
+
+/** One hue per vital so a tile and its trend chart read as the same thing. */
+export function getHealthVitalColors(theme: Theme): Record<HealthVitalKey, string> {
+  return theme === "paper" ? PAPER_VITAL_COLORS : DARK_VITAL_COLORS;
+}
+
 /** Back-compat static exports (dark palette) for any non-theme-aware callers. */
 export const trainingChartColors = DARK_CHART_COLORS;
 export const trainingChartFillStops = getTrainingChartFillStops("dark");

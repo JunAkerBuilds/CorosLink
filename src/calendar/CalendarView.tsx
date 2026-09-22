@@ -260,6 +260,8 @@ export function CalendarView({
     isInMonth
   });
 
+  useEffect(() => api.onWorkoutEditsChanged(() => { if (authenticated) void reload(); }), [api, authenticated, reload]);
+
   const selectableWorkouts = useMemo(() => {
     const entries = new Map<string, TrainingHubScheduledWorkoutEntry>();
     for (const week of weeks) {

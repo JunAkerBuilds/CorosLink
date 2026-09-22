@@ -1,3 +1,5 @@
+import { WorkoutEditCard } from "./WorkoutEditCard";
+import { CorosActionCard } from "./CorosActionCard";
 import {
   forwardRef,
   memo,
@@ -105,6 +107,7 @@ import {
   upsertHrZoneEntry,
   upsertPlanDraftEntry,
   upsertWorkoutDeleteEntry,
+  upsertCorosActionEntry,
   isChatVisualEntry,
   type ChatEntry,
   type SourceInfo
@@ -2184,6 +2187,14 @@ export function ChatView({
           setCurrentSource(sourceRef.current);
         } else if (payload.kind === "planDraft") {
           setTimeline((prev) => upsertPlanDraftEntry(prev, payload.draft));
+        } else if (payload.kind === "workoutEdit") {
+          setTimeline(prev => {
+            const entry = { kind: "workoutEdit" as const, preview: payload.preview };
+            const index = prev.findIndex(e => e.kind === "workoutEdit" && e.preview.proposalId === payload.preview.proposalId);
+            return index < 0 ? [...prev, entry] : prev.map((e, i) => i === index ? entry : e);
+          });
+        } else if (payload.kind === "corosAction") {
+          setTimeline(prev => upsertCorosActionEntry(prev, payload.preview));
         } else if (payload.kind === "workoutDelete") {
           setTimeline((prev) =>
             upsertWorkoutDeleteEntry(prev, payload.preview)
@@ -3125,6 +3136,20 @@ export function ChatView({
     }, 1800);
   };
 
+  const handleConfirmCorosAction = async (requestId: string) => {
+    if (!api) return;
+    const sessionId = activeSessionIdRef.current;
+    const preview = await api.confirmCorosAction(requestId);
+    if (activeSessionIdRef.current === sessionId) {
+      setTimeline(prev => upsertCorosActionEntry(prev, preview));
+    } else if (sessionId) {
+      const saved = await api.getChatSession(sessionId);
+      if (saved) await api.saveChatSession(sessionId, toPersistedEntries(upsertCorosActionEntry(fromPersistedEntries(saved), preview)));
+    }
+    if (preview.state === "saved") onPlanUploaded?.();
+    return preview;
+  };
+
   const handleConfirmWorkoutDelete = async (requestId: string) => {
     if (!api || deletingRequestId) return;
     setDeletingRequestId(requestId);
@@ -3808,6 +3833,18 @@ export function ChatView({
                   </div>
                 </div>
               );
+            }
+
+            if (entry.kind === "workoutEdit") {
+              return <div key={entry.preview.proposalId} className="chat-row chat-row-assistant"><div className="chat-bubble chat-bubble-plan">{api && <WorkoutEditCard preview={entry.preview} api={api} />}</div></div>;
+            }
+            if (entry.kind === "corosAction") {
+              return <div key={entry.preview.requestId} className="chat-row chat-row-assistant">
+                <div className="chat-avatar chat-avatar-assistant"><Sparkles size={16} aria-hidden="true" /></div>
+                <div className="chat-bubble chat-bubble-plan">
+                  <CorosActionCard preview={entry.preview} onConfirm={() => handleConfirmCorosAction(entry.preview.requestId)} />
+                </div>
+              </div>;
             }
 
             if (entry.kind === "workoutDelete") {

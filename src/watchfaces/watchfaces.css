@@ -10724,6 +10724,7 @@ body.wf-value-scrubbing * {
 .watchface-shell--studio .wf-stage {
   --wf-toolbar-h: 44px;
   --wf-toolbar-gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* Specificity beats the studio rule in watchfaceSimulation.css, which loads later. */
@@ -10733,11 +10734,12 @@ body.wf-value-scrubbing * {
   left: 50%;
   bottom: calc(var(--wf-stage-status-h, 32px) + var(--wf-toolbar-gap));
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   width: max-content;
   max-width: calc(100% - 24px);
-  min-height: var(--wf-toolbar-h);
+  min-height: 44px;
+  justify-content: center;
   gap: 4px;
   overflow: visible;
   border: 1px solid var(--wf-faces-edge, rgb(209 237 230 / 14%));
@@ -10773,7 +10775,16 @@ body.wf-value-scrubbing * {
 }
 
 .watchface-shell--studio .watchface-editor-device.is-fit {
-  width: min(calc(66vh - 40px), calc(100% - 48px), 600px);
+  width: min(var(--wf-fit-size, calc(66vh - 40px)), calc(100% - 48px), 600px);
+  min-width: 0;
+}
+
+.watchface-shell--studio .wf-stage-toolbar--floating > * {
+  flex-shrink: 0;
+}
+
+.watchface-shell--studio .wf-stage-toolbar--floating .wf-toolbar-divider {
+  display: none;
 }
 
 /* Every control in the pill shares one quiet tool style. */
@@ -10990,7 +11001,7 @@ body.wf-value-scrubbing * {
 
 .watchface-shell--studio .watchface-editor.is-editor-fullscreen .watchface-editor-device.is-fit,
 .watchface-shell--studio .watchface-editor:fullscreen .watchface-editor-device.is-fit {
-  width: min(calc(100vh - 230px), calc(100% - 48px), 760px);
+  width: min(var(--wf-fit-size, calc(100vh - 230px)), calc(100% - 48px), 760px);
 }
 
 .watchface-shell--studio .watchface-editor:fullscreen {
@@ -11549,7 +11560,7 @@ body.wf-value-scrubbing * {
 
 /* Layer opacity value needs room for "100". */
 :root .watchface-shell--studio .wf-properties-pane .wf-layer-opacity-control {
-  grid-template-columns: var(--wf-label-w) minmax(0, 1fr) 72px;
+  grid-template-columns: var(--wf-label-w) minmax(0, 1fr) 88px;
 }
 
 /* Number pairs (X/Y, Scale/Rotation): the label is the box, the text a k-prefix. */

@@ -21,6 +21,9 @@ import {
 
 interface ActivityRouteMapProps {
   track?: TrainingHubActivityTrack;
+  /** Controlled expansion: a host can open the full-screen map from its own controls. */
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 interface RouteGeometry {
@@ -30,8 +33,9 @@ interface RouteGeometry {
 
 const ROUTE_COLOR = "#74c08f";
 const ROUTE_COLOR_PAPER = "#0f7f5f";
-const START_COLOR = "#4da3ff";
-const END_COLOR = "#d89b22";
+const START_COLOR = "#34d399";
+const END_COLOR = "#f26d6d";
+const MARKER_RING = "#ffffff";
 const ROUTE_ANIMATION_MS = 2200;
 
 const ACTIVITY_ROUTE_BASE_LAYER_PREFERENCE =
@@ -238,13 +242,22 @@ function RouteMapCanvas({
 
     L.circleMarker(start, {
       radius: 6,
-      color: START_COLOR,
+      color: MARKER_RING,
       fillColor: START_COLOR,
       fillOpacity: 1,
       weight: 2
     }).addTo(map);
 
-    map.fitBounds(L.latLngBounds(route.latLngs), { padding: [24, 24] });
+    // A map mounted inside a closed <dialog> (or any display:none host) has
+    // no size yet, so defer the fit until the container is actually laid out.
+    let fitted = false;
+    const fitRoute = () => {
+      if (container.clientWidth > 0 && container.clientHeight > 0) {
+        map.fitBounds(L.latLngBounds(route.latLngs), { padding: [24, 24] });
+        fitted = true;
+      }
+    };
+    fitRoute();
     mapRef.current = map;
     tileLayerRef.current = tileLayer;
     ghostLineRef.current = ghostLine;
@@ -274,7 +287,7 @@ function RouteMapCanvas({
       if (!endMarker) {
         endMarker = L.circleMarker(end, {
           radius: 6,
-          color: END_COLOR,
+          color: MARKER_RING,
           fillColor: END_COLOR,
           fillOpacity: 1,
           weight: 2
@@ -286,6 +299,9 @@ function RouteMapCanvas({
 
     const resizeObserver = new ResizeObserver(() => {
       map.invalidateSize();
+      if (!fitted) {
+        fitRoute();
+      }
     });
     resizeObserver.observe(container);
 
@@ -382,9 +398,19 @@ function RouteLegend() {
   );
 }
 
-export function ActivityRouteMap({ track }: ActivityRouteMapProps) {
+export function ActivityRouteMap({
+  track,
+  expanded: expandedProp,
+  onExpandedChange
+}: ActivityRouteMapProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
-  const [expanded, setExpanded] = useState(false);
+  const [expandedState, setExpandedState] = useState(false);
+  const expanded = expandedProp ?? expandedState;
+  const setExpanded = (value: boolean) => {
+    setExpandedState(value);
+    onExpandedChange?.(value);
+  };
   const [baseLayer, setBaseLayer] = useSelectionPreference(
     ACTIVITY_ROUTE_BASE_LAYER_PREFERENCE,
     themeBaseLayer(theme)
@@ -422,7 +448,7 @@ export function ActivityRouteMap({ track }: ActivityRouteMapProps) {
   }
 
   return (
-    <div className="activity-route-map">
+    <div className="activity-route-map" ref={containerRef}>
       <RouteMapCanvas route={route} ariaLabel="Activity route map" />
       <div className="activity-route-footer">
         <RouteLegend />
@@ -490,7 +516,7 @@ export function ActivityRouteMap({ track }: ActivityRouteMapProps) {
               </div>
             </section>
           </div>,
-          document.body
+          containerRef.current?.closest("dialog") ?? document.body
         )}
     </div>
   );

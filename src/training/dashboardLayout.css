@@ -1,0 +1,215 @@
+.hub-dashboard { min-width: 0; container-type: inline-size; }
+.hub-dashboard-toolbar, .hub-dashboard-buttons { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.hub-dashboard-toolbar { margin-bottom: 18px; }
+.hub-dashboard-hint { color: var(--text-secondary); font-size: 12px; margin: 0 0 18px; }
+:is(.hub-dashboard-buttons, .hub-dashboard-empty) > button, .hub-widget-library button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 7px 10px; border: 1px solid var(--glass-border); border-radius: 8px; background: var(--surface); color: var(--text-primary); cursor: pointer; font: inherit; font-size: 12px; }
+:is(.hub-dashboard-buttons, .hub-dashboard-empty) > button:disabled, .hub-widget-library button:disabled { opacity: .4; cursor: default; }
+:is(.hub-dashboard-buttons, .hub-dashboard-empty) > button:hover:not(:disabled), .hub-widget-library button:hover:not(:disabled) { background: var(--glass-bg-hover); }
+.hub-dashboard-buttons .hub-dashboard-edit { border-color: #72bca0; }
+.hub-dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.hub-dashboard-widget { grid-column: span var(--widget-span); min-width: 0; container-type: inline-size; display: flex; flex-direction: column; }
+.hub-widget-content { min-width: 0; flex: 1; }
+.hub-widget-content > * { min-height: var(--widget-min-height, 0px); }
+.hub-widget-content > .panel { margin: 0; }
+.hub-widget-content .training-recovery-column { grid-area: auto; }
+.hub-dashboard.is-editing .hub-dashboard-widget { cursor: grab; touch-action: none; user-select: none; }
+.hub-dashboard.is-editing .hub-widget-content { pointer-events: none; }
+.hub-dashboard.is-editing .hub-dashboard-widget:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: var(--radius-lg); }
+.hub-dashboard.is-editing .hub-widget-content { height: auto; }
+.hub-dashboard .is-drop-target { outline: 2px solid #72bca0; outline-offset: 3px; }
+.hub-widget-library input { color: var(--text-primary); background: var(--surface); border: 1px solid var(--glass-border); border-radius: 6px; padding: 8px; max-width: 100%; }
+.hub-widget-label { font-size: 14px; margin: 0 0 10px; }
+.hub-dashboard-empty { text-align: center; padding: 50px 20px; }
+.hub-dashboard-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.hub-widget-library { padding: 0; width: min(640px, calc(100vw - 32px)); max-height: 85vh; border: 1px solid var(--glass-border); border-radius: 16px; color: var(--text-primary); background: var(--bg-base); box-shadow: 0 24px 80px #0006; }
+.hub-widget-library::backdrop { background: #0008; }
+.hub-library-inner { padding: 24px; }
+.hub-library-inner h2 { margin: 4px 0 0; font-size: 24px; }
+.hub-widget-library input[type="search"] { width: 100%; margin-bottom: 16px; }
+.hub-library-list > div { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 0; border-bottom: 1px solid var(--glass-border); }
+.hub-library-list strong { font-size: 14px; }
+.hub-library-list p { margin: 5px 0 0; font-size: 12px; color: var(--text-secondary); }
+.hub-library-list button { flex-shrink: 0; }
+@container (max-width: 700px) {
+  .hub-widget-content .training-chart-grid, .hub-widget-content .training-zone-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@container (max-width: 850px) {
+  .hub-dashboard-widget { grid-column: span 12; grid-row: auto !important; }
+}
+
+.hub-widget-content .training-summary-tiles.hub-daily-stat { grid-template-columns: minmax(0, 1fr); height: 100%; }
+.hub-widget-content .health-insights.is-single .health-insights-grid { grid-template-columns: minmax(0, 1fr); }
+.hub-widget-content .training-chart-single, .hub-widget-content .training-zone-single { display: grid; grid-template-columns: minmax(0, 1fr); height: 100%; }
+
+/* Cards use their own heights, so a tall neighbor cannot reserve an empty row. */
+.hub-dashboard-grid[data-packed="true"] { display: block; position: relative; }
+.hub-dashboard-grid[data-packed="true"] > .hub-dashboard-widget { position: absolute; box-sizing: border-box; }
+
+.hub-dashboard .hub-widget-remove {
+  position: absolute; top: -9px; right: 6px; z-index: 5; display: grid; place-items: center;
+  width: 26px; height: 26px; padding: 0; border: 1px solid var(--glass-border); border-radius: 50%;
+  color: var(--text-secondary); background: var(--surface); box-shadow: 0 2px 8px #0003; cursor: pointer;
+}
+.hub-dashboard .hub-widget-remove:hover { color: var(--text-primary); background: var(--glass-bg-hover); }
+.hub-widget-remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.hub-dashboard .hub-widget-resize {
+  position: absolute; right: -4px; bottom: -4px; z-index: 4; display: grid; place-items: center;
+  width: 36px; height: 36px; padding: 0; min-height: 0; border: 0; border-radius: 0 0 16px 0;
+  color: #ffdf32; background: transparent; cursor: nwse-resize; touch-action: none;
+}
+.hub-widget-resize-corner {
+  width: 30px; height: 30px; overflow: visible; fill: none; stroke-linecap: round; stroke-linejoin: round;
+  filter: drop-shadow(0 2px 2px #0005) drop-shadow(0 0 3px color-mix(in srgb, currentColor 35%, transparent));
+  transform-origin: 75% 75%;
+}
+.hub-resize-glass-body { stroke-width: 8; }
+.hub-resize-glass-highlight { stroke: #fff; stroke-width: 1.5; opacity: .55; }
+.hub-dashboard .hub-widget-resize:hover, .hub-dashboard .hub-widget-resize.is-active { color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) {
+  .hub-widget-resize { transition: color 180ms ease; }
+  .hub-widget-resize-corner { transition: transform 260ms cubic-bezier(.2, 1.6, .4, 1), filter 180ms ease; }
+  .hub-widget-resize:hover .hub-widget-resize-corner { transform: scale(1.08); }
+  .hub-widget-resize.is-active .hub-widget-resize-corner { transform: scale(.94, 1.06); }
+}
+.hub-widget-resize:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hub-dashboard.is-resizing { user-select: none; cursor: nwse-resize; }
+.hub-dashboard-widget.is-resizing { z-index: 8; outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: var(--shadow-elevated); }
+.hub-dashboard.is-resizing .hub-widget-content { pointer-events: none; }
+.hub-resize-preview {
+  position: absolute; bottom: 5px; right: 36px; z-index: 5; padding: 4px 9px;
+  border-radius: 6px; background: var(--surface); color: var(--accent); border: 1px solid var(--accent);
+  font-size: 11px; font-weight: 600; pointer-events: none; white-space: nowrap;
+}
+.hub-dashboard-widget .training-stat-card__summary { min-height: calc(var(--widget-min-height) - 2px); }
+.hub-dashboard-widget[data-expanded="true"] .training-stat-card__summary {
+  grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "reading" "chart"; gap: 12px;
+}
+.hub-dashboard-widget[data-expanded="true"] .training-stat-card__chart,
+.hub-dashboard-widget[data-expanded="true"] .training-stat-card__chart svg { height: 72px; }
+.hub-dashboard-widget .health-insight-chart { height: var(--widget-chart-height); flex-shrink: 0; }
+.hub-dashboard-widget .training-chart-shell { height: var(--widget-chart-height); }
+.hub-dashboard-widget .training-chart-panel { min-height: var(--widget-min-height); align-content: start; }
+.hub-dashboard-widget .training-ring-panel,
+.hub-dashboard-widget .training-fitness-panel,
+.hub-dashboard-widget .sleep-panel,
+.hub-dashboard-widget .vo2-widget-panel { min-height: var(--widget-min-height); }
+.hub-dashboard-widget[data-expanded="true"] .training-fitness-chart { min-height: 320px; }
+.hub-dashboard-widget .training-recovery-ring { width: min(100%, 200px); height: auto; aspect-ratio: 1; }
+.hub-dashboard-widget[data-expanded="true"] .training-recovery-ring { width: min(100%, 256px); }
+.hub-dashboard-widget .vo2-gauge svg { max-width: 260px; }
+.hub-dashboard-widget[data-expanded="true"] .vo2-gauge svg { max-width: 320px; width: min(100%, 320px); }
+.hub-dashboard-widget .health-insights.is-single { align-content: stretch; }
+@media (prefers-reduced-motion: no-preference) {
+  .hub-dashboard-grid[data-packed="true"] > .hub-dashboard-widget { transition: left 160ms ease, top 160ms ease; }
+  .hub-dashboard-grid[data-packed="true"] > .hub-dashboard-widget.is-resizing { transition: none; }
+}
+@container (max-width: 380px) {
+  .hub-widget-content .training-stat-card__value { font-size: 28px; }
+  .hub-widget-content .health-insight-heading { gap: 10px; }
+}
+
+.hub-dashboard-widget.is-dragging { opacity: .45; cursor: grabbing; }
+.hub-drop-preview { position: absolute; z-index: 10; pointer-events: none; border: 2px dashed var(--accent); border-radius: 14px; background: var(--accent-soft); display: grid; place-items: center; }
+.hub-drop-preview span { max-width: calc(100% - 24px); border-radius: 8px; padding: 10px 14px; background: var(--surface); color: var(--accent); font-size: 12px; font-weight: 600; text-align: center; }
+.hub-widget-drop-end { min-height: 80px; margin-top: 16px; display: grid; place-items: center; border: 1px dashed var(--glass-border); border-radius: 14px; color: var(--text-secondary); font-size: 12px; text-align: center; padding: 16px; }
+.hub-widget-drop-end.is-dragging { border-color: var(--accent); background: var(--accent-soft); }
+
+.hub-dashboard.is-resizing .hub-widget-resize:not(.is-active) { pointer-events: none; }
+
+/* Keep metric cards square at every preset width. */
+.hub-dashboard-widget[data-shape="square"] .hub-widget-content > .hub-daily-stat { min-height: 0; }
+.hub-dashboard-widget[data-shape="square"] .training-stat-card.is-widget:not([open]) { aspect-ratio: 1; }
+.hub-dashboard-widget[data-shape="square"] .training-stat-card__summary { min-height: 0; height: 100%; grid-template-rows: auto 1fr auto; }
+.hub-dashboard-widget[data-shape="square"] .training-stat-card[open] .training-stat-card__summary { height: auto; aspect-ratio: 1; }
+.hub-dashboard-widget[data-shape="square"] .training-stat-card__chart,
+.hub-dashboard-widget[data-shape="square"] .training-stat-card__chart svg { height: clamp(60px, 24cqw, 140px); }
+.hub-dashboard-widget[data-shape="square"] .training-stat-card__reading { align-self: center; }
+.hub-dashboard-widget[data-shape="square"] .training-stat-card.is-widget .training-stat-card__value { font-size: clamp(2rem, 11cqw, 3rem); }
+
+/* Preserve the regular card's icon and reading; the compact shape omits the chart. */
+.hub-dashboard-widget[data-compact="true"] .training-stat-card__summary { padding: 16px; gap: 15px; grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "reading"; grid-template-rows: auto 1fr; }
+.hub-dashboard-widget[data-compact="true"] .training-stat-card__header { gap: 10px; }
+.hub-dashboard-widget[data-compact="true"] .training-stat-card.is-widget .training-stat-card__icon { width: 32px; height: 32px; }
+.hub-dashboard-widget[data-compact="true"] .training-stat-card.is-widget .training-stat-card__label { font-size: 10px; letter-spacing: .075em; }
+.hub-dashboard-widget[data-compact="true"] .training-stat-card__reading { align-self: end; gap: 10px; }
+.hub-dashboard-widget[data-compact="true"] .training-stat-card.is-widget .training-stat-card__value { font-size: clamp(1.6rem, 2.15vw, 2rem); }
+.hub-dashboard-widget[data-compact="true"] .training-stat-card__chart,
+.hub-dashboard-widget[data-compact="true"] .training-stat-card__chevron { display: none; }
+
+.hub-dashboard-widget .training-ring-panel,
+.hub-dashboard-widget .training-fitness-panel,
+.hub-dashboard-widget .sleep-panel,
+.hub-dashboard-widget .vo2-widget-panel { min-height: max(var(--widget-min-height), var(--widget-aligned-height, 0px)); }
+@container (max-width: 145px) {
+  .hub-dashboard-widget[data-compact="true"] .training-stat-card__summary { padding: 8px; gap: 8px; }
+  .hub-dashboard-widget[data-compact="true"] .training-stat-card__header { gap: 6px; }
+  .hub-dashboard-widget[data-compact="true"] .training-stat-card.is-widget .training-stat-card__icon { width: 24px; height: 24px; }
+  .hub-dashboard-widget[data-compact="true"] .training-stat-card.is-widget .training-stat-card__label { font-size: 9px; letter-spacing: .025em; }
+  .hub-dashboard-widget[data-compact="true"] .training-stat-card__reading { gap: 6px; }
+  .hub-dashboard-widget[data-compact="true"] .training-stat-card.is-widget .training-stat-card__value { font-size: 26px; }
+}
+
+/* Health check proportions follow the card width, growing when readings need more room. */
+.hub-dashboard-widget[data-widget="healthCheck"] .health-insights.is-single {
+  min-height: max(var(--widget-min-height), var(--widget-proportional-height, 0px));
+}
+.hub-dashboard-widget[data-widget="healthCheck"] .health-vitals {
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+}
+.hub-dashboard-widget[data-widget="healthCheck"] .health-vital-head,
+.hub-dashboard-widget[data-widget="healthCheck"] .health-vital-foot { white-space: normal; overflow-wrap: anywhere; }
+@container (max-width: 480px) {
+  .hub-widget-content .health-insight-healthCheck { padding: 16px; }
+  .hub-widget-content .health-insight-healthCheck .health-vitals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hub-dashboard-widget:not([data-preset$="-mini"]) .health-insight-healthCheck .health-vital:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+@container (max-width: 280px) {
+  .hub-widget-content .health-insight-healthCheck .health-vitals { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Mini health checks prioritize readings, with a small trend and less card chrome. */
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-insight-card { padding: 10px 12px; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-insight-heading { gap: 8px; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-insight-title { gap: 8px; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-insight-title p { display: none; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-insight-icon { width: 28px; height: 28px; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-insight-body { margin-top: 8px; gap: 6px; flex: initial; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-segmented button { padding: 4px 8px; font-size: 11px; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vitals { grid-template-columns: repeat(auto-fit, minmax(min(108px, 100%), 1fr)); gap: 6px; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vital { padding: 7px 10px; gap: 4px; border-radius: 9px; grid-column: auto; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vital-head { font-size: 9.5px; letter-spacing: 0.06em; gap: 5px; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vital-icon { width: 20px; height: 20px; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vital-value { font-size: 22px; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-check-summary { gap: 1px; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-check-summary strong { font-size: 14px; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-check-summary span { font-size: 10px; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vital-instrument { display: none; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-insight-chart { height: 72px; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vital-hint { display: none; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-check-summary,
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-insight-source { font-size: 10px; }
+
+/* Balance a complete set of five readings without leaving an empty grid cell. */
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vitals:has(> :nth-child(5):last-child) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vital-foot { margin-top: auto; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-insight-source { margin-top: 0; padding-top: 2px; }
+@container (max-width: 620px) {
+  .hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vitals:has(> :nth-child(5):last-child) { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vitals:has(> :nth-child(5):last-child) > .health-vital { grid-column: span 2; }
+  .hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vitals:has(> :nth-child(5):last-child) > .health-vital:nth-child(n+4) { grid-column: span 3; }
+}
+@container (max-width: 340px) {
+  .hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vitals:has(> :nth-child(5):last-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vitals:has(> :nth-child(5):last-child) > .health-vital:nth-child(n) { grid-column: auto; }
+  .hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vitals:has(> :nth-child(5):last-child) > .health-vital:last-child { grid-column: 1 / -1; }
+}
+@container (max-width: 250px) {
+  .hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vitals:has(> :nth-child(5):last-child) { grid-template-columns: minmax(0, 1fr); }
+}
+
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-insights.is-single { min-height: var(--widget-aligned-height, 0px); }
+
+/* Fill the shared Sleep row while keeping compact type and controls. */
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-insight-body { flex: 1; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-vitals { flex: 1; }
+.hub-dashboard-widget[data-widget="healthCheck"][data-preset$="-mini"] .health-insight-source { margin-top: auto; }

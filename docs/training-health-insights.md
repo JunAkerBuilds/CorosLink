@@ -17,6 +17,8 @@ The live COROS server answers with an indented text report rather than JSON: sec
 
 Structured values and dated series are normalized for display. Missing values are not converted to zero; undated values do not become chart points. COROS prose is retained as a report. Health-check HRV and overnight HRV remain separate, and no local health assessment is generated. Tool discovery follows all catalog pages so newly added capabilities remain accessible to the existing Coach tool pipeline too.
 
+Health Check also returns separate metric lists such as `Heart Rate List: [1789948800=62 bpm]`, `HRV List`, `Stress List`, `Respiration Rate List` (values in `/min`), and `SpO2 List`. Each entry supplies its own timestamp. Stress level and resting heart rate are summary-only values. This populated response format was verified against a live response on 2026-09-21; regression tests use synthetic measurements.
+
 Each card shows the latest value with COROS' own label as a badge, period average/low/high, summary-only values as chips (normal range, baseline), and an area chart that breaks across gaps longer than three hours (one overnight segment per night) with the normal range drawn as a band and the baseline as a dashed line.
 
 Validation: `npm run test:health-insights` covers representative (synthetic) response shapes including the text report format, query windows, missing data, catalog pagination, and service failures. Live payloads for all four tools were checked against the parser on 2026-09-21 (health check and cycle returned "no data" notices for that account).

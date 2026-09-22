@@ -69,6 +69,8 @@ const KIND_TO_EXERCISE_TYPE: Record<RunWorkoutEditorStepKind, number> = {
 };
 
 export interface WorkoutEditSource {
+  /** AI edit eligibility established from a fresh native-plan inventory. */
+  strengthEditOwnership?: "independent" | "native" | "unknown";
   ref: WorkoutEditRef;
   program: Record<string, unknown>;
   entity?: Record<string, unknown>;
@@ -701,7 +703,7 @@ export function workoutEditRevision(source: WorkoutEditSource): string {
     : undefined;
   return crypto
     .createHash("sha256")
-    .update(JSON.stringify({ ref: source.ref, programVersion, entityVersion }))
+    .update(JSON.stringify({ ref: source.ref, programVersion, entityVersion, program: source.program, entity: source.entity }))
     .digest("hex");
 }
 

@@ -1,3 +1,4 @@
+import { registerWorkoutAutomation } from "./workoutAutomation";
 import { app, BrowserWindow, dialog, nativeTheme, session, shell } from "electron";
 import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow } from "./diagnosticsService";
 import { googleCalendar, startGoogleCalendarSync, stopGoogleCalendarSync } from "./googleCalendarService";
@@ -326,7 +327,8 @@ import {
   testLocalChatConnection,
   testOpenRouterConnection,
   uploadTrainingPlanDraft,
-  confirmWorkoutDelete
+  confirmWorkoutDelete,
+  confirmCoachCorosAction
 } from "./chatService";
 import {
   listPinnedCoachCharts,
@@ -388,6 +390,7 @@ import type {
 } from "./types";
 
 let mainWindow: BrowserWindow | undefined;
+let workoutAutomation: ReturnType<typeof registerWorkoutAutomation> | undefined;
 let watchfaceAutomation: ReturnType<typeof registerWatchfaceAutomation> | undefined;
 let rendererReady = false;
 let pendingCommunityWatchfaceOpen: CommunityWatchfaceOpenRequest | undefined;
@@ -819,6 +822,7 @@ app.whenReady().then(() => {
   pruneDeleteRequestStore();
   registerIpcHandlers();
   watchfaceAutomation = registerWatchfaceAutomation(() => mainWindow);
+  workoutAutomation = registerWorkoutAutomation(() => mainWindow);
   startGoogleCalendarSync();
   startAppleCalendarSync();
   setJobListener((jobs) => {
@@ -854,6 +858,7 @@ app.whenReady().then(() => {
   void cleanupCommunityWatchfaceImports();
   createWindow();
   void watchfaceAutomation.restore();
+  void workoutAutomation.restore();
   applyAppIcon();
 
   // Silently restore previously-authorized MCP sessions (COROS + any other
@@ -875,6 +880,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   void watchfaceAutomation?.stop();
+  void workoutAutomation?.stop();
   stopGoogleCalendarSync();
   stopAppleCalendarSync();
   stopRouteShare();
@@ -1459,6 +1465,7 @@ function registerIpcHandlers(): void {
     )
   );
 
+  ipcMain.handle("chat:confirmCorosAction", (_event, requestId: string) => confirmCoachCorosAction(requestId));
   ipcMain.handle("chat:confirmWorkoutDelete", (_event, requestId: string) =>
     confirmWorkoutDelete(requestId)
   );

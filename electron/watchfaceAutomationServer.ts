@@ -38,7 +38,7 @@ interface Session {
   lastSeen: number;
 }
 
-interface ToolDefinition {
+export interface ToolDefinition {
   name: string;
   title: string;
   description: string;
@@ -297,7 +297,7 @@ export class WatchfaceAutomationServer {
   private startPromise: Promise<WatchfaceAutomationStatus> | null = null;
   private initializingSessions = 0;
 
-  constructor(options: { dispatch: Dispatch; userDataPath: string }) {
+  constructor(private readonly options: { dispatch: Dispatch; userDataPath: string; tools?: ToolDefinition[]; name?: string; instructions?: string; defaultPort?: number }) {
     this.dispatch = options.dispatch;
     this.userDataPath = path.resolve(options.userDataPath);
     this.assets = createWatchfaceAutomationAssetStore(this.userDataPath);
@@ -321,7 +321,7 @@ export class WatchfaceAutomationServer {
   }
 
   private async startInternal(options: { port?: number }): Promise<WatchfaceAutomationStatus> {
-    const requestedPort = options.port ?? DEFAULT_PORT;
+    const requestedPort = options.port ?? this.options.defaultPort ?? DEFAULT_PORT;
     if (!Number.isSafeInteger(requestedPort) || requestedPort < 0 || requestedPort > 65_535) {
       this.error = "Automation port must be a whole number from 0 through 65535.";
       return this.getStatus();
@@ -380,33 +380,33 @@ export class WatchfaceAutomationServer {
   }
 
   async callTool(name: string, params: Record<string, unknown> = {}): Promise<unknown> {
-    const definition = editorToolDefinitions(this.assets).find((candidate) => candidate.name === name);
+    const definition = (this.options.tools ?? editorToolDefinitions(this.assets)).find((candidate) => candidate.name === name);
     if (!definition) throw new Error(`Unknown watch-face automation tool "${name}".`);
     const parsed = z.object(definition.schema).strict().parse(params) as Record<string, unknown>;
     return this.executeDefinition(definition, parsed);
   }
 
   private async executeDefinition(definition: ToolDefinition, params: Record<string, unknown>): Promise<unknown> {
-    const hydrated = await this.assets.hydrateAssetRefs(params);
+    const hydrated = this.options.tools ? params : await this.assets.hydrateAssetRefs(params);
     const result = definition.handler
       ? await withTimeout(definition.handler(hydrated), TOOL_TIMEOUT_MS)
       : await withTimeout(this.dispatch(definition.method!, hydrated), TOOL_TIMEOUT_MS);
-    return this.assets.externalizeDataImages(result);
+    return this.options.tools ? result : this.assets.externalizeDataImages(result);
   }
 
   private createMcpServer(): McpServer {
     const server = new McpServer(
-      { name: "coroslink-watchface-studio", version: "1.0.0" },
-      { capabilities: { resources: {} }, instructions:
-        "Inspect the scene schema and live document before editing. Use capabilities.placement and each layer's placement metadata for movement; do not assume an 800 x 800 canvas. Use sessionId and baseRevision for mutations. Apply coherent edits atomically, read the resulting document, render both Current and AOD, validate, then save. Build the archive to verify all device resolutions. Publishing requires the user's explicit authorization. " + WATCHFACE_LEGIBILITY_GUIDANCE }
+      { name: this.options.name ?? "coroslink-watchface-studio", version: "1.0.0" },
+      { capabilities: this.options.tools ? {} : { resources: {} }, instructions: this.options.instructions ?? (
+        "Inspect the scene schema and live document before editing. Use capabilities.placement and each layer's placement metadata for movement; do not assume an 800 x 800 canvas. Use sessionId and baseRevision for mutations. Apply coherent edits atomically, read the resulting document, render both Current and AOD, validate, then save. Build the archive to verify all device resolutions. Publishing requires the user's explicit authorization. " + WATCHFACE_LEGIBILITY_GUIDANCE) }
     );
-    for (const definition of editorToolDefinitions(this.assets)) {
+    for (const definition of this.options.tools ?? editorToolDefinitions(this.assets)) {
       server.registerTool(definition.name, {
         title: definition.title,
-        description: ["get_schema", "apply_commands", "import_asset", "render_preview", "validate", "build_archive", "save"].includes(definition.name)
+        description: !this.options.tools && ["get_schema", "apply_commands", "import_asset", "render_preview", "validate", "build_archive", "save"].includes(definition.name)
           ? `${definition.description} ${WATCHFACE_LEGIBILITY_GUIDANCE}`
           : definition.description,
-        inputSchema: definition.schema,
+        inputSchema: z.object(definition.schema).strict(),
         annotations: {
           readOnlyHint: definition.readOnly === true,
           destructiveHint: definition.destructive === true,
@@ -442,7 +442,7 @@ export class WatchfaceAutomationServer {
         }
       });
     }
-    server.registerResource(
+    if (!this.options.tools) server.registerResource(
       "watchface-scene-schema",
       "coroslink://watchface/scene-schema",
       { title: "CorosLink watch-face scene schema", mimeType: "application/json" },

@@ -238,10 +238,12 @@ export function workoutExerciseName(row: Record<string, unknown>): string {
 }
 
 export function workoutExerciseId(row: Record<string, unknown>): string | undefined {
-  const value = row.originId ?? row.exerciseId ?? row.id;
-  return value === undefined || value === null || String(value).trim() === ""
-    ? undefined
-    : String(value);
+  for (const value of [row.originId, row.exerciseId, row.id]) {
+    if (value === undefined || value === null) continue;
+    const id = String(value).trim();
+    if (id && id !== "0") return id;
+  }
+  return undefined;
 }
 
 export function normalizeWorkoutExerciseName(value: string): string {
@@ -1121,7 +1123,7 @@ export function validateWorkoutDraftShared(
     if (intensityError) errors[`${path}.intensity`] = intensityError;
     const needsExercise = draft.sport === "strength" ||
       (draft.sport === "hyrox" && step.exerciseKind !== undefined);
-    if (needsExercise && step.kind === "training" && !step.exerciseId) {
+    if (needsExercise && step.kind === "training" && !workoutExerciseId({ id: step.exerciseId })) {
       errors[`${path}.exercise`] = `Select an exact COROS exercise for this ${capability.label} step.`;
     }
     if (draft.sport === "strength" && step.kind === "training") {

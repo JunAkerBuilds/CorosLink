@@ -289,6 +289,7 @@ shades each muscle by how hard you have worked it.
 - **Weekly trends** — weight lifted and sets side by side, with push/pull/legs/core balance
 - **Exercise Explorer** — open any lift for every set, per-session PRs, best sets by rep range, estimated one-rep-max progression, and volume over time
 - **Hevy sync** — connect a Hevy API key to merge Hevy workouts with your COROS strength history; sessions logged in both apps are de-duplicated, warmup sets are optional, and disconnecting erases the cached Hevy data
+- **Hevy AI management** — in the coach’s MCP connections, choose **Quick connect → Hevy** and authorize with a Hevy Pro API key. The community [hevy-mcp server](https://github.com/chrisdoc/hevy-mcp) lets the coach read history, create or update workouts, routines, and measurements, and create custom exercises. This hosted connection is separate from Strength’s Hevy sync; refresh that sync to see workout changes in the dashboard. Remove or disconnect the MCP server to stop coach access. For self-hosting, add your own compatible HTTP endpoint as a custom server.
 - **Metric or imperial** weights and volume, following the Settings unit switch
 
 ---

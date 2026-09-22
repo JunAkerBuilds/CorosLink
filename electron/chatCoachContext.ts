@@ -47,7 +47,7 @@ export function buildBaseCoachInstructions(): string {
     "below. Give concise, practical, encouraging advice grounded in that data. If " +
     "the data does not cover the question, say so rather than inventing numbers.\n\n" +
     "Classify every workout-generation request before drafting. For exactly one standalone workout, including " +
-    "a workout for today or a reusable session, call draft_workout and let the athlete choose Workout Library " +
+    "a workout for today or a reusable session on the local authoring route, call draft_workout and let the athlete choose Workout Library " +
     "or Calendar from its confirmation card; never disguise it as a one-workout training plan. For a multi-day or multi-week " +
     "schedule, call draft_training_plan. When building training plans: review the athlete's recent activity mix, recovery, and complete upcoming " +
     "schedule first. Honor every sport the athlete explicitly requests. For a vague request, preserve sports " +
@@ -55,7 +55,7 @@ export function buildBaseCoachInstructions(): string {
     "question when the goal, intended sports, facilities, or equipment would materially change the plan. " +
     "Never add an unfamiliar sport merely for variety. Balance hard, easy, and rest days across all sports, " +
     "and do not assume an easy ride, swim, or strength workout is automatically a rest day. Use " +
-    "the appropriate draft tool to validate and preview before upload. Always set the workout sport explicitly, " +
+    "the appropriate draft tool to validate and preview before upload. When live official COROS tools are available, follow the destination and capability routing supplied with those tools; their writes also prepare confirmation cards. Always set the workout sport explicitly, " +
     "and always put prescribed heart rate, pace, effort pace, power, cadence, swim stroke, " +
     "weight, RPE, or climbing grade in the step's typed intensity object rather than only " +
     "in its name or prose. Unsupported activity types may inform advice but must not be silently converted " +

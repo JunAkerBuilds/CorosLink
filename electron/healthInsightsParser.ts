@@ -29,6 +29,8 @@ const fields: Record<HealthInsightKind, Field[]> = {
     { key: "heartRate", label: "Heart rate", unit: "bpm", aliases: ["heartRate", "avgHeartRate", "hr"] },
     { key: "hrv", label: "HRV", unit: "ms", aliases: ["hrv", "avgHrv"] },
     { key: "stress", label: "Stress", aliases: ["stress", "stressValue", "stressScore"] },
+    { key: "level", label: "Stress level", aliases: ["stressLevel"], chart: false, format: value => stressLevels[value - 1] ?? String(value) },
+    { key: "restingHeartRate", label: "Resting heart rate", unit: "bpm", aliases: ["restingHeartRate"], chart: false },
     { key: "respiratoryRate", label: "Respiratory rate", unit: "breaths/min", aliases: ["respiratoryRate", "respirationRate", "breathingRate", "respRate"] },
     { key: "spo2", label: "Blood oxygen", unit: "%", aliases: ["spo2", "bloodOxygen", "oxygenSaturation"] }
   ],
@@ -123,6 +125,18 @@ export function parseHealthTextReport(text: string): { records: ObjectValue[]; p
       const key = camel(labelled[1]);
       if (key === "note" || key === "notes") { prose.push(trimmed); continue; }
       if (key === "queryRange" || key === "today") continue;
+      // Wellness checks report each metric as `Heart Rate List: [epoch=value, ...]`.
+      const list = /^(.*) List$/i.exec(labelled[1]);
+      const entries = /^\[(.*)\]$/.exec(labelled[2]);
+      if (list && entries) {
+        const samples = entries[1].trim() ? entries[1].split(/,\s*/).map(entry => /^(\d{10}(?:\d{3})?)\s*=\s*(.+)$/.exec(entry.trim())) : [];
+        if (samples.every(sample => sample && normalizeHealthTime(sample[1]))) {
+          for (const sample of samples) {
+            if (sample) records.push({ timestamp: sample[1], [camel(list[1])]: sample[2] });
+          }
+          continue;
+        }
+      }
       // An unindented label closes the current date block.
       if (!/^\s/.test(line) && summary && "date" in summary) flush();
       summary ??= {};
@@ -138,7 +152,7 @@ export function parseHealthTextReport(text: string): { records: ObjectValue[]; p
 
 function numeric(value: unknown): number | undefined {
   if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : undefined;
-  if (typeof value !== "string" || !/^\s*\d+(?:\.\d+)?\s*(?:ms|bpm|%|breaths\/min|days)?\s*$/i.test(value)) return undefined;
+  if (typeof value !== "string" || !/^\s*\d+(?:\.\d+)?\s*(?:ms|bpm|%|(?:breaths)?\/min|days)?\s*$/i.test(value)) return undefined;
   return Number.parseFloat(value);
 }
 
@@ -256,7 +270,7 @@ export function parseHealthInsightResponse(kind: HealthInsightKind, response: st
     for (const [key, child] of Object.entries(value)) {
       const field = defs.find(def => def.aliases.some(alias => normalized(alias) === normalized(key).replace(/(?:list|series|points|data)$/, "")));
       if (object(child) || Array.isArray(child)) walk(child, normalizeHealthTime(key) ?? localTime, field ?? context, depth + 1);
-      else if (["text", "report", "summary", "message", "content"].includes(key) && typeof child === "string") walk(child, localTime, undefined, depth + 1);
+      else if (["text", "report", "summary", "message", "content", "result", "data", "structuredcontent"].includes(normalized(key)) && typeof child === "string") walk(child, localTime, undefined, depth + 1);
       else if (child !== null && child !== undefined && !["code", "status", "success", "count", "total", "type"].includes(key)) unknownValue = true;
     }
   }

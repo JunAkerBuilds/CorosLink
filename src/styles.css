@@ -16209,11 +16209,11 @@ tr.data-intervals-row-missing {
 }
 
 .activity-route-dot.is-start {
-  background: #4da3ff;
+  background: #34d399;
 }
 
 .activity-route-dot.is-end {
-  background: #d89b22;
+  background: #f26d6d;
 }
 
 .activity-route-empty,
@@ -21239,6 +21239,32 @@ tr.data-intervals-row-missing {
   font-size: 12px;
   line-height: 1.45;
   color: var(--text-secondary);
+}
+
+.chat-coros-action-card p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.chat-coros-action-details {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.chat-coros-action-details summary {
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.chat-coros-action-details ul {
+  padding-left: 20px;
+  margin: 8px 0 0;
+}
+
+.chat-coros-action-card [role="alert"] {
+  color: var(--text-danger, #e66c6c);
 }
 
 .chat-plan-sports {

@@ -362,6 +362,28 @@ async function main() {
       }
     }
     await until('document.querySelectorAll(".watchface-editor canvas").length > 0');
+    for (const [width, height] of [[1180, 780], [1440, 950], [1920, 1080]]) {
+      win.setSize(width, height);
+      await new Promise(r => setTimeout(r, 200));
+      const layout = await js(`(() => {
+        const stage = document.querySelector('.wf-stage').getBoundingClientRect();
+        const dial = document.querySelector('.watchface-editor-device').getBoundingClientRect();
+        const toolbar = document.querySelector('.wf-stage-toolbar').getBoundingClientRect();
+        const controls = [...document.querySelectorAll('.wf-stage-toolbar button, .wf-stage-toolbar select')]
+          .map(el => el.getBoundingClientRect()).filter(rect => rect.width && rect.height);
+        return {
+          dialFits: dial.left >= stage.left && dial.right <= stage.right && dial.top >= stage.top && dial.bottom <= toolbar.top,
+          controlsFit: controls.every(rect => rect.left >= toolbar.left && rect.right <= toolbar.right + 1),
+          controlsOverlap: controls.some((a, i) => controls.slice(i + 1).some(b =>
+            Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 &&
+            Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1))
+        };
+      })()`);
+      assert(layout.dialFits, `Fit preview stays above controls and inside stage at ${width}×${height}`);
+      assert(layout.controlsFit, `Preview controls stay inside toolbar at ${width}×${height}`);
+      assert(!layout.controlsOverlap, `Preview controls do not overlap at ${width}×${height}`);
+    }
+    win.setSize(1440, 1050);
     await new Promise(r => setTimeout(r, 500));
     await fs.writeFile(path.join(temp, "editor.png"), (await win.webContents.capturePage()).toPNG());
     await fs.writeFile(path.join(temp, "document.json"), JSON.stringify(doc, null, 2));

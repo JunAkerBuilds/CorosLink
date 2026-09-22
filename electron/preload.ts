@@ -109,6 +109,7 @@ import type {
   ChatStreamDone,
   ChatStreamError,
   ChatStreamInfo,
+  CoachCorosActionPreview,
   CoachChartPreview,
   FitIndexProgress,
   FitIndexStatus,
@@ -176,6 +177,17 @@ import type {
 } from "./types";
 
 const api = {
+  getWorkoutAutomationStatus: () => ipcRenderer.invoke("workoutAutomation:status"),
+  configureWorkoutAutomation: (input: { enabled: boolean; port?: number }) => ipcRenderer.invoke("workoutAutomation:configure", input),
+  onWorkoutEditsChanged: (callback: () => void): (() => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("workoutEdits:changed", listener);
+    return () => ipcRenderer.removeListener("workoutEdits:changed", listener);
+  },
+  listWorkoutEdits: () => ipcRenderer.invoke("workoutEdits:list"),
+  getWorkoutEditStatus: (proposalId: string) => ipcRenderer.invoke("workoutEdits:status", proposalId),
+  cancelWorkoutEdit: (proposalId: string) => ipcRenderer.invoke("workoutEdits:cancel", proposalId),
+  confirmWorkoutEdit: (input: { proposalId: string; reviewHash: string; selectedIds: string[] }) => ipcRenderer.invoke("workoutEdits:confirm", input),
   getWatchfaceAutomationStatus: (): Promise<WatchfaceAutomationStatus> => ipcRenderer.invoke("watchfaceAutomation:status"),
   configureWatchfaceAutomation: (input: { enabled: boolean; port?: number }): Promise<WatchfaceAutomationStatus> => ipcRenderer.invoke("watchfaceAutomation:configure", input),
   onWatchfaceAutomationActivate: (callback: () => void): (() => void) => {
@@ -1097,6 +1109,8 @@ const api = {
       destination,
       scheduleDate
     ),
+  confirmCorosAction: (requestId: string): Promise<CoachCorosActionPreview> =>
+    ipcRenderer.invoke("chat:confirmCorosAction", requestId),
   confirmWorkoutDelete: (requestId: string): Promise<DeleteWorkoutResult> =>
     ipcRenderer.invoke("chat:confirmWorkoutDelete", requestId),
   getFitIndexStatus: (): Promise<FitIndexStatus> =>

@@ -1,3 +1,4 @@
+import type { StrengthEditPreview } from "../electron/workoutEditTypes";
 import type { HealthInsightKind, HealthInsightResult } from "../electron/healthInsightsTypes";
 import type { DiagnosticsSnapshot, RendererDiagnosticError } from "../electron/diagnosticsTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "../electron/calendarSyncTypes";
@@ -108,6 +109,7 @@ import type {
   ChatStreamDone,
   ChatStreamError,
   ChatStreamInfo,
+  CoachCorosActionPreview,
   CoachChartPreview,
   FitIndexProgress,
   FitIndexStatus,
@@ -175,6 +177,13 @@ import type {
 } from "../electron/types";
 
 export interface CorosLinkApi {
+  getWorkoutAutomationStatus: () => Promise<WatchfaceAutomationStatus>;
+  configureWorkoutAutomation: (input: { enabled: boolean; port?: number }) => Promise<WatchfaceAutomationStatus>;
+  onWorkoutEditsChanged: (callback: () => void) => () => void;
+  listWorkoutEdits: () => Promise<StrengthEditPreview[]>;
+  getWorkoutEditStatus: (proposalId: string) => Promise<StrengthEditPreview>;
+  cancelWorkoutEdit: (proposalId: string) => Promise<StrengthEditPreview>;
+  confirmWorkoutEdit: (input: { proposalId: string; reviewHash: string; selectedIds: string[] }) => Promise<StrengthEditPreview>;
   getWatchfaceAutomationStatus: () => Promise<WatchfaceAutomationStatus>;
   configureWatchfaceAutomation: (input: { enabled: boolean; port?: number }) => Promise<WatchfaceAutomationStatus>;
   onWatchfaceAutomationActivate: (callback: () => void) => () => void;
@@ -688,6 +697,7 @@ export interface CorosLinkApi {
     destination?: TrainingPlanDestination,
     scheduleDate?: string
   ) => Promise<UploadPlanResult>;
+  confirmCorosAction: (requestId: string) => Promise<CoachCorosActionPreview>;
   confirmWorkoutDelete: (requestId: string) => Promise<DeleteWorkoutResult>;
   getFitIndexStatus: () => Promise<FitIndexStatus>;
   startFitIndexSync: (options?: FitIndexSyncOptions) => Promise<FitIndexProgress>;

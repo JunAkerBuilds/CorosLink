@@ -24,6 +24,31 @@ assert.equal(parse('stress', '{"stress":25}').series.length, 0, 'Do not fabricat
 const check = parse('healthCheck', JSON.stringify({ data: { happenDay: '20260920', heartRate: '62 bpm', hrv: 49, respiratoryRate: 14, spo2: '98%', stress: 0 } }));
 assert.equal(check.metrics.length, 5);
 assert.equal(check.metrics.find(m => m.key === 'spo2').unit, '%');
+// Live Health Check report format, with synthetic measurements and device names.
+const wellnessReport = [
+  'Health Check Time Series — Latest in 2026-09-15 to 2026-09-21',
+  '========================', '', 'Date: 2026-09-21',
+  'timestamp=1789948800, timezone=-16, source=dailyRhmList, device=Test Watch, dataSource=Test Watch',
+  'Heart Rate List: [1789948800=62 bpm, 1789948860=64 bpm]',
+  'HRV List: [1789948800=49 ms]',
+  'Stress List: [1789948800=0]',
+  'Respiration Rate List: [1789948800=14/min]',
+  'SpO2 List: [1789948800=98%]',
+  'Stress Level: 1', 'Resting Heart Rate: 51 bpm'
+].join('\n');
+const wellness = parse('healthCheck', JSON.stringify(wellnessReport));
+assert.deepEqual(Object.fromEntries(wellness.metrics.map(m => [m.key, m.value])), {
+  heartRate: 64, hrv: 49, stress: 0, respiratoryRate: 14, spo2: 98,
+  level: 'Relaxed', restingHeartRate: 51
+});
+assert.equal(wellness.series.length, 5);
+assert.deepEqual(wellness.series.find(s => s.key === 'heartRate').points, [
+  { time: '2026-09-21T00:00:00.000Z', value: 62 },
+  { time: '2026-09-21T00:01:00.000Z', value: 64 }
+]);
+assert.equal(wellness.report, undefined);
+assert.equal(parse('healthCheck', 'Heart Rate List: []\nHRV List: []').metrics.length, 0);
+assert.equal(parse('healthCheck', 'Heart Rate List: [1789948800=0 bpm]\nHRV List: [1789948800=0 ms]').metrics.length, 0);
 const nested = parse('healthCheck', JSON.stringify({ heartRateSeries: [{ time: '2026-09-20T10:00:00Z', value: 65 }] }));
 assert.equal(nested.series[0].points[0].value, 65);
 const hrv = parse('sleepHrv', '```json\n{"date":"20260920","avgSleepHrv":62,"normalRange":[48,72],"evaluation":"Normal"}\n```');
@@ -51,6 +76,20 @@ assert.deepEqual(stressReport.series.map(s => [s.key, s.points.length]), [['stre
 assert.equal(stressReport.metrics.find(m => m.key === 'stress').value, 60);
 assert.equal(stressReport.metrics.find(m => m.key === 'level').value, 'Medium');
 assert.equal(stressReport.report, undefined);
+// MCP structured output may wrap a text report or serialized JSON in result/data.
+for (const wrapper of ['result', 'data', 'structuredContent']) {
+  const report = 'Stress Time Series\n========================\n2026-09-20:\n  timestamp=1789886400, stress=60, score=3';
+  const wrappedReport = parse('stress', JSON.stringify({ [wrapper]: report }));
+  assert.deepEqual(wrappedReport, parse('stress', report), wrapper);
+  const jsonReport = JSON.stringify({ date: '20260920', stress: 25 });
+  assert.deepEqual(parse('stress', JSON.stringify({ [wrapper]: jsonReport })), parse('stress', jsonReport), wrapper);
+}
+assert.deepEqual(
+  parse('stress', JSON.stringify({ structuredContent: { result: { data: 'Stress: 25' } } })),
+  parse('stress', 'Stress: 25'),
+  'Nested response envelopes retain their report'
+);
+assert.throws(() => parse('stress', '{"result":{"unrecognizedMeasurement":12}}'), /format/);
 const hrvReport = parse('sleepHrv', [
   'Sleep HRV — 2026-09-20', '========================', 'Note: dates are wake-up days.', '',
   'HRV Assessment — Last 1 days', '========================', '',
@@ -110,15 +149,19 @@ try {
   const emptyResult = await getTrainingHealthInsight('stress');
   assert.equal(emptyResult.status, 'empty');
   assert.match(emptyResult.message, /No complete/);
+  reply = JSON.stringify({ result: 'No stress data found in this range.' });
+  const wrappedEmpty = await getTrainingHealthInsight('stress');
+  assert.equal(wrappedEmpty.status, 'empty');
+  assert.equal(wrappedEmpty.message, 'No stress data found in this range.');
   reply = '{"stress":0}';
   connected = false;
   assert.equal((await getTrainingHealthInsight('stress')).status, 'disconnected');
-  assert.equal(callCount, 2);
+  assert.equal(callCount, 3);
   connected = true; available = false;
   assert.equal((await getTrainingHealthInsight('stress')).status, 'unavailable');
   available = true; failCall = true;
   assert.equal((await getTrainingHealthInsight('stress')).status, 'error');
-  assert.equal(callCount, 3, 'No repeated request guessing on failure');
+  assert.equal(callCount, 4, 'No repeated request guessing on failure');
   await assert.rejects(getTrainingHealthInsight('invalid'), /Unknown/);
   await assert.rejects(getTrainingHealthInsight('stress', 90), /between 1 and 7/);
 } finally { if (old) require.cache[mcpPath] = old; else delete require.cache[mcpPath]; }

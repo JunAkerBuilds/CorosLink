@@ -8,13 +8,14 @@ interface CoachChartsPanelProps {
   api: CorosLinkApi | undefined;
   /** Bumps whenever the Training Hub refreshes, so live charts re-resolve too. */
   refreshToken?: number;
+  showEmpty?: boolean;
 }
 
 /**
  * Charts the athlete pinned from Coach. Metric-bound charts re-fetch their
  * window on mount and on every hub refresh; inline-only charts stay as pinned.
  */
-export function CoachChartsPanel({ api, refreshToken = 0 }: CoachChartsPanelProps) {
+export function CoachChartsPanel({ api, refreshToken = 0, showEmpty = false }: CoachChartsPanelProps) {
   const [charts, setCharts] = useState<PinnedCoachChart[]>([]);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +93,10 @@ export function CoachChartsPanel({ api, refreshToken = 0 }: CoachChartsPanelProp
   }, [api, refreshChart, refreshToken]);
 
   if (charts.length === 0) {
-    return null;
+    return showEmpty ? <section className="panel coach-charts-panel">
+      <div className="section-heading"><div><p className="eyebrow">Coach charts</p><h2>Your pinned charts</h2></div><ChartLine size={22} aria-hidden="true" /></div>
+      <p className="coach-charts-panel-note">{error || "Pin a chart from a coach conversation to see it on your dashboard."}</p>
+    </section> : null;
   }
 
   return (
@@ -116,7 +120,6 @@ export function CoachChartsPanel({ api, refreshToken = 0 }: CoachChartsPanelProp
             pinned
             busy={busyIds.has(chart.id)}
             onUnpin={() => void unpinChart(chart.id)}
-            onRefresh={() => void refreshChart(chart.id)}
           />
         ))}
       </div>

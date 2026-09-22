@@ -1517,6 +1517,24 @@ export function WatchfaceEditor({
     };
   }, []);
 
+  // Fit the dial to the actual center pane, including wrapped preview controls.
+  useEffect(() => {
+    const stage = previewStackRef.current?.parentElement;
+    const toolbar = stage?.querySelector<HTMLElement>(".wf-stage-toolbar");
+    const status = stage?.querySelector<HTMLElement>(".wf-stage-status");
+    if (!stage || !toolbar || !status || typeof ResizeObserver === "undefined") return;
+    const resize = () => {
+      const toolbarHeight = toolbar.getBoundingClientRect().height;
+      const availableHeight = stage.clientHeight - status.getBoundingClientRect().height - toolbarHeight - 56;
+      stage.style.setProperty("--wf-toolbar-h", `${toolbarHeight}px`);
+      stage.style.setProperty("--wf-fit-size", `${Math.max(0, Math.min(stage.clientWidth - 48, availableHeight))}px`);
+    };
+    const observer = new ResizeObserver(resize);
+    [stage, toolbar, status].forEach((element) => observer.observe(element));
+    resize();
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     writeWatchfacePlacementPreferences(
       browserPlacementStorage(),
