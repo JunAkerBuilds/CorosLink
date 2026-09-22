@@ -1,3 +1,4 @@
+import { baseTileLayer } from "../../maps/baseTileLayer";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -215,7 +216,7 @@ function RouteMapCanvas({
       scrollWheelZoom
     });
 
-    const tileLayer = L.tileLayer(tile.url, {
+    const tileLayer = baseTileLayer(tile.url, {
       maxZoom: tile.maxZoom,
       attribution: tile.attribution,
       ...(tile.subdomains ? { subdomains: tile.subdomains } : {})
@@ -329,7 +330,7 @@ function RouteMapCanvas({
       theme,
       baseLayer
     );
-    const next = L.tileLayer(tile.url, {
+    const next = baseTileLayer(tile.url, {
       maxZoom: tile.maxZoom,
       attribution: tile.attribution,
       ...(tile.subdomains ? { subdomains: tile.subdomains } : {})

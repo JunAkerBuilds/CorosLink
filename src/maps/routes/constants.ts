@@ -30,7 +30,8 @@ export interface TileLayerConfig {
 }
 
 /**
- * Base tile layers. All are free/keyless. `outdoors` uses CyclOSM, a
+ * Base tile layers. CARTO Light/Dark use the personal key in Settings.
+ * `outdoors` uses CyclOSM, a
  * cycling/outdoor-focused OSM render that pairs well with the Explore overlays.
  */
 export const ROUTE_BASE_LAYERS: Record<RouteBaseLayer, TileLayerConfig> = {

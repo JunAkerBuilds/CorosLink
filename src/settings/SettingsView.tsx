@@ -1,3 +1,4 @@
+import { MapSettings } from "./MapSettings";
 import { WorkoutAutomationSettings } from "./WorkoutAutomationSettings";
 import {
   ArrowLeft,
@@ -368,6 +369,7 @@ export function SettingsView({
         </button>
       ) : null}
 
+      <MapSettings />
       <WatchfaceAutomationSettings api={api} />
       <WorkoutAutomationSettings api={api} />
 

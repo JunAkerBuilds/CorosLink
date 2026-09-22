@@ -1,3 +1,4 @@
+import { baseTileLayer } from "../baseTileLayer";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Maximize2, Minus, Plus } from "lucide-react";
@@ -279,7 +280,7 @@ export function RouteMapCanvas({
       return;
     }
     const config = ROUTE_BASE_LAYERS[baseLayer];
-    const next = L.tileLayer(config.url, {
+    const next = baseTileLayer(config.url, {
       maxZoom: config.maxZoom,
       attribution: config.attribution,
       ...(config.subdomains ? { subdomains: config.subdomains } : {})

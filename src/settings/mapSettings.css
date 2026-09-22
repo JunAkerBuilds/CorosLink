@@ -1,0 +1,6 @@
+.settings-map-panel { display: grid; gap: 16px; }
+.settings-map-panel h2 { margin: 0 0 8px; }
+.settings-map-panel p { line-height: 1.5; }
+.settings-map-panel form { display: grid; gap: 12px; max-width: 640px; }
+.settings-map-panel input { width: 100%; }
+.settings-map-actions { display: flex; gap: 10px; flex-wrap: wrap; }

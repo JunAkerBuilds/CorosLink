@@ -1,3 +1,4 @@
+import { baseTileLayer } from "../maps/baseTileLayer";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef } from "react";
@@ -321,7 +322,7 @@ export function ActivityGlobeStreetMap({
     });
     mapRef.current = map;
 
-    L.tileLayer(tile.url, {
+    baseTileLayer(tile.url, {
       maxZoom: tile.maxZoom,
       attribution: tile.attribution,
       ...(tile.subdomains ? { subdomains: tile.subdomains } : {}),
