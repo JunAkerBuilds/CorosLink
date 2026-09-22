@@ -1,4 +1,4 @@
-import { baseTileLayer } from "../../maps/baseTileLayer";
+import { useCartoApiKey } from "../../maps/routes/useCartoApiKey";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { MapPin, Maximize2, X } from "lucide-react";
 import type { TrainingHubActivityTrack } from "../../../electron/types";
 import {
-  ROUTE_BASE_LAYERS,
+  resolveBaseLayer,
   ROUTE_OVERLAY_LAYERS,
   type RouteBaseLayer,
   type RouteOverlayId
@@ -38,19 +38,13 @@ const START_COLOR = "#34d399";
 const END_COLOR = "#f26d6d";
 const MARKER_RING = "#ffffff";
 const ROUTE_ANIMATION_MS = 2200;
+const ACTIVITY_BASE_LAYERS: RouteBaseLayer[] = ["street", "outdoors", "topo", "satellite", "light", "dark"];
 
 const ACTIVITY_ROUTE_BASE_LAYER_PREFERENCE =
   defineSelectionPreference<RouteBaseLayer>({
     key: "training.activityRoute.baseLayer",
-    defaultValue: "outdoors",
-    validate: selectionIsOneOf([
-      "street",
-      "outdoors",
-      "light",
-      "dark",
-      "topo",
-      "satellite"
-    ])
+    defaultValue: "street",
+    validate: selectionIsOneOf(ACTIVITY_BASE_LAYERS)
   });
 
 const ACTIVITY_ROUTE_OVERLAYS_PREFERENCE =
@@ -156,16 +150,11 @@ interface MapStyle {
   ghostOpacity: number;
 }
 
-/** The theme-matched CARTO layer used when no explicit layer is chosen. */
-function themeBaseLayer(theme: string): RouteBaseLayer {
-  return theme === "paper" ? "light" : "dark";
-}
-
-function resolveMapStyle(theme: string, baseLayer?: RouteBaseLayer): MapStyle {
-  const layer = baseLayer ?? themeBaseLayer(theme);
-  const isDarkGround = layer === "dark" || layer === "satellite";
+function resolveMapStyle(theme: string, baseLayer?: RouteBaseLayer, cartoApiKey = ""): MapStyle {
+  const layer = baseLayer ?? "street";
+  const isDarkGround = layer === "dark" || layer === "satellite" || (layer === "street" && theme !== "paper");
   return {
-    tile: ROUTE_BASE_LAYERS[layer],
+    tile: resolveBaseLayer(layer, cartoApiKey),
     routeColor: isDarkGround ? ROUTE_COLOR : ROUTE_COLOR_PAPER,
     ghostOpacity: isDarkGround ? 0.18 : 0.28
   };
@@ -195,6 +184,7 @@ function RouteMapCanvas({
   const baseLayerPropRef = useRef(baseLayer);
   const appliedBaseLayerRef = useRef(baseLayer);
   const { theme } = useTheme();
+  const cartoApiKey = useCartoApiKey();
 
   baseLayerPropRef.current = baseLayer;
 
@@ -207,7 +197,7 @@ function RouteMapCanvas({
     const initialLayer = baseLayerPropRef.current;
     const { tile, routeColor, ghostOpacity } = resolveMapStyle(
       theme,
-      initialLayer
+      initialLayer, cartoApiKey
     );
 
     const map = L.map(container, {
@@ -216,7 +206,8 @@ function RouteMapCanvas({
       scrollWheelZoom
     });
 
-    const tileLayer = baseTileLayer(tile.url, {
+    const tileLayer = L.tileLayer(tile.url, {
+      className: "activity-route-base-tile",
       maxZoom: tile.maxZoom,
       attribution: tile.attribution,
       ...(tile.subdomains ? { subdomains: tile.subdomains } : {})
@@ -316,7 +307,7 @@ function RouteMapCanvas({
       routeLineRef.current = null;
       overlayLayersRef.current.clear();
     };
-  }, [route, theme, scrollWheelZoom]);
+  }, [route, theme, scrollWheelZoom, cartoApiKey]);
 
   // Swap the base tile layer in place so zoom/pan and the route animation
   // survive a layer change.
@@ -328,9 +319,10 @@ function RouteMapCanvas({
 
     const { tile, routeColor, ghostOpacity } = resolveMapStyle(
       theme,
-      baseLayer
+      baseLayer, cartoApiKey
     );
-    const next = baseTileLayer(tile.url, {
+    const next = L.tileLayer(tile.url, {
+      className: "activity-route-base-tile",
       maxZoom: tile.maxZoom,
       attribution: tile.attribution,
       ...(tile.subdomains ? { subdomains: tile.subdomains } : {})
@@ -345,7 +337,7 @@ function RouteMapCanvas({
     ghostLineRef.current?.setStyle({ color: routeColor, opacity: ghostOpacity });
     routeLineRef.current?.setStyle({ color: routeColor });
     appliedBaseLayerRef.current = baseLayer;
-  }, [baseLayer, theme]);
+  }, [baseLayer, theme, cartoApiKey]);
 
   // Sync Waymarked Trails overlays with the selection.
   useEffect(() => {
@@ -377,12 +369,12 @@ function RouteMapCanvas({
       layer.addTo(map);
       active.set(id, layer);
     }
-  }, [overlays, route, theme, scrollWheelZoom]);
+  }, [overlays, route, theme, scrollWheelZoom, cartoApiKey]);
 
   return (
     <div
       ref={mapContainerRef}
-      className="activity-route-map-canvas"
+      className={`activity-route-map-canvas${(baseLayer ?? "street") === "street" && theme !== "paper" ? " is-dark-street" : ""}`}
       aria-label={ariaLabel}
     />
   );
@@ -405,17 +397,18 @@ export function ActivityRouteMap({
   onExpandedChange
 }: ActivityRouteMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { theme } = useTheme();
   const [expandedState, setExpandedState] = useState(false);
   const expanded = expandedProp ?? expandedState;
   const setExpanded = (value: boolean) => {
     setExpandedState(value);
     onExpandedChange?.(value);
   };
-  const [baseLayer, setBaseLayer] = useSelectionPreference(
-    ACTIVITY_ROUTE_BASE_LAYER_PREFERENCE,
-    themeBaseLayer(theme)
+  const [savedBaseLayer, setBaseLayer] = useSelectionPreference(
+    ACTIVITY_ROUTE_BASE_LAYER_PREFERENCE
   );
+  const cartoApiKey = useCartoApiKey();
+  const availableLayers = ACTIVITY_BASE_LAYERS.filter(layer => cartoApiKey || (layer !== "light" && layer !== "dark"));
+  const baseLayer = availableLayers.includes(savedBaseLayer) ? savedBaseLayer : "street";
   const [overlays, setOverlays] = useSelectionPreference(
     ACTIVITY_ROUTE_OVERLAYS_PREFERENCE
   );
@@ -450,7 +443,7 @@ export function ActivityRouteMap({
 
   return (
     <div className="activity-route-map" ref={containerRef}>
-      <RouteMapCanvas route={route} ariaLabel="Activity route map" />
+      <RouteMapCanvas route={route} baseLayer={baseLayer} ariaLabel="Activity route map" />
       <div className="activity-route-footer">
         <RouteLegend />
         <button
@@ -499,6 +492,7 @@ export function ActivityRouteMap({
                     ariaLabel="Expanded activity route map"
                   />
                   <MapLayerControl
+                    layers={availableLayers}
                     value={baseLayer}
                     onChange={setBaseLayer}
                     overlays={overlays}

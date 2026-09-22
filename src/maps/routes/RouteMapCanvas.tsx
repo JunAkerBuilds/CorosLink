@@ -1,4 +1,4 @@
-import { baseTileLayer } from "../baseTileLayer";
+import { useCartoApiKey } from "./useCartoApiKey";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Maximize2, Minus, Plus } from "lucide-react";
@@ -9,7 +9,7 @@ import type {
   RouteWaypoint
 } from "../../../electron/types";
 import {
-  ROUTE_BASE_LAYERS,
+  resolveBaseLayer,
   ROUTE_OVERLAY_LAYERS,
   type RouteBaseLayer,
   type RouteOverlayId
@@ -86,6 +86,7 @@ export function RouteMapCanvas({
   onSketchCenterMove
 }: RouteMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const cartoApiKey = useCartoApiKey();
   const mapRef = useRef<L.Map | null>(null);
   const baseLayerRef = useRef<L.TileLayer | null>(null);
   const overlayLayersRef = useRef<Map<RouteOverlayId, L.TileLayer>>(new Map());
@@ -279,8 +280,8 @@ export function RouteMapCanvas({
     if (!map) {
       return;
     }
-    const config = ROUTE_BASE_LAYERS[baseLayer];
-    const next = baseTileLayer(config.url, {
+    const config = resolveBaseLayer(baseLayer, cartoApiKey);
+    const next = L.tileLayer(config.url, {
       maxZoom: config.maxZoom,
       attribution: config.attribution,
       ...(config.subdomains ? { subdomains: config.subdomains } : {})
@@ -292,7 +293,7 @@ export function RouteMapCanvas({
       map.removeLayer(baseLayerRef.current);
     }
     baseLayerRef.current = next;
-  }, [baseLayer]);
+  }, [baseLayer, cartoApiKey]);
 
   // Sync discoverable-route overlays (Waymarked Trails).
   useEffect(() => {

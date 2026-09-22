@@ -3,6 +3,9 @@ export type ChartCardSize = "mini" | "short" | "standard" | "tall";
 /** Shared dashboard height tiers; compact charts align with health and gauge cards. */
 export const chartCardHeights = { mini: 224, short: 320, standard: 448, tall: 592 } as const;
 
+// Below this width, quarter-width panels cannot comfortably fit their readings and controls.
+export const dashboardDesktopWidth = 1150;
+
 export interface WidgetSizePreset {
   chartSize?: ChartCardSize;
   id: string;
@@ -53,10 +56,15 @@ export function sizePresetWidth(preset: WidgetSizePreset, gridWidth: number, chr
   const unit = (gridWidth + 16) / 12;
   if (preset.contentWidth) {
     if (gridWidth <= 850) return Math.min(gridWidth, preset.contentWidth + chromeWidth);
+    if (gridWidth <= dashboardDesktopWidth) return 3 * unit - 16;
     const half = 1.5 * unit - 16;
     return half >= 128 ? half : 3 * unit - 16;
   }
-  return gridWidth <= 850 ? gridWidth : preset.columns * unit - 16;
+  if (gridWidth <= 850) return gridWidth;
+  const columns = gridWidth <= dashboardDesktopWidth
+    ? (preset.columns <= 6 ? 6 : 12)
+    : preset.columns;
+  return columns * unit - 16;
 }
 
 /** Compare real preview dimensions, with a small dead band to avoid flickering near a snap edge. */

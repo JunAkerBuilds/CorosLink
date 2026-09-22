@@ -641,11 +641,13 @@ export function ExplorePanel({
 export function MapLayerControl({
   value,
   onChange,
+  layers = ROUTE_BASE_LAYER_ORDER,
   overlays,
   onToggleOverlay
 }: {
   value: RouteBaseLayer;
   onChange: (layer: RouteBaseLayer) => void;
+  layers?: readonly RouteBaseLayer[];
   overlays?: RouteOverlayId[];
   onToggleOverlay?: (overlay: RouteOverlayId) => void;
 }) {
@@ -665,7 +667,7 @@ export function MapLayerControl({
               <X size={15} aria-hidden="true" />
             </button>
           </div>
-          {ROUTE_BASE_LAYER_ORDER.map((id) => {
+          {layers.map((id) => {
             const config = ROUTE_BASE_LAYERS[id];
             return (
               <button

@@ -30,8 +30,7 @@ export interface TileLayerConfig {
 }
 
 /**
- * Base tile layers. CARTO Light/Dark use the personal key in Settings.
- * `outdoors` uses CyclOSM, a
+ * Base tile layers. CARTO Light/Dark require a user key. `outdoors` uses CyclOSM, a
  * cycling/outdoor-focused OSM render that pairs well with the Explore overlays.
  */
 export const ROUTE_BASE_LAYERS: Record<RouteBaseLayer, TileLayerConfig> = {
@@ -88,6 +87,14 @@ export const ROUTE_BASE_LAYERS: Record<RouteBaseLayer, TileLayerConfig> = {
       'Imagery &copy; <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics'
   }
 };
+
+/** Never request a CARTO raster tile without a key; use OSM as the fallback. */
+export function resolveBaseLayer(layer: RouteBaseLayer, cartoApiKey = ""): TileLayerConfig {
+  if (layer !== "light" && layer !== "dark") return ROUTE_BASE_LAYERS[layer];
+  const key = cartoApiKey.trim();
+  if (!key) return ROUTE_BASE_LAYERS.street;
+  return { ...ROUTE_BASE_LAYERS[layer], url: `${ROUTE_BASE_LAYERS[layer].url}?key=${encodeURIComponent(key)}` };
+}
 
 export const ROUTE_BASE_LAYER_ORDER: RouteBaseLayer[] = [
   "street",

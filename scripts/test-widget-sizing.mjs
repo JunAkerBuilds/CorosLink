@@ -55,6 +55,19 @@ for (const id of ['daily-calories', 'daily-steps', 'daily-load', 'daily-heart'])
 assert.equal(nearestSizePreset(choices, 152, 152, '3-standard').id, 'compact-square', 'Horizontal shrink reaches a compact square without adding height');
 console.log('Compact square widths and persistence passed');
 
+// Intermediate windows must reflow small saved presets before their content gets squeezed.
+for (const width of [851, 900, 1024, 1150]) {
+  for (const id of ['healthCheck', 'recovery', 'vo2', 'trend-load', 'scores', 'race', 'upcoming']) {
+    const small = widgetPresets(id).find(preset => preset.columns === 3);
+    assert.equal(sizePresetWidth(small, width), (width - 16) / 2, `${id} uses half the available width`);
+  }
+  const compact = presets.find(preset => preset.id === 'compact-square');
+  assert.ok(Math.abs(2 * sizePresetWidth(compact, width) + 16 - (width - 16) / 2) < .001,
+    'Compact pairs align with a reflowed panel');
+  const wide = widgetPresets('stress').find(preset => preset.columns === 8);
+  assert.equal(sizePresetWidth(wide, width), width, 'Wide charts use the full row');
+}
+
 for (const preset of widgetPresets('healthCheck')) {
   const widget = { ...defaultWidget('healthCheck'), size: preset.columns, preset: preset.id };
   assert.deepEqual(parseLayout(JSON.stringify({ version: 3, widgets: [widget] })), [widget]);

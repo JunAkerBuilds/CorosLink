@@ -18527,6 +18527,8 @@ tr.data-intervals-row-missing {
 }
 
 .chat-settings-modal {
+  /* Keep dialogs independent of the shared translucent panel treatment. */
+  position: relative;
   display: flex;
   flex-direction: column;
   width: min(760px, 100%);

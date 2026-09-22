@@ -46,7 +46,8 @@
 .activity-card-body { display: block; width: 100%; padding: 0 10px; border: 0; border-radius: 0; background: transparent; color: var(--text-primary); text-align: left; }
 .activity-card-route { position: relative; width: 100%; height: 172px; overflow: hidden; isolation: isolate; border: 1px solid var(--glass-border); border-radius: 10px; background: var(--bg-base); }
 .activity-card-map { width: 100%; height: 100%; background: var(--bg-base); pointer-events: none; }
-.activity-card-map.is-dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) saturate(.35) brightness(.7); }
+.activity-card-map.is-dark .leaflet-tile-pane,
+.activity-route-map-canvas.is-dark-street .activity-route-base-tile { filter: invert(1) hue-rotate(180deg) saturate(.35) brightness(.7); }
 .activity-card-route-placeholder { display: flex; height: 100%; flex-direction: column; gap: 8px; align-items: center; justify-content: center; color: var(--text-muted); background: radial-gradient(ellipse at 65% 80%, color-mix(in srgb, var(--activity-color) 9%, transparent), transparent 80%); }
 .activity-card-route-placeholder svg { color: var(--activity-color); opacity: .65; }
 .activity-card-route-placeholder span { font-size: 11px; }

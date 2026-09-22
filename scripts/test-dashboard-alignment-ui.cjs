@@ -44,19 +44,31 @@ async function main() {
       const panels = ['recovery', 'fitness', 'vo2'].map(id => document.querySelector('[data-widget="' + id + '"] .hub-widget-content > .panel').getBoundingClientRect());
       const health = document.querySelector('[data-widget="healthCheck"] .health-insight-card').getBoundingClientRect();
       const sleep = rect('sleep');
-      return sleep.height >= panels[0].height && near(health.top, sleep.top) && near(health.bottom, sleep.bottom) && panels.every(panel => near(panel.height, panels[0].height))
+      const metricsFit = [...document.querySelectorAll('[data-compact]')].every(wrapper => {
+        const outer = wrapper.getBoundingClientRect();
+        const card = wrapper.querySelector('.training-stat-card').getBoundingClientRect();
+        return card.left >= outer.left - 1 && card.right <= outer.right + 1
+          && card.top >= outer.top - 1 && card.bottom <= outer.bottom + 1;
+      });
+      return metricsFit && sleep.height >= panels[0].height && near(health.top, sleep.top) && near(health.bottom, sleep.bottom) && panels.every(panel => near(panel.height, panels[0].height))
         && near(rect('vo2').bottom, recovery.bottom)
         && near(recovery.bottom, fitness.bottom) && near(heart.left, recovery.left) && near(steps.right, recovery.right)
         && near(heart.top, steps.top) && near(calories.top, load.top) && near(heart.left, calories.left) && near(steps.right, load.right)
+        && near(calories.bottom, Math.max(sleep.bottom, heart.top + 152 * 2 + 16))
         && near(heart.top, recovery.bottom + 16) && near(calories.top, heart.bottom + 16);
     })()`;
-    for (const width of [1500, 1800]) {
+    for (const width of [1350, 1500, 1800]) {
       win.setSize(width, 1000);
       await until(aligned);
       await click('.hub-dashboard-edit');
       await until(aligned);
       await click('.hub-dashboard-edit');
       await until(aligned);
+      if (width === 1350) {
+        await js(`document.querySelector('main').scrollTop = 350; void 0`);
+        await fs.writeFile(path.join(os.tmpdir(), 'coroslink-adaptive-metrics.png'), (await win.webContents.capturePage()).toPNG());
+        await js(`document.querySelector('main').scrollTop = 0; void 0`);
+      }
     }
     await new Promise(r => setTimeout(r, 250));
     await fs.writeFile(path.join(os.tmpdir(), 'coroslink-dashboard-aligned.png'), (await win.webContents.capturePage()).toPNG());
@@ -66,8 +78,13 @@ async function main() {
       assert.ok(await js(`(() => {
         const cards = [...document.querySelectorAll('[data-widget]')].map(card => card.getBoundingClientRect());
         return cards.every((a,i) => cards.slice(i+1).every(b => a.right <= b.left+1 || b.right <= a.left+1 || a.bottom <= b.top+1 || b.bottom <= a.top+1))
-          && [...document.querySelectorAll('[data-compact] .training-stat-card')].every(card => Math.abs(card.clientWidth - card.clientHeight) <= 2);
-      })()`), 'Responsive cards remain square and do not overlap');
+          && [...document.querySelectorAll('[data-compact]')].every(wrapper => {
+            const card = wrapper.querySelector('.training-stat-card');
+            const outer = wrapper.getBoundingClientRect(), inner = card.getBoundingClientRect();
+            return inner.left >= outer.left - 1 && inner.right <= outer.right + 1
+              && (wrapper.style.getPropertyValue('--compact-adaptive-height') || Math.abs(card.clientWidth - card.clientHeight) <= 2);
+          });
+      })()`), 'Responsive cards stay within their wrappers and remain square when not aligned to a neighbor');
     }
     // Reproduce the reported gap using the existing saved row flag, without resetting the layout.
     win.setSize(1800, 1100);
@@ -93,6 +110,33 @@ async function main() {
     await until(noGap);
     await new Promise(r => setTimeout(r, 200));
     await fs.writeFile(path.join(os.tmpdir(), 'coroslink-dashboard-gap-fixed.png'), (await win.webContents.capturePage()).toPNG());
+    // The default layout previously squeezed Health Check into a tall single column
+    // just above the mobile breakpoint, leaving a large hole before the heatmap.
+    await js(`localStorage.removeItem('coroslink.training-dashboard.v1.sample'); void 0`);
+    await win.reload();
+    await until(`document.querySelector('.training-hub-sample-button') !== null`);
+    await click('.training-hub-sample-button');
+    await until(count, n => n === 22);
+    for (const width of [920, 1000, 1150, 430, 1500]) {
+      win.setSize(width, 1000);
+      await new Promise(r => setTimeout(r, 400));
+      assert.ok(await js(`(() => {
+        const grid = document.querySelector('.hub-dashboard-grid').getBoundingClientRect();
+        const cards = [...document.querySelectorAll('[data-widget]')].map(card => card.getBoundingClientRect());
+        return cards.every((a,i) => a.left >= grid.left - 1 && a.right <= grid.right + 1
+          && cards.slice(i+1).every(b => a.right <= b.left+1 || b.right <= a.left+1 || a.bottom <= b.top+1 || b.bottom <= a.top+1));
+      })()`), 'Default cards stay inside the dashboard without overlapping');
+      if (width >= 920 && width <= 1150) {
+        assert.ok(await js(`(() => {
+          const rect = id => document.querySelector('[data-widget="' + id + '"]').getBoundingClientRect();
+          const grid = document.querySelector('.hub-dashboard-grid').clientWidth;
+          const health = document.querySelector('[data-widget="healthCheck"] .health-vitals');
+          return ['healthCheck', 'vo2', 'trend-load', 'scores', 'race', 'upcoming'].every(id => Math.abs(rect(id).width - (grid - 16) / 2) < 1)
+            && health.children[0].getBoundingClientRect().top === health.children[1].getBoundingClientRect().top;
+        })()`), 'Intermediate layouts give detailed panels half a row and keep health readings side by side');
+      }
+      if (width === 1000) await fs.writeFile(path.join(os.tmpdir(), 'coroslink-dashboard-responsive.png'), (await win.webContents.capturePage()).toPNG());
+    }
     assert.deepEqual(errors, []);
     console.log('Dashboard alignment passed: shared panel baseline, paired squares, 2 × 2 spacing, edit mode and responsive layout.');
   } finally { clearTimeout(watchdog); win?.destroy(); await vite?.close(); }
