@@ -1,8 +1,8 @@
 {
   "name": "coroslink",
-  "version": "0.1.38",
+  "version": "0.1.39",
   "private": true,
-  "description": "Unofficial COROS Pace Pro companion \u2014 media, watch sync, and training analytics.",
+  "description": "Unofficial COROS Pace Pro companion — media, watch sync, and training analytics.",
   "author": "CorosLink Contributors",
   "main": "dist-electron/main.js",
   "scripts": {
