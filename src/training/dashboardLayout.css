@@ -136,6 +136,17 @@
 .hub-dashboard-widget[data-compact="true"] .training-stat-card__chart,
 .hub-dashboard-widget[data-compact="true"] .training-stat-card__chevron { display: none; }
 
+/* A paired metric group can grow to match its neighboring panel without clipping readings. */
+.hub-dashboard-widget[data-compact="true"] .training-stat-card:not([open]) {
+  /* An explicit width prevents the square aspect ratio from deriving width from adaptive height. */
+  width: 100%;
+  max-width: 100%;
+  height: var(--compact-adaptive-height, auto);
+}
+.hub-dashboard-widget[data-compact="true"] .training-stat-card:not([open]) .training-stat-card__summary {
+  min-height: calc(var(--compact-adaptive-height, 0px) - 2px);
+}
+
 .hub-dashboard-widget .training-ring-panel,
 .hub-dashboard-widget .training-fitness-panel,
 .hub-dashboard-widget .sleep-panel,

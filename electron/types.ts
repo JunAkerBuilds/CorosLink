@@ -1684,6 +1684,8 @@ export type RouteActivityType =
 export type RouteBackend = "keyless" | "ors";
 
 export interface RouteBuilderConfig {
+  /** Optional CARTO basemap key, independent of the routing backend. */
+  cartoApiKey?: string;
   /** Optional OpenRouteService key; only used when `backend` is `ors`. */
   openRouteServiceApiKey: string;
   /** Selected routing backend. Absent is treated as `keyless`. */

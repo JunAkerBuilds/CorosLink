@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import { packDashboard } from './dashboardPacking';
 import { widgetPresets, type WidgetId } from './dashboardLayout';
-import { sizePresetHeight, sizePresetWidth } from './widgetSizing';
+import { dashboardDesktopWidth, sizePresetHeight, sizePresetWidth } from './widgetSizing';
 
 /** Observe intrinsic card heights so settings, async data and window resizing repack the layout. */
 export function usePackedDashboard() {
@@ -18,6 +18,7 @@ export function usePackedDashboard() {
       const gap = 16;
       const unit = (width + gap) / 12;
       const children = cards();
+      children.forEach(card => card.style.removeProperty('--compact-adaptive-height'));
       const spans = children.map(card => {
         const preset = widgetPresets(card.dataset.widget as WidgetId).find(choice => choice.id === card.dataset.preset)!;
         const style = getComputedStyle(card);
@@ -34,7 +35,7 @@ export function usePackedDashboard() {
       // Keep the main panels consistent, with separate baselines for standard and tall presets.
       const overview = children.filter(card => ['recovery', 'fitness', 'sleep', 'vo2'].includes(card.dataset.widget!));
       overview.forEach(card => card.style.removeProperty('--widget-aligned-height'));
-      if (width > 850) {
+      if (width > dashboardDesktopWidth) {
         for (const expanded of ['false', 'true']) {
           const group = overview.filter(card => card.dataset.expanded === expanded);
           if (group.length < 2) continue;
@@ -49,7 +50,7 @@ export function usePackedDashboard() {
       const measure = () => packDashboard(children.map((card, index) => ({ span: spans[index], height: card.getBoundingClientRect().height, startRow: card.dataset.startRow === 'true', atBottom: card.dataset.atBottom === 'true' })), gap);
       let result = measure();
       const sleep = children.find(card => card.dataset.widget === 'sleep');
-      if (width > 850 && sleep && healthCheck) {
+      if (width > dashboardDesktopWidth && sleep && healthCheck) {
         const sleepPosition = result.positions[children.indexOf(sleep)];
         const healthPosition = result.positions[children.indexOf(healthCheck)];
         if (Math.abs(sleepPosition.top - healthPosition.top) < 1) {
@@ -62,8 +63,33 @@ export function usePackedDashboard() {
           result = measure();
         }
       }
+      // Let a compact 2 × 2 group fill the height of the adjacent Sleep panel.
+      // Detect the actual arrangement so custom layouts and expanded readings keep their own sizing.
+      if (width > dashboardDesktopWidth && sleep) {
+        const sleepIndex = children.indexOf(sleep);
+        const anchor = result.positions[sleepIndex];
+        const metrics = children.filter(card => card.dataset.compact === 'true'
+          && !card.querySelector('.training-stat-card[open]'));
+        if (metrics.length === 4) {
+          const cells = metrics.map(card => ({ card, index: children.indexOf(card) }))
+            .map(cell => ({ ...cell, ...result.positions[cell.index], height: cell.card.getBoundingClientRect().height }))
+            .sort((a, b) => a.top - b.top || a.column - b.column);
+          const [a, b, c, d] = cells;
+          const near = (a: number, b: number) => Math.abs(a - b) < 1;
+          const beside = cells.every(cell => cell.column + spans[cell.index] <= anchor.column + 1e-7
+            || cell.column >= anchor.column + spans[sleepIndex] - 1e-7);
+          if (beside && near(a.top, anchor.top) && near(a.top, b.top)
+            && near(c.top, d.top) && near(c.top, a.top + a.height + gap)
+            && near(a.column, c.column) && near(b.column, d.column)
+            && near(a.height, b.height) && near(c.height, d.height)) {
+            const height = Math.max(152, (sleep.getBoundingClientRect().height - gap) / 2);
+            cells.forEach(({ card }) => card.style.setProperty('--compact-adaptive-height', `${height}px`));
+            result = measure();
+          }
+        }
+      }
       // Match the profile row without changing the saved compact preview or stretching mobile cards.
-      if (width > 850 && upcoming?.dataset.preset?.endsWith('-short')) {
+      if (width > dashboardDesktopWidth && upcoming?.dataset.preset?.endsWith('-short')) {
         const top = result.positions[children.indexOf(upcoming)].top;
         const peers = children.filter(card => ['scores', 'race', 'effort'].includes(card.dataset.widget!)
           && Math.abs(result.positions[children.indexOf(card)].top - top) < 1);

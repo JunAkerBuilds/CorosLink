@@ -28,7 +28,9 @@ async function main() {
     await vite.listen();
     window = new BrowserWindow({ show: false, width: 1556, height: 1000, webPreferences: { backgroundThrottling: false } });
     window.webContents.on('console-message', event => { if (event.level === 'error' && !event.message.includes('ERR_')) errors.push(event.message); });
-    const js = code => window.webContents.executeJavaScript(code, true);
+    const js = code => window.webContents.executeJavaScript(code, true).catch(error => {
+      throw new Error(`${error.message}\nScript: ${code}\nRenderer errors: ${errors.join('\n')}`);
+    });
     const click = selector => js(`document.querySelector(${JSON.stringify(selector)}).click(); void 0`);
     const count = selector => js(`document.querySelectorAll(${JSON.stringify(selector)}).length`);
     const cards = () => count('.activity-card');
@@ -50,14 +52,33 @@ async function main() {
     await click('.activities-sport-filters .activity-sport-all');
     await input('hamilton');
     await until(cards, n => n === 1, 'search');
+    await js(`localStorage.setItem('coroslink.selection.v1.training.activityRoute.baseLayer', JSON.stringify('light')); void 0`);
     await click('.activity-card-body');
     await until(() => count('dialog[open]'), n => n === 1, 'detail dialog');
     assert.match(await js(`document.querySelector('dialog').textContent`), /Hamilton Run/);
     await click('.activity-route-expand');
     await until(() => count('dialog .activity-route-modal-backdrop'), n => n === 1, 'expanded route within modal');
+    await until(() => count('dialog .activity-route-modal-map .activity-route-base-tile img.leaflet-tile'), n => n > 0, 'expanded street tiles');
+    assert.ok(await js(`Array.from(document.querySelectorAll('dialog .activity-route-base-tile img.leaflet-tile')).every(tile => new URL(tile.src).hostname.endsWith('.tile.openstreetmap.org'))`), 'Detail and expanded maps use the same OpenStreetMap provider as previews');
+    assert.ok(await js(`Array.from(document.querySelectorAll('dialog .activity-route-map-canvas')).every(map => map.classList.contains('is-dark-street'))`), 'Detail and expanded maps share the dark street styling');
+    await click('dialog [aria-label="Change base map"]');
+    assert.deepEqual(await js(`Array.from(document.querySelectorAll('dialog .route-basemap-option > strong'), el => el.textContent)`), ['Street', 'Outdoors', 'Topo', 'Satellite', 'Hiking routes', 'Cycle routes', 'MTB routes']);
+    // Fake key only: cancel CARTO requests so this verifies URL construction without using a real account.
+    window.webContents.session.webRequest.onBeforeRequest({ urls: ['https://*.basemaps.cartocdn.com/*'] }, (_details, callback) => callback({ cancel: true }));
+    await js(`window.corosLink = { getRouteBuilderConfig: async () => ({ cartoApiKey: 'test-carto-key' }) }; window.dispatchEvent(new Event('coroslink:carto-settings-changed')); void 0`);
+    await until(() => js(`Array.from(document.querySelectorAll('dialog .route-basemap-option > strong')).some(el => el.textContent === 'Light')`), Boolean, 'CARTO layers enabled');
+    await js(`Array.from(document.querySelectorAll('dialog .route-basemap-option')).find(el => el.querySelector('strong')?.textContent === 'Light').click(); void 0`);
+    await until(() => js(`Array.from(document.querySelectorAll('dialog .activity-route-base-tile img.leaflet-tile')).some(tile => tile.src.includes('cartocdn.com') && new URL(tile.src).searchParams.get('key') === 'test-carto-key')`), Boolean, 'CARTO key on tile URL');
+    await js(`window.corosLink = undefined; window.dispatchEvent(new Event('coroslink:carto-settings-changed')); void 0`);
+    await until(() => js(`Array.from(document.querySelectorAll('dialog .activity-route-base-tile img.leaflet-tile')).every(tile => new URL(tile.src).hostname.endsWith('.tile.openstreetmap.org'))`), Boolean, 'key removal falls back to OSM');
     await click('[aria-label="Close expanded map"]');
     await click('[aria-label="Close activity details"]');
     await until(() => count('dialog[open]'), n => n === 0, 'close detail');
+    await js(`localStorage.setItem('coroslink.selection.v1.training.activityRoute.baseLayer', JSON.stringify('dark')); void 0`);
+    await click('.activity-card-body');
+    await until(() => count('dialog .activity-route-base-tile img.leaflet-tile'), n => n > 0, 'saved dark layer falls back');
+    assert.ok(await js(`Array.from(document.querySelectorAll('dialog .activity-route-base-tile img.leaflet-tile')).every(tile => new URL(tile.src).hostname.endsWith('.tile.openstreetmap.org'))`), 'Previously saved Dark uses OpenStreetMap');
+    await click('[aria-label="Close activity details"]');
     await click('.activity-card-menu');
     await until(() => count('[role="menuitem"]'), n => n > 0, 'export menu');
     await click('[role="menuitem"]');

@@ -1,0 +1,80 @@
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const os = require('node:os');
+const { app, BrowserWindow } = require('electron');
+app.setPath('userData', path.join(os.tmpdir(), `coroslink-accounts-${process.pid}`));
+app.on('window-all-closed', () => {});
+async function main() {
+  await app.whenReady();
+  const { createServer } = await import('vite');
+  const react = (await import('@vitejs/plugin-react')).default;
+  let vite, win;
+  const watchdog = setTimeout(() => app.exit(1), 60000);
+  try {
+    vite = await createServer({ root: path.resolve(__dirname, '..'), configFile: false, plugins: [react()], server: { host: '127.0.0.1', port: 0, hmr: false }, logLevel: 'error' });
+    await vite.listen();
+    win = new BrowserWindow({ show: false, width: 1100, height: 900 });
+    const js = code => win.webContents.executeJavaScript(code, true);
+    const click = selector => js(`document.querySelector(${JSON.stringify(selector)}).click(); void 0`);
+    async function until(code) {
+      const end = Date.now() + 8000;
+      while (Date.now() < end) { if (await js(code)) return; await new Promise(r => setTimeout(r, 50)); }
+      throw new Error(`Timed out: ${code}`);
+    }
+    const fill = (name, value) => js(`{ const el = document.querySelector('input[name="${name}"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event('input', { bubbles: true })); } void 0`);
+    const open = async id => { await click('.account-card-' + id); await until(`Boolean(document.querySelector('form input'))`); };
+    const back = () => click('.account-detail-panel > .settings-subpage-back');
+    await win.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/scripts/fixtures/accounts-api-settings.html`);
+    await until(`document.querySelectorAll('.account-card').length === 16`);
+    assert.equal(await js(`document.querySelector('#accounts-heading').textContent`), 'Accounts & API');
+    await open('spotify'); await fill('clientId', 'new-id'); await click('button[type=submit]');
+    await until(`window.calls.length === 1`);
+    assert.equal(await js(`window.calls[0].config.clientId`), 'new-id');
+    await back();
+    await open('strength'); await fill('apiKey', ' hevy-key '); await click('button[type=submit]');
+    await until(`window.calls.length === 2`); assert.equal(await js(`window.calls[1].key`), 'hevy-key');
+    await back();
+    await open('intervals'); await fill('apiKey', 'interval-key'); await fill('athleteId', 'i123'); await click('button[type=submit]');
+    await until(`window.calls.length === 3`); assert.equal(await js(`window.calls[2].athleteId`), 'i123');
+    await back();
+    await open('openRouter');
+    assert.equal(await js(`document.querySelector('input[name=apiKey]').value`), '', 'Stored AI keys are never exposed');
+    await fill('model', 'new/model'); await js(`window.failSave = true`); await click('button[type=submit]');
+    await until(`document.querySelector('[role=alert]')?.textContent === 'Save failed'`);
+    assert.equal(await js(`document.querySelector('input[name=model]').value`), 'new/model');
+    await js(`window.failSave = false`); await click('button[type=submit]'); await until(`window.chat.openRouter.model === 'new/model'`);
+    assert.equal(await js(`window.chat.openRouter.hasApiKey`), true, 'Blank field preserves stored key');
+    assert.equal(await js(`window.chat.customInstructions`), 'Keep my preferences');
+    await js(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Remove API key').click(); void 0`);
+    await until(`!window.chat.openRouter.hasApiKey`);
+    await back(); await open('local'); await fill('baseUrl', 'http://localhost:1234/v1'); await click('button[type=submit]');
+    await until(`window.chat.local.baseUrl === 'http://localhost:1234/v1'`);
+    assert.equal(await js(`window.chat.local.toolsEnabled`), true);
+    assert.deepEqual(await js(`window.routes`), [], 'API setup stays inside Accounts & API');
+    await back(); await open('carto');
+    assert.ok(await js(`Boolean(document.querySelector('a[href="https://carto.com/basemaps/apikey/"]'))`), 'Key request instructions are linked');
+    await fill('cartoApiKey', 'test-carto-key');
+    await js(`window.oldCartoBackend = true`); await click('button[type=submit]');
+    await until(`document.querySelector('[role=alert]')?.textContent.includes('Restart CorosLink')`);
+    assert.equal(await js(`document.querySelector('input[name=cartoApiKey]').value`), 'test-carto-key', 'Old backend preserves unsaved draft');
+    assert.equal(await js(`Boolean(document.querySelector('.account-key-state.is-saved'))`), false);
+    await js(`window.oldCartoBackend = false; window.ignoreCartoSave = true`); await click('button[type=submit]');
+    await until(`document.querySelector('[role=alert]')?.textContent.includes('The key was not saved')`);
+    assert.equal(await js(`Boolean(document.querySelector('.account-key-confirmation'))`), false, 'No success until storage confirms the key');
+    await js(`window.ignoreCartoSave = false`); await click('button[type=submit]');
+    await until(`document.body.textContent.includes('CARTO key saved.')`);
+    assert.equal(await js(`window.calls.at(-1).config.openRouteServiceApiKey`), 'existing-ors-key', 'CARTO save preserves routing credentials');
+    assert.equal(await js(`document.querySelector('input[name=cartoApiKey]').value`), '', 'Saved key is cleared from the input');
+    await back(); await open('carto');
+    assert.equal(await js(`document.querySelector('input[name=cartoApiKey]').value`), '', 'Stored key is not displayed');
+    assert.equal(await js(`document.querySelector('.account-key-state.is-saved strong')?.textContent`), 'API key saved', 'Saved badge persists when reopening');
+    await js(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Remove key').click(); void 0`);
+    await until(`document.body.textContent.includes('CARTO key removed.')`);
+    assert.equal(await js(`window.calls.at(-1).config.cartoApiKey`), '');
+    win.setSize(430, 900);
+    await new Promise(r => setTimeout(r, 250));
+    assert.equal(await js(`document.documentElement.scrollWidth <= innerWidth`), true);
+    console.log('Accounts & API: credential saves, failure recovery, key retention/removal, settings preservation, in-page navigation and narrow layout passed.');
+  } finally { clearTimeout(watchdog); win?.destroy(); await vite?.close(); }
+}
+main().then(() => app.exit(0), error => { console.error(error); app.exit(1); });

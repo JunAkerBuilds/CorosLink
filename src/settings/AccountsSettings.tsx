@@ -1,3 +1,4 @@
+import { CartoAccountSettings } from "./CartoAccountSettings";
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -21,6 +22,10 @@ import {
 } from "@phosphor-icons/react";
 import type { CorosLinkApi } from "../coroslink-api";
 import { CalendarConnections } from "../calendar/CalendarConnections";
+import { ApiAccountSettings, type ApiAccount } from "./ApiAccountSettings";
+import { McpServersPanel } from "../chat/McpServersPanel";
+import { WatchfaceAutomationSettings } from "./WatchfaceAutomationSettings";
+import { WorkoutAutomationSettings } from "./WorkoutAutomationSettings";
 import "./accountsSettings.css";
 
 export type AccountDestination =
@@ -41,6 +46,7 @@ const groups = [
   { id: "strength", label: "Strength", icon: Dumbbell },
   { id: "coach", label: "Coach / AI", icon: Sparkles },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
+  { id: "api", label: "App APIs", icon: Route },
 ] as const;
 type AccountCategory = (typeof groups)[number]["id"];
 const services = [
@@ -95,8 +101,8 @@ const services = [
   },
   {
     id: "coach",
-    name: "AI providers & tools",
-    description: "ChatGPT, OpenRouter, Claude & MCP",
+    name: "ChatGPT & Claude",
+    description: "Coach account sign-in",
     group: "coach",
     icon: Sparkles,
   },
@@ -114,6 +120,12 @@ const services = [
     group: "calendar",
     icon: AppleLogo,
   },
+  { id: "carto", name: "CARTO Basemaps", description: "Light & Dark maps · API key and setup guide", group: "maps", icon: Map },
+  { id: "intervals", name: "intervals.icu", description: "Activity imports · API key & athlete ID", group: "coros", icon: Route },
+  { id: "openRouter", name: "OpenRouter", description: "Coach API key & model", group: "coach", icon: Sparkles },
+  { id: "local", name: "Local / compatible API", description: "Coach endpoint, model & optional API key", group: "coach", icon: Sparkles },
+  { id: "mcp", name: "MCP servers", description: "Coach tools, OAuth & API keys", group: "coach", icon: Route },
+  { id: "automation", name: "CorosLink APIs", description: "Watch face & workout automation access", group: "api", icon: Route },
 ] as const;
 
 export function AccountsSettings({
@@ -128,7 +140,7 @@ export function AccountsSettings({
   const [connections, setConnections] = useState<
     Record<string, Connection | "unavailable">
   >({});
-  const [detail, setDetail] = useState<"google" | "apple" | "maps" | null>(
+  const [detail, setDetail] = useState<"google" | "apple" | "maps" | "carto" | "mcp" | "automation" | ApiAccount | null>(
     null,
   );
   const [revision, setRevision] = useState(0);
@@ -136,6 +148,16 @@ export function AccountsSettings({
   useEffect(() => {
     let active = true;
     const reads: Record<string, () => Promise<Connection>> = {
+      carto: async () => ({ connected: Boolean((await api.getRouteBuilderConfig()).cartoApiKey) }),
+      intervals: async () => {
+        const s = await api.getIntervalsStatus();
+        return { connected: s.connected, detail: s.athleteId };
+      },
+      openRouter: async () => ({ connected: (await api.getChatSettings()).openRouter.hasApiKey }),
+      local: async () => {
+        const s = (await api.getChatSettings()).local;
+        return { connected: Boolean(s.baseUrl && s.model) };
+      },
       training: async () => {
         const s = await api.getTrainingHubStatus();
         return { connected: s.authenticated, detail: s.email };
@@ -210,8 +232,8 @@ export function AccountsSettings({
           <UserRound size={25} aria-hidden="true" />
         </div>
         <div>
-          <h2 id="accounts-heading">Account settings</h2>
-          <p>Your services. One place to manage them.</p>
+          <h2 id="accounts-heading">Accounts &amp; API</h2>
+          <p>Manage accounts, API credentials, and connected tools.</p>
         </div>
         <span className="accounts-summary">
           <Check size={14} aria-hidden="true" />
@@ -255,11 +277,13 @@ export function AccountsSettings({
                 }}
               >
                 <ArrowLeft size={15} aria-hidden="true" />
-                All accounts
+                Accounts &amp; API
               </button>
               {detail === "maps" ? (
                 <RoutingAccount api={api} />
-              ) : (
+              ) : detail === "carto" ? <CartoAccountSettings api={api} /> : detail === "mcp" ? <McpServersPanel api={api} />
+                : detail === "automation" ? <><WatchfaceAutomationSettings api={api} /><WorkoutAutomationSettings api={api} /></>
+                : detail !== "google" && detail !== "apple" ? <ApiAccountSettings key={detail} api={api} service={detail} /> : (
                 <CalendarConnections
                   api={api}
                   initialProvider={detail}
@@ -277,7 +301,7 @@ export function AccountsSettings({
                 {visibleServices.map(
                   ({ id, name, description, group, icon: Icon }) => {
                     const state = connections[id];
-                    const hasStatus = id !== "youtube" && id !== "coach";
+                    const hasStatus = !["youtube", "coach", "mcp", "automation"].includes(id);
                     const connected =
                       state && state !== "unavailable" && state.connected;
                     const status = !hasStatus
@@ -287,7 +311,7 @@ export function AccountsSettings({
                         : state === "unavailable"
                           ? "Status unavailable"
                           : connected
-                            ? id === "maps"
+                            ? ["maps", "carto", "openRouter", "local"].includes(id)
                               ? "Configured"
                               : "Connected"
                             : "Not connected";
@@ -300,7 +324,8 @@ export function AccountsSettings({
                           if (
                             id === "google" ||
                             id === "apple" ||
-                            id === "maps"
+                            id === "maps" || id === "carto" || id === "spotify" || id === "strength" || id === "intervals" ||
+                            id === "openRouter" || id === "local" || id === "mcp" || id === "automation"
                           )
                             setDetail(id);
                           else onOpenAccount(id);
@@ -387,7 +412,7 @@ function RoutingAccount({ api }: { api: CorosLinkApi }) {
             setSaved(false);
             try {
               const next = {
-                ...config,
+                backend: config.backend,
                 openRouteServiceApiKey: config.openRouteServiceApiKey.trim(),
               };
               if (next.backend === "ors") {

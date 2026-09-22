@@ -1,4 +1,3 @@
-import { WorkoutAutomationSettings } from "./WorkoutAutomationSettings";
 import {
   ArrowLeft,
   Bike,
@@ -41,7 +40,6 @@ import appLogo from "../../build/icon-animated.svg";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import { AccountsSettings, type AccountDestination } from "./AccountsSettings";
 import { DiagnosticsSettings } from "./DiagnosticsSettings";
-import { WatchfaceAutomationSettings } from "./WatchfaceAutomationSettings";
 
 const ABOUT_LINKS = [
   {
@@ -362,14 +360,12 @@ export function SettingsView({
       {onOpenAccount ? (
         <button className="settings-account-entry" type="button" onClick={() => setSettingsPage("accounts")}>
           <span className="settings-account-entry-icon"><UserRound size={26} aria-hidden="true" /></span>
-          <span className="settings-account-entry-copy"><strong>Account settings</strong><span>Manage your COROS account and connected services</span></span>
+          <span className="settings-account-entry-copy"><strong>Accounts &amp; API</strong><span>Manage accounts, API keys, and connected services</span></span>
           <span className="settings-account-entry-services" aria-hidden="true"><Music size={18} /><CalendarDays size={18} /><Sparkles size={18} /></span>
           <ChevronRight size={20} aria-hidden="true" />
         </button>
       ) : null}
 
-      <WatchfaceAutomationSettings api={api} />
-      <WorkoutAutomationSettings api={api} />
 
       <div className="panel settings-units-panel">
         <div className="settings-units-heading">

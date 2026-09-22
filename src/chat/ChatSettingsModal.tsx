@@ -165,7 +165,7 @@ export function ChatSettingsModal({
       onClick={onClose}
     >
       <section
-        className="panel chat-settings-modal"
+        className="chat-settings-modal"
         onClick={(event) => event.stopPropagation()}
       >
         <header className="chat-settings-modal-header">
