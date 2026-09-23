@@ -161,7 +161,34 @@ for (const [mutate, code] of [
   [(design) => { design.tintLabels = "yes"; }, "boolean.invalid"]
 ]) {
   const corrupt = value(); mutate(corrupt.design);
-  rejects([{ op: "set", path: "/projectName", value: "Still invalid" }], code, corrupt);
+  // Errors the document already had don't block unrelated edits; they come
+  // back as warnings so the caller can repair them.
+  const edited = apply([{ op: "set", path: "/projectName", value: "Still invalid" }], "current", corrupt);
+  assert.equal(edited.value.projectName, "Still invalid");
+  assert.ok(
+    edited.diagnostics.some((item) => item.severity === "warning" && item.code === `preexisting.${code}`),
+    `pre-existing ${code} is reported as a warning`
+  );
+  assert.ok(!edited.diagnostics.some((item) => item.severity === "error"), `pre-existing ${code} is not an error`);
+}
+
+// A corrupt document still rejects errors a batch introduces.
+{
+  const corrupt = value(); corrupt.design.tintLabels = "yes";
+  rejects([{ op: "set", path: "/design/accentColor", value: "not a color!" }], "color.invalid", corrupt);
+}
+
+// A stale imported AOD color (raw COROS 0x value) no longer locks the face,
+// and the command that repairs it is accepted and clears the warning.
+{
+  const stale = value();
+  stale.design.modeDesigns = { aod: { backgroundColor: "0x00000" } };
+  const moved = apply([{ op: "set", path: "/design/backgroundElements/0/x", value: 210 }], "current", stale);
+  assert.equal(moved.value.design.backgroundElements[0].x, 210);
+  assert.ok(moved.diagnostics.some((item) => item.code === "preexisting.color.invalid"));
+  const repaired = apply([{ op: "set_mode_overrides", mode: "aod", overrides: { backgroundColor: "#000000" } }], "current", stale);
+  assert.equal(repaired.value.design.modeDesigns.aod.backgroundColor, "#000000");
+  assert.ok(!repaired.diagnostics.some((item) => item.code.endsWith("color.invalid")));
 }
 
 const cssColors = apply([

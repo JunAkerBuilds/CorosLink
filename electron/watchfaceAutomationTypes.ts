@@ -152,6 +152,11 @@ export const WATCHFACE_AUTOMATION_METHODS = {
   redo: "redo",
   setView: "set_view",
   renderPreview: "render_preview",
+  getGeometry: "get_geometry",
+  checkContrast: "check_contrast",
+  sampleColor: "sample_color",
+  recolorImage: "recolor_image",
+  renderSvg: "render_svg",
   validate: "validate",
   save: "save",
   close: "close",
@@ -305,3 +310,80 @@ export const WATCHFACE_AUTOMATION_SCENE_SCHEMA = {
       "set_mode_overrides creates, merges, copies from Current, or resets independent AOD state."
   }
 } as const;
+
+/** One text turn of the Watch Face Studio AI panel conversation. */
+export interface WatchfaceAiRequirement {
+  id: string;
+  requirement: string;
+  sourceQuote: string;
+  kind: "document" | "visual" | "generated_assets" | "generated_font" | "dynamic_assets" | "resolution" | "data_mapping";
+  status: "pending" | "implemented" | "verified" | "blocked" | "superseded";
+  requiredCharacters?: string;
+  /** Exact asset-contract ids; all covers every visible typography component. */
+  typographyScope?: "all" | string[];
+  typographyTargets?: Array<Record<string, unknown>>;
+  visualTargets?: import("./watchfaceAiVisual").VisualTarget[];
+  visualFindings?: import("./watchfaceAiVisual").VisualFinding[];
+  detail?: string;
+}
+
+export interface WatchfaceAiMemory {
+  version: 1;
+  projectId?: string;
+  entries: Array<{ tool: string; status: "done" | "failed"; summary: string }>;
+  requirements?: WatchfaceAiRequirement[];
+  assetReviews?: Array<import("./watchfaceAiAssetReview").AssetReview & { assetId: string }>;
+  designReferenceIds?: string[];
+  generationAttempts?: import("./watchfaceAiGeneration").GenerationAttempt[];
+  generatedAssets?: Array<{ assetId: string; width: number; height: number }>;
+}
+
+export interface WatchfaceAiMessage {
+  role: "user" | "assistant";
+  content: string;
+  /** PNG data URLs the user pasted or dropped into a user message. */
+  images?: string[];
+  imageRole?: "design-reference" | "diagnostic";
+  /** Assets Watchmaker generated during an assistant turn, so later turns can reuse them. */
+  generatedAssetIds?: string[];
+  memory?: WatchfaceAiMemory;
+}
+
+/** Per-request model choice from the Studio AI panel. */
+export interface WatchfaceAiOptions {
+  /** Explicit opt-in: native Codex CLI shell/file tools plus Watchmaker over MCP. */
+  harness?: "watchmaker" | "codex-cli";
+  /** ChatGPT model id; blank means Auto. */
+  model?: string;
+  /** One of the selected model's supported efforts; blank uses its default. */
+  reasoningEffort?: string;
+  /** Offer Watchmaker the generate_image tool. Defaults to on. */
+  imageGeneration?: boolean;
+}
+
+/** Progress streamed from the in-app Watchmaker agent to the Studio AI panel. */
+export type WatchfaceAiEvent =
+  | { requestId: string; type: "start" }
+  | { requestId: string; type: "memory"; memory: WatchfaceAiMemory }
+  | { requestId: string; type: "token"; delta: string }
+  | { requestId: string; type: "thinking"; delta: string }
+  | { requestId: string; type: "tool"; callId: string; tool: string; status: "call" | "done" | "failed"; message?: string }
+  | { requestId: string; type: "preview"; dataUrl: string }
+  | { requestId: string; type: "generated"; assetId: string; width: number; height: number; dataUrl: string }
+  | { requestId: string; type: "done"; fullText: string; cancelled?: boolean; changed?: boolean; generatedAssetIds?: string[] }
+  | { requestId: string; type: "error"; message: string; authError?: boolean; code?: "CODEX_CLI_NOT_FOUND" | "CODEX_CLI_UNAVAILABLE" };
+
+/** A saved Watch Face Studio AI conversation, as listed in the panel history. */
+export interface WatchfaceAiChatSummary {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
+export interface WatchfaceAiSavedChat extends WatchfaceAiChatSummary {
+  projectKey: string;
+  /** Opaque panel messages; images are restored as data URLs. */
+  messages: unknown[];
+}

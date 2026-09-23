@@ -7,7 +7,7 @@ import type {
   CorosWatchfaceTemplateDetails
 } from "../../electron/types";
 import { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
-import { parseConfigPos, parseConfigRect, pickPreviewResolution } from "./watchfaceStudio";
+import { corosConfigColorToCss, parseConfigPos, parseConfigRect, pickPreviewResolution } from "./watchfaceStudio";
 import { nativeDataSize } from "./nativeData";
 import { getWeatherCapability } from "./weatherAssets";
 
@@ -140,7 +140,7 @@ export async function recoverWatchfaceDesign(
       nativeData.chart_sun_angle.enabled = false;
     }
   }
-  return { weatherIndicator, nativeData, backgroundColor: config.bg_color?.replace(/^0x/i, "#") ?? "#000000" };
+  return { weatherIndicator, nativeData, backgroundColor: config.bg_color ? corosConfigColorToCss(config.bg_color) : "#000000" };
 }
 
 type Rect = NonNullable<ReturnType<typeof parseConfigRect>>;

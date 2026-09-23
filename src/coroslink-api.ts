@@ -1,8 +1,9 @@
+import type { ChatGptModelInfo } from "../electron/chatModels";
 import type { StrengthEditPreview } from "../electron/workoutEditTypes";
 import type { HealthInsightKind, HealthInsightResult } from "../electron/healthInsightsTypes";
 import type { DiagnosticsSnapshot, RendererDiagnosticError } from "../electron/diagnosticsTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "../electron/calendarSyncTypes";
-import type { WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
+import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "../electron/googleCalendarTypes";
 import type {
   ActivityBackupProgress,
@@ -190,6 +191,16 @@ export interface CorosLinkApi {
   onWatchfaceAutomationRequest: (callback: (request: WatchfaceAutomationRequest) => void) => () => void;
   respondWatchfaceAutomation: (response: WatchfaceAutomationResponse) => void;
   setWatchfaceAutomationReady: (scope: "hub" | "editor", ready: boolean) => void;
+  sendWatchfaceAi: (requestId: string, messages: WatchfaceAiMessage[], options?: WatchfaceAiOptions) => Promise<void>;
+  cancelWatchfaceAi: (requestId: string) => Promise<void>;
+  listWatchfaceAiModels: () => Promise<ChatGptModelInfo[]>;
+  listWatchfaceAiChats: (projectKey: string) => Promise<WatchfaceAiChatSummary[]>;
+  loadWatchfaceAiChat: (id: string) => Promise<WatchfaceAiSavedChat>;
+  saveWatchfaceAiChat: (input: { id?: string; projectKey: string; title?: string; messages: unknown[] }) => Promise<WatchfaceAiChatSummary>;
+  renameWatchfaceAiChat: (id: string, title: string) => Promise<WatchfaceAiChatSummary>;
+  deleteWatchfaceAiChat: (id: string) => Promise<void>;
+  copyWatchfaceAiImage: (assetId: string) => Promise<void>;
+  onWatchfaceAiEvent: (callback: (event: WatchfaceAiEvent) => void) => () => void;
   getAppleCalendarStatus: () => Promise<CalendarConnectionStatus>;
   connectAppleCalendar: (input: AppleCalendarCredentials) => Promise<CalendarConnectionStatus>;
   cancelAppleCalendarConnect: () => Promise<void>;

@@ -3,6 +3,7 @@ import { NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nati
 import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
 import { isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRolePart, nativeRoleIndices, nativeStateCount } from "./nativeDataParts";
 import type { WatchfacePreviewScenario } from "./watchfaceSimulation";
+import { fillWatchfaceText, setWatchfaceCanvasFont } from "./watchfaceFontSnapshots";
 export { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS, NATIVE_DATA_BY_ID } from "../../electron/watchfaceNativeCatalog";
 export type NativeData = Record<string, Style>;
 export { defaultNativeDataStyle } from "./nativeDataParts";
@@ -49,9 +50,10 @@ export async function nativeDataAsset(id: string, style: Style, role: Role, inde
   return canvasImage(width, height, ctx => {
     ctx.fillStyle = part.color;
     if (text !== null) {
-      ctx.font = `${Math.round(height * 0.75)}px ${part.fontFamily}`;
+      const fontSize = Math.round(height * 0.75);
+      setWatchfaceCanvasFont(ctx, { family: part.fontFamily, size: fontSize }, `${fontSize}px ${part.fontFamily}`);
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(text, width / 2, height / 2, width);
+      fillWatchfaceText(ctx, text, width / 2, height / 2, width);
     } else if (role === "states" && id === "weather_direction") {
       ctx.translate(width / 2, height / 2); ctx.rotate(index * Math.PI / 8);
       const r = Math.min(width, height) * 0.35;

@@ -10,6 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { listLocalFontFamilies } from "./fontService";
+import { isWebUrl } from "./externalLinks";
 import { registerWatchfaceAutomation } from "./watchfaceAutomation";
 import { onWatchfaceRendererNavigation } from "./watchfaceRendererLifecycle";
 import {
@@ -688,7 +689,9 @@ function createWindow(): void {
   observeDiagnosticWindow(mainWindow);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (isWebUrl(url)) {
+      void shell.openExternal(url);
+    }
     return { action: "deny" };
   });
   onWatchfaceRendererNavigation(mainWindow.webContents, () => {

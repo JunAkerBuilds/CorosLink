@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { type CSSProperties, useEffect, useState } from "react";
+import { isWatchfaceFontInstalled } from "./watchfaceFontSnapshots";
 import type {
   CorosWatchfaceRasterFont,
   CorosWatchfaceTemplateAsset
@@ -280,6 +281,9 @@ export function WatchfaceFontPreview({
     );
   }
   if (fontFamily) {
+    const summary = isWatchfaceFontInstalled(fontFamily)
+      ? `${fontFamily} · rasterized to PNG digits on export`
+      : `${fontFamily} is missing · sample shown in a substitute font`;
     return (
       <div className="wf-sprite-preview wf-sprite-preview--font" aria-label="Font sample">
         <div
@@ -292,8 +296,8 @@ export function WatchfaceFontPreview({
         >
           {sampleText}
         </div>
-        <span className="wf-sprite-strip-summary" title={`${fontFamily} · rasterized to PNG digits on export`}>
-          {fontFamily} · rasterized to PNG digits on export
+        <span className="wf-sprite-strip-summary" title={summary}>
+          {summary}
         </span>
       </div>
     );

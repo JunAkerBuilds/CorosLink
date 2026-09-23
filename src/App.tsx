@@ -2834,6 +2834,7 @@ function ProductHero({ presentation }: { presentation: WatchPresentation }) {
           src={presentation.heroImage}
           alt={presentation.heroAlt ?? ""}
           className="dashboard-hero-image"
+          data-watch-model={presentation.model}
         />
       ) : null}
     </section>

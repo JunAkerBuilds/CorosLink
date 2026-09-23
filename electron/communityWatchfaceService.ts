@@ -18,7 +18,7 @@ const PRODUCTION_CATALOG_ORIGIN = "https://watchfaces.coroslink.com";
 const MAX_CATALOG_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_COMMUNITY_PACKAGE_BYTES = 100 * 1024 * 1024;
 const STALE_IMPORT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-const communityModelSchema = z.enum(["PACE 3", "PACE 4", "PACE Pro", "APEX 2", "APEX 2 Pro", "APEX 4", "NOMAD", "VERTIX 2", "VERTIX 2S"]);
+const communityModelSchema = z.enum(["PACE 3", "PACE 4", "PACE 4 Pro", "PACE Pro", "APEX 2", "APEX 2 Pro", "APEX 4", "NOMAD", "VERTIX 2", "VERTIX 2S"]);
 
 function validModelQuery(url: URL): boolean {
   return !url.search || (

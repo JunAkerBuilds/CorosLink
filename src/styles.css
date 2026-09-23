@@ -2253,6 +2253,11 @@ input::placeholder {
   max-height: clamp(240px, 34vh, 420px);
 }
 
+/* Match the other product shots despite the padding in COROS's square asset. */
+.dashboard-hero-image[data-watch-model="pace-4-pro"] {
+  scale: 1.4;
+}
+
 .activity-globe-card {
   position: relative;
   display: grid;
@@ -5280,6 +5285,36 @@ td span {
 
 .watchface-font-picker-placeholder {
   color: var(--text-muted);
+}
+
+.watchface-font-picker-trigger.is-missing {
+  border-color: var(--error-text);
+  background: var(--error-bg);
+}
+
+.watchface-font-missing-badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  border-radius: 4px;
+  background: var(--error-bg);
+  padding: 3px 5px;
+  color: var(--error-text);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.watchface-font-missing-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--error-text);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .watchface-typography-controls {

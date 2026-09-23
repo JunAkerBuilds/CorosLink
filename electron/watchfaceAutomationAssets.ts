@@ -195,6 +195,16 @@ export class WatchfaceAutomationAssetStore {
     return this.store(bytes, mimeType);
   }
 
+  /** Stores an image pasted into the Studio AI panel as a reusable asset. */
+  async importImageDataUrl(dataUrl: string): Promise<WatchfaceAutomationImportedAsset> {
+    const match = /^data:image\/(?:png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+    if (!match) throw new Error("Attach a PNG, JPEG, or WebP image.");
+    const bytes = Buffer.from(match[1]!, "base64");
+    const mimeType = imageMimeType(bytes);
+    if (!mimeType) throw new Error("Attach a PNG, JPEG, or WebP image.");
+    return this.store(bytes, mimeType);
+  }
+
   async importRasterFontFolder(folderPath: string): Promise<WatchfaceAutomationRasterFolder> {
     const root = await requireSafeAbsolutePath(folderPath, "directory");
     const paths = await collectPngFiles(root);

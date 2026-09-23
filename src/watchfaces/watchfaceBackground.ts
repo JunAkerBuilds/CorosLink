@@ -24,6 +24,11 @@ import {
 } from "./watchfaceSpriteTransform";
 import { resolveWatchfaceArtworkLayerOrder } from "./watchfaceArtworkLayers";
 import { resolveWatchfaceLayerOpacity } from "./watchfaceLayerOpacity";
+import {
+  copyWatchfaceCanvasFont,
+  fillWatchfaceText,
+  setWatchfaceCanvasFont
+} from "./watchfaceFontSnapshots";
 
 export const CREATOR_CANVAS_SIZE = 800;
 export const MAX_DESIGN_SPRITES = 12;
@@ -92,9 +97,13 @@ async function drawExerciseSeparator(
       : "system-ui, sans-serif";
     layerContext.textAlign = "center";
     layerContext.textBaseline = "middle";
-    layerContext.font = `700 ${Math.round(height)}px ${family}`;
+    setWatchfaceCanvasFont(
+      layerContext,
+      { family: separatorFont, size: Math.round(height), weight: 700 },
+      `700 ${Math.round(height)}px ${family}`
+    );
     layerContext.fillStyle = separator.color;
-    layerContext.fillText(":", centerX, centerY);
+    fillWatchfaceText(layerContext, ":", centerX, centerY);
   }
 
   const effects = resolveWatchfaceLayerEffects(design, "exercise");
@@ -385,7 +394,12 @@ export async function renderDesignBackground(
     const family = separatorFont
       ? `"${separatorFont.replace(/["\\]/g, "")}"`
       : "system-ui, sans-serif";
-    context.font = `700 ${Math.round(separator.size * separatorScale)}px ${family}`;
+    const fontSize = Math.round(separator.size * separatorScale);
+    setWatchfaceCanvasFont(
+      context,
+      { family: separatorFont, size: fontSize, weight: 700 },
+      `700 ${fontSize}px ${family}`
+    );
     context.fillStyle = separator.color;
     const effects = resolveWatchfaceLayerEffects(
       design,
@@ -400,7 +414,7 @@ export async function renderDesignBackground(
     if (effects.length === 0 && strokes.length === 0) {
       context.save();
       context.globalAlpha = opacity;
-      context.fillText(text, separator.x * separatorScale, separator.y * separatorScale);
+      fillWatchfaceText(context, text, separator.x * separatorScale, separator.y * separatorScale);
       context.restore();
     } else {
       const layer = document.createElement("canvas");
@@ -410,9 +424,10 @@ export async function renderDesignBackground(
       if (!layerContext) continue;
       layerContext.textAlign = "center";
       layerContext.textBaseline = "middle";
-      layerContext.font = context.font;
+      copyWatchfaceCanvasFont(context, layerContext);
       layerContext.fillStyle = separator.color;
-      layerContext.fillText(
+      fillWatchfaceText(
+        layerContext,
         text,
         separator.x * separatorScale,
         separator.y * separatorScale

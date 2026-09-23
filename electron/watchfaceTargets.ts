@@ -3,6 +3,7 @@ import type { WatchModelId } from "./watchModels";
 /** Device identity is independent of the resolution trees shared by templates. */
 export const WATCHFACE_TARGETS = [
   { model: "pace-pro", label: "PACE Pro", firmwareType: "COROS W332", display: "amoled", previewSize: 416, sizes: [416, 800] },
+  { model: "pace-4-pro", label: "PACE 4 Pro", firmwareType: "COROS W337", display: "amoled", previewSize: 466, sizes: [466, 800] },
   { model: "pace-4", label: "PACE 4", firmwareType: "COROS W336", display: "amoled", previewSize: 390, sizes: [390, 800] },
   { model: "pace-3", label: "PACE 3", firmwareType: "COROS W331", display: "mip", previewSize: 240, sizes: [240, 260, 280, 800] },
   { model: "nomad", label: "NOMAD", firmwareType: "COROS W942", display: "mip", previewSize: 260, sizes: [240, 260, 280, 800] },

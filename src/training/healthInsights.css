@@ -101,7 +101,7 @@
 /* Health check: the five readings a watch check takes in one sitting, one tile per vital.
    Each tile is its own small instrument and doubles as the selector for the trend below. */
 /* Headline is the latest check's time (the sleep card does the same with its night), caption counts the period. */
-.health-check-summary { display: flex; flex-direction: column; gap: 3px; margin: 0; min-width: 0; }
+.health-check-summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; margin: 0; min-width: 0; }
 .health-check-summary strong { color: var(--text-primary); font-size: clamp(1.05rem, 1.4vw, 1.2rem); font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; font-variant-numeric: tabular-nums; }
 .health-check-summary span { color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .health-vitals { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px; }

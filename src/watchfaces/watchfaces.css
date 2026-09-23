@@ -9492,71 +9492,231 @@ body.wf-value-scrubbing * {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-/* A compact, collapsible entry point for first-time creators. */
-.watchface-shell .wf-quick-start {
-  border-bottom: 1px solid var(--wf-border);
-  padding: 12px;
+/* Welcome screen: the Properties pane's empty-selection state. */
+.watchface-shell .wf-welcome {
+  display: grid;
+  gap: 22px;
+  padding: 8px 14px 20px;
   color: var(--text-primary);
-  font-size: var(--wf-text-sm);
 }
 
-.watchface-shell .wf-quick-start summary {
-  cursor: pointer;
-  font-weight: 600;
+.watchface-shell .wf-welcome-hero {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 26px 12px 4px;
+  text-align: center;
 }
 
-.watchface-shell .wf-quick-start-content > p {
-  margin: 10px 0;
+/* Soft accent halo behind the mark. */
+.watchface-shell .wf-welcome-hero::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 220px;
+  height: 120px;
+  transform: translateX(-50%);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 16%, transparent), transparent);
+  pointer-events: none;
+}
+
+.watchface-shell .wf-welcome-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 25%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+    var(--wf-surface-raised);
+  box-shadow:
+    0 0 0 6px color-mix(in srgb, var(--accent) 6%, transparent),
+    0 8px 24px rgba(0, 0, 0, 0.25);
+  color: var(--accent);
+}
+
+.watchface-shell .wf-welcome-hero h2 {
+  position: relative;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.watchface-shell .wf-welcome-hero p {
+  position: relative;
+  max-width: 260px;
+  margin: 0;
   color: var(--text-secondary);
+  font-size: 12.5px;
   line-height: 1.5;
 }
 
-.watchface-shell .wf-quick-start-actions {
+.watchface-shell .wf-welcome-section {
   display: grid;
-  gap: 4px;
+  gap: 8px;
 }
 
-.watchface-shell .wf-quick-start-actions button {
+.watchface-shell .wf-welcome-section h3 {
+  margin: 0 2px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.watchface-shell .wf-welcome-actions {
+  display: grid;
+  border: 1px solid var(--wf-border);
+  border-radius: 10px;
+  background: var(--wf-surface-raised);
+  overflow: hidden;
+}
+
+.watchface-shell .wf-welcome-actions button {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  border: 1px solid var(--wf-border);
-  border-radius: 6px;
-  padding: 6px 8px;
-  background: var(--wf-surface-raised);
+  gap: 12px;
+  min-width: 0;
+  border: 0;
+  border-top: 1px solid var(--wf-border);
+  padding: 10px 12px;
+  background: transparent;
   color: var(--text-primary);
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: background 120ms ease;
 }
 
-.watchface-shell .wf-quick-start-actions button:hover:not(:disabled) {
+.watchface-shell .wf-welcome-actions button:first-child {
+  border-top: 0;
+}
+
+.watchface-shell .wf-welcome-actions button:hover:not(:disabled) {
   background: var(--wf-surface-hover);
-  border-color: var(--wf-border-strong);
 }
 
-.watchface-shell .wf-quick-start-actions button:disabled {
-  opacity: 0.5;
+.watchface-shell .wf-welcome-actions button:disabled {
+  opacity: 0.45;
   cursor: default;
 }
 
-.watchface-shell .wf-quick-start :is(button, summary):focus-visible {
+.watchface-shell .wf-welcome-actions button:focus-visible {
   outline: 2px solid var(--wf-focus);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 
-.watchface-shell .wf-quick-start-tips {
-  margin-top: 12px;
+.watchface-shell .wf-welcome-action-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.watchface-shell .wf-welcome-action-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.watchface-shell .wf-welcome-action-text :is(strong, small) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchface-shell .wf-welcome-action-text strong {
+  font-size: 12.5px;
+  font-weight: 560;
+}
+
+.watchface-shell .wf-welcome-action-text small {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.watchface-shell .wf-welcome-action-arrow {
+  flex: none;
+  color: var(--text-muted);
+  opacity: 0;
+  transform: translateX(-3px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.watchface-shell .wf-welcome-actions button:is(:hover, :focus-visible):not(:disabled) .wf-welcome-action-arrow {
+  opacity: 1;
+  transform: none;
+}
+
+.watchface-shell .wf-welcome-shortcuts {
+  display: grid;
+  margin: 0;
+  border: 1px solid var(--wf-border);
+  border-radius: 10px;
+  padding: 4px 12px;
+}
+
+.watchface-shell .wf-welcome-shortcuts > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+  border-top: 1px solid color-mix(in srgb, var(--wf-border) 60%, transparent);
+}
+
+.watchface-shell .wf-welcome-shortcuts > div:first-child {
+  border-top: 0;
+}
+
+.watchface-shell .wf-welcome-shortcuts dt {
+  display: flex;
+  order: 2;
+  gap: 3px;
+}
+
+.watchface-shell .wf-welcome-shortcuts dd {
+  margin: 0;
   color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.watchface-shell .wf-welcome-shortcuts kbd {
+  min-width: 20px;
+  border: 1px solid var(--wf-border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 0 5px;
+  background: var(--wf-surface-raised);
+  color: var(--text-primary);
+  font: 500 10.5px/17px ui-sans-serif, -apple-system, system-ui, sans-serif;
+  text-align: center;
+}
+
+.watchface-shell .wf-welcome-footnote {
+  display: flex;
+  gap: 8px;
+  margin: 0 2px;
+  color: var(--text-muted);
+  font-size: 11.5px;
   line-height: 1.5;
 }
 
-.watchface-shell .wf-quick-start-tips ul {
-  display: grid;
-  gap: 8px;
-  padding-left: 16px;
-  margin: 10px 0 0;
+.watchface-shell .wf-welcome-footnote svg {
+  flex: none;
+  margin-top: 2px;
 }
 
 /* Properties: keep everyday edits compact and easy to scan. */
@@ -11795,6 +11955,11 @@ body.wf-value-scrubbing * {
   background: var(--wf-insp-control-hover);
 }
 
+:root .watchface-shell--studio .wf-properties-pane .watchface-font-picker-trigger.is-missing {
+  border-color: var(--error-text);
+  background: var(--error-bg);
+}
+
 :root .watchface-shell--studio .wf-properties-pane .watchface-typography-controls {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -13355,4 +13520,12 @@ body.wf-value-scrubbing * {
   color: var(--text-tertiary);
   font-size: 11px;
   font-weight: 560;
+}
+
+/* The stage is driven by pointer events only: block native image/text drags
+   and selection so a press never turns into a browser drag-and-drop. */
+.watchface-shell .watchface-preview-stack,
+.watchface-shell .watchface-preview-stack * {
+  -webkit-user-drag: none;
+  user-select: none;
 }

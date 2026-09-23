@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CorosWatchfaceArchive, CorosWatchfaceTemplateAsset, CorosWatchfaceTemplateDetails } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { renderCompiledWatchfacePreview, type CompiledWatchfacePreview } from "./compiledWatchfacePixels";
-import { type WatchfaceComplicationId, type WatchfacePreviewMode } from "./watchfaceStudio";
+import { pickWatchPreviewResolution, type WatchfaceComplicationId, type WatchfacePreviewMode } from "./watchfaceStudio";
 
 export function WatchfaceExportPreview({ api, archive, details, name, complication, onClose, onPublish, onError }: {
   api: CorosLinkApi;
@@ -15,7 +15,7 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
   onError: (message: string) => void;
 }) {
   const [directory, setDirectory] = useState(() =>
-    details.resolutions.find((item) => item.width === 416)?.directory ?? details.resolutions[0]!.directory);
+    pickWatchPreviewResolution(details, archive.firmwareType)?.directory ?? details.resolutions[0]!.directory);
   const [mode, setMode] = useState<WatchfacePreviewMode>("current");
   const [sample, setSample] = useState("normal");
   const [result, setResult] = useState<CompiledWatchfacePreview | null>(null);

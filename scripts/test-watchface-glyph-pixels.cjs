@@ -254,7 +254,17 @@ async function verifyPixels() {
   check(metrics.length === 10 && metrics.every((entry) => entry.width === 26 && entry.height === 30), 'Metric export must store spacing in each digit advance cell');
   const previewCanvas = document.createElement('canvas'); previewCanvas.width=416; previewCanvas.height=416;
   await studio.drawStudioPreview(previewCanvas, sources.get(`${root}/background.png`).dataUrl, details, { fontFamily:'', digitColor:'#ffffff', accentColor:'#ffffff', tintIcons:false, tintLabels:false, metricStyles:styles }, load);
-  return { dataUrl: output.dataUrl, checks: output.checks, tests: 49 };
+  const ampmDetails = { archiveId: 'ampm-fixture', resolutions: [{ directory: '416', width: 416, height: 416,
+    config: { am_icon: 'icon/am.png', pm_icon: 'icon/pm.png', am_pm_icon_pos: '{1,1}' },
+    icons: ['am', 'pm'].map(label => ({ path: `416/icon/${label}.png`, width: 36, height: 16 })), spriteFolders: [] }] };
+  const am = png(36, 16, 2, 2, 12, 12), pm = png(36, 16, 20, 2, 12, 12);
+  const partialFont = { label: 'Partial AM', dataUrl: am, glyphs: 'A', columns: 1, tint: false, labels: { AM: am } };
+  const loadedLabels = [];
+  const labelOutput = await studio.buildAmPmSpriteReplacements(ampmDetails, { enabled: true, x: 1, y: 1, scale: 1, rasterFont: partialFont }, async paths => {
+    loadedLabels.push(...paths); return paths.map(path => ({ path, dataUrl: pm }));
+  });
+  check(labelOutput.length === 2 && loadedLabels.length === 1 && loadedLabels[0].endsWith('/pm.png'), 'An incomplete raster label uses the original PM image without breaking export');
+  return { dataUrl: output.dataUrl, checks: output.checks, tests: 50 };
 }
 
 (async () => {
@@ -267,7 +277,7 @@ async function verifyPixels() {
     window = new BrowserWindow({ show:false, webPreferences:{ contextIsolation:true, sandbox:true } });
     await window.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/__glyph_test`);
     const results = await window.webContents.executeJavaScript(`(${verifyPixels.toString()})()`);
-    assert.equal(results.tests,49);
+    assert.equal(results.tests,50);
     await fs.writeFile('/tmp/coroslink-export-pixel-test.png', Buffer.from(results.dataUrl.split(',')[1], 'base64'));
     console.log('Watchface glyph and compiled pixel tests passed', results.checks);
   } catch(error) { console.error(error); exitCode=1; }

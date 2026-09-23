@@ -167,6 +167,10 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
   const restingMetric = vitals ? result.metrics.find(metric => metric.key === "restingHeartRate") : undefined;
   const resting = series?.key === "heartRate" && typeof restingMetric?.value === "number" ? restingMetric.value : undefined;
 
+  // The health check card is already busy with five tiles, so its footer keeps only the update time.
+  const updated = result?.fetchedAt ? `Updated ${formatTime(result.fetchedAt, "clock")}` : "";
+  const sourceLine = [sampleMode ? "Sample data" : vitals ? "" : "Reported by COROS", updated].filter(Boolean).join(" · ");
+
   const chartNotes = <>
     {(range || baseline !== undefined) && <p className="health-insight-legend">
       {range && <span><i className="is-range" />Normal range {range[0]}–{range[1]} {series?.unit}</span>}
@@ -216,7 +220,7 @@ function InsightCard({ kind, title, subtitle, icon: Icon, api, refreshToken, sam
           <p className="health-insight-source">{sampleMode ? "Sample data" : "Reported by COROS"}{result.fetchedAt ? ` · Updated ${formatTime(result.fetchedAt, "clock")}` : ""}</p>
         </details> : chartNotes}
       </>}
-      {!(compact && result?.status === "ready") && !loading && result && result.status !== "disconnected" && <p className="health-insight-source">{sampleMode ? "Sample data" : "Reported by COROS"}{result.fetchedAt ? ` · Updated ${formatTime(result.fetchedAt, "clock")}` : ""}</p>}
+      {!(compact && result?.status === "ready") && !loading && result && result.status !== "disconnected" && <p className="health-insight-source">{sourceLine}</p>}
     </div>
   </article>;
 }

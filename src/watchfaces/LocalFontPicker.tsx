@@ -1,8 +1,9 @@
-import { Check, ChevronDown, Info, Loader2, Search, Type, X } from "lucide-react";
-import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, Info, Loader2, Search, TriangleAlert, Type, X } from "lucide-react";
+import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CorosWatchfaceRasterFont } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
+import { isWatchfaceFontInstalled } from "./watchfaceFontSnapshots";
 import {
   rasterFontSupportsText,
   type WatchfaceTypography
@@ -74,6 +75,7 @@ export function LocalFontPicker({
   const pickerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const missingFontHintId = useId();
 
   const matchingFamilies = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -97,6 +99,7 @@ export function LocalFontPicker({
   );
   const fontShapeControlsDisabled =
     disabled || (!value && !rasterFontIsActive) || rasterFontIsActive;
+  const fontIsMissing = !rasterFontIsActive && !isWatchfaceFontInstalled(value);
   const spriteSpacingDisabled =
     disabled ||
     (!onLetterSpacingChange && !value && !rasterFontIsActive);
@@ -279,9 +282,10 @@ export function LocalFontPicker({
       <div className="watchface-font-picker-menu">
         <button
           ref={triggerRef}
-          className="watchface-font-picker-trigger"
+          className={`watchface-font-picker-trigger${fontIsMissing ? " is-missing" : ""}`}
           type="button"
           aria-expanded={open}
+          aria-describedby={fontIsMissing ? missingFontHintId : undefined}
           disabled={disabled}
           onClick={() => {
             if (open) {
@@ -293,10 +297,16 @@ export function LocalFontPicker({
         >
           <span
             className={value || rasterFontIsActive ? "watchface-font-picker-value" : "watchface-font-picker-placeholder"}
-            style={value ? { fontFamily: value, ...pickerPreviewStyle } : undefined}
+            style={value && !fontIsMissing ? { fontFamily: value, ...pickerPreviewStyle } : undefined}
           >
             {rasterFontIsActive && rasterFont ? rasterFont.label + " (PNG)" : value || emptyLabel}
           </span>
+          {fontIsMissing ? (
+            <span className="watchface-font-missing-badge">
+              <TriangleAlert size={12} aria-hidden="true" />
+              MISSING FONT
+            </span>
+          ) : null}
           <ChevronDown size={15} aria-hidden="true" />
         </button>
 
@@ -435,6 +445,11 @@ export function LocalFontPicker({
           : null}
       </div>
 
+      {fontIsMissing ? (
+        <p id={missingFontHintId} className="watchface-font-missing-hint" role="status">
+          “{value}” isn’t installed. Install it or choose another font.
+        </p>
+      ) : null}
       {preview}
 
       {typography && onTypographyChange ? (

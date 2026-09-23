@@ -13,6 +13,17 @@ resumes conversion to the selected watch automatically. Failed sign-ins stay in
 the dialog, and returning to watch selection preserves the design and target.
 Expired sessions follow the same flow; cached support still works offline.
 
+## PACE 4 Pro
+
+PACE 4 Pro (`COROS W337`) is a separate target with a 466 × 466 device preview
+and 466/800px AMOLED export trees, including Current and Always-on layouts.
+The larger 1.47-inch display and 466px resolution are listed in the
+[official COROS specifications](https://coros.com/us/pace4pro).
+Conversion scales the design and assets from the authoring layout and fetches a
+W337 carrier from COROS on first use. Exports reject templates missing the 466px
+tree. The W337 catalog and physical-watch rendering were not part of the audit
+below; offline fixture tests cover conversion, archive detection and export.
+
 ## Template audit
 
 On 2026-09-17, the authenticated COROS editable catalogs returned 418 listings
@@ -87,6 +98,26 @@ Repeated conversions always use the retained 800px source instead of resizing
 the previous device's small output. This avoids cumulative blur and coordinate
 rounding. Dormant AOD references also participate in export asset retention so
 the MIP exporter cannot prune resources needed by a subsequent AMOLED conversion.
+
+## PACE 3 date placement
+
+PACE 3 users reproduced an English month/day position reversal across multiple
+faces and confirmed that exchanging those two rectangles corrects the installed
+layout. `electron/watchfaceDeviceLayout.ts` applies that compensation only for
+PACE 3 at the final archive build boundary, after generated font rectangles are
+fitted and any recovered face has been resized for the destination. It exchanges
+the complete `english_date_month_rect` and `english_date_day_rect` values in each
+Current config. Font assignments, weekday, other language fields, AOD and the
+composed preview image remain unchanged. Missing or blank rectangle pairs are
+left untouched; the correction does not create hidden date fields.
+
+The editor and saved design use the intended coordinates. A comment marks the
+device correction in new output configs, allowing export previews, raw editing,
+rebuilding and conversion to recover those intended coordinates. Repeated builds
+therefore apply the correction once. Unmarked older archives are treated as
+authoring layouts; there is no attempt to detect earlier manual workarounds.
+Other watches sharing the same MIP resolution folders do not receive this
+correction. Run `npm run test:watchface-device-layout` to verify these boundaries.
 
 ## Recovered official faces
 

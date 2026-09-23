@@ -8,6 +8,7 @@ import nomadHero from "../public/assets/nomad-hero.webp";
 import pace2Hero from "../public/assets/pace-2-hero.webp";
 import pace3Hero from "../public/assets/pace-3-hero.webp";
 import pace4Hero from "../public/assets/pace-4-hero.webp";
+import pace4ProHero from "../public/assets/pace-4-pro-hero.png";
 import paceProHero from "../public/assets/pace-pro-hero.webp";
 import vertix2Hero from "../public/assets/vertix-2-hero.webp";
 import vertix2sHero from "../public/assets/vertix-2s-hero.webp";
@@ -68,6 +69,24 @@ const MODEL_PRESENTATION: Record<
   WatchModelId,
   Omit<WatchPresentation, "state"> & { state: "connected-known" }
 > = {
+  "pace-4-pro": {
+    state: "connected-known",
+    model: "pace-4-pro",
+    displayName: "COROS Pace 4 Pro",
+    productName: "Pace 4 Pro",
+    tagline: "Built for Training and Racing",
+    companion: "Your Pace 4 Pro companion",
+    connectHint: "",
+    heroImage: pace4ProHero,
+    heroAlt: "COROS Pace 4 Pro in white",
+    capacityLabel: "32 GB Pace 4 Pro capacity fallback",
+    fallbackBytes: PACE_PRO_BYTES,
+    features: [
+      { icon: "display", label: '1.47" AMOLED Display' },
+      { icon: "weight", label: "Titanium Bezel" },
+      { icon: "battery", label: "60 Hours Full GPS" },
+    ],
+  },
   "pace-pro": {
     state: "connected-known",
     model: "pace-pro",

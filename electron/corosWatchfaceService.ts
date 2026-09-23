@@ -16,6 +16,7 @@ import { createStoreZip } from "./zipStore";
 import { recoverCompiledCorosWatchface } from "./corosCompiledWatchface";
 import { parseCorosFaceMagic } from "./corosBinLayout";
 import { fitGeneratedWatchfaceFontRects } from "./watchfaceExportFontBounds";
+import { finalizeWatchfaceDeviceLayout, restoreWatchfaceDateLayout } from "./watchfaceDeviceLayout";
 import { convertWatchfaceEntries, type WatchfaceConversionEntry, prepareRecoveredWatchfaceExport, normalizeConversionPath, RETAINED_AOD_CONFIG } from "./watchfaceArchiveConversion";
 import { standardizeWatchfacePackage } from "./watchfaceDistribution";
 import { getWatchfaceTarget, type WatchfaceTarget } from "./watchfaceTargets";
@@ -1683,7 +1684,9 @@ async function prepareRecoveredExportZip(bytes: Buffer, target: WatchfaceTarget,
   // Keep the renderer's full composition instead of enlarging that thumbnail.
   const previewEntry = sourceEntries.find(entry => entry.name === "watchface_customize.png");
   if (previewEntry) previewEntry.data = preview.toPNG();
-  const entries = fitGeneratedWatchfaceFontRects(prepareRecoveredWatchfaceExport(sourceEntries, carrierEntries, target));
+  const entries = finalizeWatchfaceDeviceLayout(
+    fitGeneratedWatchfaceFontRects(prepareRecoveredWatchfaceExport(sourceEntries, carrierEntries, target)), target
+  );
   validateArchiveInventory(entries.map(entry => ({ path: entry.name, type: "File", uncompressedSize: entry.data.length })),
     MAX_ARCHIVE_FILES, MAX_ARCHIVE_EXPANDED_BYTES, MAX_ARCHIVE_ENTRY_BYTES, 7, "exported watch-face archive");
   const zip = createStoreZip(entries);
@@ -1774,6 +1777,11 @@ export async function createCorosWatchfaceArchive(
     );
   }
   const firmwareType = requestedFirmwareType ?? source.firmwareType;
+  const exportTarget = getWatchfaceTarget(input.watchModel ?? firmwareType);
+  const firmwareTarget = getWatchfaceTarget(firmwareType);
+  if (exportTarget && firmwareTarget && exportTarget.model !== firmwareTarget.model) {
+    throw new Error("The selected watch and COROS firmware type do not match.");
+  }
   const recoveredTarget = verifiedSource.recoveredFromCompiled
     ? getWatchfaceTarget(input.watchModel ?? firmwareType) : undefined;
   if (verifiedSource.recoveredFromCompiled && !recoveredTarget) {
@@ -1853,7 +1861,8 @@ export async function createCorosWatchfaceArchive(
     templateNameOverride,
     watchfaceIdOverride,
     configTextReplacements,
-    input.stripBlankConfigKeys === true
+    input.stripBlankConfigKeys === true,
+    recoveredTarget ? undefined : exportTarget
   );
   if (recoveredTarget) zip = await prepareRecoveredExportZip(zip, recoveredTarget, preview);
   const outputDirectory = path.join(app.getPath("userData"), "watchface-archives");
@@ -1956,7 +1965,7 @@ export async function loadCorosWatchfaceTemplateConfigTexts(
     }
     texts.push({
       path: entry.path.replace(/^\.\//, ""),
-      text: (await entry.buffer()).toString("utf8")
+      text: restoreWatchfaceDateLayout((await entry.buffer()).toString("utf8"))
     });
   }
   return texts;
@@ -2503,7 +2512,7 @@ async function readTemplateConfig(
   if (!entry || (entry.size ?? entry.uncompressedSize ?? 0) > MAX_INFO_BYTES) {
     return {};
   }
-  return parseCorosWatchfaceConfig((await entry.buffer()).toString("utf8"));
+  return parseCorosWatchfaceConfig(restoreWatchfaceDateLayout((await entry.buffer()).toString("utf8")));
 }
 
 /**
@@ -3639,7 +3648,8 @@ async function rewriteTemplateArchive(
   templateNameOverride?: string,
   watchfaceIdOverride?: string,
   configTextReplacements: Map<string, string> = new Map(),
-  stripBlankConfigKeys = false
+  stripBlankConfigKeys = false,
+  exportTarget?: WatchfaceTarget
 ): Promise<Buffer> {
   const directory = await openTemplateArchive(sourcePath);
   const originalSourceFiles = directory.files.filter((entry) => entry.type === "File");
@@ -3665,9 +3675,10 @@ async function rewriteTemplateArchive(
   }
   const parsedConfigs = new Map<string, Record<string, string>>();
   for (const entry of configEntries) {
-    const rawText =
+    const rawText = restoreWatchfaceDateLayout(
       configTextReplacements.get(entry.path) ??
-      (await entry.buffer()).toString("utf8");
+      (await entry.buffer()).toString("utf8")
+    );
     parsedConfigs.set(entry.path, parseCorosWatchfaceConfig(rawText));
   }
   const normalizeConfigFolder = (value: string | undefined) =>
@@ -3832,8 +3843,9 @@ async function rewriteTemplateArchive(
         (isConfigFile && watchfaceIdOverride !== undefined) ||
         (isConfigFile && stripBlankConfigKeys)
       ) {
-        const rawConfig =
-          textReplacement ?? (await entry.buffer()).toString("utf8");
+        const rawConfig = restoreWatchfaceDateLayout(
+          textReplacement ?? (await entry.buffer()).toString("utf8")
+        );
         const resolutionDirectory = entry.path.split("/", 1)[0]!;
         const withWatchfaceId =
           watchfaceIdOverride !== undefined
@@ -3962,8 +3974,9 @@ async function rewriteTemplateArchive(
       finalPaths.add(aodPath);
     }
   }
-  const finalEntries = removeUnreferencedStudioSprites(
-    fitGeneratedWatchfaceFontRects(orderedEntries)
+  const finalEntries = finalizeWatchfaceDeviceLayout(
+    removeUnreferencedStudioSprites(fitGeneratedWatchfaceFontRects(orderedEntries)),
+    exportTarget
   );
   validateArchiveInventory(
     finalEntries.map((entry) => ({
@@ -4220,17 +4233,22 @@ function assertFirmwareResolutionCompatibility(
 ): void {
   const normalizedFirmwareType = firmwareType?.trim().toUpperCase();
   const compatibility =
-    normalizedFirmwareType === "COROS W336" || watchModel === "pace-4"
+    normalizedFirmwareType === "COROS W337" || watchModel === "pace-4-pro"
       ? {
-          label: "PACE 4",
-          required: ["watchface_390x390", "watchface_800x800"]
+          label: "PACE 4 Pro",
+          required: ["watchface_466x466", "watchface_800x800"]
         }
-      : normalizedFirmwareType === "COROS W541" || watchModel === "apex-4"
+      : normalizedFirmwareType === "COROS W336" || watchModel === "pace-4"
         ? {
-            label: "APEX 4",
-            required: ["watchface_240x240", "watchface_260x260"]
+            label: "PACE 4",
+            required: ["watchface_390x390", "watchface_800x800"]
           }
-        : null;
+        : normalizedFirmwareType === "COROS W541" || watchModel === "apex-4"
+          ? {
+              label: "APEX 4",
+              required: ["watchface_240x240", "watchface_260x260"]
+            }
+          : null;
   if (!compatibility) {
     return;
   }
@@ -4252,6 +4270,12 @@ function detectWatchfaceResolutionProfile(
   resolutionDirectories: string[]
 ): CorosWatchfaceArchive["resolutionProfile"] {
   const resolutions = new Set(resolutionDirectories);
+  if (
+    resolutions.has("watchface_466x466") &&
+    resolutions.has("watchface_800x800")
+  ) {
+    return "amoled-466-800";
+  }
   if (
     resolutions.has("watchface_240x240") &&
     resolutions.has("watchface_260x260") &&

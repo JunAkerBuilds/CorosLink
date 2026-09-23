@@ -40,6 +40,7 @@ export interface WatchTrack {
 }
 
 export type WatchModelId =
+  | "pace-4-pro"
   | "pace-pro"
   | "pace-4"
   | "pace-3"
@@ -55,6 +56,7 @@ export type WatchModelId =
 
 export type CorosWatchfaceResolutionProfile =
   | "mip-240-260-800"
+  | "amoled-466-800"
   | "amoled-416-800"
   | "amoled-390-800"
   | "other";
@@ -62,6 +64,7 @@ export type CorosWatchfaceResolutionProfile =
 export type WatchConnectionSmokeOptionId =
   | "auto"
   | "none"
+  | "pace-4-pro"
   | "pace-pro"
   | "pace-4"
   | "pace-3"
@@ -479,6 +482,8 @@ export interface CorosWatchfaceSpriteFolder {
 }
 
 export interface CorosWatchfaceResolutionDetails {
+  /** Preserve the template slot's identity while deriving styled/moved details. */
+  arcCutRole?: "dateSlash" | "overlay";
   /** e.g. "watchface_800x800" */
   directory: string;
   width: number;
@@ -972,8 +977,56 @@ export interface CorosWatchfaceNativeDataStyle {
   };
 }
 
+/** One glyph of a {@link CorosWatchfaceFontSnapshot}, in pixels at its `size`. */
+export interface CorosWatchfaceFontSnapshotGlyph {
+  /** Cursor advance, as canvas `measureText().width` reports it. */
+  advance: number;
+  /** Ink extents around the pen position on the alphabetic baseline. */
+  left: number;
+  right: number;
+  ascent: number;
+  descent: number;
+  /** The glyph's image rectangle inside the snapshot atlas. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Rendered glyph images plus canvas metrics for one desktop font face. A
+ * project carries these so it renders and exports the same way on a computer
+ * that does not have the font installed. Only the glyph pictures travel, never
+ * the font file itself.
+ */
+export interface CorosWatchfaceFontSnapshot {
+  family: string;
+  weight: number;
+  style: "normal" | "italic";
+  /** Font size, in pixels, the glyphs were rendered at. */
+  size: number;
+  /** Transparent space around each glyph's ink inside its atlas rectangle. */
+  padding: number;
+  /** Font-wide ascent and descent, in pixels at `size`. */
+  fontAscent: number;
+  fontDescent: number;
+  /** Distance from each canvas text baseline down to the alphabetic one. */
+  baselines: Record<string, number>;
+  /** Pair adjustments in pixels at `size`, keyed by both characters ("AV"). */
+  kerning?: Record<string, number>;
+  /** White-on-transparent PNG atlas holding every glyph image. */
+  dataUrl: string;
+  glyphs: Record<string, CorosWatchfaceFontSnapshotGlyph>;
+}
+
 export interface CorosWatchfaceDesignState {
   version: 1;
+  /**
+   * Glyph snapshots of the desktop fonts this design names, written when the
+   * project is saved or exported. The editor keeps these outside its live
+   * design state; see `watchfaceFontSnapshots.ts`.
+   */
+  fontSnapshots?: CorosWatchfaceFontSnapshot[];
   /**
    * Independent visual state for alternate firmware display modes. Current
    * display fields remain at the top level for backwards compatibility.
@@ -1107,6 +1160,7 @@ export interface CorosWatchfaceDesignState {
     /** Optional tint; absent preserves the template sprite color. */
     color?: string;
     fontFamily?: string;
+    rasterFont?: CorosWatchfaceRasterFont;
   };
   /** Dynamic 41-state weather icon; absent in older projects. */
   weatherIndicator?: {

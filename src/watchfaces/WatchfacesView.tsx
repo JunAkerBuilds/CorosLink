@@ -114,7 +114,9 @@ import {
   selectionIsOneOf,
   useSelectionPreference
 } from "../preferences/selectionPreferences";
+import { rememberWatchfaceFontSnapshots } from "./watchfaceFontSnapshots";
 import "./watchfaces.css";
+import "./watchfaceStudioAtelier.css";
 
 const AUTH_WATCH_FACE_PREVIEWS = [
   preClassicFace,
@@ -208,6 +210,7 @@ const DEFAULT_FIRMWARE_TYPE = "COROS W332";
 const DEFAULT_MODEL_VERSION = "W332-3.1708.0";
 const IS_DEVELOPMENT_BUILD = import.meta.env.DEV;
 const COMMUNITY_MODEL_BY_WATCH: Partial<Record<WatchModelId, string>> = {
+  "pace-4-pro": "PACE 4 Pro",
   "pace-pro": "PACE Pro",
   "pace-3": "PACE 3",
   "apex-2": "APEX 2",
@@ -2874,9 +2877,11 @@ function renderProjectPreview(
   const promise = (async () => {
     const assetCache = new Map<string, CorosWatchfaceTemplateAsset>();
     const loadedProject = await loadProjectPreview(api, project);
-    const details = await api.describeCorosWatchfaceTemplate(
-      loadedProject.archive.archiveId
-    );
+    const [details] = await Promise.all([
+      api.describeCorosWatchfaceTemplate(loadedProject.archive.archiveId),
+      // Thumbnails of faces whose fonts are not installed use saved glyphs.
+      rememberWatchfaceFontSnapshots(loadedProject.design.fontSnapshots)
+    ]);
     const previewDetails = deriveDesignDetails(
       details,
       loadedProject.design

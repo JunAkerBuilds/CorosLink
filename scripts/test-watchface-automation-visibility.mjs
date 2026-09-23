@@ -375,4 +375,56 @@ assert.equal(resolveWatchfaceModeDesign(aodHidden.value.design, "aod").layerVisi
 assert.equal(editorLayer(resolveWatchfaceModeDesign(aodHidden.value.design, "current"), "hours").visible, true);
 assert.equal(editorLayer(resolveWatchfaceModeDesign(aodHidden.value.design, "aod"), "hours").visible, false);
 
+// The Studio date slash replaces a template slash in arc_cut_icon, but a face
+// that uses arc_cut_icon as a progress mask (PARTICLES) keeps it.
+const templateSlash = resolveWatchfaceModeDesign(
+  apply([{ op: "set_visibility", id: "staticDateSlash", visible: true }]).value.design,
+  "current"
+);
+assert.equal(templateSlash.staticSeparators.dateSlash.enabled, true);
+assert.equal(templateSlash.configAssetOverrides["config:arc_cut_icon"]?.enabled, false);
+const maskDetails = structuredClone(details);
+Object.assign(maskDetails.resolutions[0].config, {
+  arc_cut_icon: "icon\\mask.png",
+  arc_cut_icon_pos: "{0,292}"
+});
+maskDetails.resolutions[0].icons.push({
+  path: `${maskDetails.resolutions[0].directory}/icon/mask.png`,
+  width: 416,
+  height: 125
+});
+const maskSlash = resolveWatchfaceModeDesign(
+  applyWatchfaceAutomationCommands(
+    value(),
+    [{ op: "set_visibility", id: "staticDateSlash", visible: true }],
+    { details: maskDetails, mode: "current" }
+  ).value.design,
+  "current"
+);
+assert.equal(maskSlash.staticSeparators.dateSlash.enabled, true);
+assert.notEqual(
+  maskSlash.configAssetOverrides["config:arc_cut_icon"]?.enabled,
+  false,
+  "turning on the Studio date slash must not disable a progress mask"
+);
+assert.ok(
+  deriveEditorLayers(maskDetails, maskSlash).some((layer) => layer.id === "arcCut"),
+  "a progress mask gets its own Arc cut overlay layer"
+);
+// Without native size a replacement fills the template box; with it the
+// selection (and place_layers) follow the replacement's own pixels.
+const arcCutBounds = (override) => {
+  const bounds = deriveEditorLayers(maskDetails, {
+    ...maskSlash,
+    configAssetOverrides: { ...maskSlash.configAssetOverrides, "config:arc_cut_icon": override }
+  }).find((layer) => layer.id === "arcCut")?.bounds;
+  return bounds && [bounds.x0, bounds.y0, bounds.x1, bounds.y1];
+};
+const compactOverlay = { dataUrl: png, width: 180, height: 24 };
+assert.deepEqual(arcCutBounds({ enabled: true, replacement: compactOverlay }), [0, 292, 416, 417]);
+assert.deepEqual(
+  arcCutBounds({ enabled: true, nativeSize: true, scale: 1, replacement: compactOverlay }),
+  [0, 292, 180, 316]
+);
+
 console.log("watchface automation visibility tests passed");

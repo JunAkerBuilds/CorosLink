@@ -11,6 +11,7 @@ const FOUR_GB = 4 * 1024 * 1024 * 1024;
 const THIRTY_TWO_GB = 32 * 1024 * 1024 * 1024;
 
 const {
+  fallbackBytesForModel,
   getWatchfaceDeviceProfile,
   getWatchfaceDeviceProfileByFirmware,
   normalizeVolumeName,
@@ -20,6 +21,11 @@ const {
 );
 
 const nameCases = [
+  ["COROS PACE 4 PRO", "pace-4-pro"],
+  ["Pace 4 Pro", "pace-4-pro"],
+  ["PACE4PRO", "pace-4-pro"],
+  ["PACE-4-PRO", "pace-4-pro"],
+  ["COROS_PACE_4_PRO", "pace-4-pro"],
   ["COROS PACE PRO", "pace-pro"],
   ["PACE PRO", "pace-pro"],
   ["COROS PACE 4", "pace-4"],
@@ -126,4 +132,7 @@ assert.deepEqual(getWatchfaceDeviceProfileByFirmware("coros w541"), {
   firmwareType: "COROS W541"
 });
 
+assert.deepEqual(getWatchfaceDeviceProfile("pace-4-pro"), { firmwareType: "COROS W337" });
+assert.deepEqual(getWatchfaceDeviceProfileByFirmware(" coros w337 "), { firmwareType: "COROS W337" });
+assert.equal(fallbackBytesForModel("pace-4-pro"), THIRTY_TWO_GB);
 console.log("Watch model resolution tests passed.");

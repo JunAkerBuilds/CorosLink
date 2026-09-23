@@ -99,19 +99,28 @@
     "legacy614a:patch": "npm run build:electron && node scripts/patch-legacy614a.mjs",
     "legacy614a:slender": "npm run build:electron && node scripts/build-slender-multidata-legacy.mjs",
     "test:watchface-studio": "node --experimental-strip-types scripts/test-watchface-studio.mjs",
+    "test:watchface-font-snapshots": "node --experimental-strip-types scripts/test-watchface-font-snapshots.mjs",
     "test:watchface-weekday-languages": "node --experimental-strip-types scripts/test-watchface-weekday-languages.mjs",
     "test:watchface-conversion": "npm run build:electron && electron scripts/test-watchface-conversion.cjs",
     "test:recovered-watchface-conversion": "npm run build:electron && electron scripts/test-recovered-watchface-conversion.cjs && node scripts/test-recovered-watchface-hydration.mjs",
     "test:coros-bin-layout": "node scripts/test-coros-bin-layout.mjs && node scripts/test-coros-watchface-bin-extraction.mjs",
     "test:official-watchface-editor": "npm run build:electron && electron scripts/test-official-watchface-editor.cjs",
     "test:watchface-editor": "node --experimental-strip-types scripts/test-watchface-editor.mjs",
+    "test:watchface-automation-pixels": "node --experimental-strip-types scripts/test-watchface-automation-pixels.mjs",
+    "test:watchface-ai-image": "npm run build:electron && node scripts/test-watchface-ai-image.mjs && electron scripts/test-watchface-ai-image-electron.cjs",
+    "test:watchface-codex-cli": "npm run build:electron && node scripts/test-watchface-codex-cli.mjs",
+    "test:watchface-ai-panel": "electron scripts/test-watchface-ai-panel.cjs",
+    "test:watchface-ai-chat": "npm run build:electron && node scripts/test-watchface-ai-chat.mjs && node scripts/test-watchface-ai-context.mjs && node scripts/test-watchface-ai-requirements.mjs && node scripts/test-watchface-ai-parallel.mjs && node scripts/test-watchface-ai-asset-review.mjs && node scripts/test-watchface-ai-generation.mjs && node scripts/test-watchface-ai-image.mjs && node scripts/test-watchface-asset-contracts.mjs && node scripts/test-watchface-native-contracts.mjs",
     "test:watchface-automation": "npm run build:electron && node scripts/test-watchface-automation-broker.mjs && node scripts/test-watchface-automation-server.mjs && node scripts/test-watchface-automation-commands.mjs && node scripts/test-watchface-automation-placement.mjs && node scripts/test-watchface-automation-visibility.mjs",
     "test:watchface-automation-e2e": "npm run build:electron && electron scripts/test-watchface-automation-e2e.cjs",
+    "test:watchface-automation-tools": "npm run build:electron && electron scripts/test-watchface-automation-e2e.cjs --tools-only",
     "test:watchface-glyph-pixels": "electron scripts/test-watchface-glyph-pixels.cjs",
     "test:watchface-strokes": "electron scripts/test-watchface-strokes.cjs",
     "test:coros-watchface-creator": "npm run build:electron && electron scripts/test-coros-watchface-creator.cjs",
+    "test:watchface-device-layout": "npm run build:electron && electron scripts/test-watchface-device-layout.cjs",
     "test:intervals-service": "npm run build:electron && node scripts/test-intervals-service.mjs",
     "test:intervals-imported-store": "npm run build:electron && node scripts/test-intervals-imported-store.mjs",
+    "test:external-links": "npm run build:electron && node scripts/test-external-links.mjs",
     "test:tcx-builder": "npm run build:electron && node scripts/test-tcx-builder.mjs",
     "start": "npm run build && electron .",
     "icons:generate": "node scripts/generate-icons.mjs",
@@ -157,6 +166,13 @@
       "package.json"
     ],
     "extraResources": [
+      {
+        "from": "skills",
+        "to": "skills",
+        "filter": [
+          "**/*"
+        ]
+      },
       {
         "from": "bin",
         "to": "bin",

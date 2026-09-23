@@ -1,6 +1,7 @@
 import { app, BrowserWindow, safeStorage, shell } from "electron";
 import crypto from "node:crypto";
 import http from "node:http";
+import { isWebUrl } from "./externalLinks";
 import type { AddressInfo } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -1008,15 +1009,6 @@ function attachClientCloseHandler(id: string, client: Client): void {
     rt.tools = [];
     rt.toolsRefresh = undefined;
   };
-}
-
-function isWebUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 function canonicalHttpUrl(value: string): string {

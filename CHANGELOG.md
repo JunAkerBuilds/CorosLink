@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Watchmaker AI in Watch Face Studio, using the local Codex CLI with saved conversations, image tools, and checks against design requirements.
+- Portable font snapshots and improved editor placement guides, previews, and component artwork controls.
+- PACE 4 Pro (COROS W337) device recognition and watch-face support, with native 466×466 AMOLED previews, conversion, and Current/Always-on exports.
+
+### Fixed
+
+- PACE 3 watch-face exports compensate for the observed English month/day position reversal so the installed date layout matches the editor. Reopening newly exported faces preserves the intended editor positions.
+
 ## [0.1.40] - 2026-09-22
 
 ### Added

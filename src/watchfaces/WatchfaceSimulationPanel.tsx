@@ -61,7 +61,7 @@ export function WatchfaceSimulationPanel({ simulation, onChange, design }: { sim
   ];
   return <div className="wf-simulation" ref={root}>
     <button ref={trigger} type="button" className="wf-simulation-trigger" aria-expanded={open} aria-controls={id} aria-haspopup="dialog" data-enabled={simulation.enabled} onClick={() => setOpen(!open)}>
-      <FlaskConical size={15} aria-hidden="true" /> Preview data: <strong>{simulation.playing ? "Playing" : simulation.enabled ? "Sample" : "Now"}</strong>
+      <FlaskConical size={15} aria-hidden="true" /> <span className="wf-simulation-trigger-label">Preview data:</span> <strong>{simulation.playing ? "Playing" : simulation.enabled ? "Sample" : "Now"}</strong>
     </button>
     {open && <section id={id} className="wf-simulation-panel" role="dialog" aria-label="Watch face simulation">
       <div className="wf-simulation-heading"><strong>Simulation</strong><button type="button" aria-label="Close simulation" onClick={() => { setOpen(false); trigger.current?.focus(); }}><X size={16} /></button></div>

@@ -1,7 +1,8 @@
+import type { ChatGptModelInfo } from "./chatModels";
 import type { HealthInsightKind, HealthInsightResult } from "./healthInsightsTypes";
 import { contextBridge, ipcRenderer } from "electron";
 import type { DiagnosticsSnapshot, RendererDiagnosticError } from "./diagnosticsTypes";
-import type { WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
+import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "./calendarSyncTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "./googleCalendarTypes";
 import type {
@@ -202,6 +203,20 @@ const api = {
   },
   respondWatchfaceAutomation: (response: WatchfaceAutomationResponse): void => ipcRenderer.send("watchfaceAutomation:response", response),
   setWatchfaceAutomationReady: (scope: "hub" | "editor", ready: boolean): void => ipcRenderer.send("watchfaceAutomation:ready", scope, ready),
+  sendWatchfaceAi: (requestId: string, messages: WatchfaceAiMessage[], options?: WatchfaceAiOptions): Promise<void> => ipcRenderer.invoke("watchfaceAi:send", requestId, messages, options ?? {}),
+  cancelWatchfaceAi: (requestId: string): Promise<void> => ipcRenderer.invoke("watchfaceAi:cancel", requestId),
+  listWatchfaceAiModels: (): Promise<ChatGptModelInfo[]> => ipcRenderer.invoke("watchfaceAi:models"),
+  listWatchfaceAiChats: (projectKey: string): Promise<WatchfaceAiChatSummary[]> => ipcRenderer.invoke("watchfaceAi:listChats", projectKey),
+  loadWatchfaceAiChat: (id: string): Promise<WatchfaceAiSavedChat> => ipcRenderer.invoke("watchfaceAi:loadChat", id),
+  saveWatchfaceAiChat: (input: { id?: string; projectKey: string; title?: string; messages: unknown[] }): Promise<WatchfaceAiChatSummary> => ipcRenderer.invoke("watchfaceAi:saveChat", input),
+  renameWatchfaceAiChat: (id: string, title: string): Promise<WatchfaceAiChatSummary> => ipcRenderer.invoke("watchfaceAi:renameChat", id, title),
+  deleteWatchfaceAiChat: (id: string): Promise<void> => ipcRenderer.invoke("watchfaceAi:deleteChat", id),
+  copyWatchfaceAiImage: (assetId: string): Promise<void> => ipcRenderer.invoke("watchfaceAi:copyImage", assetId),
+  onWatchfaceAiEvent: (callback: (event: WatchfaceAiEvent) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: WatchfaceAiEvent) => callback(payload);
+    ipcRenderer.on("watchfaceAi:event", listener);
+    return () => ipcRenderer.removeListener("watchfaceAi:event", listener);
+  },
   getAppleCalendarStatus: (): Promise<CalendarConnectionStatus> => ipcRenderer.invoke("appleCalendar:status"),
   connectAppleCalendar: (input: AppleCalendarCredentials): Promise<CalendarConnectionStatus> => ipcRenderer.invoke("appleCalendar:connect", input),
   cancelAppleCalendarConnect: (): Promise<void> => ipcRenderer.invoke("appleCalendar:cancelConnect"),

@@ -109,11 +109,11 @@ export function HealthCheckVitals({ result, days, selected, onSelect }: {
   }, [result]);
   if (!vitals.length) return null;
 
-  const period = days === 1 ? "today" : `in the last ${days} days`;
+  // One line: when the latest check was taken, plus a count only when there is more than one to choose from.
   return <>
     <p className="health-check-summary">
       <strong>{latest ? formatTime(latest, DAY_ONLY.test(latest) ? "day" : "full") : "Latest check"}</strong>
-      {checks > 0 && <span>{checks} {checks === 1 ? "check" : "checks"} {period}{checks > 1 ? " · showing the latest" : ""}</span>}
+      {checks > 1 && <span>· {checks} checks</span>}
     </p>
     <div className="health-vitals" role="group" aria-label="Health check readings">
       {vitals.map(vital => {
@@ -125,15 +125,18 @@ export function HealthCheckVitals({ result, days, selected, onSelect }: {
         const style: Record<string, string> = { "--vital": colors[vital.key] };
         if (vital.key === "heartRate") style["--beat"] = `${60 / Math.max(vital.value, 1)}s`;
         if (vital.key === "respiratoryRate") style["--breath"] = `${60 / Math.max(vital.value, 1)}s`;
-        const foot = vital.key === "stress" ? level
+        // Only the stress band earns a visible caption; resting HR and ranges stay in the accessible label and the trend chart.
+        const foot = vital.key === "stress" ? level : undefined;
+        const detail = vital.key === "stress" ? level
           : vital.key === "heartRate" && resting !== undefined ? `Resting ${formatNumber(resting)} ${vital.unit ?? ""}`.trim()
           : points.length > 1 ? `${formatNumber(Math.min(...values), digits)}–${formatNumber(Math.max(...values), digits)} ${vital.unit ?? ""}`.trim()
           : undefined;
-        const description = `${vital.label} ${formatNumber(vital.value, 1)} ${vital.unit ?? ""}${foot ? `, ${foot}` : ""}`.trim();
+        const description = `${vital.label} ${formatNumber(vital.value, 1)} ${vital.unit ?? ""}${detail ? `, ${detail}` : ""}`.trim();
+        const unit = vital.unit === "breaths/min" ? "/min" : vital.unit;
         return <button key={vital.key} type="button" className={`health-vital is-${vital.key}`} style={style as CSSProperties}
           aria-pressed={vital.series ? vital.key === selected : undefined} aria-label={description} disabled={!vital.series} onClick={() => onSelect(vital.key)}>
           <span className="health-vital-head"><span className="health-vital-icon" aria-hidden="true"><Icon size={14} /></span>{vital.label}</span>
-          <span className="health-vital-value">{formatNumber(vital.value, 1)}{vital.unit && <small>{vital.unit}</small>}</span>
+          <span className="health-vital-value">{formatNumber(vital.value, 1)}{unit && <small>{unit}</small>}</span>
           <span className="health-vital-instrument">
             {vital.key === "stress" ? <StressBands level={level} score={vital.value} />
               : points.length > 0 ? <Sparkline points={points} reference={vital.key === "heartRate" ? resting : undefined} /> : null}

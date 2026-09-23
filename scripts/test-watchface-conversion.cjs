@@ -143,6 +143,24 @@ async function main(){
  const restoredDetails = await service.describeCorosWatchfaceTemplate(restored.archive.archiveId);
  assert(restoredDetails.resolutions.every(r => Object.keys(r.aodConfig).length));
  assert(restoredDetails.resolutions.find(r=>r.width===800).spriteFolders.some(f=>f.folder==='studio/aod_digits'));
- console.log('Watchface conversion: all seven targets, source immutability, raw edits, analog assets, AOD round trips, automatic cached carrier and production export passed.');
+ // W337: reject smaller starter trees, then convert and export both display modes.
+ for (const identity of [{watchModel:'pace-4-pro'}, {firmwareType:'COROS W337'}]) {
+  await assert.rejects(service.createCorosWatchfaceArchive({sourceArchiveId:archive.archiveId,name:'Wrong size',...identity}), /PACE 4 Pro.*requires 466×466 and 800×800.*missing 466x466/);
+ }
+ const proTarget=getWatchfaceTarget('COROS W337');
+ assert.equal(proTarget.model,'pace-4-pro');assert.equal(proTarget.previewSize,466);
+ await fs.writeFile(path.join(cache,'pace-4-pro.zip'),createStoreZip(fixture(proTarget.sizes,true)));
+ const pro=await service.convertCorosWatchfaceArchive({sourceArchiveId:archive.archiveId,watchModel:'pace-4-pro'});
+ assert.equal(pro.archive.firmwareType,'COROS W337');
+ assert.equal(pro.archive.resolutionProfile,'amoled-466-800');
+ const proDetails=await service.describeCorosWatchfaceTemplate(pro.archive.archiveId);
+ assert.deepEqual(proDetails.resolutions.map(r=>r.width).sort((a,b)=>a-b),[466,800]);
+ assert(proDetails.resolutions.every(r=>Object.keys(r.aodConfig).length));
+ const proBuilt=await service.createCorosWatchfaceArchive({sourceArchiveId:pro.archive.archiveId,name:'PACE 4 Pro export',firmwareType:'COROS W337',watchModel:'pace-4-pro',backgroundDataUrl:nativeImage.createFromBuffer(png(800,800)).toDataURL()});
+ assert.equal(proBuilt.firmwareType,'COROS W337');assert.equal(proBuilt.resolutionProfile,'amoled-466-800');
+ const proBuiltDetails=await service.describeCorosWatchfaceTemplate(proBuilt.archiveId);
+ assert.deepEqual(proBuiltDetails.resolutions.map(r=>r.width).sort((a,b)=>a-b),[466,800]);
+ assert(proBuiltDetails.resolutions.every(r=>Object.keys(r.aodConfig).length));
+ console.log('Watchface conversion: all supported targets, source immutability, raw edits, analog assets, AOD round trips, automatic cached carrier and production export passed.');
 }
 main().then(()=>app.exit(0)).catch(e=>{console.error(e);app.exit(1)}).finally(()=>fs.rm(temp,{recursive:true,force:true}));

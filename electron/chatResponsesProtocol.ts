@@ -4,7 +4,8 @@ export function buildResponsesRequest(
   instructions: string,
   input: Record<string, unknown>[],
   tools: Record<string, unknown>[],
-  includeReasoningSummary = true
+  includeReasoningSummary = true,
+  reasoningEffort?: string
 ): Record<string, unknown> {
   const request: Record<string, unknown> = {
     model,
@@ -14,7 +15,10 @@ export function buildResponsesRequest(
     store: false
   };
   if (includeReasoningSummary) {
-    request.reasoning = { summary: "auto" };
+    request.reasoning = {
+      summary: "auto",
+      ...(reasoningEffort ? { effort: reasoningEffort } : {})
+    };
   }
   if (tools.length > 0) {
     request.tools = tools;

@@ -64,6 +64,11 @@ export class WatchfaceAutomationService {
       case "redo":
       case "set_view":
       case "render_preview":
+      case "get_geometry":
+      case "check_contrast":
+      case "sample_color":
+      case "recolor_image":
+      case "render_svg":
       case "validate":
       case "save":
       case "close":

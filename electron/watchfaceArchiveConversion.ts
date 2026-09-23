@@ -1,5 +1,6 @@
 import { nativeImage } from "electron";
 import type { WatchfaceTarget } from "./watchfaceTargets";
+import { restoreWatchfaceDateLayout } from "./watchfaceDeviceLayout";
 
 export interface WatchfaceConversionEntry { name: string; data: Buffer }
 
@@ -100,7 +101,8 @@ function convertEntries(
   for (const entry of input) {
     const name = normalizeConversionPath(entry.name);
     if (source.has(name)) throw new Error(`Duplicate source entry ${name}.`);
-    source.set(name, entry.data);
+    source.set(name, /\/config\.txt$/i.test(name)
+      ? Buffer.from(restoreWatchfaceDateLayout(entry.data.toString("utf8")), "utf8") : entry.data);
   }
   if (recoveredExport && JSON.parse(source.get("info.json")?.toString("utf8") ?? "{}").coroslinkRecovery?.partial !== true) {
     throw new Error("Only a recovered official face can use native-resolution export.");
@@ -126,7 +128,8 @@ function convertEntries(
   if (!masterSize) throw new Error("The recovered face has no editable layout to export.");
   const dir = (size: number) => `watchface_${size}x${size}`;
   const textAt = (size: number, file: string) => source.get(`${dir(size)}/${file}`)?.toString("utf8");
-  const edits = Object.entries(configTextEdits).map(([name, text]) => [normalizeConversionPath(name), text] as const);
+  const edits = Object.entries(configTextEdits).map(([name, text]) =>
+    [normalizeConversionPath(name), restoreWatchfaceDateLayout(text)] as const);
   for (const [name] of edits) {
     if (!source.has(name) || !/^watchface_\d+x\d+\/(?:AOD)?config\.txt$/.test(name)) {
       throw new Error(`The raw layout edit ${name} does not belong to the source template.`);

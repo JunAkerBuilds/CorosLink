@@ -39,6 +39,7 @@ import {
   configAssetCanUseNativeSize,
   configAssetCanvasSize,
   configAssetSupportsNativeSize,
+  configAssetDefaultsToNativeSize,
   corosMonthLabelForSpriteIndex,
   corosMonthSpriteIndex,
   corosWeekdayIndex,
@@ -58,6 +59,7 @@ import {
   hasWatchfaceAod,
   inferExerciseSeparatorStyle,
   inferStaticSeparators,
+  watchfaceArcCutRole,
   isControlComplicationEnabled,
   listWatchfaceConfigAssets,
   loadStudioImage,
@@ -67,6 +69,7 @@ import {
   parseKcalProgressArc,
   parseWatchfaceConfigText,
   pickWatchPreviewResolution,
+  pickEditorPreviewResolution,
   rasterFontSupportsText,
   rasterFontNativeSpriteSize,
   removeWatchfaceDateFontOverride,
@@ -504,6 +507,14 @@ assert.equal(
   260,
   "240/260/800 MIP bundles should preview the APEX 4 46 mm tree by default"
 );
+const pace4ProPreviewDetails = {
+  archiveId: "pace-4-pro-preview",
+  resolutions: [resolution(800, 24, 38), resolution(390, 11, 19), resolution(416, 12, 20), resolution(466, 14, 22)]
+};
+for (const watch of ["pace-4-pro", "COROS W337"]) {
+  assert.equal(pickWatchPreviewResolution(pace4ProPreviewDetails, watch)?.width, 466, `${watch} previews at its native 466px size`);
+  assert.equal(pickEditorPreviewResolution(pace4ProPreviewDetails, watch)?.width, 800, "Authoring stays at full master resolution");
+}
 for (const [watch, size] of [["pace-3", 240], ["nomad", 260], ["vertix-2", 280], ["vertix-2s", 280]]) {
   assert.equal(pickWatchPreviewResolution(apexPreviewDetails, watch)?.width, size, `${watch} uses its own native preview size`);
 }
@@ -1747,15 +1758,20 @@ assert.deepEqual(
   configAssets.map(({ id }) => id),
   [
     "config:am_icon",
+    "config:arc_cut_icon",
     "config:background_icon",
     "config:control_colon_icon",
-    "config:arc_cut_icon",
     "config:pm_icon",
     "config:colon_icon",
     "config:watchface_thmb_icon",
     "aod:background_icon"
   ],
   "Every direct PNG reference should appear once per config key and scope"
+);
+assert.equal(
+  configAssets.find(({ id }) => id === "config:arc_cut_icon")?.label,
+  "Arc cut overlay",
+  "an arc_cut_icon outside the date row is a progress mask, not the date slash"
 );
 assert.equal(
   configAssets.find(({ id }) => id === "config:colon_icon")?.archivePath,
@@ -2072,6 +2088,23 @@ assert.equal(configAssetSupportsNativeSize("bluetooth_on_icon"), true);
 assert.equal(configAssetSupportsNativeSize("no_disturb_on_icon"), true);
 assert.equal(configAssetSupportsNativeSize("no_disturb_off_icon"), true);
 assert.equal(configAssetSupportsNativeSize("control_colon_icon"), false);
+// arc_cut_icon takes its size from the PNG, so a compact progress mask can
+// keep its own pixels instead of stretching into the template's old box.
+assert.equal(configAssetSupportsNativeSize("arc_cut_icon"), true);
+assert.equal(
+  configAssetDefaultsToNativeSize("arc_cut_icon"),
+  false,
+  "a swapped arc-cut image still fits its template box unless native size is chosen"
+);
+assert.equal(configAssetDefaultsToNativeSize("control_hr_icon"), true);
+assert.deepEqual(
+  configAssetCanvasSize(
+    "arc_cut_icon",
+    { nativeSize: true, scale: 1, replacement: { dataUrl: "overlay", width: 180, height: 24 } },
+    { width: 416, height: 125 }
+  ),
+  { width: 180, height: 24, native: true }
+);
 assert.equal(
   configAssetCanUseNativeSize("bluetooth_off_icon", false),
   true,
@@ -3358,6 +3391,10 @@ assert.equal(
     ?.values.colon_icon,
   ""
 );
+// COROS compiles arc_cut_icon as one generic image above progress layers.
+// The fixture's large image outside the date row is a progress mask, so the
+// Studio slash must leave it in place.
+assert.equal(watchfaceArcCutRole(withMetrics.resolutions[1]), "overlay");
 const replacedCompositeSeparators = buildStaticSeparatorOverrides(withMetrics, {
   colon: { ...inferredSeparators.colon, enabled: true },
   dateSlash: { ...inferredSeparators.dateSlash, enabled: true }
@@ -3365,8 +3402,58 @@ const replacedCompositeSeparators = buildStaticSeparatorOverrides(withMetrics, {
 assert.equal(
   replacedCompositeSeparators.find((entry) => entry.path.includes("800x800"))
     ?.values.arc_cut_icon,
+  undefined,
+  "enabling the Studio date slash must not delete a progress mask"
+);
+// A slash-sized image between month and day (NOMAD, RUBY HORIZON) is the
+// template slash, which the Studio slash replaces.
+const slashFaceDetails = structuredClone(withMetrics);
+for (const resolution of slashFaceDetails.resolutions) {
+  // This fixture supplies a different template slot, not a derived layout.
+  delete resolution.arcCutRole;
+  const w = resolution.width;
+  resolution.icons.push({
+    path: `${resolution.directory}/icon/slash.png`,
+    width: Math.round(w * 0.02),
+    height: Math.round(w * 0.06)
+  });
+  resolution.config.arc_cut_icon = "icon\\slash.png";
+  resolution.config.arc_cut_icon_pos = `{${Math.round(w * 0.48)},${Math.round(w * 0.41)}}`;
+}
+assert.equal(watchfaceArcCutRole(slashFaceDetails.resolutions[1]), "dateSlash");
+assert.equal(
+  buildStaticSeparatorOverrides(slashFaceDetails, {
+    ...inferredSeparators,
+    dateSlash: { ...inferredSeparators.dateSlash, enabled: true }
+  }).find((entry) => entry.path.includes("800x800"))?.values.arc_cut_icon,
   ""
 );
+assert.deepEqual(
+  computeLayoutGroupBounds(slashFaceDetails.resolutions[1])
+    .filter((entry) => entry.id === "separators" || entry.id === "arcCut")
+    .map((entry) => entry.id),
+  ["separators"],
+  "a template slash stays in the separators group"
+);
+const slashFaceHidden = buildLayerVisibilityOverrides(slashFaceDetails, {
+  separators: false
+}).find((entry) => entry.path.includes("800x800"))?.values;
+assert.equal(slashFaceHidden?.arc_cut_icon, "");
+assert.equal(slashFaceHidden?.arc_cut_icon_pos, "");
+const maskFaceSeparatorsHidden = buildLayerVisibilityOverrides(withMetrics, {
+  separators: false
+}).find((entry) => entry.path.includes("800x800"))?.values;
+assert.equal(maskFaceSeparatorsHidden?.colon_icon, "");
+assert.equal(
+  maskFaceSeparatorsHidden?.arc_cut_icon,
+  undefined,
+  "hiding time and date separators must not delete a progress mask"
+);
+const maskFaceOverlayHidden = buildLayerVisibilityOverrides(withMetrics, {
+  arcCut: false
+}).find((entry) => entry.path.includes("800x800"))?.values;
+assert.equal(maskFaceOverlayHidden?.arc_cut_icon, "");
+assert.equal(maskFaceOverlayHidden?.arc_cut_icon_pos, "");
 const metricStyleOverrides = buildMetricStyleOverrides(
   withMetrics,
   {
@@ -3785,9 +3872,14 @@ assert.equal(fullLayerColors?.values.time_second_low_font_color, "0x22CC88");
 assert.equal(fullLayerColors?.values.english_date_week_font_color, "0xAA44EE");
 assert.equal(fullLayerColors?.values.battery_level_font_color, "0xFFAA00");
 const fullBounds = computeLayoutGroupBounds(withMetrics.resolutions[1]);
-assert.deepEqual(fullBounds.find((entry) => entry.id === "separators"), {
-  id: "separators",
-  label: "Time & date separators",
+assert.equal(
+  fullBounds.find((entry) => entry.id === "separators"),
+  undefined,
+  "a progress-mask arc_cut_icon leaves the separators group"
+);
+assert.deepEqual(fullBounds.find((entry) => entry.id === "arcCut"), {
+  id: "arcCut",
+  label: "Arc cut overlay",
   x0: 240,
   y0: 160,
   x1: 400,

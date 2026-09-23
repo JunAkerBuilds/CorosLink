@@ -19,7 +19,7 @@ const INSTALLER_VOLUME_PATTERN = /desktop|setup|installer|\.dmg/i;
 // APEX 4 storage volumes can include their physical size (for example,
 // "COROS APEX 4 46MM"). Keep that narrowly scoped so similarly named backup
 // volumes are still never treated as a writable watch.
-const WATCH_VOLUME_PATTERN = /^(?:COROS(?: WATCH)?|(?:COROS )?(?:PACE(?: ?(?:PRO|[234]))?|NOMAD|VERTIX ?2(?: ?S)?|APEX(?: ?(?:2(?: ?PRO)?|4(?: ?(?:42|46)(?: ?MM)?)?|PRO))?))$/i;
+const WATCH_VOLUME_PATTERN = /^(?:COROS(?: WATCH)?|(?:COROS )?(?:PACE(?: ?(?:PRO|4(?: ?PRO)?|[23]))?|NOMAD|VERTIX ?2(?: ?S)?|APEX(?: ?(?:2(?: ?PRO)?|4(?: ?(?:42|46)(?: ?MM)?)?|PRO))?))$/i;
 const ORIGINAL_COROS_WATCH_PATH = process.env.COROS_WATCH_PATH;
 // Throttle progress callbacks so a fast local copy doesn't flood IPC, while a
 // slow copy to the watch still ticks often enough to look responsive.
@@ -46,6 +46,13 @@ const WATCH_CONNECTION_SMOKE_FIXTURES: Record<
     volumeName: "COROS WATCH EMPTY",
     createMusicFolder: false,
     trackNames: []
+  },
+  "pace-4-pro": {
+    volumeName: "COROS PACE 4 PRO",
+    createMusicFolder: true,
+    createMapFolder: true,
+    trackNames: ["Workout Mix.mp3"],
+    totalBytes: fallbackBytesForModel("pace-4-pro")
   },
   "pace-pro": {
     volumeName: "COROS PACE PRO",
