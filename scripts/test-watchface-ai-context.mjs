@@ -10,6 +10,8 @@ const { WatchfaceAiChatStore } = require("../dist-electron/watchfaceAiChatStore.
 const [module] = await loadWatchfaceTestModules(["/src/watchfaces/watchfaceAutomationSchema.ts"]);
 const schema = module.getWatchfaceAutomationSchema();
 const focused = focusWatchfaceSchema(schema);
+assert.deepEqual(focused.nativeFields.find(field => field.id === "date_year").creation, { op: "add_native_field", requiresTemplateField: false }, "AI sees that missing year can be created in its initial context");
+assert.ok(focused.commands.items.oneOf.some(command => command.properties.op.const === "add_native_field"));
 assert.deepEqual(focused.commands, schema.commands, "all command definitions remain available initially");
 assert.ok(focused.designProperties.includes("configAssetOverrides"));
 assert.equal(focused.nativeFields.length, schema.nativeData.fields.length);

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { Activity, ChartNoAxesCombined, Check, ChevronDown, Circle, CloudSun, Image, Minus, MoonStar, Plus, Search, Sparkles, Square, TrendingUp, Type, X } from "lucide-react";
+import { Activity, CalendarDays, ChartNoAxesCombined, Check, ChevronDown, Circle, CloudSun, Image, Minus, MoonStar, Plus, Search, Sparkles, Square, TrendingUp, Type, X } from "lucide-react";
 import type { CorosWatchfaceBackgroundElement, CorosWatchfaceDesignState } from "../../electron/types";
 import { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS } from "../../electron/watchfaceNativeCatalog";
 
-const categories = ["All", "Weather", "Health", "Training", "Astronomy", "Charts"] as const;
+const categories = ["All", "Calendar", "Weather", "Health", "Training", "Astronomy", "Charts"] as const;
 type Category = typeof categories[number];
-const categoryIcons = { Weather: CloudSun, Health: Activity, Training: TrendingUp, Astronomy: MoonStar, Charts: ChartNoAxesCombined };
+const categoryIcons = { Calendar: CalendarDays, Weather: CloudSun, Health: Activity, Training: TrendingUp, Astronomy: MoonStar, Charts: ChartNoAxesCombined };
 const dataOptions = [
   ...NATIVE_DATA_FIELDS.filter(field => field.kind !== "chart").map(field => ({ id: field.id, label: field.label, category: field.category, keywords: field.id, availability: field.availability })),
   ...NATIVE_CHART_SOURCES.map(source => ({ id: `chart:${source.id}`, label: source.label, category: "Charts" as const, keywords: `${source.id} ${source.category}`, availability: undefined }))

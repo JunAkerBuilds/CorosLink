@@ -1,3 +1,5 @@
+import { batteryPreviewStateIndex, batteryReplacementStateCount } from "./watchfaceBatteryStates.ts";
+export { batteryPreviewStateIndex } from "./watchfaceBatteryStates.ts";
 import { drawSpritePreservingCore, renderAlignedRasterGlyph, spaceWatchfaceGlyph } from "./watchfaceGlyphLayout.ts";
 import { getWatchfaceTarget } from "../../electron/watchfaceTargets.ts";
 import type {
@@ -3174,15 +3176,6 @@ export function scaledBatterySpriteCanvasSize(
     width: Math.max(1, Math.round(sourceWidth * fit * safeScale)),
     height: Math.max(1, Math.round(sourceHeight * fit * safeScale))
   };
-}
-
-/** Representative normal-charge state used consistently by preview and bounds. */
-export function batteryPreviewStateIndex(stateCount: number, percentage?: number): number {
-  if (percentage === undefined || !Number.isFinite(percentage)) return Math.min(8, Math.max(0, stateCount - 1));
-  // Normal charge artwork occupies the first ten states. Extra frames in
-  // imported sets are special modes, not additional charge levels.
-  const levels = Math.max(1, Math.min(10, stateCount));
-  return Math.min(levels - 1, Math.floor(Math.max(0, Math.min(100, percentage)) / 100 * levels));
 }
 
 /** Rotates artwork around the center of its fixed firmware sprite canvas. */
@@ -8314,14 +8307,6 @@ export async function drawStudioPreview(
   }
 
   const batteryOverride = options.configAssetOverrides?.["config:battery_icon"];
-  const importedBatteryStates = Object.entries(
-    batteryOverride?.stateReplacements ?? {}
-  )
-    .filter(([key]) => /^\d+$/.test(key))
-    .sort(([left], [right]) => Number(left) - Number(right));
-  const importedBatteryState =
-    importedBatteryStates[batteryPreviewStateIndex(importedBatteryStates.length, options.previewValues?.battery === undefined ? undefined : Number(options.previewValues.battery))] ??
-    (batteryOverride?.replacement ? ["0", batteryOverride.replacement] as const : null);
   const batteryFolderName = config.battery_icon_dir?.replace(/\\/g, "/");
   const batteryFolder =
     (batteryFolderName
@@ -8329,14 +8314,12 @@ export async function drawStudioPreview(
           (folder) => folder.kind === "state" && folder.folder === batteryFolderName
         )
       : undefined) ?? null;
-  // Prefer a normal high-charge state; the last entries can represent special
-  // charging/low-power states in COROS's 12-image battery sets.
+  // COROS twelve-frame sets reserve index 0 for charging and 11 for full.
   const batteryFileIndex = batteryFolder
     ? batteryPreviewStateIndex(batteryFolder.files.length, options.previewValues?.battery === undefined ? undefined : Number(options.previewValues.battery))
-    : Number(importedBatteryState?.[0] ?? 0);
+    : batteryPreviewStateIndex(batteryReplacementStateCount(batteryOverride?.stateReplacements), options.previewValues?.battery === undefined ? undefined : Number(options.previewValues.battery));
   const batteryReplacement =
     batteryOverride?.stateReplacements?.[String(batteryFileIndex)] ??
-    importedBatteryState?.[1] ??
     batteryOverride?.replacement;
   const batteryFile = batteryFolder?.files[batteryFileIndex] ??
     (batteryReplacement
@@ -8359,18 +8342,6 @@ export async function drawStudioPreview(
   }
   const controlBatteryOverride =
     options.configAssetOverrides?.["config:control_battery_icon"];
-  const importedControlBatteryStates = Object.entries(
-    controlBatteryOverride?.stateReplacements ?? {}
-  )
-    .filter(([key]) => /^\d+$/.test(key))
-    .sort(([left], [right]) => Number(left) - Number(right));
-  const importedControlBatteryState =
-    importedControlBatteryStates[
-      batteryPreviewStateIndex(importedControlBatteryStates.length, options.previewValues?.battery === undefined ? undefined : Number(options.previewValues.battery))
-    ] ??
-    (controlBatteryOverride?.replacement
-      ? ["0", controlBatteryOverride.replacement] as const
-      : null);
   const controlBatteryFolderName =
     config.control_battery_icon_dir?.replace(/\\/g, "/");
   const controlBatteryFolder =
@@ -8389,12 +8360,11 @@ export async function drawStudioPreview(
     null;
   const controlBatteryFileIndex = controlBatteryFolder
     ? batteryPreviewStateIndex(controlBatteryFolder.files.length, options.previewValues?.battery === undefined ? undefined : Number(options.previewValues.battery))
-    : Number(importedControlBatteryState?.[0] ?? 0);
+    : batteryPreviewStateIndex(batteryReplacementStateCount(controlBatteryOverride?.stateReplacements), options.previewValues?.battery === undefined ? undefined : Number(options.previewValues.battery));
   const controlBatteryReplacement =
     controlBatteryOverride?.stateReplacements?.[
       String(controlBatteryFileIndex)
     ] ??
-    importedControlBatteryState?.[1] ??
     controlBatteryOverride?.replacement;
   const controlBatteryFile =
     controlBatteryFolder?.files[controlBatteryFileIndex] ??

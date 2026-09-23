@@ -95,6 +95,11 @@ labeling them with a literal space. Verify the installed result at both resoluti
 Inspect `capabilities.assetContracts` before creating component assets. A live
 battery icon uses multiple ordered state sprites. The fixed battery and the
 selectable control-battery slot have separate contracts and override paths.
+For the standard COROS twelve-frame set, `00.png` is charging; `01.png` is
+empty/0%, and `02.png`–`11.png` are 10%–100% in 10% steps. Follow the contract
+state meanings: normal percentage simulation uses indices 1, 6 and 11 at
+0%, 50% and 100%; it does not select charging index 0. Preserve the order
+of nonstandard templates without inventing firmware meanings.
 Use the exact advertised `stateIndices` and install frames under
 `stateReplacementsPath`; a standalone sprite or single `replacement` image is
 static decoration. Generate a consistent state sheet and crop its frames, or
@@ -107,6 +112,21 @@ their own documented glyph, state or native-parameter contracts.
 Read `capabilities.assetContracts` for **every** component before scheduling
 image generation. It identifies complete digit/label sets, ordered state sets,
 single images, rotating hands, and firmware-drawn components with zero sprites.
+A field absent from the starting template is not automatically unsupported.
+The `nativeData` schema catalogs fields Studio can create, including their
+native configuration and digit/state assets. Use `add_native_field` with a
+catalog `id`, master-pixel `x`/`y`, and optional `style`; it initializes the
+missing design parent and defaults. Match the neighboring date's font, color,
+and geometry. For a live year, use `date_year`, not static text. Verify it with
+`scenario.dateTime` on both sides of New Year's Day. Unsupported fields outside
+the catalog still require implementation; never invent firmware keys.
+
+Year can be shown, hidden and positioned independently of the selectable metric.
+Unlike month/day, COROS stores year in their shared control container. Export
+keeps the required origin and converts editor coordinates automatically, even
+with the selectable metric hidden. Do not enable or move that metric or manually
+offset the year to compensate. Archive checks still require on-watch verification.
+
 Use the listed indices, dimensions and edit paths. For a new native field,
 fetch `get_schema` with `section: "nativeData"` and its `ids`; chart sources can
 change the required roles and counts. Active template/configured counts take

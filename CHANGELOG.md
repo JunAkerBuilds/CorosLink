@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Let Watchmaker AI create supported native fields even when absent from the starting watch face, including a calendar year with native digit export and date-driven preview.
+- Add a collapsible calendar event editor with duration presets, a time-zone selector, and unsaved-change controls.
+
+### Fixed
+
+- Keep the native calendar year visible when the selectable metric is hidden and preserve its editor position during export and reopening.
+- Correct standard COROS battery previews and artwork labels to use charging at index 0 and 0–100% at indices 1–11.
+- Allow failed calendar syncs to be retried without changing the event's saved times.
+- Recover month labels when official faces such as LIMA HALF MARATHON store their position without rectangle dimensions, and map their images to the correct calendar months in the editor.
+
 ## [0.1.42] - 2026-09-23
 
 ### Fixed

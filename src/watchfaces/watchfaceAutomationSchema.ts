@@ -191,6 +191,14 @@ export const WATCHFACE_AUTOMATION_COMMAND_JSON_SCHEMA = {
       { type: "object", additionalProperties: false, required: ["op", "path", "index"], properties: { op: { const: "array_remove" }, path: { type: "string" }, index: { type: "integer", minimum: 0 } } },
       { type: "object", additionalProperties: false, required: ["op", "path", "from", "to"], properties: { op: { const: "array_move" }, path: { type: "string" }, from: { type: "integer", minimum: 0 }, to: { type: "integer", minimum: 0 } } },
       { type: "object", additionalProperties: false, required: ["op", "design"], properties: { op: { const: "replace_design" }, design: { type: "object" } } },
+      {
+        type: "object", additionalProperties: false, required: ["op", "id", "x", "y"],
+        description: "Create a supported live field even when absent from the starting template. Initializes nativeData and default style; export creates native config and sprites. One slot per field per display mode.",
+        properties: {
+          op: { const: "add_native_field" }, id: { enum: [...NATIVE_DATA_BY_ID.keys()] }, x: { type: "number" }, y: { type: "number" },
+          style: { ...WATCHFACE_SCHEMA_DEFINITIONS.nativeDataStyle, required: [], properties: Object.fromEntries(Object.entries(WATCHFACE_SCHEMA_DEFINITIONS.nativeDataStyle.properties).filter(([key]) => key !== "x" && key !== "y")) }
+        }
+      },
       { type: "object", additionalProperties: false, required: ["op", "sprite"], properties: { op: { const: "add_sprite" }, sprite: { type: "object" } } },
       { type: "object", additionalProperties: false, required: ["op", "id", "patch"], properties: { op: { const: "update_sprite" }, id: { type: "string" }, patch: { type: "object" } } },
       { type: "object", additionalProperties: false, required: ["op", "id"], properties: { op: { const: "remove_sprite" }, id: { type: "string" } } },

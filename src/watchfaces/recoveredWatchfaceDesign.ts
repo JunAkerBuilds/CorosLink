@@ -6,7 +6,7 @@ import type {
   CorosWatchfaceTemplateAsset,
   CorosWatchfaceTemplateDetails
 } from "../../electron/types";
-import { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS, nativeConfigPrefix, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
 import { corosConfigColorToCss, parseConfigPos, parseConfigRect, pickPreviewResolution } from "./watchfaceStudio";
 import { nativeDataSize } from "./nativeData";
 import { getWeatherCapability } from "./weatherAssets";
@@ -51,8 +51,15 @@ export async function recoverWatchfaceDesign(
   const positionedIcons = new Set<string>();
   for (const field of NATIVE_DATA_FIELDS) {
     if (field.kind !== "number") continue;
-    const rect = parseConfigRect(config[`${field.id}_rect`]);
-    const font = source(`${field.id}_font`)[0];
+    const storedRect = parseConfigRect(config[`${nativeConfigPrefix(field)}_rect`]);
+    const originKey = nativeConfigPrefix(field).startsWith("control_")
+      ? Object.keys(config).find(key => /^rect_control\d+_pos$/.test(key)) : undefined;
+    const controlOrigin = parseConfigPos(originKey ? config[originKey] : undefined);
+    const rect = storedRect && controlOrigin ? {
+      ...storedRect, x0: storedRect.x0 + controlOrigin.x, x1: storedRect.x1 + controlOrigin.x,
+      y0: storedRect.y0 + controlOrigin.y, y1: storedRect.y1 + controlOrigin.y
+    } : storedRect;
+    const font = source(`${nativeConfigPrefix(field)}_font`)[0];
     const hasValue = Boolean(rect && font && rect.x1 > rect.x0 && rect.y1 > rect.y0);
     const iconPosition = source(`${field.id}_icon`).length
       ? parseConfigPos(config[`${field.id}_icon_pos`]) : null;
@@ -68,10 +75,10 @@ export async function recoverWatchfaceDesign(
       x: Math.min(anchorX, iconPosition?.x ?? anchorX, statePosition?.x ?? anchorX),
       y: Math.min(anchorY, iconPosition?.y ?? anchorY, statePosition?.y ?? anchorY)
     };
-    const assets: CorosWatchfaceNativeDataStyle["assets"] = hasValue ? { digits: await sprites(`${field.id}_font`) } : {};
+    const assets: CorosWatchfaceNativeDataStyle["assets"] = hasValue ? { digits: await sprites(`${nativeConfigPrefix(field)}_font`) } : {};
     const parts: NonNullable<CorosWatchfaceNativeDataStyle["parts"]> = {
       value: hasValue ? { x: rect!.x0 - origin.x, y: rect!.y0 - origin.y, width: rect!.x1 - rect!.x0, height: font!.height,
-        digitWidth: font!.width, align: /\bright\b/.test(config[`${field.id}_rect`]) ? "right" : /\bhcenter\b/.test(config[`${field.id}_rect`]) ? "center" : "left" } : { enabled: false },
+        digitWidth: font!.width, align: /\bright\b/.test(config[`${nativeConfigPrefix(field)}_rect`]) ? "right" : /\bhcenter\b/.test(config[`${nativeConfigPrefix(field)}_rect`]) ? "center" : "left" } : { enabled: false },
       icon: { enabled: false }, unit: { enabled: false }, symbols: { enabled: false }
     };
     const addPart = async (role: CorosWatchfaceNativeAssetRole, key: string) => {

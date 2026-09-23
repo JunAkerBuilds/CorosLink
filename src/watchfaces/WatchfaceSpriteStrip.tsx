@@ -145,6 +145,8 @@ export function useTemplateSprites(
 
 interface TemplateSpriteStripProps {
   glyphs: WatchfaceTemplateGlyph[];
+  /** Optional display text, while replacement keys retain their original labels. */
+  displayLabels?: Record<string, string>;
   loadAssets: WatchfaceTemplateAssetLoader;
   /** Imported PNGs keyed by glyph label; they replace the template cell. */
   replacements?: Record<string, string | undefined>;
@@ -158,6 +160,7 @@ interface TemplateSpriteStripProps {
 /** A template sprite folder, with any imported state drawn in its place. */
 export function TemplateSpriteStrip({
   glyphs,
+  displayLabels,
   loadAssets,
   replacements,
   extraCells = [],
@@ -181,7 +184,7 @@ export function TemplateSpriteStrip({
           const src = replacement ?? sprites.get(glyph.path);
           return {
             key: glyph.path,
-            label: glyph.label,
+            label: displayLabels?.[glyph.label] ?? glyph.label,
             src,
             replaced: Boolean(replacement),
             missing: !src && !loading

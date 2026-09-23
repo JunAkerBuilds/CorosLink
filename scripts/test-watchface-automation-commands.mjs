@@ -64,6 +64,31 @@ function rejects(commands, code, source = value(), mode = "current") {
   );
 }
 
+// Creating a supported field must work without a template slot or nativeData map.
+const addYear = { op: "add_native_field", id: "date_year", x: 260, y: 420, style: { color: "#abcdef", parts: { value: { digitWidth: 18, width: 72 } } } };
+const fresh = value();
+const yearAdded = apply([addYear], "current", fresh);
+assert.deepEqual(yearAdded.changedLayerIds, ["native:date_year"]);
+assert.equal(fresh.design.nativeData, undefined, "commands leave the input untouched");
+assert.equal(yearAdded.value.design.nativeData.date_year.enabled, true);
+assert.equal(yearAdded.value.design.nativeData.date_year.scale, 1);
+assert.equal(yearAdded.value.design.nativeData.date_year.color, "#abcdef");
+assert.deepEqual(yearAdded.value.design.backgroundElements, fresh.design.backgroundElements, "live year is not a static text element");
+const withStress = apply([{ op: "add_native_field", id: "stress", x: 40, y: 60 }], "current", yearAdded.value);
+assert.deepEqual(withStress.value.design.nativeData.date_year, yearAdded.value.design.nativeData.date_year);
+rejects([addYear], "id.duplicate", yearAdded.value);
+rejects([{ ...addYear, id: "made_up_live_field" }], "native.field");
+rejects([{ ...addYear, x: "260" }], "command.field");
+rejects([{ ...addYear, style: { x: 42 } }], "command.field");
+rejects([addYear], "layer.locked", { ...fresh, design: { ...fresh.design, lockedLayerIds: ["native:date_year"] } });
+const before = JSON.stringify(fresh);
+assert.throws(() => apply([addYear, { op: "add_native_field", id: "stress", x: 0, y: 0, style: { scale: -1 } }], "current", fresh), WatchfaceAutomationCommandError);
+assert.equal(JSON.stringify(fresh), before, "a later invalid field rolls back the entire batch");
+const aodYear = apply([addYear], "aod", fresh).value;
+assert.equal(aodYear.design.nativeData, undefined, "adding an AOD year leaves Current untouched");
+assert.equal(aodYear.design.modeDesigns.aod.nativeData.date_year.x, 260);
+
+
 const solidFontStyles = apply([
   { op: "set", path: "/design/metricStyles/exercise", value: { scale: 0.55, solidAlpha: true } },
   { op: "set", path: "/design/dateStyles", value: { dateDay: { scale: 1, solidAlpha: true } } },

@@ -50,3 +50,25 @@ The Android compiler has not been executed in this environment. A built/exported
 ## Local checks
 
 `npm run build`, the editor/studio/automation suites and `npm run test:watchface-automation-e2e` verify the UI and archive pipeline, including typed labels, component reset/undo, graph visibility, bars-only selection and bar width. After building Electron, run `npx electron scripts/test-watchface-native-data.cjs [path/to/SIMPLE.zip]` for all 25 field definitions, all 12 chart choices, resolution scaling, Current/AOD asset separation, version floors, customized labels/glyphs/graph styling, independent component visibility, exported artwork dimensions and project round trips. `scripts/test-watchface-weather.cjs` retains the SIMPLE weather/default-artwork regression check.
+
+## Calendar year and fields absent from a template
+
+Year (`date_year`) is an addable Calendar field, using the COROS 4.9.9 compiler's
+`control_number_date_year_rect` / `control_number_date_year_font` binding
+(`WFControl.number_date_year`, `WFRectNumberValue`; see the compiler research).
+It has a value component with ten digit PNGs, no icon or static year artwork.
+Export creates the configuration and assets at every resolution, and reopening
+hydrates the original digit artwork. The COROS parser promotes this binding to format version 3;
+on-watch behavior remains unverified. Preview follows the simulation date.
+
+Year is independently positioned and visible in Studio; it does not require a
+visible selectable metric. Unlike month/day, its native binding shares the
+selectable metric's control container. Export keeps a valid container origin
+when that metric is hidden and converts the year's editor coordinates relative
+to the final origin. Recovery adds the origin back. AI context includes this
+behavior so agents do not enable the metric or manually offset the year.
+
+AI can use `add_native_field` for any supported catalog field absent from the
+starting template. The command supplies defaults and initializes the design map;
+the exporter creates missing bindings/assets. The catalog remains the source of
+supported firmware fields, rather than the list of layers in the original face.

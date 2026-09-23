@@ -1,4 +1,4 @@
-import { composeNativeData } from "./nativeData";
+import { composeNativeData, finalizeNativeControlOverrides } from "./nativeData";
 import type {
   CorosWatchfaceAssetReplacement,
   CorosWatchfaceConfigOverride,
@@ -831,9 +831,7 @@ export async function composeWatchfaceReplacements(
     design,
     isolateBatteryIconEffectPaths(details, design, baseAssetReplacements)
   );
-  const configOverrides = rebaseNegativeControlChildren(
-    details,
-    mergeConfigOverrides(
+  const mergedConfigOverrides = mergeConfigOverrides(
       metricOverrides,
       timeFormatOverrides,
       controlComplicationOverrides,
@@ -880,6 +878,11 @@ export async function composeWatchfaceReplacements(
       ),
       buildDisabledControlComplicationOverrides(details, design),
       nativeDataComposition.configOverrides
+  );
+  const configOverrides = rebaseNegativeControlChildren(
+    details,
+    finalizeNativeControlOverrides(
+      details, mergedConfigOverrides, design.nativeData, design.layerVisibility?.complication === false
     )
   );
 

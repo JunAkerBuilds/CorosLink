@@ -24,6 +24,58 @@ async function renderNativeData(details) {
   const composition=await composeWatchfaceReplacements(details,design,load);
   check(composition.minWatchFaceVersion===6,'Sleep score requires format 6');
   const single=await native.composeNativeData(details,{stress:nativeData.stress});check(single.minWatchFaceVersion===3,'Stress uses format 3');
+  const yearOnly = await native.composeNativeData(details, { date_year: nativeData.date_year });
+  check(yearOnly.minWatchFaceVersion === 3, 'COROS promotes the year binding to format 3');
+  check(yearOnly.assetReplacements.length === details.resolutions.length * 10, 'Adding year creates ten digits per resolution without template assets');
+  check(yearOnly.assetReplacements.every(asset => asset.create), 'Year assets are new files');
+  check(yearOnly.configOverrides.every(override => override.values.control_number_date_year_rect && override.values.control_number_date_year_font && !override.values.date_year_rect && !override.values.date_year_icon_pos), 'Year exports real compiler keys without invented icon bindings');
+  const yearCanvas = async dateTime => {
+    const canvas = document.createElement('canvas'); canvas.width = 800; canvas.height = 800;
+    await native.drawNativeDataPreview(canvas, 800, { date_year: { ...nativeData.date_year, previewValue: '1999' } }, { dateTime });
+    return canvas.toDataURL();
+  };
+  check(native.nativeDataPreviewValue('date_year', nativeData.date_year, { dateTime: '2026-12-31T23:59:59' }) === '2026', 'Year follows calendar date');
+  check(native.nativeDataPreviewValue('date_year', { ...nativeData.date_year, previewValue: '1999' }, { dateTime: '2027-01-01T00:00:00' }) === '2027', 'Stale preview samples cannot pin the year');
+  check(await yearCanvas('2026-12-31T23:59:59') !== await yearCanvas('2027-01-01T00:00:00'), 'Year glyph pixels change at annual rollover');
+  // Exercise the full export pipeline: native coordinates must account for
+  // layout/rebasing, and hiding the selectable metric must not hide the year.
+  const { recoverWatchfaceDesign } = await import('/src/watchfaces/recoveredWatchfaceDesign.ts');
+  for (const originState of ['missing', 'blank', 'positioned']) for (const hidden of [false, true]) for (const mode of ['current', 'aod']) {
+    const yearDetails = { archiveId: 'year-placement', resolutions: [416, 800].map(width => {
+      const ratio = width / 800;
+      const config = {
+        ...(originState === 'missing' ? {} : { rect_control1_pos: originState === 'blank' ? '' : `{${Math.round(100 * ratio)},${Math.round(200 * ratio)}}` }),
+        control_hr_rect: `{10,20,60,40,left|vcenter}`, control_hr_font: 'digits',
+        control_hr_icon_pos: '{2,3}', control_hr_icon: 'heart.png'
+      };
+      return { directory: `watchface_${width}x${width}`, width, height: width, config, aodConfig: { ...config }, icons: [], spriteFolders: [] };
+    }) };
+    const modeDetails = studio.detailsForCompositionMode(yearDetails, mode);
+    const yearDesign = { ...design, nativeData: { date_year: { ...native.defaultNativeDataStyle('date_year'), x: 352, y: 143, parts: { value: { height: 40 } } } },
+      layoutOffsets: { complication: { dx: 73, dy: -21 } }, layerVisibility: { complication: !hidden } };
+    const result = await composeWatchfaceReplacements(modeDetails, yearDesign, async () => []);
+    const effective = studio.applyConfigOverridesToDetails(modeDetails, result.configOverrides);
+    const aodResult = mode === 'aod' ? studio.retargetWatchfaceCompositionToAod(modeDetails, result) : null;
+    for (const resolution of effective.resolutions) {
+      const ratio = resolution.width / 800, config = resolution.config;
+      const origin = studio.parseConfigPos(config.rect_control1_pos);
+      const rect = studio.parseConfigRect(config.control_number_date_year_rect);
+      check(origin && rect, `${originState}/${hidden}/${mode}: compiler receives a valid control origin and year rectangle`);
+      check(origin.x + rect.x0 === Math.round(352 * ratio) && origin.y + rect.y0 === Math.round(143 * ratio), 'Exported year stays at its absolute editor position');
+      check(rect.x0 >= 0 && rect.y0 >= 0, 'Control rebasing keeps year child coordinates nonnegative');
+      if (hidden) check(!config.control_hr_rect && !config.control_hr_icon && !config.control_hr_font, 'Keeping year enabled must not revive the hidden selectable metric');
+      else if (originState === 'positioned') {
+        const hr = studio.parseConfigRect(config.control_hr_rect);
+        check(origin.x + hr.x0 === Math.round(100 * ratio) + Math.round(73 * ratio) + 10 &&
+          origin.y + hr.y0 === Math.round(200 * ratio) + Math.round(-21 * ratio) + 20, 'Year rebasing preserves the other control positions');
+      }
+      if (aodResult) check(aodResult.configOverrides.find(o => o.path === `${resolution.directory}/AODconfig.txt`)?.values.rect_control1_pos, 'AOD retains the required control origin');
+      const assets = result.assetReplacements.filter(asset => asset.path.startsWith(`${resolution.directory}/cl_nd_date_year_d/`));
+      const files = await Promise.all(assets.map(async asset => { const image = await studio.loadStudioImage(asset.dataUrl); return { path: asset.path, width: image.width, height: image.height }; }));
+      const reopened = await recoverWatchfaceDesign({ ...effective, resolutions: [{ ...resolution, spriteFolders: [{ folder: 'cl_nd_date_year_d', kind: 'digits', files }] }] }, async paths => paths.map(path => ({ ...files.find(file => file.path === path), dataUrl: assets.find(asset => asset.path === path).dataUrl })));
+      check(reopened.nativeData.date_year.x === Math.round(352 * ratio) && reopened.nativeData.date_year.y === Math.round(143 * ratio), 'Reopening the exported config retains the year position');
+    }
+  }
   const solar=await native.composeNativeData(details,{sunriseset:nativeData.sunriseset});check(solar.minWatchFaceVersion===5,'Solar progress uses format 5');
   const off=await native.composeNativeData(details,Object.fromEntries(Object.entries(nativeData).map(([id,style])=>[id,{...style,enabled:false}])));
   check(off.assetReplacements.length===0&&off.configOverrides.every(o=>Object.values(o.values).every(v=>v===studio.COROS_CONFIG_DELETE_VALUE)),'Disabling native data removes exported keys');
@@ -182,10 +234,11 @@ async function renderNativeData(details) {
     const aodSource=await service.selectCorosWatchfaceArchive(fixture);
     const combined=await service.createCorosWatchfaceArchive({sourceArchiveId:aodSource.archiveId,backgroundDataUrl:result.backgroundDataUrl,assetReplacements:[...result.dataOnly.assetReplacements,...result.aodDataOnly.assetReplacements],configOverrides:[...result.dataOnly.configOverrides,...result.aodDataOnly.configOverrides],minWatchFaceVersion:6});
     const combinedDetails=await service.describeCorosWatchfaceTemplate(combined.archiveId);
-    assert.ok(combinedDetails.resolutions.every(resolution=>resolution.aodConfig?.stress_rect),'Current + AOD export retains native data in both configurations');
+    assert.ok(combinedDetails.resolutions.every(resolution=>resolution.aodConfig?.stress_rect && resolution.aodConfig?.control_number_date_year_rect),'Current + AOD export retains native data in both configurations');
     for(const resolution of exported.resolutions) {
-      for(const key of ['weather_temp_rect','weather_temp_min_rect','weather_temp_max_rect','weather_rainfall_rect','weather_humidity_rect','weather_uv_rect','weather_aqi_rect','stress_rect','stamina_rect','sleep_score_rect','week_tl_rect','today_run_rect','week_bike_rect','sunriseset_hour_rect','chart_stress_rect']) assert.match(resolution.config[key],/^\{/,key);
+      for(const key of ['control_number_date_year_rect','weather_temp_rect','weather_temp_min_rect','weather_temp_max_rect','weather_rainfall_rect','weather_humidity_rect','weather_uv_rect','weather_aqi_rect','stress_rect','stamina_rect','sleep_score_rect','week_tl_rect','today_run_rect','week_bike_rect','sunriseset_hour_rect','chart_stress_rect']) assert.match(resolution.config[key],/^\{/,key);
       assert.ok(resolution.spriteFolders.find(f=>f.folder==='cl_nd_sleep_score_d')?.files.length===10,'Native digit font retained');
+      assert.equal(resolution.spriteFolders.find(f => f.folder === resolution.config.control_number_date_year_font)?.files.length, 10, 'Year digit binding survives archive export');
       assert.ok(resolution.config.sleep_hrv_level_icon,'Native HRV status folder retained');
       assert.equal(resolution.spriteFolders.find(f=>f.folder===resolution.config.stamina_level_icon)?.files.length,11,'All stamina frames survive export at every resolution');
       assert.match(resolution.config.stamina_level_pos,/^\{/,'Stamina arc position survives export');

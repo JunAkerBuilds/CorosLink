@@ -241,7 +241,8 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
     </div>, { disabled: locked, status: `${available.filter(part => nativePart(id, style, part).enabled).length} of ${available.length} shown` })}
 
     {renderSection("advanced", "Advanced", <div className="wf-property-stack">
-      <label className="field">Preview sample<input aria-label="Preview sample" value={nativeDataPreviewValue(id,style)} maxLength={6} onChange={event=>onPatch({previewValue:event.target.value.replace(/[^0-9.:%−-]/g,"")})} /></label>
+      {id !== "date_year" && <label className="field">Preview sample<input aria-label="Preview sample" value={nativeDataPreviewValue(id,style)} maxLength={6} onChange={event=>onPatch({previewValue:event.target.value.replace(/[^0-9.:%−-]/g,"")})} /></label>}
+      {id === "date_year" && <p className="field-hint">Year follows the date in Preview simulation.</p>}
       <p className="watchface-studio-summary">The sample only feeds this preview; the watch supplies live values. Firmware support and state ordering still need an on-watch test.</p>
       <button type="button" className="secondary-button wf-native-restore-all" onClick={()=>onPatch({parts:undefined,assets:undefined,assetTexts:undefined,chartStyle:undefined,color:"#ffffff",fontFamily:undefined,scale:1,chartWidth:240,chartHeight:120})}><RotateCcw size={14} /> Restore all appearance defaults</button>
     </div>, { disabled: locked })}

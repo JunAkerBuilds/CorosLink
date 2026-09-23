@@ -82,7 +82,8 @@ export function focusWatchfaceSchema(value: unknown, section: string = "overview
     commands: schema.commands,
     designProperties: Object.keys(record(design.properties)),
     nativeFields: Array.isArray(native.fields) ? native.fields.map((field: RecordValue) => ({
-      id: field.id, label: field.label, category: field.category,
+      id: field.id, label: field.label, category: field.category, creation: field.creation, minimumFormatVersion: field.minimumFormatVersion,
+      ...(field.note ? { note: field.note } : {}),
       components: Array.isArray(field.components) ? field.components.map((component: RecordValue) => ({
         id: component.id, assetRole: component.assetRole, spriteCount: component.spriteCount,
         stateIndices: component.stateIndices, countSource: component.countSource

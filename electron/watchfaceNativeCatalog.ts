@@ -8,10 +8,14 @@ interface NativeDataAvailability {
 export interface NativeDataDefinition {
   id: string;
   label: string;
-  category: "Weather" | "Astronomy" | "Health" | "Training" | "Charts";
+  category: "Calendar" | "Weather" | "Astronomy" | "Health" | "Training" | "Charts";
   kind: "number" | "state" | "solar" | "chart";
   sample: string;
   version: number;
+  /** Native config name when the editor ID differs from the compiler binding. */
+  configPrefix?: string;
+  /** Some numeric bindings (including calendar year) have digits only. */
+  valueOnly?: boolean;
   unit?: string;
   percentKey?: string;
   unitKey?: string;
@@ -25,6 +29,8 @@ export interface NativeDataDefinition {
 }
 const number = (id: string, label: string, category: NativeDataDefinition["category"], sample: string, version = 3, extra: Partial<NativeDataDefinition> = {}): NativeDataDefinition => ({ id, label, category, sample, version, kind: "number", ...extra });
 export const NATIVE_DATA_FIELDS: readonly NativeDataDefinition[] = [
+  number("date_year", "Year", "Calendar", "2026", 3, { configPrefix: "control_number_date_year", valueOnly: true,
+    note: "Live calendar year binding recovered from COROS 4.9.9. Independently positioned and visible in the editor; it does not require a visible selectable metric. Unlike month/day, COROS stores it in the shared control container. Export preserves the required origin and converts editor coordinates automatically; do not enable or move the selectable metric to place the year. Preview follows the simulation date; device support requires on-watch verification." }),
   number("weather_temp", "Current weather", "Weather", "18", 0, { unit: "°" }),
   number("weather_temp_min", "Minimum temperature", "Weather", "12", 0, { unit: "°" }),
   number("weather_temp_max", "Maximum temperature", "Weather", "24", 0, { unit: "°" }),
@@ -98,11 +104,13 @@ export function nativeChartGroup(source: string | undefined): "general" | "sun" 
 export function nativeStatePositionKey(field: NativeDataDefinition): string {
   return field.positionKey ?? `${field.id}_pos`;
 }
+export function nativeConfigPrefix(field: NativeDataDefinition): string { return field.configPrefix ?? field.id; }
+export function nativeHasIcon(field: NativeDataDefinition): boolean { return !field.valueOnly && !field.id.startsWith("weather_temp"); }
 export function nativeFieldKeys(field: NativeDataDefinition): string[] {
   if (field.kind === "state") return [field.stateKey!, nativeStatePositionKey(field)];
   if (field.kind === "solar") return ["sunriseset_hour_rect", "sunriseset_minute_rect", "sunriseset_font", "sunriseset_icon_pos", "sunriseset_sunrise_icon", "sunriseset_sunset_icon", "sunriseset_colon_icon", "sunriseset_progress_pos", "sunrise_progress", "sunset_progress"];
   if (field.kind === "chart") return [...NATIVE_CHART_SHARED_KEYS, "chart_sun_icon_pos", "chart_sun_icon", ...NATIVE_CHART_SOURCES.flatMap(({ id }) => nativeChartSourceKeys(id))];
-  return [`${field.id}_rect`, `${field.id}_font`, ...(!field.id.startsWith("weather_temp") ? [`${field.id}_icon_pos`, `${field.id}_icon`] : []), ...(field.percentKey ? [field.percentKey] : []), ...(field.unitKey ? [field.unitKey] : []), ...(field.stateKey ? [`${field.id}_level_pos`, field.stateKey] : [])];
+  return [`${nativeConfigPrefix(field)}_rect`, `${nativeConfigPrefix(field)}_font`, ...(nativeHasIcon(field) ? [`${field.id}_icon_pos`, `${field.id}_icon`] : []), ...(field.percentKey ? [field.percentKey] : []), ...(field.unitKey ? [field.unitKey] : []), ...(field.stateKey ? [`${field.id}_level_pos`, field.stateKey] : [])];
 }
 export const NATIVE_DATA_CONFIG_KEYS = new Set([
   ...NATIVE_DATA_FIELDS.flatMap(nativeFieldKeys),

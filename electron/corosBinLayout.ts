@@ -35,7 +35,10 @@ export interface CorosBinProgressArc {
   /** Stored trailing word, kept exactly as found. */
   rawColor: number; color: number;
 }
-interface BitmapLink { index: number; offset: number | string; encoding?: number | string; viaPointer?: boolean; note?: string }
+interface BitmapLink {
+  index: number; offset: number | string; encoding?: number | string; viaPointer?: boolean; note?: string;
+  width?: number; height?: number; frameCount?: number;
+}
 type PositionedField = [string, number, number, string, string];
 
 // Read-only recovery of COROS's compiled layout family. Offsets were checked
@@ -83,6 +86,7 @@ export interface CorosBitmapBlock {
   /**
    * Encoding word. 0x2002 (416px AMOLED) and 0x3002 (DIGITAL's normal-mode
    * clock fonts) share RLE palette (version 1) / RGBA (version 3) frames;
+   * 0x2000 is uncompressed RGBA8888 (version 3, FOCUS/ENTHUSIASM backgrounds);
    * 0x1800 is uncompressed RGB888 (version 2, TWILIGHT's exercise icon);
    * 0x0802 is RLE with one A2R2G2B2 byte per pixel (MIP, version 0). Any
    * other word reaches the editor only through `viaPointer`.
@@ -109,6 +113,7 @@ function readBitmapBlockAt(buffer: Buffer, offset: number, knownEncodingsOnly: b
   if (!width || width > 800 || !height || height > 800 || !declared || declared > 64) return null;
   // 0x3002 decodes byte-for-byte like 0x2002 (indexed pixels + 256-entry LUT); only the flag word differs.
   const known = ((encoding === 0x2002 || encoding === 0x3002) && (version === 1 || version === 3))
+    || (encoding === 0x2000 && version === 3)
     || (encoding === 0x1800 && version === 2) || (encoding === 0x0802 && version === 0);
   if (knownEncodingsOnly ? !known : ![0, 1, 2, 3].includes(version)) return null;
   const mip = version === 0;
@@ -182,6 +187,12 @@ export function decodeCorosBitmapFrame(bytes: Buffer, block: BitmapBlockShape, f
   if (!Number.isInteger(frame) || frame < 0 || frame >= block.frameCount) throw new Error("Invalid bitmap frame.");
   const encoded = bytes.subarray(block.dataOffset + (block.frameEnds[frame - 1] ?? 0), block.dataOffset + block.frameEnds[frame]);
   const pixels = block.width * block.height;
+  if (block.version === 3 && (block.encoding & 0xff) === 0) {
+    // FOCUS and ENTHUSIASM store backgrounds/thumbnails as straight RGBA,
+    // without RLE. Bytes >= 0xc0 are literal color/alpha, not run controls.
+    if (encoded.length !== pixels * 4) throw new Error("Invalid watchface image data.");
+    return Buffer.from(encoded);
+  }
   if (block.version === 2) {
     // Uncompressed RGB888 (encoding 0x1800): three bytes per pixel, no alpha, no RLE.
     if (encoded.length !== pixels * 3) throw new Error("Invalid watchface image data.");
@@ -466,6 +477,20 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
       if (geometry.geometryOffset !== undefined && !geometry.indirectFieldOffset && !inHeader(geometry.geometryOffset, kind === "number" ? 10 : 8)) return;
       const asset = reference(absolutePointer, Boolean(geometry.indirectFieldOffset));
       if (!asset) return;
+      // LIMA HALF MARATHON, MINIMAL GRID, NIGHT CLIMBER and STREAMLINE2
+      // WHITE store month labels as a top-left point, with both rect corners
+      // equal. Their 12-frame bitmap supplies the cell size. Do not apply this
+      // convention to numeric fonts or dormant, all-zero rectangles.
+      const rect = geometry.rect;
+      const bitmap = bitmapMap.get(asset.pointer);
+      if (/^date\.[a-z_]+\.month$/.test(id) && rect && bitmap?.frameCount === 12 &&
+          bitmap.width && bitmap.height && bitmap.width > 0 && bitmap.height > 0 &&
+          rect.x0 === rect.x1 && rect.y0 === rect.y1 && (rect.x0 !== 0 || rect.y0 !== 0) &&
+          rect.x0 >= 0 && rect.y0 >= 0 && rect.x0 + bitmap.width <= header.width && rect.y0 + bitmap.height <= header.height) {
+        geometry = { ...geometry, rect: { ...rect, x1: rect.x0 + bitmap.width, y1: rect.y0 + bitmap.height } };
+        evidence = "inferred-from-official-month-labels";
+        note = "Month label bounds use the bitmap cell size at the stored top-left point; the original rectangle remains in rawHeaderHex.";
+      }
       const active = asset.group !== null && (kind !== "number" || Boolean(geometry.rect && geometry.rect.x1 > geometry.rect.x0 && geometry.rect.y1 > geometry.rect.y0));
       elements.push({ id, kind, ...geometry, asset, active, evidence, ...(note ? { note } : {}), ...(config ? { config } : {}) });
     };

@@ -66,3 +66,9 @@ assert.equal(role("weather_uv", "states", { stateCount: 8 }).verification.suppor
 assert.equal(role("stamina", "states", { stateCount: 12 }).verification.supported, false);
 assert.equal(role("sleep_hrv_level", "states").verification.scope, "editor-state-selection");
 assert.match(role("sleep_hrv_level", "states").verification.note, /not firmware timing, health-category meaning/);
+
+const year = automation.getNativeDataAutomationCatalog().fields.find(field => field.id === "date_year");
+assert.deepEqual(year.creation, { op: "add_native_field", requiresTemplateField: false });
+assert.deepEqual(year.components.map(part => part.id), ["value"]);
+assert.equal(role("date_year", "digits").spriteCount, 10);
+assert.deepEqual(catalog.nativeFieldKeys(catalog.NATIVE_DATA_BY_ID.get("date_year")), ["control_number_date_year_rect", "control_number_date_year_font"]);

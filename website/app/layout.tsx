@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Inter } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
 import {
   SITE_DESCRIPTION,
   SITE_KEYWORDS,
@@ -85,7 +84,6 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
     <html lang="en" className={inter.variable}>
       <body>
         {children}
-        <Analytics />
       </body>
     </html>
   );

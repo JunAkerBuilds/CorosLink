@@ -71,6 +71,7 @@ export type WatchfaceAutomationCommand =
   | { op: "array_remove"; path: string; index: number }
   | { op: "array_move"; path: string; from: number; to: number }
   | { op: "replace_design"; design: Record<string, unknown> }
+  | { op: "add_native_field"; id: string; x: number; y: number; style?: Record<string, unknown> }
   | { op: "add_sprite"; sprite: Record<string, unknown> }
   | { op: "update_sprite"; id: string; patch: Record<string, unknown> }
   | { op: "remove_sprite"; id: string }
@@ -245,7 +246,7 @@ export const WATCHFACE_AUTOMATION_SCENE_SCHEMA = {
   },
   objectShapes: {
     nativeData:
-      "nativeData in get_schema catalogs every addable field, chart source, default style, component, artwork role and state index. get_document capabilities.nativeData lists supported IDs; each configured native layer includes effective component styles and edit paths. Set /design/nativeData/<id> to a complete style to add; use set/merge/unset for parts, assetTexts, assets and chartStyle. Use native:<id> for placement and visibility. Image overrides require PNG asset references. Use mode:'aod' and the same paths for AOD. One slot per field and one chart per mode; live graph representation is firmware-controlled.",
+      "nativeData in get_schema catalogs every addable field, chart source, default style, component, artwork role and state index. get_document capabilities.nativeData lists supported IDs; each configured native layer includes effective component styles and edit paths. Use add_native_field with id, x, y and optional style to create a catalog field, even if its layer/config/assets are absent from the starting template. This initializes defaults and export creates the binding and sprites. date_year is a live calendar year; use set/merge/unset for parts, assetTexts, assets and chartStyle. Use native:<id> for placement and visibility. Image overrides require PNG asset references. Use mode:'aod' and the same paths for AOD. One slot per field and one chart per mode; live graph representation is firmware-controlled.",
     placementCapabilities:
       "{width,height,unit:'pixels'} defines the authoritative placement canvas. Width and height come from the template's largest native resolution.",
     layerPlacement:
@@ -289,6 +290,8 @@ export const WATCHFACE_AUTOMATION_SCENE_SCHEMA = {
       "Replace the complete active-mode design state. Prefer small commands for reviewability.",
     sprites:
       "add_sprite, update_sprite, remove_sprite and duplicate_sprite manage imported image layers by stable id.",
+    nativeFields:
+      "add_native_field creates supported live fields without requiring an existing template slot. Inspect the nativeData catalog and use master-pixel coordinates. Existing fields are edited via their design paths.",
     elements:
       "add_element, update_element, remove_element and duplicate_element manage freeform vector/text layers by stable id.",
     layers:

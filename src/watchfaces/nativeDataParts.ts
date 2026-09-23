@@ -1,5 +1,5 @@
 import type { CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part } from "../../electron/types";
-import { NATIVE_DATA_BY_ID } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_DATA_BY_ID, nativeHasIcon } from "../../electron/watchfaceNativeCatalog";
 
 export function defaultNativeDataStyle(id: string): Style {
   return { enabled: true, x: 280, y: 500, scale: 1, color: "#ffffff", ...(id === "chart" ? { chartSource: "chart_stress", chartWidth: 240, chartHeight: 120, chartStyle: { previewType: "bars" as const } } : {}) };
@@ -18,7 +18,7 @@ export function nativeParts(id: string, style: Style): Part[] {
   }
   if (field?.kind === "solar") return ["icon", "value", "symbols", "progress"];
   return [
-    ...(!id.startsWith("weather_temp") ? ["icon" as const] : []), "value",
+    ...(field && nativeHasIcon(field) ? ["icon" as const] : []), "value",
     ...(field?.unit || field?.unitKey ? ["unit" as const] : []),
     ...(id.startsWith("weather_temp") ? ["symbols" as const] : []),
     ...(field?.stateKey ? ["states" as const] : [])
@@ -29,7 +29,7 @@ export function nativePart(id: string, style: Style, part: Part) {
   const width = style.chartWidth ?? 240, height = style.chartHeight ?? 120;
   const chartMoon = id === "chart" && style.chartSource === "chart_moon";
   const defaults = {
-    value: { x: id.startsWith("weather_temp") || style.parts?.icon?.enabled === false ? 0 : 40, y: 0, width: 96, height: 48 },
+    value: { x: !nativeParts(id, style).includes("icon") || style.parts?.icon?.enabled === false ? 0 : 40, y: 0, width: 96, height: 48 },
     icon: { x: 0, y: 0, width: 36, height: 48 },
     states: { x: 0, y: 0, width: chartMoon ? 48 : 96, height: 48 },
     unit: { x: 0, y: 0, width: 38, height: 48 },

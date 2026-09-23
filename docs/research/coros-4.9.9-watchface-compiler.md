@@ -79,3 +79,27 @@ CorosLink's current weather implementation covers the core SIMPLE icon and tempe
 A practical next implementation group is min/max temperature, rain probability, humidity, UV and AQI; their number/icon structures closely resemble the working SIMPLE weather path. Sleep score, stress, training load and stamina are a second group with explicit level-asset and version requirements. Treat HRV as a level icon until a numeric source is demonstrated.
 
 No app behavior was changed during the inspection itself. Subsequent editor/export support is described in [Native watchface data](../watchface-native-data.md), including the remaining device-testing boundary.
+
+## Native year binding follow-up
+
+The year parser looks up `control_number_date_year_rect` at `0x1e1a10`,
+branches past the binding if absent (`0x1e1a30` → `0x1e1d80`), and creates
+`WFControl` and `WFRectNumberValue` when necessary (`0x1e1a54`–`0x1e1a7c`).
+A missing preceding `control_airplane_icon` branches to this year lookup
+(`0x1e18d0` → `0x1e1a0c`); it does not gate year creation.
+The rectangle path reads `control_number_date_year_font` and calls `GetFont`
+at `0x1e1c3c`. Font color is optional (`0x1e1c64` → `0x1e1d44`).
+Version promotion at `0x1e1d5c`–`0x1e1d7c` compares against 2 and sets 3,
+so the year binding uses format 3 despite the later `WF_VERSION_EXT_DATE` name.
+This establishes the native export contract, not verified firmware behavior.
+
+`WFTemplateParser::SetControl` also requires the container position. When the
+`WFControl` position pointer at offset `0x70` is absent, the branch at
+`0x185198` reaches `0x1851e4` and then exits through `0x18c3b8`, skipping
+the year serialization at `0x18c230`. Thus a blank `rect_control1_pos` can
+silently omit a year whose rectangle and font are otherwise valid. Studio
+keeps an origin of `{0,0}` when year is enabled but the selectable metric is
+hidden, removes the hidden metric's control bindings, and converts the year's
+absolute editor rectangle into coordinates relative to the final origin.
+Recovery adds that origin back when reopening an exported face. These paths
+have export/recovery regression coverage; verification on watch is still needed.

@@ -37,10 +37,70 @@ function fixture() {
   return Buffer.concat([headers, bitmap, ...Array(10).fill(encoded)]);
 }
 
+function monthLabelFixture() {
+  const header = Buffer.alloc(0x1164);
+  header.write("042R"); header.writeUInt16LE(header.length, 0x138); header[0x13a] = 4;
+  // The exact point and cell dimensions from LIMA; generated pixels keep the
+  // regression independent of the user's downloaded official artwork.
+  [141, 57, 141, 57].forEach((n, i) => header.writeInt16LE(n, 0x13c + i * 2));
+  header[0x144] = 18; header.writeUInt32LE(header.length, 0x146);
+  const frames = Array.from({ length: 12 }, (_, index) => Buffer.alloc(58 * 29, index));
+  const frameSize = frames[0].length;
+  const bitmap = Buffer.alloc(12 + 12 * 2);
+  bitmap.writeUInt16LE(58); bitmap.writeUInt16LE(29, 2); bitmap.writeUInt16LE(0x0802, 4); bitmap[6] = 12;
+  for (let i = 0; i < 12; i++) bitmap.writeUInt16LE(frameSize * (i + 1), 12 + i * 2);
+  return Buffer.concat([header, bitmap, ...frames]);
+}
+
 async function main() {
   await app.whenReady(); await fs.mkdir(temp, { recursive: true });
   const { recoverCompiledCorosWatchface } = require("../dist-electron/corosCompiledWatchface.js");
   const unzipper = require("unzipper");
+  // Raw RGBA background and thumbnail must recover separately. The catalog
+  // thumbnail includes sample readings and must never replace the backdrop.
+  const rawLayout = Buffer.alloc(0x1164);
+  rawLayout.write("664A"); rawLayout.writeUInt16LE(rawLayout.length, 0x138); rawLayout[0x13a] = 4;
+  const rawBitmap = rgba => {
+    const header = Buffer.alloc(18);
+    header.writeUInt16LE(2); header.writeUInt16LE(1, 2); header.writeUInt16LE(0x2000, 4);
+    header[6] = 1; header[7] = 3; header.writeUInt32LE(rgba.length, 14);
+    return Buffer.concat([header, rgba]);
+  };
+  const backdropPixels = Buffer.from([250, 128, 20, 128, 20, 80, 192, 255]);
+  const thumbnailPixels = Buffer.from([255, 255, 255, 255, 100, 200, 240, 255]);
+  const rawBackdrop = rawBitmap(backdropPixels), rawThumbnail = rawBitmap(thumbnailPixels);
+  rawLayout.writeUInt32LE(rawLayout.length, 0x1a);
+  rawLayout.writeUInt32LE(rawLayout.length + rawBackdrop.length, 0x1e);
+  const rawSource = Buffer.concat([rawLayout, rawBackdrop, rawThumbnail]);
+  const rawRecovered = recoverCompiledCorosWatchface(rawSource, "Raw RGBA background");
+  assert.equal(rawRecovered.recovery.unresolvedBitmapPointers, 0);
+  const rawZip = await unzipper.Open.buffer(rawRecovered.zip);
+  const rawEntry = name => rawZip.files.find(file => file.path === name).buffer();
+  assert.deepEqual(PNG.sync.read(await rawEntry("watchface_466x466/background.png")).data, backdropPixels);
+  assert.deepEqual(PNG.sync.read(await rawEntry("watchface_customize.png")).data, thumbnailPixels);
+  assert.match((await rawEntry("watchface_466x466/config.txt")).toString(), /\[background_icon\]=background\.png/);
+  assert.deepEqual(await rawEntry("recovery/source.bin"), rawSource);
+  const monthSource = monthLabelFixture();
+  const monthZip = await unzipper.Open.buffer(recoverCompiledCorosWatchface(monthSource, "Month labels").zip);
+  const monthConfig = (await monthZip.files.find(f => f.path === "watchface_240x240/config.txt").buffer()).toString();
+  assert.match(monthConfig, /\[english_date_month_rect\]=\{141,57,199,86,hcenter\|vcenter\}/);
+  assert.match(monthConfig, /\[english_date_month_font\]=recovered\\group-00/);
+  assert.equal(monthZip.files.filter(f => /recovered\/group-00\/\d{2}\.png$/.test(f.path)).length, 12);
+  const { decodeCorosBitmapFrame, findCorosBitmapBlocks } = require("../dist-electron/corosBinLayout.js");
+  const monthBlock = findCorosBitmapBlocks(monthSource, 0x1164)[0];
+  for (let calendarMonth = 1; calendarMonth <= 12; calendarMonth++) {
+    const frame = String(calendarMonth % 12).padStart(2, "0");
+    const png = PNG.sync.read(await monthZip.files.find(f => f.path === `watchface_240x240/recovered/group-00/${frame}.png`).buffer());
+    assert.deepEqual(png.data, decodeCorosBitmapFrame(monthSource, monthBlock, calendarMonth - 1), "Every recovered month maps to the correct editable calendar slot");
+  }
+  assert.deepEqual(await monthZip.files.find(f => f.path === "recovery/source.bin").buffer(), monthSource);
+  const boundedMonthSource = Buffer.from(monthSource);
+  boundedMonthSource.writeInt16LE(199, 0x140); boundedMonthSource.writeInt16LE(86, 0x142);
+  const boundedMonthZip = await unzipper.Open.buffer(recoverCompiledCorosWatchface(boundedMonthSource, "Existing month layout").zip);
+  for (let frame = 0; frame < 12; frame++) {
+    const png = PNG.sync.read(await boundedMonthZip.files.find(f => f.path === `watchface_240x240/recovered/group-00/${String(frame).padStart(2, "0")}.png`).buffer());
+    assert.deepEqual(png.data, decodeCorosBitmapFrame(monthSource, monthBlock, frame), "Already bounded month tables retain their original image order");
+  }
   const recoveredFixture = recoverCompiledCorosWatchface(fixture(), "Fixture", "90071992547409931");
   const zip = await unzipper.Open.buffer(recoveredFixture.zip);
   const entry = n => zip.files.find(f => f.path === n).buffer();
@@ -164,6 +224,37 @@ async function main() {
     assert(doc.capabilities.layers.some(layer => layer.id === "hours"), "Recovered clock is editable, not a flattened thumbnail");
     const request = (method, params) => js(`import('/src/watchfaces/watchfaceAutomation.ts').then(m=>m.getWatchfaceAutomationEditor().request(${JSON.stringify(method)},${JSON.stringify(params)}))`);
     const faceId = source.readUInt32LE(4);
+    if (faceId === 1000001243) { // LIMA HALF MARATHON
+      assert(doc.capabilities.layers.some(layer => layer.id === "dateMonth"), "The point-sized month is editable");
+      const render = async dateTime => Buffer.from((await request("render_preview", {
+        sessionId: doc.sessionId, mode: "current", resolution: nativeSize, size: nativeSize,
+        scenario: { dateTime }
+      })).dataUrl.split(",")[1], "base64");
+      const august = await render("2026-08-23T09:36:20"), september = await render("2026-09-23T09:36:20");
+      const monthPixels = bytes => {
+        const png = PNG.sync.read(bytes);
+        return Buffer.concat(Array.from({ length: 29 }, (_, y) => png.data.subarray(((57 + y) * png.width + 141) * 4, ((57 + y) * png.width + 199) * 4)));
+      };
+      assert.notDeepEqual(monthPixels(august), monthPixels(september), "Recovered month label renders at its original position and changes with the calendar");
+      const blocks = findCorosBitmapBlocks(source, source.readUInt16LE(0x138));
+      const month = blocks.find(b => b.offset === source.readUInt32LE(0x146));
+      await fs.writeFile(path.join(temp, "lima-august.png"), august);
+      await fs.writeFile(path.join(temp, "lima-september.png"), september);
+      const whiteMask = rgba => Array.from({ length: rgba.length / 4 }, (_, i) =>
+        rgba[i * 4] > 240 && rgba[i * 4 + 1] > 240 && rgba[i * 4 + 2] > 240 && rgba[i * 4 + 3] > 240);
+      for (let calendarMonth = 1; calendarMonth <= 12; calendarMonth++) {
+        const preview = calendarMonth === 8 ? august : calendarMonth === 9 ? september
+          : await render(`2026-${String(calendarMonth).padStart(2, "0")}-23T09:36:20`);
+        const expected = whiteMask(decodeCorosBitmapFrame(source, month, calendarMonth - 1));
+        const points = expected.flatMap((v, i) => v ? [{ x: i % 58, y: Math.floor(i / 58) }] : []);
+        const left = Math.min(...points.map(p => p.x)), right = Math.max(...points.map(p => p.x));
+        const top = Math.min(...points.map(p => p.y)), bottom = Math.max(...points.map(p => p.y));
+        // Transparent cell margins include part of the Nike logo. Compare
+        // every pixel inside the expected label, at its original position.
+        const glyph = mask => Array.from({ length: bottom - top + 1 }, (_, y) => mask.slice((top + y) * 58 + left, (top + y) * 58 + right + 1));
+        assert.deepEqual(glyph(whiteMask(monthPixels(preview))), glyph(expected), `Calendar month ${calendarMonth} paints the correct original glyph at its correct position`);
+      }
+    }
     if (faceId === 1000001120 && doc.design.nativeData?.stamina?.assets?.states) { // PLANET
       assert(doc.capabilities.layers.some(layer => layer.id === "dateMonth"), "Combined month becomes an editable date layer");
       assert(doc.capabilities.layers.some(layer => layer.id === "dateDay"), "Combined day becomes an editable date layer");
@@ -250,6 +341,10 @@ async function main() {
     for (const size of [416, 800]) {
       for (const mode of ["config.txt", "AODconfig.txt"]) {
         const config = (await files.get(`watchface_${size}x${size}/${mode}`).buffer()).toString();
+        if (faceId === 1000001243 && mode === "config.txt") {
+          assert.match(config, /\[english_date_month_font\]=.+/);
+          assert.match(config, /\[english_date_month_rect\]=\{[^}]+\}/, "Recovered month survives export");
+        }
         assert.match(config, /\[watchface_id\]=0x00000029/);
         assert.match(config, /\[watchface_thmb_icon\]=thmb.png/);
         // Every nonblank asset path must resolve inside its own resolution tree.
@@ -281,7 +376,7 @@ async function main() {
       // Older/MIP faces stop before the weather block: the clock, date, battery
       // and selectable control must still round-trip through a saved project.
       assert.equal(reopened.design.weatherIndicator?.enabled ?? false, false);
-      assert(reopened.design.nativeData === undefined || !Object.values(reopened.design.nativeData).some(style => style.enabled), "No weather layers are invented");
+      assert(!Object.entries(reopened.design.nativeData ?? {}).some(([id, style]) => id.startsWith("weather_") && style.enabled), "No weather layers are invented; non-weather native indicators may still exist");
       // This offline carrier targets PACE Pro, so a 260px MIP layout is scaled to its 416px tree.
       const exportedConfig = service.parseCorosWatchfaceConfig((await files.get("watchface_416x416/config.txt").buffer()).toString());
       if (nativeSize === 260) {

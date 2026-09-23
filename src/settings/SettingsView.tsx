@@ -44,7 +44,7 @@ import { DiagnosticsSettings } from "./DiagnosticsSettings";
 const ABOUT_LINKS = [
   {
     label: "Website",
-    href: "https://coros-link.vercel.app/",
+    href: "https://coroslink.com/",
     icon: Globe2,
   },
   {

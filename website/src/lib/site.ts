@@ -1,5 +1,5 @@
 export const SITE_NAME = "CorosLink";
-export const SITE_URL = "https://coros-link.vercel.app";
+export const SITE_URL = "https://coroslink.com";
 export const SITE_DESCRIPTION =
   "CorosLink is an unofficial, open-source COROS watch companion for desktop. Sync music from Spotify, YouTube, YouTube Music, and Apple Music, download public Apple Podcasts episodes, install offline maps, build GPX routes, and review training analytics on macOS, Windows, and Linux.";
 

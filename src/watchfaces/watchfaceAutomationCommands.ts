@@ -5,6 +5,8 @@ import type {
   CorosWatchfaceRasterFont,
   CorosWatchfaceRasterFontFolder
 } from "../../electron/types";
+import { NATIVE_DATA_BY_ID } from "../../electron/watchfaceNativeCatalog";
+import { defaultNativeDataStyle } from "./nativeDataParts";
 import { resolveWatchfaceArtworkLayerOrder } from "./watchfaceArtworkLayers.ts";
 import {
   normalizeWatchfaceEditorGroups,
@@ -308,6 +310,19 @@ function rasterFontFromFolder(folder: CorosWatchfaceRasterFontFolder, targetKind
 
 function applySemantic(command: JsonObject, design: CorosWatchfaceDesignState, context: WatchfaceAutomationCommandContext, index: number, changed: Set<string>, baseline: Set<string>): CorosWatchfaceDesignState | null {
   const op = command.op;
+  if (op === "add_native_field") {
+    assertExactKeys(command, ["op", "id", "x", "y", "style"], index);
+    const id = requireString(command.id, "id", index);
+    if (!NATIVE_DATA_BY_ID.has(id)) fail("native.field", `Unknown native field ${id}. Check get_schema.nativeData for supported IDs.`, undefined, index);
+    const layerId = `native:${id}`;
+    requireUnlocked(design, [layerId], index);
+    if (Object.prototype.hasOwnProperty.call(design.nativeData ?? {}, id)) fail("id.duplicate", `Native field ${id} already exists. Edit its style instead.`, undefined, index);
+    if (typeof command.x !== "number" || !Number.isFinite(command.x) || typeof command.y !== "number" || !Number.isFinite(command.y)) fail("command.field", "x and y must be finite master-pixel coordinates.", undefined, index);
+    const style = command.style === undefined ? {} : requireObject(command.style, "style", index);
+    if (own(style, "x") || own(style, "y")) fail("command.field", "Supply x and y on the command, not inside style.", undefined, index);
+    changed.add(layerId);
+    return { ...design, nativeData: { ...design.nativeData, [id]: { ...defaultNativeDataStyle(id), ...structuredClone(style), x: command.x, y: command.y } } };
+  }
   if (op === "import_raster_font") {
     assertExactKeys(command, ["op", "folder", "target", "mode", "tint"], index);
     if (command.mode !== undefined && command.mode !== (context.mode ?? "current")) fail("mode.mismatch", "The command mode must match the active editor mode.", undefined, index);

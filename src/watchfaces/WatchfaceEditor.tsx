@@ -1,3 +1,4 @@
+import { batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
 import { WatchfaceAddMenu } from "./WatchfaceAddMenu";
 import { recoverWatchfaceDesign } from "./recoveredWatchfaceDesign";
 import { WatchfaceSimulationPanel } from "./WatchfaceSimulationPanel";
@@ -7645,6 +7646,8 @@ export function WatchfaceEditor({
         assetContracts: watchfaceAutomationAssetContracts(placementReference, modeDesign, automationModeRef.current),
         nativeData: {
           schemaPath: "nativeData",
+          creationOperation: "add_native_field",
+          requiresTemplateField: false,
           fieldIds: NATIVE_DATA_FIELDS.map(field => field.id),
           chartSources: NATIVE_CHART_SOURCES.map(source => source.id),
           slotsPerField: 1,
@@ -11463,7 +11466,7 @@ export function WatchfaceEditor({
                 {stateCount > 0 ? <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => restoreBatteryIcon()}><RotateCcw size={15} /> Restore template</button> : null}
               </div>
               <label className="watchface-inspector-field"><span>Icon scale</span><EditableNumberInput min="0.1" step="0.01" value={iconScale} fallback={1} onValueChange={setBatteryIconScale} /></label>
-              <p className="watchface-studio-summary">Import PNGs named 00.png, 01.png, and so on. Each file replaces its matching charge state.</p>
+              <p className="watchface-studio-summary">Import PNGs by state index. Standard COROS sets: {COROS_BATTERY_STATE_ORDER} Preserve the existing order for other template sizes.</p>
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
@@ -12766,9 +12769,15 @@ export function WatchfaceEditor({
               folder.kind === "state" &&
               folder.folder.replace(/^a\//, "") === "battery"
           )?.folder;
-    const template = sourceResolution
+    const sourceTemplate = sourceResolution
       ? templateStateGlyphs(sourceResolution, folderName)
       : null;
+    // Battery replacements address ordered slots, even with nonnumeric filenames.
+    const template = sourceTemplate && { ...sourceTemplate, glyphs: sourceTemplate.glyphs.map((glyph, index) => ({ ...glyph, label: String(index).padStart(2, "0") })) };
+    const stateLabel = (state: string) => {
+      const meaning = batteryStateMeaning(template?.glyphs.length ?? batteryReplacementStateCount(override?.stateReplacements), Number(state));
+      return meaning ? `${state} · ${meaning}` : state;
+    };
     const replacements = Object.fromEntries(
       imported.map(([state, artwork]) => [state, artwork.dataUrl])
     );
@@ -12776,7 +12785,7 @@ export function WatchfaceEditor({
       .filter(([state]) => !template?.glyphs.some((glyph) => glyph.label === state))
       .map(([state, artwork]) => ({
         key: `${overrideId}:${state}`,
-        label: state,
+        label: stateLabel(state),
         src: artwork.dataUrl,
         replaced: true
       }));
@@ -12793,6 +12802,7 @@ export function WatchfaceEditor({
         <TemplateSpriteStrip
           label={label}
           glyphs={template.glyphs}
+          displayLabels={Object.fromEntries(template.glyphs.map(glyph => [glyph.label, stateLabel(glyph.label)]))}
           loadAssets={loadAssets}
           replacements={replacements}
           extraCells={extraCells}

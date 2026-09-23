@@ -1,5 +1,5 @@
 import type { CorosWatchfaceDesignState, CorosWatchfaceResolutionDetails } from "../../electron/types";
-import { batteryPreviewStateIndex } from "./watchfaceStudio";
+import { batteryPreviewStateIndex, batteryStateMeaning, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
 import { watchfaceComponentAssetContracts } from "./watchfaceComponentAssetContracts";
 
 /** Describe sprite roles from the actual template, without copying PNG payloads. */
@@ -32,6 +32,7 @@ export function watchfaceAutomationAssetContracts(
       spriteCount: stateIndices.length || null,
       states: (folder?.files ?? []).map((file, index) => ({
         index: String(index), path: file.path, width: file.width, height: file.height,
+        meaning: batteryStateMeaning(stateIndices.length, index),
         replacementPath: `${stateReplacementsPath}/${index}`
       })),
       referenceFrame: resolution ? { directory: resolution.directory, width: resolution.width, height: resolution.height } : null,
@@ -39,7 +40,8 @@ export function watchfaceAutomationAssetContracts(
       hasStaticReplacement: Boolean(override?.replacement),
       behavior: "Firmware selects the battery sprite as charge changes. Each state is a separate image; layer position and scale affect the whole state set.",
       replacementWarning: "A single replacement is a fallback copied into battery states; using one image for every state makes the indicator look static. Preserve the ordered template state set and draw distinct charge levels. Do not replace this role with a decorative background image.",
-      stateOrder: "Keys are zero-based positions in the ordered template files array, not numbers parsed from filenames. Preserve extra template states; their firmware meanings need an on-watch check.",
+      stateOrder: "Keys are zero-based positions in the ordered template files array, not numbers parsed from filenames. " + (stateIndices.length === 12 ? COROS_BATTERY_STATE_ORDER : "Nonstandard state count: preserve the template order; firmware meanings are unknown."),
+      stateMappingKnown: stateIndices.length === 12,
       verification: {
         tool: "render_preview",
         ...(layerId === "controlBatteryIcon" ? { setup: { tool: "set_view", previewComplication: "battery" } } : {}),
@@ -47,7 +49,7 @@ export function watchfaceAutomationAssetContracts(
           scenario: { values: { battery: String(battery) } },
           expectedPreviewStateIndex: stateIndices.length ? String(batteryPreviewStateIndex(stateIndices.length, battery)) : null
         })),
-        note: "The editor previews charge using the first ten states at most; remaining template frames may be special states. If templateKnown is false, inspect a known template or explicitly author and test a complete ordered custom state set; do not invent a template state count. Firmware-specific behavior still needs an on-watch check."
+        note: "For standard twelve-frame sets, normal charge uses 1 + floor(percent / 10): 0% → 1, 50% → 6, 100% → 11. Index 0 is charging and is not selected by percentage simulation. Other state counts use an approximate preview; their firmware mapping is unknown. If templateKnown is false, inspect a known template or explicitly author and test a complete ordered custom state set; do not invent a template state count. Firmware-specific behavior still needs an on-watch check."
       }
     };
   });

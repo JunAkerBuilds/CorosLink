@@ -50,6 +50,21 @@ and downloads and stubs the network and keychain.
 
 ## Evidence and scope
 
+LIMA HALF MARATHON (240px), MINIMAL GRID, NIGHT CLIMBER and STREAMLINE2
+WHITE (416px) store month-label rectangles with identical corners at a
+nonzero position. These are 12-frame label tables, not disabled numeric
+fields. Recovery expands such a point to one bitmap cell at the stored
+top-left position, for each language, and records the inference on the
+element. LIMA's `{141,57,141,57}` with 58×29 images becomes
+`{141,57,199,86}`. Raw headers and `source.bin` retain the original bytes.
+When building the editable starter, these point-positioned month tables are
+also reordered from the official JAN-first images to the editable format's
+`00=DEC, 01=JAN, …, 11=NOV` slots. Otherwise an August preview displays SEP.
+All-zero points, invalid/off-screen bounds, numeric fonts and other empty
+value rectangles remain inactive. This repairs newly recovered starters;
+existing saved projects are not rewritten. Reopen the official face to
+recover its month labels.
+
 The layout map comes from static disassembly of the Android ARM64
 `libw4-watchface.so` shipped in COROS 4.9.9, SHA-256
 `0ae044c6507cb37357799db49bfe71cc2bf6490d045ea825a8c42676041b925c`.
@@ -94,6 +109,19 @@ The MIP NOMAD (`062R` and `082R`) seconds hand — the bezel chevron on a
 screen-height canvas, 34×260 / 37×280 — keeps `0x0f` in the frame-count byte
 over a single u16 frame end followed directly by RLE data; the AMOLED NOMAD
 stores the same hand as an ordinary one-frame `0x2002` block.
+
+### Uncompressed RGBA backgrounds (`0x2000`)
+
+FOCUS (479217514369368064) and ENTHUSIASM (479217661471997952), both
+466px `664A` v4 faces, store their background and catalog thumbnail as
+`0x2000`, version 3. These use the usual six reserved bytes and u32 frame-end
+table, followed by exactly width × height × 4 straight RGBA bytes per frame.
+Unlike `0x2002` version 3, the payload is not RLE: bytes at or above `0xc0`
+are literal channel values. Their 466×466 backgrounds each contain 868,624
+bytes. ENTHUSIASM's thumbnail is 353×353; FOCUS's is 353×352. Decoding raw
+frames restores the original gradient artwork and resolves both previously
+missing image sets on each face. The recovered thumbnail stays a preview;
+only the separate background image becomes the editor's backdrop.
 
 ### Blocks the scan does not recognize
 

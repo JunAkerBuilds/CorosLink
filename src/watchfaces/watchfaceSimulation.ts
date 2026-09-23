@@ -23,13 +23,13 @@ export const SIMULATION_SPEEDS = [1, 60, 3600, 86400] as const;
 export const WATCHFACE_SIMULATION_CAPABILITIES = {
   editorOnly: true,
   speeds: SIMULATION_SPEEDS,
-  dateTime: "ISO date-time, years 1900–9999. No offset means local time; time-zone offsets are converted to local time. Drives clock, AM/PM, weekday, month and day in existing layers.",
-  values: ["battery", "steps", "heartRate", "calories", "exercise", "elevation", "temperature", "floors", "barometer", "sunrise", "sunset", "kcalProgress", "exerciseProgress", ...NATIVE_DATA_FIELDS.map(field => field.id), ...NATIVE_CHART_SOURCES.map(source => source.id)],
+  dateTime: "ISO date-time, years 1900–9999. No offset means local time; time-zone offsets are converted to local time. Drives clock, AM/PM, weekday, month, day and native date_year in configured layers.",
+  values: ["battery", "steps", "heartRate", "calories", "exercise", "elevation", "temperature", "floors", "barometer", "sunrise", "sunset", "kcalProgress", "exerciseProgress", ...NATIVE_DATA_FIELDS.filter(field => field.id !== "date_year").map(field => field.id), ...NATIVE_CHART_SOURCES.map(source => source.id)],
   valueFormat: "String samples. Use h:mm for time fields, numbers for other values, integer state indices for wind direction / HRV / moon phase. Battery and progress: 0–100. temperature is the watch sensor; weather_temp is weather temperature. They are independent. Values replace the current map. Unspecified fields use their design samples.",
   weather: { condition: "Asset index 0–40", night: "Boolean selecting day/night artwork" },
   chartHistory: "2–120 normalized numbers between 0 and 1; sample plot heights, not firmware-generated history.",
   chartProgress: "0–1 marker position along a line-graph preview (for example sun-path progress through the day).",
-  limitations: "Preview simulation; not firmware emulation. Only supported fields present in the selected display mode render. Battery states approximate normal charge levels; special charging states are excluded. Year controls the calendar; a year label requires template support."
+  limitations: "Preview simulation; not firmware emulation. Only supported fields present in the selected display mode render. Standard COROS battery sets use 01–11 for 0–100%; 00 is charging and is excluded from percentage simulation. Nonstandard state counts use an approximate mapping. Year follows dateTime. Add the live date_year native field when the starting template has no year layer."
 } as const;
 const pad = (value: number, length = 2) => String(value).padStart(length, "0");
 export function simulationDateTime(date: Date): string {
@@ -74,6 +74,7 @@ export function parseWatchfacePreviewScenario(value: unknown): WatchfacePreviewS
     if (!raw.values || typeof raw.values !== "object" || Array.isArray(raw.values)) throw new Error("scenario.values must be an object of strings.");
     const entries = Object.entries(raw.values);
     if (entries.length > 64 || entries.some(([key, entry]) => key.length > 80 || typeof entry !== "string" || entry.length > 160)) throw new Error("Use at most 64 values with string values up to 160 characters.");
+    if (entries.some(([key]) => key === "date_year")) throw new Error("date_year follows the calendar. Set scenario.dateTime to preview a different year.");
     result.values = Object.fromEntries(entries) as Record<string, string>;
     for (const key of ["battery", "kcalProgress", "exerciseProgress"]) {
       if (result.values[key] !== undefined && (!result.values[key].trim() || !Number.isFinite(Number(result.values[key])) || Number(result.values[key]) < 0 || Number(result.values[key]) > 100)) throw new Error(`${key} must be between 0 and 100.`);

@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pngjs from "pngjs";
+import { decodeCorosBitmapFrame, findCorosBitmapBlocks } from "./lib/coros-bin-layout.mjs";
 
 const { PNG } = pngjs;
 const extractor = fileURLToPath(new URL("./extract-coros-watchface-bin.mjs", import.meta.url));
@@ -67,6 +68,31 @@ try {
     0, 0, 0, 0
   ]));
   assert.equal(manifest.magic, "614A");
+
+  // FOCUS/ENTHUSIASM use 0x2000 version 3 for uncompressed RGBA backgrounds
+  // and thumbnails. High bytes must stay literal, and frame offsets must be
+  // respected. Distinct channels/alpha catch swizzling and premultiplication.
+  const rawFrames = [Buffer.from([0xc0, 0xff, 1, 128, 11, 22, 33, 0]), Buffer.from([250, 40, 200, 255, 3, 70, 110, 254])];
+  const rawHeader = Buffer.alloc(22);
+  rawHeader.writeUInt16LE(2); rawHeader.writeUInt16LE(1, 2);
+  rawHeader.writeUInt16LE(0x2000, 4); rawHeader[6] = 2; rawHeader[7] = 3;
+  rawHeader.writeUInt32LE(8, 14); rawHeader.writeUInt32LE(16, 18);
+  const rawSource = Buffer.concat([layout, rawHeader, ...rawFrames]);
+  const rawPath = path.join(temporaryDirectory, "raw-rgba.bin"), rawOut = path.join(temporaryDirectory, "raw-rgba-extracted");
+  await fs.writeFile(rawPath, rawSource);
+  execFileSync(process.execPath, [extractor, rawPath, rawOut], { stdio: "pipe" });
+  const rawManifest = JSON.parse(await fs.readFile(path.join(rawOut, "manifest.json"), "utf8"));
+  assert.equal(rawManifest.bitmapGroups, 1);
+  assert.equal(rawManifest.bitmapFrames, 2);
+  assert.equal(rawManifest.blocks[0].encoding, "0x2000");
+  for (let frame = 0; frame < 2; frame++) {
+    const png = PNG.sync.read(await fs.readFile(path.join(rawOut, rawManifest.blocks[0].files[frame].file)));
+    assert.deepEqual(png.data, rawFrames[frame], "Raw RGBA bytes survive extraction exactly");
+  }
+  const rawBlock = findCorosBitmapBlocks(rawSource, layout.length)[0];
+  assert.throws(() => decodeCorosBitmapFrame(rawSource, { ...rawBlock, width: 3 }, 0), /Invalid watchface image data/);
+  assert.throws(() => decodeCorosBitmapFrame(rawSource, { ...rawBlock, width: 1 }, 0), /Invalid watchface image data/);
+  assert.throws(() => decodeCorosBitmapFrame(rawSource.subarray(0, -1), rawBlock, 1), /Invalid watchface image data/);
 
   // MIP faces ("062R"): version-0 header ended by the background pointer, and
   // 0x0802 blocks with u16 frame ends and one A2R2G2B2 byte per pixel.
@@ -153,7 +179,7 @@ try {
   assert.deepEqual(rgbPng.data, Buffer.from([1, 2, 3, 255, 250, 251, 252, 255]));
   const handPng = PNG.sync.read(await fs.readFile(path.join(handOut, handManifest.blocks[1].files[0].file)));
   assert.deepEqual(handPng.data, Buffer.from([255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 170, 170, 170, 255]));
-  console.log("COROS BIN extraction: indexed color/alpha, direct RGBA, 0x3002 flagged palette, MIP A2R2G2B2, pointer-vouched unknown encodings, RGB888, MIP hand sprites, and layout preservation passed.");
+  console.log("COROS BIN extraction: indexed color/alpha, RLE and uncompressed RGBA, 0x3002 flagged palette, MIP A2R2G2B2, pointer-vouched unknown encodings, RGB888, MIP hand sprites, and layout preservation passed.");
 } finally {
   await fs.rm(temporaryDirectory, { recursive: true, force: true });
 }

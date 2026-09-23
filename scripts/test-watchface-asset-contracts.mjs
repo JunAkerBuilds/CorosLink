@@ -25,6 +25,11 @@ const [fixed, selectable] = contracts;
 assert.equal(fixed.layerId, "batteryIcon");
 assert.equal(selectable.layerId, "controlBatteryIcon");
 assert.equal(fixed.kind, "state-sprites");
+assert.equal(fixed.stateMappingKnown, true);
+assert.deepEqual(fixed.states.map(state => state.meaning), ["Charging", "0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%"]);
+assert.equal(selectable.stateMappingKnown, false);
+assert.ok(selectable.states.every(state => state.meaning === null));
+assert.deepEqual(contracts.find(contract => contract.id === "template:fixed").frames.map(frame => frame.meaning), fixed.states.map(state => state.meaning));
 assert.equal(fixed.stateReplacementsPath, "/design/configAssetOverrides/config:battery_icon/stateReplacements");
 assert.equal(selectable.stateReplacementsPath, "/design/configAssetOverrides/config:control_battery_icon/stateReplacements");
 assert.equal(fixed.stateIndices.length, 12);
@@ -42,7 +47,7 @@ for (const contract of contracts.filter(contract => contract.kind === "state-spr
     assert.equal(example.expectedPreviewStateIndex, String(batteryPreviewStateIndex(contract.stateIndices.length, Number(example.scenario.values.battery))));
   }
 }
-assert.deepEqual(fixed.verification.scenarios.map((entry) => entry.expectedPreviewStateIndex), ["0", "5", "9"], "special extra frames are not presented as additional charge levels");
+assert.deepEqual(fixed.verification.scenarios.map((entry) => entry.expectedPreviewStateIndex), ["1", "6", "11"], "COROS normal levels skip charging and include the full frame");
 assert.deepEqual(selectable.verification.scenarios.map((entry) => entry.expectedPreviewStateIndex), ["0", "2", "3"]);
 
 const overrides = watchfaceAutomationAssetContracts(template, { configAssetOverrides: {
@@ -94,7 +99,8 @@ const component = id => { const match = inventory.find(c => c.id === id); assert
 assert.deepEqual(component("typography:weekday").orderedValues, ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]);
 assert.deepEqual(component("typography:dateMonth").orderedValues, ["DEC", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV"]);
 assert.equal(component("template:month").frames[0].meaning, "DEC");
-assert.equal(component("template:fixed").frames[0].meaning, null, "unknown states must not inherit digit meanings");
+assert.equal(component("template:fixed").frames[0].meaning, "Charging", "battery folder inventory includes COROS meanings");
+assert.equal(component("template:selectable").frames[0].meaning, null, "nonstandard states must not inherit digit meanings");
 assert.equal(component("template:fixed").frames[0].file, "frame-20.png", "preserve importer array order instead of parsing file numbers");
 assert.equal(component("typography:control").editRasterFontPath, "/design/selectableMetricStyle/rasterFont");
 assert.equal(component("typography:hours").spriteCount, 10);

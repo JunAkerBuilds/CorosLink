@@ -92,7 +92,7 @@ export function getNativeDataAutomationCatalog() {
     path: "/design/nativeData",
     layerIdPrefix: "native:",
     coordinates: "Layer x/y use capabilities.placement master pixels. Part offsets, dimensions, line widths and bar spacing use master pixels before the layer scale. Units, symbols and decimal points have firmware-controlled positions.",
-    editing: "Use set/merge/unset via apply_commands. Initialize nativeData when absent; set a field to its defaults before editing. Pointer parents must exist and merge is shallow. Unset optional overrides to restore defaults. Use mode:'aod' with the same /design paths for AOD.",
+    editing: "Use add_native_field with id, x, y and optional style to create any catalog field absent from the current mode, even when the starting template has no corresponding config or sprites. Export creates these bindings and assets. Use set/merge/unset for existing fields. Pointer parents must exist and merge is shallow. Unset optional overrides to restore defaults. Use mode:'aod' with the same /design paths for AOD.",
     artwork: "assets[role][stateIndex] accepts a PNG assetId from import_asset or get_document. State keys are canonical unpadded strings such as '0'. Missing states use defaults. assetTexts uses the same role/index map. Replacement images take precedence over text. Decimal is a numeric decimal point.",
     chartPreviewTypes: ["bars", "curve"],
     limits: [
@@ -111,6 +111,8 @@ export function getNativeDataAutomationCatalog() {
       const defaults = defaultNativeDataStyle(field.id);
       return {
         id: field.id, layerId: `native:${field.id}`, label: field.label, category: field.category,
+        creation: { op: "add_native_field", requiresTemplateField: false },
+        ...(field.note ? { note: field.note } : {}),
         kind: field.kind, minimumFormatVersion: field.version, sample: field.sample,
         ...(field.availability ? { availability: field.availability } : {}),
         defaults, components: describeNativeDataComponents(field.id, defaults)

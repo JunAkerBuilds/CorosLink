@@ -68,3 +68,23 @@ const untouched = await recoverWatchfaceDesign(plain, loadAssets);
 assert.equal(untouched.weatherIndicator.assets, undefined);
 assert.deepEqual(untouched.nativeData, {});
 console.log("Recovered watch-face hydration tests passed");
+
+const withYear = structuredClone(plain);
+withYear.resolutions[0].directory = directory;
+Object.assign(withYear.resolutions[0].config, {
+  control_number_date_year_rect: "{40,60,136,108,left|vcenter}",
+  control_number_date_year_font: "year_digits"
+});
+withYear.resolutions[0].spriteFolders = [folder("year_digits", 10, 24, 48)];
+const recoveredYear = (await recoverWatchfaceDesign(withYear, loadAssets)).nativeData.date_year;
+assert.deepEqual([recoveredYear.x, recoveredYear.y], [40, 60]);
+assert.equal(recoveredYear.parts.value.width, 96);
+assert.equal(recoveredYear.parts.value.digitWidth, 24);
+assert.equal(recoveredYear.parts.icon.enabled, false);
+assert.equal(Object.keys(recoveredYear.assets.digits).length, 10, "reopening keeps the full native year font");
+
+withYear.resolutions[0].config.rect_control1_pos = "{100,200}";
+const offsetYear = (await recoverWatchfaceDesign(withYear, loadAssets)).nativeData.date_year;
+assert.deepEqual([offsetYear.x, offsetYear.y], [140, 260], "Native year recovers its absolute position from the control origin");
+assert.equal(offsetYear.parts.value.x, 0);
+assert.equal(offsetYear.parts.value.y, 0);

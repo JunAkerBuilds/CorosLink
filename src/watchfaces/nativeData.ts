@@ -1,13 +1,50 @@
 import type { CorosWatchfaceAssetReplacement, CorosWatchfaceConfigOverride, CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceTemplateDetails } from "../../electron/types";
-import { NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartGroup, nativeChartSourceKeys, nativeFieldKeys, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
-import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
+import { NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartGroup, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
+import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, offsetConfigValue, parseConfigPos, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
 import { isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRolePart, nativeRoleIndices, nativeStateCount } from "./nativeDataParts";
-import type { WatchfacePreviewScenario } from "./watchfaceSimulation";
+import { parseSimulationDateTime, type WatchfacePreviewScenario } from "./watchfaceSimulation";
 import { fillWatchfaceText, setWatchfaceCanvasFont } from "./watchfaceFontSnapshots";
 export { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS, NATIVE_DATA_BY_ID } from "../../electron/watchfaceNativeCatalog";
 export type NativeData = Record<string, Style>;
 export { defaultNativeDataStyle } from "./nativeDataParts";
-export function nativeDataPreviewValue(id: string, style: Style): string {
+
+/** Finalize absolute native year coordinates after control layout and visibility.
+ * COROS SetControl skips every child, including year, without a control origin.
+ * The year is an independent editor layer even though it shares that container.
+ */
+export function finalizeNativeControlOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  overrides: CorosWatchfaceConfigOverride[],
+  data: NativeData = {},
+  selectableHidden = false
+): CorosWatchfaceConfigOverride[] {
+  const year = data.date_year;
+  if (!year?.enabled || !nativePart("date_year", year, "value").enabled) return overrides;
+  const yearKeys = new Set(nativeFieldKeys(NATIVE_DATA_BY_ID.get("date_year")!));
+  return overrides.map(override => {
+    const resolution = details.resolutions.find(item => `${item.directory}/config.txt` === override.path);
+    const yearRect = override.values.control_number_date_year_rect;
+    if (!resolution || !yearRect || yearRect === COROS_CONFIG_DELETE_VALUE) return override;
+    const values = { ...override.values };
+    const effective = { ...resolution.config, ...values };
+    const originKey = Object.keys(effective).find(key => /^rect_control\d+_pos$/.test(key)) ?? "rect_control1_pos";
+    const origin = selectableHidden ? null : parseConfigPos(effective[originKey]);
+    if (selectableHidden) {
+      // Restoring the container must not revive the metric the user hid.
+      for (const key of Object.keys(effective)) {
+        if (key.startsWith("control_") && !yearKeys.has(key)) values[key] = COROS_CONFIG_DELETE_VALUE;
+      }
+    }
+    if (!origin) values[originKey] = "{0,0}";
+    values.control_number_date_year_rect = offsetConfigValue(yearRect, -(origin?.x ?? 0), -(origin?.y ?? 0))!;
+    return { ...override, values };
+  });
+}
+
+export function nativeDataPreviewValue(id: string, style: Style, scenario?: WatchfacePreviewScenario): string {
+  if (id === "date_year") return String((scenario?.dateTime ? parseSimulationDateTime(scenario.dateTime) : new Date()).getFullYear());
+  const sample = scenario?.values?.[id === "chart" ? style.chartSource ?? "chart_stress" : id] ?? scenario?.values?.[id];
+  if (sample !== undefined) return sample;
   if (style.previewValue !== undefined) return style.previewValue;
   if (isNativeTime(id, style)) return "06:24";
   if (id === "chart" && style.chartSource === "chart_moon") return "7";
@@ -164,7 +201,7 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
           for (const index of nativeRoleIndices(id, style, "states")) await sprite("states", index);
         }
         if (part("value").enabled) {
-          values[`${id}_rect`] = rect("value"); values[`${id}_font`] = await font();
+          values[`${nativeConfigPrefix(field)}_rect`] = rect("value"); values[`${nativeConfigPrefix(field)}_font`] = await font();
           if (field.percentKey || field.unitKey) {
             const unit = await sprite("unit");
             if (field.unitKey) await sprite("unit", 1);
@@ -180,7 +217,7 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
             values.weather_temp_max_min_dgree_icon = "cl_nd_temp_units";
           }
         }
-        if (!id.startsWith("weather_temp")) await icon(id);
+        if (nativeHasIcon(field)) await icon(id);
       } else if (field.kind === "solar") {
         await time("sunriseset");
         await icon("sunriseset", "sunriseset_sunrise_icon", "sunriseset_sunset_icon");
@@ -278,7 +315,7 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
     };
     const source = style.chartSource ?? "chart_stress", moon = id === "chart" && source === "chart_moon";
     const available = nativeParts(id, style);
-    const value = scenario?.values?.[id === "chart" ? source : id] ?? scenario?.values?.[id] ?? nativeDataPreviewValue(id, style);
+    const value = nativeDataPreviewValue(id, style, scenario);
     if (id === "chart" && part("background").enabled) await draw("background");
     if (available.includes("states") && part("states").enabled) {
       // PLANET has eleven stamina frames, from empty (0) to full (100%). UV

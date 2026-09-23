@@ -373,8 +373,9 @@ per real second. Rollover presets cover midnight, New Year, and leap day.
 
 Simulation belongs to the editor view, not the design. It never adds undo history,
 changes the project dirty flag, or changes the live-data bindings/assets in a saved
-project or export. Opening another document resets it. Year drives the calendar;
-only fields present in the template are drawn. This is a sample-data preview, not
+project or export. Opening another document resets it. Year drives the calendar
+and the native `date_year` layer. Catalog fields can be created even when absent
+from the starting template. This is a sample-data preview, not
 firmware emulation; battery artwork uses approximate charge levels and excludes
 extra charging/special-state frames. Native astronomy and chart values are manual
 samples, not calculations based on location or recorded sensor history.
@@ -420,3 +421,20 @@ object overrides it for that one image, with the same `dateTime`, `values`,
 `weather`, `chartHistory` and `chartProgress` properties. Pass `scenario: {}` for ordinary sample
 values. The response includes the scenario used. These overrides also apply to
 native data and weather, including previews in AOD mode when those layers exist.
+
+### Creating a missing native field
+
+`add_native_field` creates a catalog field in the active display mode without
+requiring an existing template layer, config entry or sprite folder. It initializes
+`nativeData` and defaults; `style` can override typography, components and assets.
+Coordinates are required master pixels. Existing IDs are rejected to preserve edits;
+use the field's design path to edit an existing layer. The batch remains atomic.
+
+```json
+[{"op":"add_native_field","id":"date_year","x":260,"y":420,"style":{"color":"#ffffff","fontFamily":"Arial","parts":{"value":{"width":96,"height":48,"digitWidth":24}}}}]
+```
+
+Match those example coordinates/styles to the current face. Export creates the
+native year rectangle and ten digit sprites for every resolution and raises the
+format to at least 3. Preview uses `scenario.dateTime`, including annual rollover;
+`previewValue` cannot pin the calendar year. Firmware support requires device testing.

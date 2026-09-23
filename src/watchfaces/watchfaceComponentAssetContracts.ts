@@ -1,3 +1,4 @@
+import { batteryStateMeaning, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
 import type { CorosWatchfaceDesignState, CorosWatchfaceResolutionDetails } from "../../electron/types";
 import {
   WATCHFACE_TIME_PARTS, WATCHFACE_DATE_PARTS, WATCHFACE_FIXED_METRICS,
@@ -29,6 +30,7 @@ export function watchfaceComponentAssetContracts(
   for (const folder of folders) {
     const keys = Object.keys(config).filter(key => config[key]?.replace(/\\/g, "/") === folder.folder);
     if (!keys.length) continue;
+    const isCorosBattery = folder.kind === "state" && folder.files.length === 12 && keys.some(key => key === "battery_icon_dir" || key === "control_battery_icon_dir");
     const first = folder.files[0];
     const uniform = folder.files.every(file => file.width === first?.width && file.height === first?.height);
     result.push({
@@ -37,12 +39,12 @@ export function watchfaceComponentAssetContracts(
       sourceSize: uniform && first ? { width: first.width, height: first.height } : null,
       frames: folder.files.map((file, index) => ({
         index: String(index), file: file.path.split("/").at(-1),
-        meaning: folder.kind === "digits" && index < 10 ? String(index)
+        meaning: isCorosBattery ? batteryStateMeaning(folder.files.length, index) : folder.kind === "digits" && index < 10 ? String(index)
           : folder.kind === "week" && index < 7 ? weekdays[index]
           : folder.kind === "month" && index < 12 ? corosMonthLabelForSpriteIndex(index) : null,
         ...(!uniform ? { width: file.width, height: file.height } : {})
       })),
-      ordering: folder.kind === "state" ? "Exact template file order. Meanings are unknown unless a specialized component contract defines them; inspect existing assets and preserve indices."
+      ordering: isCorosBattery ? COROS_BATTERY_STATE_ORDER : folder.kind === "state" ? "Exact template file order. Meanings are unknown unless a specialized component contract defines them; inspect existing assets and preserve indices."
         : folder.kind === "month" ? "00=DEC, 01=JAN through 11=NOV; retain the template language."
         : folder.kind === "week" ? "00=Monday through 06=Sunday; retain the template language."
         : "Digit index 0–9; any extra frames have unknown firmware semantics.",

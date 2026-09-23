@@ -1,3 +1,4 @@
+import { batteryReplacementStateCount } from "./watchfaceBatteryStates";
 import { NATIVE_DATA_BY_ID, NATIVE_CHART_SOURCES, nativeDataSize } from "./nativeData";
 import type {
   CorosWatchfaceDesignState,
@@ -319,20 +320,11 @@ export function deriveEditorLayers(
               )
             : undefined);
         const templateStateIndex = batteryPreviewStateIndex(
-          batteryFolder?.files.length ?? 0
+          batteryFolder?.files.length ?? batteryReplacementStateCount(batteryOverride?.stateReplacements)
         );
         const templateState = batteryFolder?.files[templateStateIndex];
-        const importedStates = Object.entries(
-          batteryOverride?.stateReplacements ?? {}
-        )
-          .filter(([key]) => /^\d+$/.test(key))
-          .sort(([left], [right]) => Number(left) - Number(right));
-        const importedPreviewState = importedStates[
-          batteryPreviewStateIndex(importedStates.length)
-        ];
         const artwork =
           batteryOverride?.stateReplacements?.[String(templateStateIndex)] ??
-          importedPreviewState?.[1] ??
           batteryOverride?.replacement;
         const canvas = artwork && !templateState
           ? {

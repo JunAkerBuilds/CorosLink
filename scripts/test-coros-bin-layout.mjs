@@ -113,6 +113,32 @@ assert.equal(result.modes[1].chart, undefined, "an empty chart rectangle produce
 assert.equal(result.modes[0].rawHeaderHex, bytes.subarray(0, HEADER).toString("hex"));
 assert.equal(result.warnings.length, 0);
 
+// Official LIMA's 12 month labels use a point instead of a clipping box.
+// Recover one full label cell, without reviving dormant numeric/AOD fields.
+const monthBytes = Buffer.from(bytes);
+for (const at of [0x13c, 0x14c, 0x61a]) {
+  [141, 57, 141, 57].forEach((n, i) => monthBytes.writeInt16LE(n, at + i * 2));
+  monthBytes[at + 8] = 18;
+  monthBytes.writeUInt32LE(blocks[3].offset, at + 10);
+}
+monthBytes.writeUInt32LE(blocks[3].offset, AOD + 0x146);
+const monthBlocks = blocks.map(b => ({ ...b, width: 58, height: 29, frameCount: 12 }));
+const monthLayout = decodeCorosLayout(monthBytes, monthBlocks);
+for (const id of ["date.english.month", "date.chinese.month", "date.germany.month"]) {
+  const e = monthLayout.modes[0].elements.find(e => e.id === id);
+  assert.equal(e.active, true);
+  assert.deepEqual([e.rect.x0, e.rect.y0, e.rect.x1, e.rect.y1], [141, 57, 199, 86]);
+  assert.equal(e.evidence, "inferred-from-official-month-labels");
+}
+assert.equal(monthLayout.modes[1].elements.find(e => e.id === "date.english.month").active, false);
+assert.equal(monthLayout.modes[1].elements.find(e => e.id === "weather.temperature").active, false);
+assert.equal(monthLayout.modes[0].rawHeaderHex, monthBytes.subarray(0, HEADER).toString("hex"));
+for (const metadata of [{ frameCount: 10, width: 58, height: 29 }, { frameCount: 12 },
+  { frameCount: 12, width: 800, height: 29 }]) {
+  const e = decodeCorosLayout(monthBytes, blocks.map(b => ({ ...b, ...metadata }))).modes[0].elements.find(e => e.id === "date.english.month");
+  assert.equal(e.active, false, "missing/invalid cell geometry and numeric fonts must not enable an empty rectangle");
+}
+
 const badIndirect = Buffer.from(bytes);
 badIndirect.writeUInt32LE(bytes.length - 4, 0x316);
 assert(decodeCorosLayout(badIndirect, blocks).warnings.some((w) => w.includes("invalid indirect")));
