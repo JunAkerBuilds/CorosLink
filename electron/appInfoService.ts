@@ -31,6 +31,14 @@ const STORAGE_LOCATION_SPECS: StorageLocationSpec[] = [
     resolvePath: () => path.join(app.getPath("userData"), "map-cache")
   },
   {
+    id: "fit-cache",
+    label: "Activity FIT cache",
+    description:
+      "Full-resolution activity files downloaded once for local Coach analysis (splits, power curves, route comparisons).",
+    kind: "directory",
+    resolvePath: () => path.join(app.getPath("userData"), "fit-cache")
+  },
+  {
     id: "routes",
     label: "Saved routes",
     description: "Routes generated, drawn, or imported in the route builder.",

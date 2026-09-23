@@ -80,6 +80,7 @@ import {
 } from "../src/watchfaces/watchfaceEditorSnapping.ts";
 import {
   firmwareTypeForWatchfaceArchive,
+  isWatchfaceSignInRequired,
   prepareWatchfaceConversion
 } from "../src/watchfaces/watchfaceConversion.ts";
 import {
@@ -104,6 +105,13 @@ import {
   resizeWatchfaceDimensions,
   watchfaceMasterPixelsFromDevice
 } from "../src/watchfaces/watchfaceDimensions.ts";
+import {
+  controlIconConfigKey,
+  isSelectableSlotConfigAssetKey,
+  rasterFontPreviewCells,
+  templateFontGlyphsForLayer,
+  templateStateGlyphs
+} from "../src/watchfaces/watchfaceSpritePreview.ts";
 
 const dragBackgroundSource = {
   backgroundColor: "#123456",
@@ -478,6 +486,10 @@ assert.equal(
   "COROS W336",
   "an archive-declared target firmware should win"
 );
+assert.equal(isWatchfaceSignInRequired(new Error("Error invoking remote method 'watchfaces:convertArchive': Error: Sign in to your COROS mobile account before publishing.")), true);
+assert.equal(isWatchfaceSignInRequired(new Error("Sign in to your COROS mobile account to continue.")), true);
+assert.equal(isWatchfaceSignInRequired(new Error("Your COROS mobile session expired. Sign in again.")), true);
+assert.equal(isWatchfaceSignInRequired(new Error("COROS mobile request failed (HTTP 500).")), false);
 const conversionSource = {
   version: 1,
   metricChanges: { heartRate: true },
@@ -486,8 +498,18 @@ const conversionSource = {
     "watchface_800x800/AODconfig.txt": "[watchface_id]=1"
   }
 };
-const preparedConversion = prepareWatchfaceConversion(conversionSource);
-assert.equal(preparedConversion.omittedRawConfigEditCount, 2);
+assert.deepEqual(prepareWatchfaceConversion(conversionSource).design.configTextEdits,
+  conversionSource.configTextEdits, "raw edits survive until the archive converter consumes them");
+const aodConversion = prepareWatchfaceConversion({ ...conversionSource,
+  layoutOffsets: { hours: { dx: 33, dy: -17 } },
+  nativeData: { stress: { x: 50, y: 80 } },
+  editorGroups: [{ id: "time", name: "Time", layerIds: ["hours", "minutes"] }]
+}, { rawEditsApplied: true, generatedAod: true });
+assert.deepEqual(aodConversion.design.modeDesigns.aod.layoutOffsets, { hours: { dx: 33, dy: -17 } });
+assert.deepEqual(aodConversion.design.modeDesigns.aod.nativeData, { stress: { x: 50, y: 80 } });
+assert.equal(aodConversion.design.modeDesigns.aod.configTextEdits, undefined);
+const preparedConversion = prepareWatchfaceConversion(conversionSource, { rawEditsApplied: true });
+assert.equal(preparedConversion.omittedRawConfigEditCount, 0);
 assert.equal(preparedConversion.design.configTextEdits, undefined);
 assert.deepEqual(
   preparedConversion.sourceDesign.configTextEdits,
@@ -723,6 +745,97 @@ assert.equal(
   true,
   "turning off every selectable choice must retain the parent layer"
 );
+
+// Control-slot artwork is edited from the Selectable metric panel: one icon
+// per data choice plus the shared colon and negative sign. Positionable
+// status icons and the stateful battery folder keep their own layers.
+for (const key of ["control_step_icon", "control_hr_icon", "control_sunrise_icon", "control_colon_icon", "control_negative_sign_icon"]) {
+  assert.equal(isSelectableSlotConfigAssetKey(key), true, `${key} belongs to the selectable metric panel`);
+}
+for (const key of ["control_battery_icon", "control_barometer_icon", "control_bluetooth_on_icon", "control_no_disturb_off_icon", "bluetooth_on_icon", "colon_icon", "negative_sign_icon", "background_icon"]) {
+  assert.equal(isSelectableSlotConfigAssetKey(key), false, `${key} stays in the Layers list`);
+}
+assert.equal(controlIconConfigKey("steps"), "control_step_icon");
+assert.equal(controlIconConfigKey("heartRate"), "control_hr_icon");
+
+// Template font previews resolve the same folder export draws with, labelled
+// the way the firmware reads it: digits by value, weekdays Monday-first, and
+// month labels with COROS's 00=DEC wrap.
+const digitFiles = (folder) => Array.from({ length: 10 }, (_, index) => ({
+  path: `800/${folder}/${String(index).padStart(2, "0")}.png`, width: 20 + index, height: 40
+}));
+const glyphFixtureResolution = {
+  directory: "800",
+  width: 800,
+  height: 800,
+  config: {
+    time_hour_high_font: "01",
+    time_minute_high_font: "01",
+    control_step_font: "02",
+    control_hr_font: "missing",
+    battery_level_font: "03",
+    english_date_week_font: "week",
+    english_date_month_font: "month",
+    battery_icon_dir: "battery",
+    control_battery_icon_dir: "a\\battery"
+  },
+  aodConfig: {},
+  icons: [],
+  spriteFolders: [
+    { folder: "01", kind: "digits", aod: false, files: digitFiles("01") },
+    { folder: "02", kind: "digits", aod: false, files: digitFiles("02") },
+    { folder: "03", kind: "digits", aod: false, files: digitFiles("03") },
+    { folder: "week", kind: "week", aod: false, files: Array.from({ length: 7 }, (_, index) => ({ path: `800/week/${String(index).padStart(2, "0")}.png`, width: 60, height: 24 })) },
+    { folder: "month", kind: "month", aod: false, files: Array.from({ length: 12 }, (_, index) => ({ path: `800/month/${String(index).padStart(2, "0")}.png`, width: 60, height: 24 })) },
+    { folder: "battery", kind: "state", aod: false, files: Array.from({ length: 12 }, (_, index) => ({ path: `800/battery/${String(index).padStart(2, "0")}.png`, width: 30, height: 16 })) },
+    { folder: "a/battery", kind: "state", aod: true, files: Array.from({ length: 5 }, (_, index) => ({ path: `800/a/battery/${String(index).padStart(2, "0")}.png`, width: 30, height: 16 })) }
+  ]
+};
+const hourGlyphs = templateFontGlyphsForLayer(glyphFixtureResolution, "hours");
+assert.equal(hourGlyphs?.folder, "01");
+assert.deepEqual(hourGlyphs?.glyphs.map((glyph) => glyph.label), ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+assert.equal(hourGlyphs?.glyphs[3]?.path, "800/01/03.png");
+assert.equal(templateFontGlyphsForLayer(glyphFixtureResolution, "autoTime")?.folder, "01");
+assert.equal(templateFontGlyphsForLayer(glyphFixtureResolution, "battery")?.folder, "03", "fixed metrics use their own font key first");
+assert.equal(templateFontGlyphsForLayer(glyphFixtureResolution, "steps")?.folder, "02", "a metric without its own font borrows the control step digits");
+assert.equal(templateFontGlyphsForLayer(glyphFixtureResolution, "complication", { complicationId: "steps" })?.folder, "02");
+assert.equal(
+  templateFontGlyphsForLayer(glyphFixtureResolution, "complication", { complicationId: "heartRate" })?.folder,
+  "02",
+  "a control font pointing at a missing folder falls back to another control font"
+);
+assert.deepEqual(
+  templateFontGlyphsForLayer(glyphFixtureResolution, "weekday")?.glyphs.map((glyph) => glyph.label),
+  ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+);
+const monthGlyphs = templateFontGlyphsForLayer(glyphFixtureResolution, "dateMonth");
+assert.equal(monthGlyphs?.kind, "month");
+assert.deepEqual(monthGlyphs?.glyphs.slice(0, 3).map((glyph) => glyph.label), ["DEC", "JAN", "FEB"]);
+assert.equal(templateFontGlyphsForLayer(glyphFixtureResolution, "dateDay"), null, "a date part without a template font shows no template glyphs");
+assert.equal(templateFontGlyphsForLayer(glyphFixtureResolution, "weather"), null);
+assert.deepEqual(
+  templateStateGlyphs(glyphFixtureResolution, "battery")?.glyphs.map((glyph) => glyph.label).slice(0, 3),
+  ["00", "01", "02"]
+);
+assert.equal(templateStateGlyphs(glyphFixtureResolution, "a\\battery")?.glyphs.length, 5, "backslash folder names resolve like the config writes them");
+assert.equal(templateStateGlyphs(glyphFixtureResolution, undefined), null);
+
+// PNG-set previews show one cell per digit, individual PNGs over the sheet,
+// labels appended, and dashed cells for digits the set still lacks.
+const atlasCells = rasterFontPreviewCells({
+  label: "Sheet", dataUrl: "data:sheet", glyphs: "0123456789", columns: 10,
+  atlasSize: { width: 200, height: 40 }, tint: false, sprites: { "7": "data:seven" }, labels: { MON: "data:mon" }
+});
+assert.equal(atlasCells.length, 11);
+assert.equal(atlasCells[7]?.kind, "sprite", "an individual PNG wins over its sheet cell");
+assert.equal(atlasCells[2]?.kind, "atlas");
+assert.equal(atlasCells[2]?.style.backgroundPosition, "-34px 0px", "sheet cells are cropped at the preview scale");
+assert.equal(atlasCells[10]?.key, "MON");
+const sparseCells = rasterFontPreviewCells({
+  label: "Two digits", dataUrl: "data:one", glyphs: "", columns: 1, tint: false, sprites: { "1": "data:one", "4": "data:four" }
+});
+assert.equal(sparseCells.filter((cell) => cell.kind === "missing").length, 8);
+assert.equal(sparseCells.filter((cell) => cell.kind === "sprite").length, 2);
 
 // Image transform handles preserve the opposite corner, work in local rotated
 // axes, and leave aspect-ratio locking to the caller's modifier key.

@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { loadWatchfaceTestModules } from "./load-watchface-test-modules.mjs";
 
-const [commandsModule, placementModule, displayModesModule, schemaModule] =
+const [commandsModule, placementModule, displayModesModule, schemaModule, studioModule, composeModule] =
   await loadWatchfaceTestModules([
     "/src/watchfaces/watchfaceAutomationCommands.ts",
     "/src/watchfaces/watchfaceAutomationPlacement.ts",
     "/src/watchfaces/watchfaceDisplayModes.ts",
-    "/src/watchfaces/watchfaceAutomationSchema.ts"
+    "/src/watchfaces/watchfaceAutomationSchema.ts",
+    "/src/watchfaces/watchfaceStudio.ts",
+    "/src/watchfaces/watchfaceCompose.ts"
   ]);
 const {
   WatchfaceAutomationCommandError,
@@ -505,5 +507,49 @@ close(
   400 + 5 * 800 / 416,
   "AOD bgel y"
 );
+
+// Regression: a full-face arc mask was mistaken for a slash when date rows
+// were far apart, then became arcCut after those rows moved. Its offset was
+// silently ignored and its replacement remained stuck at (0,0).
+const arcDetails = { archiveId: "arc-placement", resolutions: [416, 800].map((width) => {
+  const result = resolution(width);
+  result.config.arc_cut_icon = "background.png";
+  result.config.arc_cut_icon_pos = "{0,0}";
+  result.config.english_date_month_rect = `{${Math.round(width * .43)},${Math.round(width * .15)},${Math.round(width * .53)},${Math.round(width * .19)},left|vcenter}`;
+  result.config.english_date_day_rect = `{${Math.round(width * .73)},${Math.round(width * .75)},${Math.round(width * .81)},${Math.round(width * .84)},left|vcenter}`;
+  return result;
+}) };
+const arcDesign = {
+  ...structuredClone(baseDesign),
+  staticSeparators: { colon: { ...baseDesign.staticSeparators.colon, enabled: false }, dateSlash: { ...baseDesign.staticSeparators.dateSlash, enabled: false } },
+  configAssetOverrides: { "config:arc_cut_icon": {
+    enabled: true, nativeSize: true, scale: .1,
+    replacement: { dataUrl: png, width: 1983, height: 793 }
+  } },
+  layoutOffsets: { dateMonth: { dx: 59, dy: 38 }, dateDay: { dx: -266, dy: -458 }, arcCut: { dx: 168, dy: 600 } }
+};
+const arcScene = sceneFor(arcDesign, "current", arcDetails);
+assert.deepEqual(layer(arcScene, "arcCut").bounds, { x0: 168, y0: 600, x1: 366, y1: 679 });
+assert.equal(arcScene.layers.some((candidate) => candidate.id === "separators"), false);
+const arcMoved = apply([{ op: "place_layers", layerIds: ["arcCut"], anchor: "top-left", x: 300, y: 500 }], value(arcDesign), "current", arcDetails);
+assert.deepEqual(layer(sceneFor(activeDesign(arcMoved), "current", arcDetails), "arcCut").bounds, { x0: 300, y0: 500, x1: 498, y1: 579 });
+const arcDerived = composeModule.deriveDesignDetails(arcDetails, activeDesign(arcMoved));
+assert.deepEqual(arcDerived.previewDetails.resolutions.map((r) => r.config.arc_cut_icon_pos), ["{156,260}", "{300,500}"], "movement reaches each exported resolution's config");
+const arcLimits = studioModule.computeLayoutOffsetLimits(arcDerived.styledMetricDetails.resolutions[1], { configAssetOverrides: arcDesign.configAssetOverrides });
+assert.equal(arcLimits.arcCut.maxDx, 602, "replacement-sized mask can move across the face");
+assert.equal(arcLimits.arcCut.maxDy, 721);
+
+// A real slash keeps its identity even when moved away from the date row.
+const slashDetails = structuredClone(arcDetails);
+for (const r of slashDetails.resolutions) {
+  r.config.english_date_day_rect = r.config.english_date_month_rect;
+  r.config.arc_cut_icon = "slash.png";
+  r.config.arc_cut_icon_pos = `{${Math.round(r.width * .47)},${Math.round(r.width * .15)}}`;
+  r.icons.push({ path: `${r.directory}/slash.png`, width: 8, height: 16 });
+}
+const slashMoved = studioModule.applyLayoutToDetails(slashDetails, { separators: { dx: -200, dy: 300 } });
+assert.equal(studioModule.watchfaceArcCutRole(slashMoved.resolutions[1]), "dateSlash");
+assert.ok(studioModule.computeLayoutGroupBounds(slashMoved.resolutions[1]).some((box) => box.id === "separators"));
+assert.equal(studioModule.buildLayerVisibilityOverrides(slashMoved, { separators: false })[1].values.arc_cut_icon, "");
 
 console.log("watchface automation placement tests passed");

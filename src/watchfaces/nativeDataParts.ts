@@ -20,7 +20,8 @@ export function nativeParts(id: string, style: Style): Part[] {
   return [
     ...(!id.startsWith("weather_temp") ? ["icon" as const] : []), "value",
     ...(field?.unit || field?.unitKey ? ["unit" as const] : []),
-    ...(id.startsWith("weather_temp") ? ["symbols" as const] : [])
+    ...(id.startsWith("weather_temp") ? ["symbols" as const] : []),
+    ...(field?.stateKey ? ["states" as const] : [])
   ];
 }
 
@@ -42,14 +43,20 @@ export function nativePart(id: string, style: Style, part: Part) {
   }[part];
   const custom = style.parts?.[part];
   return {
-    enabled: custom?.enabled ?? (!["background", "mask", "noDataMask"].includes(part) && !(chartMoon && part === "plot")),
+    enabled: custom?.enabled ?? (!["background", "mask", "noDataMask"].includes(part) && !(chartMoon && part === "plot") && !(["stamina", "weather_uv"].includes(id) && part === "states")),
     color: custom?.color ?? style.color, fontFamily: custom?.fontFamily || style.fontFamily || "Arial",
     x: custom?.x ?? defaults.x, y: custom?.y ?? defaults.y,
-    width: custom?.width ?? defaults.width, height: custom?.height ?? defaults.height
+    width: custom?.width ?? defaults.width, height: custom?.height ?? defaults.height,
+    digitWidth: custom?.digitWidth ?? (custom?.width ?? defaults.width) / 4,
+    align: custom?.align ?? "left"
   };
 }
 
 export function nativeRolePart(role: Role): Part { return role === "digits" ? "value" : role; }
+/** Recovered faces keep their original state-table size (official NOMAD ships eight wind directions). */
+export function nativeStateCount(id: string, style: Style): number {
+  return style.stateCount ?? NATIVE_DATA_BY_ID.get(id)?.stateCount ?? 1;
+}
 export function nativePartHasPosition(part: Part): boolean { return !["unit", "symbols", "decimal"].includes(part); }
 
 const ICON_LABELS: Record<string, string> = {
@@ -76,7 +83,7 @@ export function nativeAssetText(id: string, style: Style, role: Role, index: num
 
 export function nativeRoleIndices(id: string, style: Style, role: Role): number[] {
   if (role === "digits") return Array.from({ length: 10 }, (_, i) => i);
-  if (role === "states") return Array.from({ length: id === "chart" ? 30 : NATIVE_DATA_BY_ID.get(id)?.stateCount ?? 1 }, (_, i) => i);
+  if (role === "states") return Array.from({ length: id === "chart" ? 30 : nativeStateCount(id, style) }, (_, i) => i);
   if (role === "symbols") return id.startsWith("weather_temp") ? [0] : id === "sunriseset" ? [3] : [0, 1, 2, 3];
   if (role === "icon") return isNativeTime(id, style) ? [0, 1] : [0];
   if (role === "progress" || (role === "unit" && (id.startsWith("weather_temp_") || NATIVE_DATA_BY_ID.get(id)?.unitKey))) return [0, 1];

@@ -38,6 +38,22 @@ Compared it with `/Users/aker/Downloads/watchface-harness-libs/libw4-watchface.s
 | Fishing display | `fish_time_mask`, `fish_arc_center_pos`, `fish_radius`, `fish_recommend_color`, `chart_fish_*` | New fishing arc/pointer and start/end-time structures. |
 | Other status/date additions | `sedentary_icon_dir`, `sleep_mode_icon`, `airplane_icon`, `battery_level_percent_icon`, `control_number_date_year_rect`, `lunar_date_rect` | Status icons, year display, and lunar date placement. |
 
+## The `_icon_pos` gate on icon+value blocks
+
+`WFTemplateParser::LoadConfig` reads each inline `WFIconValue` block only when
+its `*_icon_pos` key is present. With `stamina_icon_pos` absent, `0x1e7e38`
+branches straight to `stamina_percent_icon` (`0x1e8318`), never reading
+`stamina_rect`/`stamina_font`; `weather_uv_icon_pos` (`0x1e42a8` → `0x1e470c`)
+behaves the same, as do wind, rainfall, humidity, AQI, `week_tl`, stress,
+`baro`, `today_*`/`week_*` totals and `sunriseset` (`0x1ec700` skips the
+hour/minute rectangles). A missing `*_icon` key on its own is harmless: the
+parser skips `GetIcon` and continues to the rectangle. `sleep_score` and the
+chart helpers look each key up independently. The level icons
+(`*_level_pos`) are separate gates. RUBY HORIZON demonstrated it on the watch:
+its stamina and UV have no icons, so Studio's hidden icon component dropped
+`_icon_pos` and the values vanished while the stamina level artwork survived.
+Studio now writes the position key whenever the value is enabled.
+
 ## Format/version implications
 
 The recovered `WF_VERSION` enum contains:

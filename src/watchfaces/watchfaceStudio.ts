@@ -1,4 +1,5 @@
-import { renderAlignedRasterGlyph, spaceWatchfaceGlyph } from "./watchfaceGlyphLayout.ts";
+import { drawSpritePreservingCore, renderAlignedRasterGlyph, spaceWatchfaceGlyph } from "./watchfaceGlyphLayout.ts";
+import { getWatchfaceTarget } from "../../electron/watchfaceTargets.ts";
 import type {
   CorosWatchfaceArtwork,
   CorosWatchfaceAssetReplacement,
@@ -26,6 +27,11 @@ import {
   resolveWatchfaceLayerStrokes
 } from "./watchfaceEditorStrokes.ts";
 import { watchfaceLayerRequiresFixedSpriteBounds } from "./watchfaceEffectPadding.ts";
+import {
+  fillWatchfaceText,
+  measureWatchfaceText,
+  setWatchfaceCanvasFont
+} from "./watchfaceFontSnapshots.ts";
 import {
   resolveWatchfaceLayerOpacity
 } from "./watchfaceLayerOpacity.ts";
@@ -94,6 +100,13 @@ export interface WatchfaceStudioOptions extends WatchfaceTypography {
    * off so the arcs are baked into the final image.
    */
   deferProgressArcs?: boolean;
+  /**
+   * Leaves the composite transparent instead of painting the background (or
+   * AOD black). The editor pairs it with `deferProgressArcs`: background and
+   * arcs live on canvases underneath, so sprites such as PARTICLES's
+   * `arc_cut_icon` cover the arc exactly as the firmware draws them.
+   */
+  transparentBackground?: boolean;
   /** Shared bitmap style for values shown in the selectable control slot. */
   complicationStyle?: WatchfaceMetricSpriteStyle;
   /** Scales a Studio-created standalone battery folder from authoring size. */
@@ -301,6 +314,7 @@ export function applyConfigTextEditsToDetails(
         : {
             ...resolution,
             config: nextConfig,
+            arcCutRole: nextConfig === resolution.config ? resolution.arcCutRole : undefined,
             aodConfig: nextAod
           };
     })
@@ -378,6 +392,7 @@ export function detailsForPreviewMode(
       .filter((resolution) => Object.keys(resolution.aodConfig).length > 0)
       .map((resolution) => ({
         ...resolution,
+        arcCutRole: undefined,
         config: { ...resolution.aodConfig }
       }))
   };
@@ -593,7 +608,14 @@ export function retargetWatchfaceCompositionToCurrent<
   );
 }
 
-function configAssetLabel(configKey: string, _scope: WatchfaceConfigAssetScope): string {
+function configAssetLabel(
+  configKey: string,
+  _scope: WatchfaceConfigAssetScope,
+  arcCutRole: WatchfaceArcCutRole | null = null
+): string {
+  if (configKey === "arc_cut_icon" && arcCutRole === "overlay") {
+    return "Arc cut overlay";
+  }
   const special: Record<string, string> = {
     background_icon: "Background image",
     watchface_thmb_icon: "Watch face thumbnail",
@@ -668,7 +690,7 @@ export function listWatchfaceConfigAssets(
           scope,
           configKey,
           configPath: `${resolution.directory}/${scope === "aod" ? "AODconfig" : "config"}.txt`,
-          label: configAssetLabel(configKey, scope),
+          label: configAssetLabel(configKey, scope, watchfaceArcCutRole(resolution)),
           relativePath,
           archivePath,
           source: resolution.icons.find((file) => file.path === archivePath) ?? null
@@ -989,8 +1011,25 @@ const NATIVE_CONFIG_ICON_KEYS = new Set([
   "no_disturb_on_icon"
 ]);
 
+/**
+ * The firmware takes an arc-cut image's size from its PNG, so a replacement
+ * (a compact progress mask, a new slash) may keep its own pixel size. Unlike
+ * the status icons it stays in its own created file and only uses native size
+ * when asked, so an ordinary swap still fits the template box.
+ */
+const ARC_CUT_ICON_KEYS = new Set([
+  "arc_cut_icon",
+  "arc_cut_on_icon",
+  "arc_cut_off_icon"
+]);
+
 /** Direct status/control icons whose firmware entries accept a resized PNG. */
 export function configAssetSupportsNativeSize(configKey: string): boolean {
+  return NATIVE_CONFIG_ICON_KEYS.has(configKey) || ARC_CUT_ICON_KEYS.has(configKey);
+}
+
+/** Whether a freshly chosen replacement starts at its own PNG size. */
+export function configAssetDefaultsToNativeSize(configKey: string): boolean {
   return NATIVE_CONFIG_ICON_KEYS.has(configKey);
 }
 
@@ -1276,7 +1315,7 @@ export function buildBarometerIconReplacements(
 }
 
 function replaceConfigAssetInPlace(configKey: string): boolean {
-  return configAssetSupportsNativeSize(configKey);
+  return NATIVE_CONFIG_ICON_KEYS.has(configKey);
 }
 
 /**
@@ -1597,11 +1636,14 @@ export async function buildWatchfaceConfigAssetReplacements(
               : /^control_[a-z_]+_icon$/.test(configKey) ||
                   configKey === "control_colon_icon"
                 ? "complication"
-                : /^(?:colon_icon|autoalign_time_colon_icon|arc_cut_icon)$/.test(
-                    configKey
-                  )
-                  ? "separators"
-                  : undefined;
+                : configKey === "arc_cut_icon" &&
+                    watchfaceArcCutRole(resolution) === "overlay"
+                  ? "arcCut"
+                  : /^(?:colon_icon|autoalign_time_colon_icon|arc_cut_icon)$/.test(
+                      configKey
+                    )
+                    ? "separators"
+                    : undefined;
         const opacity =
           resolveWatchfaceLayerOpacity(
             options,
@@ -1882,6 +1924,80 @@ export type WatchfaceStaticSeparators = Record<
   WatchfaceStaticSeparatorStyle
 >;
 
+export type WatchfaceArcCutRole = "dateSlash" | "overlay";
+
+/**
+ * COROS 4.9.9 compiles `arc_cut_icon` as one generic status image
+ * (WF_DT_ARC_CUT, a single position, optional on/off states) drawn above the
+ * progress arcs and bars. The compiler has no date-separator key, so faces
+ * borrow it two ways: a small slash between month and day (NOMAD, RUBY
+ * HORIZON, MULTIDATA) or a mask over a progress ring or bar (PARTICLES'
+ * segmented arc, COLOR PALETTE's rounded bar). Only a slash-sized image
+ * centered in the date row counts as the slash.
+ */
+export function watchfaceArcCutRole(
+  resolution: CorosWatchfaceResolutionDetails | null | undefined
+): WatchfaceArcCutRole | null {
+  if (!resolution) {
+    return null;
+  }
+  const config = resolution.config;
+  const pos = parseConfigPos(config["arc_cut_icon_pos"]);
+  const iconValue =
+    config["arc_cut_icon"] || config["arc_cut_on_icon"] || config["arc_cut_off_icon"];
+  if (!pos || !iconValue) {
+    return null;
+  }
+  if (resolution.arcCutRole) return resolution.arcCutRole;
+  const iconPath = `${resolution.directory}/${iconValue.replace(/\\/g, "/")}`;
+  const icon = resolution.icons.find((entry) => entry.path === iconPath);
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const [key, value] of Object.entries(config)) {
+    if (!/^[a-z_]+_date_(?:month|day)_rect$/.test(key)) {
+      continue;
+    }
+    const rect = parseConfigRect(value);
+    if (rect) {
+      x0 = Math.min(x0, rect.x0);
+      y0 = Math.min(y0, rect.y0);
+      x1 = Math.max(x1, rect.x1);
+      y1 = Math.max(y1, rect.y1);
+    }
+  }
+  if (!(x0 <= x1 && y0 <= y1)) {
+    return "overlay";
+  }
+  const rowHeight = y1 - y0;
+  const margin = Math.max(4, rowHeight / 2);
+  const width = icon?.width ?? 0;
+  const height = icon?.height ?? 0;
+  const centerX = pos.x + width / 2;
+  const centerY = pos.y + height / 2;
+  const inDateRow =
+    centerX >= x0 - margin &&
+    centerX <= x1 + margin &&
+    centerY >= y0 - margin &&
+    centerY <= y1 + margin;
+  // Distant month/day rows can make their union nearly the whole face. A
+  // background-sized progress mask must never become a date separator.
+  const slashSized = width > 0 && height > 0 &&
+    width <= resolution.width * 0.1 && height <= resolution.height * 0.2;
+  return inDateRow && slashSized && height <= rowHeight * 2 + margin ? "dateSlash" : "overlay";
+}
+
+/**
+ * Whether the Studio date slash replaces the face's arc_cut_icon. False only
+ * for a progress mask, which must survive the slash being turned on or off.
+ */
+export function watchfaceArcCutIsDateSlash(
+  details: CorosWatchfaceTemplateDetails
+): boolean {
+  return watchfaceArcCutRole(pickPreviewResolution(details)) !== "overlay";
+}
+
 /** Suggested separator centers inferred from the surrounding template fields. */
 export function inferStaticSeparators(
   details: CorosWatchfaceTemplateDetails,
@@ -1956,9 +2072,12 @@ export function buildStaticSeparatorOverrides(
     ) {
       values.colon_icon = "";
     }
+    // Only a face that borrows arc_cut_icon as its slash loses it; on mask
+    // faces the Studio slash (baked into the background) sits alongside it.
     if (
       separators.dateSlash.enabled &&
-      Object.prototype.hasOwnProperty.call(resolution.config, "arc_cut_icon")
+      Object.prototype.hasOwnProperty.call(resolution.config, "arc_cut_icon") &&
+      watchfaceArcCutRole(resolution) !== "overlay"
     ) {
       values.arc_cut_icon = "";
     }
@@ -1984,6 +2103,7 @@ export interface WatchfaceAmPmStyle {
   color?: string;
   /** Optional desktop font rasterized into the live AM and PM sprites. */
   fontFamily?: string;
+  rasterFont?: CorosWatchfaceRasterFont;
 }
 
 /**
@@ -2157,7 +2277,7 @@ export async function buildAmPmSpriteReplacements(
   }
   const assets = style.fontFamily
     ? []
-    : await loadAssets([...new Set(jobs.map((job) => job.source.path))]);
+    : await loadAssets([...new Set(jobs.filter(job => !rasterFontSupportsText(style.rasterFont, job.label)).map(job => job.source.path))]);
   const assetsByPath = new Map(assets.map((asset) => [asset.path, asset]));
   const replacements: CorosWatchfaceAssetReplacement[] = [];
   for (const job of jobs) {
@@ -2173,7 +2293,9 @@ export async function buildAmPmSpriteReplacements(
             style.fontFamily,
             style.color ?? "#ffffff"
           )
-        : await resizeAndTintSprite(
+        : style.rasterFont && rasterFontSupportsText(style.rasterFont, job.label)
+          ? await renderRasterFontSprite(job.label, width, height, style.rasterFont, style.color ?? "#ffffff")
+          : await resizeAndTintSprite(
             assetsByPath.get(job.source.path)?.dataUrl ?? "",
             width,
             height,
@@ -2412,7 +2534,8 @@ async function renderRasterImageSprite(
   }
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
-  context.drawImage(
+  drawSpritePreservingCore(
+    context,
     image,
     sourceX,
     sourceY,
@@ -2487,13 +2610,17 @@ export async function renderNativeWatchfaceTextSprite(
     -0.35,
     Math.min(0.25, typography.letterSpacing ?? 0)
   );
-  measureContext.font =
-    `${fontStyle} ${fontWeight} ${fontSize}px ${quoteFontFamily(fontFamily)}`;
+  const face = { family: fontFamily, size: fontSize, weight: fontWeight, style: fontStyle };
+  setWatchfaceCanvasFont(
+    measureContext,
+    face,
+    `${fontStyle} ${fontWeight} ${fontSize}px ${quoteFontFamily(fontFamily)}`
+  );
   setCanvasLetterSpacing(measureContext, fontSize * letterSpacing);
-  const metrics = measureContext.measureText(text);
+  const metrics = measureWatchfaceText(measureContext, text);
   if (/^\d$/.test(text)) {
     setCanvasLetterSpacing(measureContext, 0);
-    const family = [..."0123456789"].map((digit) => measureContext.measureText(digit));
+    const family = [..."0123456789"].map((digit) => measureWatchfaceText(measureContext, digit));
     const cellWidth = Math.ceil(Math.max(...family.map((metric) => textInkMetrics(metric).width)) / 0.96) + 2;
     return renderDigitSprite(text, cellWidth, targetHeight, fontFamily, color, { ...typography, letterSpacing: 0 });
   }
@@ -2507,14 +2634,18 @@ export async function renderNativeWatchfaceTextSprite(
   if (!context) {
     throw new Error("Sprite rendering is unavailable in this window.");
   }
-  context.font =
-    `${fontStyle} ${fontWeight} ${fontSize}px ${quoteFontFamily(fontFamily)}`;
+  setWatchfaceCanvasFont(
+    context,
+    face,
+    `${fontStyle} ${fontWeight} ${fontSize}px ${quoteFontFamily(fontFamily)}`
+  );
   setCanvasLetterSpacing(context, fontSize * letterSpacing);
   context.textBaseline = "alphabetic";
   context.fillStyle = color;
   const glyphHeight =
     metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-  context.fillText(
+  fillWatchfaceText(
+    context,
     text,
     (width - ink.width) / 2 + ink.left,
     (targetHeight - glyphHeight) / 2 + metrics.actualBoundingBoxAscent
@@ -2832,16 +2963,20 @@ export function renderDigitSprite(
   const fontStyle = typography.fontStyle === "italic" ? "italic" : "normal";
   const letterSpacing = Math.max(-0.35, Math.min(0.25, typography.letterSpacing ?? 0));
   const numeric = /^\d$/.test(text);
-  const familyMetrics = () => [..."0123456789"].map((digit) => context.measureText(digit));
+  const familyMetrics = () => [..."0123456789"].map((digit) => measureWatchfaceText(context, digit));
   let fontSize = Math.floor(height * 0.92);
   context.textBaseline = "alphabetic";
   context.fillStyle = color;
   for (; fontSize > 4; fontSize -= 1) {
     // Use the font's Regular face by default, matching what desktop editors
     // such as Word show when a family is chosen without applying Bold.
-    context.font = `${fontStyle} ${fontWeight} ${fontSize}px ${quoteFontFamily(fontFamily)}`;
+    setWatchfaceCanvasFont(
+      context,
+      { family: fontFamily, size: fontSize, weight: fontWeight, style: fontStyle },
+      `${fontStyle} ${fontWeight} ${fontSize}px ${quoteFontFamily(fontFamily)}`
+    );
     setCanvasLetterSpacing(context, numeric ? 0 : fontSize * letterSpacing);
-    const metrics = context.measureText(text);
+    const metrics = measureWatchfaceText(context, text);
     const ink = textInkMetrics(metrics);
     const glyphHeight =
       metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
@@ -2853,12 +2988,13 @@ export function renderDigitSprite(
       break;
     }
   }
-  const metrics = context.measureText(text);
+  const metrics = measureWatchfaceText(context, text);
   const ink = textInkMetrics(metrics);
   const family = numeric ? familyMetrics() : [metrics];
   const ascent = Math.max(...family.map((metric) => metric.actualBoundingBoxAscent));
   const descent = Math.max(...family.map((metric) => metric.actualBoundingBoxDescent));
-  context.fillText(
+  fillWatchfaceText(
+    context,
     text,
     (width - ink.width) / 2 + ink.left,
     (height - ascent - descent) / 2 + ascent
@@ -2871,7 +3007,9 @@ export function renderDigitSprite(
  * and decorative faces can overhang that advance on either side, so using it
  * to size or center a sprite clips otherwise valid pixels.
  */
-function textInkMetrics(metrics: TextMetrics): {
+function textInkMetrics(
+  metrics: Pick<TextMetrics, "width" | "actualBoundingBoxLeft" | "actualBoundingBoxRight">
+): {
   left: number;
   right: number;
   width: number;
@@ -2929,7 +3067,18 @@ export async function resizeAndTintSprite(
   if (!context) {
     throw new Error("Sprite tinting is unavailable in this window.");
   }
-  context.drawImage(image, 0, 0, width, height);
+  drawSpritePreservingCore(
+    context,
+    image,
+    0,
+    0,
+    image.naturalWidth,
+    image.naturalHeight,
+    0,
+    0,
+    width,
+    height
+  );
   if (color) {
     context.globalCompositeOperation = "source-in";
     context.fillStyle = color;
@@ -3491,6 +3640,10 @@ export interface WatchfaceDateSpriteStyle {
   height?: number;
   /** Imported PNG dimensions preserve their proportions unless unlocked. */
   aspectLocked?: boolean;
+  /** Use the custom weekday labels for every watch language. Defaults to false. */
+  overwriteAllLanguages?: boolean;
+  /** Additional language prefixes to replace when all languages is off. */
+  overwriteLanguages?: string[];
   /** Date-month rendering mode; absent preserves the starter's format. */
   monthFormat?: "digits" | "labels";
   /** Optional per-layer font; falls back to the design font. */
@@ -3532,6 +3685,8 @@ export function removeWatchfaceDateFontOverride(
     ...remaining
   } = style;
   const hasIndependentEdits =
+    remaining.overwriteAllLanguages !== undefined ||
+    remaining.overwriteLanguages !== undefined ||
     remaining.scale !== 1 ||
     remaining.color !== undefined ||
     remaining.rotation !== undefined ||
@@ -5428,9 +5583,18 @@ export function parseKcalProgressArc(
     : null;
 }
 
+/**
+ * Converts a COROS config color (0xRRGGBB, a number, so starters also carry
+ * short forms such as 0x00000) to #rrggbb. Other strings pass through.
+ */
+export function corosConfigColorToCss(value: string): string {
+  const match = value.trim().match(/^0x([0-9a-f]{1,6})$/i);
+  return match ? `#${match[1]!.padStart(6, "0").toLowerCase()}` : value;
+}
+
 function configColor(value: string | undefined, fallback: string): string {
-  const match = value?.trim().match(/^0x([0-9a-f]{6})$/i);
-  return match ? `#${match[1]!.toLowerCase()}` : fallback;
+  const color = value === undefined ? "" : corosConfigColorToCss(value);
+  return /^#[0-9a-f]{6}$/.test(color) ? color : fallback;
 }
 
 function rectProgressDirection(value: string | undefined): CorosWatchfaceKcalProgressStyle["rect"]["direction"] {
@@ -6626,7 +6790,63 @@ export async function buildDateSpriteComposition(
       });
     }
   }
-  return { replacements, configOverrides };
+  return applyWeekdayLanguageOverrides(details, styles, { replacements, configOverrides });
+}
+
+/** Copy the composed weekday into firmware-native locale folders only when opted in. */
+export function applyWeekdayLanguageOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  styles: WatchfaceDateStyles,
+  composition: WatchfaceDateSpriteComposition
+): WatchfaceDateSpriteComposition {
+  const allLanguages = styles.weekday?.overwriteAllLanguages === true;
+  const selected = new Set(styles.weekday?.overwriteLanguages ?? []);
+  if (!allLanguages && selected.size === 0) return composition;
+  selected.add("english");
+  const replacements = new Map(composition.replacements.map((asset) => [asset.path, asset]));
+  const configOverrides = [...composition.configOverrides];
+  const styledRects = buildDateStyleOverrides(details, styles, true);
+  for (const resolution of details.resolutions) {
+    const path = `${resolution.directory}/config.txt`;
+    const rect = [...styledRects, ...composition.configOverrides]
+      .filter((override) => override.path === path)
+      .reduce((value, override) => override.values.english_date_week_rect ?? value,
+        resolution.config.english_date_week_rect);
+    const weekdays = Array.from({ length: 7 }, (_, index) =>
+      replacements.get(`${resolution.directory}/cl_weekday/${String(index).padStart(2, "0")}.png`));
+    if (!rect || weekdays.some((asset) => !asset)) continue;
+    const values: Record<string, string> = {};
+    for (const [fontKey, font] of Object.entries(resolution.config)) {
+      if (!fontKey.endsWith("_date_week_font") || fontKey.startsWith("control_")) continue;
+      const language = fontKey.replace(/_date_week_font$/, "");
+      if (!allLanguages && !selected.has(language)) continue;
+      const folder = findSpriteFolder(resolution, font);
+      if (!folder || folder.files.length < 7) continue;
+      // Avoid modifying an unselected language that shares this font folder.
+      const sharedWithUnselected = !allLanguages && Object.entries(resolution.config).some(
+        ([key, value]) => key.endsWith("_date_week_font") && value === font &&
+          !selected.has(key.replace(/_date_week_font$/, ""))
+      );
+      const targetFont = sharedWithUnselected ? `cl_weekday_${language}` : font;
+      weekdays.forEach((asset, index) => {
+        const target = folder.files[index]!;
+        const targetPath = sharedWithUnselected
+          ? `${resolution.directory}/${targetFont}/${String(index).padStart(2, "0")}.png`
+          : target.path;
+        replacements.set(targetPath, {
+          path: targetPath, dataUrl: asset!.dataUrl, allowDimensionOverride: true,
+          ...(sharedWithUnselected ? { create: true } : {})
+        });
+      });
+      values[fontKey] = targetFont;
+      values[fontKey.replace(/_font$/, "_rect")] = rect;
+      // The composed PNG already contains its color.
+      const colorKey = `${fontKey}_color`;
+      if (colorKey in resolution.config) values[colorKey] = "";
+    }
+    if (Object.keys(values).length) configOverrides.push({ path, values });
+  }
+  return { replacements: [...replacements.values()], configOverrides };
 }
 
 /** Generates isolated date sprites in the template's firmware-native canvases. */
@@ -6672,6 +6892,7 @@ export function applyConfigOverridesToDetails(
       return values || aodValues
         ? {
             ...resolution,
+            arcCutRole: watchfaceArcCutRole(resolution) ?? undefined,
             ...(values
               ? { config: applyValues(resolution.config, values) }
               : {}),
@@ -6769,6 +6990,13 @@ export const WATCHFACE_LAYOUT_GROUPS: WatchfaceLayoutGroup[] = [
     patterns: [/^arc_cut_icon_pos$/]
   },
   {
+    // The same key when the face uses arc_cut_icon as a progress mask rather
+    // than its date slash; layoutGroupKeys routes it to exactly one group.
+    id: "arcCut",
+    label: "Arc cut overlay",
+    patterns: [/^arc_cut_icon_pos$/]
+  },
+  {
     id: "battery",
     label: "Battery data",
     patterns: [/^battery_level_rect$/]
@@ -6860,6 +7088,12 @@ export function layoutGroupKeys(
   ) {
     return [];
   }
+  if (group.id === "separators" || group.id === "arcCut") {
+    const overlay = watchfaceArcCutRole(resolution) === "overlay";
+    if (overlay !== (group.id === "arcCut")) {
+      return [];
+    }
+  }
   return Object.keys(resolution.config).filter(
     (key) =>
       group.patterns.some((pattern) => pattern.test(key)) &&
@@ -6923,8 +7157,12 @@ export function buildLayerVisibilityOverrides(
       for (const key of layoutGroupKeys(resolution, group)) {
         values[key] = "";
       }
-      if (group.id === "separators") {
-        for (const key of ["colon_icon", "arc_cut_icon"]) {
+      if (group.id === "separators" || group.id === "arcCut") {
+        const overlay = watchfaceArcCutRole(resolution) === "overlay";
+        const keys = group.id === "arcCut"
+          ? overlay ? ["arc_cut_icon", "arc_cut_on_icon", "arc_cut_off_icon"] : []
+          : overlay ? ["colon_icon"] : ["colon_icon", "arc_cut_icon"];
+        for (const key of keys) {
           if (Object.prototype.hasOwnProperty.call(resolution.config, key)) {
             values[key] = "";
           }
@@ -7034,7 +7272,11 @@ export async function buildLayerColorSpriteReplacements(
       resolution.config["autoalign_time_colon_icon"],
       colors.separators
     );
-    addIcon("separators", resolution.config["arc_cut_icon"], colors.separators);
+    if (watchfaceArcCutRole(resolution) === "overlay") {
+      addIcon("arcCut", resolution.config["arc_cut_icon"], colors.arcCut);
+    } else {
+      addIcon("separators", resolution.config["arc_cut_icon"], colors.separators);
+    }
     if (
       colors.complication ||
       resolveWatchfaceLayerOpacity(opacitySource, "complication") < 1
@@ -7087,6 +7329,7 @@ export interface WatchfaceLayoutGroupBounds {
  * the source folder metadata stored on the imported template.
  */
 export interface WatchfaceLayoutGeometryOptions {
+  configAssetOverrides?: Record<string, CorosWatchfaceConfigAssetOverride>;
   timeStyles?: WatchfaceTimeStyles;
   /** Face-wide tracking used when a time part has no component override. */
   letterSpacing?: number;
@@ -7238,7 +7481,10 @@ export function computeLayoutGroupBounds(
       }
       const pos = parseConfigPos(value);
       if (pos) {
-        const sourceSize = spriteSizeForPosKey(resolution, key);
+        const templateSize = spriteSizeForPosKey(resolution, key);
+        const sourceSize = key === "arc_cut_icon_pos"
+          ? configAssetCanvasSize("arc_cut_icon", geometry.configAssetOverrides?.["config:arc_cut_icon"], templateSize)
+          : templateSize;
         const timeStyle =
           group.id === "hours" ||
           group.id === "minutes" ||
@@ -7392,7 +7638,7 @@ export function applyLayoutToDetails(
     resolutions: details.resolutions.map((resolution) => {
       const values = overridesByPath.get(`${resolution.directory}/config.txt`);
       return values
-        ? { ...resolution, config: { ...resolution.config, ...values } }
+        ? { ...resolution, arcCutRole: watchfaceArcCutRole(resolution) ?? undefined, config: { ...resolution.config, ...values } }
         : resolution;
     })
   };
@@ -7415,9 +7661,13 @@ export function pickPreviewResolution(
  * switch to any other tree in Studio.
  */
 export function pickWatchPreviewResolution(
-  details: CorosWatchfaceTemplateDetails
+  details: CorosWatchfaceTemplateDetails,
+  modelOrFirmware?: string
 ): CorosWatchfaceResolutionDetails | null {
   const resolutions = [...details.resolutions];
+  const target = getWatchfaceTarget(modelOrFirmware);
+  const native = target && resolutions.find(resolution => resolution.width === target.previewSize);
+  if (native) return native;
   const widths = new Set(resolutions.map((resolution) => resolution.width));
   if (widths.has(240) && widths.has(260) && widths.has(800)) {
     return resolutions.find((resolution) => resolution.width === 260) ?? null;
@@ -7428,6 +7678,21 @@ export function pickWatchPreviewResolution(
   return (
     deviceResolutions.sort((left, right) => right.width - left.width)[0] ??
     pickPreviewResolution(details)
+  );
+}
+
+/**
+ * The tree Studio's watch preview opens on: the 800px master when the bundle
+ * has one, so edits start at full resolution. Bundles without a master fall
+ * back to the physical watch tree.
+ */
+export function pickEditorPreviewResolution(
+  details: CorosWatchfaceTemplateDetails,
+  modelOrFirmware?: string
+): CorosWatchfaceResolutionDetails | null {
+  return (
+    details.resolutions.find((resolution) => resolution.width === 800) ??
+    pickWatchPreviewResolution(details, modelOrFirmware)
   );
 }
 
@@ -7888,7 +8153,9 @@ export async function drawStudioPreview(
   // COROS BuildAodWatchface omits SetBackground (including bg_color).
   // Showing the flattened artwork here made black AOD digits look readable
   // in Studio even though they disappear against the watch's black screen.
-  if (options.previewMode === "aod") {
+  if (options.transparentBackground) {
+    // Painted by the editor's own background canvas beneath the arc overlay.
+  } else if (options.previewMode === "aod") {
     context.fillStyle = "#000000";
     context.fillRect(0, 0, canvas.width, canvas.height);
   } else {
@@ -7976,9 +8243,16 @@ export async function drawStudioPreview(
     ? resolution.icons.find((icon) => icon.path === arcCutPath) ?? null
     : null;
   const arcCutPos = parseConfigPos(config["arc_cut_icon_pos"]);
+  // A progress mask has to match the background it cuts into, so it only
+  // takes its own tint, never the face-wide accent.
+  const arcCutOverlay = watchfaceArcCutRole(resolution) === "overlay";
+  const arcCutLayerId = arcCutOverlay ? "arcCut" : "separators";
+  const arcCutColor = arcCutOverlay
+    ? options.layerColors?.arcCut ?? null
+    : separatorIconColor;
   if (arcCutFile) {
     wantedSprites.set(arcCutFile.path, {
-      color: separatorIconColor
+      color: arcCutColor
     });
   }
   const analogLayers = getWatchfaceAnalogPreviewLayers(resolution, now);
@@ -8280,6 +8554,7 @@ export async function drawStudioPreview(
       file: CorosWatchfaceSpriteFile;
       index?: number;
     };
+    suffix?: { configKey: string; file: CorosWatchfaceSpriteFile };
   }[] = [];
   if (autoAlignedTime) {
     const rect = parseConfigRect(config.autoalign_time_rect);
@@ -8344,13 +8619,18 @@ export async function drawStudioPreview(
     config["battery_level_font"]
   );
   if (batteryRect && batterySource) {
+    const percentPath = config.battery_level_percent_icon?.replace(/\\/g, "/").replace(/^\.\//, "");
+    const percentFile = percentPath
+      ? resolution.icons.find(file => file.path === `${resolution.directory}/${percentPath}`) : undefined;
+    if (percentFile) wantedSprites.set(percentFile.path, { color: null });
     numberPlans.push({
       rect: batteryRect,
       configValue: config.battery_level_rect,
       source: batterySource,
       value: options.previewValues?.battery ?? "82",
       metricId: "battery",
-      componentId: "battery"
+      componentId: "battery",
+      ...(percentFile ? { suffix: { configKey: "battery_level_percent_icon", file: percentFile } } : {})
     });
   }
   const dateFields: [string, string, string, WatchfaceDatePartId][] = [
@@ -8687,7 +8967,7 @@ export async function drawStudioPreview(
   }
 
   if (arcCutFile && arcCutPos) {
-    const image = await configuredAssetImage("arc_cut_icon", arcCutFile, separatorIconColor);
+    const image = await configuredAssetImage("arc_cut_icon", arcCutFile, arcCutColor);
     if (image) {
       drawStudioLayerImage(
         context,
@@ -8698,7 +8978,7 @@ export async function drawStudioPreview(
         image.naturalHeight * scale,
         scale,
         options,
-        "separators",
+        arcCutLayerId,
         false
       );
     }
@@ -9459,6 +9739,16 @@ export async function drawStudioPreview(
       x += glyph.file.width;
     }
     if (options.compiledPixels) context.restore();
+    // COROS stores the percent image separately from the numeric rectangle.
+    // Keep it attached to the value, outside the digit clipping region.
+    const suffixImage = plan.suffix
+      ? await configuredAssetImage(plan.suffix.configKey, plan.suffix.file,
+          componentColor ?? metricStyle?.color ?? (options.tintLabels ? options.digitColor : null))
+      : undefined;
+    if (suffixImage) drawStudioLayerImage(
+      context, suffixImage, x * scale, Math.round(glyphY(suffixImage.naturalHeight)) * scale,
+      suffixImage.naturalWidth * scale, suffixImage.naturalHeight * scale, scale, options, layerId
+    );
   }
 
   if (
@@ -9513,7 +9803,7 @@ export async function drawStudioPreview(
     const width = Math.max(1, Math.round(ampmFile.width * ampmScale));
     const height = Math.max(1, Math.round(ampmFile.height * ampmScale));
     const sourceDataUrl = loadedAssets.get(ampmFile.path)?.dataUrl;
-    if (sourceDataUrl || ampmStyle.fontFamily) {
+    if (sourceDataUrl || ampmStyle.fontFamily || ampmStyle.rasterFont) {
       const dataUrl = ampmStyle.fontFamily
         ? renderDigitSprite(
             now.getHours() < 12 ? "AM" : "PM",
@@ -9522,7 +9812,9 @@ export async function drawStudioPreview(
             ampmStyle.fontFamily,
             ampmStyle.color ?? options.digitColor
           )
-        : await resizeAndTintSprite(
+        : ampmStyle.rasterFont && rasterFontSupportsText(ampmStyle.rasterFont, now.getHours() < 12 ? "AM" : "PM")
+          ? await renderRasterFontSprite(now.getHours() < 12 ? "AM" : "PM", width, height, ampmStyle.rasterFont, ampmStyle.color ?? options.digitColor)
+          : await resizeAndTintSprite(
             sourceDataUrl!,
             width,
             height,

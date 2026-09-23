@@ -4,6 +4,7 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod/v4";
 import {
@@ -26,6 +27,10 @@ const TOOL_TIMEOUT_MS = 120_000;
 const SESSION_IDLE_MS = 30 * 60_000;
 const MAX_SESSIONS = 16;
 
+const WATCHFACE_LEGIBILITY_GUIDANCE =
+  "Required before saving or exporting a newly authored face: inspect text at the smallest supported device resolution, with render_preview resolution and size both set to that native width; an enlarged master-canvas preview is insufficient. Measure visible glyphs, not transparent sprite padding. For a 416px display, start small metric/date digits around 12x17 visible pixels with continuous 1-2px strokes and clear spacing; this is a design target, not a firmware minimum or a guarantee. Thin italic digits around 9x13px need enlargement or stroke simplification. Test all digits 0-9, maximum-width values, weekdays and battery states for clipping and legibility. Enable solidAlpha:true on small timeStyles, metricStyles or dateStyles components to make final exported glyph coverage binary; inspect the exported PNGs after resizing because thresholding can erase thin strokes. nativeData assets have no solidAlpha setting: inspect and normalize their final-size glyph alpha separately. Render Current and AOD, build and inspect every exported resolution, and distinguish preview/schema validation from actual on-watch verification.";
+
+
 type Dispatch = (method: string, params: Record<string, unknown>) => Promise<unknown>;
 
 interface Session {
@@ -34,7 +39,7 @@ interface Session {
   lastSeen: number;
 }
 
-interface ToolDefinition {
+export interface ToolDefinition {
   name: string;
   title: string;
   description: string;
@@ -43,6 +48,8 @@ interface ToolDefinition {
   readOnly?: boolean;
   destructive?: boolean;
   openWorld?: boolean;
+  /** Internal adapters may return native MCP content (including several images). */
+  mcpHandler?: (params: Record<string, unknown>) => Promise<CallToolResult>;
   handler?: (params: Record<string, unknown>) => Promise<unknown>;
 }
 
@@ -50,6 +57,14 @@ const sessionFields = {
   sessionId: z.string().min(1).max(200).describe("Editor sessionId returned by get_document."),
   baseRevision: z.number().int().nonnegative().describe("Current revision returned by get_document.")
 };
+
+const assetRef = z.object({ assetId: z.string().min(1).max(200) }).strict()
+  .describe("A stored image: {assetId} from generate_image, import_asset, get_document or another image tool.");
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/).describe("#RRGGBB");
+const previewScenario = z.record(z.string(), z.unknown()).optional()
+  .describe("Sample data to render with, as in render_preview. Omit for the editor's active simulation.");
+const imageSide = z.number().int().min(1).max(2048);
+const pixelBox = z.object({ x: z.number(), y: z.number(), width: z.number().positive(), height: z.number().positive() }).strict();
 
 function editorToolDefinitions(assetStore: WatchfaceAutomationAssetStore): ToolDefinition[] {
   return [
@@ -133,6 +148,62 @@ function editorToolDefinitions(assetStore: WatchfaceAutomationAssetStore): ToolD
       }
     },
     {
+      name: "get_geometry", title: "Measure watch-face geometry", readOnly: true,
+      description: "Exact boxes in master pixels (the capabilities.placement frame) for every layer, the round display circle, and each enabled calorie/exercise progress arc and bar: its swept box plus its arc or rect parameters. Use it to size and position artwork, overlays and masks instead of estimating from renders. Progress arcs and bars are edited through /design/kcalProgress and /design/exerciseProgress, not move_layer.",
+      method: WATCHFACE_AUTOMATION_METHODS.getGeometry,
+      schema: {
+        sessionId: sessionFields.sessionId,
+        mode: z.enum(["current", "aod"]).optional(),
+        ids: z.array(z.string().min(1).max(200)).max(100).optional().describe("Only these layer or progress ids; omit for all.")
+      }
+    },
+    {
+      name: "check_contrast", title: "Check watch-face contrast", readOnly: true,
+      description: "Measures how readable text and data layers are against the pixels actually behind them, by rendering the face in master pixels with and without each layer. Reports the text color, the background color, the WCAG contrast ratio against the average background and against its least favorable tenth, the required ratio (3:1 for large glyphs, 4.5:1 otherwise) and a verdict. Defaults to every visible time, date and metric layer.",
+      method: WATCHFACE_AUTOMATION_METHODS.checkContrast,
+      schema: {
+        sessionId: sessionFields.sessionId,
+        mode: z.enum(["current", "aod"]).optional(),
+        ids: z.array(z.string().min(1).max(200)).max(24).optional().describe("Layer ids to measure; omit for all visible text and data layers."),
+        scenario: previewScenario
+      }
+    },
+    {
+      name: "sample_color", title: "Sample colors", readOnly: true,
+      description: "Reads exact colors from a stored image, or without image from the rendered face in master pixels. points return single pixels; regions return the alpha-weighted average, visible coverage and dominant colors. With neither, samples the whole image. Use it to match a mask to the background, take an accent from artwork, or check a color before recoloring.",
+      method: WATCHFACE_AUTOMATION_METHODS.sampleColor,
+      schema: {
+        sessionId: sessionFields.sessionId.optional(),
+        image: assetRef.optional(),
+        mode: z.enum(["current", "aod"]).optional(),
+        scenario: previewScenario,
+        points: z.array(z.object({ x: z.number(), y: z.number() }).strict()).max(64).optional(),
+        regions: z.array(pixelBox).max(16).optional(),
+        palette: z.number().int().min(0).max(12).optional().describe("Dominant colors per region. Default 5.")
+      }
+    },
+    {
+      name: "recolor_image", title: "Recolor image",
+      description: "Makes a new PNG from a stored image with its visible pixels painted one exact color, keeping alpha so edges stay smooth. With from, only pixels within tolerance (largest per-channel difference, default 48) of that color change. Use it to make a mask exactly match the background or to tint an icon. Returns the new image as an assetId.",
+      method: WATCHFACE_AUTOMATION_METHODS.recolorImage,
+      schema: {
+        image: assetRef,
+        color: hexColor,
+        from: hexColor.optional(),
+        tolerance: z.number().min(0).max(255).optional()
+      }
+    },
+    {
+      name: "render_svg", title: "Render SVG",
+      description: "Rasterizes a self-contained SVG to a transparent PNG of exactly width x height pixels and returns it as an assetId. Use it for precise geometric artwork where exact pixels matter: frames, rounded caps, masks with holes, ticks, rings, segment gaps and simple icons. Give the SVG a viewBox; it is stretched to width x height. Scripts, foreignObject and external references are removed, and only common system fonts are available.",
+      method: WATCHFACE_AUTOMATION_METHODS.renderSvg,
+      schema: {
+        svg: z.string().min(1).max(200_000),
+        width: imageSide,
+        height: imageSide
+      }
+    },
+    {
       name: "validate", title: "Validate watch face", readOnly: true,
       description: "Validate the live document against editor, template and target-device constraints before saving or building.",
       method: WATCHFACE_AUTOMATION_METHODS.validate,
@@ -170,11 +241,11 @@ function editorToolDefinitions(assetStore: WatchfaceAutomationAssetStore): ToolD
     },
     {
       name: "convert", title: "Convert watch-face template",
-      description: "Convert the open design onto another already-selected compatible starter archive. This opens a new editor session.",
+      description: "Convert the open design by watchModel, preserving its layout, fonts, assets, raw edits and AOD. The destination carrier is selected automatically. Opens a new editor session after success.",
       method: WATCHFACE_AUTOMATION_METHODS.convert,
       schema: {
         ...sessionFields,
-        targetArchive: z.string().min(1).max(200),
+        targetArchive: z.string().min(1).max(200).optional(),
         name: z.string().max(80).optional(),
         firmwareType: z.string().max(120).optional(),
         watchModel: z.string().max(80).optional()
@@ -280,6 +351,13 @@ function editorToolDefinitions(assetStore: WatchfaceAutomationAssetStore): ToolD
   ];
 }
 
+// Tools whose PNG the in-app agent should also see, not just reference.
+const AGENT_IMAGE_METHODS = new Set<string>([
+  WATCHFACE_AUTOMATION_METHODS.renderPreview,
+  WATCHFACE_AUTOMATION_METHODS.recolorImage,
+  WATCHFACE_AUTOMATION_METHODS.renderSvg
+]);
+
 export class WatchfaceAutomationServer {
   private readonly dispatch: Dispatch;
   private readonly userDataPath: string;
@@ -293,7 +371,7 @@ export class WatchfaceAutomationServer {
   private startPromise: Promise<WatchfaceAutomationStatus> | null = null;
   private initializingSessions = 0;
 
-  constructor(options: { dispatch: Dispatch; userDataPath: string }) {
+  constructor(private readonly options: { dispatch: Dispatch; userDataPath: string; tools?: ToolDefinition[]; name?: string; instructions?: string; defaultPort?: number }) {
     this.dispatch = options.dispatch;
     this.userDataPath = path.resolve(options.userDataPath);
     this.assets = createWatchfaceAutomationAssetStore(this.userDataPath);
@@ -317,7 +395,7 @@ export class WatchfaceAutomationServer {
   }
 
   private async startInternal(options: { port?: number }): Promise<WatchfaceAutomationStatus> {
-    const requestedPort = options.port ?? DEFAULT_PORT;
+    const requestedPort = options.port ?? this.options.defaultPort ?? DEFAULT_PORT;
     if (!Number.isSafeInteger(requestedPort) || requestedPort < 0 || requestedPort > 65_535) {
       this.error = "Automation port must be a whole number from 0 through 65535.";
       return this.getStatus();
@@ -376,31 +454,83 @@ export class WatchfaceAutomationServer {
   }
 
   async callTool(name: string, params: Record<string, unknown> = {}): Promise<unknown> {
-    const definition = editorToolDefinitions(this.assets).find((candidate) => candidate.name === name);
+    const definition = (this.options.tools ?? editorToolDefinitions(this.assets)).find((candidate) => candidate.name === name);
     if (!definition) throw new Error(`Unknown watch-face automation tool "${name}".`);
     const parsed = z.object(definition.schema).strict().parse(params) as Record<string, unknown>;
     return this.executeDefinition(definition, parsed);
   }
 
+  /** Function-tool specs for the in-app Watchmaker panel, limited to `names`. */
+  listAgentTools(names: readonly string[]): Array<{ name: string; description: string; parameters: Record<string, unknown> }> {
+    return editorToolDefinitions(this.assets)
+      .filter((definition) => names.includes(definition.name))
+      .map((definition) => {
+        const { $schema: _ignored, ...parameters } = z.toJSONSchema(z.object(definition.schema).strict()) as Record<string, unknown>;
+        return {
+          name: definition.name,
+          description: ["apply_commands", "render_preview", "validate"].includes(definition.name)
+            ? `${definition.description} ${WATCHFACE_LEGIBILITY_GUIDANCE}`
+            : definition.description,
+          parameters
+        };
+      });
+  }
+
+  /** Stores an image the user attached in the Studio AI panel. */
+  importAgentImage(dataUrl: string) {
+    return this.assets.importImageDataUrl(dataUrl);
+  }
+
+  /** Reads a stored asset back as a data URL, e.g. to hand it to image editing. */
+  readAgentImage(assetId: string): Promise<string> {
+    return this.assets.hydrateAssetRefs<unknown>({ assetId }) as Promise<string>;
+  }
+
+  /** Runs one tool for the in-app agent, keeping a rendered PNG for vision input. */
+  async callAgentTool(name: string, params: Record<string, unknown>): Promise<{ result: unknown; imageDataUrl?: string }> {
+    const definition = editorToolDefinitions(this.assets).find((candidate) => candidate.name === name);
+    if (!definition) throw new Error(`Unknown watch-face tool "${name}".`);
+    // Non-strict function calling often sends null for omitted optional
+    // arguments; treat those as absent instead of failing validation.
+    const cleaned = Object.fromEntries(
+      Object.entries(params).filter(([, value]) => value !== null)
+    );
+    const parsed = z.object(definition.schema).strict().parse(cleaned) as Record<string, unknown>;
+    const hydrated = await this.assets.hydrateAssetRefs(parsed);
+    const raw = definition.handler
+      ? await withTimeout(definition.handler(hydrated), TOOL_TIMEOUT_MS)
+      : await withTimeout(this.dispatch(definition.method!, hydrated), TOOL_TIMEOUT_MS);
+    let imageDataUrl: string | undefined;
+    if (AGENT_IMAGE_METHODS.has(definition.method ?? "") && raw && typeof raw === "object") {
+      const withImage = await this.assets.hydrateAssetRefs(raw) as Record<string, unknown>;
+      if (typeof withImage.dataUrl === "string" && withImage.dataUrl.startsWith("data:image/png;base64,")) {
+        imageDataUrl = withImage.dataUrl;
+      }
+    }
+    return { result: await this.assets.externalizeDataImages(raw), ...(imageDataUrl ? { imageDataUrl } : {}) };
+  }
+
   private async executeDefinition(definition: ToolDefinition, params: Record<string, unknown>): Promise<unknown> {
-    const hydrated = await this.assets.hydrateAssetRefs(params);
+    const hydrated = this.options.tools ? params : await this.assets.hydrateAssetRefs(params);
     const result = definition.handler
       ? await withTimeout(definition.handler(hydrated), TOOL_TIMEOUT_MS)
       : await withTimeout(this.dispatch(definition.method!, hydrated), TOOL_TIMEOUT_MS);
-    return this.assets.externalizeDataImages(result);
+    return this.options.tools ? result : this.assets.externalizeDataImages(result);
   }
 
   private createMcpServer(): McpServer {
     const server = new McpServer(
-      { name: "coroslink-watchface-studio", version: "1.0.0" },
-      { capabilities: { resources: {} }, instructions:
-        "Inspect the scene schema and live document before editing. Use capabilities.placement and each layer's placement metadata for movement; do not assume an 800 x 800 canvas. Use sessionId and baseRevision for mutations. Apply coherent edits atomically, read the resulting document, render both Current and AOD, validate, then save. Build the archive to verify all device resolutions. Publishing requires the user's explicit authorization." }
+      { name: this.options.name ?? "coroslink-watchface-studio", version: "1.0.0" },
+      { capabilities: this.options.tools ? {} : { resources: {} }, instructions: this.options.instructions ?? (
+        "Inspect the scene schema and live document before editing. Use capabilities.placement and each layer's placement metadata for movement; do not assume an 800 x 800 canvas. Use sessionId and baseRevision for mutations. Apply coherent edits atomically, read the resulting document, render both Current and AOD, validate, then save. Build the archive to verify all device resolutions. Publishing requires the user's explicit authorization. " + WATCHFACE_LEGIBILITY_GUIDANCE) }
     );
-    for (const definition of editorToolDefinitions(this.assets)) {
+    for (const definition of this.options.tools ?? editorToolDefinitions(this.assets)) {
       server.registerTool(definition.name, {
         title: definition.title,
-        description: definition.description,
-        inputSchema: definition.schema,
+        description: !this.options.tools && ["get_schema", "apply_commands", "import_asset", "render_preview", "validate", "build_archive", "save"].includes(definition.name)
+          ? `${definition.description} ${WATCHFACE_LEGIBILITY_GUIDANCE}`
+          : definition.description,
+        inputSchema: z.object(definition.schema).strict(),
         annotations: {
           readOnlyHint: definition.readOnly === true,
           destructiveHint: definition.destructive === true,
@@ -409,7 +539,8 @@ export class WatchfaceAutomationServer {
         }
       }, async (params) => {
         try {
-          const original = definition.method === WATCHFACE_AUTOMATION_METHODS.renderPreview
+          if (definition.mcpHandler) return await definition.mcpHandler(params as Record<string, unknown>);
+          const original = AGENT_IMAGE_METHODS.has(definition.method ?? "")
             ? await this.assets.hydrateAssetRefs(await this.executeDefinition(definition, params as Record<string, unknown>))
             : undefined;
           const result = original === undefined
@@ -436,7 +567,7 @@ export class WatchfaceAutomationServer {
         }
       });
     }
-    server.registerResource(
+    if (!this.options.tools) server.registerResource(
       "watchface-scene-schema",
       "coroslink://watchface/scene-schema",
       { title: "CorosLink watch-face scene schema", mimeType: "application/json" },

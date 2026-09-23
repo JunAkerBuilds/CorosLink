@@ -61,7 +61,7 @@ export function WatchfaceSimulationPanel({ simulation, onChange, design }: { sim
   ];
   return <div className="wf-simulation" ref={root}>
     <button ref={trigger} type="button" className="wf-simulation-trigger" aria-expanded={open} aria-controls={id} aria-haspopup="dialog" data-enabled={simulation.enabled} onClick={() => setOpen(!open)}>
-      <FlaskConical size={15} aria-hidden="true" /> Simulation{simulation.playing ? " · Playing" : simulation.enabled ? " · On" : ""}
+      <FlaskConical size={15} aria-hidden="true" /> <span className="wf-simulation-trigger-label">Preview data:</span> <strong>{simulation.playing ? "Playing" : simulation.enabled ? "Sample" : "Now"}</strong>
     </button>
     {open && <section id={id} className="wf-simulation-panel" role="dialog" aria-label="Watch face simulation">
       <div className="wf-simulation-heading"><strong>Simulation</strong><button type="button" aria-label="Close simulation" onClick={() => { setOpen(false); trigger.current?.focus(); }}><X size={16} /></button></div>
@@ -91,7 +91,8 @@ export function WatchfaceSimulationPanel({ simulation, onChange, design }: { sim
             const style = design.nativeData![field.id];
             const key = field.id === "chart" ? style.chartSource ?? "chart_stress" : field.id;
             const fallback = nativeDataPreviewValue(field.id, style);
-            const stateCount = field.stateCount ?? (key === "chart_moon" ? 30 : undefined);
+            // Only pure state fields take an index; numeric fields with level artwork keep their value.
+            const stateCount = field.kind === "state" ? style.stateCount ?? field.stateCount : key === "chart_moon" ? 30 : undefined;
             return <SampleValue key={key} label={field.label + (stateCount ? " state" : "")} value={simulation.values[key] ?? fallback} min={stateCount ? 0 : undefined} max={stateCount ? stateCount - 1 : undefined} time={fallback.includes(":")} onCommit={value => setValue(key, value)} />;
           })}
           {design.nativeData?.chart?.enabled && <label>Chart history<select aria-label="Simulated chart history" value={!simulation.chartHistory ? "sample" : simulation.chartHistory.every(value => value === 0) ? "empty" : simulation.chartHistory[0] < simulation.chartHistory.at(-1)! ? "rising" : "falling"} onChange={event => patch({ chartHistory: event.target.value === "sample" ? undefined : event.target.value === "empty" ? [0, 0, 0, 0] : event.target.value === "rising" ? [0.1, 0.25, 0.2, 0.5, 0.7, 0.9] : [0.9, 0.7, 0.5, 0.6, 0.25, 0.1] })}><option value="sample">Default sample</option><option value="rising">Rising</option><option value="falling">Falling</option><option value="empty">Zero values</option></select></label>}

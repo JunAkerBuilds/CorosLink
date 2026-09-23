@@ -744,6 +744,7 @@ export async function composeWatchfaceReplacements(
           design.layerOpacities ?? {}
         )
       : hasWatchfaceLayerOpacity(design, "separators") ||
+          hasWatchfaceLayerOpacity(design, "arcCut") ||
           hasWatchfaceLayerOpacity(design, "complication")
         ? await buildLayerColorSpriteReplacements(
             details,

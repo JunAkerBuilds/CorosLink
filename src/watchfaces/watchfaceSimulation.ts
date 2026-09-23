@@ -7,6 +7,8 @@ export interface WatchfacePreviewScenario {
   values?: Record<string, string>;
   weather?: { condition: number; night: boolean };
   chartHistory?: number[];
+  /** 0–1 position of the marker along a line-graph preview (sun/moon path progress). */
+  chartProgress?: number;
 }
 
 export interface WatchfaceSimulation extends WatchfacePreviewScenario {
@@ -26,6 +28,7 @@ export const WATCHFACE_SIMULATION_CAPABILITIES = {
   valueFormat: "String samples. Use h:mm for time fields, numbers for other values, integer state indices for wind direction / HRV / moon phase. Battery and progress: 0–100. temperature is the watch sensor; weather_temp is weather temperature. They are independent. Values replace the current map. Unspecified fields use their design samples.",
   weather: { condition: "Asset index 0–40", night: "Boolean selecting day/night artwork" },
   chartHistory: "2–120 normalized numbers between 0 and 1; sample plot heights, not firmware-generated history.",
+  chartProgress: "0–1 marker position along a line-graph preview (for example sun-path progress through the day).",
   limitations: "Preview simulation; not firmware emulation. Only supported fields present in the selected display mode render. Battery states approximate normal charge levels; special charging states are excluded. Year controls the calendar; a year label requires template support."
 } as const;
 const pad = (value: number, length = 2) => String(value).padStart(length, "0");
@@ -84,6 +87,10 @@ export function parseWatchfacePreviewScenario(value: unknown): WatchfacePreviewS
   if (raw.chartHistory !== undefined) {
     if (!Array.isArray(raw.chartHistory) || raw.chartHistory.length < 2 || raw.chartHistory.length > 120 || raw.chartHistory.some(value => typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1)) throw new Error("chartHistory needs 2–120 numbers between 0 and 1.");
     result.chartHistory = [...raw.chartHistory];
+  }
+  if (raw.chartProgress !== undefined) {
+    if (typeof raw.chartProgress !== "number" || !Number.isFinite(raw.chartProgress) || raw.chartProgress < 0 || raw.chartProgress > 1) throw new Error("chartProgress must be a number between 0 and 1.");
+    result.chartProgress = raw.chartProgress;
   }
   return result;
 }

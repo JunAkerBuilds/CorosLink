@@ -1,10 +1,13 @@
 import { WatchfaceAddMenu } from "./WatchfaceAddMenu";
+import { recoverWatchfaceDesign } from "./recoveredWatchfaceDesign";
 import { WatchfaceSimulationPanel } from "./WatchfaceSimulationPanel";
 import { useWatchfaceSimulation } from "./useWatchfaceSimulation";
 import { WATCHFACE_SIMULATION_CAPABILITIES, activeSimulationScenario, createWatchfaceSimulation, parseWatchfacePreviewScenario, patchWatchfaceSimulation, simulationStudioOptions, type WatchfacePreviewScenario } from "./watchfaceSimulation";
 import { WatchfaceColorInput, flushWatchfaceColorInputs } from "./WatchfaceColorInput";
+import { WatchfaceNumberAlignControl } from "./WatchfaceNumberAlignControl";
 import { NativeDataInspector } from "./NativeDataInspector";
 import { describeNativeDataComponents } from "./nativeDataAutomation";
+import { watchfaceAutomationAssetContracts } from "./watchfaceAutomationAssetContracts";
 import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, nativeDataSize } from "./nativeData";
 import { glyphBaselineMovements, visibleGlyphBounds } from "./watchfaceGlyphLayout";
 import { WatchfaceExportPreview } from "./WatchfaceExportPreview";
@@ -233,6 +236,7 @@ import {
   Group,
   GripVertical,
   ImagePlus,
+  Sparkles,
   Info,
   Layers,
   Link2,
@@ -261,7 +265,11 @@ import {
   MousePointerSquareDashed,
   X,
   XCircle,
-  MoonStar
+  MoonStar,
+  Watch,
+  Maximize2,
+  Minimize2,
+  TriangleAlert
 } from "lucide-react";
 import {
   resizeWatchfaceDimensions,
@@ -270,7 +278,10 @@ import {
   type WatchfaceDimensions
 } from "./watchfaceDimensions";
 import type {
+  CorosOfficialAssetFrames,
   CorosWatchfaceArchive,
+  CorosWatchfaceRasterFontFolder,
+  CorosWatchfaceArtwork,
   CorosWatchfaceBackgroundElement,
   CorosWatchfaceBackgroundEllipse,
   CorosWatchfaceBackgroundLine,
@@ -285,7 +296,9 @@ import type {
   CorosWatchfaceShadowEffect,
   CorosWatchfaceStroke,
   CorosWatchfaceProject,
+  CorosWatchfaceRasterFont,
   CorosWatchfaceTemplateAsset,
+  CorosWatchfaceResolutionDetails,
   CorosWatchfaceTemplateDetails,
   WatchModelId
 } from "../../electron/types";
@@ -347,6 +360,8 @@ function centerSpriteArtwork(
 }
 
 import type { CorosLinkApi } from "../coroslink-api";
+import { WatchfaceAiPanel } from "./WatchfaceAiPanel";
+import { WatchmakerDial } from "./WatchmakerDial";
 import {
   deriveEditorLayers,
   editorLayerAtPoint,
@@ -405,7 +420,7 @@ import {
   computeLayoutOffsetLimits,
   configAssetCanUseNativeSize,
   configAssetCanvasSize,
-  configAssetSupportsNativeSize,
+  configAssetDefaultsToNativeSize,
   applyConfigTextEditsToDetails,
   buildDisabledControlComplicationOverrides,
   buildDisabledWatchfaceConfigAssetOverrides,
@@ -425,6 +440,7 @@ import {
   hasWatchfaceAod,
   inferStaticSeparators,
   inferExerciseSeparatorStyle,
+  corosConfigColorToCss,
   exerciseProgressStyleForResolution,
   kcalProgressStyleForResolution,
   loadStudioImage,
@@ -432,6 +448,7 @@ import {
   mergeConfigOverrides,
   parseConfigPos,
   pickPreviewResolution,
+  pickEditorPreviewResolution,
   pickWatchPreviewResolution,
   rasterFontSupportsText,
   removeWatchfaceDateFontOverride,
@@ -440,11 +457,13 @@ import {
   supportsWatchfaceSpriteRotation,
   virtualControlIconCanvasSize,
   isControlComplicationEnabled,
+  watchfaceArcCutIsDateSlash,
   WATCHFACE_COMPLICATIONS,
   WATCHFACE_MONTH_LABELS,
   type WatchfaceDatePartId,
   type WatchfaceAssetLoader,
   type WatchfaceConfigAssetReference,
+  type WatchfaceComplicationDefinition,
   type WatchfaceComplicationId,
   type WatchfaceMetricId,
   type WatchfacePreviewMode,
@@ -454,6 +473,13 @@ import {
 } from "./watchfaceStudio";
 import type { WatchfaceAutomationDiagnostic } from "./watchfaceAutomationSchema";
 import { resolveWatchfacePlacementScene } from "./watchfaceAutomationPlacement";
+import {
+  decodeImageDataUrl,
+  recolorAutomationImage,
+  renderAutomationSvg,
+  sampleAutomationImage
+} from "./watchfaceAutomationImageTools";
+import { analyzeLayerContrast, watchfaceArcSweepBox } from "./watchfaceAutomationPixels";
 import {
   applyWatchfaceAutomationCommands,
   validateWatchfaceAutomationDocument,
@@ -472,10 +498,26 @@ import {
   weatherPreviewDataUrl,
   drawWeatherTemperaturePreview,
   WEATHER_ASSET_COUNTS,
-  type WeatherAssetSet
+  WEATHER_ICON_SETS,
+  WEATHER_TEMPERATURE_SETS,
+  weatherAssetUrl,
+  type WeatherAssetSet,
+  type WeatherAssetSetInfo
 } from "./weatherAssets";
 import { CustomPngFontPanel } from "./CustomPngFontPanel";
+import { OfficialAssetBrowser, officialAssetToSpriteFolder, type OfficialAssetBrowserMode } from "./OfficialAssetBrowser";
 import { LocalFontPicker } from "./LocalFontPicker";
+import {
+  TemplateSpriteStrip,
+  WatchfaceFontPreview,
+  WatchfaceSpriteStrip
+} from "./WatchfaceSpriteStrip";
+import {
+  controlIconConfigKey,
+  isSelectableSlotConfigAssetKey,
+  templateFontGlyphsForLayer,
+  templateStateGlyphs
+} from "./watchfaceSpritePreview";
 import { WatchfaceSpriteImportTracker } from "./watchfaceSpriteImportTracker";
 import {
   beginWatchfaceEditorHistoryTransaction,
@@ -500,6 +542,8 @@ import {
   snapWatchfaceBounds,
   translateWatchfaceBounds,
   watchfaceDesignThreshold,
+  watchfaceAlignmentGuides,
+  watchfaceNeighborMeasurements,
   watchfaceSafeAreaBounds,
   writeWatchfacePlacementPreferences,
   type WatchfaceGridStep,
@@ -556,10 +600,34 @@ import {
   watchfaceStrokePadding
 } from "./watchfaceEditorStrokes";
 import {
+  WATCHFACE_PLACEMENT_ACCENT,
+  paintWatchfaceLabelPill,
   paintWatchfaceMeasurements,
+  paintWatchfaceSnapMarker,
   resizeWatchfaceCanvasBackings
 } from "./watchfaceInteractiveRenderer";
 import { WatchfacePointerController } from "./watchfacePointerController";
+import {
+  attachWatchfaceFontSnapshots,
+  findMissingWatchfaceFonts,
+  forgetWatchfaceFontAvailability,
+  rememberWatchfaceFontSnapshots,
+  withoutWatchfaceFontSnapshots
+} from "./watchfaceFontSnapshots";
+
+/** Display names for the `<language>_date_week_font` prefixes COROS archives use. */
+const WEEKDAY_LANGUAGE_NAMES: Record<string, string> = {
+  chinese: "Chinese (Simplified)",
+  chinese_tw: "Chinese (Traditional)",
+  germany: "German",
+  spanish: "Spanish",
+  french: "French",
+  japanese: "Japanese",
+  thai: "Thai",
+  polish: "Polish",
+  portugal: "Portuguese",
+  italian: "Italian"
+};
 
 function LinkedDimensionInputs({
   width,
@@ -694,6 +762,7 @@ function drawWeatherPreviewLayer(
 interface WatchfaceEditorProps {
   api: CorosLinkApi;
   active: boolean;
+  conversionBusy?: boolean;
   sessionId: string;
   starterArchive: CorosWatchfaceArchive;
   targetFirmwareType?: string;
@@ -712,16 +781,17 @@ interface WatchfaceEditorProps {
   onConvertTarget: (
     design: CorosWatchfaceDesignState,
     name: string,
-    sourceDirty: boolean
+    sourceDirty: boolean,
+    bakeForWatch?: WatchfaceAutomationConversionInput["bakeForWatch"]
   ) => void;
   onAutomationConvert: (
     input: WatchfaceAutomationConversionInput
-  ) => {
+  ) => Promise<{
     opened: boolean;
     name: string;
     targetFirmwareType: string;
     omittedRawConfigEditCount: number;
-  };
+  }>;
   onError: (message: string) => void;
   onNotice: (message: string) => void;
   onClearMessages: () => void;
@@ -776,6 +846,16 @@ interface PendingWatchfaceDrag {
   drag: WatchfaceDragState;
   point: { x: number; y: number };
   bypassSnap: boolean;
+  /** Shift held: constrain the move to its dominant axis, like Figma. */
+  axisLock: boolean;
+}
+
+/** Live geometry of the selection being dragged, painted over the stage. */
+interface WatchfaceDragFeedback {
+  origin: WatchfaceEditorBounds;
+  bounds: WatchfaceEditorBounds;
+  axisLock: "x" | "y" | null;
+  targets: WatchfaceSnapTarget[];
 }
 
 interface WatchfacePreviewRenderRequest {
@@ -840,6 +920,10 @@ function isSpriteTransformDrag(
 }
 
 const PREVIEW_SIZE = 520;
+/** Layer kinds check_contrast measures when no ids are given: the readable ones. */
+const CONTRAST_LAYER_KINDS = new Set<EditorLayer["kind"]>([
+  "time", "seconds", "date", "weekday", "battery", "metric", "complication"
+]);
 const DRAG_START_THRESHOLD = 3;
 const PROJECT_THUMBNAIL_SIZE = 416;
 
@@ -965,6 +1049,10 @@ function normalizeEditorDesign(
           ...design.modeDesigns,
           aod: {
             ...aodMode,
+            // Older imports stored the starter's raw COROS value (0x000000).
+            ...(typeof aodMode.backgroundColor === "string"
+              ? { backgroundColor: corosConfigColorToCss(aodMode.backgroundColor) }
+              : {}),
             exerciseSeparator: normalizeExerciseSeparator(
               aodMode.exerciseSeparator
             ),
@@ -975,7 +1063,11 @@ function normalizeEditorDesign(
         }
       : design.modeDesigns;
   const normalized: CorosWatchfaceDesignState = {
-    ...design,
+    // Saved font snapshots are loaded separately and re-attached on save.
+    ...withoutWatchfaceFontSnapshots(design),
+    ...(typeof design.backgroundColor === "string"
+      ? { backgroundColor: corosConfigColorToCss(design.backgroundColor) }
+      : {}),
     artworkVisible:
       design.artworkVisible ?? legacyBackgroundOverride?.enabled !== false,
     exerciseSeparator: normalizeExerciseSeparator(design.exerciseSeparator),
@@ -1047,6 +1139,7 @@ export function WatchfaceEditor({
   onArchiveCreated,
   onProjectSaved,
   onConvertTarget,
+  conversionBusy = false,
   onAutomationConvert,
   onError,
   onNotice,
@@ -1055,6 +1148,7 @@ export function WatchfaceEditor({
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const dragPreviewCanvasRef = useRef<HTMLCanvasElement>(null);
   const arcOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewStackRef = useRef<HTMLDivElement>(null);
   const componentDragBoundsRef = useRef<SVGRectElement>(null);
@@ -1063,6 +1157,8 @@ export function WatchfaceEditor({
   const dragOverlaySnapshotRef = useRef<ImageData | null>(null);
   const snapGuidesRef = useRef<WatchfaceSnapGuide[]>([]);
   const snapMeasurementsRef = useRef<WatchfaceSnapMeasurement[]>([]);
+  const dragFeedbackRef = useRef<WatchfaceDragFeedback | null>(null);
+  const lastPendingDragRef = useRef<PendingWatchfaceDrag | null>(null);
   const snapStatusElementRef = useRef<HTMLSpanElement>(null);
   const mountedRef = useRef(true);
   const previewSessionRef = useRef(sessionId);
@@ -1088,6 +1184,8 @@ export function WatchfaceEditor({
   const dragPreparationIdRef = useRef(0);
   const dragCommitIdRef = useRef(0);
   const placementMenuRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLElement>(null);
+  const [stageFullscreen, setStageFullscreen] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const assetCacheRef = useRef(new Map<string, CorosWatchfaceTemplateAsset>());
   const dragRef = useRef<WatchfaceDragState | null>(null);
@@ -1128,18 +1226,18 @@ export function WatchfaceEditor({
   );
   const rootDesign = history.present.value.design;
   const projectName = history.present.value.projectName;
-  const [selectedId, setSelectedId] = useState<string>("background");
-  const [selectedIds, setSelectedIds] = useState<string[]>(["background"]);
-  const automationSelectionRef = useRef({
-    selectedId: "background",
-    selectedIds: ["background"]
+  const [selectedId, setSelectedId] = useState<string>("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const automationSelectionRef = useRef<{ selectedId: string; selectedIds: string[] }>({
+    selectedId: "",
+    selectedIds: []
   });
   const previousPreviewModeRef = useRef<WatchfacePreviewMode>("current");
   const selectionByModeRef = useRef<
     Record<WatchfacePreviewMode, { selectedId: string; selectedIds: string[] }>
   >({
-    current: { selectedId: "background", selectedIds: ["background"] },
-    aod: { selectedId: "background", selectedIds: ["background"] }
+    current: { selectedId: "", selectedIds: [] },
+    aod: { selectedId: "", selectedIds: [] }
   });
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [draggedArtworkLayerId, setDraggedArtworkLayerId] =
@@ -1152,11 +1250,61 @@ export function WatchfaceEditor({
   const [previewMode, setPreviewMode] = useState<WatchfacePreviewMode>("current");
   const automationModeRef = useRef<WatchfacePreviewMode>("current");
   const { simulation, simulationRef, updateSimulation, simulationScenario } = useWatchfaceSimulation();
+
+  // Full-screen editor: an in-window view that hides the app header and
+  // sidebar so the whole studio (panes, command bar, stage) fills the window.
+  // OS fullscreen is asked for on top of that; the view works the same when
+  // the window declines.
+  useEffect(() => {
+    if (!stageFullscreen) return;
+    document.documentElement.dataset.editorFullscreen = "true";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || document.fullscreenElement) return;
+      setStageFullscreen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      delete document.documentElement.dataset.editorFullscreen;
+    };
+  }, [stageFullscreen]);
+  useEffect(() => {
+    // Leaving OS fullscreen (Esc, the green button) also leaves the canvas view.
+    const sync = () => {
+      if (!document.fullscreenElement) setStageFullscreen(false);
+    };
+    document.addEventListener("fullscreenchange", sync);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      if (document.fullscreenElement === editorRef.current) void document.exitFullscreen().catch(() => {});
+    };
+  }, []);
+  const toggleStageFullscreen = () => {
+    if (stageFullscreen) {
+      setStageFullscreen(false);
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+      return;
+    }
+    setStageFullscreen(true);
+    const editor = editorRef.current;
+    if (editor && document.fullscreenEnabled) {
+      editor.requestFullscreen({ navigationUI: "hide" }).catch((error: unknown) => {
+        console.warn("[watchface-studio] OS fullscreen unavailable; using the in-window full-screen view.", error);
+      });
+    }
+  };
   const [automationPreviewComplication, setAutomationPreviewComplication] =
     useState<WatchfaceComplicationId | null>(null);
   const design = useMemo(
     () => resolveWatchfaceModeDesign(rootDesign, previewMode),
     [rootDesign, previewMode]
+  );
+  // Saved font snapshots finish decoding before `details` is set (see the
+  // template load below), so this reflects which families they cover.
+  const [fontNoticeDismissed, setFontNoticeDismissed] = useState(false);
+  const missingFonts = useMemo(
+    () => (details ? findMissingWatchfaceFonts(rootDesign) : []),
+    [details, rootDesign]
   );
   const [projectId, setProjectId] = useState<string | undefined>(initialProjectId);
   const [creating, setCreating] = useState(false);
@@ -1173,6 +1321,16 @@ export function WatchfaceEditor({
   const spriteImportTrackerRef = useRef(new WatchfaceSpriteImportTracker());
   const [pendingSpriteImportCount, setPendingSpriteImportCount] = useState(0);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  /** Open official COROS asset browser and where its pick goes. */
+  const [officialBrowser, setOfficialBrowser] = useState<{
+    mode: OfficialAssetBrowserMode;
+    title: string;
+    defaultCategory?: string;
+    defaultRole?: string;
+    frameCount?: number;
+    configKey?: string;
+    onPick: (frames: CorosOfficialAssetFrames, frameIndex?: number) => void | Promise<void>;
+  } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [layersOpen, setLayersOpen] = useState(false);
@@ -1181,7 +1339,9 @@ export function WatchfaceEditor({
     () => new Set<string>(["Template assets", "Always-on assets"])
   );
   const [propertiesOpen, setPropertiesOpen] = useState(false);
-  const [propertiesTab, setPropertiesTab] = useState<"selection" | "project">(
+  const [aiHeadingSlot, setAiHeadingSlot] = useState<HTMLDivElement | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [propertiesTab, setPropertiesTab] = useState<"selection" | "project" | "ai">(
     "selection"
   );
   const [collapsedInspectorSections, setCollapsedInspectorSections] = useState(
@@ -1243,6 +1403,7 @@ export function WatchfaceEditor({
   ), []);
 
   const rasterFolderImportProps = {
+    firmwareType: targetFirmwareType,
     importDisabled: spriteImportPending,
     onImportStart: beginSpriteImport,
     onImportFinish: finishSpriteImport,
@@ -1325,6 +1486,8 @@ export function WatchfaceEditor({
   function clearSnapGuides() {
     snapGuidesRef.current = [];
     snapMeasurementsRef.current = [];
+    dragFeedbackRef.current = null;
+    lastPendingDragRef.current = null;
     const canvas = overlayCanvasRef.current;
     const context = canvas?.getContext("2d");
     if (context && dragOverlaySnapshotRef.current) {
@@ -1355,19 +1518,87 @@ export function WatchfaceEditor({
       Math.PI * 2
     );
     context.clip();
+    const feedback = dragFeedbackRef.current;
+    const hairline = Math.max(1, canvas.width / 900);
+    if (feedback?.axisLock) {
+      // Shift-constrained move: show the rail the selection is sliding along.
+      const centerX = ((feedback.origin.x0 + feedback.origin.x1) / 2) * scaleX;
+      const centerY = ((feedback.origin.y0 + feedback.origin.y1) / 2) * scaleY;
+      context.beginPath();
+      if (feedback.axisLock === "x") {
+        context.moveTo(0, centerY);
+        context.lineTo(canvas.width, centerY);
+      } else {
+        context.moveTo(centerX, 0);
+        context.lineTo(centerX, canvas.height);
+      }
+      context.strokeStyle = "rgba(255, 255, 255, 0.35)";
+      context.lineWidth = hairline;
+      context.setLineDash([4 * hairline, 4 * hairline]);
+      context.stroke();
+      context.setLineDash([]);
+    }
+    if (feedback) {
+      // Outline every layer the selection is aligned with or measured against.
+      const referenceIds = new Set([
+        ...snapGuidesRef.current.flatMap((guide) => guide.kind === "layer" && guide.targetId ? [guide.targetId] : []),
+        ...snapMeasurementsRef.current.flatMap((measurement) => measurement.targetIds ?? [])
+      ]);
+      context.beginPath();
+      for (const target of feedback.targets) {
+        if (!referenceIds.has(target.id)) continue;
+        const { bounds: box } = target;
+        context.rect(
+          box.x0 * scaleX,
+          box.y0 * scaleY,
+          (box.x1 - box.x0) * scaleX,
+          (box.y1 - box.y0) * scaleY
+        );
+      }
+      context.fillStyle = "rgba(255, 76, 110, 0.05)";
+      context.fill();
+      context.strokeStyle = "rgba(255, 76, 110, 0.75)";
+      context.lineWidth = hairline;
+      context.setLineDash([3 * hairline, 3 * hairline]);
+      context.stroke();
+      context.setLineDash([]);
+    }
     if (snapGuidesRef.current.length > 0) {
       context.beginPath();
       for (const guide of snapGuidesRef.current) {
+        const target = guide.targetId
+          ? feedback?.targets.find((candidate) => candidate.id === guide.targetId)
+          : undefined;
+        const boxes = [feedback?.bounds, target?.bounds].filter(
+          (box): box is WatchfaceEditorBounds => Boolean(box)
+        );
         if (guide.axis === "x") {
-          context.moveTo(guide.value * scaleX, 0);
-          context.lineTo(guide.value * scaleX, canvas.height);
+          const x = guide.value * scaleX;
+          // Layer alignment spans only the two objects; face-level guides run edge to edge.
+          const [y0, y1] = target && boxes.length > 1
+            ? [Math.min(...boxes.map((box) => box.y0)) * scaleY, Math.max(...boxes.map((box) => box.y1)) * scaleY]
+            : [0, canvas.height];
+          context.moveTo(x, y0);
+          context.lineTo(x, y1);
+          for (const box of boxes) {
+            paintWatchfaceSnapMarker(context, x, box.y0 * scaleY);
+            paintWatchfaceSnapMarker(context, x, box.y1 * scaleY);
+          }
         } else {
-          context.moveTo(0, guide.value * scaleY);
-          context.lineTo(canvas.width, guide.value * scaleY);
+          const y = guide.value * scaleY;
+          const [x0, x1] = target && boxes.length > 1
+            ? [Math.min(...boxes.map((box) => box.x0)) * scaleX, Math.max(...boxes.map((box) => box.x1)) * scaleX]
+            : [0, canvas.width];
+          context.moveTo(x0, y);
+          context.lineTo(x1, y);
+          for (const box of boxes) {
+            paintWatchfaceSnapMarker(context, box.x0 * scaleX, y);
+            paintWatchfaceSnapMarker(context, box.x1 * scaleX, y);
+          }
         }
       }
-      context.strokeStyle = "rgba(81, 224, 181, 0.98)";
-      context.lineWidth = 1.5;
+      context.strokeStyle = WATCHFACE_PLACEMENT_ACCENT;
+      context.lineWidth = hairline;
       context.setLineDash([]);
       context.stroke();
     }
@@ -1377,17 +1608,56 @@ export function WatchfaceEditor({
       scaleX,
       scaleY
     );
+    if (feedback) {
+      const { bounds } = feedback;
+      context.strokeStyle = "rgba(81, 224, 181, 0.95)";
+      context.lineWidth = hairline * 1.5;
+      context.setLineDash([]);
+      context.strokeRect(
+        bounds.x0 * scaleX,
+        bounds.y0 * scaleY,
+        (bounds.x1 - bounds.x0) * scaleX,
+        (bounds.y1 - bounds.y0) * scaleY
+      );
+      const dx = toWatchCoordinate(bounds.x0 - feedback.origin.x0);
+      const dy = toWatchCoordinate(bounds.y0 - feedback.origin.y0);
+      const label = `X ${toWatchCoordinate(bounds.x0)}  Y ${toWatchCoordinate(bounds.y0)}` +
+        (dx !== 0 || dy !== 0 ? `   Δ ${dx >= 0 ? "+" : ""}${dx}, ${dy >= 0 ? "+" : ""}${dy}` : "");
+      // Sit below the selection unless a distance label already occupies that gap.
+      const pillGap = Math.max(14, canvas.width / 34);
+      const below = !snapMeasurementsRef.current.some(
+        (measurement) => measurement.axis === "y" && measurement.start >= bounds.y1 - 0.5
+      );
+      paintWatchfaceLabelPill(
+        context,
+        label,
+        ((bounds.x0 + bounds.x1) / 2) * scaleX,
+        below ? bounds.y1 * scaleY + pillGap : bounds.y0 * scaleY - pillGap,
+        "rgba(81, 224, 181, 0.96)",
+        "rgb(6, 32, 25)"
+      );
+    }
     context.restore();
-    const status = formatWatchfaceSnapStatus(snapGuidesRef.current);
-    if (snapStatusElementRef.current && status) {
-      snapStatusElementRef.current.textContent = status;
-      snapStatusElementRef.current.classList.add("is-snap-status");
+    const alignedTargets = new Set(
+      snapGuidesRef.current.flatMap((guide) => guide.kind === "layer" && guide.targetId ? [guide.targetId] : [])
+    );
+    const status = alignedTargets.size > 1
+      ? `Aligned with ${alignedTargets.size} layers`
+      : formatWatchfaceSnapStatus(snapGuidesRef.current);
+    if (snapStatusElementRef.current) {
+      snapStatusElementRef.current.textContent = status ?? (selectedElement
+        ? backgroundElementLabel(selectedElement)
+        : selectedLayer?.label ?? "No selection");
+      snapStatusElementRef.current.classList.toggle("is-snap-status", Boolean(status));
     }
   }
 
-  /** Selecting anything pulls the Properties pane back to the selection tab. */
+  /**
+   * Selecting anything pulls the Properties pane back to the selection tab,
+   * except from the AI chat, which selects layers to show its own work.
+   */
   useEffect(() => {
-    if (selectedId) setPropertiesTab("selection");
+    if (selectedId) setPropertiesTab((tab) => (tab === "ai" ? tab : "selection"));
   }, [selectedId]);
 
   useEffect(() => {
@@ -1414,6 +1684,24 @@ export function WatchfaceEditor({
       observer.disconnect();
       window.cancelAnimationFrame(frame);
     };
+  }, []);
+
+  // Fit the dial to the actual center pane, including wrapped preview controls.
+  useEffect(() => {
+    const stage = previewStackRef.current?.parentElement;
+    const toolbar = stage?.querySelector<HTMLElement>(".wf-stage-toolbar");
+    const status = stage?.querySelector<HTMLElement>(".wf-stage-status");
+    if (!stage || !toolbar || !status || typeof ResizeObserver === "undefined") return;
+    const resize = () => {
+      const toolbarHeight = toolbar.getBoundingClientRect().height;
+      const availableHeight = stage.clientHeight - status.getBoundingClientRect().height - toolbarHeight - 56;
+      stage.style.setProperty("--wf-toolbar-h", `${toolbarHeight}px`);
+      stage.style.setProperty("--wf-fit-size", `${Math.max(0, Math.min(stage.clientWidth - 48, availableHeight))}px`);
+    };
+    const observer = new ResizeObserver(resize);
+    [stage, toolbar, status].forEach((element) => observer.observe(element));
+    resize();
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -1482,17 +1770,24 @@ export function WatchfaceEditor({
   }, [contextMenu]);
 
   useEffect(() => {
-    const handleSnapBypass = (event: KeyboardEvent) => {
-      if (event.key === "Alt" && dragRef.current) {
-        pointerControllerRef.current?.updatePending((pending) => ({
-          ...pending,
-          bypassSnap: true
-        }));
-        clearSnapGuides();
-      }
+    // Modifier changes mid-drag re-resolve the last pointer sample, so Shift
+    // (axis lock) and Alt (skip snapping) respond without moving the mouse.
+    const handleDragModifier = (event: KeyboardEvent) => {
+      if (event.key !== "Alt" && event.key !== "Shift") return;
+      const last = lastPendingDragRef.current;
+      if (!dragRef.current || !last || last.drag !== dragRef.current) return;
+      pointerControllerRef.current?.schedule({
+        ...last,
+        bypassSnap: event.altKey,
+        axisLock: event.shiftKey
+      });
     };
-    window.addEventListener("keydown", handleSnapBypass);
-    return () => window.removeEventListener("keydown", handleSnapBypass);
+    window.addEventListener("keydown", handleDragModifier);
+    window.addEventListener("keyup", handleDragModifier);
+    return () => {
+      window.removeEventListener("keydown", handleDragModifier);
+      window.removeEventListener("keyup", handleDragModifier);
+    };
   }, []);
 
   useEffect(() => {
@@ -1538,16 +1833,16 @@ export function WatchfaceEditor({
       })
     );
     setProjectId(initialProjectId);
-    setSelectedId("background");
-    setSelectedIds(["background"]);
+    setSelectedId("");
+    setSelectedIds([]);
     automationSelectionRef.current = {
-      selectedId: "background",
-      selectedIds: ["background"]
+      selectedId: "",
+      selectedIds: []
     };
     previousPreviewModeRef.current = "current";
     selectionByModeRef.current = {
-      current: { selectedId: "background", selectedIds: ["background"] },
-      aod: { selectedId: "background", selectedIds: ["background"] }
+      current: { selectedId: "", selectedIds: [] },
+      aod: { selectedId: "", selectedIds: [] }
     };
     setHoveredId(null);
     setBackgroundDataUrl("");
@@ -1555,6 +1850,7 @@ export function WatchfaceEditor({
     automationModeRef.current = "current";
     setAutomationPreviewComplication(null);
     setDetails(null);
+    setFontNoticeDismissed(false);
     setExportPreviewImages(null);
     setConfigTextBaselines({});
     setConfigEditorDirectory("");
@@ -1577,10 +1873,15 @@ export function WatchfaceEditor({
 
   useEffect(() => {
     assetCacheRef.current.clear();
+    // Re-check fonts per opened project, so one installed since is picked up.
+    forgetWatchfaceFontAvailability();
     let cancelled = false;
     Promise.all([
       api.describeCorosWatchfaceTemplate(starterArchive.archiveId),
-      api.loadCorosWatchfaceTemplateConfigTexts(starterArchive.archiveId)
+      api.loadCorosWatchfaceTemplateConfigTexts(starterArchive.archiveId),
+      // Decode saved font snapshots before the first preview renders, so a
+      // face whose fonts are not installed never flashes fallback glyphs.
+      rememberWatchfaceFontSnapshots(initialDesign?.fontSnapshots)
     ])
       .then(async ([described, configTexts]) => {
         let templateArtwork: CorosWatchfaceTemplateAsset | undefined;
@@ -1599,7 +1900,7 @@ export function WatchfaceEditor({
           }
         }
         if (hasWatchfaceAod(described) && !initialDesign?.modeDesigns?.aod) {
-          const preferred = pickWatchPreviewResolution(described);
+          const preferred = pickWatchPreviewResolution(described, targetWatchModel ?? targetFirmwareType);
           const aodResolutions = [
             ...(preferred ? [preferred] : []),
             ...described.resolutions.filter(
@@ -1625,6 +1926,20 @@ export function WatchfaceEditor({
             }
           }
         }
+        // Hydrate a starter's own weather and native-data sprites instead of
+        // the editor's generated defaults. Recovered official faces always
+        // qualify; so does any archive that carries such artwork itself, such
+        // as a recovered face converted to another watch, where the generated
+        // defaults would otherwise replace the original icons and geometry.
+        const hydratedCurrent = initialDesign
+          ? undefined : await recoverWatchfaceDesign(described, loadAssets);
+        const carriesOwnAssets = Boolean(hydratedCurrent?.weatherIndicator?.assets) ||
+          Object.keys(hydratedCurrent?.nativeData ?? {}).length > 0;
+        const recoverAssets = Boolean(hydratedCurrent) &&
+          (starterArchive.recoveredFromCompiled || carriesOwnAssets);
+        const recoveredCurrent = recoverAssets ? hydratedCurrent : undefined;
+        const recoveredAod = recoverAssets && hasWatchfaceAod(described)
+          ? await recoverWatchfaceDesign(detailsForCompositionMode(described, "aod"), loadAssets) : undefined;
         if (cancelled) return;
 
         const baselines: Record<string, string> = {};
@@ -1732,7 +2047,7 @@ export function WatchfaceEditor({
         }
         if (hasWatchfaceAod(described) && !nextDesign.modeDesigns?.aod) {
           const sourceResolution =
-            pickWatchPreviewResolution(described) ??
+            pickWatchPreviewResolution(described, targetWatchModel ?? targetFirmwareType) ??
             described.resolutions.find(
               (resolution) => Object.keys(resolution.aodConfig).length > 0
             );
@@ -1766,10 +2081,16 @@ export function WatchfaceEditor({
                       height: aodArtwork.height
                     }
                   : null,
-                sourceResolution?.aodConfig.bg_color ?? "#000000"
+                corosConfigColorToCss(sourceResolution?.aodConfig.bg_color ?? "#000000")
               )
             }
           };
+        }
+        if (recoveredCurrent) {
+          nextDesign = { ...nextDesign, ...recoveredCurrent };
+          if (recoveredAod && nextDesign.modeDesigns?.aod) {
+            nextDesign = { ...nextDesign, modeDesigns: { aod: { ...nextDesign.modeDesigns.aod, ...recoveredAod } } };
+          }
         }
         const initialized = {
           ...current,
@@ -1801,7 +2122,8 @@ export function WatchfaceEditor({
     loadAssets,
     onError,
     sessionId,
-    starterArchive.archiveId
+    starterArchive.archiveId,
+    starterArchive.recoveredFromCompiled
   ]);
 
   const backgroundDesign = useMemo(
@@ -1875,6 +2197,7 @@ export function WatchfaceEditor({
       ...simulationStudioOptions(simulationScenario),
       previewMode: supportsAod ? previewMode : ("current" as const),
       deferProgressArcs: true,
+      transparentBackground: true,
       ...(automationPreviewComplication
         ? { previewComplication: automationPreviewComplication }
         : {})
@@ -1983,8 +2306,8 @@ export function WatchfaceEditor({
   const watchPreviewResolution = useMemo(
     () => previewDetails?.resolutions.find(
       (resolution) => resolution.directory === watchPreviewDirectory
-    ) ?? (previewDetails ? pickWatchPreviewResolution(previewDetails) : null),
-    [previewDetails, watchPreviewDirectory]
+    ) ?? (previewDetails ? pickEditorPreviewResolution(previewDetails, targetWatchModel ?? targetFirmwareType) : null),
+    [previewDetails, watchPreviewDirectory, targetWatchModel, targetFirmwareType]
   );
   const renderedPreviewDetails = useMemo(
     () => previewDetails && watchPreviewResolution
@@ -2049,9 +2372,9 @@ export function WatchfaceEditor({
         (resolution) => resolution.directory === current
       )
         ? current
-        : pickWatchPreviewResolution(previewDetails)?.directory ?? ""
+        : pickEditorPreviewResolution(previewDetails, targetWatchModel ?? targetFirmwareType)?.directory ?? ""
     );
-  }, [previewDetails]);
+  }, [previewDetails, targetWatchModel, targetFirmwareType]);
 
   useEffect(() => {
     if (!watchPreviewDirectory) return;
@@ -2065,6 +2388,7 @@ export function WatchfaceEditor({
       : null;
     return base
       ? computeLayoutOffsetLimits(base, {
+          configAssetOverrides: design.configAssetOverrides,
           timeStyles: design.timeStyles,
           letterSpacing: design.letterSpacing,
           rasterFont: design.rasterFont
@@ -2082,6 +2406,7 @@ export function WatchfaceEditor({
       : null;
     return base
       ? computeLayoutGroupBounds(base, {
+          configAssetOverrides: design.configAssetOverrides,
           timeStyles: design.timeStyles,
           letterSpacing: design.letterSpacing,
           rasterFont: design.rasterFont
@@ -2234,7 +2559,7 @@ export function WatchfaceEditor({
     };
     const saved = selectionByModeRef.current[previewMode];
     const fallback = canEditActiveMode
-      ? { selectedId: "background", selectedIds: ["background"] }
+      ? { selectedId: "", selectedIds: [] }
       : { selectedId: "", selectedIds: [] };
     const restored = canEditActiveMode ? saved ?? fallback : fallback;
     setSelectedId(restored.selectedId);
@@ -2248,6 +2573,9 @@ export function WatchfaceEditor({
   }, [previewMode]);
 
   useEffect(() => {
+    // An empty selection is deliberate while editing (shows Get started);
+    // only repair a selection that points at a layer which no longer exists.
+    if (canEditActiveMode && selectedId === "") return;
     if (
       watchfaceEditorSelectionExists(
         selectedId,
@@ -2262,6 +2590,12 @@ export function WatchfaceEditor({
     setSelectedIds(nextId ? [nextId] : []);
   }, [backgroundElements, canEditActiveMode, layers, selectedId]);
 
+  // Template PNG previews are keyed by archive path, so they only go stale
+  // when the archive itself changes. Keeping them across design edits stops
+  // every inspector thumbnail from blinking while the references recompute.
+  useEffect(() => {
+    setConfigAssetPreviews(new Map());
+  }, [starterArchive.archiveId]);
   useEffect(() => {
     let cancelled = false;
     const paths = [...new Set(
@@ -2269,7 +2603,6 @@ export function WatchfaceEditor({
         .filter((reference) => reference.source)
         .map((reference) => reference.archivePath)
     )];
-    setConfigAssetPreviews(new Map());
     if (paths.length === 0) {
       return () => {
         cancelled = true;
@@ -2278,7 +2611,11 @@ export function WatchfaceEditor({
     void loadAssets(paths)
       .then((assets) => {
         if (!cancelled) {
-          setConfigAssetPreviews(new Map(assets.map((asset) => [asset.path, asset])));
+          setConfigAssetPreviews((current) => {
+            const next = new Map(current);
+            for (const asset of assets) next.set(asset.path, asset);
+            return next;
+          });
         }
       })
       .catch(() => {
@@ -2376,6 +2713,33 @@ export function WatchfaceEditor({
     visibleEditorGroups.flatMap((group) => group.layerIds)
   );
   const previewBackgroundDataUrl = backgroundDataUrl;
+  // The background sits on its own canvas under the arc overlay, and the face
+  // composite above both is transparent, so sprites cover the arcs the way the
+  // firmware layers them (PARTICLES's arc_cut_icon segments its calorie ring).
+  useEffect(() => {
+    const canvas = backgroundCanvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d", { colorSpace: "display-p3" });
+    if (!context) return;
+    let cancelled = false;
+    const paint = async () => {
+      if (previewStudioOptions.previewMode === "aod") {
+        context.fillStyle = "#000000";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
+      if (!previewBackgroundDataUrl) {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
+      const image = await loadStudioImage(previewBackgroundDataUrl);
+      if (cancelled) return;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    };
+    void paint();
+    return () => { cancelled = true; };
+  }, [previewBackgroundDataUrl, previewStudioOptions.previewMode]);
   const selectedElementId = selectedId.startsWith("bgel:")
     ? selectedId.slice("bgel:".length)
     : null;
@@ -3614,8 +3978,8 @@ export function WatchfaceEditor({
         )
       )
     }));
-    setSelectedId("background");
-    setSelectedIds(["background"]);
+    setSelectedId("");
+    setSelectedIds([]);
   }
 
   const queueBackgroundRender = useCallback(
@@ -4178,7 +4542,6 @@ export function WatchfaceEditor({
     } else {
       next = hitUnits.flatMap((unit) => unit.layerIds);
     }
-    if (next.length === 0 && !marquee.additive) next = ["background"];
     setSelectedIds(next);
     setSelectedId(next.at(-1) ?? "");
     setHoveredId(null);
@@ -4239,14 +4602,12 @@ export function WatchfaceEditor({
   function resolveDragMovement(
     drag: NonNullable<typeof dragRef.current>,
     point: { x: number; y: number },
-    bypassSnap: boolean
-  ): { dx: number; dy: number } {
-    const rawDx = point.x - drag.startX;
-    const rawDy = point.y - drag.startY;
-    if (!placementPreferences.snapEnabled || bypassSnap) {
-      clearSnapGuides();
-      return { dx: rawDx, dy: rawDy };
-    }
+    bypassSnap: boolean,
+    axisLock: "x" | "y" | null,
+    targets: WatchfaceSnapTarget[]
+  ): { dx: number; dy: number; baseBounds: WatchfaceEditorBounds } {
+    const rawDx = axisLock === "y" ? 0 : point.x - drag.startX;
+    const rawDy = axisLock === "x" ? 0 : point.y - drag.startY;
     const renderedWidth =
       overlayCanvasRef.current?.getBoundingClientRect().width ?? PREVIEW_SIZE;
     const threshold = watchfaceDesignThreshold(
@@ -4266,6 +4627,11 @@ export function WatchfaceEditor({
           y1: Math.max(result.y1, box.y1)
         }))
       : drag.baseBounds;
+    if (!placementPreferences.snapEnabled || bypassSnap) {
+      snapGuidesRef.current = [];
+      snapMeasurementsRef.current = [];
+      return { dx: rawDx, dy: rawDy, baseBounds };
+    }
     const result = snapWatchfaceBounds({
       movingId: drag.snapId,
       movingBounds: translateWatchfaceBounds(
@@ -4280,7 +4646,7 @@ export function WatchfaceEditor({
       retainedGuides: snapGuidesRef.current,
       guides: design.editorGuides ?? [],
       safeAreaInsetPercent: placementPreferences.safeAreaInsetPercent,
-      targets: placementSnapTargets(drag.snapId),
+      targets,
       ...(placementPreferences.gridVisible
         ? {
             gridStep: placementPreferences.gridStep / watchCoordinateScale,
@@ -4288,15 +4654,23 @@ export function WatchfaceEditor({
           }
         : {})
     });
-    snapGuidesRef.current = result.guides;
-    snapMeasurementsRef.current = result.measurements.map((measurement) => ({
-      ...measurement,
-      label: `${Math.round(
-        Math.abs(measurement.end - measurement.start) * watchCoordinateScale
-      )} px`
-    }));
-    paintPlacementFeedback();
-    return { dx: rawDx + result.dx, dy: rawDy + result.dy };
+    // A locked axis never snaps, so the selection stays on its rail.
+    snapGuidesRef.current = result.guides.filter((guide) => guide.axis !== (axisLock === "x" ? "y" : axisLock === "y" ? "x" : null));
+    return {
+      dx: rawDx + (axisLock === "y" ? 0 : result.dx),
+      dy: rawDy + (axisLock === "x" ? 0 : result.dy),
+      baseBounds
+    };
+  }
+
+  /** Dominant axis of the gesture so far; Shift pins the move to it. */
+  function dragAxisLock(
+    drag: WatchfaceDragState,
+    point: { x: number; y: number },
+    axisLock: boolean
+  ): "x" | "y" | null {
+    if (!axisLock) return null;
+    return Math.abs(point.x - drag.startX) >= Math.abs(point.y - drag.startY) ? "x" : "y";
   }
 
   function startElementDrag(
@@ -4674,12 +5048,33 @@ export function WatchfaceEditor({
   function previewDragMovement(
     drag: WatchfaceDragState,
     point: { x: number; y: number },
-    bypassSnap: boolean
+    bypassSnap: boolean,
+    axisLockHeld: boolean
   ) {
-    const movement = clampDragMovement(
-      drag,
-      resolveDragMovement(drag, point, bypassSnap)
+    const axisLock = dragAxisLock(drag, point, axisLockHeld);
+    const targets = placementSnapTargets(drag.snapId);
+    const resolved = resolveDragMovement(drag, point, bypassSnap, axisLock, targets);
+    const movement = clampDragMovement(drag, resolved);
+    const bounds = translateWatchfaceBounds(resolved.baseBounds, movement.dx, movement.dy);
+    snapMeasurementsRef.current = watchfaceNeighborMeasurements(
+      bounds,
+      targets,
+      (gap) => `${Math.round(gap * watchCoordinateScale)}`
     );
+    // Show every object the selection lines up with, not just the one it
+    // snapped to; face-level guides (grid, safe area, rulers) stay as picked.
+    const alignment = watchfaceAlignmentGuides(bounds, targets, previewWidth, previewHeight);
+    snapGuidesRef.current = [
+      ...snapGuidesRef.current.filter((guide) => guide.kind !== "layer" && guide.kind !== "face-center" && guide.kind !== "spacing"),
+      ...alignment
+    ];
+    dragFeedbackRef.current = {
+      origin: resolved.baseBounds,
+      bounds,
+      axisLock,
+      targets
+    };
+    paintPlacementFeedback();
     const visual = dragVisualRef.current;
     if (visual?.drag === drag) {
       visual.movement = movement;
@@ -4952,7 +5347,8 @@ export function WatchfaceEditor({
 
   dragPaintCallbackRef.current = (pending) => {
     if (dragRef.current === pending.drag) {
-      previewDragMovement(pending.drag, pending.point, pending.bypassSnap);
+      lastPendingDragRef.current = pending;
+      previewDragMovement(pending.drag, pending.point, pending.bypassSnap, pending.axisLock);
     }
   };
 
@@ -4989,7 +5385,12 @@ export function WatchfaceEditor({
       previewSpriteTransform(drag, point, event.shiftKey, event.altKey);
       return;
     }
-    scheduleDragMovement({ drag, point, bypassSnap: event.altKey });
+    scheduleDragMovement({
+      drag,
+      point,
+      bypassSnap: event.altKey,
+      axisLock: event.shiftKey
+    });
   }
 
   function handlePointerEnd(event: React.PointerEvent<Element>) {
@@ -5038,7 +5439,8 @@ export function WatchfaceEditor({
           pointerControllerRef.current?.schedule({
             drag,
             point,
-            bypassSnap: event.altKey
+            bypassSnap: event.altKey,
+            axisLock: event.shiftKey
           });
         }
       }
@@ -5190,10 +5592,13 @@ export function WatchfaceEditor({
           }
         }
       };
-      if (safePatch.enabled === true) {
-        const configAssetId = separatorId === "colon"
-          ? "config:colon_icon"
-          : "config:arc_cut_icon";
+      // A progress-mask arc_cut_icon stays; only a template slash is replaced.
+      const configAssetId = separatorId === "colon"
+        ? "config:colon_icon"
+        : !details || watchfaceArcCutIsDateSlash(details)
+          ? "config:arc_cut_icon"
+          : null;
+      if (safePatch.enabled === true && configAssetId) {
         next.configAssetOverrides = {
           ...(prev.configAssetOverrides ?? {}),
           [configAssetId]: {
@@ -5246,14 +5651,14 @@ export function WatchfaceEditor({
     });
   }
 
-  async function chooseConfigAsset(reference: WatchfaceConfigAssetReference) {
+  async function chooseConfigAsset(reference: WatchfaceConfigAssetReference, preset?: CorosWatchfaceArtwork) {
     try {
-      const selected = await api.chooseCorosWatchfaceArtwork();
+      const selected = preset ?? await api.chooseCorosWatchfaceArtwork();
       if (!selected) return;
       updateConfigAsset(reference, {
         enabled: true,
         replacement: await downscaleArtwork(selected),
-        ...(configAssetSupportsNativeSize(reference.configKey)
+        ...(configAssetDefaultsToNativeSize(reference.configKey)
           ? { nativeSize: Boolean(reference.source) }
           : {})
       });
@@ -5266,14 +5671,15 @@ export function WatchfaceEditor({
   async function chooseBatterySpriteFolder(
     overrideId:
       | "config:battery_icon"
-      | "config:control_battery_icon" = "config:battery_icon"
+      | "config:control_battery_icon" = "config:battery_icon",
+    preset?: CorosWatchfaceRasterFontFolder
   ) {
     if (spriteImportTrackerRef.current.pendingCount > 0) return;
     const importId = beginSpriteImport(`battery-folder:${overrideId}`);
     if (importId === null) return;
     const canCommit = () => isSpriteImportCurrent(importId);
     try {
-      const folder = await api.chooseCorosWatchfaceRasterFontFolder();
+      const folder = preset ?? await api.chooseCorosWatchfaceRasterFontFolder();
       if (!folder) return;
       const decoded = await Promise.all(folder.sprites.map(async (sprite) => {
         // The shared PNG-folder picker is recursive for custom fonts. Battery
@@ -5738,6 +6144,9 @@ export function WatchfaceEditor({
       fontStyle?: "normal" | "italic";
       letterSpacing?: number;
       rasterFont?: CorosWatchfaceDesignState["rasterFont"];
+      overwriteAllLanguages?: boolean;
+      /** Additional language prefixes to replace when all languages is off. */
+      overwriteLanguages?: string[];
       nativeSize?: boolean;
     }
   ) {
@@ -5884,8 +6293,8 @@ export function WatchfaceEditor({
         )
       )
     }));
-    setSelectedId("background");
-    setSelectedIds(["background"]);
+    setSelectedId("");
+    setSelectedIds([]);
   }
 
   function reorderArtworkLayer(
@@ -6019,14 +6428,74 @@ export function WatchfaceEditor({
     }
   }
 
-  async function chooseSprite() {
+  /** One frame of a picked official set as importable artwork. */
+  function officialFrameArtwork(frames: CorosOfficialAssetFrames, frameIndex = 0): CorosWatchfaceArtwork {
+    return { dataUrl: frames.frames[frameIndex] ?? frames.frames[0], width: frames.width, height: frames.height };
+  }
+
+  function browseOfficialImage() {
+    setOfficialBrowser({
+      mode: "image",
+      title: "Official COROS images",
+      onPick: (frames, frameIndex) => chooseSprite(officialFrameArtwork(frames, frameIndex))
+    });
+  }
+
+  /** Which library category a template image key belongs to, so the browser opens on the right chip. */
+  function officialCategoryForConfigKey(configKey: string): string | undefined {
+    const key = configKey.toLowerCase();
+    if (/weather/.test(key)) return "weather";
+    if (/battery/.test(key)) return "battery";
+    if (/bluetooth|no_disturb|sleep_mode|airplane|sedentary/.test(key)) return "status";
+    if (/^time_|colon|am_icon|pm_icon|_hour_icon|_minute_icon|_second_icon|center_polygon|arc_cut/.test(key)) return "clock";
+    if (/background|thmb/.test(key)) return "backgrounds";
+    if (/sunrise|sunset|sun_|moon/.test(key)) return "sun-moon";
+    if (/negative|percent|unit|dgree|degree/.test(key)) return "glyphs";
+    if (/stamina|stress|sleep|baro/.test(key)) return "health";
+    if (/chart/.test(key)) return "charts";
+    if (/control_|step|kcal|exercise|elev|floor|_hr_|heart/.test(key)) return "training";
+    return undefined;
+  }
+
+  function browseOfficialConfigAsset(reference: WatchfaceConfigAssetReference) {
+    setOfficialBrowser({
+      mode: "image",
+      title: `Official image for ${reference.label}`,
+      defaultCategory: officialCategoryForConfigKey(reference.configKey),
+      onPick: (frames, frameIndex) => chooseConfigAsset(reference, officialFrameArtwork(frames, frameIndex))
+    });
+  }
+
+  function browseOfficialBatterySprites(overrideId: "config:battery_icon" | "config:control_battery_icon" = "config:battery_icon") {
+    setOfficialBrowser({
+      mode: "sprites",
+      title: "Official battery sprites",
+      defaultCategory: "battery",
+      onPick: (frames) => chooseBatterySpriteFolder(overrideId, officialAssetToSpriteFolder(frames))
+    });
+  }
+
+  /** Day/night weather folders are 41-state sets; the temperature digits are a 10-frame weather font. */
+  function browseOfficialWeatherSprites(set: WeatherAssetSet) {
+    setOfficialBrowser({
+      mode: "sprites",
+      title: set === "digits" ? "Official temperature digits" : `Official ${set} weather icons`,
+      defaultCategory: set === "digits" ? "fonts" : "weather",
+      defaultRole: set === "digits" ? "weather" : undefined,
+      frameCount: WEATHER_ASSET_COUNTS[set],
+      configKey: set === "day" ? "weather_icon_dir" : set === "night" ? "weather_dark_icon_dir" : "weather_temp_font",
+      onPick: (frames) => chooseWeatherSpriteFolder(set, officialAssetToSpriteFolder(frames))
+    });
+  }
+
+  async function chooseSprite(preset?: CorosWatchfaceArtwork) {
     if ((design.designSprites ?? []).length >= MAX_DESIGN_SPRITES) {
       onError(`A design can contain up to ${MAX_DESIGN_SPRITES} imported images.`);
       return;
     }
     setLoadingSprite(true);
     try {
-      const selected = await api.chooseCorosWatchfaceArtwork();
+      const selected = preset ?? await api.chooseCorosWatchfaceArtwork();
       if (!selected) {
         return;
       }
@@ -6080,7 +6549,9 @@ export function WatchfaceEditor({
     snapshotBackgroundDataUrl?: string,
     outputSize = 800,
     resolutionDirectory = watchPreviewDirectory,
-    scenario?: WatchfacePreviewScenario
+    scenario?: WatchfacePreviewScenario,
+    previewComplication?: WatchfaceStudioOptions["previewComplication"],
+    onPreviewState?: (state: { previewComplication: string | null }) => void
   ): Promise<string> {
     if (!details) {
       throw new Error("The editor is still loading. Try again in a moment.");
@@ -6104,7 +6575,7 @@ export function WatchfaceEditor({
         (resolution) => resolution.directory === resolutionDirectory
       ) ??
       (snapshotPreviewDetails
-        ? pickWatchPreviewResolution(snapshotPreviewDetails)
+        ? pickWatchPreviewResolution(snapshotPreviewDetails, targetWatchModel ?? targetFirmwareType)
         : null);
     const exportDetails =
       snapshotPreviewDetails && snapshotTargetResolution
@@ -6129,6 +6600,7 @@ export function WatchfaceEditor({
         : 1;
     const exportOptions: WatchfaceStudioOptions = {
       ...snapshotOptions,
+      ...(previewComplication ? { previewComplication } : {}),
       previewMode: hasWatchfaceAod(details) ? mode : "current",
       ...simulationStudioOptions(scenario),
       batteryIconResolutionScale: resolutionScale,
@@ -6146,6 +6618,8 @@ export function WatchfaceEditor({
           }
         : {})
     };
+    const availableComplications = getAvailableComplications(exportDetails);
+    onPreviewState?.({ previewComplication: (availableComplications.find(item => item.id === exportOptions.previewComplication) ?? availableComplications[0])?.id ?? null });
     await drawStudioPreview(
       archivePreview,
       renderedBackground,
@@ -6239,7 +6713,7 @@ export function WatchfaceEditor({
         sourceArchiveId: starterArchive.archiveId,
         name,
         ...(targetFirmwareType ? { firmwareType: targetFirmwareType } : {}),
-        design: designSnapshot,
+        design: await attachWatchfaceFontSnapshots(designSnapshot),
         previewDataUrl: await renderExportPreview(designSnapshot, "current")
       });
       if (result.saved) {
@@ -6257,12 +6731,13 @@ export function WatchfaceEditor({
   }
 
   async function createArchive(
-    action: "publish" | "export" | "automation" | "preview" = "publish",
-    requestedName?: string
+    action: "publish" | "export" | "automation" | "preview" | "convert" = "publish",
+    requestedName?: string,
+    destination?: { firmwareType: string; watchModel: WatchModelId }
   ): Promise<{ archive: CorosWatchfaceArchive; name: string } | null> {
     onClearMessages();
     if (spriteImportTrackerRef.current.pendingCount > 0) {
-      if (action === "automation") {
+      if (action === "automation" || action === "convert") {
         throw new WatchfaceAutomationError(
           "EDITOR_BUSY",
           "Wait for the sprite import to finish before building."
@@ -6272,7 +6747,7 @@ export function WatchfaceEditor({
       return null;
     }
     if (!details || !backgroundDataUrl) {
-      if (action === "automation") {
+      if (action === "automation" || action === "convert") {
         throw new WatchfaceAutomationError(
           "EDITOR_NOT_READY",
           "The editor is still loading."
@@ -6432,12 +6907,14 @@ export function WatchfaceEditor({
           currentDesign
         )
       );
+      const buildFirmwareType = destination?.firmwareType ?? targetFirmwareType;
+      const buildWatchModel = destination?.watchModel ?? targetWatchModel;
       const archive = await api.createCorosWatchfaceArchive({
         sourceArchiveId: starterArchive.archiveId,
         backgroundDataUrl: exportBackground,
         previewDataUrl: exportPreview,
-        ...(targetFirmwareType ? { firmwareType: targetFirmwareType } : {}),
-        ...(targetWatchModel ? { watchModel: targetWatchModel } : {}),
+        ...(buildFirmwareType ? { firmwareType: buildFirmwareType } : {}),
+        ...(buildWatchModel ? { watchModel: buildWatchModel } : {}),
         ...(designSnapshot.archiveWatchFaceVersion !== undefined
           ? { watchFaceVersion: designSnapshot.archiveWatchFaceVersion }
           : {}),
@@ -6454,7 +6931,7 @@ export function WatchfaceEditor({
           : {}),
         ...(minWatchFaceVersion !== undefined ? { minWatchFaceVersion } : {})
       });
-      if (action !== "preview") onArchiveCreated?.(archive);
+      if (action !== "preview" && action !== "convert") onArchiveCreated?.(archive);
       const name = requestedName?.trim() ||
         editorSnapshot.projectName.trim() ||
         "Custom watch face";
@@ -6470,13 +6947,33 @@ export function WatchfaceEditor({
       }
       return { archive, name };
     } catch (caught) {
-      if (action === "automation") throw caught;
+      if (action === "automation" || action === "convert") throw caught;
       onError(caught instanceof Error ? caught.message : "Could not build the archive.");
       return null;
     } finally {
       setCreating(false);
     }
   }
+
+  /**
+   * A recovered official face has only its native tree, so a live scene cannot
+   * be carried onto another watch's 800px master. Bake the scene into a final
+   * archive built for the destination instead; it opens as a fresh starter.
+   */
+  const bakeForWatchRef = useRef<NonNullable<WatchfaceAutomationConversionInput["bakeForWatch"]>>(
+    async () => { throw new Error("The editor is not ready to convert."); }
+  );
+  bakeForWatchRef.current = async (target, name) => {
+    const built = await createArchive("convert", name, target);
+    if (!built) throw new Error("The archive could not be built for the destination watch.");
+    return built.archive;
+  };
+  // The conversion dialog holds this while the editor is frozen; delegate
+  // through the ref so it always builds from the latest editor state.
+  const bakeForWatch: WatchfaceAutomationConversionInput["bakeForWatch"] =
+    starterArchive.recoveredFromCompiled
+      ? (target, name) => bakeForWatchRef.current(target, name)
+      : undefined;
 
   async function saveProject(
     reportErrors = true
@@ -6516,7 +7013,7 @@ export function WatchfaceEditor({
         name,
         sourceArchiveId: starterArchive.archiveId,
         ...(targetFirmwareType ? { firmwareType: targetFirmwareType } : {}),
-        design: designSnapshot,
+        design: await attachWatchfaceFontSnapshots(designSnapshot),
         ...(previewDataUrl ? { previewDataUrl } : {})
       });
       setProjectId(saved.projectId);
@@ -6615,8 +7112,8 @@ export function WatchfaceEditor({
         )
       )
     }));
-    setSelectedId("background");
-    setSelectedIds(["background"]);
+    setSelectedId("");
+    setSelectedIds([]);
   }
 
   function nudgeSingleSelected(dx: number, dy: number) {
@@ -6767,6 +7264,17 @@ export function WatchfaceEditor({
         return;
       }
       if (editable) return;
+      if (
+        event.key === "Escape" &&
+        !event.defaultPrevented &&
+        !stageFullscreen &&
+        selectedIds.length > 0
+      ) {
+        event.preventDefault();
+        setSelectedIds([]);
+        setSelectedId("");
+        return;
+      }
       if (command && key === "d" && selectedSprite) {
         event.preventDefault();
         duplicateSprite(selectedSprite.id);
@@ -6834,6 +7342,7 @@ export function WatchfaceEditor({
   ]);
 
   function automationBusy(): boolean {
+    if (conversionBusy) return true;
     return Boolean(
       historyRef.current.transactionBase ||
       dragRef.current ||
@@ -6967,6 +7476,130 @@ export function WatchfaceEditor({
     return { locked: explicitlyLocked || readOnly, readOnly };
   }
 
+  function automationToolMode(params: Record<string, unknown>): WatchfacePreviewMode {
+    const mode: WatchfacePreviewMode = params.mode === undefined
+      ? automationModeRef.current
+      : params.mode === "aod"
+        ? "aod"
+        : "current";
+    if (mode === "aod" && (!details || !hasWatchfaceAod(details))) {
+      throw new WatchfaceAutomationError("UNSUPPORTED_MODE", "This template has no always-on display mode.");
+    }
+    return mode;
+  }
+
+  /** The largest native resolution: the frame placement and geometry use. */
+  function automationMasterResolution(
+    value = historyRef.current.present.value,
+    mode: WatchfacePreviewMode = automationModeRef.current
+  ) {
+    if (!details) {
+      throw new WatchfaceAutomationError("EDITOR_NOT_READY", "Template details are still loading.");
+    }
+    const master = pickPreviewResolution(detailsForCompositionMode(
+      applyConfigTextEditsToDetails(details, value.design.configTextEdits), mode
+    ));
+    if (!master) {
+      throw new WatchfaceAutomationError("UNKNOWN_RESOLUTION", "No preview resolution is available.");
+    }
+    return master;
+  }
+
+  function automationFrame(master: { width: number; height: number }) {
+    return {
+      width: master.width,
+      height: master.height,
+      unit: "master pixels" as const,
+      circle: {
+        centerX: master.width / 2,
+        centerY: master.height / 2,
+        radius: Math.min(master.width, master.height) / 2
+      }
+    };
+  }
+
+  function automationBox(bounds: { x0: number; y0: number; x1: number; y1: number }) {
+    const round = (value: number) => Math.round(value * 10) / 10;
+    return {
+      x: round(bounds.x0),
+      y: round(bounds.y0),
+      width: round(bounds.x1 - bounds.x0),
+      height: round(bounds.y1 - bounds.y0),
+      centerX: round((bounds.x0 + bounds.x1) / 2),
+      centerY: round((bounds.y0 + bounds.y1) / 2)
+    };
+  }
+
+  /** Enabled progress arcs and bars in master pixels, as the watch draws them. */
+  function automationProgressGeometry(
+    design: CorosWatchfaceDesignState,
+    master: CorosWatchfaceResolutionDetails
+  ) {
+    const kcal = kcalProgressStyleForResolution(master, design.kcalProgress);
+    const exercise = exerciseProgressStyleForResolution(master, design.exerciseProgress);
+    const entries: Array<Record<string, unknown>> = [];
+    const add = (
+      id: string,
+      label: string,
+      style: { referenceWidth?: number; referenceHeight?: number },
+      shape:
+        | { kind: "arc"; arc: typeof kcal.arc }
+        | { kind: "rect"; rect: typeof kcal.rect },
+      color: string
+    ) => {
+      const sx = master.width / (style.referenceWidth ?? master.width);
+      const sy = master.height / (style.referenceHeight ?? master.height);
+      if (shape.kind === "arc") {
+        const arc = {
+          centerX: shape.arc.centerX * sx,
+          centerY: shape.arc.centerY * sy,
+          radiusX: shape.arc.radiusX * sx,
+          radiusY: shape.arc.radiusY * sy,
+          startAngle: shape.arc.startAngle,
+          endAngle: shape.arc.endAngle,
+          strokeWidth: shape.arc.strokeWidth * (sx + sy) / 2
+        };
+        entries.push({
+          id,
+          label,
+          type: "arc",
+          color,
+          box: automationBox(watchfaceArcSweepBox(arc)),
+          arc: {
+            ...Object.fromEntries(Object.entries(arc).map(([key, value]) => [key, Math.round(value * 10) / 10])),
+            angles: "COROS: 0 at 3 o'clock, positive counter-clockwise; the track runs startAngle to endAngle."
+          }
+        });
+      } else {
+        const rect = {
+          x0: shape.rect.x0 * sx,
+          y0: shape.rect.y0 * sy,
+          x1: shape.rect.x1 * sx,
+          y1: shape.rect.y1 * sy
+        };
+        entries.push({
+          id,
+          label,
+          type: "bar",
+          color,
+          box: automationBox(rect),
+          fillsFrom: shape.rect.direction === "right"
+            ? "right"
+            : shape.rect.direction === "top"
+              ? "top"
+              : shape.rect.direction === "bottom"
+                ? "bottom"
+                : "left"
+        });
+      }
+    };
+    if (kcal.arcEnabled) add("kcalProgress.arc", "Calorie progress arc", kcal, { kind: "arc", arc: kcal.arc }, kcal.arcColor);
+    if (kcal.rectEnabled) add("kcalProgress.rect", "Calorie progress bar", kcal, { kind: "rect", rect: kcal.rect }, kcal.rectColor);
+    if (exercise.arcEnabled) add("exerciseProgress.arc", "Exercise progress arc", exercise, { kind: "arc", arc: exercise.arc }, exercise.color);
+    if (exercise.enabled) add("exerciseProgress.rect", "Exercise progress bar", exercise, { kind: "rect", rect: exercise.rect }, exercise.color);
+    return entries;
+  }
+
   function automationDocument() {
     const current = historyRef.current;
     const currentValue = current.present.value;
@@ -7009,6 +7642,7 @@ export function WatchfaceEditor({
         },
         resolutions: resolutionCapabilities,
         simulation: WATCHFACE_SIMULATION_CAPABILITIES,
+        assetContracts: watchfaceAutomationAssetContracts(placementReference, modeDesign, automationModeRef.current),
         nativeData: {
           schemaPath: "nativeData",
           fieldIds: NATIVE_DATA_FIELDS.map(field => field.id),
@@ -7099,11 +7733,11 @@ export function WatchfaceEditor({
           )
         ) {
           automationSelectionRef.current = {
-            selectedId: "background",
-            selectedIds: ["background"]
+            selectedId: "",
+            selectedIds: []
           };
-          setSelectedIds(["background"]);
-          setSelectedId("background");
+          setSelectedIds([]);
+          setSelectedId("");
         }
       }
       return {
@@ -7271,7 +7905,7 @@ export function WatchfaceEditor({
         ? details?.resolutions.find((candidate) => candidate.width === requestedResolution)
         : details?.resolutions.find(
             (candidate) => candidate.directory === requestedResolution
-          ) ?? pickWatchPreviewResolution(details!);
+          ) ?? pickWatchPreviewResolution(details!, targetWatchModel ?? targetFirmwareType);
       if (!targetResolution) {
         throw new WatchfaceAutomationError("UNKNOWN_RESOLUTION", "No preview resolution is available.");
       }
@@ -7283,13 +7917,17 @@ export function WatchfaceEditor({
       const scenario = params.scenario === undefined
         ? activeSimulationScenario(simulationRef.current)
         : automationPreviewScenario(params.scenario);
+      const previewComplication = automationView(mode).previewComplication as WatchfaceStudioOptions["previewComplication"];
+      let renderedPreviewComplication: string | null = null;
       const dataUrl = await renderExportPreview(
         designSnapshot,
         mode,
         undefined,
         size,
         targetResolution.directory,
-        scenario
+        scenario,
+        previewComplication,
+        state => { renderedPreviewComplication = state.previewComplication; }
       );
       return {
         sessionId,
@@ -7299,6 +7937,7 @@ export function WatchfaceEditor({
         width: size,
         height: size,
         scenario: scenario ?? null,
+        previewComplication: renderedPreviewComplication,
         mimeType: "image/png",
         dataUrl
       };
@@ -7370,14 +8009,236 @@ export function WatchfaceEditor({
       return { ...built, sessionId, revision: snapshotRevision };
     }
 
+    if (method === "get_geometry") {
+      assertAutomationSession(params);
+      if (!details) {
+        throw new WatchfaceAutomationError("EDITOR_NOT_READY", "Template details are still loading.");
+      }
+      const mode = automationToolMode(params);
+      const value = historyRef.current.present.value;
+      const modeDesign = resolveWatchfaceModeDesign(value.design, mode);
+      const master = automationMasterResolution(value, mode);
+      const wanted = Array.isArray(params.ids)
+        ? new Set(params.ids.filter((id): id is string => typeof id === "string"))
+        : null;
+      const placements = new Map(
+        resolveWatchfacePlacementScene(details, modeDesign, mode).layers.map((layer) => [layer.id, layer])
+      );
+      const layers = automationLayers(value, mode)
+        .filter((layer) => !wanted || wanted.has(layer.id))
+        .map((layer) => {
+          const placed = placements.get(layer.id);
+          return {
+            id: layer.id,
+            label: layer.label,
+            kind: layer.kind,
+            visible: layer.visible,
+            movable: placed?.movable ?? false,
+            box: placed?.bounds ? automationBox(placed.bounds) : null
+          };
+        });
+      const progress = automationProgressGeometry(modeDesign, master)
+        .filter((entry) => !wanted || wanted.has(String(entry.id)));
+      return {
+        sessionId,
+        revision: automationRevisionRef.current,
+        mode,
+        frame: automationFrame(master),
+        layers,
+        progress
+      };
+    }
+
+    if (method === "check_contrast") {
+      assertAutomationSession(params);
+      if (automationBusy()) {
+        throw new WatchfaceAutomationError("EDITOR_BUSY", "Finish the active edit before measuring contrast.");
+      }
+      if (!details) {
+        throw new WatchfaceAutomationError("EDITOR_NOT_READY", "Template details are still loading.");
+      }
+      const mode = automationToolMode(params);
+      const snapshotRevision = automationRevisionRef.current;
+      const value = historyRef.current.present.value;
+      const modeDesign = resolveWatchfaceModeDesign(value.design, mode);
+      const master = automationMasterResolution(value, mode);
+      const scenario = params.scenario === undefined
+        ? activeSimulationScenario(simulationRef.current)
+        : automationPreviewScenario(params.scenario);
+      const wanted = Array.isArray(params.ids)
+        ? params.ids.filter((id): id is string => typeof id === "string")
+        : null;
+      const placements = new Map(
+        resolveWatchfacePlacementScene(details, modeDesign, mode).layers.map((layer) => [layer.id, layer])
+      );
+      const layers = automationLayers(value, mode);
+      const skipped: Array<{ id: string; reason: string }> = [];
+      const candidates = wanted
+        ? wanted.flatMap((id) => {
+            const layer = layers.find((candidate) => candidate.id === id);
+            if (!layer) skipped.push({ id, reason: "No such layer in this mode." });
+            else if (!layer.visible) skipped.push({ id, reason: "The layer is hidden." });
+            return layer?.visible ? [layer] : [];
+          })
+        : layers.filter((layer) => layer.visible && CONTRAST_LAYER_KINDS.has(layer.kind));
+      // Render in the master frame so layer boxes map 1:1 onto pixels.
+      const render = async (design: CorosWatchfaceDesignState) =>
+        decodeImageDataUrl(await renderExportPreview(
+          design, mode, undefined, master.width, master.directory, scenario
+        ));
+      // Solid black and white backdrops reveal exactly where each layer draws,
+      // even where its color matches the real background. Always-on already
+      // renders on black and can't show a white backdrop.
+      const probes = mode === "current";
+      const onBackdrop = (design: CorosWatchfaceDesignState, color: string): CorosWatchfaceDesignState => ({
+        ...design,
+        backgroundColor: color,
+        artworkVisible: false,
+        designSprites: [],
+        backgroundElements: [],
+        artworkLayerOrder: []
+      });
+      const withOnBlack = await render(probes ? onBackdrop(value.design, "#000000") : value.design);
+      const withOnWhite = probes ? await render(onBackdrop(value.design, "#FFFFFF")) : undefined;
+      const results: Array<Record<string, unknown>> = [];
+      for (const layer of candidates) {
+        const bounds = placements.get(layer.id)?.bounds;
+        if (!bounds) {
+          skipped.push({ id: layer.id, reason: "The layer has no rendered bounds." });
+          continue;
+        }
+        let hidden: typeof value;
+        try {
+          hidden = applyWatchfaceAutomationCommands(
+            value,
+            [{ op: "set_visibility", id: layer.id, visible: false }],
+            { details, mode }
+          ).value;
+        } catch (caught) {
+          skipped.push({ id: layer.id, reason: caught instanceof Error ? caught.message : "The layer cannot be hidden." });
+          continue;
+        }
+        const behind = await render(hidden.design);
+        const measured = analyzeLayerContrast(
+          {
+            width: behind.width,
+            height: behind.height,
+            behind: behind.data,
+            onBlack: {
+              withLayer: withOnBlack.data,
+              withoutLayer: probes ? (await render(onBackdrop(hidden.design, "#000000"))).data : behind.data
+            },
+            ...(withOnWhite
+              ? {
+                  onWhite: {
+                    withLayer: withOnWhite.data,
+                    withoutLayer: (await render(onBackdrop(hidden.design, "#FFFFFF"))).data
+                  }
+                }
+              : {})
+          },
+          { x: bounds.x0, y: bounds.y0, width: bounds.x1 - bounds.x0, height: bounds.y1 - bounds.y0 }
+        );
+        if (!measured) {
+          skipped.push({ id: layer.id, reason: "Nothing visible is drawn in its box." });
+          continue;
+        }
+        // WCAG large text; on a watch that means glyphs about 6% of the face tall.
+        const requiredRatio = bounds.y1 - bounds.y0 >= master.height * 0.06 ? 3 : 4.5;
+        results.push({
+          id: layer.id,
+          label: layer.label,
+          kind: layer.kind,
+          box: automationBox(bounds),
+          ...measured,
+          requiredRatio,
+          verdict: measured.worstRatio >= requiredRatio
+            ? "pass"
+            : measured.ratio >= requiredRatio
+              ? "uneven"
+              : "fail"
+        });
+      }
+      return {
+        sessionId,
+        revision: snapshotRevision,
+        mode,
+        frame: automationFrame(master),
+        verdicts: {
+          pass: "Readable against the whole background behind it.",
+          uneven: "Readable on average, but part of the background behind it is too close in brightness.",
+          fail: "Too little contrast."
+        },
+        results,
+        skipped
+      };
+    }
+
+    if (method === "sample_color") {
+      let image;
+      let face: Record<string, unknown> = {};
+      if (typeof params.image === "string") {
+        image = await decodeImageDataUrl(params.image);
+      } else {
+        assertAutomationSession(params);
+        if (automationBusy()) {
+          throw new WatchfaceAutomationError("EDITOR_BUSY", "Finish the active edit before sampling.");
+        }
+        const mode = automationToolMode(params);
+        const value = historyRef.current.present.value;
+        const master = automationMasterResolution(value, mode);
+        const scenario = params.scenario === undefined
+          ? activeSimulationScenario(simulationRef.current)
+          : automationPreviewScenario(params.scenario);
+        face = { sessionId, revision: automationRevisionRef.current, mode, frame: automationFrame(master) };
+        image = await decodeImageDataUrl(await renderExportPreview(
+          value.design, mode, undefined, master.width, master.directory, scenario
+        ));
+      }
+      return {
+        source: typeof params.image === "string" ? "image" : "face",
+        ...face,
+        ...sampleAutomationImage(image, {
+          points: Array.isArray(params.points) ? params.points as Array<{ x: number; y: number }> : undefined,
+          regions: Array.isArray(params.regions)
+            ? params.regions as Array<{ x: number; y: number; width: number; height: number }>
+            : undefined,
+          palette: typeof params.palette === "number" ? params.palette : undefined
+        })
+      };
+    }
+
+    if (method === "recolor_image" || method === "render_svg") {
+      try {
+        const result = method === "render_svg"
+          ? await renderAutomationSvg(
+              requireAutomationString(params.svg, "svg"),
+              requireAutomationNumber(params.width, "width"),
+              requireAutomationNumber(params.height, "height")
+            )
+          : await recolorAutomationImage(requireAutomationString(params.image, "image"), {
+              color: requireAutomationString(params.color, "color"),
+              ...(typeof params.from === "string" ? { from: params.from } : {}),
+              ...(typeof params.tolerance === "number" ? { tolerance: params.tolerance } : {})
+            });
+        return { mimeType: "image/png", ...result };
+      } catch (caught) {
+        if (caught instanceof WatchfaceAutomationError) throw caught;
+        throw new WatchfaceAutomationError(
+          "INVALID_PARAMS",
+          caught instanceof Error ? caught.message : "The image could not be processed."
+        );
+      }
+    }
+
     if (method === "convert") {
       assertAutomationSession(params, true);
       if (automationBusy()) {
         throw new WatchfaceAutomationError("EDITOR_BUSY", "Finish the active edit before converting.");
       }
       const targetArchive = params.targetArchive as CorosWatchfaceArchive | undefined;
-      if (!targetArchive?.archiveId) {
-        throw new WatchfaceAutomationError("INVALID_PARAMS", "convert requires targetArchive.");
+      if (!targetArchive?.archiveId && !params.watchModel && !params.firmwareType) {
+        throw new WatchfaceAutomationError("INVALID_PARAMS", "convert requires watchModel.");
       }
       const value = historyRef.current.present.value;
       return onAutomationConvert({
@@ -7385,6 +8246,7 @@ export function WatchfaceEditor({
         name: typeof params.name === "string" ? params.name : value.projectName,
         sourceDirty: isWatchfaceEditorHistoryDirty(historyRef.current, checkpoint, sessionId),
         targetArchive,
+        ...(bakeForWatch ? { bakeForWatch } : {}),
         ...(typeof params.firmwareType === "string" ? { firmwareType: params.firmwareType } : {}),
         ...(typeof params.watchModel === "string" ? { watchModel: params.watchModel as WatchModelId } : {})
       });
@@ -7438,7 +8300,9 @@ export function WatchfaceEditor({
   const searchedLayerSections = groupLayersForDisplay(
     layers.filter(
       (layer) =>
-        !groupedEditorLayerIds.has(layer.id) && layerMatchesSearch(layer.label)
+        !groupedEditorLayerIds.has(layer.id) &&
+        !layerIsSelectableSlotAsset(layer) &&
+        layerMatchesSearch(layer.label)
     )
   ).filter((section) => section.layers.length > 0);
   const layerSearchIsEmpty =
@@ -7456,7 +8320,7 @@ export function WatchfaceEditor({
     ?? layers.find((layer) => layer.timePartId);
 
   return (
-    <section className="watchface-editor wf-studio" aria-label="Watch face studio">
+    <section ref={editorRef} className={`watchface-editor wf-studio${stageFullscreen ? " is-editor-fullscreen" : ""}`} aria-label="Watch face studio" inert={conversionBusy}>
       <header className="watchface-editor-topbar wf-command-bar">
         <button className="wf-icon-button wf-back-button" type="button" onClick={requestBack}>
           <ArrowLeft size={18} aria-hidden="true" />
@@ -7559,14 +8423,15 @@ export function WatchfaceEditor({
                   className="is-convert"
                   type="button"
                   role="menuitem"
-                  disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
+                  disabled={saving || spriteImportPending || creating || exporting || previewingExport || !backgroundDataUrl}
                   onClick={() => {
                     setExportMenuOpen(false);
                     const snapshot = historyRef.current.present.value;
                     onConvertTarget(
                       structuredClone(snapshot.design),
                       snapshot.projectName.trim() || "Custom watch face",
-                      isDirty
+                      isDirty,
+                      bakeForWatch
                     );
                   }}
                 >
@@ -7634,22 +8499,11 @@ export function WatchfaceEditor({
               design={design}
               imageDisabled={loadingSprite || (design.designSprites ?? []).length >= MAX_DESIGN_SPRITES}
               onAddImage={() => void chooseSprite()}
+              onAddOfficialImage={browseOfficialImage}
               onAddElement={addElement}
               onAddData={addNativeData}
             /> : null}
           </div>
-          {details && previewMode === "current" ? (
-            <WatchfaceQuickStart
-              onBackground={() => selectQuickStartItem("background")}
-              onPhoto={() => void chooseArtwork()}
-              photoDisabled={isPositionLocked("background")}
-              onTime={quickStartTimeLayer
-                ? () => selectQuickStartItem(quickStartTimeLayer.id)
-                : undefined}
-              onText={() => addElement("text")}
-              onShape={() => addElement("rect")}
-            />
-          ) : null}
           {details ? (
             <div className="wf-layer-search">
               <Search size={14} aria-hidden="true" />
@@ -7949,13 +8803,22 @@ export function WatchfaceEditor({
         </aside>
 
         <main className="watchface-editor-stage wf-stage">
-          <div className="wf-stage-toolbar" aria-label="Preview controls">
+          <div className="wf-stage-toolbar wf-stage-toolbar--floating" role="toolbar" aria-label="Preview controls">
             <div className="wf-zoom-control">
               <button type="button" aria-pressed={stageZoom === "fit"} onClick={() => setStageZoom("fit")}>Fit</button>
-              <button type="button" aria-pressed={stageZoom === 1} onClick={() => setStageZoom(1)}>100%</button>
               <button type="button" aria-label="Zoom out" onClick={() => setStageZoom((zoom) => Math.max(0.6, (zoom === "fit" ? 1 : zoom) - 0.1))}><Minus size={15} aria-hidden="true" /></button>
+              <button
+                type="button"
+                className="wf-zoom-value"
+                aria-pressed={stageZoom === 1}
+                title="Reset zoom to 100%"
+                onClick={() => setStageZoom(1)}
+              >
+                {stageZoom === "fit" ? "100%" : `${Math.round(stageZoom * 100)}%`}
+              </button>
               <button type="button" aria-label="Zoom in" onClick={() => setStageZoom((zoom) => Math.min(1.4, (zoom === "fit" ? 1 : zoom) + 0.1))}><Plus size={15} aria-hidden="true" /></button>
             </div>
+            <span className="wf-toolbar-divider" aria-hidden="true" />
             <div className="wf-preview-mode-switch" role="group" aria-label="Watch display preview">
               <button
                 type="button"
@@ -7975,9 +8838,11 @@ export function WatchfaceEditor({
                 <MoonStar size={14} aria-hidden="true" /> Always-on
               </button>
             </div>
+            <span className="wf-toolbar-divider" aria-hidden="true" />
             {previewDetails && previewDetails.resolutions.length > 1 ? (
-              <label className="wf-preview-resolution">
-                Watch preview
+              <label className="wf-preview-resolution" title="Watch preview">
+                <Watch size={14} aria-hidden="true" />
+                <span className="sr-only">Watch preview</span>
                 <select
                   value={watchPreviewResolution?.directory ?? ""}
                   onChange={(event) => setWatchPreviewDirectory(event.target.value)}
@@ -8001,6 +8866,7 @@ export function WatchfaceEditor({
               </label>
             ) : null}
             <WatchfaceSimulationPanel simulation={simulation} onChange={updateSimulation} design={design} />
+            <span className="wf-toolbar-divider" aria-hidden="true" />
             {canEditActiveMode ? <div className="wf-placement-menu" ref={placementMenuRef}>
               <button
                 className={`wf-placement-trigger${
@@ -8106,6 +8972,17 @@ export function WatchfaceEditor({
                 {supportsAod ? "AODconfig.txt" : "Current face stays on"}
               </span>
             )}
+            <span className="wf-toolbar-divider" aria-hidden="true" />
+            <button
+              type="button"
+              className="wf-stage-fullscreen"
+              aria-pressed={stageFullscreen}
+              aria-label={stageFullscreen ? "Exit full screen" : "Open the editor in full screen"}
+              title={stageFullscreen ? "Exit full screen (Esc)" : "Full screen"}
+              onClick={toggleStageFullscreen}
+            >
+              {stageFullscreen ? <Minimize2 size={15} aria-hidden="true" /> : <Maximize2 size={15} aria-hidden="true" />}
+            </button>
           </div>
           {previewMode === "aod" && supportsAod ? (
             <p className="watchface-studio-summary">
@@ -8135,6 +9012,9 @@ export function WatchfaceEditor({
             ref={previewStackRef}
             className={`watchface-preview-stack watchface-editor-device${stageZoom === "fit" ? " is-fit" : ""}`}
             style={{ "--wf-stage-scale": stageZoom === "fit" ? 1 : stageZoom } as CSSProperties}
+            // Layer moves are pointer gestures; a native HTML drag (the globe
+            // cursor) would cancel the pointer stream mid-move.
+            onDragStart={(event) => event.preventDefault()}
           >
             {canEditActiveMode && placementPreferences.guidesVisible ? (
               <>
@@ -8166,7 +9046,13 @@ export function WatchfaceEditor({
                 </div>
               </>
             ) : null}
-            <canvas ref={previewCanvasRef} className="watchface-studio-preview" width={PREVIEW_SIZE} height={PREVIEW_SIZE} />
+            <canvas
+              ref={backgroundCanvasRef}
+              className="watchface-preview-background"
+              width={PREVIEW_SIZE}
+              height={PREVIEW_SIZE}
+              aria-hidden="true"
+            />
             <canvas
               ref={arcOverlayCanvasRef}
               className="watchface-preview-arc"
@@ -8174,6 +9060,7 @@ export function WatchfaceEditor({
               height={PREVIEW_SIZE}
               aria-hidden="true"
             />
+            <canvas ref={previewCanvasRef} className="watchface-studio-preview is-layered" width={PREVIEW_SIZE} height={PREVIEW_SIZE} />
             <canvas
               ref={dragPreviewCanvasRef}
               className="watchface-preview-drag"
@@ -8371,6 +9258,45 @@ export function WatchfaceEditor({
               </p>
             </div>
           ) : null}
+          {missingFonts.length > 0 && !fontNoticeDismissed ? (
+            <div className="wf-font-notice" role="status">
+              <TriangleAlert className="wf-font-notice-icon" size={16} aria-hidden="true" />
+              <div className="wf-font-notice-body">
+                <p className="wf-font-notice-title">
+                  {missingFonts.length === 1
+                    ? "MISSING FONT"
+                    : `MISSING FONTS (${missingFonts.length})`}
+                </p>
+                <ul>
+                  {missingFonts.map((font) => (
+                    <li key={font.family}>
+                      <strong>&quot;{font.family}&quot; font isn’t installed.</strong>
+                      <span>
+                        {font.hasSnapshot
+                          ? "Drawn from the glyphs saved with this project."
+                          : "The preview and export use a substitute font."}
+                      </span>
+                      <span className="wf-font-notice-uses">Used by: {font.usedBy.join(", ")}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="wf-font-notice-hint">
+                  {missingFonts.some((font) => !font.hasSnapshot)
+                    ? "Install the font or choose another one before exporting."
+                    : "Install the font to change its weight or draw characters the project didn’t save."}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="wf-font-notice-close"
+                aria-label="Hide font notice"
+                title="Hide"
+                onClick={() => setFontNoticeDismissed(true)}
+              >
+                <X size={14} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
           <div className="wf-stage-status" role="status">
             <span ref={snapStatusElementRef}>
               {selectedElement ? backgroundElementLabel(selectedElement) : selectedLayer?.label ?? "No selection"}
@@ -8381,12 +9307,24 @@ export function WatchfaceEditor({
                 ? supportsAod ? "Always-on display" : "Always-on uses Current"
                 : "Current display"}
             </span>
+            {missingFonts.length > 0 && fontNoticeDismissed ? (
+              <span>
+                <button
+                  type="button"
+                  className="wf-font-notice-reopen"
+                  onClick={() => setFontNoticeDismissed(false)}
+                >
+                  <TriangleAlert size={12} aria-hidden="true" />
+                  {missingFonts.length === 1 ? "MISSING FONT" : `MISSING FONTS (${missingFonts.length})`}
+                </button>
+              </span>
+            ) : null}
             <span>{starterArchive.fileName}</span>
           </div>
         </main>
 
         <aside
-          className={`watchface-editor-inspector wf-pane wf-properties-pane${propertiesOpen ? " is-open" : ""}`}
+          className={`watchface-editor-inspector wf-pane wf-properties-pane${propertiesOpen ? " is-open" : ""}${propertiesTab === "ai" ? " is-ai" : ""}`}
           aria-label="Properties"
           onPointerDownCapture={(event) => {
             if ((event.target as HTMLInputElement).type === "range") beginDesignTransaction();
@@ -8397,7 +9335,15 @@ export function WatchfaceEditor({
           onPointerCancel={endDesignTransaction}
         >
           <div className="wf-pane-heading wf-properties-heading">
-            {inspectedLayer ? (
+            {propertiesTab === "ai" ? (
+              <>
+                <div className="wf-pane-heading-main">
+                  <WatchmakerDial size={22} working={aiBusy} />
+                  <p className="watchface-editor-pane-title">Watchmaker</p>
+                </div>
+                <div className="wf-ai-heading-actions" ref={setAiHeadingSlot} />
+              </>
+            ) : inspectedLayer ? (
               renderPropertiesIdentity(inspectedLayer)
             ) : (
               <div className="wf-pane-heading-main">
@@ -8433,7 +9379,37 @@ export function WatchfaceEditor({
             >
               Project
             </button>
+            <button
+              type="button"
+              role="tab"
+              id={`wf-properties-tab-ai-${sessionId}`}
+              aria-controls={`wf-ai-panel-${sessionId}`}
+              aria-selected={propertiesTab === "ai"}
+              className={`wf-ai-tab${aiBusy ? " is-working" : ""}`}
+              title={aiBusy ? "Watchmaker is working" : "Design with Watchmaker"}
+              onClick={() => setPropertiesTab("ai")}
+            >
+              <WatchmakerDial size={16} working={aiBusy} />
+              <span className="wf-ai-tab-label">AI</span>
+            </button>
           </div>
+          {/* Stays mounted while hidden so the conversation survives tab switches. */}
+          <div
+            className="wf-ai-tabpanel"
+            id={`wf-ai-panel-${sessionId}`}
+            role="tabpanel"
+            aria-labelledby={`wf-properties-tab-ai-${sessionId}`}
+            hidden={propertiesTab !== "ai"}
+          >
+            <WatchfaceAiPanel
+              api={api}
+              hidden={propertiesTab !== "ai"}
+              projectKey={projectId ? `project:${projectId}` : `draft:${starterArchive.archiveId}`}
+              headingSlot={propertiesTab === "ai" ? aiHeadingSlot : null}
+              onBusyChange={setAiBusy}
+            />
+          </div>
+          {propertiesTab === "ai" ? null : (
           <div
             className="wf-properties-tabpanel"
             id={`wf-properties-panel-${sessionId}`}
@@ -8453,6 +9429,18 @@ export function WatchfaceEditor({
               </p>
             </div>
           ) : (
+            details && previewMode === "current" ? (
+              <WatchfaceQuickStart
+                onBackground={() => selectQuickStartItem("background")}
+                onPhoto={() => void chooseArtwork()}
+                photoDisabled={isPositionLocked("background")}
+                onTime={quickStartTimeLayer
+                  ? () => selectQuickStartItem(quickStartTimeLayer.id)
+                  : undefined}
+                onText={() => addElement("text")}
+                onShape={() => addElement("rect")}
+              />
+            ) : (
             <div className="wf-properties-empty">
               <MousePointerSquareDashed size={22} aria-hidden="true" />
               <strong>Nothing selected</strong>
@@ -8461,6 +9449,7 @@ export function WatchfaceEditor({
                 Template-wide settings live on the Project tab.
               </p>
             </div>
+            )
           )
           ) : null}
           {propertiesTab === "project" ? (() => {
@@ -8750,6 +9739,7 @@ export function WatchfaceEditor({
             { className: "wf-project-section" }
           ) : null}
           </div>
+          )}
         </aside>
       </div>
 
@@ -8765,6 +9755,20 @@ export function WatchfaceEditor({
           onPublish={onPublish} />
       ) : null}
 
+      {officialBrowser ? (
+        <OfficialAssetBrowser
+          api={api}
+          firmwareType={targetFirmwareType}
+          mode={officialBrowser.mode}
+          defaultCategory={officialBrowser.defaultCategory}
+          defaultRole={officialBrowser.defaultRole}
+          frameCount={officialBrowser.frameCount}
+          configKey={officialBrowser.configKey}
+          title={officialBrowser.title}
+          onPick={officialBrowser.onPick}
+          onClose={() => setOfficialBrowser(null)}
+        />
+      ) : null}
       {leaveOpen ? (
         <div className="wf-modal-backdrop" role="presentation">
           <section className="wf-modal" role="dialog" aria-modal="true" aria-labelledby="wf-unsaved-title">
@@ -8784,6 +9788,22 @@ export function WatchfaceEditor({
       ) : null}
     </section>
   );
+
+  /**
+   * Control-slot icons, the value colon, and the negative sign are edited
+   * from the Selectable metric's own panel, so the Layers list leaves them
+   * out. The layers themselves stay derived for canvas hit-testing and for
+   * automation, which still addresses them by id.
+   */
+  function layerIsSelectableSlotAsset(layer: EditorLayer): boolean {
+    if (!layer.configAssetId) return false;
+    const reference = configAssetsById.get(layer.configAssetId);
+    return Boolean(
+      reference &&
+        reference.scope === "config" &&
+        isSelectableSlotConfigAssetKey(reference.configKey)
+    );
+  }
 
   function layerGroupLabel(layer: EditorLayer): string {
     if (
@@ -8859,6 +9879,7 @@ export function WatchfaceEditor({
             "steps",
             "calories",
             "exercise",
+            "arcCut",
             "elevation",
             "temperature"
           ],
@@ -9061,6 +10082,7 @@ export function WatchfaceEditor({
       weekday: "Dynamic date",
       seconds: "Dynamic time",
       separators: "Template separator",
+      arcCut: "Template overlay",
       battery: "Dynamic metric",
       batteryIcon: "Battery sprite",
       controlBatteryIcon: "Selectable sprite",
@@ -9111,7 +10133,7 @@ export function WatchfaceEditor({
           </span>
         </label>
         <label className="watchface-inspector-field">
-          <span>Preview completion</span>
+          <span>Preview fill</span>
           <span className="wf-input-with-unit">
             <EditableNumberInput
               min="0"
@@ -9171,7 +10193,7 @@ export function WatchfaceEditor({
             </select>
           </label>
         </details>
-        <p className="muted">
+        <p className="watchface-studio-summary">
           COROS supplies the live exercise-goal percentage. Current settings
           mirror to Always-on until you customize that mode.
         </p>
@@ -9993,10 +11015,31 @@ export function WatchfaceEditor({
     }
   }
 
-  function renderConfigAssetInspector(
-    reference: WatchfaceConfigAssetReference,
-    layer: EditorLayer
-  ) {
+  /** The image a config asset currently draws: the import, else the template PNG. */
+  function configAssetPreviewDataUrl(
+    reference: WatchfaceConfigAssetReference
+  ): string | undefined {
+    return (
+      design.configAssetOverrides?.[reference.id]?.replacement?.dataUrl ??
+      configAssetPreviews.get(reference.archivePath)?.dataUrl
+    );
+  }
+
+  function configAssetDimensions(reference: WatchfaceConfigAssetReference): string {
+    const override = design.configAssetOverrides?.[reference.id];
+    return override?.replacement
+      ? `${override.replacement.width} × ${override.replacement.height} source`
+      : reference.source
+        ? `${reference.source.width} × ${reference.source.height}px`
+        : "Not in template";
+  }
+
+  /**
+   * Preview, replace/restore, and sizing for one direct PNG config entry.
+   * Shared by the Template assets inspector and the Selectable metric panel,
+   * which edits the control-slot icons in place.
+   */
+  function renderConfigAssetControls(reference: WatchfaceConfigAssetReference) {
     const override = design.configAssetOverrides?.[reference.id];
     const enabled = override?.enabled !== false;
     const artworkZoom = override?.scale ?? 1;
@@ -10005,13 +11048,30 @@ export function WatchfaceEditor({
       Boolean(reference.source)
     );
     const nativeSize = supportsNativeSize && override?.nativeSize === true;
-    const templatePreview = configAssetPreviews.get(reference.archivePath);
-    const previewDataUrl = override?.replacement?.dataUrl ?? templatePreview?.dataUrl;
-    const dimensions = override?.replacement
-      ? `${override.replacement.width} × ${override.replacement.height} source`
-      : reference.source
-        ? `${reference.source.width} × ${reference.source.height}px`
-        : "Source file unavailable";
+    const previewDataUrl = configAssetPreviewDataUrl(reference);
+    return (
+      <div className="wf-property-stack wf-config-asset-inspector">
+        <div className={`wf-config-asset-preview${enabled ? "" : " is-disabled"}`}>{previewDataUrl ? <img src={previewDataUrl} alt={`${reference.label} preview`} /> : <Image size={24} aria-hidden="true" />}</div>
+        <div className="wf-config-asset-actions">
+          <button type="button" className="secondary-button" onClick={() => void chooseConfigAsset(reference)}><ImagePlus size={15} /> {override?.replacement ? "Replace again" : previewDataUrl ? "Replace image" : "Import image"}</button>
+          <button type="button" className="secondary-button" onClick={() => browseOfficialConfigAsset(reference)}><Sparkles size={15} /> Official</button>
+          {override?.replacement ? <button type="button" className="secondary-button" onClick={() => restoreConfigAsset(reference)}><RotateCcw size={15} /> Restore original</button> : null}
+        </div>
+        {override?.replacement ? (
+          <>
+            {supportsNativeSize ? <label className="watchface-studio-toggle"><input type="checkbox" checked={nativeSize} onChange={(event) => updateConfigAsset(reference, { nativeSize: event.target.checked })} />Native PNG size</label> : null}
+            <label className="watchface-inspector-field"><span>{nativeSize ? "Native scale" : "Artwork zoom"}</span><span className="wf-input-with-unit"><EditableNumberInput min="0.1" step="0.01" value={artworkZoom} fallback={1} onValueChange={(scale) => updateConfigAsset(reference, { scale: Math.max(0.1, scale) })} /><span>×</span></span></label>
+          </>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderConfigAssetInspector(
+    reference: WatchfaceConfigAssetReference,
+    layer: EditorLayer
+  ) {
+    const dimensions = configAssetDimensions(reference);
     const deviceResolution = watchPreviewResolution ?? previewResolution;
     const center = parseConfigPos(deviceResolution?.config.time_center_pos);
     const centerLabel = center && deviceResolution
@@ -10050,19 +11110,7 @@ export function WatchfaceEditor({
         {renderPropertySection(
           "specific",
           "Asset",
-          <div className="wf-property-stack wf-config-asset-inspector">
-            <div className={`wf-config-asset-preview${enabled ? "" : " is-disabled"}`}>{previewDataUrl ? <img src={previewDataUrl} alt={`${reference.label} preview`} /> : <Image size={24} aria-hidden="true" />}</div>
-            <div className="wf-config-asset-actions">
-              <button type="button" className="secondary-button" onClick={() => void chooseConfigAsset(reference)}><ImagePlus size={15} /> {override?.replacement ? "Replace again" : "Replace image"}</button>
-              {override?.replacement ? <button type="button" className="secondary-button" onClick={() => restoreConfigAsset(reference)}><RotateCcw size={15} /> Restore original</button> : null}
-            </div>
-            {override?.replacement ? (
-              <>
-                {supportsNativeSize ? <label className="watchface-studio-toggle"><input type="checkbox" checked={nativeSize} onChange={(event) => updateConfigAsset(reference, { nativeSize: event.target.checked })} />Native PNG size</label> : null}
-                <label className="watchface-inspector-field"><span>{nativeSize ? "Native size scale" : "Artwork zoom"}</span><span className="wf-input-with-unit"><EditableNumberInput min="0.1" step="0.01" value={artworkZoom} fallback={1} onValueChange={(scale) => updateConfigAsset(reference, { scale: Math.max(0.1, scale) })} /><span>×</span></span></label>
-              </>
-            ) : null}
-          </div>,
+          renderConfigAssetControls(reference),
           { disabled: isPositionLocked(layer.id) }
         )}
         {renderStrokeInspector(layer.id)}
@@ -10220,6 +11268,7 @@ export function WatchfaceEditor({
           "specific",
           "Sprite",
           <div className="wf-property-stack">
+            {renderBatteryStateStrip("config:control_battery_icon", "Selectable battery states")}
             <div className="wf-config-asset-actions">
               <button
                 className="secondary-button"
@@ -10229,6 +11278,15 @@ export function WatchfaceEditor({
               >
                 <ImagePlus size={15} />
                 {stateCount > 0 ? "Replace sprite folder" : "Import sprite folder"}
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={spriteImportPending}
+                onClick={() => browseOfficialBatterySprites("config:control_battery_icon")}
+              >
+                <Sparkles size={15} />
+                Official sprites
               </button>
               {stateCount > 0 ? (
                 <button
@@ -10254,10 +11312,6 @@ export function WatchfaceEditor({
                 <span>×</span>
               </span>
             </label>
-            <div className="wf-asset-dimensions">
-              <span>Imported states</span>
-              <strong>{stateCount || "Template"}</strong>
-            </div>
           </div>,
           { disabled: isPositionLocked(layer.id) }
         )}
@@ -10284,20 +11338,24 @@ export function WatchfaceEditor({
 
   function renderInspectorBody(layer: EditorLayer) {
     if (layer.nativeDataId && design.nativeData?.[layer.nativeDataId]) {
-      return renderPropertySection("appearance", layer.label,
-        <NativeDataInspector
-          key={`${previewMode}:${layer.nativeDataId}`}
-          id={layer.nativeDataId}
-          style={design.nativeData[layer.nativeDataId]}
-          coordinateScale={watchCoordinateWidth / previewWidth}
-          api={api}
-          disabled={isPositionLocked(layer.id) || spriteImportPending}
-          onPatch={patch => updateNativeData(layer.nativeDataId!, patch)}
-          onError={onError}
-          onImportStart={beginSpriteImport}
-          onImportFinish={finishSpriteImport}
-          isImportCurrent={isSpriteImportCurrent}
-        />
+      return (
+        <>
+          {renderNativeDataPositionPanel(layer, layer.nativeDataId, design.nativeData[layer.nativeDataId])}
+          <NativeDataInspector
+            key={`${previewMode}:${layer.nativeDataId}`}
+            id={layer.nativeDataId}
+            style={design.nativeData[layer.nativeDataId]}
+            coordinateScale={watchCoordinateWidth / previewWidth}
+            api={api}
+            disabled={isPositionLocked(layer.id) || spriteImportPending}
+            renderSection={renderPropertySection}
+            onPatch={patch => updateNativeData(layer.nativeDataId!, patch)}
+            onError={onError}
+            onImportStart={beginSpriteImport}
+            onImportFinish={finishSpriteImport}
+            isImportCurrent={isSpriteImportCurrent}
+          />
+        </>
       );
     }
     if (layer.configAssetId) {
@@ -10398,8 +11456,10 @@ export function WatchfaceEditor({
             "specific",
             "Sprite",
             <div className="wf-property-stack">
+              {renderBatteryStateStrip("config:battery_icon", "Battery states")}
               <div className="wf-config-asset-actions">
                 <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => void chooseBatterySpriteFolder()}><ImagePlus size={15} /> {stateCount > 0 ? "Replace sprite folder" : "Import sprite folder"}</button>
+                <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => browseOfficialBatterySprites()}><Sparkles size={15} /> Official sprites</button>
                 {stateCount > 0 ? <button className="secondary-button" type="button" disabled={spriteImportPending} onClick={() => restoreBatteryIcon()}><RotateCcw size={15} /> Restore template</button> : null}
               </div>
               <label className="watchface-inspector-field"><span>Icon scale</span><EditableNumberInput min="0.1" step="0.01" value={iconScale} fallback={1} onValueChange={setBatteryIconScale} /></label>
@@ -10431,13 +11491,13 @@ export function WatchfaceEditor({
             "specific",
             "Typography",
             <div className="wf-property-stack">
-        <label className="field">Number alignment<select value={style?.align ?? ""} onChange={(event) => { const align = (event.target.value || undefined) as "left" | "center" | "right" | undefined; setMetricStyle("battery", { align }); }}><option value="">Template default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
-              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setMetricStyle("battery", { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle("battery", typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle("battery", { letterSpacing })} />
+              <WatchfaceNumberAlignControl value={style?.align} allowTemplateDefault onChange={(align) => setMetricStyle("battery", { align })} />
+              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" preview={renderFontPreview("battery", style)} onChange={(fontFamily) => setMetricStyle("battery", { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle("battery", typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle("battery", { letterSpacing })} />
               <div className="watchface-position-inputs">
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle("battery", { scale: Math.max(0.01, scale) })} /></label>
                 <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle("battery", { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               </div>
-              <details className="wf-nested-disclosure"><summary>Custom PNG font</summary><CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} componentLabel="Battery data" onActivate={() => setMetricStyle("battery", { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont })} /></details>
+              <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel="Battery data" onActivate={() => setMetricStyle("battery", { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle("battery", { rasterFont })} />
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
@@ -10463,12 +11523,12 @@ export function WatchfaceEditor({
             "Typography",
             <div className="wf-property-stack">
               {layer.timePartId === "autoTime" ? <button type="button" className="secondary-button" onClick={convertAutoTimeToSeparate}>Separate hours and minutes</button> : null}
-              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setTimeStyle(layer.timePartId!, { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setTimeStyle(layer.timePartId!, typography)} onLetterSpacingChange={(letterSpacing) => setTimeStyle(layer.timePartId!, { letterSpacing })} />
+              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" preview={renderFontPreview(layer.timePartId!, style)} onChange={(fontFamily) => setTimeStyle(layer.timePartId!, { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setTimeStyle(layer.timePartId!, typography)} onLetterSpacingChange={(letterSpacing) => setTimeStyle(layer.timePartId!, { letterSpacing })} />
               <div className="watchface-position-inputs">
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setTimeStyle(layer.timePartId!, { scale: Math.max(0.01, scale) })} /></label>
                 <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setTimeStyle(layer.timePartId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
               </div>
-              <details className="wf-nested-disclosure"><summary>Custom PNG font</summary><CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} componentLabel={layer.label} onActivate={() => setTimeStyle(layer.timePartId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont })} /></details>
+              <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setTimeStyle(layer.timePartId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont })} />
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
@@ -10526,7 +11586,7 @@ export function WatchfaceEditor({
                       />
                     </label>
                     <label className="field">
-                      Separator color
+                      Color
                       <span className="watchface-color-control">
                         <WatchfaceColorInput
                           value={exerciseSeparator.color}
@@ -10549,7 +11609,7 @@ export function WatchfaceEditor({
                         />
                       </div>
                     ) : (
-                      <p className="muted">Using a generated colon glyph.</p>
+                      <p className="watchface-studio-summary">Using a generated colon glyph.</p>
                     )}
                     <div className="wf-config-asset-actions">
                       <button
@@ -10570,7 +11630,7 @@ export function WatchfaceEditor({
                         </button>
                       ) : null}
                     </div>
-                    <p className="muted">
+                    <p className="watchface-studio-summary">
                       This separator is flattened into the face artwork and follows Exercise when the metric moves.
                     </p>
                   </div>
@@ -10584,13 +11644,13 @@ export function WatchfaceEditor({
             "specific",
             "Typography",
             <div className="wf-property-stack">
-        <label className="field">Number alignment<select value={style?.align ?? ""} onChange={(event) => { const align = (event.target.value || undefined) as "left" | "center" | "right" | undefined; setMetricStyle(layer.metricId!, { align }); }}><option value="">Template default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
-              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle(layer.metricId!, typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
+              <WatchfaceNumberAlignControl value={style?.align} allowTemplateDefault onChange={(align) => setMetricStyle(layer.metricId!, { align })} />
+              <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" preview={renderFontPreview(layer.metricId!, style)} onChange={(fontFamily) => setMetricStyle(layer.metricId!, { fontFamily })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setMetricStyle(layer.metricId!, typography)} onLetterSpacingChange={(letterSpacing) => setMetricStyle(layer.metricId!, { letterSpacing })} />
               <div className="watchface-position-inputs">
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setMetricStyle(layer.metricId!, { scale: Math.max(0.01, scale) })} /></label>
                 {supportsWatchfaceSpriteRotation(layer.metricId) ? <label>Rotation<EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setMetricStyle(layer.metricId!, { rotation: normalizeWatchfaceRotation(rotation) })} /></label> : null}
               </div>
-              <details className="wf-nested-disclosure"><summary>Custom PNG font</summary><CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} componentLabel={layer.label} onActivate={() => setMetricStyle(layer.metricId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont })} /></details>
+              <CustomPngFontPanel api={api} {...rasterFolderImportProps} rasterFont={design.rasterFont} componentRasterFont={style?.rasterFont} previewedFont={style?.rasterFont ?? design.rasterFont} componentLabel={layer.label} onActivate={() => setMetricStyle(layer.metricId!, { fontFamily: "" })} onRasterFontChange={setRasterFont} onComponentRasterFontChange={(rasterFont) => setMetricStyle(layer.metricId!, { rasterFont })} />
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
@@ -10650,7 +11710,7 @@ export function WatchfaceEditor({
                     </span>
                   </label>
                   <label className="watchface-inspector-field">
-                    <span>Preview completion</span>
+                    <span>Preview fill</span>
                     <span className="wf-input-with-unit">
                       <EditableNumberInput
                         min="0"
@@ -10704,7 +11764,7 @@ export function WatchfaceEditor({
                       </select>
                     </label>
                   </details>
-                  <p className="muted">
+                  <p className="watchface-studio-summary">
                     COROS supplies the live goal percentage on the watch. Current settings mirror to Always-on until you customize that mode.
                   </p>
                 </div>
@@ -10755,6 +11815,24 @@ export function WatchfaceEditor({
       const nativeHeight = sourceSizes.length > 0
         ? Math.max(...sourceSizes.map((size) => size.height))
         : 1;
+      const sizeOverridden =
+        style?.width !== undefined || style?.height !== undefined;
+      // Custom weekday labels always replace the English set; the other
+      // locale folders in the archive are only touched when opted in.
+      const languageMode: "english" | "all" | "selected" =
+        style?.overwriteAllLanguages
+          ? "all"
+          : style?.overwriteLanguages
+            ? "selected"
+            : "english";
+      const selectedLanguages = style?.overwriteLanguages ?? [];
+      const weekdayLanguages = partId === "weekday"
+        ? [...new Set((details?.resolutions ?? []).flatMap((resolution) =>
+            Object.keys(resolution.config)
+              .filter((key) => key.endsWith("_date_week_font") && !key.startsWith("control_"))
+              .map((key) => key.replace(/_date_week_font$/, ""))
+          ))].filter((language) => language !== "english").sort()
+        : [];
       return (
         <>
           {renderPositionReadout(layer)}
@@ -10774,6 +11852,14 @@ export function WatchfaceEditor({
                 label="Font"
                 value={style?.fontFamily ?? design.fontFamily}
                 emptyLabel="Keep template font"
+                preview={renderFontPreview(partId, style, {
+                  rasterFontRequiredText: partId === "weekday" ? "MON" : usesMonthLabels ? "JAN" : undefined,
+                  sampleText: partId === "weekday"
+                    ? "MON TUE WED"
+                    : usesMonthLabels
+                      ? "JAN FEB MAR"
+                      : "0123456789"
+                })}
                 onChange={(fontFamily) => {
                   if (!fontFamily) {
                     restoreDateTemplateFont(partId);
@@ -10795,8 +11881,51 @@ export function WatchfaceEditor({
                   })
                 }
               />
-              <div className="field">
-                Native PNG size
+              {partId === "weekday" ? (
+                <div className="wf-weekday-languages">
+                  <label className="field">
+                    Languages
+                    <select
+                      value={languageMode}
+                      onChange={(event) => setDateStyle(partId, {
+                        overwriteAllLanguages: event.target.value === "all",
+                        overwriteLanguages: event.target.value === "selected" ? selectedLanguages : undefined
+                      })}
+                    >
+                      <option value="english">English only</option>
+                      <option value="all">All languages</option>
+                      <option value="selected">Choose languages</option>
+                    </select>
+                  </label>
+                  {languageMode === "selected" ? (
+                    <div className="wf-weekday-language-options" role="group" aria-label="Additional weekday languages">
+                      {weekdayLanguages.map((language) => (
+                        <label key={language}>
+                          <input
+                            type="checkbox"
+                            checked={selectedLanguages.includes(language)}
+                            onChange={(event) => setDateStyle(partId, {
+                              overwriteLanguages: event.target.checked
+                                ? [...selectedLanguages, language]
+                                : selectedLanguages.filter((value) => value !== language)
+                            })}
+                          />
+                          <span>{WEEKDAY_LANGUAGE_NAMES[language] ?? language}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
+                  <p className="watchface-typography-hint">
+                    {languageMode === "all"
+                      ? "Every watch language shows these labels."
+                      : languageMode === "selected"
+                        ? "Checked languages get these labels too."
+                        : "Other watch languages keep the template's labels."}
+                  </p>
+                </div>
+              ) : null}
+              <div className="field wf-sprite-size">
+                <span>Size</span>
                 <LinkedDimensionInputs
                   width={style?.width ?? nativeWidth}
                   height={style?.height ?? nativeHeight}
@@ -10811,28 +11940,44 @@ export function WatchfaceEditor({
                     setDateStyle(partId, { aspectLocked })
                   }
                 />
-                <button type="button" className="watchface-color-none" disabled={style?.width === undefined && style?.height === undefined} onClick={() => setDateStyle(partId, { width: undefined, height: undefined })}>Use imported size</button>
               </div>
+              {sizeOverridden ? (
+                <p className="watchface-typography-hint wf-sprite-size-hint">
+                  {sourceSizes.length > 0 ? <span>Imported at {nativeWidth} × {nativeHeight} px</span> : null}
+                  <button
+                    type="button"
+                    className="wf-native-part-reset"
+                    onClick={() => setDateStyle(partId, { width: undefined, height: undefined })}
+                  >
+                    {sourceSizes.length > 0 ? "Reset" : "Use imported size"}
+                  </button>
+                </p>
+              ) : null}
               <label className="watchface-inspector-field"><span>Rotation</span><EditableNumberInput min="0" max="360" step="1" value={normalizeWatchfaceRotation(style?.rotation ?? 0)} fallback={0} onValueChange={(rotation) => setDateStyle(partId, { rotation: normalizeWatchfaceRotation(rotation) })} /></label>
-              <details className="wf-nested-disclosure">
-                <summary>Custom PNG font</summary>
-                <CustomPngFontPanel
-                  api={api}
-                  {...rasterFolderImportProps}
-                  rasterFont={design.rasterFont}
-                  componentRasterFont={style?.rasterFont}
-                  componentLabel={layer.label}
-                  onActivate={() => setDateStyle(partId, { fontFamily: "" })}
-                  onRasterFontChange={setRasterFont}
-                  onComponentRasterFontChange={(rasterFont) => {
-                    if (!rasterFont) {
-                      restoreDateTemplateFont(partId);
-                      return;
-                    }
-                    setDateStyle(partId, { rasterFont, ...(supportsNativeSize ? { nativeSize: true } : {}), ...(partId === "dateMonth" ? { monthFormat: WATCHFACE_MONTH_LABELS.every((label) => rasterFontSupportsText(rasterFont, label)) ? "labels" : rasterFontSupportsText(rasterFont, "0123456789") ? "digits" : undefined } : {}) });
-                  }}
-                />
-              </details>
+              <CustomPngFontPanel
+                api={api}
+                {...rasterFolderImportProps}
+                rasterFont={design.rasterFont}
+                componentRasterFont={style?.rasterFont}
+                previewedFont={
+                  // The picker previews the set only when it covers this part's labels.
+                  (() => {
+                    const font = style?.rasterFont ?? design.rasterFont;
+                    const required = partId === "weekday" ? "MON" : usesMonthLabels ? "JAN" : undefined;
+                    return font && (!required || rasterFontSupportsText(font, required)) ? font : undefined;
+                  })()
+                }
+                componentLabel={layer.label}
+                onActivate={() => setDateStyle(partId, { fontFamily: "" })}
+                onRasterFontChange={setRasterFont}
+                onComponentRasterFontChange={(rasterFont) => {
+                  if (!rasterFont) {
+                    restoreDateTemplateFont(partId);
+                    return;
+                  }
+                  setDateStyle(partId, { rasterFont, ...(supportsNativeSize ? { nativeSize: true } : {}), ...(partId === "dateMonth" ? { monthFormat: WATCHFACE_MONTH_LABELS.every((label) => rasterFontSupportsText(rasterFont, label)) ? "labels" : rasterFontSupportsText(rasterFont, "0123456789") ? "digits" : undefined } : {}) });
+                }}
+              />
             </div>,
             { disabled: isPositionLocked(layer.id) }
           )}
@@ -10919,7 +12064,7 @@ export function WatchfaceEditor({
                 <label>Skew X<EditableNumberInput min="-80" max="80" step="1" value={normalizeWatchfaceSkew(sprite.skewX)} fallback={0} onValueChange={(skewX) => updateSprite(sprite.id, { skewX: normalizeWatchfaceSkew(skewX) })} /></label>
                 <label>Skew Y<EditableNumberInput min="-80" max="80" step="1" value={normalizeWatchfaceSkew(sprite.skewY)} fallback={0} onValueChange={(skewY) => updateSprite(sprite.id, { skewY: normalizeWatchfaceSkew(skewY) })} /></label>
               </div>
-              <label className="field">Transform origin<select value={(() => { const origin = normalizeWatchfaceTransformOrigin(sprite.origin); return `${origin.x},${origin.y}`; })()} onChange={(event) => { const [x, y] = event.target.value.split(",").map(Number); updateSprite(sprite.id, { origin: normalizeWatchfaceTransformOrigin({ x, y }) }); }}><option value="0,0">Top left</option><option value="0.5,0">Top center</option><option value="1,0">Top right</option><option value="0,0.5">Center left</option><option value="0.5,0.5">Center</option><option value="1,0.5">Center right</option><option value="0,1">Bottom left</option><option value="0.5,1">Bottom center</option><option value="1,1">Bottom right</option></select></label>
+              <label className="field">Origin<select value={(() => { const origin = normalizeWatchfaceTransformOrigin(sprite.origin); return `${origin.x},${origin.y}`; })()} onChange={(event) => { const [x, y] = event.target.value.split(",").map(Number); updateSprite(sprite.id, { origin: normalizeWatchfaceTransformOrigin({ x, y }) }); }}><option value="0,0">Top left</option><option value="0.5,0">Top center</option><option value="1,0">Top right</option><option value="0,0.5">Center left</option><option value="0.5,0.5">Center</option><option value="1,0.5">Center right</option><option value="0,1">Bottom left</option><option value="0.5,1">Bottom center</option><option value="1,1">Bottom right</option></select></label>
               <div className={`wf-crop-controls${cropSpriteId === sprite.id ? " is-active" : ""}`}>
                 <div className="wf-crop-heading"><strong>Crop</strong>{cropSpriteId === sprite.id ? <span>Enter applies, Esc cancels</span> : null}</div>
                 {cropSpriteId === sprite.id ? (
@@ -10964,7 +12109,9 @@ export function WatchfaceEditor({
                       design.layerColors?.[layer.layoutGroupId] ??
                       (layer.kind === "separators"
                         ? design.accentColor
-                        : design.digitColor)
+                        : layer.kind === "arcCut"
+                          ? "#000000"
+                          : design.digitColor)
                     }
                     onValueChange={(color) => setLayerColor(layer.layoutGroupId!, color)}
                   />
@@ -10972,7 +12119,9 @@ export function WatchfaceEditor({
                     {design.layerColors?.[layer.layoutGroupId] ??
                       (layer.kind === "separators"
                         ? design.accentColor
-                        : design.digitColor)}
+                        : layer.kind === "arcCut"
+                          ? "#000000"
+                          : design.digitColor)}
                   </code>
                   <button
                     type="button"
@@ -10997,6 +12146,8 @@ export function WatchfaceEditor({
           watchfaceInspectorSpecificTitle({ kind: layer.kind }),
           layer.layoutGroupId === "complication" ? (
             renderComplicationPicker()
+          ) : layer.kind === "arcCut" && configAssetsById.get("config:arc_cut_icon") ? (
+            renderConfigAssetControls(configAssetsById.get("config:arc_cut_icon")!)
           ) : (
             <p className="watchface-studio-summary">
               This component is rendered live by the watch firmware.
@@ -11035,9 +12186,6 @@ export function WatchfaceEditor({
     const selectedComplication = supported.find(
       (complication) => complication.id === selected
     );
-    const controlColonReference = configAssetsById.get("config:control_colon_icon");
-    const controlColonEnabled =
-      design.configAssetOverrides?.["config:control_colon_icon"]?.enabled !== false;
     const sourceResolution = previewDetails
       ? pickPreviewResolution(previewDetails)
       : pickPreviewResolution(details);
@@ -11106,11 +12254,33 @@ export function WatchfaceEditor({
                 modeSourceDetails,
                 complication.id
               );
+              const iconKey = complication.id === "battery"
+                ? null
+                : controlIconConfigKey(complication.id);
+              const iconReference = iconKey
+                ? configAssetsById.get(`config:${iconKey}`)
+                : undefined;
+              const iconDataUrl = iconReference
+                ? configAssetPreviewDataUrl(iconReference)
+                : undefined;
               return (
                 <label
                   key={complication.id}
                   className={`wf-selectable-component${enabled ? " is-enabled" : ""}`}
                 >
+                  <i
+                    className={`wf-selectable-component-icon${iconDataUrl ? "" : " is-empty"}`}
+                    aria-hidden="true"
+                    title={iconDataUrl ? `${complication.label} icon` : undefined}
+                  >
+                    {iconDataUrl ? (
+                      <img src={iconDataUrl} alt="" draggable={false} />
+                    ) : complication.id === "battery" ? (
+                      <Battery size={13} />
+                    ) : (
+                      <Image size={13} />
+                    )}
+                  </i>
                   <span>
                     <strong>{complication.label}</strong>
                     <small>
@@ -11140,7 +12310,7 @@ export function WatchfaceEditor({
             })}
           </div>
         </section>
-        <label className="field">Number alignment<select value={design.selectableMetricStyle?.align ?? ""} onChange={(event) => { const align = (event.target.value || undefined) as "left" | "center" | "right" | undefined; setSelectableMetricStyle({ align }); }}><option value="">Template default</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
+        <WatchfaceNumberAlignControl value={design.selectableMetricStyle?.align} allowTemplateDefault onChange={(align) => setSelectableMetricStyle({ align })} />
         <label className="field">
           Preview data
           <select
@@ -11174,40 +12344,71 @@ export function WatchfaceEditor({
         </label>
         {selectedComplication ? (
           <>
-        {selectedComplication?.valueParts &&
-        selectedComplication.id !== "barometer" &&
-        controlColonReference ? (
-          <div className="wf-inline-config-asset">
-            <label className="watchface-studio-toggle">
-              <input
-                type="checkbox"
-                checked={controlColonEnabled}
-                onChange={(event) =>
-                  updateConfigAsset(controlColonReference, {
-                    enabled: event.target.checked
-                  })
-                }
-              />
-              Show colon between values
-            </label>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => {
-                setSelectedId("configAsset:config:control_colon_icon");
-                setSelectedIds(["configAsset:config:control_colon_icon"]);
-                setPropertiesOpen(true);
-              }}
-            >
-              Edit colon image
-            </button>
-          </div>
-        ) : null}
+        {renderSelectableSlotIcon(
+          selectedComplication,
+          baseIconPosition && selectedComplication.id !== "battery"
+            ? (
+              <div className="wf-inline-position-controls">
+                <strong>Icon offset</strong>
+                <div className="watchface-position-inputs">
+                  <label>
+                    X
+                    <input
+                      type="number"
+                      min="0"
+                      max={watchCoordinateWidth}
+                      value={iconScreenPosition?.x ?? 0}
+                      onChange={(event) =>
+                        setIconOffset(
+                          fromWatchCoordinate(Number(event.target.value) || 0) -
+                            controlOrigin.x - controlOffset.dx - baseIconPosition.x,
+                          iconOffset.dy
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    Y
+                    <input
+                      type="number"
+                      min="0"
+                      max={watchCoordinateHeight}
+                      value={iconScreenPosition?.y ?? 0}
+                      onChange={(event) =>
+                        setIconOffset(
+                          iconOffset.dx,
+                          fromWatchCoordinate(Number(event.target.value) || 0) -
+                            controlOrigin.y - controlOffset.dy - baseIconPosition.y
+                        )
+                      }
+                    />
+                  </label>
+                </div>
+                <span>Nudge</span>
+                <div className="watchface-nudge-pad wf-position-nudge-only">
+                  <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy - fromWatchCoordinate(1))} aria-label="Nudge selector icon up"><ArrowUp size={13} aria-hidden="true" /></button>
+                  <button type="button" onClick={() => setIconOffset(iconOffset.dx - fromWatchCoordinate(1), iconOffset.dy)} aria-label="Nudge selector icon left"><ArrowLeft size={13} aria-hidden="true" /></button>
+                  <button type="button" onClick={() => setIconOffset(iconOffset.dx + fromWatchCoordinate(1), iconOffset.dy)} aria-label="Nudge selector icon right"><ArrowRight size={13} aria-hidden="true" /></button>
+                  <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy + fromWatchCoordinate(1))} aria-label="Nudge selector icon down"><ArrowDown size={13} aria-hidden="true" /></button>
+                  <button type="button" className="watchface-nudge-reset" onClick={() => setIconOffset(0, 0)}>Reset</button>
+                </div>
+                <p className="watchface-studio-summary">
+                  This moves only the {selectedComplication.label.toLowerCase()} icon.
+                  Move the Selectable metric layer to reposition its icon and value together.
+                </p>
+              </div>
+            )
+            : null
+        )}
+        {renderSelectableSlotSharedAssets(selectedComplication)}
         <LocalFontPicker
           api={api}
           label="Font"
           value={design.selectableMetricStyle?.fontFamily ?? design.fontFamily}
           emptyLabel="Keep template font"
+          preview={renderFontPreview("complication", design.selectableMetricStyle, {
+            complicationId: selectedComplication.id
+          })}
           onChange={(fontFamily) =>
             setSelectableMetricStyle({
               fontFamily,
@@ -11243,6 +12444,7 @@ export function WatchfaceEditor({
           {...rasterFolderImportProps}
           rasterFont={design.rasterFont}
           componentRasterFont={design.selectableMetricStyle?.rasterFont}
+          previewedFont={design.selectableMetricStyle?.rasterFont ?? design.rasterFont}
           componentLabel="Selectable metric"
           onActivate={() =>
             setSelectableMetricStyle({ fontFamily: "" })
@@ -11308,57 +12510,6 @@ export function WatchfaceEditor({
           design.selectableMetricStyle?.rotation,
           (rotation) => setSelectableMetricStyle({ rotation })
         )}
-        {baseIconPosition && selectedComplication?.id !== "battery" ? (
-          <div className="wf-inline-position-controls">
-            <strong>Selector icon offset</strong>
-            <div className="watchface-position-inputs">
-              <label>
-                X
-                <input
-                  type="number"
-                  min="0"
-                  max={watchCoordinateWidth}
-                  value={iconScreenPosition?.x ?? 0}
-                  onChange={(event) =>
-                    setIconOffset(
-                      fromWatchCoordinate(Number(event.target.value) || 0) -
-                        controlOrigin.x - controlOffset.dx - baseIconPosition.x,
-                      iconOffset.dy
-                    )
-                  }
-                />
-              </label>
-              <label>
-                Y
-                <input
-                  type="number"
-                  min="0"
-                  max={watchCoordinateHeight}
-                  value={iconScreenPosition?.y ?? 0}
-                  onChange={(event) =>
-                    setIconOffset(
-                      iconOffset.dx,
-                      fromWatchCoordinate(Number(event.target.value) || 0) -
-                        controlOrigin.y - controlOffset.dy - baseIconPosition.y
-                    )
-                  }
-                />
-              </label>
-            </div>
-            <span>Nudge</span>
-            <div className="watchface-nudge-pad wf-position-nudge-only">
-              <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy - fromWatchCoordinate(1))} aria-label="Nudge selector icon up"><ArrowUp size={13} aria-hidden="true" /></button>
-              <button type="button" onClick={() => setIconOffset(iconOffset.dx - fromWatchCoordinate(1), iconOffset.dy)} aria-label="Nudge selector icon left"><ArrowLeft size={13} aria-hidden="true" /></button>
-              <button type="button" onClick={() => setIconOffset(iconOffset.dx + fromWatchCoordinate(1), iconOffset.dy)} aria-label="Nudge selector icon right"><ArrowRight size={13} aria-hidden="true" /></button>
-              <button type="button" onClick={() => setIconOffset(iconOffset.dx, iconOffset.dy + fromWatchCoordinate(1))} aria-label="Nudge selector icon down"><ArrowDown size={13} aria-hidden="true" /></button>
-              <button type="button" className="watchface-nudge-reset" onClick={() => setIconOffset(0, 0)}>Reset</button>
-            </div>
-            <p className="watchface-studio-summary">
-              This moves only the {selectedComplication?.label.toLowerCase()} icon.
-              Move the Selectable metric layer to reposition its icon and value together.
-            </p>
-          </div>
-        ) : null}
         <p className="watchface-studio-summary">
           Move this Selectable metric layer to position its icon and value together.
           Sensor temperature uses the watch's thermometer and can be affected by
@@ -11372,6 +12523,290 @@ export function WatchfaceEditor({
           </p>
         )}
       </>
+    );
+  }
+
+  /**
+   * The chosen data type's slot icon, edited beside the metric it belongs
+   * to. A template icon can be replaced or hidden; a data type the template
+   * lacks an icon for can import one, which adds its config entry on export.
+   */
+  function renderSelectableSlotIcon(
+    complication: WatchfaceComplicationDefinition,
+    offsetControls: ReactNode
+  ) {
+    if (complication.id === "battery") {
+      return (
+        <div className="wf-slot-asset">
+          <div className="wf-slot-asset-heading">
+            <span>Battery icon</span>
+          </div>
+          <p className="watchface-studio-summary">
+            The battery choice draws a charge-state sprite folder instead of
+            one icon.{" "}
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => selectEditorItem("controlBatteryIcon")}
+            >
+              Edit battery states
+            </button>
+          </p>
+        </div>
+      );
+    }
+    const configKey = controlIconConfigKey(complication.id);
+    const reference = configKey
+      ? configAssetsById.get(`config:${configKey}`)
+      : undefined;
+    const override = reference
+      ? design.configAssetOverrides?.[reference.id]
+      : undefined;
+    const available = Boolean(
+      reference && (reference.source || override?.replacement)
+    );
+    const enabled = override?.enabled !== false;
+    return (
+      <div className="wf-slot-asset">
+        <div className="wf-slot-asset-heading">
+          <span>{complication.label} icon</span>
+          {override?.replacement ? (
+            <span className="wf-layer-state">Custom</span>
+          ) : null}
+          {reference && available ? (
+            <label className="watchface-studio-toggle">
+              <input
+                type="checkbox"
+                checked={enabled}
+                onChange={(event) =>
+                  updateConfigAsset(reference, { enabled: event.target.checked })
+                }
+              />
+              Show
+            </label>
+          ) : null}
+        </div>
+        {reference ? renderConfigAssetControls(reference) : null}
+        <p className="watchface-studio-summary">
+          {!reference
+            ? `No ${complication.label.toLowerCase()} icon is defined for this display mode.`
+            : available
+              ? `${configAssetDimensions(reference)} · [${reference.configKey}]. Shown when ${complication.label.toLowerCase()} is active in the selectable slot.`
+              : `This template has no ${complication.label.toLowerCase()} icon. Import a PNG to draw one beside the value; export adds [${reference.configKey}] to config.txt.`}
+        </p>
+        {available ? offsetControls : null}
+      </div>
+    );
+  }
+
+  /**
+   * The colon and negative sign the firmware draws inside the selectable
+   * slot for every data type, as compact rows with show/replace controls.
+   */
+  function renderSelectableSlotSharedAssets(
+    complication: WatchfaceComplicationDefinition
+  ) {
+    const rows = [
+      {
+        reference: configAssetsById.get("config:control_colon_icon"),
+        title: "Value colon",
+        detail: complication.valueParts
+          ? `Between the ${complication.label.toLowerCase()} values`
+          : "Only data types with two values use it"
+      },
+      {
+        reference: configAssetsById.get("config:control_negative_sign_icon"),
+        title: "Negative sign",
+        detail: "Shown before values below zero"
+      }
+    ].filter(
+      (row): row is typeof row & { reference: WatchfaceConfigAssetReference } =>
+        Boolean(row.reference)
+    );
+    if (rows.length === 0) return null;
+    return (
+      <div className="wf-slot-asset">
+        <div className="wf-slot-asset-heading">
+          <span>Shared slot artwork</span>
+        </div>
+        <div className="wf-slot-asset-list">
+          {rows.map(({ reference, title, detail }) => {
+            const override = design.configAssetOverrides?.[reference.id];
+            const enabled = override?.enabled !== false;
+            const previewDataUrl = configAssetPreviewDataUrl(reference);
+            return (
+              <div
+                key={reference.id}
+                className={`wf-slot-asset-row${enabled ? "" : " is-disabled"}`}
+              >
+                <span className="wf-slot-asset-thumb" aria-hidden="true">
+                  {previewDataUrl ? (
+                    <img src={previewDataUrl} alt="" draggable={false} />
+                  ) : (
+                    <Image size={16} />
+                  )}
+                </span>
+                <span className="wf-slot-asset-copy">
+                  <strong>
+                    {title}
+                    {override?.replacement ? " · Custom" : ""}
+                  </strong>
+                  <span>{detail} · {configAssetDimensions(reference)}</span>
+                </span>
+                <span className="wf-slot-asset-row-actions">
+                  <button
+                    type="button"
+                    className="wf-property-icon-button"
+                    aria-label={`${enabled ? "Hide" : "Show"} ${title.toLowerCase()}`}
+                    aria-pressed={!enabled}
+                    title={enabled ? "Hide" : "Show"}
+                    disabled={!previewDataUrl}
+                    onClick={() => updateConfigAsset(reference, { enabled: !enabled })}
+                  >
+                    {enabled ? <Eye size={14} /> : <EyeOff size={14} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="wf-property-icon-button"
+                    aria-label={`Replace ${title.toLowerCase()} image`}
+                    title="Replace image"
+                    onClick={() => void chooseConfigAsset(reference)}
+                  >
+                    <ImagePlus size={14} />
+                  </button>
+                  {override?.replacement ? (
+                    <button
+                      type="button"
+                      className="wf-property-icon-button"
+                      aria-label={`Restore original ${title.toLowerCase()}`}
+                      title="Restore original"
+                      onClick={() => restoreConfigAsset(reference)}
+                    >
+                      <RotateCcw size={14} />
+                    </button>
+                  ) : null}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  /**
+   * The glyphs a text layer draws with, under its font picker: the imported
+   * PNG set, the template sprite folder, or a sample of the local font.
+   */
+  function renderFontPreview(
+    layerId: string,
+    style:
+      | {
+          fontFamily?: string;
+          rasterFont?: CorosWatchfaceRasterFont;
+          fontWeight?: number;
+          fontStyle?: "normal" | "italic";
+        }
+      | undefined,
+    options: {
+      complicationId?: WatchfaceComplicationId;
+      rasterFontRequiredText?: string;
+      sampleText?: string;
+    } = {}
+  ) {
+    const sourceResolution = modeSourceDetails
+      ? pickPreviewResolution(modeSourceDetails)
+      : null;
+    return (
+      <WatchfaceFontPreview
+        fontFamily={style?.fontFamily ?? design.fontFamily}
+        typography={{
+          fontWeight: style?.fontWeight ?? design.fontWeight ?? 400,
+          fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal"
+        }}
+        rasterFont={style?.rasterFont ?? design.rasterFont}
+        rasterFontRequiredText={options.rasterFontRequiredText}
+        templateGlyphs={
+          sourceResolution
+            ? templateFontGlyphsForLayer(sourceResolution, layerId, {
+                complicationId: options.complicationId
+              })
+            : null
+        }
+        loadAssets={loadAssets}
+        sampleText={options.sampleText}
+      />
+    );
+  }
+
+  /**
+   * Every charge state the battery sprite draws: the template folder with
+   * imported PNGs in place of the states they replace, plus any imported
+   * states the template folder has no slot for.
+   */
+  function renderBatteryStateStrip(
+    overrideId: "config:battery_icon" | "config:control_battery_icon",
+    label: string
+  ) {
+    const sourceResolution = modeSourceDetails
+      ? pickPreviewResolution(modeSourceDetails)
+      : null;
+    const override = design.configAssetOverrides?.[overrideId];
+    const imported = Object.entries(override?.stateReplacements ?? {})
+      .filter(([key]) => /^\d+$/.test(key))
+      .map(([key, artwork]) => [key.padStart(2, "0"), artwork] as const)
+      .sort(([left], [right]) => Number(left) - Number(right));
+    const folderName = !sourceResolution
+      ? undefined
+      : overrideId === "config:battery_icon"
+        ? sourceResolution.config.battery_icon_dir
+        : sourceResolution.config.control_battery_icon_dir ??
+          sourceResolution.spriteFolders.find(
+            (folder) =>
+              folder.kind === "state" &&
+              folder.folder.replace(/^a\//, "") === "battery"
+          )?.folder;
+    const template = sourceResolution
+      ? templateStateGlyphs(sourceResolution, folderName)
+      : null;
+    const replacements = Object.fromEntries(
+      imported.map(([state, artwork]) => [state, artwork.dataUrl])
+    );
+    const extraCells = imported
+      .filter(([state]) => !template?.glyphs.some((glyph) => glyph.label === state))
+      .map(([state, artwork]) => ({
+        key: `${overrideId}:${state}`,
+        label: state,
+        src: artwork.dataUrl,
+        replaced: true
+      }));
+    const canvas = imported[0]?.[1];
+    const summary = imported.length > 0
+      ? `${imported.length} imported state${imported.length === 1 ? "" : "s"}` +
+        (canvas ? ` · ${canvas.width} × ${canvas.height} px canvas` : "") +
+        (template ? ` · template ${template.folder}` : "")
+      : template
+        ? `Template · ${template.folder} · ${template.glyphs.length} state${template.glyphs.length === 1 ? "" : "s"}`
+        : undefined;
+    if (template && template.glyphs.length > 0) {
+      return (
+        <TemplateSpriteStrip
+          label={label}
+          glyphs={template.glyphs}
+          loadAssets={loadAssets}
+          replacements={replacements}
+          extraCells={extraCells}
+          summary={summary}
+        />
+      );
+    }
+    return (
+      <WatchfaceSpriteStrip
+        label={label}
+        cells={extraCells}
+        summary={summary}
+        emptyText="No battery sprites yet. Import a folder of 00.png, 01.png… to add charge states."
+      />
     );
   }
 
@@ -11402,8 +12837,11 @@ export function WatchfaceEditor({
       "transform",
       "Transform",
       <div className="watchface-inspector-position">
-        <div className="wf-position-heading">
-          <span>{title}</span>
+        <div
+          className="wf-position-heading"
+          title={`${title}. Coordinates use the selected watch display.`}
+        >
+          <span>Position</span>
           <Info
             size={13}
             aria-label="Coordinates use the selected watch display"
@@ -11411,6 +12849,7 @@ export function WatchfaceEditor({
         </div>
         <fieldset
           className="wf-position-controls"
+          aria-label={title}
           disabled={isMovementLockedForId(id)}
         >
           {children}
@@ -11529,6 +12968,85 @@ export function WatchfaceEditor({
       </>,
       <p className="watchface-studio-summary">
         This element is drawn live by the watch. Drag it on the face to reposition it.
+      </p>
+    );
+  }
+
+  /** Native data shares Hour digits' Transform panel: position, align, nudge, plus the layer's own scale. */
+  function renderNativeDataPositionPanel(
+    layer: EditorLayer,
+    id: string,
+    style: NonNullable<CorosWatchfaceDesignState["nativeData"]>[string]
+  ) {
+    const size = nativeDataSize(id, style);
+    const maxX = Math.max(0, previewWidth - size.width);
+    const maxY = Math.max(0, previewHeight - size.height);
+    const setPosition = (x: number, y: number) => {
+      if (isMovementLockedForId(layer.id)) return;
+      updateNativeData(id, {
+        x: Math.round(Math.max(0, Math.min(maxX, x))),
+        y: Math.round(Math.max(0, Math.min(maxY, y)))
+      });
+    };
+    const alignX = (position: "start" | "center" | "end") =>
+      setPosition(position === "start" ? 0 : position === "end" ? maxX : maxX / 2, style.y);
+    const alignY = (position: "start" | "center" | "end") =>
+      setPosition(style.x, position === "start" ? 0 : position === "end" ? maxY : maxY / 2);
+    return renderPositionPanel(layer.id, "Watch screen position", <>
+        <div className="watchface-position-inputs">
+          <label>
+            X
+            <input
+              type="number"
+              min="0"
+              max={watchCoordinateWidth}
+              value={toWatchCoordinate(style.x)}
+              onChange={(event) => setPosition(fromWatchCoordinate(Number(event.target.value) || 0), style.y)}
+            />
+          </label>
+          <label>
+            Y
+            <input
+              type="number"
+              min="0"
+              max={watchCoordinateHeight}
+              value={toWatchCoordinate(style.y)}
+              onChange={(event) => setPosition(style.x, fromWatchCoordinate(Number(event.target.value) || 0))}
+            />
+          </label>
+        </div>
+        <span>Align to face</span>
+        <div className="wf-align-icon-grid" role="group" aria-label="Align layer to face">
+          <button type="button" title="Align left" aria-label="Align left" onClick={() => alignX("start")}><AlignHorizontalJustifyStart size={14} /></button>
+          <button type="button" title="Align horizontal center" aria-label="Align horizontal center" onClick={() => alignX("center")}><AlignHorizontalJustifyCenter size={14} /></button>
+          <button type="button" title="Align right" aria-label="Align right" onClick={() => alignX("end")}><AlignHorizontalJustifyEnd size={14} /></button>
+          <button type="button" title="Align top" aria-label="Align top" onClick={() => alignY("start")}><AlignVerticalJustifyStart size={14} /></button>
+          <button type="button" title="Align vertical center" aria-label="Align vertical center" onClick={() => alignY("center")}><AlignVerticalJustifyCenter size={14} /></button>
+          <button type="button" title="Align bottom" aria-label="Align bottom" onClick={() => alignY("end")}><AlignVerticalJustifyEnd size={14} /></button>
+        </div>
+        <span>Nudge</span>
+        <div className="watchface-nudge-pad">
+          <button type="button" onClick={() => setPosition(style.x - fromWatchCoordinate(1), style.y)} aria-label="Nudge left"><ArrowLeft size={13} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setPosition(style.x + fromWatchCoordinate(1), style.y)} aria-label="Nudge right"><ArrowRight size={13} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setPosition(style.x, style.y - fromWatchCoordinate(1))} aria-label="Nudge up"><ArrowUp size={13} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setPosition(style.x, style.y + fromWatchCoordinate(1))} aria-label="Nudge down"><ArrowDown size={13} aria-hidden="true" /></button>
+        </div>
+        <span>Scale</span>
+        <span className="wf-input-with-unit wf-position-scale">
+          <EditableNumberInput
+            aria-label="Layer scale"
+            min="0.1"
+            max="4"
+            step="0.05"
+            value={style.scale}
+            fallback={1}
+            onValueChange={(scale) => updateNativeData(id, { scale: Math.max(0.1, Math.min(4, scale)) })}
+          />
+          <span>×</span>
+        </span>
+      </>,
+      <p className="watchface-studio-summary">
+        The watch draws this data live. Drag it on the face to reposition it.
       </p>
     );
   }
@@ -11841,11 +13359,11 @@ export function WatchfaceEditor({
     );
   }
 
-  async function chooseWeatherSpriteFolder(set: WeatherAssetSet) {
+  async function chooseWeatherSpriteFolder(set: WeatherAssetSet, preset?: CorosWatchfaceRasterFontFolder) {
     const importId = beginSpriteImport(`weather-folder:${set}`);
     if (importId === null) return;
     try {
-      const folder = await api.chooseCorosWatchfaceRasterFontFolder();
+      const folder = preset ?? await api.chooseCorosWatchfaceRasterFontFolder();
       if (!folder) return;
       const states: Record<string, string> = {};
       for (const sprite of folder.sprites) {
@@ -11989,15 +13507,89 @@ export function WatchfaceEditor({
           </label>,
           { disabled: isPositionLocked("weather") }
         )}
-        {renderPropertySection("assets", "Weather assets", <div className="wf-property-stack">
-          <label className="field"><span><input type="checkbox" checked={indicator.temperatureEnabled !== false} onChange={event => updateWeatherIndicator({ temperatureEnabled: event.target.checked })} /> Show current weather</span></label>
-          <p className="watchface-studio-summary">SIMPLE's day and night icons, temperature digits, and symbols are included by default. Import numbered PNGs to replace any states.</p>
-          {([ ["day", "Day icons"], ["night", "Night icons"], ["digits", "Temperature digits"], ["symbols", "Minus / degree"], ["units", "Celsius / Fahrenheit"] ] as const).map(([set, label]) => <div key={set} className="wf-config-asset-actions">
-            <button type="button" className="secondary-button" disabled={spriteImportPending} onClick={() => void chooseWeatherSpriteFolder(set)}><ImagePlus size={15} /> {label}</button>
-            {indicator.assets?.[set] && <button type="button" className="secondary-button" disabled={spriteImportPending} onClick={() => { const assets = { ...indicator.assets }; delete assets[set]; updateWeatherIndicator({ assets }); }}><RotateCcw size={15} /> Restore defaults</button>}
-          </div>)}
-          <p className="watchface-studio-summary">Icons: 00–40. Digits: 00–09. Symbols: 00 minus, 01 degree. Units: 00 °C, 01 °F. The preview uses 18°; the watch supplies live weather.</p>
-        </div>, { disabled: isPositionLocked("weather") })}
+        {renderPropertySection("assets", "Artwork", (() => {
+          const temperatureOn = indicator.temperatureEnabled !== false;
+          const importedCount = (set: WeatherAssetSet) => Object.keys(indicator.assets?.[set] ?? {}).length;
+          const restoreSet = (set: WeatherAssetSet) => {
+            const assets = { ...indicator.assets };
+            delete assets[set];
+            updateWeatherIndicator({ assets });
+          };
+          const renderSet = ({ set, label, hint, official }: WeatherAssetSetInfo) => {
+            const count = WEATHER_ASSET_COUNTS[set];
+            const imported = importedCount(set);
+            const custom = imported > 0;
+            const cells = Array.from({ length: count }, (_, index) => ({
+              key: `${set}:${index}`,
+              label: String(index).padStart(2, "0"),
+              src: weatherAssetUrl(set, index, indicator) || undefined,
+              replaced: Boolean(indicator.assets?.[set]?.[String(index)])
+            }));
+            const status = !custom
+              ? "SIMPLE default"
+              : imported === count
+                ? `All ${count} states replaced`
+                : `${imported} of ${count} replaced`;
+            return (
+              <section key={set} className={`wf-weather-set${custom ? " is-custom" : ""}`} aria-label={`${label} artwork`}>
+                <div className="wf-weather-set-head">
+                  <strong>{label}</strong>
+                  <span className="wf-weather-set-badge">{custom ? "Custom" : "Default"}</span>
+                  {custom ? (
+                    <button
+                      type="button"
+                      className="wf-property-icon-button"
+                      aria-label={`Restore SIMPLE default ${label.toLowerCase()}`}
+                      title="Restore SIMPLE default"
+                      disabled={spriteImportPending}
+                      onClick={() => restoreSet(set)}
+                    >
+                      <RotateCcw size={14} />
+                    </button>
+                  ) : null}
+                </div>
+                <WatchfaceSpriteStrip label={`${label} states`} cells={cells} summary={`${status} · ${hint}`} />
+                <div className="wf-weather-set-actions">
+                  <button type="button" className="secondary-button" disabled={spriteImportPending} onClick={() => void chooseWeatherSpriteFolder(set)}>
+                    <ImagePlus size={15} /> Import PNG folder
+                  </button>
+                  {official ? (
+                    <button type="button" className="secondary-button" disabled={spriteImportPending} onClick={() => browseOfficialWeatherSprites(set)}>
+                      <Sparkles size={15} /> Official library
+                    </button>
+                  ) : null}
+                </div>
+              </section>
+            );
+          };
+          return (
+            <div className="wf-weather-assets">
+              <p className="watchface-studio-summary">Every set starts with SIMPLE's built-in artwork. Replace a set with your own numbered PNGs or one from the official COROS library; states you leave out keep the default.</p>
+              <div className="wf-weather-group">
+                <div className="wf-weather-group-head"><span>Condition icon</span></div>
+                {WEATHER_ICON_SETS.map(renderSet)}
+              </div>
+              <div className="wf-weather-group">
+                <div className="wf-weather-group-head">
+                  <span>Temperature</span>
+                  <label className="watchface-studio-toggle">
+                    <input type="checkbox" checked={temperatureOn} onChange={(event) => updateWeatherIndicator({ temperatureEnabled: event.target.checked })} />
+                    <span>Show reading</span>
+                  </label>
+                </div>
+                {temperatureOn
+                  ? WEATHER_TEMPERATURE_SETS.map(renderSet)
+                  : <p className="watchface-studio-summary">Only the condition icon is shown. Turn the reading on to edit its digits and symbols.</p>}
+              </div>
+            </div>
+          );
+        })(), {
+          disabled: isPositionLocked("weather"),
+          status: (() => {
+            const custom = [...WEATHER_ICON_SETS, ...WEATHER_TEMPERATURE_SETS].filter(({ set }) => Object.keys(indicator.assets?.[set] ?? {}).length > 0).length;
+            return custom > 0 ? `${custom} custom` : undefined;
+          })()
+        })}
         {renderStrokeInspector("weather")}
         {renderPropertySection(
           "specific",
@@ -12023,7 +13615,7 @@ export function WatchfaceEditor({
           "advanced",
           "Advanced",
           <p className="watchface-studio-summary">
-            The editor previews the sunny state. The watch swaps among all 41 weather states.
+            The editor previews the sunny state at 18°. The watch shows live conditions and temperature.
           </p>,
           { disabled: isPositionLocked("weather") }
         )}

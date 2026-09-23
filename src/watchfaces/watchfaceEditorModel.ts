@@ -54,6 +54,7 @@ export type EditorLayerKind =
   | "weekday"
   | "seconds"
   | "separators"
+  | "arcCut"
   | "battery"
   | "batteryIcon"
   | "controlBatteryIcon"
@@ -143,7 +144,8 @@ const LAYER_ORDER: string[] = [
   "calories",
   "exercise",
   "elevation",
-  "temperature"
+  "temperature",
+  "arcCut"
 ];
 
 const METRIC_IDS = new Set<WatchfaceMetricId>([
@@ -272,6 +274,9 @@ function kindForGroup(groupId: string): EditorLayerKind {
   if (groupId === "complication") {
     return "complication";
   }
+  if (groupId === "arcCut") {
+    return "arcCut";
+  }
   return "separators";
 }
 
@@ -298,6 +303,7 @@ export function deriveEditorLayers(
   const boundsById = new Map<string, WatchfaceLayoutGroupBounds>();
   if (resolution) {
     for (const box of computeLayoutGroupBounds(resolution, {
+      configAssetOverrides: design.configAssetOverrides,
       timeStyles: design.timeStyles,
       letterSpacing: design.letterSpacing
     })) {

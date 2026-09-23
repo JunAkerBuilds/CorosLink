@@ -1,4 +1,5 @@
 export type WatchModelId =
+  | "pace-4-pro"
   | "pace-pro"
   | "pace-4"
   | "pace-3"
@@ -34,6 +35,9 @@ export interface WatchfaceDeviceProfile {
 const WATCHFACE_DEVICE_PROFILES: Partial<
   Record<WatchModelId, WatchfaceDeviceProfile>
 > = {
+  "pace-4-pro": {
+    firmwareType: "COROS W337"
+  },
   "pace-pro": {
     firmwareType: "COROS W332",
     modelVersion: "W332-3.1708.0"
@@ -89,6 +93,10 @@ export function normalizeVolumeName(name?: string): string {
 function matchWatchModelFromName(
   normalized: string
 ): WatchModelId | undefined {
+  if (/\bPACE\s*4\s*PRO\b/.test(normalized)) {
+    return "pace-4-pro";
+  }
+
   if (/\bPACE\s*PRO\b/.test(normalized)) {
     return "pace-pro";
   }
@@ -149,6 +157,7 @@ export function resolveWatchModel(
 
 export function fallbackBytesForModel(model?: WatchModelId): number {
   if (
+    model === "pace-4-pro" ||
     model === "pace-pro" ||
     model === "nomad" ||
     model === "vertix-2" ||

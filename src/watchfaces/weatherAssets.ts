@@ -40,6 +40,26 @@ export const WEATHER_ASSET_COUNTS: Record<WeatherAssetSet, number> = {
   day: 41, night: 41, digits: 10, symbols: 2, units: 2
 };
 
+export interface WeatherAssetSetInfo {
+  set: WeatherAssetSet;
+  label: string;
+  /** What each numbered state stands for, or how to name the files. */
+  hint: string;
+  /** The official COROS library carries this set; symbols and units are SIMPLE-only. */
+  official: boolean;
+}
+
+/** The sprite sets in inspector order: the condition icon first, then the temperature reading. */
+export const WEATHER_ICON_SETS: readonly WeatherAssetSetInfo[] = [
+  { set: "day", label: "Day icons", hint: "PNGs named 00–40", official: true },
+  { set: "night", label: "Night icons", hint: "PNGs named 00–40", official: true }
+];
+export const WEATHER_TEMPERATURE_SETS: readonly WeatherAssetSetInfo[] = [
+  { set: "digits", label: "Temperature digits", hint: "PNGs named 00–09", official: true },
+  { set: "symbols", label: "Minus & degree", hint: "00 = minus, 01 = degree", official: false },
+  { set: "units", label: "°C / °F", hint: "00 = °C, 01 = °F", official: false }
+];
+
 export function weatherAssetUrl(set: WeatherAssetSet, index: number, style?: WatchfaceWeatherStyle): string {
   return style?.assets?.[set]?.[String(index)] ??
     bundled[`../assets/watchfaces/weather/simple/${sourceFolders[set]}/${String(index).padStart(2, "0")}.png`] ?? "";

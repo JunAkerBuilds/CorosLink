@@ -200,6 +200,8 @@ export function TrainingLibraryView({
     if (status?.authenticated) void load();
   }, [load, status?.authenticated]);
 
+  useEffect(() => api.onWorkoutEditsChanged(() => { if (status?.authenticated) void load(); }), [api, load, status?.authenticated]);
+
   useEffect(() => {
     if (!status?.authenticated || !pendingPlan) return;
     setSection("plans");

@@ -147,8 +147,9 @@ export function ChatSettingsPanel({
           <span>Show charts and activity visuals in chat</span>
         </label>
         <p className="chat-settings-copy">
-          When off, heart rate trends, zone summaries, and activity charts are
-          hidden. The coach still responds with text.
+          When off, automatic heart rate trends, zone summaries, and activity
+          charts are hidden. Charts you explicitly ask the coach to draw are
+          always shown.
         </p>
       </section>
 
@@ -458,7 +459,8 @@ export function ChatSettingsPanel({
               ["recentActivities", "Recent activities"],
               ["trainingMetrics", "Training metrics"],
               ["upcomingWorkouts", "Upcoming workouts"],
-              ["sleepData", "Sleep data"]
+              ["sleepData", "Sleep data"],
+              ["fullActivityFiles", "Full activity files (local FIT analysis)"]
             ] as const
           ).map(([permission, label]) => (
             <label key={permission} className="chat-local-tools">
@@ -477,16 +479,14 @@ export function ChatSettingsPanel({
               <span>{label}</span>
             </label>
           ))}
-          <label className="chat-local-tools is-disabled">
-            <input type="checkbox" checked={false} disabled />
-            <span>Full activity files (not available in beta)</span>
-          </label>
         </div>
         <p className="chat-settings-copy">
           These selections control built-in COROS and Training Hub data.
-          Connected custom MCP servers are trusted separately and can expose
-          their tools to Claude. Drafts stay local until you click an upload or
-          delete button.
+          Full activity files unlock splits, power curves, best efforts, and
+          route comparisons computed locally from cached FIT files; only the
+          derived numbers reach Claude. Connected custom MCP servers are trusted
+          separately and can expose their tools to Claude. Drafts stay local
+          until you click an upload or delete button.
         </p>
       </section>
 

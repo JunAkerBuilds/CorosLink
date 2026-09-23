@@ -1,3 +1,4 @@
+import type { StrengthEditPreview } from "./workoutEditTypes";
 export type BinaryName = "yt-dlp" | "ffmpeg";
 
 /** User-selected measurement system for CorosLink presentation and writes. */
@@ -39,6 +40,7 @@ export interface WatchTrack {
 }
 
 export type WatchModelId =
+  | "pace-4-pro"
   | "pace-pro"
   | "pace-4"
   | "pace-3"
@@ -54,6 +56,7 @@ export type WatchModelId =
 
 export type CorosWatchfaceResolutionProfile =
   | "mip-240-260-800"
+  | "amoled-466-800"
   | "amoled-416-800"
   | "amoled-390-800"
   | "other";
@@ -61,6 +64,7 @@ export type CorosWatchfaceResolutionProfile =
 export type WatchConnectionSmokeOptionId =
   | "auto"
   | "none"
+  | "pace-4-pro"
   | "pace-pro"
   | "pace-4"
   | "pace-3"
@@ -109,40 +113,6 @@ export interface CorosWatchfaceStatus {
   region?: CorosWatchfaceRegion;
   /** Best-guess region to preselect in the login form. */
   suggestedRegion: CorosWatchfaceRegion;
-}
-
-/** The only carrier currently approved for the guarded legacy editor. */
-export type CorosLegacy614aCarrierProfile = "multidata-elev-416";
-
-export interface CorosLegacy614aCarrierInspection {
-  profile: CorosLegacy614aCarrierProfile;
-  profileName: string;
-  fileName: string;
-  watchFaceId: number;
-  sizeBytes: number;
-  payloadCrc16: number;
-  fullFileCrc16: number;
-  weatherSpriteSize: number;
-  weatherPosition: { x: number; y: number };
-  temperatureRect: { x0: number; y0: number; x1: number; y1: number };
-}
-
-/** Opaque main-process handle returned after an exact reference is inspected. */
-export interface CorosLegacy614aCarrierSelection {
-  selectionId: string;
-  inspection: CorosLegacy614aCarrierInspection;
-}
-
-/** Safe normal-display geometry only. Carrier identity and resources are locked. */
-export interface CorosLegacy614aCarrierPatchInput {
-  weatherPosition: { x: number; y: number };
-  temperatureRect: { x0: number; y0: number; x1: number; y1: number };
-}
-
-export interface CorosLegacy614aCarrierExportResult {
-  saved: boolean;
-  filePath?: string;
-  watchFaceId: number;
 }
 
 /** A source-template, on-watch, or user-created watchface catalog. */
@@ -288,12 +258,29 @@ export interface CorosWatchfaceArchive {
   diyVersion: number;
   /** Effective `o_wf_ver` declared by info.json (defaults to 0 when absent). */
   watchFaceVersion: number;
+  /** Editable starter reconstructed from a compiled official face. */
+  recoveredFromCompiled?: boolean;
   /** Target firmware family retained from template selection/import. */
   firmwareType?: string;
   /** Detected from resolution folders, independent of COROS's firmware ID. */
   resolutionProfile: CorosWatchfaceResolutionProfile;
   /** Portable CorosLink project metadata bundled with an editable website ZIP. */
   editableProject?: CorosWatchfaceEditableProject;
+}
+
+export interface CorosWatchfaceConversionInput {
+  sourceArchiveId: string;
+  watchModel: WatchModelId;
+  /** Optional preselected carrier for automation/backwards compatibility. */
+  targetArchiveId?: string;
+  configTextEdits?: Record<string, string>;
+}
+
+export interface CorosWatchfaceConversionResult {
+  archive: CorosWatchfaceArchive;
+  appliedRawConfigEditCount: number;
+  generatedAod: boolean;
+  display: "mip" | "amoled";
 }
 
 export interface CorosWatchfaceProjectExportResult {
@@ -372,6 +359,7 @@ export interface CommunityWatchfaceDownloadProgress {
 
 export interface CommunityWatchfaceOpenRequest {
   slug: string;
+  model?: string;
 }
 
 export interface CorosWatchfacePublishInput {
@@ -494,6 +482,8 @@ export interface CorosWatchfaceSpriteFolder {
 }
 
 export interface CorosWatchfaceResolutionDetails {
+  /** Preserve the template slot's identity while deriving styled/moved details. */
+  arcCutRole?: "dateSlash" | "overlay";
   /** e.g. "watchface_800x800" */
   directory: string;
   width: number;
@@ -528,8 +518,81 @@ export interface CorosWatchfaceThemeDownload {
   message: string;
 }
 
+/** One deduplicated bitmap set from the official COROS face catalog. */
+export interface CorosOfficialAsset {
+  /** Content hash shared by identical sets across faces and resolutions. */
+  id: string;
+  category: string;
+  /** Present for digit fonts: what the source face used the font for. */
+  role?: string;
+  width: number;
+  height: number;
+  frames: number;
+  configKeys: string[];
+  /** Purpose tags derived from the config keys (day/night, hours/minutes…). */
+  tags: { id: string; label: string }[];
+  /** Up to three source face names plus the total count. */
+  faces: string[];
+  faceCount: number;
+  /** Sprite-strip preview of every frame. */
+  strip: { width: number; height: number; dataUrl: string };
+}
+
+export interface CorosOfficialAssetLibraryStatus {
+  firmwareType: string;
+  state: "idle" | "building" | "ready" | "error";
+  facesDone: number;
+  facesTotal: number;
+  assetCount: number;
+  message?: string;
+}
+
+export interface CorosOfficialAssetQuery {
+  firmwareType: string;
+  category?: string;
+  role?: string;
+  /** Free text matched against face names, config keys and WxH. */
+  query?: string;
+  /** Restrict to single images or multi-frame sets. */
+  frames?: "single" | "multi";
+  /** Exact frame count, e.g. 10 for digit fonts, 7 for weekday labels, 12 for months. */
+  frameCount?: number;
+  /** Only sets a source face bound to this config key, e.g. weather_dark_icon_dir for night icons. */
+  configKey?: string;
+  /** Only sets carrying this purpose tag id (see officialAssetTags), e.g. "night". */
+  tag?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface CorosOfficialAssetPage {
+  status: CorosOfficialAssetLibraryStatus;
+  categories: { id: string; label: string; count: number }[];
+  roles: { id: string; label: string; count: number }[];
+  /** Purpose tags present in the current category, for the sidebar. */
+  tags: { id: string; label: string; count: number }[];
+  total: number;
+  page: number;
+  pageSize: number;
+  assets: CorosOfficialAsset[];
+}
+
+/** Every frame of one set as PNG data URLs, in stored order. */
+export interface CorosOfficialAssetFrames {
+  id: string;
+  category: string;
+  label: string;
+  width: number;
+  height: number;
+  frames: string[];
+}
+
 export interface CorosWatchfaceThemeDownloadInput {
   packageUrl: string;
+  /** Recover compiled official packages as local editable starter archives. */
+  openInEditor?: boolean;
+  /** Catalog identity, kept as text to avoid precision loss. */
+  templateId?: string;
   /** Display name used for the downloaded archive, usually the theme name. */
   name?: string;
   /** Firmware family used to query the catalog that returned this template. */
@@ -878,6 +941,9 @@ export interface CorosWatchfaceNativePartStyle {
   height?: number;
   color?: string;
   fontFamily?: string;
+  /** Preserve a recovered glyph's width independently of its value rectangle. */
+  digitWidth?: number;
+  align?: "left" | "center" | "right";
 }
 
 export interface CorosWatchfaceNativeDataStyle {
@@ -889,6 +955,8 @@ export interface CorosWatchfaceNativeDataStyle {
   fontFamily?: string;
   /** Chart data-field prefix; not a verified selector for the watch's plotted history. */
   chartSource?: string;
+  /** State-table size when recovered artwork defines fewer frames than the catalog default. */
+  stateCount?: number;
   chartWidth?: number;
   chartHeight?: number;
   previewValue?: string;
@@ -909,8 +977,56 @@ export interface CorosWatchfaceNativeDataStyle {
   };
 }
 
+/** One glyph of a {@link CorosWatchfaceFontSnapshot}, in pixels at its `size`. */
+export interface CorosWatchfaceFontSnapshotGlyph {
+  /** Cursor advance, as canvas `measureText().width` reports it. */
+  advance: number;
+  /** Ink extents around the pen position on the alphabetic baseline. */
+  left: number;
+  right: number;
+  ascent: number;
+  descent: number;
+  /** The glyph's image rectangle inside the snapshot atlas. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Rendered glyph images plus canvas metrics for one desktop font face. A
+ * project carries these so it renders and exports the same way on a computer
+ * that does not have the font installed. Only the glyph pictures travel, never
+ * the font file itself.
+ */
+export interface CorosWatchfaceFontSnapshot {
+  family: string;
+  weight: number;
+  style: "normal" | "italic";
+  /** Font size, in pixels, the glyphs were rendered at. */
+  size: number;
+  /** Transparent space around each glyph's ink inside its atlas rectangle. */
+  padding: number;
+  /** Font-wide ascent and descent, in pixels at `size`. */
+  fontAscent: number;
+  fontDescent: number;
+  /** Distance from each canvas text baseline down to the alphabetic one. */
+  baselines: Record<string, number>;
+  /** Pair adjustments in pixels at `size`, keyed by both characters ("AV"). */
+  kerning?: Record<string, number>;
+  /** White-on-transparent PNG atlas holding every glyph image. */
+  dataUrl: string;
+  glyphs: Record<string, CorosWatchfaceFontSnapshotGlyph>;
+}
+
 export interface CorosWatchfaceDesignState {
   version: 1;
+  /**
+   * Glyph snapshots of the desktop fonts this design names, written when the
+   * project is saved or exported. The editor keeps these outside its live
+   * design state; see `watchfaceFontSnapshots.ts`.
+   */
+  fontSnapshots?: CorosWatchfaceFontSnapshot[];
   /**
    * Independent visual state for alternate firmware display modes. Current
    * display fields remain at the top level for backwards compatibility.
@@ -1008,6 +1124,10 @@ export interface CorosWatchfaceDesignState {
       height?: number;
       /** Imported PNG dimensions preserve their proportions unless unlocked. */
       aspectLocked?: boolean;
+      /** Use the custom weekday labels for every watch language. Defaults to false. */
+      overwriteAllLanguages?: boolean;
+      /** Additional language prefixes to replace when all languages is off. */
+      overwriteLanguages?: string[];
       /** Date-month rendering mode; absent preserves the starter's format. */
       monthFormat?: "digits" | "labels";
       fontFamily?: string;
@@ -1040,6 +1160,7 @@ export interface CorosWatchfaceDesignState {
     /** Optional tint; absent preserves the template sprite color. */
     color?: string;
     fontFamily?: string;
+    rasterFont?: CorosWatchfaceRasterFont;
   };
   /** Dynamic 41-state weather icon; absent in older projects. */
   weatherIndicator?: {
@@ -1617,6 +1738,8 @@ export type RouteActivityType =
 export type RouteBackend = "keyless" | "ors";
 
 export interface RouteBuilderConfig {
+  /** Optional CARTO basemap key, independent of the routing backend. */
+  cartoApiKey?: string;
   /** Optional OpenRouteService key; only used when `backend` is `ors`. */
   openRouteServiceApiKey: string;
   /** Selected routing backend. Absent is treated as `keyless`. */
@@ -1928,6 +2051,44 @@ export type ActivityBackupState =
   | "error";
 
 /** Live progress for a bulk activity backup run. */
+// ----- Local FIT index -----
+
+export type FitIndexSyncState =
+  | "listing"
+  | "indexing"
+  | "done"
+  | "cancelled"
+  | "error";
+
+export interface FitIndexProgress {
+  state: FitIndexSyncState;
+  /** Activities considered for this run (0 while listing). */
+  total: number;
+  /** Files downloaded and indexed during this run. */
+  completed: number;
+  /** Already indexed before this run. */
+  skipped: number;
+  failed: number;
+  currentName?: string;
+  error?: string;
+}
+
+export interface FitIndexStatus {
+  /** Activities with a parsed summary in the local index. */
+  indexed: number;
+  /** Bytes used by cached .fit files. */
+  cacheBytes: number;
+  cacheDir: string;
+  syncing: boolean;
+  progress: FitIndexProgress | null;
+  lastSyncAt?: string;
+}
+
+export interface FitIndexSyncOptions {
+  /** Only activities that started within this many days; omit for everything. */
+  sinceDays?: number;
+}
+
 export interface ActivityBackupProgress {
   state: ActivityBackupState;
   folder: string;
@@ -2687,6 +2848,8 @@ export interface ChatStreamError {
  * calls the model makes mid-stream.
  */
 export type ChatStreamInfo =
+  | { requestId: string; kind: "workoutEdit"; preview: StrengthEditPreview }
+  | { requestId: string; kind: "corosAction"; preview: CoachCorosActionPreview }
   | {
       requestId: string;
       kind: "context";
@@ -2734,6 +2897,11 @@ export type ChatStreamInfo =
       requestId: string;
       kind: "hrZoneSummary";
       preview: HrZonePreview;
+    }
+  | {
+      requestId: string;
+      kind: "coachChart";
+      preview: CoachChartPreview;
     }
   | {
       requestId: string;
@@ -3087,6 +3255,114 @@ export interface TrainingTrendPoint {
   rhr?: number;
   sleepMinutes?: number;
   sleepScore?: number;
+  trainingLoadRatio?: number;
+  staminaLevel?: number;
+}
+
+// ----- Coach charts (AI-authored, declarative) -----
+
+/** Daily metric a chart series can bind to; CorosLink resolves the values. */
+export type CoachChartMetricKey =
+  | "trainingLoad"
+  | "rpeLoad"
+  | "avgSleepHrv"
+  | "sleepHrvBase"
+  | "rhr"
+  | "sleepScore"
+  | "sleepMinutes"
+  | "trainingLoadRatio"
+  | "staminaLevel";
+
+export type CoachChartSeriesKind = "line" | "area" | "bar";
+export type CoachChartAxis = "left" | "right";
+export type CoachChartColor =
+  | "load"
+  | "hrv"
+  | "sleep"
+  | "rpe"
+  | "gold"
+  | "blue"
+  | "accent"
+  | "muted";
+
+export interface CoachChartSeriesSpec {
+  label: string;
+  kind?: CoachChartSeriesKind;
+  axis?: CoachChartAxis;
+  color?: CoachChartColor;
+  dashed?: boolean;
+  /** Bind to a daily metric over the chart window; resolved by CorosLink. */
+  metric?: CoachChartMetricKey;
+  /** Inline values aligned with the x axis; null marks a gap. */
+  values?: (number | null)[];
+}
+
+export interface CoachChartRangeSpec {
+  /** Start label or date (YYYY-MM-DD / YYYYMMDD), inclusive. */
+  from: string;
+  /** End label or date, inclusive. */
+  to: string;
+  label?: string;
+}
+
+export interface CoachChartTileSpec {
+  label: string;
+  value: string;
+  caption?: string;
+}
+
+/** What the model sends to render_chart. */
+export interface CoachChartSpec {
+  title: string;
+  subtitle?: string;
+  /** Window for bound metrics (7–90 days). Default 30. */
+  days?: number;
+  /** X-axis labels for inline-only charts. Ignored when a series is bound. */
+  labels?: string[];
+  series: CoachChartSeriesSpec[];
+  ranges?: CoachChartRangeSpec[];
+  tiles?: CoachChartTileSpec[];
+  leftAxisLabel?: string;
+  rightAxisLabel?: string;
+  note?: string;
+}
+
+export interface CoachChartResolvedSeries {
+  key: string;
+  label: string;
+  kind: CoachChartSeriesKind;
+  axis: CoachChartAxis;
+  color: CoachChartColor;
+  dashed: boolean;
+  metric?: CoachChartMetricKey;
+  values: (number | null)[];
+}
+
+export interface CoachChartResolvedRange {
+  fromIndex: number;
+  toIndex: number;
+  label?: string;
+}
+
+/** Fully resolved chart the renderer can draw without further lookups. */
+export interface CoachChartPreview {
+  previewId: string;
+  spec: CoachChartSpec;
+  labels: string[];
+  /** YYYYMMDD per point when the x axis is a date window. */
+  dates?: string[];
+  series: CoachChartResolvedSeries[];
+  ranges: CoachChartResolvedRange[];
+  tiles: CoachChartTileSpec[];
+  resolvedAt: string;
+  /** True when at least one series is metric-bound and can be refreshed. */
+  live: boolean;
+}
+
+export interface PinnedCoachChart {
+  id: string;
+  preview: CoachChartPreview;
+  pinnedAt: string;
 }
 
 export interface ActivityVisualLapPoint {
@@ -3638,8 +3914,22 @@ export interface WorkoutDeletePreview {
   summary: string;
 }
 
+export interface CoachCorosActionPreview {
+  requestId: string;
+  title: string;
+  summary: string;
+  destination: "Workout Library" | "Calendar" | "Training Plan";
+  date?: string;
+  details: string[];
+  createdAt: number;
+  state: "pending" | "saving" | "saved" | "uncertain";
+  message?: string;
+}
+
 /** Persisted coach timeline entry (messages plus inline action cards). */
 export type PersistedChatEntry =
+  | { kind: "workoutEdit"; preview: StrengthEditPreview }
+  | { kind: "corosAction"; preview: CoachCorosActionPreview }
   | PersistedChatMessageEntry
   | { kind: "coachPrompt"; prompt: CoachInputPrompt }
   | { kind: "planDraft"; draft: PlanDraftPreview }
@@ -3647,7 +3937,8 @@ export type PersistedChatEntry =
   | { kind: "activityVisual"; preview: ActivityVisualPreview }
   | { kind: "activityHrTrend"; preview: ActivityHrTrendPreview }
   | { kind: "fitnessTrend"; preview: FitnessTrendPreview }
-  | { kind: "hrZoneSummary"; preview: HrZonePreview };
+  | { kind: "hrZoneSummary"; preview: HrZonePreview }
+  | { kind: "coachChart"; preview: CoachChartPreview };
 
 export interface IntervalsStatus {
   connected: boolean;

@@ -24,6 +24,13 @@ import type {
 // server's own auth metadata by the MCP SDK).
 const PRESETS: Array<McpServerInput & { description: string }> = [
   {
+    id: "hevy",
+    name: "Hevy",
+    url: "https://mcp.hevy-mcp.dev/mcp",
+    authType: "oauth",
+    description: "Manage workouts and routines · Community server · Hevy Pro"
+  },
+  {
     id: "freddy",
     name: "Freddy",
     url: "https://freddy.coach/mcp",
@@ -271,7 +278,7 @@ export function McpServersPanel({
           <div className="mcp-servers-subheading">
             <div>
               <strong id="mcp-quick-add">Quick connect</strong>
-              <span>Trusted hosted servers with OAuth sign-in</span>
+              <span>Hosted servers with browser sign-in</span>
             </div>
           </div>
           <div className="mcp-servers-preset-grid">
@@ -302,6 +309,13 @@ export function McpServersPanel({
               </button>
             ))}
           </div>
+          {availablePresets.some((preset) => preset.id === "hevy") ? (
+            <p className="chat-settings-copy">
+              Hevy opens the community server’s authorization page, where you
+              enter your Hevy Pro API key. This connects the AI coach separately
+              from Hevy workout sync in Strength.
+            </p>
+          ) : null}
         </section>
       ) : null}
 

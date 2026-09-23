@@ -39,6 +39,64 @@ async function verifyPixels() {
   check(JSON.stringify(tightened.ink) === JSON.stringify(b.ink), 'Negative tracking must not clip ink');
   const shifted = await inspect(await studio.renderRasterFontSprite('8', 48, 60, { ...font, glyphLayout: { height: .5, baseline: .8 } }, '#ffffff'));
   check(shifted.y1 === 47 && shifted.y1 - shifted.y0 + 1 === 30, 'Glyph height and baseline must be independent');
+  // Thin outlines. A PNG at the cell size is copied as authored, like the
+  // template's own sprites, and a resized one keeps an opaque core the AOD
+  // cleanup can trace: smoothing alone left a beaded, broken stroke.
+  const outline = (w, h) => {
+    const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+    const context = canvas.getContext('2d'); context.strokeStyle = '#ff6060';
+    // A 2px opaque core with soft shoulders, like a neon-outline digit font.
+    for (const [lineWidth, alpha] of [[6, .25], [4, .6], [2, 1]]) {
+      context.globalAlpha = alpha; context.lineWidth = lineWidth; context.strokeRect(8, 8, w - 16, h - 16);
+    }
+    return canvas;
+  };
+  const rgba = (canvas) => [...canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height).data];
+  const coreComponents = (canvas) => {
+    const data = rgba(canvas), w = canvas.width, h = canvas.height, seen = new Set(); let count = 0, size = 0;
+    const core = (x, y) => x >= 0 && y >= 0 && x < w && y < h && data[(y * w + x) * 4 + 3] >= 250;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (!core(x, y) || seen.has(y * w + x)) continue;
+      count++; const stack = [[x, y]]; seen.add(y * w + x);
+      while (stack.length) {
+        const [cx, cy] = stack.pop(); size++;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = cx + dx, ny = cy + dy;
+          if (core(nx, ny) && !seen.has(ny * w + nx)) { seen.add(ny * w + nx); stack.push([nx, ny]); }
+        }
+      }
+    }
+    return { count, size };
+  };
+  const thinSource = outline(48, 60);
+  const thinFont = { label: 'Thin outline', glyphs: '0123456789', columns: 10, dataUrl: thinSource.toDataURL(), tint: false,
+    sprites: Object.fromEntries([...Array(10)].map((_, d) => [String(d), thinSource.toDataURL()])) };
+  const authored = await inspect(await studio.renderRasterFontSprite('8', 48, 60, thinFont, '#ffffff'));
+  check(JSON.stringify(rgba(authored.canvas)) === JSON.stringify(rgba(thinSource)), 'A PNG at the cell size must be copied pixel for pixel');
+  const narrowSource = outline(30, 60);
+  const narrowFont = { ...thinFont, sprites: { ...thinFont.sprites, '1': narrowSource.toDataURL() } };
+  const narrow = await inspect(await studio.renderRasterFontSprite('1', 48, 60, narrowFont, '#ffffff'));
+  const narrowInk = (canvas, x0) => [...canvas.getContext('2d', { willReadFrequently: true }).getImageData(x0, 0, 30, 60).data];
+  check(narrow.width === 48 && JSON.stringify(narrowInk(narrow.canvas, 9)) === JSON.stringify(narrowInk(narrowSource, 0)), 'A narrower numeral at the cell height must be centred on whole pixels, unscaled');
+  const laidOut = await inspect(await studio.renderRasterFontSprite('8', 48, 60, { ...thinFont, glyphLayout: { height: .94, baseline: .97 } }, '#ffffff'));
+  check(laidOut.y1 === 57 && laidOut.y1 - laidOut.y0 + 1 > authored.y1 - authored.y0 + 1, 'An explicit glyph layout must still fit the same PNG');
+  const resized = await inspect(await studio.renderRasterFontSprite('8', 40, 50, thinFont, '#ffffff'));
+  const resizedCore = coreComponents(resized.canvas);
+  check(resizedCore.count === 1 && resizedCore.size > 60, `A resized thin outline must keep one connected opaque core (got ${resizedCore.count} pieces of ${resizedCore.size}px)`);
+  const halved = await inspect(await studio.renderRasterFontSprite('8', 24, 30, thinFont, '#ffffff'));
+  const halvedCore = coreComponents(halved.canvas);
+  check(halvedCore.count === 1 && halvedCore.size > 30, `A 2x downscaled thin outline must keep one connected opaque core (got ${halvedCore.count} pieces of ${halvedCore.size}px)`);
+  const plain = document.createElement('canvas'); plain.width = 44; plain.height = 54;
+  plain.getContext('2d').drawImage(thinSource, 0, 0, 48, 60, 0.5, 0.5, 43, 53);
+  const preserved = document.createElement('canvas'); preserved.width = 44; preserved.height = 54;
+  layout.drawSpritePreservingCore(preserved.getContext('2d'), thinSource, 0, 0, 48, 60, 0.5, 0.5, 43, 53);
+  const plainCore = coreComponents(plain), preservedCore = coreComponents(preserved);
+  check(preservedCore.count === 1 && preservedCore.size > plainCore.size, `Core preservation must restore opaque pixels smoothing lost (${plainCore.size} -> ${preservedCore.size})`);
+  const plainRgba = rgba(plain), preservedRgba = rgba(preserved);
+  check(preservedRgba.every((value, i) => i % 4 === 3 ? value === plainRgba[i] || (value === 255 && plainRgba[i] >= 64) : plainRgba[i | 3] < 200 || Math.abs(value - plainRgba[i]) <= 2), 'Core preservation must only raise covered alpha to 255');
+  const unscaled = document.createElement('canvas'); unscaled.width = 48; unscaled.height = 60;
+  layout.drawSpritePreservingCore(unscaled.getContext('2d'), thinSource, 0, 0, 48, 60, 0, 0, 48, 60);
+  check(JSON.stringify(rgba(unscaled)) === JSON.stringify(rgba(thinSource)), 'An unscaled whole-pixel draw must not be touched');
   const moves = layout.glyphBaselineMovements([{ id: 'digits', top: 30, bottom: 90 }, { id: 'unit', top: 80, bottom: 100 }, { id: 'colon', top: 70, bottom: 90, colon: true }]);
   check(moves.unit.dy === -10 && moves.colon.dy === -20 && moves.digits.dy === 0, 'Baseline alignment must place units and colons relative to cap height');
   const digit1 = await inspect(studio.renderDigitSprite('1', 48, 60, 'Arial', '#ffffff'));
@@ -196,7 +254,17 @@ async function verifyPixels() {
   check(metrics.length === 10 && metrics.every((entry) => entry.width === 26 && entry.height === 30), 'Metric export must store spacing in each digit advance cell');
   const previewCanvas = document.createElement('canvas'); previewCanvas.width=416; previewCanvas.height=416;
   await studio.drawStudioPreview(previewCanvas, sources.get(`${root}/background.png`).dataUrl, details, { fontFamily:'', digitColor:'#ffffff', accentColor:'#ffffff', tintIcons:false, tintLabels:false, metricStyles:styles }, load);
-  return { dataUrl: output.dataUrl, checks: output.checks, tests: 41 };
+  const ampmDetails = { archiveId: 'ampm-fixture', resolutions: [{ directory: '416', width: 416, height: 416,
+    config: { am_icon: 'icon/am.png', pm_icon: 'icon/pm.png', am_pm_icon_pos: '{1,1}' },
+    icons: ['am', 'pm'].map(label => ({ path: `416/icon/${label}.png`, width: 36, height: 16 })), spriteFolders: [] }] };
+  const am = png(36, 16, 2, 2, 12, 12), pm = png(36, 16, 20, 2, 12, 12);
+  const partialFont = { label: 'Partial AM', dataUrl: am, glyphs: 'A', columns: 1, tint: false, labels: { AM: am } };
+  const loadedLabels = [];
+  const labelOutput = await studio.buildAmPmSpriteReplacements(ampmDetails, { enabled: true, x: 1, y: 1, scale: 1, rasterFont: partialFont }, async paths => {
+    loadedLabels.push(...paths); return paths.map(path => ({ path, dataUrl: pm }));
+  });
+  check(labelOutput.length === 2 && loadedLabels.length === 1 && loadedLabels[0].endsWith('/pm.png'), 'An incomplete raster label uses the original PM image without breaking export');
+  return { dataUrl: output.dataUrl, checks: output.checks, tests: 50 };
 }
 
 (async () => {
@@ -209,7 +277,7 @@ async function verifyPixels() {
     window = new BrowserWindow({ show:false, webPreferences:{ contextIsolation:true, sandbox:true } });
     await window.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/__glyph_test`);
     const results = await window.webContents.executeJavaScript(`(${verifyPixels.toString()})()`);
-    assert.equal(results.tests,41);
+    assert.equal(results.tests,50);
     await fs.writeFile('/tmp/coroslink-export-pixel-test.png', Buffer.from(results.dataUrl.split(',')[1], 'base64'));
     console.log('Watchface glyph and compiled pixel tests passed', results.checks);
   } catch(error) { console.error(error); exitCode=1; }

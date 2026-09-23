@@ -1,0 +1,898 @@
+{
+  "source": "Authenticated COROS MCP tools/list, 2026-09-21. Descriptions omitted; schema structure preserved. Write schemas matched the original capture; read schemas verified against live calls.",
+  "tools": [
+    {
+      "name": "coros__createScheduledWorkout",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "course": {
+            "$defs": {
+              "Section": {
+                "type": "object",
+                "properties": {
+                  "intensityPercentEnd": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityPercentStart": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityValueEnd": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityValueStart": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intervalGroup": {
+                    "type": "boolean"
+                  },
+                  "repeats": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sectionIntensity": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sectionType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sets": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/Section"
+                    }
+                  },
+                  "targetType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "targetValue": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                }
+              }
+            },
+            "type": "object",
+            "properties": {
+              "courseDescription": {
+                "type": "string"
+              },
+              "courseName": {
+                "type": "string"
+              },
+              "dayNo": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "sections": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/Section"
+                }
+              },
+              "sportType": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "strengthBodypart": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            "required": [
+              "courseDescription",
+              "courseName",
+              "sections",
+              "sportType"
+            ]
+          }
+        },
+        "required": [
+          "date",
+          "course"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coros__updateScheduledWorkout",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "idInPlan": {
+            "type": "string"
+          },
+          "course": {
+            "$defs": {
+              "Section": {
+                "type": "object",
+                "properties": {
+                  "intensityPercentEnd": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityPercentStart": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityValueEnd": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityValueStart": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intervalGroup": {
+                    "type": "boolean"
+                  },
+                  "repeats": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sectionIntensity": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sectionType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sets": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/Section"
+                    }
+                  },
+                  "targetType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "targetValue": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                }
+              }
+            },
+            "type": "object",
+            "properties": {
+              "courseDescription": {
+                "type": "string"
+              },
+              "courseName": {
+                "type": "string"
+              },
+              "dayNo": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "sections": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/Section"
+                }
+              },
+              "sportType": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "strengthBodypart": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            "required": [
+              "courseDescription",
+              "courseName",
+              "sections",
+              "sportType"
+            ]
+          }
+        },
+        "required": [
+          "date",
+          "idInPlan",
+          "course"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coros__createTrainingPlan",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "planInfo": {
+            "type": "object",
+            "properties": {
+              "planName": {
+                "type": "string"
+              },
+              "planOverview": {
+                "type": "string"
+              },
+              "planStartDate": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "totalWeeks": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          },
+          "courseList": {
+            "$defs": {
+              "Section": {
+                "type": "object",
+                "properties": {
+                  "intensityPercentEnd": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityPercentStart": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityValueEnd": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityValueStart": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intervalGroup": {
+                    "type": "boolean"
+                  },
+                  "repeats": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sectionIntensity": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sectionType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sets": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/Section"
+                    }
+                  },
+                  "targetType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "targetValue": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                }
+              }
+            },
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "courseDescription": {
+                  "type": "string"
+                },
+                "courseName": {
+                  "type": "string"
+                },
+                "dayNo": {
+                  "type": "integer",
+                  "format": "int32"
+                },
+                "sections": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/Section"
+                  }
+                },
+                "sportType": {
+                  "type": "integer",
+                  "format": "int32"
+                },
+                "strengthBodypart": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              },
+              "required": [
+                "courseDescription",
+                "courseName",
+                "sections",
+                "sportType"
+              ]
+            }
+          },
+          "phaseInfo": {
+            "type": "object",
+            "properties": {
+              "periodization": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "durationWeeks": {
+                      "type": "integer",
+                      "format": "int32"
+                    },
+                    "endDate": {
+                      "type": "integer",
+                      "format": "int32"
+                    },
+                    "phaseType": {
+                      "type": "integer",
+                      "format": "int32"
+                    },
+                    "startDate": {
+                      "type": "integer",
+                      "format": "int32"
+                    }
+                  },
+                  "required": [
+                    "durationWeeks",
+                    "endDate",
+                    "phaseType",
+                    "startDate"
+                  ]
+                }
+              },
+              "planRationale": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "periodization"
+            ]
+          }
+        },
+        "required": [
+          "planInfo",
+          "courseList",
+          "phaseInfo"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coros__updateTrainingPlan",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "planInfo": {
+            "type": "object",
+            "properties": {
+              "planId": {
+                "type": "string"
+              },
+              "planName": {
+                "type": "string"
+              },
+              "planOverview": {
+                "type": "string"
+              },
+              "totalWeeks": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          },
+          "courseList": {
+            "$defs": {
+              "Section": {
+                "type": "object",
+                "properties": {
+                  "intensityPercentEnd": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityPercentStart": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityValueEnd": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityValueStart": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intervalGroup": {
+                    "type": "boolean"
+                  },
+                  "repeats": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sectionIntensity": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sectionType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sets": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/Section"
+                    }
+                  },
+                  "targetType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "targetValue": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                }
+              }
+            },
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "courseDescription": {
+                  "type": "string"
+                },
+                "courseName": {
+                  "type": "string"
+                },
+                "dayNo": {
+                  "type": "integer",
+                  "format": "int32"
+                },
+                "sections": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/Section"
+                  }
+                },
+                "sportType": {
+                  "type": "integer",
+                  "format": "int32"
+                },
+                "strengthBodypart": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              },
+              "required": [
+                "courseDescription",
+                "courseName",
+                "sections",
+                "sportType"
+              ]
+            }
+          },
+          "phaseInfo": {
+            "type": "object",
+            "properties": {
+              "periodization": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "durationWeeks": {
+                      "type": "integer",
+                      "format": "int32"
+                    },
+                    "endDate": {
+                      "type": "integer",
+                      "format": "int32"
+                    },
+                    "phaseType": {
+                      "type": "integer",
+                      "format": "int32"
+                    },
+                    "startDate": {
+                      "type": "integer",
+                      "format": "int32"
+                    }
+                  },
+                  "required": [
+                    "durationWeeks",
+                    "endDate",
+                    "phaseType",
+                    "startDate"
+                  ]
+                }
+              },
+              "planRationale": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "periodization"
+            ]
+          }
+        },
+        "required": [
+          "planInfo"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coros__createSingleWorkout",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "course": {
+            "$defs": {
+              "Section": {
+                "type": "object",
+                "properties": {
+                  "intensityPercentEnd": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityPercentStart": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityValueEnd": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityValueStart": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intervalGroup": {
+                    "type": "boolean"
+                  },
+                  "repeats": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sectionIntensity": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sectionType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sets": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/Section"
+                    }
+                  },
+                  "targetType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "targetValue": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                }
+              }
+            },
+            "type": "object",
+            "properties": {
+              "courseDescription": {
+                "type": "string"
+              },
+              "courseName": {
+                "type": "string"
+              },
+              "dayNo": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "sections": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/Section"
+                }
+              },
+              "sportType": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "strengthBodypart": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            "required": [
+              "courseDescription",
+              "courseName",
+              "sections",
+              "sportType"
+            ]
+          }
+        },
+        "required": [
+          "course"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coros__scheduleWorkout",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workoutId": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workoutId",
+          "date"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coros__updateWorkoutDetails",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workoutId": {
+            "type": "string"
+          },
+          "course": {
+            "$defs": {
+              "Section": {
+                "type": "object",
+                "properties": {
+                  "intensityPercentEnd": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityPercentStart": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityValueEnd": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intensityValueStart": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "intervalGroup": {
+                    "type": "boolean"
+                  },
+                  "repeats": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sectionIntensity": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sectionType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "sets": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/Section"
+                    }
+                  },
+                  "targetType": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "targetValue": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                }
+              }
+            },
+            "type": "object",
+            "properties": {
+              "courseDescription": {
+                "type": "string"
+              },
+              "courseName": {
+                "type": "string"
+              },
+              "dayNo": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "sections": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/Section"
+                }
+              },
+              "sportType": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "strengthBodypart": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            "required": [
+              "courseDescription",
+              "courseName",
+              "sections",
+              "sportType"
+            ]
+          }
+        },
+        "required": [
+          "workoutId",
+          "course"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coros__queryWorkoutLibrary",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sportType": {
+            "type": "integer"
+          },
+          "courseType": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coros__queryWorkoutDetails",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workoutId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workoutId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coros__queryScheduledWorkoutDetails",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "idInPlan": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "idInPlan"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coros__queryTrainingPlanLibrary",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "statusList": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "planType": {
+            "type": "string"
+          },
+          "weeks": {
+            "type": "integer"
+          },
+          "cursor": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coros__queryTrainingPlanDetails",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "planId": {
+            "type": "string"
+          },
+          "startDay": {
+            "type": "string"
+          },
+          "endDay": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "planId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "coros__queryTrainingSchedule",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "startDate": {
+            "type": "string"
+          },
+          "endDate": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

@@ -2969,6 +2969,12 @@
   scrollbar-gutter: stable;
 }
 
+/* The stack scrolls as a whole; panels keep their natural height instead of
+   shrinking (overflow: hidden drops their min-height to 0) to fit the view. */
+.tl-adherence > .tl-panel {
+  flex: 0 0 auto;
+}
+
 .tl-adherence-lede > header {
   align-items: center;
 }

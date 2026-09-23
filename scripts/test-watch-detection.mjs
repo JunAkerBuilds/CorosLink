@@ -46,7 +46,7 @@ function loadService(initialVolumes, env = {}) {
 }
 
 const hdd = { name: "4TB-HDD", root: "D:\\", folders: ["Music", "map"] };
-for (const name of ["4TB-HDD", "Backup", "COROS Backup", "APEX archives", "COROS Desktop installer", "PACE 30"]) {
+for (const name of ["4TB-HDD", "Backup", "COROS Backup", "APEX archives", "COROS APEX 4 Backup", "COROS Desktop installer", "PACE 30", "COROS PACE 4 PRO Backup", "PACE 4 PRO installer"]) {
   const { service, reads } = loadService([{ ...hdd, name }]);
   const status = await service.getWatchStatus();
   assert.equal(status.connected, false, name);
@@ -56,8 +56,8 @@ for (const name of ["4TB-HDD", "Backup", "COROS Backup", "APEX archives", "COROS
   await assert.rejects(service.deleteWatchTrack("track.mp3"), /No COROS watch/);
 }
 
-for (const name of ["COROS", "COROS WATCH", "COROS PACE", "COROS PACE PRO", "PACE3", "pace-3", "COROS_NOMAD", "VERTIX 2S", "COROS APEX 2 PRO", "APEX4"]) {
-  for (const folders of [["Music"], ["map"], ["Music", "map"]]) {
+for (const name of ["COROS PACE 4 PRO", "PACE4PRO", "PACE-4-PRO", "COROS_PACE_4_PRO", "COROS", "COROS WATCH", "COROS PACE", "COROS PACE PRO", "PACE3", "pace-3", "COROS_NOMAD", "VERTIX 2S", "COROS APEX 2 PRO", "Apex 4", "APEX4", "COROS APEX 4 42MM", "COROS APEX 4 46 mm", "APEX4 46"]) {
+  for (const folders of [[], ["Music"], ["map"], ["Map"], ["Music", "map"]]) {
     const { service, reads } = loadService([hdd, { name, root: "E:\\", folders }]);
     const status = await service.getWatchStatus();
     assert.equal(status.connected, true, name);
@@ -67,7 +67,11 @@ for (const name of ["COROS", "COROS WATCH", "COROS PACE", "COROS PACE PRO", "PAC
   }
 }
 
-assert.equal((await loadService([{ name: "COROS", root: "E:\\", folders: [] }]).service.getWatchStatus()).connected, false);
+const pace4Pro = await loadService([{ name: "COROS PACE 4 PRO", root: "E:\\", folders: [] }]).service.getWatchStatus();
+assert.equal(pace4Pro.model, "pace-4-pro", "PACE 4 Pro must not be recognized as PACE 4");
+const emptyWatch = await loadService([{ name: "Apex 4", root: "E:\\", folders: [] }]).service.getWatchStatus();
+assert.equal(emptyWatch.connected, true, "Recognized empty watch volumes are connected");
+assert.equal(emptyWatch.candidates[0]?.reason, "Recognized COROS watch volume");
 const explicit = loadService([hdd], { COROS_WATCH_PATH: "D:\\" });
 assert.equal((await explicit.service.getWatchStatus()).connected, true, "Explicit override remains supported");
 

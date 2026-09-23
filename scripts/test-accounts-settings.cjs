@@ -61,7 +61,7 @@ async function main() {
       await js(`Boolean(document.querySelector('.accounts-screen'))`),
       false,
     );
-    await click("Account settings");
+    await click("Accounts & API");
     await until(
       `document.body.textContent.includes('runner@example.com') && !document.body.textContent.includes('Checking…')`,
       "connection status",
@@ -78,6 +78,7 @@ async function main() {
         "Strength",
         "Coach / AI",
         "Calendar",
+        "App APIs",
       ],
     );
     assert.match(
@@ -95,9 +96,7 @@ async function main() {
       ["COROSYour", "training"],
       ["YouTube", "youtube"],
       ["YouTube Music", "youtube-music"],
-      ["Spotify", "spotify"],
       ["Apple Music", "apple-music"],
-      ["Hevy", "strength"],
       ["AI providers", "coach"],
     ]) {
       await js(
@@ -151,13 +150,13 @@ async function main() {
       email: "runner@example.com",
       appPassword: "app-password",
     });
-    await click("All accounts");
+    await click("Accounts & API");
     await click("Google Calendar");
     await until(
       `document.querySelector('.calendar-provider-tabs [aria-pressed=true]')?.textContent.includes('Google Calendar')`,
       "Google selected",
     );
-    await click("All accounts");
+    await click("Accounts & API");
     await click("All connections");
     await click("OpenRouteService");
     await until(
@@ -179,7 +178,7 @@ async function main() {
       "save confirmation",
     );
     assert.equal(await js("window.saves"), 1);
-    await click("All accounts");
+    await click("Accounts & API");
     window.setSize(440, 1100);
     await until(`window.innerWidth === 440`, "narrow viewport");
     assert.equal(

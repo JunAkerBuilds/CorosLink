@@ -37,6 +37,8 @@ async function main() {
   ]));
   const archive = await service.selectCorosWatchfaceArchive(archivePath);
   const imports = [];
+  const importedModels = [];
+  const requestedModels = [];
   const saves = [];
   let failSave = false;
   const face = (slug) => ({ slug, title: slug, models: ["PACE Pro"] });
@@ -45,8 +47,8 @@ async function main() {
     "watchfaces:listProjects": () => [],
     "watchfaces:automation:setRendererReady": () => undefined,
     "watchfaces:listCommunity": () => ({ schemaVersion: 1, items: [], pagination: { page: 1, pageCount: 1, total: 0 }, facets: { models: [], styles: [] } }),
-    "watchfaces:getCommunity": (_, slug) => face(slug),
-    "watchfaces:importCommunity": (_, slug) => { imports.push(slug); return { face: face(slug), archive }; },
+    "watchfaces:getCommunity": (_, slug, model) => { requestedModels.push(model); return face(slug); },
+    "watchfaces:importCommunity": (_, slug, model) => { imports.push(slug); importedModels.push(model); return { face: face(slug), archive }; },
     "watchfaces:describeTemplate": (_, id) => service.describeCorosWatchfaceTemplate(id),
     "watchfaces:loadTemplateAssets": (_, id, paths) => service.loadCorosWatchfaceTemplateAssets(id, paths),
     "watchfaces:loadTemplateConfigTexts": (_, id) => service.loadCorosWatchfaceTemplateConfigTexts(id),
@@ -96,14 +98,14 @@ async function main() {
     await until(() => js('Boolean(document.querySelector(".watchfaces-view"))'), Boolean, "hub after reload");
     stage = "community requests";
     let sequence = 0;
-    const open = (slug) => js(`window.dispatchEvent(new CustomEvent('test:community-open', {detail:${JSON.stringify({ slug, requestId: ++sequence })}})); void 0;`);
+    const open = (slug, model) => js(`window.dispatchEvent(new CustomEvent('test:community-open', {detail:${JSON.stringify({ slug, model, requestId: ++sequence })}})); void 0;`);
     const name = () => js('document.querySelector(".watchface-editor-name")?.value');
     const dialog = () => js('Boolean(document.querySelector("#wf-unsaved-title"))');
     const expectName = (value) => until(name, (actual) => actual === value, `editor ${value}`);
     const editName = (value) => js(`(() => { const input=document.querySelector('.watchface-editor-name'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)}); input.dispatchEvent(new Event('input',{bubbles:true})); })()`);
     const choose = (label) => js(`Array.from(document.querySelectorAll('.wf-modal-actions button')).find(b=>b.textContent.trim()===${JSON.stringify(label)}).click(); void 0;`);
 
-    await open("first-face"); await expectName("first-face");
+    await open("first-face", "PACE 4"); await expectName("first-face");
     await until(() => js('Boolean(document.querySelector(".wf-save-state:not(.is-dirty)"))'), Boolean, "clean editor");
     await open("second-face"); await expectName("second-face");
     assert.equal(await dialog(), false, "a clean editor switches directly");
@@ -132,9 +134,12 @@ async function main() {
     assert.equal(saves.at(-1).name, "Keep these edits");
 
     await editName("Discard these edits");
-    await open("fifth-face"); await until(dialog, Boolean, "discard prompt");
+    await open("fifth-face", "PACE 4"); await until(dialog, Boolean, "discard prompt");
     await choose("Discard"); await expectName("fifth-face");
     assert.deepEqual(imports, ["first-face", "second-face", "third-face", "fourth-face", "fifth-face"]);
+    assert.deepEqual(importedModels, ["PACE 4", undefined, undefined, undefined, "PACE 4"], "selected model survives direct and queued handoffs");
+    assert.equal(requestedModels[0], "PACE 4");
+    assert.equal(requestedModels.at(-1), "PACE 4");
     assert.equal(errors.filter((error) => !error.includes("Fixture save failed")).length, 0, errors.join("\n"));
     console.log("Community handoff passed: renderer navigation, direct open, saved editor, unsaved edits, cancel, save failure, save, discard, exact import count.");
   } finally {

@@ -276,3 +276,54 @@ assert.deepEqual(mixedUploadInput.workouts[2].sport_options, {
 assert.equal(mixedUploadInput.workouts[3].steps[0].target_type, "reps");
 
 console.log("test-chat-workout-tools: ok");
+
+// Strength aliases must resolve real catalog references before payload creation.
+const { resolveTrainingPlanExercises } = await import(distUrl("trainingHubService.js"));
+const { workoutExerciseId } = await import(distUrl("workoutCapabilities.js"));
+assert.equal(workoutExerciseId({ originId: "0", id: "T123" }), "T123");
+assert.equal(workoutExerciseId({ originId: 0, exerciseId: " T124 " }), "T124");
+assert.equal(workoutExerciseId({ originId: "0", id: "0" }), undefined);
+for (const kind of ["training", "interval", "train", " Training ", undefined]) {
+  const draft = { name: "Strength regression", workouts: [{
+    key: "strength", name: "Strength", sport: "strength", steps: [{
+      kind, exercise_name: "Squat", target_type: "reps", target_reps: 10
+    }, { repeat: 3, steps: [{ kind, exercise_name: "Squat", target_type: "reps", target_reps: 8 }] }]
+  }] };
+  let calls = 0;
+  const resolved = await resolveTrainingPlanExercises(draft, async () => {
+    calls++;
+    return [{ id: "T123", originId: "0", name: "Squat" }];
+  });
+  assert.equal(calls, 1);
+  assert.deepEqual(resolved.issues, []);
+  assert.equal(draft.workouts[0].steps[0].exercise_id, undefined);
+  const payload = buildWorkoutPayload("Strength", resolved.draft.workouts[0].steps, "strength");
+  assert.deepEqual(payload.exercises.filter(x => !x.isGroup).map(x => x.originId), ["T123", "T123"]);
+  for (const badReference of [{}, { exercise_id: "0" }, { exercise_name: "Unknown" }]) {
+    const invalid = structuredClone(draft);
+    invalid.workouts[0].steps = [{ kind, target_type: "reps", target_reps: 10, ...badReference }];
+    const result = await resolveTrainingPlanExercises(invalid, async () => [{ id: "T123", name: "Squat" }]);
+    assert.equal(result.issues.length, 1);
+    assert.equal(result.issues[0].reason, badReference.exercise_name ? "unavailable" : "missing");
+    if (!badReference.exercise_name) {
+      assert.match(result.issues[0].message, /require exercise_id or exercise_name/);
+      assert.equal(result.issues[0].exerciseName, "");
+    }
+  }
+}
+assert.throws(() => buildWorkoutPayload("Strength", [{ kind: "interval", target_type: "reps", target_reps: 10 }], "strength"), /require exercise/);
+const restOnly = await resolveTrainingPlanExercises({ name: "Rest", workouts: [{ key: "r", name: "Rest", sport: "strength", steps: [{ kind: "rest", target_type: "time", target_duration_seconds: 60 }] }] }, async () => { throw new Error("Rest must not query catalog"); });
+assert.deepEqual(restOnly.issues, []);
+const missingExercise = await resolveTrainingPlanExercises({ name: "Missing", workouts: [{ key: "m", name: "Strength", sport: "strength", steps: [{ kind: "training", target_type: "reps", target_reps: 10 }] }] }, async () => { throw new Error("Missing exercises must not query the catalog"); });
+assert.equal(missingExercise.issues[0].reason, "missing");
+console.log("Strength exercise resolution regression tests passed");
+
+// Existing Strength edits use the local review service and respect Coach workout permissions.
+const { handleChatWorkoutTool } = await import(distUrl("chatWorkoutTools.js"));
+for (const name of ["find_editable_workouts", "read_workout_for_edit", "prepare_workout_edit", "prepare_exercise_load_update", "get_workout_edit_status", "cancel_workout_edit"]) {
+  assert.equal(isChatWorkoutTool(name), true);
+  const denied = JSON.parse(await handleChatWorkoutTool(name, {}, { allowUpcomingWorkouts: false }));
+  assert.match(denied.error, /disabled/);
+}
+assert.equal(isChatWorkoutTool("confirm_workout_edit"), false);
+console.log("Strength Coach tools: six review-only tools registered and permission-gated.");

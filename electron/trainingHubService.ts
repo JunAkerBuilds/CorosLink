@@ -1,3 +1,4 @@
+import { buildScheduledWorkoutEditRequest } from "./corosWorkoutEditor";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -84,6 +85,7 @@ import {
   applyWorkoutCalculation,
   buildWorkoutPayloadFromEntry,
   resetProgramForCreate,
+  normalizeWorkoutStepKind,
   validatePlanDraft,
   type CorosWorkoutCalculation,
   type CorosTrainingPlanDraft,
@@ -1893,7 +1895,7 @@ export async function duplicateLibraryWorkout(
   };
 }
 
-async function resolveWorkoutEditSource(ref: WorkoutEditRef): Promise<WorkoutEditSource> {
+export async function resolveWorkoutEditSource(ref: WorkoutEditRef): Promise<WorkoutEditSource> {
   if (ref.kind === "library") {
     const program = await trainingHubGet<Record<string, unknown>>(
       "/training/program/detail",
@@ -2603,12 +2605,13 @@ export interface TrainingPlanExerciseResolutionIssue {
   sport: WorkoutSport;
   exerciseName: string;
   candidates: string[];
-  reason: "ambiguous" | "unavailable";
+  reason: "ambiguous" | "unavailable" | "missing";
   message: string;
 }
 
 export async function resolveTrainingPlanExercises(
-  draft: CorosTrainingPlanDraft
+  draft: CorosTrainingPlanDraft,
+  loadCatalog: (sport: WorkoutSport) => Promise<Record<string, unknown>[]> = loadWorkoutExerciseCatalog
 ): Promise<{
   draft: CorosTrainingPlanDraft;
   issues: TrainingPlanExerciseResolutionIssue[];
@@ -2619,7 +2622,7 @@ export async function resolveTrainingPlanExercises(
   const catalogFor = (sport: WorkoutSport): Promise<Record<string, unknown>[]> => {
     let catalog = catalogs.get(sport);
     if (!catalog) {
-      catalog = loadWorkoutExerciseCatalog(sport);
+      catalog = loadCatalog(sport);
       catalogs.set(sport, catalog);
     }
     return catalog;
@@ -2633,14 +2636,30 @@ export async function resolveTrainingPlanExercises(
       "repeat" in step ? step.steps : [step]
     );
     const exerciseSteps = plainSteps.filter(
-      (step) => step.kind === "training" && (step.exercise_id || step.exercise_name)
+      (step) => {
+        const kind = normalizeWorkoutStepKind(step.kind);
+        return (kind === "training" || kind === "interval") &&
+          (sport === "strength" || step.exercise_kind !== undefined || Boolean(step.exercise_id || step.exercise_name));
+      }
     );
     if (!exerciseSteps.length) continue;
-    const catalog = await catalogFor(sport);
-
     for (const step of exerciseSteps) {
-      const requestedId = step.exercise_id?.trim();
-      const exerciseName = step.exercise_name?.trim() || (requestedId ? `ID ${requestedId}` : "Exercise");
+      const requestedId = step.exercise_id?.trim().replace(/^0$/, "");
+      const requestedName = step.exercise_name?.trim();
+      if (!requestedId && !requestedName) {
+        issues.push({
+          workoutKey: entry.key,
+          workoutName: entry.name,
+          sport,
+          exerciseName: "",
+          candidates: [],
+          reason: "missing",
+          message: `${capability.label} training steps in "${entry.name}" require exercise_id or exercise_name. Choose an exercise for the missing step.`
+        });
+        continue;
+      }
+      const catalog = await catalogFor(sport);
+      const exerciseName = requestedName || `ID ${requestedId}`;
       const idMatch = requestedId
         ? catalog.find((row) => workoutExerciseId(row) === requestedId)
         : undefined;
@@ -6281,4 +6300,60 @@ async function performReauthentication(): Promise<TrainingHubAuthState | null> {
     );
     return null;
   }
+}
+
+/** Narrow write boundary for reviewed Strength patches. No payload comes from the renderer. */
+export async function writeReviewedStrengthProgram(
+  source: WorkoutEditSource,
+  program: Record<string, unknown>,
+  expectedAccount: string
+): Promise<void> {
+  const { sourceRevision } = await import("./strengthWorkoutPatch.js");
+  const { requireStrengthEligibility } = await import("./workoutEditService.js");
+  let auth: TrainingHubAuthState;
+  let body: Record<string, unknown>;
+  try {
+    const fresh = await resolveStrengthWorkoutEditSource(source.ref);
+    const captured = getStoredAuth();
+    if (!captured || `${captured.regionId}:${captured.userId}` !== expectedAccount) throw new Error("COROS account changed before saving.");
+    requireStrengthEligibility(fresh, formatScheduleDay(new Date()));
+    if (sourceRevision(fresh) !== sourceRevision(source)) throw new Error("Workout changed before saving.");
+    if (source.ref.kind === "scheduled" && !fresh.entity) throw new Error("Calendar occurrence is missing.");
+    auth = captured;
+    body = source.ref.kind === "library" ? program : buildScheduledWorkoutEditRequest(source.ref, fresh.entity!, program);
+  } catch (error) {
+    throw Object.assign(new Error(error instanceof Error ? error.message : "Workout preflight failed."), { code: "WORKOUT_EDIT_NOT_SENT" });
+  }
+  // Use the captured account and a single bounded request; never automatically retry a mutation.
+  await executeTrainingHubRequest(auth, source.ref.kind === "library" ? "/training/program/update" : "/training/schedule/update", {
+    method: "POST", body: JSON.stringify(body), allowEmptyData: true, signal: AbortSignal.timeout(30_000)
+  });
+}
+
+/** The verified program query returns a complete array; unexpected pagination is not silently truncated. */
+export async function listStrengthEditLibraryRefs(): Promise<WorkoutEditRef[]> {
+  const data = await trainingHubPost<unknown>("/training/program/query", {});
+  if (!Array.isArray(data)) throw new Error("Unexpected library response; search completeness cannot be established.");
+  return data.filter(p => p && Number(p.sportType) === 4).map(p => {
+    if (p.id === undefined || p.id === null) throw new Error("Library workout identity is missing.");
+    return { kind: "library", programId: String(p.id) };
+  });
+}
+
+export async function listStrengthEditCalendarRefs(startDay: string, endDay: string): Promise<WorkoutEditRef[]> {
+  const raw = await trainingHubGet<Record<string, unknown>>("/training/schedule/query", { startDate: startDay, endDate: endDay, supportRestExercise: 1 });
+  if (!Array.isArray(raw.entities) || !Array.isArray(raw.programs)) throw new Error("Calendar response is incomplete; no complete search can be claimed.");
+  const entries = parseScheduledWorkoutEntries(raw);
+  const liveEntities = (raw.entities as Record<string, unknown>[]).filter(e => Number(e.status) !== 3);
+  if (entries.length !== liveEntities.length || entries.some(e => !e.rawProgram)) throw new Error("Some calendar workouts could not be resolved. Narrow the range or read an exact occurrence.");
+  return entries.filter(e => e.sportType === 4).map(e => ({ kind: "scheduled", happenDay: e.happenDay, planId: e.planId, idInPlan: e.idInPlan, planProgramId: e.planProgramId }));
+}
+
+/** A calendar planId is also used by standalone occurrences; nonzero is not proof of native ownership. */
+export async function resolveStrengthWorkoutEditSource(ref: WorkoutEditRef): Promise<WorkoutEditSource> {
+  const source = await resolveWorkoutEditSource(ref);
+  if (ref.kind === "library") return source;
+  const plans = await readNativeTrainingPlanEndpoint<unknown>("/training/plan/query", { method: "POST", body: {} });
+  const { classifyStrengthCalendarOwnership } = await import("./strengthWorkoutPatch.js");
+  return { ...source, strengthEditOwnership: classifyStrengthCalendarOwnership(ref.planId, plans) };
 }

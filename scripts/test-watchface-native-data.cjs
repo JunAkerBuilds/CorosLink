@@ -15,6 +15,8 @@ async function renderNativeData(details) {
   const { deriveEditorLayers } = await import('/src/watchfaces/watchfaceEditorModel.ts');
   const check = (ok, message) => { if (!ok) throw new Error(message); };
   const nativeData = Object.fromEntries(native.NATIVE_DATA_FIELDS.map((field,index) => [field.id, {...native.defaultNativeDataStyle(field.id),x:60+(index%3)*230,y:60+Math.floor(index/3)*72}]));
+  nativeData.stamina.parts = { states: { enabled:true, x:0, y:50, width:100, height:50 } };
+  nativeData.stamina.assetTexts = { states: Object.fromEntries(Array.from({length:11}, (_,i)=>[String(i), String(i*10)+'%'])) };
   const design = { version:1, backgroundColor:'#000000', accentColor:'#ffffff', artwork:null,zoom:1,fontFamily:'',digitColor:'#ffffff',tintLabels:false,tintIcons:false,previewComplication:'heartRate',metricChanges:{},metricStyles:{},timeStyles:{},staticSeparators:{colon:{enabled:false,x:0,y:0,size:10,color:'#ffffff'},dateSlash:{enabled:false,x:0,y:0,size:10,color:'#ffffff'}},layoutOffsets:{},designSprites:[],nativeData };
   const diagnostics = validateWatchfaceAutomationDocument({design,projectName:'Native data'}, {details});
   check(!diagnostics.some(d=>d.severity==='error'), 'Schema accepts native data: '+JSON.stringify(diagnostics));
@@ -30,8 +32,33 @@ async function renderNativeData(details) {
     const values=chart.configOverrides[0].values;
     const key=source.id==='chart_moon'?'chart_moon_icon':source.id==='chart_sunrise'||source.id==='chart_moonrise'?source.id+'_hour_rect':source.id+'_rect';
     check(values[key]&&values[key]!==studio.COROS_CONFIG_DELETE_VALUE,source.id+' emits its native fields');
-    check(values.chart_stress_rect===studio.COROS_CONFIG_DELETE_VALUE||source.id==='chart_stress','Switching charts removes old sources');
+    check(values.chart_stress_rect===undefined||values.chart_stress_rect===studio.COROS_CONFIG_DELETE_VALUE||source.id==='chart_stress','Switching charts never writes a stale source');
   }
+  // Recovered official faces carry every chart group's readouts; only the
+  // selected source, the shared graph and this editor's own leftovers are replaced.
+  const official={...details.resolutions.find(r=>r.width===800),config:{...details.resolutions.find(r=>r.width===800).config,chart_tide_rect:'{10,10,50,30,hcenter|vcenter}',chart_tide_font:'recovered/group-13',chart_stress_rect:'{1,1,2,2,left|vcenter}',chart_stress_font:'cl_nd_chart_d',chart_item3_bg:'recovered/group-38/00.png'}};
+  const grouped=await native.composeNativeData({...details,resolutions:[official]},{chart:{...nativeData.chart,chartSource:'chart_step'}});
+  const groupedValues=grouped.configOverrides[0].values;
+  check(groupedValues.chart_tide_rect===undefined&&groupedValues.chart_item3_bg===undefined,'Other chart groups of an official face survive export');
+  check(groupedValues.chart_stress_rect===studio.COROS_CONFIG_DELETE_VALUE&&groupedValues.chart_stress_font===studio.COROS_CONFIG_DELETE_VALUE,'Editor-generated leftovers of another source are cleared');
+  check(groupedValues.chart_step_rect&&groupedValues.chart_rect&&groupedValues.chart_bg===studio.COROS_CONFIG_DELETE_VALUE,'Selected source and shared graph keys are rewritten');
+  // Preview follows the chart layer's group for slot-sharing alternatives.
+  const slot=(id,x,y,extra={})=>({...native.defaultNativeDataStyle(id),x,y,...extra});
+  const grouping={weather_temp:slot('weather_temp',300,60),chart_sun_angle:slot('chart_sun_angle',300,60),weather_wind:slot('weather_wind',300,140),weather_temp_min:slot('weather_temp_min',300,140),chart:slot('chart',80,300,{chartSource:'chart_sunrise'})};
+  check(native.nativeLayerHiddenByChartGroup('weather_temp',grouping)&&!native.nativeLayerHiddenByChartGroup('chart_sun_angle',grouping),'Sun group shows the solar angle instead of the shared temperature slot');
+  check(native.nativeLayerHiddenByChartGroup('weather_temp_min',grouping)&&!native.nativeLayerHiddenByChartGroup('weather_wind',grouping),'Sun group shows wind instead of min/max in a shared row');
+  const generalGrouping={...grouping,chart:{...grouping.chart,chartSource:'chart_stress'}};
+  check(!native.nativeLayerHiddenByChartGroup('weather_temp',generalGrouping)&&native.nativeLayerHiddenByChartGroup('chart_sun_angle',generalGrouping)&&native.nativeLayerHiddenByChartGroup('weather_wind',generalGrouping)&&!native.nativeLayerHiddenByChartGroup('weather_temp_min',generalGrouping),'General group shows temperature and min/max');
+  check(!native.nativeLayerHiddenByChartGroup('weather_temp',{...grouping,weather_temp:slot('weather_temp',10,10)}),'Non-overlapping layers are never suppressed');
+  check(!native.nativeLayerHiddenByChartGroup('weather_temp',{...grouping,chart:{...grouping.chart,enabled:false}}),'Without a chart layer nothing is suppressed');
+  // Recovered NOMAD keeps the solar angle beside a sunrise chart. The chart owns
+  // every chart_* key, so its blanket deletion must not erase the earlier field.
+  const nomadLike=await native.composeNativeData({...details,resolutions:[details.resolutions.find(r=>r.width===800)]},{chart_sun_angle:{...nativeData.chart_sun_angle,assets:{unit:{0:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='}}},chart:{...nativeData.chart,chartSource:'chart_sunrise'}});
+  const nomadValues=nomadLike.configOverrides[0].values;
+  check(nomadValues.chart_sun_angle_rect&&nomadValues.chart_sun_angle_rect!==studio.COROS_CONFIG_DELETE_VALUE&&nomadValues.chart_sunrise_hour_rect!==studio.COROS_CONFIG_DELETE_VALUE,'Solar angle survives the chart export in either insertion order');
+  check(nomadValues.chart_dgree_icon==='cl_nd_chart_sun_angle_u\\00.png','Solar angle supplies the shared chart degree artwork');
+  const eightDirections=await native.composeNativeData({...details,resolutions:[details.resolutions.find(r=>r.width===800)]},{weather_direction:{...nativeData.weather_direction,stateCount:8}});
+  check(eightDirections.assetReplacements.filter(a=>a.path.includes('/cl_nd_weather_direction/')).length===8,'A recovered eight-frame direction table exports eight frames');
   const aod=studio.retargetWatchfaceCompositionToAod(details,composition);
   check(aod.configOverrides.every(o=>o.path.endsWith('/AODconfig.txt')),'AOD overrides target AOD config');
   check(aod.assetReplacements.every(a=>!composition.assetReplacements.some(b=>a.path===b.path)),'AOD sprites do not overwrite Current');
@@ -63,6 +90,7 @@ async function renderNativeData(details) {
   const hidden=await native.composeNativeData(details,{week_tl:{...customData.week_tl,parts:{icon:{enabled:false}}},chart:{...customData.chart,parts:{plot:{enabled:false}}}});
   const hiddenKeys=hidden.configOverrides[0].values;
   check(hiddenKeys.week_tl_icon===studio.COROS_CONFIG_DELETE_VALUE&&hiddenKeys.week_tl_font!==studio.COROS_CONFIG_DELETE_VALUE,'Hiding label keeps the live value');
+  check(hidden.configOverrides.find(o=>o.path==='watchface_800x800/config.txt').values.week_tl_icon_pos==='{80,100}','Hidden label still writes the icon position the parser gates the value on');
   check(hiddenKeys.chart_rect===studio.COROS_CONFIG_DELETE_VALUE&&hiddenKeys.chart_stress_font!==studio.COROS_CONFIG_DELETE_VALUE,'Hiding graph keeps the live value');
   Object.assign(design.nativeData,customData);
   check(!validateWatchfaceAutomationDocument({design,projectName:'Customized'}, {details}).some(d=>d.severity==='error'),'Custom component settings pass validation');
@@ -80,14 +108,15 @@ async function renderNativeData(details) {
   const renderSample=async scenario=>{const c=sampleCanvas();await native.drawNativeDataPreview(c,800,simulatedData,scenario);return c.toDataURL();};
   const defaultSample=await renderSample();
   check(native.defaultNativeDataStyle('chart').chartStyle.previewType==='bars','New charts default to bars');
-  for (const previewType of [undefined, 'curve', 'bars']) {
-    const legacyData={...simulatedData,chart:{...simulatedData.chart,chartStyle:{previewType,lineWidth:30,upperColor:'#00ff00',lowerColor:'#ff0000'}}};
-    const beforeLegacy=JSON.stringify(legacyData);
-    const legacyPreview=sampleCanvas();
-    await native.drawNativeDataPreview(legacyPreview,800,legacyData);
-    check(legacyPreview.toDataURL()===defaultSample,'All saved preview types render bars, including legacy curve projects');
-    check(JSON.stringify(legacyData)===beforeLegacy,'Bars-only rendering preserves saved chart settings');
-  }
+  const previewWith=async (chartStyle,scenario)=>{const data={...simulatedData,chart:{...simulatedData.chart,chartStyle}};const before=JSON.stringify(data);const c=sampleCanvas();await native.drawNativeDataPreview(c,800,data,scenario);check(JSON.stringify(data)===before,'Preview rendering preserves saved chart settings');return c;};
+  const barsPreview=await previewWith({previewType:'bars',lineWidth:30,upperColor:'#00ff00',lowerColor:'#ff0000'});
+  check(barsPreview.toDataURL()===(await previewWith({lineWidth:30,upperColor:'#00ff00',lowerColor:'#ff0000'})).toDataURL(),'Charts without a preview type render bars');
+  const curvePreview=await previewWith({previewType:'curve',lineWidth:30,upperColor:'#00ff00',lowerColor:'#ff0000'});
+  const curvePixels=curvePreview.getContext('2d').getImageData(0,0,800,800).data;
+  check(curvePreview.toDataURL()!==barsPreview.toDataURL(),'Line graph preview differs from bars');
+  check(curvePixels.some((v,i)=>i%4===0&&v===0&&curvePixels[i+1]===255&&curvePixels[i+2]===0)&&curvePixels.some((v,i)=>i%4===0&&v===255&&curvePixels[i+1]===0&&curvePixels[i+2]===0),'Line graph uses the upper and lower curve colors');
+  check(curvePreview.toDataURL()!==(await previewWith({previewType:'curve',lineWidth:30,upperColor:'#00ff00',lowerColor:'#ff0000'},{chartProgress:0.9})).toDataURL(),'chartProgress moves the line-graph marker');
+  check(curvePreview.toDataURL()!==(await previewWith({previewType:'curve',lineWidth:30,upperColor:'#00ff00',lowerColor:'#ff0000'},{chartHistory:[1,0,1,0]})).toDataURL(),'chartHistory reshapes the sample line');
   check(defaultSample!==await renderSample({values:{week_tl:'9999'}}),'Training simulation renders new glyphs');
   check(defaultSample!==await renderSample({values:{weather_direction:'8'}}),'Wind simulation selects different state artwork');
   check(defaultSample!==await renderSample({values:{chart_stress:'99'},chartHistory:[0,1,0,1]}),'Chart simulation changes history and value');
@@ -158,6 +187,8 @@ async function renderNativeData(details) {
       for(const key of ['weather_temp_rect','weather_temp_min_rect','weather_temp_max_rect','weather_rainfall_rect','weather_humidity_rect','weather_uv_rect','weather_aqi_rect','stress_rect','stamina_rect','sleep_score_rect','week_tl_rect','today_run_rect','week_bike_rect','sunriseset_hour_rect','chart_stress_rect']) assert.match(resolution.config[key],/^\{/,key);
       assert.ok(resolution.spriteFolders.find(f=>f.folder==='cl_nd_sleep_score_d')?.files.length===10,'Native digit font retained');
       assert.ok(resolution.config.sleep_hrv_level_icon,'Native HRV status folder retained');
+      assert.equal(resolution.spriteFolders.find(f=>f.folder===resolution.config.stamina_level_icon)?.files.length,11,'All stamina frames survive export at every resolution');
+      assert.match(resolution.config.stamina_level_pos,/^\{/,'Stamina arc position survives export');
     }
     const saved=await service.saveCorosWatchfaceProject({name:'Native data round trip',sourceArchiveId:source.archiveId,design:result.design,previewDataUrl:result.preview});
     const loaded=await service.loadCorosWatchfaceProject(saved.projectId);

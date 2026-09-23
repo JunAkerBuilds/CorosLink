@@ -1,0 +1,23 @@
+const assert = require('node:assert/strict');
+const os = require('node:os');
+const path = require('node:path');
+const { app, safeStorage } = require('electron');
+const directory = path.join(os.tmpdir(), `coroslink-carto-${process.pid}`);
+app.setPath('userData', directory);
+app.whenReady().then(() => {
+  const database = require('../dist-electron/database.js');
+  database.initializeDatabase(directory);
+  const { getRouteBuilderConfig, saveRouteBuilderConfig } = require('../dist-electron/mapService.js');
+  assert.ok(safeStorage.isEncryptionAvailable(), 'OS credential encryption is available');
+  saveRouteBuilderConfig({ openRouteServiceApiKey: 'ors-test', backend: 'keyless', cartoApiKey: 'test-carto-key' });
+  assert.equal(getRouteBuilderConfig().cartoApiKey, 'test-carto-key');
+  const encrypted = database.getSetting('maps.cartoApiKeyEncrypted');
+  assert.ok(encrypted && !encrypted.includes('test-carto-key'), 'Stored CARTO key is encrypted');
+  saveRouteBuilderConfig({ openRouteServiceApiKey: 'ors-changed', backend: 'ors' });
+  assert.equal(getRouteBuilderConfig().cartoApiKey, 'test-carto-key', 'Routing saves preserve CARTO credentials');
+  saveRouteBuilderConfig({ ...getRouteBuilderConfig(), cartoApiKey: '' });
+  assert.equal(getRouteBuilderConfig().cartoApiKey, '');
+  assert.equal(getRouteBuilderConfig().openRouteServiceApiKey, 'ors-changed');
+  console.log('CARTO encrypted storage, retrieval, independent routing updates and removal passed.');
+  app.exit(0);
+}).catch(error => { console.error(error); app.exit(1); });

@@ -119,6 +119,7 @@ import {
 } from "./media/libraryUtils";
 import { trackAvatarColor, trackInitial } from "./media/trackAvatar";
 import { useTimeOfDayGreeting } from "./hooks/useTimeOfDayGreeting";
+import { OverviewWeatherCard } from "./overview/OverviewWeatherCard";
 import {
   defineSelectionPreference,
   selectionIsOneOf,
@@ -2349,7 +2350,7 @@ export default function App() {
                 }}
               >
                 <ArrowLeft size={16} aria-hidden="true" />
-                Back to accounts
+                Back to Accounts &amp; API
               </button>
             ) : null}
             {activeView === "overview" ? (
@@ -2833,6 +2834,7 @@ function ProductHero({ presentation }: { presentation: WatchPresentation }) {
           src={presentation.heroImage}
           alt={presentation.heroAlt ?? ""}
           className="dashboard-hero-image"
+          data-watch-model={presentation.model}
         />
       ) : null}
     </section>
@@ -2993,6 +2995,7 @@ function MediaOverviewTab({
             {greeting} <span className="dashboard-greeting-wave" aria-hidden="true">👋</span>
           </h1>
         </div>
+        <OverviewWeatherCard />
       </header>
 
       <div

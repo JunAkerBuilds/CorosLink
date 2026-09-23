@@ -1,3 +1,6 @@
+import { getWorkoutEditTools, isWorkoutEditTool } from "./workoutEditService";
+import { workoutEdits } from "./workoutEditRuntime";
+import type { StrengthEditPreview } from "./workoutEditTypes";
 import crypto from "node:crypto";
 import {
   buildPlanPreview,
@@ -145,6 +148,7 @@ export function hydratePlanDraftStoreFromDatabase(): void {
 }
 
 export const CHAT_WORKOUT_TOOL_NAMES = [
+  "find_editable_workouts", "read_workout_for_edit", "prepare_workout_edit", "prepare_exercise_load_update", "get_workout_edit_status", "cancel_workout_edit",
   "search_coros_exercises",
   "draft_workout",
   "draft_training_plan",
@@ -166,6 +170,7 @@ export function getChatWorkoutTools(): CorosMcpTool[] {
   }
 
   return [
+    ...getWorkoutEditTools(),
     {
       name: "search_coros_exercises",
       description:
@@ -331,10 +336,19 @@ export async function handleChatWorkoutTool(
   options?: {
     onPlanDraft?: (preview: PlanDraftPreview) => void;
     onWorkoutDelete?: (preview: WorkoutDeletePreview) => void;
+    onWorkoutEdit?: (preview: StrengthEditPreview) => void;
     allowUpcomingWorkouts?: boolean;
     unitSystem?: UnitSystem;
   }
 ): Promise<string> {
+  if (isWorkoutEditTool(name)) {
+    if (options?.allowUpcomingWorkouts === false) return JSON.stringify({ error: "Workout access is disabled in Coach permissions." });
+    try {
+      const result = await workoutEdits().tool(name, args);
+      if (result && typeof result === "object" && "proposalId" in result) options?.onWorkoutEdit?.(result as StrengthEditPreview);
+      return JSON.stringify(result);
+    } catch (error) { return JSON.stringify({ error: error instanceof Error ? error.message : "Workout edit failed." }); }
+  }
   if (name === "draft_training_plan") {
     return handleDraftTrainingPlan(
       args,
@@ -714,7 +728,9 @@ async function handleDraftTrainingPlan(
         candidates: issue.candidates,
         message: issue.message
       })),
-      action: exerciseResolution.issues.every((issue) => issue.candidates.length > 0)
+      action: exerciseResolution.issues.some((issue) => issue.reason === "missing")
+        ? `At least one training step is missing an exercise. Specify exercise_id or exercise_name for each missing step and call ${retryTool} again.`
+        : exerciseResolution.issues.every((issue) => issue.candidates.length > 0)
         ? `Update each affected step to the exact best-matching candidate and call ${retryTool} again now. If the candidates materially change the intended movement, call request_coach_input with the exact candidates as clickable choices.`
         : `At least one exercise name is unavailable. Call search_coros_exercises now using the intended movement, target muscles, and known equipment; use an exact returned ID/name and call ${retryTool} again. Ask the athlete only if the available movement or equipment would materially change the workout.`
     });

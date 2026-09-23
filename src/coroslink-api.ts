@@ -1,7 +1,10 @@
 import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEventSaveResult } from "../electron/calendarSyncTypes";
+import type { ChatGptModelInfo } from "../electron/chatModels";
+import type { StrengthEditPreview } from "../electron/workoutEditTypes";
+import type { HealthInsightKind, HealthInsightResult } from "../electron/healthInsightsTypes";
 import type { DiagnosticsSnapshot, RendererDiagnosticError } from "../electron/diagnosticsTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "../electron/calendarSyncTypes";
-import type { WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
+import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "../electron/googleCalendarTypes";
 import type {
   ActivityBackupProgress,
@@ -108,6 +111,12 @@ import type {
   ChatStreamDone,
   ChatStreamError,
   ChatStreamInfo,
+  CoachCorosActionPreview,
+  CoachChartPreview,
+  FitIndexProgress,
+  FitIndexStatus,
+  FitIndexSyncOptions,
+  PinnedCoachChart,
   LocalChatConfig,
   LocalChatConnectionTest,
   LocalChatDiscovery,
@@ -126,15 +135,14 @@ import type {
   ManualActivityInput
 } from "../electron/types";
 import type {
-  CorosLegacy614aCarrierExportResult,
-  CorosLegacy614aCarrierPatchInput,
-  CorosLegacy614aCarrierSelection,
   CorosWatchfaceArchive,
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceProjectExportResult,
   CorosWatchfaceArchiveExportInput,
   CorosWatchfaceArtwork,
   CorosWatchfaceCreatorInput,
+  CorosWatchfaceConversionInput,
+  CorosWatchfaceConversionResult,
   CorosWatchfaceExistingShareInput,
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceProject,
@@ -152,6 +160,10 @@ import type {
   CorosWatchfaceThemeDownload,
   CorosWatchfaceThemeDownloadInput,
   CorosWatchfaceThemeListInput,
+  CorosOfficialAssetFrames,
+  CorosOfficialAssetLibraryStatus,
+  CorosOfficialAssetPage,
+  CorosOfficialAssetQuery,
   CorosBatteryQueryInput,
   CorosBatteryReport,
   CorosGearCatalog,
@@ -167,12 +179,29 @@ import type {
 } from "../electron/types";
 
 export interface CorosLinkApi {
+  getWorkoutAutomationStatus: () => Promise<WatchfaceAutomationStatus>;
+  configureWorkoutAutomation: (input: { enabled: boolean; port?: number }) => Promise<WatchfaceAutomationStatus>;
+  onWorkoutEditsChanged: (callback: () => void) => () => void;
+  listWorkoutEdits: () => Promise<StrengthEditPreview[]>;
+  getWorkoutEditStatus: (proposalId: string) => Promise<StrengthEditPreview>;
+  cancelWorkoutEdit: (proposalId: string) => Promise<StrengthEditPreview>;
+  confirmWorkoutEdit: (input: { proposalId: string; reviewHash: string; selectedIds: string[] }) => Promise<StrengthEditPreview>;
   getWatchfaceAutomationStatus: () => Promise<WatchfaceAutomationStatus>;
   configureWatchfaceAutomation: (input: { enabled: boolean; port?: number }) => Promise<WatchfaceAutomationStatus>;
   onWatchfaceAutomationActivate: (callback: () => void) => () => void;
   onWatchfaceAutomationRequest: (callback: (request: WatchfaceAutomationRequest) => void) => () => void;
   respondWatchfaceAutomation: (response: WatchfaceAutomationResponse) => void;
   setWatchfaceAutomationReady: (scope: "hub" | "editor", ready: boolean) => void;
+  sendWatchfaceAi: (requestId: string, messages: WatchfaceAiMessage[], options?: WatchfaceAiOptions) => Promise<void>;
+  cancelWatchfaceAi: (requestId: string) => Promise<void>;
+  listWatchfaceAiModels: () => Promise<ChatGptModelInfo[]>;
+  listWatchfaceAiChats: (projectKey: string) => Promise<WatchfaceAiChatSummary[]>;
+  loadWatchfaceAiChat: (id: string) => Promise<WatchfaceAiSavedChat>;
+  saveWatchfaceAiChat: (input: { id?: string; projectKey: string; title?: string; messages: unknown[] }) => Promise<WatchfaceAiChatSummary>;
+  renameWatchfaceAiChat: (id: string, title: string) => Promise<WatchfaceAiChatSummary>;
+  deleteWatchfaceAiChat: (id: string) => Promise<void>;
+  copyWatchfaceAiImage: (assetId: string) => Promise<void>;
+  onWatchfaceAiEvent: (callback: (event: WatchfaceAiEvent) => void) => () => void;
   getAppleCalendarStatus: () => Promise<CalendarConnectionStatus>;
   connectAppleCalendar: (input: AppleCalendarCredentials) => Promise<CalendarConnectionStatus>;
   cancelAppleCalendarConnect: () => Promise<void>;
@@ -228,11 +257,23 @@ export interface CorosLinkApi {
   importCorosWatchfaceShareLink: (
     shareUrl: string
   ) => Promise<CorosWatchfaceShareImport>;
+  ensureCorosOfficialAssetLibrary: (
+    input: { firmwareType: string; rebuild?: boolean }
+  ) => Promise<CorosOfficialAssetLibraryStatus>;
+  getCorosOfficialAssetLibraryStatus: (
+    input: { firmwareType: string }
+  ) => Promise<CorosOfficialAssetLibraryStatus>;
+  listCorosOfficialAssets: (
+    input: CorosOfficialAssetQuery
+  ) => Promise<CorosOfficialAssetPage>;
+  readCorosOfficialAssetFrames: (
+    input: { firmwareType: string; id: string }
+  ) => Promise<CorosOfficialAssetFrames>;
   listCommunityWatchfaces: (
     input: CommunityWatchfaceCatalogQuery
   ) => Promise<CommunityWatchfaceCatalogPage>;
-  getCommunityWatchface: (slug: string) => Promise<CommunityWatchface>;
-  importCommunityWatchface: (slug: string) => Promise<CommunityWatchfaceImport>;
+  getCommunityWatchface: (slug: string, model?: string) => Promise<CommunityWatchface>;
+  importCommunityWatchface: (slug: string, model?: string) => Promise<CommunityWatchfaceImport>;
   consumeCommunityWatchfaceOpenRequest: () =>
     Promise<CommunityWatchfaceOpenRequest | null>;
   onCommunityWatchfaceOpenRequest: (
@@ -242,13 +283,9 @@ export interface CorosLinkApi {
     callback: (progress: CommunityWatchfaceDownloadProgress) => void
   ) => () => void;
   chooseCorosWatchfaceArchive: () => Promise<CorosWatchfaceArchive | null>;
-  chooseLegacy614aCarrier: () => Promise<CorosLegacy614aCarrierSelection | null>;
-  exportLegacy614aCarrier: (
-    selectionId: string,
-    patch: CorosLegacy614aCarrierPatchInput
-  ) => Promise<CorosLegacy614aCarrierExportResult>;
   chooseCorosWatchfaceArtwork: () => Promise<CorosWatchfaceArtwork | null>;
   chooseCorosWatchfaceRasterFontFolder: () => Promise<CorosWatchfaceRasterFontFolder | null>;
+  convertCorosWatchfaceArchive: (input: CorosWatchfaceConversionInput) => Promise<CorosWatchfaceConversionResult>;
   createCorosWatchfaceArchive: (
     input: CorosWatchfaceCreatorInput
   ) => Promise<CorosWatchfaceArchive>;
@@ -527,6 +564,7 @@ export interface CorosLinkApi {
   getActivityPaceBaselines: () => Promise<ActivityPaceBaselines>;
   getUpcomingWorkouts: (days?: number) => Promise<TrainingHubUpcomingWorkout[]>;
   getTrainingSleepData: (days?: number) => Promise<TrainingHubSleepSummary>;
+  getTrainingHealthInsight: (kind: HealthInsightKind, days?: number) => Promise<HealthInsightResult>;
   getTrainingDailyHealthData: (
     days?: number
   ) => Promise<TrainingHubDailyHealthSummary>;
@@ -674,7 +712,16 @@ export interface CorosLinkApi {
     destination?: TrainingPlanDestination,
     scheduleDate?: string
   ) => Promise<UploadPlanResult>;
+  confirmCorosAction: (requestId: string) => Promise<CoachCorosActionPreview>;
   confirmWorkoutDelete: (requestId: string) => Promise<DeleteWorkoutResult>;
+  getFitIndexStatus: () => Promise<FitIndexStatus>;
+  startFitIndexSync: (options?: FitIndexSyncOptions) => Promise<FitIndexProgress>;
+  cancelFitIndexSync: () => Promise<FitIndexProgress | null>;
+  onFitIndexProgress: (callback: (progress: FitIndexProgress) => void) => () => void;
+  listPinnedCoachCharts: () => Promise<PinnedCoachChart[]>;
+  pinCoachChart: (preview: CoachChartPreview) => Promise<PinnedCoachChart>;
+  unpinCoachChart: (id: string) => Promise<void>;
+  refreshPinnedCoachChart: (id: string) => Promise<PinnedCoachChart | null>;
   setWindowBackground: (color: string) => Promise<void>;
   isWindowFullscreen: () => Promise<boolean>;
   onWindowFullscreenChange: (callback: (fullscreen: boolean) => void) => () => void;

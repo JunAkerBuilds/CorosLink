@@ -164,6 +164,7 @@ export function resolveWatchfacePlacementScene(
   const base = pickPreviewResolution(styledDetails);
   const limits = base
     ? computeLayoutOffsetLimits(base, {
+        configAssetOverrides: design.configAssetOverrides,
         timeStyles: design.timeStyles,
         letterSpacing: design.letterSpacing,
         rasterFont: design.rasterFont

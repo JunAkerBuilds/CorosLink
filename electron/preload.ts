@@ -1,7 +1,9 @@
 import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEventSaveResult } from "./calendarSyncTypes";
+import type { ChatGptModelInfo } from "./chatModels";
+import type { HealthInsightKind, HealthInsightResult } from "./healthInsightsTypes";
 import { contextBridge, ipcRenderer } from "electron";
 import type { DiagnosticsSnapshot, RendererDiagnosticError } from "./diagnosticsTypes";
-import type { WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
+import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "./calendarSyncTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "./googleCalendarTypes";
 import type {
@@ -109,6 +111,12 @@ import type {
   ChatStreamDone,
   ChatStreamError,
   ChatStreamInfo,
+  CoachCorosActionPreview,
+  CoachChartPreview,
+  FitIndexProgress,
+  FitIndexStatus,
+  FitIndexSyncOptions,
+  PinnedCoachChart,
   LocalChatConfig,
   LocalChatConnectionTest,
   LocalChatDiscovery,
@@ -127,15 +135,14 @@ import type {
   ManualActivityInput
 } from "./types";
 import type {
-  CorosLegacy614aCarrierExportResult,
-  CorosLegacy614aCarrierPatchInput,
-  CorosLegacy614aCarrierSelection,
   CorosWatchfaceArchive,
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceProjectExportResult,
   CorosWatchfaceArchiveExportInput,
   CorosWatchfaceArtwork,
   CorosWatchfaceCreatorInput,
+  CorosWatchfaceConversionInput,
+  CorosWatchfaceConversionResult,
   CorosWatchfaceExistingShareInput,
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceProject,
@@ -153,6 +160,10 @@ import type {
   CorosWatchfaceThemeDownload,
   CorosWatchfaceThemeDownloadInput,
   CorosWatchfaceThemeListInput,
+  CorosOfficialAssetFrames,
+  CorosOfficialAssetLibraryStatus,
+  CorosOfficialAssetPage,
+  CorosOfficialAssetQuery,
   CorosBatteryQueryInput,
   CorosBatteryReport,
   CorosGearCatalog,
@@ -168,6 +179,17 @@ import type {
 } from "./types";
 
 const api = {
+  getWorkoutAutomationStatus: () => ipcRenderer.invoke("workoutAutomation:status"),
+  configureWorkoutAutomation: (input: { enabled: boolean; port?: number }) => ipcRenderer.invoke("workoutAutomation:configure", input),
+  onWorkoutEditsChanged: (callback: () => void): (() => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("workoutEdits:changed", listener);
+    return () => ipcRenderer.removeListener("workoutEdits:changed", listener);
+  },
+  listWorkoutEdits: () => ipcRenderer.invoke("workoutEdits:list"),
+  getWorkoutEditStatus: (proposalId: string) => ipcRenderer.invoke("workoutEdits:status", proposalId),
+  cancelWorkoutEdit: (proposalId: string) => ipcRenderer.invoke("workoutEdits:cancel", proposalId),
+  confirmWorkoutEdit: (input: { proposalId: string; reviewHash: string; selectedIds: string[] }) => ipcRenderer.invoke("workoutEdits:confirm", input),
   getWatchfaceAutomationStatus: (): Promise<WatchfaceAutomationStatus> => ipcRenderer.invoke("watchfaceAutomation:status"),
   configureWatchfaceAutomation: (input: { enabled: boolean; port?: number }): Promise<WatchfaceAutomationStatus> => ipcRenderer.invoke("watchfaceAutomation:configure", input),
   onWatchfaceAutomationActivate: (callback: () => void): (() => void) => {
@@ -182,6 +204,20 @@ const api = {
   },
   respondWatchfaceAutomation: (response: WatchfaceAutomationResponse): void => ipcRenderer.send("watchfaceAutomation:response", response),
   setWatchfaceAutomationReady: (scope: "hub" | "editor", ready: boolean): void => ipcRenderer.send("watchfaceAutomation:ready", scope, ready),
+  sendWatchfaceAi: (requestId: string, messages: WatchfaceAiMessage[], options?: WatchfaceAiOptions): Promise<void> => ipcRenderer.invoke("watchfaceAi:send", requestId, messages, options ?? {}),
+  cancelWatchfaceAi: (requestId: string): Promise<void> => ipcRenderer.invoke("watchfaceAi:cancel", requestId),
+  listWatchfaceAiModels: (): Promise<ChatGptModelInfo[]> => ipcRenderer.invoke("watchfaceAi:models"),
+  listWatchfaceAiChats: (projectKey: string): Promise<WatchfaceAiChatSummary[]> => ipcRenderer.invoke("watchfaceAi:listChats", projectKey),
+  loadWatchfaceAiChat: (id: string): Promise<WatchfaceAiSavedChat> => ipcRenderer.invoke("watchfaceAi:loadChat", id),
+  saveWatchfaceAiChat: (input: { id?: string; projectKey: string; title?: string; messages: unknown[] }): Promise<WatchfaceAiChatSummary> => ipcRenderer.invoke("watchfaceAi:saveChat", input),
+  renameWatchfaceAiChat: (id: string, title: string): Promise<WatchfaceAiChatSummary> => ipcRenderer.invoke("watchfaceAi:renameChat", id, title),
+  deleteWatchfaceAiChat: (id: string): Promise<void> => ipcRenderer.invoke("watchfaceAi:deleteChat", id),
+  copyWatchfaceAiImage: (assetId: string): Promise<void> => ipcRenderer.invoke("watchfaceAi:copyImage", assetId),
+  onWatchfaceAiEvent: (callback: (event: WatchfaceAiEvent) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: WatchfaceAiEvent) => callback(payload);
+    ipcRenderer.on("watchfaceAi:event", listener);
+    return () => ipcRenderer.removeListener("watchfaceAi:event", listener);
+  },
   getAppleCalendarStatus: (): Promise<CalendarConnectionStatus> => ipcRenderer.invoke("appleCalendar:status"),
   connectAppleCalendar: (input: AppleCalendarCredentials): Promise<CalendarConnectionStatus> => ipcRenderer.invoke("appleCalendar:connect", input),
   cancelAppleCalendarConnect: (): Promise<void> => ipcRenderer.invoke("appleCalendar:cancelConnect"),
@@ -254,14 +290,30 @@ const api = {
     shareUrl: string
   ): Promise<CorosWatchfaceShareImport> =>
     ipcRenderer.invoke("watchfaces:importShareLink", shareUrl),
+  ensureCorosOfficialAssetLibrary: (
+    input: { firmwareType: string; rebuild?: boolean }
+  ): Promise<CorosOfficialAssetLibraryStatus> =>
+    ipcRenderer.invoke("watchfaces:officialAssets:ensure", input),
+  getCorosOfficialAssetLibraryStatus: (
+    input: { firmwareType: string }
+  ): Promise<CorosOfficialAssetLibraryStatus> =>
+    ipcRenderer.invoke("watchfaces:officialAssets:status", input),
+  listCorosOfficialAssets: (
+    input: CorosOfficialAssetQuery
+  ): Promise<CorosOfficialAssetPage> =>
+    ipcRenderer.invoke("watchfaces:officialAssets:list", input),
+  readCorosOfficialAssetFrames: (
+    input: { firmwareType: string; id: string }
+  ): Promise<CorosOfficialAssetFrames> =>
+    ipcRenderer.invoke("watchfaces:officialAssets:frames", input),
   listCommunityWatchfaces: (
     input: CommunityWatchfaceCatalogQuery
   ): Promise<CommunityWatchfaceCatalogPage> =>
     ipcRenderer.invoke("watchfaces:listCommunity", input),
-  getCommunityWatchface: (slug: string): Promise<CommunityWatchface> =>
-    ipcRenderer.invoke("watchfaces:getCommunity", slug),
-  importCommunityWatchface: (slug: string): Promise<CommunityWatchfaceImport> =>
-    ipcRenderer.invoke("watchfaces:importCommunity", slug),
+  getCommunityWatchface: (slug: string, model?: string): Promise<CommunityWatchface> =>
+    ipcRenderer.invoke("watchfaces:getCommunity", slug, model),
+  importCommunityWatchface: (slug: string, model?: string): Promise<CommunityWatchfaceImport> =>
+    ipcRenderer.invoke("watchfaces:importCommunity", slug, model),
   consumeCommunityWatchfaceOpenRequest:
     (): Promise<CommunityWatchfaceOpenRequest | null> =>
       ipcRenderer.invoke("watchfaces:consumeCommunityOpenRequest"),
@@ -289,17 +341,12 @@ const api = {
   },
   chooseCorosWatchfaceArchive: (): Promise<CorosWatchfaceArchive | null> =>
     ipcRenderer.invoke("watchfaces:chooseArchive"),
-  chooseLegacy614aCarrier: (): Promise<CorosLegacy614aCarrierSelection | null> =>
-    ipcRenderer.invoke("watchfaces:chooseLegacy614aCarrier"),
-  exportLegacy614aCarrier: (
-    selectionId: string,
-    patch: CorosLegacy614aCarrierPatchInput
-  ): Promise<CorosLegacy614aCarrierExportResult> =>
-    ipcRenderer.invoke("watchfaces:exportLegacy614aCarrier", selectionId, patch),
   chooseCorosWatchfaceArtwork: (): Promise<CorosWatchfaceArtwork | null> =>
     ipcRenderer.invoke("watchfaces:chooseArtwork"),
   chooseCorosWatchfaceRasterFontFolder: (): Promise<CorosWatchfaceRasterFontFolder | null> =>
     ipcRenderer.invoke("watchfaces:chooseRasterFontFolder"),
+  convertCorosWatchfaceArchive: (input: CorosWatchfaceConversionInput): Promise<CorosWatchfaceConversionResult> =>
+    ipcRenderer.invoke("watchfaces:convertArchive", input),
   createCorosWatchfaceArchive: (
     input: CorosWatchfaceCreatorInput
   ): Promise<CorosWatchfaceArchive> =>
@@ -782,6 +829,8 @@ const api = {
     ipcRenderer.invoke("trainingHub:getUpcomingWorkouts", days),
   getTrainingSleepData: (days?: number): Promise<TrainingHubSleepSummary> =>
     ipcRenderer.invoke("trainingHub:getSleepData", days),
+  getTrainingHealthInsight: (kind: HealthInsightKind, days?: number): Promise<HealthInsightResult> =>
+    ipcRenderer.invoke("trainingHub:getHealthInsight", kind, days),
   getTrainingDailyHealthData: (
     days?: number
   ): Promise<TrainingHubDailyHealthSummary> =>
@@ -1079,8 +1128,36 @@ const api = {
       destination,
       scheduleDate
     ),
+  confirmCorosAction: (requestId: string): Promise<CoachCorosActionPreview> =>
+    ipcRenderer.invoke("chat:confirmCorosAction", requestId),
   confirmWorkoutDelete: (requestId: string): Promise<DeleteWorkoutResult> =>
     ipcRenderer.invoke("chat:confirmWorkoutDelete", requestId),
+  getFitIndexStatus: (): Promise<FitIndexStatus> =>
+    ipcRenderer.invoke("fitIndex:getStatus"),
+  startFitIndexSync: (options?: FitIndexSyncOptions): Promise<FitIndexProgress> =>
+    ipcRenderer.invoke("fitIndex:startSync", options),
+  cancelFitIndexSync: (): Promise<FitIndexProgress | null> =>
+    ipcRenderer.invoke("fitIndex:cancelSync"),
+  onFitIndexProgress: (
+    callback: (progress: FitIndexProgress) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      progress: FitIndexProgress
+    ) => {
+      callback(progress);
+    };
+    ipcRenderer.on("fitIndex:progress", listener);
+    return () => ipcRenderer.removeListener("fitIndex:progress", listener);
+  },
+  listPinnedCoachCharts: (): Promise<PinnedCoachChart[]> =>
+    ipcRenderer.invoke("coachCharts:list"),
+  pinCoachChart: (preview: CoachChartPreview): Promise<PinnedCoachChart> =>
+    ipcRenderer.invoke("coachCharts:pin", preview),
+  unpinCoachChart: (id: string): Promise<void> =>
+    ipcRenderer.invoke("coachCharts:unpin", id),
+  refreshPinnedCoachChart: (id: string): Promise<PinnedCoachChart | null> =>
+    ipcRenderer.invoke("coachCharts:refresh", id),
   setWindowBackground: (color: string): Promise<void> =>
     ipcRenderer.invoke("window:setBackground", color),
   isWindowFullscreen: (): Promise<boolean> =>

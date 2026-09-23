@@ -705,7 +705,7 @@ assert.deepEqual(
 );
 assert.deepEqual(
   getChatGptModelCandidates(undefined, "gpt-5.5").slice(0, 2),
-  ["gpt-5.5", "gpt-5.6-sol"]
+  ["gpt-5.5", "gpt-6-astra"]
 );
 
 const settingsValues = new Map();

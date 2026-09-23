@@ -1,3 +1,4 @@
+import { strengthEditPreviewSchema } from "./workoutEditService";
 import crypto from "node:crypto";
 import {
   deleteChatSessionRow,
@@ -9,6 +10,10 @@ import {
 } from "./database";
 import type {
   ActivityHrTrendPreview,
+  CoachChartPreview,
+  CoachChartResolvedRange,
+  CoachChartResolvedSeries,
+  CoachChartTileSpec,
   ActivityVisualHrSection,
   ActivityVisualLapPoint,
   ActivityVisualPreview,
@@ -29,6 +34,7 @@ import type {
   TrainingHubThresholdZone,
   TrainingHubTrackPoint,
   TrainingTrendPoint,
+  CoachCorosActionPreview,
   WorkoutDeletePreview
 } from "./types";
 import { migrateActivityHrTrendPreview } from "./chatActivityTools";
@@ -631,7 +637,17 @@ function parseTrendPoint(value: unknown): TrainingTrendPoint | null {
       typeof value.avgSleepHrv === "number" ? value.avgSleepHrv : undefined,
     sleepHrvBase:
       typeof value.sleepHrvBase === "number" ? value.sleepHrvBase : undefined,
-    rhr: typeof value.rhr === "number" ? value.rhr : undefined
+    rhr: typeof value.rhr === "number" ? value.rhr : undefined,
+    rpeLoad: typeof value.rpeLoad === "number" ? value.rpeLoad : undefined,
+    sleepMinutes:
+      typeof value.sleepMinutes === "number" ? value.sleepMinutes : undefined,
+    sleepScore: typeof value.sleepScore === "number" ? value.sleepScore : undefined,
+    trainingLoadRatio:
+      typeof value.trainingLoadRatio === "number"
+        ? value.trainingLoadRatio
+        : undefined,
+    staminaLevel:
+      typeof value.staminaLevel === "number" ? value.staminaLevel : undefined
   };
 }
 
@@ -745,9 +761,136 @@ function parseMessageEntry(value: unknown): PersistedChatMessageEntry | null {
   };
 }
 
+function parseCoachChartSeries(value: unknown): CoachChartResolvedSeries | null {
+  if (
+    !isRecord(value) ||
+    typeof value.key !== "string" ||
+    typeof value.label !== "string" ||
+    !Array.isArray(value.values)
+  ) {
+    return null;
+  }
+  const kind =
+    value.kind === "area" || value.kind === "bar" ? value.kind : "line";
+  const axis = value.axis === "right" ? "right" : "left";
+  const color =
+    typeof value.color === "string" &&
+    ["load", "hrv", "sleep", "rpe", "gold", "blue", "accent", "muted"].includes(
+      value.color
+    )
+      ? (value.color as CoachChartResolvedSeries["color"])
+      : "accent";
+  return {
+    key: value.key,
+    label: value.label,
+    kind,
+    axis,
+    color,
+    dashed: value.dashed === true,
+    metric:
+      typeof value.metric === "string"
+        ? (value.metric as CoachChartResolvedSeries["metric"])
+        : undefined,
+    values: value.values.map((entry) =>
+      typeof entry === "number" && Number.isFinite(entry) ? entry : null
+    )
+  };
+}
+
+function parseCoachChartPreview(value: unknown): CoachChartPreview | null {
+  if (
+    !isRecord(value) ||
+    typeof value.previewId !== "string" ||
+    !isRecord(value.spec) ||
+    typeof value.spec.title !== "string" ||
+    !Array.isArray(value.labels) ||
+    !Array.isArray(value.series)
+  ) {
+    return null;
+  }
+  const labels = value.labels.filter(
+    (label): label is string => typeof label === "string"
+  );
+  const series = value.series
+    .map((entry) => parseCoachChartSeries(entry))
+    .filter((entry): entry is CoachChartResolvedSeries => entry !== null);
+  if (labels.length !== value.labels.length || series.length !== value.series.length) {
+    return null;
+  }
+  const ranges: CoachChartResolvedRange[] = Array.isArray(value.ranges)
+    ? value.ranges.flatMap((entry) =>
+        isRecord(entry) &&
+        typeof entry.fromIndex === "number" &&
+        typeof entry.toIndex === "number"
+          ? [
+              {
+                fromIndex: entry.fromIndex,
+                toIndex: entry.toIndex,
+                label: typeof entry.label === "string" ? entry.label : undefined
+              }
+            ]
+          : []
+      )
+    : [];
+  const tiles: CoachChartTileSpec[] = Array.isArray(value.tiles)
+    ? value.tiles.flatMap((entry) =>
+        isRecord(entry) &&
+        typeof entry.label === "string" &&
+        typeof entry.value === "string"
+          ? [
+              {
+                label: entry.label,
+                value: entry.value,
+                caption:
+                  typeof entry.caption === "string" ? entry.caption : undefined
+              }
+            ]
+          : []
+      )
+    : [];
+  return {
+    previewId: value.previewId,
+    spec: value.spec as unknown as CoachChartPreview["spec"],
+    labels,
+    dates: Array.isArray(value.dates)
+      ? value.dates.filter((date): date is string => typeof date === "string")
+      : undefined,
+    series,
+    ranges,
+    tiles,
+    resolvedAt:
+      typeof value.resolvedAt === "string"
+        ? value.resolvedAt
+        : new Date(0).toISOString(),
+    live: value.live === true
+  };
+}
+
 function parseEntry(value: unknown): PersistedChatEntry | null {
   if (!isRecord(value)) {
     return null;
+  }
+
+  if (value.kind === "workoutEdit") {
+    const parsed = strengthEditPreviewSchema.safeParse(value.preview);
+    return parsed.success ? { kind: "workoutEdit", preview: parsed.data } : null;
+  }
+
+  if (value.kind === "corosAction") {
+    const p = value.preview;
+    if (!isRecord(p) || typeof p.requestId !== "string" || typeof p.title !== "string" ||
+      typeof p.summary !== "string" || typeof p.createdAt !== "number" ||
+      !["Workout Library", "Calendar", "Training Plan"].includes(String(p.destination)) ||
+      !["pending", "saving", "saved", "uncertain"].includes(String(p.state)) || !Array.isArray(p.details)) return null;
+    const preview: CoachCorosActionPreview = {
+      requestId: p.requestId, title: p.title, summary: p.summary, createdAt: p.createdAt,
+      destination: p.destination as CoachCorosActionPreview["destination"],
+      state: p.state as CoachCorosActionPreview["state"],
+      details: p.details.filter((line): line is string => typeof line === "string"),
+      ...(typeof p.date === "string" ? { date: p.date } : {}),
+      ...(typeof p.message === "string" ? { message: p.message } : {})
+    };
+    return { kind: "corosAction", preview };
   }
 
   if (value.kind === "planDraft") {
@@ -785,6 +928,11 @@ function parseEntry(value: unknown): PersistedChatEntry | null {
   if (value.kind === "hrZoneSummary") {
     const preview = parseHrZonePreview(value.preview);
     return preview ? { kind: "hrZoneSummary", preview } : null;
+  }
+
+  if (value.kind === "coachChart") {
+    const preview = parseCoachChartPreview(value.preview);
+    return preview ? { kind: "coachChart", preview } : null;
   }
 
   return parseMessageEntry(value);

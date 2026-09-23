@@ -65,7 +65,8 @@ export function watchfaceInspectorSpecificTitle(
   }
   if (
     context.kind === "batteryIcon" ||
-    context.kind === "controlBatteryIcon"
+    context.kind === "controlBatteryIcon" ||
+    context.kind === "arcCut"
   ) {
     return "Sprite";
   }

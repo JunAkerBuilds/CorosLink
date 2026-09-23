@@ -235,9 +235,10 @@ export function removeMcpServer(
     mcpSecretKey(id, "clientInfo"),
     mcpSecretKey(id, "bearer"),
     `mcp.${id}.resourceUrl`,
+    `mcp.${id}.authorizationId`,
     // The original COROS connection predates the generic registry.
     ...(id === "coros"
-      ? ["corosMcp.tokens", "corosMcp.clientInfo", "corosMcp.resourceUrl"]
+      ? ["corosMcp.tokens", "corosMcp.clientInfo", "corosMcp.resourceUrl", "corosMcp.authorizationId"]
       : [])
   ]);
 }

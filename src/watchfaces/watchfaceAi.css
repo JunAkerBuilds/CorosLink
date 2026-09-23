@@ -1,0 +1,1629 @@
+/* Watch Face Studio — Watchmaker AI chat in the right-hand panel. */
+
+.watchface-shell .wf-properties-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+/* The pane becomes a column: heading, tabs, then a log that scrolls on its
+   own above a composer pinned to the bottom. */
+:root .watchface-shell .wf-properties-pane.is-ai {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+:root .watchface-shell .wf-properties-pane.is-ai > :is(.wf-pane-heading, .wf-properties-tabs) {
+  flex: 0 0 auto;
+}
+
+.watchface-shell .wf-ai-tabpanel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.watchface-shell .wf-ai-tabpanel[hidden],
+.watchface-shell .wf-ai-panel[hidden] {
+  display: none;
+}
+
+.watchface-shell .wf-ai-panel {
+  --wf-ai-line: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --wf-ai-line-strong: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  --wf-ai-fill: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --wf-ai-fill-hover: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  /* Lume comes in two classic tints: C3 green and BGW9 ice blue. Watchmaker glows
+     from one to the other. */
+  --wf-ai-c3: var(--accent);
+  --wf-ai-c3-hi: var(--accent-strong);
+  --wf-ai-bgw: #8ccdf5;
+  --wf-ai-glow: linear-gradient(125deg, var(--wf-ai-c3-hi), var(--wf-ai-bgw));
+  --wf-ai-surface: var(--atl-tray-raised, var(--wf-surface-raised));
+  --wf-ai-sunburst: rgb(236 240 243 / 7%);
+  --wf-ai-glow-ink: #03140d;
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  color: var(--text-primary);
+  font-size: var(--wf-text-md);
+  line-height: 1.5;
+}
+
+/* On paper, light reads as saturated ink. */
+:root[data-theme="paper"] .watchface-shell .wf-ai-panel {
+  --wf-ai-bgw: #1d6796;
+  --wf-ai-surface: #ffffff;
+  --wf-ai-sunburst: rgb(30 45 35 / 10%);
+  --wf-ai-glow-ink: #ffffff;
+}
+
+/* --- Conversation -------------------------------------------------------- */
+
+.wf-ai-log {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 14px 18px;
+  scrollbar-width: thin;
+}
+
+.wf-ai-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wf-ai-turn.is-user {
+  align-items: flex-end;
+}
+
+.wf-ai-bubble {
+  max-width: 88%;
+  border: 1px solid color-mix(in srgb, var(--wf-ai-c3) 24%, transparent);
+  border-radius: 14px 14px 4px 14px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--wf-ai-c3) 14%, transparent), color-mix(in srgb, var(--wf-ai-bgw) 7%, transparent)),
+    var(--wf-ai-fill);
+  padding: 7px 11px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.wf-ai-user-images {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 88%;
+}
+
+.wf-ai-user-images img {
+  width: auto;
+  min-width: 40px;
+  max-width: 100%;
+  height: 72px;
+  border: 1px solid var(--wf-ai-line);
+  border-radius: 10px;
+  background: var(--wf-ai-fill);
+  object-fit: contain;
+}
+
+.wf-ai-markdown {
+  overflow-wrap: anywhere;
+}
+
+.wf-ai-markdown > :first-child { margin-top: 0; }
+.wf-ai-markdown > :last-child { margin-bottom: 0; }
+
+.wf-ai-markdown :is(p, ul, ol) {
+  margin: 0 0 8px;
+}
+
+.wf-ai-markdown :is(ul, ol) {
+  padding-left: 18px;
+}
+
+.wf-ai-markdown li + li {
+  margin-top: 2px;
+}
+
+.wf-ai-markdown strong {
+  font-weight: 600;
+}
+
+.wf-ai-markdown code {
+  border-radius: 4px;
+  background: var(--wf-ai-fill-hover);
+  padding: 1px 4px;
+  font-size: 0.9em;
+}
+
+/* --- Activity disclosure ------------------------------------------------- */
+
+.wf-ai-activity {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.wf-ai-activity-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 2px 8px 2px 0;
+  font: inherit;
+  font-size: var(--wf-text-sm);
+  cursor: pointer;
+}
+
+.wf-ai-activity-toggle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-ai-activity-toggle:hover {
+  color: var(--text-primary);
+}
+
+.wf-ai-activity-chevron {
+  flex: none;
+  opacity: 0.7;
+  transition: transform 120ms ease;
+}
+
+.wf-ai-activity.is-open .wf-ai-activity-chevron {
+  transform: rotate(180deg);
+}
+
+.wf-ai-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 6px 0 0;
+  border-left: 1px solid var(--wf-ai-line-strong);
+  padding: 2px 0 2px 10px;
+  list-style: none;
+  color: var(--text-secondary);
+  font-size: var(--wf-text-sm);
+}
+
+.wf-ai-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.wf-ai-step-icon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 3px;
+  color: var(--text-muted);
+}
+
+.wf-ai-steps li.is-call .wf-ai-step-icon {
+  color: var(--wf-ai-c3-hi);
+}
+
+.wf-ai-steps li.is-failed .wf-ai-step-icon {
+  color: var(--error-text);
+}
+
+.wf-ai-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.wf-ai-step-body code {
+  display: block;
+  border-radius: 6px;
+  background: var(--wf-ai-fill);
+  color: var(--text-muted);
+  padding: 4px 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* --- Previews, notes, errors --------------------------------------------- */
+
+.wf-ai-previews {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.wf-ai-previews img {
+  width: 52px;
+  height: 52px;
+  border: 1px solid var(--wf-ai-line);
+  border-radius: 50%;
+  background: #000;
+  object-fit: cover;
+  opacity: 0.7;
+}
+
+.wf-ai-previews img.is-latest {
+  width: 104px;
+  height: 104px;
+  border-color: color-mix(in srgb, var(--wf-ai-c3) 45%, transparent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--wf-ai-c3) 10%, transparent),
+    0 10px 28px -8px color-mix(in srgb, var(--wf-ai-c3) 40%, rgb(0 0 0 / 40%));
+  opacity: 1;
+}
+
+.wf-ai-thinking,
+.wf-ai-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--wf-text-sm);
+}
+
+.wf-ai-note svg {
+  color: var(--accent-strong);
+}
+
+.wf-ai-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--text-muted) 0%,
+    var(--text-muted) 32%,
+    var(--wf-ai-c3-hi, var(--text-primary)) 45%,
+    var(--wf-ai-bgw, var(--text-primary)) 55%,
+    var(--text-muted) 68%,
+    var(--text-muted) 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: wf-ai-shimmer 1.8s linear infinite;
+}
+
+.wf-ai-error {
+  margin: 0;
+  color: var(--error-text);
+  font-size: var(--wf-text-sm);
+}
+
+.wf-ai-error-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--error-text) 35%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--error-text) 8%, transparent);
+  color: var(--error-text);
+  padding: 8px 10px;
+  font-size: var(--wf-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.wf-ai-error-card svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.wf-ai-cli-setup {
+  padding: 14px;
+  border: 1px solid var(--wf-ai-line-strong);
+  border-radius: 12px;
+  background: var(--wf-ai-surface);
+  color: var(--text-primary);
+  font-size: var(--wf-text-sm);
+  line-height: 1.55;
+}
+.wf-ai-cli-setup-heading { display: flex; align-items: center; gap: 8px; }
+.wf-ai-cli-setup-heading svg { flex: none; color: var(--text-muted); }
+.wf-ai-cli-setup p { margin: 10px 0; }
+.wf-ai-cli-setup ol { margin: 12px 0; padding-left: 20px; }
+.wf-ai-cli-setup li + li { margin-top: 8px; }
+.wf-ai-cli-setup a { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
+.wf-ai-cli-setup a svg { display: inline; vertical-align: middle; margin-left: 3px; }
+.wf-ai-cli-setup code { padding: 1px 4px; background: var(--wf-ai-surface); border: 1px solid var(--wf-ai-line-strong); border-radius: 4px; }
+.wf-ai-cli-setup-note, .wf-ai-cli-setup details { color: var(--text-muted); }
+.wf-ai-cli-setup-fallback { padding: 7px 10px; border: 1px solid var(--wf-ai-line-strong); border-radius: 7px; color: var(--text-primary); background: var(--wf-ai-surface); cursor: pointer; }
+.wf-ai-cli-setup-fallback:disabled { opacity: .5; cursor: default; }
+.wf-ai-cli-setup details { margin-top: 12px; font-size: 11px; }
+.wf-ai-cli-setup summary { cursor: pointer; }
+.wf-ai-cli-setup pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.wf-ai-cli-setup a:focus-visible, .wf-ai-cli-setup button:focus-visible, .wf-ai-cli-setup summary:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 3px; }
+
+/* --- Empty and signed-out states ----------------------------------------- */
+
+.wf-ai-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-block: auto;
+  padding: 12px 4px;
+  color: var(--text-secondary);
+}
+
+.wf-ai-panel > .wf-ai-hero {
+  padding: 24px 18px;
+}
+
+.wf-ai-hero strong {
+  color: var(--text-primary);
+  font-size: var(--wf-text-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.wf-ai-hero p {
+  margin: 0 0 4px;
+}
+
+.wf-ai-mark {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  margin-bottom: 4px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 30%, transparent), color-mix(in srgb, var(--accent) 8%, transparent));
+  color: var(--accent-strong);
+}
+
+.wf-ai-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  margin-top: 8px;
+  border-top: 1px solid var(--wf-ai-line);
+  padding-top: 8px;
+}
+
+.wf-ai-suggestions button {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 7px 8px;
+  margin-inline: -8px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wf-ai-suggestions button:hover:not(:disabled) {
+  background: var(--wf-ai-fill-hover);
+}
+
+/* --- Composer ------------------------------------------------------------ */
+
+.wf-ai-composer-wrap {
+  position: relative;
+  isolation: isolate;
+  flex: 0 0 auto;
+  padding: 0 12px 12px;
+}
+
+/* Light pooling up from the composer, brighter while you type or Watchmaker works. */
+.wf-ai-composer-wrap::before {
+  content: "";
+  position: absolute;
+  inset: -40px 0 0;
+  z-index: -1;
+  background:
+    radial-gradient(50% 55% at 34% 60%, color-mix(in srgb, var(--wf-ai-c3) 20%, transparent), transparent),
+    radial-gradient(42% 50% at 74% 64%, color-mix(in srgb, var(--wf-ai-bgw) 14%, transparent), transparent);
+  opacity: 0.75;
+  transition: opacity 320ms ease;
+  pointer-events: none;
+}
+
+.wf-ai-composer-wrap:focus-within::before,
+.wf-ai-composer-wrap:has(.wf-ai-composer.is-working)::before {
+  opacity: 1;
+}
+
+.wf-ai-composer {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--wf-ai-line-strong);
+  border-radius: 14px;
+  background: var(--wf-ai-fill);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.wf-ai-composer:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--wf-ai-line-strong));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.wf-ai-composer textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  max-height: 200px;
+  resize: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 11px 12px 4px;
+  font: inherit;
+  line-height: 1.45;
+  outline: none;
+}
+
+.wf-ai-composer textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.wf-ai-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px 0;
+}
+
+.wf-ai-attachment {
+  position: relative;
+}
+
+/* Fixed height, natural width: a wide crop shows whole instead of a sliver. */
+.wf-ai-attachment img {
+  display: block;
+  width: auto;
+  min-width: 32px;
+  max-width: 168px;
+  height: 48px;
+  border: 1px solid var(--wf-ai-line);
+  border-radius: 8px;
+  background: var(--wf-ai-fill);
+  object-fit: contain;
+}
+
+.wf-ai-attachment button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  /* The Studio's 40px button floor turned this into a pill over the image. */
+  min-height: 0;
+  place-items: center;
+  border: 1px solid var(--wf-ai-line-strong);
+  border-radius: 50%;
+  background: var(--surface, var(--wf-surface-raised));
+  color: var(--text-primary);
+  padding: 0;
+  cursor: pointer;
+}
+
+.wf-ai-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px 6px;
+}
+
+.wf-ai-toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.wf-ai-icon {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.wf-ai-icon:hover:not(:disabled) {
+  background: var(--wf-ai-fill-hover);
+  color: var(--text-primary);
+}
+
+.wf-ai-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  border-radius: 8px;
+  color: var(--text-muted);
+}
+
+.wf-ai-select:hover {
+  background: var(--wf-ai-fill-hover);
+  color: var(--text-primary);
+}
+
+.wf-ai-select select {
+  min-width: 0;
+  max-width: 150px;
+  height: 28px;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0 20px 0 8px;
+  font: inherit;
+  font-size: var(--wf-text-sm);
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.wf-ai-select select:focus-visible {
+  outline: 2px solid var(--wf-focus);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+
+.wf-ai-select svg {
+  position: absolute;
+  right: 6px;
+  pointer-events: none;
+}
+
+.wf-ai-select svg.wf-ai-select-lead {
+  left: 7px;
+  right: auto;
+}
+
+.wf-ai-select.has-icon select {
+  padding-left: 25px;
+}
+
+.wf-ai-send,
+.wf-ai-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  background: var(--wf-ai-glow);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 28%),
+    0 6px 16px -6px color-mix(in srgb, var(--wf-ai-c3) 75%, transparent);
+  color: var(--wf-ai-glow-ink);
+  font: inherit;
+  cursor: pointer;
+  transition: filter 120ms ease, transform 120ms ease, box-shadow 160ms ease;
+}
+
+.wf-ai-send {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  margin-left: 2px;
+  border-radius: 50%;
+}
+
+.wf-ai-send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.wf-ai-primary {
+  min-height: 34px;
+  margin-top: 4px;
+  border-radius: 10px;
+  padding: 0 16px;
+  font-size: var(--wf-text-sm);
+  font-weight: 600;
+}
+
+:is(.wf-ai-send, .wf-ai-primary):hover:not(:disabled) {
+  filter: brightness(1.08) saturate(1.1);
+}
+
+:is(.wf-ai-send, .wf-ai-icon, .wf-ai-suggestions button):disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.wf-ai-primary:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.wf-ai-attach-error {
+  padding: 6px 4px 0;
+}
+
+/* --- Generated artwork -------------------------------------------------- */
+
+.wf-ai-generated {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.wf-ai-generated figure {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--wf-ai-line);
+  border-radius: 10px;
+  /* Checkerboard so transparent sprites read as transparent. */
+  background:
+    conic-gradient(var(--wf-ai-fill-hover) 25%, transparent 0 50%, var(--wf-ai-fill-hover) 0 75%, transparent 0)
+    0 0 / 12px 12px;
+}
+
+.wf-ai-generated img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+}
+
+.wf-ai-generated figcaption {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 55%);
+  color: #fff;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-ai-copy-image {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 1px solid rgb(255 255 255 / 25%);
+  border-radius: 6px;
+  background: rgb(0 0 0 / 75%);
+  color: #fff;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.wf-ai-copy-image:hover { background: rgb(0 0 0 / 95%); }
+.wf-ai-copy-image:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+.wf-ai-copy-image:disabled { cursor: wait; opacity: .7; }
+.wf-ai-copy-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.wf-ai-copy-error { padding: 6px; background: var(--wf-ai-fill); color: var(--text-primary); font-size: 11px; overflow-wrap: anywhere; }
+
+/* --- History ----------------------------------------------------------- */
+
+.wf-ai-icon.is-active {
+  background: var(--wf-ai-fill-hover);
+  color: var(--accent-strong);
+}
+
+.wf-ai-history {
+  position: relative;
+  display: inline-flex;
+}
+
+.watchface-shell .wf-properties-pane.is-ai > .wf-pane-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wf-ai-heading-actions,
+.wf-ai-chat-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.wf-ai-inline-controls {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 4;
+}
+
+.wf-ai-history-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 10;
+  width: min(300px, calc(100vw - 32px));
+  max-height: 340px;
+  overflow-y: auto;
+  border: 1px solid var(--wf-ai-line-strong);
+  border-radius: 12px;
+  background: var(--surface, var(--wf-surface-raised));
+  box-shadow: 0 14px 40px rgb(0 0 0 / 32%);
+  padding: 6px;
+}
+
+.wf-ai-history-heading {
+  margin: 0;
+  padding: 6px 8px 4px;
+  color: var(--text-muted);
+  font-size: var(--wf-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.wf-ai-history-empty {
+  margin: 0;
+  padding: 6px 8px 8px;
+  color: var(--text-muted);
+  font-size: var(--wf-text-sm);
+}
+
+.wf-ai-history-menu ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wf-ai-history-menu li {
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+}
+
+.wf-ai-history-menu li:hover,
+.wf-ai-history-menu li.is-current {
+  background: var(--wf-ai-fill-hover);
+}
+
+.wf-ai-history-open {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 7px 8px;
+  font: inherit;
+  font-size: var(--wf-text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.wf-ai-history-open span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-ai-history-open small {
+  color: var(--text-muted);
+  font-size: var(--wf-text-xs);
+}
+
+.wf-ai-history-delete {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  place-items: center;
+  margin-right: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.wf-ai-history-menu li:hover .wf-ai-history-delete,
+.wf-ai-history-delete:focus-visible {
+  opacity: 1;
+}
+
+.wf-ai-history-delete:hover {
+  color: var(--error-text);
+}
+
+/* --- Drag and drop ------------------------------------------------------- */
+
+.wf-ai-dropzone {
+  position: absolute;
+  inset: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface, transparent));
+  color: var(--accent-strong);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* --- Motion -------------------------------------------------------------- */
+
+.wf-ai-spin {
+  animation: wf-ai-spin 0.9s linear infinite;
+}
+
+@keyframes wf-ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes wf-ai-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -150% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wf-ai-spin,
+  .wf-ai-shimmer {
+    animation: none;
+  }
+
+  .wf-ai-shimmer {
+    color: var(--text-muted);
+  }
+}
+
+/* =========================================================================
+   Watchmaker dial — the panel's signature. A bezel, a tick ring and a lume
+   seconds hand: one sweep a minute at rest, racing while Watchmaker works.
+   ========================================================================= */
+
+.wf-watchmaker-dial {
+  --dial-lume: var(--atl-lume, var(--accent));
+  --dial-face: radial-gradient(circle at 50% 32%, #1c2226 0%, #0b0e10 72%);
+  position: relative;
+  display: inline-block;
+  width: var(--dial-size);
+  height: var(--dial-size);
+  flex: none;
+  border-radius: 50%;
+  isolation: isolate;
+  vertical-align: middle;
+}
+
+.wf-watchmaker-dial > span {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.wf-watchmaker-dial-bezel {
+  inset: 0;
+  background: var(--atl-bezel-metal, conic-gradient(from 210deg, #2b2f34, #474d54 12%, #262a2e 26%, #3b4046 40%, #22262a 55%, #43494f 68%, #272b30 82%, #3a3f45 92%, #2b2f34));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 9%), 0 1px 2px rgb(0 0 0 / 35%);
+}
+
+.wf-watchmaker-dial-bezel::after {
+  content: "";
+  position: absolute;
+  inset: calc(var(--dial-size) * 0.11);
+  border-radius: 50%;
+  background: var(--dial-face);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 70%);
+}
+
+/* Hour markers; large dials add the 60 minute ticks between them. */
+.wf-watchmaker-dial-ticks {
+  inset: calc(var(--dial-size) * 0.15);
+  background: repeating-conic-gradient(from -2deg, var(--atl-tick-hour, rgb(244 247 249 / 82%)) 0 4deg, transparent 4deg 30deg);
+  -webkit-mask: radial-gradient(circle closest-side, transparent calc(100% - var(--dial-size) * 0.1), #000 calc(100% - var(--dial-size) * 0.1 + 0.5px));
+  mask: radial-gradient(circle closest-side, transparent calc(100% - var(--dial-size) * 0.1), #000 calc(100% - var(--dial-size) * 0.1 + 0.5px));
+  opacity: 0.8;
+}
+
+.wf-watchmaker-dial.is-large .wf-watchmaker-dial-ticks {
+  background:
+    repeating-conic-gradient(from -1deg, var(--atl-tick-hour, rgb(244 247 249 / 82%)) 0 2deg, transparent 2deg 30deg),
+    repeating-conic-gradient(from -0.4deg, var(--atl-tick, rgb(236 240 243 / 34%)) 0 0.8deg, transparent 0.8deg 6deg);
+  -webkit-mask: radial-gradient(circle closest-side, transparent calc(100% - var(--dial-size) * 0.06), #000 calc(100% - var(--dial-size) * 0.06 + 0.5px));
+  mask: radial-gradient(circle closest-side, transparent calc(100% - var(--dial-size) * 0.06), #000 calc(100% - var(--dial-size) * 0.06 + 0.5px));
+  opacity: 1;
+}
+
+/* The seconds hand drags a fading lume trail across the face. */
+.wf-watchmaker-dial-sweep {
+  inset: calc(var(--dial-size) * 0.11);
+  background: conic-gradient(from 0deg, transparent 0 72%, color-mix(in srgb, var(--dial-lume) 38%, transparent) 100%);
+  animation: wf-watchmaker-sweep 60s linear infinite;
+}
+
+.wf-watchmaker-dial-sweep::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  width: max(1px, calc(var(--dial-size) * 0.035));
+  height: 44%;
+  border-radius: 999px;
+  background: var(--dial-lume);
+  box-shadow: 0 0 calc(var(--dial-size) * 0.08) var(--dial-lume);
+  transform: translateX(-50%);
+}
+
+.wf-watchmaker-dial.is-working .wf-watchmaker-dial-sweep {
+  animation-duration: 1.4s;
+}
+
+.wf-watchmaker-dial-hands {
+  inset: 0;
+}
+
+.wf-watchmaker-dial-hands::before,
+.wf-watchmaker-dial-hands::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  border-radius: 999px;
+  background: linear-gradient(var(--atl-ink, #d9dee3), var(--atl-titanium-dim, #949ca4));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 60%);
+  transform-origin: 50% 100%;
+}
+
+/* 10:10, the pose every watch is photographed in. */
+.wf-watchmaker-dial-hands::before {
+  width: calc(var(--dial-size) * 0.045);
+  height: 22%;
+  transform: translateX(-50%) rotate(-55deg);
+}
+
+.wf-watchmaker-dial-hands::after {
+  width: calc(var(--dial-size) * 0.03);
+  height: 32%;
+  transform: translateX(-50%) rotate(60deg);
+}
+
+.wf-watchmaker-dial-cap {
+  top: 50%;
+  left: 50%;
+  width: max(3px, calc(var(--dial-size) * 0.1));
+  height: max(3px, calc(var(--dial-size) * 0.1));
+  background: radial-gradient(circle at 35% 30%, #f1f4f6, #7d868e 70%);
+  box-shadow: 0 0 0 max(0.5px, calc(var(--dial-size) * 0.012)) var(--dial-lume);
+  transform: translate(-50%, -50%);
+}
+
+@keyframes wf-watchmaker-sweep {
+  to { transform: rotate(360deg); }
+}
+
+/* --- The AI tab: lit like lume ------------------------------------------- */
+
+@property --wf-ai-tab-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* Studio-scoped selectors so these outrank the Atelier's tab skin. */
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabs button.wf-ai-tab,
+:root .watchface-shell .wf-properties-tabs button.wf-ai-tab {
+  --tab-lume: var(--accent);
+  --tab-lume-hi: color-mix(in srgb, var(--accent) 55%, #ffffff);
+  --tab-shine: #ffffff;
+  position: relative;
+  isolation: isolate;
+  gap: 7px;
+  color: color-mix(in srgb, var(--accent-strong) 70%, var(--atl-titanium, var(--text-secondary)));
+  transition: color 200ms ease, box-shadow 260ms ease, background-color 200ms ease;
+}
+
+/* A faint charged rim even at rest, so the tab reads as the AI entry point. */
+:root .watchface-shell .wf-properties-tabs button.wf-ai-tab::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--wf-ai-tab-angle),
+    color-mix(in srgb, var(--tab-lume) 55%, transparent),
+    transparent 30%,
+    color-mix(in srgb, var(--tab-lume) 20%, transparent) 55%,
+    transparent 75%,
+    color-mix(in srgb, var(--tab-lume) 55%, transparent)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: wf-ai-tab-orbit 6s linear infinite;
+  pointer-events: none;
+}
+
+:root .watchface-shell .wf-properties-tabs button.wf-ai-tab:hover {
+  color: var(--tab-lume-hi);
+  box-shadow: 0 0 16px -4px color-mix(in srgb, var(--tab-lume) 55%, transparent);
+}
+
+:root .watchface-shell.watchface-shell--studio .wf-properties-tabs button.wf-ai-tab[aria-selected="true"],
+:root .watchface-shell .wf-properties-tabs button.wf-ai-tab[aria-selected="true"] {
+  background:
+    radial-gradient(120% 140% at 50% 120%, color-mix(in srgb, var(--tab-lume) 38%, transparent), transparent 60%),
+    linear-gradient(180deg, color-mix(in srgb, var(--tab-lume) 16%, transparent), transparent 80%),
+    var(--wf-insp-raised, var(--atl-tray-raised, var(--wf-surface-raised)));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--tab-lume-hi) 35%, transparent),
+    0 0 10px -2px color-mix(in srgb, var(--tab-lume) 70%, transparent),
+    0 0 26px -6px color-mix(in srgb, var(--tab-lume) 60%, transparent);
+  color: var(--tab-lume-hi);
+  animation: wf-ai-tab-breathe 3.2s ease-in-out infinite;
+}
+
+:root .watchface-shell .wf-properties-tabs button.wf-ai-tab[aria-selected="true"]::before {
+  padding: 1.25px;
+  background: conic-gradient(
+    from var(--wf-ai-tab-angle),
+    var(--tab-lume-hi),
+    color-mix(in srgb, var(--tab-lume) 50%, transparent) 18%,
+    transparent 38%,
+    color-mix(in srgb, var(--tab-lume) 70%, transparent) 60%,
+    transparent 80%,
+    var(--tab-lume-hi)
+  );
+  animation-duration: 3.5s;
+}
+
+/* On paper, light glows as saturated ink; white highlights would vanish. */
+:root[data-theme="paper"] .watchface-shell .wf-properties-tabs button.wf-ai-tab {
+  --tab-lume-hi: color-mix(in srgb, var(--accent) 70%, #0b2a1d);
+  --tab-shine: color-mix(in srgb, var(--accent) 45%, #04140d);
+}
+
+/* The label is lit from within and a highlight glides across it. */
+.wf-ai-tab-label {
+  font-family: var(--atl-engrave, inherit);
+  font-stretch: 112%;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 11.5px;
+}
+
+.wf-ai-tab[aria-selected="true"] .wf-ai-tab-label {
+  background: linear-gradient(
+    100deg,
+    var(--tab-lume) 0%,
+    var(--tab-lume-hi) 35%,
+    var(--tab-shine) 50%,
+    var(--tab-lume-hi) 65%,
+    var(--tab-lume) 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--tab-lume) 75%, transparent));
+  animation: wf-ai-tab-shine 3.2s ease-in-out infinite;
+}
+
+.wf-ai-tab .wf-watchmaker-dial {
+  transition: filter 200ms ease;
+}
+
+.wf-ai-tab[aria-selected="true"] .wf-watchmaker-dial,
+.wf-ai-tab:hover .wf-watchmaker-dial {
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 80%, transparent));
+}
+
+/* Working: the rim races, the glow brightens, wherever you are in Studio. */
+:root .watchface-shell .wf-properties-tabs button.wf-ai-tab.is-working::before {
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--wf-ai-tab-angle),
+    #ffffff,
+    var(--tab-lume) 12%,
+    transparent 34%,
+    transparent 66%,
+    var(--tab-lume) 88%,
+    #ffffff
+  );
+  animation-duration: 1.2s;
+}
+
+:root .watchface-shell .wf-properties-tabs button.wf-ai-tab.is-working {
+  color: var(--tab-lume-hi);
+  animation: wf-ai-tab-breathe 1.2s ease-in-out infinite;
+}
+
+.wf-ai-tab.is-working .wf-watchmaker-dial {
+  filter: drop-shadow(0 0 7px var(--accent));
+}
+
+@keyframes wf-ai-tab-orbit {
+  to { --wf-ai-tab-angle: 360deg; }
+}
+
+@keyframes wf-ai-tab-breathe {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--tab-lume-hi) 35%, transparent),
+      0 0 8px -2px color-mix(in srgb, var(--tab-lume) 60%, transparent),
+      0 0 20px -8px color-mix(in srgb, var(--tab-lume) 50%, transparent);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--tab-lume-hi) 45%, transparent),
+      0 0 14px -1px color-mix(in srgb, var(--tab-lume) 85%, transparent),
+      0 0 34px -4px color-mix(in srgb, var(--tab-lume) 70%, transparent);
+  }
+}
+
+@keyframes wf-ai-tab-shine {
+  0%, 100% { background-position: 100% 0; }
+  50% { background-position: 0% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wf-ai-tab,
+  .wf-ai-tab::before,
+  .wf-ai-tab .wf-ai-tab-label {
+    animation: none !important;
+  }
+}
+
+/* --- Header mark and bylines --------------------------------------------- */
+
+.wf-ai-byline {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--atl-titanium-dim, var(--text-muted));
+  font-family: var(--atl-engrave, inherit);
+  font-size: 10.5px;
+  font-stretch: 112%;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.wf-ai-turn.is-assistant .wf-ai-byline {
+  margin-bottom: -2px;
+}
+
+/* --- Empty state: the dial as a thesis ----------------------------------- */
+
+.wf-ai-hero.is-bench {
+  position: relative;
+  isolation: isolate;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 6px 8px;
+  text-align: center;
+}
+
+/* The model is inscribed under the dial, as a caliber would be, on a small
+   lit plate whose pip pulses while the panel is ready. */
+.wf-ai-hero.is-bench .wf-ai-caliber {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  margin: 0 0 8px;
+  border: 1px solid color-mix(in srgb, var(--wf-ai-c3) 28%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wf-ai-c3) 8%, transparent);
+  padding: 4px 9px 4px 9px;
+  color: var(--atl-titanium-dim, var(--text-muted));
+  font-family: var(--atl-engrave, inherit);
+  font-size: 10px;
+  font-stretch: 125%;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.wf-ai-caliber b {
+  overflow: hidden;
+  color: var(--wf-ai-c3-hi);
+  font-weight: 650;
+  text-overflow: ellipsis;
+}
+
+.wf-ai-live {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--wf-ai-glow);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--wf-ai-c3) 80%, transparent);
+  animation: wf-ai-live 2.6s ease-out infinite;
+}
+
+.wf-ai-hero.is-bench strong {
+  background: linear-gradient(100deg, var(--text-primary) 0 42%, var(--wf-ai-c3-hi) 76%, var(--wf-ai-bgw));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+
+.wf-ai-hero.is-bench p {
+  max-width: 36ch;
+  text-wrap: balance;
+  color: var(--atl-titanium, var(--text-secondary));
+}
+
+/* Starters sit on one lit plate; each icon charges up on hover. */
+.wf-ai-hero.is-bench .wf-ai-suggestions {
+  gap: 0;
+  margin-top: 14px;
+  border: 1px solid var(--wf-ai-line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+  padding: 4px;
+  text-align: left;
+}
+
+.wf-ai-hero.is-bench .wf-ai-suggestions button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  border-radius: 10px;
+  color: var(--atl-titanium, var(--text-secondary));
+  padding: 8px 10px 8px 7px;
+  line-height: 1.35;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.wf-ai-hero.is-bench .wf-ai-suggestions button + button::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 10px;
+  left: 43px;
+  height: 1px;
+  background: var(--wf-ai-line);
+  transition: opacity 160ms ease;
+}
+
+.wf-ai-suggestions button > span:not(.wf-ai-suggestion-icon) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.wf-ai-suggestion-icon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  place-items: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--wf-ai-c3) 11%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wf-ai-c3) 24%, transparent);
+  color: var(--wf-ai-c3-hi);
+  transition: background 200ms ease, color 200ms ease, box-shadow 200ms ease;
+}
+
+.wf-ai-hero.is-bench .wf-ai-suggestions button > svg {
+  flex: none;
+  color: var(--wf-ai-c3-hi);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 140ms ease, transform 180ms var(--atl-ease, ease);
+}
+
+.wf-ai-hero.is-bench .wf-ai-suggestions button:is(:hover:not(:disabled), :focus-visible) {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--wf-ai-c3) 13%, transparent), color-mix(in srgb, var(--wf-ai-bgw) 5%, transparent) 75%, transparent);
+  color: var(--text-primary);
+}
+
+.wf-ai-hero.is-bench .wf-ai-suggestions button:is(:hover:not(:disabled), :focus-visible)::before,
+.wf-ai-hero.is-bench .wf-ai-suggestions button:is(:hover:not(:disabled), :focus-visible) + button::before {
+  opacity: 0;
+}
+
+.wf-ai-suggestions button:is(:hover:not(:disabled), :focus-visible) .wf-ai-suggestion-icon {
+  background: var(--wf-ai-glow);
+  box-shadow: 0 0 14px -2px color-mix(in srgb, var(--wf-ai-c3) 70%, transparent);
+  color: var(--wf-ai-glow-ink);
+}
+
+.wf-ai-hero.is-bench .wf-ai-suggestions button:is(:hover:not(:disabled), :focus-visible) > svg {
+  opacity: 1;
+  transform: none;
+}
+
+/* --- The charged dial ---------------------------------------------------- */
+
+@property --wf-ai-orb-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.wf-ai-orb {
+  --orb: 176px;
+  position: relative;
+  display: grid;
+  width: var(--orb);
+  height: var(--orb);
+  flex: none;
+  place-items: center;
+  margin: -8px 0 2px;
+}
+
+.wf-ai-orb > span:not(.wf-watchmaker-dial) {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* An engine-turned sunburst ring, fading out toward its edge. */
+.wf-ai-orb-sunburst,
+.wf-ai-orb-light {
+  inset: 0;
+  --wf-ai-ring-mask: radial-gradient(closest-side, transparent 50%, #000 57%, #000 72%, transparent 100%);
+}
+
+.wf-ai-orb-sunburst {
+  background: repeating-conic-gradient(var(--wf-ai-sunburst) 0 0.8deg, transparent 0.8deg 3deg);
+  -webkit-mask: var(--wf-ai-ring-mask);
+  mask: var(--wf-ai-ring-mask);
+}
+
+/* Light catching the sunburst: two bands, green and ice, travel round the
+   engraved lines only. */
+.wf-ai-orb-light {
+  background: conic-gradient(
+    from var(--wf-ai-orb-angle),
+    transparent 0 6%,
+    color-mix(in srgb, var(--wf-ai-c3-hi) 70%, transparent) 13%,
+    transparent 21% 55%,
+    color-mix(in srgb, var(--wf-ai-bgw) 60%, transparent) 63%,
+    transparent 71%
+  );
+  -webkit-mask:
+    repeating-conic-gradient(#000 0 0.8deg, transparent 0.8deg 3deg),
+    var(--wf-ai-ring-mask);
+  -webkit-mask-composite: source-in;
+  mask:
+    repeating-conic-gradient(#000 0 0.8deg, transparent 0.8deg 3deg),
+    var(--wf-ai-ring-mask);
+  mask-composite: intersect;
+  animation: wf-ai-orb-turn 14s linear infinite;
+}
+
+/* The glow behind the bezel, turning from C3 green to BGW9 ice. */
+.wf-ai-orb-halo {
+  inset: calc((var(--orb) - 112px) / 2);
+  background: conic-gradient(
+    var(--wf-ai-c3),
+    var(--wf-ai-bgw) 28%,
+    transparent 46% 54%,
+    var(--wf-ai-c3-hi) 78%,
+    var(--wf-ai-c3)
+  );
+  filter: blur(13px);
+  opacity: 0.5;
+  animation: wf-ai-spin 10s linear infinite;
+}
+
+/* A hairline orbit with a lume pip and its fading trail. */
+.wf-ai-orb-track,
+.wf-ai-orb-pip {
+  inset: 9px;
+  animation: wf-ai-spin 12s linear infinite;
+}
+
+.wf-ai-orb-track {
+  background: conic-gradient(
+    color-mix(in srgb, var(--text-primary) 8%, transparent) 0 76%,
+    color-mix(in srgb, var(--wf-ai-c3-hi) 85%, transparent)
+  );
+  -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 1.25px), #000 calc(100% - 0.75px));
+  mask: radial-gradient(closest-side, transparent calc(100% - 1.25px), #000 calc(100% - 0.75px));
+}
+
+.wf-ai-orb-pip::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: var(--wf-ai-c3-hi);
+  box-shadow: 0 0 8px 2px color-mix(in srgb, var(--wf-ai-c3) 70%, transparent);
+}
+
+.wf-ai-orb .wf-watchmaker-dial {
+  z-index: 1;
+  filter: drop-shadow(0 14px 22px rgb(0 0 0 / 55%));
+}
+
+:root[data-theme="paper"] .wf-ai-orb .wf-watchmaker-dial {
+  filter: drop-shadow(0 12px 18px rgb(30 45 35 / 30%));
+}
+
+:root[data-theme="paper"] .wf-ai-orb-halo {
+  opacity: 0.32;
+}
+
+@media (max-height: 760px) {
+  .wf-ai-orb {
+    --orb: 144px;
+  }
+}
+
+/* --- Entrance: the dial charges, then the words and starters settle in ---- */
+
+.wf-ai-enter {
+  animation: wf-ai-rise 520ms var(--atl-ease, ease) both;
+  animation-delay: calc(var(--wf-ai-enter-i, 0) * 55ms);
+}
+
+.wf-ai-orb.wf-ai-enter {
+  animation-name: wf-ai-orb-in;
+  animation-duration: 700ms;
+}
+
+.wf-ai-hero > :nth-child(2) { --wf-ai-enter-i: 1; }
+.wf-ai-hero > :nth-child(3) { --wf-ai-enter-i: 2; }
+.wf-ai-hero > :nth-child(4) { --wf-ai-enter-i: 3; }
+.wf-ai-hero > :nth-child(5) { --wf-ai-enter-i: 4; }
+
+@keyframes wf-ai-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes wf-ai-orb-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes wf-ai-orb-turn {
+  to { --wf-ai-orb-angle: 360deg; }
+}
+
+@keyframes wf-ai-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wf-ai-enter,
+  .wf-ai-live,
+  .wf-ai-orb-light,
+  .wf-ai-orb-halo,
+  .wf-ai-orb-track,
+  .wf-ai-orb-pip {
+    animation: none;
+  }
+}
+
+/* --- Composer: the lume sweeps its rim while Watchmaker works ------------------ */
+
+@property --wf-ai-sweep {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.wf-ai-composer {
+  position: relative;
+}
+
+.wf-ai-composer.is-working::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--wf-ai-sweep),
+    transparent 0 62%,
+    color-mix(in srgb, var(--accent) 40%, transparent) 86%,
+    var(--accent-strong) 100%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: wf-ai-rim 2.4s linear infinite;
+  pointer-events: none;
+}
+
+.wf-ai-composer > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes wf-ai-rim {
+  to { --wf-ai-sweep: 360deg; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wf-watchmaker-dial-sweep,
+  .wf-ai-composer.is-working::before {
+    animation: none;
+  }
+}
+.wf-ai-requirements { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--border, #ffffff20); border-radius: 10px; font-size: 12px; }
+.wf-ai-requirements summary { cursor: pointer; }
+.wf-ai-requirements ul { list-style: none; margin: 10px 0 0; padding: 0; }
+.wf-ai-requirements li + li { margin-top: 10px; }
+.wf-ai-requirements li strong, .wf-ai-requirements li span { display: block; }
+.wf-ai-requirements li span { opacity: .75; margin-top: 2px; }
+.wf-ai-requirements li p { margin: 4px 0 0; opacity: .8; overflow-wrap: anywhere; }
+.wf-ai-requirements li[data-status="blocked"] > span { color: #f4bb68; opacity: 1; }
+.wf-ai-requirements li[data-status="verified"] > span { color: #63d5b5; opacity: 1; }
+
+.wf-ai-design-reference { display: flex; align-items: center; gap: 8px; margin: 0 4px 8px; font-size: 11px; color: var(--text-muted, #8c929b); }
+.wf-ai-design-reference img { width: 28px; height: 28px; object-fit: contain; border-radius: 4px; }
+
+
+.wf-ai-harness {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 12px;
+  padding: 10px 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.wf-ai-harness-label {
+  font-weight: 500;
+}
+
+.wf-ai-harness-value {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.wf-ai-harness-hint {
+  grid-column: 1 / -1;
+  text-align: right;
+  line-height: 1.4;
+}
+.wf-ai-cli-warning { margin: 0 0 8px; padding: 9px; border: 1px solid #a47a3455; border-radius: 8px; color: #c9ab75; background: #a47a340c; font-size: 11px; line-height: 1.5; }
+.wf-ai-cli-warning p { margin: 0; }
+.wf-ai-cli-warning button { display: block; margin: 10px 0 0 auto; padding: 5px 12px; border: 1px solid #a47a3470; border-radius: 6px; background: #a47a3420; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
+.wf-ai-cli-warning button:hover { background: #a47a3435; }
+.wf-ai-cli-warning button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.wf-ai-cli-model { font-size: 11px; color: var(--text-muted); }

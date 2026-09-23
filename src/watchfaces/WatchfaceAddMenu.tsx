@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { Activity, ChartNoAxesCombined, Check, ChevronDown, Circle, CloudSun, Image, Minus, MoonStar, Plus, Search, Square, TrendingUp, Type, X } from "lucide-react";
+import { Activity, ChartNoAxesCombined, Check, ChevronDown, Circle, CloudSun, Image, Minus, MoonStar, Plus, Search, Sparkles, Square, TrendingUp, Type, X } from "lucide-react";
 import type { CorosWatchfaceBackgroundElement, CorosWatchfaceDesignState } from "../../electron/types";
-import { NATIVE_CHART_LINE_AVAILABILITY, NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS } from "../../electron/watchfaceNativeCatalog";
+import { NATIVE_CHART_SOURCES, NATIVE_DATA_FIELDS } from "../../electron/watchfaceNativeCatalog";
 
 const categories = ["All", "Weather", "Health", "Training", "Astronomy", "Charts"] as const;
 type Category = typeof categories[number];
@@ -11,10 +11,12 @@ const dataOptions = [
   ...NATIVE_CHART_SOURCES.map(source => ({ id: `chart:${source.id}`, label: source.label, category: "Charts" as const, keywords: `${source.id} ${source.category}`, availability: undefined }))
 ];
 
-export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddElement, onAddData }: {
+export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOfficialImage, onAddElement, onAddData }: {
   design: CorosWatchfaceDesignState;
   imageDisabled: boolean;
   onAddImage: () => void;
+  /** Opens the official COROS asset browser instead of a file dialog. */
+  onAddOfficialImage?: () => void;
   onAddElement: (kind: CorosWatchfaceBackgroundElement["kind"]) => void;
   onAddData: (id: string) => void;
 }) {
@@ -112,6 +114,7 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddEleme
       <div className="wf-layer-picker-heading"><strong>Add a layer</strong><button type="button" aria-label="Close add menu" onClick={close}><X size={15} /></button></div>
       <div className="wf-layer-picker-artwork" role="group" aria-label="Artwork">
         <button type="button" data-add-option className="wf-add-image" disabled={imageDisabled} onClick={() => choose(onAddImage)}><Image size={18} /><span>Image</span></button>
+        {onAddOfficialImage ? <button type="button" data-add-option className="wf-add-official" disabled={imageDisabled} onClick={() => choose(onAddOfficialImage)}><Sparkles size={17} /><span>Official</span></button> : null}
         <button type="button" data-add-option onClick={() => choose(() => onAddElement("text"))}><Type size={18} /><span>Text</span></button>
         <button type="button" data-add-option onClick={() => choose(() => onAddElement("rect"))}><Square size={17} /><span>Rectangle</span></button>
         <button type="button" data-add-option onClick={() => choose(() => onAddElement("ellipse"))}><Circle size={17} /><span>Ellipse</span></button>
@@ -127,7 +130,6 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddEleme
           const Icon = categoryIcons[group];
           return <section key={group} aria-label={group}>
             <h3><Icon size={13} aria-hidden="true" />{group}{group === "Charts" && " · Experimental"}<span>{options.length}</span></h3>
-            {group === "Charts" && <p className="wf-layer-picker-notice">Line graphs — {NATIVE_CHART_LINE_AVAILABILITY.label}</p>}
             {options.map(option => {
               const [field, source] = option.id.split(":");
               const existing = design.nativeData?.[field];

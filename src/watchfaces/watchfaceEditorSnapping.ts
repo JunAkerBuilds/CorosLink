@@ -3,6 +3,7 @@ import type {
   CorosWatchfaceEditorGuide
 } from "../../electron/types";
 import type { WatchfaceEditorBounds } from "./watchfaceEditorGeometry";
+import { measureWatchfaceText, setWatchfaceCanvasFont } from "./watchfaceFontSnapshots.ts";
 
 export const WATCHFACE_PLACEMENT_STORAGE_KEY =
   "coroslink.watchfacePlacement.v1";
@@ -141,6 +142,10 @@ export interface WatchfaceSnapMeasurement {
   cross: number;
   label: string;
   kind: "distance" | "spacing";
+  /** Cross-axis extent shared by both sides of the gap, for shading. */
+  span?: [number, number];
+  /** Layers this gap is measured against, outlined while dragging. */
+  targetIds?: string[];
 }
 
 export interface SnapWatchfaceBoundsInput {
@@ -286,10 +291,14 @@ function backgroundTextLocalBounds(
   const context =
     suppliedContext === undefined ? createTextMeasurementContext() : suppliedContext;
   if (context) {
-    context.font = backgroundTextFont(element);
+    setWatchfaceCanvasFont(
+      context,
+      { family: element.fontFamily, size: element.fontSize, weight: element.weight },
+      backgroundTextFont(element)
+    );
     context.textAlign = element.align;
     context.textBaseline = "middle";
-    const metrics = context.measureText(element.text);
+    const metrics = measureWatchfaceText(context, element.text);
     const measured = {
       x0: -metrics.actualBoundingBoxLeft,
       y0: -metrics.actualBoundingBoxAscent,
@@ -738,4 +747,170 @@ function pickCandidate(
       : left.priority - right.priority;
   });
   return eligible[0] ?? null;
+}
+
+/**
+ * Every target edge or center the (already snapped) selection lines up with,
+ * like Figma's red alignment lines. Unlike snapping, which picks one candidate
+ * per axis, this reports all matches so each aligned object gets marked.
+ */
+export function watchfaceAlignmentGuides(
+  moving: WatchfaceEditorBounds,
+  targets: WatchfaceSnapTarget[],
+  faceWidth: number,
+  faceHeight: number,
+  tolerance = 0.5
+): WatchfaceSnapGuide[] {
+  const guides: WatchfaceSnapGuide[] = [];
+  const seen = new Set<string>();
+  const push = (guide: WatchfaceSnapGuide) => {
+    const key = `${guide.axis}:${Math.round(guide.value * 100)}:${guide.targetId ?? guide.kind}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    guides.push(guide);
+  };
+  const x = anchorsForAxis(moving.x0, moving.x1);
+  const y = anchorsForAxis(moving.y0, moving.y1);
+  if (Math.abs(x.center - faceWidth / 2) <= tolerance) {
+    push({ axis: "x", value: faceWidth / 2, kind: "face-center", message: "Centered on face" });
+  }
+  if (Math.abs(y.center - faceHeight / 2) <= tolerance) {
+    push({ axis: "y", value: faceHeight / 2, kind: "face-center", message: "Centered on face" });
+  }
+  for (const target of targets) {
+    if (target.visible === false) continue;
+    const targetX = anchorsForAxis(target.bounds.x0, target.bounds.x1);
+    const targetY = anchorsForAxis(target.bounds.y0, target.bounds.y1);
+    for (const [axis, mine, theirs] of [
+      ["x", x, targetX],
+      ["y", y, targetY]
+    ] as const) {
+      for (const movingValue of Object.values(mine)) {
+        for (const fixed of Object.values(theirs)) {
+          if (Math.abs(movingValue - fixed) > tolerance) continue;
+          push({
+            axis,
+            value: fixed,
+            kind: "layer",
+            message: `Aligned with ${target.label}`,
+            targetId: target.id
+          });
+        }
+      }
+    }
+  }
+  return guides;
+}
+
+function crossOverlap(
+  a: WatchfaceEditorBounds,
+  b: WatchfaceEditorBounds,
+  axis: "x" | "y"
+): [number, number] | null {
+  const [start, end] = axis === "x" ? ["y0", "y1"] as const : ["x0", "x1"] as const;
+  const from = Math.max(a[start], b[start]);
+  const to = Math.min(a[end], b[end]);
+  return to > from ? [from, to] : null;
+}
+
+/**
+ * Figma-style gap measurements: only to the nearest object that actually sits
+ * beside the selection (overlapping on the cross axis), plus equal-spacing
+ * pairs when a neighbour's own neighbour shares the same gap.
+ */
+export function watchfaceNeighborMeasurements(
+  moving: WatchfaceEditorBounds,
+  targets: WatchfaceSnapTarget[],
+  formatGap: (gap: number) => string = (gap) => `${Math.round(gap)}`,
+  tolerance = 0.5
+): WatchfaceSnapMeasurement[] {
+  const visible = targets.filter((target) => target.visible !== false);
+  const measurements: WatchfaceSnapMeasurement[] = [];
+
+  type Direction = { axis: "x" | "y"; before: boolean };
+  const directions: Direction[] = [
+    { axis: "x", before: true },
+    { axis: "x", before: false },
+    { axis: "y", before: true },
+    { axis: "y", before: false }
+  ];
+
+  const nearest = (from: WatchfaceEditorBounds, { axis, before }: Direction) => {
+    const [start, end] = axis === "x" ? ["x0", "x1"] as const : ["y0", "y1"] as const;
+    let best: { target: WatchfaceSnapTarget; gap: number; span: [number, number] } | null = null;
+    for (const target of visible) {
+      if (target.bounds === from) continue;
+      const span = crossOverlap(from, target.bounds, axis);
+      if (!span) continue;
+      const gap = before ? from[start] - target.bounds[end] : target.bounds[start] - from[end];
+      if (gap < -tolerance) continue;
+      if (!best || gap < best.gap) best = { target, gap: Math.max(0, gap), span };
+    }
+    return best;
+  };
+
+  const measure = (
+    axis: "x" | "y",
+    start: number,
+    end: number,
+    span: [number, number],
+    kind: WatchfaceSnapMeasurement["kind"],
+    targetIds: string[]
+  ): WatchfaceSnapMeasurement => ({
+    axis,
+    start,
+    end,
+    cross: (span[0] + span[1]) / 2,
+    label: formatGap(Math.abs(end - start)),
+    kind,
+    span,
+    targetIds
+  });
+
+  const found = directions.map((direction) => ({ direction, hit: nearest(moving, direction) }));
+  for (const axis of ["x", "y"] as const) {
+    const [start, end] = axis === "x" ? ["x0", "x1"] as const : ["y0", "y1"] as const;
+    const before = found.find((entry) => entry.direction.axis === axis && entry.direction.before)?.hit;
+    const after = found.find((entry) => entry.direction.axis === axis && !entry.direction.before)?.hit;
+    const equalBetween =
+      before && after && before.gap > tolerance && Math.abs(before.gap - after.gap) <= tolerance;
+
+    // Neighbour-of-neighbour gaps that match ours count as equal spacing too.
+    const chainBefore = before && before.gap > tolerance
+      ? nearest(before.target.bounds, { axis, before: true })
+      : null;
+    const chainAfter = after && after.gap > tolerance
+      ? nearest(after.target.bounds, { axis, before: false })
+      : null;
+    const equalChainBefore = chainBefore && before && Math.abs(chainBefore.gap - before.gap) <= tolerance;
+    const equalChainAfter = chainAfter && after && Math.abs(chainAfter.gap - after.gap) <= tolerance;
+
+    if (before && before.gap > tolerance) {
+      measurements.push(measure(
+        axis,
+        before.target.bounds[end],
+        moving[start],
+        before.span,
+        equalBetween || equalChainBefore ? "spacing" : "distance",
+        [before.target.id]
+      ));
+    }
+    if (after && after.gap > tolerance) {
+      measurements.push(measure(
+        axis,
+        moving[end],
+        after.target.bounds[start],
+        after.span,
+        equalBetween || equalChainAfter ? "spacing" : "distance",
+        [after.target.id]
+      ));
+    }
+    if (equalChainBefore && chainBefore && before) {
+      measurements.push(measure(axis, chainBefore.target.bounds[end], before.target.bounds[start], chainBefore.span, "spacing", [chainBefore.target.id, before.target.id]));
+    }
+    if (equalChainAfter && chainAfter && after) {
+      measurements.push(measure(axis, after.target.bounds[end], chainAfter.target.bounds[start], chainAfter.span, "spacing", [after.target.id, chainAfter.target.id]));
+    }
+  }
+  return measurements;
 }

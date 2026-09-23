@@ -157,6 +157,21 @@ jobs:
     needs: [macos, linux, windows]
     runs-on: ubuntu-latest
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Extract release changelog
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node scripts/test-release-notes.mjs
+          node scripts/extract-release-notes.mjs "$RELEASE_TAG" release-notes.md
+
       - name: Download macOS artifact
         uses: actions/download-artifact@v4
         with:
@@ -181,7 +196,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           draft: false
-          generate_release_notes: true
+          body_path: release-notes.md
+          generate_release_notes: false
           files: |
             release/macos/*
             release/linux/*

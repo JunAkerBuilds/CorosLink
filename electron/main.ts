@@ -1,6 +1,7 @@
 import { getCalendarWorkoutEvent, updateCalendarWorkoutEvent, syncEditedCalendarWorkout } from "./calendarWorkoutEventService";
 import { listCalendarWorkoutEntries } from "./calendarWorkoutEventStorage";
 import type { CalendarEventTiming, CalendarWorkoutEventRef } from "./calendarSyncTypes";
+import { registerWorkoutAutomation } from "./workoutAutomation";
 import { app, BrowserWindow, dialog, nativeTheme, session, shell } from "electron";
 import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow } from "./diagnosticsService";
 import { googleCalendar, startGoogleCalendarSync, stopGoogleCalendarSync } from "./googleCalendarService";
@@ -12,6 +13,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { listLocalFontFamilies } from "./fontService";
+import { isWebUrl } from "./externalLinks";
 import { registerWatchfaceAutomation } from "./watchfaceAutomation";
 import { onWatchfaceRendererNavigation } from "./watchfaceRendererLifecycle";
 import {
@@ -126,6 +128,7 @@ import { normalizeUnitSystem } from "./unitSystem.js";
 import {
   cacheCorosWatchfaceProjectPreview,
   createCorosWatchfaceArchive,
+  convertCorosWatchfaceArchive,
   createCorosWatchfaceShareLink,
   duplicateCorosWatchfaceProject,
   describeCorosWatchfaceTemplate,
@@ -152,6 +155,12 @@ import {
   deleteCorosWatchfaceProject,
   selectCorosWatchfaceArchive
 } from "./corosWatchfaceService";
+import {
+  ensureCorosOfficialAssetLibrary,
+  getCorosOfficialAssetLibraryStatus,
+  listCorosOfficialAssets,
+  readCorosOfficialAssetFrames
+} from "./corosOfficialAssetService";
 import {
   cleanupCommunityWatchfaceImports,
   getCommunityWatchface,
@@ -226,8 +235,8 @@ import type {
   ManualActivityInput
 } from "./types";
 import type {
-  CorosLegacy614aCarrierPatchInput,
   CorosWatchfaceCreatorInput,
+  CorosWatchfaceConversionInput,
   CorosWatchfaceExistingShareInput,
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceArchiveExportInput,
@@ -236,17 +245,14 @@ import type {
   CorosWatchfaceRegion,
   CorosWatchfaceThemeDownloadInput,
   CorosWatchfaceThemeListInput,
+  CorosOfficialAssetQuery,
   CorosBatteryQueryInput,
   CorosGearSaveInput,
   CorosBluetoothDeviceChoice,
   WatchTransferProgress
 } from "./types";
 import type { CommunityWatchfaceOpenRequest } from "./types";
-import {
-  MULTIDATA_ELEV_416_PROFILE,
-  inspectLegacy614aCarrier,
-  patchLegacy614aFeatures
-} from "./legacy614a";
+import type { CoachChartPreview, FitIndexSyncOptions } from "./types";
 import {
   deleteWatchTrack,
   getWatchConnectionSmokeOption,
@@ -325,8 +331,21 @@ import {
   testLocalChatConnection,
   testOpenRouterConnection,
   uploadTrainingPlanDraft,
-  confirmWorkoutDelete
+  confirmWorkoutDelete,
+  confirmCoachCorosAction
 } from "./chatService";
+import {
+  listPinnedCoachCharts,
+  pinCoachChart,
+  refreshPinnedCoachChart,
+  unpinCoachChart
+} from "./coachChartService";
+import {
+  cancelFitIndexSync,
+  getFitIndexStatus,
+  setFitIndexProgressListener,
+  startFitIndexSync
+} from "./fitIndexService";
 import { buildBaseCoachInstructions } from "./chatCoachContext";
 import {
   OPENROUTER_KEYS_URL,
@@ -357,6 +376,8 @@ import {
   setMcpBearer,
   updateMcpServer
 } from "./mcpServersStore";
+import { getTrainingHealthInsight } from "./healthInsightsService";
+import type { HealthInsightKind } from "./healthInsightsTypes";
 import { getTrainingDailyHealthData } from "./dailyHealthDataService";
 import { getTrainingSleepData } from "./sleepDataService";
 import type {
@@ -373,6 +394,7 @@ import type {
 } from "./types";
 
 let mainWindow: BrowserWindow | undefined;
+let workoutAutomation: ReturnType<typeof registerWorkoutAutomation> | undefined;
 let watchfaceAutomation: ReturnType<typeof registerWatchfaceAutomation> | undefined;
 let rendererReady = false;
 let pendingCommunityWatchfaceOpen: CommunityWatchfaceOpenRequest | undefined;
@@ -383,7 +405,6 @@ let pendingCorosBluetoothSelection:
     }
   | undefined;
 
-const legacy614aCarrierSelections = new Map<string, { sourcePath: string }>();
 const MAX_RASTER_FONT_SPRITE_FOLDER_BYTES = 12 * 1024 * 1024;
 
 /** Matches --bg-base in styles.css; updated when the renderer theme changes. */
@@ -671,7 +692,9 @@ function createWindow(): void {
   observeDiagnosticWindow(mainWindow);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (isWebUrl(url)) {
+      void shell.openExternal(url);
+    }
     return { action: "deny" };
   });
   onWatchfaceRendererNavigation(mainWindow.webContents, () => {
@@ -805,6 +828,7 @@ app.whenReady().then(() => {
   pruneDeleteRequestStore();
   registerIpcHandlers();
   watchfaceAutomation = registerWatchfaceAutomation(() => mainWindow);
+  workoutAutomation = registerWorkoutAutomation(() => mainWindow);
   startGoogleCalendarSync();
   startAppleCalendarSync();
   setJobListener((jobs) => {
@@ -827,6 +851,11 @@ app.whenReady().then(() => {
       mainWindow.webContents.send("trainingHub:backupProgress", progress);
     }
   });
+  setFitIndexProgressListener((progress) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("fitIndex:progress", progress);
+    }
+  });
   setCommunityWatchfaceProgressListener((progress) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("watchfaces:communityDownloadProgress", progress);
@@ -835,6 +864,7 @@ app.whenReady().then(() => {
   void cleanupCommunityWatchfaceImports();
   createWindow();
   void watchfaceAutomation.restore();
+  void workoutAutomation.restore();
   applyAppIcon();
 
   // Silently restore previously-authorized MCP sessions (COROS + any other
@@ -856,6 +886,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   void watchfaceAutomation?.stop();
+  void workoutAutomation?.stop();
   stopGoogleCalendarSync();
   stopAppleCalendarSync();
   stopRouteShare();
@@ -964,14 +995,27 @@ function registerIpcHandlers(): void {
     importCorosWatchfaceShareLink(shareUrl)
   );
 
+  ipcMain.handle("watchfaces:officialAssets:ensure", (_event, input: { firmwareType: string; rebuild?: boolean }) =>
+    ensureCorosOfficialAssetLibrary(input)
+  );
+  ipcMain.handle("watchfaces:officialAssets:status", (_event, input: { firmwareType: string }) =>
+    getCorosOfficialAssetLibraryStatus(input)
+  );
+  ipcMain.handle("watchfaces:officialAssets:list", (_event, input: CorosOfficialAssetQuery) =>
+    listCorosOfficialAssets(input)
+  );
+  ipcMain.handle("watchfaces:officialAssets:frames", (_event, input: { firmwareType: string; id: string }) =>
+    readCorosOfficialAssetFrames(input)
+  );
+
   ipcMain.handle("watchfaces:listCommunity", (_event, input) =>
     listCommunityWatchfaces(input)
   );
-  ipcMain.handle("watchfaces:getCommunity", (_event, slug: string) =>
-    getCommunityWatchface(slug)
+  ipcMain.handle("watchfaces:getCommunity", (_event, slug: string, model?: string) =>
+    getCommunityWatchface(slug, model)
   );
-  ipcMain.handle("watchfaces:importCommunity", (_event, slug: string) =>
-    importCommunityWatchface(slug)
+  ipcMain.handle("watchfaces:importCommunity", (_event, slug: string, model?: string) =>
+    importCommunityWatchface(slug, model)
   );
   ipcMain.handle("watchfaces:consumeCommunityOpenRequest", () => {
     rendererReady = true;
@@ -1000,75 +1044,6 @@ function registerIpcHandlers(): void {
       ? null
       : selectCorosWatchfaceArchive(archivePath);
   });
-
-  ipcMain.handle("watchfaces:chooseLegacy614aCarrier", async () => {
-    const options: OpenDialogOptions = {
-      title: "Choose the original MULTIDATA ELEV legacy carrier",
-      properties: ["openFile"],
-      filters: [{ name: "COROS legacy watchface BIN", extensions: ["bin"] }]
-    };
-    const result =
-      mainWindow && !mainWindow.isDestroyed()
-        ? await dialog.showOpenDialog(mainWindow, options)
-        : await dialog.showOpenDialog(options);
-    const sourcePath = result.filePaths[0];
-    if (result.canceled || !sourcePath) return null;
-
-    const reference = await fs.promises.readFile(sourcePath);
-    // This validates the exact file hash in addition to its 614A shape. A
-    // previously patched carrier, another model, or a similar lookalike BIN
-    // cannot become the base for another edit.
-    const carrier = inspectLegacy614aCarrier(reference, MULTIDATA_ELEV_416_PROFILE);
-    const selectionId = `legacy614a-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    legacy614aCarrierSelections.set(selectionId, { sourcePath });
-    return {
-      selectionId,
-      inspection: {
-        profile: "multidata-elev-416" as const,
-        profileName: carrier.profileName,
-        fileName: path.basename(sourcePath),
-        watchFaceId: carrier.watchFaceId,
-        sizeBytes: carrier.sizeBytes,
-        payloadCrc16: carrier.payloadCrc16,
-        fullFileCrc16: carrier.fullFileCrc16,
-        weatherSpriteSize: carrier.weatherSpriteSize,
-        weatherPosition: carrier.weatherPosition,
-        temperatureRect: carrier.temperatureRect
-      }
-    };
-  });
-
-  ipcMain.handle(
-    "watchfaces:exportLegacy614aCarrier",
-    async (_event, selectionId: string, patch: CorosLegacy614aCarrierPatchInput) => {
-      const selection = legacy614aCarrierSelections.get(selectionId);
-      if (!selection) {
-        throw new Error("Choose and validate the original MULTIDATA ELEV carrier again before exporting.");
-      }
-      const reference = await fs.promises.readFile(selection.sourcePath);
-      const output = patchLegacy614aFeatures(reference, patch, MULTIDATA_ELEV_416_PROFILE);
-      const saveOptions = {
-        title: "Export guarded MULTIDATA carrier",
-        defaultPath: "MULTIDATA-ELEV-SLENDER-614A.bin",
-        filters: [{ name: "COROS legacy watchface BIN", extensions: ["bin"] }]
-      };
-      const result =
-        mainWindow && !mainWindow.isDestroyed()
-          ? await dialog.showSaveDialog(mainWindow, saveOptions)
-          : await dialog.showSaveDialog(saveOptions);
-      if (result.canceled || !result.filePath) {
-        return { saved: false, watchFaceId: MULTIDATA_ELEV_416_PROFILE.watchFaceId };
-      }
-      // Never overwrite the downloaded public reference or another export by
-      // mistake. The user can choose a fresh filename in the save dialog.
-      await fs.promises.writeFile(result.filePath, output, { flag: "wx" });
-      return {
-        saved: true,
-        filePath: result.filePath,
-        watchFaceId: MULTIDATA_ELEV_416_PROFILE.watchFaceId
-      };
-    }
-  );
 
   ipcMain.handle("watchfaces:chooseArtwork", async () => {
     const options: OpenDialogOptions = {
@@ -1106,6 +1081,9 @@ function registerIpcHandlers(): void {
       : loadRasterFontSpriteFolder(folderPath);
   });
 
+  ipcMain.handle("watchfaces:convertArchive", (_event, input: CorosWatchfaceConversionInput) =>
+    convertCorosWatchfaceArchive(input)
+  );
   ipcMain.handle(
     "watchfaces:createArchive",
     (_event, input: CorosWatchfaceCreatorInput) =>
@@ -1496,8 +1474,18 @@ function registerIpcHandlers(): void {
     )
   );
 
+  ipcMain.handle("chat:confirmCorosAction", (_event, requestId: string) => confirmCoachCorosAction(requestId));
   ipcMain.handle("chat:confirmWorkoutDelete", (_event, requestId: string) =>
     confirmWorkoutDelete(requestId)
+  );
+
+  ipcMain.handle("coachCharts:list", () => listPinnedCoachCharts());
+  ipcMain.handle("coachCharts:pin", (_event, preview: CoachChartPreview) =>
+    pinCoachChart(preview)
+  );
+  ipcMain.handle("coachCharts:unpin", (_event, id: string) => unpinCoachChart(id));
+  ipcMain.handle("coachCharts:refresh", (_event, id: string) =>
+    refreshPinnedCoachChart(id)
   );
 
   ipcMain.handle(
@@ -1823,6 +1811,12 @@ function registerIpcHandlers(): void {
     cancelActivityBackup()
   );
 
+  ipcMain.handle("fitIndex:getStatus", () => getFitIndexStatus());
+  ipcMain.handle("fitIndex:startSync", (_event, options?: FitIndexSyncOptions) =>
+    startFitIndexSync(options ?? {})
+  );
+  ipcMain.handle("fitIndex:cancelSync", () => cancelFitIndexSync());
+
   ipcMain.handle("trainingHub:getActivityBackupProgress", () =>
     getActivityBackupProgress()
   );
@@ -1871,6 +1865,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("trainingHub:getSleepData", (_event, days?: number) =>
     getTrainingSleepData(mainWindow, days ?? 7)
+  );
+
+  ipcMain.handle("trainingHub:getHealthInsight", (_event, kind: HealthInsightKind, days?: number) =>
+    getTrainingHealthInsight(kind, days ?? 7)
   );
 
   ipcMain.handle("trainingHub:getDailyHealthData", (_event, days?: number) =>

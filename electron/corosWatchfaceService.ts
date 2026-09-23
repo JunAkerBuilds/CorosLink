@@ -13,9 +13,17 @@ import {
   storeCorosCredentials
 } from "./corosCredentialStore";
 import { createStoreZip } from "./zipStore";
+import { recoverCompiledCorosWatchface } from "./corosCompiledWatchface";
+import { parseCorosFaceMagic } from "./corosBinLayout";
 import { fitGeneratedWatchfaceFontRects } from "./watchfaceExportFontBounds";
+import { finalizeWatchfaceDeviceLayout, restoreWatchfaceDateLayout } from "./watchfaceDeviceLayout";
+import { convertWatchfaceEntries, type WatchfaceConversionEntry, prepareRecoveredWatchfaceExport, normalizeConversionPath, RETAINED_AOD_CONFIG } from "./watchfaceArchiveConversion";
+import { standardizeWatchfacePackage } from "./watchfaceDistribution";
+import { getWatchfaceTarget, type WatchfaceTarget } from "./watchfaceTargets";
 import type {
   CorosWatchfaceArchive,
+  CorosWatchfaceConversionInput,
+  CorosWatchfaceConversionResult,
   CorosWatchfaceArtwork,
   CorosWatchfaceAssetReplacement,
   CorosWatchfaceConfigOverride,
@@ -190,6 +198,7 @@ interface ArchiveInfo {
   o_template_id?: number | string;
   o_diy_version?: number | string;
   o_wf_ver?: number | string;
+  coroslinkRecovery?: { partial?: boolean };
 }
 
 interface SelectedArchive extends CorosWatchfaceArchive {
@@ -223,6 +232,7 @@ interface UnzipperFile {
 
 interface UnzipperModule {
   Open: {
+    buffer: (bytes: Buffer) => Promise<{ files: UnzipperFile[] }>;
     file: (zipPath: string) => Promise<{ files: UnzipperFile[] }>;
   };
 }
@@ -441,16 +451,21 @@ export async function listCorosWatchfaceThemes(
  * Downloads an official source-template package and validates it as a DIY
  * starter. Only URLs returned by the catalog in this session may be fetched.
  */
-export async function downloadCorosWatchfaceTheme(
-  input: CorosWatchfaceThemeDownloadInput
-): Promise<CorosWatchfaceThemeDownload> {
-  const session = requireSession();
-  const packageUrl = typeof input?.packageUrl === "string" ? input.packageUrl : "";
-  const firmwareType = normalizeOptionalFirmwareType(input?.firmwareType);
+/**
+ * Fetches a catalog package's bytes. Shared by the download command and the
+ * official asset library, which caches binaries without saving to Downloads.
+ */
+export async function fetchCorosWatchfaceThemePackage(packageUrl: string): Promise<Buffer> {
   if (!knownThemePackageUrls.has(packageUrl)) {
     throw new Error("Load the template catalog first, then choose a listed template.");
   }
+  return (await fetchThemePackage(packageUrl, requireSession())).bytes;
+}
 
+async function fetchThemePackage(
+  packageUrl: string,
+  session: StoredMobileSession
+): Promise<{ bytes: Buffer; contentType: string }> {
   // The mobile client also carries the token as a query parameter; some
   // resource endpoints ignore the header alone.
   const first = await fetchThemeResource(
@@ -479,16 +494,47 @@ export async function downloadCorosWatchfaceTheme(
       // Leave the original bytes for the diagnostic below.
     }
   }
+  return { bytes, contentType };
+}
+
+export async function downloadCorosWatchfaceTheme(
+  input: CorosWatchfaceThemeDownloadInput
+): Promise<CorosWatchfaceThemeDownload> {
+  const session = requireSession();
+  const packageUrl = typeof input?.packageUrl === "string" ? input.packageUrl : "";
+  const firmwareType = normalizeOptionalFirmwareType(input?.firmwareType);
+  if (!knownThemePackageUrls.has(packageUrl)) {
+    throw new Error("Load the template catalog first, then choose a listed template.");
+  }
+
+  const { bytes, contentType } = await fetchThemePackage(packageUrl, session);
 
   const safeName = (input.name ?? "COROS watchface")
     .replace(/[\u0000-\u001f\u007f/\\:*?"<>|]/g, "")
     .trim()
     .slice(0, 60) || "COROS watchface";
-  const outputDirectory = path.join(app.getPath("downloads"), "COROS watchfaces");
+  const outputDirectory = input.openInEditor
+    ? path.join(app.getPath("userData"), "watchface-official-editor")
+    : path.join(app.getPath("downloads"), "COROS watchfaces");
   await fs.promises.mkdir(outputDirectory, { recursive: true });
   const uniqueName = `${safeName}-${crypto.randomUUID().slice(0, 8)}`;
 
   if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
+    if (input.openInEditor) {
+      const recovered = recoverCompiledCorosWatchface(bytes, safeName, input.templateId);
+      const editablePath = path.join(outputDirectory, `${uniqueName}.zip`);
+      await fs.promises.writeFile(editablePath, recovered.zip);
+      try {
+        const inspected = await inspectArchive(editablePath);
+        const selected: SelectedArchive = { ...inspected, ...(firmwareType ? { firmwareType } : {}) };
+        selectedArchives.set(selected.archiveId, selected);
+        return { fileName: selected.fileName, sizeBytes: selected.sizeBytes, usableAsTemplate: true,
+          archive: toPublicArchive(selected), savedPath: editablePath, message: recovered.recovery.message };
+      } catch (caught) {
+        await fs.promises.rm(editablePath, { force: true });
+        throw caught;
+      }
+    }
     // Keep the raw payload so the unknown format can be analyzed offline.
     const rawPath = path.join(outputDirectory, `${uniqueName}.bin`);
     await fs.promises.writeFile(rawPath, bytes);
@@ -497,7 +543,9 @@ export async function downloadCorosWatchfaceTheme(
       sizeBytes: bytes.length,
       usableAsTemplate: false,
       savedPath: rawPath,
-      message: `COROS answered with ${describeUnknownPayload(bytes, contentType)}. A raw copy was saved to ${rawPath} for analysis.`
+      message: parseCorosFaceMagic(bytes.toString("latin1", 0, 4))
+        ? `Downloaded ${safeName} to ${rawPath}.`
+        : `COROS answered with ${describeUnknownPayload(bytes, contentType)}. A raw copy was saved to ${rawPath} for analysis.`
     };
   }
 
@@ -602,10 +650,11 @@ function describeUnknownPayload(bytes: Buffer, contentType: string): string {
     .subarray(0, 60)
     .toString("latin1")
     .replace(/[^\x20-\x7e]/g, ".");
-  // "614A" (bytes reversed to "A416") is COROS's compiled on-watch watchface
-  // binary: a layout table of element records plus encoded bitmap blobs. It is
-  // read-only firmware content, not the DIY ZIP the creator and upload use.
-  const isCompiledFace = bytes.length >= 4 && bytes.subarray(0, 4).toString("latin1") === "614A";
+  // "614A" (bytes reversed to "A416") or "062R" (R260) is COROS's compiled
+  // on-watch watchface binary: a layout table of element records plus encoded
+  // bitmap blobs. It is read-only firmware content, not the DIY ZIP the creator
+  // and upload use.
+  const isCompiledFace = bytes.length >= 4 && Boolean(parseCorosFaceMagic(bytes.subarray(0, 4).toString("latin1")));
   const kind = isCompiledFace
     ? "COROS's compiled on-watch watchface format (not an editable DIY template)"
     : printable.trimStart().startsWith("<")
@@ -895,9 +944,34 @@ export async function selectCorosWatchfaceArchive(
 }
 
 /**
+ * Rebuilds a starter only when the website validator would reject it as-is
+ * (editor recovery blobs, missing DIY manifest fields, stray entries). A
+ * conforming starter is copied byte for byte.
+ */
+async function distributableStarterArchive(
+  archivePath: string,
+  fallbackName: string
+): Promise<Buffer> {
+  const bytes = await fs.promises.readFile(archivePath);
+  const unzipper = require("unzipper") as UnzipperModule;
+  const directory = await unzipper.Open.buffer(bytes);
+  const files = await Promise.all(
+    directory.files
+      .filter((entry) => entry.type === "File")
+      .map(async (entry) => ({ name: entry.path, data: await entry.buffer() }))
+  );
+  const directories = directory.files
+    .filter((entry) => entry.type === "Directory")
+    .map((entry) => entry.path);
+  const standardized = standardizeWatchfacePackage(files, directories, fallbackName);
+  return standardized.changed ? createStoreZip(standardized.entries) : bytes;
+}
+
+/**
  * Build a portable project ZIP for website distribution. The original starter
  * is kept separate from the design state so importing and exporting again does
- * not apply layout changes twice.
+ * not apply layout changes twice. The starter itself is reduced to the
+ * website's DAT standard so the upload validator accepts it.
  */
 export async function exportCorosWatchfaceProject(
   input: CorosWatchfaceProjectExportInput,
@@ -931,7 +1005,7 @@ export async function exportCorosWatchfaceProject(
       name: "coroslink-project.json",
       data: Buffer.from(JSON.stringify(manifest), "utf8")
     },
-    { name: "starter.dat", data: await fs.promises.readFile(source.path) },
+    { name: "starter.dat", data: await distributableStarterArchive(source.path, name) },
     { name: "preview.png", data: preview }
   ]);
   if (projectZip.byteLength > MAX_PROJECT_PACKAGE_BYTES) {
@@ -1508,6 +1582,164 @@ export async function loadCorosWatchfaceArtwork(
 }
 
 /**
+ * Every `[key]=` a template declares — blank values included. COROS's compiler
+ * fills the slots its template owns and drops keys the template never declared,
+ * so this list is the template's capability surface, not just its content.
+ */
+async function declaredConfigKeys(archivePath: string): Promise<Set<string>> {
+  const directory = await openTemplateArchive(archivePath);
+  const keys = new Set<string>();
+  for (const entry of directory.files) {
+    if (entry.type !== "File" || !/^watchface_\d+x\d+\/(?:AOD)?config\.txt$/i.test(entry.path)) continue;
+    const text = (await entry.buffer()).toString("utf8");
+    for (const match of text.matchAll(/^[\t ]*\[([a-z0-9_]+)\][\t ]*=/gim)) keys.add(match[1]!.toLowerCase());
+  }
+  return keys;
+}
+function configKeysOf(entries: WatchfaceConversionEntry[]): Set<string> {
+  const keys = new Set<string>();
+  for (const entry of entries) {
+    if (!/^watchface_\d+x\d+\/(?:AOD)?config\.txt$/i.test(normalizeConversionPath(entry.name))) continue;
+    for (const match of entry.data.toString("utf8").matchAll(/^[\t ]*\[([a-z0-9_]+)\][\t ]*=[\t ]*\S/gim)) keys.add(match[1]!.toLowerCase());
+  }
+  return keys;
+}
+interface CarrierCacheMeta { scanned: boolean; keys: string[] }
+
+/**
+ * Resolve a carrier once per device and keep it available for offline
+ * conversion. The carrier contributes the exported face's template identity,
+ * and COROS compiles only what that template natively supports: a PACE Pro
+ * STANDARD carrier declares no weather, metric or progress-arc slots, so a
+ * recovered face built on it loses those elements on the watch even though the
+ * archive carries the keys and artwork. `wanted` therefore steers the choice
+ * toward the template that declares the most of what this face actually uses.
+ */
+async function conversionCarrier(target: WatchfaceTarget, wanted: Set<string> = new Set()): Promise<SelectedArchive> {
+  const cacheDirectory = path.join(app.getPath("userData"), "watchface-conversion-carriers");
+  const cachePath = path.join(cacheDirectory, `${target.model}.zip`);
+  const metaPath = path.join(cacheDirectory, `${target.model}.carrier.json`);
+  const usable = (archive: SelectedArchive) =>
+    target.sizes.every(size => archive.resolutionDirectories.includes(`watchface_${size}x${size}`));
+  let cached: SelectedArchive | undefined;
+  try {
+    const inspected = await inspectArchive(cachePath);
+    if (usable(inspected)) cached = { ...inspected, firmwareType: target.firmwareType };
+  } catch { /* Fetch the device's official carrier on first use. */ }
+  if (cached) {
+    let meta: CarrierCacheMeta | undefined;
+    try { meta = JSON.parse(await fs.promises.readFile(metaPath, "utf8")) as CarrierCacheMeta; } catch { /* Pre-capability cache. */ }
+    const keys = new Set(meta?.keys ?? [...(await declaredConfigKeys(cachePath))]);
+    // A scanned carrier is already the best the catalog offered; only an
+    // unscanned one is worth replacing when this face needs more than it has.
+    if (meta?.scanned || [...wanted].every(key => keys.has(key))) return cached;
+  }
+  const scan = async () => {
+    const themes = await listCorosWatchfaceThemes({ firmwareType: target.firmwareType, catalog: "editable" });
+    const ranked = themes.filter(theme => theme.packageUrl).sort((a, b) => {
+      const rank = (name: string) => /^(BOLD|SIMPLE)$/i.test(name) ? 0 : 1;
+      return rank(a.name) - rank(b.name) || (a.id ?? "").localeCompare(b.id ?? "");
+    });
+    let best: { archive: SelectedArchive; keys: Set<string>; covered: number } | undefined;
+    for (const theme of ranked.slice(0, 8)) {
+      const downloaded = await downloadCorosWatchfaceTheme({ packageUrl: theme.packageUrl!, name: theme.name, firmwareType: target.firmwareType });
+      if (!downloaded.archive) continue;
+      const selected = requireSelectedArchive(downloaded.archive.archiveId);
+      if (!usable(selected)) continue;
+      const keys = await declaredConfigKeys(selected.path);
+      const covered = [...wanted].filter(key => keys.has(key)).length;
+      if (!best || covered > best.covered) best = { archive: selected, keys, covered };
+      if (best.covered === wanted.size) break;
+    }
+    if (!best) throw new Error(`COROS did not provide a complete ${target.label} conversion template. Your source project is unchanged.`);
+    await fs.promises.mkdir(cacheDirectory, { recursive: true });
+    await fs.promises.copyFile(best.archive.path, cachePath);
+    await fs.promises.writeFile(metaPath, JSON.stringify({ scanned: true, keys: [...best.keys] } satisfies CarrierCacheMeta));
+    return best.archive;
+  };
+  try {
+    return await scan();
+  } catch (error) {
+    // Offline, or COROS refused the catalog: a cached carrier still converts.
+    if (cached) return cached;
+    throw error;
+  }
+}
+
+async function prepareRecoveredExportZip(bytes: Buffer, target: WatchfaceTarget, preview: Electron.NativeImage): Promise<Buffer> {
+  const unzipper = require("unzipper") as UnzipperModule;
+  const sourceKeys = configKeysOf(await Promise.all((await unzipper.Open.buffer(bytes)).files
+    .filter(entry => entry.type === "File" && /config\.txt$/i.test(entry.path))
+    .map(async entry => ({ name: entry.path, data: await entry.buffer() }))));
+  const carrier = await conversionCarrier(target, sourceKeys);
+  const [sourceDirectory, carrierDirectory] = await Promise.all([
+    unzipper.Open.buffer(bytes), openTemplateArchive(carrier.path)
+  ]);
+  const readEntries = (files: UnzipperFile[]) => Promise.all(files.filter(entry => entry.type === "File")
+    .map(async entry => ({ name: entry.path, data: await entry.buffer() })));
+  const [sourceEntries, carrierEntries] = await Promise.all([
+    readEntries(sourceDirectory.files), readEntries(carrierDirectory.files)
+  ]);
+  // The recovered catalog thumbnail can be smaller than the DIY preview.
+  // Keep the renderer's full composition instead of enlarging that thumbnail.
+  const previewEntry = sourceEntries.find(entry => entry.name === "watchface_customize.png");
+  if (previewEntry) previewEntry.data = preview.toPNG();
+  const entries = finalizeWatchfaceDeviceLayout(
+    fitGeneratedWatchfaceFontRects(prepareRecoveredWatchfaceExport(sourceEntries, carrierEntries, target)), target
+  );
+  validateArchiveInventory(entries.map(entry => ({ path: entry.name, type: "File", uncompressedSize: entry.data.length })),
+    MAX_ARCHIVE_FILES, MAX_ARCHIVE_EXPANDED_BYTES, MAX_ARCHIVE_ENTRY_BYTES, 7, "exported watch-face archive");
+  const zip = createStoreZip(entries);
+  if (zip.length > MAX_ARCHIVE_BYTES) throw new Error("The exported archive exceeds 100 MB.");
+  return zip;
+}
+
+export async function convertCorosWatchfaceArchive(
+  input: CorosWatchfaceConversionInput
+): Promise<CorosWatchfaceConversionResult> {
+  const target = getWatchfaceTarget(input?.watchModel);
+  if (!target || input.watchModel !== target.model) throw new Error("Choose a supported destination watch.");
+  const source = requireSelectedArchive(input.sourceArchiveId);
+  const verified = await inspectArchive(source.path, source.archiveId);
+  if (verified.modifiedMs !== source.modifiedMs) throw new Error("The source template changed. Reopen it before converting.");
+  const rawEdits = Object.fromEntries(validateConfigTextReplacements(
+    Object.entries(input.configTextEdits ?? {}).map(([path, text]) => ({ path, text }))
+  ));
+  const readEntries = async (archivePath: string) => {
+    const archive = await openTemplateArchive(archivePath);
+    return Promise.all(archive.files.filter(entry => entry.type === "File").map(async entry => ({ name: entry.path, data: await entry.buffer() })));
+  };
+  // A conversion also keeps only the carrier's native capabilities, so it picks
+  // by the source's own keys unless the caller named a destination template.
+  const carrier = input.targetArchiveId
+    ? requireSelectedArchive(input.targetArchiveId)
+    : await conversionCarrier(target, configKeysOf(await readEntries(source.path)));
+  if (carrier.firmwareType && carrier.firmwareType.toUpperCase() !== target.firmwareType.toUpperCase()) {
+    throw new Error("The destination template belongs to a different watch.");
+  }
+  if (!target.sizes.every(size => carrier.resolutionDirectories.includes(`watchface_${size}x${size}`))) {
+    throw new Error(`The destination template does not contain every ${target.label} resolution.`);
+  }
+  const [sourceEntries, carrierEntries] = await Promise.all([readEntries(source.path), readEntries(carrier.path)]);
+  const converted = convertWatchfaceEntries(sourceEntries, carrierEntries, target, rawEdits);
+  validateArchiveInventory(converted.entries.map(entry => ({ path: entry.name, type: "File", uncompressedSize: entry.data.length })), MAX_ARCHIVE_FILES, MAX_ARCHIVE_EXPANDED_BYTES, MAX_ARCHIVE_ENTRY_BYTES, 7, "converted watch-face archive");
+  const bytes = createStoreZip(converted.entries);
+  if (bytes.length > MAX_ARCHIVE_BYTES) throw new Error("The converted archive exceeds 100 MB.");
+  const outputDirectory = path.join(app.getPath("userData"), "watchface-archives");
+  await fs.promises.mkdir(outputDirectory, { recursive: true });
+  const outputPath = path.join(outputDirectory, `${crypto.randomUUID()}-${target.model}.dat`);
+  try {
+    await fs.promises.writeFile(outputPath, bytes, { flag: "wx" });
+    const archive = { ...(await inspectArchive(outputPath)), firmwareType: target.firmwareType };
+    selectedArchives.set(archive.archiveId, archive);
+    return { archive: toPublicArchive(archive), appliedRawConfigEditCount: converted.appliedRawConfigEditCount, generatedAod: converted.generatedAod, display: target.display };
+  } catch (error) {
+    await fs.promises.rm(outputPath, { force: true });
+    throw error;
+  }
+}
+
+/**
  * Builds a new uploadable archive from the source template. Dynamic controls
  * remain firmware-backed; the renderer supplies a composed root image so the
  * COROS share/install preview matches the face instead of showing only artwork.
@@ -1532,20 +1764,34 @@ export async function createCorosWatchfaceArchive(
   }
 
   const requestedFirmwareType = normalizeOptionalFirmwareType(input.firmwareType);
+  // A recovered official face is scaled from its native tree at export, so it
+  // can be built for any supported watch, not only the one it was decoded from.
   if (
     requestedFirmwareType &&
     source.firmwareType &&
-    requestedFirmwareType.toUpperCase() !== source.firmwareType.toUpperCase()
+    requestedFirmwareType.toUpperCase() !== source.firmwareType.toUpperCase() &&
+    !verifiedSource.recoveredFromCompiled
   ) {
     throw new Error(
       `This starter template was selected for ${source.firmwareType}, not ${requestedFirmwareType}. Browse templates again for the connected watch.`
     );
   }
   const firmwareType = requestedFirmwareType ?? source.firmwareType;
-  assertFirmwareResolutionCompatibility(
-    verifiedSource.resolutionDirectories,
-    firmwareType,
-    input.watchModel
+  const exportTarget = getWatchfaceTarget(input.watchModel ?? firmwareType);
+  const firmwareTarget = getWatchfaceTarget(firmwareType);
+  if (exportTarget && firmwareTarget && exportTarget.model !== firmwareTarget.model) {
+    throw new Error("The selected watch and COROS firmware type do not match.");
+  }
+  const recoveredTarget = verifiedSource.recoveredFromCompiled
+    ? getWatchfaceTarget(input.watchModel ?? firmwareType) : undefined;
+  if (verifiedSource.recoveredFromCompiled && !recoveredTarget) {
+    throw new Error("Choose a supported watch before exporting this recovered official face.");
+  }
+  if (recoveredTarget && firmwareType && recoveredTarget.firmwareType.toUpperCase() !== firmwareType.toUpperCase()) {
+    throw new Error("The selected watch and COROS firmware type do not match.");
+  }
+  if (!recoveredTarget) assertFirmwareResolutionCompatibility(
+    verifiedSource.resolutionDirectories, firmwareType, input.watchModel
   );
 
   const background = renderCreatorBackground(input.backgroundDataUrl);
@@ -1599,7 +1845,10 @@ export async function createCorosWatchfaceArchive(
       `Archive watch-face version ${watchFaceVersion} is too low for the selected features; use version ${minimumWatchFaceVersion} or newer.`
     );
   }
-  const zip = await rewriteTemplateArchive(
+  if (recoveredTarget && (templateIdOverride || watchfaceIdOverride)) {
+    throw new Error("Recovered faces use a compatible COROS template identity. Clear the template/watch-face ID overrides before exporting.");
+  }
+  let zip = await rewriteTemplateArchive(
     verifiedSource.path,
     replacements,
     background,
@@ -1612,8 +1861,10 @@ export async function createCorosWatchfaceArchive(
     templateNameOverride,
     watchfaceIdOverride,
     configTextReplacements,
-    input.stripBlankConfigKeys === true
+    input.stripBlankConfigKeys === true,
+    recoveredTarget ? undefined : exportTarget
   );
+  if (recoveredTarget) zip = await prepareRecoveredExportZip(zip, recoveredTarget, preview);
   const outputDirectory = path.join(app.getPath("userData"), "watchface-archives");
   await fs.promises.mkdir(outputDirectory, { recursive: true });
   const outputPath = path.join(outputDirectory, `${crypto.randomUUID()}.dat`);
@@ -1628,7 +1879,7 @@ export async function createCorosWatchfaceArchive(
   const selected: SelectedArchive = {
     ...generated,
     fileName: "CorosLink custom face.dat",
-    ...(firmwareType ? { firmwareType } : {})
+    ...(firmwareType || recoveredTarget ? { firmwareType: firmwareType ?? recoveredTarget!.firmwareType } : {})
   };
   selectedArchives.set(selected.archiveId, selected);
   return toPublicArchive(selected);
@@ -1714,7 +1965,7 @@ export async function loadCorosWatchfaceTemplateConfigTexts(
     }
     texts.push({
       path: entry.path.replace(/^\.\//, ""),
-      text: (await entry.buffer()).toString("utf8")
+      text: restoreWatchfaceDateLayout((await entry.buffer()).toString("utf8"))
     });
   }
   return texts;
@@ -1820,6 +2071,14 @@ export function applyCorosWatchfaceConfigOverrides(
     // not originally declare. The renderer only emits this fixed allow-list;
     // arbitrary missing keys remain rejected below.
     "rect_control1_pos",
+    // Studio offers these standalone status states even when the template
+    // omits them. Custom artwork also synthesizes their shared position.
+    "bluetooth_icon_pos",
+    "bluetooth_on_icon",
+    "bluetooth_off_icon",
+    "no_disturb_icon_pos",
+    "no_disturb_on_icon",
+    "no_disturb_off_icon",
     "weather_icon_pos",
     "weather_icon_dir",
     "weather_dark_icon_dir",
@@ -2253,7 +2512,7 @@ async function readTemplateConfig(
   if (!entry || (entry.size ?? entry.uncompressedSize ?? 0) > MAX_INFO_BYTES) {
     return {};
   }
-  return parseCorosWatchfaceConfig((await entry.buffer()).toString("utf8"));
+  return parseCorosWatchfaceConfig(restoreWatchfaceDateLayout((await entry.buffer()).toString("utf8")));
 }
 
 /**
@@ -2310,7 +2569,9 @@ async function discoverSpriteAssets(
   const spriteFolders: CorosWatchfaceSpriteFolder[] = [];
   const stateFolders = new Set(
     configs.flatMap((config) => Object.entries(config))
-      .filter(([key, value]) => (/_icon_dir$/.test(key) || key === "weather_temp_max_min_dgree_icon") && Boolean(value))
+      // Level tables (stamina, sleep HRV, UV, AQI, training load, stress) and
+      // the moon phase set are state folders of arbitrary length.
+      .filter(([key, value]) => (/_icon_dir$/.test(key) || /_level_icon$/.test(key) || /^(today|week)_\w+_unit_icon$/.test(key) || key === "chart_moon_icon" || key === "weather_temp_max_min_dgree_icon") && Boolean(value))
       .map(([, value]) => value.replace(/\\/g, "/").replace(/^\.\//, ""))
   );
   for (const [folder, numbered] of folderFiles) {
@@ -2449,7 +2710,17 @@ async function openTemplateArchive(
 ): Promise<{ files: UnzipperFile[] }> {
   const unzipper = require("unzipper") as UnzipperModule;
   try {
-    return await unzipper.Open.file(archivePath);
+    const directory = await unzipper.Open.file(archivePath);
+    // Four official editable templates spell a resolution separator as × or
+    // ??. Normalize reads as well as conversion so Studio still authors at
+    // 800px before the user changes watches. This never rewrites the source ZIP.
+    const names = new Set<string>();
+    for (const entry of directory.files) {
+      entry.path = normalizeConversionPath(entry.path);
+      if (names.has(entry.path)) throw new Error("Duplicate archive path.");
+      names.add(entry.path);
+    }
+    return directory;
   } catch {
     throw new Error("That file is not a readable ZIP watchface archive.");
   }
@@ -2470,6 +2741,9 @@ export async function publishCorosWatchface(
     throw new Error(
       "The archive changed after it was selected. Review it and publish again."
     );
+  }
+  if (freshArchive.recoveredFromCompiled) {
+    throw new Error("This is an editor recovery archive. Open it in the editor and export or send it again to build the COROS format.");
   }
 
   const name = sanitizeTemplateName(input.name);
@@ -3374,7 +3648,8 @@ async function rewriteTemplateArchive(
   templateNameOverride?: string,
   watchfaceIdOverride?: string,
   configTextReplacements: Map<string, string> = new Map(),
-  stripBlankConfigKeys = false
+  stripBlankConfigKeys = false,
+  exportTarget?: WatchfaceTarget
 ): Promise<Buffer> {
   const directory = await openTemplateArchive(sourcePath);
   const originalSourceFiles = directory.files.filter((entry) => entry.type === "File");
@@ -3400,9 +3675,10 @@ async function rewriteTemplateArchive(
   }
   const parsedConfigs = new Map<string, Record<string, string>>();
   for (const entry of configEntries) {
-    const rawText =
+    const rawText = restoreWatchfaceDateLayout(
       configTextReplacements.get(entry.path) ??
-      (await entry.buffer()).toString("utf8");
+      (await entry.buffer()).toString("utf8")
+    );
     parsedConfigs.set(entry.path, parseCorosWatchfaceConfig(rawText));
   }
   const normalizeConfigFolder = (value: string | undefined) =>
@@ -3447,14 +3723,11 @@ async function rewriteTemplateArchive(
     const match = spritePath.match(/^(watchface_\d+x\d+)\/cl_battery_icon\/\d{2}\.png$/i);
     if (match) studioBatteryResolutions.add(match[1]!);
   }
-  for (const required of [
-    "watchface_customize.png",
-    "watchface_800x800/background.png",
-    "watchface_800x800/thmb.png"
-  ]) {
-    if (!sourcePaths.has(required)) {
-      throw new Error("This template does not include the assets required by the creator.");
-    }
+  const hasNativeBackground = sourceFiles.some(entry =>
+    /^watchface_\d+x\d+\/background\.png$/i.test(entry.path) &&
+    sourcePaths.has(entry.path.replace(/background\.png$/i, "config.txt")));
+  if (!sourcePaths.has("watchface_customize.png") || !hasNativeBackground) {
+    throw new Error("This template does not include the assets required by the creator.");
   }
 
   // Every firmware family ships its own resolution trees. Replace each
@@ -3570,8 +3843,9 @@ async function rewriteTemplateArchive(
         (isConfigFile && watchfaceIdOverride !== undefined) ||
         (isConfigFile && stripBlankConfigKeys)
       ) {
-        const rawConfig =
-          textReplacement ?? (await entry.buffer()).toString("utf8");
+        const rawConfig = restoreWatchfaceDateLayout(
+          textReplacement ?? (await entry.buffer()).toString("utf8")
+        );
         const resolutionDirectory = entry.path.split("/", 1)[0]!;
         const withWatchfaceId =
           watchfaceIdOverride !== undefined
@@ -3700,8 +3974,9 @@ async function rewriteTemplateArchive(
       finalPaths.add(aodPath);
     }
   }
-  const finalEntries = removeUnreferencedStudioSprites(
-    fitGeneratedWatchfaceFontRects(orderedEntries)
+  const finalEntries = finalizeWatchfaceDeviceLayout(
+    removeUnreferencedStudioSprites(fitGeneratedWatchfaceFontRects(orderedEntries)),
+    exportTarget
   );
   validateArchiveInventory(
     finalEntries.map((entry) => ({
@@ -3728,7 +4003,7 @@ function removeUnreferencedStudioSprites(
 ): { name: string; data: Buffer }[] {
   const references = new Set<string>();
   for (const entry of entries) {
-    if (!CONFIG_TEXT_PATH_PATTERN.test(entry.name)) continue;
+    if (!CONFIG_TEXT_PATH_PATTERN.test(entry.name) && !entry.name.endsWith(`/${RETAINED_AOD_CONFIG}`)) continue;
     const resolutionDirectory = entry.name.split("/", 1)[0]!.toLowerCase();
     for (const value of Object.values(parseCorosWatchfaceConfig(entry.data.toString("utf8")))) {
       const relative = value.trim().replace(/\\/g, "/")
@@ -3844,6 +4119,7 @@ async function inspectArchive(
     sourceTemplateId,
     diyVersion,
     watchFaceVersion,
+    ...(manifest.coroslinkRecovery?.partial === true ? { recoveredFromCompiled: true } : {}),
     resolutionDirectories,
     resolutionProfile
   };
@@ -3957,17 +4233,22 @@ function assertFirmwareResolutionCompatibility(
 ): void {
   const normalizedFirmwareType = firmwareType?.trim().toUpperCase();
   const compatibility =
-    normalizedFirmwareType === "COROS W336" || watchModel === "pace-4"
+    normalizedFirmwareType === "COROS W337" || watchModel === "pace-4-pro"
       ? {
-          label: "PACE 4",
-          required: ["watchface_390x390", "watchface_800x800"]
+          label: "PACE 4 Pro",
+          required: ["watchface_466x466", "watchface_800x800"]
         }
-      : normalizedFirmwareType === "COROS W541" || watchModel === "apex-4"
+      : normalizedFirmwareType === "COROS W336" || watchModel === "pace-4"
         ? {
-            label: "APEX 4",
-            required: ["watchface_240x240", "watchface_260x260"]
+            label: "PACE 4",
+            required: ["watchface_390x390", "watchface_800x800"]
           }
-        : null;
+        : normalizedFirmwareType === "COROS W541" || watchModel === "apex-4"
+          ? {
+              label: "APEX 4",
+              required: ["watchface_240x240", "watchface_260x260"]
+            }
+          : null;
   if (!compatibility) {
     return;
   }
@@ -3989,6 +4270,12 @@ function detectWatchfaceResolutionProfile(
   resolutionDirectories: string[]
 ): CorosWatchfaceArchive["resolutionProfile"] {
   const resolutions = new Set(resolutionDirectories);
+  if (
+    resolutions.has("watchface_466x466") &&
+    resolutions.has("watchface_800x800")
+  ) {
+    return "amoled-466-800";
+  }
   if (
     resolutions.has("watchface_240x240") &&
     resolutions.has("watchface_260x260") &&
@@ -4061,7 +4348,10 @@ async function mobileRequest<T>(
       logoutCorosWatchfaces();
       throw new Error("Your COROS mobile session expired. Sign in again.");
     }
-    throw new Error(payload.message?.trim() || "COROS rejected the mobile request.");
+    throw annotateDiagnosticRequest(
+      new Error(`${payload.message?.trim() || "COROS rejected the mobile request."} (COROS ${result || "unknown"})`),
+      options.method, `${baseUrl}${endpoint}`
+    );
   }
   return { ...payload, raw };
 }
@@ -4141,7 +4431,7 @@ function isOfficialShareUrl(value: string): boolean {
 function requireSession(): StoredMobileSession {
   const session = readStoredSession();
   if (!session) {
-    throw new Error("Sign in to your COROS mobile account before publishing.");
+    throw new Error("Sign in to your COROS mobile account to continue.");
   }
   return session;
 }

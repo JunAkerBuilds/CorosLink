@@ -14,6 +14,7 @@ fixture.eventCalls=[]; fixture.syncCalls=[]; fixture.errors=[];
 const workout: TrainingHubScheduledWorkoutEntry = {planId:"p",idInPlan:"w",planProgramId:"program",happenDay:getLocalHappenDayKey(),name:"Morning run",sportType:1,volume:"5 km"};
 let saved: CalendarWorkoutEvent | undefined;
 const api = {
+  onWorkoutEditsChanged: ()=>()=>{},
   getGoogleCalendarStatus: async()=>({connected:true,accountMatches:true,calendar:{id:"g"},autoSync:false}),
   getAppleCalendarStatus: async()=>({connected:true,accountMatches:true,calendar:{id:"a"},autoSync:false}),
   listScheduledWorkouts: async()=>[{...workout,calendarEvent:saved}],
