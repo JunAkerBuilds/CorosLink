@@ -389,10 +389,10 @@ function CalendarConnection({
                 </div>
                 <fieldset disabled={working || !status.accountMatches}>
                   <label className="field">
-                    Event format
+                    Event type
                     <select value={timing.mode} onChange={(event) => changeTiming({ mode: event.target.value as CalendarEventTiming["mode"] })}>
                       <option value="all-day">All-day events</option>
-                      <option value="timed">Timed workout blocks</option>
+                      <option value="timed">Timed events</option>
                     </select>
                   </label>
                   {timing.mode === "timed" ? (
@@ -403,8 +403,8 @@ function CalendarConnection({
                           <input type="time" required value={timing.startTime} onChange={(event) => changeTiming({ startTime: event.target.value })} />
                         </label>
                         <label className="field">
-                          Fallback duration (minutes)
-                          <input type="number" required min={1} max={1440} step={1} value={Number.isFinite(timing.fallbackDurationMinutes) ? timing.fallbackDurationMinutes : ""} onChange={(event) => changeTiming({ fallbackDurationMinutes: event.target.valueAsNumber })} />
+                          Default end time
+                          <input type="time" required value={timing.endTime} onChange={(event) => changeTiming({ endTime: event.target.value })} />
                         </label>
                       </div>
                       <label className="field">
@@ -413,14 +413,14 @@ function CalendarConnection({
                         <datalist id={timeZonesId}>{timeZones.map(zone => <option key={zone} value={zone} />)}</datalist>
                       </label>
                       <p className="calendar-connection-hint">
-                        Uses the workout’s expected duration. The fallback applies when no complete estimate is available.
-                        Move or resize individual events in {providerName} to fit your shifts; sync keeps those edits.
+                        Choose the start and end times for your events. Move or resize individual events in {providerName}; sync keeps those times when workout details change.
                       </p>
+                      {timing.endTime <= timing.startTime ? <p className="calendar-connection-hint">End time is on the following day.</p> : null}
                     </>
                   ) : null}
                   {timingChanged ? (
                     <p className="calendar-connection-hint">
-                      Saving reapplies these defaults to synced workouts in the past 7 and next 90 days.
+                      Saving updates synced workouts without individual event settings in the past 7 and next 90 days.
                       Rescheduling a workout in CorosLink also reapplies its time.
                     </p>
                   ) : null}

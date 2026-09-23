@@ -10,12 +10,16 @@ import { ActivityDetailPanel } from "../training/components/ActivityDetailPanel"
 import { formatHappenDayLabel } from "../training/formatters";
 import type { CalendarSelection } from "./calendarTypes";
 import { ScheduledWorkoutDetail } from "./ScheduledWorkoutDetail";
+import { CalendarEventEditor } from "./CalendarEventEditor";
+import type { CalendarWorkoutEvent } from "../../electron/calendarSyncTypes";
 
 interface DayDetailPanelProps {
   api: CorosLinkApi;
   selection: CalendarSelection | null;
   sportTypes: TrainingHubSportType[];
   deleting: boolean;
+  userId?: string;
+  onEventSaved: (event: CalendarWorkoutEvent) => void;
   onClose: () => void;
   onDelete: (selection: Extract<CalendarSelection, { kind: "scheduled" }>) => void;
   onAskCoach: (selection: CalendarSelection) => void;
@@ -27,6 +31,8 @@ export function DayDetailPanel({
   selection,
   sportTypes,
   deleting,
+  userId,
+  onEventSaved,
   onClose,
   onDelete,
   onAskCoach,
@@ -160,6 +166,13 @@ export function DayDetailPanel({
             </header>
 
             <div className="calendar-detail-body">
+              {selection.kind === "scheduled" && userId ? <CalendarEventEditor
+                key={JSON.stringify([userId, selection.entry.planId, selection.entry.idInPlan, selection.entry.happenDay])}
+                api={api}
+                eventRef={{ userId, planId: selection.entry.planId, idInPlan: selection.entry.idInPlan, happenDay: selection.entry.happenDay }}
+                disabled={deleting}
+                onSaved={onEventSaved}
+              /> : null}
               {selection.kind === "scheduled" ? (
                 <ScheduledWorkoutDetail
                   entry={selection.entry}

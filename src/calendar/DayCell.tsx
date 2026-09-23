@@ -211,6 +211,9 @@ function PairChip({
       <span className="calendar-chip-title">
         <span className="calendar-chip-name">{scheduled.name}</span>
       </span>
+      {scheduled.calendarEvent ? <span className="calendar-chip-meta">
+        {scheduled.calendarEvent.timing.mode === "all-day" ? "All day" : `${scheduled.calendarEvent.timing.startTime}–${scheduled.calendarEvent.timing.endTime}${scheduled.calendarEvent.timing.endTime <= scheduled.calendarEvent.timing.startTime ? " (+1 day)" : ""}`}
+      </span> : null}
       <span className="calendar-chip-meta">
         {formatUpcomingWorkoutVolumeDisplay(scheduled.volume, unitSystem)}
         {scheduled.trainingLoad !== undefined

@@ -3716,6 +3716,8 @@ export interface UploadPlanResult {
 }
 
 export interface TrainingHubScheduledWorkoutEntry {
+  /** Calendar presentation saved locally for this scheduled occurrence. */
+  calendarEvent?: import("./calendarSyncTypes").CalendarWorkoutEvent;
   planId: string;
   idInPlan: string;
   planProgramId: string;

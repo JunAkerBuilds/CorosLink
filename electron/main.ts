@@ -1,3 +1,6 @@
+import { getCalendarWorkoutEvent, updateCalendarWorkoutEvent, syncEditedCalendarWorkout } from "./calendarWorkoutEventService";
+import { listCalendarWorkoutEntries } from "./calendarWorkoutEventStorage";
+import type { CalendarEventTiming, CalendarWorkoutEventRef } from "./calendarSyncTypes";
 import { registerWorkoutAutomation } from "./workoutAutomation";
 import { app, BrowserWindow, dialog, nativeTheme, session, shell } from "electron";
 import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow } from "./diagnosticsService";
@@ -890,6 +893,9 @@ app.on("before-quit", () => {
 });
 
 function registerIpcHandlers(): void {
+  ipcMain.handle("calendar:getWorkoutEvent", (_event, ref: CalendarWorkoutEventRef) => getCalendarWorkoutEvent(ref));
+  ipcMain.handle("calendar:updateWorkoutEvent", (_event, input: { ref: CalendarWorkoutEventRef; timing: CalendarEventTiming }) => updateCalendarWorkoutEvent(input));
+  ipcMain.handle("calendar:syncEditedWorkout", (_event, ref: CalendarWorkoutEventRef) => syncEditedCalendarWorkout(ref));
   ipcMain.handle("appleCalendar:status", () => appleCalendar.status());
   ipcMain.handle("appleCalendar:connect", (_event, input: AppleCalendarCredentials) => appleCalendar.connect(input));
   ipcMain.handle("appleCalendar:cancelConnect", () => appleCalendar.cancelConnect());
@@ -1577,7 +1583,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "trainingHub:listScheduledWorkouts",
     (_event, startDay: string, endDay: string) =>
-      listScheduledWorkoutEntries(startDay, endDay)
+      listCalendarWorkoutEntries(startDay, endDay)
   );
 
   ipcMain.handle("trainingHub:listLibraryWorkouts", () =>

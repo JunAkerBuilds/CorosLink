@@ -84,7 +84,6 @@ export function serializeAppleWorkout(
     `X-COROSLINK-DAY:${event.day}`,
     ...(event.timingKey ? [
       `X-COROSLINK-TIMING:${event.timingKey}`,
-      `X-COROSLINK-DURATION:${event.durationSeconds}`,
     ] : []),
     "END:VEVENT",
     "END:VCALENDAR",
@@ -234,7 +233,6 @@ export function parseAppleWorkout(
     startTime,
     endTime,
     timingKey: get("X-COROSLINK-TIMING") || undefined,
-    durationSeconds: Number(get("X-COROSLINK-DURATION")) || undefined,
   };
 }
 
@@ -247,7 +245,6 @@ function matches(
     (desired.startTime ? remote.startTime === desired.startTime && remote.endTime === desired.endTime
       : remote.actualStart === desired.day && remote.endDay === desired.endDay) &&
     remote.timingKey === desired.timingKey &&
-    remote.durationSeconds === desired.durationSeconds &&
     remote.day === desired.day &&
     remote.summary === desired.summary &&
     remote.description === desired.description

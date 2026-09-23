@@ -239,7 +239,12 @@ export class AppleCalendarClient {
     });
   }
 
-  sync(): Promise<CalendarSyncResult> {
+  async syncAfterCurrentOperation(userId: string, day: string): Promise<CalendarSyncResult> {
+    while (this.active) await this.active.promise.catch(() => undefined);
+    return this.sync(day, userId);
+  }
+
+  sync(day?: string, expectedUserId?: string): Promise<CalendarSyncResult> {
     return this.run(async (signal) => {
       this.syncing = true;
       try {
@@ -249,7 +254,11 @@ export class AppleCalendarClient {
           throw new Error("Choose an iCloud calendar to start syncing.");
         const userId = state.corosUserId!;
         const sourceRevision = this.dependencies.sourceRevision?.();
-        const range = calendarSyncRange();
+        if (expectedUserId && expectedUserId !== this.dependencies.sourceUserId())
+          throw new Error("Your COROS account changed. Reopen the calendar and try again.");
+        const regularRange = calendarSyncRange();
+        const outsideWindow = day && (day < regularRange.startDay || day > regularRange.endDay);
+        const range = outsideWindow ? { startDay: day, endDay: day } : regularRange;
         const workouts = await readCalendarWorkouts({
           userId,
           ...range,
@@ -269,7 +278,7 @@ export class AppleCalendarClient {
         this.dependencies.write({
           ...this.dependencies.read(),
           lastSyncedAt: new Date().toISOString(),
-          syncedSourceRevision: sourceRevision,
+          syncedSourceRevision: outsideWindow ? state.syncedSourceRevision : sourceRevision,
           error: undefined,
         });
         return result;

@@ -392,7 +392,12 @@ export class GoogleCalendarClient {
     });
   }
 
-  sync(): Promise<GoogleCalendarSyncResult> {
+  async syncAfterCurrentOperation(userId: string, day: string): Promise<GoogleCalendarSyncResult> {
+    while (this.active) await this.active.promise.catch(() => undefined);
+    return this.sync(day, userId);
+  }
+
+  sync(day?: string, expectedUserId?: string): Promise<GoogleCalendarSyncResult> {
     return this.run(async (signal) => {
       this.syncing = true;
       try {
@@ -407,7 +412,11 @@ export class GoogleCalendarClient {
             "Calendar sync is paused. Sign in to the linked COROS account or reconnect Google Calendar.",
           );
         const sourceRevision = this.dependencies.sourceRevision?.();
-        const range = calendarSyncRange();
+        if (expectedUserId && expectedUserId !== this.dependencies.sourceUserId())
+          throw new Error("Your COROS account changed. Reopen the calendar and try again.");
+        const regularRange = calendarSyncRange();
+        const outsideWindow = day && (day < regularRange.startDay || day > regularRange.endDay);
+        const range = outsideWindow ? { startDay: day, endDay: day } : regularRange;
         const workouts = await readCalendarWorkouts({
           userId,
           ...range,
@@ -428,7 +437,7 @@ export class GoogleCalendarClient {
         this.dependencies.write({
           ...this.dependencies.read(),
           lastSyncedAt: new Date().toISOString(),
-          syncedSourceRevision: sourceRevision,
+          syncedSourceRevision: outsideWindow ? state.syncedSourceRevision : sourceRevision,
           error: undefined,
         });
         return result;

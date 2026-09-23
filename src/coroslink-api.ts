@@ -1,3 +1,4 @@
+import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEventSaveResult } from "../electron/calendarSyncTypes";
 import type { ChatGptModelInfo } from "../electron/chatModels";
 import type { StrengthEditPreview } from "../electron/workoutEditTypes";
 import type { HealthInsightKind, HealthInsightResult } from "../electron/healthInsightsTypes";
@@ -206,6 +207,9 @@ export interface CorosLinkApi {
   cancelAppleCalendarConnect: () => Promise<void>;
   disconnectAppleCalendar: () => Promise<CalendarConnectionStatus>;
   listAppleCalendars: () => Promise<CalendarChoice[]>;
+  getCalendarWorkoutEvent: (ref: CalendarWorkoutEventRef) => Promise<CalendarEventTiming>;
+  updateCalendarWorkoutEvent: (input: { ref: CalendarWorkoutEventRef; timing: CalendarEventTiming }) => Promise<CalendarWorkoutEventSaveResult>;
+  syncEditedCalendarWorkout: (ref: CalendarWorkoutEventRef) => Promise<Pick<CalendarWorkoutEventSaveResult, "synced" | "errors">>;
   updateAppleCalendarSettings: (input: CalendarSyncSettings) => Promise<CalendarConnectionStatus>;
   syncAppleCalendar: () => Promise<CalendarSyncResult>;
   getGoogleCalendarStatus: () => Promise<GoogleCalendarStatus>;

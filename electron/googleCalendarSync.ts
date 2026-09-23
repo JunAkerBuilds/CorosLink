@@ -58,7 +58,6 @@ export function workoutGoogleEvent(
         corosLinkDay: data.day,
         ...(data.timingKey ? {
           corosLinkTiming: data.timingKey,
-          corosLinkDuration: String(data.durationSeconds),
         } : {}),
       },
     },
@@ -78,7 +77,6 @@ function keepCalendarTime(remote: GoogleWorkoutEvent, desired: GoogleWorkoutEven
   const timing = (event: GoogleWorkoutEvent) => ({
     startTime: googleEventTime(event.start), endTime: googleEventTime(event.end),
     timingKey: event.extendedProperties?.private?.corosLinkTiming,
-    durationSeconds: Number(event.extendedProperties?.private?.corosLinkDuration) || undefined,
   });
   const resolved = reconcileCalendarTiming(timing(remote), timing(desired));
   return resolved.startTime ? { ...desired, start: { dateTime: resolved.startTime }, end: { dateTime: resolved.endTime } } : desired;
@@ -98,7 +96,6 @@ function matches(
     sameDate(remote.start, desired.start) &&
     sameDate(remote.end, desired.end) &&
     (remote.extendedProperties?.private?.corosLinkTiming || undefined) === desired.extendedProperties?.private?.corosLinkTiming &&
-    (remote.extendedProperties?.private?.corosLinkDuration || undefined) === desired.extendedProperties?.private?.corosLinkDuration &&
     remote.extendedProperties?.private?.corosLinkDay ===
       desired.extendedProperties?.private?.corosLinkDay
   );
