@@ -575,8 +575,8 @@ test("partial grants and absent offline access fail before connecting", async ()
   );
 });
 
-const timedPreferences = { mode: "timed", startTime: "18:00", timeZone: "America/Toronto", fallbackDurationMinutes: 60 };
-test("Google timed events migrate in place, preserve calendar moves/resizes and update estimates", async () => {
+const timedPreferences = { mode: "timed", startTime: "18:00", endTime: "19:00", timeZone: "America/Toronto" };
+test("Google timed events migrate in place, preserve calendar moves/resizes regardless of workout estimates", async () => {
   const entry = { ...workout(), rawProgram: { estimatedTime: 2700 } };
   const api = fakeCalendar();
   const input = syncInput(api, [entry]);
@@ -586,7 +586,7 @@ test("Google timed events migrate in place, preserve calendar moves/resizes and 
   assert.equal((await syncWorkoutEvents(timedInput)).updated, 1);
   assert.equal(api.events.size,1);
   assert.equal(api.events.get(id).start.dateTime,"2026-09-04T22:00:00.000Z");
-  assert.equal(api.events.get(id).end.dateTime,"2026-09-04T22:45:00.000Z");
+  assert.equal(api.events.get(id).end.dateTime,"2026-09-04T23:00:00.000Z");
   assert.equal((await syncWorkoutEvents(timedInput)).unchanged,1);
   const moved = api.events.get(id);
   moved.start = {dateTime:"2026-09-05T09:00:00",timeZone:"America/Toronto"};
@@ -596,12 +596,18 @@ test("Google timed events migrate in place, preserve calendar moves/resizes and 
   entry.name="Longer run";
   assert.equal((await syncWorkoutEvents(timedInput)).updated,1);
   assert.equal(api.events.get(id).start.dateTime,"2026-09-05T13:00:00.000Z");
-  assert.equal(api.events.get(id).end.dateTime,"2026-09-05T14:00:00.000Z");
-  api.events.get(id).end.dateTime="2026-09-05T14:30:00Z";
+  assert.equal(api.events.get(id).end.dateTime,"2026-09-05T13:45:00.000Z");
+  api.events.get(id).end.dateTime="2026-09-05T14:30:00.000Z";
   entry.rawProgram.estimatedTime=4500;
   await syncWorkoutEvents(timedInput);
   assert.equal(api.events.get(id).end.dateTime,"2026-09-05T14:30:00.000Z");
   assert.equal((await syncWorkoutEvents(timedInput)).unchanged,1);
+  for (const duration of [5400, 7200]) {
+    entry.rawProgram = {planDuration: duration, duration, estimatedTime: duration};
+    entry.name = `Run ${duration}`;
+    await syncWorkoutEvents(timedInput);
+    assert.equal(api.events.get(id).end.dateTime,"2026-09-05T14:30:00.000Z");
+  }
   assert.equal((await syncWorkoutEvents({...timedInput,eventTiming:{...timedPreferences,startTime:"07:00"}})).updated,1);
   assert.equal(api.events.get(id).start.dateTime,"2026-09-04T11:00:00.000Z");
   assert.equal((await syncWorkoutEvents(input)).updated,1);
@@ -625,4 +631,44 @@ test("Google settings persist timing, invalidate sync status and reject invalid 
   assert.deepEqual(f.client.status().eventTiming,timedPreferences);
   await assert.rejects(f.client.updateSettings({eventTiming:{...timedPreferences,startTime:"25:00"}}),/valid start time/);
   assert.deepEqual(f.state.eventTiming,timedPreferences);
+});
+
+test("Google applies individual event saves in place without changing other workout times", async () => {
+  const api=fakeCalendar();
+  const entry=workout();
+  const other=workout("other");
+  const input={...syncInput(api,[entry,other]),eventTiming:timedPreferences};
+  await syncWorkoutEvents(input);
+  const id=workoutGoogleEvent("coros-1",entry).id;
+  const otherId=workoutGoogleEvent("coros-1",other).id;
+  entry.calendarEvent={timing:{...timedPreferences,startTime:"07:30",endTime:"08:15"},revision:"save-1"};
+  await syncWorkoutEvents(input);
+  assert.equal(api.events.size,2);
+  assert.equal(api.events.get(id).start.dateTime,"2026-09-04T11:30:00.000Z");
+  assert.equal(api.events.get(id).end.dateTime,"2026-09-04T12:15:00.000Z");
+  assert.equal(api.events.get(otherId).start.dateTime,"2026-09-04T22:00:00.000Z");
+  api.events.get(id).start.dateTime="2026-09-04T10:00:00.000Z";
+  await syncWorkoutEvents(input);
+  assert.equal(api.events.get(id).start.dateTime,"2026-09-04T10:00:00.000Z");
+  entry.calendarEvent.revision="save-2";
+  await syncWorkoutEvents(input);
+  assert.equal(api.events.get(id).start.dateTime,"2026-09-04T11:30:00.000Z");
+  entry.calendarEvent={timing:{...timedPreferences,mode:"all-day"},revision:"save-3"};
+  await syncWorkoutEvents(input);
+  assert.equal(api.events.get(id).start.date,"2026-09-04");
+  assert.equal(api.events.get(otherId).start.dateTime,"2026-09-04T22:00:00.000Z");
+});
+
+test("Google queues explicit event sync behind active sync and supports days outside the normal window", async () => {
+  const f=clientFixture();
+  let release;
+  const gate=new Promise(resolve=>{release=resolve;});
+  f.setSourceRead(async(start,end)=>{await gate; return start<="20280904" && end>="20280904" ? [workout("far","20280904")] : [];});
+  const active=f.client.sync();
+  const queued=f.client.syncAfterCurrentOperation("coros-1","20280904");
+  release();
+  await Promise.all([active,queued]);
+  assert.equal(f.api.events.size,1);
+  assert.equal([...f.api.events.values()][0].start.date,"2028-09-04");
+  await assert.rejects(f.client.syncAfterCurrentOperation("different-user","20280904"),/account changed/);
 });

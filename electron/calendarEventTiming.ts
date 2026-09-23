@@ -1,20 +1,27 @@
-import type { TrainingHubScheduledWorkoutEntry } from "./types";
 import { defaultCalendarEventTiming, type CalendarEventTiming } from "./calendarSyncTypes";
 
-export function validateCalendarEventTiming(input?: CalendarEventTiming): CalendarEventTiming {
+export function validateCalendarEventTiming(input?: CalendarEventTiming | Omit<CalendarEventTiming, "endTime"> & { fallbackDurationMinutes: number }): CalendarEventTiming {
   if (input === undefined) return defaultCalendarEventTiming();
+  // Migrate saved duration preferences to an explicit end time.
+  let endTime = input && "endTime" in input ? input.endTime : undefined;
+  if (input && endTime === undefined && "fallbackDurationMinutes" in input &&
+      Number.isInteger(input.fallbackDurationMinutes) && input.fallbackDurationMinutes >= 1 &&
+      input.fallbackDurationMinutes <= 1440 && typeof input.startTime === "string") {
+    const [hours, minutes] = input.startTime.split(":").map(Number);
+    const end = (hours * 60 + minutes + input.fallbackDurationMinutes) % 1440;
+    endTime = `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`;
+  }
   if (!input || !["all-day", "timed"].includes(input.mode) ||
       typeof input.startTime !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.startTime) ||
+      typeof endTime !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(endTime) ||
       typeof input.timeZone !== "string" || !input.timeZone || input.timeZone.length > 100 ||
-      !Number.isInteger(input.fallbackDurationMinutes) ||
-      input.fallbackDurationMinutes < 1 || input.fallbackDurationMinutes > 1440) {
-    throw new Error("Choose an event format, valid start time, time zone, and fallback duration from 1 to 1440 minutes.");
+      !endTime) {
+    throw new Error("Choose an event type, valid start time and end time, and time zone.");
   }
   try { new Intl.DateTimeFormat("en", { timeZone: input.timeZone }); }
   catch { throw new Error("Choose a valid time zone, such as America/Toronto."); }
   return {
-    mode: input.mode, startTime: input.startTime, timeZone: input.timeZone,
-    fallbackDurationMinutes: input.fallbackDurationMinutes,
+    mode: input.mode, startTime: input.startTime, endTime, timeZone: input.timeZone,
   };
 }
 
@@ -39,52 +46,13 @@ export function calendarWallTime(day: string, time: string, timeZone: string): n
   return result;
 }
 
-const positiveSeconds = (value: unknown): number | undefined => {
-  if (typeof value !== "number" && typeof value !== "string") return undefined;
-  const seconds = Math.round(Number(value));
-  return Number.isFinite(seconds) && seconds > 0 && seconds <= 7 * 86400 ? seconds : undefined;
-};
-
-/** Prefer COROS's complete estimate. Never mistake only the timed recovery
- * steps in a distance/open-ended workout for its total duration. */
-export function expectedWorkoutSeconds(workout: TrainingHubScheduledWorkoutEntry): number | undefined {
-  const program = workout.rawProgram;
-  if (!program) return undefined;
-  for (const key of ["planDuration", "duration"]) {
-    const seconds = positiveSeconds(program[key]);
-    if (seconds) return seconds;
-  }
-  const exercises = Array.isArray(program.exercises) ? program.exercises : [];
-  if (!exercises.length) return positiveSeconds(program.estimatedTime) ??
-    (Number(program.targetType) === 2 ? positiveSeconds(program.targetValue) : undefined);
-  if (exercises.some(step => !step || typeof step !== "object")) return undefined;
-  const steps = exercises as Record<string, unknown>[];
-  const groups = new Map(steps.filter(step => step.isGroup).map(step => [String(step.id), step]));
-  const leaves = steps.filter(step => !step.isGroup);
-  if (!leaves.length || [...groups.values()].some(group =>
-    !leaves.some(step => String(step.groupId) === String(group.id)))) return undefined;
-  let total = 0;
-  for (const step of leaves) {
-    const seconds = Number(step.targetType) === 2 ? positiveSeconds(step.targetValue) : undefined;
-    if (!seconds) return undefined;
-    const group = groups.get(String(step.groupId));
-    if (step.groupId && String(step.groupId) !== "0" && !group) return undefined;
-    const repeats = Number(group?.sets ?? step.sets ?? 1);
-    if (!Number.isInteger(repeats) || repeats < 1 || repeats > 99) return undefined;
-    total += seconds * repeats;
-  }
-  return positiveSeconds(total);
-}
-
 export interface CalendarTimedEvent {
   startTime?: string;
   endTime?: string;
   timingKey?: string;
-  durationSeconds?: number;
 }
 
-/** Retain calendar moves/resizes until the source day or timing defaults change.
- * Updated workout estimates resize only events the user has not resized. */
+/** Retain the user's calendar times until the source day or timing defaults change. */
 export function reconcileCalendarTiming(remote: CalendarTimedEvent, desired: CalendarTimedEvent): CalendarTimedEvent {
   if (!desired.startTime || !desired.timingKey || remote.timingKey !== desired.timingKey ||
       !remote.startTime || !remote.endTime) return desired;
@@ -93,8 +61,6 @@ export function reconcileCalendarTiming(remote: CalendarTimedEvent, desired: Cal
   return {
     ...desired,
     startTime: new Date(start).toISOString(),
-    endTime: new Date(remote.durationSeconds && desired.durationSeconds &&
-      end - start === remote.durationSeconds * 1000
-        ? start + desired.durationSeconds * 1000 : end).toISOString(),
+    endTime: new Date(end).toISOString(),
   };
 }

@@ -1,3 +1,4 @@
+import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEventSaveResult } from "../electron/calendarSyncTypes";
 import type { DiagnosticsSnapshot, RendererDiagnosticError } from "../electron/diagnosticsTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "../electron/calendarSyncTypes";
 import type { WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
@@ -177,6 +178,9 @@ export interface CorosLinkApi {
   cancelAppleCalendarConnect: () => Promise<void>;
   disconnectAppleCalendar: () => Promise<CalendarConnectionStatus>;
   listAppleCalendars: () => Promise<CalendarChoice[]>;
+  getCalendarWorkoutEvent: (ref: CalendarWorkoutEventRef) => Promise<CalendarEventTiming>;
+  updateCalendarWorkoutEvent: (input: { ref: CalendarWorkoutEventRef; timing: CalendarEventTiming }) => Promise<CalendarWorkoutEventSaveResult>;
+  syncEditedCalendarWorkout: (ref: CalendarWorkoutEventRef) => Promise<Pick<CalendarWorkoutEventSaveResult, "synced" | "errors">>;
   updateAppleCalendarSettings: (input: CalendarSyncSettings) => Promise<CalendarConnectionStatus>;
   syncAppleCalendar: () => Promise<CalendarSyncResult>;
   getGoogleCalendarStatus: () => Promise<GoogleCalendarStatus>;

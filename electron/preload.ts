@@ -1,3 +1,4 @@
+import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEventSaveResult } from "./calendarSyncTypes";
 import { contextBridge, ipcRenderer } from "electron";
 import type { DiagnosticsSnapshot, RendererDiagnosticError } from "./diagnosticsTypes";
 import type { WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
@@ -186,6 +187,9 @@ const api = {
   cancelAppleCalendarConnect: (): Promise<void> => ipcRenderer.invoke("appleCalendar:cancelConnect"),
   disconnectAppleCalendar: (): Promise<CalendarConnectionStatus> => ipcRenderer.invoke("appleCalendar:disconnect"),
   listAppleCalendars: (): Promise<CalendarChoice[]> => ipcRenderer.invoke("appleCalendar:listCalendars"),
+  getCalendarWorkoutEvent: (ref: CalendarWorkoutEventRef): Promise<CalendarEventTiming> => ipcRenderer.invoke("calendar:getWorkoutEvent", ref),
+  updateCalendarWorkoutEvent: (input: { ref: CalendarWorkoutEventRef; timing: CalendarEventTiming }): Promise<CalendarWorkoutEventSaveResult> => ipcRenderer.invoke("calendar:updateWorkoutEvent", input),
+  syncEditedCalendarWorkout: (ref: CalendarWorkoutEventRef): Promise<Pick<CalendarWorkoutEventSaveResult, "synced" | "errors">> => ipcRenderer.invoke("calendar:syncEditedWorkout", ref),
   updateAppleCalendarSettings: (input: CalendarSyncSettings): Promise<CalendarConnectionStatus> => ipcRenderer.invoke("appleCalendar:updateSettings", input),
   syncAppleCalendar: (): Promise<CalendarSyncResult> => ipcRenderer.invoke("appleCalendar:sync"),
   getGoogleCalendarStatus: (): Promise<GoogleCalendarStatus> => ipcRenderer.invoke("googleCalendar:status"),

@@ -768,7 +768,7 @@ test("source failures and a changed account during network reads never write eve
   );
 });
 
-const timedPreferences = { mode: "timed", startTime: "18:00", timeZone: "America/Toronto", fallbackDurationMinutes: 60 };
+const timedPreferences = { mode: "timed", startTime: "18:00", endTime: "19:00", timeZone: "America/Toronto" };
 test("Apple timed events migrate in place, preserve moved times, alarms, location and manual duration", async () => {
   const f = serverFixture();
   const entry = {...workout(), rawProgram:{estimatedTime:2700}};
@@ -779,22 +779,28 @@ test("Apple timed events migrate in place, preserve moved times, alarms, locatio
   assert.equal((await syncAppleWorkoutEvents(timedInput)).updated,1);
   assert.equal(f.resources.size,1);
   assert.match(f.resources.get(href).data,/DTSTART:20260904T220000Z/);
-  assert.match(f.resources.get(href).data,/DTEND:20260904T224500Z/);
+  assert.match(f.resources.get(href).data,/DTEND:20260904T230000Z/);
   assert.equal((await syncAppleWorkoutEvents(timedInput)).unchanged,1);
-  f.resources.get(href).data=f.resources.get(href).data.replace("DTSTART:20260904T220000Z",'DTSTART;TZID="America/Toronto":20260905T090000').replace("DTEND:20260904T224500Z",'DTEND;TZID="America/Toronto":20260905T094500').replace("END:VEVENT","LOCATION:My gym\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nDESCRIPTION:Reminder\r\nEND:VALARM\r\nEND:VEVENT");
+  f.resources.get(href).data=f.resources.get(href).data.replace("DTSTART:20260904T220000Z",'DTSTART;TZID="America/Toronto":20260905T090000').replace("DTEND:20260904T230000Z",'DTEND;TZID="America/Toronto":20260905T094500').replace("END:VEVENT","LOCATION:My gym\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nDESCRIPTION:Reminder\r\nEND:VALARM\r\nEND:VEVENT");
   assert.equal((await syncAppleWorkoutEvents(timedInput)).unchanged,1);
   entry.rawProgram.estimatedTime=3600;
   entry.name="Longer run";
   assert.equal((await syncAppleWorkoutEvents(timedInput)).updated,1);
   assert.match(f.resources.get(href).data,/DTSTART:20260905T130000Z/);
-  assert.match(f.resources.get(href).data,/DTEND:20260905T140000Z/);
+  assert.match(f.resources.get(href).data,/DTEND:20260905T134500Z/);
   assert.match(f.resources.get(href).data,/LOCATION:My gym/);
   assert.match(f.resources.get(href).data,/BEGIN:VALARM\r\nACTION:DISPLAY/);
-  f.resources.get(href).data=f.resources.get(href).data.replace("DTEND:20260905T140000Z","DTEND:20260905T143000Z");
+  f.resources.get(href).data=f.resources.get(href).data.replace("DTEND:20260905T134500Z","DTEND:20260905T143000Z");
   entry.rawProgram.estimatedTime=4500;
   await syncAppleWorkoutEvents(timedInput);
   assert.match(f.resources.get(href).data,/DTEND:20260905T143000Z/);
   assert.equal((await syncAppleWorkoutEvents(timedInput)).unchanged,1);
+  for (const duration of [5400, 7200]) {
+    entry.rawProgram = {planDuration: duration, duration, estimatedTime: duration};
+    entry.name = `Run ${duration}`;
+    await syncAppleWorkoutEvents(timedInput);
+    assert.match(f.resources.get(href).data,/DTEND:20260905T143000Z/);
+  }
   entry.happenDay="20260906";
   await syncAppleWorkoutEvents(timedInput);
   assert.match(f.resources.get(href).data,/DTSTART:20260906T220000Z/);
@@ -818,7 +824,7 @@ test("Apple timing settings survive reconnect and are used by sync; invalid inpu
   assert.match([...f.resources.values()][0].data,/DTSTART:\d{8}T\d{6}Z/);
   await f.client.connect(credentials);
   assert.deepEqual(f.client.status().eventTiming,timedPreferences);
-  await assert.rejects(f.client.updateSettings({eventTiming:{...timedPreferences,fallbackDurationMinutes:0}}),/fallback duration/);
+  await assert.rejects(f.client.updateSettings({eventTiming:{...timedPreferences,endTime:"25:00"}}),/end time/);
   assert.deepEqual(f.state().eventTiming,timedPreferences);
 });
 
@@ -841,4 +847,46 @@ test("Apple accepts duration-based timed events and preserves a move made during
   assert.match(f.resources.get(href).data,/DTEND:20260905T140000Z/);
   assert.doesNotMatch(f.resources.get(href).data,/\r\nDURATION:/);
   assert.equal((await syncAppleWorkoutEvents(input)).unchanged,1);
+});
+
+test("Apple applies individual event saves in place and leaves other workouts unchanged", async () => {
+  const f=serverFixture();
+  const entry=workout();
+  const other=workout("other");
+  const input={...syncInput(f,[entry,other]),eventTiming:timedPreferences};
+  await syncAppleWorkoutEvents(input);
+  const href=appleWorkoutHref(calendar,workoutCalendarData("coros-1",entry).key);
+  const otherHref=appleWorkoutHref(calendar,workoutCalendarData("coros-1",other).key);
+  entry.calendarEvent={timing:{...timedPreferences,startTime:"07:30",endTime:"08:15"},revision:"save-1"};
+  await syncAppleWorkoutEvents(input);
+  assert.equal(f.resources.size,2);
+  assert.match(f.resources.get(href).data,/DTSTART:20260904T113000Z/);
+  assert.match(f.resources.get(href).data,/DTEND:20260904T121500Z/);
+  assert.match(f.resources.get(otherHref).data,/DTSTART:20260904T220000Z/);
+  f.resources.get(href).data=f.resources.get(href).data.replace("DTSTART:20260904T113000Z","DTSTART:20260904T100000Z");
+  await syncAppleWorkoutEvents(input);
+  assert.match(f.resources.get(href).data,/DTSTART:20260904T100000Z/);
+  entry.calendarEvent.revision="save-2";
+  await syncAppleWorkoutEvents(input);
+  assert.match(f.resources.get(href).data,/DTSTART:20260904T113000Z/);
+  entry.calendarEvent={timing:{...timedPreferences,mode:"all-day"},revision:"save-3"};
+  await syncAppleWorkoutEvents(input);
+  assert.match(f.resources.get(href).data,/DTSTART;VALUE=DATE:20260904/);
+  assert.match(f.resources.get(otherHref).data,/DTSTART:20260904T220000Z/);
+});
+
+test("Apple queues an explicit event save behind active sync and supports dates outside the normal window", async () => {
+  const f=clientFixture();
+  await f.client.connect(credentials);
+  await f.client.updateSettings({calendarId:calendar});
+  let release;
+  const gate=new Promise(resolve=>{release=resolve;});
+  f.setRead(async(start,end)=>{await gate;return start<="20280904" && end>="20280904" ? [workout("far","20280904")] : [];});
+  const active=f.client.sync();
+  const queued=f.client.syncAfterCurrentOperation("coros-1","20280904");
+  release();
+  await Promise.all([active,queued]);
+  assert.equal(f.resources.size,1);
+  assert.match([...f.resources.values()][0].data,/DTSTART;VALUE=DATE:20280904/);
+  await assert.rejects(f.client.syncAfterCurrentOperation("different-user","20280904"),/account changed/);
 });

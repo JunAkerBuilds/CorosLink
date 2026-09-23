@@ -195,6 +195,19 @@ export function CalendarView({
 
   const calendarSyncState = calendarSyncButtonState(calendarStatuses, calendarSyncing);
 
+  const syncCalendarEdit = useCallback(async (entry: { planId: string; idInPlan: string; happenDay: string }) => {
+    if (!status?.userId) return;
+    setCalendarSyncing(true);
+    try {
+      const result = await api.syncEditedCalendarWorkout({ userId: status.userId, ...entry });
+      if (result.errors.length) onError(`Saved in CorosLink. ${result.errors.join(" ")}`);
+    } catch (cause) {
+      onError(`Saved in CorosLink. Calendar sync failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    } finally {
+      setCalendarSyncing(false);
+    }
+  }, [api, status?.userId, onError]);
+
   const handleSyncCalendars = useCallback(async () => {
     if (calendarSyncing) return;
     setCalendarSyncing(true);
@@ -356,10 +369,11 @@ export function CalendarView({
       const rollback = applyOptimisticMove(payload, targetDay);
       void api
         .rescheduleWorkout(payload, targetDay)
-        .then(() => {
+        .then(async () => {
           onMessage(
             `Moved "${payload.name}" to ${formatHappenDayLabel(targetDay)}.`
           );
+          await syncCalendarEdit({ ...payload, happenDay: targetDay });
         })
         .catch((cause: unknown) => {
           rollback();
@@ -370,7 +384,7 @@ export function CalendarView({
           reload();
         });
     },
-    [api, applyOptimisticMove, mutating, onError, onMessage, reload]
+    [api, applyOptimisticMove, mutating, onError, onMessage, reload, syncCalendarEdit]
   );
 
   const handleDelete = useCallback(
@@ -378,9 +392,10 @@ export function CalendarView({
       setMutating(true);
       void api
         .removeScheduledWorkout(scheduledWorkoutRemovalRef(target.entry))
-        .then(() => {
+        .then(async () => {
           onMessage(`Removed "${target.entry.name}" from the calendar.`);
           setSelection(null);
+          await syncCalendarEdit(target.entry);
         })
         .catch((cause: unknown) => {
           onError(cause instanceof Error ? cause.message : String(cause));
@@ -390,7 +405,7 @@ export function CalendarView({
           reload();
         });
     },
-    [api, onError, onMessage, reload]
+    [api, onError, onMessage, reload, syncCalendarEdit]
   );
 
   const handleDeleteSelected = useCallback(() => {
@@ -728,6 +743,11 @@ export function CalendarView({
 
       <DayDetailPanel
         api={api}
+        userId={status?.userId}
+        onEventSaved={(event) => {
+          setSelection(current => current?.kind === "scheduled" ? { ...current, entry: { ...current.entry, calendarEvent: event } } : current);
+          reload();
+        }}
         selection={selection}
         sportTypes={sportTypes}
         deleting={mutating}
@@ -793,6 +813,7 @@ export function CalendarView({
             onMessage(result.verified ? `Updated ${scope} in COROS.` : result.warning ?? `Updated ${scope}, but verification is still pending.`);
             setEditRef(null);
             reload();
+            if (editRef.kind === "scheduled") void syncCalendarEdit(editRef);
           }}
           onError={onError}
         />
