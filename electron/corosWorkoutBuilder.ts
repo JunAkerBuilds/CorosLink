@@ -9,6 +9,7 @@ import type {
   WorkoutSport,
   WorkoutSportOptions
 } from "./types";
+import { corosDistanceTargetDisplayUnit } from "./corosWorkoutDistance";
 import {
   POUNDS_PER_KILOGRAM,
   formatDistanceValue,
@@ -395,15 +396,9 @@ function resolveRunTarget(
     return {
       targetType: 5,
       targetValue: metersToCorosDistance(Number(meters)),
-      targetDisplayUnit:
-        step.target_display_unit ??
-        (sport === "swim"
-          ? context?.distanceUnit === "imperial"
-            ? COROS_DISTANCE_UNIT_YARDS
-            : COROS_DISTANCE_UNIT_METERS
-          : context?.distanceUnit === "imperial"
-            ? COROS_DISTANCE_UNIT_MILES
-            : COROS_DISTANCE_UNIT_METERS)
+      targetDisplayUnit: corosDistanceTargetDisplayUnit(
+        Number(meters), sport, context?.distanceUnit, step.target_display_unit
+      )
     };
   }
 
@@ -877,13 +872,7 @@ export function buildWorkoutPayload(
         targetValue: groupTargetValue,
         targetDisplayUnit:
           groupTargetType === 5
-            ? sport === "swim"
-              ? context?.distanceUnit === "imperial"
-                ? COROS_DISTANCE_UNIT_YARDS
-                : COROS_DISTANCE_UNIT_METERS
-              : context?.distanceUnit === "imperial"
-                ? COROS_DISTANCE_UNIT_MILES
-                : COROS_DISTANCE_UNIT_METERS
+            ? corosDistanceTargetDisplayUnit(groupDistance / 100, sport, context?.distanceUnit)
             : 0,
         sets: repeatCount,
         sortNo: groupSort,

@@ -26159,6 +26159,12 @@ tr.data-intervals-row-missing {
 
 /* --- detail slide-over --- */
 
+.calendar-detail-backdrop,
+.calendar-detail-panel {
+  /* These overlays cover the draggable title bar; keep their full hit area clickable. */
+  -webkit-app-region: no-drag;
+}
+
 .calendar-detail-backdrop {
   position: fixed;
   inset: 0;

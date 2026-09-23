@@ -111,8 +111,12 @@ Related enums: `intensityType` (1=weight, 2=heart, 3=pace, 4=speed, 5=stroke,
 (1=min/km, 2=min/mi, 3=s/100m, 4=km/h, 5=mph, 6=kg, 7=lbs),
 `restType` (0=manualEnd, 1=time, 2=heart, 3=noRest, 4=distance).
 
-Distance-step `targetDisplayUnit` is 2 (meters); an overall metric workout uses
-`distanceDisplayUnit: 1` (kilometers). Pace targets use seconds per kilometer
+Metric land-distance steps and repeat-group targets use `targetDisplayUnit: 2`
+(meters) up to 1,000 m and `1` (kilometers) above that boundary to avoid the
+reported COROS iOS meter-target cap (issue #124). `targetValue` remains in
+centimeters for both units. Swimming keeps meters/yards and imperial land targets
+keep miles. An overall metric land workout uses `distanceDisplayUnit: 1`
+(kilometers). Pace targets use seconds per kilometer
 multiplied by 1000, `intensityMultiplier: 1000`, and an ordered low/high range.
 For example, `4:05-4:15/km` is encoded as `245000..255000` with
 `intensityDisplayUnit: 1`. Speed is stored as km/h ×100. A custom yard pool

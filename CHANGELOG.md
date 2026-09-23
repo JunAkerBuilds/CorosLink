@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.42] - 2026-09-23
+
+### Fixed
+
+- Structured workouts now use kilometers for land-distance targets above 1,000 m, preventing the reported COROS iOS truncation to 1,000 m. The same correction applies when editing workouts and calculating repeat-group targets. Addresses [#124](https://github.com/JunAkerBuilds/CorosLink/issues/124).
+- Calendar workout details keep their full button hit areas clickable when overlapping the window title bar, fixing unresponsive spots in Ask Coach, Edit, Remove, and Close.
+
 ## [0.1.41] - 2026-09-23
 
 ### Added

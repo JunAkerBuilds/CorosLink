@@ -195,6 +195,51 @@ assert.deepEqual(draft.nodes[3]?.target, { type: "open" });
 assert.equal(draft.nodes[4]?.editable, false);
 
 const roundTrip = workoutDraftToCorosProgram(source, draft, metricContext);
+
+// Issue #124: editing must normalize legacy long meter targets, including groups.
+for (const [meters, expectedUnit] of [[400, 2], [1000, 2], [1001, 1], [2000, 1]]) {
+  const edited = structuredClone(draft);
+  edited.nodes[0].target = { type: "distance", meters };
+  edited.nodes[1].steps[0].target = { type: "distance", meters };
+  const program = workoutDraftToCorosProgram(source, edited, metricContext);
+  for (const id of ["70", "71", "72"]) {
+    const exercise = program.exercises.find((item) => item.id === id);
+    assert.equal(exercise.targetValue, meters * 100);
+    assert.equal(exercise.targetDisplayUnit, expectedUnit);
+  }
+  assert.equal(workoutDraftsMatch(edited, program), true);
+}
+const combinedDistance = structuredClone(draft);
+combinedDistance.nodes[1].steps[0].target = { type: "distance", meters: 600 };
+combinedDistance.nodes[1].steps[1].target = { type: "distance", meters: 600 };
+const combinedProgram = workoutDraftToCorosProgram(source, combinedDistance, metricContext);
+assert.equal(combinedProgram.exercises.find((item) => item.id === "71").targetValue, 120000);
+assert.equal(combinedProgram.exercises.find((item) => item.id === "71").targetDisplayUnit, 1);
+for (const id of ["72", "73"]) {
+  assert.equal(combinedProgram.exercises.find((item) => item.id === id).targetDisplayUnit, 2);
+}
+for (const [sportType, context, expectedUnit] of [
+  [1, imperialContext, 3],
+  [2, metricContext, 1],
+  [3, metricContext, 2],
+  [3, imperialContext, 4],
+  [5, metricContext, 1]
+]) {
+  const legacyProgram = {
+    name: "Long legacy target",
+    sportType,
+    exercises: [{
+      id: "1", exerciseType: 2, sportType, targetType: 5,
+      targetValue: 200000, targetDisplayUnit: 2,
+      intensityType: 0, sets: 1, groupId: "0", isGroup: false
+    }]
+  };
+  const legacyDraft = corosProgramToWorkoutDraft(legacyProgram);
+  const saved = workoutDraftToCorosProgram(legacyProgram, legacyDraft, context);
+  assert.equal(saved.exercises[0].targetValue, 200000);
+  assert.equal(saved.exercises[0].targetDisplayUnit, expectedUnit);
+}
+
 assert.equal(roundTrip.id, source.id);
 assert.equal(roundTrip.version, source.version);
 assert.equal(roundTrip.sourceId, source.sourceId);
