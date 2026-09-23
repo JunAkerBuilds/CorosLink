@@ -92,6 +92,7 @@
     "test:coros-upload-config": "npm run build:electron && node scripts/test-coros-upload-config.mjs",
     "test:coros-watchfaces": "npm run build:electron && node scripts/test-coros-watchface-service.mjs",
     "test:community-watchfaces": "npm run build:electron && node scripts/test-community-watchfaces.mjs",
+    "test:community-scroll": "electron scripts/test-community-scroll.cjs",
     "test:community-handoff": "npm run build:electron && electron scripts/test-community-handoff.cjs",
     "test:legacy614a": "npm run build:electron && node scripts/test-legacy614a.mjs",
     "test:coros-device-info": "node --experimental-strip-types scripts/test-coros-bluetooth-device-info.mjs",

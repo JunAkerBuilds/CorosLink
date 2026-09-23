@@ -8125,14 +8125,29 @@ body.wf-value-scrubbing * {
   padding-left: 0;
 }
 
-.watchface-community-results,
-.watchface-community-pagination {
+.watchface-community-results {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.watchface-community-load-more,
+.watchface-community-load-more > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.watchface-community-load-more {
+  min-height: 64px;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
 }
 
 .watchface-community-grid {
@@ -8248,7 +8263,7 @@ body.wf-value-scrubbing * {
 }
 
 .watchface-community-empty .secondary-button,
-.watchface-community-pagination .secondary-button {
+.watchface-community-load-more .secondary-button {
   width: auto;
   padding-inline: 18px;
 }

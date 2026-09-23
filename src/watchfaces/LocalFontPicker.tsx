@@ -447,7 +447,7 @@ export function LocalFontPicker({
 
       {fontIsMissing ? (
         <p id={missingFontHintId} className="watchface-font-missing-hint" role="status">
-          “{value}” isn’t installed. Install it or choose another font.
+          &quot;{value}&quot; font isn’t installed. Install it or choose another font.
         </p>
       ) : null}
       {preview}

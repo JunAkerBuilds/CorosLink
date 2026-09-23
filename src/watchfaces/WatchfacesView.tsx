@@ -50,7 +50,6 @@ import type {
   CorosWatchfaceThemeCatalog,
   CorosWatchfaceTemplateAsset,
   CommunityWatchface,
-  CommunityWatchfaceCatalogPage,
   CommunityWatchfaceDownloadProgress,
   CommunityWatchfaceOpenRequest,
   WatchModelId,
@@ -115,6 +114,7 @@ import {
   useSelectionPreference
 } from "../preferences/selectionPreferences";
 import { rememberWatchfaceFontSnapshots } from "./watchfaceFontSnapshots";
+import { useCommunityWatchfaceCatalog } from "./useCommunityWatchfaceCatalog";
 import "./watchfaces.css";
 import "./watchfaceStudioAtelier.css";
 
@@ -1978,7 +1978,7 @@ function WatchFacesTabs({
   );
 }
 
-function CommunityWatchfaceBrowser({
+export function CommunityWatchfaceBrowser({
   api,
   connectedModel,
   disabled,
@@ -2001,12 +2001,10 @@ function CommunityWatchfaceBrowser({
     COMMUNITY_STYLE_PREFERENCE
   );
   const [sort, setSort] = useSelectionPreference(COMMUNITY_SORT_PREFERENCE);
-  const [page, setPage] = useState(1);
-  const [catalog, setCatalog] =
-    useState<CommunityWatchfaceCatalogPage | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [retry, setRetry] = useState(0);
+  const { catalog, loading, loadError, hasMore, loadMore } = useCommunityWatchfaceCatalog(
+    api, { q: debouncedSearch, model, style, sort }
+  );
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<CommunityWatchface | null>(null);
   const [faceModels, setFaceModels] = useState<Record<string, string>>({});
 
@@ -2043,7 +2041,6 @@ function CommunityWatchfaceBrowser({
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setDebouncedSearch(search.trim());
-      setPage(1);
     }, 300);
     return () => window.clearTimeout(timeout);
   }, [search]);
@@ -2051,40 +2048,21 @@ function CommunityWatchfaceBrowser({
   useEffect(() => {
     if (!modelTouchedRef.current && connectedModel) {
       setModel(connectedModel);
-      setPage(1);
     }
   }, [connectedModel]);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setLoadError(null);
-    void api
-      .listCommunityWatchfaces({
-        ...(debouncedSearch ? { q: debouncedSearch } : {}),
-        ...(model ? { model } : {}),
-        ...(style ? { style } : {}),
-        sort,
-        page,
-        pageSize: 12
-      })
-      .then((nextCatalog) => {
-        if (cancelled) return;
-        setCatalog(nextCatalog);
-        if (nextCatalog.pagination.page !== page) {
-          setPage(nextCatalog.pagination.page);
-        }
-      })
-      .catch((caught) => {
-        if (!cancelled) setLoadError(toErrorMessage(caught));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [api, debouncedSearch, model, page, retry, sort, style]);
+    const sentinel = loadMoreRef.current;
+    if (!sentinel || loading || loadError || !hasMore) return;
+    // Observe inside the app's scrolling pane as well as standalone layouts.
+    let root = sentinel.parentElement;
+    while (root && !/(auto|scroll)/.test(getComputedStyle(root).overflowY)) root = root.parentElement;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) loadMore();
+    }, { root, rootMargin: "0px 0px 400px 0px" });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loading, loadError, hasMore, loadMore]);
 
   const modelAvailable =
     !model ||
@@ -2099,14 +2077,12 @@ function CommunityWatchfaceBrowser({
     if (!modelAvailable) {
       modelTouchedRef.current = true;
       setModel("");
-      setPage(1);
     }
   }, [modelAvailable, setModel]);
 
   useEffect(() => {
     if (!styleAvailable) {
       setStyle("");
-      setPage(1);
     }
   }, [setStyle, styleAvailable]);
 
@@ -2160,7 +2136,6 @@ function CommunityWatchfaceBrowser({
             onChange={(event) => {
               modelTouchedRef.current = true;
               setModel(event.target.value);
-              setPage(1);
             }}
           >
             <option value="">All watches</option>
@@ -2174,7 +2149,6 @@ function CommunityWatchfaceBrowser({
             value={style}
             onChange={(event) => {
               setStyle(event.target.value);
-              setPage(1);
             }}
           >
             <option value="">All styles</option>
@@ -2189,7 +2163,6 @@ function CommunityWatchfaceBrowser({
             value={sort}
             onChange={(event) => {
               setSort(event.target.value === "title" ? "title" : "newest");
-              setPage(1);
             }}
           >
             <option value="newest">Newest first</option>
@@ -2216,17 +2189,17 @@ function CommunityWatchfaceBrowser({
         </div>
       ) : null}
 
-      {loading ? (
+      {loading && !catalog ? (
         <div className="watchface-community-grid" aria-label="Loading community watch faces">
           {Array.from({ length: 6 }, (_, index) => (
             <div className="watchface-community-card is-loading" key={index} />
           ))}
         </div>
-      ) : loadError ? (
+      ) : loadError && !catalog ? (
         <section className="watchface-community-empty" role="alert">
           <h3>Community faces are unavailable</h3>
           <p>{loadError}</p>
-          <button className="primary-button" type="button" onClick={() => setRetry((value) => value + 1)}>
+          <button className="primary-button" type="button" onClick={loadMore}>
             Try again
           </button>
         </section>
@@ -2234,7 +2207,7 @@ function CommunityWatchfaceBrowser({
         <>
           <div className="watchface-community-results">
             <span>{catalog.pagination.total} {catalog.pagination.total === 1 ? "face" : "faces"}</span>
-            <span>Page {catalog.pagination.page} of {catalog.pagination.pageCount}</span>
+            <span>{catalog.items.length} loaded</span>
           </div>
           <div className="watchface-community-grid">
             {catalog.items.map((face) => (
@@ -2245,7 +2218,7 @@ function CommunityWatchfaceBrowser({
                   onClick={() => setSelected(face)}
                   aria-label={`View ${face.title}`}
                 >
-                  <img src={face.previewUrl} alt={`Preview of ${face.title}`} />
+                  <img src={face.previewUrl} alt={`Preview of ${face.title}`} loading="lazy" />
                 </button>
                 <div className="watchface-community-card-body">
                   <button type="button" className="watchface-community-title" onClick={() => setSelected(face)}>
@@ -2273,23 +2246,19 @@ function CommunityWatchfaceBrowser({
               </article>
             ))}
           </div>
-          <div className="watchface-community-pagination">
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage((value) => Math.max(1, value - 1))}
-            >
-              Previous
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={page >= catalog.pagination.pageCount}
-              onClick={() => setPage((value) => value + 1)}
-            >
-              Next
-            </button>
+          <div className="watchface-community-load-more" ref={loadMoreRef}>
+            {loadError ? (
+              <>
+                <span role="alert">Couldn’t load more faces. {loadError}</span>
+                <button className="secondary-button" type="button" onClick={loadMore}>Try again</button>
+              </>
+            ) : loading ? (
+              <span role="status"><Loader2 className="spin" size={16} aria-hidden="true" /> Loading more faces…</span>
+            ) : hasMore ? (
+              <button className="secondary-button" type="button" onClick={loadMore}>Load more faces</button>
+            ) : (
+              <span role="status">You’ve seen all {catalog.items.length} faces</span>
+            )}
           </div>
         </>
       ) : (
@@ -2306,7 +2275,6 @@ function CommunityWatchfaceBrowser({
               setModel("");
               setStyle("");
               setSort("newest");
-              setPage(1);
             }}
           >
             Clear filters

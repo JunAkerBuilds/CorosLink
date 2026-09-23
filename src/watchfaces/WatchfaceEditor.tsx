@@ -9270,7 +9270,7 @@ export function WatchfaceEditor({
                 <ul>
                   {missingFonts.map((font) => (
                     <li key={font.family}>
-                      <strong>{font.family} isn’t installed.</strong>
+                      <strong>&quot;{font.family}&quot; font isn’t installed.</strong>
                       <span>
                         {font.hasSnapshot
                           ? "Drawn from the glyphs saved with this project."
