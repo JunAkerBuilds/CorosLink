@@ -3976,6 +3976,14 @@ export interface ManualActivityInput {
 
 export type AudiobookStatus = "converting" | "ready" | "failed";
 
+export type AudiobookSplitMode = "minutes" | "chapters";
+
+export interface AudiobookSplitOptions {
+  mode: AudiobookSplitMode;
+  /** Part length for "minutes", and the fallback when a book has no chapters. */
+  minutes: number;
+}
+
 export interface AudiobookPart {
   /** 1-based position; parts must reach the watch in this order. */
   index: number;
@@ -3983,6 +3991,8 @@ export interface AudiobookPart {
   name: string;
   sizeBytes: number;
   durationSeconds: number;
+  /** Source chapter title when the book was split by chapter. */
+  chapterTitle?: string;
   /** Whether a file with this name is currently in the watch Music folder. */
   onWatch: boolean;
 }
@@ -3995,6 +4005,9 @@ export interface Audiobook {
   createdAt: string;
   status: AudiobookStatus;
   error?: string;
+  split: AudiobookSplitOptions;
+  /** Set when the requested split could not be used, e.g. no chapters found. */
+  splitNote?: string;
   durationSeconds: number;
   sizeBytes: number;
   parts: AudiobookPart[];

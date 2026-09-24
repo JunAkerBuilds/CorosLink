@@ -268,11 +268,13 @@ import {
   getAudiobook,
   getAudiobookPartPaths,
   listAudiobooks,
+  normalizeSplitOptions,
   startAudiobookImport
 } from "./audiobookService";
 import type {
   Audiobook,
   AudiobookProgress,
+  AudiobookSplitOptions,
   AudiobookTransferResult
 } from "./types";
 import {
@@ -2182,21 +2184,29 @@ function registerAudiobookIpcHandlers(): void {
 
   ipcMain.handle("audiobooks:list", async () => listAudiobooks(await watchTracks()));
 
-  ipcMain.handle("audiobooks:import", async (): Promise<Audiobook | null> => {
-    const options: OpenDialogOptions = {
-      title: "Choose an audiobook (select several files to join them)",
-      properties: ["openFile", "multiSelections"],
-      filters: [{ name: "Audiobook", extensions: AUDIOBOOK_EXTENSIONS }]
-    };
-    const result =
-      mainWindow && !mainWindow.isDestroyed()
-        ? await dialog.showOpenDialog(mainWindow, options)
-        : await dialog.showOpenDialog(options);
-    if (result.canceled || result.filePaths.length === 0) {
-      return null;
+  ipcMain.handle(
+    "audiobooks:import",
+    async (_event, split: AudiobookSplitOptions): Promise<Audiobook | null> => {
+      const options: OpenDialogOptions = {
+        title: "Choose an audiobook (select several files to join them)",
+        properties: ["openFile", "multiSelections"],
+        filters: [{ name: "Audiobook", extensions: AUDIOBOOK_EXTENSIONS }]
+      };
+      const result =
+        mainWindow && !mainWindow.isDestroyed()
+          ? await dialog.showOpenDialog(mainWindow, options)
+          : await dialog.showOpenDialog(options);
+      if (result.canceled || result.filePaths.length === 0) {
+        return null;
+      }
+      return startAudiobookImport(
+        result.filePaths,
+        normalizeSplitOptions(split),
+        sendProgress,
+        sendUpdated
+      );
     }
-    return startAudiobookImport(result.filePaths, sendProgress, sendUpdated);
-  });
+  );
 
   ipcMain.handle("audiobooks:cancel", (_event, id: string) =>
     cancelAudiobookConversion(id)

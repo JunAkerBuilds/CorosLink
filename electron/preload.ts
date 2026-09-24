@@ -10,6 +10,7 @@ import type {
   ActivityBackupProgress,
   Audiobook,
   AudiobookProgress,
+  AudiobookSplitOptions,
   AudiobookTransferResult,
   BinaryStatus,
   CachedCorosMapPackage,
@@ -428,8 +429,8 @@ const api = {
       ipcRenderer.removeListener("watch:transferProgress", listener);
   },
   listAudiobooks: (): Promise<Audiobook[]> => ipcRenderer.invoke("audiobooks:list"),
-  importAudiobook: (): Promise<Audiobook | null> =>
-    ipcRenderer.invoke("audiobooks:import"),
+  importAudiobook: (split: AudiobookSplitOptions): Promise<Audiobook | null> =>
+    ipcRenderer.invoke("audiobooks:import", split),
   cancelAudiobookConversion: (id: string): Promise<boolean> =>
     ipcRenderer.invoke("audiobooks:cancel", id),
   deleteAudiobook: (id: string): Promise<Audiobook[]> =>

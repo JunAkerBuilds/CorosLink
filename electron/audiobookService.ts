@@ -9,13 +9,22 @@ import type {
   Audiobook,
   AudiobookPart,
   AudiobookProgress,
+  AudiobookSplitOptions,
   WatchTrack
 } from "./types";
 
 // COROS watches play MP3 only and keep no bookmark inside a track, so a book
 // is cut into short, speech-tuned MP3 parts. Losing your place then costs at
-// most one part, and the watch's skip button becomes a 10-minute jump.
-export const AUDIOBOOK_PART_SECONDS = 600;
+// most one part, and the watch's skip button jumps a whole part.
+export const DEFAULT_AUDIOBOOK_SPLIT: AudiobookSplitOptions = {
+  mode: "minutes",
+  minutes: 10
+};
+export const MIN_PART_MINUTES = 1;
+export const MAX_PART_MINUTES = 180;
+// Chapter marks this close to the start or end of the book would only make
+// empty parts.
+const CHAPTER_EDGE_SECONDS = 0.5;
 const AUDIO_BITRATE = "64k";
 const MAX_TITLE_LENGTH = 40;
 const MANIFEST_NAME = "book.json";
@@ -40,6 +49,7 @@ interface StoredPart {
   name: string;
   sizeBytes: number;
   durationSeconds: number;
+  chapterTitle?: string;
 }
 
 interface AudiobookManifest {
@@ -51,13 +61,29 @@ interface AudiobookManifest {
   createdAt: string;
   status: Audiobook["status"];
   error?: string;
+  /** Absent in manifests written before split options existed. */
+  split?: AudiobookSplitOptions;
+  splitNote?: string;
   durationSeconds: number;
   parts: StoredPart[];
+}
+
+export interface ProbeChapter {
+  startSeconds: number;
+  title?: string;
 }
 
 interface ProbeResult {
   durationSeconds: number;
   metadata: Record<string, string>;
+  chapters: ProbeChapter[];
+}
+
+interface SegmentPlan {
+  args: string[];
+  /** Chapter title for each expected segment, by position. */
+  titles: Array<string | undefined>;
+  note?: string;
 }
 
 const runningConversions = new Map<string, ChildProcess>();
@@ -117,6 +143,7 @@ export function getAudiobookPartPaths(id: string): string[] {
  */
 export function startAudiobookImport(
   sourcePaths: string[],
+  split: AudiobookSplitOptions,
   onProgress: (progress: AudiobookProgress) => void,
   onUpdate: (book: Audiobook) => void
 ): Audiobook {
@@ -137,6 +164,7 @@ export function startAudiobookImport(
     sourcePaths: sorted,
     createdAt: new Date().toISOString(),
     status: "converting",
+    split: normalizeSplitOptions(split),
     durationSeconds: 0,
     parts: []
   };
@@ -228,6 +256,14 @@ async function convertAudiobook(
   );
   writeManifest(manifest);
 
+  const plan = planSegments(
+    manifest.split ?? DEFAULT_AUDIOBOOK_SPLIT,
+    probes,
+    manifest.sourcePaths,
+    manifest.durationSeconds
+  );
+  manifest.splitNote = plan.note;
+
   const workDir = workDirectory(manifest.id);
   fs.rmSync(workDir, { recursive: true, force: true });
   fs.mkdirSync(workDir, { recursive: true });
@@ -260,8 +296,7 @@ async function convertAudiobook(
       AUDIO_BITRATE,
       "-f",
       "segment",
-      "-segment_time",
-      String(AUDIOBOOK_PART_SECONDS),
+      ...plan.args,
       "-segment_format",
       "mp3",
       "-reset_timestamps",
@@ -302,8 +337,9 @@ async function convertAudiobook(
     const number = String(index).padStart(width, "0");
     const name = `${fileStem} ${number}.mp3`;
     const destination = path.join(bookDirectory(manifest.id), name);
+    const chapterTitle = plan.titles[offset];
     const tags: Record<string, string> = {
-      title: `${title} ${number}`,
+      title: chapterTitle ? `${number} ${chapterTitle}` : `${title} ${number}`,
       album: title,
       track: `${index}/${segments.length}`,
       genre: "Audiobook"
@@ -333,14 +369,13 @@ async function convertAudiobook(
       destination
     ]);
 
-    const isLast = index === segments.length;
+    // Chapter parts vary in length, so read each part's real duration.
     parts.push({
       index,
       name,
       sizeBytes: fs.statSync(destination).size,
-      durationSeconds: isLast
-        ? Math.max(manifest.durationSeconds - AUDIOBOOK_PART_SECONDS * offset, 0)
-        : AUDIOBOOK_PART_SECONDS
+      durationSeconds: (await probeAudio(ffmpeg, destination)).durationSeconds,
+      chapterTitle
     });
     report(0.95 + (index / segments.length) * 0.05, `Tagging part ${index} of ${segments.length}`);
   }
@@ -387,6 +422,91 @@ async function foldTinyTailSegment(
   segments.pop();
 }
 
+export function normalizeSplitOptions(
+  split: Partial<AudiobookSplitOptions> | undefined
+): AudiobookSplitOptions {
+  const minutes = Math.round(Number(split?.minutes));
+  return {
+    mode: split?.mode === "chapters" ? "chapters" : "minutes",
+    minutes: Number.isFinite(minutes)
+      ? Math.min(Math.max(minutes, MIN_PART_MINUTES), MAX_PART_MINUTES)
+      : DEFAULT_AUDIOBOOK_SPLIT.minutes
+  };
+}
+
+/**
+ * Turns the split choice into segment-muxer arguments. Chapter mode cuts at
+ * each chapter start; when several files are joined, a file without chapter
+ * marks counts as one chapter. A book with fewer than two chapters falls back
+ * to fixed-length parts.
+ */
+export function planSegments(
+  split: AudiobookSplitOptions,
+  probes: ProbeResult[],
+  sourcePaths: string[],
+  totalSeconds: number
+): SegmentPlan {
+  const byMinutes = (note?: string): SegmentPlan => ({
+    args: ["-segment_time", String(split.minutes * 60)],
+    titles: [],
+    note
+  });
+  if (split.mode !== "chapters") {
+    return byMinutes();
+  }
+
+  const chapters: ProbeChapter[] = [];
+  let offset = 0;
+  for (const [position, probe] of probes.entries()) {
+    if (probe.chapters.length > 0) {
+      chapters.push(
+        ...probe.chapters.map((chapter) => ({
+          startSeconds: offset + chapter.startSeconds,
+          title: chapter.title
+        }))
+      );
+    } else {
+      const sourcePath = sourcePaths[position];
+      chapters.push({
+        startSeconds: offset,
+        title:
+          probe.metadata.title ||
+          (sourcePath ? path.basename(sourcePath, path.extname(sourcePath)) : undefined)
+      });
+    }
+    offset += probe.durationSeconds;
+  }
+
+  const cuts = [
+    ...new Set(
+      chapters
+        .map((chapter) => chapter.startSeconds)
+        .filter(
+          (start) =>
+            start > CHAPTER_EDGE_SECONDS && start < totalSeconds - CHAPTER_EDGE_SECONDS
+        )
+        .map((start) => Number(start.toFixed(3)))
+    )
+  ].sort((left, right) => left - right);
+  if (cuts.length === 0) {
+    return byMinutes(`No chapters found, so it was split every ${split.minutes} min.`);
+  }
+
+  const boundaries = [0, ...cuts];
+  const titles = boundaries.map((boundary, position) => {
+    const chapter = chapters.find((candidate) =>
+      position === 0
+        ? candidate.startSeconds <= CHAPTER_EDGE_SECONDS
+        : Math.abs(candidate.startSeconds - boundary) < 0.001
+    );
+    return chapter?.title?.trim() || undefined;
+  });
+  return {
+    args: ["-segment_times", cuts.join(",")],
+    titles
+  };
+}
+
 async function probeAudio(ffmpeg: string, sourcePath: string): Promise<ProbeResult> {
   // `ffmpeg -i` with no output exits non-zero but still prints the header.
   const { lines } = await runProcess(ffmpeg, ["-hide_banner", "-i", sourcePath]);
@@ -395,10 +515,29 @@ async function probeAudio(ffmpeg: string, sourcePath: string): Promise<ProbeResu
 
 export function parseProbeOutput(lines: string[]): ProbeResult {
   const metadata: Record<string, string> = {};
+  const chapters: ProbeChapter[] = [];
   let durationSeconds = 0;
   let inInputMetadata = false;
+  let currentChapter: ProbeChapter | undefined;
 
   for (const line of lines) {
+    const chapter = /^\s*Chapter #\d+:\d+: start (-?\d+(?:\.\d+)?), end/.exec(line);
+    if (chapter) {
+      currentChapter = { startSeconds: Math.max(Number(chapter[1]), 0) };
+      chapters.push(currentChapter);
+      continue;
+    }
+    if (/^\s*Stream #/.test(line)) {
+      currentChapter = undefined;
+    }
+    if (currentChapter) {
+      const chapterTitle = /^\s*title\s*:\s(.*)$/.exec(line);
+      if (chapterTitle && currentChapter.title === undefined) {
+        currentChapter.title = chapterTitle[1].trim();
+      }
+      continue;
+    }
+
     const duration = /^\s*Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(line);
     if (duration) {
       durationSeconds =
@@ -424,7 +563,7 @@ export function parseProbeOutput(lines: string[]): ProbeResult {
     throw new Error(reason ?? "Could not read the audio duration.");
   }
 
-  return { durationSeconds, metadata };
+  return { durationSeconds, metadata, chapters };
 }
 
 async function runFfmpeg(
@@ -517,6 +656,8 @@ function toAudiobook(manifest: AudiobookManifest, watchTracks: WatchTrack[]): Au
     createdAt: manifest.createdAt,
     status: manifest.status,
     error: manifest.error,
+    split: manifest.split ?? DEFAULT_AUDIOBOOK_SPLIT,
+    splitNote: manifest.splitNote,
     durationSeconds: manifest.durationSeconds,
     sizeBytes: parts.reduce((total, part) => total + part.sizeBytes, 0),
     parts

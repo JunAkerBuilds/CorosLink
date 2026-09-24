@@ -41,13 +41,37 @@ function probe(filePath) {
   return output;
 }
 
-function importAndWait(service, sourcePaths) {
+const TEN_MINUTES = { mode: "minutes", minutes: 10 };
+
+function importAndWait(service, sourcePaths, split = TEN_MINUTES) {
   return new Promise((resolve) => {
     const progress = [];
-    service.startAudiobookImport(sourcePaths, (event) => progress.push(event), (book) =>
+    service.startAudiobookImport(sourcePaths, split, (event) => progress.push(event), (book) =>
       resolve({ book, progress })
     );
   });
+}
+
+function makeChapteredBook(outputPath, chapters, totalSeconds) {
+  const metaPath = `${outputPath}.ffmeta`;
+  const body = chapters
+    .map(
+      ([start, end, title]) =>
+        `[CHAPTER]\nTIMEBASE=1/1000\nSTART=${start * 1000}\nEND=${end * 1000}\ntitle=${title}\n`
+    )
+    .join("");
+  fs.writeFileSync(metaPath, `;FFMETADATA1\nalbum=Chaptered\n${body}`);
+  execFileSync(ffmpegPath(), [
+    "-hide_banner", "-loglevel", "error", "-y",
+    "-f", "lavfi", "-i", `sine=frequency=440:duration=${totalSeconds}`,
+    "-i", metaPath, "-map_metadata", "1", "-map_chapters", "1",
+    "-c:a", "aac", outputPath
+  ]);
+}
+
+function durationOf(output) {
+  const match = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(output);
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
 }
 
 async function run() {
@@ -118,11 +142,67 @@ async function run() {
   assert.equal(exactBook.book.parts.length, 2);
   assert.match(probe(service.getAudiobookPartPaths(exactBook.book.id)[1]), /Duration: 00:10:0[01]/);
 
+  // A custom part length.
+  const fiveMinuteBook = await importAndWait(service, [m4b], { mode: "minutes", minutes: 5 });
+  assert.equal(fiveMinuteBook.book.status, "ready", fiveMinuteBook.book.error);
+  assert.equal(fiveMinuteBook.book.parts.length, 5);
+  assert.deepEqual(fiveMinuteBook.book.split, { mode: "minutes", minutes: 5 });
+  assert.ok(fiveMinuteBook.book.parts.every((part) => Math.abs(part.durationSeconds - 300) < 1));
+
+  // Split by chapter marks: uneven parts carrying chapter titles.
+  const chaptered = path.join(tempRoot, "chaptered.m4b");
+  makeChapteredBook(
+    chaptered,
+    [[0, 90, "Opening Credits"], [90, 400, "Chapter 1: The Start"], [400, 600, "Chapter 2"]],
+    600
+  );
+  const byChapter = await importAndWait(service, [chaptered], { mode: "chapters", minutes: 10 });
+  assert.equal(byChapter.book.status, "ready", byChapter.book.error);
+  assert.equal(byChapter.book.splitNote, undefined);
+  assert.deepEqual(
+    byChapter.book.parts.map((part) => part.chapterTitle),
+    ["Opening Credits", "Chapter 1: The Start", "Chapter 2"]
+  );
+  assert.deepEqual(
+    byChapter.book.parts.map((part) => Math.round(part.durationSeconds)),
+    [90, 310, 200]
+  );
+  const chapterPaths = service.getAudiobookPartPaths(byChapter.book.id);
+  assert.match(probe(chapterPaths[1]), /title\s+: 002 Chapter 1: The Start/);
+  assert.ok(Math.abs(durationOf(probe(chapterPaths[1])) - 310) < 1);
+
+  // Chapter mode on a book without chapters falls back to the minutes value.
+  const noChapters = await importAndWait(service, [m4b], { mode: "chapters", minutes: 15 });
+  assert.equal(noChapters.book.status, "ready", noChapters.book.error);
+  assert.equal(noChapters.book.parts.length, 2);
+  assert.match(noChapters.book.splitNote, /No chapters found.*15 min/);
+
+  // Joined files without chapter marks count as one chapter each.
+  const joinedChapters = await importAndWait(
+    service,
+    [path.join(folder, "Chapter 1.m4a"), path.join(folder, "Chapter 2.m4a"), path.join(folder, "Chapter 10.m4a")],
+    { mode: "chapters", minutes: 10 }
+  );
+  assert.equal(joinedChapters.book.status, "ready", joinedChapters.book.error);
+  assert.deepEqual(
+    joinedChapters.book.parts.map((part) => part.chapterTitle),
+    ["Chapter 1", "Chapter 2", "Chapter 10"]
+  );
+  assert.deepEqual(
+    joinedChapters.book.parts.map((part) => Math.round(part.durationSeconds)),
+    [400, 200, 200]
+  );
+
+  // Out-of-range or malformed options are clamped.
+  assert.deepEqual(service.normalizeSplitOptions({ mode: "chapters", minutes: 0 }), { mode: "chapters", minutes: 1 });
+  assert.deepEqual(service.normalizeSplitOptions({ mode: "bogus", minutes: 999 }), { mode: "minutes", minutes: 180 });
+  assert.deepEqual(service.normalizeSplitOptions(undefined), { mode: "minutes", minutes: 10 });
+
   // Cancel mid-conversion.
   const long = path.join(tempRoot, "long.m4a");
   makeTone(long, 3600);
   const cancelled = new Promise((resolve) => {
-    const started = service.startAudiobookImport([long], () => {}, resolve);
+    const started = service.startAudiobookImport([long], TEN_MINUTES, () => {}, resolve);
     setTimeout(() => service.cancelAudiobookConversion(started.id), 300);
   });
   const cancelledBook = await cancelled;

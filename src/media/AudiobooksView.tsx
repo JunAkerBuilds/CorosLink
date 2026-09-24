@@ -13,9 +13,20 @@ import {
 import type {
   Audiobook,
   AudiobookProgress,
+  AudiobookSplitMode,
+  AudiobookSplitOptions,
   WatchStatus,
 } from "../../electron/types";
 import { formatBytes } from "./libraryUtils";
+
+const SPLIT_STORAGE_KEY = "audiobooks.split";
+const MIN_PART_MINUTES = 1;
+const MAX_PART_MINUTES = 180;
+const DEFAULT_SPLIT: AudiobookSplitOptions = { mode: "minutes", minutes: 10 };
+const SPLIT_MODES: Array<{ value: AudiobookSplitMode; label: string }> = [
+  { value: "minutes", label: "Every N minutes" },
+  { value: "chapters", label: "By chapter" },
+];
 
 interface AudiobooksViewProps {
   watchStatus: WatchStatus | null;
@@ -36,6 +47,23 @@ export function AudiobooksView({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [split, setSplit] = useState<AudiobookSplitOptions>(readStoredSplit);
+  const [minutesInput, setMinutesInput] = useState(String(split.minutes));
+
+  function updateSplit(next: AudiobookSplitOptions) {
+    setSplit(next);
+    try {
+      localStorage.setItem(SPLIT_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // Storage can be unavailable; the choice then lasts for this session.
+    }
+  }
+
+  function commitMinutes(raw: string) {
+    const minutes = clampMinutes(Number(raw));
+    setMinutesInput(String(minutes));
+    updateSplit({ ...split, minutes });
+  }
   const connected = Boolean(watchStatus?.connected);
   const watchTrackCount = watchStatus?.tracks.length ?? 0;
 
@@ -77,7 +105,10 @@ export function AudiobooksView({
     if (!api) return;
     setImporting(true);
     try {
-      const book = await api.importAudiobook();
+      const book = await api.importAudiobook({
+        ...split,
+        minutes: clampMinutes(Number(minutesInput)),
+      });
       if (book) {
         setBooks((current) => [book, ...current.filter((item) => item.id !== book.id)]);
       }
@@ -141,21 +172,58 @@ export function AudiobooksView({
               {books.length} book{books.length === 1 ? "" : "s"}
             </h2>
             <p className="audiobook-hint">
-              Books are converted to 10-minute MP3 parts (mono, 64 kbps) named in
-              play order. The watch plays files in the order they were copied,
-              so parts are transferred one at a time, first to last.
+              Books are converted to MP3 parts (mono, 64 kbps) named in play
+              order. The watch plays files in the order they were copied, so
+              parts are transferred one at a time, first to last.
             </p>
           </div>
+          <BookOpen size={22} aria-hidden="true" />
+        </div>
+
+        <div className="audiobook-toolbar">
+          <span className="audiobook-toolbar-label">Split</span>
+          <div className="library-filter-group" role="group" aria-label="How to split audiobooks">
+            {SPLIT_MODES.map((option) => (
+              <button
+                key={option.value}
+                className={
+                  split.mode === option.value
+                    ? "library-filter-option active"
+                    : "library-filter-option"
+                }
+                type="button"
+                aria-pressed={split.mode === option.value}
+                onClick={() => updateSplit({ ...split, mode: option.value })}
+              >
+                <span>{option.label}</span>
+              </button>
+            ))}
+          </div>
+          <label className="audiobook-minutes-field">
+            <span>{split.mode === "chapters" ? "No chapters? Every" : "Every"}</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={MIN_PART_MINUTES}
+              max={MAX_PART_MINUTES}
+              step={1}
+              value={minutesInput}
+              aria-label="Part length in minutes"
+              onChange={(event) => setMinutesInput(event.target.value)}
+              onBlur={(event) => commitMinutes(event.target.value)}
+            />
+            <span>min</span>
+          </label>
           <button
-            className="primary-button"
+            className="primary-button compact-button audiobook-import-button"
             type="button"
             disabled={!api || importing}
             onClick={() => void handleImport()}
           >
             {importing ? (
-              <Loader2 className="spin" size={16} aria-hidden="true" />
+              <Loader2 className="spin" size={17} aria-hidden="true" />
             ) : (
-              <Plus size={16} aria-hidden="true" />
+              <Plus size={17} aria-hidden="true" />
             )}
             Import audiobook
           </button>
@@ -211,11 +279,16 @@ export function AudiobooksView({
                             )}
                             <span className="audiobook-title-copy">
                               <strong>{book.title}</strong>
-                              <span>{book.author ?? statusLabel(book)}</span>
+                              <span>
+                                {[book.author, splitLabel(book)].filter(Boolean).join(" · ")}
+                              </span>
                             </span>
                           </button>
                           {book.status === "failed" && book.error ? (
                             <p className="audiobook-error">{book.error}</p>
+                          ) : null}
+                          {ready && book.splitNote ? (
+                            <p className="audiobook-note">{book.splitNote}</p>
                           ) : null}
                         </td>
                         <td>{book.durationSeconds > 0 ? formatLength(book.durationSeconds) : "—"}</td>
@@ -333,7 +406,12 @@ export function AudiobooksView({
                             <ol className="audiobook-parts">
                               {book.parts.map((part) => (
                                 <li key={part.index}>
-                                  <span className="audiobook-part-name">{part.name}</span>
+                                  <span className="audiobook-part-name">
+                                    {part.name}
+                                    {part.chapterTitle ? (
+                                      <small>{part.chapterTitle}</small>
+                                    ) : null}
+                                  </span>
                                   <span>{formatLength(part.durationSeconds)}</span>
                                   <span>{formatBytes(part.sizeBytes)}</span>
                                   <span className={part.onWatch ? "badge ready" : "badge"}>
@@ -355,6 +433,32 @@ export function AudiobooksView({
       </section>
     </div>
   );
+}
+
+function readStoredSplit(): AudiobookSplitOptions {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SPLIT_STORAGE_KEY) ?? "null");
+    if (stored && (stored.mode === "minutes" || stored.mode === "chapters")) {
+      return { mode: stored.mode, minutes: clampMinutes(Number(stored.minutes)) };
+    }
+  } catch {
+    // Fall through to the default.
+  }
+  return DEFAULT_SPLIT;
+}
+
+function clampMinutes(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_SPLIT.minutes;
+  return Math.min(Math.max(Math.round(value), MIN_PART_MINUTES), MAX_PART_MINUTES);
+}
+
+function splitLabel(book: Audiobook): string {
+  if (book.status === "converting") return "Converting";
+  if (book.status === "failed") return "";
+  if (book.split.mode === "chapters" && !book.splitNote) {
+    return `${book.parts.length} chapters`;
+  }
+  return `${book.split.minutes}-min parts`;
 }
 
 function statusLabel(book: Audiobook): string {

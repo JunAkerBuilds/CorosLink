@@ -10,6 +10,7 @@ import type {
   ActivityBackupProgress,
   Audiobook,
   AudiobookProgress,
+  AudiobookSplitOptions,
   AudiobookTransferResult,
   BinaryStatus,
   CachedCorosMapPackage,
@@ -339,7 +340,7 @@ export interface CorosLinkApi {
     callback: (progress: WatchTransferProgress) => void
   ) => () => void;
   listAudiobooks: () => Promise<Audiobook[]>;
-  importAudiobook: () => Promise<Audiobook | null>;
+  importAudiobook: (split: AudiobookSplitOptions) => Promise<Audiobook | null>;
   cancelAudiobookConversion: (id: string) => Promise<boolean>;
   deleteAudiobook: (id: string) => Promise<Audiobook[]>;
   transferAudiobook: (id: string) => Promise<AudiobookTransferResult>;

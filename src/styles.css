@@ -32698,7 +32698,62 @@ body.is-backgrounded .training-backup-progress-track.is-indeterminate span {
 }
 
 .audiobook-part-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.audiobook-part-name small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.audiobook-note {
+  margin: 4px 0 0 23px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.audiobook-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.audiobook-toolbar-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.audiobook-minutes-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.audiobook-minutes-field input {
+  width: 64px;
+  min-height: 34px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--control-bg, rgba(255, 255, 255, 0.04));
+  color: var(--text-primary);
+  padding: 0 8px;
+  font: inherit;
+  text-align: center;
+}
+
+.audiobook-import-button {
+  margin-left: auto;
 }
