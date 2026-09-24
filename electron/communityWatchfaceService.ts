@@ -235,15 +235,42 @@ export async function cleanupCommunityWatchfaceImports(): Promise<void> {
   }));
 }
 
-function signedBlobUrl(location: string): URL {
-  const parsed = new URL(location);
+// The catalog's own signed-storage route (Cloudflare R2 behind the catalog
+// origin since September 2026), for a published release ZIP only.
+const SIGNED_STORAGE_PATH = /^\/api\/storage\/releases\/[a-f0-9-]{36}\/[a-f0-9-]{36}\.zip$/i;
+
+/**
+ * Accepts a download redirect only to the catalog's signed-storage route or to
+ * Vercel Blob (where catalogs before the move to Cloudflare stored releases).
+ */
+export function trustedDownloadLocation(location: string, catalogOrigin: string): URL | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(location);
+  } catch {
+    return null;
+  }
+  if (parsed.username || parsed.password || parsed.hash) return null;
+  if (parsed.protocol === "https:" && parsed.hostname.toLowerCase().endsWith(".blob.vercel-storage.com")) {
+    return parsed;
+  }
   if (
-    parsed.protocol !== "https:" ||
-    !parsed.hostname.toLowerCase().endsWith(".blob.vercel-storage.com")
+    parsed.origin === new URL(catalogOrigin).origin &&
+    SIGNED_STORAGE_PATH.test(parsed.pathname) &&
+    parsed.searchParams.get("expires") &&
+    parsed.searchParams.get("signature")
   ) {
+    return parsed;
+  }
+  return null;
+}
+
+function signedBlobUrl(location: string): URL {
+  const trusted = trustedDownloadLocation(location, catalogBaseUrl().origin);
+  if (!trusted) {
     throw new Error("The community download redirected to an untrusted host.");
   }
-  return parsed;
+  return trusted;
 }
 
 async function resolveSignedDownload(face: CommunityWatchface): Promise<URL> {
