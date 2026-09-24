@@ -73,10 +73,35 @@
 }
 .hub-widget-resize:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .hub-dashboard.is-resizing { user-select: none; cursor: nwse-resize; }
-.hub-dashboard-widget.is-resizing { z-index: 8; outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: var(--shadow-elevated); }
+.hub-dashboard-widget.is-resizing { z-index: 8; outline: 1.5px dashed color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: 2px; border-radius: var(--radius-lg, 16px); }
 .hub-dashboard.is-resizing .hub-widget-content { pointer-events: none; }
+/* While resizing, the card fades into a placeholder for the snapped size and an acrylic pane follows the pointer.
+   Only the pane blurs (backdrop), so content is never re-filtered while the layout snaps. */
+.hub-dashboard-widget.is-resizing > .hub-widget-content { opacity: .38; transform: scale(.985); }
+.hub-resize-ghost {
+  position: absolute; left: 0; top: 0; z-index: 3; pointer-events: none; box-sizing: border-box;
+  width: 100%; height: 100%; opacity: 0; overflow: hidden;
+  border: 1px solid color-mix(in srgb, #fff 26%, transparent); border-radius: var(--radius-lg, 16px);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.07'/%3E%3C/svg%3E"),
+    linear-gradient(145deg, color-mix(in srgb, #fff 16%, transparent), transparent 42%),
+    color-mix(in srgb, var(--accent) 12%, color-mix(in srgb, var(--surface) 42%, transparent));
+  -webkit-backdrop-filter: blur(22px) saturate(1.7); backdrop-filter: blur(22px) saturate(1.7);
+  box-shadow:
+    0 18px 50px #0006, 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 35%, transparent), inset 0 -1px 0 #0003;
+  will-change: width, height, opacity; contain: layout style;
+}
+.hub-dashboard-widget.is-resizing > .hub-resize-ghost { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .hub-widget-content { transition: opacity 220ms ease, transform 300ms cubic-bezier(.2, 1.3, .4, 1); }
+  /* Settle: spring onto the committed size, then fade to reveal the sharp content. */
+  .hub-resize-ghost { transition: width 300ms cubic-bezier(.2, 1.35, .4, 1), height 300ms cubic-bezier(.2, 1.35, .4, 1), opacity 180ms ease 160ms; }
+  /* Track the pointer 1:1 while dragging; frames are already paced by requestAnimationFrame. */
+  .hub-dashboard-widget.is-resizing > .hub-resize-ghost { transition: opacity 140ms ease; }
+}
 .hub-resize-preview {
-  position: absolute; bottom: 5px; right: 36px; z-index: 5; padding: 4px 9px;
+  position: absolute; bottom: 8px; right: 36px; z-index: 5; padding: 4px 9px;
   border-radius: 6px; background: var(--surface); color: var(--accent); border: 1px solid var(--accent);
   font-size: 11px; font-weight: 600; pointer-events: none; white-space: nowrap;
 }

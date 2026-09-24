@@ -6,6 +6,7 @@ import { promisify, stripVTControlCharacters } from "node:util";
 import { z } from "zod/v4";
 import type { CallToolResult, ContentBlock } from "@modelcontextprotocol/sdk/types.js";
 import { WatchfaceAutomationServer } from "./watchfaceAutomationServer";
+import type { ChatGptModelInfo } from "./chatModels";
 import path from "node:path";
 
 interface RoundOptions {
@@ -71,6 +72,51 @@ export async function findCodexExecutable(options: CodexDetectionOptions = {}): 
   }
   if (failures.length) throw Object.assign(new Error("Codex launchers were found, but none passed the launch check. Repair or reinstall the official Codex CLI, then retry. No engine was substituted.\n" + failures.slice(0, 3).join("\n")), { code: "CODEX_CLI_UNAVAILABLE" });
   throw Object.assign(new Error("Codex CLI was not found. Install the official Codex CLI and run codex login, then try again. Watchmaker has not switched engines."), { code: "CODEX_CLI_NOT_FOUND" });
+}
+
+let cliModelCache: { at: number; models: ChatGptModelInfo[] } | undefined;
+
+/** Models offered by the local CLI under its own sign-in, via app-server `model/list`. */
+export async function listCodexCliModels(): Promise<ChatGptModelInfo[]> {
+  if (cliModelCache && Date.now() - cliModelCache.at < 10 * 60_000) return cliModelCache.models;
+  const executable = await findCodexExecutable();
+  const child = spawn(executable, ["app-server", "--listen", "stdio://"], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env: codexEnvironment(executable) });
+  try {
+    const result = await new Promise<any>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Codex CLI did not list its models.")), 15_000);
+      let buffer = "";
+      const send = (value: unknown) => child.stdin.write(JSON.stringify(value) + "\n");
+      child.on("error", error => { clearTimeout(timer); reject(error); });
+      child.on("exit", code => { clearTimeout(timer); reject(new Error(`Codex CLI exited (${code ?? "signal"}).`)); });
+      child.stdout.setEncoding("utf8");
+      child.stdout.on("data", (data: string) => {
+        buffer += data;
+        const lines = buffer.split("\n"); buffer = lines.pop() ?? "";
+        for (const line of lines) if (line.trim()) {
+          let message: any;
+          try { message = JSON.parse(line); } catch { continue; }
+          if (message.id === 1) { send({ method: "initialized", params: {} }); send({ id: 2, method: "model/list", params: {} }); }
+          if (message.id === 2) { clearTimeout(timer); message.error ? reject(new Error(message.error.message ?? "model/list failed")) : resolve(message.result); }
+        }
+      });
+      send({ id: 1, method: "initialize", params: { clientInfo: { name: "coroslink_watchmaker", version: "1.0.0" } } });
+    });
+    const models = (Array.isArray(result?.data) ? result.data : [])
+      .filter((model: any) => model && typeof model.model === "string" && !model.hidden)
+      .map((model: any): ChatGptModelInfo => ({
+        slug: model.model,
+        displayName: typeof model.displayName === "string" ? model.displayName : model.model,
+        efforts: (Array.isArray(model.supportedReasoningEfforts) ? model.supportedReasoningEfforts : [])
+          .map((level: any) => typeof level === "string" ? level : level?.reasoningEffort)
+          .filter((effort: unknown): effort is string => typeof effort === "string"),
+        ...(typeof model.defaultReasoningEffort === "string" ? { defaultEffort: model.defaultReasoningEffort } : {})
+      }));
+    if (!models.length) throw new Error("Codex CLI returned no models.");
+    cliModelCache = { at: Date.now(), models };
+    return models;
+  } finally {
+    child.kill();
+  }
 }
 
 /** Native CLI harness, adapted to Watchmaker's existing gated tool loop through MCP.

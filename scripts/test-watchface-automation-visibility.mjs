@@ -347,6 +347,28 @@ assertError(
 );
 assert.deepEqual(lockedSource, lockedSnapshot);
 
+// Opening a saved design with the custom colon off must not require an on/off
+// toggle to remove the starter's implicit colon. Verify a serialized reload too.
+const implicitColonDesign = structuredClone(baseDesign);
+delete implicitColonDesign.configAssetOverrides["config:colon_icon"];
+implicitColonDesign.staticSeparators.colon.enabled = false;
+for (const design of [implicitColonDesign, JSON.parse(JSON.stringify(implicitColonDesign))]) {
+  assert.equal(deriveDesignDetails(details, design).previewDetails.resolutions[0].config.colon_icon, "");
+  assert.equal(editorLayer(design, "configAsset:config:colon_icon").visible, false);
+  assert.equal(editorLayer(design, "staticColon").visible, false);
+}
+const enabledTemplateColon = activeDesign(apply([
+  { op: "set_visibility", id: "configAsset:config:colon_icon", visible: true }
+], value(implicitColonDesign)));
+assert.equal(editorLayer(enabledTemplateColon, "configAsset:config:colon_icon").visible, true);
+assert.equal(deriveDesignDetails(details, enabledTemplateColon).previewDetails.resolutions[0].config.colon_icon, "icon\\colon.png");
+const customColonThenTemplate = activeDesign(apply([
+  { op: "set_visibility", id: "staticColon", visible: true },
+  { op: "set_visibility", id: "configAsset:config:colon_icon", visible: true }
+], value(implicitColonDesign)));
+assert.equal(customColonThenTemplate.staticSeparators.colon.enabled, false);
+assert.equal(editorLayer(customColonThenTemplate, "configAsset:config:colon_icon").visible, true);
+
 // Unknown ids are rejected and remain a true no-op for caller-owned state.
 const unknownSource = value();
 const unknownSnapshot = structuredClone(unknownSource);

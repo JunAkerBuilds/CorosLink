@@ -2,6 +2,10 @@ import { useEffect, useId, useState } from "react";
 import { ChevronDown, Loader2, Save } from "lucide-react";
 import { MAX_CUSTOM_COACH_INSTRUCTIONS } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
+import {
+  ChatSettingsSectionHeader,
+  chatSettingsSectionDomId
+} from "./chatSettingsSections";
 
 export function CoachInstructionsSettings({
   api,
@@ -59,8 +63,12 @@ export function CoachInstructionsSettings({
   };
 
   return (
-    <section className="chat-settings-section chat-coach-instructions-section">
-      <h3>Coach instructions</h3>
+    <section
+      className="chat-settings-section chat-coach-instructions-section"
+      id={chatSettingsSectionDomId("coach")}
+      data-settings-section="coach"
+    >
+      <ChatSettingsSectionHeader id="coach" />
       <p className="chat-settings-copy" id={descriptionId}>
         Tell your coach about your goals, training days, equipment, or preferred
         tone. Saved preferences apply to your next message with any provider.

@@ -227,10 +227,38 @@ assert.equal(
   normalizeLocalChatBaseUrl("http://localhost:1234/v1/"),
   "http://localhost:1234/v1"
 );
-assert.throws(
-  () => normalizeLocalChatBaseUrl("http://192.168.1.2:11434/v1"),
-  /localhost/
+assert.equal(
+  normalizeLocalChatBaseUrl("http://192.168.1.2:11434/v1"),
+  "http://192.168.1.2:11434/v1"
 );
+assert.equal(
+  normalizeLocalChatBaseUrl("spark.local:8000"),
+  "http://spark.local:8000/v1"
+);
+for (const lanUrl of [
+  "http://10.0.0.5:8000",
+  "http://172.20.1.1:8000/v1",
+  "http://100.101.102.103:11434",
+  "http://dgx-spark:8000",
+  "https://spark.tail1234.ts.net/v1",
+  "http://[fd12:3456::1]:8000",
+  "http://[::ffff:192.168.1.2]:8000"
+]) {
+  assert.doesNotThrow(() => normalizeLocalChatBaseUrl(lanUrl), lanUrl);
+}
+for (const publicUrl of [
+  "http://8.8.8.8:11434/v1",
+  "https://api.example.com/v1",
+  "http://172.32.0.1:8000",
+  "http://[2001:db8::1]:8000",
+  "http://[::ffff:8.8.8.8]:8000"
+]) {
+  assert.throws(
+    () => normalizeLocalChatBaseUrl(publicUrl),
+    /local network/,
+    publicUrl
+  );
+}
 assert.throws(
   () => normalizeLocalChatBaseUrl("http://localhost:11434/api"),
   /server root or \/v1/

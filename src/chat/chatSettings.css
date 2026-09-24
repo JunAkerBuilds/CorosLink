@@ -1,0 +1,790 @@
+/* Coach settings dialog: the same smoked acrylic as the desktop shell —
+   a translucent neutral tint over a heavy blur, fine monochrome grain, and
+   hairline edges. Colors come from the Coach graphite palette (.chat-view);
+   only the glass surfaces are defined here.
+   Selectors are prefixed with `:root .app` because this file is injected
+   before styles.css/coach.css. */
+
+:root .app .chat-settings-backdrop {
+  --settings-dim: rgba(0, 0, 0, 0.3);
+  --settings-glass-fill: rgba(26, 28, 31, 0.74);
+  --settings-glass-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Cpath fill='%23fff' filter='url(%23g)' d='M0 0h160v160H0z'/%3E%3C/svg%3E");
+  --settings-glass-edge: rgba(255, 255, 255, 0.09);
+  --settings-glass-highlight: rgba(255, 255, 255, 0.05);
+  --settings-hairline: rgba(255, 255, 255, 0.07);
+  --settings-card: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018));
+  --settings-card-border: rgba(255, 255, 255, 0.07);
+  --settings-card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  --settings-well: rgba(0, 0, 0, 0.16);
+  --settings-rail-bg: rgba(255, 255, 255, 0.018);
+  --settings-tile: rgba(255, 255, 255, 0.06);
+  --settings-tile-border: rgba(255, 255, 255, 0.08);
+  --surface: rgba(0, 0, 0, 0.22);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-bg-hover: rgba(255, 255, 255, 0.09);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --settings-primary-bg: var(--accent);
+  --settings-primary-text: var(--text-on-accent);
+  --settings-primary-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  --settings-switch-on: var(--accent);
+  --settings-knob: #f4f5f7;
+  --settings-knob-on: var(--text-on-accent);
+
+  z-index: 80;
+  padding: 28px;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  animation: chat-settings-fade 0.18s ease-out;
+}
+
+/* Blur the surroundings on a sibling layer, not the backdrop itself: an
+   element with backdrop-filter becomes a backdrop root, which would stop the
+   dialog's own (much heavier) blur from reaching the app underneath. */
+:root .app .chat-settings-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--settings-dim);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
+  backdrop-filter: blur(16px) saturate(120%);
+  pointer-events: none;
+}
+
+:root[data-theme="paper"] .app .chat-settings-backdrop {
+  --settings-glass-fill: rgba(250, 251, 252, 0.76);
+  --settings-glass-grain: none;
+  --settings-glass-edge: rgba(38, 44, 54, 0.1);
+  --settings-glass-highlight: rgba(255, 255, 255, 0.7);
+  --settings-hairline: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  --settings-card: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.46));
+  --settings-card-border: color-mix(in srgb, var(--text-muted) 15%, transparent);
+  --settings-card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 6px 18px rgba(43, 52, 67, 0.05);
+  --settings-well: rgba(255, 255, 255, 0.5);
+  --settings-rail-bg: rgba(255, 255, 255, 0.22);
+  --settings-tile: rgba(255, 255, 255, 0.7);
+  --settings-tile-border: color-mix(in srgb, var(--text-muted) 18%, transparent);
+  --surface: rgba(255, 255, 255, 0.78);
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-bg-hover: rgba(255, 255, 255, 0.85);
+  --glass-border: color-mix(in srgb, var(--text-muted) 20%, transparent);
+  --settings-primary-shadow: 0 1px 2px rgba(43, 52, 67, 0.12);
+  --settings-knob: #ffffff;
+
+  --settings-dim: rgba(38, 44, 54, 0.14);
+}
+
+@keyframes chat-settings-fade {
+  from { opacity: 0; }
+}
+
+@keyframes chat-settings-rise {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+}
+
+/* ---------- Shell ---------- */
+
+:root .app .chat-settings-backdrop .chat-settings-modal {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  width: min(1120px, 100%);
+  height: min(88vh, 880px);
+  max-height: none;
+  border: 1px solid var(--settings-glass-edge);
+  border-radius: 18px;
+  background:
+    linear-gradient(155deg, var(--settings-glass-highlight), transparent 42%),
+    var(--settings-glass-fill);
+  color: var(--text-primary);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 30px 80px rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: blur(72px) saturate(160%);
+  backdrop-filter: blur(72px) saturate(160%);
+  animation: chat-settings-rise 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+:root[data-theme="paper"] .app .chat-settings-backdrop .chat-settings-modal {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 30px 80px rgba(43, 52, 67, 0.18);
+}
+
+:root .app .chat-settings-backdrop .chat-settings-modal::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  border-radius: inherit;
+  background-image: var(--settings-glass-grain);
+  opacity: 0.035;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root .app .chat-settings-backdrop .chat-settings-modal::after {
+    display: none;
+  }
+
+  :root .app .chat-settings-backdrop .chat-settings-modal {
+    background: var(--coach-canvas);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+:root .app .chat-settings-backdrop .chat-settings-rail {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-height: 0;
+  padding: 24px 14px 20px;
+  border-right: 1px solid var(--settings-hairline);
+  background: var(--settings-rail-bg);
+}
+
+:root .app .chat-settings-backdrop .chat-settings-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 8px;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-modal-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--settings-tile-border);
+  border-radius: 10px;
+  background: var(--settings-tile);
+  color: var(--text-primary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+:root .app .chat-settings-backdrop .chat-settings-modal-title > div {
+  display: grid;
+  gap: 1px;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-modal-title h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-modal-title span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-nav {
+  display: grid;
+  gap: 18px;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-nav-group {
+  display: grid;
+  gap: 2px;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-nav-label {
+  padding: 0 10px 6px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-nav-item svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: color 0.15s ease;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-nav-item:hover {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+:root .app .chat-settings-backdrop .chat-settings-nav-item.is-active {
+  border-color: var(--settings-card-border);
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+:root .app .chat-settings-backdrop .chat-settings-nav-item.is-active svg {
+  color: var(--accent-strong);
+}
+
+:root .app .chat-settings-backdrop .chat-settings-nav-item:focus-visible,
+:root .app .chat-settings-backdrop .chat-settings-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-rail-note {
+  margin: auto 0 0;
+  padding: 0 10px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-rail-note kbd {
+  display: inline-block;
+  margin-right: 3px;
+  padding: 1px 6px;
+  border: 1px solid var(--glass-border);
+  border-radius: 5px;
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-close {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  z-index: 3;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+:root .app .chat-settings-backdrop .chat-settings-close:hover {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+:root .app .chat-settings-backdrop .chat-settings-modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 30px 72px 48px 40px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--glass-border) transparent;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-panel {
+  height: auto;
+  max-height: none;
+  max-width: 820px;
+  overflow: visible;
+  padding: 0;
+  gap: 18px;
+}
+
+/* ---------- Sections ---------- */
+
+:root .app .chat-settings-backdrop .chat-settings-section,
+:root .app .chat-settings-backdrop .chat-openrouter-section,
+:root .app .chat-settings-backdrop .chat-claude-section {
+  gap: 16px;
+  padding: 22px 24px 24px;
+  border: 1px solid var(--settings-card-border);
+  border-radius: 16px;
+  background: var(--settings-card);
+  box-shadow: var(--settings-card-shadow);
+  scroll-margin-top: 24px;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-section-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 13px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--settings-hairline);
+}
+
+:root .app .chat-settings-backdrop .chat-settings-section-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--settings-tile-border);
+  border-radius: 10px;
+  background: var(--settings-tile);
+  color: var(--text-secondary);
+}
+
+:root .app .chat-settings-backdrop .chat-settings-section-heading {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-section-heading h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14.5px;
+  font-weight: 620;
+  letter-spacing: -0.012em;
+  text-transform: none;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-section-heading p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+:root .app .chat-settings-backdrop .chat-beta-badge {
+  min-height: 19px;
+  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-strong);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-copy {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* ---------- Fields ---------- */
+
+/* Pair short fields side by side now that the dialog is wide. */
+:root .app .chat-settings-backdrop .chat-local-settings-panel > .chat-local-field-key {
+  grid-column: auto;
+}
+
+:root .app .chat-settings-backdrop .chat-local-settings-panel > .chat-local-tools {
+  grid-column: auto;
+  align-self: end;
+  min-height: 40px;
+}
+
+:root .app .chat-settings-backdrop .chat-openrouter-section .chat-local-settings-panel > .chat-local-field-key {
+  grid-column: auto;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-field-grid,
+:root .app .chat-settings-backdrop .chat-local-settings-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px 14px;
+}
+
+:root .app .chat-settings-backdrop .chat-local-field {
+  gap: 7px;
+}
+
+:root .app .chat-settings-backdrop .chat-local-field > span,
+:root .app .chat-settings-backdrop .chat-local-field > label > span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+:root .app .chat-settings-backdrop .chat-local-field > span,
+:root .app .chat-settings-backdrop .chat-local-field > label,
+:root .app .chat-settings-backdrop .chat-local-field > label > span {
+  display: block;
+  line-height: 16px;
+}
+
+:root .app .chat-settings-backdrop .chat-local-field input,
+:root .app .chat-settings-backdrop .chat-local-field select,
+:root .app .chat-settings-backdrop .chat-local-key-row,
+:root .app .chat-settings-backdrop .chat-claude-path-row,
+:root .app .chat-settings-backdrop .chat-custom-instructions,
+:root .app .chat-settings-backdrop .chat-base-instructions-body {
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-primary);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+:root .app .chat-settings-backdrop .chat-local-field > input,
+:root .app .chat-settings-backdrop .chat-local-field > select {
+  min-height: 40px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+:root .app .chat-settings-backdrop .chat-local-key-row,
+:root .app .chat-settings-backdrop .chat-claude-path-row {
+  min-height: 40px;
+  padding: 0 12px;
+  gap: 9px;
+  color: var(--text-muted);
+}
+
+:root .app .chat-settings-backdrop .chat-local-key-row input,
+:root .app .chat-settings-backdrop .chat-claude-path-row input {
+  min-height: 38px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  box-shadow: none;
+}
+
+:root .app .chat-settings-backdrop .chat-local-field input::placeholder,
+:root .app .chat-settings-backdrop .chat-custom-instructions::placeholder {
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+:root .app .chat-settings-backdrop .chat-local-field > input:focus,
+:root .app .chat-settings-backdrop .chat-local-field > select:focus,
+:root .app .chat-settings-backdrop .chat-local-key-row:focus-within,
+:root .app .chat-settings-backdrop .chat-claude-path-row:focus-within,
+:root .app .chat-settings-backdrop .chat-custom-instructions:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+:root .app .chat-settings-backdrop .chat-custom-instructions {
+  min-height: 132px;
+  padding: 12px 14px;
+  font-size: 13px;
+}
+
+:root .app .chat-settings-backdrop .chat-coach-instructions-section .chat-settings-copy {
+  color: var(--text-muted);
+}
+
+:root .app .chat-settings-backdrop .chat-custom-instructions-meta {
+  color: var(--text-muted);
+}
+
+:root .app .chat-settings-backdrop .chat-custom-instructions-footer {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+:root .app .chat-settings-backdrop .chat-base-instructions {
+  border-top-color: var(--settings-hairline);
+  padding-top: 14px;
+}
+
+:root .app .chat-settings-backdrop .chat-base-instructions summary {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+/* ---------- Buttons ---------- */
+
+:root .app .chat-settings-backdrop .chat-local-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+:root .app .chat-settings-backdrop .chat-local-action,
+:root .app .chat-settings-backdrop .chat-signout-settings {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+:root .app .chat-settings-backdrop .chat-local-action svg,
+:root .app .chat-settings-backdrop .chat-signout-settings svg {
+  color: var(--text-muted);
+}
+
+:root .app .chat-settings-backdrop .chat-local-action:hover:not(:disabled),
+:root .app .chat-settings-backdrop .chat-signout-settings:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  background: var(--glass-bg-hover);
+}
+
+:root .app .chat-settings-backdrop .chat-local-action.primary {
+  border-color: transparent;
+  background: var(--settings-primary-bg);
+  color: var(--settings-primary-text);
+  box-shadow: var(--settings-primary-shadow);
+}
+
+:root .app .chat-settings-backdrop .chat-local-action.primary svg {
+  color: currentColor;
+}
+
+:root .app .chat-settings-backdrop .chat-local-action.primary:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--settings-primary-bg);
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+:root .app .chat-settings-backdrop .chat-local-action:disabled {
+  opacity: 0.42;
+  box-shadow: none;
+}
+
+:root .app .chat-settings-backdrop .chat-local-action:focus-visible,
+:root .app .chat-settings-backdrop .chat-signout-settings:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Toggles ---------- */
+
+:root .app .chat-settings-backdrop .chat-settings-toggle-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--settings-hairline);
+  border-radius: 12px;
+  background: var(--settings-well);
+  cursor: pointer;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-toggle-text {
+  display: grid;
+  gap: 4px;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-toggle-text strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-toggle-text span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+:root .app .chat-settings-backdrop :is(.chat-settings-switch, .chat-local-tools input[type="checkbox"]) {
+  flex-shrink: 0;
+  width: 38px;
+  height: 22px;
+  margin: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background-color: color-mix(in srgb, var(--text-muted) 22%, transparent);
+  background-image: radial-gradient(circle, var(--settings-knob) 0 7px, transparent 7.5px);
+  background-position: 1px center;
+  background-repeat: no-repeat;
+  background-size: 20px 20px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: background-color 0.18s ease, background-position 0.18s ease, border-color 0.18s ease;
+}
+
+:root .app .chat-settings-backdrop :is(.chat-settings-switch, .chat-local-tools input[type="checkbox"]):checked {
+  border-color: transparent;
+  background-color: var(--settings-switch-on);
+  background-image: radial-gradient(circle, var(--settings-knob-on) 0 7px, transparent 7.5px);
+  background-position: calc(100% - 1px) center;
+}
+
+:root .app .chat-settings-backdrop :is(.chat-settings-switch, .chat-local-tools input[type="checkbox"]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+:root .app .chat-settings-backdrop .chat-local-tools {
+  gap: 10px;
+  min-height: 36px;
+  white-space: normal;
+  cursor: pointer;
+}
+
+:root .app .chat-settings-backdrop .chat-local-tools span {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+/* ---------- Provider details ---------- */
+
+:root .app .chat-settings-backdrop .chat-settings-account {
+  gap: 12px;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-account.is-signed-in {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 12px 16px;
+  border: 1px solid var(--settings-hairline);
+  border-radius: 12px;
+  background: var(--settings-well);
+}
+
+:root .app .chat-settings-backdrop .chat-settings-email {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:root .app .chat-settings-backdrop .chat-settings-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success-dot);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success-dot) 18%, transparent);
+}
+
+:root .app .chat-settings-backdrop .chat-claude-status {
+  gap: 11px;
+  padding: 12px 14px;
+  border-color: var(--settings-hairline);
+  border-radius: 12px;
+  background: var(--settings-well);
+}
+
+:root .app .chat-settings-backdrop .chat-claude-status[data-state="connected"] {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+:root .app .chat-settings-backdrop .chat-claude-status strong {
+  font-size: 12.5px;
+}
+
+:root .app .chat-settings-backdrop .chat-claude-status span {
+  font-size: 12px;
+}
+
+:root .app .chat-settings-backdrop .chat-claude-permissions {
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 6px 18px;
+  padding-top: 14px;
+  border-top-color: var(--settings-hairline);
+}
+
+:root .app .chat-settings-backdrop .chat-claude-permissions > .chat-local-tools {
+  grid-column: auto;
+}
+
+:root .app .chat-settings-backdrop .chat-claude-permissions > strong {
+  padding-bottom: 4px;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+:root .app .chat-settings-backdrop .chat-local-result {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+/* ---------- Narrow windows ---------- */
+
+@media (max-width: 860px) {
+  :root .app .chat-settings-backdrop {
+    padding: 12px;
+  }
+
+  :root .app .chat-settings-backdrop .chat-settings-modal {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    height: min(94vh, 880px);
+    border-radius: 18px;
+  }
+
+  :root .app .chat-settings-backdrop .chat-settings-rail {
+    gap: 14px;
+    padding: 16px 16px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--settings-hairline);
+    background: var(--settings-rail-bg);
+  }
+
+  :root .app .chat-settings-backdrop .chat-settings-nav {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  :root .app .chat-settings-backdrop .chat-settings-nav-group {
+    display: contents;
+  }
+
+  :root .app .chat-settings-backdrop .chat-settings-nav-label,
+  :root .app .chat-settings-backdrop .chat-settings-rail-note {
+    display: none;
+  }
+
+  :root .app .chat-settings-backdrop .chat-settings-nav-item {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  :root .app .chat-settings-backdrop .chat-settings-close {
+    top: 14px;
+    right: 14px;
+  }
+
+  :root .app .chat-settings-backdrop .chat-settings-modal-body {
+    padding: 18px 16px 32px;
+  }
+
+  :root .app .chat-settings-backdrop .chat-settings-section,
+  :root .app .chat-settings-backdrop .chat-openrouter-section,
+  :root .app .chat-settings-backdrop .chat-claude-section {
+    padding: 18px 16px 20px;
+  }
+
+  :root .app .chat-settings-backdrop .chat-settings-field-grid,
+  :root .app .chat-settings-backdrop .chat-local-settings-panel,
+  :root .app .chat-settings-backdrop .chat-custom-instructions-footer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root .app .chat-settings-backdrop,
+  :root .app .chat-settings-backdrop .chat-settings-modal {
+    animation: none;
+  }
+}

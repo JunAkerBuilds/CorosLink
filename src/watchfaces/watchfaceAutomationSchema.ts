@@ -121,6 +121,7 @@ export const WATCHFACE_AUTOMATION_DOCUMENT_JSON_SCHEMA = {
         modeDesigns: { type: "object", additionalProperties: false, properties: { aod: { $ref: "#/$defs/modeDesign" } } },
         archiveWatchFaceVersion: { type: "number" },
         stripBlankConfigKeys: { type: "boolean" },
+        watchLanguages: { anyOf: [{ enum: ["all", "english"] }, { type: "array", uniqueItems: true, items: { type: "string", pattern: "^[a-z_]+$" } }], description: "Watch languages that get the custom weekday labels. Month/day digits always reach every language." },
         configTextEdits: stringMap,
         backgroundColor: { $ref: "#/$defs/color", description: "Solid base painted first. Opaque artwork may cover it; set artworkVisible false to show only this color." },
         accentColor: { type: "string" },
@@ -577,6 +578,10 @@ export function validateWatchfaceAutomationDocument(
   for (const key of ["fontFamily", "previewComplication"] as const) text(design[key], diagnostics, `/design/${key}`, 512);
   if (design.fontWeight !== undefined) finite(design.fontWeight, diagnostics, "/design/fontWeight", { minimum: 1, maximum: 1000 });
   if (design.letterSpacing !== undefined) finite(design.letterSpacing, diagnostics, "/design/letterSpacing", { minimum: -10, maximum: 10 });
+  if (design.watchLanguages !== undefined && design.watchLanguages !== "all" && design.watchLanguages !== "english" &&
+    (!Array.isArray(design.watchLanguages) || design.watchLanguages.some((language) => typeof language !== "string" || !/^[a-z_]+$/.test(language)))) {
+    issue(diagnostics, "style.languages", "watchLanguages must be all, english or an array of language prefixes.", "/design/watchLanguages");
+  }
   if (design.archiveWatchFaceVersion !== undefined) finite(design.archiveWatchFaceVersion, diagnostics, "/design/archiveWatchFaceVersion", { minimum: 0, maximum: 1000, integer: true });
   validateAdvancedCollections(design, diagnostics);
   if (objectOf(design.modeDesigns)) {

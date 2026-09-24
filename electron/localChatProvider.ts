@@ -98,8 +98,10 @@ export function normalizeLocalChatBaseUrl(input: string): string {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Local model URL must use http or https.");
   }
-  if (url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
-    throw new Error("Local model URL must point to localhost or 127.0.0.1.");
+  if (!isLocalNetworkHost(url.hostname)) {
+    throw new Error(
+      "Local model URL must point to this computer or a device on your local network (for example 192.168.1.20 or spark.local)."
+    );
   }
 
   const pathName = url.pathname.replace(/\/+$/, "");
@@ -113,6 +115,69 @@ export function normalizeLocalChatBaseUrl(input: string): string {
   url.search = "";
   url.hash = "";
   return url.toString().replace(/\/$/, "");
+}
+
+// Local runtimes may live on another machine on the LAN (issue #126), but the
+// "local" provider still must not become a way to ship health data to an
+// arbitrary internet host. Accept loopback, private/link-local/CGNAT (Tailscale)
+// addresses, and names that only resolve on a local network.
+const LOCAL_NETWORK_NAME_SUFFIXES = [
+  ".localhost",
+  ".local",
+  ".lan",
+  ".home",
+  ".home.arpa",
+  ".internal",
+  ".ts.net"
+];
+
+export function isLocalNetworkHost(hostname: string): boolean {
+  const host = hostname.trim().toLowerCase().replace(/\.$/, "");
+  if (!host) return false;
+  if (host.startsWith("[") && host.endsWith("]")) {
+    return isLocalNetworkIpv6(host.slice(1, -1));
+  }
+  const ipv4 = parseIpv4(host);
+  if (ipv4) return isLocalNetworkIpv4(ipv4);
+  if (/^[\d.]+$/.test(host)) return false;
+  if (host === "localhost") return true;
+  // Single-label names (e.g. "spark") only resolve via local DNS/mDNS.
+  if (!host.includes(".")) return true;
+  return LOCAL_NETWORK_NAME_SUFFIXES.some((suffix) => host.endsWith(suffix));
+}
+
+function parseIpv4(host: string): number[] | null {
+  const parts = host.split(".");
+  if (parts.length !== 4 || !parts.every((part) => /^\d{1,3}$/.test(part))) {
+    return null;
+  }
+  const octets = parts.map(Number);
+  return octets.every((octet) => octet <= 255) ? octets : null;
+}
+
+function isLocalNetworkIpv4([a, b]: number[]): boolean {
+  return (
+    a === 127 ||
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254) ||
+    (a === 100 && b >= 64 && b <= 127)
+  );
+}
+
+function isLocalNetworkIpv6(address: string): boolean {
+  if (address === "::1") return true;
+  // IPv4-mapped addresses are serialized by URL as ::ffff:XXXX:XXXX.
+  const mapped = /^::ffff:([\da-f]{1,4}):([\da-f]{1,4})$/.exec(address);
+  if (mapped) {
+    const high = parseInt(mapped[1], 16);
+    const low = parseInt(mapped[2], 16);
+    return isLocalNetworkIpv4([high >> 8, high & 0xff, low >> 8, low & 0xff]);
+  }
+  const first = parseInt(address.split(":")[0] || "0", 16);
+  // fc00::/7 unique-local, fe80::/10 link-local.
+  return (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80;
 }
 
 export function buildLocalFunctionTools(

@@ -97,7 +97,7 @@ function applyLayerVisibility(
     return {
       ...design,
       configAssetOverrides,
-      ...(staticSeparatorId && !visible
+      ...(staticSeparatorId && (!visible || staticSeparatorId === "colon")
         ? {
             staticSeparators: {
               ...design.staticSeparators,

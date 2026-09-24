@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Bot,
   CircleCheck,
@@ -19,7 +20,13 @@ import type {
 } from "../../electron/types";
 import { CoachInstructionsSettings } from "./CoachInstructionsSettings";
 import { McpServersPanel } from "./McpServersPanel";
+import {
+  ChatSettingsSectionHeader,
+  chatSettingsSectionDomId
+} from "./chatSettingsSections";
 import type { CorosLinkApi } from "../coroslink-api";
+
+const CUSTOM_LOCAL_SERVER_OPTION = "__custom__";
 
 function claudeStatusLabel(status: ClaudeCodeStatus | null): string {
   if (!status) return "Not checked";
@@ -124,19 +131,40 @@ export function ChatSettingsPanel({
     localDiscovery?.servers.filter(
       (server) => server.ok && server.models.length > 0
     ) ?? [];
-  const selectedLocalServer =
-    availableLocalServers.find(
-      (server) => server.baseUrl === chatSettings.local.baseUrl
-    ) ?? availableLocalServers[0];
+  const [enteringCustomLocalUrl, setEnteringCustomLocalUrl] = useState(false);
+  const matchedLocalServer = availableLocalServers.find(
+    (server) => server.baseUrl === chatSettings.local.baseUrl
+  );
+  // A saved URL that detection didn't find (e.g. a server elsewhere on the
+  // LAN) stays editable instead of snapping to the first localhost server.
+  const usingCustomLocalUrl =
+    availableLocalServers.length > 0 &&
+    (enteringCustomLocalUrl || !matchedLocalServer);
+  const selectedLocalServer = usingCustomLocalUrl
+    ? undefined
+    : matchedLocalServer;
   const discoveredLocalModels = selectedLocalServer?.models ?? [];
 
   return (
     <div className="chat-settings-panel">
-      <section className="chat-settings-section">
-        <h3>Display</h3>
-        <label className="chat-local-tools">
+      <section
+        className="chat-settings-section"
+        id={chatSettingsSectionDomId("display")}
+        data-settings-section="display"
+      >
+        <ChatSettingsSectionHeader id="display" />
+        <label className="chat-settings-toggle-row">
+          <span className="chat-settings-toggle-text">
+            <strong>Show charts and activity visuals in chat</strong>
+            <span>
+              When off, automatic heart rate trends, zone summaries, and
+              activity charts are hidden. Charts you explicitly ask the coach
+              to draw are always shown.
+            </span>
+          </span>
           <input
             type="checkbox"
+            className="chat-settings-switch"
             checked={chatSettings.visualizationsEnabled === true}
             onChange={(event) =>
               onUpdateChatSettings({
@@ -144,13 +172,7 @@ export function ChatSettingsPanel({
               })
             }
           />
-          <span>Show charts and activity visuals in chat</span>
         </label>
-        <p className="chat-settings-copy">
-          When off, automatic heart rate trends, zone summaries, and activity
-          charts are hidden. Charts you explicitly ask the coach to draw are
-          always shown.
-        </p>
       </section>
 
       <CoachInstructionsSettings
@@ -160,11 +182,18 @@ export function ChatSettingsPanel({
         onSave={(customInstructions) => onUpdateChatSettings({ customInstructions })}
       />
 
-      <section className="chat-settings-section">
-        <h3>ChatGPT account</h3>
+      <section
+        className="chat-settings-section"
+        id={chatSettingsSectionDomId("chatgpt")}
+        data-settings-section="chatgpt"
+      >
+        <ChatSettingsSectionHeader id="chatgpt" />
         {authStatus?.signedIn ? (
-          <div className="chat-settings-account">
-            <span className="chat-settings-email">Signed in</span>
+          <div className="chat-settings-account is-signed-in">
+            <span className="chat-settings-email">
+              <span className="chat-settings-status-dot" aria-hidden="true" />
+              Signed in
+            </span>
             <button
               type="button"
               className="chat-signout chat-signout-settings"
@@ -195,11 +224,12 @@ export function ChatSettingsPanel({
         )}
       </section>
 
-      <section className="chat-settings-section chat-openrouter-section">
-        <div className="chat-settings-section-title">
-          <h3>OpenRouter API</h3>
-          <span className="chat-beta-badge">BYOK</span>
-        </div>
+      <section
+        className="chat-settings-section chat-openrouter-section"
+        id={chatSettingsSectionDomId("openrouter")}
+        data-settings-section="openrouter"
+      >
+        <ChatSettingsSectionHeader id="openrouter" badge="BYOK" />
         <p className="chat-settings-copy">
           Use your OpenRouter account and credits for coaching. CorosLink stores
           the key encrypted on this computer and only sends it to OpenRouter.
@@ -331,45 +361,48 @@ export function ChatSettingsPanel({
         </p>
       </section>
 
-      <section className="chat-settings-section chat-claude-section">
-        <div className="chat-settings-section-title">
-          <h3>Claude subscription</h3>
-          <span className="chat-beta-badge">Beta</span>
-        </div>
+      <section
+        className="chat-settings-section chat-claude-section"
+        id={chatSettingsSectionDomId("claude")}
+        data-settings-section="claude"
+      >
+        <ChatSettingsSectionHeader id="claude" badge="Beta" />
         <p className="chat-settings-copy">
           Uses Claude Code installed and signed in on this computer. CorosLink
           never reads or stores your Claude password or subscription credentials.
         </p>
 
-        <label className="chat-local-field">
-          <span>Claude executable</span>
-          <div className="chat-claude-path-row">
-            <Terminal size={15} aria-hidden="true" />
-            <input
-              value={chatSettings.claudeCode.executablePath ?? ""}
-              onChange={(event) =>
-                onUpdateClaudeCode({ executablePath: event.target.value })
-              }
-              placeholder="Auto-detect Claude Code"
-              spellCheck={false}
-            />
-          </div>
-        </label>
+        <div className="chat-settings-field-grid">
+          <label className="chat-local-field">
+            <span>Claude executable</span>
+            <div className="chat-claude-path-row">
+              <Terminal size={15} aria-hidden="true" />
+              <input
+                value={chatSettings.claudeCode.executablePath ?? ""}
+                onChange={(event) =>
+                  onUpdateClaudeCode({ executablePath: event.target.value })
+                }
+                placeholder="Auto-detect Claude Code"
+                spellCheck={false}
+              />
+            </div>
+          </label>
 
-        <label className="chat-local-field">
-          <span>Model</span>
-          <select
-            value={chatSettings.claudeCode.model ?? ""}
-            onChange={(event) =>
-              onUpdateClaudeCode({ model: event.target.value })
-            }
-          >
-            <option value="">Account default</option>
-            <option value="opus">Opus (most capable)</option>
-            <option value="sonnet">Sonnet (balanced)</option>
-            <option value="haiku">Haiku (fastest)</option>
-          </select>
-        </label>
+          <label className="chat-local-field">
+            <span>Model</span>
+            <select
+              value={chatSettings.claudeCode.model ?? ""}
+              onChange={(event) =>
+                onUpdateClaudeCode({ model: event.target.value })
+              }
+            >
+              <option value="">Account default</option>
+              <option value="opus">Opus (most capable)</option>
+              <option value="sonnet">Sonnet (balanced)</option>
+              <option value="haiku">Haiku (fastest)</option>
+            </select>
+          </label>
+        </div>
 
         <div className="chat-claude-status" data-state={claudeStatus?.state}>
           {checkingClaude || connectingClaude ? (
@@ -490,19 +523,30 @@ export function ChatSettingsPanel({
         </p>
       </section>
 
-      <section className="chat-settings-section">
-        <h3>Local model</h3>
+      <section
+        className="chat-settings-section"
+        id={chatSettingsSectionDomId("local")}
+        data-settings-section="local"
+      >
+        <ChatSettingsSectionHeader id="local" />
         <div className="chat-local-settings chat-local-settings-panel">
             <label className="chat-local-field">
               <span>Server</span>
               {availableLocalServers.length > 0 ? (
                 <select
-                  value={selectedLocalServer?.baseUrl ?? chatSettings.local.baseUrl}
+                  value={
+                    selectedLocalServer?.baseUrl ?? CUSTOM_LOCAL_SERVER_OPTION
+                  }
                   onChange={(event) => {
+                    if (event.target.value === CUSTOM_LOCAL_SERVER_OPTION) {
+                      setEnteringCustomLocalUrl(true);
+                      return;
+                    }
                     const server = availableLocalServers.find(
                       (entry) => entry.baseUrl === event.target.value
                     );
                     if (!server) return;
+                    setEnteringCustomLocalUrl(false);
                     onUpdateLocalDraft({
                       baseUrl: server.baseUrl,
                       model: server.models.includes(chatSettings.local.model)
@@ -517,17 +561,22 @@ export function ChatSettingsPanel({
                       {server.models.length === 1 ? "" : "s"}
                     </option>
                   ))}
+                  <option value={CUSTOM_LOCAL_SERVER_OPTION}>
+                    Other server URL…
+                  </option>
                 </select>
-              ) : (
+              ) : null}
+              {availableLocalServers.length === 0 || usingCustomLocalUrl ? (
                 <input
                   value={chatSettings.local.baseUrl}
                   onChange={(event) =>
                     onUpdateLocalDraft({ baseUrl: event.target.value })
                   }
-                  placeholder="http://localhost:11434/v1"
+                  placeholder="http://localhost:11434/v1 or http://192.168.1.20:8000/v1"
+                  aria-label="Server URL"
                   spellCheck={false}
                 />
-              )}
+              ) : null}
             </label>
             <label className="chat-local-field">
               <span>Model</span>
@@ -648,8 +697,12 @@ export function ChatSettingsPanel({
         </div>
       </section>
 
-      <section className="chat-settings-section">
-        <h3>MCP servers</h3>
+      <section
+        className="chat-settings-section"
+        id={chatSettingsSectionDomId("mcp")}
+        data-settings-section="mcp"
+      >
+        <ChatSettingsSectionHeader id="mcp" />
         <p className="chat-settings-copy">
           Connect additional Model Context Protocol servers so the coach can call
           their tools. Their tools appear alongside COROS, namespaced per server.

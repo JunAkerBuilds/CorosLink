@@ -1,7 +1,4 @@
-import type { WatchfaceTarget } from "./watchfaceTargets";
-
 type Entry = { name: string; data: Buffer };
-const PACE3_DATE_MARKER = "// CorosLink device layout: pace-3-date-rects-v1";
 const MARKER_LINE = /^(\uFEFF?)\/\/ CorosLink device layout: pace-3-date-rects-v1\r?\n/;
 const DATE_RECT = /^([\t ]*\[english_date_(month|day)_rect\][\t ]*=)([^\r\n]*)/gm;
 const RECT_VALUE = /^\s*\{\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+(?:,[^{}\r\n]+)?\}\s*$/;
@@ -26,27 +23,15 @@ export function restoreWatchfaceDateLayout(text: string): string {
 }
 
 /**
- * PACE 3 installs English month/day values in each other's rectangles. The
- * rectangle exchange was verified by users on the affected faces. Compensate
- * only in final device configs, after font bounds have been fitted to their
- * semantic fields. Fonts, weekday, other locales and preview images stay put.
- * The comment lets a newly exported ZIP reopen with its intended editor layout.
+ * Preserve authored date positions for every watch. The former PACE 3-only
+ * swap can counteract COROS's date ordering preference; do not infer that
+ * preference from the watch model. Undo marked legacy exports on rebuild.
  */
-export function finalizeWatchfaceDeviceLayout(entries: Entry[], target?: WatchfaceTarget): Entry[] {
+export function finalizeWatchfaceDeviceLayout(entries: Entry[]): Entry[] {
   return entries.map(entry => {
     if (!/^watchface_\d+x\d+\/config\.txt$/i.test(entry.name)) return entry;
     const original = entry.data.toString("utf8");
-    const canonical = restoreWatchfaceDateLayout(original);
-    let text = canonical;
-    if (target?.model === "pace-3") {
-      const bom = canonical.startsWith("\uFEFF") ? "\uFEFF" : "";
-      const body = canonical.slice(bom.length);
-      const swapped = exchangeDateRects(body);
-      if (swapped !== body) {
-        const newline = body.includes("\r\n") ? "\r\n" : "\n";
-        text = bom + PACE3_DATE_MARKER + newline + swapped;
-      }
-    }
+    const text = restoreWatchfaceDateLayout(original);
     return text === original ? entry : { ...entry, data: Buffer.from(text, "utf8") };
   });
 }

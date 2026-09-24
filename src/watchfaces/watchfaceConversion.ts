@@ -39,7 +39,7 @@ export function prepareWatchfaceConversion(
   const portableDesign = structuredClone(sourceDesign);
   if (options.rawEditsApplied) delete portableDesign.configTextEdits;
   if (options.generatedAod && !portableDesign.modeDesigns?.aod) {
-    const { version, modeDesigns, configTextEdits, archiveWatchFaceVersion, stripBlankConfigKeys, ...visual } = structuredClone(portableDesign);
+    const { version, modeDesigns, configTextEdits, archiveWatchFaceVersion, stripBlankConfigKeys, watchLanguages, ...visual } = structuredClone(portableDesign);
     portableDesign.modeDesigns = { aod: { ...visual, backgroundEdited: true } };
   }
   return {

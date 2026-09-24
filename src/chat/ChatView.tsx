@@ -2722,7 +2722,7 @@ export function ChatView({
           message:
             runningEmpty.length > 0
               ? `${runningEmpty.map((server) => server.label).join(" and ")} ${runningEmpty.length === 1 ? "is" : "are"} running, but no models were found. Pull an Ollama model or load a model in LM Studio, then detect again.`
-              : "No Ollama or LM Studio server found on localhost ports 11434 or 1234."
+              : "No Ollama or LM Studio server found on localhost ports 11434 or 1234. For a server on another machine, enter its URL (for example http://192.168.1.20:8000/v1) and click Test."
         });
         return;
       }

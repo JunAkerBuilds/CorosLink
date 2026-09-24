@@ -4,6 +4,7 @@ import { WatchfaceAutomationBroker } from "./watchfaceAutomationBroker";
 import { WatchfaceAutomationServer } from "./watchfaceAutomationServer";
 import { WatchfaceAutomationService } from "./watchfaceAutomationService";
 import { listChatGptModels } from "./chatService";
+import { listCodexCliModels } from "./watchfaceCodexCli";
 import { WatchfaceAiChatStore } from "./watchfaceAiChatStore";
 import { cancelWatchfaceAiChat, runWatchfaceAiChat, WATCHFACE_AI_TOOL_NAMES } from "./watchfaceAiChat";
 import type { WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "./watchfaceAutomationTypes";
@@ -105,7 +106,11 @@ export function registerWatchfaceAutomation(getWindow: () => BrowserWindow | und
   });
   ipcMain.handle("watchfaceAi:models", (event) => {
     if (!trusted(event)) throw new Error("This connection is only available to the CorosLink window.");
-    return listChatGptModels();
+    // The editor runs Codex CLI, so list what its own sign-in offers.
+    return listCodexCliModels().catch((error: unknown) => {
+      console.warn("[watchmaker] Codex CLI model list unavailable:", error instanceof Error ? error.message : error);
+      return listChatGptModels();
+    });
   });
   const chats = new WatchfaceAiChatStore(app.getPath("userData"));
   const handleTrusted = <Args extends unknown[]>(channel: string, handler: (...args: Args) => unknown) => {

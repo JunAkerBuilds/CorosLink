@@ -33,6 +33,7 @@ import {
   type LucideIcon
 } from "lucide-react";
 import type { CorosLinkApi } from "../coroslink-api";
+import type { ChatGptModelInfo } from "../../electron/chatModels";
 import type {
   WatchfaceAiChatSummary,
   WatchfaceAiEvent,
@@ -173,6 +174,8 @@ const SUGGESTIONS: Array<{ text: string; icon: LucideIcon }> = [
 const MAX_ATTACHMENTS = 4;
 const MAX_IMAGE_EDGE = 1024;
 const CLI_WARNING_KEY = "coroslink.watchfaceAi.cliWarningAcknowledged.v1";
+const CLI_MODEL_KEY = "coroslink.watchfaceAi.cliModel.v1";
+const CLI_EFFORT_KEY = "coroslink.watchfaceAi.cliEffort.v1";
 
 function newId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -340,6 +343,10 @@ export function WatchfaceAiPanel({
   const [attachError, setAttachError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [cliWarningAcknowledged, setCliWarningAcknowledged] = useState(() => readPreference(CLI_WARNING_KEY) === "true");
+  const [models, setModels] = useState<ChatGptModelInfo[]>([]);
+  const [model, setModel] = useState(() => readPreference(CLI_MODEL_KEY));
+  const [effort, setEffort] = useState(() => readPreference(CLI_EFFORT_KEY));
+  const modelInfo = models.find(option => option.slug === model);
   const [chatId, setChatId] = useState<string | null>(null);
   const [savedChats, setSavedChats] = useState<WatchfaceAiChatSummary[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -451,6 +458,12 @@ export function WatchfaceAiPanel({
   }, [api, projectKey]);
 
   useEffect(() => { void refreshChats(); }, [refreshChats]);
+
+  useEffect(() => {
+    let live = true;
+    api.listWatchfaceAiModels().then(list => { if (live) setModels(list); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [api]);
 
   const persist = useCallback((list: PanelMessage[], key: string) => {
     if (!list.length) return;
@@ -599,7 +612,9 @@ export function WatchfaceAiPanel({
     activeRef.current = requestId;
     setActiveRequest(requestId);
     const options: WatchfaceAiOptions = {
-      harness: "codex-cli"
+      harness: "codex-cli",
+      ...(model ? { model } : {}),
+      ...(model && effort && modelInfo?.efforts.includes(effort) ? { reasoningEffort: effort } : {})
     };
     api.sendWatchfaceAi(requestId, history, options).catch((caught: unknown) => {
       updateAssistant(requestId, (message) => ({
@@ -865,10 +880,10 @@ export function WatchfaceAiPanel({
           <div className="wf-ai-harness">
             <span className="wf-ai-harness-label">Engine</span>
             <span className="wf-ai-harness-value"><Terminal size={14} aria-hidden="true" />Codex CLI</span>
-            <span className="wf-ai-harness-hint">Uses your local CLI settings</span>
+            <span className="wf-ai-harness-hint">Uses your local CLI sign-in</span>
           </div>
           {!cliWarningAcknowledged ? <div className="wf-ai-cli-warning" role="note">
-            <p>Codex CLI uses your local CLI sign-in and model settings. It can run shell commands, read local files, write to its work folder and temporary files, and access the network. Shell changes are outside editor Undo. Editor tools connect through MCP. Image generation still needs CorosLink’s ChatGPT sign-in.</p>
+            <p>Codex CLI uses your local CLI sign-in, and its configured model unless you pick one below. It can run shell commands, read local files, write to its work folder and temporary files, and access the network. Shell changes are outside editor Undo. Editor tools connect through MCP. Image generation still needs CorosLink’s ChatGPT sign-in.</p>
             <button type="button" onClick={() => {
               setCliWarningAcknowledged(true);
               writePreference(CLI_WARNING_KEY, "true");
@@ -907,7 +922,37 @@ export function WatchfaceAiPanel({
                 event.target.value = "";
               }}
             />
-            <span className="wf-ai-cli-model">CLI model · sandboxed</span>
+            <span className="wf-ai-model-picker">
+              <select
+                aria-label="Codex CLI model"
+                title="Codex CLI model"
+                value={model}
+                disabled={busy}
+                onChange={(event) => {
+                  setModel(event.target.value);
+                  writePreference(CLI_MODEL_KEY, event.target.value);
+                }}
+              >
+                <option value="">CLI default</option>
+                {model && !modelInfo ? <option value={model}>{model}</option> : null}
+                {models.map(option => <option key={option.slug} value={option.slug}>{option.displayName}</option>)}
+              </select>
+              {modelInfo?.efforts.length ? (
+                <select
+                  aria-label="Reasoning effort"
+                  title="Reasoning effort"
+                  value={modelInfo.efforts.includes(effort) ? effort : ""}
+                  disabled={busy}
+                  onChange={(event) => {
+                    setEffort(event.target.value);
+                    writePreference(CLI_EFFORT_KEY, event.target.value);
+                  }}
+                >
+                  <option value="">{modelInfo.defaultEffort ? `Default (${modelInfo.defaultEffort})` : "Default effort"}</option>
+                  {modelInfo.efforts.map(level => <option key={level} value={level}>{level}</option>)}
+                </select>
+              ) : null}
+            </span>
             <span className="wf-ai-toolbar-spacer" />
             {busy ? (
               <button type="button" className="wf-ai-send is-stop" onClick={stop} aria-label="Stop" title="Stop">

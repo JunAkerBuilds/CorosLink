@@ -493,7 +493,7 @@ export function deriveDesignDetails(
       selectableAssetDetails,
       design.controlIconOffsets ?? {}
     ),
-    buildStaticSeparatorOverrides(details, design.staticSeparators),
+    buildStaticSeparatorOverrides(details, design.staticSeparators, design.configAssetOverrides),
     buildDisabledControlComplicationOverrides(details, design)
   );
   const styledMetricDetails = applyConfigOverridesToDetails(
@@ -558,6 +558,46 @@ function hasLayerBitmapTransform(
  * Studio sends to createCorosWatchfaceArchive, driven purely by a
  * design state so the new editor produces byte-identical archives.
  */
+/**
+ * A weekday still drawn from the template's own sprites has a translated
+ * label set per watch language. Languages chosen in the Send panel instead
+ * show the English weekday exactly as designed: its final font folder, rect
+ * and color. Custom weekday styles are handled by applyWeekdayLanguageOverrides.
+ */
+export function buildTemplateWeekdayLanguageOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  design: CorosWatchfaceDesignState,
+  overrides: CorosWatchfaceConfigOverride[]
+): CorosWatchfaceConfigOverride[] {
+  const languages = design.watchLanguages;
+  if (design.dateStyles?.weekday || !languages || languages === "english") return [];
+  const chosen = languages === "all" ? null : new Set(languages);
+  const result: CorosWatchfaceConfigOverride[] = [];
+  for (const resolution of details.resolutions) {
+    const path = `${resolution.directory}/config.txt`;
+    const final: Record<string, string> = { ...resolution.config };
+    for (const override of overrides) {
+      if (override.path === path) Object.assign(final, override.values);
+    }
+    const font = final.english_date_week_font;
+    if (!font) continue;
+    const values: Record<string, string> = {};
+    for (const key of Object.keys(resolution.config)) {
+      const language = /^([a-z_]+)_date_week_font$/.exec(key)?.[1];
+      if (!language || language === "english" || language.startsWith("control_")) continue;
+      if (chosen && !chosen.has(language)) continue;
+      values[key] = font;
+      for (const field of ["rect", "font_color"]) {
+        const source = final[`english_date_week_${field}`];
+        const target = `${language}_date_week_${field}`;
+        if (source !== undefined && target in resolution.config) values[target] = source;
+      }
+    }
+    if (Object.keys(values).length) result.push({ path, values });
+  }
+  return result;
+}
+
 export async function composeWatchfaceReplacements(
   details: CorosWatchfaceTemplateDetails,
   design: CorosWatchfaceDesignState,
@@ -855,7 +895,6 @@ export async function composeWatchfaceReplacements(
         selectableAssetDetails,
         design.controlIconOffsets ?? {}
       ),
-      buildStaticSeparatorOverrides(details, design.staticSeparators),
       ampmOverrides,
       weatherStyle ? buildWeatherOverrides(details, weatherStyle) : [],
       // Retain synthesized fixed-asset keys (notably battery_icon_dir/pos).
@@ -877,12 +916,20 @@ export async function composeWatchfaceReplacements(
         true
       ),
       buildDisabledControlComplicationOverrides(details, design),
-      nativeDataComposition.configOverrides
+      nativeDataComposition.configOverrides,
+      // Apply after asset replacements so they cannot resurrect a hidden colon.
+      buildStaticSeparatorOverrides(details, design.staticSeparators, design.configAssetOverrides)
   );
   const configOverrides = rebaseNegativeControlChildren(
     details,
     finalizeNativeControlOverrides(
-      details, mergedConfigOverrides, design.nativeData, design.layerVisibility?.complication === false
+      details,
+      mergeConfigOverrides(
+        mergedConfigOverrides,
+        buildTemplateWeekdayLanguageOverrides(details, design, mergedConfigOverrides)
+      ),
+      design.nativeData,
+      design.layerVisibility?.complication === false
     )
   );
 

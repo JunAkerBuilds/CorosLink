@@ -260,6 +260,7 @@ export function resolveWatchfaceModeDesign(
     version: 1,
     archiveWatchFaceVersion: design.archiveWatchFaceVersion,
     stripBlankConfigKeys: design.stripBlankConfigKeys,
+    watchLanguages: design.watchLanguages,
     configTextEdits: design.configTextEdits,
     modeDesigns: design.modeDesigns
   };
@@ -277,6 +278,7 @@ export function writeWatchfaceModeDesign(
   const global = {
     archiveWatchFaceVersion: active.archiveWatchFaceVersion,
     stripBlankConfigKeys: active.stripBlankConfigKeys,
+    watchLanguages: active.watchLanguages,
     configTextEdits: active.configTextEdits
   };
   if (mode === "current") {

@@ -1019,26 +1019,39 @@ export function WatchfacesView({
     }
   }
 
-  function openPublish(archive: CorosWatchfaceArchive, currentName: string) {
+  /**
+   * `sendNow` comes from the Studio Send panel, where the name was already
+   * confirmed: upload straight away and let the dialog show the share link
+   * (or sign-in first, when the account is not connected).
+   */
+  function openPublish(archive: CorosWatchfaceArchive, currentName: string, options?: { sendNow?: boolean }) {
+    const name = currentName.trim() || studioSession?.initialName || "Untitled watch face";
     setBuiltArchive(archive);
     if (archive.firmwareType) {
       setFirmwareType(archive.firmwareType);
     }
-    setPublishName(currentName.trim() || studioSession?.initialName || "Untitled watch face");
+    setPublishName(name);
     setShareLink(null);
     setPublishOpen(true);
     clearMessages();
+    if (options?.sendNow && connected) {
+      void publishArchive(archive, name, archive.firmwareType || firmwareType);
+    }
   }
 
   async function handlePublish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!builtArchive) return;
+    await publishArchive(builtArchive, publishName, firmwareType);
+  }
+
+  async function publishArchive(archive: CorosWatchfaceArchive, name: string, archiveFirmwareType: string) {
     if (!connected) {
       setError("Connect your COROS account before sending this watch face.");
       setNotice(null);
       return;
     }
-    if (!publishName.trim()) {
+    if (!name.trim()) {
       setError("Enter a watch-face name before sending.");
       setNotice(null);
       return;
@@ -1047,9 +1060,9 @@ export function WatchfacesView({
     clearMessages();
     try {
       const nextLink = await api.publishCorosWatchface({
-        archiveId: builtArchive.archiveId,
-        name: publishName.trim(),
-        firmwareType,
+        archiveId: archive.archiveId,
+        name: name.trim(),
+        firmwareType: archiveFirmwareType,
         backgroundImageId: Number(backgroundImageId),
         language
       });
@@ -3679,7 +3692,7 @@ function WatchfaceConversionDialog({ name, sourceFirmwareType, bakes, busy, erro
     dialog.current?.querySelector<HTMLSelectElement>("select")?.focus();
     return () => {
       if (previous?.isConnected) previous.focus();
-      else document.querySelector<HTMLButtonElement>(".wf-export-button")?.focus();
+      else document.querySelector<HTMLButtonElement>(".wf-convert-button")?.focus();
     };
   }, []);
   useEffect(() => {

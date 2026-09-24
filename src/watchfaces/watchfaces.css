@@ -838,7 +838,7 @@
 }
 
 .watchface-shell .watchface-hub-disconnect,
-.watchface-shell :where(.wf-save-button, .wf-export-button, .wf-send-button) {
+.watchface-shell :where(.wf-save-button, .wf-download-button, .wf-convert-button, .wf-send-button) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2775,11 +2775,11 @@
   background: var(--wf-border);
 }
 
-.watchface-shell .wf-export-button > svg:last-child {
+.watchface-shell .wf-download-button > svg:last-child {
   transition: transform 160ms ease;
 }
 
-.watchface-shell .wf-export-button[aria-expanded="true"] > svg:last-child {
+.watchface-shell .wf-download-button[aria-expanded="true"] > svg:last-child {
   transform: rotate(180deg);
 }
 
@@ -9838,44 +9838,304 @@ body.wf-value-scrubbing * {
   font-family: monospace;
 }
 
-.watchface-shell .wf-export-preview-controls {
+/* Send to COROS panel: the compiled face at 1:1 on a quiet stage with
+   segmented preview controls; languages and pixel checks in a side column,
+   stacked below on narrow windows. Atelier tokens fall back to the shell's. */
+.watchface-shell .wf-send-panel {
+  --send-tray: var(--atl-tray-raised, var(--wf-surface));
+  --send-line: var(--atl-line, var(--wf-border));
+  --send-line-strong: var(--atl-line-strong, var(--wf-border-strong));
+  --send-control: var(--atl-control, color-mix(in srgb, var(--text-primary) 6%, transparent));
+  display: flex;
+  flex-direction: column;
+  width: min(1000px, 100%);
+  max-height: min(820px, calc(100dvh - 36px));
+  padding: 0;
+  overflow: hidden;
+  border-color: var(--send-line-strong);
+  border-radius: 18px;
+}
+.watchface-shell .wf-send-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 18px;
+}
+.watchface-shell .wf-send-header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.watchface-shell .wf-send-header p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--wf-text-sm);
+}
+.watchface-shell .wf-send-dismiss {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.watchface-shell .wf-send-dismiss:hover {
+  border-color: var(--send-line);
+  background: var(--send-control);
+  color: var(--text-primary);
+}
+.watchface-shell .wf-send-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 292px;
+  gap: 20px;
+  min-height: 0;
+  padding: 0 24px 20px;
+  overflow: auto;
+}
+.watchface-shell .wf-send-stage {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-width: 0;
+}
+.watchface-shell .wf-send-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 16px;
+  align-items: center;
+  gap: 8px;
 }
-.watchface-shell .wf-export-preview-controls label { display: grid; gap: 6px; }
+.watchface-shell .wf-send-toolbar select {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 28px 0 11px;
+  border: 1px solid var(--send-line);
+  border-radius: 9px;
+  background-color: var(--send-control);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.watchface-shell .wf-send-segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--send-line);
+  border-radius: 10px;
+  background: var(--send-control);
+}
+.watchface-shell .wf-send-segmented.is-full { display: flex; }
+.watchface-shell .wf-send-segmented.is-full button { flex: 1; }
+.watchface-shell .wf-send-segmented button {
+  height: 26px;
+  min-height: 26px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.watchface-shell .wf-send-segmented button:hover:not(:disabled) { color: var(--text-primary); }
+.watchface-shell .wf-send-segmented button[aria-checked="true"] {
+  background: var(--send-tray);
+  box-shadow: 0 0 0 1px var(--send-line-strong), 0 1px 2px rgb(0 0 0 / 22%);
+  color: var(--text-primary);
+}
+.watchface-shell .wf-send-segmented button:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+/* The stage never scales the image: exported pixels are shown 1:1. */
+.watchface-shell .wf-send-canvas {
+  display: grid;
+  place-items: center;
+  min-height: 476px;
+  border: 1px solid var(--send-line);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 50% 45%, rgb(255 255 255 / 5%), transparent 62%),
+    #0b0d0f;
+  overflow: hidden;
+}
 .watchface-shell .wf-export-pixel-scroll {
+  max-width: 100%;
+  max-height: 62vh;
   overflow: auto;
-  max-height: 58vh;
-  background: #111;
-  border: 1px solid var(--wf-border);
+  padding: 30px;
 }
 .watchface-shell .wf-export-pixel-scroll img {
   display: block;
   max-width: none;
   max-height: none;
-  margin: 16px auto;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 6%), 0 24px 60px -20px rgb(0 0 0 / 90%);
   image-rendering: pixelated;
 }
-.watchface-shell .wf-export-pixel-checks { margin: 16px 0; }
-.watchface-shell .wf-export-pixel-checks p { color: var(--text-muted); font-size: var(--wf-text-sm); }
-
-.watchface-shell .wf-export-preview-modal .wf-modal-actions {
-  position: sticky;
-  bottom: -26px;
-  background: var(--wf-surface-raised);
-  padding: 14px 0;
-  border-top: 1px solid var(--wf-border);
+.watchface-shell .wf-send-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 24px;
+  color: #aeb6bd;
+  font-size: var(--wf-text-sm);
 }
-.watchface-shell .wf-export-preview-controls select {
+.watchface-shell .wf-send-status.is-error { color: var(--error-text); }
+.watchface-shell .wf-send-caption {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.watchface-shell .wf-send-side {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.watchface-shell .wf-send-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--send-line);
+  border-radius: 14px;
+  background: var(--send-control);
+}
+.watchface-shell .wf-send-card legend,
+.watchface-shell .wf-send-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+/* A fieldset legend sits on the border; float it into the card instead. */
+.watchface-shell .wf-send-card legend { float: left; width: 100%; }
+.watchface-shell .wf-send-card legend + * { clear: both; }
+.watchface-shell .wf-send-card legend svg,
+.watchface-shell .wf-send-card h3 svg { color: var(--text-secondary); flex: none; }
+.watchface-shell .wf-send-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.watchface-shell .wf-send-card small {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.watchface-shell .wf-send-name { gap: 7px; }
+.watchface-shell .wf-send-name > span {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.watchface-shell .wf-send-name input {
+  height: 34px;
   min-height: 34px;
-  padding: 5px 10px;
-  border: 1px solid var(--wf-border-strong);
-  border-radius: var(--wf-control-radius);
-  background: var(--wf-surface);
+  padding: 0 11px;
+  border: 1px solid var(--send-line-strong);
+  border-radius: 9px;
+  background: var(--send-tray);
   color: var(--text-primary);
   font: inherit;
+  font-size: 13px;
+}
+.watchface-shell .wf-send-name input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+}
+.watchface-shell .wf-send-language-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.watchface-shell .wf-send-language-chips :is(span, button) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--send-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.watchface-shell .wf-send-language-chips button { cursor: pointer; }
+.watchface-shell .wf-send-language-chips button:hover { border-color: var(--send-line-strong); color: var(--text-primary); }
+.watchface-shell .wf-send-language-chips .is-on {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text-primary);
+}
+.watchface-shell .wf-send-language-chips .is-on svg { color: var(--accent); }
+.watchface-shell .wf-export-pixel-checks h3 svg { color: var(--success-text); }
+.watchface-shell .wf-export-pixel-checks.has-checks {
+  border-color: var(--warning-border, var(--send-line));
+  background: var(--warning-bg, var(--send-control));
+}
+.watchface-shell .wf-export-pixel-checks.has-checks h3 svg { color: var(--warning-text); }
+.watchface-shell .wf-export-pixel-checks ul {
+  display: grid;
+  gap: 5px;
+  max-height: 180px;
+  margin: 0;
+  padding: 0 0 0 16px;
+  overflow: auto;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.watchface-shell .wf-send-actions {
+  flex-wrap: nowrap;
+  margin: 0;
+  padding: 14px 24px;
+  border-top: 1px solid var(--send-line);
+  background: var(--send-control);
+}
+.watchface-shell .wf-send-actions > :first-child { margin-right: auto; }
+.watchface-shell .wf-send-actions :is(.primary-button, .secondary-button) {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+@media (max-width: 860px) {
+  .watchface-shell .wf-send-body { grid-template-columns: minmax(0, 1fr); }
+  .watchface-shell .wf-send-canvas { min-height: 0; }
 }
 
 /* Weekday languages: the mode row, then a two-column checklist when

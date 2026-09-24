@@ -60,11 +60,18 @@
 .overview-weather-glyph {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  color: var(--weather-accent);
-  background: color-mix(in srgb, var(--weather-accent) 12%, transparent);
+  width: 46px;
+  height: 46px;
+}
+
+.overview-weather-glyph svg {
+  overflow: visible;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.28));
+}
+
+.overview-weather--clear:not(.overview-weather--night) .overview-weather-glyph svg {
+  filter: drop-shadow(0 0 10px rgba(255, 184, 28, 0.45))
+    drop-shadow(0 3px 5px rgba(0, 0, 0, 0.25));
 }
 
 .overview-weather-main {
@@ -124,6 +131,23 @@
   align-items: center;
   gap: 4px;
   color: var(--text-muted);
+}
+
+.overview-weather-range b {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.overview-weather-range span {
+  color: var(--text-primary);
+}
+
+.overview-weather-wind svg {
+  color: #7fb8e8;
+}
+
+.overview-weather-humidity svg {
+  color: #4ea8ff;
 }
 
 .overview-weather-place {

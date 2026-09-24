@@ -3385,6 +3385,28 @@ const staticSeparatorOverrides = buildStaticSeparatorOverrides(withMetrics, {
   ...inferredSeparators,
   colon: { ...inferredSeparators.colon, enabled: true }
 });
+assert.equal(
+  buildStaticSeparatorOverrides(withMetrics, inferredSeparators)
+    .find((entry) => entry.path.includes("800x800"))?.values.colon_icon,
+  "",
+  "a disabled custom colon must not leave an implicit template colon behind"
+);
+assert.deepEqual(
+  buildStaticSeparatorOverrides(withMetrics, inferredSeparators, {
+    "config:colon_icon": { enabled: true }
+  }),
+  [],
+  "the template colon remains available when explicitly enabled"
+);
+assert.equal(
+  buildStaticSeparatorOverrides(withMetrics, {
+    ...inferredSeparators,
+    colon: { ...inferredSeparators.colon, enabled: true }
+  }, { "config:colon_icon": { enabled: true } })
+    .find((entry) => entry.path.includes("800x800"))?.values.colon_icon,
+  "",
+  "a custom colon must never render a second template colon"
+);
 assert.equal(staticSeparatorOverrides.length, 2);
 assert.equal(
   staticSeparatorOverrides.find((entry) => entry.path.includes("800x800"))

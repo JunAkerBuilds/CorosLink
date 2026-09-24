@@ -8,6 +8,14 @@ interface Props {
   onPreview: (preset: WidgetSizePreset | null) => void;
   onCommit: (preset: WidgetSizePreset) => void;
 }
+/** Past a size limit the outline keeps moving with increasing resistance, like a rubber band. */
+function rubberBand(value: number, min: number, max: number, give = 120) {
+  const stretch = (excess: number) => (1 - 1 / (excess * 0.55 / give + 1)) * give;
+  if (value < min) return min - stretch(min - value);
+  if (value > max) return max + stretch(value - max);
+  return value;
+}
+
 interface Gesture {
   pointerId: number;
   x: number;
@@ -15,6 +23,8 @@ interface Gesture {
   width: number;
   height: number;
   choice: WidgetSizePreset;
+  ghost: HTMLElement | null;
+  bounds: { minWidth: number; maxWidth: number; minHeight: number; maxHeight: number };
   choices: { preset: WidgetSizePreset; width: number; height: number }[];
 }
 
@@ -31,8 +41,15 @@ export function WidgetResizeHandle({ title, preset, presets, onPreview, onCommit
     const current = gesture.current;
     const point = pending.current;
     if (!current || !point) return;
-    const choice = nearestSizePreset(current.choices,
-      current.width + point.x - current.x, current.height + point.y - current.y, current.choice.id);
+    const width = current.width + point.x - current.x;
+    const height = current.height + point.y - current.y;
+    const { minWidth, maxWidth, minHeight, maxHeight } = current.bounds;
+    // Size only the outline: custom properties on the card would restyle the whole widget every frame.
+    if (current.ghost) {
+      current.ghost.style.width = `${rubberBand(width, minWidth, maxWidth)}px`;
+      current.ghost.style.height = `${rubberBand(height, minHeight, maxHeight)}px`;
+    }
+    const choice = nearestSizePreset(current.choices, width, height, current.choice.id);
     if (choice.id !== current.choice.id) {
       current.choice = choice;
       callbacks.current.onPreview(choice);
@@ -43,6 +60,9 @@ export function WidgetResizeHandle({ title, preset, presets, onPreview, onCommit
     if (commit) flush();
     const current = gesture.current;
     gesture.current = null;
+    // Dropping the live size lets the outline settle onto the card's committed size.
+    current?.ghost?.style.removeProperty('width');
+    current?.ghost?.style.removeProperty('height');
     if (current && buttonRef.current?.hasPointerCapture(current.pointerId)) buttonRef.current.releasePointerCapture(current.pointerId);
     pending.current = null;
     setActive(false);
@@ -97,16 +117,24 @@ export function WidgetResizeHandle({ title, preset, presets, onPreview, onCommit
     const chromeHeight = rect.height - content.height;
     const chromeWidth = rect.width - content.width;
     const narrow = grid.clientWidth <= 850;
-    gesture.current = {
-      pointerId: event.pointerId, x: event.clientX, y: event.clientY, width: rect.width, height: rect.height, choice: preset,
-      choices: presets.filter(choice => !narrow || choice.columns === preset.columns || choice.contentWidth || preset.contentWidth && choice.columns === 3).map(choice => ({
+    const choices = presets.filter(choice => !narrow || choice.columns === preset.columns || choice.contentWidth || preset.contentWidth && choice.columns === 3).map(choice => ({
         preset: choice,
         width: sizePresetWidth(choice, grid.clientWidth, chromeWidth),
         height: choice.aspectRatio || preset.aspectRatio
           ? sizePresetHeight(choice, sizePresetWidth(choice, grid.clientWidth, chromeWidth) - chromeWidth, grid.clientWidth) + chromeHeight
           : rect.height + choice.minHeight - preset.minHeight
-      }))
+      }));
+    const ghost = card.querySelector<HTMLElement>(':scope > .hub-resize-ghost');
+    const widths = choices.map(choice => choice.width);
+    const heights = choices.map(choice => choice.height);
+    gesture.current = {
+      pointerId: event.pointerId, x: event.clientX, y: event.clientY, width: rect.width, height: rect.height, choice: preset, ghost, choices,
+      bounds: {
+        minWidth: Math.min(rect.width, ...widths), maxWidth: Math.max(rect.width, ...widths, grid.getBoundingClientRect().right - rect.left),
+        minHeight: Math.min(rect.height, ...heights), maxHeight: Math.max(rect.height, ...heights)
+      }
     };
+    if (ghost) { ghost.style.width = `${rect.width}px`; ghost.style.height = `${rect.height}px`; }
     setActive(true);
     callbacks.current.onPreview(preset);
   }

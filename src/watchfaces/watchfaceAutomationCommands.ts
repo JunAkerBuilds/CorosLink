@@ -55,7 +55,7 @@ export class WatchfaceAutomationCommandError extends Error {
 type JsonObject = Record<string, unknown>;
 const DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const GLOBAL_DESIGN_FIELDS = new Set([
-  "version", "archiveWatchFaceVersion", "stripBlankConfigKeys", "configTextEdits"
+  "version", "archiveWatchFaceVersion", "stripBlankConfigKeys", "watchLanguages", "configTextEdits"
 ]);
 
 function isObject(value: unknown): value is JsonObject {

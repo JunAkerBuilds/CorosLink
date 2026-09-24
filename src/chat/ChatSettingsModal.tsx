@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Settings2, X } from "lucide-react";
 import type {
   ChatAuthStatus,
@@ -10,6 +10,14 @@ import type {
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { ChatSettingsPanel } from "./ChatSettingsPanel";
+import {
+  CHAT_SETTINGS_SECTIONS,
+  chatSettingsSectionDomId,
+  type ChatSettingsSectionId
+} from "./chatSettingsSections";
+import "./chatSettings.css";
+
+const SECTION_GROUPS = ["Coach", "Providers", "Tools"] as const;
 
 export function ChatSettingsModal({
   api,
@@ -105,6 +113,9 @@ export function ChatSettingsModal({
   onUpdateChatSettings: (patch: Partial<ChatSettings>) => Promise<boolean>;
 }) {
   const modalRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [activeSection, setActiveSection] =
+    useState<ChatSettingsSectionId>("display");
   const closeRef = useRef(onClose);
   useEffect(() => {
     closeRef.current = onClose;
@@ -151,9 +162,43 @@ export function ChatSettingsModal({
     };
   }, [open]);
 
+  // Highlight the rail entry for whichever section sits nearest the top of
+  // the scroll area.
+  useEffect(() => {
+    if (!open) return;
+    const root = scrollRef.current;
+    if (!root) return;
+    const update = () => {
+      const top = root.getBoundingClientRect().top + 96;
+      const sections = Array.from(
+        root.querySelectorAll<HTMLElement>("[data-settings-section]")
+      );
+      let current = sections[0]?.dataset.settingsSection;
+      for (const section of sections) {
+        if (section.getBoundingClientRect().top <= top) {
+          current = section.dataset.settingsSection;
+        }
+      }
+      if (root.scrollTop + root.clientHeight >= root.scrollHeight - 4) {
+        current = sections.at(-1)?.dataset.settingsSection ?? current;
+      }
+      if (current) setActiveSection(current as ChatSettingsSectionId);
+    };
+    update();
+    root.addEventListener("scroll", update, { passive: true });
+    return () => root.removeEventListener("scroll", update);
+  }, [open]);
+
   if (!open) {
     return null;
   }
+
+  const jumpTo = (id: ChatSettingsSectionId) => {
+    setActiveSection(id);
+    document
+      .getElementById(chatSettingsSectionDomId(id))
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <div
@@ -168,21 +213,54 @@ export function ChatSettingsModal({
         className="chat-settings-modal"
         onClick={(event) => event.stopPropagation()}
       >
-        <header className="chat-settings-modal-header">
+        <aside className="chat-settings-rail">
           <div className="chat-settings-modal-title">
-            <Settings2 size={16} aria-hidden="true" />
-            <h2 id="chat-settings-title">Settings</h2>
+            <span className="chat-settings-modal-mark" aria-hidden="true">
+              <Settings2 size={17} strokeWidth={1.8} />
+            </span>
+            <div>
+              <h2 id="chat-settings-title">Settings</h2>
+              <span>Training Coach</span>
+            </div>
           </div>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Close settings"
-            onClick={onClose}
-          >
-            <X size={18} aria-hidden="true" />
-          </button>
-        </header>
-        <div className="chat-settings-modal-body">
+          <nav className="chat-settings-nav" aria-label="Settings sections">
+            {SECTION_GROUPS.map((group) => (
+              <div key={group} className="chat-settings-nav-group">
+                <span className="chat-settings-nav-label">{group}</span>
+                {CHAT_SETTINGS_SECTIONS.filter(
+                  (section) => section.group === group
+                ).map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={
+                      activeSection === id
+                        ? "chat-settings-nav-item is-active"
+                        : "chat-settings-nav-item"
+                    }
+                    aria-current={activeSection === id ? "true" : undefined}
+                    onClick={() => jumpTo(id)}
+                  >
+                    <Icon size={15} strokeWidth={1.8} aria-hidden="true" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </nav>
+          <p className="chat-settings-rail-note">
+            <kbd>Esc</kbd> to close
+          </p>
+        </aside>
+        <button
+          type="button"
+          className="icon-button chat-settings-close"
+          aria-label="Close settings"
+          onClick={onClose}
+        >
+          <X size={18} aria-hidden="true" />
+        </button>
+        <div className="chat-settings-modal-body" ref={scrollRef}>
           <ChatSettingsPanel
             api={api}
             chatSettings={chatSettings}

@@ -204,12 +204,12 @@ async function main() {
       // A saved preference for the retired engine must not restore it.
       await window.webContents.executeJavaScript(`localStorage.setItem('coroslink.watchfaceAi.harness', 'watchmaker'); document.querySelector('[title="Design with Watchmaker"]').click()`);
       await until(() => window.webContents.executeJavaScript(`Boolean(document.querySelector('.wf-ai-cli-warning'))`), Boolean, "CLI warning without ChatGPT sign-in");
-      const state = await window.webContents.executeJavaScript(`({ engine: document.querySelector('.wf-ai-harness-value').textContent, warning: document.querySelector('.wf-ai-cli-warning').textContent, selectors: document.querySelectorAll('.wf-ai-panel select').length, model: document.querySelector('.wf-ai-cli-model').textContent, suggestionDisabled: document.querySelector('.wf-ai-suggestions button').disabled })`);
+      const state = await window.webContents.executeJavaScript(`({ engine: document.querySelector('.wf-ai-harness-value').textContent, warning: document.querySelector('.wf-ai-cli-warning').textContent, model: document.querySelector('.wf-ai-panel select[aria-label="Codex CLI model"]')?.value, suggestionDisabled: document.querySelector('.wf-ai-suggestions button').disabled })`);
       assert.equal(state.engine, 'Codex CLI');
-      assert.equal(state.selectors, 0, 'No alternate engine or unused model controls');
+      assert.equal(state.model, '', 'Model picker defaults to the CLI configuration');
       assert.equal(state.suggestionDisabled, false, 'CLI suggestions do not require CorosLink ChatGPT auth');
       assert.match(state.warning, /Shell changes are outside editor Undo/);
-      assert.match(state.warning, /MCP/); assert.match(state.model, /sandboxed/);
+      assert.match(state.warning, /MCP/);
       if (process.argv.includes("--cli-missing-ui")) {
         await window.webContents.executeJavaScript(`(() => { const input = document.querySelector('.wf-ai-panel textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, 'Help me improve this watch face.'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
         await window.webContents.executeJavaScript(`document.querySelector('.wf-ai-panel textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`);
@@ -866,9 +866,7 @@ async function main() {
     assert.ok(exported.manifest.design.timeStyles.hours.rasterFont.sprites, "imported digit font remains editable");
     assert.ok(exported.manifest.design.modeDesigns.aod);
     stage = "compiled export preview";
-    await window.webContents.executeJavaScript('document.querySelector(".wf-export-button").click()');
-    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".wf-export-popover"))'), Boolean, "export menu");
-    await window.webContents.executeJavaScript('Array.from(document.querySelectorAll(".wf-export-popover button")).find(button => button.textContent.includes("Preview export")).click()');
+    await window.webContents.executeJavaScript('document.querySelector(".wf-send-button").click()');
     await until(() => window.webContents.executeJavaScript('document.querySelector(".wf-export-pixel-scroll img")?.naturalWidth'), (width) => width === 416, "compiled 416 pixel preview");
     const compiledSize = await window.webContents.executeJavaScript(`(() => {
       const image = document.querySelector('.wf-export-pixel-scroll img');
@@ -999,9 +997,7 @@ async function main() {
     document = await tool("get_document");
     const dialogRevision = document.revision;
     const dialogSession = document.sessionId;
-    await window.webContents.executeJavaScript(`document.querySelector('.wf-export-button').click()`);
-    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".wf-export-popover .is-convert"))'), Boolean, "conversion menu");
-    await window.webContents.executeJavaScript('document.querySelector(".wf-export-popover .is-convert").click()');
+    await window.webContents.executeJavaScript('document.querySelector(".wf-convert-button").click()');
     await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog"))'), Boolean, "watch-only conversion picker");
     assert.equal(await window.webContents.executeJavaScript('document.querySelectorAll(".watchface-convert-dialog select").length'), 1);
     assert.equal(await window.webContents.executeJavaScript('document.querySelectorAll(".watchface-template-browser").length'), 0);
@@ -1019,9 +1015,7 @@ async function main() {
     const pace4Carrier = await fs.readFile(pace4CarrierPath);
     await fs.unlink(pace4CarrierPath);
     restoreCarrierAfterLogin = () => fs.writeFile(pace4CarrierPath, pace4Carrier);
-    await window.webContents.executeJavaScript(`document.querySelector('.wf-export-button').click()`);
-    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".wf-export-popover .is-convert"))'), Boolean, "conversion menu");
-    await window.webContents.executeJavaScript('document.querySelector(".wf-export-popover .is-convert").click()');
+    await window.webContents.executeJavaScript('document.querySelector(".wf-convert-button").click()');
     await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog .primary-button"))'), Boolean, "convert button");
     await window.webContents.executeJavaScript(`(() => { const select = document.querySelector('.watchface-convert-dialog select'); select.value = 'pace-4'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
     await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .primary-button").click()');
@@ -1039,9 +1033,7 @@ async function main() {
     assert.equal(document.sessionId, previousSession, "cancelling sign-in keeps the original editor");
     assert.equal(document.revision, dialogRevision);
     assert.deepEqual(document.design, originalDesign);
-    await window.webContents.executeJavaScript('document.querySelector(".wf-export-button").click()');
-    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".wf-export-popover .is-convert"))'), Boolean, "conversion menu after cancelled sign-in");
-    await window.webContents.executeJavaScript('document.querySelector(".wf-export-popover .is-convert").click()');
+    await window.webContents.executeJavaScript('document.querySelector(".wf-convert-button").click()');
     await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog .primary-button"))'), Boolean, "convert button after cancelled sign-in");
     await window.webContents.executeJavaScript(`(() => { const select = document.querySelector('.watchface-convert-dialog select'); select.value = 'pace-4'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
     await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .primary-button").click()');
@@ -1073,9 +1065,7 @@ async function main() {
     // A stale authenticated status must also open sign-in when COROS expires it.
     conversionAuthError = "Your COROS mobile session expired. Sign in again.";
     const beforeSavedLoginSession = document.sessionId;
-    await window.webContents.executeJavaScript('document.querySelector(".wf-export-button").click()');
-    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".wf-export-popover .is-convert"))'), Boolean, "MIP conversion menu");
-    await window.webContents.executeJavaScript('document.querySelector(".wf-export-popover .is-convert").click()');
+    await window.webContents.executeJavaScript('document.querySelector(".wf-convert-button").click()');
     await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog select"))'), Boolean, "MIP watch picker");
     await window.webContents.executeJavaScript(`(() => { const select = document.querySelector('.watchface-convert-dialog select'); select.value = 'pace-3'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
     await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .primary-button").click()');

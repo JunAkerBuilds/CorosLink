@@ -101,23 +101,20 @@ the MIP exporter cannot prune resources needed by a subsequent AMOLED conversion
 
 ## PACE 3 date placement
 
-PACE 3 users reproduced an English month/day position reversal across multiple
-faces and confirmed that exchanging those two rectangles corrects the installed
-layout. `electron/watchfaceDeviceLayout.ts` applies that compensation only for
-PACE 3 at the final archive build boundary, after generated font rectangles are
-fitted and any recovered face has been resized for the destination. It exchanges
-the complete `english_date_month_rect` and `english_date_day_rect` values in each
-Current config. Font assignments, weekday, other language fields, AOD and the
-composed preview image remain unchanged. Missing or blank rectangle pairs are
-left untouched; the correction does not create hidden date fields.
+Exports preserve the authored month/day positions for every watch, including
+PACE 3. Version 0.1.41 introduced a PACE 3-only rectangle swap after reports of
+reversed dates. A subsequent report that official faces adapt their date order
+when installed suggests this swap can counteract COROS date preferences. The
+watch model alone cannot determine the preferred date order, so new exports no
+longer apply this compensation. Regional behavior still needs on-watch verification.
 
-The editor and saved design use the intended coordinates. A comment marks the
-device correction in new output configs, allowing export previews, raw editing,
-rebuilding and conversion to recover those intended coordinates. Repeated builds
-therefore apply the correction once. Unmarked older archives are treated as
-authoring layouts; there is no attempt to detect earlier manual workarounds.
-Other watches sharing the same MIP resolution folders do not receive this
-correction. Run `npm run test:watchface-device-layout` to verify these boundaries.
+`electron/watchfaceDeviceLayout.ts` retains support for the
+`pace-3-date-rects-v1` comment in older exports. Previewing, raw editing,
+rebuilding and conversion restore the authored positions from marked files;
+rebuilt archives omit the marker and do not swap again. Font assignments,
+weekday, other language fields, AOD and preview images remain unchanged.
+Unmarked archives and manual workarounds are preserved without guessing their
+intended order. Run `npm run test:watchface-device-layout` to verify these boundaries.
 
 ## Recovered official faces
 

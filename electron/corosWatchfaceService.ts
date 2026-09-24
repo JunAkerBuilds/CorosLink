@@ -1685,7 +1685,7 @@ async function prepareRecoveredExportZip(bytes: Buffer, target: WatchfaceTarget,
   const previewEntry = sourceEntries.find(entry => entry.name === "watchface_customize.png");
   if (previewEntry) previewEntry.data = preview.toPNG();
   const entries = finalizeWatchfaceDeviceLayout(
-    fitGeneratedWatchfaceFontRects(prepareRecoveredWatchfaceExport(sourceEntries, carrierEntries, target)), target
+    fitGeneratedWatchfaceFontRects(prepareRecoveredWatchfaceExport(sourceEntries, carrierEntries, target))
   );
   validateArchiveInventory(entries.map(entry => ({ path: entry.name, type: "File", uncompressedSize: entry.data.length })),
     MAX_ARCHIVE_FILES, MAX_ARCHIVE_EXPANDED_BYTES, MAX_ARCHIVE_ENTRY_BYTES, 7, "exported watch-face archive");
@@ -2032,6 +2032,35 @@ export function parseCorosWatchfaceConfig(text: string): Record<string, string> 
   return entries;
 }
 
+const ENGLISH_DATE_KEY = /^english_date_((?:month|day)_(?:rect|font|font_color))$/;
+const LANGUAGE_DATE_KEY = /^\s*\[([a-z]+(?:_tw)?)_date_((?:month|day)_(?:rect|font|font_color))\]\s*=/gm;
+
+/**
+ * The watch draws the date from the table matching its system language
+ * (germany_date_*, french_date_*, …); Studio only edits english_date_*. Copy
+ * month/day edits onto every other language table the template declares, so
+ * a watch set to another language shows the designed date instead of the
+ * template's stock digits at the stock position. Those are numerals in every
+ * language; the localized weekday stays with the editor's per-language
+ * option (applyWeekdayLanguageOverrides). Explicit per-language overrides win;
+ * undeclared keys are never appended.
+ */
+function mirrorEnglishDateOverrides(
+  text: string,
+  overrides: Record<string, string>
+): Record<string, string> {
+  const edited = Object.keys(overrides).filter((key) => ENGLISH_DATE_KEY.test(key));
+  if (!edited.length) return overrides;
+  const mirrored = { ...overrides };
+  for (const [, language, field] of text.matchAll(LANGUAGE_DATE_KEY)) {
+    const key = `${language}_date_${field}`;
+    const source = `english_date_${field}`;
+    if (language === "english" || key in mirrored || !(source in overrides)) continue;
+    mirrored[key] = overrides[source]!;
+  }
+  return mirrored;
+}
+
 /**
  * Rewrites `[key]=value` lines in a firmware config file, preserving every
  * other byte (comments, ordering, CRLF). Confirmed optional firmware keys may
@@ -2042,7 +2071,7 @@ export function applyCorosWatchfaceConfigOverrides(
   text: string,
   overrides: Record<string, string>
 ): string {
-  const pending = new Map(Object.entries(overrides));
+  const pending = new Map(Object.entries(mirrorEnglishDateOverrides(text, overrides)));
   const matched = new Set<string>();
   const newline = text.includes("\r\n") ? "\r\n" : "\n";
   const lines = text.split(/\r?\n/).flatMap((line) => {
@@ -3975,8 +4004,7 @@ async function rewriteTemplateArchive(
     }
   }
   const finalEntries = finalizeWatchfaceDeviceLayout(
-    removeUnreferencedStudioSprites(fitGeneratedWatchfaceFontRects(orderedEntries)),
-    exportTarget
+    removeUnreferencedStudioSprites(fitGeneratedWatchfaceFontRects(orderedEntries))
   );
   validateArchiveInventory(
     finalEntries.map((entry) => ({

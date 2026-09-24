@@ -77,7 +77,9 @@ export function CustomizableDashboard({ renderWidget, sampleMode = false, toolba
           {editing && <button type="button" className="hub-widget-remove" disabled={Boolean(resizing)} aria-label={`Remove ${title}`} title={`Remove ${title}`} onPointerDown={event => event.stopPropagation()} onClick={() => update(layout.filter(item => item.id !== widget.id), `${title} removed. Use Undo to restore it.`)}><X size={14} aria-hidden="true" /></button>}
           {!editing && widget.title && <h2 className="hub-widget-label">{widget.title}</h2>}
           <div className="hub-widget-content" inert={editing}>{renderWidget(widget)}</div>
-          {resizing?.id === widget.id && <span className="hub-resize-preview" role="status">{preset.label} · Release to apply</span>}
+          {editing && <span className="hub-resize-ghost" aria-hidden={resizing?.id !== widget.id}>
+            {resizing?.id === widget.id && <span className="hub-resize-preview" role="status">{preset.label} · Release to apply</span>}
+          </span>}
           {editing && <WidgetResizeHandle title={title} preset={preset} presets={widgetPresets(widget.id)}
             onPreview={choice => setResizing(choice ? { id: widget.id, preset: choice } : null)}
             onCommit={choice => resize(widget.id, choice)} />}

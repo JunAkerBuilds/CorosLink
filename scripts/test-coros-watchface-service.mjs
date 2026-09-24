@@ -114,6 +114,16 @@ assert.equal(
 );
 assert.equal(
   applyCorosWatchfaceConfigOverrides(
+    "[english_date_day_rect]={1,1,2,2}\n[english_date_day_font]=13x19\n[english_date_week_rect]={5,5,6,6}\n[germany_date_day_rect]={1,1,2,2}\n[chinese_tw_date_day_font]=13x19\n" +
+      "[french_date_day_rect]={1,1,2,2}\n[germany_date_week_rect]={5,5,6,6}\n[control_germany_date_day_rect]={7,7,8,8}\n",
+    { english_date_day_rect: "{9,9,40,20}", english_date_day_font: "studio\\day", french_date_day_rect: "{0,0,1,1}", english_date_week_rect: "{3,3,4,4}" }
+  ),
+  "[english_date_day_rect]={9,9,40,20}\n[english_date_day_font]=studio\\day\n[english_date_week_rect]={3,3,4,4}\n[germany_date_day_rect]={9,9,40,20}\n[chinese_tw_date_day_font]=studio\\day\n" +
+    "[french_date_day_rect]={0,0,1,1}\n[germany_date_week_rect]={5,5,6,6}\n[control_germany_date_day_rect]={7,7,8,8}\n",
+  "English month/day edits must reach every declared language table; weekday and control slots stay untouched"
+);
+assert.equal(
+  applyCorosWatchfaceConfigOverrides(
     "[background_icon]=background.png\r\n",
     { watchface_id: "0x3B9ACE60" }
   ),

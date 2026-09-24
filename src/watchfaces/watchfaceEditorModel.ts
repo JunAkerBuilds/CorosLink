@@ -19,6 +19,7 @@ import {
   getWatchfaceControlStatusPreviewLayers,
   hasControlBattery,
   isControlComplicationEnabled,
+  isTemplateTimeColonEnabled,
   pickPreviewResolution,
   watchfaceControlStatusPosition,
   WATCHFACE_COMPLICATIONS,
@@ -733,7 +734,9 @@ export function deriveEditorLayers(
         : {}),
       configAssetId: reference.id,
       configAssetReplaced: Boolean(override?.replacement),
-      visible: assetAvailable && override?.enabled !== false,
+      visible: assetAvailable && (reference.id === "config:colon_icon"
+        ? isTemplateTimeColonEnabled(design.staticSeparators, override)
+        : override?.enabled !== false),
       canHide: true,
       present:
         statusLayoutGroupId || analogLayoutGroupId

@@ -1039,6 +1039,12 @@ export interface CorosWatchfaceDesignState {
   /** Deletes blank `[key]=` config lines from built archives (see creator input). */
   stripBlankConfigKeys?: boolean;
   /**
+   * Watch languages that get the custom weekday labels, chosen in the Export
+   * panel: "all", "english", or extra language prefixes. Absent uses the
+   * legacy weekday style fields, then the user's remembered preference.
+   */
+  watchLanguages?: "all" | "english" | string[];
+  /**
    * Studio raw-text edits for template `config.txt` / `AODconfig.txt` paths.
    * Keys are archive-relative paths; values are full UTF-8 file bodies.
    */

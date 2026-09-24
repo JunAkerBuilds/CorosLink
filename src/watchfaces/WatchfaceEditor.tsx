@@ -13,6 +13,13 @@ import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawN
 import { glyphBaselineMovements, visibleGlyphBounds } from "./watchfaceGlyphLayout";
 import { WatchfaceExportPreview } from "./WatchfaceExportPreview";
 import {
+  effectiveWatchLanguages,
+  loadWatchLanguagesPreference,
+  saveWatchLanguagesPreference,
+  withWatchLanguages,
+  type WatchfaceWatchLanguages
+} from "./watchfaceLanguages";
+import {
   Fragment,
   type ComponentProps,
   type CSSProperties,
@@ -458,6 +465,7 @@ import {
   supportsWatchfaceSpriteRotation,
   virtualControlIconCanvasSize,
   isControlComplicationEnabled,
+  isTemplateTimeColonEnabled,
   watchfaceArcCutIsDateSlash,
   WATCHFACE_COMPLICATIONS,
   WATCHFACE_MONTH_LABELS,
@@ -617,19 +625,6 @@ import {
 } from "./watchfaceFontSnapshots";
 
 /** Display names for the `<language>_date_week_font` prefixes COROS archives use. */
-const WEEKDAY_LANGUAGE_NAMES: Record<string, string> = {
-  chinese: "Chinese (Simplified)",
-  chinese_tw: "Chinese (Traditional)",
-  germany: "German",
-  spanish: "Spanish",
-  french: "French",
-  japanese: "Japanese",
-  thai: "Thai",
-  polish: "Polish",
-  portugal: "Portuguese",
-  italian: "Italian"
-};
-
 function LinkedDimensionInputs({
   width,
   height,
@@ -776,7 +771,7 @@ interface WatchfaceEditorProps {
   onBack: () => void;
   backRequestId?: number;
   onBackCancelled?: () => void;
-  onPublish: (archive: CorosWatchfaceArchive, name: string) => void;
+  onPublish: (archive: CorosWatchfaceArchive, name: string, options?: { sendNow?: boolean }) => void;
   onArchiveCreated?: (archive: CorosWatchfaceArchive) => void;
   onProjectSaved?: (project: CorosWatchfaceProject) => void;
   onConvertTarget: (
@@ -1332,8 +1327,10 @@ export function WatchfaceEditor({
     configKey?: string;
     onPick: (frames: CorosOfficialAssetFrames, frameIndex?: number) => void | Promise<void>;
   } | null>(null);
-  const [exportMenuOpen, setExportMenuOpen] = useState(false);
-  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
+  // The Export panel's language choice, remembered across projects.
+  const watchLanguagesPreferenceRef = useRef<WatchfaceWatchLanguages>(loadWatchLanguagesPreference());
   const [layersOpen, setLayersOpen] = useState(false);
   const [layerQuery, setLayerQuery] = useState("");
   const [collapsedLayerSections, setCollapsedLayerSections] = useState(
@@ -1733,15 +1730,15 @@ export function WatchfaceEditor({
   }, [placementMenuOpen]);
 
   useEffect(() => {
-    if (!exportMenuOpen) return;
+    if (!downloadMenuOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
-      if (!exportMenuRef.current?.contains(event.target as Node)) {
-        setExportMenuOpen(false);
+      if (!downloadMenuRef.current?.contains(event.target as Node)) {
+        setDownloadMenuOpen(false);
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setExportMenuOpen(false);
+        setDownloadMenuOpen(false);
       }
     };
     document.addEventListener("pointerdown", handlePointerDown);
@@ -1750,7 +1747,7 @@ export function WatchfaceEditor({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [exportMenuOpen]);
+  }, [downloadMenuOpen]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -5627,7 +5624,7 @@ export function WatchfaceEditor({
       };
       if (
         reference.id === "config:colon_icon" &&
-        (patch.enabled === false || patch.replacement)
+        (patch.enabled !== undefined || patch.replacement)
       ) {
         nextDesign.staticSeparators = {
           ...prev.staticSeparators,
@@ -5643,8 +5640,8 @@ export function WatchfaceEditor({
       const configAssetOverrides = { ...(prev.configAssetOverrides ?? {}) };
       const current = configAssetOverrides[reference.id];
       if (!current) return prev;
-      if (current.enabled === false) {
-        configAssetOverrides[reference.id] = { enabled: false };
+      if (current.enabled !== undefined) {
+        configAssetOverrides[reference.id] = { enabled: current.enabled };
       } else {
         delete configAssetOverrides[reference.id];
       }
@@ -6695,6 +6692,16 @@ export function WatchfaceEditor({
     }
   }
 
+  function convertToAnotherWatch() {
+    const snapshot = historyRef.current.present.value;
+    onConvertTarget(
+      structuredClone(snapshot.design),
+      snapshot.projectName.trim() || "Custom watch face",
+      isDirty,
+      bakeForWatch
+    );
+  }
+
   async function exportEditableProject() {
     onClearMessages();
     if (spriteImportTrackerRef.current.pendingCount > 0) {
@@ -6758,7 +6765,7 @@ export function WatchfaceEditor({
       return null;
     }
     const editorSnapshot = historyRef.current.present.value;
-    const designSnapshot = editorSnapshot.design;
+    const designSnapshot = withWatchLanguages(editorSnapshot.design, watchLanguagesPreferenceRef.current);
     setCreating(true);
     try {
       const templateIdOverride = devTemplateIdOverride.trim();
@@ -7232,7 +7239,7 @@ export function WatchfaceEditor({
   useEffect(() => {
     if (active) return;
     setPlacementMenuOpen(false);
-    setExportMenuOpen(false);
+    setDownloadMenuOpen(false);
     setContextMenu(null);
     clearSnapGuides();
     pointerControllerRef.current?.cancel();
@@ -8379,79 +8386,41 @@ export function WatchfaceEditor({
             {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}
             Save
           </button>
-          <div className="wf-export-menu" ref={exportMenuRef}>
-            <button
-              className="secondary-button wf-export-button"
-              type="button"
-              aria-haspopup="menu"
-              aria-expanded={exportMenuOpen}
-              disabled={spriteImportPending || creating || exporting || previewingExport || !backgroundDataUrl}
-              onClick={() => setExportMenuOpen((open) => !open)}
-            >
-              {exporting || previewingExport ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
-              Export
-              <ChevronDown size={14} aria-hidden="true" />
-            </button>
-            {exportMenuOpen ? (
-              <div className="wf-export-popover" role="menu" aria-label="Export options">
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={spriteImportPending || previewingExport || creating || exporting || !backgroundDataUrl}
-                  onClick={() => { setExportMenuOpen(false); void openExportPreview(); }}
-                >
-                  <span className="wf-export-option-icon" aria-hidden="true">
-                    <Eye size={16} />
-                  </span>
-                  <span className="wf-export-option-copy">
-                    <strong>Preview export</strong>
-                    <small>Inspect compiled pixels at 100%</small>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
-                  onClick={() => { setExportMenuOpen(false); void exportEditableProject(); }}
-                >
-                  <span className="wf-export-option-icon" aria-hidden="true">
-                    <Download size={16} />
-                  </span>
-                  <span className="wf-export-option-copy">
-                    <strong>Editable project ZIP</strong>
-                    <small>Save an editable backup</small>
-                  </span>
-                </button>
-                <button
-                  className="is-convert"
-                  type="button"
-                  role="menuitem"
-                  disabled={saving || spriteImportPending || creating || exporting || previewingExport || !backgroundDataUrl}
-                  onClick={() => {
-                    setExportMenuOpen(false);
-                    const snapshot = historyRef.current.present.value;
-                    onConvertTarget(
-                      structuredClone(snapshot.design),
-                      snapshot.projectName.trim() || "Custom watch face",
-                      isDirty,
-                      bakeForWatch
-                    );
-                  }}
-                >
-                  <span className="wf-export-option-icon" aria-hidden="true">
-                    <Repeat2 size={16} />
-                  </span>
-                  <span className="wf-export-option-copy">
-                    <strong>Convert to another watch</strong>
-                    <small>Adapt the design for a new model</small>
-                  </span>
-                </button>
-                {showDevelopmentTools ? (
+          {showDevelopmentTools ? (
+            <div className="wf-export-menu" ref={downloadMenuRef}>
+              <button
+                className="secondary-button wf-download-button"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={downloadMenuOpen}
+                disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
+                onClick={() => setDownloadMenuOpen((open) => !open)}
+              >
+                {exporting || creating ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
+                Download
+                <ChevronDown size={14} aria-hidden="true" />
+              </button>
+              {downloadMenuOpen ? (
+                <div className="wf-export-popover" role="menu" aria-label="Download options">
                   <button
                     type="button"
                     role="menuitem"
                     disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
-                    onClick={() => { setExportMenuOpen(false); void createArchive("export"); }}
+                    onClick={() => { setDownloadMenuOpen(false); void exportEditableProject(); }}
+                  >
+                    <span className="wf-export-option-icon" aria-hidden="true">
+                      <Download size={16} />
+                    </span>
+                    <span className="wf-export-option-copy">
+                      <strong>Editable project ZIP</strong>
+                      <small>Save an editable backup</small>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
+                    onClick={() => { setDownloadMenuOpen(false); void createArchive("export"); }}
                   >
                     <span className="wf-export-option-icon" aria-hidden="true">
                       <Package size={16} />
@@ -8461,12 +8430,38 @@ export function WatchfaceEditor({
                       <small>Development export</small>
                     </span>
                   </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-          <button className="primary-button wf-send-button" type="button" disabled={spriteImportPending || creating || exporting || !backgroundDataUrl} onClick={() => void createArchive()}>
-            {creating ? <Loader2 className="spin" size={15} /> : <Send size={15} />}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <button
+              className="secondary-button wf-download-button"
+              type="button"
+              title="Download an editable project ZIP"
+              disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
+              onClick={() => void exportEditableProject()}
+            >
+              {exporting ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
+              Download
+            </button>
+          )}
+          <button
+            className="secondary-button wf-convert-button"
+            type="button"
+            title="Adapt the design for another watch model"
+            disabled={saving || spriteImportPending || creating || exporting || previewingExport || !backgroundDataUrl}
+            onClick={convertToAnotherWatch}
+          >
+            <Repeat2 size={15} />
+            Convert
+          </button>
+          <button
+            className="primary-button wf-send-button"
+            type="button"
+            disabled={spriteImportPending || creating || exporting || previewingExport || !backgroundDataUrl}
+            onClick={() => void openExportPreview()}
+          >
+            {previewingExport ? <Loader2 className="spin" size={15} /> : <Send size={15} />}
             Send to COROS
           </button>
         </div>
@@ -9753,9 +9748,23 @@ export function WatchfaceEditor({
       {exportPreviewImages ? (
         <WatchfaceExportPreview api={api} {...exportPreviewImages}
           complication={design.previewComplication as WatchfaceComplicationId}
+          languages={effectiveWatchLanguages(historyRef.current.present.value.design, watchLanguagesPreferenceRef.current)}
+          customWeekday={Boolean(historyRef.current.present.value.design.dateStyles?.weekday)}
+          rebuilding={previewingExport}
+          onLanguagesChange={(watchLanguages) => {
+            // The remembered default describes custom weekday labels only.
+            if (historyRef.current.present.value.design.dateStyles?.weekday) {
+              watchLanguagesPreferenceRef.current = watchLanguages;
+              saveWatchLanguagesPreference(watchLanguages);
+            }
+            setDesign((prev) => ({ ...prev, watchLanguages }));
+            void openExportPreview();
+          }}
           onClose={closeExportPreview}
-          onError={onError}
-          onPublish={onPublish} />
+          onPublish={(archive, name) => {
+            onArchiveCreated?.(archive);
+            onPublish(archive, name, { sendNow: true });
+          }} />
       ) : null}
 
       {officialBrowser ? (
@@ -11044,7 +11053,9 @@ export function WatchfaceEditor({
    */
   function renderConfigAssetControls(reference: WatchfaceConfigAssetReference) {
     const override = design.configAssetOverrides?.[reference.id];
-    const enabled = override?.enabled !== false;
+    const enabled = reference.id === "config:colon_icon"
+      ? isTemplateTimeColonEnabled(design.staticSeparators, override)
+      : override?.enabled !== false;
     const artworkZoom = override?.scale ?? 1;
     const supportsNativeSize = configAssetCanUseNativeSize(
       reference.configKey,
@@ -11820,22 +11831,6 @@ export function WatchfaceEditor({
         : 1;
       const sizeOverridden =
         style?.width !== undefined || style?.height !== undefined;
-      // Custom weekday labels always replace the English set; the other
-      // locale folders in the archive are only touched when opted in.
-      const languageMode: "english" | "all" | "selected" =
-        style?.overwriteAllLanguages
-          ? "all"
-          : style?.overwriteLanguages
-            ? "selected"
-            : "english";
-      const selectedLanguages = style?.overwriteLanguages ?? [];
-      const weekdayLanguages = partId === "weekday"
-        ? [...new Set((details?.resolutions ?? []).flatMap((resolution) =>
-            Object.keys(resolution.config)
-              .filter((key) => key.endsWith("_date_week_font") && !key.startsWith("control_"))
-              .map((key) => key.replace(/_date_week_font$/, ""))
-          ))].filter((language) => language !== "english").sort()
-        : [];
       return (
         <>
           {renderPositionReadout(layer)}
@@ -11884,49 +11879,6 @@ export function WatchfaceEditor({
                   })
                 }
               />
-              {partId === "weekday" ? (
-                <div className="wf-weekday-languages">
-                  <label className="field">
-                    Languages
-                    <select
-                      value={languageMode}
-                      onChange={(event) => setDateStyle(partId, {
-                        overwriteAllLanguages: event.target.value === "all",
-                        overwriteLanguages: event.target.value === "selected" ? selectedLanguages : undefined
-                      })}
-                    >
-                      <option value="english">English only</option>
-                      <option value="all">All languages</option>
-                      <option value="selected">Choose languages</option>
-                    </select>
-                  </label>
-                  {languageMode === "selected" ? (
-                    <div className="wf-weekday-language-options" role="group" aria-label="Additional weekday languages">
-                      {weekdayLanguages.map((language) => (
-                        <label key={language}>
-                          <input
-                            type="checkbox"
-                            checked={selectedLanguages.includes(language)}
-                            onChange={(event) => setDateStyle(partId, {
-                              overwriteLanguages: event.target.checked
-                                ? [...selectedLanguages, language]
-                                : selectedLanguages.filter((value) => value !== language)
-                            })}
-                          />
-                          <span>{WEEKDAY_LANGUAGE_NAMES[language] ?? language}</span>
-                        </label>
-                      ))}
-                    </div>
-                  ) : null}
-                  <p className="watchface-typography-hint">
-                    {languageMode === "all"
-                      ? "Every watch language shows these labels."
-                      : languageMode === "selected"
-                        ? "Checked languages get these labels too."
-                        : "Other watch languages keep the template's labels."}
-                  </p>
-                </div>
-              ) : null}
               <div className="field wf-sprite-size">
                 <span>Size</span>
                 <LinkedDimensionInputs

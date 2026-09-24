@@ -185,8 +185,38 @@ async function verifyPixels() {
   // SATISFY has no AM/PM support in its 800px master, but the 416px AOD
   // still references missing a/icon/am.png and pm.png. Export with AM/PM
   // disabled must remove those references before the strict preview load.
-  const { composeWatchfaceReplacements } = await import('/src/watchfaces/watchfaceCompose.ts');
+  const { composeWatchfaceReplacements, deriveDesignDetails } = await import('/src/watchfaces/watchfaceCompose.ts');
   const { makeDefaultDesign } = await import('/src/watchfaces/watchfaceBackground.ts');
+  // The starter's implicit colon must disappear on first render, including
+  // stacked time layouts, without first toggling the custom colon on and off.
+  asset(`${root}/colon.png`, png(8, 24, 0, 0, 8, 24, '#00ffff'), 8, 24);
+  for (const minuteY of [120, 200]) for (const enabled of [undefined, false, true]) {
+    const colonDetails = { ...details, resolutions: [{ ...resolution,
+      config: { ...resolution.config, colon_icon: 'colon.png',
+        time_minute_high_pos: `{220,${minuteY}}`, time_minute_low_pos: `{246,${minuteY}}`,
+        time_minute_high_font: 'digits', time_minute_low_font: 'digits' },
+      icons: [...resolution.icons, { path: `${root}/colon.png`, width: 8, height: 24 }]
+    }] };
+    const colonDesign = JSON.parse(JSON.stringify({ ...makeDefaultDesign(),
+      configAssetOverrides: enabled === undefined ? {} : { 'config:colon_icon': { enabled } }
+    }));
+    const previewDetails = deriveDesignDetails(colonDetails, colonDesign).previewDetails;
+    const colonFrame = document.createElement('canvas'); colonFrame.width = 416; colonFrame.height = 416;
+    await studio.drawStudioPreview(colonFrame, sources.get(`${root}/background.png`).dataUrl,
+      previewDetails, { ...aodOptions, previewMode: 'current' }, load);
+    const pixels = rgba(colonFrame);
+    const hasColonPixels = pixels.some((red, i) => i % 4 === 0 && red < 150 && pixels[i+1] > 200 && pixels[i+2] > 200);
+    check(hasColonPixels === (enabled === true), `Colon pixels must follow explicit visibility (${minuteY}, ${enabled})`);
+    const exportedColon = await composeWatchfaceReplacements(colonDetails, colonDesign, load);
+    const exportedConfig = studio.applyConfigOverridesToDetails(colonDetails, exportedColon.configOverrides).resolutions[0].config;
+    check(Boolean(exportedConfig.colon_icon) === (enabled === true), 'Export must match colon preview visibility');
+    colonDesign.staticSeparators.colon.enabled = true;
+    colonDesign.configAssetOverrides['config:colon_icon'] = { enabled: true,
+      replacement: { dataUrl: sources.get(`${root}/colon.png`).dataUrl, width: 8, height: 24 } };
+    const replacedColon = await composeWatchfaceReplacements(colonDetails, colonDesign, load);
+    check(studio.applyConfigOverridesToDetails(colonDetails, replacedColon.configOverrides).resolutions[0].config.colon_icon === '',
+      'An exported replacement asset must not resurrect the template colon behind a custom colon');
+  }
   const staleAodDetails = { ...details, resolutions: [
     { directory: 'watchface_800x800', width: 800, height: 800, config: {}, aodConfig: {}, icons: [], spriteFolders: [] },
     { ...resolution, config: { ...resolution.aodConfig, am_icon: 'a\\icon\\am.png', pm_icon: 'a\\icon\\pm.png', am_pm_icon_pos: '{0,0}' }, aodConfig: {}, icons: [] }

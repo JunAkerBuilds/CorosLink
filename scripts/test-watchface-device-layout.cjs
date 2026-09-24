@@ -20,6 +20,16 @@ const config = [
   "[time_hour_high_pos]={24,86}"
 ].join("\r\n") + "\r\n";
 const parse = text => Object.fromEntries([...text.matchAll(/^\[([^\]]+)\]=([^\r\n]*)/gm)].map(m => [m[1], m[2]]));
+// Reproduce the v0.1.41 output independently of the current exporter.
+function legacyConfig(text) {
+  const bom = text.startsWith("\uFEFF") ? "\uFEFF" : "";
+  const body = text.slice(bom.length);
+  const values = parse(body);
+  return bom + "// CorosLink device layout: pace-3-date-rects-v1" +
+    (body.includes("\r\n") ? "\r\n" : "\n") +
+    body.replace(/^(\[english_date_(month|day)_rect\]=)[^\r\n]*/gm,
+      (_, prefix, part) => prefix + values[`english_date_${part === "month" ? "day" : "month"}_rect`]);
+}
 function png(width, height) {
   return nativeImage.createFromBitmap(Buffer.alloc(width * height * 4, 255), { width, height }).toPNG();
 }
@@ -28,12 +38,11 @@ async function main() {
   await app.whenReady();
   await fs.mkdir(temp, { recursive: true });
   const { createStoreZip } = require("../dist-electron/zipStore.js");
-  const { WATCHFACE_TARGETS, getWatchfaceTarget } = require("../dist-electron/watchfaceTargets.js");
+  const { WATCHFACE_TARGETS } = require("../dist-electron/watchfaceTargets.js");
   const { finalizeWatchfaceDeviceLayout: finalize, restoreWatchfaceDateLayout: restore } = require("../dist-electron/watchfaceDeviceLayout.js");
   const { initializeDatabase } = require("../dist-electron/database.js");
   initializeDatabase(app.getPath("userData"));
   const service = require("../dist-electron/corosWatchfaceService.js");
-  const pace3 = getWatchfaceTarget("pace-3");
 
   // Preserve CRLF/LF/BOM, per-field alignment, disabled fields, and all assets.
   for (const text of [config, config.replaceAll("\r\n", "\n"), "\uFEFF" + config,
@@ -42,18 +51,24 @@ async function main() {
       { name: "watchface_240x240/AODconfig.txt", data: Buffer.from(text) },
       { name: "watchface_800x800/CorosLinkAODconfig.txt", data: Buffer.from(text) },
       { name: "watchface_customize.png", data: png(20, 20) }];
-    const result = finalize(entries, pace3);
+    const result = finalize(entries);
+    assert.deepEqual(result, entries, "new exports preserve authored positions without a marker");
     assert.equal(restore(result[0].data.toString()), text);
     assert.equal(restore(text), text, "unmarked starters are already authoring layouts");
-    assert.deepEqual(finalize(result, pace3), result, "finalization must be idempotent");
+    assert.deepEqual(finalize(result), result, "finalization must be idempotent");
     assert.deepEqual(entries.slice(1), result.slice(1), "AOD and previews stay untouched");
     assert.equal(entries[0].data.toString(), text, "source is immutable");
+    const legacy = legacyConfig(text);
+    assert.equal(restore(legacy), text, "legacy swapped output restores authored coordinates");
+    assert.equal(restore(restore(legacy)), text, "legacy restoration happens once");
+    const legacyEntries = [{ ...entries[0], data: Buffer.from(legacy) }, ...entries.slice(1)];
+    assert.deepEqual(finalize(legacyEntries), entries, "rebuilding removes the legacy swap and marker");
   }
   for (const text of [config.replace(`[english_date_day_rect]=${day}\r\n`, ""),
     config.replace(`[english_date_month_rect]=${month}`, "[english_date_month_rect]="),
     config + `[english_date_day_rect]=${day}\r\n`]) {
     const entries = [{ name: "watchface_240x240/config.txt", data: Buffer.from(text) }];
-    assert.deepEqual(finalize(entries, pace3), entries, "incomplete or ambiguous pairs stay untouched");
+    assert.deepEqual(finalize(entries), entries, "incomplete or ambiguous pairs stay untouched");
   }
 
   // Real archive builds, including full-file edits followed by structured edits.
@@ -91,12 +106,13 @@ async function main() {
     const built = await build(target ? { firmwareType: target.firmwareType, watchModel: target.model } : {});
     const files = await readArchive(built);
     regularPreview ??= files.get("watchface_customize.png");
-    assert.deepEqual(files.get("watchface_customize.png"), regularPreview, "the COROS preview must not show the compensation");
+    assert.deepEqual(files.get("watchface_customize.png"), regularPreview, "date handling preserves the COROS preview");
     for (const size of [240, 260, 280, 390, 416, 466, 800]) {
       const root = `watchface_${size}x${size}`;
       const actual = parse(files.get(`${root}/config.txt`).toString());
-      assert.equal(actual.english_date_month_rect, target?.model === "pace-3" ? day : month);
-      assert.equal(actual.english_date_day_rect, target?.model === "pace-3" ? month : day);
+      assert.equal(actual.english_date_month_rect, month);
+      assert.equal(actual.english_date_day_rect, day);
+      assert(!files.get(`${root}/config.txt`).toString().includes("pace-3-date-rects-v1"));
       for (const key of ["english_date_month_font", "english_date_day_font", "english_date_week_rect", "french_date_day_rect", "french_date_month_rect"]) {
         assert.equal(actual[key], parse(config)[key]);
       }
@@ -119,7 +135,25 @@ async function main() {
   const rawEditor = await service.loadCorosWatchfaceTemplateConfigTexts(builtPace3.archiveId);
   assert(rawEditor.every(file => file.text === config), "raw editing also uses authoring coordinates");
   const repeated = await readArchive(await build({ sourceArchiveId: builtPace3.archiveId }));
-  assert.equal(repeated.get("watchface_240x240/config.txt").toString(), pace3Files.get("watchface_240x240/config.txt").toString(), "rebuilding a generated face swaps exactly once");
+  assert.equal(repeated.get("watchface_240x240/config.txt").toString(), pace3Files.get("watchface_240x240/config.txt").toString(), "rebuilding a generated face preserves date positions");
+
+  // Marked archives from v0.1.41 restore before font fitting, editing and conversion.
+  const legacyPath = path.join(temp, "legacy.zip");
+  await fs.writeFile(legacyPath, createStoreZip(entries.map(entry =>
+    /^watchface_\d+x\d+\/config\.txt$/.test(entry.name)
+      ? { ...entry, data: Buffer.from(legacyConfig(config)) } : entry)));
+  const legacySource = await service.selectCorosWatchfaceArchive(legacyPath);
+  const legacyDetails = await service.describeCorosWatchfaceTemplate(legacySource.archiveId);
+  for (const resolution of legacyDetails.resolutions) {
+    assert.equal(resolution.config.english_date_month_rect, month);
+    assert.equal(resolution.config.english_date_day_rect, day);
+  }
+  assert((await service.loadCorosWatchfaceTemplateConfigTexts(legacySource.archiveId)).every(file => file.text === config));
+  for (const watchModel of ["pace-3", "pace-pro"]) {
+    const rebuilt = await readArchive(await build({ sourceArchiveId: legacySource.archiveId, watchModel }));
+    assert.equal(rebuilt.get("watchface_240x240/config.txt").toString(), config,
+      "legacy rebuild restores before fitting unequal month/day fonts and omits the workaround");
+  }
 
   const changed = await readArchive(await build({
     sourceArchiveId: builtPace3.archiveId,
@@ -127,17 +161,17 @@ async function main() {
     configOverrides: [{ path: "watchface_240x240/config.txt", values: { english_date_day_rect: "{30,20,54,40,hcenter|vcenter}" } }]
   }));
   const changedConfig = parse(changed.get("watchface_240x240/config.txt").toString());
-  assert.equal(changedConfig.english_date_month_rect, "{20,7,64,53,hcenter|vcenter}", "fit the 44x46 day font before exchanging rectangles");
-  assert.equal(changedConfig.english_date_day_rect, month, "never resize the swapped month slot to fit the day font");
+  assert.equal(changedConfig.english_date_day_rect, "{20,7,64,53,hcenter|vcenter}", "fit the 44x46 day font to its own rectangle");
+  assert.equal(changedConfig.english_date_month_rect, month, "day font fitting preserves the month slot");
 
   // Newly exported PACE 3 files can become another model's editable source.
-  const converted = await service.convertCorosWatchfaceArchive({ sourceArchiveId: builtPace3.archiveId, watchModel: "pace-pro", targetArchiveId: source.archiveId });
+  const converted = await service.convertCorosWatchfaceArchive({ sourceArchiveId: legacySource.archiveId, watchModel: "pace-pro", targetArchiveId: source.archiveId });
   const convertedFiles = await readArchive(converted.archive);
   assert.equal(parse(convertedFiles.get("watchface_800x800/config.txt").toString()).english_date_day_rect, day);
   const proFiles = await readArchive(await build({ sourceArchiveId: converted.archive.archiveId, firmwareType: "COROS W332" }));
   assert.equal(parse(proFiles.get("watchface_800x800/config.txt").toString()).english_date_month_rect, month);
 
-  // Recovered faces get the correction after their final destination resize.
+  // Recovered faces preserve date positions through the final destination resize.
   const cache = path.join(app.getPath("userData"), "watchface-conversion-carriers");
   await fs.mkdir(cache, { recursive: true });
   await fs.writeFile(path.join(cache, "pace-3.zip"), originalBytes);
@@ -147,10 +181,10 @@ async function main() {
   await fs.writeFile(recoveredPath, createStoreZip(recoveredEntries));
   const recoveredSource = await service.selectCorosWatchfaceArchive(recoveredPath);
   const recoveredFiles = await readArchive(await build({ sourceArchiveId: recoveredSource.archiveId, firmwareType: "COROS W331" }));
-  assert.equal(parse(recoveredFiles.get("watchface_240x240/config.txt").toString()).english_date_month_rect, day);
-  assert.equal(parse(recoveredFiles.get("watchface_240x240/config.txt").toString()).english_date_day_rect, month);
+  assert.equal(parse(recoveredFiles.get("watchface_240x240/config.txt").toString()).english_date_month_rect, month);
+  assert.equal(parse(recoveredFiles.get("watchface_240x240/config.txt").toString()).english_date_day_rect, day);
   assert.deepEqual(await fs.readFile(sourcePath), originalBytes, "builds never rewrite the editor's source archive");
-  console.log("PACE 3 date layout: production exports, font sizing, previews, repeat builds, conversion, recovered faces and other models passed.");
+  console.log("Date layout: production exports, legacy migration, font sizing, previews, repeat builds, conversion, recovered faces and all models passed.");
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {

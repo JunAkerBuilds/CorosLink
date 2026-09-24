@@ -1,19 +1,4 @@
-import {
-  Cloud,
-  CloudDrizzle,
-  CloudFog,
-  CloudLightning,
-  CloudMoon,
-  CloudRain,
-  CloudSnow,
-  CloudSun,
-  Droplets,
-  MapPin,
-  Moon,
-  RefreshCw,
-  Sun,
-  Wind
-} from "lucide-react";
+import { Cloud, Droplets, MapPin, RefreshCw, Wind } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import {
@@ -25,39 +10,10 @@ import {
   OVERVIEW_WEATHER_MAX_AGE_MS,
   readCachedOverviewWeather,
   temperatureUnitLabel,
-  type OverviewWeatherKind,
   type OverviewWeatherSnapshot
 } from "./overviewWeather";
+import { WeatherIcon } from "./WeatherIcon";
 import "./overviewWeather.css";
-
-function WeatherGlyph({
-  kind,
-  isDay
-}: {
-  kind: OverviewWeatherKind;
-  isDay: boolean;
-}) {
-  const props = { size: 30, strokeWidth: 1.6, "aria-hidden": true } as const;
-  switch (kind) {
-    case "clear":
-      return isDay ? <Sun {...props} /> : <Moon {...props} />;
-    case "partly-cloudy":
-      return isDay ? <CloudSun {...props} /> : <CloudMoon {...props} />;
-    case "fog":
-      return <CloudFog {...props} />;
-    case "drizzle":
-      return <CloudDrizzle {...props} />;
-    case "rain":
-      return <CloudRain {...props} />;
-    case "snow":
-      return <CloudSnow {...props} />;
-    case "thunder":
-      return <CloudLightning {...props} />;
-    case "cloudy":
-    default:
-      return <Cloud {...props} />;
-  }
-}
 
 export function OverviewWeatherCard() {
   const { unitSystem } = useUnitSystem();
@@ -159,7 +115,7 @@ export function OverviewWeatherCard() {
       title={title}
     >
       <div className="overview-weather-glyph">
-        <WeatherGlyph kind={condition.kind} isDay={snapshot.isDay} />
+        <WeatherIcon kind={condition.kind} isDay={snapshot.isDay} />
       </div>
       <div className="overview-weather-main">
         <div className="overview-weather-temp">
@@ -172,15 +128,19 @@ export function OverviewWeatherCard() {
       </div>
       <div className="overview-weather-meta">
         <div className="overview-weather-range">
-          <span>H {formatTemperature(snapshot.highC, unitSystem)}</span>
-          <span>L {formatTemperature(snapshot.lowC, unitSystem)}</span>
+          <span className="overview-weather-high">
+            <b>H</b> {formatTemperature(snapshot.highC, unitSystem)}
+          </span>
+          <span className="overview-weather-low">
+            <b>L</b> {formatTemperature(snapshot.lowC, unitSystem)}
+          </span>
         </div>
         <div className="overview-weather-details">
-          <span>
+          <span className="overview-weather-wind">
             <Wind size={12} aria-hidden="true" />
             {formatWindSpeed(snapshot.windKmh, unitSystem)}
           </span>
-          <span>
+          <span className="overview-weather-humidity">
             <Droplets size={12} aria-hidden="true" />
             {Math.round(snapshot.humidityPercent)}%
           </span>

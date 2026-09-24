@@ -2058,18 +2058,24 @@ export function inferStaticSeparators(
   return fallback;
 }
 
-/** Hides the firmware colon when a draggable static replacement is enabled. */
+/** The template colon is opt-in; otherwise a hidden custom colon must stay hidden. */
+export function isTemplateTimeColonEnabled(
+  separators: WatchfaceStaticSeparators,
+  override?: CorosWatchfaceConfigAssetOverride
+): boolean {
+  return !separators.colon.enabled && override?.enabled === true;
+}
+
+/** Resolves template separators independently of whether a custom one was toggled. */
 export function buildStaticSeparatorOverrides(
   details: CorosWatchfaceTemplateDetails,
-  separators: WatchfaceStaticSeparators
+  separators: WatchfaceStaticSeparators,
+  configAssetOverrides: Record<string, CorosWatchfaceConfigAssetOverride> = {}
 ): CorosWatchfaceConfigOverride[] {
-  if (!separators.colon.enabled && !separators.dateSlash.enabled) {
-    return [];
-  }
   return details.resolutions.flatMap((resolution) => {
     const values: Record<string, string> = {};
     if (
-      separators.colon.enabled &&
+      !isTemplateTimeColonEnabled(separators, configAssetOverrides["config:colon_icon"]) &&
       Object.prototype.hasOwnProperty.call(resolution.config, "colon_icon")
     ) {
       values.colon_icon = "";

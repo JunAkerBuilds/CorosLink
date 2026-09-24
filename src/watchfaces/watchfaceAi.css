@@ -1626,4 +1626,11 @@
 .wf-ai-cli-warning button { display: block; margin: 10px 0 0 auto; padding: 5px 12px; border: 1px solid #a47a3470; border-radius: 6px; background: #a47a3420; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
 .wf-ai-cli-warning button:hover { background: #a47a3435; }
 .wf-ai-cli-warning button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-.wf-ai-cli-model { font-size: 11px; color: var(--text-muted); }
+.wf-ai-model-picker { display: inline-flex; min-width: 0; gap: 2px; margin-left: 4px; }
+.wf-ai-model-picker select {
+  min-width: 0; max-width: 140px; padding: 3px 4px; border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: var(--text-secondary); font: inherit; font-size: 11px; text-overflow: ellipsis; cursor: pointer;
+}
+.wf-ai-model-picker select:hover:not(:disabled) { border-color: var(--glass-border); color: var(--text-primary); }
+.wf-ai-model-picker select:focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: 1px; }
+.wf-ai-model-picker select:disabled { opacity: 0.6; cursor: default; }
