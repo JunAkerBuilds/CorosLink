@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.45] - 2026-09-24
+
+### Added
+
+- Choose which watch system languages show your designed weekday from the new **Watch languages** option in Studio's Export panel.
+- Connect the local-model chat provider to OpenAI-compatible servers elsewhere on your network (private IPs, `.local`/`.lan` names, Tailscale), not just localhost. Pick **Other server URL…** in Local model settings when detection has found a localhost server. ([#126](https://github.com/JunAkerBuilds/CorosLink/issues/126))
+
+### Changed
+
+- Redesign Coach settings as a wider, smoked-glass dialog with a section rail, grouped provider cards, toggle switches, and side-by-side fields.
+- Refresh the Overview weather card icons and the dashboard widget resize preview.
+- Refresh the README with new light and dark screenshots.
+
+### Fixed
+
+- Remove the automatic PACE 3 month/day position swap added in v0.1.41, which could counteract COROS date preferences. Rebuilding marked older exports restores their authored positions.
+
 ## [0.1.44] - 2026-09-24
 
 ### Fixed
