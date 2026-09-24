@@ -261,6 +261,21 @@ import {
   transferFileToWatch
 } from "./watchService";
 import {
+  AUDIOBOOK_EXTENSIONS,
+  audiobookPartsOnWatch,
+  cancelAudiobookConversion,
+  deleteAudiobook,
+  getAudiobook,
+  getAudiobookPartPaths,
+  listAudiobooks,
+  startAudiobookImport
+} from "./audiobookService";
+import type {
+  Audiobook,
+  AudiobookProgress,
+  AudiobookTransferResult
+} from "./types";
+import {
   configureYouTubeBrowserSession,
   registerYouTubeBrowserHandlers,
   resetYouTubeBrowserSession
@@ -1231,6 +1246,8 @@ function registerIpcHandlers(): void {
     };
   });
 
+  registerAudiobookIpcHandlers();
+
   ipcMain.handle("downloads:list", () => listDownloads());
 
   ipcMain.handle("downloads:downloadAudio", (_event, url: string) =>
@@ -2148,4 +2165,107 @@ function registerIpcHandlers(): void {
   ipcMain.handle("app:openStorageLocation", (_event, id: string) =>
     openAppStorageLocation(id)
   );
+}
+
+function registerAudiobookIpcHandlers(): void {
+  const sendProgress = (progress: AudiobookProgress): void => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("audiobooks:progress", progress);
+    }
+  };
+  const sendUpdated = (book: Audiobook): void => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("audiobooks:updated", book);
+    }
+  };
+  const watchTracks = async () => (await getWatchStatus()).tracks;
+
+  ipcMain.handle("audiobooks:list", async () => listAudiobooks(await watchTracks()));
+
+  ipcMain.handle("audiobooks:import", async (): Promise<Audiobook | null> => {
+    const options: OpenDialogOptions = {
+      title: "Choose an audiobook (select several files to join them)",
+      properties: ["openFile", "multiSelections"],
+      filters: [{ name: "Audiobook", extensions: AUDIOBOOK_EXTENSIONS }]
+    };
+    const result =
+      mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showOpenDialog(mainWindow, options)
+        : await dialog.showOpenDialog(options);
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+    return startAudiobookImport(result.filePaths, sendProgress, sendUpdated);
+  });
+
+  ipcMain.handle("audiobooks:cancel", (_event, id: string) =>
+    cancelAudiobookConversion(id)
+  );
+
+  ipcMain.handle("audiobooks:delete", async (_event, id: string) => {
+    deleteAudiobook(id);
+    return listAudiobooks(await watchTracks());
+  });
+
+  ipcMain.handle(
+    "audiobooks:transfer",
+    async (_event, id: string): Promise<AudiobookTransferResult> => {
+      const status = await getWatchStatus();
+      if (!status.connected) {
+        throw new Error("No COROS watch is connected.");
+      }
+      const book = getAudiobook(id, status.tracks);
+      if (!book || book.status !== "ready") {
+        throw new Error("Audiobook is not ready to transfer.");
+      }
+
+      const partPaths = getAudiobookPartPaths(id);
+      const pending = book.parts
+        .map((part, offset) => ({ part, filePath: partPaths[offset] }))
+        .filter(({ part }) => !part.onWatch);
+      const pendingBytes = pending.reduce((total, { part }) => total + part.sizeBytes, 0);
+      if (status.freeBytes !== undefined && pendingBytes > status.freeBytes) {
+        throw new Error(
+          `Not enough space on the watch: need ${Math.ceil(pendingBytes / 1_048_576)} MB, ` +
+            `${Math.floor(status.freeBytes / 1_048_576)} MB free.`
+        );
+      }
+
+      // The watch plays in transfer order, so copy strictly one part at a
+      // time, in part order.
+      let copiedBytes = 0;
+      for (const [position, { part, filePath }] of pending.entries()) {
+        await transferFileToWatch(filePath, (fileProgress) => {
+          sendProgress({
+            id,
+            phase: "transferring",
+            progress:
+              pendingBytes > 0
+                ? Math.min((copiedBytes + fileProgress.copiedBytes) / pendingBytes, 1)
+                : 1,
+            message: `Copying part ${position + 1} of ${pending.length}`
+          });
+        });
+        copiedBytes += part.sizeBytes;
+      }
+
+      return {
+        copied: pending.length,
+        skipped: book.parts.length - pending.length,
+        watch: await getWatchStatus()
+      };
+    }
+  );
+
+  ipcMain.handle("audiobooks:removeFromWatch", async (_event, id: string) => {
+    const status = await getWatchStatus();
+    const book = getAudiobook(id, status.tracks);
+    if (!book) {
+      throw new Error("Audiobook was not found.");
+    }
+    for (const track of audiobookPartsOnWatch(book, status.tracks)) {
+      await deleteWatchTrack(track.relativePath);
+    }
+    return getWatchStatus();
+  });
 }

@@ -32635,3 +32635,70 @@ body.is-backgrounded .training-backup-progress-track.is-indeterminate span {
     width: 100%;
   }
 }
+
+/* Audiobooks */
+.audiobook-hint {
+  margin: 6px 0 0;
+  max-width: 62ch;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.audiobook-title-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.audiobook-title-button:disabled {
+  cursor: default;
+}
+
+.audiobook-title-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.audiobook-title-copy span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.audiobook-error {
+  margin: 4px 0 0 23px;
+  font-size: 12px;
+  color: var(--error-text);
+  white-space: pre-wrap;
+}
+
+.audiobook-parts {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 23px;
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.audiobook-parts li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px 80px 80px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.audiobook-part-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

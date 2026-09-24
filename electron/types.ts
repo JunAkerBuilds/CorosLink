@@ -3973,3 +3973,43 @@ export interface ManualActivityInput {
   calories?: number;
   avgHr?: number;
 }
+
+export type AudiobookStatus = "converting" | "ready" | "failed";
+
+export interface AudiobookPart {
+  /** 1-based position; parts must reach the watch in this order. */
+  index: number;
+  /** File name, shared by the local copy and the copy on the watch. */
+  name: string;
+  sizeBytes: number;
+  durationSeconds: number;
+  /** Whether a file with this name is currently in the watch Music folder. */
+  onWatch: boolean;
+}
+
+export interface Audiobook {
+  id: string;
+  title: string;
+  author?: string;
+  sourcePaths: string[];
+  createdAt: string;
+  status: AudiobookStatus;
+  error?: string;
+  durationSeconds: number;
+  sizeBytes: number;
+  parts: AudiobookPart[];
+}
+
+export interface AudiobookProgress {
+  id: string;
+  phase: "converting" | "transferring";
+  /** 0..1 progress across the whole book. */
+  progress: number;
+  message: string;
+}
+
+export interface AudiobookTransferResult {
+  copied: number;
+  skipped: number;
+  watch: WatchStatus;
+}
