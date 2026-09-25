@@ -11,7 +11,15 @@ const dataOptions = [
   ...NATIVE_CHART_SOURCES.map(source => ({ id: `chart:${source.id}`, label: source.label, category: "Charts" as const, keywords: `${source.id} ${source.category}`, availability: undefined }))
 ];
 
-export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOfficialImage, onAddElement, onAddData }: {
+/** Firmware time digits the template lacks, which Studio can synthesize. */
+export interface WatchfaceAddTimeOption {
+  id: string;
+  label: string;
+  added: boolean;
+  onAdd: () => void;
+}
+
+export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOfficialImage, onAddElement, onAddData, timeOptions = [] }: {
   design: CorosWatchfaceDesignState;
   imageDisabled: boolean;
   onAddImage: () => void;
@@ -19,6 +27,7 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
   onAddOfficialImage?: () => void;
   onAddElement: (kind: CorosWatchfaceBackgroundElement["kind"]) => void;
   onAddData: (id: string) => void;
+  timeOptions?: WatchfaceAddTimeOption[];
 }) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -100,7 +109,9 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
     options[(index + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length]?.focus();
   };
   const normalized = query.trim().toLocaleLowerCase();
-  const visible = dataOptions.filter(option => (category === "All" || category === option.category) && `${option.label} ${option.category} ${option.keywords}`.toLocaleLowerCase().includes(normalized));
+  const matches = (label: string, group: string, keywords: string) => (category === "All" || category === group) && `${label} ${group} ${keywords}`.toLocaleLowerCase().includes(normalized);
+  const visible = dataOptions.filter(option => matches(option.label, option.category, option.keywords));
+  const visibleTime = timeOptions.filter(option => matches(option.label, "Calendar", `time clock ${option.id}`));
   return <div className="wf-add-menu">
     <button ref={trigger} type="button" className="watchface-add-sprite" aria-haspopup="dialog" aria-expanded={open} aria-controls={id}
       popoverTarget={id} onClick={place}><Plus size={15} aria-hidden="true" /><span>Add</span><ChevronDown size={12} aria-hidden="true" /></button>
@@ -126,10 +137,14 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
       <div id={`${id}-data-panel`} className="wf-layer-picker-results" ref={results} role="tabpanel" aria-labelledby={`${id}-tab-${category}`} tabIndex={0}>
         {categories.filter(item => item !== "All").map(group => {
           const options = visible.filter(option => option.category === group);
-          if (!options.length) return null;
+          const timeRows = group === "Calendar" ? visibleTime : [];
+          if (!options.length && !timeRows.length) return null;
           const Icon = categoryIcons[group];
           return <section key={group} aria-label={group}>
-            <h3><Icon size={13} aria-hidden="true" />{group}{group === "Charts" && " · Experimental"}<span>{options.length}</span></h3>
+            <h3><Icon size={13} aria-hidden="true" />{group}{group === "Charts" && " · Experimental"}<span>{options.length + timeRows.length}</span></h3>
+            {timeRows.map(option => <button type="button" key={`time:${option.id}`} data-add-option data-time-option={option.id} aria-label={`${option.added ? "Select" : "Add"} ${option.label}`} onClick={() => choose(option.onAdd)}>
+              <span className="wf-layer-picker-option-label">{option.label}</span>{option.added ? <span className="wf-layer-picker-added"><Check size={12} />On face</span> : <Plus size={13} className="wf-layer-picker-plus" aria-hidden="true" />}
+            </button>)}
             {options.map(option => {
               const [field, source] = option.id.split(":");
               const existing = design.nativeData?.[field];
@@ -140,7 +155,7 @@ export function WatchfaceAddMenu({ design, imageDisabled, onAddImage, onAddOffic
             })}
           </section>;
         })}
-        {!visible.length && <div className="wf-layer-picker-empty"><Search size={22} aria-hidden="true" /><strong>No matching data fields</strong><span>Try another name or category.</span><button type="button" onClick={() => { setQuery(""); setCategory("All"); search.current?.focus(); }}>Clear filters</button></div>}
+        {!visible.length && !visibleTime.length && <div className="wf-layer-picker-empty"><Search size={22} aria-hidden="true" /><strong>No matching data fields</strong><span>Try another name or category.</span><button type="button" onClick={() => { setQuery(""); setCategory("All"); search.current?.focus(); }}>Clear filters</button></div>}
       </div>
       <div className="wf-layer-picker-footer">{design.nativeData?.chart?.enabled && (category === "Charts" || normalized.includes("chart")) ? "Choosing another chart replaces the current one." : "Add a layer, then customize it in the inspector."}</div>
     </div>

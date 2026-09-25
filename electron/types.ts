@@ -1115,6 +1115,11 @@ export interface CorosWatchfaceDesignState {
   controlIconOffsets?: Record<string, { dx: number; dy: number }>;
   /** Converts firmware auto-aligned HH:MM into four independently positioned digits. */
   separateAutoTime?: boolean;
+  /**
+   * Adds seconds digits to a template that declares none, reusing its minute
+   * digit sprites. Ignored when the template already ships seconds.
+   */
+  addSeconds?: boolean;
   timeStyles: Record<string, { solidAlpha?: boolean; color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Weekday/month/day sizing; absent in projects saved before resizing. */
   dateStyles?: Record<
@@ -1256,6 +1261,7 @@ export type CorosWatchfaceModeDesignState = Partial<
     | "controlBarometerMode"
     | "controlIconOffsets"
     | "separateAutoTime"
+    | "addSeconds"
     | "timeStyles"
     | "dateStyles"
     | "staticSeparators"

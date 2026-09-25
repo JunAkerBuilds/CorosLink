@@ -456,6 +456,7 @@ import {
   mergeConfigOverrides,
   parseConfigPos,
   pickPreviewResolution,
+  templateHasSeconds,
   pickEditorPreviewResolution,
   pickWatchPreviewResolution,
   rasterFontSupportsText,
@@ -5865,6 +5866,42 @@ export function WatchfaceEditor({
     setDesign(prev => ({ ...prev, nativeData: { ...prev.nativeData, [id]: { ...defaultNativeDataStyle(id), ...prev.nativeData?.[id], ...patch } } }));
   }
 
+  // Offered only on the Current face: the template must lack seconds itself
+  // (not merely have them added by this design).
+  const templateSecondsResolution = detailsWithConfigEdits
+    ? pickPreviewResolution(detailsWithConfigEdits)
+    : null;
+  const canAddSeconds = previewMode === "current" &&
+    Boolean(templateSecondsResolution && !templateHasSeconds(templateSecondsResolution));
+  function addSeconds() {
+    if (!design.addSeconds) {
+      setDesign((prev) => ({
+        ...prev,
+        addSeconds: true,
+        // Minute-sized digits are too large for seconds; start at half size.
+        timeStyles: {
+          ...prev.timeStyles,
+          seconds: prev.timeStyles?.seconds ?? { scale: 0.5 }
+        }
+      }));
+    }
+    selectEditorItem("seconds");
+    openQuickStartProperties();
+  }
+  function removeAddedSeconds() {
+    setDesign((prev) => {
+      const timeStyles = { ...prev.timeStyles };
+      delete timeStyles.seconds;
+      const layoutOffsets = { ...prev.layoutOffsets };
+      delete layoutOffsets.seconds;
+      const layerVisibility = { ...prev.layerVisibility };
+      delete layerVisibility.seconds;
+      return { ...prev, addSeconds: false, timeStyles, layoutOffsets, layerVisibility };
+    });
+    setSelectedId("");
+    setSelectedIds([]);
+  }
+
   function addNativeData(value: string) {
     const [id, chartSource] = value.split(":");
     if (!id) return;
@@ -7084,6 +7121,10 @@ export function WatchfaceEditor({
         .map((layer) => layer.spriteId)
         .filter((id): id is string => Boolean(id))
     );
+    if (ids.has("seconds") && design.addSeconds && canAddSeconds) {
+      removeAddedSeconds();
+      if (elementIds.size === 0 && spriteIds.size === 0) return;
+    }
     if (elementIds.size === 0 && spriteIds.size === 0) return;
     const removedEditorIds = new Set([
       ...[...elementIds].map((id) => `bgel:${id}`),
@@ -8500,6 +8541,7 @@ export function WatchfaceEditor({
               onAddOfficialImage={browseOfficialImage}
               onAddElement={addElement}
               onAddData={addNativeData}
+              timeOptions={canAddSeconds ? [{ id: "seconds", label: "Seconds", added: Boolean(design.addSeconds), onAdd: addSeconds }] : []}
             /> : null}
           </div>
           {details ? (
@@ -11537,6 +11579,10 @@ export function WatchfaceEditor({
             "Typography",
             <div className="wf-property-stack">
               {layer.timePartId === "autoTime" ? <button type="button" className="secondary-button" onClick={convertAutoTimeToSeparate}>Separate hours and minutes</button> : null}
+              {layer.timePartId === "seconds" && design.addSeconds && canAddSeconds ? <>
+                <p className="watchface-studio-summary">Added by Studio using the minute digits. This template has no seconds of its own.</p>
+                <div className="wf-config-asset-actions"><button className="secondary-button wf-danger-action" type="button" onClick={removeAddedSeconds}><Trash2 size={15} /> Remove seconds</button></div>
+              </> : null}
               <LocalFontPicker api={api} label="Font" value={style?.fontFamily ?? design.fontFamily} emptyLabel="Keep template font" preview={renderFontPreview(layer.timePartId!, style)} onChange={(fontFamily) => setTimeStyle(layer.timePartId!, { fontFamily, rasterFont: undefined })} rasterFont={style?.rasterFont ?? design.rasterFont} onRasterFontChange={(rasterFont) => setTimeStyle(layer.timePartId!, { rasterFont, ...(rasterFont ? { fontFamily: "" } : {}) })} typography={{ fontWeight: style?.fontWeight ?? design.fontWeight ?? 400, fontStyle: style?.fontStyle ?? design.fontStyle ?? "normal", letterSpacing: style?.letterSpacing ?? design.letterSpacing ?? 0 }} onTypographyChange={(typography) => setTimeStyle(layer.timePartId!, typography)} onLetterSpacingChange={(letterSpacing) => setTimeStyle(layer.timePartId!, { letterSpacing })} />
               <div className="watchface-position-inputs">
                 <label>Scale<EditableNumberInput min="0.01" step="0.01" value={style?.scale ?? 1} fallback={1} onValueChange={(scale) => setTimeStyle(layer.timePartId!, { scale: Math.max(0.01, scale) })} /></label>

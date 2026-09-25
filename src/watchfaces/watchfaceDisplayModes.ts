@@ -91,6 +91,7 @@ const MODE_DESIGN_KEYS = [
   "controlBarometerMode",
   "controlIconOffsets",
   "separateAutoTime",
+  "addSeconds",
   "timeStyles",
   "dateStyles",
   "staticSeparators",

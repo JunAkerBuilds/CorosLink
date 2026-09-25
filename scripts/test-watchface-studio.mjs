@@ -28,6 +28,7 @@ import {
   buildSelectableMetricSpriteComposition,
   buildSelectableMetricSpriteReplacements,
   buildSelectableMetricStyleOverrides,
+  buildAddedSecondsOverrides,
   buildSeparateTimeOverrides,
   buildStaticSeparatorOverrides,
   buildTimeStyleOverrides,
@@ -60,6 +61,7 @@ import {
   inferExerciseSeparatorStyle,
   inferStaticSeparators,
   watchfaceArcCutRole,
+  templateHasSeconds,
   isControlComplicationEnabled,
   listWatchfaceConfigAssets,
   loadStudioImage,
@@ -1283,6 +1285,64 @@ assert.deepEqual(
   ["hours", "minutes"],
   "Converted time should expose independent hour and minute layers"
 );
+const withoutSeconds = (template) => ({
+  ...template,
+  resolutions: template.resolutions.map((entry) => ({
+    ...entry,
+    config: Object.fromEntries(
+      Object.entries(entry.config).filter(([key]) => !key.startsWith("time_second_"))
+    )
+  }))
+});
+const noSecondsAutoTimeDetails = withoutSeconds(autoTimeDetails);
+const separateTimeDetails = applyConfigOverridesToDetails(
+  noSecondsAutoTimeDetails,
+  buildSeparateTimeOverrides(noSecondsAutoTimeDetails, true)
+);
+assert.equal(templateHasSeconds(separateTimeDetails.resolutions[0]), false);
+assert.deepEqual(buildAddedSecondsOverrides(separateTimeDetails, false), []);
+assert.deepEqual(
+  buildAddedSecondsOverrides(separateTimeDetails, true)[0],
+  {
+    path: "watchface_240x240/config.txt",
+    values: {
+      time_second_high_pos: "{125,106}",
+      time_second_high_font: "13x19",
+      time_second_low_pos: "{137,106}",
+      time_second_low_font: "13x19"
+    }
+  },
+  "Added seconds should reuse the minute font, centered under the minutes"
+);
+assert.equal(
+  buildAddedSecondsOverrides(noSecondsAutoTimeDetails, true)[0]?.values
+    .time_second_low_font,
+  "13x19",
+  "Auto-aligned templates should add seconds from the shared time font"
+);
+const addedSecondsDetails = applyConfigOverridesToDetails(
+  separateTimeDetails,
+  buildAddedSecondsOverrides(separateTimeDetails, true)
+);
+assert.equal(templateHasSeconds(addedSecondsDetails.resolutions[0]), true);
+assert.deepEqual(
+  buildAddedSecondsOverrides(addedSecondsDetails, true),
+  [],
+  "Templates that already declare seconds must be left untouched"
+);
+assert.ok(
+  computeLayoutGroupBounds(addedSecondsDetails.resolutions[0]).some(
+    ({ id }) => id === "seconds"
+  ),
+  "Added seconds should appear as a movable Seconds layer"
+);
+const addedSecondsStyle = buildTimeStyleOverrides(
+  addedSecondsDetails,
+  { seconds: { scale: 0.5 } },
+  true
+)[0]?.values;
+assert.equal(addedSecondsStyle?.time_second_high_font, "cl_sh");
+assert.equal(addedSecondsStyle?.time_second_low_font, "cl_sl");
 assert.equal(hasWatchfaceAod(details), true);
 assert.equal(
   hasWatchfaceAod({
@@ -3581,6 +3641,31 @@ assert.equal(fullTimeStyle?.values.time_second_high_pos, "{398,68}");
 assert.equal(fullTimeStyle?.values.time_second_low_pos, "{478,68}");
 assert.equal(fullTimeStyle?.values.time_second_high_font, "cl_sh");
 assert.equal(fullTimeStyle?.values.time_second_low_font, "cl_sl");
+// Animated faces declare only `time_second_low_*`; the lone slot must still
+// be redirected to the Studio folder or export keeps the template frames.
+const lowOnlySecondsDetails = {
+  ...withMetrics,
+  resolutions: withMetrics.resolutions.map((resolution) => {
+    const config = { ...resolution.config };
+    delete config.time_second_high_pos;
+    delete config.time_second_high_font;
+    return { ...resolution, config };
+  })
+};
+const lowOnlySecondsStyle = buildTimeStyleOverrides(
+  lowOnlySecondsDetails,
+  { seconds: { color: "#ffcc22", scale: 1 } },
+  true
+).find((entry) => entry.path.includes("800x800"));
+assert.equal(lowOnlySecondsStyle?.values.time_second_low_font, "cl_sl");
+assert.equal(
+  lowOnlySecondsStyle?.values.time_second_low_pos,
+  lowOnlySecondsDetails.resolutions.find(({ directory }) =>
+    directory.includes("800x800")
+  )?.config.time_second_low_pos,
+  "an unscaled lone seconds digit should keep its template position"
+);
+assert.equal(lowOnlySecondsStyle?.values.time_second_high_font, undefined);
 const wideDigitRasterFont = {
   label: "Wide digits",
   dataUrl: "data:image/png;base64,wide",

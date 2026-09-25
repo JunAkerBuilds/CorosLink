@@ -32,6 +32,7 @@ import {
   buildMetricOverrides,
   buildMetricSpriteReplacements,
   buildMetricStyleOverrides,
+  buildAddedSecondsOverrides,
   buildSeparateTimeOverrides,
   buildStaticSeparatorOverrides,
   buildStudioReplacements,
@@ -421,9 +422,17 @@ export function deriveDesignDetails(
   details: CorosWatchfaceTemplateDetails,
   design: CorosWatchfaceDesignState
 ): DesignDetails {
-  const timeFormatOverrides = buildSeparateTimeOverrides(
+  const separateTimeOverrides = buildSeparateTimeOverrides(
     details,
     design.separateAutoTime === true
+  );
+  // Seconds are placed under the minutes, so they follow separated time.
+  const timeFormatOverrides = mergeConfigOverrides(
+    separateTimeOverrides,
+    buildAddedSecondsOverrides(
+      applyConfigOverridesToDetails(details, separateTimeOverrides),
+      design.addSeconds === true
+    )
   );
   const timeFormatDetails = applyConfigOverridesToDetails(
     details,

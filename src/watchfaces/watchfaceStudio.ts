@@ -4123,6 +4123,70 @@ export function buildSeparateTimeOverrides(
   return overrides;
 }
 
+/** True when the template itself declares at least one seconds digit. */
+export function templateHasSeconds(
+  resolution: CorosWatchfaceResolutionDetails
+): boolean {
+  return ["time_second_high_pos", "time_second_low_pos"].some((key) =>
+    Boolean(resolution.config[key]?.trim())
+  );
+}
+
+/**
+ * Adds seconds to templates that ship none by reusing the minute digit folder
+ * (or the auto-aligned time font), so no new artwork is required. The pair is
+ * centered under the minutes; its center stays put when the Seconds style is
+ * scaled, so the default 50% style lands just below the time.
+ */
+export function buildAddedSecondsOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  enabled: boolean
+): CorosWatchfaceConfigOverride[] {
+  if (!enabled) return [];
+  const overrides: CorosWatchfaceConfigOverride[] = [];
+  for (const resolution of details.resolutions) {
+    if (templateHasSeconds(resolution)) continue;
+    const config = resolution.config;
+    let font: string | undefined;
+    let box: { x0: number; y0: number; x1: number; y1: number } | null = null;
+    const minuteHigh = parseConfigPos(config.time_minute_high_pos);
+    const minuteLow = parseConfigPos(config.time_minute_low_pos);
+    const minuteFont = config.time_minute_low_font?.trim() || config.time_minute_high_font?.trim();
+    const minuteSample = findSpriteFolder(resolution, minuteFont)?.files[0];
+    if (minuteLow && minuteFont && minuteSample) {
+      font = minuteFont;
+      const left = minuteHigh ?? minuteLow;
+      box = {
+        x0: Math.min(left.x, minuteLow.x),
+        y0: Math.min(left.y, minuteLow.y),
+        x1: minuteLow.x + minuteSample.width,
+        y1: Math.max(left.y, minuteLow.y) + minuteSample.height
+      };
+    } else if (hasAutoAlignedTime(resolution)) {
+      font = config.autoalign_time_font?.trim();
+      box = parseConfigRect(config.autoalign_time_rect);
+    }
+    const sample = findSpriteFolder(resolution, font)?.files[0];
+    if (!font || !box || !sample) continue;
+    const centerX = Math.round((box.x0 + box.x1) / 2);
+    const centerY = Math.round(
+      Math.min(resolution.height - sample.height * 0.3, box.y1 + sample.height * 0.3)
+    );
+    const x = centerX - sample.width;
+    const y = Math.round(centerY - sample.height / 2);
+    overrides.push({
+      path: `${resolution.directory}/config.txt`,
+      values: {
+        time_second_high_pos: `{${x},${y}}`,
+        time_second_high_font: font,
+        time_second_low_pos: `{${x + sample.width},${y}}`,
+        time_second_low_font: font
+      }
+    });
+  }
+  return overrides;
+}
+
 export const WATCHFACE_COMPLICATIONS: WatchfaceComplicationDefinition[] = [
   { id: "heartRate", label: "Heart rate", controlPrefix: "hr", sampleValue: "96" },
   { id: "steps", label: "Steps", controlPrefix: "step", sampleValue: "8420" },
@@ -6189,7 +6253,13 @@ export function buildTimeStyleOverrides(
       if (!style) {
         continue;
       }
-      const planned = part.digits.flatMap((digit) => {
+      // Templates may declare only one slot (seconds is often low-only, e.g.
+      // an animated `time_second_low_font`). Requiring both slots left the
+      // config on the template folder, so Studio sprites were dropped on export.
+      const declared = part.digits.filter((digit) =>
+        Boolean(resolution.config[digit.posKey]?.trim() && resolution.config[digit.fontKey]?.trim())
+      );
+      const planned = declared.flatMap((digit) => {
         const pos = parseConfigPos(resolution.config[digit.posKey]);
         const source = findSpriteFolder(resolution, resolution.config[digit.fontKey]);
         const sample = source?.files[0];
@@ -6203,7 +6273,7 @@ export function buildTimeStyleOverrides(
             }]
           : [];
       });
-      if (planned.length !== part.digits.length) {
+      if (planned.length === 0 || planned.length !== declared.length) {
         continue;
       }
       const x0 = Math.min(...planned.map((item) => item.pos.x));
@@ -6213,12 +6283,13 @@ export function buildTimeStyleOverrides(
       const centerX = (x0 + x1) / 2;
       const centerY = (y0 + y1) / 2;
       const normalizedScale = normalizeSpriteScale(style.scale);
-      const baseGap =
-        planned[1]!.pos.x -
-        (planned[0]!.pos.x + planned[0]!.sample.width);
+      const baseGap = planned[1]
+        ? planned[1].pos.x - (planned[0]!.pos.x + planned[0]!.sample.width)
+        : 0;
       const targetGap = baseGap * normalizedScale;
       const targetWidth =
-        planned[0]!.size.width + targetGap + planned[1]!.size.width;
+        planned.reduce((sum, item) => sum + item.size.width, 0) +
+        targetGap * (planned.length - 1);
       let targetX = centerX - targetWidth / 2;
       for (const item of planned) {
         const x = Math.round(targetX);
