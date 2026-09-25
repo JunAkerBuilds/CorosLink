@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.46] - 2026-09-25
+
+### Added
+
+- Add **Seconds** to a watch face whose template has none, from **Add → Live data**. Studio reuses the template's minute digits, starts them at half size below the time, and lets you restyle, move, or remove them like any Seconds layer.
+
+### Fixed
+
+- Export a custom font or sprite sheet chosen for Seconds on templates that only have a single seconds digit, such as animated faces. The exported face previously kept the template's original seconds frames.
+
 ## [0.1.45] - 2026-09-24
 
 ### Added
