@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.47] - 2026-09-26
+
+### Added
+
+- Add **analog hands** to any watch face from Studio's **Add** menu, including DIY templates without hands. Watchmaker AI can add them too.
+- Restore template layers you deleted, such as the time, date, fixed metrics and indicators, from **Add**, which now has **Time** and **Device** categories.
+- Add a GitHub Sponsors link.
+
+### Changed
+
+- Restyle the Watch Faces hub to match the Faces website. Community shows each design once, with its variants on their own page, and theme listings load from cache before refreshing.
+- Refresh the Training Hub personal records and race predictor.
+- The send preview for a converted official face now draws its live data.
+
+### Fixed
+
+- Replaced analog hands now rotate around their pivot instead of spinning in place.
+- Min/max temperature, humidity and UV now show on the watch when their icon is hidden. The export adds the invisible icon and separator that official faces include.
+- Converted official faces with an auto-aligned clock, such as SATISFY, keep their time and their light background.
+- Chart styles switched off in an official face (bar or line width 0) stay off after export.
+
 ## [0.1.46] - 2026-09-25
 
 ### Added
