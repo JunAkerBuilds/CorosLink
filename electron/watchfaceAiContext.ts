@@ -149,3 +149,59 @@ export function watchfaceEditEvidence(before: unknown, after: unknown, commands:
   }
   return { revision: current.revision, changedLayers: changedLayers.slice(0, 60), movementWarnings };
 }
+
+/** How each asset-contract kind behaves on the watch and in the editor. */
+export const WATCHFACE_COMPONENT_KIND_GUIDE: Record<string, string> = {
+  "state-sprites": "Firmware picks one frame from an ordered state set as the live value changes (battery). Draw every frame as a distinct state with identical canvas size and alignment, install each under stateReplacementsPath/<index>, and preview each verification scenario. A single replacement image makes the indicator static.",
+  "digit-font": "Live digits drawn from a font. Either set a fontFamily, or install a rasterFont (PNG atlas + glyphs order + columns) covering 0–9 and clear the fontFamily override so the atlas is used. Scale lives on the matching style object.",
+  "weekday-labels": "Live weekday text in firmware order MON..SUN. A rasterFont must cover every glyph needed to compose all seven labels.",
+  "month-labels": "Live month labels in firmware order DEC, JAN..NOV. A rasterFont must cover every glyph needed for all twelve labels.",
+  "weather-assets": "Weather icon/temperature sets at weatherIndicator.assets.<set>[index] = {assetId}. Day and night condition sets share indices 0–40 in COROS order; inspect the original images instead of guessing meanings. Missing indices fall back to bundled defaults.",
+  "native-component-assets": "A native data field component (health, training, calendar, weather...). Per-index PNGs at assets[role][index]; style, text and chart parameters at their paths. get_schema section:nativeData ids:[field] explains roles, counts and ordering.",
+  "native-graph": "Firmware-drawn graph or value with no sprites; styled through its numeric/color parameters only.",
+  "single-image": "One PNG for this config slot, installed at replacementPath as {dataUrl:{assetId},width,height}. Decorations do not supply live values.",
+  "rotating-sprite": "An analog hand: one PNG the firmware rotates around its image center using live time. Draw it pointing at 12 with the pivot exactly at the canvas center; never make one frame per angle. Hands on a face without template hands are added by merging {enabled:true, replacement} at editOverridePath. All hands share one pivot; moving any hand layer moves it.",
+  "template-sprite-set": "A physical template folder. Informational: install through the component-specific contract that references it, not the folder path.",
+  "background-artwork": "The static background at /design/artwork. Never bake live time, date, metrics, battery or progress fills into it; those are separate live components drawn above it.",
+  "drawn-separator": "Editor-drawn colon/date slash; set its properties at propertiesPath.",
+  "paired-labels": "Live AM/PM label. Install ampmIndicator.rasterFont covering both labels and clear its fontFamily override.",
+  "live-progress": "Firmware draws this arc/bar live from numeric parameters over the whole background. Read get_geometry for its box. Static artwork always sits beneath it; only the arc_cut_icon slot can overlay it (as a background-colored mask with transparent holes).",
+  "decorative-image": "A static sprite in the background pass; edit with update_sprite. x/y are its center in master pixels.",
+  "drawn-element": "Editor-drawn shape or static text in the background pass; edit with update_element. Not live data."
+};
+
+export const DESCRIBE_COMPONENTS_TOOL = {
+  name: "describe_components",
+  description: "Explain how face components work before designing them. Without ids returns an index of every component (contract id, layer, kind, enabled, sprite count). With ids (contract ids like typography:hours, native:heartRate:value, weather:day, layer ids like batteryIcon, or native field ids) returns each component's full asset contract, live layer state, native schema definition and a guide to how that kind of component behaves and is installed.",
+  parameters: { type: "object", properties: { ids: { type: "array", items: { type: "string" }, maxItems: 30 } }, additionalProperties: false }
+};
+
+export function describeWatchfaceComponents(documentValue: unknown, schemaValue: unknown, ids?: string[]): unknown {
+  const capabilities = record(record(documentValue).capabilities);
+  const contracts: RecordValue[] = Array.isArray(capabilities.assetContracts) ? capabilities.assetContracts : [];
+  const layers: RecordValue[] = Array.isArray(capabilities.layers) ? capabilities.layers : [];
+  const nativeFields: RecordValue[] = Array.isArray(record(record(schemaValue).nativeData).fields) ? record(schemaValue).nativeData.fields : [];
+  if (!ids?.length) {
+    return {
+      components: contracts.map((contract) => ({ id: contract.id, layerId: contract.layerId, label: contract.label, kind: contract.kind,
+        ...(contract.enabled !== undefined ? { enabled: contract.enabled } : {}), spriteCount: contract.spriteCount })),
+      addableNativeFields: nativeFields.map((field) => ({ id: field.id, label: field.label, category: field.category })),
+      lookup: "Call describe_components with ids for full contracts, or get_schema section:nativeData ids:[...] for a field not on the face yet (add it with add_native_field)."
+    };
+  }
+  return {
+    components: ids.map((id) => {
+      const native = /^native:([^:]+)/.exec(id)?.[1] ?? id;
+      const matched = contracts.filter((contract) => contract.id === id || contract.layerId === id || contract.layerId === `native:${id}`);
+      const field = nativeFields.find((candidate) => candidate.id === native);
+      const layerIds = new Set([id, ...matched.map((contract) => contract.layerId).filter(Boolean)]);
+      if (!matched.length && !field && !layers.some((layer) => layerIds.has(layer.id))) return { id, error: "Unknown component. Call describe_components without ids for the index." };
+      return {
+        id,
+        layers: layers.filter((layer) => layerIds.has(layer.id)),
+        contracts: matched.map((contract) => ({ ...contract, howItWorks: WATCHFACE_COMPONENT_KIND_GUIDE[contract.kind] })),
+        ...(field ? { nativeSchema: field } : {})
+      };
+    })
+  };
+}
