@@ -7,6 +7,7 @@ import {
   Combine,
   Copy,
   Download,
+  BookOpen,
   ExternalLink,
   Feather,
   FolderOpen,
@@ -113,6 +114,7 @@ import {
   WatchLibraryPanel,
   type TrackTransferProgress,
 } from "./media/LibraryPanels";
+import { AudiobooksView } from "./media/AudiobooksView";
 import {
   countPendingTransfers,
   isLocalTrackOnWatch,
@@ -140,7 +142,8 @@ type MediaTab =
   | "youtube-music"
   | "spotify"
   | "apple-music"
-  | "apple-podcasts";
+  | "apple-podcasts"
+  | "audiobooks";
 
 const MEDIA_TAB_PREFERENCE = defineSelectionPreference<MediaTab>({
   key: "media.activeTab",
@@ -152,6 +155,7 @@ const MEDIA_TAB_PREFERENCE = defineSelectionPreference<MediaTab>({
     "spotify",
     "apple-music",
     "apple-podcasts",
+    "audiobooks",
   ]),
 });
 
@@ -2456,6 +2460,13 @@ export default function App() {
                     onCombinedDownload={handleCombinedDownload}
                     combinedDownloads={combinedDownloads}
                   />
+                ) : activeMediaTab === "audiobooks" ? (
+                  <AudiobooksView
+                    watchStatus={watchStatus}
+                    onWatchStatusChange={setWatchStatus}
+                    onMessage={setMessage}
+                    onError={setError}
+                  />
                 ) : (
                   <ApplePodcastsView
                     downloads={downloads}
@@ -2691,6 +2702,11 @@ function MediaView({ activeTab, onTabChange, children }: MediaViewProps) {
       id: "apple-podcasts",
       label: "Apple Podcasts",
       icon: <Podcast size={16} aria-hidden="true" />,
+    },
+    {
+      id: "audiobooks",
+      label: "Audiobooks",
+      icon: <BookOpen size={16} aria-hidden="true" />,
     },
   ];
 

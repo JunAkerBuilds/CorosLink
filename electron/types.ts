@@ -3979,3 +3979,56 @@ export interface ManualActivityInput {
   calories?: number;
   avgHr?: number;
 }
+
+export type AudiobookStatus = "converting" | "ready" | "failed";
+
+export type AudiobookSplitMode = "minutes" | "chapters";
+
+export interface AudiobookSplitOptions {
+  mode: AudiobookSplitMode;
+  /** Part length for "minutes", and the fallback when a book has no chapters. */
+  minutes: number;
+}
+
+export interface AudiobookPart {
+  /** 1-based position; parts must reach the watch in this order. */
+  index: number;
+  /** File name, shared by the local copy and the copy on the watch. */
+  name: string;
+  sizeBytes: number;
+  durationSeconds: number;
+  /** Source chapter title when the book was split by chapter. */
+  chapterTitle?: string;
+  /** Whether a file with this name is currently in the watch Music folder. */
+  onWatch: boolean;
+}
+
+export interface Audiobook {
+  id: string;
+  title: string;
+  author?: string;
+  sourcePaths: string[];
+  createdAt: string;
+  status: AudiobookStatus;
+  error?: string;
+  split: AudiobookSplitOptions;
+  /** Set when the requested split could not be used, e.g. no chapters found. */
+  splitNote?: string;
+  durationSeconds: number;
+  sizeBytes: number;
+  parts: AudiobookPart[];
+}
+
+export interface AudiobookProgress {
+  id: string;
+  phase: "converting" | "transferring";
+  /** 0..1 progress across the whole book. */
+  progress: number;
+  message: string;
+}
+
+export interface AudiobookTransferResult {
+  copied: number;
+  skipped: number;
+  watch: WatchStatus;
+}

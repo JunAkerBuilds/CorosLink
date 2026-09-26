@@ -113,6 +113,8 @@ Design custom COROS watch faces in a layer-based editor — fonts, colors, artwo
 
 Get MP3s onto your watch over USB from **YouTube**, **Spotify**, **YouTube Music**, **Apple Music**, **YouTube playlists**, or public **Apple Podcasts** episodes. Streaming-service tracks are matched on YouTube and downloaded with yt-dlp + ffmpeg. See [music integrations setup](docs/music-integrations.md).
 
+**Audiobooks** — import a DRM-free `.m4b`, `.m4a`, `.mp3`, or similar file (or several files to join them) and CorosLink splits it into mono MP3 parts named in play order: every N minutes (10 by default), or at the book's chapter marks, using each file as a chapter when joining files that have no chapter marks. COROS watches play MP3 only and don't remember your place inside a track, so short parts limit how much you lose and turn the skip button into a jump to the next part. Parts are copied one at a time, first to last, because the watch plays files in the order they were transferred.
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/media-light.webp" />

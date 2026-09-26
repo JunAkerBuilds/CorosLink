@@ -8,6 +8,10 @@ import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "./googleCalendarTypes";
 import type {
   ActivityBackupProgress,
+  Audiobook,
+  AudiobookProgress,
+  AudiobookSplitOptions,
+  AudiobookTransferResult,
   BinaryStatus,
   CachedCorosMapPackage,
   CombinedDownloadProgressEvent,
@@ -423,6 +427,36 @@ const api = {
     ipcRenderer.on("watch:transferProgress", listener);
     return () =>
       ipcRenderer.removeListener("watch:transferProgress", listener);
+  },
+  listAudiobooks: (): Promise<Audiobook[]> => ipcRenderer.invoke("audiobooks:list"),
+  importAudiobook: (split: AudiobookSplitOptions): Promise<Audiobook | null> =>
+    ipcRenderer.invoke("audiobooks:import", split),
+  cancelAudiobookConversion: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke("audiobooks:cancel", id),
+  deleteAudiobook: (id: string): Promise<Audiobook[]> =>
+    ipcRenderer.invoke("audiobooks:delete", id),
+  transferAudiobook: (id: string): Promise<AudiobookTransferResult> =>
+    ipcRenderer.invoke("audiobooks:transfer", id),
+  removeAudiobookFromWatch: (id: string): Promise<WatchStatus> =>
+    ipcRenderer.invoke("audiobooks:removeFromWatch", id),
+  onAudiobookProgress: (
+    callback: (progress: AudiobookProgress) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      progress: AudiobookProgress
+    ) => {
+      callback(progress);
+    };
+    ipcRenderer.on("audiobooks:progress", listener);
+    return () => ipcRenderer.removeListener("audiobooks:progress", listener);
+  },
+  onAudiobookUpdated: (callback: (book: Audiobook) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, book: Audiobook) => {
+      callback(book);
+    };
+    ipcRenderer.on("audiobooks:updated", listener);
+    return () => ipcRenderer.removeListener("audiobooks:updated", listener);
   },
   listDownloads: (): Promise<LocalTrack[]> =>
     ipcRenderer.invoke("downloads:list"),

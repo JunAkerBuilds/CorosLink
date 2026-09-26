@@ -8,6 +8,10 @@ import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, Watc
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "../electron/googleCalendarTypes";
 import type {
   ActivityBackupProgress,
+  Audiobook,
+  AudiobookProgress,
+  AudiobookSplitOptions,
+  AudiobookTransferResult,
   BinaryStatus,
   CachedCorosMapPackage,
   CombinedDownloadProgressEvent,
@@ -335,6 +339,16 @@ export interface CorosLinkApi {
   onWatchTransferProgress: (
     callback: (progress: WatchTransferProgress) => void
   ) => () => void;
+  listAudiobooks: () => Promise<Audiobook[]>;
+  importAudiobook: (split: AudiobookSplitOptions) => Promise<Audiobook | null>;
+  cancelAudiobookConversion: (id: string) => Promise<boolean>;
+  deleteAudiobook: (id: string) => Promise<Audiobook[]>;
+  transferAudiobook: (id: string) => Promise<AudiobookTransferResult>;
+  removeAudiobookFromWatch: (id: string) => Promise<WatchStatus>;
+  onAudiobookProgress: (
+    callback: (progress: AudiobookProgress) => void
+  ) => () => void;
+  onAudiobookUpdated: (callback: (book: Audiobook) => void) => () => void;
   listDownloads: () => Promise<LocalTrack[]>;
   downloadAudio: (url: string) => Promise<DownloadAudioResult>;
   deleteDownload: (id: string, removeFile: boolean) => Promise<LocalTrack[]>;

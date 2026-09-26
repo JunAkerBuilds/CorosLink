@@ -32635,3 +32635,125 @@ body.is-backgrounded .training-backup-progress-track.is-indeterminate span {
     width: 100%;
   }
 }
+
+/* Audiobooks */
+.audiobook-hint {
+  margin: 6px 0 0;
+  max-width: 62ch;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.audiobook-title-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.audiobook-title-button:disabled {
+  cursor: default;
+}
+
+.audiobook-title-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.audiobook-title-copy span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.audiobook-error {
+  margin: 4px 0 0 23px;
+  font-size: 12px;
+  color: var(--error-text);
+  white-space: pre-wrap;
+}
+
+.audiobook-parts {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 23px;
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.audiobook-parts li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px 80px 80px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.audiobook-part-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audiobook-part-name small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.audiobook-note {
+  margin: 4px 0 0 23px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.audiobook-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.audiobook-toolbar-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.audiobook-minutes-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.audiobook-minutes-field input {
+  width: 64px;
+  min-height: 34px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--control-bg, rgba(255, 255, 255, 0.04));
+  color: var(--text-primary);
+  padding: 0 8px;
+  font: inherit;
+  text-align: center;
+}
+
+.audiobook-import-button {
+  margin-left: auto;
+}
