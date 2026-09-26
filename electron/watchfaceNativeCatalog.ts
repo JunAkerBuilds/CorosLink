@@ -114,7 +114,9 @@ export function nativeFieldKeys(field: NativeDataDefinition): string[] {
 }
 export const NATIVE_DATA_CONFIG_KEYS = new Set([
   ...NATIVE_DATA_FIELDS.flatMap(nativeFieldKeys),
-  "weather_negasign_icon", "weather_dgree_icon", "weather_temp_max_min_negasign_icon", "weather_temp_max_min_dgree_icon"
+  "weather_negasign_icon", "weather_dgree_icon", "weather_temp_max_min_negasign_icon", "weather_temp_max_min_dgree_icon",
+  // Invisible min/max companions (nativeData.ts addMinMaxCompanions).
+  "weather_temp_separator_icon_pos", "weather_temp_separator_icon"
 ]);
 
 export const NATIVE_ASSET_ROLES = ["digits", "icon", "states", "unit", "symbols", "progress", "decimal", "background", "mask", "noDataMask"] as const;

@@ -1,6 +1,6 @@
-import type { CorosWatchfaceAssetReplacement, CorosWatchfaceConfigOverride, CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceTemplateDetails } from "../../electron/types";
+import type { CorosWatchfaceAssetReplacement, CorosWatchfaceConfigOverride, CorosWatchfaceNativeAssetRole as Role, CorosWatchfaceNativeDataStyle as Style, CorosWatchfaceNativePart as Part, CorosWatchfaceResolutionDetails, CorosWatchfaceTemplateDetails } from "../../electron/types";
 import { NATIVE_CHART_SHARED_KEYS, NATIVE_CHART_SOURCES, NATIVE_DATA_BY_ID, nativeChartGroup, nativeChartSourceKeys, nativeFieldKeys, nativeConfigPrefix, nativeHasIcon, nativeStatePositionKey } from "../../electron/watchfaceNativeCatalog";
-import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, offsetConfigValue, parseConfigPos, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
+import { COROS_CONFIG_DELETE_VALUE, loadStudioImage, offsetConfigValue, parseConfigPos, parseConfigRect, pickPreviewResolution, resizeAndTintSprite } from "./watchfaceStudio";
 import { isNativeTime, nativeAssetText, nativePart, nativePartHasPosition, nativeParts, nativeRolePart, nativeRoleIndices, nativeStateCount } from "./nativeDataParts";
 import { parseSimulationDateTime, type WatchfacePreviewScenario } from "./watchfaceSimulation";
 import { fillWatchfaceText, setWatchfaceCanvasFont } from "./watchfaceFontSnapshots";
@@ -113,7 +113,14 @@ export function moonPhaseAsset(style: Style, phase: number, scale: number): Prom
   return nativeDataAsset("chart", { ...style, chartSource: "chart_moon" }, "states", phase, scale);
 }
 
-export async function composeNativeData(details: CorosWatchfaceTemplateDetails, data: NativeData = {}) {
+/** Frames in a COROS weather-condition table (`weather_icon_dir`). */
+const WEATHER_CONDITION_FRAMES = 41;
+
+/**
+ * @param weatherIconEnabled The design's weather-indicator state; undefined
+ * when the design leaves the template's own weather keys untouched.
+ */
+export async function composeNativeData(details: CorosWatchfaceTemplateDetails, data: NativeData = {}, weatherIconEnabled?: boolean) {
   const base = pickPreviewResolution(details);
   const assetReplacements: CorosWatchfaceAssetReplacement[] = [];
   const configOverrides: CorosWatchfaceConfigOverride[] = [];
@@ -267,9 +274,47 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         }
       }
     }
+    await addMinMaxCompanions(resolution, data, weatherIconEnabled, values, assetReplacements, existing);
     if (Object.keys(values).length) configOverrides.push({ path: `${resolution.directory}/config.txt`, values });
   }
   return { assetReplacements, configOverrides, minWatchFaceVersion };
+}
+
+/**
+ * Every official face that draws minimum/maximum temperature (NOMAD, GLASS
+ * 1–4, NIGHT CLIMBER, V) also has a weather-condition icon and a min/max
+ * separator. Without them the values compile but did not appear on a PACE
+ * Pro (2026-09-26), so a face that lacks either gets an invisible one.
+ */
+async function addMinMaxCompanions(
+  resolution: CorosWatchfaceResolutionDetails,
+  data: NativeData,
+  weatherIconEnabled: boolean | undefined,
+  values: Record<string, string>,
+  assetReplacements: CorosWatchfaceAssetReplacement[],
+  existing: Set<string>
+) {
+  const shown = (id: string) => data[id]?.enabled && nativePart(id, data[id]!, "value").enabled;
+  const anchor = parseConfigRect(values[shown("weather_temp_min") ? "weather_temp_min_rect" : "weather_temp_max_rect"]);
+  if (!anchor || !(shown("weather_temp_min") || shown("weather_temp_max"))) return;
+  const blank = async (folder: string, count: number) => {
+    const dataUrl = canvasImage(1, 1, () => undefined);
+    for (let i = 0; i < count; i++) {
+      const path = `${resolution.directory}/${folder}/${String(i).padStart(2, "0")}.png`;
+      assetReplacements.push({ path, dataUrl, create: !existing.has(path), allowDimensionOverride: true });
+    }
+  };
+  const templateIcon = Boolean(resolution.config.weather_icon_dir && parseConfigPos(resolution.config.weather_icon_pos));
+  if (!(weatherIconEnabled ?? templateIcon)) {
+    await blank("cl_nd_weather_blank", WEATHER_CONDITION_FRAMES);
+    values.weather_icon_pos = `{${anchor.x0},${anchor.y0}}`;
+    values.weather_icon_dir = values.weather_dark_icon_dir = "cl_nd_weather_blank";
+  }
+  if (!resolution.config.weather_temp_separator_icon) {
+    await blank("cl_nd_temp_separator", 1);
+    values.weather_temp_separator_icon_pos = `{${anchor.x1},${anchor.y0}}`;
+    values.weather_temp_separator_icon = "cl_nd_temp_separator\\00.png";
+  }
 }
 
 /**

@@ -671,7 +671,7 @@ export async function composeWatchfaceReplacements(
     ? buildAmPmOverrides(details, ampmStyle)
     : [];
   const weatherStyle = design.weatherIndicator;
-  const nativeDataComposition = await composeNativeData(details, design.nativeData);
+  const nativeDataComposition = await composeNativeData(details, design.nativeData, weatherStyle?.enabled);
   const controlTemperatureActive = isControlComplicationEnabled(
     details,
     design,

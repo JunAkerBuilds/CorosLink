@@ -1,5 +1,7 @@
 import type { CorosWatchfaceResolutionDetails, CorosWatchfaceTemplateDetails } from "../../electron/types";
 import { drawStudioPreview, parseConfigPos, type WatchfaceAssetLoader, type WatchfaceComplicationId, type WatchfacePreviewMode } from "./watchfaceStudio";
+import { drawNativeDataPreview } from "./nativeData";
+import { recoverWatchfaceDesign } from "./recoveredWatchfaceDesign";
 
 export interface CompiledWatchfacePreview {
   dataUrl: string;
@@ -85,9 +87,8 @@ export async function renderCompiledWatchfacePreview(
   }
   const checks = createCompiledPixelChecks(canvas.width, canvas.height);
   const ampmPos = parseConfigPos(config.am_pm_icon_pos);
-  await drawStudioPreview(canvas, background?.dataUrl ?? "", {
-    ...details, resolutions: [{ ...resolution, config, icons: [...icons.values()] }]
-  }, {
+  const compiledDetails = { ...details, resolutions: [{ ...resolution, config, icons: [...icons.values()] }] };
+  await drawStudioPreview(canvas, background?.dataUrl ?? "", compiledDetails, {
     fontFamily: "", digitColor: "#ffffff", accentColor: "#ffffff",
     tintLabels: false, tintIcons: false, previewMode: usesAod ? "aod" : "current",
     ...(ampmPos && config.am_icon && config.pm_icon ? { ampmStyle: { enabled: true, ...ampmPos, scale: 1 } } : {}),
@@ -95,6 +96,11 @@ export async function renderCompiledWatchfacePreview(
     previewComplication: scenario.complication, previewValues: scenario.values,
     onCompiledSprite: checks.sprite, onCompiledRect: checks.rect
   }, loadAssets);
+  // The studio pass draws template keys only. Native data layers (min/max
+  // temperature, charts, stamina…) are rebuilt from the compiled keys and
+  // their exported sprites, the same way an official face is recovered.
+  const { nativeData } = await recoverWatchfaceDesign(compiledDetails, loadAssets);
+  if (nativeData) await drawNativeDataPreview(canvas, resolution.width, nativeData, { values: scenario.values });
   const context = canvas.getContext("2d")!;
   context.globalCompositeOperation = "destination-in";
   context.beginPath(); context.ellipse(canvas.width / 2, canvas.height / 2, canvas.width / 2, canvas.height / 2, 0, 0, Math.PI * 2); context.fill();
