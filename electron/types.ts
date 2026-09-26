@@ -301,6 +301,15 @@ export interface CorosWatchfaceArchiveExportInput {
   name: string;
 }
 
+/** A folder the user picked for a multi-watch export; the path stays in main. */
+export interface CorosWatchfaceExportFolder {
+  folderId: string;
+  label: string;
+}
+export interface CorosWatchfaceArchiveFolderExportInput extends CorosWatchfaceArchiveExportInput {
+  folderId: string;
+}
+
 /** A public COROS share page downloaded and registered as a Studio archive. */
 export interface CorosWatchfaceShareImport {
   archive: CorosWatchfaceArchive;
@@ -1230,6 +1239,11 @@ export interface CorosWatchfaceDesignState {
    * alter the exported watch-face format.
    */
   lockedLayerIds?: string[];
+  /**
+   * Firmware-backed editor layers the user deleted. They are turned off and
+   * left out of the Layers list until re-added from the Add menu. Editor-only.
+   */
+  removedLayerIds?: string[];
   /** Reusable, live-linked visual-effect styles. */
   effectStyles?: CorosWatchfaceEffectStyle[];
   /** Effects keyed by editor layer id, or by `aod:<id>` for always-on assets. */
@@ -1300,6 +1314,7 @@ export type CorosWatchfaceModeDesignState = Partial<
     | "editorGroups"
     | "editorGuides"
     | "lockedLayerIds"
+    | "removedLayerIds"
     | "effectStyles"
     | "layerEffects"
     | "layerStrokes"

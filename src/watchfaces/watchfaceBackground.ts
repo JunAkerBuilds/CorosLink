@@ -164,6 +164,7 @@ export function makeDefaultDesign(): CorosWatchfaceDesignState {
     editorGroups: [],
     editorGuides: [],
     lockedLayerIds: [],
+    removedLayerIds: [],
     effectStyles: [],
     layerEffects: {},
     layerStrokes: {},

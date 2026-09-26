@@ -179,9 +179,25 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
       // totals and sunrise/sunset). A missing `_icon` key is skipped on its own,
       // so a hidden icon still writes the position, or the value never reaches
       // the watch. The chart helpers look every key up independently.
+      // Every official humidity readout (and all but two UV ones) carries an
+      // icon, blank where the face draws none. A converted SATISFY 3 whose
+      // humidity and UV kept only the position showed neither value on a PACE
+      // Pro while rainfall, with its icon, did (2026-09-26). So a hidden icon
+      // becomes an invisible one rather than a missing key.
+      const blankIcon = () => {
+        const folder = "cl_nd_blank_icon", path = `${resolution.directory}/${folder}/00.png`;
+        if (!written.has(path)) {
+          written.add(path);
+          assetReplacements.push({ path, dataUrl: canvasImage(1, 1, () => undefined), create: !existing.has(path), allowDimensionOverride: true });
+        }
+        return `${folder}\\00.png`;
+      };
       const icon = async (prefix: string, riseKey?: string, setKey?: string) => {
         if (!part("icon").enabled) {
-          if (part("value").enabled) values[`${prefix}_icon_pos`] = point("icon");
+          if (!part("value").enabled) return;
+          values[`${prefix}_icon_pos`] = point("icon");
+          values[riseKey ?? `${prefix}_icon`] = blankIcon();
+          if (setKey) values[setKey] = blankIcon();
           return;
         }
         values[`${prefix}_icon_pos`] = point("icon");
@@ -239,13 +255,16 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         const chart = style.chartStyle;
         if (part("plot").enabled) {
           values.chart_rect = rect("plot");
-          values.chart_bar_width = String(Math.max(1, Math.round((chart?.barWidth ?? 8) * scale)));
+          // 0 switches that style off on the watch (official SATISFY faces);
+          // any other width stays at least one pixel after scaling.
+          const width = (value: number) => value === 0 ? "0" : String(Math.max(1, Math.round(value * scale)));
+          values.chart_bar_width = width(chart?.barWidth ?? 8);
           values.chart_bar_interval = String(Math.max(0, Math.round((chart?.barGap ?? 4) * scale)));
           values.chart_selected_bar_color = `0x${(chart?.selectedBarColor ?? part("plot").color).slice(1)}`;
           values.chart_unselected_bar_color = `0x${(chart?.unselectedBarColor ?? "#555555").slice(1)}`;
           values.chart_curves_upper_color = `0x${(chart?.upperColor ?? part("plot").color).slice(1)}`;
           values.chart_curves_lower_color = `0x${(chart?.lowerColor ?? "#555555").slice(1)}`;
-          values.chart_curves_width = String(Math.max(1, Math.round((chart?.lineWidth ?? 2) * scale)));
+          values.chart_curves_width = width(chart?.lineWidth ?? 2);
         }
         for (const [role, imageKey, positionKey] of [
           ["background", "chart_bg", "chart_pos"], ["mask", "chart_bar_mask", "chart_bar_mask_pos"], ["noDataMask", "chart_bar_nodata_mask", "chart_bar_nodata_mask_pos"]
@@ -400,7 +419,9 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
     if (plot.enabled) {
       ctx.save();
       ctx.beginPath(); ctx.rect(x + plot.x * scale, y + plot.y * scale, plot.width * scale, plot.height * scale); ctx.clip();
-      if (chart?.previewType === "curve") {
+      if (chart?.previewType === "curve" ? chart.lineWidth === 0 : chart?.barWidth === 0) {
+        // That style is switched off: the watch draws nothing for it.
+      } else if (chart?.previewType === "curve") {
         // Sample curve using the exported line appearance. Rise/set sources draw
         // a day arc around a horizon like official sun/moon groups; other
         // sources trace the sample history. Upper/lower colors split at the

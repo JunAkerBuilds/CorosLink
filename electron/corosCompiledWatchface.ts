@@ -1,6 +1,6 @@
 import { deflateSync } from "node:zlib";
 import { createHash } from "node:crypto";
-import { chartConfigValues, progressArcConfigValues, decodeCorosBitmapFrame, decodeCorosLayout, findCorosBitmapBlocks, formatConfigPos, formatConfigRect, parseCorosFaceMagic, readLayoutHeaders, type CorosBinLayout, type CorosBitmapBlock } from "./corosBinLayout";
+import { chartConfigValues, progressArcConfigValues, decodeCorosBitmapFrame, expandChartColor, decodeCorosLayout, findCorosBitmapBlocks, formatConfigPos, formatConfigRect, parseCorosFaceMagic, readLayoutHeaders, type CorosBinLayout, type CorosBitmapBlock } from "./corosBinLayout";
 import { createStoreZip } from "./zipStore";
 
 type BitmapBlock = CorosBitmapBlock;
@@ -50,7 +50,11 @@ const recoveredAsset = (block: BitmapBlock) => block.frameCount > 1 ? recoveredF
 function recoveredConfig(mode: CorosBinLayout["modes"][number], blocks: BitmapBlock[], bytes: Buffer): string {
   const values = new Map<string, string>([
     ["watchface_id", String(mode.id)], ["watchface_theme_color_off", String(Number(mode.themeColorOff))],
-    ["watchface_point_layer", String(mode.pointLayer)], ["watchface_time_format", String(mode.timeFormat)], ["bg_color", "0x000000"]
+    ["watchface_point_layer", String(mode.pointLayer)], ["watchface_time_format", String(mode.timeFormat)],
+    // Header 0x22 is the rgb222 fill behind the background image. Only light
+    // faces set it: SATISFY's dial is transparent over 0x2a (grey 170), and
+    // its small fonts carry that grey as an opaque backing.
+    ["bg_color", `0x${expandChartColor(mode.backgroundColorPacked ?? 0).toString(16).padStart(6, "0")}`]
   ]);
   for (const element of mode.elements) {
     if (!element.active || !element.config || element.asset?.group == null) continue;
@@ -69,6 +73,7 @@ function recoveredConfig(mode: CorosBinLayout["modes"][number], blocks: BitmapBl
   // face keeps only its static backdrop, and the goal ring stops moving.
   for (const [key, value] of progressArcConfigValues(mode.kcalProgressArc)) values.set(key, value);
   if (mode.pointerCenter) values.set("time_center_pos", formatConfigPos(mode.pointerCenter));
+  if (mode.autoAlignDigitOneWidth) values.set("autoalign_time_digit_one_real_xsize", String(mode.autoAlignDigitOneWidth));
   // The combined date has no known 4.9.9 config binding. Translate its original
   // fonts into ordinary editable month/day fields, leaving the original record
   // in recovery/layout.json. The editor's standard fields use two-digit dates.

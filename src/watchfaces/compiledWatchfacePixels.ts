@@ -18,7 +18,7 @@ export function createCompiledPixelChecks(width: number, height: number) {
   const checks = new Set<string>();
   return {
     checks,
-    sprite(label: string, image: CanvasImageSource, x: number, y: number, w: number, h: number, clip?: { x0: number; y0: number; x1: number; y1: number }) {
+    sprite(label: string, image: CanvasImageSource, x: number, y: number, w: number, h: number) {
       const source = document.createElement("canvas");
       source.width = Math.max(1, Math.round(w)); source.height = Math.max(1, Math.round(h));
       const context = source.getContext("2d", { willReadFrequently: true })!;
@@ -28,7 +28,6 @@ export function createCompiledPixelChecks(width: number, height: number) {
       for (let sy = 0; sy < source.height; sy++) for (let sx = 0; sx < source.width; sx++) {
         if (pixels[(sy * source.width + sx) * 4 + 3]! < 8) continue;
         const px = Math.round(x) + sx, py = Math.round(y) + sy;
-        if (clip && (px < clip.x0 || py < clip.y0 || px >= clip.x1 || py >= clip.y1)) continue;
         if (px < 0 || py < 0 || px >= width || py >= height ||
             ((px + 0.5 - width / 2) / (width / 2)) ** 2 + ((py + 0.5 - height / 2) / (height / 2)) ** 2 > 1) {
           checks.add(`${label}: visible pixels cross the display edge.`);
@@ -38,11 +37,6 @@ export function createCompiledPixelChecks(width: number, height: number) {
         const previous = owners[index]!;
         if (previous) checks.add(`${[labels[previous]!, label].sort().join(" / ")}: visible pixels overlap.`);
         owners[index] = owner;
-      }
-    },
-    rect(label: string, w: number, h: number, rect: { x0: number; y0: number; x1: number; y1: number }) {
-      if (w > rect.x1 - rect.x0 || h > rect.y1 - rect.y0) {
-        checks.add(`${label}: glyph cells exceed the exported value rectangle; pixels may be clipped.`);
       }
     }
   };
@@ -94,7 +88,7 @@ export async function renderCompiledWatchfacePreview(
     ...(ampmPos && config.am_icon && config.pm_icon ? { ampmStyle: { enabled: true, ...ampmPos, scale: 1 } } : {}),
     compiledPixels: true, previewDate: scenario.date ?? new Date(2026, 8, 13, 10, 8, 36),
     previewComplication: scenario.complication, previewValues: scenario.values,
-    onCompiledSprite: checks.sprite, onCompiledRect: checks.rect
+    onCompiledSprite: checks.sprite
   }, loadAssets);
   // The studio pass draws template keys only. Native data layers (min/max
   // temperature, charts, stamina…) are rebuilt from the compiled keys and

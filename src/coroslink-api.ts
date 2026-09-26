@@ -139,6 +139,8 @@ import type {
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceProjectExportResult,
   CorosWatchfaceArchiveExportInput,
+  CorosWatchfaceArchiveFolderExportInput,
+  CorosWatchfaceExportFolder,
   CorosWatchfaceArtwork,
   CorosWatchfaceCreatorInput,
   CorosWatchfaceConversionInput,
@@ -299,6 +301,10 @@ export interface CorosLinkApi {
   ) => Promise<CorosWatchfaceProjectExportResult>;
   exportCorosWatchfaceArchive: (
     input: CorosWatchfaceArchiveExportInput
+  ) => Promise<CorosWatchfaceProjectExportResult>;
+  chooseCorosWatchfaceExportFolder: () => Promise<CorosWatchfaceExportFolder | null>;
+  exportCorosWatchfaceArchiveToFolder: (
+    input: CorosWatchfaceArchiveFolderExportInput
   ) => Promise<CorosWatchfaceProjectExportResult>;
   listCorosWatchfaceProjects: (
     options?: CorosWatchfaceProjectListOptions

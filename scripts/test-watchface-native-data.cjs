@@ -141,7 +141,8 @@ async function renderNativeData(details) {
   check(label.dataUrl!==await native.nativeDataAsset('week_tl',native.defaultNativeDataStyle('week_tl'),'icon',0),'Typed label changes the exported sprite');
   const hidden=await native.composeNativeData(details,{week_tl:{...customData.week_tl,parts:{icon:{enabled:false}}},chart:{...customData.chart,parts:{plot:{enabled:false}}}});
   const hiddenKeys=hidden.configOverrides[0].values;
-  check(hiddenKeys.week_tl_icon===studio.COROS_CONFIG_DELETE_VALUE&&hiddenKeys.week_tl_font!==studio.COROS_CONFIG_DELETE_VALUE,'Hiding label keeps the live value');
+  check(hiddenKeys.week_tl_icon==='cl_nd_blank_icon\\00.png'&&hiddenKeys.week_tl_font!==studio.COROS_CONFIG_DELETE_VALUE,'Hiding label keeps the live value behind an invisible icon');
+  check(hidden.assetReplacements.some(asset=>asset.path.endsWith('/cl_nd_blank_icon/00.png')),'The invisible icon is a real 1x1 asset');
   check(hidden.configOverrides.find(o=>o.path==='watchface_800x800/config.txt').values.week_tl_icon_pos==='{80,100}','Hidden label still writes the icon position the parser gates the value on');
   check(hiddenKeys.chart_rect===studio.COROS_CONFIG_DELETE_VALUE&&hiddenKeys.chart_stress_font!==studio.COROS_CONFIG_DELETE_VALUE,'Hiding graph keeps the live value');
   Object.assign(design.nativeData,customData);

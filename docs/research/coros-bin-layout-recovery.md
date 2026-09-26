@@ -161,7 +161,8 @@ by alignment flags. `(0,0)` is a valid position and does not disable an icon.
 | `0x092` / `0x0a2` / `0x0de` | step, elevation and calorie value rectangles with their fonts | official artwork: TWILIGHT labels `0x0a2` ALTITUDE and `0x0de` KCAL |
 | `0x0ee` | calorie goal arc: centre, radii, start/end angle, stroke width, trailing color word | official PARTICLES's bottom arc; exported as `kcal_progress_arc` |
 | `0xd02` … `0xd4a` | UV value/icon, UV level, AQI value/icon, AQI level | `SetWeather` at `0x18ecc8`–`0x18f188` |
-| `0x31e` | auto-align record pointer, not decoded | `SetAutoAlign` at `0x184d78` |
+| `0x022` | rgb222 fill behind the background image (`bg_color`); nonzero only on light faces | SATISFY 1–3 store `0x2a` (grey 170) under a transparent dial |
+| `0x31e` | pointer to a 40-byte auto-aligned time record: rect + alignment, u16 real width of the "1" glyph, colon pointer, digit-font pointer, 16 zero bytes | `SetAutoAlign` at `0x184d78`; exported as `autoalign_time_*` |
 | `0x322` | AOD header pointer | `Finish` at `0x17b784` |
 | `0x33a` | selectable control origin | `SetControl` at `0x185120` |
 | `0x35a` … `0x4c0` | selectable battery (level table + value), temperature, barometer (integer + decimal rects), HR, floor, elevation, sunrise, sunset, step, kcal, exercise, keyed by `WF_DATA_TYPE` | `SetControl`, `Map<int, WFIconValue>::at` |
@@ -207,6 +208,23 @@ matching artwork that bakes the full-length gradient into the backdrop) plus
 `kcal_progress_arc_color`. Without it the recovered face keeps only the static
 `arc_cut_icon` track and the goal ring stops moving on the watch. The flag and
 the color reading are inferred from the artwork, not from the compiler.
+
+## Auto-aligned time and light backgrounds
+
+Faces with `watchface_time_format` 1 (header flags bits 2–3) leave the six
+digit slots at `0x1b0` empty and draw HH:MM from the record at `0x31e`, which
+sits outside the header like the heart-rate record. Its rectangle, the "1"
+glyph's real width, colon and font map directly onto `autoalign_time_rect`,
+`autoalign_time_digit_one_real_xsize`, `autoalign_time_colon_icon` and
+`autoalign_time_font`. SATISFY 1–3 (260px MIP) and about a dozen cached 416px and 466px faces
+use it in both normal and AOD headers. Before it was decoded those faces
+recovered with no clock at all.
+
+SATISFY's dial is transparent over the header `0x22` fill (`0x2a`, grey
+170), and its small value fonts carry that grey as an opaque backing so a
+two-digit value hides the leading `0` baked into the dial. Recovering the
+fill as `bg_color` restores the light face; with the old fixed black fill
+the dial was black and every value sat in a grey box.
 
 ## PLANET result
 
@@ -366,9 +384,10 @@ shares the graph area. The application importer starts the editor's single
 chart layer on the sunrise/sunset group shown by the catalog thumbnail, with
 the original backdrop, no-data artwork, icons, fonts, colors and a line-graph
 preview; the solar angle becomes a `chart_sun_angle` number layer. Readouts of
-other groups are not editable layers, but they stay in the recovered config
-and survive export: the chart layer replaces only the shared graph keys and
-its selected source. Slot-sharing alternatives (temperature vs. solar angle,
+other groups stay in the recovered config and survive export: the chart
+layer replaces only the shared graph keys and its selected source. The chart
+inspector lists the face's own groups under Chart data and rebuilds the layer
+on the chosen one from its recovered artwork. Slot-sharing alternatives (temperature vs. solar angle,
 wind vs. min/max) all stay enabled and exported; the preview draws the ones
 the chart layer's group would show. Without a chart layer the importer falls
 back to disabling the overlapping alternatives.

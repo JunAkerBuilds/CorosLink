@@ -14,7 +14,9 @@ import { getWeatherCapability } from "./weatherAssets";
 /** Hydrate original sprites instead of the editor's generated weather/data defaults. */
 export async function recoverWatchfaceDesign(
   details: CorosWatchfaceTemplateDetails,
-  loadAssets: (paths: string[]) => Promise<CorosWatchfaceTemplateAsset[]>
+  loadAssets: (paths: string[]) => Promise<CorosWatchfaceTemplateAsset[]>,
+  /** Start the chart layer on this readout when the face carries it (e.g. after a conversion). */
+  preferredChartSource?: string
 ): Promise<Pick<CorosWatchfaceDesignState, "weatherIndicator" | "nativeData"> & Partial<Pick<CorosWatchfaceDesignState, "backgroundColor">>> {
   const resolution = pickPreviewResolution(details);
   if (!resolution) return {};
@@ -92,7 +94,9 @@ export async function recoverWatchfaceDesign(
       };
     };
     await addPart("icon", `${field.id}_icon`);
-    if (iconPosition && parts.icon?.enabled) {
+    // Only activity totals: weather readouts (SATISFY 3's rain, humidity and
+    // UV) share one blank icon, and each needs its own on the watch.
+    if (iconPosition && parts.icon?.enabled && /^(?:today|week)_/.test(field.id)) {
       const key = `${config[`${field.id}_icon`]}:${iconPosition.x},${iconPosition.y}`;
       // Daily and weekly totals can share one icon at exactly the same spot.
       if (positionedIcons.has(key)) parts.icon.enabled = false;
@@ -118,7 +122,7 @@ export async function recoverWatchfaceDesign(
     nativeData[field.id] = { enabled: true, ...position, scale: 1, color: "#ffffff", stateCount: Object.keys(states).length,
       parts: { states: { enabled: true, x: 0, y: 0, width: file.width, height: file.height } }, assets: { states } };
   }
-  const chart = await recoverChart(config, source, sprites);
+  const chart = await recoverChart(config, source, sprites, preferredChartSource);
   if (chart) nativeData.chart = chart;
   // RUBY HORIZON declares an icon-less air-quality value on top of its UV
   // column. Live AQI is unavailable in current PACE Pro testing, so start that
@@ -161,14 +165,70 @@ function overlaps(a: Rect, b: Rect): boolean {
  * the project's config text, and the layer starts on the group the official
  * thumbnail shows (sunrise/sunset first), keeping the original graph artwork.
  */
-async function recoverChart(config: Record<string, string>, source: (key: string) => CorosWatchfaceSpriteFile[],
-  sprites: (key: string) => Promise<Record<string, string>>): Promise<CorosWatchfaceNativeDataStyle | null> {
+const CHART_SOURCE_ORDER = ["chart_sunrise", "chart_moonrise", "chart_baro", "chart_tide", "chart_stress", "chart_stamina", "chart_step", "chart_kcal", "chart_elevation", "chart_moon_percent", "chart_sun_angle", "chart_moon"];
+const storedWidth = (value: string | undefined, fallback: number) => {
+  const n = Number(value?.trim());
+  return value?.trim() && Number.isFinite(n) && n >= 0 ? n : fallback;
+};
+const chartRectKey = (id: string) => ["chart_sunrise", "chart_moonrise"].includes(id) ? `${id}_hour_rect` : `${id}_rect`;
+
+/** Chart readouts the template itself declares, in the order the layer prefers them. */
+function templateChartSources(config: Record<string, string>, source: (key: string) => CorosWatchfaceSpriteFile[]): string[] {
   const plot = parseConfigRect(config.chart_rect);
-  if (!plot || plot.x1 <= plot.x0 || plot.y1 <= plot.y0) return null;
-  const rectKey = (id: string) => ["chart_sunrise", "chart_moonrise"].includes(id) ? `${id}_hour_rect` : `${id}_rect`;
-  const chartSource = ["chart_sunrise", "chart_moonrise", "chart_baro", "chart_tide", "chart_stress", "chart_stamina", "chart_step", "chart_kcal", "chart_elevation", "chart_moon_percent", "chart_sun_angle", "chart_moon"]
-    .find(id => id === "chart_moon" ? source("chart_moon_icon").length > 0 : Boolean(parseConfigRect(config[rectKey(id)]) && source(`${id}_font`).length));
-  if (!chartSource || !NATIVE_CHART_SOURCES.some(item => item.id === chartSource)) return null;
+  if (!plot || plot.x1 <= plot.x0 || plot.y1 <= plot.y0) return [];
+  return CHART_SOURCE_ORDER.filter(id => NATIVE_CHART_SOURCES.some(item => item.id === id) &&
+    // A moon-phase group is a frame table; SATISFY's single blank sun/moon
+    // icon is a placeholder, not a readout the watch cycles to.
+    (id === "chart_moon" ? source("chart_moon_icon").length > 1 : Boolean(parseConfigRect(config[chartRectKey(id)]) && source(`${id}_font`).length)));
+}
+
+function templateSpriteSource(details: CorosWatchfaceTemplateDetails) {
+  const resolution = pickPreviewResolution(details);
+  if (!resolution) return null;
+  const { config } = resolution;
+  const files = [...resolution.icons, ...resolution.spriteFolders.flatMap(folder => folder.files)];
+  const source = (key: string): CorosWatchfaceSpriteFile[] => {
+    const relative = config[key]?.replace(/\\/g, "/").replace(/^\.\//, "");
+    if (!relative) return [];
+    const path = `${resolution.directory}/${relative}`;
+    return files.filter(file => file.path === path || file.path.startsWith(`${path}/`))
+      .sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }));
+  };
+  return { config, source };
+}
+
+/**
+ * The watch cycles the graph through chart groups with Back, like a
+ * selectable metric. These are the readouts this face carries for them.
+ */
+export function recoveredChartSources(details: CorosWatchfaceTemplateDetails): string[] {
+  const template = templateSpriteSource(details);
+  return template ? templateChartSources(template.config, template.source) : [];
+}
+
+/** Rebuild the chart layer on another of the face's own chart readouts. */
+export async function recoverChartGroup(details: CorosWatchfaceTemplateDetails,
+  loadAssets: (paths: string[]) => Promise<CorosWatchfaceTemplateAsset[]>, chartSource: string): Promise<CorosWatchfaceNativeDataStyle | null> {
+  const template = templateSpriteSource(details);
+  if (!template) return null;
+  const sprites = async (key: string): Promise<Record<string, string>> => {
+    const selected = template.source(key);
+    const loaded = new Map((selected.length ? await loadAssets(selected.map(file => file.path)) : []).map(asset => [asset.path, asset]));
+    return Object.fromEntries(selected.flatMap((file, index) => {
+      const asset = loaded.get(file.path);
+      return asset ? [[String(index), asset.dataUrl]] : [];
+    }));
+  };
+  return recoverChart(template.config, template.source, sprites, chartSource);
+}
+
+async function recoverChart(config: Record<string, string>, source: (key: string) => CorosWatchfaceSpriteFile[],
+  sprites: (key: string) => Promise<Record<string, string>>, preferred?: string): Promise<CorosWatchfaceNativeDataStyle | null> {
+  const plot = parseConfigRect(config.chart_rect);
+  const sources = templateChartSources(config, source);
+  const chartSource = preferred && sources.includes(preferred) ? preferred : sources[0];
+  if (!plot || !chartSource) return null;
+  const rectKey = chartRectKey;
   const moon = chartSource === "chart_moon", isTime = ["chart_sunrise", "chart_moonrise"].includes(chartSource);
   const iconKey = moon ? "chart_moon_icon" : `${chartSource}_icon`, iconFile = source(iconKey)[0];
   const iconPosition = iconFile ? parseConfigPos(config[moon ? "chart_moon_icon_pos" : `${chartSource}_icon_pos`]) : null;
@@ -222,14 +282,24 @@ async function recoverChart(config: Record<string, string>, source: (key: string
   const color = (key: string, fallback: string) => /^0x[0-9a-f]{6}$/i.test(config[key] ?? "") ? `#${config[key].slice(2).toLowerCase()}` : fallback;
   // The preview's curve marker uses the plot color; match it to the curve.
   parts.plot = { ...parts.plot, color: color("chart_curves_upper_color", "#ffffff") };
+  // Official faces zero the graph style they don't draw: SATISFY 1/2 keep
+  // bar width 0 with a 3px curve, SATISFY 3 keeps 6px bars with curve width 0
+  // (its barometer group draws bars). Only when both are set (NOMAD) fall back
+  // to the groups that draw curves on the other official faces.
+  const barWidth = Number(config.chart_bar_width) || 0, curveWidth = Number(config.chart_curves_width) || 0;
+  const previewType = barWidth > 0 && curveWidth === 0 ? "bars" : curveWidth > 0 && barWidth === 0 ? "curve"
+    : ["chart_sunrise", "chart_moonrise", "chart_baro", "chart_tide"].includes(chartSource) ? "curve" : "bars";
   return {
     enabled: true, ...origin, scale: 1, color: "#ffffff", chartSource, chartWidth: plot.x1 - plot.x0, chartHeight: plot.y1 - plot.y0, parts, assets,
     chartStyle: {
-      barWidth: Number(config.chart_bar_width) || 8, barGap: Number.isFinite(Number(config.chart_bar_interval)) && config.chart_bar_interval !== undefined ? Number(config.chart_bar_interval) : 4,
+      // Keep an explicit 0: official SATISFY 1/2 turn bars off (curve only)
+      // and SATISFY 3 turns the curve off. A default would make the watch
+      // draw that style on the groups that use it.
+      barWidth: storedWidth(config.chart_bar_width, 8), barGap: Number.isFinite(Number(config.chart_bar_interval)) && config.chart_bar_interval !== undefined ? Number(config.chart_bar_interval) : 4,
       selectedBarColor: color("chart_selected_bar_color", "#ffffff"), unselectedBarColor: color("chart_unselected_bar_color", "#555555"),
       upperColor: color("chart_curves_upper_color", "#ffffff"), lowerColor: color("chart_curves_lower_color", "#555555"),
-      lineWidth: Number(config.chart_curves_width) || 2,
-      previewType: ["chart_sunrise", "chart_moonrise", "chart_baro", "chart_tide"].includes(chartSource) ? "curve" : "bars"
+      lineWidth: storedWidth(config.chart_curves_width, 2),
+      previewType
     }
   };
 }

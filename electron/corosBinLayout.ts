@@ -630,6 +630,24 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
           heartRatePointer + 10, { rect: "heartreate_level_rect", asset: "heartreate_level_font" });
       }
     }
+    // SetAutoAlign's 40-byte record: the whole HH:MM laid out inside one
+    // rectangle (watchface_time_format 1), so the six digit slots at 0x1b0 are
+    // empty. Rect + alignment, the "1" glyph's real width, then colon and
+    // digit-font pointers; the trailing 16 bytes are zero in every sample.
+    // SATISFY 1–3 (260px) and several 416px AMOLED faces use it.
+    const autoAlignPointer = inHeader(base + 0x31e, 4) ? u32(0x31e) : 0;
+    let autoAlignDigitOneWidth: number | undefined;
+    if (autoAlignPointer) {
+      if (autoAlignPointer < layoutEnd || autoAlignPointer + 20 > bytes.length) {
+        warnings.push(`${header.mode}: invalid auto-aligned time record ${hex(autoAlignPointer)}.`);
+      } else {
+        const indirect = { indirectFieldOffset: base + 0x31e };
+        add("time.autoAlign", "number", { rect: rectangle(autoAlignPointer), geometryOffset: autoAlignPointer, ...indirect },
+          autoAlignPointer + 16, { rect: "autoalign_time_rect", asset: "autoalign_time_font" });
+        add("time.autoAlignColon", "resource", indirect, autoAlignPointer + 12, { asset: "autoalign_time_colon_icon" });
+        autoAlignDigitOneWidth = bytes.readUInt16LE(autoAlignPointer + 10);
+      }
+    }
     // Present in official PLANET, but no writer for this record was found in
     // 4.9.9. Retain exact geometry and all three pointers; do not invent INI keys.
     const dateFonts = [0x6b4, 0x6b8, 0x6bc].map((off) => reference(base + off));
@@ -653,6 +671,7 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
       id: u32(4), layout: bytes.readUInt16LE(base + 0xe), flags,
       themeColorOff: Boolean(flags & 1), pointLayer: (flags >> 1) & 1, timeFormat: (flags >> 2) & 3, defaultTheme: flags >> 4,
       backgroundColorPacked: bytes[base + 0x22], controlOrigin,
+      ...(autoAlignDigitOneWidth && elements.some((e) => e.active && e.id === "time.autoAlign") ? { autoAlignDigitOneWidth } : {}),
       ...(chart ? { chart } : {}),
       ...(kcalProgressArc ? { kcalProgressArc } : {}),
       ...(elements.some((e) => e.active && /^time\.(hour|minute|second)Hand$/.test(e.id)) ? { pointerCenter } : {}),

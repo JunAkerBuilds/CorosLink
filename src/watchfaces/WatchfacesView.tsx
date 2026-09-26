@@ -77,7 +77,7 @@ import {
 } from "../watchModels";
 import { BatteryHistoryPanel } from "./BatteryHistoryPanel";
 import { DeviceInfoPanel } from "./DeviceInfoPanel";
-import { WatchfaceEditor } from "./WatchfaceEditor";
+import { carriedWatchfacePreferences, WatchfaceEditor, type WatchfaceCarriedPreferences } from "./WatchfaceEditor";
 import { renderDesignBackground } from "./watchfaceBackground";
 import { deriveDesignDetails, toStudioOptions } from "./watchfaceCompose";
 import { createWatchfaceEditorSessionId } from "./watchfaceEditorHistory";
@@ -242,6 +242,7 @@ interface StudioSession {
   archive: CorosWatchfaceArchive;
   project?: CorosWatchfaceProject;
   initialDesign?: CorosWatchfaceDesignState;
+  carriedPreferences?: WatchfaceCarriedPreferences;
   initialName: string;
   targetFirmwareType: string;
   targetWatchModel?: WatchModelId;
@@ -618,7 +619,8 @@ export function WatchfacesView({
     project?: CorosWatchfaceProject,
     transferredDesign?: CorosWatchfaceDesignState,
     initiallyDirty = false,
-    automationTarget?: { firmwareType?: string; watchModel?: WatchModelId }
+    automationTarget?: { firmwareType?: string; watchModel?: WatchModelId },
+    carriedPreferences?: WatchfaceCarriedPreferences
   ) {
     const targetFirmwareType = automationTarget?.firmwareType?.trim() ||
       firmwareTypeForWatchfaceArchive(
@@ -651,7 +653,8 @@ export function WatchfacesView({
         ).trim() || "Untitled watch face",
       targetFirmwareType,
       ...(targetWatchModel ? { targetWatchModel } : {}),
-      ...(initiallyDirty ? { initiallyDirty: true } : {})
+      ...(initiallyDirty ? { initiallyDirty: true } : {}),
+      ...(carriedPreferences ? { carriedPreferences } : {})
     });
     setBuiltArchive(null);
     setImportOpen(false);
@@ -724,7 +727,7 @@ export function WatchfacesView({
         clearWatchfaceAutomationEditor();
         api.setWatchfaceAutomationReady("editor", false);
         openStudio(baked, bakedName, undefined, undefined, true,
-          { firmwareType: target.firmwareType, watchModel: target.model });
+          { firmwareType: target.firmwareType, watchModel: target.model }, carriedWatchfacePreferences(design));
         setNotice(`Converted to ${target.label}. Your edits are baked into this new starter; keep editing and save it as a project.`);
         return { opened: true, name: bakedName, targetFirmwareType: target.firmwareType,
           omittedRawConfigEditCount: 0, appliedRawConfigEditCount: 0 };
@@ -1355,6 +1358,7 @@ export function WatchfacesView({
           targetFirmwareType={studioSession.targetFirmwareType}
           targetWatchModel={studioSession.targetWatchModel}
           initialDesign={studioSession.initialDesign}
+          carriedPreferences={studioSession.carriedPreferences}
           initialProjectId={studioSession.project?.projectId}
           initialProjectName={studioSession.project?.name ?? studioSession.initialName}
           initiallyDirty={studioSession.initiallyDirty}
@@ -3625,6 +3629,11 @@ const TEMPLATE_CATALOG_CHIPS: readonly HubChip<CorosWatchfaceThemeCatalog>[] = [
   { value: "custom", label: "My faces", icon: UserRound }
 ];
 
+// Known watches whose serial unlocks their official/custom face catalog.
+const TEMPLATE_WATCH_PRESETS: readonly { id: string; label: string; model: WatchModelId; serial: string }[] = [
+  { id: "apex-4-satisfy", label: "APEX 4 · SATISFY", model: "apex-4", serial: "W51E005280" }
+];
+
 const UNCATEGORIZED_TEMPLATE = "Other";
 
 function templateCategory(theme: CorosWatchfaceTheme): string {
@@ -3781,6 +3790,34 @@ function TemplatesPanel(props: TemplatesPanelProps) {
                   </option>
                 ))}
               </HubSelectField>
+              {props.catalog !== "editable" ? (
+                <HubSelectField
+                  label="Watch serial preset"
+                  icon={KeyRound}
+                  value={
+                    TEMPLATE_WATCH_PRESETS.find(
+                      (preset) =>
+                        preset.model === props.watchModel &&
+                        preset.serial === props.watchSerial.trim()
+                    )?.id ?? ""
+                  }
+                  onChange={(value) => {
+                    const preset = TEMPLATE_WATCH_PRESETS.find((entry) => entry.id === value);
+                    if (!preset) return;
+                    props.onWatchModelChange(preset.model);
+                    props.onWatchSerialChange(preset.serial);
+                  }}
+                >
+                  <option value="" disabled>
+                    Custom serial
+                  </option>
+                  {TEMPLATE_WATCH_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </HubSelectField>
+              ) : null}
               <HubSelectField
                 label="Sort templates"
                 icon={ArrowDownUp}

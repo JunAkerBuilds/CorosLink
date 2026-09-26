@@ -52,7 +52,13 @@ chart helpers look each key up independently. The level icons
 (`*_level_pos`) are separate gates. RUBY HORIZON demonstrated it on the watch:
 its stamina and UV have no icons, so Studio's hidden icon component dropped
 `_icon_pos` and the values vanished while the stamina level artwork survived.
-Studio now writes the position key whenever the value is enabled.
+Studio now writes the position key whenever the value is enabled. The parser tolerating a
+missing `*_icon` is not the whole story on the watch: every official humidity
+readout carries an icon (blank where the art has none), and a converted SATISFY
+3 whose humidity and UV kept only `_icon_pos` showed neither on a PACE Pro
+while its rainfall, with the face's blank icon, did (2026-09-26). Studio now
+writes a 1×1 transparent `cl_nd_blank_icon` for a hidden icon instead of
+omitting the key.
 
 ## Format/version implications
 

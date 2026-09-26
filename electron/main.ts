@@ -242,6 +242,7 @@ import type {
   CorosWatchfaceExistingShareInput,
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceArchiveExportInput,
+  CorosWatchfaceArchiveFolderExportInput,
   CorosWatchfacePublishInput,
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceRegion,
@@ -1142,6 +1143,39 @@ function registerIpcHandlers(): void {
       const destinationPath = result.filePath.toLowerCase().endsWith(".zip")
         ? result.filePath
         : `${result.filePath}.zip`;
+      await exportCorosWatchfaceArchive(input.archiveId, destinationPath);
+      return { saved: true, filePath: destinationPath };
+    }
+  );
+  // Export for every watch: the renderer picks the folder once through this
+  // dialog and only ever holds an opaque id, never a writable path.
+  const exportFolders = new Map<string, string>();
+  ipcMain.handle("watchfaces:chooseExportFolder", async () => {
+    const options: OpenDialogOptions = {
+      title: "Choose a folder for the watch-face ZIPs",
+      buttonLabel: "Export here",
+      properties: ["openDirectory", "createDirectory"]
+    };
+    const result = mainWindow && !mainWindow.isDestroyed()
+      ? await dialog.showOpenDialog(mainWindow, options)
+      : await dialog.showOpenDialog(options);
+    const directory = result.canceled ? undefined : result.filePaths[0];
+    if (!directory) return null;
+    const folderId = `folder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    exportFolders.set(folderId, directory);
+    return { folderId, label: path.basename(directory) || directory };
+  });
+  ipcMain.handle(
+    "watchfaces:exportArchiveToFolder",
+    async (_event, input: CorosWatchfaceArchiveFolderExportInput) => {
+      const directory = input && typeof input.folderId === "string" ? exportFolders.get(input.folderId) : undefined;
+      if (!directory) throw new Error("Choose an export folder first.");
+      if (typeof input.archiveId !== "string") throw new Error("Build a final watch-face archive before exporting it.");
+      const baseName = sanitizeExportFileName(input.name) || "CorosLink-watch-face";
+      let destinationPath = path.join(directory, `${baseName}.zip`);
+      for (let copy = 2; fs.existsSync(destinationPath); copy++) {
+        destinationPath = path.join(directory, `${baseName} ${copy}.zip`);
+      }
       await exportCorosWatchfaceArchive(input.archiveId, destinationPath);
       return { saved: true, filePath: destinationPath };
     }

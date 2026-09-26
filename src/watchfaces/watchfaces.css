@@ -3212,6 +3212,15 @@
   cursor: not-allowed;
 }
 
+.watchface-shell .wf-layer-context-menu button.wf-context-menu-danger:not(:disabled),
+.watchface-shell .wf-layer-context-menu button.wf-context-menu-danger:hover:not(:disabled) {
+  color: var(--wf-danger);
+}
+
+.watchface-shell .wf-layer-context-menu button.wf-context-menu-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--wf-danger) 10%, transparent);
+}
+
 .watchface-shell .wf-layer-context-menu p {
   margin: 3px 5px 1px;
   border-top: 1px solid var(--wf-border);

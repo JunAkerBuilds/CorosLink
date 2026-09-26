@@ -1,6 +1,7 @@
 import { batteryStateMeaning, batteryReplacementStateCount, COROS_BATTERY_STATE_ORDER } from "./watchfaceBatteryStates";
-import { WatchfaceAddMenu } from "./WatchfaceAddMenu";
-import { recoverWatchfaceDesign } from "./recoveredWatchfaceDesign";
+import { WatchfaceAddMenu, type WatchfaceAddCategory, type WatchfaceAddFaceOption } from "./WatchfaceAddMenu";
+import { recoverChartGroup, recoveredChartSources, recoverWatchfaceDesign } from "./recoveredWatchfaceDesign";
+import { WATCHFACE_TARGETS } from "../../electron/watchfaceTargets";
 import { WatchfaceSimulationPanel } from "./WatchfaceSimulationPanel";
 import { useWatchfaceSimulation } from "./useWatchfaceSimulation";
 import { WATCHFACE_SIMULATION_CAPABILITIES, activeSimulationScenario, createWatchfaceSimulation, parseWatchfacePreviewScenario, patchWatchfaceSimulation, simulationStudioOptions, type WatchfacePreviewScenario } from "./watchfaceSimulation";
@@ -241,6 +242,7 @@ import {
   EyeOff,
   FlipHorizontal2,
   FlipVertical2,
+  FolderDown,
   Group,
   GripVertical,
   ImagePlus,
@@ -769,6 +771,8 @@ interface WatchfaceEditorProps {
   targetFirmwareType?: string;
   targetWatchModel?: WatchModelId;
   initialDesign?: CorosWatchfaceDesignState;
+  /** Editor-only choices a baked conversion can't carry in the archive's config. */
+  carriedPreferences?: WatchfaceCarriedPreferences;
   initialProjectId?: string;
   initialProjectName?: string;
   initiallyDirty?: boolean;
@@ -926,6 +930,12 @@ const CONTRAST_LAYER_KINDS = new Set<EditorLayer["kind"]>([
   "time", "seconds", "date", "weekday", "battery", "metric", "complication"
 ]);
 const DRAG_START_THRESHOLD = 3;
+/** Analog hands come back through the dedicated "Analog hands" Add row. */
+const ANALOG_HAND_CONFIG_ASSET_IDS = new Set([
+  "config:time_hour_icon",
+  "config:time_minute_icon",
+  "config:time_second_icon"
+]);
 const PROJECT_THUMBNAIL_SIZE = 416;
 
 function maskCanvasToCircle(canvas: HTMLCanvasElement): void {
@@ -1121,6 +1131,48 @@ function normalizeEditorDesign(
   });
 }
 
+/**
+ * A recovered face converts by baking a final archive for the destination and
+ * reopening it as a starter, so only what its config stores survives. The
+ * chart's bar/line choice is editor-only (the watch picks per chart group);
+ * carry it across so the converted face previews like the source.
+ */
+export interface WatchfaceCarriedPreferences {
+  chartPreviewType?: Partial<Record<"current" | "aod", "curve" | "bars">>;
+  /** The chart group that was open; the baked face still carries the others. */
+  chartSource?: Partial<Record<"current" | "aod", string>>;
+}
+
+type ChartPreviewType = "curve" | "bars";
+type NativeDataMap = CorosWatchfaceDesignState["nativeData"];
+
+export function carriedWatchfacePreferences(design: CorosWatchfaceDesignState): WatchfaceCarriedPreferences | undefined {
+  const pick = <T,>(current: T | undefined, aod: T | undefined) =>
+    current || aod ? { ...(current ? { current } : {}), ...(aod ? { aod } : {}) } : undefined;
+  const aodChart = design.modeDesigns?.aod?.nativeData?.chart;
+  const chartPreviewType = pick(design.nativeData?.chart?.chartStyle?.previewType, aodChart?.chartStyle?.previewType);
+  const chartSource = pick(design.nativeData?.chart?.chartSource, aodChart?.chartSource);
+  return chartPreviewType || chartSource
+    ? { ...(chartPreviewType ? { chartPreviewType } : {}), ...(chartSource ? { chartSource } : {}) } : undefined;
+}
+
+function withChartPreviewType(nativeData: NativeDataMap, previewType: ChartPreviewType | undefined): NativeDataMap {
+  const chart = nativeData?.chart;
+  if (!chart || !previewType) return nativeData;
+  return { ...nativeData, chart: { ...chart, chartStyle: { ...chart.chartStyle, previewType } } };
+}
+
+function applyCarriedPreferences(design: CorosWatchfaceDesignState, carried: WatchfaceCarriedPreferences | undefined): CorosWatchfaceDesignState {
+  const types = carried?.chartPreviewType;
+  if (!types) return design;
+  const aod = design.modeDesigns?.aod;
+  return {
+    ...design,
+    nativeData: withChartPreviewType(design.nativeData, types.current),
+    ...(aod ? { modeDesigns: { ...design.modeDesigns, aod: { ...aod, nativeData: withChartPreviewType(aod.nativeData, types.aod) } } } : {})
+  };
+}
+
 export function WatchfaceEditor({
   api,
   active,
@@ -1129,6 +1181,7 @@ export function WatchfaceEditor({
   targetFirmwareType,
   targetWatchModel,
   initialDesign,
+  carriedPreferences,
   initialProjectId,
   initialProjectName,
   initiallyDirty = false,
@@ -1333,6 +1386,7 @@ export function WatchfaceEditor({
     onPick: (frames: CorosOfficialAssetFrames, frameIndex?: number) => void | Promise<void>;
   } | null>(null);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [allWatchesExport, setAllWatchesExport] = useState<{ done: number; total: number; label: string } | null>(null);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
   // The Export panel's language choice, remembered across projects.
   const watchLanguagesPreferenceRef = useRef<WatchfaceWatchLanguages>(loadWatchLanguagesPreference());
@@ -1935,14 +1989,14 @@ export function WatchfaceEditor({
         // as a recovered face converted to another watch, where the generated
         // defaults would otherwise replace the original icons and geometry.
         const hydratedCurrent = initialDesign
-          ? undefined : await recoverWatchfaceDesign(described, loadAssets);
+          ? undefined : await recoverWatchfaceDesign(described, loadAssets, carriedPreferences?.chartSource?.current);
         const carriesOwnAssets = Boolean(hydratedCurrent?.weatherIndicator?.assets) ||
           Object.keys(hydratedCurrent?.nativeData ?? {}).length > 0;
         const recoverAssets = Boolean(hydratedCurrent) &&
           (starterArchive.recoveredFromCompiled || carriesOwnAssets);
         const recoveredCurrent = recoverAssets ? hydratedCurrent : undefined;
         const recoveredAod = recoverAssets && hasWatchfaceAod(described)
-          ? await recoverWatchfaceDesign(detailsForCompositionMode(described, "aod"), loadAssets) : undefined;
+          ? await recoverWatchfaceDesign(detailsForCompositionMode(described, "aod"), loadAssets, carriedPreferences?.chartSource?.aod) : undefined;
         if (cancelled) return;
 
         const baselines: Record<string, string> = {};
@@ -2094,6 +2148,7 @@ export function WatchfaceEditor({
           if (recoveredAod && nextDesign.modeDesigns?.aod) {
             nextDesign = { ...nextDesign, modeDesigns: { aod: { ...nextDesign.modeDesigns.aod, ...recoveredAod } } };
           }
+          nextDesign = applyCarriedPreferences(nextDesign, carriedPreferences);
         }
         const initialized = {
           ...current,
@@ -2875,7 +2930,7 @@ export function WatchfaceEditor({
     if (!selectedIds.includes(id)) selectEditorItem(id);
     setContextMenu({
       x: Math.max(8, Math.min(event.clientX, window.innerWidth - 246)),
-      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 236))
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 280))
     });
   }
 
@@ -5870,6 +5925,44 @@ export function WatchfaceEditor({
     setDesign(prev => ({ ...prev, nativeData: { ...prev.nativeData, [id]: { ...defaultNativeDataStyle(id), ...prev.nativeData?.[id], ...patch } } }));
   }
 
+  // The watch's Back button cycles the graph through its chart groups, like a
+  // selectable metric. Switching to another group the face carries rebuilds
+  // the readout from its own recovered artwork and geometry, shifted by however
+  // far the shared graph was moved, and keeps the graph's appearance.
+  const chartGroups = useMemo(
+    () => modeSourceDetails ? recoveredChartSources(modeSourceDetails) : [],
+    [modeSourceDetails]
+  );
+  async function selectChartGroup(source: string) {
+    if (!modeSourceDetails || isPositionLocked("native:chart")) return;
+    const recovered = await recoverChartGroup(modeSourceDetails, loadAssets, source).catch(() => null);
+    if (!recovered) { updateNativeData("chart", { chartSource: source }); return; }
+    setDesign(prev => {
+      const current = prev.nativeData?.chart;
+      if (!current) return { ...prev, nativeData: { ...prev.nativeData, chart: recovered } };
+      const scale = current.scale ?? 1;
+      const plotAt = (style: typeof recovered, s: number) => ({
+        x: style.x + (style.parts?.plot?.x ?? 0) * s, y: style.y + (style.parts?.plot?.y ?? 0) * s
+      });
+      const from = plotAt(recovered, 1), to = plotAt(current, scale);
+      const next = { ...recovered, x: Math.round(recovered.x + to.x - from.x), y: Math.round(recovered.y + to.y - from.y),
+        enabled: current.enabled, color: current.color, fontFamily: current.fontFamily, chartStyle: current.chartStyle ?? recovered.chartStyle };
+      // At 1:1 the shared graph components (resized plot, replaced backdrop)
+      // carry over; they are drawn by every group.
+      if (scale === 1) {
+        const parts = { ...next.parts }, assets = { ...next.assets };
+        for (const role of ["plot", "background", "mask", "noDataMask"] as const) {
+          const part = current.parts?.[role];
+          if (!part) continue;
+          parts[role] = { ...part, ...(part.x !== undefined ? { x: current.x + part.x - next.x } : {}), ...(part.y !== undefined ? { y: current.y + part.y - next.y } : {}) };
+          if (role !== "plot" && current.assets?.[role]) assets[role] = current.assets[role];
+        }
+        next.parts = parts; next.assets = assets;
+      }
+      return { ...prev, nativeData: { ...prev.nativeData, chart: next } };
+    });
+  }
+
   // Offered only on the Current face: the template must lack seconds itself
   // (not merely have them added by this design).
   const templateSecondsResolution = detailsWithConfigEdits
@@ -7100,6 +7193,45 @@ export function WatchfaceEditor({
       ? (target, name) => bakeForWatchRef.current(target, name)
       : undefined;
 
+  /**
+   * Build a final archive for every supported watch and save each into one
+   * folder, as "<name> (<watch>).zip". Only recovered official faces rebuild
+   * for any watch from their native tree; other templates convert through a
+   * new editor session (Convert), because the destination has its own layout.
+   */
+  async function exportForAllWatches() {
+    if (!bakeForWatch || allWatchesExport) return;
+    let folder: Awaited<ReturnType<typeof api.chooseCorosWatchfaceExportFolder>>;
+    try { folder = await api.chooseCorosWatchfaceExportFolder(); }
+    catch (caught) { onError(caught instanceof Error ? caught.message : "Could not open the folder picker."); return; }
+    if (!folder) return;
+    const projectName = historyRef.current.present.value.projectName.trim() || "Custom watch face";
+    // A converted project is already named "<name> (<watch>)"; don't stack suffixes.
+    let baseName = projectName, suffix;
+    while ((suffix = WATCHFACE_TARGETS.find(target => baseName.endsWith(` (${target.label})`)))) {
+      baseName = baseName.slice(0, -(` (${suffix.label})`.length)).trimEnd() || projectName;
+    }
+    const saved: string[] = [], failed: string[] = [];
+    try {
+      for (const [index, target] of WATCHFACE_TARGETS.entries()) {
+        setAllWatchesExport({ done: index, total: WATCHFACE_TARGETS.length, label: target.label });
+        const name = `${baseName} (${target.label})`;
+        try {
+          const built = await createArchive("convert", name, { firmwareType: target.firmwareType, watchModel: target.model });
+          if (!built) throw new Error("The archive could not be built.");
+          await api.exportCorosWatchfaceArchiveToFolder({ archiveId: built.archive.archiveId, name, folderId: folder.folderId });
+          saved.push(target.label);
+        } catch (caught) {
+          failed.push(`${target.label} (${caught instanceof Error ? caught.message : "failed"})`);
+        }
+      }
+    } finally {
+      setAllWatchesExport(null);
+    }
+    if (failed.length) onError(`Exported ${saved.length} of ${WATCHFACE_TARGETS.length} to “${folder.label}”. Not exported: ${failed.join("; ")}`);
+    else onNotice(`Exported final ZIPs for all ${saved.length} watches to “${folder.label}”.`);
+  }
+
   async function saveProject(
     reportErrors = true
   ): Promise<CorosWatchfaceProject | null> {
@@ -7190,7 +7322,84 @@ export function WatchfaceEditor({
     requestBack();
   }, [backRequestId, isDirty, saving, spriteImportPending, onBack]);
 
+  /**
+   * Firmware-backed layers (time, date, metrics, indicators, native data,
+   * template assets) that Delete removes and the Add menu can restore.
+   * Images, shapes and Studio-added seconds are removed by deleteSelectedArtwork.
+   */
+  function isRemovableFirmwareLayer(layer: EditorLayer): boolean {
+    return layer.canHide &&
+      layer.kind !== "background" &&
+      layer.kind !== "customSprite" &&
+      layer.kind !== "backgroundElement" &&
+      !(layer.id === "seconds" && design.addSeconds) &&
+      !layerIsSelectableSlotAsset(layer);
+  }
+
+  function selectionIsDeletable(): boolean {
+    return selectedIds.some((id) => {
+      if (isMovementLockedForId(id)) return false;
+      if (id.startsWith("bgel:")) return true;
+      if (id === "seconds" && design.addSeconds && canAddSeconds) return true;
+      const layer = layers.find((candidate) => candidate.id === id);
+      return Boolean(layer && (layer.kind === "customSprite" || isRemovableFirmwareLayer(layer)));
+    });
+  }
+
   function deleteSelected() {
+    const ids = new Set(selectedIds.filter((id) => !isMovementLockedForId(id)));
+    const firmwareLayers = layers.filter((layer) => ids.has(layer.id) && isRemovableFirmwareLayer(layer));
+    setContextMenu(null);
+    beginDesignTransaction();
+    try {
+      removeFirmwareLayers(firmwareLayers);
+      deleteSelectedArtwork();
+    } finally {
+      endDesignTransaction();
+    }
+  }
+
+  function removeFirmwareLayers(removed: EditorLayer[]) {
+    if (removed.length === 0) return;
+    for (const layer of removed) {
+      if (!layer.nativeDataId) setLayerOn(layer, false);
+    }
+    const removedIds = new Set(removed.map((layer) => layer.id));
+    const nativeIds = new Set(removed.flatMap((layer) => layer.nativeDataId ? [layer.nativeDataId] : []));
+    setDesign((current) => syncLegacyWatchfaceGroups({
+      ...current,
+      // Native layers are fully removed: Add starts them fresh.
+      nativeData: Object.fromEntries(
+        Object.entries(current.nativeData ?? {}).filter(([id]) => !nativeIds.has(id))
+      ),
+      removedLayerIds: [...new Set([
+        ...(current.removedLayerIds ?? []),
+        ...removed.filter((layer) => !layer.nativeDataId).map((layer) => layer.id)
+      ])],
+      editorGroups: (current.editorGroups ?? [])
+        .map((group) => ({ ...group, layerIds: group.layerIds.filter((id) => !removedIds.has(id)) }))
+        .filter((group) => group.layerIds.length >= 2)
+    }));
+    setSelectedIds((current) => current.filter((id) => !removedIds.has(id)));
+    if (removedIds.has(selectedId)) setSelectedId("");
+  }
+
+  /** Turns a deleted firmware layer back on and lists it again. */
+  function restoreFirmwareLayer(layer: EditorLayer) {
+    beginDesignTransaction();
+    try {
+      if (!layer.visible) setLayerOn(layer, true);
+      setDesign((current) => ({
+        ...current,
+        removedLayerIds: (current.removedLayerIds ?? []).filter((id) => id !== layer.id)
+      }));
+    } finally {
+      endDesignTransaction();
+    }
+    selectQuickStartItem(layer.id);
+  }
+
+  function deleteSelectedArtwork() {
     const ids = new Set(selectedIds.filter((id) => !isMovementLockedForId(id)));
     const elementIds = new Set(
       [...ids].filter((id) => id.startsWith("bgel:")).map((id) => id.slice(5))
@@ -7427,11 +7636,7 @@ export function WatchfaceEditor({
         return;
       }
       if (event.key === "Delete" || event.key === "Backspace") {
-        if (selectedIds.some((id) =>
-          id.startsWith("bgel:") || layers.some(
-            (layer) => layer.id === id && layer.kind === "customSprite"
-          )
-        )) {
+        if (selectionIsDeletable()) {
           event.preventDefault();
           deleteSelected();
         }
@@ -7463,6 +7668,8 @@ export function WatchfaceEditor({
     projectName,
     selectedElement,
     selectedLayer,
+    selectedIds,
+    layers,
     sessionId,
     previewWidth,
     previewResolution,
@@ -8415,6 +8622,32 @@ export function WatchfaceEditor({
     };
   }, [api, automationEditorReady, sessionId]);
 
+  // Deleted firmware layers stay derivable (the Add menu restores them) but
+  // leave the Layers list while they are off.
+  const removedLayerIds = new Set(design.removedLayerIds ?? []);
+  const listedLayers = layers.filter(
+    (layer) => layer.visible || !removedLayerIds.has(layer.id)
+  );
+  const faceAddOptions: WatchfaceAddFaceOption[] = [
+    ...(canAddSeconds ? [{ id: "seconds", label: "Seconds", category: "Time" as const, added: Boolean(design.addSeconds), onAdd: addSeconds }] : []),
+    { id: "analog", label: "Analog hands", category: "Time", added: analogHandsOnFace, onAdd: addAnalogHands },
+    ...layers
+      .filter((layer) =>
+        isRemovableFirmwareLayer(layer) &&
+        !layer.nativeDataId &&
+        !(layer.id === "seconds" && canAddSeconds) &&
+        !ANALOG_HAND_CONFIG_ASSET_IDS.has(layer.configAssetId ?? "") &&
+        // A template image the face never drew has nothing to restore.
+        (layer.kind !== "configAsset" || layer.present)
+      )
+      .map((layer) => ({
+        id: layer.id,
+        label: layer.label,
+        category: addCategoryForLayer(layer),
+        added: layer.visible,
+        onAdd: () => layer.visible ? selectQuickStartItem(layer.id) : restoreFirmwareLayer(layer)
+      }))
+  ];
   const layerSearch = layerQuery.trim().toLowerCase();
   const layerMatchesSearch = (label: string) =>
     !layerSearch || label.toLowerCase().includes(layerSearch);
@@ -8429,7 +8662,7 @@ export function WatchfaceEditor({
     }))
     .filter((entry) => entry.layerIds.length > 0);
   const searchedLayerSections = groupLayersForDisplay(
-    layers.filter(
+    listedLayers.filter(
       (layer) =>
         !groupedEditorLayerIds.has(layer.id) &&
         !layerIsSelectableSlotAsset(layer) &&
@@ -8507,18 +8740,18 @@ export function WatchfaceEditor({
             {saving ? <Loader2 className="spin" size={15} /> : <Save size={15} />}
             Save
           </button>
-          {showDevelopmentTools ? (
+          {showDevelopmentTools || bakeForWatch ? (
             <div className="wf-export-menu" ref={downloadMenuRef}>
               <button
                 className="secondary-button wf-download-button"
                 type="button"
                 aria-haspopup="menu"
                 aria-expanded={downloadMenuOpen}
-                disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
+                disabled={spriteImportPending || creating || exporting || Boolean(allWatchesExport) || !backgroundDataUrl}
                 onClick={() => setDownloadMenuOpen((open) => !open)}
               >
-                {exporting || creating ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
-                Download
+                {exporting || creating || allWatchesExport ? <Loader2 className="spin" size={15} /> : <Download size={15} />}
+                {allWatchesExport ? `${allWatchesExport.label} · ${allWatchesExport.done + 1}/${allWatchesExport.total}` : "Download"}
                 <ChevronDown size={14} aria-hidden="true" />
               </button>
               {downloadMenuOpen ? (
@@ -8537,7 +8770,7 @@ export function WatchfaceEditor({
                       <small>Save an editable backup</small>
                     </span>
                   </button>
-                  <button
+                  {showDevelopmentTools ? <button
                     type="button"
                     role="menuitem"
                     disabled={spriteImportPending || creating || exporting || !backgroundDataUrl}
@@ -8550,7 +8783,21 @@ export function WatchfaceEditor({
                       <strong>Final watch ZIP</strong>
                       <small>Development export</small>
                     </span>
-                  </button>
+                  </button> : null}
+                  {bakeForWatch ? <button
+                    type="button"
+                    role="menuitem"
+                    disabled={spriteImportPending || creating || exporting || Boolean(allWatchesExport) || !backgroundDataUrl}
+                    onClick={() => { setDownloadMenuOpen(false); void exportForAllWatches(); }}
+                  >
+                    <span className="wf-export-option-icon" aria-hidden="true">
+                      <FolderDown size={16} />
+                    </span>
+                    <span className="wf-export-option-copy">
+                      <strong>All watches</strong>
+                      <small>{WATCHFACE_TARGETS.length} final ZIPs in one folder</small>
+                    </span>
+                  </button> : null}
                 </div>
               ) : null}
             </div>
@@ -8601,16 +8848,16 @@ export function WatchfaceEditor({
                 aria-label={
                   previewMode === "aod"
                     ? supportsAod
-                      ? `${layers.length} always-on assets`
+                      ? `${listedLayers.length} always-on assets`
                       : "Uses the current face"
-                    : `${layers.length + activeBackgroundElements.length} items`
+                    : `${listedLayers.length + activeBackgroundElements.length} items`
                 }
               >
                 {previewMode === "aod"
                   ? supportsAod
-                    ? layers.length
+                    ? listedLayers.length
                     : "Current"
-                  : layers.length + activeBackgroundElements.length}
+                  : listedLayers.length + activeBackgroundElements.length}
               </span>
             </div>
             {canEditActiveMode ? <WatchfaceAddMenu
@@ -8621,10 +8868,7 @@ export function WatchfaceEditor({
               onAddOfficialImage={browseOfficialImage}
               onAddElement={addElement}
               onAddData={addNativeData}
-              timeOptions={[
-                ...(canAddSeconds ? [{ id: "seconds", label: "Seconds", added: Boolean(design.addSeconds), onAdd: addSeconds }] : []),
-                { id: "analog", label: "Analog hands", added: analogHandsOnFace, onAdd: addAnalogHands }
-              ]}
+              faceOptions={faceAddOptions}
             /> : null}
           </div>
           {details ? (
@@ -9371,6 +9615,16 @@ export function WatchfaceEditor({
                   {selectionHasLockedPosition ? <Unlock size={15} aria-hidden="true" /> : <Lock size={15} aria-hidden="true" />}
                   <span>{selectionHasLockedPosition ? "Unlock position" : "Lock position"}</span>
                 </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="wf-context-menu-danger"
+                  disabled={!selectionIsDeletable()}
+                  onClick={deleteSelected}
+                >
+                  <Trash2 size={15} aria-hidden="true" />
+                  <span>Delete</span>
+                </button>
               </div>
               <p>
                 {selectedMovableIds.length >= 2
@@ -9940,6 +10194,16 @@ export function WatchfaceEditor({
         reference.scope === "config" &&
         isSelectableSlotConfigAssetKey(reference.configKey)
     );
+  }
+
+  function addCategoryForLayer(layer: EditorLayer): WatchfaceAddCategory {
+    const group = layerGroupLabel(layer);
+    if (group === "Time") return "Time";
+    if (group === "Date") return "Calendar";
+    if (layer.weatherIndicator || layer.metricId === "temperature") return "Weather";
+    if (layer.metricId === "heartRate") return "Health";
+    if (layer.metricId && layer.metricId !== "battery") return "Training";
+    return "Device";
   }
 
   function layerGroupLabel(layer: EditorLayer): string {
@@ -11125,30 +11389,35 @@ export function WatchfaceEditor({
 
   function toggleLayerVisibility(layer: EditorLayer) {
     if (isPositionLocked(layer.id)) return;
-    if (layer.nativeDataId) { updateNativeData(layer.nativeDataId, {enabled: !layer.visible}); return; }
+    setLayerOn(layer, !layer.visible);
+  }
+
+  /** Turns a layer on or off through the design setting that owns it. */
+  function setLayerOn(layer: EditorLayer, on: boolean) {
+    if (layer.nativeDataId) { updateNativeData(layer.nativeDataId, {enabled: on}); return; }
     if (layer.configAssetId) {
       const reference = configAssetsById.get(layer.configAssetId);
-      if (reference) updateConfigAsset(reference, { enabled: !layer.visible });
+      if (reference) updateConfigAsset(reference, { enabled: on });
     } else if (layer.metricId) {
-      setMetricVisible(layer.metricId, !layer.visible);
+      setMetricVisible(layer.metricId, on);
     } else if (layer.weatherIndicator) {
-      updateWeatherIndicator({ enabled: !layer.visible });
+      updateWeatherIndicator({ enabled: on });
     } else if (layer.ampmIndicator) {
-      updateAmPmIndicator({ enabled: !layer.visible });
+      updateAmPmIndicator({ enabled: on });
     } else if (layer.staticSeparatorId) {
-      updateStaticSeparator(layer.staticSeparatorId, { enabled: !layer.visible });
+      updateStaticSeparator(layer.staticSeparatorId, { enabled: on });
     } else if (layer.backgroundElementId) {
-      updateElement(layer.backgroundElementId, { visible: !layer.visible });
+      updateElement(layer.backgroundElementId, { visible: on });
     } else if (layer.spriteId) {
-      updateSprite(layer.spriteId, { visible: !layer.visible });
+      updateSprite(layer.spriteId, { visible: on });
     } else if (layer.kind === "background") {
-      patchDesign({ artworkVisible: !layer.visible });
+      patchDesign({ artworkVisible: on });
     } else if (layer.kind === "batteryIcon") {
-      setBatteryIconVisible(!layer.visible);
+      setBatteryIconVisible(on);
     } else if (layer.kind === "controlBatteryIcon") {
-      setControlBatteryEnabled(!layer.visible);
+      setControlBatteryEnabled(on);
     } else if (layer.layoutGroupId) {
-      setFirmwareLayerVisible(layer.layoutGroupId, !layer.visible);
+      setFirmwareLayerVisible(layer.layoutGroupId, on);
     }
   }
 
@@ -11491,6 +11760,8 @@ export function WatchfaceEditor({
             disabled={isPositionLocked(layer.id) || spriteImportPending}
             renderSection={renderPropertySection}
             onPatch={patch => updateNativeData(layer.nativeDataId!, patch)}
+            chartGroups={layer.nativeDataId === "chart" ? chartGroups : undefined}
+            onChartGroup={layer.nativeDataId === "chart" ? source => { void selectChartGroup(source); } : undefined}
             onError={onError}
             onImportStart={beginSpriteImport}
             onImportFinish={finishSpriteImport}

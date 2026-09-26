@@ -204,4 +204,24 @@ assert.equal(mipLayout.modes[0].chart, undefined);
 assert.equal(mipLayout.modes[0].unmappedBitmapReferences.length, 0);
 assert.equal(mipLayout.modes[0].rawHeaderHex.length, mipHeader * 2);
 assert.throws(() => readLayoutHeaders(mip.subarray(0, mipHeader - 1)), /Truncated normal/);
-console.log("COROS layout: signed geometry, alignment, day/night/AOD separation, indirect HR, calorie value and goal arc, chart block, dormant resources, unknown links, MIP headers and bounds checks passed.");
+// SetAutoAlign (SATISFY): 0x31e points at a 40-byte record outside the header
+// holding the whole HH:MM rectangle, the "1" glyph width, colon and font.
+// Header 0x22 is the rgb222 fill behind a transparent background.
+const autoAlign = Buffer.from(bytes);
+autoAlign.writeUInt32LE(DATA + 40, 0x31e);
+autoAlign[0x22] = 0x2a;
+[18, 66, 171, 113].forEach((n, i) => autoAlign.writeInt16LE(n, DATA + 40 + i * 2));
+autoAlign[DATA + 48] = 17; autoAlign.writeUInt16LE(30, DATA + 50);
+autoAlign.writeUInt32LE(blocks[1].offset, DATA + 52); autoAlign.writeUInt32LE(blocks[3].offset, DATA + 56);
+const autoMode = decodeCorosLayout(autoAlign, blocks).modes[0];
+const autoTime = autoMode.elements.find(e => e.id === "time.autoAlign");
+assert.deepEqual([autoTime.rect.x0, autoTime.rect.y0, autoTime.rect.x1, autoTime.rect.y1, autoTime.rect.horizontal], [18, 66, 171, 113, "left"]);
+assert.equal(autoTime.asset.group, 3);
+assert.equal(autoTime.config.asset, "autoalign_time_font");
+assert.equal(autoMode.elements.find(e => e.id === "time.autoAlignColon").asset.group, 1);
+assert.equal(autoMode.autoAlignDigitOneWidth, 30);
+assert.equal(expandChartColor(autoMode.backgroundColorPacked), 0xaaaaaa);
+assert.equal(result.modes[0].elements.find(e => e.id === "time.autoAlign"), undefined, "no record without the 0x31e pointer");
+const badAutoAlign = Buffer.from(autoAlign); badAutoAlign.writeUInt32LE(0x40, 0x31e);
+assert(decodeCorosLayout(badAutoAlign, blocks).warnings.some((w) => w.includes("auto-aligned time")));
+console.log("COROS layout: signed geometry, alignment, day/night/AOD separation, indirect HR, auto-aligned time, calorie value and goal arc, chart block, dormant resources, unknown links, MIP headers and bounds checks passed.");

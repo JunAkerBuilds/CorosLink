@@ -58,9 +58,7 @@ export interface WatchfaceTypography {
 export interface WatchfaceStudioOptions extends WatchfaceTypography {
   /** Inspect already-compiled PNGs at native resolution without reprocessing alpha. */
   compiledPixels?: boolean;
-  compiledClipRect?: { x0: number; y0: number; x1: number; y1: number };
-  onCompiledSprite?: (layer: string, image: CanvasImageSource, x: number, y: number, width: number, height: number, clip?: { x0: number; y0: number; x1: number; y1: number }) => void;
-  onCompiledRect?: (layer: string, width: number, height: number, rect: { x0: number; y0: number; x1: number; y1: number }) => void;
+  onCompiledSprite?: (layer: string, image: CanvasImageSource, x: number, y: number, width: number, height: number) => void;
   /** Optional fixed clock used by external design previews; never changes the watch clock. */
   previewDate?: Date;
   /** Representative numeric metric values, keyed by fixed/selectable metric id. */
@@ -8008,7 +8006,7 @@ function drawStudioLayerImage(
   rotateSprite = true,
   additionalOpacityLayerId?: string
 ): void {
-  if (options.compiledPixels) options.onCompiledSprite?.(layerId ?? "sprite", image, x, y, width, height, options.compiledClipRect);
+  if (options.compiledPixels) options.onCompiledSprite?.(layerId ?? "sprite", image, x, y, width, height);
   const renderAodSafeAlpha = (
     source: CanvasImageSource,
     alpha = 1
@@ -9893,14 +9891,10 @@ export async function drawStudioPreview(
     const centerY = (plan.rect.y0 + plan.rect.y1) / 2;
     let x = numberStartX(plan.rect, totalWidth, plan.configValue);
     const layerId = plan.timePartId ?? plan.metricId ?? plan.datePartId ?? plan.componentId;
-    if (options.compiledPixels) {
-      options.onCompiledRect?.(layerId ?? "value", totalWidth, Math.max(...glyphs.map((glyph) => glyph.file.height)), plan.rect);
-      context.save();
-      context.beginPath();
-      context.rect(plan.rect.x0 * scale, plan.rect.y0 * scale, (plan.rect.x1 - plan.rect.x0) * scale, (plan.rect.y1 - plan.rect.y0) * scale);
-      context.clip();
-    }
-    const numberOptions = options.compiledPixels ? { ...options, compiledClipRect: plan.rect } : options;
+    // The watch does not crop a value to its rectangle: official SATISFY sets
+    // 23px date rects for two 13px digits and an HH:MM rect narrower than its
+    // glyph cells, and draws them whole. The compiled preview draws every
+    // glyph too, so the edge and overlap checks see what the watch paints.
     const glyphY = (height: number) => {
       const flags = plan.configValue?.split(/[,|}]/) ?? [];
       if (flags.includes("bottom")) return plan.rect.y1 - height;
@@ -9921,7 +9915,7 @@ export async function drawStudioPreview(
           separatorImage.naturalWidth * scale,
           separatorImage.naturalHeight * scale,
           scale,
-          numberOptions,
+          options,
           layerId,
           false
         );
@@ -9935,14 +9929,13 @@ export async function drawStudioPreview(
         glyph.file.width * scale,
         glyph.file.height * scale,
         scale,
-        numberOptions,
+        options,
         layerId
       );
       x += glyph.file.width;
     }
-    if (options.compiledPixels) context.restore();
     // COROS stores the percent image separately from the numeric rectangle.
-    // Keep it attached to the value, outside the digit clipping region.
+    // Keep it attached to the value.
     const suffixImage = plan.suffix
       ? await configuredAssetImage(plan.suffix.configKey, plan.suffix.file,
           componentColor ?? metricStyle?.color ?? (options.tintLabels ? options.digitColor : null))

@@ -139,6 +139,8 @@ import type {
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceProjectExportResult,
   CorosWatchfaceArchiveExportInput,
+  CorosWatchfaceArchiveFolderExportInput,
+  CorosWatchfaceExportFolder,
   CorosWatchfaceArtwork,
   CorosWatchfaceCreatorInput,
   CorosWatchfaceConversionInput,
@@ -365,6 +367,12 @@ const api = {
     input: CorosWatchfaceArchiveExportInput
   ): Promise<CorosWatchfaceProjectExportResult> =>
     ipcRenderer.invoke("watchfaces:exportArchive", input),
+  chooseCorosWatchfaceExportFolder: (): Promise<CorosWatchfaceExportFolder | null> =>
+    ipcRenderer.invoke("watchfaces:chooseExportFolder"),
+  exportCorosWatchfaceArchiveToFolder: (
+    input: CorosWatchfaceArchiveFolderExportInput
+  ): Promise<CorosWatchfaceProjectExportResult> =>
+    ipcRenderer.invoke("watchfaces:exportArchiveToFolder", input),
   listCorosWatchfaceProjects: (
     options?: CorosWatchfaceProjectListOptions
   ): Promise<CorosWatchfaceProjectSummary[]> =>

@@ -232,7 +232,7 @@ export const WATCHFACE_AUTOMATION_SCENE_SCHEMA = {
       "staticSeparators", "ampmIndicator", "weatherIndicator", "nativeData", "layoutOffsets"
     ],
     editor: [
-      "linkedLayerGroups", "editorGroups", "editorGuides", "lockedLayerIds",
+      "linkedLayerGroups", "editorGroups", "editorGuides", "lockedLayerIds", "removedLayerIds",
       "effectStyles", "layerEffects", "layerStrokes", "layerVisibility",
       "layerOpacities", "layerColors", "configAssetOverrides"
     ],
