@@ -1,0 +1,1065 @@
+/*
+ * Hub browse surfaces (Create, My projects, Community) in the Faces website's
+ * gallery language: one glass filter bar, pill quick filters beside an
+ * emblem heading, and the shared wf-hub card grid. Loads after the legacy
+ * watchfaces.css and the Atelier editor skin.
+ */
+
+.watchface-shell--hub .wf-hub-browse {
+  display: grid;
+  gap: 20px;
+}
+
+/* Filter bar ------------------------------------------------------------ */
+
+.watchface-shell--hub .wf-hub-toolbar-form {
+  display: grid;
+  gap: 10px;
+}
+
+.watchface-shell--hub .wf-hub-toolbar {
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1.7fr) repeat(3, minmax(140px, 1fr)) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--wf-faces-edge);
+  border-radius: 18px;
+  background: var(--wf-faces-panel);
+  box-shadow: inset 0 1px 0 var(--wf-faces-highlight), var(--wf-faces-shadow);
+  padding: 8px;
+}
+
+.watchface-shell--hub .wf-hub-toolbar:has(> .wf-hub-control:nth-of-type(5)) {
+  grid-template-columns:
+    minmax(200px, 1.6fr) repeat(4, minmax(128px, 1fr));
+}
+
+.watchface-shell--hub .wf-hub-control {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.watchface-shell--hub .wf-hub-control > svg {
+  position: absolute;
+  left: 13px;
+  z-index: 1;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.watchface-shell--hub .wf-hub-control :is(input, select) {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  color: var(--text-primary);
+  padding: 0 30px 0 38px;
+  font: inherit;
+  font-size: var(--wf-text-md);
+  text-overflow: ellipsis;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.watchface-shell--hub .wf-hub-control--search input {
+  padding-right: 34px;
+}
+
+.watchface-shell--hub .wf-hub-control :is(input, select):hover {
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+}
+
+.watchface-shell--hub .wf-hub-control :is(input, select):focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 64%, transparent);
+  outline: none;
+  background: var(--wf-faces-panel);
+}
+
+.watchface-shell--hub .wf-hub-control input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.85;
+}
+
+.watchface-shell--hub .wf-hub-control input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.watchface-shell--hub .wf-hub-control-clear {
+  position: absolute;
+  right: 8px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  color: var(--text-secondary);
+  padding: 0;
+  cursor: pointer;
+  place-items: center;
+}
+
+.watchface-shell--hub .wf-hub-control-clear:hover {
+  color: var(--text-primary);
+}
+
+.watchface-shell--hub .wf-hub-toolbar-action {
+  min-height: 42px;
+  padding-inline: 16px;
+  white-space: nowrap;
+}
+
+/* Quick filters -------------------------------------------------------- */
+
+.watchface-shell--hub .wf-hub-chips-rail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.watchface-shell--hub .wf-hub-filter-chip {
+  display: inline-flex;
+  min-height: 38px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--wf-faces-edge);
+  border-radius: 999px;
+  background: var(--wf-faces-panel);
+  box-shadow: inset 0 1px 0 var(--wf-faces-highlight);
+  color: var(--text-secondary);
+  padding: 7px 13px;
+  font: inherit;
+  font-size: var(--wf-text-sm);
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+  transition:
+    transform 220ms ease,
+    color 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.watchface-shell--hub .wf-hub-filter-chip > small {
+  min-width: 20px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  padding: 1px 6px;
+  font-size: var(--wf-text-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.watchface-shell--hub .wf-hub-filter-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--wf-faces-edge));
+  color: var(--text-primary);
+}
+
+.watchface-shell--hub .wf-hub-filter-chip[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--wf-faces-edge));
+  background: color-mix(in srgb, var(--accent) 14%, var(--wf-faces-panel));
+  color: var(--text-primary);
+}
+
+.watchface-shell--hub .wf-hub-filter-chip[aria-pressed="true"] > svg {
+  color: var(--accent);
+}
+
+.watchface-shell--hub .wf-hub-filter-chip[aria-pressed="true"] > small {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.watchface-shell--hub .wf-hub-filter-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .watchface-shell--hub .wf-hub-filter-chip:hover {
+    transform: translateY(-2px);
+  }
+
+  .watchface-shell--hub .wf-hub-filter-chip:active {
+    transform: translateY(0) scale(0.97);
+  }
+}
+
+/* Results heading ------------------------------------------------------- */
+
+.watchface-shell--hub .wf-hub-results {
+  display: grid;
+  gap: 18px;
+  scroll-margin-top: 24px;
+}
+
+.watchface-shell--hub .wf-hub-results-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 20px;
+  margin-top: 8px;
+}
+
+.watchface-shell--hub .wf-hub-results-heading :is(h2, h3) {
+  position: relative;
+  display: inline-block;
+  margin: 0;
+  padding-bottom: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(22px, 2.2vw, 27px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+}
+
+.watchface-shell--hub .wf-hub-results-heading.is-group {
+  margin-top: 6px;
+}
+
+.watchface-shell--hub .wf-hub-results-heading.is-group h3 {
+  font-size: 19px;
+}
+
+.watchface-shell--hub .wf-hub-results-heading.is-group .wf-hub-emblem {
+  width: 38px;
+  height: 38px;
+}
+
+.watchface-shell--hub .wf-hub-results-note {
+  color: var(--text-secondary);
+  font-size: var(--wf-text-sm);
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.watchface-shell--hub .wf-hub-group {
+  display: grid;
+  gap: 14px;
+}
+
+.watchface-shell--hub .wf-hub-group + .wf-hub-group {
+  margin-top: 10px;
+  border-top: 1px solid var(--wf-faces-edge);
+  padding-top: 14px;
+}
+
+.watchface-shell--hub .wf-hub-filter-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -8px 0 0;
+}
+
+.watchface-shell--hub .wf-hub-filter-summary p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--wf-text-sm);
+  line-height: 1.5;
+}
+
+.watchface-shell--hub .wf-hub-filter-summary .wf-hub-text-link {
+  flex-shrink: 0;
+  color: var(--text-primary);
+  font-size: var(--wf-text-sm);
+}
+
+.watchface-shell--hub .wf-hub-inline-note {
+  margin: -6px 0 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--wf-faces-edge));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--wf-faces-panel));
+  color: var(--text-primary);
+  padding: 9px 13px;
+  font-size: var(--wf-text-sm);
+}
+
+/* Cards ------------------------------------------------------------------ */
+
+.watchface-shell--hub .wf-hub-dial {
+  background: #050607;
+}
+
+.watchface-shell--hub .wf-hub-card-open:disabled {
+  cursor: default;
+}
+
+.watchface-shell--hub .wf-hub-card-visual {
+  position: relative;
+}
+
+.watchface-shell--hub .wf-hub-card-busy {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  background: color-mix(in srgb, var(--wf-faces-panel) 55%, transparent);
+  color: var(--accent);
+  place-items: center;
+}
+
+.watchface-shell--hub .wf-hub-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  border-top: 1px solid var(--wf-faces-edge);
+  padding: 4px 13px;
+}
+
+.watchface-shell--hub .wf-hub-card-actions .wf-hub-text-link {
+  min-height: 32px;
+  color: var(--text-primary);
+  font-size: var(--wf-text-sm);
+}
+
+.watchface-shell--hub .wf-hub-card-actions .wf-hub-text-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.watchface-shell--hub .wf-hub-card--template .wf-hub-card-arrow,
+.watchface-shell--hub .wf-hub-card--community .wf-hub-card-arrow {
+  top: 12px;
+  bottom: auto;
+}
+
+.watchface-shell--hub .wf-hub-card-footer .wf-hub-card-template {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.watchface-shell--hub .wf-hub-card--skeleton {
+  min-height: 268px;
+  overflow: hidden;
+}
+
+.watchface-shell--hub .wf-hub-card--skeleton::after {
+  content: "";
+  display: block;
+  width: 54%;
+  aspect-ratio: 1;
+  margin: 28px auto 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .watchface-shell--hub .wf-hub-card--skeleton::after {
+    animation: wf-hub-pulse 1.3s ease-in-out infinite;
+  }
+}
+
+@keyframes wf-hub-pulse {
+  50% { opacity: 0.45; }
+}
+
+/* The toolbar replaces the legacy community filter strip and card body. */
+.watchface-shell--hub .wf-hub-browse .watchface-community-progress {
+  margin: 0;
+}
+
+/* Narrow panes ----------------------------------------------------------- */
+
+@container watchfaces (max-width: 1000px) {
+  .watchface-shell--hub .wf-hub-toolbar,
+  .watchface-shell--hub .wf-hub-toolbar:has(> .wf-hub-control:nth-of-type(5)) {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .watchface-shell--hub .wf-hub-toolbar > .wf-hub-control {
+    flex: 1 1 150px;
+  }
+
+  .watchface-shell--hub .wf-hub-toolbar > .wf-hub-control--search {
+    flex-basis: 100%;
+  }
+
+  .watchface-shell--hub .wf-hub-toolbar-action {
+    flex: 0 0 auto;
+  }
+
+  .watchface-shell--hub .wf-hub-results-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@container watchfaces (max-width: 700px) {
+  .watchface-shell--hub .wf-hub-toolbar,
+  .watchface-shell--hub .wf-hub-toolbar:has(> .wf-hub-control:nth-of-type(5)) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .watchface-shell--hub .wf-hub-toolbar-action {
+    flex: 1 1 100%;
+  }
+
+  .watchface-shell--hub .wf-hub-chips-rail {
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 2px 2px 8px;
+    scrollbar-width: thin;
+  }
+}
+
+/* The card's main action (edit / use) reads as the accent link; Download stays secondary. */
+.watchface-shell--hub .wf-hub-card-actions .wf-hub-card-primary {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.watchface-shell--hub .wf-hub-card-actions .wf-hub-card-primary + .wf-hub-text-link {
+  margin-left: auto;
+  color: var(--text-secondary);
+}
+
+/*
+ * COROS template previews are transparent PNGs, often with black digits.
+ * Show them over a soft checkerboard (like an image editor) instead of a
+ * black dial so dark and light artwork both stay visible.
+ */
+.watchface-shell--hub .wf-hub-card--template .wf-hub-dial {
+  --wf-checker-a: color-mix(in srgb, var(--text-primary) 16%, var(--wf-faces-panel));
+  --wf-checker-b: color-mix(in srgb, var(--text-primary) 26%, var(--wf-faces-panel));
+  border-color: color-mix(in srgb, var(--text-primary) 22%, transparent);
+  background:
+    repeating-conic-gradient(var(--wf-checker-a) 0 25%, var(--wf-checker-b) 0 50%)
+    50% / 18px 18px;
+}
+
+/*
+ * Community tab — the Faces website's gallery, brought over as-is:
+ * teal-black ground with a green/gold glow, the illustrated "Browse watch
+ * faces." hero, auto-filling face cards, and one card per variant group.
+ */
+
+.watchface-shell--hub {
+  --wf-faces-ground: #0e1315;
+  --wf-faces-glow-green: color-mix(in srgb, #72c9ad 12%, transparent);
+  --wf-faces-glow-gold: color-mix(in srgb, #f2c94c 8%, transparent);
+  --wf-faces-hand-ink: #f0f7eb;
+  --wf-faces-hand-muted: #b5c9bb;
+  --wf-faces-note: #62d1ac;
+}
+
+:root[data-theme="paper"] .watchface-shell--hub {
+  --wf-faces-ground: #f7f8f8;
+  --wf-faces-glow-green: color-mix(in srgb, #72c9ad 16%, transparent);
+  --wf-faces-glow-gold: color-mix(in srgb, #f2c94c 11%, transparent);
+  --wf-faces-hand-ink: #10251e;
+  --wf-faces-hand-muted: #4d665c;
+  --wf-faces-note: #2f9873;
+}
+
+:root .watchface-shell.watchface-shell--hub:not(.watchface-shell--signin) {
+  background:
+    radial-gradient(ellipse 58% 420px at 12% 180px, var(--wf-faces-glow-green), transparent 70%),
+    radial-gradient(ellipse 40% 360px at 84% 120px, var(--wf-faces-glow-gold), transparent 70%),
+    var(--wf-faces-ground);
+}
+
+.watchface-shell--hub .wf-hub-hand {
+  font-family: "Balsamiq Sans", var(--font-display), ui-rounded, system-ui, sans-serif;
+}
+
+/* Hero ------------------------------------------------------------------- */
+
+.watchface-shell--hub .wf-hub-gallery-hero {
+  position: relative;
+  display: flex;
+  min-height: 216px;
+  align-items: center;
+  isolation: isolate;
+}
+
+.watchface-shell--hub .wf-hub-gallery-hero--group {
+  min-height: 0;
+}
+
+.watchface-shell--hub .wf-hub-gallery-hero-copy {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  width: 58%;
+  justify-items: start;
+  padding: 10px 0 18px;
+}
+
+.watchface-shell--hub .wf-hub-gallery-hero--group .wf-hub-gallery-hero-copy {
+  width: min(100%, 680px);
+}
+
+.watchface-shell--hub .wf-hub-gallery-eyebrow {
+  margin: 0 0 12px;
+  color: var(--wf-faces-hand-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.watchface-shell--hub .wf-hub-gallery-hero h2 {
+  max-width: 18ch;
+  margin: 0;
+  color: var(--wf-faces-hand-ink);
+  font-size: clamp(28px, 3vw, 39px);
+  font-weight: 700;
+  line-height: 1.16;
+  letter-spacing: -0.035em;
+}
+
+.watchface-shell--hub .wf-hub-gallery-hero--group h2 {
+  max-width: none;
+}
+
+.watchface-shell--hub .wf-hub-gallery-hero h2 > span {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 7px;
+  color: var(--accent);
+}
+
+.watchface-shell--hub .wf-hub-gallery-hero h2 .wf-hub-underline {
+  left: 2%;
+  width: 96%;
+}
+
+.watchface-shell--hub .wf-hub-gallery-lead {
+  max-width: 46ch;
+  margin: 12px 0 0;
+  color: var(--wf-faces-hand-muted);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.watchface-shell--hub .wf-hub-gallery-site {
+  margin-top: 14px;
+  color: var(--text-primary);
+  font-size: var(--wf-text-sm);
+}
+
+.watchface-shell--hub .wf-hub-gallery-note {
+  position: absolute;
+  top: 34%;
+  right: 34%;
+  z-index: 2;
+  margin: 0;
+  color: var(--wf-faces-note);
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: right;
+  transform: rotate(-4deg);
+}
+
+.watchface-shell--hub .wf-hub-gallery-art {
+  position: absolute;
+  top: -10px;
+  right: 0;
+  bottom: -10px;
+  z-index: 0;
+  width: min(30%, 300px);
+  pointer-events: none;
+}
+
+.watchface-shell--hub .wf-hub-gallery-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+.watchface-shell--hub .wf-hub-gallery-art .is-light,
+:root[data-theme="paper"] .watchface-shell--hub .wf-hub-gallery-art .is-dark {
+  display: none;
+}
+
+:root[data-theme="paper"] .watchface-shell--hub .wf-hub-gallery-art .is-light {
+  display: block;
+}
+
+/* Face grid and cards ---------------------------------------------------- */
+
+.watchface-shell--hub .wf-hub-grid.wf-hub-grid--faces {
+  grid-template-columns: repeat(auto-fill, minmax(214px, 1fr));
+  gap: 18px;
+}
+
+.watchface-shell--hub .wf-hub-card--community {
+  transition:
+    transform 220ms ease,
+    border-color 180ms ease,
+    box-shadow 220ms ease;
+}
+
+.watchface-shell--hub .wf-hub-card--community .wf-hub-card-visual {
+  background:
+    radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 46%),
+    radial-gradient(circle at 26% 12%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 34%);
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .watchface-shell--hub .wf-hub-card--community:hover {
+    transform: translateY(-3px);
+  }
+
+  .watchface-shell--hub .wf-hub-card--community:hover .wf-hub-dial {
+    transform: scale(1.035);
+  }
+
+  .watchface-shell--hub .wf-hub-card--community .wf-hub-dial {
+    transition: transform 320ms ease;
+  }
+}
+
+.watchface-shell--hub .wf-hub-card--community:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--wf-faces-edge));
+}
+
+/* "N variants" pill over the dial, like the website's group badge. */
+.watchface-shell--hub .wf-hub-card-group-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--wf-faces-edge));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--wf-faces-panel));
+  box-shadow: inset 0 1px 0 var(--wf-faces-highlight);
+  color: var(--text-primary);
+  padding: 4px 9px;
+  font-size: var(--wf-text-xs);
+  font-weight: 650;
+  line-height: 1.2;
+  backdrop-filter: blur(8px);
+}
+
+.watchface-shell--hub .wf-hub-card-group-badge > svg {
+  color: var(--accent);
+}
+
+/* A group reads as a small stack of cards. */
+.watchface-shell--hub .wf-hub-card--community.is-group {
+  box-shadow:
+    inset 0 1px 0 var(--wf-faces-highlight),
+    0 5px 0 -1px color-mix(in srgb, var(--wf-faces-panel) 85%, var(--wf-faces-ground)),
+    0 5px 0 0 var(--wf-faces-edge),
+    0 10px 0 -2px color-mix(in srgb, var(--wf-faces-panel) 60%, var(--wf-faces-ground)),
+    0 10px 0 -1px var(--wf-faces-edge),
+    var(--wf-faces-shadow);
+}
+
+/* Variants page ---------------------------------------------------------- */
+
+.watchface-shell--hub .wf-hub-variants {
+  display: grid;
+  gap: 20px;
+}
+
+.watchface-shell--hub .wf-hub-variants-back {
+  justify-self: start;
+  color: var(--text-secondary);
+  font-size: var(--wf-text-sm);
+}
+
+.watchface-shell--hub .wf-hub-variants-back:hover {
+  color: var(--text-primary);
+}
+
+.watchface-shell--hub .wf-hub-variants .wf-hub-toolbar {
+  width: min(100%, 340px);
+  grid-template-columns: minmax(0, 1fr);
+  justify-self: start;
+}
+
+@container watchfaces (max-width: 900px) {
+  .watchface-shell--hub .wf-hub-gallery-hero {
+    min-height: 0;
+  }
+
+  .watchface-shell--hub .wf-hub-gallery-hero-copy {
+    width: 100%;
+  }
+
+  .watchface-shell--hub .wf-hub-gallery-note,
+  .watchface-shell--hub .wf-hub-gallery-art {
+    display: none;
+  }
+
+  :root[data-theme="paper"] .watchface-shell--hub .wf-hub-gallery-art .is-light {
+    display: none;
+  }
+}
+
+/*
+ * My projects hero — "Continue designing" as the site's banner: glass panel
+ * on the teal ground, hand-drawn title and note, facts row, and the dial on
+ * a lit watch stage instead of concentric rings.
+ */
+
+.watchface-shell--hub .wf-hub-hero--faces {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.62fr);
+  min-height: 300px;
+  border-color: var(--wf-faces-edge);
+  border-radius: 24px;
+  background:
+    linear-gradient(115deg, color-mix(in srgb, var(--wf-faces-ground) 40%, var(--wf-faces-panel)), var(--wf-faces-panel)),
+    var(--wf-faces-ground);
+}
+
+.watchface-shell--hub .wf-hub-hero--faces::before {
+  background:
+    radial-gradient(ellipse 52% 90% at 6% 30%, var(--wf-faces-glow-green), transparent 70%),
+    radial-gradient(ellipse 38% 70% at 90% 12%, var(--wf-faces-glow-gold), transparent 70%);
+}
+
+.watchface-shell--hub .wf-hub-hero--faces .wf-hub-hero-copy {
+  padding: 40px 24px 34px 44px;
+  color: var(--wf-faces-hand-ink);
+}
+
+.watchface-shell--hub .wf-hub-hero--faces .wf-hub-eyebrow {
+  margin-bottom: 12px;
+  color: var(--wf-faces-hand-muted);
+  font-weight: 650;
+  letter-spacing: 0.18em;
+}
+
+.watchface-shell--hub .wf-hub-hero--faces .wf-hub-hero-title {
+  display: -webkit-box;
+  max-width: 22ch;
+  overflow: hidden;
+  color: var(--wf-faces-hand-ink);
+  font-size: clamp(28px, 2.9vw, 38px);
+  font-weight: 700;
+  line-height: 1.14;
+  letter-spacing: -0.03em;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.watchface-shell--hub .wf-hub-hero--faces .wf-hub-chips {
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.watchface-shell--hub .wf-hub-hero--faces .wf-hub-chip {
+  min-height: 28px;
+  border-color: var(--wf-faces-edge);
+  background: color-mix(in srgb, var(--wf-faces-hand-ink) 5%, transparent);
+  color: var(--wf-faces-hand-muted);
+  padding: 0 11px 0 9px;
+  font-size: var(--wf-text-xs);
+  font-weight: 600;
+}
+
+.watchface-shell--hub .wf-hub-hero--faces .wf-hub-hero-actions {
+  margin-top: 24px;
+}
+
+/* The site's solid accent button with its soft glow. */
+.watchface-shell--hub .wf-hub-hero--faces .wf-hub-hero-open {
+  border-color: transparent;
+  background: var(--accent);
+  box-shadow:
+    0 12px 28px -14px color-mix(in srgb, var(--accent) 70%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 18%);
+  transition: box-shadow 180ms ease, transform 180ms ease, filter 180ms ease;
+}
+
+.watchface-shell--hub .wf-hub-hero--faces .wf-hub-hero-open:hover:not(:disabled) {
+  filter: brightness(1.07);
+  box-shadow:
+    0 16px 34px -14px color-mix(in srgb, var(--accent) 80%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 22%);
+}
+
+.watchface-shell--hub .wf-hub-hero--faces .wf-hub-hero-actions .wf-hub-text-link {
+  color: var(--wf-faces-hand-ink);
+}
+
+.watchface-shell--hub .wf-hub-hero-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 26px;
+  margin: 26px 0 0;
+  border-top: 1px solid var(--wf-faces-edge);
+  padding: 16px 0 0;
+  list-style: none;
+}
+
+.watchface-shell--hub .wf-hub-hero-facts li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1.3;
+}
+
+.watchface-shell--hub .wf-hub-hero-facts svg {
+  flex-shrink: 0;
+  align-self: center;
+  margin-right: 3px;
+  color: var(--accent);
+}
+
+.watchface-shell--hub .wf-hub-hero-facts strong {
+  color: var(--wf-faces-hand-ink);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.watchface-shell--hub .wf-hub-hero-facts span {
+  color: var(--wf-faces-hand-muted);
+  font-size: 12.5px;
+}
+
+/* Hand-drawn aside pointing at the dial, like "Pick one. Make it yours." */
+.watchface-shell--hub .wf-hub-hero-note {
+  position: absolute;
+  top: 26%;
+  right: calc(min(38%, 440px) - 6px);
+  z-index: 2;
+  margin: 0;
+  color: var(--wf-faces-note);
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: right;
+  transform: rotate(-4deg);
+  pointer-events: none;
+}
+
+.watchface-shell--hub .wf-hub-hero-note-arrow {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: -46px;
+  width: 52px;
+  height: 28px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Watch stage: a lit plate, like the site's face-detail stage. */
+.watchface-shell--hub .wf-hub-hero--faces .wf-hub-hero-stage {
+  margin: 18px 18px 18px 0;
+  min-height: 264px;
+  border: 1px solid var(--wf-faces-edge);
+  border-radius: 20px;
+  background:
+    radial-gradient(ellipse 58% 52% at 50% 48%, color-mix(in srgb, #72c9ad 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 44% 38% at 88% 8%, var(--wf-faces-glow-gold), transparent 70%),
+    linear-gradient(158deg, color-mix(in srgb, var(--wf-faces-hand-ink) 6%, transparent), transparent 70%);
+  box-shadow: inset 0 1px 0 var(--wf-faces-highlight);
+}
+
+.watchface-shell--hub .wf-hub-hero--faces .wf-hub-hero-halo {
+  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 42%);
+}
+
+.watchface-shell--hub .wf-hub-hero--faces .wf-hub-hero-halo::before,
+.watchface-shell--hub .wf-hub-hero--faces .wf-hub-hero-halo::after {
+  content: none;
+}
+
+.watchface-shell--hub .wf-hub-hero--faces .wf-hub-hero-stage .watchface-project-preview {
+  width: min(214px, 74%);
+  box-shadow:
+    0 26px 50px -16px rgb(0 0 0 / 60%),
+    0 0 0 7px color-mix(in srgb, var(--wf-faces-hand-ink) 7%, transparent),
+    0 0 0 8px var(--wf-faces-edge);
+}
+
+.watchface-shell--hub .wf-hub-hero-spark {
+  position: absolute;
+  z-index: 1;
+  color: #f2c94c;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.watchface-shell--hub .wf-hub-hero-spark.is-one {
+  top: 18%;
+  left: 16%;
+}
+
+.watchface-shell--hub .wf-hub-hero-spark.is-two {
+  right: 14%;
+  bottom: 20%;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+:root[data-theme="paper"] .watchface-shell--hub .wf-hub-hero--faces .wf-hub-hero-stage .watchface-project-preview {
+  box-shadow:
+    0 22px 44px -18px rgb(10 42 33 / 45%),
+    0 0 0 7px rgb(255 255 255 / 70%),
+    0 0 0 8px var(--wf-faces-edge);
+}
+
+@container watchfaces (max-width: 1000px) {
+  .watchface-shell--hub .wf-hub-hero-note {
+    display: none;
+  }
+}
+
+@container watchfaces (max-width: 900px) {
+  .watchface-shell--hub .wf-hub-hero--faces .wf-hub-hero-stage {
+    margin: 0 18px 18px;
+  }
+}
+
+.watchface-shell--hub .wf-hub-hero--faces > .watchface-project-menu {
+  top: 30px;
+  right: 30px;
+}
+
+/*
+ * Create tab hero — same open, illustrated banner as the Community tab, with
+ * three starter dials fanned on a lit stage in place of the illustration.
+ */
+
+.watchface-shell--hub .wf-hub-create-hero {
+  min-height: 250px;
+}
+
+.watchface-shell--hub .wf-hub-create-hero h2 {
+  max-width: 22ch;
+}
+
+.watchface-shell--hub .wf-hub-create-steps {
+  margin-top: 22px;
+  padding-top: 14px;
+}
+
+.watchface-shell--hub .wf-hub-create-note {
+  top: 30%;
+  right: calc(min(34%, 400px) + 8px);
+}
+
+.watchface-shell--hub .wf-hub-create-stage {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  display: flex;
+  width: min(34%, 400px);
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--wf-faces-edge);
+  border-radius: 24px;
+  background:
+    radial-gradient(ellipse 58% 52% at 50% 50%, color-mix(in srgb, #72c9ad 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 44% 38% at 88% 8%, var(--wf-faces-glow-gold), transparent 70%),
+    linear-gradient(158deg, color-mix(in srgb, var(--wf-faces-hand-ink) 6%, transparent), transparent 70%);
+  box-shadow: inset 0 1px 0 var(--wf-faces-highlight);
+  pointer-events: none;
+}
+
+.watchface-shell--hub .wf-hub-create-stage img {
+  width: 34%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #050607;
+  box-shadow:
+    0 22px 40px -16px rgb(0 0 0 / 60%),
+    0 0 0 5px color-mix(in srgb, var(--wf-faces-hand-ink) 7%, transparent),
+    0 0 0 6px var(--wf-faces-edge);
+}
+
+.watchface-shell--hub .wf-hub-create-stage img:nth-of-type(1) {
+  transform: translateX(24%) rotate(-8deg) scale(0.88);
+}
+
+.watchface-shell--hub .wf-hub-create-stage img:nth-of-type(2) {
+  z-index: 1;
+  transform: scale(1.12);
+}
+
+.watchface-shell--hub .wf-hub-create-stage img:nth-of-type(3) {
+  transform: translateX(-24%) rotate(8deg) scale(0.88);
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .watchface-shell--hub .wf-hub-create-stage img {
+    transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .watchface-shell--hub .wf-hub-create-hero:hover .wf-hub-create-stage img:nth-of-type(1) {
+    transform: translateX(14%) rotate(-12deg) scale(0.9);
+  }
+
+  .watchface-shell--hub .wf-hub-create-hero:hover .wf-hub-create-stage img:nth-of-type(3) {
+    transform: translateX(-14%) rotate(12deg) scale(0.9);
+  }
+}
+
+@container watchfaces (max-width: 1000px) {
+  .watchface-shell--hub .wf-hub-create-note {
+    display: none;
+  }
+}
+
+@container watchfaces (max-width: 900px) {
+  .watchface-shell--hub .wf-hub-create-stage {
+    display: none;
+  }
+}
+
+.watchface-shell--hub .wf-hub-create-note {
+  right: calc(min(34%, 400px) + 36px);
+}
+
+/* Any number of controls: search leads, selects share the rest, action hugs. */
+.watchface-shell--hub .wf-hub-toolbar,
+.watchface-shell--hub .wf-hub-toolbar:has(> .wf-hub-control:nth-of-type(5)) {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.watchface-shell--hub .wf-hub-toolbar > .wf-hub-control {
+  flex: 1 1 150px;
+}
+
+.watchface-shell--hub .wf-hub-toolbar > .wf-hub-control--search {
+  flex: 1.7 1 240px;
+}
+
+.watchface-shell--hub .wf-hub-toolbar > .wf-hub-toolbar-action {
+  flex: 0 0 auto;
+}
+
+@container watchfaces (max-width: 1000px) {
+  .watchface-shell--hub .wf-hub-toolbar > .wf-hub-control--search {
+    flex-basis: 100%;
+  }
+}
+
+@container watchfaces (max-width: 700px) {
+  .watchface-shell--hub .wf-hub-toolbar > .wf-hub-toolbar-action {
+    flex: 1 1 100%;
+  }
+}

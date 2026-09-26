@@ -130,6 +130,12 @@ export interface CorosWatchfaceThemeListInput {
   catalog?: CorosWatchfaceThemeCatalog;
 }
 
+/** The last catalog listing saved for a query, served before a refresh. */
+export interface CorosWatchfaceThemeCacheEntry {
+  savedAt: string;
+  themes: CorosWatchfaceTheme[];
+}
+
 /** An entry returned by a COROS watchface catalog. */
 export interface CorosWatchfaceTheme {
   id?: string;
@@ -319,13 +325,34 @@ export interface CommunityWatchface {
   packageBytes: number;
   packageSha256: string;
   validatorVersion: string | null;
+  /** All-time downloads, when the catalog reports them. */
+  downloadCount?: number;
+  /**
+   * The moderated variant group this face belongs to. In the "designs" view
+   * one item stands for the whole group (like a website gallery card).
+   */
+  group?: CommunityWatchfaceGroup;
 }
+
+export interface CommunityWatchfaceGroup {
+  slug: string;
+  name: string;
+  /** Variants matching the current filters. */
+  variantCount: number;
+  creatorCount?: number;
+}
+
+export type CommunityWatchfaceSort = "newest" | "title" | "trending" | "downloads";
 
 export interface CommunityWatchfaceCatalogQuery {
   q?: string;
   model?: string;
   style?: string;
-  sort?: "newest" | "title";
+  sort?: CommunityWatchfaceSort;
+  /** "designs" collapses each variant group into one item. */
+  view?: "faces" | "designs";
+  /** A group slug: lists that group's variants. */
+  group?: string;
   page?: number;
   pageSize?: number;
 }
@@ -1299,6 +1326,13 @@ export interface CorosWatchfaceProjectSummary {
   firmwareType?: string;
   /** Cached dashboard thumbnail, generated when the project was last saved. */
   previewDataUrl?: string;
+  /** When the stored thumbnail was written; set when previews are not inlined. */
+  previewUpdatedAt?: string;
+}
+
+export interface CorosWatchfaceProjectListOptions {
+  /** Inline every stored thumbnail as a data URL (default true). */
+  includePreviews?: boolean;
 }
 
 export interface CorosWatchfaceProjectSaveInput {

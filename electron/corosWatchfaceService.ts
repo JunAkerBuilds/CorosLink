@@ -34,6 +34,7 @@ import type {
   CorosWatchfaceProject,
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceProjectSaveInput,
+  CorosWatchfaceProjectListOptions,
   CorosWatchfaceProjectSummary,
   CorosWatchfaceRegion,
   CorosWatchfaceResolutionDetails,
@@ -48,6 +49,7 @@ import type {
   CorosWatchfaceThemeCatalog,
   CorosWatchfaceThemeDownload,
   CorosWatchfaceThemeDownloadInput,
+  CorosWatchfaceThemeCacheEntry,
   CorosWatchfaceThemeListInput,
   CorosBatteryQueryInput,
   CorosBatteryReport,
@@ -143,6 +145,12 @@ const MAX_CONFIG_OVERRIDE_FILES = 8;
 const MAX_CONFIG_OVERRIDE_KEYS = 512;
 const MAX_CONFIG_TEXT_REPLACEMENTS = 8;
 const PROJECT_PREVIEW_FILE_NAME = "preview.png";
+// Small per-project sidecar so listing never re-parses multi-MB manifests.
+const PROJECT_SUMMARY_FILE_NAME = "summary.json";
+const PROJECT_LIST_CONCURRENCY = 4;
+const THEME_CATALOG_CACHE_DIRECTORY = "watchface-catalog-cache";
+const THEME_PACKAGE_CACHE_DIRECTORY = "watchface-package-cache";
+const MAX_CACHED_THEME_PACKAGES = 150;
 const CONFIG_TEXT_PATH_PATTERN = /^watchface_\d{3,4}x\d{3,4}\/(?:AOD)?config\.txt$/i;
 const CONFIG_KEY_PATTERN = /^[a-z0-9_]{1,64}$/i;
 const CREATED_STUDIO_SPRITE_PATTERN =
@@ -366,10 +374,18 @@ export function logoutCorosWatchfaces(): CorosWatchfaceStatus {
 }
 
 /** Lists editable source templates, official on-watch faces, or the user's custom faces. */
-export async function listCorosWatchfaceThemes(
+interface NormalizedThemeListRequest {
+  catalog: CorosWatchfaceThemeCatalog;
+  firmwareType: string;
+  language: string;
+  maxWatchFaceVersion: number;
+  snCode: string;
+  modelVersion: string;
+}
+
+function normalizeThemeListRequest(
   input: CorosWatchfaceThemeListInput
-): Promise<CorosWatchfaceTheme[]> {
-  const session = requireSession();
+): NormalizedThemeListRequest {
   const firmwareType = input?.firmwareType?.trim();
   if (!firmwareType) {
     throw new Error("Enter the COROS firmware type to browse templates.");
@@ -398,6 +414,117 @@ export async function listCorosWatchfaceThemes(
   if (modelVersion.length > 120 || /[\u0000-\u001f\u007f]/.test(modelVersion)) {
     throw new Error("Enter a valid model version.");
   }
+  return {
+    catalog,
+    firmwareType,
+    language: normalizeLanguage(input.language),
+    maxWatchFaceVersion,
+    snCode,
+    modelVersion
+  };
+}
+
+/** One cache file per account and catalog query; custom catalogs are per account. */
+function themeCatalogCachePath(
+  session: StoredMobileSession,
+  request: NormalizedThemeListRequest
+): string {
+  const key = crypto
+    .createHash("sha256")
+    .update(JSON.stringify([session.userId ?? "", session.region ?? "", request]))
+    .digest("hex")
+    .slice(0, 32);
+  return path.join(app.getPath("userData"), THEME_CATALOG_CACHE_DIRECTORY, `${key}.json`);
+}
+
+/**
+ * The last catalog COROS returned for this query, so Studio can show it
+ * instantly and refresh in the background. Its package URLs came from the
+ * catalog, so they are trusted for download like a fresh listing's.
+ */
+export async function readCachedCorosWatchfaceThemes(
+  input: CorosWatchfaceThemeListInput
+): Promise<CorosWatchfaceThemeCacheEntry | null> {
+  let session: StoredMobileSession | null;
+  try {
+    session = readStoredSession();
+  } catch {
+    return null;
+  }
+  if (!session) return null;
+  const request = normalizeThemeListRequest(input);
+  try {
+    const parsed = JSON.parse(
+      await fs.promises.readFile(themeCatalogCachePath(session, request), "utf8")
+    ) as Partial<CorosWatchfaceThemeCacheEntry> & { version?: unknown };
+    if (
+      parsed.version !== 1 ||
+      typeof parsed.savedAt !== "string" ||
+      !Array.isArray(parsed.themes)
+    ) {
+      return null;
+    }
+    const themes = parsed.themes.filter(isCachedWatchfaceTheme);
+    for (const theme of themes) {
+      if (theme.packageUrl) knownThemePackageUrls.add(theme.packageUrl);
+    }
+    return { savedAt: parsed.savedAt, themes };
+  } catch {
+    return null;
+  }
+}
+
+function isCachedWatchfaceTheme(value: unknown): value is CorosWatchfaceTheme {
+  if (!value || typeof value !== "object") return false;
+  const theme = value as Record<string, unknown>;
+  const optionalText = (key: string) => theme[key] === undefined || typeof theme[key] === "string";
+  const optionalNumber = (key: string) =>
+    theme[key] === undefined || Number.isSafeInteger(theme[key]);
+  const optionalHttps = (key: string) =>
+    theme[key] === undefined ||
+    (typeof theme[key] === "string" && /^https:\/\//i.test(theme[key] as string));
+  return (
+    typeof theme.name === "string" &&
+    ["id", "sourceTemplateId", "firmwareType", "category"].every(optionalText) &&
+    ["backgroundImageId", "watchFaceVersion", "diyVersion", "templateType"].every(optionalNumber) &&
+    ["previewImageUrl", "packageUrl"].every(optionalHttps)
+  );
+}
+
+async function writeCachedCorosWatchfaceThemes(
+  session: StoredMobileSession,
+  request: NormalizedThemeListRequest,
+  themes: CorosWatchfaceTheme[]
+): Promise<void> {
+  const cachePath = themeCatalogCachePath(session, request);
+  const temporaryPath = `${cachePath}.${crypto.randomUUID()}.tmp`;
+  try {
+    await fs.promises.mkdir(path.dirname(cachePath), { recursive: true });
+    await fs.promises.writeFile(
+      temporaryPath,
+      JSON.stringify({ version: 1, savedAt: new Date().toISOString(), themes }),
+      "utf8"
+    );
+    await fs.promises.rename(temporaryPath, cachePath);
+  } catch {
+    // The cache is an optimization; a failed write only costs a refetch.
+  } finally {
+    await fs.promises.rm(temporaryPath, { force: true }).catch(() => undefined);
+  }
+}
+
+export async function listCorosWatchfaceThemes(
+  input: CorosWatchfaceThemeListInput
+): Promise<CorosWatchfaceTheme[]> {
+  const session = requireSession();
+  const {
+    catalog,
+    firmwareType,
+    language,
+    maxWatchFaceVersion,
+    snCode,
+    modelVersion
+  } = normalizeThemeListRequest(input);
 
   const themes = await mobileRequest<unknown>(
     catalog === "editable"
@@ -415,7 +542,7 @@ export async function listCorosWatchfaceThemes(
           ? {
               accessToken: session.accessToken,
               firmwareType,
-              language: normalizeLanguage(input.language),
+              language,
               maxWatchFaceVersion,
               orderType: 1,
               releaseType: 1,
@@ -426,7 +553,7 @@ export async function listCorosWatchfaceThemes(
           : {
               accessToken: session.accessToken,
               firmwareType,
-              language: normalizeLanguage(input.language),
+              language,
               maxWatchFaceVersion,
               page: 0,
               releaseType: 1,
@@ -444,6 +571,11 @@ export async function listCorosWatchfaceThemes(
       knownThemePackageUrls.add(theme.packageUrl);
     }
   }
+  await writeCachedCorosWatchfaceThemes(
+    session,
+    { catalog, firmwareType, language, maxWatchFaceVersion, snCode, modelVersion },
+    normalized
+  );
   return normalized;
 }
 
@@ -462,10 +594,71 @@ export async function fetchCorosWatchfaceThemePackage(packageUrl: string): Promi
   return (await fetchThemePackage(packageUrl, requireSession())).bytes;
 }
 
+/** Package bytes keyed by URL (minus the rotating access token). */
+function themePackageCachePath(packageUrl: string): string {
+  const parsed = new URL(packageUrl);
+  parsed.searchParams.delete("accessToken");
+  const key = crypto.createHash("sha256").update(parsed.toString()).digest("hex").slice(0, 40);
+  return path.join(app.getPath("userData"), THEME_PACKAGE_CACHE_DIRECTORY, `${key}.bin`);
+}
+
+function isCacheableThemePackage(bytes: Buffer): boolean {
+  return (
+    bytes.length >= 4 &&
+    ((bytes[0] === 0x50 && bytes[1] === 0x4b) ||
+      Boolean(parseCorosFaceMagic(bytes.toString("latin1", 0, 4))))
+  );
+}
+
+async function readCachedThemePackage(cachePath: string): Promise<Buffer | null> {
+  try {
+    const bytes = await fs.promises.readFile(cachePath);
+    if (!isCacheableThemePackage(bytes) || bytes.length > MAX_OFFICIAL_ARCHIVE_BYTES) return null;
+    // Recency drives pruning, so touch the entry on every hit.
+    const now = new Date();
+    await fs.promises.utimes(cachePath, now, now).catch(() => undefined);
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCachedThemePackage(cachePath: string, bytes: Buffer): Promise<void> {
+  const directory = path.dirname(cachePath);
+  const temporaryPath = `${cachePath}.${crypto.randomUUID()}.tmp`;
+  try {
+    await fs.promises.mkdir(directory, { recursive: true });
+    await fs.promises.writeFile(temporaryPath, bytes);
+    await fs.promises.rename(temporaryPath, cachePath);
+    const entries = (await fs.promises.readdir(directory)).filter((name) => name.endsWith(".bin"));
+    if (entries.length <= MAX_CACHED_THEME_PACKAGES) return;
+    const dated = await Promise.all(
+      entries.map(async (name) => {
+        const filePath = path.join(directory, name);
+        const stat = await fs.promises.stat(filePath).catch(() => null);
+        return { filePath, mtimeMs: stat?.mtimeMs ?? 0 };
+      })
+    );
+    dated.sort((left, right) => left.mtimeMs - right.mtimeMs);
+    await Promise.all(
+      dated
+        .slice(0, dated.length - MAX_CACHED_THEME_PACKAGES)
+        .map(({ filePath }) => fs.promises.rm(filePath, { force: true }).catch(() => undefined))
+    );
+  } catch {
+    // Cache writes are best effort.
+  } finally {
+    await fs.promises.rm(temporaryPath, { force: true }).catch(() => undefined);
+  }
+}
+
 async function fetchThemePackage(
   packageUrl: string,
   session: StoredMobileSession
 ): Promise<{ bytes: Buffer; contentType: string }> {
+  const cachePath = themePackageCachePath(packageUrl);
+  const cached = await readCachedThemePackage(cachePath);
+  if (cached) return { bytes: cached, contentType: "cached" };
   // The mobile client also carries the token as a query parameter; some
   // resource endpoints ignore the header alone.
   const first = await fetchThemeResource(
@@ -493,6 +686,9 @@ async function fetchThemePackage(
     } catch {
       // Leave the original bytes for the diagnostic below.
     }
+  }
+  if (isCacheableThemePackage(bytes)) {
+    await writeCachedThemePackage(cachePath, bytes);
   }
   return { bytes, contentType };
 }
@@ -1349,6 +1545,10 @@ export async function saveCorosWatchfaceProject(
   }
   await fs.promises.writeFile(temporaryManifest, JSON.stringify(stored), "utf8");
   await fs.promises.rename(temporaryManifest, manifestPath);
+  {
+    const { design: _design, ...summary } = stored;
+    await rememberProjectSummary(projectDirectory, summary);
+  }
   if (!preview) {
     await fs.promises.rm(
       path.join(projectDirectory, PROJECT_PREVIEW_FILE_NAME),
@@ -1367,34 +1567,173 @@ export async function saveCorosWatchfaceProject(
   };
 }
 
-export async function listCorosWatchfaceProjects(): Promise<
-  CorosWatchfaceProjectSummary[]
-> {
+type StoredProjectSummary = Omit<StoredWatchfaceProject, "design">;
+
+interface StoredProjectSummaryIndex {
+  version: 1;
+  manifestSize: number;
+  manifestMtimeMs: number;
+  summary: StoredProjectSummary;
+}
+
+const projectSummaryMemo = new Map<string, StoredProjectSummaryIndex>();
+
+function isStoredProjectSummary(value: unknown, projectId: string): value is StoredProjectSummary {
+  if (!value || typeof value !== "object") return false;
+  const summary = value as Record<string, unknown>;
+  return (
+    summary.projectId === projectId &&
+    typeof summary.name === "string" &&
+    typeof summary.updatedAt === "string" &&
+    typeof summary.sourceTemplateId === "string" &&
+    /^\d{1,20}$/.test(summary.sourceTemplateId) &&
+    (summary.firmwareType === undefined || typeof summary.firmwareType === "string")
+  );
+}
+
+async function writeProjectSummaryIndex(
+  projectDirectory: string,
+  index: StoredProjectSummaryIndex
+): Promise<void> {
+  const indexPath = path.join(projectDirectory, PROJECT_SUMMARY_FILE_NAME);
+  const temporaryPath = `${indexPath}.${crypto.randomUUID()}.tmp`;
+  try {
+    await fs.promises.writeFile(temporaryPath, JSON.stringify(index), "utf8");
+    await fs.promises.rename(temporaryPath, indexPath);
+  } catch {
+    // The sidecar is only a cache of project.json.
+  } finally {
+    await fs.promises.rm(temporaryPath, { force: true }).catch(() => undefined);
+  }
+}
+
+async function rememberProjectSummary(
+  projectDirectory: string,
+  summary: StoredProjectSummary
+): Promise<void> {
+  const stat = await fs.promises
+    .stat(path.join(projectDirectory, "project.json"))
+    .catch(() => null);
+  if (!stat) return;
+  const index: StoredProjectSummaryIndex = {
+    version: 1,
+    manifestSize: stat.size,
+    manifestMtimeMs: stat.mtimeMs,
+    summary
+  };
+  projectSummaryMemo.set(summary.projectId, index);
+  await writeProjectSummaryIndex(projectDirectory, index);
+}
+
+/**
+ * Project metadata without the design. Manifests can be tens of MB of
+ * embedded artwork, so the summary is cached in memory and in a sidecar file
+ * keyed to the manifest's size and mtime; any other writer invalidates it.
+ */
+async function readProjectSummary(projectId: string): Promise<StoredProjectSummary> {
+  const id = validateProjectId(projectId);
+  const projectDirectory = path.join(watchfaceProjectsDirectory(), id);
+  const stat = await fs.promises.stat(path.join(projectDirectory, "project.json"));
+  const current = (index: unknown): index is StoredProjectSummaryIndex => {
+    if (!index || typeof index !== "object") return false;
+    const candidate = index as Partial<StoredProjectSummaryIndex>;
+    return (
+      candidate.version === 1 &&
+      candidate.manifestSize === stat.size &&
+      candidate.manifestMtimeMs === stat.mtimeMs &&
+      isStoredProjectSummary(candidate.summary, id)
+    );
+  };
+  const memo = projectSummaryMemo.get(id);
+  if (current(memo)) return memo.summary;
+  try {
+    const sidecar: unknown = JSON.parse(
+      await fs.promises.readFile(path.join(projectDirectory, PROJECT_SUMMARY_FILE_NAME), "utf8")
+    );
+    if (current(sidecar)) {
+      projectSummaryMemo.set(id, sidecar);
+      return sidecar.summary;
+    }
+  } catch {
+    // Missing or stale sidecar: rebuild it from the manifest below.
+  }
+  const { design: _design, ...summary } = await readStoredWatchfaceProject(id);
+  const index: StoredProjectSummaryIndex = {
+    version: 1,
+    manifestSize: stat.size,
+    manifestMtimeMs: stat.mtimeMs,
+    summary
+  };
+  projectSummaryMemo.set(id, index);
+  await writeProjectSummaryIndex(projectDirectory, index);
+  return summary;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  run: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await run(items[index]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+/**
+ * Lists saved projects. `includePreviews: false` skips inlining every
+ * thumbnail (hundreds of KB each) and reports `previewUpdatedAt` instead, so
+ * the dashboard can fetch only the thumbnails it shows.
+ */
+export async function listCorosWatchfaceProjects(
+  options: CorosWatchfaceProjectListOptions = {}
+): Promise<CorosWatchfaceProjectSummary[]> {
+  const includePreviews = options?.includePreviews !== false;
   const directory = watchfaceProjectsDirectory();
   await fs.promises.mkdir(directory, { recursive: true });
   const entries = await fs.promises.readdir(directory, { withFileTypes: true });
-  const projects = await Promise.all(
-    entries
-      .filter((entry) => entry.isDirectory())
-      .map(async (entry) => {
-        try {
-          const stored = await readStoredWatchfaceProject(entry.name);
-          const previewDataUrl = await readStoredProjectPreview(
-            path.join(directory, stored.projectId)
-          );
-          const { design: _design, ...summary } = stored;
-          return {
-            ...summary,
-            ...(previewDataUrl ? { previewDataUrl } : {})
-          };
-        } catch {
-          return null;
+  const projects = await mapWithConcurrency(
+    entries.filter((entry) => entry.isDirectory()),
+    PROJECT_LIST_CONCURRENCY,
+    async (entry): Promise<CorosWatchfaceProjectSummary | null> => {
+      try {
+        const summary = await readProjectSummary(entry.name);
+        const projectDirectory = path.join(directory, summary.projectId);
+        if (includePreviews) {
+          const previewDataUrl = await readStoredProjectPreview(projectDirectory);
+          return { ...summary, ...(previewDataUrl ? { previewDataUrl } : {}) };
         }
-      })
+        const previewStat = await fs.promises
+          .stat(path.join(projectDirectory, PROJECT_PREVIEW_FILE_NAME))
+          .catch(() => null);
+        return {
+          ...summary,
+          ...(previewStat?.isFile() && previewStat.size > 0
+            ? { previewUpdatedAt: previewStat.mtime.toISOString() }
+            : {})
+        };
+      } catch {
+        return null;
+      }
+    }
   );
   return projects
     .filter((project): project is CorosWatchfaceProjectSummary => Boolean(project))
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+/** The stored dashboard thumbnail, or null when it must be rendered. */
+export async function loadCorosWatchfaceProjectPreview(
+  projectId: string
+): Promise<string | null> {
+  const id = validateProjectId(projectId);
+  return (await readStoredProjectPreview(path.join(watchfaceProjectsDirectory(), id))) ?? null;
 }
 
 export async function loadCorosWatchfaceProject(
@@ -1525,6 +1864,7 @@ export async function deleteCorosWatchfaceProject(
   projectId: string
 ): Promise<void> {
   const id = validateProjectId(projectId);
+  projectSummaryMemo.delete(id);
   await fs.promises.rm(path.join(watchfaceProjectsDirectory(), id), {
     recursive: true,
     force: true

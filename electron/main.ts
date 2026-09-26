@@ -140,6 +140,7 @@ import {
   importCorosWatchfaceShareLink,
   listCorosPairedDevices,
   listCorosWatchfaceThemes,
+  readCachedCorosWatchfaceThemes,
   loadCorosWatchfaceArtwork,
   loadCorosWatchfaceTemplateAssets,
   loadCorosWatchfaceTemplateConfigTexts,
@@ -148,6 +149,7 @@ import {
   loginCorosWatchfacesWithSavedCredentials,
   logoutCorosWatchfaces,
   listCorosWatchfaceProjects,
+  loadCorosWatchfaceProjectPreview,
   publishCorosWatchface,
   queryCorosGear,
   saveCorosGear,
@@ -244,6 +246,7 @@ import type {
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceRegion,
   CorosWatchfaceThemeDownloadInput,
+  CorosWatchfaceProjectListOptions,
   CorosWatchfaceThemeListInput,
   CorosOfficialAssetQuery,
   CorosBatteryQueryInput,
@@ -986,6 +989,11 @@ function registerIpcHandlers(): void {
   );
 
   ipcMain.handle(
+    "watchfaces:readCachedThemes",
+    (_event, input: CorosWatchfaceThemeListInput) => readCachedCorosWatchfaceThemes(input)
+  );
+
+  ipcMain.handle(
     "watchfaces:downloadTheme",
     (_event, input: CorosWatchfaceThemeDownloadInput) =>
       downloadCorosWatchfaceTheme(input)
@@ -1138,7 +1146,14 @@ function registerIpcHandlers(): void {
       return { saved: true, filePath: destinationPath };
     }
   );
-  ipcMain.handle("watchfaces:listProjects", () => listCorosWatchfaceProjects());
+  ipcMain.handle(
+    "watchfaces:listProjects",
+    (_event, options?: CorosWatchfaceProjectListOptions) =>
+      listCorosWatchfaceProjects(options)
+  );
+  ipcMain.handle("watchfaces:loadProjectPreview", (_event, projectId: string) =>
+    loadCorosWatchfaceProjectPreview(projectId)
+  );
   ipcMain.handle("watchfaces:saveProject", (_event, input) =>
     saveCorosWatchfaceProject(input)
   );

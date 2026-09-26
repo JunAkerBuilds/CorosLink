@@ -44,7 +44,14 @@ const watchfaceSchema = z.object({
   downloadUrl: z.string().url(),
   packageBytes: z.number().int().positive().max(MAX_COMMUNITY_PACKAGE_BYTES),
   packageSha256: z.string().regex(/^[a-f0-9]{64}$/),
-  validatorVersion: z.string().max(100).nullable()
+  validatorVersion: z.string().max(100).nullable(),
+  downloadCount: z.number().int().nonnegative().optional(),
+  group: z.object({
+    slug: z.string().regex(SLUG_PATTERN).max(100),
+    name: z.string().min(1).max(160),
+    variantCount: z.number().int().nonnegative(),
+    creatorCount: z.number().int().nonnegative().optional()
+  }).optional()
 });
 
 const catalogPageSchema = z.object({
@@ -167,7 +174,15 @@ function normalizeQuery(input: CommunityWatchfaceCatalogQuery = {}) {
   if (model) query.set("model", model.slice(0, 80));
   const style = input.style?.trim();
   if (style) query.set("style", style.slice(0, 80));
-  query.set("sort", input.sort === "title" ? "title" : "newest");
+  query.set(
+    "sort",
+    input.sort === "title" || input.sort === "trending" || input.sort === "downloads"
+      ? input.sort
+      : "newest"
+  );
+  if (input.view === "designs") query.set("view", "designs");
+  const group = input.group?.trim().toLowerCase();
+  if (group && SLUG_PATTERN.test(group) && group.length <= 100) query.set("group", group);
   query.set("page", String(Math.max(1, Math.min(10_000, Math.trunc(input.page ?? 1)))));
   query.set("pageSize", String(Math.max(1, Math.min(48, Math.trunc(input.pageSize ?? 12)))));
   return query;

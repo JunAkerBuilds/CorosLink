@@ -147,6 +147,7 @@ import type {
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceProject,
   CorosWatchfaceProjectSaveInput,
+  CorosWatchfaceProjectListOptions,
   CorosWatchfaceProjectSummary,
   CorosWatchfacePublishInput,
   CorosWatchfaceRegion,
@@ -159,6 +160,7 @@ import type {
   CorosWatchfaceTheme,
   CorosWatchfaceThemeDownload,
   CorosWatchfaceThemeDownloadInput,
+  CorosWatchfaceThemeCacheEntry,
   CorosWatchfaceThemeListInput,
   CorosOfficialAssetFrames,
   CorosOfficialAssetLibraryStatus,
@@ -251,6 +253,9 @@ export interface CorosLinkApi {
   listCorosWatchfaceThemes: (
     input: CorosWatchfaceThemeListInput
   ) => Promise<CorosWatchfaceTheme[]>;
+  readCachedCorosWatchfaceThemes: (
+    input: CorosWatchfaceThemeListInput
+  ) => Promise<CorosWatchfaceThemeCacheEntry | null>;
   downloadCorosWatchfaceTheme: (
     input: CorosWatchfaceThemeDownloadInput
   ) => Promise<CorosWatchfaceThemeDownload>;
@@ -295,7 +300,10 @@ export interface CorosLinkApi {
   exportCorosWatchfaceArchive: (
     input: CorosWatchfaceArchiveExportInput
   ) => Promise<CorosWatchfaceProjectExportResult>;
-  listCorosWatchfaceProjects: () => Promise<CorosWatchfaceProjectSummary[]>;
+  listCorosWatchfaceProjects: (
+    options?: CorosWatchfaceProjectListOptions
+  ) => Promise<CorosWatchfaceProjectSummary[]>;
+  loadCorosWatchfaceProjectPreview: (projectId: string) => Promise<string | null>;
   saveCorosWatchfaceProject: (
     input: CorosWatchfaceProjectSaveInput
   ) => Promise<CorosWatchfaceProject>;

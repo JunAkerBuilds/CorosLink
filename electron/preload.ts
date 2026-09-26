@@ -147,6 +147,7 @@ import type {
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceProject,
   CorosWatchfaceProjectSaveInput,
+  CorosWatchfaceProjectListOptions,
   CorosWatchfaceProjectSummary,
   CorosWatchfacePublishInput,
   CorosWatchfaceRegion,
@@ -159,6 +160,7 @@ import type {
   CorosWatchfaceTheme,
   CorosWatchfaceThemeDownload,
   CorosWatchfaceThemeDownloadInput,
+  CorosWatchfaceThemeCacheEntry,
   CorosWatchfaceThemeListInput,
   CorosOfficialAssetFrames,
   CorosOfficialAssetLibraryStatus,
@@ -282,6 +284,10 @@ const api = {
   listCorosWatchfaceThemes: (
     input: CorosWatchfaceThemeListInput
   ): Promise<CorosWatchfaceTheme[]> => ipcRenderer.invoke("watchfaces:listThemes", input),
+  readCachedCorosWatchfaceThemes: (
+    input: CorosWatchfaceThemeListInput
+  ): Promise<CorosWatchfaceThemeCacheEntry | null> =>
+    ipcRenderer.invoke("watchfaces:readCachedThemes", input),
   downloadCorosWatchfaceTheme: (
     input: CorosWatchfaceThemeDownloadInput
   ): Promise<CorosWatchfaceThemeDownload> =>
@@ -359,8 +365,12 @@ const api = {
     input: CorosWatchfaceArchiveExportInput
   ): Promise<CorosWatchfaceProjectExportResult> =>
     ipcRenderer.invoke("watchfaces:exportArchive", input),
-  listCorosWatchfaceProjects: (): Promise<CorosWatchfaceProjectSummary[]> =>
-    ipcRenderer.invoke("watchfaces:listProjects"),
+  listCorosWatchfaceProjects: (
+    options?: CorosWatchfaceProjectListOptions
+  ): Promise<CorosWatchfaceProjectSummary[]> =>
+    ipcRenderer.invoke("watchfaces:listProjects", options),
+  loadCorosWatchfaceProjectPreview: (projectId: string): Promise<string | null> =>
+    ipcRenderer.invoke("watchfaces:loadProjectPreview", projectId),
   saveCorosWatchfaceProject: (
     input: CorosWatchfaceProjectSaveInput
   ): Promise<CorosWatchfaceProject> =>
