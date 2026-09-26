@@ -12,6 +12,7 @@
   <a href="https://github.com/JunAkerBuilds/CorosLink/releases"><strong>Download</strong></a> ·
   <a href="https://coroslink.com/">Website</a> ·
   <a href="https://docs.coroslink.com/">Docs</a> ·
+  <a href="https://github.com/sponsors/Akerrules">Sponsor</a> ·
   <a href="https://www.buymeacoffee.com/addridoa">Buy me a coffee</a>
 </p>
 
