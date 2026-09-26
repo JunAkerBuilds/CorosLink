@@ -2184,7 +2184,16 @@ export function applyCorosWatchfaceConfigOverrides(
     "time_minute_high_font",
     "time_minute_low_pos",
     "time_minute_low_font",
-    "colon_icon"
+    "colon_icon",
+    // Analog hands Studio adds to a template that never declared them. Most
+    // DIY templates declare these blank, and the phone compiler's SetPoint
+    // stage reads them for every face.
+    "time_hour_icon",
+    "time_minute_icon",
+    "time_second_icon",
+    "time_center_polygon_icon1",
+    "time_center_polygon_icon2",
+    "time_center_pos"
   ]);
   for (const prefix of [
     "hr",

@@ -675,7 +675,9 @@ export function deriveEditorLayers(
           : null;
     const analogPreviewLayer =
       analogLayoutGroupId && resolution
-        ? getWatchfaceAnalogPreviewLayers(resolution, new Date()).find(
+        ? getWatchfaceAnalogPreviewLayers(resolution, new Date(), {
+            overrides: design.configAssetOverrides
+          }).find(
             (layer) => layer.configKey === reference.configKey
           ) ?? null
         : null;

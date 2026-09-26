@@ -411,6 +411,10 @@ import {
   writeWatchfaceModeDesign
 } from "./watchfaceDisplayModes";
 import {
+  renderDefaultAnalogHands,
+  type WatchfaceDefaultAnalogKey
+} from "./watchfaceAnalogHands";
+import {
   BACKGROUND_SPACE,
   backgroundElementAtPoint,
   backgroundElementLabel,
@@ -5902,6 +5906,82 @@ export function WatchfaceEditor({
     setSelectedIds([]);
   }
 
+  // Every DIY template declares the analog keys (usually blank), so hands can
+  // be added to any face. Template-backed hands are re-enabled as they are.
+  const analogHandsOnFace = layers.some(
+    (layer) =>
+      (layer.configAssetId === "config:time_hour_icon" ||
+        layer.configAssetId === "config:time_minute_icon") &&
+      layer.present &&
+      layer.visible
+  );
+  function addAnalogHands() {
+    const source = detailsWithConfigEdits
+      ? pickPreviewResolution(detailsWithConfigEdits)
+      : null;
+    if (!source) return;
+    const current = historyRef.current;
+    const root = current.present.value.design;
+    const withHands = (
+      modeDesign: CorosWatchfaceDesignState,
+      config: Record<string, string>,
+      keys: WatchfaceDefaultAnalogKey[]
+    ): CorosWatchfaceDesignState => {
+      const artwork = renderDefaultAnalogHands(
+        source.width,
+        modeDesign.digitColor,
+        modeDesign.accentColor
+      );
+      const overrides = { ...(modeDesign.configAssetOverrides ?? {}) };
+      for (const key of keys) {
+        const id = `config:${key}`;
+        const templateBacked = /\.png$/i.test(config[key]?.trim() ?? "");
+        overrides[id] = templateBacked || overrides[id]?.replacement
+          ? { ...overrides[id], enabled: true }
+          : { enabled: true, replacement: artwork[key] };
+      }
+      return { ...modeDesign, configAssetOverrides: overrides };
+    };
+    const activeConfig =
+      previewMode === "aod" ? source.aodConfig : source.config;
+    let design = writeWatchfaceModeDesign(
+      root,
+      previewMode,
+      withHands(
+        resolveWatchfaceModeDesign(root, previewMode),
+        activeConfig,
+        ["time_hour_icon", "time_minute_icon", "time_second_icon", "time_center_polygon_icon2"]
+      )
+    );
+    // Always-on refreshes once a minute, so it gets hour and minute hands but
+    // no frozen second hand. Its colors come from the dimmed AOD design.
+    if (previewMode === "current" && design.modeDesigns?.aod) {
+      const aod = withHands(
+        resolveWatchfaceModeDesign(design, "aod"),
+        source.aodConfig,
+        ["time_hour_icon", "time_minute_icon", "time_center_polygon_icon2"]
+      );
+      design = {
+        ...design,
+        modeDesigns: {
+          ...design.modeDesigns,
+          aod: {
+            ...design.modeDesigns.aod,
+            configAssetOverrides: aod.configAssetOverrides
+          }
+        }
+      };
+    }
+    const nextValue = { ...current.present.value, design };
+    applyHistory(
+      current.transactionBase
+        ? updateWatchfaceEditorHistoryTransaction(current, nextValue)
+        : recordWatchfaceEditorHistory(current, nextValue)
+    );
+    selectEditorItem("configAsset:config:time_hour_icon");
+    openQuickStartProperties();
+  }
+
   function addNativeData(value: string) {
     const [id, chartSource] = value.split(":");
     if (!id) return;
@@ -8541,7 +8621,10 @@ export function WatchfaceEditor({
               onAddOfficialImage={browseOfficialImage}
               onAddElement={addElement}
               onAddData={addNativeData}
-              timeOptions={canAddSeconds ? [{ id: "seconds", label: "Seconds", added: Boolean(design.addSeconds), onAdd: addSeconds }] : []}
+              timeOptions={[
+                ...(canAddSeconds ? [{ id: "seconds", label: "Seconds", added: Boolean(design.addSeconds), onAdd: addSeconds }] : []),
+                { id: "analog", label: "Analog hands", added: analogHandsOnFace, onAdd: addAnalogHands }
+              ]}
             /> : null}
           </div>
           {details ? (
@@ -11111,7 +11194,7 @@ export function WatchfaceEditor({
         <div className="wf-config-asset-actions">
           <button type="button" className="secondary-button" onClick={() => void chooseConfigAsset(reference)}><ImagePlus size={15} /> {override?.replacement ? "Replace again" : previewDataUrl ? "Replace image" : "Import image"}</button>
           <button type="button" className="secondary-button" onClick={() => browseOfficialConfigAsset(reference)}><Sparkles size={15} /> Official</button>
-          {override?.replacement ? <button type="button" className="secondary-button" onClick={() => restoreConfigAsset(reference)}><RotateCcw size={15} /> Restore original</button> : null}
+          {override?.replacement ? <button type="button" className="secondary-button" onClick={() => restoreConfigAsset(reference)}><RotateCcw size={15} /> {reference.source ? "Restore original" : "Remove image"}</button> : null}
         </div>
         {override?.replacement ? (
           <>
@@ -11133,6 +11216,8 @@ export function WatchfaceEditor({
     const centerLabel = center && deviceResolution
       ? `Centered at ${center.x}, ${center.y} on the ${deviceResolution.width}px preview.`
       : "Centered on the watch face.";
+    const analogPivotHint =
+      "The image center is the pivot: draw the hand pointing up, with the pivot in the middle of the canvas.";
     const onWatchBehavior = (() => {
       switch (reference.configKey) {
         case "time_center_polygon_icon1":
@@ -11140,11 +11225,11 @@ export function WatchfaceEditor({
         case "time_center_polygon_icon2":
           return `${centerLabel} Fixed above all analog hands.`;
         case "time_hour_icon":
-          return `${centerLabel} Rotates as the analog hour hand.`;
+          return `${centerLabel} Rotates as the analog hour hand. ${analogPivotHint}`;
         case "time_minute_icon":
-          return `${centerLabel} Rotates as the analog minute hand.`;
+          return `${centerLabel} Rotates as the analog minute hand. ${analogPivotHint}`;
         case "time_second_icon":
-          return `${centerLabel} Rotates as the analog second hand.`;
+          return `${centerLabel} Rotates as the analog second hand. ${analogPivotHint}`;
         case "colon_icon":
           return "Placed automatically between the hour and minute digits.";
         case "control_colon_icon":

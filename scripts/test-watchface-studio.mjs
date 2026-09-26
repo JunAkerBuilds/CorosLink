@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
   analogCenterLayoutGroupId,
+  COROS_CONFIG_DELETE_VALUE,
   alignConfigRectValue,
   numberStartX,
   applyConfigOverridesToDetails,
@@ -1812,6 +1813,64 @@ assert.equal(analogLayers[1].rotationDegrees, 93);
 assert.equal(analogLayers[2].rotationDegrees, null);
 assert.equal(analogLayers[3].rotationDegrees, 180);
 assert.equal(analogLayers[4].rotationDegrees, null);
+
+// Digital templates declare the analog keys blank; Studio can add hands.
+{
+  const digital = resolution(416, 8, 12);
+  digital.aodConfig = { time_hour_icon: "", time_center_pos: "" };
+  Object.assign(digital.config, { time_hour_icon: "", time_second_icon: "", time_center_pos: "" });
+  const digitalDetails = { archiveId: "analog-add", resolutions: [digital] };
+  const hand = { dataUrl: "data:image/png;base64,", width: 20, height: 300 };
+  const handOverrides = {
+    "config:time_hour_icon": { enabled: true, replacement: hand },
+    "config:time_minute_icon": { enabled: true, replacement: hand },
+    "aod:time_hour_icon": { enabled: true, replacement: hand }
+  };
+  const handValues = Object.fromEntries(
+    buildWatchfaceConfigAssetOverrides(digitalDetails, handOverrides).map(
+      ({ path, values }) => [path.split("/").at(-1), values]
+    )
+  );
+  assert.match(handValues["config.txt"].time_hour_icon, /^studio\\.+\\00\.png$/);
+  assert.match(
+    handValues["config.txt"].time_minute_icon,
+    /^studio\\/,
+    "An undeclared analog key is created, not only a blank one"
+  );
+  assert.equal(handValues["config.txt"].time_center_pos, "{208,208}");
+  assert.equal(handValues["AODconfig.txt"].time_center_pos, "{208,208}");
+  assert.equal(handValues["config.txt"].time_second_icon, undefined);
+  const withHands = applyConfigOverridesToDetails(
+    digitalDetails,
+    buildWatchfaceConfigAssetOverrides(digitalDetails, handOverrides)
+  );
+  const createdLayers = getWatchfaceAnalogPreviewLayers(
+    withHands.resolutions[0],
+    new Date(2026, 0, 1, 3, 0, 0),
+    { overrides: handOverrides, nativeScale: 0.5 }
+  );
+  assert.deepEqual(
+    createdLayers.map(({ configKey, source, center, rotationDegrees }) => [
+      configKey, source.width, source.height, center, rotationDegrees
+    ]),
+    [
+      ["time_hour_icon", 10, 150, { x: 208, y: 208 }, 90],
+      ["time_minute_icon", 10, 150, { x: 208, y: 208 }, 0]
+    ],
+    "Created hands preview at their scaled native size around the default center"
+  );
+  assert.equal(
+    getWatchfaceAnalogPreviewLayers(withHands.resolutions[0], new Date()).length,
+    0,
+    "Without the override there is no artwork to draw for a created hand"
+  );
+  const hidden = buildWatchfaceConfigAssetOverrides(digitalDetails, {
+    "config:time_hour_icon": { enabled: false, replacement: hand }
+  });
+  assert.equal(hidden[0].values.time_hour_icon, COROS_CONFIG_DELETE_VALUE);
+  assert.equal(configAssetSupportsNativeSize("time_hour_icon"), true);
+  assert.equal(configAssetCanUseNativeSize("time_second_icon", false), true);
+}
 
 const configAssets = listWatchfaceConfigAssets(details);
 assert.deepEqual(

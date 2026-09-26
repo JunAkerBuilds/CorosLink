@@ -760,15 +760,18 @@ export interface WatchfaceAnalogPreviewLayer {
   rotationDegrees: number | null;
 }
 
-const ANALOG_CENTER_CONFIG_KEYS = new Set<
+/** Firmware compositing order of the analog assets, bottom to top. */
+export const WATCHFACE_ANALOG_CONFIG_KEYS: ReadonlyArray<
   WatchfaceAnalogPreviewLayer["configKey"]
->([
+> = [
   "time_hour_icon",
   "time_minute_icon",
   "time_center_polygon_icon1",
   "time_second_icon",
   "time_center_polygon_icon2"
-]);
+];
+
+const ANALOG_CENTER_CONFIG_KEYS = new Set(WATCHFACE_ANALOG_CONFIG_KEYS);
 
 /** Direct analog assets share one firmware-controlled center coordinate. */
 export function analogCenterLayoutGroupId(
@@ -779,6 +782,34 @@ export function analogCenterLayoutGroupId(
   )
     ? "analogCenter"
     : null;
+}
+
+/**
+ * Every DIY template declares the analog keys, usually blank. A blank (or
+ * unparseable) `time_center_pos` means the firmware default: the screen
+ * center. Studio writes that default explicitly when it adds hands.
+ */
+function defaultAnalogCenterPos(
+  resolution: Pick<CorosWatchfaceResolutionDetails, "width" | "height">
+): string {
+  return `{${Math.round(resolution.width / 2)},${Math.round(resolution.height / 2)}}`;
+}
+
+/**
+ * Analog PNGs rotate (or sit) around their image center, so a replacement is
+ * scaled as a whole canvas. Trimming transparent padding like other direct
+ * assets would move the pivot to the middle of the visible hand.
+ */
+function fitConfigAssetReplacement(
+  configKey: string,
+  dataUrl: string,
+  width: number,
+  height: number,
+  zoom = 1
+): Promise<string> {
+  return analogCenterLayoutGroupId(configKey)
+    ? fitWholeSpriteToCanvas(dataUrl, width, height, zoom)
+    : fitVisibleSpriteToCanvas(dataUrl, width, height, zoom);
 }
 
 function directConfigSprite(
@@ -948,7 +979,13 @@ export function getWatchfaceControlStatusPreviewLayers(
  */
 export function getWatchfaceAnalogPreviewLayers(
   resolution: CorosWatchfaceResolutionDetails,
-  now: Date
+  now: Date,
+  created: {
+    overrides?: Record<string, CorosWatchfaceConfigAssetOverride>;
+    scope?: WatchfaceConfigAssetScope;
+    /** Converts master-resolution replacement pixels to this resolution. */
+    nativeScale?: number;
+  } = {}
 ): WatchfaceAnalogPreviewLayer[] {
   const center = parseConfigPos(resolution.config.time_center_pos) ?? {
     x: resolution.width / 2,
@@ -969,9 +1006,49 @@ export function getWatchfaceAnalogPreviewLayers(
     ["time_center_polygon_icon2", null]
   ];
   return plan.flatMap(([configKey, rotationDegrees]) => {
-    const source = directConfigSprite(resolution, configKey);
+    const source =
+      directConfigSprite(resolution, configKey) ??
+      createdAnalogSprite(resolution, configKey, created);
     return source ? [{ configKey, source, center, rotationDegrees }] : [];
   });
+}
+
+/**
+ * Hands Studio added to a template have no source PNG yet: their config value
+ * points at the created file, and the replacement defines its native size.
+ */
+function createdAnalogSprite(
+  resolution: CorosWatchfaceResolutionDetails,
+  configKey: string,
+  {
+    overrides,
+    scope = "config",
+    nativeScale = 1
+  }: {
+    overrides?: Record<string, CorosWatchfaceConfigAssetOverride>;
+    scope?: WatchfaceConfigAssetScope;
+    nativeScale?: number;
+  }
+): (CorosWatchfaceSpriteFile & { created: true }) | null {
+  const value = resolution.config[configKey]?.trim().replace(/\\/g, "/");
+  const override = overrides?.[watchfaceConfigAssetId(scope, configKey)];
+  const replacement = override?.replacement;
+  if (!value || !replacement || override.enabled === false) return null;
+  const size = configAssetCanvasSize(
+    configKey,
+    override,
+    {
+      width: Math.max(1, Math.round(replacement.width * nativeScale)),
+      height: Math.max(1, Math.round(replacement.height * nativeScale))
+    },
+    nativeScale
+  );
+  return {
+    path: `${resolution.directory}/${value.replace(/^\.\//, "")}`,
+    width: size.width,
+    height: size.height,
+    created: true
+  };
 }
 
 function configAssetFolder(id: string): string {
@@ -1027,7 +1104,13 @@ const ARC_CUT_ICON_KEYS = new Set([
 
 /** Direct status/control icons whose firmware entries accept a resized PNG. */
 export function configAssetSupportsNativeSize(configKey: string): boolean {
-  return NATIVE_CONFIG_ICON_KEYS.has(configKey) || ARC_CUT_ICON_KEYS.has(configKey);
+  // Analog PNGs have no config box at all: the firmware rotates whatever
+  // canvas the file has around time_center_pos.
+  return (
+    NATIVE_CONFIG_ICON_KEYS.has(configKey) ||
+    ARC_CUT_ICON_KEYS.has(configKey) ||
+    analogCenterLayoutGroupId(configKey) !== null
+  );
 }
 
 /** Whether a freshly chosen replacement starts at its own PNG size. */
@@ -1047,6 +1130,7 @@ export function configAssetCanUseNativeSize(
   return (
     configAssetSupportsNativeSize(configKey) &&
     (hasTemplateSource ||
+      analogCenterLayoutGroupId(configKey) !== null ||
       VIRTUAL_STANDALONE_STATUS_ICON_KEYS.includes(
         configKey as (typeof VIRTUAL_STANDALONE_STATUS_ICON_KEYS)[number]
       ))
@@ -1407,6 +1491,17 @@ export function buildWatchfaceConfigAssetOverrides(
           }
         }
       }
+      // Hands added to a digital template: the keys are declared blank (or
+      // not at all), in both config.txt and AODconfig.txt.
+      for (const configKey of WATCHFACE_ANALOG_CONFIG_KEYS) {
+        const id = watchfaceConfigAssetId(scope, configKey);
+        if (
+          overrides[id]?.replacement &&
+          !entries.some(([candidate]) => candidate === configKey)
+        ) {
+          entries.push([configKey, configAssetCreatedRelativePath(id)]);
+        }
+      }
       for (const [configKey] of entries) {
         // The current background is always a composed Studio PNG written back
         // to the template's original path. Artwork visibility is handled while
@@ -1441,7 +1536,11 @@ export function buildWatchfaceConfigAssetOverrides(
           (virtual || !replaceConfigAssetInPlace(configKey))
         ) {
           values[configKey] = configAssetCreatedRelativePath(id).replace(/\//g, "\\");
-          if (virtual) {
+          if (virtual && analogCenterLayoutGroupId(configKey)) {
+            if (!parseConfigPos(scopedConfig.time_center_pos)) {
+              values.time_center_pos = defaultAnalogCenterPos(resolution);
+            }
+          } else if (virtual) {
             const statusDefinition = CONTROL_STATUS_PREVIEW_DEFINITIONS.find(
               (definition) => definition.configKey === configKey
             );
@@ -1621,6 +1720,17 @@ export async function buildWatchfaceConfigAssetReplacements(
           }
         }
       }
+      // Hands added to a digital template: the keys are declared blank (or
+      // not at all), in both config.txt and AODconfig.txt.
+      for (const configKey of WATCHFACE_ANALOG_CONFIG_KEYS) {
+        const id = watchfaceConfigAssetId(scope, configKey);
+        if (
+          overrides[id]?.replacement &&
+          !entries.some(([candidate]) => candidate === configKey)
+        ) {
+          entries.push([configKey, configAssetCreatedRelativePath(id)]);
+        }
+      }
       for (const [configKey, rawPath] of entries) {
         const id = watchfaceConfigAssetId(scope, configKey);
         const assetLayerId = `configAsset:${id}`;
@@ -1717,7 +1827,8 @@ export async function buildWatchfaceConfigAssetReplacements(
               canvasSize.width,
               canvasSize.height
             )
-          : await fitVisibleSpriteToCanvas(
+          : await fitConfigAssetReplacement(
+              configKey,
               override!.replacement!.dataUrl,
               canvasSize.width,
               canvasSize.height,
@@ -3092,6 +3203,42 @@ export async function resizeAndTintSprite(
     context.fillStyle = color;
     context.fillRect(0, 0, width, height);
   }
+  return canvas.toDataURL("image/png");
+}
+
+/**
+ * Fits a whole image, transparent padding included, into a firmware canvas
+ * with its center kept on the canvas center. Analog hands depend on this:
+ * their pivot is the image center, wherever the visible pixels sit.
+ */
+export async function fitWholeSpriteToCanvas(
+  dataUrl: string,
+  width: number,
+  height: number,
+  zoom = 1
+): Promise<string> {
+  const image = await loadStudioImage(dataUrl);
+  const fit =
+    Math.min(width / image.naturalWidth, height / image.naturalHeight) *
+    normalizePositiveScale(zoom);
+  const outputWidth = image.naturalWidth * fit;
+  const outputHeight = image.naturalHeight * fit;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Sprite fitting is unavailable in this window.");
+  }
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(
+    image,
+    (width - outputWidth) / 2,
+    (height - outputHeight) / 2,
+    outputWidth,
+    outputHeight
+  );
   return canvas.toDataURL("image/png");
 }
 
@@ -7458,7 +7605,8 @@ export function computeLayoutGroupBounds(
     if (group.id === "analogCenter") {
       const analogLayers = getWatchfaceAnalogPreviewLayers(
         resolution,
-        new Date(0)
+        new Date(0),
+        { overrides: geometry.configAssetOverrides }
       );
       if (analogLayers.length > 0) {
         bounds.push({
@@ -8325,9 +8473,15 @@ export async function drawStudioPreview(
       color: arcCutColor
     });
   }
-  const analogLayers = getWatchfaceAnalogPreviewLayers(resolution, now);
+  const analogLayers = getWatchfaceAnalogPreviewLayers(resolution, now, {
+    overrides: options.configAssetOverrides,
+    scope: options.configAssetScope,
+    nativeScale: options.nativeSpriteResolutionScale
+  });
   const analogIconColor = options.tintIcons ? options.accentColor : null;
   for (const layer of analogLayers) {
+    // Created hands draw from their replacement; there is no file to load.
+    if ("created" in layer.source) continue;
     wantedSprites.set(layer.source.path, { color: analogIconColor });
   }
 
@@ -8807,7 +8961,8 @@ export async function drawStudioPreview(
             canvasSize.width,
             canvasSize.height
           )
-        : await fitVisibleSpriteToCanvas(
+        : await fitConfigAssetReplacement(
+            configKey,
             sourceDataUrl,
             canvasSize.width,
             canvasSize.height,
