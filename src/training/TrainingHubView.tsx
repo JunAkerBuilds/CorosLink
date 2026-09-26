@@ -20,6 +20,10 @@ import { CoachChartsPanel } from "./components/CoachChartsPanel";
 import { FitnessScoresPanel } from "./components/FitnessScoresPanel";
 import { FitnessTrendPanel } from "./components/FitnessTrendPanel";
 import { PersonalRecordsPanel } from "./components/PersonalRecordsPanel";
+import {
+  PersonalRecordCelebrationOverlay,
+  usePersonalRecordCelebration
+} from "./components/PersonalRecordCelebration";
 import { RacePredictorCards } from "./components/RacePredictorCards";
 import { RecoveryRing } from "./components/RecoveryRing";
 import { HealthInsightsPanel } from "./components/HealthInsightsPanel";
@@ -127,6 +131,11 @@ function TrainingHubContent({
     return api.getTrainingHubActivityDetail(activity.activityId, activity.sportType, activity);
   }, [api, sampleDetails]);
   const connected = sampleMode || Boolean(status?.authenticated);
+  // Sample records are regenerated relative to today, so never celebrate them.
+  const prCelebration = usePersonalRecordCelebration(
+    snapshot?.dashboard ?? null,
+    connected && !sampleMode
+  );
   // Counts completed hub refreshes so pinned live charts re-resolve alongside them.
   const [hubRefreshCount, setHubRefreshCount] = useState(0);
   const wasRefreshingRef = useRef(false);
@@ -189,6 +198,7 @@ function TrainingHubContent({
           onRefresh={onRefresh}
           onLogout={onLogout}
           onToggleSample={onToggleSample}
+          onTestPrCelebration={import.meta.env.DEV ? prCelebration.test : undefined}
         />
       ) : null}
       {!connected ? (
@@ -537,10 +547,22 @@ function TrainingHubContent({
             hidden={activeTab !== "records"}
           >
             {visitedTabs.includes("records") ? (
-              <PersonalRecordsPanel dashboard={snapshot?.dashboard ?? null} />
+              <PersonalRecordsPanel
+                dashboard={snapshot?.dashboard ?? null}
+                celebration={prCelebration.cardCelebration}
+                onCelebrate={prCelebration.replay}
+              />
             ) : null}
           </div>
         </>
+      ) : null}
+
+      {prCelebration.overlayRecord ? (
+        <PersonalRecordCelebrationOverlay
+          key={prCelebration.overlayNonce}
+          record={prCelebration.overlayRecord}
+          onDismiss={prCelebration.dismiss}
+        />
       ) : null}
     </div>
   );

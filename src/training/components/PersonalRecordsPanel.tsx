@@ -1,5 +1,5 @@
-import { Footprints, Mountain, Route } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Mountain, Route } from "lucide-react";
+import { useEffect, useMemo, type CSSProperties, type ReactNode } from "react";
 import type {
   TrainingHubDashboard,
   TrainingHubPersonalRecord
@@ -12,18 +12,32 @@ import {
   isPersonalRecordVisible
 } from "../formatters";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
-import { formatDistanceValue } from "../../units/units";
 import {
   defineSelectionPreference,
   useSelectionPreference
 } from "../../preferences/selectionPreferences";
+import {
+  PR_ASSET_BASE,
+  RecordBurst,
+  RollingText,
+  recordLabel,
+  recordSignature,
+  splitHero,
+  type RecordCelebration
+} from "./PersonalRecordCelebration";
+import "../personalRecords.css";
 
 interface PersonalRecordsPanelProps {
   dashboard: TrainingHubDashboard | null;
+  /** Set while a record's on-card celebration plays (after the full-screen moment). */
+  celebration?: RecordCelebration | null;
+  /** Replays the full-screen celebration for a record. */
+  onCelebrate?: (record: TrainingHubPersonalRecord) => void;
 }
 
 const RECORD_TYPE_LONGEST_RUN = 101;
 const RECORD_TYPE_ELEVATION_GAIN = 103;
+const RECENT_RECORD_DAYS = 30;
 
 const PERSONAL_RECORD_GROUP_PREFERENCE = defineSelectionPreference<number>({
   key: "training.personalRecordGroup",
@@ -32,139 +46,57 @@ const PERSONAL_RECORD_GROUP_PREFERENCE = defineSelectionPreference<number>({
     typeof value === "number" && Number.isInteger(value) && value > 0
 });
 
-function recordIcon(type: number) {
-  if (type === RECORD_TYPE_LONGEST_RUN) {
-    return Route;
-  }
-
-  if (type === RECORD_TYPE_ELEVATION_GAIN) {
-    return Mountain;
-  }
-
-  return Footprints;
+function isEnduranceRecord(record: TrainingHubPersonalRecord): boolean {
+  return record.type === RECORD_TYPE_LONGEST_RUN || record.type === RECORD_TYPE_ELEVATION_GAIN;
 }
 
-/** Split "12.01km" / "84m" into a bold value and a muted unit. */
-function splitHero(hero: string): { value: string; unit: string | null } {
-  const match = hero.match(/^([\d.:]+)\s*(km|mi|m|ft)$/i);
-
-  if (match) {
-    return { value: match[1]!, unit: match[2]! };
-  }
-
-  return { value: hero, unit: null };
+/** Split "6:40 /km" into the pace and its unit. */
+function splitPace(meta: string): { value: string; unit: string | null } {
+  const match = meta.match(/^(\S+)\s*(\/\s*\S+)$/);
+  return match ? { value: match[1]!, unit: match[2]!.replace(/\s+/g, "") } : { value: meta, unit: null };
 }
 
-/** Deterministic pseudo-random values in [0, 1) seeded from a record. */
-function seededValues(seed: string, count: number): number[] {
-  let hash = 2166136261;
-
-  for (let index = 0; index < seed.length; index += 1) {
-    hash ^= seed.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
+function happenDayTime(happenDay?: string): number | null {
+  if (!happenDay || !/^\d{8}$/.test(happenDay)) {
+    return null;
   }
 
-  const values: number[] = [];
-
-  for (let index = 0; index < count; index += 1) {
-    hash ^= hash << 13;
-    hash ^= hash >>> 17;
-    hash ^= hash << 5;
-    values.push((Math.abs(hash) % 1000) / 1000);
-  }
-
-  return values;
+  return new Date(
+    Number(happenDay.slice(0, 4)),
+    Number(happenDay.slice(4, 6)) - 1,
+    Number(happenDay.slice(6, 8))
+  ).getTime();
 }
 
-/** Decorative upward-trending bars (progress motif) for time-based records. */
-function RecordSparkbars({ seed }: { seed: string }) {
-  const noise = seededValues(seed, 7);
-  const bars = noise.map((value, index) => {
-    const base = 0.28 + (index / (noise.length - 1)) * 0.62;
-    return Math.min(1, Math.max(0.14, base * 0.72 + value * 0.28));
-  });
+/** Compact engraving for the card watermark: "Half Marathon" → "HM". */
+function recordMark(label: string): string {
+  if (/^half/i.test(label)) {
+    return "HM";
+  }
 
-  const barWidth = 4;
-  const gap = 2.6;
+  if (/^marathon/i.test(label)) {
+    return "M";
+  }
 
+  return label.replace(/\s+/g, "").toUpperCase();
+}
+
+function Laurels({ children, celebrating }: { children: ReactNode; celebrating: boolean }) {
   return (
-    <svg
-      className="training-record-spark is-bars"
-      viewBox="0 0 46 28"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      {bars.map((value, index) => {
-        const height = value * 26;
-        return (
-          <rect
-            key={index}
-            x={index * (barWidth + gap)}
-            y={28 - height}
-            width={barWidth}
-            height={height}
-            rx={1.3}
-          />
-        );
-      })}
-    </svg>
+    <div className={celebrating ? "pr-emblem is-celebrating" : "pr-emblem"} aria-hidden="true">
+      <img className="pr-emblem-wheat is-left" src={`${PR_ASSET_BASE}/left-wheat_no_bg.png`} alt="" />
+      <span className="pr-emblem-medal">{children}</span>
+      <img className="pr-emblem-wheat is-right" src={`${PR_ASSET_BASE}/left-wheat_no_bg.png`} alt="" />
+    </div>
   );
 }
 
-/** Decorative area sparkline for distance / elevation records. */
-function RecordSparkarea({ seed }: { seed: string }) {
-  const points = seededValues(seed, 12);
-  const width = 60;
-  const height = 28;
-  const step = width / (points.length - 1);
-
-  const line = points
-    .map((value, index) => {
-      const x = (index * step).toFixed(1);
-      const y = (height - (0.18 + value * 0.72) * height).toFixed(1);
-      return `${index === 0 ? "M" : "L"} ${x} ${y}`;
-    })
-    .join(" ");
-
-  return (
-    <svg
-      className="training-record-spark is-area"
-      viewBox="0 0 60 28"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <path className="training-record-spark-fill" d={`${line} L ${width} ${height} L 0 ${height} Z`} />
-      <path className="training-record-spark-line" d={line} />
-    </svg>
-  );
-}
-
-function RecordEmptyGraphic() {
-  return (
-    <svg
-      className="training-record-empty-graphic"
-      viewBox="0 0 60 28"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <path d="M0 28 L13 13 L21 20 L33 6 L43 17 L51 11 L60 28 Z" />
-    </svg>
-  );
-}
-
-const PR_ASSET_BASE = "./assets/training-hub/PR";
-
-function LaurelBadge() {
-  return (
-    <img
-      className="training-record-pr"
-      src={`${PR_ASSET_BASE}/pr-logo_no_bg.png`}
-      alt="Personal record"
-    />
-  );
-}
-
-export function PersonalRecordsPanel({ dashboard }: PersonalRecordsPanelProps) {
+export function PersonalRecordsPanel({
+  dashboard,
+  celebration = null,
+  onCelebrate
+}: PersonalRecordsPanelProps) {
+  const { unitSystem } = useUnitSystem();
   const groups = dashboard?.personalRecords ?? [];
   const [activeGroupType, setActiveGroupType] = useSelectionPreference(
     PERSONAL_RECORD_GROUP_PREFERENCE
@@ -186,58 +118,125 @@ export function PersonalRecordsPanel({ dashboard }: PersonalRecordsPanelProps) {
   );
 
   const records = (activeGroup?.records ?? []).filter(isPersonalRecordVisible);
-  const hasRecords = records.length > 0;
+  const raceRecords = records.filter((record) => !isEnduranceRecord(record));
+  const enduranceRecords = records.filter(isEnduranceRecord);
+  const populated = records.filter(isPersonalRecordPopulated);
+
+  const newest = populated.reduce<TrainingHubPersonalRecord | null>((best, record) => {
+    const time = happenDayTime(record.happenDay);
+    const bestTime = best ? happenDayTime(best.happenDay) : null;
+    return time !== null && (bestTime === null || time > bestTime) ? record : best;
+  }, null);
+  const newestTime = newest ? happenDayTime(newest.happenDay) : null;
+  const newestIsRecent =
+    newestTime !== null && Date.now() - newestTime <= RECENT_RECORD_DAYS * 86_400_000;
+
+  const celebrated = celebration
+    ? groups
+        .flatMap((group) => group.records)
+        .find((record) => recordSignature(record) === celebration.signature) ?? null
+    : null;
+  const celebrate = (record: TrainingHubPersonalRecord) => onCelebrate?.(record);
 
   return (
     <section className="panel training-records-panel">
-      <div className="training-records-banner">
-        <span className="training-records-embers" aria-hidden="true" />
-        <img
-          className="training-records-banner-wheat is-left"
-          src={`${PR_ASSET_BASE}/left-wheat_no_bg.png`}
-          alt=""
-          aria-hidden="true"
-        />
-        <div className="training-records-banner-text">
-          <p className="training-records-banner-headline">Personal Records</p>
+      <header className="pr-head">
+        <span className="pr-head-light" aria-hidden="true" />
+        <span className="pr-head-embers" aria-hidden="true" />
+        <div className="pr-head-title">
+          <Laurels celebrating={celebrated !== null}>{populated.length}</Laurels>
+          <div className="pr-head-copy">
+            <p className="pr-eyebrow">Hall of bests</p>
+            <h2 className="pr-title">Personal Records</h2>
+            {celebrated ? (
+              <p className="pr-announce" key={celebration?.nonce} role="status">
+                <span className="pr-announce-spark" aria-hidden="true" />
+                New personal record: <strong>{recordLabel(celebrated, unitSystem)}</strong> in{" "}
+                <strong>{formatPersonalRecordHero(celebrated, unitSystem)}</strong>
+              </p>
+            ) : (
+              <p className="pr-summary">
+                {populated.length} of {records.length} set
+                {newest ? (
+                  <>
+                    <span className="pr-summary-sep" aria-hidden="true" />
+                    Latest: <strong>{recordLabel(newest, unitSystem)}</strong> on{" "}
+                    {formatRecordDateShort(newest.happenDay)}
+                  </>
+                ) : null}
+              </p>
+            )}
+          </div>
         </div>
-        <img
-          className="training-records-banner-wheat is-right"
-          src={`${PR_ASSET_BASE}/left-wheat_no_bg.png`}
-          alt=""
-          aria-hidden="true"
-        />
-      </div>
 
-      {groups.length > 0 ? (
-        <div className="training-records-tabs" role="tablist" aria-label="Record period">
-          {groups.map((group) => (
-            <button
-              key={group.type}
-              type="button"
-              role="tab"
-              aria-selected={group.type === activeGroup?.type}
-              className={
-                group.type === activeGroup?.type
-                  ? "training-records-tab active"
-                  : "training-records-tab"
-              }
-              onClick={() => setActiveGroupType(group.type)}
-            >
-              {group.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+        {groups.length > 0 ? (
+          <div className="pr-periods" role="tablist" aria-label="Record period">
+            {groups.map((group) => (
+              <button
+                key={group.type}
+                type="button"
+                role="tab"
+                aria-selected={group.type === activeGroup?.type}
+                className={group.type === activeGroup?.type ? "pr-period active" : "pr-period"}
+                onClick={() => setActiveGroupType(group.type)}
+              >
+                {group.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </header>
 
-      {hasRecords ? (
-        <div className="training-records-grid">
-          {records.map((record, index) => (
-            <RecordCard
-              key={`${record.type}-${record.happenDay ?? index}`}
-              record={record}
-            />
-          ))}
+      {records.length > 0 ? (
+        <div className="pr-body" key={activeGroup?.type}>
+          {raceRecords.length > 0 ? (
+            <div className="pr-section">
+              <p className="pr-section-label">Race distances</p>
+              <div
+                className="pr-race-grid"
+                style={
+                  {
+                    "--pr-race-cols": raceRecords.length,
+                    "--pr-race-cols-mid":
+                      raceRecords.length <= 3 ? raceRecords.length : Math.ceil(raceRecords.length / 2)
+                  } as CSSProperties
+                }
+              >
+                {raceRecords.map((record, index) => (
+                  <RaceRecordCard
+                    key={`${record.type}-${record.happenDay ?? index}`}
+                    record={record}
+                    celebrationNonce={
+                      celebration?.signature === recordSignature(record) ? celebration.nonce : null
+                    }
+                    onCelebrate={() => celebrate(record)}
+                    index={index}
+                    isLatest={newestIsRecent && record === newest}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {enduranceRecords.length > 0 ? (
+            <div className="pr-section">
+              <p className="pr-section-label">Endurance</p>
+              <div className="pr-endurance-grid">
+                {enduranceRecords.map((record, index) => (
+                  <EnduranceRecordCard
+                    key={`${record.type}-${record.happenDay ?? index}`}
+                    record={record}
+                    celebrationNonce={
+                      celebration?.signature === recordSignature(record) ? celebration.nonce : null
+                    }
+                    onCelebrate={() => celebrate(record)}
+                    index={raceRecords.length + index}
+                    isLatest={newestIsRecent && record === newest}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="training-empty-state">
@@ -248,60 +247,159 @@ export function PersonalRecordsPanel({ dashboard }: PersonalRecordsPanelProps) {
   );
 }
 
-function RecordCard({ record }: { record: TrainingHubPersonalRecord }) {
+interface RecordCardProps {
+  record: TrainingHubPersonalRecord;
+  index: number;
+  isLatest: boolean;
+  /** Set while this record's celebration plays; changes restart the animation. */
+  celebrationNonce: number | null;
+  onCelebrate: () => void;
+}
+
+function LatestChip({ onCelebrate }: { onCelebrate: () => void }) {
+  return (
+    <button
+      type="button"
+      className="pr-latest-chip"
+      onClick={onCelebrate}
+      title="Celebrate again"
+    >
+      <img src={`${PR_ASSET_BASE}/pr-logo_no_bg.png`} alt="" aria-hidden="true" />
+      New PR
+    </button>
+  );
+}
+
+function cardClass(
+  base: string,
+  populated: boolean,
+  isLatest: boolean,
+  celebrating: boolean
+): string {
+  return [
+    base,
+    populated ? null : "is-empty",
+    isLatest ? "is-latest" : null,
+    celebrating ? "is-celebrating" : null
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function CardSlot({
+  celebrationNonce,
+  children
+}: {
+  celebrationNonce: number | null;
+  children: ReactNode;
+}) {
+  return (
+    <div className={celebrationNonce !== null ? "pr-card-slot is-celebrating" : "pr-card-slot"}>
+      {children}
+      {celebrationNonce !== null ? <RecordBurst key={`burst-${celebrationNonce}`} /> : null}
+    </div>
+  );
+}
+
+function RaceRecordCard({ record, index, isLatest, celebrationNonce, onCelebrate }: RecordCardProps) {
   const { unitSystem } = useUnitSystem();
-  const Icon = recordIcon(record.type);
-  const hero = formatPersonalRecordHero(record, unitSystem);
-  const meta = formatPersonalRecordMeta(record, unitSystem);
   const populated = isPersonalRecordPopulated(record);
-  const { value, unit } = splitHero(hero);
-  const seed = `${record.type}-${record.happenDay ?? ""}-${hero}`;
-  const isDistanceLike =
-    record.type === RECORD_TYPE_LONGEST_RUN || record.type === RECORD_TYPE_ELEVATION_GAIN;
-  const numericLabel = record.label.match(/^([\d.]+)\s*(km|m)$/i);
-  const displayLabel = numericLabel && Number.isFinite(Number(numericLabel[1]))
-    ? formatDistanceValue(
-        Number(numericLabel[1]) * (numericLabel[2]?.toLowerCase() === "km" ? 1000 : 1),
-        unitSystem
-      )
-    : record.label;
+  const label = recordLabel(record, unitSystem);
+  const meta = formatPersonalRecordMeta(record, unitSystem);
+  const pace = meta ? splitPace(meta) : null;
+  const celebrating = celebrationNonce !== null;
 
   return (
-    <article
-      className={
-        populated ? "training-record-card" : "training-record-card is-empty"
-      }
-    >
-      <div className="training-record-card-top">
-        <span className="training-record-card-lead">
-          <span className="training-record-card-icon" aria-hidden="true">
-            <Icon size={16} strokeWidth={2.2} />
-          </span>
-          <span className="training-record-card-label">{displayLabel}</span>
+    <CardSlot celebrationNonce={celebrationNonce}>
+      <article
+        key={celebrationNonce === null ? "card" : `card-${celebrationNonce}`}
+        className={cardClass("pr-card", populated, isLatest, celebrating)}
+        style={{ "--pr-index": index } as CSSProperties}
+      >
+        <span className="pr-card-mark" aria-hidden="true">
+          {recordMark(label)}
         </span>
-        {populated ? <LaurelBadge /> : null}
-      </div>
 
-      <p className="training-record-card-hero">
-        {value}
-        {unit ? <span className="training-record-card-unit"> {unit}</span> : null}
-      </p>
-      {meta ? <p className="training-record-card-meta">{meta}</p> : null}
+        <div className="pr-card-top">
+          <span className="pr-card-label">{label}</span>
+          {isLatest ? <LatestChip onCelebrate={onCelebrate} /> : null}
+        </div>
 
-      <div className="training-record-card-foot">
-        <span className="training-record-card-date">
-          {populated ? formatRecordDateShort(record.happenDay) : "—"}
-        </span>
         {populated ? (
-          isDistanceLike ? (
-            <RecordSparkarea seed={seed} />
-          ) : (
-            <RecordSparkbars seed={seed} />
-          )
+          <>
+            <p className="pr-card-hero">
+              <RollingText text={formatPersonalRecordHero(record, unitSystem)} rolling={celebrating} />
+            </p>
+            <div className="pr-card-foot">
+              {pace ? (
+                <span className="pr-card-pace">
+                  {pace.value}
+                  {pace.unit ? <small>{pace.unit}</small> : null}
+                </span>
+              ) : null}
+              <span className="pr-card-date">{formatRecordDateShort(record.happenDay)}</span>
+            </div>
+          </>
         ) : (
-          <RecordEmptyGraphic />
+          <>
+            <p className="pr-card-hero is-empty">Not yet set</p>
+            <div className="pr-card-foot">
+              <span className="pr-card-date">Your first {label.toLowerCase()} lands here</span>
+            </div>
+          </>
         )}
-      </div>
-    </article>
+      </article>
+    </CardSlot>
+  );
+}
+
+function EnduranceRecordCard({
+  record,
+  index,
+  isLatest,
+  celebrationNonce,
+  onCelebrate
+}: RecordCardProps) {
+  const { unitSystem } = useUnitSystem();
+  const populated = isPersonalRecordPopulated(record);
+  const Icon = record.type === RECORD_TYPE_ELEVATION_GAIN ? Mountain : Route;
+  const { value, unit } = splitHero(formatPersonalRecordHero(record, unitSystem));
+  const meta = formatPersonalRecordMeta(record, unitSystem);
+  const celebrating = celebrationNonce !== null;
+
+  return (
+    <CardSlot celebrationNonce={celebrationNonce}>
+      <article
+        key={celebrationNonce === null ? "card" : `card-${celebrationNonce}`}
+        className={cardClass("pr-card pr-card-wide", populated, isLatest, celebrating)}
+        style={{ "--pr-index": index } as CSSProperties}
+      >
+        <span className="pr-card-icon" aria-hidden="true">
+          <Icon size={20} strokeWidth={1.8} />
+        </span>
+
+        <div className="pr-card-wide-body">
+          <div className="pr-card-top">
+            <span className="pr-card-label">{recordLabel(record, unitSystem)}</span>
+            {isLatest ? <LatestChip onCelebrate={onCelebrate} /> : null}
+          </div>
+          {populated ? (
+            <p className="pr-card-hero">
+              <RollingText text={value} rolling={celebrating} />
+              {unit ? <span className="pr-card-unit">{unit}</span> : null}
+            </p>
+          ) : (
+            <p className="pr-card-hero is-empty">Not yet set</p>
+          )}
+        </div>
+
+        <div className="pr-card-wide-meta">
+          {populated && meta ? <span className="pr-card-pace">{meta}</span> : null}
+          <span className="pr-card-date">
+            {populated ? formatRecordDateShort(record.happenDay) : "—"}
+          </span>
+        </div>
+      </article>
+    </CardSlot>
   );
 }
