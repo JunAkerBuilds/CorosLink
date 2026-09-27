@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.49] - 2026-09-27
+
+### Changed
+
+- **Minimum** and **Maximum temperature** now show as one reading in Studio, the way the watch draws them: the minimum, a "/", the maximum and one unit. The maximum follows the minimum, and moving either moves both. Restyle, replace or hide the "/" with the new **Min/max separator** component on Minimum temperature.
+
+### Fixed
+
+- Min/max temperature no longer shows on the watch as one run-together number such as "1327°C". The export now draws a visible separator between them.
+- **Send to COROS** no longer fails with "does not contain one of the requested images" for templates that reference images they don't include, such as AROUND-based faces. The send preview lists those images instead.
+
 ## [0.1.48] - 2026-09-27
 
 ### Added
