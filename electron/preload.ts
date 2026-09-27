@@ -158,6 +158,7 @@ import type {
   CorosWatchfaceStatus,
   CorosWatchfaceConfigTextFile,
   CorosWatchfaceTemplateAsset,
+  CorosWatchfaceTemplateAssetOptions,
   CorosWatchfaceTemplateDetails,
   CorosWatchfaceTheme,
   CorosWatchfaceThemeDownload,
@@ -404,9 +405,10 @@ const api = {
     ipcRenderer.invoke("watchfaces:describeTemplate", archiveId),
   loadCorosWatchfaceTemplateAssets: (
     archiveId: string,
-    paths: string[]
+    paths: string[],
+    options?: CorosWatchfaceTemplateAssetOptions
   ): Promise<CorosWatchfaceTemplateAsset[]> =>
-    ipcRenderer.invoke("watchfaces:loadTemplateAssets", archiveId, paths),
+    ipcRenderer.invoke("watchfaces:loadTemplateAssets", archiveId, paths, options),
   loadCorosWatchfaceTemplateConfigTexts: (
     archiveId: string
   ): Promise<CorosWatchfaceConfigTextFile[]> =>

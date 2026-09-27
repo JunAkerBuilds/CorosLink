@@ -44,6 +44,7 @@ import type {
   CorosWatchfaceSpriteFolder,
   CorosWatchfaceStatus,
   CorosWatchfaceTemplateAsset,
+  CorosWatchfaceTemplateAssetOptions,
   CorosWatchfaceTemplateDetails,
   CorosWatchfaceTheme,
   CorosWatchfaceThemeCatalog,
@@ -2314,10 +2315,13 @@ export async function loadCorosWatchfaceTemplateConfigTexts(
 /**
  * Exports template PNGs to the renderer so it can tint or preview them. Only
  * entries of the already-validated selected archive can be requested.
+ * `skipMissing` omits absent entries instead: stock templates can name PNGs
+ * they never shipped (AROUND's icon\point.png), which the Send preview lists.
  */
 export async function loadCorosWatchfaceTemplateAssets(
   archiveId: string,
-  paths: string[]
+  paths: string[],
+  options?: CorosWatchfaceTemplateAssetOptions
 ): Promise<CorosWatchfaceTemplateAsset[]> {
   const source = requireSelectedArchive(archiveId);
   if (!Array.isArray(paths) || paths.length === 0) {
@@ -2341,6 +2345,7 @@ export async function loadCorosWatchfaceTemplateAssets(
     }
     const entry = filesByPath.get(assetPath);
     if (!entry) {
+      if (options?.skipMissing === true) continue;
       throw new Error("The template does not contain one of the requested images.");
     }
     const data = await entry.buffer();

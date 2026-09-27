@@ -246,6 +246,7 @@ import type {
   CorosWatchfacePublishInput,
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceRegion,
+  CorosWatchfaceTemplateAssetOptions,
   CorosWatchfaceThemeDownloadInput,
   CorosWatchfaceProjectListOptions,
   CorosWatchfaceThemeListInput,
@@ -1213,8 +1214,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "watchfaces:loadTemplateAssets",
-    (_event, archiveId: string, paths: string[]) =>
-      loadCorosWatchfaceTemplateAssets(archiveId, paths)
+    (_event, archiveId: string, paths: string[], options?: CorosWatchfaceTemplateAssetOptions) =>
+      loadCorosWatchfaceTemplateAssets(archiveId, paths, options)
   );
 
   ipcMain.handle(

@@ -639,6 +639,11 @@ export interface CorosWatchfaceTemplateAsset extends CorosWatchfaceSpriteFile {
   dataUrl: string;
 }
 
+export interface CorosWatchfaceTemplateAssetOptions {
+  /** Leave out paths the archive lacks instead of rejecting the request. */
+  skipMissing?: boolean;
+}
+
 export interface CorosWatchfaceArtwork {
   dataUrl: string;
   width: number;

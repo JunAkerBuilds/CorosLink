@@ -52,7 +52,8 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
     void renderCompiledWatchfacePreview(details, resolution, mode, async (paths) => {
       const missing = [...new Set(paths)].filter((path) => !cache.has(path));
       for (let offset = 0; offset < missing.length; offset += 100) {
-        const assets = await api.loadCorosWatchfaceTemplateAssets(archive.archiveId, missing.slice(offset, offset + 100));
+        // Absent PNGs come back omitted; the compiled preview lists them.
+        const assets = await api.loadCorosWatchfaceTemplateAssets(archive.archiveId, missing.slice(offset, offset + 100), { skipMissing: true });
         for (const asset of assets) cache.set(asset.path, asset);
       }
       return paths.map((path) => cache.get(path)!).filter(Boolean);

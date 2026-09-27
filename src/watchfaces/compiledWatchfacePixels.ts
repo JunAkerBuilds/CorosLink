@@ -43,7 +43,9 @@ export function createCompiledPixelChecks(width: number, height: number) {
 }
 
 /** The caller supplies details and assets read back from the generated ZIP.
- * No editor design, font family, scaling, strokes or effects are reapplied. */
+ * No editor design, font family, scaling, strokes or effects are reapplied.
+ * A loader may omit PNGs the ZIP lacks; the config keys naming them become
+ * checks instead of failing the preview. */
 export async function renderCompiledWatchfacePreview(
   details: CorosWatchfaceTemplateDetails,
   resolution: CorosWatchfaceResolutionDetails,
@@ -64,9 +66,10 @@ export async function renderCompiledWatchfacePreview(
   // those in font folders, without guessing icons from folder names.
   const icons = new Map(resolution.icons.map((file) => [file.path, file]));
   const spriteFiles = new Map(resolution.spriteFolders.flatMap((folder) => folder.files).map((file) => [file.path, file]));
+  const configPath = (value: string) => `${resolution.directory}/${value.replace(/\\/g, "/")}`;
   const referencedPaths = [...new Set(Object.values(config)
     .filter((value) => /\.png$/i.test(value))
-    .map((value) => `${resolution.directory}/${value.replace(/\\/g, "/")}`))]
+    .map(configPath))]
     .filter((path) => !usesAod || path !== backgroundPath);
   if (background) icons.set(background.path, background);
   for (const path of referencedPaths) {
@@ -80,6 +83,12 @@ export async function renderCompiledWatchfacePreview(
     }
   }
   const checks = createCompiledPixelChecks(canvas.width, canvas.height);
+  // Stock templates can name PNGs they never shipped (AROUND's icon\point.png
+  // and icon\cen.png). Nothing can draw them, so list them for review.
+  for (const path of missing.filter((path) => !icons.has(path))) {
+    const keys = Object.entries(config).filter(([, value]) => configPath(value) === path).map(([key]) => key);
+    checks.checks.add(`${keys.join(" / ")}: ${path.slice(resolution.directory.length + 1)} isn't in the archive.`);
+  }
   const ampmPos = parseConfigPos(config.am_pm_icon_pos);
   const compiledDetails = { ...details, resolutions: [{ ...resolution, config, icons: [...icons.values()] }] };
   await drawStudioPreview(canvas, background?.dataUrl ?? "", compiledDetails, {

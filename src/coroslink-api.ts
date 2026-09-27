@@ -158,6 +158,7 @@ import type {
   CorosWatchfaceStatus,
   CorosWatchfaceConfigTextFile,
   CorosWatchfaceTemplateAsset,
+  CorosWatchfaceTemplateAssetOptions,
   CorosWatchfaceTemplateDetails,
   CorosWatchfaceTheme,
   CorosWatchfaceThemeDownload,
@@ -329,7 +330,8 @@ export interface CorosLinkApi {
   ) => Promise<CorosWatchfaceTemplateDetails>;
   loadCorosWatchfaceTemplateAssets: (
     archiveId: string,
-    paths: string[]
+    paths: string[],
+    options?: CorosWatchfaceTemplateAssetOptions
   ) => Promise<CorosWatchfaceTemplateAsset[]>;
   loadCorosWatchfaceTemplateConfigTexts: (
     archiveId: string
