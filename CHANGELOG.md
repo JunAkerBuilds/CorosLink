@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.48] - 2026-09-27
+
+### Added
+
+- Add **Weekday**, **Date month** and **Date day** to any watch face from Studio's **Add** menu, including faces whose template has no date, such as converted official faces. Month and day reuse the face's own digits. The weekday is drawn with a font you can change. Studio places them next to the face's existing date or below the time, and **Remove** takes them off again.
+- Pick the PACE 4 Jakob Ingebrigtsen Edition from the template watch presets to browse its face catalog.
+
+### Changed
+
+- The **Add** menu lists face components in the same order on every face.
+
+### Fixed
+
+- Seconds and other layers that Studio added now stay off the watch when you hide them. The exported face previously still showed them.
+
 ## [0.1.47] - 2026-09-26
 
 ### Added
