@@ -60,6 +60,26 @@ while its rainfall, with the face's blank icon, did (2026-09-26). Studio now
 writes a 1×1 transparent `cl_nd_blank_icon` for a hidden icon instead of
 omitting the key.
 
+## Minimum/maximum temperature is one reading on the watch
+
+`WFBinExporter::SetWeather` (`0x18d3d4`) copies the minimum rectangle, maximum
+rectangle and separator position into the bin unchanged (`0xc96`, `0xca4`,
+`0xcb2`). COROS's phone-side preview, `WFPreviewBuilder::DrawWeather`
+(`0x19ff00`), also draws minimum and maximum at their own rectangles with a
+unit each, and the separator at its own position. The watch does not. In
+[issue #131](https://github.com/JunAkerBuilds/CorosLink/issues/131) a MIP
+watch drew `1327°C` for a converted HUD2 whose minimum sat left of the date
+(`{45,26,93,44}` at 240 px), whose maximum sat right of it (`{163,26,211,44}`),
+and whose separator was an invisible 1×1 pixel at the minimum's right edge.
+The reading ran minimum, separator, maximum, then a single unit, each right
+after the previous glyphs from the minimum's left edge. The maximum's
+rectangle and the separator position did not move anything. Official faces (NOMAD,
+GLASS, NIGHT CLIMBER) always place minimum, `/` separator and maximum side by
+side, so both renderers agree on them. Studio lays the reading out the way the
+watch does (`minMaxTemperatureRun` in `src/watchfaces/nativeData.ts`).
+Alignment other than left, and one-digit or negative minimums, remain
+unverified on a watch.
+
 ## Format/version implications
 
 The recovered `WF_VERSION` enum contains:

@@ -32,8 +32,12 @@ export const NATIVE_DATA_FIELDS: readonly NativeDataDefinition[] = [
   number("date_year", "Year", "Calendar", "2026", 3, { configPrefix: "control_number_date_year", valueOnly: true,
     note: "Live calendar year binding recovered from COROS 4.9.9. Independently positioned and visible in the editor; it does not require a visible selectable metric. Unlike month/day, COROS stores it in the shared control container. Export preserves the required origin and converts editor coordinates automatically; do not enable or move the selectable metric to place the year. Preview follows the simulation date; device support requires on-watch verification." }),
   number("weather_temp", "Current weather", "Weather", "18", 0, { unit: "°" }),
-  number("weather_temp_min", "Minimum temperature", "Weather", "12", 0, { unit: "°" }),
-  number("weather_temp_max", "Maximum temperature", "Weather", "24", 0, { unit: "°" }),
+  // A PACE-series watch drew min/max as one run from the minimum's position
+  // (issue #131, 2026-09-27): "1327°C", with the maximum's own rectangle ignored.
+  number("weather_temp_min", "Minimum temperature", "Weather", "12", 0, { unit: "°",
+    note: "The watch draws minimum and maximum temperature as one reading: minimum, separator, maximum, then one unit. With both shown, this layer places the reading and supplies the separator, unit and minus artwork." }),
+  number("weather_temp_max", "Maximum temperature", "Weather", "24", 0, { unit: "°",
+    note: "The watch draws the maximum straight after the minimum and its separator, not at a position of its own. With both shown, move the minimum to place the reading." }),
   number("weather_wind", "Wind speed", "Weather", "14", 0),
   { id: "weather_direction", label: "Wind direction", category: "Weather", kind: "state", sample: "2", version: 0, stateKey: "weather_direction_icon_dir", positionKey: "weather_direction_icon_pos", stateCount: 16 },
   number("weather_rainfall", "Rain probability", "Weather", "35", 0, { unit: "%", percentKey: "weather_rainfall_percent_icon" }),
@@ -115,12 +119,12 @@ export function nativeFieldKeys(field: NativeDataDefinition): string[] {
 export const NATIVE_DATA_CONFIG_KEYS = new Set([
   ...NATIVE_DATA_FIELDS.flatMap(nativeFieldKeys),
   "weather_negasign_icon", "weather_dgree_icon", "weather_temp_max_min_negasign_icon", "weather_temp_max_min_dgree_icon",
-  // Invisible min/max companions (nativeData.ts addMinMaxCompanions).
+  // Min/max companions (nativeData.ts addMinMaxCompanions).
   "weather_temp_separator_icon_pos", "weather_temp_separator_icon"
 ]);
 
-export const NATIVE_ASSET_ROLES = ["digits", "icon", "states", "unit", "symbols", "progress", "decimal", "background", "mask", "noDataMask"] as const;
-export const NATIVE_PARTS = ["value", "icon", "states", "unit", "symbols", "progress", "plot", "decimal", "background", "mask", "noDataMask"] as const;
+export const NATIVE_ASSET_ROLES = ["digits", "icon", "states", "unit", "symbols", "progress", "decimal", "background", "mask", "noDataMask", "separator"] as const;
+export const NATIVE_PARTS = ["value", "icon", "states", "unit", "symbols", "progress", "plot", "decimal", "background", "mask", "noDataMask", "separator"] as const;
 export function nativeAssetCount(id: string, role: string): number {
   if (role === "digits") return 10;
   if (role === "states") return id === "chart" ? 30 : NATIVE_DATA_BY_ID.get(id)?.stateCount ?? 1;

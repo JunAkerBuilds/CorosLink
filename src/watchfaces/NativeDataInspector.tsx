@@ -12,10 +12,12 @@ import type { WatchfaceInspectorSectionId } from "./watchfaceInspectorSections";
 
 const PART_LABELS: Record<Part, string> = {
   icon: "Label / icon", value: "Number / time", states: "State artwork", unit: "Units", symbols: "Symbols", progress: "Sun / moon progress",
-  plot: "Graph", decimal: "Decimal point", background: "Graph background", mask: "Graph mask", noDataMask: "No-data artwork"
+  plot: "Graph", decimal: "Decimal point", background: "Graph background", mask: "Graph mask", noDataMask: "No-data artwork",
+  separator: "Min/max separator"
 };
 const SPRITE_LABELS: Partial<Record<Role, string[]>> = {
-  icon: ["Main / rise icon", "Set icon"], unit: ["Primary / metric unit", "Alternate / imperial unit"], symbols: ["Minus", "Degree", "Percent", "Colon"], progress: ["Sunrise progress", "Sunset progress"]
+  icon: ["Main / rise icon", "Set icon"], unit: ["Primary / metric unit", "Alternate / imperial unit"], symbols: ["Minus", "Degree", "Percent", "Colon"], progress: ["Sunrise progress", "Sunset progress"],
+  separator: ["Separator"]
 };
 
 const chartSourceLabel = (source: string) => NATIVE_CHART_SOURCES.find(item => item.id === source)?.label ?? source;
@@ -247,7 +249,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
 
         <button type="button" className="wf-native-part-reset" disabled={!customized} onClick={restoreComponent}><RotateCcw size={13} /> Reset {partLabel.toLowerCase()}</button>
       </section>
-      {id.startsWith("weather_temp_") && <p className="watchface-studio-summary">Minimum and maximum temperature share unit and minus artwork. When both are enabled, the minimum-temperature settings supply these shared assets.</p>}
+      {id.startsWith("weather_temp_") && <p className="watchface-studio-summary">Minimum and maximum temperature share the separator, unit and minus artwork. When both are enabled, the minimum-temperature settings supply these shared assets.</p>}
     </div>, { disabled: locked, status: `${available.filter(part => nativePart(id, style, part).enabled).length} of ${available.length} shown` })}
 
     {renderSection("advanced", "Advanced", <div className="wf-property-stack">

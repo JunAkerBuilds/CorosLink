@@ -50,6 +50,67 @@ export function nativeDataPreviewValue(id: string, style: Style, scenario?: Watc
   if (id === "chart" && style.chartSource === "chart_moon") return "7";
   return NATIVE_DATA_BY_ID.get(id)?.sample ?? "0";
 }
+/** The value's glyphs and where they start inside the value part, in part units. */
+function nativeValueRun(id: string, style: Style, scenario?: WatchfacePreviewScenario) {
+  const digits = nativePart(id, style, "value");
+  const characters = nativeDataPreviewValue(id, style, scenario).slice(0, isNativeTime(id, style) ? 5 : 6);
+  const width = [...characters].reduce((sum, char) => sum + (/\d/.test(char) ? digits.digitWidth : char === "." ? nativePart(id, style, "decimal").width : nativePart(id, style, "symbols").width), 0);
+  return { characters, width, x: digits.x + (digits.align === "right" ? digits.width - width : digits.align === "center" ? (digits.width - width) / 2 : 0) };
+}
+
+export interface MinMaxTemperatureRun {
+  /** The maximum's style, moved to where the watch draws it. */
+  max: Style;
+  /** Top-left corner and size, in master pixels. */
+  separator: { x: number; y: number; width: number; height: number; visible: boolean };
+}
+
+/**
+ * The watch draws minimum and maximum temperature as one reading: the minimum
+ * in its own rectangle, then the separator, the maximum and a single unit,
+ * each straight after the glyphs before it. A watch ignored the maximum's
+ * rectangle (issue #131, 2026-09-27: "1327°C" at the minimum's position where
+ * the editor showed 12°C and 24°C far apart), and every official face places
+ * minimum, separator and maximum side by side. Null unless both are shown.
+ */
+export function minMaxTemperatureRun(data: NativeData, scenario?: WatchfacePreviewScenario): MinMaxTemperatureRun | null {
+  const min = data.weather_temp_min, max = data.weather_temp_max;
+  if (!min?.enabled || !max?.enabled) return null;
+  const minValue = nativePart("weather_temp_min", min, "value"), maxValue = nativePart("weather_temp_max", max, "value");
+  if (!minValue.enabled || !maxValue.enabled) return null;
+  const text = nativeValueRun("weather_temp_min", min, scenario);
+  const part = nativePart("weather_temp_min", min, "separator");
+  const width = part.enabled ? part.width * min.scale : 0, height = part.height * min.scale;
+  const x = min.x + (text.x + text.width) * min.scale;
+  const middle = min.y + (minValue.y + minValue.height / 2) * min.scale;
+  return {
+    separator: { x, y: middle - height / 2, width, height, visible: part.enabled },
+    max: { ...max,
+      x: x + width - maxValue.x * max.scale,
+      y: middle - (maxValue.y + maxValue.height / 2) * max.scale,
+      // The maximum starts right after the separator whatever its own alignment.
+      parts: { ...max.parts, value: { ...max.parts?.value, align: "left" } } }
+  };
+}
+
+/** A layer's style where the watch draws it: with both shown, the maximum follows the minimum. */
+export function nativeLayerStyle(id: string, data: NativeData, scenario?: WatchfacePreviewScenario): Style | undefined {
+  return (id === "weather_temp_max" ? minMaxTemperatureRun(data, scenario)?.max : undefined) ?? data[id];
+}
+
+/** Editor bounds in master pixels; the minimum's box also covers the separator it draws. */
+export function nativeDataBounds(id: string, data: NativeData) {
+  const style = nativeLayerStyle(id, data);
+  if (!style?.enabled) return null;
+  const size = nativeDataSize(id, style);
+  const separator = id === "weather_temp_min" ? minMaxTemperatureRun(data)?.separator : undefined;
+  return {
+    x0: style.x, y0: Math.min(style.y, separator?.y ?? Infinity),
+    x1: Math.max(style.x + size.width, separator ? separator.x + separator.width : -Infinity),
+    y1: Math.max(style.y + size.height, separator ? separator.y + separator.height : -Infinity)
+  };
+}
+
 export function nativeDataSize(id: string, style: Style) {
   let width = 1, height = 1;
   for (const key of nativeParts(id, style)) {
@@ -129,6 +190,7 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
   // The firmware shares min/max units and minus artwork. Use minimum when both
   // are enabled, so output is independent of object insertion order.
   const temperatureStyle = data.weather_temp_min?.enabled ? data.weather_temp_min : data.weather_temp_max;
+  const run = minMaxTemperatureRun(data);
   for (const resolution of details.resolutions) {
     const values: Record<string, string> = {};
     const ratio = resolution.width / base.width;
@@ -151,9 +213,11 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
       } else for (const key of nativeFieldKeys(field)) values[key] = COROS_CONFIG_DELETE_VALUE;
       if (style.enabled) minWatchFaceVersion = Math.max(minWatchFaceVersion, field.version);
     }
-    for (const [id, style] of Object.entries(data)) {
+    for (const [id, authored] of Object.entries(data)) {
       const field = NATIVE_DATA_BY_ID.get(id)!;
-      if (!style.enabled) continue;
+      if (!authored.enabled) continue;
+      // Written where the watch draws it, so the config matches the preview.
+      const style = id === "weather_temp_max" && run ? run.max : authored;
       const scale = ratio * style.scale;
       const part = (key: Part) => nativePart(id, style, key);
       const point = (key: Part) => `{${Math.round((style.x + part(key).x * style.scale) * ratio)},${Math.round((style.y + part(key).y * style.scale) * ratio)}}`;
@@ -162,7 +226,7 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         return `{${Math.round(x + (p.x + dx) * scale)},${Math.round(y + p.y * scale)},${Math.round(x + (p.x + dx + width) * scale)},${Math.round(y + (p.y + p.height) * scale)},${p.align === "center" ? "hcenter" : p.align}|vcenter}`;
       };
       const folders: Record<Role, string> = {
-        digits: `cl_nd_${id}_d`, icon: `cl_nd_${id}_i`, states: `cl_nd_${id}`, unit: `cl_nd_${id}_u`, symbols: `cl_nd_${id}_s`, progress: `cl_nd_${id}_p`, decimal: `cl_nd_${id}_m`, background: `cl_nd_${id}_bg`, mask: `cl_nd_${id}_mask`, noDataMask: `cl_nd_${id}_nodata`
+        digits: `cl_nd_${id}_d`, icon: `cl_nd_${id}_i`, states: `cl_nd_${id}`, unit: `cl_nd_${id}_u`, symbols: `cl_nd_${id}_s`, progress: `cl_nd_${id}_p`, decimal: `cl_nd_${id}_m`, background: `cl_nd_${id}_bg`, mask: `cl_nd_${id}_mask`, noDataMask: `cl_nd_${id}_nodata`, separator: "cl_nd_temp_separator"
       };
       const sprite = async (role: Role, index = 0, sourceStyle = style, folder = folders[role]) => {
         const file = `${String(index).padStart(2, "0")}.png`, path = `${resolution.directory}/${folder}/${file}`;
@@ -293,7 +357,7 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         }
       }
     }
-    await addMinMaxCompanions(resolution, data, weatherIconEnabled, values, assetReplacements, existing);
+    await addMinMaxCompanions(resolution, data, run, ratio, weatherIconEnabled, values, assetReplacements, existing);
     if (Object.keys(values).length) configOverrides.push({ path: `${resolution.directory}/config.txt`, values });
   }
   return { assetReplacements, configOverrides, minWatchFaceVersion };
@@ -303,11 +367,15 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
  * Every official face that draws minimum/maximum temperature (NOMAD, GLASS
  * 1–4, NIGHT CLIMBER, V) also has a weather-condition icon and a min/max
  * separator. Without them the values compile but did not appear on a PACE
- * Pro (2026-09-26), so a face that lacks either gets an invisible one.
+ * Pro (2026-09-26), so a face that lacks the icon gets an invisible one. With
+ * both values shown the separator is the minimum's own component, placed
+ * where the run puts it: an invisible one drew "1327°C" on the watch.
  */
 async function addMinMaxCompanions(
   resolution: CorosWatchfaceResolutionDetails,
   data: NativeData,
+  run: MinMaxTemperatureRun | null,
+  ratio: number,
   weatherIconEnabled: boolean | undefined,
   values: Record<string, string>,
   assetReplacements: CorosWatchfaceAssetReplacement[],
@@ -315,7 +383,14 @@ async function addMinMaxCompanions(
 ) {
   const shown = (id: string) => data[id]?.enabled && nativePart(id, data[id]!, "value").enabled;
   const anchor = parseConfigRect(values[shown("weather_temp_min") ? "weather_temp_min_rect" : "weather_temp_max_rect"]);
-  if (!anchor || !(shown("weather_temp_min") || shown("weather_temp_max"))) return;
+  if (!anchor || !(shown("weather_temp_min") || shown("weather_temp_max"))) {
+    // Their keys were cleared above; a separator an earlier export left in the
+    // starter goes with them rather than drawing a stray "/".
+    if ((data.weather_temp_min || data.weather_temp_max) && /^cl_nd_temp_separator[\\/]/.test(resolution.config.weather_temp_separator_icon ?? "")) {
+      values.weather_temp_separator_icon = values.weather_temp_separator_icon_pos = COROS_CONFIG_DELETE_VALUE;
+    }
+    return;
+  }
   const blank = async (folder: string, count: number) => {
     const dataUrl = canvasImage(1, 1, () => undefined);
     for (let i = 0; i < count; i++) {
@@ -329,7 +404,15 @@ async function addMinMaxCompanions(
     values.weather_icon_pos = `{${anchor.x0},${anchor.y0}}`;
     values.weather_icon_dir = values.weather_dark_icon_dir = "cl_nd_weather_blank";
   }
-  if (!resolution.config.weather_temp_separator_icon) {
+  if (run) {
+    const min = data.weather_temp_min!, path = `${resolution.directory}/cl_nd_temp_separator/00.png`;
+    const dataUrl = run.separator.visible
+      ? await nativeDataAsset("weather_temp_min", min, "separator", 0, ratio * min.scale)
+      : canvasImage(1, 1, () => undefined);
+    assetReplacements.push({ path, dataUrl, create: !existing.has(path), allowDimensionOverride: true });
+    values.weather_temp_separator_icon_pos = `{${Math.round(run.separator.x * ratio)},${Math.round(run.separator.y * ratio)}}`;
+    values.weather_temp_separator_icon = "cl_nd_temp_separator\\00.png";
+  } else if (!resolution.config.weather_temp_separator_icon) {
     await blank("cl_nd_temp_separator", 1);
     values.weather_temp_separator_icon_pos = `{${anchor.x1},${anchor.y0}}`;
     values.weather_temp_separator_icon = "cl_nd_temp_separator\\00.png";
@@ -345,14 +428,8 @@ export function nativeLayerHiddenByChartGroup(id: string, data: NativeData): boo
   const chart = data.chart?.enabled ? data.chart : undefined;
   const group = nativeChartGroup(chart ? chart.chartSource ?? "chart_stress" : undefined);
   if (!group) return false;
-  const bounds = (key: string) => {
-    const style = data[key];
-    if (!style?.enabled) return null;
-    const size = nativeDataSize(key, style);
-    return { x0: style.x, y0: style.y, x1: style.x + size.width, y1: style.y + size.height };
-  };
   const collides = (a: string, b: string) => {
-    const p = bounds(a), q = bounds(b);
+    const p = nativeDataBounds(a, data), q = nativeDataBounds(b, data);
     return Boolean(p && q && p.x0 < q.x1 && q.x0 < p.x1 && p.y0 < q.y1 && q.y0 < p.y1);
   };
   if (id === "chart_sun_angle") return group !== "sun";
@@ -370,8 +447,10 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
   const ctx = canvas.getContext("2d"); if (!ctx) return;
   const ratio = canvas.width / width;
   const history = scenario?.chartHistory ?? SAMPLE_HISTORY;
-  for (const [id, style] of Object.entries(data)) {
-    const field = NATIVE_DATA_BY_ID.get(id); if (!style.enabled || !field || nativeLayerHiddenByChartGroup(id, data)) continue;
+  const run = minMaxTemperatureRun(data, scenario);
+  for (const [id, authored] of Object.entries(data)) {
+    const field = NATIVE_DATA_BY_ID.get(id); if (!authored.enabled || !field || nativeLayerHiddenByChartGroup(id, data)) continue;
+    const style = id === "weather_temp_max" && run ? run.max : authored;
     const scale = style.scale * ratio, x = style.x * ratio, y = style.y * ratio;
     const part = (key: Part) => nativePart(id, style, key);
     const draw = async (role: Role, index = 0, dx = part(nativeRolePart(role)).x, dy = part(nativeRolePart(role)).y, sourceStyle = style) => {
@@ -394,10 +473,8 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
     if (available.includes("icon") && part("icon").enabled) await draw("icon");
     if (available.includes("value") && part("value").enabled) {
       const digits = part("value"), digitWidth = digits.digitWidth;
-      const time = isNativeTime(id, style);
-      const characters = value.slice(0, time ? 5 : 6);
-      const textWidth = [...characters].reduce((sum, char) => sum + (/\d/.test(char) ? digitWidth : char === "." ? part("decimal").width : part("symbols").width), 0);
-      let dx = digits.x + (digits.align === "right" ? digits.width - textWidth : digits.align === "center" ? (digits.width - textWidth) / 2 : 0);
+      const { characters, x: textX } = nativeValueRun(id, style, scenario);
+      let dx = textX;
       for (const char of characters) {
         if (/\d/.test(char)) { await draw("digits", Number(char), dx, digits.y); dx += digitWidth; }
         else if (char === ".") {
@@ -407,7 +484,11 @@ export async function drawNativeDataPreview(canvas: HTMLCanvasElement, width: nu
           await draw("symbols", index, dx, digits.y); dx += part("symbols").width;
         }
       }
-      if (available.includes("unit")) {
+      if (id === "weather_temp_min" && run) {
+        // One reading: the separator follows the minimum; the unit comes after the maximum.
+        const separator = part("separator");
+        if (separator.enabled) await draw("separator", 0, dx, digits.y + (digits.height - separator.height) / 2);
+      } else if (available.includes("unit")) {
         const shared = id.startsWith("weather_temp_") && data.weather_temp_min?.enabled ? data.weather_temp_min : style;
         await draw("unit", 0, dx, digits.y, shared);
       } else if (id === "chart" && source === "chart_moon_percent") await draw("symbols", 2, dx, digits.y);

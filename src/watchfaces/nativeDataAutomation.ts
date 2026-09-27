@@ -10,6 +10,7 @@ function nativeSpriteMeaning(id: string, style: CorosWatchfaceNativeDataStyle, r
   if (role === "digits") return known(`Digit ${index}`);
   if (role === "symbols") return known(["Minus sign", "Degree sign", "Percent sign", "Time colon"][index]);
   if (role === "decimal") return known("Decimal point");
+  if (role === "separator") return known("Separator between minimum and maximum temperature");
   if (role === "progress") return known(index === 0 ? "Sunrise progress artwork" : "Sunset progress artwork");
   if (role === "unit") {
     const text = nativeAssetText(id, { ...style, assetTexts: undefined }, role, index);
@@ -74,7 +75,7 @@ export function describeNativeDataComponents(id: string, style: CorosWatchfaceNa
         textPath: `/design/nativeData/${id}/assetTexts/${assetRole}`,
         stateIndices,
         spriteCount: stateIndices.length,
-        ...(["digits", "symbols", "decimal", "unit"].includes(assetRole) ? { orderedValues: stateIndices.map(index => nativeAssetText(id, style, assetRole, Number(index))) } : {}),
+        ...(["digits", "symbols", "decimal", "unit", "separator"].includes(assetRole) ? { orderedValues: stateIndices.map(index => nativeAssetText(id, style, assetRole, Number(index))) } : {}),
         countSource: assetRole === "states" && id !== "chart" ? style.stateCount !== undefined ? "recovered-or-configured-stateCount" : "catalog-default; confirm against template" : "exporter",
         states: stateIndices.map(index => ({ index, ...nativeSpriteMeaning(id, style, assetRole, Number(index), stateIndices.length) })),
         stateOrder: "Each state is a separate PNG at its exact canonical index key. Indices may be sparse (the sunrise colon is key '3'); never renumber. Export filenames are zero-padded indices. Preserve unknown template states rather than guessing or repeating one image.",
@@ -101,7 +102,7 @@ export function getNativeDataAutomationCatalog() {
       "PACE Pro testing reports chart changes on Back while the chart number remains absent. Do not treat cycling as proof of numeric-readout support or a fix for missing numbers. A separate metric layer is independent and will not follow chart changes.",
       "chartStyle.previewType selects the sample preview only: 'bars' uses barWidth, barGap, selectedBarColor and unselectedBarColor; 'curve' uses lineWidth, upperColor and lowerColor. Both appearance sets are exported. Firmware still chooses the live graph representation per chart group; sunrise, moonrise, barometer and tide groups draw curves on official faces.",
       "The watch cycles chart groups with Back (general, sun, moon, barometer, tide). Readouts of other groups already in a recovered official face's config are kept on export; the chart layer replaces only the shared graph and its selected source. The preview follows the chart layer's group: chart_sun_angle draws only in the sun group, and weather_temp, weather_temp_min/max, weather_wind and weather_direction are hidden only where they share a slot with the group's alternative. Hidden-by-group layers remain enabled and exported.",
-      "Minimum/maximum temperature share units and minus artwork; minimum supplies them when both are enabled.",
+      "The watch draws minimum and maximum temperature as one reading: minimum, separator, maximum, then one unit. With both enabled the maximum follows the minimum and its own x/y are ignored, so place the reading with weather_temp_min. Minimum supplies the separator, unit and minus artwork.",
       "AQI availability depends on region and synced weather data. A blank weather_aqi layer does not by itself establish an export bug; check whether the watch's built-in Weather widget has an AQI reading. Preview and simulation values are samples, not supplied live data.",
       "weather_temp owns the weather companion temperature slot when configured. Remove it to restore companion control.",
       "weather_temp is labeled Current weather and displays weather temperature. The separate temperature metric and selectable control use the watch's temperature sensor, which is affected by body heat. Preserve both when requested; their simulation values are independent.",

@@ -111,6 +111,21 @@ async function renderNativeData(details) {
   check(nomadValues.chart_dgree_icon==='cl_nd_chart_sun_angle_u\\00.png','Solar angle supplies the shared chart degree artwork');
   const eightDirections=await native.composeNativeData({...details,resolutions:[details.resolutions.find(r=>r.width===800)]},{weather_direction:{...nativeData.weather_direction,stateCount:8}});
   check(eightDirections.assetReplacements.filter(a=>a.path.includes('/cl_nd_weather_direction/')).length===8,'A recovered eight-frame direction table exports eight frames');
+  // The watch draws min/max as one reading from the minimum (issue #131: an
+  // invisible separator drew "1327°C"), whatever the maximum's own position.
+  const r800={...details,resolutions:[details.resolutions.find(r=>r.width===800)]};
+  const pair={weather_temp_min:{...nativeData.weather_temp_min,x:100,y:300},weather_temp_max:{...nativeData.weather_temp_max,x:600,y:500}};
+  const reading=await native.composeNativeData(r800,pair,false),readingValues=reading.configOverrides[0].values;
+  const minRect=studio.parseConfigRect(readingValues.weather_temp_min_rect),maxRect=studio.parseConfigRect(readingValues.weather_temp_max_rect),separatorPos=studio.parseConfigPos(readingValues.weather_temp_separator_icon_pos);
+  const separatorImage=await studio.loadStudioImage(reading.assetReplacements.find(a=>a.path.endsWith('/cl_nd_temp_separator/00.png')).dataUrl);
+  check(separatorImage.width===24&&separatorImage.height===48,'Min/max export a visible digit-sized separator');
+  check(separatorPos.x===minRect.x0+48&&maxRect.x0===separatorPos.x+24&&maxRect.y0===minRect.y0,'The maximum exports after the minimum and separator, on the minimum line');
+  const readingCanvas=document.createElement('canvas');readingCanvas.width=800;readingCanvas.height=800;
+  await native.drawNativeDataPreview(readingCanvas,800,pair);
+  const ink=(x,y,w,h)=>readingCanvas.getContext('2d').getImageData(x,y,w,h).data.filter((_,i)=>i%4===3).reduce((sum,alpha)=>sum+alpha,0);
+  check(ink(148,300,24,48)>0&&ink(172,300,48,48)>0&&ink(600,500,96,48)===0,'The preview draws separator and maximum after the minimum, not at the maximum position');
+  const lone=await native.composeNativeData(r800,{weather_temp_min:pair.weather_temp_min},false);
+  check((await studio.loadStudioImage(lone.assetReplacements.find(a=>a.path.endsWith('/cl_nd_temp_separator/00.png')).dataUrl)).width===1,'A lone minimum keeps the invisible separator companion');
   const aod=studio.retargetWatchfaceCompositionToAod(details,composition);
   check(aod.configOverrides.every(o=>o.path.endsWith('/AODconfig.txt')),'AOD overrides target AOD config');
   check(aod.assetReplacements.every(a=>!composition.assetReplacements.some(b=>a.path===b.path)),'AOD sprites do not overwrite Current');

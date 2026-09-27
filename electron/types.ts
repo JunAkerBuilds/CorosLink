@@ -971,7 +971,7 @@ export interface CorosWatchfaceExerciseSeparatorStyle {
 }
 
 /** Authored native 4.9.9 data layer, in master-preview pixels. */
-export type CorosWatchfaceNativeAssetRole = "digits" | "icon" | "states" | "unit" | "symbols" | "progress" | "decimal" | "background" | "mask" | "noDataMask";
+export type CorosWatchfaceNativeAssetRole = "digits" | "icon" | "states" | "unit" | "symbols" | "progress" | "decimal" | "background" | "mask" | "noDataMask" | "separator";
 export type CorosWatchfaceNativePart = "value" | Exclude<CorosWatchfaceNativeAssetRole, "digits"> | "plot";
 export interface CorosWatchfaceNativePartStyle {
   enabled?: boolean;

@@ -10,7 +10,7 @@ import { WatchfaceNumberAlignControl } from "./WatchfaceNumberAlignControl";
 import { NativeDataInspector } from "./NativeDataInspector";
 import { describeNativeDataComponents } from "./nativeDataAutomation";
 import { watchfaceAutomationAssetContracts } from "./watchfaceAutomationAssetContracts";
-import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, nativeDataSize } from "./nativeData";
+import { NATIVE_DATA_FIELDS, NATIVE_CHART_SOURCES, defaultNativeDataStyle, drawNativeDataPreview, minMaxTemperatureRun, nativeDataSize, nativeLayerStyle } from "./nativeData";
 import { glyphBaselineMovements, visibleGlyphBounds } from "./watchfaceGlyphLayout";
 import { WatchfaceExportPreview } from "./WatchfaceExportPreview";
 import {
@@ -2880,9 +2880,19 @@ export function WatchfaceEditor({
     return (design.lockedLayerIds ?? []).includes(id);
   }
 
+  /**
+   * The watch draws minimum and maximum temperature as one reading, the
+   * maximum placed after the minimum, so moving either moves both.
+   */
+  function withReadingCompanions(ids: string[]): string[] {
+    const pair = ["native:weather_temp_min", "native:weather_temp_max"];
+    if (!ids.some((id) => pair.includes(id)) || !minMaxTemperatureRun(design.nativeData ?? {})) return ids;
+    return [...new Set([...ids, ...pair])];
+  }
+
   /** A linked group cannot move when any of its components is position-locked. */
   function isMovementLockedForId(id: string): boolean {
-    return linkedIdsFor(id).some(isPositionLocked);
+    return withReadingCompanions(linkedIdsFor(id)).some(isPositionLocked);
   }
 
   function isMovableSelectionId(id: string): boolean {
@@ -2904,7 +2914,7 @@ export function WatchfaceEditor({
     const source = selectedIds.includes(primaryId)
       ? selectedIds
       : linkedIdsFor(primaryId);
-    return expandWatchfaceGroupSelection(design.editorGroups, source).filter(
+    return withReadingCompanions(expandWatchfaceGroupSelection(design.editorGroups, source)).filter(
       (id) => isMovableSelectionId(id) && !isMovementLockedForId(id)
     );
   }
@@ -2914,7 +2924,7 @@ export function WatchfaceEditor({
       return drag.selectionIds?.length ? drag.selectionIds : [drag.snapId];
     }
     const primaryId = drag.kind === "selectorIcon" ? "complication" : drag.snapId;
-    return drag.selectionIds?.length ? drag.selectionIds : linkedIdsFor(primaryId);
+    return drag.selectionIds?.length ? drag.selectionIds : withReadingCompanions(linkedIdsFor(primaryId));
   }
 
   function dragBoundsForId(
@@ -4878,7 +4888,8 @@ export function WatchfaceEditor({
     const movementIds = movableIdsForGesture(liveHit.id);
     if (!selectedIds.includes(liveHit.id)) selectEditorItem(liveHit.id);
     if (liveHit.nativeDataId && design.nativeData?.[liveHit.nativeDataId]) {
-      const style = design.nativeData[liveHit.nativeDataId];
+      // Where the layer draws: a maximum temperature follows the minimum.
+      const style = nativeLayerStyle(liveHit.nativeDataId, design.nativeData)!;
       startElementDrag(event, {kind: "nativeData", targetId: liveHit.nativeDataId, startX: point.x, startY: point.y, baseX: style.x, baseY: style.y, snapId: liveHit.id, baseBounds: liveHit.bounds!, selectionIds: movementIds});
       return;
     }
@@ -5024,7 +5035,7 @@ export function WatchfaceEditor({
       return { dx: x - drag.baseX, dy: y - drag.baseY };
     }
     if (drag.kind === "nativeData") {
-      const style = design.nativeData?.[drag.targetId];
+      const style = nativeLayerStyle(drag.targetId, design.nativeData ?? {});
       if (!style) return {dx:0,dy:0};
       const size = nativeDataSize(drag.targetId, style);
       return {dx: Math.max(0, Math.min(previewWidth - size.width, drag.baseX + movement.dx)) - drag.baseX, dy: Math.max(0, Math.min(previewHeight - size.height, drag.baseY + movement.dy)) - drag.baseY};
@@ -13463,16 +13474,22 @@ export function WatchfaceEditor({
   function renderNativeDataPositionPanel(
     layer: EditorLayer,
     id: string,
-    style: NonNullable<CorosWatchfaceDesignState["nativeData"]>[string]
+    authored: NonNullable<CorosWatchfaceDesignState["nativeData"]>[string]
   ) {
+    // A maximum temperature is drawn after the minimum: show where it lands
+    // and move the whole reading by moving the minimum.
+    const run = id === "weather_temp_max" ? minMaxTemperatureRun(design.nativeData ?? {}) : null;
+    const style = run?.max ?? authored;
+    const target = run ? "weather_temp_min" : id;
+    const targetStyle = design.nativeData?.[target] ?? authored;
     const size = nativeDataSize(id, style);
     const maxX = Math.max(0, previewWidth - size.width);
     const maxY = Math.max(0, previewHeight - size.height);
     const setPosition = (x: number, y: number) => {
       if (isMovementLockedForId(layer.id)) return;
-      updateNativeData(id, {
-        x: Math.round(Math.max(0, Math.min(maxX, x))),
-        y: Math.round(Math.max(0, Math.min(maxY, y)))
+      updateNativeData(target, {
+        x: Math.round(targetStyle.x + Math.max(0, Math.min(maxX, x)) - style.x),
+        y: Math.round(targetStyle.y + Math.max(0, Math.min(maxY, y)) - style.y)
       });
     };
     const alignX = (position: "start" | "center" | "end") =>
@@ -13533,7 +13550,9 @@ export function WatchfaceEditor({
         </span>
       </>,
       <p className="watchface-studio-summary">
-        The watch draws this data live. Drag it on the face to reposition it.
+        {target === id
+          ? "The watch draws this data live. Drag it on the face to reposition it."
+          : "The watch draws this right after the minimum temperature, so moving it moves both."}
       </p>
     );
   }

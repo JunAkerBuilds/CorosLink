@@ -108,6 +108,14 @@ export async function recoverWatchfaceDesign(
     if (unitKey && hasValue) await addPart("unit", unitKey);
     if (field.id.startsWith("weather_temp") && hasValue) await addPart("symbols",
       field.id === "weather_temp" ? "weather_negasign_icon" : "weather_temp_max_min_negasign_icon");
+    // The "/" official faces draw between minimum and maximum. Earlier Studio
+    // exports wrote an invisible pixel there; keep it hidden so the editor and
+    // the send preview show what that config draws.
+    if (field.id === "weather_temp_min" && hasValue) {
+      const separator = source("weather_temp_separator_icon")[0];
+      if (separator && Math.max(separator.width, separator.height) <= 4) parts.separator = { enabled: false };
+      else await addPart("separator", "weather_temp_separator_icon");
+    }
     nativeData[field.id] = { enabled: true, ...origin, scale: 1, color: "#ffffff", parts, assets,
       ...(assets.states ? { stateCount: Object.keys(assets.states).length } : {}) };
   }
