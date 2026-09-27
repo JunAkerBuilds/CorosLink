@@ -463,6 +463,10 @@ import {
   parseConfigPos,
   pickPreviewResolution,
   templateHasSeconds,
+  ADDED_DATE_PART_FLAGS,
+  ADDED_WEEKDAY_FALLBACK_FONT,
+  WATCHFACE_DATE_PARTS,
+  canAddDatePart,
   pickEditorPreviewResolution,
   pickWatchPreviewResolution,
   rasterFontSupportsText,
@@ -936,6 +940,23 @@ const ANALOG_HAND_CONFIG_ASSET_IDS = new Set([
   "config:time_minute_icon",
   "config:time_second_icon"
 ]);
+const ADDED_DATE_PART_LABELS: Record<WatchfaceDatePartId, string> = {
+  weekday: "Weekday",
+  dateMonth: "Date month",
+  dateDay: "Date day"
+};
+/**
+ * Add-menu order for face components, so a row keeps its place whether the
+ * template ships the part or Studio adds it. Unlisted rows follow in order.
+ */
+const FACE_ADD_OPTION_ORDER = [
+  "analog", "autoTime", "hours", "minutes", "seconds", "separators",
+  "staticColon", "ampm", "weekday", "dateMonth", "dateDay", "staticDateSlash"
+];
+function faceAddOptionRank(id: string): number {
+  const index = FACE_ADD_OPTION_ORDER.indexOf(id);
+  return index < 0 ? FACE_ADD_OPTION_ORDER.length : index;
+}
 const PROJECT_THUMBNAIL_SIZE = 416;
 
 function maskCanvasToCircle(canvas: HTMLCanvasElement): void {
@@ -2238,6 +2259,10 @@ export function WatchfaceEditor({
       design.controlFloorEnabled,
       design.controlTemperatureEnabled,
       design.separateAutoTime,
+      design.addSeconds,
+      design.addWeekday,
+      design.addDateMonth,
+      design.addDateDay,
       design.timeStyles,
       design.dateStyles,
       design.layerColors,
@@ -2296,6 +2321,10 @@ export function WatchfaceEditor({
       design.controlFloorEnabled,
       design.controlTemperatureEnabled,
       design.separateAutoTime,
+      design.addSeconds,
+      design.addWeekday,
+      design.addDateMonth,
+      design.addDateDay,
       design.timeStyles,
       design.dateStyles,
       design.layerColors,
@@ -5999,6 +6028,72 @@ export function WatchfaceEditor({
     setSelectedIds([]);
   }
 
+  // Like seconds, calendar parts the template lacks are added by Studio
+  // (Current face only); parts the template ships are restored as layers.
+  const addableDateParts = new Set<string>(
+    previewMode === "current" && templateSecondsResolution
+      ? WATCHFACE_DATE_PARTS
+          .filter((part) => canAddDatePart(templateSecondsResolution, part.id))
+          .map((part) => part.id)
+      : []
+  );
+  function isAddedDatePart(id: string): id is WatchfaceDatePartId {
+    return addableDateParts.has(id) &&
+      design[ADDED_DATE_PART_FLAGS[id as WatchfaceDatePartId]] === true;
+  }
+  function addDatePart(partId: WatchfaceDatePartId) {
+    const flag = ADDED_DATE_PART_FLAGS[partId];
+    // Adding again also brings back a part that was hidden with the eye.
+    if (!design[flag] || design.layerVisibility?.[partId] === false) {
+      setDesign((prev) => {
+        const layerVisibility = { ...prev.layerVisibility };
+        delete layerVisibility[partId];
+        const weekday = prev.dateStyles?.weekday;
+        return {
+          ...prev,
+          [flag]: true,
+          layerVisibility,
+          // The added weekday has no label artwork; naming the font it
+          // renders with keeps the inspector truthful.
+          ...(partId === "weekday" && !weekday?.fontFamily
+            ? {
+                dateStyles: {
+                  ...prev.dateStyles,
+                  weekday: {
+                    scale: 1,
+                    ...weekday,
+                    fontFamily: prev.fontFamily || ADDED_WEEKDAY_FALLBACK_FONT,
+                    nativeSize: true
+                  }
+                }
+              }
+            : {})
+        };
+      });
+    }
+    selectEditorItem(partId);
+    openQuickStartProperties();
+  }
+  function removeAddedDatePart(partId: WatchfaceDatePartId) {
+    setDesign((prev) => {
+      const dateStyles = { ...prev.dateStyles };
+      delete dateStyles[partId];
+      const layoutOffsets = { ...prev.layoutOffsets };
+      delete layoutOffsets[partId];
+      const layerVisibility = { ...prev.layerVisibility };
+      delete layerVisibility[partId];
+      return {
+        ...prev,
+        [ADDED_DATE_PART_FLAGS[partId]]: false,
+        dateStyles,
+        layoutOffsets,
+        layerVisibility
+      };
+    });
+    setSelectedId("");
+    setSelectedIds([]);
+  }
+
   // Every DIY template declares the analog keys (usually blank), so hands can
   // be added to any face. Template-backed hands are re-enabled as they are.
   const analogHandsOnFace = layers.some(
@@ -7333,6 +7428,7 @@ export function WatchfaceEditor({
       layer.kind !== "customSprite" &&
       layer.kind !== "backgroundElement" &&
       !(layer.id === "seconds" && design.addSeconds) &&
+      !isAddedDatePart(layer.id) &&
       !layerIsSelectableSlotAsset(layer);
   }
 
@@ -7341,6 +7437,7 @@ export function WatchfaceEditor({
       if (isMovementLockedForId(id)) return false;
       if (id.startsWith("bgel:")) return true;
       if (id === "seconds" && design.addSeconds && canAddSeconds) return true;
+      if (isAddedDatePart(id)) return true;
       const layer = layers.find((candidate) => candidate.id === id);
       return Boolean(layer && (layer.kind === "customSprite" || isRemovableFirmwareLayer(layer)));
     });
@@ -7412,6 +7509,11 @@ export function WatchfaceEditor({
     );
     if (ids.has("seconds") && design.addSeconds && canAddSeconds) {
       removeAddedSeconds();
+      if (elementIds.size === 0 && spriteIds.size === 0) return;
+    }
+    const addedDateParts = [...ids].filter(isAddedDatePart);
+    if (addedDateParts.length > 0) {
+      for (const partId of addedDateParts) removeAddedDatePart(partId);
       if (elementIds.size === 0 && spriteIds.size === 0) return;
     }
     if (elementIds.size === 0 && spriteIds.size === 0) return;
@@ -8631,11 +8733,21 @@ export function WatchfaceEditor({
   const faceAddOptions: WatchfaceAddFaceOption[] = [
     ...(canAddSeconds ? [{ id: "seconds", label: "Seconds", category: "Time" as const, added: Boolean(design.addSeconds), onAdd: addSeconds }] : []),
     { id: "analog", label: "Analog hands", category: "Time", added: analogHandsOnFace, onAdd: addAnalogHands },
+    ...WATCHFACE_DATE_PARTS
+      .filter((part) => addableDateParts.has(part.id))
+      .map((part) => ({
+        id: part.id,
+        label: ADDED_DATE_PART_LABELS[part.id],
+        category: "Calendar" as const,
+        added: isAddedDatePart(part.id) && design.layerVisibility?.[part.id] !== false,
+        onAdd: () => addDatePart(part.id)
+      })),
     ...layers
       .filter((layer) =>
         isRemovableFirmwareLayer(layer) &&
         !layer.nativeDataId &&
         !(layer.id === "seconds" && canAddSeconds) &&
+        !addableDateParts.has(layer.id) &&
         !ANALOG_HAND_CONFIG_ASSET_IDS.has(layer.configAssetId ?? "") &&
         // A template image the face never drew has nothing to restore.
         (layer.kind !== "configAsset" || layer.present)
@@ -8648,6 +8760,7 @@ export function WatchfaceEditor({
         onAdd: () => layer.visible ? selectQuickStartItem(layer.id) : restoreFirmwareLayer(layer)
       }))
   ];
+  faceAddOptions.sort((left, right) => faceAddOptionRank(left.id) - faceAddOptionRank(right.id));
   const layerSearch = layerQuery.trim().toLowerCase();
   const layerMatchesSearch = (label: string) =>
     !layerSearch || label.toLowerCase().includes(layerSearch);
@@ -12208,7 +12321,11 @@ export function WatchfaceEditor({
         partId === "weekday" || partId === "dateDay";
       // Native sizes are authored in master coordinates; export scales them
       // per device tree, so the inspector reads master fallbacks only.
-      const sourceResolution = details ? pickPreviewResolution(details) : null;
+      // A Studio-added part exists only in the derived details.
+      const sourceDetails = isAddedDatePart(partId)
+        ? designDetails?.metricDetails ?? details
+        : details;
+      const sourceResolution = sourceDetails ? pickPreviewResolution(sourceDetails) : null;
       const monthFolderName = sourceResolution?.config.english_date_month_font
         ?.replace(/\\/g, "/");
       const starterUsesMonthLabels = partId === "dateMonth" &&
@@ -12247,11 +12364,17 @@ export function WatchfaceEditor({
             "specific",
             "Typography",
             <div className="wf-property-stack">
+              {isAddedDatePart(partId) ? <>
+                <p className="watchface-studio-summary">{partId === "weekday"
+                  ? "Added by Studio and drawn with a font. This template has no weekday of its own."
+                  : "Added by Studio using this face's digits. This template has no date of its own."}</p>
+                <div className="wf-config-asset-actions"><button className="secondary-button wf-danger-action" type="button" onClick={() => removeAddedDatePart(partId)}><Trash2 size={15} /> Remove {layer.label.toLowerCase()}</button></div>
+              </> : null}
               <LocalFontPicker
                 api={api}
                 label="Font"
                 value={style?.fontFamily ?? design.fontFamily}
-                emptyLabel="Keep template font"
+                emptyLabel={isAddedDatePart(partId) && partId === "weekday" ? "Default font" : "Keep template font"}
                 preview={renderFontPreview(partId, style, {
                   rasterFontRequiredText: partId === "weekday" ? "MON" : usesMonthLabels ? "JAN" : undefined,
                   sampleText: partId === "weekday"

@@ -1156,6 +1156,14 @@ export interface CorosWatchfaceDesignState {
    * digit sprites. Ignored when the template already ships seconds.
    */
   addSeconds?: boolean;
+  /**
+   * Add weekday/month/day to a template that lays out none of its own. Month
+   * and day reuse a template digit folder; weekday is rendered from a font.
+   * Ignored for parts the template already ships.
+   */
+  addWeekday?: boolean;
+  addDateMonth?: boolean;
+  addDateDay?: boolean;
   timeStyles: Record<string, { solidAlpha?: boolean; color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Weekday/month/day sizing; absent in projects saved before resizing. */
   dateStyles?: Record<
@@ -1303,6 +1311,9 @@ export type CorosWatchfaceModeDesignState = Partial<
     | "controlIconOffsets"
     | "separateAutoTime"
     | "addSeconds"
+    | "addWeekday"
+    | "addDateMonth"
+    | "addDateDay"
     | "timeStyles"
     | "dateStyles"
     | "staticSeparators"

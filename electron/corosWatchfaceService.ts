@@ -2525,6 +2525,15 @@ export function applyCorosWatchfaceConfigOverrides(
     "time_minute_low_pos",
     "time_minute_low_font",
     "colon_icon",
+    // Weekday/month/day Studio adds to a template that lays out no date.
+    // Such templates declare no date table in any language, so only the
+    // English one is written (mirrorEnglishDateOverrides finds nothing).
+    "english_date_week_rect",
+    "english_date_week_font",
+    "english_date_month_rect",
+    "english_date_month_font",
+    "english_date_day_rect",
+    "english_date_day_font",
     // Analog hands Studio adds to a template that never declared them. Most
     // DIY templates declare these blank, and the phone compiler's SetPoint
     // stage reads them for every face.

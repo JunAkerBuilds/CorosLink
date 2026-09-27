@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
   analogCenterLayoutGroupId,
+  buildAddedDateOverrides,
+  canAddDatePart,
+  resolveAddedDateStyles,
+  templateHasDatePart,
   COROS_CONFIG_DELETE_VALUE,
   alignConfigRectValue,
   numberStartX,
@@ -1336,6 +1340,106 @@ assert.ok(
     ({ id }) => id === "seconds"
   ),
   "Added seconds should appear as a movable Seconds layer"
+);
+
+// Calendar parts the template lacks are added from its own digit sprites.
+const parseRect = (value) => {
+  const [x0, y0, x1, y1] = value.match(/-?\d+/g).map(Number);
+  return { x0, y0, x1, y1 };
+};
+const withoutConfig = (template, pattern) => ({
+  ...template,
+  resolutions: template.resolutions.map((entry) => ({
+    ...entry,
+    config: Object.fromEntries(
+      Object.entries(entry.config).filter(([key]) => !pattern.test(key))
+    )
+  }))
+});
+const fullDateDetails = { archiveId: "full-date", resolutions: [resolution(240, 12, 20)] };
+assert.equal(templateHasDatePart(fullDateDetails.resolutions[0], "dateDay"), true);
+assert.equal(canAddDatePart(fullDateDetails.resolutions[0], "dateDay"), false);
+assert.deepEqual(
+  buildAddedDateOverrides(fullDateDetails, { addWeekday: true, addDateMonth: true, addDateDay: true }),
+  [],
+  "Date parts the template already lays out must be left untouched"
+);
+const noDateDetails = withoutConfig(fullDateDetails, /_date_(week|month|day)_/);
+for (const partId of ["weekday", "dateMonth", "dateDay"]) {
+  assert.equal(templateHasDatePart(noDateDetails.resolutions[0], partId), false);
+  assert.equal(canAddDatePart(noDateDetails.resolutions[0], partId), true);
+}
+assert.deepEqual(buildAddedDateOverrides(noDateDetails, {}), []);
+const addedDateValues = buildAddedDateOverrides(noDateDetails, {
+  addWeekday: true,
+  addDateMonth: true,
+  addDateDay: true
+})[0].values;
+assert.equal(addedDateValues.english_date_month_font, "13x19");
+assert.equal(addedDateValues.english_date_day_font, "13x19");
+assert.equal(
+  addedDateValues.english_date_week_font,
+  "13x19",
+  "An added weekday sizes itself from template digits and renders labels from a font"
+);
+const addedWeek = parseRect(addedDateValues.english_date_week_rect);
+const addedMonth = parseRect(addedDateValues.english_date_month_rect);
+const addedDay = parseRect(addedDateValues.english_date_day_rect);
+assert.ok(addedWeek.y0 >= 50, "Added date parts should sit below the time digits");
+assert.ok(addedWeek.y1 <= addedMonth.y0, "The added weekday gets its own row above month/day");
+assert.equal(addedMonth.y0, addedDay.y0, "Added month and day share a row");
+assert.ok(addedMonth.x1 < addedDay.x0, "Month leads day with room for a separator");
+for (const rect of [addedWeek, addedMonth, addedDay]) {
+  for (const [x, y] of [[rect.x0, rect.y0], [rect.x1, rect.y0], [rect.x0, rect.y1], [rect.x1, rect.y1]]) {
+    assert.ok(Math.hypot(x - 120, y - 120) <= 120, "Added date parts must stay on the round dial");
+  }
+}
+const addedDateDetails = applyConfigOverridesToDetails(
+  noDateDetails,
+  buildAddedDateOverrides(noDateDetails, { addWeekday: true, addDateMonth: true, addDateDay: true })
+);
+assert.deepEqual(
+  computeLayoutGroupBounds(addedDateDetails.resolutions[0])
+    .filter(({ id }) => ["weekday", "dateMonth", "dateDay"].includes(id))
+    .map(({ id }) => id)
+    .sort(),
+  ["dateDay", "dateMonth", "weekday"],
+  "Added date parts should appear as movable layers"
+);
+assert.deepEqual(
+  buildAddedDateOverrides(addedDateDetails, { addWeekday: true, addDateMonth: true, addDateDay: true }),
+  [],
+  "Re-deriving an already added date must not move it again"
+);
+const noDayDetails = withoutConfig(fullDateDetails, /_date_day_/);
+const addedDayRect = parseRect(
+  buildAddedDateOverrides(noDayDetails, { addDateDay: true })[0].values.english_date_day_rect
+);
+const templateMonthRect = parseRect(noDayDetails.resolutions[0].config.english_date_month_rect);
+assert.ok(addedDayRect.x0 > templateMonthRect.x1, "An added day follows the template month");
+assert.equal(addedDayRect.y0, templateMonthRect.y0, "An added day shares the template month row");
+const weekOnlyDetails = withoutConfig(fullDateDetails, /_date_(month|day)_/);
+const weekOnlyRect = parseRect(weekOnlyDetails.resolutions[0].config.english_date_week_rect);
+const besideWeekMonth = parseRect(
+  buildAddedDateOverrides(weekOnlyDetails, { addDateMonth: true })[0].values.english_date_month_rect
+);
+assert.ok(
+  besideWeekMonth.x0 > weekOnlyRect.x1,
+  "A month added to a left-side weekday sits on its dial-center side"
+);
+assert.deepEqual(resolveAddedDateStyles({}, {}, ""), {});
+assert.equal(
+  resolveAddedDateStyles({}, { addWeekday: true }, "").weekday.fontFamily,
+  "Arial",
+  "An added weekday must always render from a font, never its digit placeholder"
+);
+assert.equal(
+  resolveAddedDateStyles({ weekday: { scale: 1 } }, { addWeekday: true }, "Futura").weekday.fontFamily,
+  "Futura"
+);
+assert.equal(
+  resolveAddedDateStyles({ weekday: { scale: 1, fontFamily: "Menlo" } }, { addWeekday: true }, "Futura").weekday.fontFamily,
+  "Menlo"
 );
 const addedSecondsStyle = buildTimeStyleOverrides(
   addedSecondsDetails,
