@@ -2855,6 +2855,14 @@ export interface CorosMcpStatus {
   tools: CorosMcpTool[];
 }
 
+/** The COROS account CorosLink is signed in with, reused to connect COROS MCP. */
+export interface CorosMcpAccount {
+  /** Saved account email, filled in on COROS's sign-in page. */
+  email?: string;
+  /** Region of the Training Hub or Watch Faces session; picks the MCP server. */
+  region?: CorosWatchfaceRegion;
+}
+
 // ----- Configurable MCP server registry -----
 
 export type McpTransport = "streamable-http";
@@ -2868,7 +2876,10 @@ export interface McpServerConfig {
   authType: McpAuthType;
   scope?: string;
   enabled: boolean;
-  /** Built-in (COROS): URL/id immutable; can be disabled or removed. */
+  /**
+   * Built-in (COROS): id immutable, URL limited to COROS's regional endpoints;
+   * can be disabled or removed.
+   */
   builtin: boolean;
   sortOrder: number;
 }

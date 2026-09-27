@@ -138,6 +138,15 @@ assert.throws(() => updateMcpServer("coros", { url: "https://evil/mcp" }, db));
 const corosOff = updateMcpServer("coros", { enabled: false }, db);
 assert.equal(corosOff.enabled, false);
 
+// ...except that built-in COROS follows the account to another COROS region.
+const europe = "https://mcpeu.coros.com/mcp";
+assert.equal(updateMcpServer("coros", { url: europe }, db).url, europe);
+assert.throws(() => updateMcpServer("coros", { url: "http://mcpcn.coros.com/mcp" }, db));
+assert.throws(() =>
+  updateMcpServer("coros", { url: "https://mcpcn.coros.com.evil.example/mcp" }, db)
+);
+assert.equal(getMcpServer("coros", db).url, europe);
+
 // scope can be explicitly cleared and ids cannot be changed
 assert.equal(updateMcpServer("freddy", { scope: "read write" }, db).scope, "read write");
 assert.equal(updateMcpServer("freddy", { scope: null }, db).scope, undefined);

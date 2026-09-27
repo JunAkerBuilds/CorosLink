@@ -1,0 +1,48 @@
+/* COROS account note on COROS MCP server rows. The rest of the panel's
+   styling predates co-located sheets and lives in styles.css. */
+.mcp-server-coros-account {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  margin-top: 2px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--glass-border));
+  border-radius: var(--radius-sm);
+  /* Opaque, so its small text keeps 4.5:1 on paper's grey rows. */
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  color: var(--accent-strong);
+}
+
+.mcp-server-coros-account > svg {
+  margin-top: 1px;
+}
+
+.mcp-server-coros-account > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mcp-server-coros-account > div > span {
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.mcp-server-coros-account strong {
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mcp-server-coros-account small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.mcp-server-coros-account small.is-warning {
+  color: color-mix(in srgb, var(--warning-text) 80%, var(--text-primary));
+}

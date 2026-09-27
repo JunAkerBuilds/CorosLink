@@ -122,6 +122,7 @@ import type {
   LocalChatDiscovery,
   OpenRouterConfig,
   OpenRouterConnectionTest,
+  CorosMcpAccount,
   CorosMcpStatus,
   CorosMcpTool,
   McpServerConfig,
@@ -719,6 +720,7 @@ export interface CorosLinkApi {
   ) => Promise<McpServerConfig>;
   removeMcpServer: (id: string) => Promise<void>;
   connectMcpServer: (id: string) => Promise<McpServerStatus>;
+  getCorosMcpAccount: () => Promise<CorosMcpAccount>;
   disconnectMcpServer: (id: string) => Promise<void>;
   getMcpStatuses: () => Promise<McpServerStatus[]>;
   setMcpBearer: (id: string, token: string) => Promise<void>;
