@@ -3631,7 +3631,8 @@ const TEMPLATE_CATALOG_CHIPS: readonly HubChip<CorosWatchfaceThemeCatalog>[] = [
 
 // Known watches whose serial unlocks their official/custom face catalog.
 const TEMPLATE_WATCH_PRESETS: readonly { id: string; label: string; model: WatchModelId; serial: string }[] = [
-  { id: "apex-4-satisfy", label: "APEX 4 · SATISFY", model: "apex-4", serial: "W51E005280" }
+  { id: "apex-4-satisfy", label: "APEX 4 · SATISFY", model: "apex-4", serial: "W51E005280" },
+  { id: "pace-4-jakob-ingebrigtsen", label: "PACE 4 · Jakob Ingebrigtsen Edition", model: "pace-4", serial: "W36C018325" }
 ];
 
 const UNCATEGORIZED_TEMPLATE = "Other";
