@@ -1206,6 +1206,13 @@ export default function App() {
       return;
     }
 
+    // Switching downloads off cancels the download an earlier "Update now"
+    // was waiting on; that acceptance must not restart the app if the user
+    // later downloads the update by hand.
+    if (prefs.autoDownload === false) {
+      installAcceptedVersionRef.current = null;
+    }
+
     try {
       const snapshot = await api.setUpdatePreferences(prefs);
       setAppUpdateSnapshot(snapshot);
