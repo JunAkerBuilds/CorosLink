@@ -12,7 +12,7 @@
 #
 # Needs bash 4+, clamscan with current signatures, unzip, 7z, unsquashfs, and
 # node with this repo's npm dependencies installed (for @electron/asar). CI
-# runs it on ubuntu-latest; see .github/workflows/release.yml.
+# no longer runs it; see docs/releasing.md.
 set -euo pipefail
 shopt -s globstar nullglob
 
