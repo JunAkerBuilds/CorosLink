@@ -35,15 +35,57 @@ clamscan_args=(
 failures=()
 unpacked=0
 
+# Detections that are known false positives, as "<signature>|<file name>".
+# Each one names a single signature on a single file, so the same signature on
+# any other file, or any other signature on these files, still fails the scan.
+#
+# Win.Packed.Mikey-9859574-0 matches the Windows app executable (Electron's
+# electron.exe renamed by electron-builder), and so also the NSIS installer and
+# the 7z payload that carry it. The 0.1.49 installer, both as published and as
+# rebuilt on 2026-10-02, was clean on every other VirusTotal engine, and ClamAV
+# has declined to change the signature.
+known_false_positives=(
+  "Win.Packed.Mikey-9859574-0|CorosLink.exe"
+  "Win.Packed.Mikey-9859574-0|app-64.7z"
+  "Win.Packed.Mikey-9859574-0|CorosLink-Setup-*.exe"
+)
+
+# Succeeds when every detection in a clamscan log is a known false positive.
+only_known_false_positives() {
+  local log=$1 line signature file entry matched
+  grep -q ' FOUND$' "$log" || return 1
+  while IFS= read -r line; do
+    signature=${line% FOUND}
+    signature=${signature##*: }
+    file=$(basename "${line%: "$signature" FOUND}")
+    matched=0
+    for entry in "${known_false_positives[@]}"; do
+      # shellcheck disable=SC2053 # the file part is a glob on purpose
+      if [[ $signature == "${entry%%|*}" && $file == ${entry#*|} ]]; then
+        matched=1
+        break
+      fi
+    done
+    ((matched)) || return 1
+  done < <(grep ' FOUND$' "$log")
+}
+
 # Scans the given paths, recording a failure instead of stopping so that every
 # installer gets a verdict.
 scan() {
   local label=$1
   shift
-  local status=0
+  local status log="$work/clamscan.log"
   echo "::group::ClamAV: $label"
-  clamscan "${clamscan_args[@]}" "$@" || status=$?
+  set +e
+  clamscan "${clamscan_args[@]}" "$@" | tee "$log"
+  status=${PIPESTATUS[0]}
+  set -e
   echo "::endgroup::"
+  if ((status == 1)) && only_known_false_positives "$log"; then
+    echo "::warning::$label: only known ClamAV false positives (see known_false_positives in $0)"
+    status=0
+  fi
   case $status in
     0) echo "$label: clean" ;;
     1) failures+=("$label: flagged by ClamAV (Heuristics.Limits.Exceeded means a file could not be scanned in full)") ;;
