@@ -575,7 +575,10 @@ export function decodeCorosLayout(bytes: Buffer, blocks: BitmapLink[]) {
     for (const [id, ptr, assetKey] of CHART_RESOURCES) add(id, "resource", {}, base + ptr, { asset: assetKey });
     const chartRect = rectangle(base + 0xdd0);
     const rawColors = { selectedBar: u32(0xdde), unselectedBar: u32(0xde2), curvesUpper: u32(0xe5e), curvesLower: u32(0xe62) };
-    const chart: CorosBinChart | undefined = inHeader(base + 0xdc4, 0xfd8 - 0xdc4) && chartRect.x1 > chartRect.x0 && chartRect.y1 > chartRect.y0 ? {
+    // The graph style ends at curvesWidth (0xe66). Some official 260px NOMAD
+    // headers end at 0xfd4, four bytes before the full chart record boundary;
+    // their rectangle and colors are still present and valid.
+    const chart: CorosBinChart | undefined = inHeader(base + 0xdd0, 0xe67 - 0xdd0) && chartRect.x1 > chartRect.x0 && chartRect.y1 > chartRect.y0 ? {
       rect: chartRect, barWidth: bytes.readUInt16LE(base + 0xdda), barInterval: bytes.readUInt16LE(base + 0xddc), curvesWidth: bytes[base + 0xe66],
       selectedBarColor: expandChartColor(rawColors.selectedBar), unselectedBarColor: expandChartColor(rawColors.unselectedBar),
       curvesUpperColor: expandChartColor(rawColors.curvesUpper), curvesLowerColor: expandChartColor(rawColors.curvesLower), rawColors

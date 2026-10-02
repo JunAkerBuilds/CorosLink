@@ -7,9 +7,9 @@ import { pickWatchPreviewResolution, type WatchfaceComplicationId, type Watchfac
 import { WATCH_LANGUAGE_NAMES, type WatchfaceWatchLanguages } from "./watchfaceLanguages";
 
 /**
- * The Send to COROS panel: the compiled archive at 100% and the watch-language
- * choice baked into it, sent as-is. Changing languages asks the editor to
- * rebuild, which swaps in a new archive.
+ * The Send to COROS panel renders archive sprites at 100%. Firmware-drawn
+ * controls use samples and can differ on the watch. Changing languages asks
+ * the editor to rebuild, which swaps in a new archive.
  */
 export function WatchfaceExportPreview({ api, archive, details, name, complication, languages, customWeekday, rebuilding,
   onLanguagesChange, onClose, onPublish }: {
@@ -45,6 +45,7 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
   const cache = useMemo(() => new Map<string, CorosWatchfaceTemplateAsset>(), [archive.archiveId]);
   const resolution = details.resolutions.find((item) => item.directory === directory)!;
   const supportsAod = Object.keys(resolution.aodConfig ?? {}).length > 0;
+  const hasFirmwareChart = mode === "current" && Boolean(resolution.config.chart_rect);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,7 +98,7 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
       <header className="wf-send-header">
         <div>
           <h2 id="wf-send-title">Send to COROS</h2>
-          <p>The exact build your watch receives.</p>
+          <p>Archive artwork with sample live readings. Firmware-drawn charts may differ on your watch.</p>
         </div>
         <button type="button" className="wf-send-dismiss" aria-label="Close" title="Close" onClick={onClose}><X size={16} /></button>
       </header>
@@ -122,6 +123,7 @@ export function WatchfaceExportPreview({ api, archive, details, name, complicati
                 : <div className="wf-export-pixel-scroll"><img src={result.dataUrl} width={result.width} height={result.height} alt={`Compiled ${mode === "aod" ? "always-on" : "Current"} watch face at ${result.width} × ${result.height} pixels`} /></div>}
           </div>
           <p className="wf-send-caption">{resolution.width} × {resolution.height} · shown at 1:1, one image pixel per screen pixel</p>
+          {hasFirmwareChart ? <p className="wf-send-caption" role="note">Chart lines and bars are drawn by COROS after this preview. On PACE Pro, custom chart colors can appear blue on the watch even when they look orange or white here.</p> : null}
         </div>
 
         <aside className="wf-send-side" aria-label="Send settings">

@@ -113,6 +113,16 @@ assert.equal(result.modes[1].chart, undefined, "an empty chart rectangle produce
 assert.equal(result.modes[0].rawHeaderHex, bytes.subarray(0, HEADER).toString("hex"));
 assert.equal(result.warnings.length, 0);
 
+// Official 260px COROS NOMAD has a 0xfd4 header: the graph style and its
+// readouts are complete, even though the final four bytes of the larger
+// chart-record boundary are outside the declared header.
+const shortChartHeader = Buffer.from(bytes);
+shortChartHeader.writeUInt16LE(0xfd4, 0x138);
+const shortChartLayout = decodeCorosLayout(shortChartHeader, blocks);
+assert.equal(shortChartLayout.modes[0].length, 0xfd4);
+assert.equal(shortChartLayout.modes[0].chart.rect.x0, 89);
+assert.equal(shortChartLayout.modes[0].chart.curvesUpperColor, 0x555555);
+
 // Official LIMA's 12 month labels use a point instead of a clipping box.
 // Recover one full label cell, without reviving dormant numeric/AOD fields.
 const monthBytes = Buffer.from(bytes);

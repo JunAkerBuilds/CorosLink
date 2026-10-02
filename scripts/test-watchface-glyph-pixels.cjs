@@ -132,6 +132,24 @@ async function verifyPixels() {
   check(px(232,202)[1] === 255, 'Compiled preview must include configured PM sprite');
   // The watch draws a value's glyphs whole, past a narrow firmware rectangle.
   check(px(161,230)[0] === 255, 'Compiled values must not be clipped to their firmware rectangle');
+  const weatherPath = `${root}/weather/00.png`;
+  asset(weatherPath, png(46, 46, 0, 0, 46, 46, '#00ff00'), 46, 46);
+  const weatherResolution = { ...resolution,
+    config: { ...resolution.config, weather_icon_pos: '{60,70}', weather_icon_dir: 'weather' },
+    spriteFolders: [...resolution.spriteFolders, { folder: 'weather', kind: 'icons', files: [{ path: weatherPath, width: 46, height: 46 }] }] };
+  const weatherPreview = await inspect((await compiled.renderCompiledWatchfacePreview(
+    { ...details, resolutions: [weatherResolution] }, weatherResolution, 'current', load)).dataUrl);
+  check(weatherPreview.canvas.getContext('2d').getImageData(70,80,1,1).data[1] === 255,
+    'Compiled preview must paint the weather icon recovered from the archive');
+  asset(weatherPath, png(20, 10, 0, 0, 20, 10, '#00ff00'), 20, 10);
+  const rectangularWeather = { ...weatherResolution, spriteFolders: [...resolution.spriteFolders,
+    { folder: 'weather', kind: 'icons', files: [{ path: weatherPath, width: 20, height: 10 }] }] };
+  const rectangularPreview = await inspect((await compiled.renderCompiledWatchfacePreview(
+    { ...details, resolutions: [rectangularWeather] }, rectangularWeather, 'current', load)).dataUrl);
+  check(rectangularPreview.canvas.getContext('2d').getImageData(65,75,1,1).data[1] === 255,
+    'Rectangular weather artwork retains its archive coordinates');
+  check(rectangularPreview.canvas.getContext('2d').getImageData(65,85,1,1).data[1] === 0,
+    'Compiled weather artwork keeps its native height instead of stretching into a square');
   const aod = await inspect((await compiled.renderCompiledWatchfacePreview(details, resolution, 'aod', load)).dataUrl);
   check(aod.canvas.getContext('2d').getImageData(204,163,1,1).data[0] === 255, 'AOD must use its own compiled coordinates without dimming again');
   // COROS compiles dynamic AOD fields but skips the background entirely.
@@ -304,7 +322,7 @@ async function verifyPixels() {
     loadedLabels.push(...paths); return paths.map(path => ({ path, dataUrl: pm }));
   });
   check(labelOutput.length === 2 && loadedLabels.length === 1 && loadedLabels[0].endsWith('/pm.png'), 'An incomplete raster label uses the original PM image without breaking export');
-  return { dataUrl: output.dataUrl, checks: output.checks, tests: 51 };
+  return { dataUrl: output.dataUrl, checks: output.checks, tests: 54 };
 }
 
 (async () => {
@@ -317,7 +335,7 @@ async function verifyPixels() {
     window = new BrowserWindow({ show:false, webPreferences:{ contextIsolation:true, sandbox:true } });
     await window.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/__glyph_test`);
     const results = await window.webContents.executeJavaScript(`(${verifyPixels.toString()})()`);
-    assert.equal(results.tests,51);
+    assert.equal(results.tests,54);
     await fs.writeFile('/tmp/coroslink-export-pixel-test.png', Buffer.from(results.dataUrl.split(',')[1], 'base64'));
     console.log('Watchface glyph and compiled pixel tests passed', results.checks);
   } catch(error) { console.error(error); exitCode=1; }

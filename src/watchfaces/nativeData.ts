@@ -143,7 +143,13 @@ export async function nativeDataAsset(id: string, style: Style, role: Role, inde
   const height = part.height * scale;
   if (!part.enabled) return canvasImage(width, height, () => undefined);
   const replacement = style.assets?.[role]?.[String(index)];
-  if (replacement) return resizeAndTintSprite(replacement, Math.max(1, Math.round(width)), Math.max(1, Math.round(height)));
+  if (replacement) {
+    // Keep an imported chart backdrop at native size without another canvas
+    // pass, which can change edge pixels and transparent RGB channels.
+    const image = id === "chart" && role === "background" ? await loadStudioImage(replacement) : null;
+    if (image && image.naturalWidth === Math.round(width) && image.naturalHeight === Math.round(height)) return replacement;
+    return resizeAndTintSprite(replacement, Math.max(1, Math.round(width)), Math.max(1, Math.round(height)));
+  }
   const text = nativeAssetText(id, style, role, index);
   return canvasImage(width, height, ctx => {
     ctx.fillStyle = part.color;
@@ -223,7 +229,12 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
       const point = (key: Part) => `{${Math.round((style.x + part(key).x * style.scale) * ratio)},${Math.round((style.y + part(key).y * style.scale) * ratio)}}`;
       const rect = (key: Part, dx = 0, width = part(key).width) => {
         const p = part(key), x = style.x * ratio, y = style.y * ratio;
-        return `{${Math.round(x + (p.x + dx) * scale)},${Math.round(y + p.y * scale)},${Math.round(x + (p.x + dx + width) * scale)},${Math.round(y + (p.y + p.height) * scale)},${p.align === "center" ? "hcenter" : p.align}|vcenter}`;
+        const originalChartAlign = id === "chart" && key === "plot"
+          ? /,\s*(hcenter|right)\|vcenter\s*\}$/.exec(resolution.config.chart_rect ?? "")?.[1]
+          : undefined;
+        const authoredAlign = style.parts?.[key]?.align;
+        const align = authoredAlign === "center" ? "hcenter" : authoredAlign ?? originalChartAlign ?? "left";
+        return `{${Math.round(x + (p.x + dx) * scale)},${Math.round(y + p.y * scale)},${Math.round(x + (p.x + dx + width) * scale)},${Math.round(y + (p.y + p.height) * scale)},${align}|vcenter}`;
       };
       const folders: Record<Role, string> = {
         digits: `cl_nd_${id}_d`, icon: `cl_nd_${id}_i`, states: `cl_nd_${id}`, unit: `cl_nd_${id}_u`, symbols: `cl_nd_${id}_s`, progress: `cl_nd_${id}_p`, decimal: `cl_nd_${id}_m`, background: `cl_nd_${id}_bg`, mask: `cl_nd_${id}_mask`, noDataMask: `cl_nd_${id}_nodata`, separator: "cl_nd_temp_separator"
@@ -357,10 +368,43 @@ export async function composeNativeData(details: CorosWatchfaceTemplateDetails, 
         }
       }
     }
-    await addMinMaxCompanions(resolution, data, run, ratio, weatherIconEnabled, values, assetReplacements, existing);
+    addWeatherConditionCompanion(resolution, weatherIconEnabled, values, assetReplacements, existing);
+    await addMinMaxCompanions(resolution, data, run, ratio, values, assetReplacements, existing);
     if (Object.keys(values).length) configOverrides.push({ path: `${resolution.directory}/config.txt`, values });
   }
   return { assetReplacements, configOverrides, minWatchFaceVersion };
+}
+
+/**
+ * Keep a condition table even when only weather numbers are visible. The
+ * working PACE Pro face "1" shared on 2026-09-29 includes 41 transparent
+ * condition frames; the failed BOLD exports omitted them. This companion
+ * previously existed only for min/max, so current temperature and wind lost
+ * it when exported without a visible weather indicator.
+ */
+function addWeatherConditionCompanion(
+  resolution: CorosWatchfaceResolutionDetails,
+  weatherIconEnabled: boolean | undefined,
+  values: Record<string, string>,
+  assetReplacements: CorosWatchfaceAssetReplacement[],
+  existing: Set<string>
+) {
+  const templateIcon = Boolean(resolution.config.weather_icon_dir && parseConfigPos(resolution.config.weather_icon_pos));
+  if (weatherIconEnabled ?? templateIcon) return;
+  const position = Object.entries(values).flatMap(([key, value]) => {
+    if (!key.startsWith("weather_")) return [];
+    const rect = key.endsWith("_rect") ? parseConfigRect(value) : null;
+    const point = key.endsWith("_pos") ? parseConfigPos(value) : null;
+    return rect ? [{ x: rect.x0, y: rect.y0 }] : point ? [point] : [];
+  })[0];
+  if (!position) return;
+  const folder = "cl_nd_weather_blank", dataUrl = canvasImage(1, 1, () => undefined);
+  for (let i = 0; i < WEATHER_CONDITION_FRAMES; i++) {
+    const path = `${resolution.directory}/${folder}/${String(i).padStart(2, "0")}.png`;
+    assetReplacements.push({ path, dataUrl, create: !existing.has(path), allowDimensionOverride: true });
+  }
+  values.weather_icon_pos = `{${position.x},${position.y}}`;
+  values.weather_icon_dir = values.weather_dark_icon_dir = folder;
 }
 
 /**
@@ -376,7 +420,6 @@ async function addMinMaxCompanions(
   data: NativeData,
   run: MinMaxTemperatureRun | null,
   ratio: number,
-  weatherIconEnabled: boolean | undefined,
   values: Record<string, string>,
   assetReplacements: CorosWatchfaceAssetReplacement[],
   existing: Set<string>
@@ -398,12 +441,6 @@ async function addMinMaxCompanions(
       assetReplacements.push({ path, dataUrl, create: !existing.has(path), allowDimensionOverride: true });
     }
   };
-  const templateIcon = Boolean(resolution.config.weather_icon_dir && parseConfigPos(resolution.config.weather_icon_pos));
-  if (!(weatherIconEnabled ?? templateIcon)) {
-    await blank("cl_nd_weather_blank", WEATHER_CONDITION_FRAMES);
-    values.weather_icon_pos = `{${anchor.x0},${anchor.y0}}`;
-    values.weather_icon_dir = values.weather_dark_icon_dir = "cl_nd_weather_blank";
-  }
   if (run) {
     const min = data.weather_temp_min!, path = `${resolution.directory}/cl_nd_temp_separator/00.png`;
     const dataUrl = run.separator.visible

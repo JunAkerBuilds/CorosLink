@@ -77,6 +77,31 @@ async function renderNativeData(details) {
     }
   }
   const solar=await native.composeNativeData(details,{sunriseset:nativeData.sunriseset});check(solar.minWatchFaceVersion===5,'Solar progress uses format 5');
+  // Actual shared face "1" has an invisible condition table even with only
+  // current temperature. BOLD's failing export lacked it. Exercise standalone
+  // fields and the full composition pipeline with the visible indicator off.
+  for (const id of ['weather_temp', 'weather_wind', 'weather_direction']) {
+    const weatherData = { [id]: native.defaultNativeDataStyle(id) };
+    const standalone = await composeWatchfaceReplacements(details, {
+      ...design, nativeData: weatherData,
+      weatherIndicator: { enabled: false, x: 0, y: 0, scale: 1, temperatureEnabled: false }
+    }, load);
+    for (const resolution of details.resolutions) {
+      const values = Object.assign({}, ...standalone.configOverrides.filter(o => o.path === `${resolution.directory}/config.txt`).map(o => o.values));
+      check(values.weather_icon_dir && values.weather_icon_dir !== studio.COROS_CONFIG_DELETE_VALUE, id + ' retains a condition table without a visible icon');
+      check(values.weather_dark_icon_dir === values.weather_icon_dir && studio.parseConfigPos(values.weather_icon_pos), id + ' binds both day and night tables');
+      const frames = standalone.assetReplacements.filter(a => a.path.startsWith(`${resolution.directory}/${values.weather_icon_dir.replaceAll('\\', '/')}/`));
+      check(frames.length === 41, id + ' exports all 41 condition frames per resolution');
+      const blank = await studio.loadStudioImage(frames[0].dataUrl);
+      const canvas = document.createElement('canvas'); canvas.width = blank.width; canvas.height = blank.height;
+      canvas.getContext('2d').drawImage(blank, 0, 0);
+      check(!canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some((v, i) => i % 4 === 3 && v), 'The companion remains invisible');
+    }
+    const visible = await native.composeNativeData(details, weatherData, true);
+    check(!visible.assetReplacements.some(a => a.path.includes('/cl_nd_weather_blank/')), 'A visible weather indicator keeps its own condition artwork');
+  }
+  const hiddenWeather = await native.composeNativeData(details, {weather_temp:{...native.defaultNativeDataStyle('weather_temp'),parts:{value:{enabled:false}}}}, false);
+  check(!hiddenWeather.assetReplacements.some(a => a.path.includes('/cl_nd_weather_blank/')), 'Hidden weather values do not create a condition table');
   const off=await native.composeNativeData(details,Object.fromEntries(Object.entries(nativeData).map(([id,style])=>[id,{...style,enabled:false}])));
   check(off.assetReplacements.length===0&&off.configOverrides.every(o=>Object.values(o.values).every(v=>v===studio.COROS_CONFIG_DELETE_VALUE)),'Disabling native data removes exported keys');
   for(const source of native.NATIVE_CHART_SOURCES) {
@@ -133,6 +158,9 @@ async function renderNativeData(details) {
   const aodDataOnly=studio.retargetWatchfaceCompositionToAod(details,dataOnly);
   const background=document.createElement('canvas');background.width=800;background.height=800;background.getContext('2d').fillRect(0,0,800,800);
   const backgroundDataUrl=background.toDataURL();
+  const recoveredBackdrop={...native.defaultNativeDataStyle('chart'),parts:{background:{enabled:true,x:0,y:0,width:800,height:800}},assets:{background:{0:backgroundDataUrl}}};
+  check(await native.nativeDataAsset('chart',recoveredBackdrop,'background',0)===backgroundDataUrl,'An unchanged native-size chart backdrop keeps its original PNG bytes');
+  check(await native.nativeDataAsset('chart',recoveredBackdrop,'background',0,0.5)!==backgroundDataUrl,'A resized chart backdrop still gets a new PNG');
   const gallery={weather_temp:{...nativeData.weather_temp,x:80,y:130},weather_humidity:{...nativeData.weather_humidity,x:400,y:130},sleep_score:{...nativeData.sleep_score,x:80,y:300},week_tl:{...nativeData.week_tl,x:400,y:300},sunriseset:{...nativeData.sunriseset,x:80,y:470},chart:{...nativeData.chart,x:400,y:470,chartWidth:280}};
   const ctx=background.getContext('2d');ctx.font='20px Arial';ctx.fillStyle='#999';for(const[id,style]of Object.entries(gallery))ctx.fillText(native.NATIVE_DATA_BY_ID.get(id).label,style.x,style.y-22);
   await native.drawNativeDataPreview(background,800,gallery);
@@ -149,6 +177,9 @@ async function renderNativeData(details) {
   const master=custom.configOverrides.find(o=>o.path==='watchface_800x800/config.txt').values;
   check(master.week_tl_icon_pos==='{90,105}'&&master.week_tl_rect==='{210,100,370,172,left|vcenter}','Independent label/number placement exported');
   check(master.chart_rect==='{80,440,500,600,left|vcenter}'&&master.chart_curves_width==='8'&&master.chart_curves_upper_color==='0x11aa22'&&master.chart_curves_lower_color==='0xff00ff','Graph geometry and line appearance exported');
+  const alignedDetails={...details,resolutions:details.resolutions.map(r=>r.width===800?{...r,config:{...r.config,chart_rect:'{80,440,500,600,hcenter|vcenter}'}}:r)};
+  const aligned=await native.composeNativeData(alignedDetails,{chart:{...customData.chart,parts:{...customData.chart.parts,plot:{...customData.chart.parts.plot,align:undefined}}}});
+  check(aligned.configOverrides.find(o=>o.path==='watchface_800x800/config.txt').values.chart_rect==='{80,440,500,600,hcenter|vcenter}','A recovered chart keeps the original plot alignment');
   check(master.chart_bar_width==='12'&&master.chart_bar_interval==='7'&&master.chart_selected_bar_color==='0xffff00'&&master.chart_unselected_bar_color==='0x223344','Bar styling exported');
   for(const key of ['chart_bg','chart_bar_mask','chart_bar_nodata_mask','chart_point_icon','sunrise_progress','sunset_progress','sunriseset_colon_icon']) check(master[key]&&master[key]!==studio.COROS_CONFIG_DELETE_VALUE,key+' retains custom artwork');
   const label=custom.assetReplacements.find(a=>a.path==='watchface_800x800/cl_nd_week_tl_i/00.png');
@@ -162,6 +193,8 @@ async function renderNativeData(details) {
   check(hiddenKeys.chart_rect===studio.COROS_CONFIG_DELETE_VALUE&&hiddenKeys.chart_stress_font!==studio.COROS_CONFIG_DELETE_VALUE,'Hiding graph keeps the live value');
   Object.assign(design.nativeData,customData);
   check(!validateWatchfaceAutomationDocument({design,projectName:'Customized'}, {details}).some(d=>d.severity==='error'),'Custom component settings pass validation');
+  const compactChart=structuredClone(design);compactChart.nativeData.chart.chartHeight=35;
+  check(!validateWatchfaceAutomationDocument({design:compactChart,projectName:'Recovered 260px chart'}, {details}).some(d=>d.path==='/design/nativeData/chart/chartHeight'),'Official 260px chart height is accepted');
   const invalid=structuredClone(design);invalid.nativeData.chart.chartStyle.lineWidth=-1;
   check(validateWatchfaceAutomationDocument({design:invalid,projectName:'Invalid'}, {details}).some(d=>d.severity==='error'),'Invalid graph thickness is rejected');
   const customPreview=document.createElement('canvas');customPreview.width=800;customPreview.height=800;

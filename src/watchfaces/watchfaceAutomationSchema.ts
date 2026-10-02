@@ -65,7 +65,7 @@ const WATCHFACE_SCHEMA_DEFINITIONS = {
   nativeColor: { type: "string", pattern: "^#[0-9a-fA-F]{6}$", description: "Six-digit RGB hex color supported by the native compiler." },
   nativeDataMap: { type: "object", propertyNames: { enum: [...NATIVE_DATA_BY_ID.keys()] }, additionalProperties: { $ref: "#/$defs/nativeDataStyle" } },
   nativeDataStyle: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "scale", "color"], properties: {
-    enabled: {type:"boolean"}, x:{type:"number"}, y:{type:"number"}, scale:{type:"number",minimum:0.1,maximum:4}, color:{$ref:"#/$defs/nativeColor"}, fontFamily:{type:"string"}, previewValue:{type:"string",maxLength:6}, chartSource:{enum:NATIVE_CHART_SOURCES.map(source=>source.id)}, chartWidth:{type:"number",minimum:80,maximum:700}, chartHeight:{type:"number",minimum:40,maximum:500}, stateCount:{type:"integer",minimum:1,maximum:64},
+    enabled: {type:"boolean"}, x:{type:"number"}, y:{type:"number"}, scale:{type:"number",minimum:0.1,maximum:4}, color:{$ref:"#/$defs/nativeColor"}, fontFamily:{type:"string"}, previewValue:{type:"string",maxLength:6}, chartSource:{enum:NATIVE_CHART_SOURCES.map(source=>source.id)}, chartWidth:{type:"number",minimum:80,maximum:700}, chartHeight:{type:"number",minimum:16,maximum:500}, stateCount:{type:"integer",minimum:1,maximum:64},
     assets:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_ASSET_ROLES.map(role=>[role,{type:"object",propertyNames:{pattern:"^(0|[1-9][0-9]?)$"},additionalProperties:{$ref:"#/$defs/pngImageValue"}}]))},
     assetTexts:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_ASSET_ROLES.map(role=>[role,{type:"object",additionalProperties:{type:"string",maxLength:32}}]))},
     parts:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_PARTS.map(part=>[part,{$ref:"#/$defs/nativeDataPart"}]))},
@@ -483,7 +483,7 @@ function validateAdvancedCollections(design: Record<string, unknown>, diagnostic
       allowedKeys(style,["enabled","x","y","scale","color","fontFamily","chartSource","chartWidth","chartHeight","stateCount","previewValue","assets","assetTexts","parts","chartStyle"],diagnostics,path);
       bool(style.enabled,diagnostics,`${path}/enabled`);finite(style.x,diagnostics,`${path}/x`);finite(style.y,diagnostics,`${path}/y`);finite(style.scale,diagnostics,`${path}/scale`,{minimum:0.1,maximum:4});requireNativeColor(style.color,diagnostics,`${path}/color`);
       if(style.chartWidth!==undefined)finite(style.chartWidth,diagnostics,`${path}/chartWidth`,{minimum:80,maximum:700});
-      if(style.chartHeight!==undefined)finite(style.chartHeight,diagnostics,`${path}/chartHeight`,{minimum:40,maximum:500});
+      if(style.chartHeight!==undefined)finite(style.chartHeight,diagnostics,`${path}/chartHeight`,{minimum:16,maximum:500});
       if(style.stateCount!==undefined&&(typeof style.stateCount!=="number"||!Number.isInteger(style.stateCount)||style.stateCount<1||style.stateCount>64))issue(diagnostics,"native.invalid","State count must be a whole number from 1 to 64.",`${path}/stateCount`);
       if(style.fontFamily!==undefined)text(style.fontFamily,diagnostics,`${path}/fontFamily`,256);
       if(style.previewValue!==undefined)text(style.previewValue,diagnostics,`${path}/previewValue`,6);
