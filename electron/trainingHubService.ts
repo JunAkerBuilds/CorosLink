@@ -2865,28 +2865,9 @@ export async function uploadNativeTrainingPlan(
 
   // A library-only Plan uses dates just for relative day offsets, so past
   // dates are fine there; only an activated Plan lands on the Calendar.
-  const validation = validatePlanDraft(
-    options.activate
-      ? draft
-      : {
-          ...draft,
-          workouts: draft.workouts.map((workout) => ({
-            ...workout,
-            schedule_date: undefined,
-            save_to_library: true
-          }))
-        }
-  );
+  const validation = validatePlanDraft(draft, { allowPastDates: !options.activate });
   if (!validation.ok) {
     throw new Error(validation.errors.join(" "));
-  }
-  const malformedDay = draft.workouts.find(
-    (workout) => workout.schedule_date && !/^\d{8}$/.test(workout.schedule_date)
-  );
-  if (malformedDay) {
-    throw new Error(
-      `Workout "${malformedDay.name}" schedule_date must be a valid YYYYMMDD date.`
-    );
   }
 
   const exerciseResolution = await resolveTrainingPlanExercises(draft);
@@ -2926,6 +2907,7 @@ export async function uploadNativeTrainingPlan(
   const entities: Record<string, unknown>[] = [];
   let maxDayNo = 0;
   let pbVersion = 2;
+  const workoutsPerDay = new Map<number, number>();
 
   for (const [index, workout] of resolvedDraft.workouts.entries()) {
     const idInPlan = index + 1;
@@ -2939,6 +2921,8 @@ export async function uploadNativeTrainingPlan(
         ? planDayOffset(planStartDay, workout.schedule_date)
         : index;
     maxDayNo = Math.max(maxDayNo, dayNo);
+    const positionInDay = (workoutsPerDay.get(dayNo) ?? 0) + 1;
+    workoutsPerDay.set(dayNo, positionInDay);
 
     // Plan Library entities carry placeholder identity only — happenDay is
     // set on activation (executeSubPlan), not at create time.
@@ -2948,7 +2932,8 @@ export async function uploadNativeTrainingPlan(
       dayNo,
       sortNo: idInPlan,
       sortNoInPlan: idInPlan,
-      sortNoInSchedule: 1
+      // Orders workouts that share a day, like the individual schedule path.
+      sortNoInSchedule: workout.sort_no ?? positionInDay
     });
 
     entries.push({
@@ -3005,7 +2990,7 @@ export async function uploadNativeTrainingPlan(
       await activateNativeTrainingPlan(planId, planStartDay);
     } catch (error) {
       // Roll back so a retry doesn't leave duplicate Plans in the library.
-      await deleteNativeTrainingPlan(planId).catch(() => undefined);
+      await rollBackNativeTrainingPlan(planId);
       throw error;
     }
   }
@@ -3023,6 +3008,32 @@ export async function uploadNativeTrainingPlan(
       ...(options.activate ? [`Activate plan on Calendar starting ${planStartDay}`] : [])
     ]
   };
+}
+
+/**
+ * Best-effort cleanup after a failed activation. COROS may have accepted
+ * executeSubPlan even though the client saw an error, which leaves a separate
+ * active instance (linked by originId) with calendar workouts; quit that
+ * before deleting the library plan.
+ */
+async function rollBackNativeTrainingPlan(planId: string): Promise<void> {
+  try {
+    const active = await readNativeTrainingPlanEndpoint<unknown>("/training/plan/query", {
+      method: "POST",
+      body: { statusList: [1] }
+    });
+    const instances = Array.isArray(active)
+      ? (active as Record<string, unknown>[]).filter(
+          (plan) => String(plan.originId ?? "") === planId && plan.id != null
+        )
+      : [];
+    for (const instance of instances) {
+      await deactivateNativeTrainingPlan(String(instance.id)).catch(() => undefined);
+    }
+  } catch {
+    // Still try to delete the library plan below.
+  }
+  await deleteNativeTrainingPlan(planId).catch(() => undefined);
 }
 
 export async function activateNativeTrainingPlan(

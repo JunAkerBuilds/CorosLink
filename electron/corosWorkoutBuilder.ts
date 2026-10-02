@@ -1222,7 +1222,12 @@ function formatLegacyPaceForUnits(
 
 export function validatePlanDraft(
   draft: CorosTrainingPlanDraft,
-  options?: { todayDay?: string; existingSchedule?: Map<string, string[]> }
+  options?: {
+    todayDay?: string;
+    existingSchedule?: Map<string, string[]>;
+    /** Dates only set relative spacing (e.g. a library-only COROS Plan). */
+    allowPastDates?: boolean;
+  }
 ): PlanValidationResult {
   const errors: string[] = [];
   const todayDay =
@@ -1287,7 +1292,7 @@ export function validatePlanDraft(
         errors.push(
           `Workout "${entry.name}" schedule_date must be a valid YYYYMMDD date.`
         );
-      } else if (entry.schedule_date < todayDay) {
+      } else if (!options?.allowPastDates && entry.schedule_date < todayDay) {
         errors.push(
           `Workout "${entry.name}" cannot be scheduled in the past (${entry.schedule_date}).`
         );
