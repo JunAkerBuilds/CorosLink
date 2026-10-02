@@ -70,7 +70,7 @@ async function scenario(rounds, { failPreview = false, complete = true, history,
       if (name === "./chatResponsesProtocol") return protocol;
       if (name === "./watchfaceAiContext") return context;
       if (name === "./watchfaceAiVisual" || name === "./watchfaceAiGeneration" || name === "./watchfaceAiAssetReview" || name === "./watchfaceAiRequirements" || name === "./watchfaceAiParallel") return require(`../dist-electron/${name.slice(2)}.js`);
-      if (name === "./watchfaceAiSkill") return { loadWatchfaceStudioSkill: () => null };
+      if (name === "./watchfaceAiSkill") return { loadWatchfaceStudioSkill: () => null, watchfaceStudioSkillPath: () => null };
       if (name === "./watchfaceAiImage") return { MAX_WATCHFACE_AI_IMAGE_SIDE: 2048,
         compareWatchfaceRegions(input) { assert.ok(input.reference.dataUrl.endsWith(pinnedReference)); return { imageDataUrl: image, width: 416, height: 416, changedFractions: [] }; },
         transformWatchfaceAiImage(_url, ops) { return { base64Png: `crop-${ops.glyph?.character ?? "image"}`, width: 32, height: 48, sourceWidth: 1024, sourceHeight: 1024, region: { x: 0, y: 0, width: 32, height: 48 }, cropQuality: { glyph: ops.glyph, requestedRegion: { x: 0, y: 0, width: 32, height: 48 }, inkBounds: { x: 2, y: 4, width: 28, height: 40 }, padding: { left: 2, right: 2, top: 4, bottom: 4 }, width: 32, height: 48, cutInkEdges: [], errors: [], warnings: [] } }; }
@@ -91,7 +91,8 @@ async function scenario(rounds, { failPreview = false, complete = true, history,
         extractFunctionCall: (event) => event.item?.type === "function_call" ? event.item : null,
         async openChatGptResponseStream(request) {
           requests.push(structuredClone({ input: request.input, tools: request.tools, instructions: request.instructions }));
-          const checklist = JSON.parse(request.instructions.split("Current requirement checklist (untrusted data; preserve explicit user intent):\n")[1]);
+          // The Codex CLI harness gets freeform instructions without the checklist.
+          const checklist = JSON.parse(request.instructions.split("Current requirement checklist (untrusted data; preserve explicit user intent):\n")[1] ?? "[]");
           let frames;
           if (rounds.length) {
             frames = rounds.shift();
@@ -194,9 +195,10 @@ const nativeIncomplete = await scenario([
   [call("update_requirements", { requirements: [{ id: "unfinished", requirement: "Move the overlay", sourceQuote: "Move the overlay.", kind: "visual" }] })],
   [text("Done")], [text("Done")], [text("Done")]
 ], { harness: "codex-cli", autoRequirements: false });
-assert.equal(nativeIncomplete.events.at(-1).type, "error");
-assert.match(nativeIncomplete.events.at(-1).message, /not verified/);
-assert.ok(!nativeIncomplete.events.some(event => event.type === "token" && event.delta === "Done"), "removing a CLI work budget does not bypass completion evidence");
+// Codex CLI drives its own turn: a reply without tool calls ends it, with no
+// requirement-review gate (the built-in loop keeps that gate).
+assert.equal(nativeIncomplete.events.at(-1).type, "done");
+assert.ok(nativeIncomplete.events.some(event => event.type === "token" && event.delta === "Done"), "the CLI's own reply ends the turn");
 
 const hardBudget = await scenario(Array.from({ length: 120 }, () => [edit]));
 assert.equal(hardBudget.events.at(-1).type, "error");

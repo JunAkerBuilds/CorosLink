@@ -12,11 +12,15 @@ import type { WatchfaceInspectorSectionId } from "./watchfaceInspectorSections";
 
 const PART_LABELS: Record<Part, string> = {
   icon: "Label / icon", value: "Number / time", states: "State artwork", unit: "Units", symbols: "Symbols", progress: "Sun / moon progress",
-  plot: "Graph", decimal: "Decimal point", background: "Graph background", mask: "Graph mask", noDataMask: "No-data artwork"
+  plot: "Graph", decimal: "Decimal point", background: "Graph background", mask: "Graph mask", noDataMask: "No-data artwork",
+  separator: "Min/max separator"
 };
 const SPRITE_LABELS: Partial<Record<Role, string[]>> = {
-  icon: ["Main / rise icon", "Set icon"], unit: ["Primary / metric unit", "Alternate / imperial unit"], symbols: ["Minus", "Degree", "Percent", "Colon"], progress: ["Sunrise progress", "Sunset progress"]
+  icon: ["Main / rise icon", "Set icon"], unit: ["Primary / metric unit", "Alternate / imperial unit"], symbols: ["Minus", "Degree", "Percent", "Colon"], progress: ["Sunrise progress", "Sunset progress"],
+  separator: ["Separator"]
 };
+
+const chartSourceLabel = (source: string) => NATIVE_CHART_SOURCES.find(item => item.id === source)?.label ?? source;
 
 /** Keep a draft so typing a minus sign or clearing the field is not reset. */
 function ComponentOffsetInput({ label, value, coordinateScale, onChange }: {
@@ -63,9 +67,11 @@ type RenderSection = (
  * selected part, and Advanced for preview-only settings. The editor renders
  * the Transform section itself so it matches every other layer.
  */
-export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, onPatch, onError, onImportStart, onImportFinish, isImportCurrent }: {
+export function NativeDataInspector({ id, style, coordinateScale, api, disabled, renderSection, onPatch, onError, onImportStart, onImportFinish, isImportCurrent, chartGroups = [], onChartGroup }: {
   id: string; style: Style; api: CorosLinkApi; disabled: boolean; coordinateScale: number;
   renderSection: RenderSection;
+  /** Chart readouts the face itself carries; the watch's Back button cycles between them. */
+  chartGroups?: string[]; onChartGroup?: (source: string) => void;
   onPatch: (patch: Partial<Style>) => void; onError: (message: string) => void;
   onImportStart: (target: string) => number | null; onImportFinish: (token: number) => void; isImportCurrent: (token: number) => boolean;
 }) {
@@ -153,6 +159,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
 
   const notes = [
     definition.kind === "chart" ? <p key="chart" className="watchface-studio-summary" role="note"><strong>Experimental charts.</strong> This preview uses sample data. {style.chartSource !== "chart_moon" && "Line graphs are not available right now."}</p> : null,
+    definition.kind === "chart" && chartGroups.length > 1 ? <p key="chart-groups" className="watchface-studio-summary" role="note"><strong>Selectable on the watch.</strong> Back cycles this graph through its chart groups. This face has readouts for {chartGroups.map(chartSourceLabel).join(", ")}. Choose one under Chart data to preview and edit it. The layer exports the group shown; the others keep the face&apos;s original readouts and don&apos;t follow a moved graph.</p> : null,
     definition.kind === "chart" && style.chartSource !== "chart_moon" ? <p key="chart-pace" className="watchface-studio-summary" role="note">Chart numbers may stay blank on PACE Pro even when Back changes the graph. The sample number here does not confirm watch support. A separate metric layer can show a value, but will not follow chart changes.</p> : null,
     definition.availability ? <p key="availability" className="watchface-studio-summary" role="note"><strong>AQI — {definition.availability.label}.</strong> {definition.availability.message}</p> : null,
     definition.note ? <p key="note" className="watchface-studio-summary" role="note">{definition.note}</p> : null
@@ -165,7 +172,12 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
       {notes}
       {colorControl("Color",style.color,color=>onPatch({color}))}
       <LocalFontPicker api={api} label="Font" value={style.fontFamily ?? ""} emptyLabel="Default" disabled={locked} onChange={fontFamily=>onPatch({fontFamily})} />
-      {definition.kind === "chart" && <label className="field">Chart data<select aria-label="Chart data field" value={style.chartSource ?? "chart_stress"} onChange={event=>onPatch({chartSource:event.target.value})}>{NATIVE_CHART_SOURCES.map(source=><option key={source.id} value={source.id}>{source.category} · {source.label}</option>)}</select></label>}
+      {definition.kind === "chart" && <label className="field">Chart data<select aria-label="Chart data field" value={style.chartSource ?? "chart_stress"} onChange={event=>{ const source = event.target.value; if (onChartGroup && chartGroups.includes(source)) onChartGroup(source); else onPatch({chartSource:source}); }}>
+        {chartGroups.length > 1 ? <>
+          <optgroup label="On this face">{chartGroups.map(source=><option key={source} value={source}>{chartSourceLabel(source)}</option>)}</optgroup>
+          <optgroup label="Other data">{NATIVE_CHART_SOURCES.filter(source=>!chartGroups.includes(source.id)).map(source=><option key={source.id} value={source.id}>{source.category} · {source.label}</option>)}</optgroup>
+        </> : NATIVE_CHART_SOURCES.map(source=><option key={source.id} value={source.id}>{source.category} · {source.label}</option>)}
+      </select></label>}
       <p className="watchface-studio-summary">Every component uses this color and font unless it sets its own below.</p>
     </div>, { disabled: locked })}
 
@@ -202,18 +214,18 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
         {partKey === "plot" && <>
           <label className="field">Graph type<select aria-label="Graph type" value={style.chartStyle?.previewType ?? "bars"} onChange={event=>patchChart({previewType:event.target.value as "curve" | "bars"})}><option value="bars">Bar graph</option><option value="curve">Line graph</option></select></label>
           {(style.chartStyle?.previewType ?? "bars") === "curve" ? <>
-            <div className="watchface-position-inputs">{numberControl("Line thickness",style.chartStyle?.lineWidth ?? 2,lineWidth=>patchChart({lineWidth}),1,40,true)}</div>
+            <div className="watchface-position-inputs">{numberControl("Line thickness",style.chartStyle?.lineWidth ?? 2,lineWidth=>patchChart({lineWidth}),0,40,true)}</div>
             {colorControl("Upper curve",style.chartStyle?.upperColor ?? component.color,upperColor=>patchChart({upperColor}))}
             {colorControl("Lower curve",style.chartStyle?.lowerColor ?? "#555555",lowerColor=>patchChart({lowerColor}))}
           </> : <>
             <div className="watchface-position-inputs">
-              {numberControl("Bar width",style.chartStyle?.barWidth ?? 8,barWidth=>patchChart({barWidth}),1,80,true)}
+              {numberControl("Bar width",style.chartStyle?.barWidth ?? 8,barWidth=>patchChart({barWidth}),0,80,true)}
               {numberControl("Bar gap",style.chartStyle?.barGap ?? 4,barGap=>patchChart({barGap}),0,80,true)}
             </div>
             {colorControl("Selected bar",style.chartStyle?.selectedBarColor ?? component.color,selectedBarColor=>patchChart({selectedBarColor}))}
             {colorControl("Other bars",style.chartStyle?.unselectedBarColor ?? "#555555",unselectedBarColor=>patchChart({unselectedBarColor}))}
           </>}
-          <p className="watchface-studio-summary">Graph type only changes this preview. Bar and line appearance are both exported; the watch draws each chart group's live history in its own representation.</p>
+          <p className="watchface-studio-summary">Graph type only changes this preview. Bar and line appearance are both exported; the watch draws each chart group's live history in its own representation. A width of 0 turns that style off, so groups drawn that way show no graph.</p>
         </>}
 
         {role && <div className="wf-native-artwork">
@@ -237,7 +249,7 @@ export function NativeDataInspector({ id, style, coordinateScale, api, disabled,
 
         <button type="button" className="wf-native-part-reset" disabled={!customized} onClick={restoreComponent}><RotateCcw size={13} /> Reset {partLabel.toLowerCase()}</button>
       </section>
-      {id.startsWith("weather_temp_") && <p className="watchface-studio-summary">Minimum and maximum temperature share unit and minus artwork. When both are enabled, the minimum-temperature settings supply these shared assets.</p>}
+      {id.startsWith("weather_temp_") && <p className="watchface-studio-summary">Minimum and maximum temperature share the separator, unit and minus artwork. When both are enabled, the minimum-temperature settings supply these shared assets.</p>}
     </div>, { disabled: locked, status: `${available.filter(part => nativePart(id, style, part).enabled).length} of ${available.length} shown` })}
 
     {renderSection("advanced", "Advanced", <div className="wf-property-stack">

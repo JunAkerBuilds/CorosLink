@@ -21,6 +21,7 @@ import type {
   CorosWatchfaceStatus
 } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
+import { SelectDropdown } from "../components/SelectDropdown";
 import { resolveSportName } from "../training/sportTypes";
 import { useUnitSystem } from "../units/UnitSystemProvider";
 import {
@@ -340,22 +341,20 @@ export function GearView({ api }: { api: CorosLinkApi }) {
                 />
               </span>
             </label>
-            <label className="field">
+            <div className="field">
               <span>Account region</span>
-              <select
+              <SelectDropdown
+                label="Account region"
+                options={REGION_OPTIONS}
+                portal
+                disabled={busy !== null}
                 value={region}
-                onChange={(event) => {
-                  setRegion(event.target.value as CorosWatchfaceRegion);
+                onChange={(nextRegion) => {
+                  setRegion(nextRegion);
                   setRegionTouched(true);
                 }}
-              >
-                {REGION_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
             <label className="gear-checkbox gear-remember">
               <input
                 type="checkbox"

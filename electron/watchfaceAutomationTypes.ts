@@ -228,11 +228,11 @@ export const WATCHFACE_AUTOMATION_SCENE_SCHEMA = {
       "exerciseSeparator", "selectableMetricStyle", "controlComplicationEnabled",
       "controlBarometerMode", "controlBatteryEnabled", "controlSunriseEnabled",
       "controlSunsetEnabled", "controlFloorEnabled", "controlTemperatureEnabled",
-      "controlIconOffsets", "separateAutoTime", "timeStyles", "dateStyles",
+      "controlIconOffsets", "separateAutoTime", "addSeconds", "addWeekday", "addDateMonth", "addDateDay", "timeStyles", "dateStyles",
       "staticSeparators", "ampmIndicator", "weatherIndicator", "nativeData", "layoutOffsets"
     ],
     editor: [
-      "linkedLayerGroups", "editorGroups", "editorGuides", "lockedLayerIds",
+      "linkedLayerGroups", "editorGroups", "editorGuides", "lockedLayerIds", "removedLayerIds",
       "effectStyles", "layerEffects", "layerStrokes", "layerVisibility",
       "layerOpacities", "layerColors", "configAssetOverrides"
     ],

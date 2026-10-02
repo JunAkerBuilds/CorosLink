@@ -130,6 +130,12 @@ export interface CorosWatchfaceThemeListInput {
   catalog?: CorosWatchfaceThemeCatalog;
 }
 
+/** The last catalog listing saved for a query, served before a refresh. */
+export interface CorosWatchfaceThemeCacheEntry {
+  savedAt: string;
+  themes: CorosWatchfaceTheme[];
+}
+
 /** An entry returned by a COROS watchface catalog. */
 export interface CorosWatchfaceTheme {
   id?: string;
@@ -295,6 +301,15 @@ export interface CorosWatchfaceArchiveExportInput {
   name: string;
 }
 
+/** A folder the user picked for a multi-watch export; the path stays in main. */
+export interface CorosWatchfaceExportFolder {
+  folderId: string;
+  label: string;
+}
+export interface CorosWatchfaceArchiveFolderExportInput extends CorosWatchfaceArchiveExportInput {
+  folderId: string;
+}
+
 /** A public COROS share page downloaded and registered as a Studio archive. */
 export interface CorosWatchfaceShareImport {
   archive: CorosWatchfaceArchive;
@@ -319,13 +334,34 @@ export interface CommunityWatchface {
   packageBytes: number;
   packageSha256: string;
   validatorVersion: string | null;
+  /** All-time downloads, when the catalog reports them. */
+  downloadCount?: number;
+  /**
+   * The moderated variant group this face belongs to. In the "designs" view
+   * one item stands for the whole group (like a website gallery card).
+   */
+  group?: CommunityWatchfaceGroup;
 }
+
+export interface CommunityWatchfaceGroup {
+  slug: string;
+  name: string;
+  /** Variants matching the current filters. */
+  variantCount: number;
+  creatorCount?: number;
+}
+
+export type CommunityWatchfaceSort = "newest" | "title" | "trending" | "downloads";
 
 export interface CommunityWatchfaceCatalogQuery {
   q?: string;
   model?: string;
   style?: string;
-  sort?: "newest" | "title";
+  sort?: CommunityWatchfaceSort;
+  /** "designs" collapses each variant group into one item. */
+  view?: "faces" | "designs";
+  /** A group slug: lists that group's variants. */
+  group?: string;
   page?: number;
   pageSize?: number;
 }
@@ -601,6 +637,11 @@ export interface CorosWatchfaceThemeDownloadInput {
 
 export interface CorosWatchfaceTemplateAsset extends CorosWatchfaceSpriteFile {
   dataUrl: string;
+}
+
+export interface CorosWatchfaceTemplateAssetOptions {
+  /** Leave out paths the archive lacks instead of rejecting the request. */
+  skipMissing?: boolean;
 }
 
 export interface CorosWatchfaceArtwork {
@@ -930,7 +971,7 @@ export interface CorosWatchfaceExerciseSeparatorStyle {
 }
 
 /** Authored native 4.9.9 data layer, in master-preview pixels. */
-export type CorosWatchfaceNativeAssetRole = "digits" | "icon" | "states" | "unit" | "symbols" | "progress" | "decimal" | "background" | "mask" | "noDataMask";
+export type CorosWatchfaceNativeAssetRole = "digits" | "icon" | "states" | "unit" | "symbols" | "progress" | "decimal" | "background" | "mask" | "noDataMask" | "separator";
 export type CorosWatchfaceNativePart = "value" | Exclude<CorosWatchfaceNativeAssetRole, "digits"> | "plot";
 export interface CorosWatchfaceNativePartStyle {
   enabled?: boolean;
@@ -1115,6 +1156,19 @@ export interface CorosWatchfaceDesignState {
   controlIconOffsets?: Record<string, { dx: number; dy: number }>;
   /** Converts firmware auto-aligned HH:MM into four independently positioned digits. */
   separateAutoTime?: boolean;
+  /**
+   * Adds seconds digits to a template that declares none, reusing its minute
+   * digit sprites. Ignored when the template already ships seconds.
+   */
+  addSeconds?: boolean;
+  /**
+   * Add weekday/month/day to a template that lays out none of its own. Month
+   * and day reuse a template digit folder; weekday is rendered from a font.
+   * Ignored for parts the template already ships.
+   */
+  addWeekday?: boolean;
+  addDateMonth?: boolean;
+  addDateDay?: boolean;
   timeStyles: Record<string, { solidAlpha?: boolean; color?: string; scale: number; rotation?: number; fontFamily?: string; fontWeight?: number; fontStyle?: "normal" | "italic"; letterSpacing?: number; rasterFont?: CorosWatchfaceRasterFont }>;
   /** Weekday/month/day sizing; absent in projects saved before resizing. */
   dateStyles?: Record<
@@ -1198,6 +1252,11 @@ export interface CorosWatchfaceDesignState {
    * alter the exported watch-face format.
    */
   lockedLayerIds?: string[];
+  /**
+   * Firmware-backed editor layers the user deleted. They are turned off and
+   * left out of the Layers list until re-added from the Add menu. Editor-only.
+   */
+  removedLayerIds?: string[];
   /** Reusable, live-linked visual-effect styles. */
   effectStyles?: CorosWatchfaceEffectStyle[];
   /** Effects keyed by editor layer id, or by `aod:<id>` for always-on assets. */
@@ -1256,6 +1315,10 @@ export type CorosWatchfaceModeDesignState = Partial<
     | "controlBarometerMode"
     | "controlIconOffsets"
     | "separateAutoTime"
+    | "addSeconds"
+    | "addWeekday"
+    | "addDateMonth"
+    | "addDateDay"
     | "timeStyles"
     | "dateStyles"
     | "staticSeparators"
@@ -1267,6 +1330,7 @@ export type CorosWatchfaceModeDesignState = Partial<
     | "editorGroups"
     | "editorGuides"
     | "lockedLayerIds"
+    | "removedLayerIds"
     | "effectStyles"
     | "layerEffects"
     | "layerStrokes"
@@ -1293,6 +1357,13 @@ export interface CorosWatchfaceProjectSummary {
   firmwareType?: string;
   /** Cached dashboard thumbnail, generated when the project was last saved. */
   previewDataUrl?: string;
+  /** When the stored thumbnail was written; set when previews are not inlined. */
+  previewUpdatedAt?: string;
+}
+
+export interface CorosWatchfaceProjectListOptions {
+  /** Inline every stored thumbnail as a data URL (default true). */
+  includePreviews?: boolean;
 }
 
 export interface CorosWatchfaceProjectSaveInput {
@@ -2784,6 +2855,14 @@ export interface CorosMcpStatus {
   tools: CorosMcpTool[];
 }
 
+/** The COROS account CorosLink is signed in with, reused to connect COROS MCP. */
+export interface CorosMcpAccount {
+  /** Saved account email, filled in on COROS's sign-in page. */
+  email?: string;
+  /** Region of the Training Hub or Watch Faces session; picks the MCP server. */
+  region?: CorosWatchfaceRegion;
+}
+
 // ----- Configurable MCP server registry -----
 
 export type McpTransport = "streamable-http";
@@ -2797,7 +2876,10 @@ export interface McpServerConfig {
   authType: McpAuthType;
   scope?: string;
   enabled: boolean;
-  /** Built-in (COROS): URL/id immutable; can be disabled or removed. */
+  /**
+   * Built-in (COROS): id immutable, URL limited to COROS's regional endpoints;
+   * can be disabled or removed.
+   */
   builtin: boolean;
   sortOrder: number;
 }

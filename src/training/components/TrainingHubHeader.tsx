@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { ChevronDown, FlaskConical, Loader2, LogOut, RefreshCw } from "lucide-react";
+import { ChevronDown, FlaskConical, Loader2, LogOut, RefreshCw, Trophy } from "lucide-react";
 import type { TrainingHubStatus } from "../../../electron/types";
 
 export const trainingHubTabs = [
@@ -23,11 +23,13 @@ interface TrainingHubHeaderProps {
   onRefresh: () => void;
   onLogout: () => void;
   onToggleSample?: () => void;
+  /** Dev builds only: plays the new-PR celebration on demand. */
+  onTestPrCelebration?: () => void;
 }
 
 export function TrainingHubHeader({
   connected, status, busy, sampleMode, activeTab, tabIdPrefix, activityCount,
-  onTabChange, onRefresh, onLogout, onToggleSample, dashboardToolbarRef
+  onTabChange, onRefresh, onLogout, onToggleSample, onTestPrCelebration, dashboardToolbarRef
 }: TrainingHubHeaderProps) {
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
@@ -79,6 +81,17 @@ export function TrainingHubHeader({
             >
               <FlaskConical size={14} aria-hidden="true" />
               Sample data
+            </button>
+          ) : null}
+          {onTestPrCelebration ? (
+            <button
+              type="button"
+              className="training-hub-sample-button"
+              title="Dev: play the new personal record celebration"
+              onClick={onTestPrCelebration}
+            >
+              <Trophy size={14} aria-hidden="true" />
+              Test PR
             </button>
           ) : null}
           {connected && !sampleMode ? (

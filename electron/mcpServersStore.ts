@@ -4,6 +4,7 @@ import {
   setSetting,
   deleteSettings
 } from "./database";
+import { isCorosMcpUrl } from "./corosMcpRegions";
 import { isValidServerId } from "./mcpToolNames";
 import type { McpServerConfig, McpServerInput } from "./types";
 
@@ -187,11 +188,16 @@ export function updateMcpServer(
   if ("id" in patch) {
     throw new Error("MCP server ids cannot be changed.");
   }
-  if (existing.builtin && patch.url !== undefined) {
-    throw new Error(`Built-in MCP server "${id}" URL is immutable.`);
-  }
   const name = patch.name === undefined ? existing.name : validateName(patch.name);
   const url = patch.url === undefined ? existing.url : validateUrl(patch.url);
+  // The built-in COROS server may only move to another COROS account region.
+  if (
+    existing.builtin &&
+    url !== existing.url &&
+    !(isCorosMcpUrl(existing.url) && isCorosMcpUrl(url))
+  ) {
+    throw new Error(`Built-in MCP server "${id}" URL is immutable.`);
+  }
   const transport =
     patch.transport === undefined
       ? existing.transport

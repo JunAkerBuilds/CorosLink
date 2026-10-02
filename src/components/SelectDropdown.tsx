@@ -19,13 +19,14 @@ export type SelectOption<T extends string> = {
 
 export interface SelectDropdownProps<T extends string> {
   value: T;
-  options: SelectOption<T>[];
+  options: readonly SelectOption<T>[];
   onChange: (value: T) => void;
   label: string;
   className?: string;
   menuClassName?: string;
   renderIcon?: (value: T) => ReactNode;
   disabled?: boolean;
+  autoFocus?: boolean;
   portal?: boolean;
   title?: string;
 }
@@ -47,7 +48,9 @@ const PORTAL_THEME_VARIABLES = [
   "--text-primary",
   "--text-secondary",
   "--accent",
+  "--accent-strong",
   "--accent-soft",
+  "--shadow-elevated",
   "--radius-sm"
 ] as const;
 
@@ -62,6 +65,7 @@ export function SelectDropdown<T extends string>({
   menuClassName,
   renderIcon,
   disabled = false,
+  autoFocus = false,
   portal = false,
   title
 }: SelectDropdownProps<T>) {
@@ -84,18 +88,20 @@ export function SelectDropdown<T extends string>({
   const valueId = `${dropdownId}-value`;
   const menuId = `${dropdownId}-menu`;
 
-  const openMenu = useCallback(() => {
+  const openMenu = useCallback((initialValue: T = value) => {
     if (closeTimerRef.current !== null) {
       window.clearTimeout(closeTimerRef.current);
       closeTimerRef.current = null;
     }
     setIsClosing(false);
+    setHighlightedValue(initialValue);
     setIsOpen(true);
-  }, []);
+  }, [value]);
 
   const closeMenu = useCallback(() => {
     setIsOpen(false);
     setIsClosing(true);
+    typeaheadRef.current = { query: "", updatedAt: 0 };
     if (closeTimerRef.current !== null) {
       window.clearTimeout(closeTimerRef.current);
     }
@@ -119,8 +125,8 @@ export function SelectDropdown<T extends string>({
     const preferredHeight = Math.min(menuRef.current?.scrollHeight ?? 280, 280);
     const roomBelow = window.innerHeight - trigger.bottom - viewportMargin;
     const roomAbove = trigger.top - viewportMargin;
-    const opensUp = roomBelow < Math.min(preferredHeight, 180) && roomAbove > roomBelow;
-    const availableRoom = Math.max(96, (opensUp ? roomAbove : roomBelow) - menuGap);
+    const opensUp = roomBelow < preferredHeight + menuGap && roomAbove > roomBelow;
+    const availableRoom = Math.max(0, (opensUp ? roomAbove : roomBelow) - menuGap);
 
     setMenuPosition({
       left: Math.max(viewportMargin, Math.min(trigger.left, window.innerWidth - menuWidth - viewportMargin)),
@@ -129,17 +135,19 @@ export function SelectDropdown<T extends string>({
       maxHeight: Math.min(preferredHeight, availableRoom),
       transform: opensUp ? "translateY(-100%)" : undefined
     });
-    setPortalTheme(Object.fromEntries(
-      PORTAL_THEME_VARIABLES.map((name) => [name, computedStyle.getPropertyValue(name)])
-    ) as PortalTheme);
+    setPortalTheme({
+      ...Object.fromEntries(
+        PORTAL_THEME_VARIABLES.map((name) => [name, computedStyle.getPropertyValue(name)])
+      ),
+      fontFamily: computedStyle.fontFamily,
+      fontSize: computedStyle.fontSize
+    } as PortalTheme);
   }, [portal]);
 
   useEffect(() => {
     if (!isOpen) {
       return;
     }
-
-    setHighlightedValue(value);
 
     function handlePointerDown(event: PointerEvent) {
       const target = event.target as Node;
@@ -161,7 +169,11 @@ export function SelectDropdown<T extends string>({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleDocumentKeyDown);
     };
-  }, [closeMenu, isOpen, value]);
+  }, [closeMenu, isOpen]);
+
+  useEffect(() => {
+    if (disabled && isOpen) closeMenu();
+  }, [closeMenu, disabled, isOpen]);
 
   useEffect(() => {
     return () => {
@@ -182,13 +194,32 @@ export function SelectDropdown<T extends string>({
       ? null
       : new ResizeObserver(updateMenuPosition);
     if (triggerRef.current) observer?.observe(triggerRef.current);
+    if (menuRef.current) observer?.observe(menuRef.current);
+    // Portals inherit local tokens from their trigger, including live theme changes.
+    const themeObserver = new MutationObserver(updateMenuPosition);
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme", "style"]
+    });
+    const handleScroll = (event: Event) => {
+      if (!menuRef.current?.contains(event.target as Node)) updateMenuPosition();
+    };
     window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", handleScroll, true);
 
     return () => {
       observer?.disconnect();
+      themeObserver.disconnect();
       window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", handleScroll, true);
     };
   }, [isMenuMounted, portal, updateMenuPosition]);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    document.getElementById(`${dropdownId}-option-${String(highlightedValue)}`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [dropdownId, highlightedValue, isOpen]);
 
   function moveHighlight(direction: 1 | -1) {
     if (options.length === 0) {
@@ -210,9 +241,11 @@ export function SelectDropdown<T extends string>({
   }
 
   function selectOption(nextValue: T) {
+    if (!options.some((option) => option.value === nextValue)) return;
     onChange(nextValue);
     setHighlightedValue(nextValue);
     closeMenu();
+    triggerRef.current?.focus({ preventScroll: true });
   }
 
   function handleTriggerKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
@@ -225,7 +258,6 @@ export function SelectDropdown<T extends string>({
 
       if (!isOpen) {
         openMenu();
-        setHighlightedValue(value);
         return;
       }
 
@@ -240,9 +272,22 @@ export function SelectDropdown<T extends string>({
       return;
     }
 
-    if ((event.key === "Enter" || event.key === " ") && isOpen) {
+    if (event.key === "Escape" && isOpen) {
       event.preventDefault();
-      selectOption(highlightedValue);
+      event.stopPropagation();
+      closeMenu();
+      return;
+    }
+
+    if (event.key === "Tab" && isOpen) {
+      closeMenu();
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (isOpen) selectOption(highlightedValue);
+      else openMenu();
       return;
     }
 
@@ -252,10 +297,13 @@ export function SelectDropdown<T extends string>({
       const previous = typeaheadRef.current;
       const query = `${now - previous.updatedAt > 700 ? "" : previous.query}${event.key}`.toLocaleLowerCase();
       typeaheadRef.current = { query, updatedAt: now };
-      const match = options.find((option) => option.label.toLocaleLowerCase().startsWith(query));
+      const search = [...query].every((character) => character === query[0]) ? query[0] : query;
+      const currentIndex = options.findIndex((option) => option.value === (isOpen ? highlightedValue : value));
+      const startIndex = search.length === 1 ? currentIndex + 1 : 0;
+      const orderedOptions = [...options.slice(startIndex), ...options.slice(0, startIndex)];
+      const match = orderedOptions.find((option) => option.label.toLocaleLowerCase().startsWith(search));
       if (match) {
-        openMenu();
-        setHighlightedValue(match.value);
+        openMenu(match.value);
       }
     }
   }
@@ -276,6 +324,7 @@ export function SelectDropdown<T extends string>({
       role="listbox"
       aria-label={label}
       aria-hidden={isClosing || undefined}
+      inert={isClosing || undefined}
       data-side={menuPosition?.transform ? "top" : "bottom"}
       style={portal ? ({
         ...portalTheme,
@@ -307,6 +356,7 @@ export function SelectDropdown<T extends string>({
               id={`${dropdownId}-option-${String(option.value)}`}
               key={option.value}
               role="option"
+              tabIndex={-1}
               aria-selected={isSelected}
               style={{
                 "--app-select-delay": `${40 + index * 18}ms`
@@ -358,6 +408,7 @@ export function SelectDropdown<T extends string>({
         aria-activedescendant={isOpen && options.length ? `${dropdownId}-option-${String(highlightedValue)}` : undefined}
         aria-labelledby={`${labelId} ${valueId}`}
         disabled={disabled}
+        autoFocus={autoFocus}
         title={title}
         onClick={() => {
           if (!disabled) {

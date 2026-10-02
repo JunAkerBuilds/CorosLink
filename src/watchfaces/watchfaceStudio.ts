@@ -58,9 +58,7 @@ export interface WatchfaceTypography {
 export interface WatchfaceStudioOptions extends WatchfaceTypography {
   /** Inspect already-compiled PNGs at native resolution without reprocessing alpha. */
   compiledPixels?: boolean;
-  compiledClipRect?: { x0: number; y0: number; x1: number; y1: number };
-  onCompiledSprite?: (layer: string, image: CanvasImageSource, x: number, y: number, width: number, height: number, clip?: { x0: number; y0: number; x1: number; y1: number }) => void;
-  onCompiledRect?: (layer: string, width: number, height: number, rect: { x0: number; y0: number; x1: number; y1: number }) => void;
+  onCompiledSprite?: (layer: string, image: CanvasImageSource, x: number, y: number, width: number, height: number) => void;
   /** Optional fixed clock used by external design previews; never changes the watch clock. */
   previewDate?: Date;
   /** Representative numeric metric values, keyed by fixed/selectable metric id. */
@@ -760,15 +758,18 @@ export interface WatchfaceAnalogPreviewLayer {
   rotationDegrees: number | null;
 }
 
-const ANALOG_CENTER_CONFIG_KEYS = new Set<
+/** Firmware compositing order of the analog assets, bottom to top. */
+export const WATCHFACE_ANALOG_CONFIG_KEYS: ReadonlyArray<
   WatchfaceAnalogPreviewLayer["configKey"]
->([
+> = [
   "time_hour_icon",
   "time_minute_icon",
   "time_center_polygon_icon1",
   "time_second_icon",
   "time_center_polygon_icon2"
-]);
+];
+
+const ANALOG_CENTER_CONFIG_KEYS = new Set(WATCHFACE_ANALOG_CONFIG_KEYS);
 
 /** Direct analog assets share one firmware-controlled center coordinate. */
 export function analogCenterLayoutGroupId(
@@ -779,6 +780,34 @@ export function analogCenterLayoutGroupId(
   )
     ? "analogCenter"
     : null;
+}
+
+/**
+ * Every DIY template declares the analog keys, usually blank. A blank (or
+ * unparseable) `time_center_pos` means the firmware default: the screen
+ * center. Studio writes that default explicitly when it adds hands.
+ */
+function defaultAnalogCenterPos(
+  resolution: Pick<CorosWatchfaceResolutionDetails, "width" | "height">
+): string {
+  return `{${Math.round(resolution.width / 2)},${Math.round(resolution.height / 2)}}`;
+}
+
+/**
+ * Analog PNGs rotate (or sit) around their image center, so a replacement is
+ * scaled as a whole canvas. Trimming transparent padding like other direct
+ * assets would move the pivot to the middle of the visible hand.
+ */
+function fitConfigAssetReplacement(
+  configKey: string,
+  dataUrl: string,
+  width: number,
+  height: number,
+  zoom = 1
+): Promise<string> {
+  return analogCenterLayoutGroupId(configKey)
+    ? fitWholeSpriteToCanvas(dataUrl, width, height, zoom)
+    : fitVisibleSpriteToCanvas(dataUrl, width, height, zoom);
 }
 
 function directConfigSprite(
@@ -948,7 +977,13 @@ export function getWatchfaceControlStatusPreviewLayers(
  */
 export function getWatchfaceAnalogPreviewLayers(
   resolution: CorosWatchfaceResolutionDetails,
-  now: Date
+  now: Date,
+  created: {
+    overrides?: Record<string, CorosWatchfaceConfigAssetOverride>;
+    scope?: WatchfaceConfigAssetScope;
+    /** Converts master-resolution replacement pixels to this resolution. */
+    nativeScale?: number;
+  } = {}
 ): WatchfaceAnalogPreviewLayer[] {
   const center = parseConfigPos(resolution.config.time_center_pos) ?? {
     x: resolution.width / 2,
@@ -969,9 +1004,49 @@ export function getWatchfaceAnalogPreviewLayers(
     ["time_center_polygon_icon2", null]
   ];
   return plan.flatMap(([configKey, rotationDegrees]) => {
-    const source = directConfigSprite(resolution, configKey);
+    const source =
+      directConfigSprite(resolution, configKey) ??
+      createdAnalogSprite(resolution, configKey, created);
     return source ? [{ configKey, source, center, rotationDegrees }] : [];
   });
+}
+
+/**
+ * Hands Studio added to a template have no source PNG yet: their config value
+ * points at the created file, and the replacement defines its native size.
+ */
+function createdAnalogSprite(
+  resolution: CorosWatchfaceResolutionDetails,
+  configKey: string,
+  {
+    overrides,
+    scope = "config",
+    nativeScale = 1
+  }: {
+    overrides?: Record<string, CorosWatchfaceConfigAssetOverride>;
+    scope?: WatchfaceConfigAssetScope;
+    nativeScale?: number;
+  }
+): (CorosWatchfaceSpriteFile & { created: true }) | null {
+  const value = resolution.config[configKey]?.trim().replace(/\\/g, "/");
+  const override = overrides?.[watchfaceConfigAssetId(scope, configKey)];
+  const replacement = override?.replacement;
+  if (!value || !replacement || override.enabled === false) return null;
+  const size = configAssetCanvasSize(
+    configKey,
+    override,
+    {
+      width: Math.max(1, Math.round(replacement.width * nativeScale)),
+      height: Math.max(1, Math.round(replacement.height * nativeScale))
+    },
+    nativeScale
+  );
+  return {
+    path: `${resolution.directory}/${value.replace(/^\.\//, "")}`,
+    width: size.width,
+    height: size.height,
+    created: true
+  };
 }
 
 function configAssetFolder(id: string): string {
@@ -1027,7 +1102,13 @@ const ARC_CUT_ICON_KEYS = new Set([
 
 /** Direct status/control icons whose firmware entries accept a resized PNG. */
 export function configAssetSupportsNativeSize(configKey: string): boolean {
-  return NATIVE_CONFIG_ICON_KEYS.has(configKey) || ARC_CUT_ICON_KEYS.has(configKey);
+  // Analog PNGs have no config box at all: the firmware rotates whatever
+  // canvas the file has around time_center_pos.
+  return (
+    NATIVE_CONFIG_ICON_KEYS.has(configKey) ||
+    ARC_CUT_ICON_KEYS.has(configKey) ||
+    analogCenterLayoutGroupId(configKey) !== null
+  );
 }
 
 /** Whether a freshly chosen replacement starts at its own PNG size. */
@@ -1047,6 +1128,7 @@ export function configAssetCanUseNativeSize(
   return (
     configAssetSupportsNativeSize(configKey) &&
     (hasTemplateSource ||
+      analogCenterLayoutGroupId(configKey) !== null ||
       VIRTUAL_STANDALONE_STATUS_ICON_KEYS.includes(
         configKey as (typeof VIRTUAL_STANDALONE_STATUS_ICON_KEYS)[number]
       ))
@@ -1407,6 +1489,17 @@ export function buildWatchfaceConfigAssetOverrides(
           }
         }
       }
+      // Hands added to a digital template: the keys are declared blank (or
+      // not at all), in both config.txt and AODconfig.txt.
+      for (const configKey of WATCHFACE_ANALOG_CONFIG_KEYS) {
+        const id = watchfaceConfigAssetId(scope, configKey);
+        if (
+          overrides[id]?.replacement &&
+          !entries.some(([candidate]) => candidate === configKey)
+        ) {
+          entries.push([configKey, configAssetCreatedRelativePath(id)]);
+        }
+      }
       for (const [configKey] of entries) {
         // The current background is always a composed Studio PNG written back
         // to the template's original path. Artwork visibility is handled while
@@ -1441,7 +1534,11 @@ export function buildWatchfaceConfigAssetOverrides(
           (virtual || !replaceConfigAssetInPlace(configKey))
         ) {
           values[configKey] = configAssetCreatedRelativePath(id).replace(/\//g, "\\");
-          if (virtual) {
+          if (virtual && analogCenterLayoutGroupId(configKey)) {
+            if (!parseConfigPos(scopedConfig.time_center_pos)) {
+              values.time_center_pos = defaultAnalogCenterPos(resolution);
+            }
+          } else if (virtual) {
             const statusDefinition = CONTROL_STATUS_PREVIEW_DEFINITIONS.find(
               (definition) => definition.configKey === configKey
             );
@@ -1621,6 +1718,17 @@ export async function buildWatchfaceConfigAssetReplacements(
           }
         }
       }
+      // Hands added to a digital template: the keys are declared blank (or
+      // not at all), in both config.txt and AODconfig.txt.
+      for (const configKey of WATCHFACE_ANALOG_CONFIG_KEYS) {
+        const id = watchfaceConfigAssetId(scope, configKey);
+        if (
+          overrides[id]?.replacement &&
+          !entries.some(([candidate]) => candidate === configKey)
+        ) {
+          entries.push([configKey, configAssetCreatedRelativePath(id)]);
+        }
+      }
       for (const [configKey, rawPath] of entries) {
         const id = watchfaceConfigAssetId(scope, configKey);
         const assetLayerId = `configAsset:${id}`;
@@ -1717,7 +1825,8 @@ export async function buildWatchfaceConfigAssetReplacements(
               canvasSize.width,
               canvasSize.height
             )
-          : await fitVisibleSpriteToCanvas(
+          : await fitConfigAssetReplacement(
+              configKey,
               override!.replacement!.dataUrl,
               canvasSize.width,
               canvasSize.height,
@@ -3096,6 +3205,42 @@ export async function resizeAndTintSprite(
 }
 
 /**
+ * Fits a whole image, transparent padding included, into a firmware canvas
+ * with its center kept on the canvas center. Analog hands depend on this:
+ * their pivot is the image center, wherever the visible pixels sit.
+ */
+export async function fitWholeSpriteToCanvas(
+  dataUrl: string,
+  width: number,
+  height: number,
+  zoom = 1
+): Promise<string> {
+  const image = await loadStudioImage(dataUrl);
+  const fit =
+    Math.min(width / image.naturalWidth, height / image.naturalHeight) *
+    normalizePositiveScale(zoom);
+  const outputWidth = image.naturalWidth * fit;
+  const outputHeight = image.naturalHeight * fit;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Sprite fitting is unavailable in this window.");
+  }
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(
+    image,
+    (width - outputWidth) / 2,
+    (height - outputHeight) / 2,
+    outputWidth,
+    outputHeight
+  );
+  return canvas.toDataURL("image/png");
+}
+
+/**
  * Removes transparent source padding and fits the visible artwork into a
  * firmware-sized canvas without distorting its aspect ratio. Zoom may enlarge
  * the artwork beyond the canvas; the excess is intentionally clipped while
@@ -4119,6 +4264,331 @@ export function buildSeparateTimeOverrides(
     };
     if (colonValue) values.colon_icon = colonValue;
     overrides.push({ path: `${resolution.directory}/config.txt`, values });
+  }
+  return overrides;
+}
+
+/** Design flags that ask Studio to add a date part the template lacks. */
+export const ADDED_DATE_PART_FLAGS = {
+  weekday: "addWeekday",
+  dateMonth: "addDateMonth",
+  dateDay: "addDateDay"
+} as const satisfies Record<WatchfaceDatePartId, string>;
+
+export type WatchfaceAddedDatePartFlags = Partial<
+  Record<(typeof ADDED_DATE_PART_FLAGS)[WatchfaceDatePartId], boolean>
+>;
+
+/** Font used for added weekday labels when the design names none. */
+export const ADDED_WEEKDAY_FALLBACK_FONT = "Arial";
+
+/** True when the template lays out this date part in any watch language. */
+export function templateHasDatePart(
+  resolution: CorosWatchfaceResolutionDetails,
+  partId: WatchfaceDatePartId
+): boolean {
+  const group = WATCHFACE_LAYOUT_GROUPS.find((candidate) => candidate.id === partId);
+  return Boolean(group && layoutGroupKeys(resolution, group).length > 0);
+}
+
+/**
+ * The digit folder an added date part draws from: the template's own date
+ * digits first, then the small metric fonts that official faces share with
+ * their dates, then the time digits.
+ */
+function addedDateDigitFolder(
+  resolution: CorosWatchfaceResolutionDetails
+): (PreviewDigitSource & { configValue: string }) | null {
+  const config = resolution.config;
+  for (const key of [
+    "english_date_day_font",
+    "english_date_month_font",
+    "battery_level_font",
+    "step_font",
+    "heartreate_level_font",
+    "kcal_font",
+    "elevation_font",
+    "control_step_font",
+    "time_hour_high_font",
+    "time_minute_low_font",
+    "autoalign_time_font"
+  ]) {
+    const folder = findSpriteFolder(resolution, config[key]);
+    // Keep the template's own spelling (often `recovered\group-05`).
+    if (folder?.kind === "digits" && folder.files.length >= 10) {
+      return { ...folder, configValue: config[key]!.trim() };
+    }
+  }
+  const folder = resolution.spriteFolders.find(
+    (candidate) =>
+      candidate.kind === "digits" && !candidate.aod && candidate.files.length >= 10
+  );
+  return folder
+    ? { folder: folder.folder, kind: folder.kind, files: folder.files, configValue: folder.folder }
+    : null;
+}
+
+/** Whether Studio can add this date part to a template that lacks it. */
+export function canAddDatePart(
+  resolution: CorosWatchfaceResolutionDetails,
+  partId: WatchfaceDatePartId
+): boolean {
+  return !templateHasDatePart(resolution, partId) &&
+    addedDateDigitFolder(resolution) !== null;
+}
+
+/**
+ * Adds weekday, month and day to templates that draw none, so every face can
+ * carry the full calendar. Month and day reuse a template digit folder at its
+ * native size. Weekday has no label artwork to borrow: it points at the same
+ * digit folder only for its canvas size and is always rendered from a font
+ * (see `resolveAddedDateStyles`), exporting into its own studio folder.
+ *
+ * Added parts sit next to a date part the template already has; otherwise
+ * they stack below the time (above it when the time sits low on the face).
+ */
+export function buildAddedDateOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  flags: WatchfaceAddedDatePartFlags
+): CorosWatchfaceConfigOverride[] {
+  const requested = WATCHFACE_DATE_PARTS.filter(
+    (part) => flags[ADDED_DATE_PART_FLAGS[part.id]] === true
+  );
+  if (requested.length === 0) return [];
+  const overrides: CorosWatchfaceConfigOverride[] = [];
+  for (const resolution of details.resolutions) {
+    const parts = requested.filter((part) => canAddDatePart(resolution, part.id));
+    const folder = addedDateDigitFolder(resolution);
+    const sample = folder?.files[0];
+    if (parts.length === 0 || !folder || !sample) continue;
+    const config = resolution.config;
+    const gap = Math.max(2, Math.round(sample.width / 2));
+    const width = (part: WatchfaceDatePartDefinition) =>
+      sample.width * (part.kind === "week" ? 3 : 2);
+    // COROS dials are round: pull a rect toward the center until its corners
+    // are on screen, then keep it inside the canvas.
+    const dialX = resolution.width / 2;
+    const dialY = resolution.height / 2;
+    const dialRadius = Math.min(resolution.width, resolution.height) / 2 - 2;
+    const rectValue = (x0: number, y0: number, w: number, h: number) => {
+      let x = x0;
+      let y = y0;
+      for (let step = 0; step <= 20; step += 1) {
+        const t = step / 20;
+        const cx = x0 + w / 2 + (dialX - x0 - w / 2) * t;
+        const cy = y0 + h / 2 + (dialY - y0 - h / 2) * t;
+        const onDial = [[-1, -1], [1, -1], [-1, 1], [1, 1]].every(
+          ([sx, sy]) =>
+            Math.hypot(cx + (sx! * w) / 2 - dialX, cy + (sy! * h) / 2 - dialY) <= dialRadius
+        );
+        x = cx - w / 2;
+        y = cy - h / 2;
+        if (onDial) break;
+      }
+      x = Math.round(Math.max(0, Math.min(resolution.width - w, x)));
+      y = Math.round(Math.max(0, Math.min(resolution.height - h, y)));
+      return `{${x},${y},${x + Math.round(w)},${y + Math.round(h)},hcenter|vcenter}`;
+    };
+    const values: Record<string, string> = {};
+    const place = (part: WatchfaceDatePartDefinition, value: string) => {
+      values[part.rectKey] = value;
+      values[part.fontKey] = folder.configValue;
+    };
+    const month = WATCHFACE_DATE_PARTS[1]!;
+    const day = WATCHFACE_DATE_PARTS[2]!;
+    const monthRect = parseConfigRect(config[month.rectKey]);
+    const dayRect = parseConfigRect(config[day.rectKey]);
+    const remaining = new Set(parts);
+
+    // Complete a half-present month/day pair on the template's own row.
+    if (remaining.has(day) && monthRect) {
+      const h = monthRect.y1 - monthRect.y0;
+      place(day, rectValue(monthRect.x1 + gap, monthRect.y0, width(day), h));
+      remaining.delete(day);
+    }
+    if (remaining.has(month) && dayRect) {
+      const h = dayRect.y1 - dayRect.y0;
+      place(month, rectValue(dayRect.x0 - gap - width(month), dayRect.y0, width(month), h));
+      remaining.delete(month);
+    }
+    const rowGap = Math.max(2, Math.round(sample.height / 4));
+    const rowWidth = (row: WatchfaceDatePartDefinition[]) =>
+      row.reduce((sum, part) => sum + width(part), 0) + gap * (row.length - 1);
+    const placeRow = (row: WatchfaceDatePartDefinition[], x: number, y: number) => {
+      for (const part of row) {
+        place(part, rectValue(x, y, width(part), sample.height));
+        x += width(part) + gap;
+      }
+    };
+
+    // The template's own date row anchors the rest: beside it on the side
+    // facing the dial center when it sits off-center, otherwise below it.
+    const weekRect = parseConfigRect(config[WATCHFACE_DATE_PARTS[0]!.rectKey]);
+    const templateDate = [weekRect, monthRect, dayRect].filter(
+      (rect): rect is NonNullable<typeof rect> => rect !== null
+    );
+    if (remaining.size > 0 && templateDate.length > 0) {
+      const box = {
+        x0: Math.min(...templateDate.map((rect) => rect.x0)),
+        y0: Math.min(...templateDate.map((rect) => rect.y0)),
+        x1: Math.max(...templateDate.map((rect) => rect.x1)),
+        y1: Math.max(...templateDate.map((rect) => rect.y1))
+      };
+      const row = [...remaining];
+      const span = rowWidth(row);
+      const offset = (box.x0 + box.x1) / 2 - dialX;
+      const rowY = (box.y0 + box.y1) / 2 - sample.height / 2;
+      if (offset > resolution.width * 0.08) {
+        placeRow(row, box.x0 - gap - span, rowY);
+      } else if (offset < -resolution.width * 0.08) {
+        placeRow(row, box.x1 + gap, rowY);
+      } else {
+        const below = box.y1 + rowGap + sample.height <= resolution.height * 0.9;
+        placeRow(
+          row,
+          (box.x0 + box.x1) / 2 - span / 2,
+          below ? box.y1 + rowGap : box.y0 - rowGap - sample.height
+        );
+      }
+      remaining.clear();
+    }
+
+    if (remaining.size > 0) {
+      // No date on the face yet: stack below the time, or above it when the
+      // time sits low. Weekday gets its own row; month and day share one.
+      const timeBoxes = (
+        [
+          ["time_hour_high_pos", "time_hour_high_font"],
+          ["time_hour_low_pos", "time_hour_low_font"],
+          ["time_minute_high_pos", "time_minute_high_font"],
+          ["time_minute_low_pos", "time_minute_low_font"]
+        ] as const
+      ).flatMap(([posKey, fontKey]) => {
+        const pos = parseConfigPos(config[posKey]);
+        const file = findSpriteFolder(resolution, config[fontKey])?.files[0];
+        return pos && file
+          ? [{ x0: pos.x, y0: pos.y, x1: pos.x + file.width, y1: pos.y + file.height }]
+          : [];
+      });
+      const autoTime = hasAutoAlignedTime(resolution)
+        ? parseConfigRect(config.autoalign_time_rect)
+        : null;
+      if (autoTime) timeBoxes.push(autoTime);
+      const anchor = timeBoxes.length > 0
+        ? {
+            centerX: (Math.min(...timeBoxes.map((box) => box.x0)) +
+              Math.max(...timeBoxes.map((box) => box.x1))) / 2,
+            top: Math.min(...timeBoxes.map((box) => box.y0)),
+            bottom: Math.max(...timeBoxes.map((box) => box.y1))
+          }
+        : {
+            centerX: dialX,
+            top: resolution.height * 0.62,
+            bottom: resolution.height * 0.62
+          };
+      const rows = [
+        [...remaining].filter((part) => part.kind === "week"),
+        [...remaining].filter((part) => part.kind === "digits")
+      ].filter((row) => row.length > 0);
+      const stackHeight = rows.length * (sample.height + rowGap);
+      const below = anchor.bottom + stackHeight <= resolution.height * 0.9;
+      let y = below ? anchor.bottom + rowGap : anchor.top - stackHeight;
+      for (const row of rows) {
+        placeRow(row, anchor.centerX - rowWidth(row) / 2, y);
+        y += sample.height + rowGap;
+      }
+    }
+    overrides.push({ path: `${resolution.directory}/config.txt`, values });
+  }
+  return overrides;
+}
+
+/**
+ * Keeps an added weekday rendered from a font. Its config points at digit
+ * sprites purely for sizing, so a style without a usable font would draw (and
+ * export) digits as weekday labels.
+ */
+export function resolveAddedDateStyles(
+  styles: WatchfaceDateStyles,
+  flags: WatchfaceAddedDatePartFlags,
+  designFontFamily: string | undefined
+): WatchfaceDateStyles {
+  if (flags.addWeekday !== true) return styles;
+  const weekday = styles.weekday;
+  if (weekday?.fontFamily || rasterFontSupportsText(weekday?.rasterFont, "MON")) {
+    return styles;
+  }
+  return {
+    ...styles,
+    weekday: {
+      scale: 1,
+      ...weekday,
+      fontFamily: designFontFamily || ADDED_WEEKDAY_FALLBACK_FONT,
+      nativeSize: weekday?.nativeSize ?? true
+    }
+  };
+}
+
+/** True when the template itself declares at least one seconds digit. */
+export function templateHasSeconds(
+  resolution: CorosWatchfaceResolutionDetails
+): boolean {
+  return ["time_second_high_pos", "time_second_low_pos"].some((key) =>
+    Boolean(resolution.config[key]?.trim())
+  );
+}
+
+/**
+ * Adds seconds to templates that ship none by reusing the minute digit folder
+ * (or the auto-aligned time font), so no new artwork is required. The pair is
+ * centered under the minutes; its center stays put when the Seconds style is
+ * scaled, so the default 50% style lands just below the time.
+ */
+export function buildAddedSecondsOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  enabled: boolean
+): CorosWatchfaceConfigOverride[] {
+  if (!enabled) return [];
+  const overrides: CorosWatchfaceConfigOverride[] = [];
+  for (const resolution of details.resolutions) {
+    if (templateHasSeconds(resolution)) continue;
+    const config = resolution.config;
+    let font: string | undefined;
+    let box: { x0: number; y0: number; x1: number; y1: number } | null = null;
+    const minuteHigh = parseConfigPos(config.time_minute_high_pos);
+    const minuteLow = parseConfigPos(config.time_minute_low_pos);
+    const minuteFont = config.time_minute_low_font?.trim() || config.time_minute_high_font?.trim();
+    const minuteSample = findSpriteFolder(resolution, minuteFont)?.files[0];
+    if (minuteLow && minuteFont && minuteSample) {
+      font = minuteFont;
+      const left = minuteHigh ?? minuteLow;
+      box = {
+        x0: Math.min(left.x, minuteLow.x),
+        y0: Math.min(left.y, minuteLow.y),
+        x1: minuteLow.x + minuteSample.width,
+        y1: Math.max(left.y, minuteLow.y) + minuteSample.height
+      };
+    } else if (hasAutoAlignedTime(resolution)) {
+      font = config.autoalign_time_font?.trim();
+      box = parseConfigRect(config.autoalign_time_rect);
+    }
+    const sample = findSpriteFolder(resolution, font)?.files[0];
+    if (!font || !box || !sample) continue;
+    const centerX = Math.round((box.x0 + box.x1) / 2);
+    const centerY = Math.round(
+      Math.min(resolution.height - sample.height * 0.3, box.y1 + sample.height * 0.3)
+    );
+    const x = centerX - sample.width;
+    const y = Math.round(centerY - sample.height / 2);
+    overrides.push({
+      path: `${resolution.directory}/config.txt`,
+      values: {
+        time_second_high_pos: `{${x},${y}}`,
+        time_second_high_font: font,
+        time_second_low_pos: `{${x + sample.width},${y}}`,
+        time_second_low_font: font
+      }
+    });
   }
   return overrides;
 }
@@ -6189,7 +6659,13 @@ export function buildTimeStyleOverrides(
       if (!style) {
         continue;
       }
-      const planned = part.digits.flatMap((digit) => {
+      // Templates may declare only one slot (seconds is often low-only, e.g.
+      // an animated `time_second_low_font`). Requiring both slots left the
+      // config on the template folder, so Studio sprites were dropped on export.
+      const declared = part.digits.filter((digit) =>
+        Boolean(resolution.config[digit.posKey]?.trim() && resolution.config[digit.fontKey]?.trim())
+      );
+      const planned = declared.flatMap((digit) => {
         const pos = parseConfigPos(resolution.config[digit.posKey]);
         const source = findSpriteFolder(resolution, resolution.config[digit.fontKey]);
         const sample = source?.files[0];
@@ -6203,7 +6679,7 @@ export function buildTimeStyleOverrides(
             }]
           : [];
       });
-      if (planned.length !== part.digits.length) {
+      if (planned.length === 0 || planned.length !== declared.length) {
         continue;
       }
       const x0 = Math.min(...planned.map((item) => item.pos.x));
@@ -6213,12 +6689,13 @@ export function buildTimeStyleOverrides(
       const centerX = (x0 + x1) / 2;
       const centerY = (y0 + y1) / 2;
       const normalizedScale = normalizeSpriteScale(style.scale);
-      const baseGap =
-        planned[1]!.pos.x -
-        (planned[0]!.pos.x + planned[0]!.sample.width);
+      const baseGap = planned[1]
+        ? planned[1].pos.x - (planned[0]!.pos.x + planned[0]!.sample.width)
+        : 0;
       const targetGap = baseGap * normalizedScale;
       const targetWidth =
-        planned[0]!.size.width + targetGap + planned[1]!.size.width;
+        planned.reduce((sum, item) => sum + item.size.width, 0) +
+        targetGap * (planned.length - 1);
       let targetX = centerX - targetWidth / 2;
       for (const item of planned) {
         const x = Math.round(targetX);
@@ -7387,7 +7864,8 @@ export function computeLayoutGroupBounds(
     if (group.id === "analogCenter") {
       const analogLayers = getWatchfaceAnalogPreviewLayers(
         resolution,
-        new Date(0)
+        new Date(0),
+        { overrides: geometry.configAssetOverrides }
       );
       if (analogLayers.length > 0) {
         bounds.push({
@@ -7789,7 +8267,7 @@ function drawStudioLayerImage(
   rotateSprite = true,
   additionalOpacityLayerId?: string
 ): void {
-  if (options.compiledPixels) options.onCompiledSprite?.(layerId ?? "sprite", image, x, y, width, height, options.compiledClipRect);
+  if (options.compiledPixels) options.onCompiledSprite?.(layerId ?? "sprite", image, x, y, width, height);
   const renderAodSafeAlpha = (
     source: CanvasImageSource,
     alpha = 1
@@ -8254,9 +8732,15 @@ export async function drawStudioPreview(
       color: arcCutColor
     });
   }
-  const analogLayers = getWatchfaceAnalogPreviewLayers(resolution, now);
+  const analogLayers = getWatchfaceAnalogPreviewLayers(resolution, now, {
+    overrides: options.configAssetOverrides,
+    scope: options.configAssetScope,
+    nativeScale: options.nativeSpriteResolutionScale
+  });
   const analogIconColor = options.tintIcons ? options.accentColor : null;
   for (const layer of analogLayers) {
+    // Created hands draw from their replacement; there is no file to load.
+    if ("created" in layer.source) continue;
     wantedSprites.set(layer.source.path, { color: analogIconColor });
   }
 
@@ -8736,7 +9220,8 @@ export async function drawStudioPreview(
             canvasSize.width,
             canvasSize.height
           )
-        : await fitVisibleSpriteToCanvas(
+        : await fitConfigAssetReplacement(
+            configKey,
             sourceDataUrl,
             canvasSize.width,
             canvasSize.height,
@@ -9667,14 +10152,10 @@ export async function drawStudioPreview(
     const centerY = (plan.rect.y0 + plan.rect.y1) / 2;
     let x = numberStartX(plan.rect, totalWidth, plan.configValue);
     const layerId = plan.timePartId ?? plan.metricId ?? plan.datePartId ?? plan.componentId;
-    if (options.compiledPixels) {
-      options.onCompiledRect?.(layerId ?? "value", totalWidth, Math.max(...glyphs.map((glyph) => glyph.file.height)), plan.rect);
-      context.save();
-      context.beginPath();
-      context.rect(plan.rect.x0 * scale, plan.rect.y0 * scale, (plan.rect.x1 - plan.rect.x0) * scale, (plan.rect.y1 - plan.rect.y0) * scale);
-      context.clip();
-    }
-    const numberOptions = options.compiledPixels ? { ...options, compiledClipRect: plan.rect } : options;
+    // The watch does not crop a value to its rectangle: official SATISFY sets
+    // 23px date rects for two 13px digits and an HH:MM rect narrower than its
+    // glyph cells, and draws them whole. The compiled preview draws every
+    // glyph too, so the edge and overlap checks see what the watch paints.
     const glyphY = (height: number) => {
       const flags = plan.configValue?.split(/[,|}]/) ?? [];
       if (flags.includes("bottom")) return plan.rect.y1 - height;
@@ -9695,7 +10176,7 @@ export async function drawStudioPreview(
           separatorImage.naturalWidth * scale,
           separatorImage.naturalHeight * scale,
           scale,
-          numberOptions,
+          options,
           layerId,
           false
         );
@@ -9709,14 +10190,13 @@ export async function drawStudioPreview(
         glyph.file.width * scale,
         glyph.file.height * scale,
         scale,
-        numberOptions,
+        options,
         layerId
       );
       x += glyph.file.width;
     }
-    if (options.compiledPixels) context.restore();
     // COROS stores the percent image separately from the numeric rectangle.
-    // Keep it attached to the value, outside the digit clipping region.
+    // Keep it attached to the value.
     const suffixImage = plan.suffix
       ? await configuredAssetImage(plan.suffix.configKey, plan.suffix.file,
           componentColor ?? metricStyle?.color ?? (options.tintLabels ? options.digitColor : null))

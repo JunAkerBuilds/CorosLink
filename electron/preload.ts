@@ -126,6 +126,7 @@ import type {
   LocalChatDiscovery,
   OpenRouterConfig,
   OpenRouterConnectionTest,
+  CorosMcpAccount,
   CorosMcpStatus,
   CorosMcpTool,
   McpServerConfig,
@@ -143,6 +144,8 @@ import type {
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceProjectExportResult,
   CorosWatchfaceArchiveExportInput,
+  CorosWatchfaceArchiveFolderExportInput,
+  CorosWatchfaceExportFolder,
   CorosWatchfaceArtwork,
   CorosWatchfaceCreatorInput,
   CorosWatchfaceConversionInput,
@@ -151,6 +154,7 @@ import type {
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceProject,
   CorosWatchfaceProjectSaveInput,
+  CorosWatchfaceProjectListOptions,
   CorosWatchfaceProjectSummary,
   CorosWatchfacePublishInput,
   CorosWatchfaceRegion,
@@ -159,10 +163,12 @@ import type {
   CorosWatchfaceStatus,
   CorosWatchfaceConfigTextFile,
   CorosWatchfaceTemplateAsset,
+  CorosWatchfaceTemplateAssetOptions,
   CorosWatchfaceTemplateDetails,
   CorosWatchfaceTheme,
   CorosWatchfaceThemeDownload,
   CorosWatchfaceThemeDownloadInput,
+  CorosWatchfaceThemeCacheEntry,
   CorosWatchfaceThemeListInput,
   CorosOfficialAssetFrames,
   CorosOfficialAssetLibraryStatus,
@@ -286,6 +292,10 @@ const api = {
   listCorosWatchfaceThemes: (
     input: CorosWatchfaceThemeListInput
   ): Promise<CorosWatchfaceTheme[]> => ipcRenderer.invoke("watchfaces:listThemes", input),
+  readCachedCorosWatchfaceThemes: (
+    input: CorosWatchfaceThemeListInput
+  ): Promise<CorosWatchfaceThemeCacheEntry | null> =>
+    ipcRenderer.invoke("watchfaces:readCachedThemes", input),
   downloadCorosWatchfaceTheme: (
     input: CorosWatchfaceThemeDownloadInput
   ): Promise<CorosWatchfaceThemeDownload> =>
@@ -363,8 +373,18 @@ const api = {
     input: CorosWatchfaceArchiveExportInput
   ): Promise<CorosWatchfaceProjectExportResult> =>
     ipcRenderer.invoke("watchfaces:exportArchive", input),
-  listCorosWatchfaceProjects: (): Promise<CorosWatchfaceProjectSummary[]> =>
-    ipcRenderer.invoke("watchfaces:listProjects"),
+  chooseCorosWatchfaceExportFolder: (): Promise<CorosWatchfaceExportFolder | null> =>
+    ipcRenderer.invoke("watchfaces:chooseExportFolder"),
+  exportCorosWatchfaceArchiveToFolder: (
+    input: CorosWatchfaceArchiveFolderExportInput
+  ): Promise<CorosWatchfaceProjectExportResult> =>
+    ipcRenderer.invoke("watchfaces:exportArchiveToFolder", input),
+  listCorosWatchfaceProjects: (
+    options?: CorosWatchfaceProjectListOptions
+  ): Promise<CorosWatchfaceProjectSummary[]> =>
+    ipcRenderer.invoke("watchfaces:listProjects", options),
+  loadCorosWatchfaceProjectPreview: (projectId: string): Promise<string | null> =>
+    ipcRenderer.invoke("watchfaces:loadProjectPreview", projectId),
   saveCorosWatchfaceProject: (
     input: CorosWatchfaceProjectSaveInput
   ): Promise<CorosWatchfaceProject> =>
@@ -390,9 +410,10 @@ const api = {
     ipcRenderer.invoke("watchfaces:describeTemplate", archiveId),
   loadCorosWatchfaceTemplateAssets: (
     archiveId: string,
-    paths: string[]
+    paths: string[],
+    options?: CorosWatchfaceTemplateAssetOptions
   ): Promise<CorosWatchfaceTemplateAsset[]> =>
-    ipcRenderer.invoke("watchfaces:loadTemplateAssets", archiveId, paths),
+    ipcRenderer.invoke("watchfaces:loadTemplateAssets", archiveId, paths, options),
   loadCorosWatchfaceTemplateConfigTexts: (
     archiveId: string
   ): Promise<CorosWatchfaceConfigTextFile[]> =>
@@ -772,6 +793,11 @@ const api = {
     newHappenDay: string
   ): Promise<void> =>
     ipcRenderer.invoke("trainingHub:rescheduleWorkout", entry, newHappenDay),
+  copyScheduledWorkout: (
+    entry: { planId: string; idInPlan: string; happenDay: string; rawProgram?: Record<string, unknown> },
+    newHappenDay: string
+  ): Promise<void> =>
+    ipcRenderer.invoke("trainingHub:copyScheduledWorkout", entry, newHappenDay),
   removeScheduledWorkout: (entry: {
     planId: string;
     idInPlan: string;
@@ -1143,6 +1169,8 @@ const api = {
     ipcRenderer.invoke("mcp:removeServer", id),
   connectMcpServer: (id: string): Promise<McpServerStatus> =>
     ipcRenderer.invoke("mcp:connect", id),
+  getCorosMcpAccount: (): Promise<CorosMcpAccount> =>
+    ipcRenderer.invoke("mcp:corosAccount"),
   disconnectMcpServer: (id: string): Promise<void> =>
     ipcRenderer.invoke("mcp:disconnect", id),
   getMcpStatuses: (): Promise<McpServerStatus[]> =>

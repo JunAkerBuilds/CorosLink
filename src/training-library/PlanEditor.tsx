@@ -8,7 +8,7 @@ import {
   CalendarX,
   CloudOff,
   Copy,
-  CornerDownLeft,
+  Moon,
   Pencil,
   Plus,
   Redo2,
@@ -93,6 +93,12 @@ function entryDate(plan: TrainingPlanDocument, weekIndex: number, dayIndex: numb
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function weekDateRange(plan: TrainingPlanDocument, weekIndex: number): string | undefined {
+  const first = entryDate(plan, weekIndex, 0);
+  const last = entryDate(plan, weekIndex, 6);
+  return first && last ? `${first} – ${last}` : undefined;
+}
+
 function planDayName(startDate: string | undefined, dayIndex: number): string {
   if (!startDate) return DAY_NAMES[dayIndex]!;
   const date = new Date(`${startDate}T12:00:00`);
@@ -112,6 +118,8 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
   const [newWorkoutMinutes, setNewWorkoutMinutes] = useState("45");
   const [libraryQuery, setLibraryQuery] = useState("");
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  /** What is being dragged, so drop zones can announce themselves. */
+  const [dragKind, setDragKind] = useState<"entry" | "library" | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [workoutEditorError, setWorkoutEditorError] = useState<string | null>(null);
   const plan = history[historyIndex]!;
@@ -149,7 +157,7 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
 
   const patchPlan = (patch: Partial<TrainingPlanDocument>) => commit({ ...plan, ...patch });
 
-  const addLibraryWorkout = (workout: TrainingLibraryWorkout) => {
+  const addLibraryWorkout = (workout: TrainingLibraryWorkout, weekIndex = 0, dayIndex?: number) => {
     const sport = workoutSportFromType(workout.sportType) ?? "run";
     const source: PlanWorkoutEntryInput = {
       key: `library:${workout.id}`,
@@ -157,7 +165,7 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
       sport,
       save_to_library: false
     };
-    const entry = planEntryFromWorkout(source, 0, undefined, workout.id);
+    const entry = planEntryFromWorkout(source, weekIndex, dayIndex, workout.id);
     entry.plannedTrainingLoad = workout.trainingLoad;
     commit({ ...plan, entries: [...plan.entries, entry] });
   };
@@ -236,8 +244,23 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
 
   const drop = (event: DragEvent, weekIndex: number, dayIndex?: number) => {
     event.preventDefault();
+    setDragKind(null);
     const entryId = event.dataTransfer.getData("text/training-plan-entry");
-    if (entryId) moveEntry(entryId, weekIndex, dayIndex);
+    if (entryId) {
+      moveEntry(entryId, weekIndex, dayIndex);
+      return;
+    }
+    const workoutId = event.dataTransfer.getData("text/training-library-workout");
+    const workout = workoutId ? workouts.find((item) => item.id === workoutId) : undefined;
+    if (workout) addLibraryWorkout(workout, weekIndex, dayIndex);
+  };
+
+  const entryDragProps = {
+    onDragStart: () => setDragKind("entry"),
+    onDragEnd: () => {
+      setDragKind(null);
+      setDropTarget(null);
+    }
   };
 
   /** Lights the day (or the holding area) a dragged card is hovering over. */
@@ -352,8 +375,25 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
               <input value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="Filter workouts" aria-label="Filter workouts" />
               {libraryQuery ? <button type="button" aria-label="Clear workout filter" onClick={() => setLibraryQuery("")}><X size={13} /></button> : null}
             </div>
+            <p className="plan-editor-library-hint">Drag a workout onto a day, or click to hold it.</p>
             <div className="plan-editor-library-list">
-              {libraryMatches.length === 0 ? <p className="plan-editor-empty-inline">No workouts match your filter.</p> : libraryMatches.map((workout) => <button type="button" key={workout.id} aria-label={`Add ${workout.name} to plan`} onClick={() => addLibraryWorkout(workout)}><SportDot sport={workoutSportFromType(workout.sportType)} /><span><strong>{workout.name}</strong><small>{formatWorkoutSport(workoutSportFromType(workout.sportType) ?? "run")}</small></span><span className="plan-editor-library-add" aria-hidden="true"><Plus size={14} /></span></button>)}
+              {libraryMatches.length === 0 ? <p className="plan-editor-empty-inline">No workouts match your filter.</p> : libraryMatches.map((workout) => <button
+                type="button"
+                key={workout.id}
+                aria-label={`Add ${workout.name} to plan`}
+                title="Click to add to the holding area, or drag onto a day"
+                draggable
+                onDragStart={(event) => {
+                  event.dataTransfer.setData("text/training-library-workout", workout.id);
+                  event.dataTransfer.effectAllowed = "copy";
+                  setDragKind("library");
+                }}
+                onDragEnd={() => {
+                  setDragKind(null);
+                  setDropTarget(null);
+                }}
+                onClick={() => addLibraryWorkout(workout)}
+              ><SportDot sport={workoutSportFromType(workout.sportType)} /><span><strong>{workout.name}</strong><small>{formatWorkoutSport(workoutSportFromType(workout.sportType) ?? "run")}</small></span><span className="plan-editor-library-add" aria-hidden="true"><Plus size={14} /></span></button>)}
             </div>
           </section>
 
@@ -366,12 +406,22 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
           </section>
         </aside>
 
-        <main className="plan-editor-main">
-          <section className={`plan-holding-area${dropTarget === "holding" ? " is-drop-target" : ""}`} {...dropTargetProps("holding", (event) => drop(event, 0, undefined))}>
-            <div><h3>Holding area</h3><p>Drag unscheduled workouts into a day.</p></div>
-            <div className="plan-holding-list">
-              {unscheduled.length === 0 ? <span className="plan-editor-empty-inline">No unscheduled workouts</span> : unscheduled.map((entry) => <PlanEntryCard key={entry.id} entry={entry} onEdit={() => setEditingEntryId(entry.id)} onRemove={() => removeEntry(entry.id)} />)}
+        <main className={`plan-editor-main${dragKind ? " is-dragging" : ""}`}>
+          <section
+            className={`plan-holding-area${unscheduled.length === 0 ? " is-empty" : ""}${dropTarget === "holding" ? " is-drop-target" : ""}`}
+            {...dropTargetProps("holding", (event) => drop(event, 0, undefined))}
+          >
+            <div className="plan-holding-heading">
+              <h3>Holding area{unscheduled.length ? <span>{unscheduled.length}</span> : null}</h3>
+              <p>{dragKind === "entry"
+                ? "Drop here to unschedule."
+                : unscheduled.length === 0
+                  ? "Workouts you add from the library wait here until you drag them onto a day."
+                  : "Drag these onto a day to schedule them."}</p>
             </div>
+            {unscheduled.length ? <div className="plan-holding-list">
+              {unscheduled.map((entry) => <PlanEntryCard key={entry.id} entry={entry} dragProps={entryDragProps} onEdit={() => setEditingEntryId(entry.id)} onRemove={() => removeEntry(entry.id)} />)}
+            </div> : null}
           </section>
 
           <div className="plan-week-list">
@@ -380,7 +430,7 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
               const weekSummary = summary.weekly[weekIndex];
               return <section className="plan-week" key={weekIndex}>
                 <header>
-                  <div><h3>Week {weekIndex + 1}</h3><p>{weekSummary?.workouts ?? 0} workouts · {Math.round((weekSummary?.durationSeconds ?? 0) / 360) / 10} hr · {Math.round(weekSummary?.trainingLoad ?? 0)} load</p></div>
+                  <div><h3>Week {weekIndex + 1}{weekDateRange(plan, weekIndex) ? <small>{weekDateRange(plan, weekIndex)}</small> : null}</h3><p>{weekSummary?.workouts ?? 0} workout{weekSummary?.workouts === 1 ? "" : "s"} · {Math.round((weekSummary?.durationSeconds ?? 0) / 360) / 10} hr · {Math.round(weekSummary?.trainingLoad ?? 0)} load</p></div>
                   <div>
                     <button type="button" className="icon-button" aria-label={`Move week ${weekIndex + 1} up`} disabled={weekIndex === 0} onClick={() => commit(reorderTrainingPlanWeek(plan, weekIndex, weekIndex - 1))}><ArrowUp size={15} /></button>
                     <button type="button" className="icon-button" aria-label={`Move week ${weekIndex + 1} down`} disabled={weekIndex === plan.weekCount - 1} onClick={() => commit(reorderTrainingPlanWeek(plan, weekIndex, weekIndex + 1))}><ArrowDown size={15} /></button>
@@ -394,9 +444,9 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
                     const entries = weekEntries.filter((entry) => entry.dayIndex === dayIndex).sort((a, b) => a.sortOrder - b.sortOrder);
                     const dayKey = `week-${weekIndex}-day-${dayIndex}`;
                     return <div className={`plan-day${dropTarget === dayKey ? " is-drop-target" : ""}`} key={dayKey} {...dropTargetProps(dayKey, (event) => drop(event, weekIndex, dayIndex))}>
-                      <div className="plan-day-heading"><span><strong>{day}</strong><small>{entryDate(plan, weekIndex, dayIndex)}</small></span><button type="button" aria-label={`Add rest day on ${day}`} onClick={() => addRest(weekIndex, dayIndex)}><CornerDownLeft size={13} /></button></div>
+                      <div className="plan-day-heading"><span><strong>{day}</strong><small>{entryDate(plan, weekIndex, dayIndex)}</small></span>{entries.some((entry) => entry.kind === "rest") ? null : <button type="button" aria-label={`Mark ${day} of week ${weekIndex + 1} as a rest day`} title="Mark as rest day" onClick={() => addRest(weekIndex, dayIndex)}><Moon size={12} /></button>}</div>
                       <div className="plan-day-entries">
-                        {entries.map((entry) => <PlanEntryCard key={entry.id} entry={entry} onEdit={() => setEditingEntryId(entry.id)} onRemove={() => removeEntry(entry.id)} />)}
+                        {entries.map((entry) => <PlanEntryCard key={entry.id} entry={entry} dragProps={entryDragProps} onEdit={() => setEditingEntryId(entry.id)} onRemove={() => removeEntry(entry.id)} />)}
                       </div>
                     </div>;
                   })}
@@ -408,22 +458,22 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
         </main>
 
         <aside className="plan-editor-preview">
-          <h3>Save preview</h3>
-          <Ridge
+          <h3>Plan summary</h3>
+          <p className="plan-editor-preview-note">Estimated load by week</p>
+          {summary.trainingLoad > 0 ? <Ridge
             values={summary.weekly.map((week) => week.trainingLoad)}
             peakWeek={summary.peakWeek}
             unit="load"
             variant="load"
             label={`Estimated weekly training load across the ${summary.weekCount} weeks`}
-          />
-          <p className="plan-editor-preview-note">Estimated load by week</p>
+          /> : <p className="plan-editor-preview-empty">Schedule workouts to see how load builds week to week.</p>}
           <dl>
             <div><dt>Workouts</dt><dd>{summary.workouts}</dd></div>
             <div><dt>Duration</dt><dd>{Math.round(summary.durationSeconds / 360) / 10} hr</dd></div>
             <div><dt>Distance</dt><dd>{formatDistanceValue(summary.distanceMeters, unitSystem, { digits: 1 })}</dd></div>
             <div><dt>Training load</dt><dd>{Math.round(summary.trainingLoad)}</dd></div>
             <div><dt>Rest days</dt><dd>{summary.restDays}</dd></div>
-            <div><dt>Peak week</dt><dd>{summary.peakWeek ?? "-"}</dd></div>
+            <div><dt>Peak week</dt><dd>{summary.trainingLoad > 0 && summary.peakWeek ? `Week ${summary.peakWeek}` : "–"}</dd></div>
           </dl>
           {plan.source === "coros" ? <div className="plan-editor-limitation"><AlertTriangle size={16} /><p>This edit will be saved as a local plan. Native plan writes remain disabled until verified.</p></div> : null}
           {validation.length ? <div className="plan-editor-validation" aria-live="polite">{validation.map((issue, index) => <p className={issue.severity} key={`${issue.path}:${index}`}><AlertTriangle size={13} />{issue.message}</p>)}</div> : <p className="plan-editor-valid">Ready to save.</p>}
@@ -443,9 +493,27 @@ export function PlanEditor({ api, initialPlan, workouts, calendarEnabled, offlin
   );
 }
 
-function PlanEntryCard({ entry, onEdit, onRemove }: { entry: TrainingPlanEntry; onEdit: () => void; onRemove: () => void }) {
-  return <article className={`plan-entry-card is-${entry.kind}`} draggable={entry.kind === "workout"} onDragStart={(event) => event.dataTransfer.setData("text/training-plan-entry", entry.id)}>
-    {entry.kind === "workout" ? <SportDot sport={entry.workout?.sport} /> : null}
+interface PlanEntryCardProps {
+  entry: TrainingPlanEntry;
+  dragProps: { onDragStart: () => void; onDragEnd: () => void };
+  onEdit: () => void;
+  onRemove: () => void;
+}
+
+function PlanEntryCard({ entry, dragProps, onEdit, onRemove }: PlanEntryCardProps) {
+  const draggable = entry.kind === "workout";
+  return <article
+    className={`plan-entry-card is-${entry.kind}`}
+    draggable={draggable}
+    onDragStart={draggable ? (event) => {
+      event.dataTransfer.setData("text/training-plan-entry", entry.id);
+      event.dataTransfer.effectAllowed = "move";
+      dragProps.onDragStart();
+    } : undefined}
+    onDragEnd={draggable ? dragProps.onDragEnd : undefined}
+    onDoubleClick={draggable ? onEdit : undefined}
+  >
+    {entry.kind === "workout" ? <SportDot sport={entry.workout?.sport} /> : entry.kind === "rest" ? <Moon size={12} className="plan-entry-rest-icon" aria-hidden="true" /> : null}
     <span><strong>{entry.title ?? (entry.kind === "rest" ? "Rest day" : "Note")}</strong>{entry.workout?.sport ? <small>{formatWorkoutSport(entry.workout.sport)}</small> : null}</span>
     <span className="plan-entry-actions">
       {entry.kind === "workout" ? <button type="button" aria-label={`Edit ${entry.title ?? "workout"}`} onClick={onEdit}><Pencil size={12} /></button> : null}

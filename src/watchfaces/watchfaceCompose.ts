@@ -32,6 +32,8 @@ import {
   buildMetricOverrides,
   buildMetricSpriteReplacements,
   buildMetricStyleOverrides,
+  buildAddedDateOverrides,
+  buildAddedSecondsOverrides,
   buildSeparateTimeOverrides,
   buildStaticSeparatorOverrides,
   buildStudioReplacements,
@@ -50,6 +52,7 @@ import {
   renderWatchfaceSolidFontSprite,
   type WatchfaceAssetLoader,
   type WatchfaceDateStyles,
+  resolveAddedDateStyles,
   type WatchfaceMetricStyles,
   type WatchfaceStudioOptions,
   type WatchfaceTimeStyles
@@ -377,7 +380,11 @@ function timeStylesOf(design: CorosWatchfaceDesignState): WatchfaceTimeStyles {
 }
 
 function dateStylesOf(design: CorosWatchfaceDesignState): WatchfaceDateStyles {
-  return (design.dateStyles ?? {}) as WatchfaceDateStyles;
+  return resolveAddedDateStyles(
+    (design.dateStyles ?? {}) as WatchfaceDateStyles,
+    design,
+    design.fontFamily
+  );
 }
 
 /** Preview options keep Studio rendering aligned with archive composition. */
@@ -421,9 +428,16 @@ export function deriveDesignDetails(
   details: CorosWatchfaceTemplateDetails,
   design: CorosWatchfaceDesignState
 ): DesignDetails {
-  const timeFormatOverrides = buildSeparateTimeOverrides(
+  const separateTimeOverrides = buildSeparateTimeOverrides(
     details,
     design.separateAutoTime === true
+  );
+  // Seconds are placed under the minutes, so they follow separated time.
+  const separatedDetails = applyConfigOverridesToDetails(details, separateTimeOverrides);
+  const timeFormatOverrides = mergeConfigOverrides(
+    separateTimeOverrides,
+    buildAddedSecondsOverrides(separatedDetails, design.addSeconds === true),
+    buildAddedDateOverrides(separatedDetails, design)
   );
   const timeFormatDetails = applyConfigOverridesToDetails(
     details,
@@ -662,7 +676,7 @@ export async function composeWatchfaceReplacements(
     ? buildAmPmOverrides(details, ampmStyle)
     : [];
   const weatherStyle = design.weatherIndicator;
-  const nativeDataComposition = await composeNativeData(details, design.nativeData);
+  const nativeDataComposition = await composeNativeData(details, design.nativeData, weatherStyle?.enabled);
   const controlTemperatureActive = isControlComplicationEnabled(
     details,
     design,
@@ -718,9 +732,10 @@ export async function composeWatchfaceReplacements(
     design,
     loadAssets
   );
+  // metricDetails carries date parts Studio added to templates without them.
   const dateSpriteComposition = dateStyleActive
     ? await buildDateSpriteComposition(
-        applyLayoutToDetails(details, design.layoutOffsets ?? {}),
+        applyLayoutToDetails(metricDetails, design.layoutOffsets ?? {}),
         dateStyles,
         toStudioOptions(design),
         loadAssets
@@ -885,7 +900,7 @@ export async function composeWatchfaceReplacements(
           )
         : [],
       timeStyleOverrides,
-      dateStyleActive ? buildDateStyleOverrides(details, dateStyles, true) : [],
+      dateStyleActive ? buildDateStyleOverrides(metricDetails, dateStyles, true) : [],
       timeTrackingOverrides,
       buildLayerColorOverrides(details, design.layerColors ?? {}),
       // Preserve the generated path and base position for selectable icons
@@ -908,7 +923,8 @@ export async function composeWatchfaceReplacements(
         decorationPositionDetails,
         effectedAssets.padding
       ),
-      buildLayerVisibilityOverrides(details, design.layerVisibility ?? {}),
+      // Hiding must also blank keys Studio added (seconds, date parts).
+      buildLayerVisibilityOverrides(metricDetails, design.layerVisibility ?? {}),
       batteryIconEffectSources.configOverrides,
       buildWatchfaceConfigAssetOverrides(
         configAssetPositionDetails,

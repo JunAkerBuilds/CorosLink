@@ -126,6 +126,7 @@ import type {
   LocalChatDiscovery,
   OpenRouterConfig,
   OpenRouterConnectionTest,
+  CorosMcpAccount,
   CorosMcpStatus,
   CorosMcpTool,
   McpServerConfig,
@@ -143,6 +144,8 @@ import type {
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceProjectExportResult,
   CorosWatchfaceArchiveExportInput,
+  CorosWatchfaceArchiveFolderExportInput,
+  CorosWatchfaceExportFolder,
   CorosWatchfaceArtwork,
   CorosWatchfaceCreatorInput,
   CorosWatchfaceConversionInput,
@@ -151,6 +154,7 @@ import type {
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceProject,
   CorosWatchfaceProjectSaveInput,
+  CorosWatchfaceProjectListOptions,
   CorosWatchfaceProjectSummary,
   CorosWatchfacePublishInput,
   CorosWatchfaceRegion,
@@ -159,10 +163,12 @@ import type {
   CorosWatchfaceStatus,
   CorosWatchfaceConfigTextFile,
   CorosWatchfaceTemplateAsset,
+  CorosWatchfaceTemplateAssetOptions,
   CorosWatchfaceTemplateDetails,
   CorosWatchfaceTheme,
   CorosWatchfaceThemeDownload,
   CorosWatchfaceThemeDownloadInput,
+  CorosWatchfaceThemeCacheEntry,
   CorosWatchfaceThemeListInput,
   CorosOfficialAssetFrames,
   CorosOfficialAssetLibraryStatus,
@@ -255,6 +261,9 @@ export interface CorosLinkApi {
   listCorosWatchfaceThemes: (
     input: CorosWatchfaceThemeListInput
   ) => Promise<CorosWatchfaceTheme[]>;
+  readCachedCorosWatchfaceThemes: (
+    input: CorosWatchfaceThemeListInput
+  ) => Promise<CorosWatchfaceThemeCacheEntry | null>;
   downloadCorosWatchfaceTheme: (
     input: CorosWatchfaceThemeDownloadInput
   ) => Promise<CorosWatchfaceThemeDownload>;
@@ -299,7 +308,14 @@ export interface CorosLinkApi {
   exportCorosWatchfaceArchive: (
     input: CorosWatchfaceArchiveExportInput
   ) => Promise<CorosWatchfaceProjectExportResult>;
-  listCorosWatchfaceProjects: () => Promise<CorosWatchfaceProjectSummary[]>;
+  chooseCorosWatchfaceExportFolder: () => Promise<CorosWatchfaceExportFolder | null>;
+  exportCorosWatchfaceArchiveToFolder: (
+    input: CorosWatchfaceArchiveFolderExportInput
+  ) => Promise<CorosWatchfaceProjectExportResult>;
+  listCorosWatchfaceProjects: (
+    options?: CorosWatchfaceProjectListOptions
+  ) => Promise<CorosWatchfaceProjectSummary[]>;
+  loadCorosWatchfaceProjectPreview: (projectId: string) => Promise<string | null>;
   saveCorosWatchfaceProject: (
     input: CorosWatchfaceProjectSaveInput
   ) => Promise<CorosWatchfaceProject>;
@@ -319,7 +335,8 @@ export interface CorosLinkApi {
   ) => Promise<CorosWatchfaceTemplateDetails>;
   loadCorosWatchfaceTemplateAssets: (
     archiveId: string,
-    paths: string[]
+    paths: string[],
+    options?: CorosWatchfaceTemplateAssetOptions
   ) => Promise<CorosWatchfaceTemplateAsset[]>;
   loadCorosWatchfaceTemplateConfigTexts: (
     archiveId: string
@@ -532,6 +549,10 @@ export interface CorosLinkApi {
     },
     newHappenDay: string
   ) => Promise<void>;
+  copyScheduledWorkout: (
+    entry: { planId: string; idInPlan: string; happenDay: string; rawProgram?: Record<string, unknown> },
+    newHappenDay: string
+  ) => Promise<void>;
   removeScheduledWorkout: (entry: {
     planId: string;
     idInPlan: string;
@@ -717,6 +738,7 @@ export interface CorosLinkApi {
   ) => Promise<McpServerConfig>;
   removeMcpServer: (id: string) => Promise<void>;
   connectMcpServer: (id: string) => Promise<McpServerStatus>;
+  getCorosMcpAccount: () => Promise<CorosMcpAccount>;
   disconnectMcpServer: (id: string) => Promise<void>;
   getMcpStatuses: () => Promise<McpServerStatus[]>;
   setMcpBearer: (id: string, token: string) => Promise<void>;

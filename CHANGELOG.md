@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.49] - 2026-09-27
+
+### Changed
+
+- **Minimum** and **Maximum temperature** now show as one reading in Studio, the way the watch draws them: the minimum, a "/", the maximum and one unit. The maximum follows the minimum, and moving either moves both. Restyle, replace or hide the "/" with the new **Min/max separator** component on Minimum temperature.
+
+### Fixed
+
+- Min/max temperature no longer shows on the watch as one run-together number such as "1327°C". The export now draws a visible separator between them.
+- **Send to COROS** no longer fails with "does not contain one of the requested images" for templates that reference images they don't include, such as AROUND-based faces. The send preview lists those images instead.
+
+## [0.1.48] - 2026-09-27
+
+### Added
+
+- Add **Weekday**, **Date month** and **Date day** to any watch face from Studio's **Add** menu, including faces whose template has no date, such as converted official faces. Month and day reuse the face's own digits. The weekday is drawn with a font you can change. Studio places them next to the face's existing date or below the time, and **Remove** takes them off again.
+- Pick the PACE 4 Jakob Ingebrigtsen Edition from the template watch presets to browse its face catalog.
+
+### Changed
+
+- The **Add** menu lists face components in the same order on every face.
+
+### Fixed
+
+- Seconds and other layers that Studio added now stay off the watch when you hide them. The exported face previously still showed them.
+
+## [0.1.47] - 2026-09-26
+
+### Added
+
+- Add **analog hands** to any watch face from Studio's **Add** menu, including DIY templates without hands. Watchmaker AI can add them too.
+- Restore template layers you deleted, such as the time, date, fixed metrics and indicators, from **Add**, which now has **Time** and **Device** categories.
+- Add a GitHub Sponsors link.
+
+### Changed
+
+- Restyle the Watch Faces hub to match the Faces website. Community shows each design once, with its variants on their own page, and theme listings load from cache before refreshing.
+- Refresh the Training Hub personal records and race predictor.
+- The send preview for a converted official face now draws its live data.
+
+### Fixed
+
+- Replaced analog hands now rotate around their pivot instead of spinning in place.
+- Min/max temperature, humidity and UV now show on the watch when their icon is hidden. The export adds the invisible icon and separator that official faces include.
+- Converted official faces with an auto-aligned clock, such as SATISFY, keep their time and their light background.
+- Chart styles switched off in an official face (bar or line width 0) stay off after export.
+
+## [0.1.46] - 2026-09-25
+
+### Added
+
+- Add **Seconds** to a watch face whose template has none, from **Add → Live data**. Studio reuses the template's minute digits, starts them at half size below the time, and lets you restyle, move, or remove them like any Seconds layer.
+
+### Fixed
+
+- Export a custom font or sprite sheet chosen for Seconds on templates that only have a single seconds digit, such as animated faces. The exported face previously kept the template's original seconds frames.
+
 ## [0.1.45] - 2026-09-24
 
 ### Added

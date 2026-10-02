@@ -21,6 +21,8 @@ export function nativeParts(id: string, style: Style): Part[] {
     ...(field && nativeHasIcon(field) ? ["icon" as const] : []), "value",
     ...(field?.unit || field?.unitKey ? ["unit" as const] : []),
     ...(id.startsWith("weather_temp") ? ["symbols" as const] : []),
+    // Drawn between minimum and maximum, which the watch shows as one reading.
+    ...(id === "weather_temp_min" ? ["separator" as const] : []),
     ...(field?.stateKey ? ["states" as const] : [])
   ];
 }
@@ -28,6 +30,8 @@ export function nativeParts(id: string, style: Style): Part[] {
 export function nativePart(id: string, style: Style, part: Part) {
   const width = style.chartWidth ?? 240, height = style.chartHeight ?? 120;
   const chartMoon = id === "chart" && style.chartSource === "chart_moon";
+  // The separator defaults to one digit cell, like the official "/" glyphs.
+  const valueStyle = style.parts?.value, valueHeight = valueStyle?.height ?? 48;
   const defaults = {
     value: { x: !nativeParts(id, style).includes("icon") || style.parts?.icon?.enabled === false ? 0 : 40, y: 0, width: 96, height: 48 },
     icon: { x: 0, y: 0, width: 36, height: 48 },
@@ -39,7 +43,8 @@ export function nativePart(id: string, style: Style, part: Part) {
     decimal: { x: 0, y: 0, width: 18, height: 48 },
     background: { x: 0, y: 58, width, height },
     mask: { x: 0, y: 58, width, height },
-    noDataMask: { x: 0, y: 58, width, height }
+    noDataMask: { x: 0, y: 58, width, height },
+    separator: { x: 0, y: 0, width: valueStyle?.digitWidth ?? (valueStyle?.width ?? 96) / 4, height: valueHeight }
   }[part];
   const custom = style.parts?.[part];
   return {
@@ -57,7 +62,7 @@ export function nativeRolePart(role: Role): Part { return role === "digits" ? "v
 export function nativeStateCount(id: string, style: Style): number {
   return style.stateCount ?? NATIVE_DATA_BY_ID.get(id)?.stateCount ?? 1;
 }
-export function nativePartHasPosition(part: Part): boolean { return !["unit", "symbols", "decimal"].includes(part); }
+export function nativePartHasPosition(part: Part): boolean { return !["unit", "symbols", "decimal", "separator"].includes(part); }
 
 const ICON_LABELS: Record<string, string> = {
   weather_temp: "°", weather_temp_min: "↓", weather_temp_max: "↑", weather_wind: "≈", weather_rainfall: "☂", weather_humidity: "%", weather_uv: "UV", weather_aqi: "AQ",
@@ -69,6 +74,7 @@ export function nativeAssetText(id: string, style: Style, role: Role, index: num
   if (role === "digits") return String(index);
   if (role === "symbols") return ["−", "°", "%", ":"][index] ?? "";
   if (role === "decimal") return ".";
+  if (role === "separator") return "/";
   if (role === "progress") return index ? "☾" : "☀";
   if (role === "states") return id === "sleep_hrv_level" ? `HRV ${index}` : null;
   if (role === "unit") {

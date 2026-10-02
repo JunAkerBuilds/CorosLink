@@ -1,5 +1,5 @@
 import { batteryReplacementStateCount } from "./watchfaceBatteryStates";
-import { NATIVE_DATA_BY_ID, NATIVE_CHART_SOURCES, nativeDataSize } from "./nativeData";
+import { NATIVE_DATA_BY_ID, NATIVE_CHART_SOURCES, nativeDataBounds } from "./nativeData";
 import type {
   CorosWatchfaceDesignState,
   CorosWatchfaceTemplateDetails
@@ -585,10 +585,10 @@ export function deriveEditorLayers(
     const field = NATIVE_DATA_BY_ID.get(id);
     if (!field) continue;
     const label = field.kind === "chart" ? `${NATIVE_CHART_SOURCES.find(source => source.id === style.chartSource)?.label ?? "Native"} chart` : field.label;
-    const size = nativeDataSize(id, style);
+    const box = nativeDataBounds(id, design.nativeData ?? {});
     layers.splice(1, 0, { id: `native:${id}`, nativeDataId: id, kind: "metric", label,
       visible: style.enabled, canHide: true, present: true,
-      bounds: style.enabled ? { id: `native:${id}`, label, x0: style.x, y0: style.y, x1: style.x + size.width, y1: style.y + size.height } : null,
+      bounds: box ? { id: `native:${id}`, label, ...box } : null,
       capabilities: { position: true, color: true, scale: true, font: field.kind !== "state" }
     });
   }
@@ -675,7 +675,9 @@ export function deriveEditorLayers(
           : null;
     const analogPreviewLayer =
       analogLayoutGroupId && resolution
-        ? getWatchfaceAnalogPreviewLayers(resolution, new Date()).find(
+        ? getWatchfaceAnalogPreviewLayers(resolution, new Date(), {
+            overrides: design.configAssetOverrides
+          }).find(
             (layer) => layer.configKey === reference.configKey
           ) ?? null
         : null;

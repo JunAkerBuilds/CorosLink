@@ -81,6 +81,7 @@ import {
   createAndScheduleWorkout,
   createLibraryWorkout,
   rescheduleScheduledWorkout,
+  copyScheduledWorkout,
   removeScheduledWorkout,
   getWorkoutForEdit,
   previewWorkoutEdit,
@@ -140,6 +141,7 @@ import {
   importCorosWatchfaceShareLink,
   listCorosPairedDevices,
   listCorosWatchfaceThemes,
+  readCachedCorosWatchfaceThemes,
   loadCorosWatchfaceArtwork,
   loadCorosWatchfaceTemplateAssets,
   loadCorosWatchfaceTemplateConfigTexts,
@@ -148,6 +150,7 @@ import {
   loginCorosWatchfacesWithSavedCredentials,
   logoutCorosWatchfaces,
   listCorosWatchfaceProjects,
+  loadCorosWatchfaceProjectPreview,
   publishCorosWatchface,
   queryCorosGear,
   saveCorosGear,
@@ -240,10 +243,13 @@ import type {
   CorosWatchfaceExistingShareInput,
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceArchiveExportInput,
+  CorosWatchfaceArchiveFolderExportInput,
   CorosWatchfacePublishInput,
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceRegion,
+  CorosWatchfaceTemplateAssetOptions,
   CorosWatchfaceThemeDownloadInput,
+  CorosWatchfaceProjectListOptions,
   CorosWatchfaceThemeListInput,
   CorosOfficialAssetQuery,
   CorosBatteryQueryInput,
@@ -373,14 +379,16 @@ import {
   pruneDeleteRequestStore,
   prunePlanDraftStore
 } from "./chatWorkoutTools";
+import { getCorosMcpAccount } from "./corosMcpAccount";
 import {
   connectCorosMcp,
+  connectMcpServerWithCorosAccount,
   disconnectCorosMcp,
   getCorosMcpStatus,
-  listCorosMcpTools
+  listCorosMcpTools,
+  setCorosMcpAccountSource
 } from "./corosMcpService";
 import {
-  connectMcpServer,
   disconnectMcpServer,
   ensureAllMcpConnected,
   getMcpStatuses
@@ -879,6 +887,7 @@ app.whenReady().then(() => {
     }
   });
   void cleanupCommunityWatchfaceImports();
+  setCorosMcpAccountSource(getCorosMcpAccount);
   createWindow();
   void watchfaceAutomation.restore();
   void workoutAutomation.restore();
@@ -1000,6 +1009,11 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "watchfaces:listThemes",
     (_event, input: CorosWatchfaceThemeListInput) => listCorosWatchfaceThemes(input)
+  );
+
+  ipcMain.handle(
+    "watchfaces:readCachedThemes",
+    (_event, input: CorosWatchfaceThemeListInput) => readCachedCorosWatchfaceThemes(input)
   );
 
   ipcMain.handle(
@@ -1155,7 +1169,47 @@ function registerIpcHandlers(): void {
       return { saved: true, filePath: destinationPath };
     }
   );
-  ipcMain.handle("watchfaces:listProjects", () => listCorosWatchfaceProjects());
+  // Export for every watch: the renderer picks the folder once through this
+  // dialog and only ever holds an opaque id, never a writable path.
+  const exportFolders = new Map<string, string>();
+  ipcMain.handle("watchfaces:chooseExportFolder", async () => {
+    const options: OpenDialogOptions = {
+      title: "Choose a folder for the watch-face ZIPs",
+      buttonLabel: "Export here",
+      properties: ["openDirectory", "createDirectory"]
+    };
+    const result = mainWindow && !mainWindow.isDestroyed()
+      ? await dialog.showOpenDialog(mainWindow, options)
+      : await dialog.showOpenDialog(options);
+    const directory = result.canceled ? undefined : result.filePaths[0];
+    if (!directory) return null;
+    const folderId = `folder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    exportFolders.set(folderId, directory);
+    return { folderId, label: path.basename(directory) || directory };
+  });
+  ipcMain.handle(
+    "watchfaces:exportArchiveToFolder",
+    async (_event, input: CorosWatchfaceArchiveFolderExportInput) => {
+      const directory = input && typeof input.folderId === "string" ? exportFolders.get(input.folderId) : undefined;
+      if (!directory) throw new Error("Choose an export folder first.");
+      if (typeof input.archiveId !== "string") throw new Error("Build a final watch-face archive before exporting it.");
+      const baseName = sanitizeExportFileName(input.name) || "CorosLink-watch-face";
+      let destinationPath = path.join(directory, `${baseName}.zip`);
+      for (let copy = 2; fs.existsSync(destinationPath); copy++) {
+        destinationPath = path.join(directory, `${baseName} ${copy}.zip`);
+      }
+      await exportCorosWatchfaceArchive(input.archiveId, destinationPath);
+      return { saved: true, filePath: destinationPath };
+    }
+  );
+  ipcMain.handle(
+    "watchfaces:listProjects",
+    (_event, options?: CorosWatchfaceProjectListOptions) =>
+      listCorosWatchfaceProjects(options)
+  );
+  ipcMain.handle("watchfaces:loadProjectPreview", (_event, projectId: string) =>
+    loadCorosWatchfaceProjectPreview(projectId)
+  );
   ipcMain.handle("watchfaces:saveProject", (_event, input) =>
     saveCorosWatchfaceProject(input)
   );
@@ -1181,8 +1235,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "watchfaces:loadTemplateAssets",
-    (_event, archiveId: string, paths: string[]) =>
-      loadCorosWatchfaceTemplateAssets(archiveId, paths)
+    (_event, archiveId: string, paths: string[], options?: CorosWatchfaceTemplateAssetOptions) =>
+      loadCorosWatchfaceTemplateAssets(archiveId, paths, options)
   );
 
   ipcMain.handle(
@@ -1469,8 +1523,9 @@ function registerIpcHandlers(): void {
     removeMcpServer(id);
   });
   ipcMain.handle("mcp:connect", (_event, id: string) =>
-    connectMcpServer(id, true, mainWindow)
+    connectMcpServerWithCorosAccount(id, true, mainWindow)
   );
+  ipcMain.handle("mcp:corosAccount", () => getCorosMcpAccount());
   ipcMain.handle("mcp:disconnect", async (_event, id: string) => {
     const server = getMcpServer(id);
     await disconnectMcpServer(id);
@@ -1750,6 +1805,15 @@ function registerIpcHandlers(): void {
       },
       newHappenDay: string
     ) => rescheduleScheduledWorkout(entry, newHappenDay)
+  );
+
+  ipcMain.handle(
+    "trainingHub:copyScheduledWorkout",
+    (
+      _event,
+      entry: { planId: string; idInPlan: string; happenDay: string; rawProgram?: Record<string, unknown> },
+      newHappenDay: string
+    ) => copyScheduledWorkout(entry, newHappenDay)
   );
 
   ipcMain.handle(

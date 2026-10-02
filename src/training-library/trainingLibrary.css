@@ -256,6 +256,23 @@
   filter: brightness(0.97);
 }
 
+/* On the dark ground the bright mint gradient and its glow outshine the page;
+   a deeper, flat fill keeps the action obvious without glaring. */
+:root:not([data-theme="paper"]) .training-library-view .primary-button {
+  background: color-mix(in srgb, var(--accent) 58%, #0c0e11);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 2px 8px rgba(0, 0, 0, 0.24);
+  text-shadow: none;
+}
+
+:root:not([data-theme="paper"]) .training-library-view .primary-button:hover:not(:disabled) {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 4px 12px rgba(0, 0, 0, 0.28);
+  filter: brightness(1.1);
+}
+
 .training-library-view .ghost-button {
   border: 1px solid var(--glass-border);
   color: var(--text-secondary);
@@ -3650,7 +3667,7 @@
 /* The plan's load silhouette, at reading size, before the numbers. */
 .plan-editor-preview .tl-ridge {
   height: 42px;
-  margin-top: 14px;
+  margin-top: 10px;
   gap: 2px;
 }
 
@@ -3659,8 +3676,18 @@
   border-radius: 2px;
 }
 
+.plan-editor-preview-empty {
+  margin: 12px 0 0;
+  padding: 12px;
+  border: 1px dashed var(--tl-rule);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
 .plan-editor-preview-note {
-  margin: 6px 0 0;
+  margin: 14px 0 0;
   color: var(--text-muted);
   font-size: 10px;
   font-weight: 600;
@@ -3845,9 +3872,15 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+.plan-editor-library-hint {
+  margin: 8px 2px 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .plan-editor-library-list {
   display: flex;
-  max-height: 240px;
+  max-height: 320px;
   flex-direction: column;
   gap: 2px;
   margin-top: 8px;
@@ -3864,7 +3897,7 @@
 .plan-editor-library-list button {
   display: flex;
   width: 100%;
-  min-height: 48px;
+  min-height: 44px;
   align-items: center;
   gap: 9px;
   padding: 7px 8px;
@@ -3887,6 +3920,7 @@
 
 .plan-editor-library-list button:active {
   transform: scale(0.99);
+  cursor: grabbing;
 }
 
 /* The row answers with the sport's icon chip; the plus wakes on hover. */
@@ -3920,7 +3954,7 @@
   opacity: 1;
 }
 
-.plan-editor-library-list span {
+.plan-editor-library-list button > span:not([class]) {
   display: flex;
   min-width: 0;
   flex: 1;
@@ -4007,6 +4041,43 @@
   font-size: 11.5px;
 }
 
+.plan-holding-area h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.plan-holding-area h3 > span {
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* Empty, the holding area shrinks to a single line so the weeks lead. */
+.plan-holding-area.is-empty {
+  padding: 10px 14px;
+}
+
+.plan-holding-area.is-empty .plan-holding-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.plan-holding-area.is-empty p {
+  margin: 0;
+}
+
+.plan-editor-main.is-dragging .plan-holding-area {
+  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
+}
+
 .plan-holding-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -4042,6 +4113,15 @@
   gap: 12px;
   padding: 11px 14px;
   border-bottom: 1px solid var(--tl-rule);
+}
+
+.plan-week h3 small {
+  margin-left: 8px;
+  color: var(--text-muted);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .plan-week > header p {
@@ -4124,7 +4204,13 @@
 
 .plan-day-heading button {
   display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   border: 0;
+  border-radius: 4px;
   color: var(--text-muted);
   background: none;
   opacity: 0;
@@ -4135,6 +4221,17 @@
 .plan-day:hover .plan-day-heading button,
 .plan-day-heading button:focus-visible {
   opacity: 1;
+}
+
+.plan-day-heading button:hover {
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+@media (hover: none) {
+  .plan-day-heading button {
+    opacity: 1;
+  }
 }
 
 .plan-day-entries {
@@ -4148,6 +4245,11 @@
   min-height: 34px;
   border: 1px dashed var(--tl-rule-soft);
   border-radius: var(--radius-sm);
+}
+
+.plan-editor-main.is-dragging .plan-day-entries:empty {
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  background: color-mix(in srgb, var(--accent) 3%, transparent);
 }
 
 .plan-day.is-drop-target .plan-day-entries:empty {
@@ -4172,6 +4274,10 @@
     transform 160ms var(--tl-ease-out);
 }
 
+.plan-entry-card:active {
+  cursor: grabbing;
+}
+
 .plan-entry-card:hover {
   border-color: color-mix(in srgb, var(--accent) 48%, transparent);
   box-shadow:
@@ -4186,6 +4292,15 @@
   background: var(--glass-bg);
   box-shadow: none;
   cursor: default;
+}
+
+.plan-entry-card > .plan-entry-rest-icon {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.plan-entry-card.is-rest > span:not(.plan-entry-actions) {
+  flex: 1;
 }
 
 .plan-entry-card.is-rest:hover,
@@ -5491,6 +5606,51 @@
 }
 
 .plan-entry-card .plan-entry-actions button:hover { color: var(--text-primary); background: var(--glass-bg-hover); }
+
+/* Day columns are narrow: the title takes the full card and may wrap to two
+   lines, while edit/remove float in over its corner only when reached. */
+.plan-entry-card {
+  position: relative;
+  justify-content: flex-start;
+}
+
+.plan-entry-card > span:not(.plan-entry-actions):not(.tl-sport-dot) {
+  flex: 1;
+}
+
+.plan-entry-card strong {
+  display: -webkit-box;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.plan-entry-card .plan-entry-actions {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  padding: 1px;
+  border-radius: 5px;
+  background: var(--tl-card, var(--surface));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.plan-entry-card:hover .plan-entry-actions,
+.plan-entry-card .plan-entry-actions:focus-within {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .plan-entry-card .plan-entry-actions {
+    position: static;
+    box-shadow: none;
+    background: none;
+    opacity: 1;
+  }
+}
 .plan-editor-workout-error { position: fixed; right: 22px; bottom: 22px; z-index: 95; display: flex; align-items: center; gap: 8px; max-width: 420px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--danger, #e5484d) 36%, transparent); border-radius: var(--radius-sm); color: var(--danger, #e5484d); background: var(--surface); box-shadow: var(--shadow-elevated); font-size: 11px; }
 .plan-editor-workout-error button { display: inline-flex; margin-left: auto; border: 0; color: inherit; background: none; cursor: pointer; }
 

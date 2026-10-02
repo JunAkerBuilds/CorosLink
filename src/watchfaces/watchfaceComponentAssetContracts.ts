@@ -119,6 +119,26 @@ export function watchfaceComponentAssetContracts(
   }
 
   if (resolution) {
+    // DIY templates declare the analog keys blank, so they are not listed as
+    // template PNGs, yet a replacement override alone adds the hand.
+    const templateHands = new Set(Object.keys(config).filter(key => /\.png$/i.test(config[key]?.trim() ?? "")));
+    for (const [configKey, label, layerId] of [
+      ["time_hour_icon", "Analog hour hand", "analogHour"], ["time_minute_icon", "Analog minute hand", "analogMinute"],
+      ["time_second_icon", "Analog second hand", "analogSecond"], ["time_center_polygon_icon2", "Analog center cap", null]
+    ] as const) {
+      if (templateHands.has(configKey)) continue;
+      const id = `config:${configKey}`;
+      const override = design.configAssetOverrides?.[id];
+      result.push({
+        id, label, ...(layerId ? { layerId } : {}), kind: layerId ? "rotating-sprite" : "single-image", mode, configKey, spriteCount: 1,
+        templateKnown: false, added: Boolean(override?.enabled && override.replacement),
+        overridePath: `${root}/configAssetOverrides/${pointer(id)}`, editOverridePath: `/design/configAssetOverrides/${pointer(id)}`,
+        imageValueShape: "{enabled:true, replacement:{dataUrl:{assetId},width,height}} merged into /design/configAssetOverrides; width/height in master pixels.",
+        behavior: layerId
+          ? "Adds a live analog hand. Firmware rotates the whole PNG around its center, so draw the hand pointing at 12 with the pivot exactly at the image center (extend a counterweight or transparent padding below so the canvas stays symmetric). Hour ≈25%, minute ≈39%, second ≈43% of face width from pivot to tip. All hands share one pivot (time_center_pos, default screen center); moving any hand layer moves that shared center. Always-on refreshes once a minute: give AOD hour and minute hands but no second hand."
+          : "Fixed cap drawn at the shared hand pivot, covering where the hands meet. Square PNG centered on the pivot."
+      });
+    }
     for (const asset of listWatchfaceConfigAssets({ archiveId: "", resolutions: [resolution] }, resolution.directory).filter(asset => asset.scope === "config")) {
       result.push({
         id: asset.id, label: asset.label, typography: /colon/.test(asset.configKey), ...(/colon/.test(asset.configKey) ? { layerId: asset.configKey.startsWith("control_") ? "complication" : "separators", enabled: asset.configKey.startsWith("control_") || !design.staticSeparators?.colon?.enabled } : {}), kind: /^time_(hour|minute|second)_icon$/.test(asset.configKey) ? "rotating-sprite" : "single-image",

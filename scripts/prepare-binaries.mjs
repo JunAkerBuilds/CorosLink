@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -10,14 +11,13 @@ const execFileAsync = promisify(execFile);
 const gunzipAsync = promisify(gunzip);
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const userAgent = "coroslink";
-const PINNED_YT_DLP_VERSION = "2026.08.19";
-const PINNED_YTMUSICAPI_VERSION = "1.12.1";
 const BUNDLED_PYTHON_VERSION = "310";
-// Self-contained CPython shipped with the app so users don't need Python
-// installed. Sourced from astral-sh/python-build-standalone (relocatable,
-// "install_only" flavor). Override the release tag with PYTHON_STANDALONE_TAG.
-const BUNDLED_PYTHON_RUNTIME_VERSION = "3.11.13";
-const PINNED_PYTHON_STANDALONE_TAG = "20250612";
+// Every download is checked against these SHA-256 pins before it lands in
+// bin/, so a swapped release asset stops the build. Bump versions with
+// `npm run binaries:pin`, which rewrites both files.
+const PINS_FILE = "scripts/bundled-binaries.lock.json";
+const PYTHON_REQUIREMENTS_FILE = "scripts/bundled-python-requirements.txt";
+const pins = JSON.parse(fs.readFileSync(path.join(repoRoot, PINS_FILE), "utf8"));
 
 const options = parseArgs(process.argv.slice(2));
 const targetPlatform = options.platform ?? process.platform;
@@ -83,69 +83,49 @@ function resolveYtDlpAsset(platform, arch) {
 }
 
 async function downloadYtDlp(destination, assetName) {
-  const version = await resolveYtDlpVersion();
+  const { version } = pins.ytDlp;
   const url = `https://github.com/yt-dlp/yt-dlp/releases/download/${version}/${assetName}`;
+  const label = `yt-dlp ${version} (${assetName})`;
 
-  await downloadFile(url, destination);
+  const binary = await downloadBuffer(url);
+  verifySha256(binary, pinnedSha256("ytDlp", assetName, label), label);
+  await writeFileAtomic(destination, binary);
   await fs.promises.chmod(destination, 0o755);
-  console.log(`Downloaded yt-dlp ${version} (${assetName})`);
-}
-
-async function resolveYtDlpVersion() {
-  const requested = process.env.YT_DLP_VERSION?.trim();
-
-  if (!requested || requested === PINNED_YT_DLP_VERSION) {
-    return PINNED_YT_DLP_VERSION;
-  }
-
-  if (requested !== "latest") {
-    return requested;
-  }
-
-  const releaseResponse = await fetch(
-    "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest",
-    { headers: githubApiHeaders() }
-  );
-
-  if (!releaseResponse.ok) {
-    throw new Error(
-      `Could not read yt-dlp release metadata: ${releaseResponse.status} ${releaseResponse.statusText}`
-    );
-  }
-
-  const release = await releaseResponse.json();
-  return release.tag_name;
-}
-
-function githubApiHeaders() {
-  const headers = {
-    Accept: "application/vnd.github+json",
-    "User-Agent": userAgent,
-    "X-GitHub-Api-Version": "2022-11-28"
-  };
-
-  const token = process.env.GITHUB_TOKEN?.trim();
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  return headers;
+  console.log(`Downloaded and verified ${label}`);
 }
 
 async function copyFfmpeg(destination, platform, arch) {
+  const { release } = pins.ffmpeg;
+  const packageRelease =
+    require("ffmpeg-static/package.json")["ffmpeg-static"]["binary-release-tag"];
+  if (packageRelease !== release) {
+    throw new Error(
+      `ffmpeg-static now ships ${packageRelease} but ${PINS_FILE} pins ${release}. Run npm run binaries:pin to re-pin ffmpeg.`
+    );
+  }
+
+  const label = `ffmpeg ${release} (${platform}-${arch})`;
+  const expectedSha256 = pinnedSha256("ffmpeg", `${platform}-${arch}`, label);
+  let binary;
+  let source;
+
   if (platform !== process.platform || arch !== process.arch) {
-    await downloadFfmpegStatic(destination, platform, arch);
-    return;
+    binary = await downloadFfmpegStatic(release, platform, arch);
+    source = "downloaded";
+  } else {
+    const ffmpegPath = require("ffmpeg-static");
+    if (!ffmpegPath || !fs.existsSync(ffmpegPath)) {
+      throw new Error("ffmpeg-static did not provide an executable path.");
+    }
+
+    binary = await fs.promises.readFile(ffmpegPath);
+    source = `copied from ${path.relative(repoRoot, ffmpegPath)}`;
   }
 
-  const ffmpegPath = require("ffmpeg-static");
-  if (!ffmpegPath || !fs.existsSync(ffmpegPath)) {
-    throw new Error("ffmpeg-static did not provide an executable path.");
-  }
-
-  await fs.promises.copyFile(ffmpegPath, destination);
+  verifySha256(binary, expectedSha256, label);
+  await writeFileAtomic(destination, binary);
   await fs.promises.chmod(destination, 0o755);
-  console.log(`Copied ffmpeg-static binary from ${path.relative(repoRoot, ffmpegPath)}`);
+  console.log(`Verified ${label}, ${source}`);
 }
 
 async function installPythonPackages(destination) {
@@ -178,7 +158,9 @@ async function installPythonPackages(destination) {
     "any",
     "--python-version",
     BUNDLED_PYTHON_VERSION,
-    `ytmusicapi==${PINNED_YTMUSICAPI_VERSION}`
+    "--require-hashes",
+    "--requirement",
+    path.join(repoRoot, PYTHON_REQUIREMENTS_FILE)
   ];
 
   try {
@@ -197,7 +179,7 @@ async function installPythonPackages(destination) {
       .slice(-3)
       .join(" ");
     console.log(
-      `Vendored ytmusicapi ${PINNED_YTMUSICAPI_VERSION} in ${path.relative(repoRoot, destination)}${summary ? ` (${summary})` : ""}`
+      `Vendored hash-pinned ytmusicapi packages in ${path.relative(repoRoot, destination)}${summary ? ` (${summary})` : ""}`
     );
   } catch (error) {
     const stderr =
@@ -213,12 +195,16 @@ async function installPythonPackages(destination) {
 }
 
 async function installPythonRuntime(destination, platform, arch) {
+  // Self-contained CPython shipped with the app so users don't need Python
+  // installed. Sourced from astral-sh/python-build-standalone (relocatable,
+  // "install_only" flavor).
   const triple = resolvePythonStandaloneTriple(platform, arch);
-  const tag = process.env.PYTHON_STANDALONE_TAG?.trim() || PINNED_PYTHON_STANDALONE_TAG;
-  const assetName = `cpython-${BUNDLED_PYTHON_RUNTIME_VERSION}+${tag}-${triple}-install_only.tar.gz`;
-  const url = `https://github.com/astral-sh/python-build-standalone/releases/download/${tag}/${assetName}`;
+  const { version, release } = pins.python;
+  const assetName = `cpython-${version}+${release}-${triple}-install_only.tar.gz`;
+  const url = `https://github.com/astral-sh/python-build-standalone/releases/download/${release}/${assetName}`;
 
   const archive = await downloadBuffer(url);
+  verifySha256(archive, pinnedSha256("python", triple, assetName), assetName);
   const parentDir = path.dirname(destination);
   const extractRoot = path.join(parentDir, ".python-runtime-tmp");
 
@@ -240,7 +226,7 @@ async function installPythonRuntime(destination, platform, arch) {
   }
 
   console.log(
-    `Vendored CPython ${BUNDLED_PYTHON_RUNTIME_VERSION} (${triple}) in ${path.relative(
+    `Vendored verified CPython ${version} (${triple}) in ${path.relative(
       repoRoot,
       destination
     )}`
@@ -288,25 +274,39 @@ async function findPythonCommand() {
   return undefined;
 }
 
-async function downloadFfmpegStatic(destination, platform, arch) {
-  const packageMetadata = require("ffmpeg-static/package.json");
-  const ffmpegMetadata = packageMetadata["ffmpeg-static"];
-  const release =
-    process.env[ffmpegMetadata["binary-release-tag-env-var"]] ??
-    ffmpegMetadata["binary-release-tag"];
+async function downloadFfmpegStatic(release, platform, arch) {
+  const ffmpegMetadata = require("ffmpeg-static/package.json")["ffmpeg-static"];
   const baseUrl =
     process.env[ffmpegMetadata["binaries-url-env-var"]] ??
     "https://github.com/eugeneware/ffmpeg-static/releases/download";
   const url = `${baseUrl}/${release}/${ffmpegMetadata["executable-base-name"]}-${platform}-${arch}.gz`;
 
-  const compressed = await downloadBuffer(url);
-  await fs.promises.writeFile(destination, await gunzipAsync(compressed));
-  await fs.promises.chmod(destination, 0o755);
-  console.log(`Downloaded ffmpeg-static ${release} (${platform}-${arch})`);
+  // The pin covers the decompressed executable, which is also what the
+  // ffmpeg-static install script leaves in node_modules.
+  return gunzipAsync(await downloadBuffer(url));
 }
 
-async function downloadFile(url, destination) {
-  const buffer = await downloadBuffer(url);
+function pinnedSha256(group, key, label) {
+  const expected = pins[group]?.sha256?.[key];
+  if (!expected) {
+    throw new Error(
+      `No SHA-256 pinned for ${label} in ${PINS_FILE}. Add "${key}" under ${group}.sha256 and run npm run binaries:pin to fill in its hash.`
+    );
+  }
+
+  return expected;
+}
+
+function verifySha256(buffer, expected, label) {
+  const actual = createHash("sha256").update(buffer).digest("hex");
+  if (actual !== expected) {
+    throw new Error(
+      `${label} failed SHA-256 verification.\n  expected ${expected}\n  received ${actual}\nRefusing to bundle it. If the upstream asset changed on purpose, re-pin with npm run binaries:pin.`
+    );
+  }
+}
+
+async function writeFileAtomic(destination, buffer) {
   const tempFile = `${destination}.tmp`;
   await fs.promises.writeFile(tempFile, buffer);
   await fs.promises.rename(tempFile, destination);

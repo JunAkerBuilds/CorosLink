@@ -1,5 +1,97 @@
 # PACE Pro chart investigation — 2026-09-16
 
+## Official NOMAD thumbnail versus compiled chart — 2026-09-29
+
+The gallery thumbnail and compiled watch-face BIN are separate image/data
+sources. In the downloaded 260px `COROS NOMAD` (template
+`470133195753504768`), `watchface_customize.png` paints the chart orange, but
+the BIN's chart record stores `0xff0000` for both the selected bars and upper
+curve. The recovered editor correctly shows that source BIN in red. The
+downloaded 416px `NOMAD` (template `473240729416744960`) is a different
+official face whose BIN stores `0xffaa00` for those fields. No channel swap is
+needed to explain the red 260px preview or the orange 416px preview.
+
+The Android 4.9.9 custom compiler's `rgb888_to_rgb222` would pack
+`0xffaa00` to `0x3c` and `0xff0000` to `0x30`. If those small values are then
+read as full RGB words by PACE Pro firmware, both appear as dark blue
+(`0x00003c` or `0x000030`). This matches the reported hue but remains a
+hypothesis for the installed custom face: its compiled BIN has not been
+captured. The working white CorosLink face also prevents treating this as an
+universal custom-chart failure. A direct official 416px install is the useful
+control, because its downloaded BIN already contains full `0xffaa00`.
+
+### Color-edit report and controlled carrier test
+
+The user reports that a previously gray chart looked correct on PACE Pro, but
+changing chart colors, including white, makes the chart blue. In the editor's
+latest white NOMAD document, the bar colors are `#fa0000` and `#ffdd80`, while
+the curves remain `#555555`. Its 22:42 local export
+`2a2bcccd-e414-4251-bf14-6a940148d4fd.dat` uses SIMPLE carrier `2607304`
+and `watchface_id=0`. The earlier working white export used BOLD carrier
+`140001` and `watchface_id=0x00000029`; the carrier and palette both differed.
+
+Prepared `output/nomad-yellow-red-bold-carrier-test.dat` from the 22:42
+export. Only `info.json` and the four Current/AOD config files changed to
+the BOLD carrier identifiers. The other 795 ZIP entries, including every
+sprite and the chart colors, are byte-identical. CorosLink imported the test
+archive successfully as `65c8bbf3-0917-462e-b837-22266c34428e`. It has
+not been published or tested on watch. A correct-color result would implicate
+carrier identity; a blue result would keep color handling or another
+shared export path in play.
+
+## NOMAD color mismatch photographed on PACE Pro — 2026-09-29
+
+Two user photos of an awake PACE Pro show the converted NOMAD chart curves and
+bars in deep blue/purple. The surrounding face colors remain as expected. The
+source NOMAD 416px archive and the freshly built custom archive both request
+orange `0xffaa00` for selected bars and upper curves, gray `0xaaaaaa` for
+unselected bars, and white `0xffffff` for lower curves. Both chart-backdrop
+PNGs have opaque `#1f1c1b` center pixels. The exported archive also retains
+the original `hcenter|vcenter` chart rectangle after the local alignment fix.
+
+The COROS 4.9.9 chart exporter documented below applies `rgb888_to_rgb222`
+to those four graph colors. Standard two-bit channel packing would reduce
+`0xffaa00` to `0x3c`, `0xaaaaaa` to `0x2a`, and `0xffffff` to `0x3f`. Official
+NOMAD stores full RGB words in the same chart record. If PACE Pro firmware
+interprets the packed custom values as full RGB, all three become dark blue
+values, matching the photos. The later working-white comparison below means
+this interpretation is only a hypothesis. The installed custom BIN has not
+been captured to confirm its exact stored words. The chart panel also looks lighter in the photos;
+camera exposure and its compiled sprite need separate verification. The
+source ZIP's correct RGB values and PNG pixels do not establish on-watch color.
+
+The Send to COROS preview now warns when a firmware-drawn chart is present.
+The current source archive format has no chart-color setting that bypasses
+`SetChart`'s conversion. Preserve the distinction between this possible
+compiler/firmware mismatch and the already verified source-archive pixels.
+
+### Working white custom NOMAD comparison
+
+The user then confirmed that the white NOMAD variant was **sent from CorosLink**
+and its chart colors look correct on the same PACE Pro. This rules out the
+claim that all CorosLink charts necessarily turn blue on that watch. The
+working white custom archive `e3088f51-ade1-41d1-a9b0-4b56cad61bd1.dat`
+(2026-09-18) has a light gray `#d4d4d4` panel and only achromatic chart colors
+(`0xaaaaaa` and `0x555555`). Its `info.json` uses DIY carrier ID `140001`
+(BOLD) and its 416px config has `watchface_id=0x00000029`. The failing dark
+custom archive `732669e2-5449-4dad-9631-303da9c7e475.dat` uses orange and
+white chart colors, a `#1f1c1b` panel, carrier `2607304` (SIMPLE), and
+`watchface_id=0`. These differences are correlated with the observed outcome;
+there is no on-watch test isolating carrier from chart palette yet. The
+simple RGB222-as-full-RGB interpretation above is therefore unproven and
+should not be presented as the established cause.
+
+For the requested dark test, copied the failing dark archive to
+`/tmp/nomad-dark-pace-pro-working-carrier-test.dat`, changing only
+`info.json`'s `o_template_id` from `2607304` to `140001` and the four Current/
+AOD `watchface_id` values from `0` to `0x00000029`. All 775 other ZIP entries,
+including chart PNGs and color settings, are byte-identical to the failing
+archive. ZIP CRC and CorosLink archive import validation pass. It is registered
+as archive `7904c65b-0b34-46e3-a13d-0f71a42bb9ac`, but has not been
+published or tested on a watch. A successful on-watch result would implicate
+carrier identity; another blue result would leave the chart palette or other
+differences as possibilities.
+
 The user first described an editor-added chart on PACE Pro as a faint blue
 line, then clarified that it is showing bar charts. This is user-reported
 evidence of on-device chart rendering, not a completely missing chart. The
