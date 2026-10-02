@@ -1423,7 +1423,9 @@ function PlanPreviewCard({
                     : destination === "nativePlanAndCalendar"
                       ? `This will be bundled into one Plan with ${draft.entries.length} ${
                           draft.entries.length === 1 ? "workout" : "workouts"
-                        } and put on your COROS Calendar starting ${startDate ?? "the first workout's date"}.`
+                        } and put on your COROS Calendar starting ${
+                          startDate ? formatPlanDateLabel(startDate) : "the first workout's date"
+                        }.`
                       : `${draft.entries.length} ${
                           draft.entries.length === 1 ? "workout" : "workouts"
                         } will be saved individually to your COROS Workout Library. Dates will not be added to Calendar.`}
