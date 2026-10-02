@@ -70,6 +70,7 @@ import type {
 } from "../../electron/types";
 import { WATCHFACE_AUTOMATION_SCENE_SCHEMA } from "../../electron/watchfaceAutomationTypes";
 import type { CorosLinkApi } from "../coroslink-api";
+import { SelectDropdown } from "../components/SelectDropdown";
 import {
   getWatchPresentation,
   getWatchfaceDeviceProfile,
@@ -1532,22 +1533,21 @@ export function WatchfacesView({
                   </div>
                 </>
               ) : null}
-              <label className="field">
-                Region
-                <select
+              <div className="field">
+                <span>Region</span>
+                <SelectDropdown
+                  label="Account region"
+                  className="watchface-region-select"
+                  options={REGION_OPTIONS}
+                  portal
+                  disabled={busy !== null}
                   value={region}
-                  onChange={(event) => {
-                    setRegion(event.target.value as CorosWatchfaceRegion);
+                  onChange={(nextRegion) => {
+                    setRegion(nextRegion);
                     setRegionTouched(true);
                   }}
-                >
-                  {REGION_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                />
+              </div>
               <label className="field">
                 Email
                 <input
@@ -4193,23 +4193,19 @@ function WatchfaceSignInForm(props: WatchfaceSignInFormProps) {
           </div>
         </>
       ) : null}
-      <label className="field">
-        Account region
-        <select
+      <div className="field">
+        <span>Account region</span>
+        <SelectDropdown
+          label="Account region"
+          className="watchface-region-select"
+          options={REGION_OPTIONS}
+          portal
           autoFocus
           disabled={props.loginBusy}
           value={props.region}
-          onChange={(event) =>
-            props.onRegionChange(event.target.value as CorosWatchfaceRegion)
-          }
-        >
-          {REGION_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+          onChange={props.onRegionChange}
+        />
+      </div>
       <label className="field">
         Email
         <input
