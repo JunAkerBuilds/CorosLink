@@ -1,5 +1,8 @@
+import type { ChartCardSize } from "../widgetSizing";
+import "../chartSizing.css";
+import "../upcomingSizing.css";
 import { CalendarDays, ChevronRight, Moon } from "lucide-react";
-import { useMemo } from "react";
+import { useId, useMemo, useState } from "react";
 import type { TrainingHubUpcomingWorkout } from "../../../electron/types";
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 import {
@@ -13,19 +16,24 @@ import {
 } from "../formatters";
 
 interface UpcomingWorkoutsPanelProps {
+  size?: ChartCardSize;
   workouts: TrainingHubUpcomingWorkout[];
 }
 
-export function UpcomingWorkoutsPanel({ workouts }: UpcomingWorkoutsPanelProps) {
+export function UpcomingWorkoutsPanel({ workouts, size }: UpcomingWorkoutsPanelProps) {
   const { unitSystem } = useUnitSystem();
+  const [expanded, setExpanded] = useState(false);
+  const listId = useId();
+  const limit = size ? { mini: 1, short: 3, standard: Infinity, tall: Infinity }[size] : Infinity;
   const scheduledWorkouts = useMemo(
     () => filterUpcomingWorkoutsFromToday(workouts),
     [workouts]
   );
-  const todayWorkouts = scheduledWorkouts.filter((workout) =>
+  const previewWorkouts = expanded ? scheduledWorkouts : scheduledWorkouts.slice(0, limit);
+  const todayWorkouts = previewWorkouts.filter((workout) =>
     isUpcomingWorkoutToday(workout.happenDay)
   );
-  const laterWorkouts = scheduledWorkouts.filter(
+  const laterWorkouts = previewWorkouts.filter(
     (workout) => !isUpcomingWorkoutToday(workout.happenDay)
   );
   const nextWorkout = laterWorkouts[0];
@@ -35,7 +43,7 @@ export function UpcomingWorkoutsPanel({ workouts }: UpcomingWorkoutsPanelProps) 
   const statsLabel = formatUpcomingWorkoutStats(scheduledWorkouts, unitSystem);
 
   return (
-    <section className="panel training-upcoming-panel">
+    <section className="panel training-upcoming-panel" data-chart-size={size}>
       <header className="training-upcoming-header">
         <div className="training-upcoming-heading">
           <p className="eyebrow">Training Calendar</p>
@@ -54,7 +62,7 @@ export function UpcomingWorkoutsPanel({ workouts }: UpcomingWorkoutsPanelProps) 
           <p>No scheduled workouts in the next two weeks.</p>
         </div>
       ) : (
-        <div className="training-upcoming-body">
+        <div id={listId} className="training-upcoming-body">
           {todayWorkouts.length > 0 ? (
             <div className="training-upcoming-today-stack">
               {todayWorkouts.map((workout, index) => (
@@ -111,6 +119,7 @@ export function UpcomingWorkoutsPanel({ workouts }: UpcomingWorkoutsPanelProps) 
           ) : null}
         </div>
       )}
+      {scheduledWorkouts.length > limit && <button type="button" className="upcoming-sized-more" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded(value => !value)}>{expanded ? "Show fewer" : `Show all ${scheduledWorkouts.length} workouts`}</button>}
     </section>
   );
 }

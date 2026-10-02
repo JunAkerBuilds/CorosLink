@@ -64,6 +64,31 @@ function rejects(commands, code, source = value(), mode = "current") {
   );
 }
 
+// Creating a supported field must work without a template slot or nativeData map.
+const addYear = { op: "add_native_field", id: "date_year", x: 260, y: 420, style: { color: "#abcdef", parts: { value: { digitWidth: 18, width: 72 } } } };
+const fresh = value();
+const yearAdded = apply([addYear], "current", fresh);
+assert.deepEqual(yearAdded.changedLayerIds, ["native:date_year"]);
+assert.equal(fresh.design.nativeData, undefined, "commands leave the input untouched");
+assert.equal(yearAdded.value.design.nativeData.date_year.enabled, true);
+assert.equal(yearAdded.value.design.nativeData.date_year.scale, 1);
+assert.equal(yearAdded.value.design.nativeData.date_year.color, "#abcdef");
+assert.deepEqual(yearAdded.value.design.backgroundElements, fresh.design.backgroundElements, "live year is not a static text element");
+const withStress = apply([{ op: "add_native_field", id: "stress", x: 40, y: 60 }], "current", yearAdded.value);
+assert.deepEqual(withStress.value.design.nativeData.date_year, yearAdded.value.design.nativeData.date_year);
+rejects([addYear], "id.duplicate", yearAdded.value);
+rejects([{ ...addYear, id: "made_up_live_field" }], "native.field");
+rejects([{ ...addYear, x: "260" }], "command.field");
+rejects([{ ...addYear, style: { x: 42 } }], "command.field");
+rejects([addYear], "layer.locked", { ...fresh, design: { ...fresh.design, lockedLayerIds: ["native:date_year"] } });
+const before = JSON.stringify(fresh);
+assert.throws(() => apply([addYear, { op: "add_native_field", id: "stress", x: 0, y: 0, style: { scale: -1 } }], "current", fresh), WatchfaceAutomationCommandError);
+assert.equal(JSON.stringify(fresh), before, "a later invalid field rolls back the entire batch");
+const aodYear = apply([addYear], "aod", fresh).value;
+assert.equal(aodYear.design.nativeData, undefined, "adding an AOD year leaves Current untouched");
+assert.equal(aodYear.design.modeDesigns.aod.nativeData.date_year.x, 260);
+
+
 const solidFontStyles = apply([
   { op: "set", path: "/design/metricStyles/exercise", value: { scale: 0.55, solidAlpha: true } },
   { op: "set", path: "/design/dateStyles", value: { dateDay: { scale: 1, solidAlpha: true } } },
@@ -161,7 +186,34 @@ for (const [mutate, code] of [
   [(design) => { design.tintLabels = "yes"; }, "boolean.invalid"]
 ]) {
   const corrupt = value(); mutate(corrupt.design);
-  rejects([{ op: "set", path: "/projectName", value: "Still invalid" }], code, corrupt);
+  // Errors the document already had don't block unrelated edits; they come
+  // back as warnings so the caller can repair them.
+  const edited = apply([{ op: "set", path: "/projectName", value: "Still invalid" }], "current", corrupt);
+  assert.equal(edited.value.projectName, "Still invalid");
+  assert.ok(
+    edited.diagnostics.some((item) => item.severity === "warning" && item.code === `preexisting.${code}`),
+    `pre-existing ${code} is reported as a warning`
+  );
+  assert.ok(!edited.diagnostics.some((item) => item.severity === "error"), `pre-existing ${code} is not an error`);
+}
+
+// A corrupt document still rejects errors a batch introduces.
+{
+  const corrupt = value(); corrupt.design.tintLabels = "yes";
+  rejects([{ op: "set", path: "/design/accentColor", value: "not a color!" }], "color.invalid", corrupt);
+}
+
+// A stale imported AOD color (raw COROS 0x value) no longer locks the face,
+// and the command that repairs it is accepted and clears the warning.
+{
+  const stale = value();
+  stale.design.modeDesigns = { aod: { backgroundColor: "0x00000" } };
+  const moved = apply([{ op: "set", path: "/design/backgroundElements/0/x", value: 210 }], "current", stale);
+  assert.equal(moved.value.design.backgroundElements[0].x, 210);
+  assert.ok(moved.diagnostics.some((item) => item.code === "preexisting.color.invalid"));
+  const repaired = apply([{ op: "set_mode_overrides", mode: "aod", overrides: { backgroundColor: "#000000" } }], "current", stale);
+  assert.equal(repaired.value.design.modeDesigns.aod.backgroundColor, "#000000");
+  assert.ok(!repaired.diagnostics.some((item) => item.code.endsWith("color.invalid")));
 }
 
 const cssColors = apply([
@@ -174,5 +226,30 @@ assert.equal(apply([{ op: "set", path: "/projectName", value: "Repaired" }], "cu
 
 rejects([{ op: "replace_design", design: locked.design }], "layer.locked", locked);
 rejects([{ op: "merge", path: "/design", value: { lockedLayerIds: [] } }], "pointer.protected");
+
+// Native data participates in command discovery, locking and validation.
+const nativeStyle = { enabled: true, x: 40, y: 60, scale: 1, color: "#ffffff" };
+const nativeAdded = apply([{ op: "set", path: "/design/nativeData", value: { week_tl: nativeStyle } }]);
+assert.deepEqual(nativeAdded.changedLayerIds, ["native:week_tl"]);
+const nativeLocked = apply([{ op: "set_locked", id: "native:week_tl", locked: true }], "current", nativeAdded.value).value;
+for (const command of [
+  { op: "set", path: "/design/nativeData/week_tl/color", value: "#ff0000" },
+  { op: "unset", path: "/design/nativeData/week_tl" },
+  { op: "set", path: "/design/nativeData", value: {} },
+  { op: "merge", path: "/design/nativeData", value: { week_tl: { ...nativeStyle, enabled: false } } }
+]) rejects([command], "layer.locked", nativeLocked);
+rejects([{ op: "set", path: "/design/nativeData/week_tl/color", value: "red" }], "native.color", nativeAdded.value);
+rejects([{ op: "set", path: "/design/nativeData/unknown", value: nativeStyle }], "native.invalid", nativeAdded.value);
+rejects([{ op: "set", path: "/design/nativeData/week_tl/assets", value: { icon: { "00": completePng } } }], "native.assets", nativeAdded.value);
+const nativeCustomized = apply([{ op: "merge", path: "/design/nativeData/week_tl", value: {
+  parts: { icon: { x: -120, y: -64, width: 80, color: "#00ff00" } }, assetTexts: { icon: { "0": "LOAD" } }, assets: { digits: { "0": completePng } }
+} }], "current", nativeAdded.value);
+assert.deepEqual(nativeCustomized.changedLayerIds, ["native:week_tl"]);
+assert.equal(nativeCustomized.value.design.nativeData.week_tl.assetTexts.icon["0"], "LOAD");
+assert.equal(nativeAdded.value.design.nativeData.week_tl.assetTexts, undefined);
+assert.equal(nativeCustomized.value.design.nativeData.week_tl.parts.icon.x, -120);
+assert.equal(nativeCustomized.value.design.nativeData.week_tl.parts.icon.y, -64);
+assert.equal(nativeCustomized.value.design.nativeData.week_tl.x, nativeStyle.x);
+assert.equal(nativeCustomized.value.design.nativeData.week_tl.y, nativeStyle.y);
 
 console.log("watchface automation command tests passed");

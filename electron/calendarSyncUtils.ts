@@ -1,5 +1,7 @@
 import type { TrainingHubScheduledWorkoutEntry } from "./types";
 import { createHash } from "node:crypto";
+import type { CalendarEventTiming } from "./calendarSyncTypes";
+import { calendarWallTime, validateCalendarEventTiming, type CalendarTimedEvent } from "./calendarEventTiming";
 
 export const calendarHash = (value: string): string =>
   createHash("sha256").update(value).digest("hex");
@@ -7,6 +9,7 @@ export const calendarHash = (value: string): string =>
 export function workoutCalendarData(
   userId: string,
   workout: TrainingHubScheduledWorkoutEntry,
+  settings?: CalendarEventTiming,
 ) {
   if (
     !workout.planId ||
@@ -17,8 +20,30 @@ export function workoutCalendarData(
       "A workout is missing its calendar identity. Calendar sync stopped.",
     );
   }
-  isoCalendarDay(workout.happenDay);
+  const day = isoCalendarDay(workout.happenDay);
+  const timing = validateCalendarEventTiming(workout.calendarEvent?.timing ?? settings);
+  const timed: CalendarTimedEvent = {};
+  if (timing.mode === "timed") {
+    const start = calendarWallTime(day, timing.startTime, timing.timeZone);
+    const endDay = timing.endTime <= timing.startTime ? isoCalendarDay(shiftCalendarDay(workout.happenDay, 1)) : day;
+    const end = calendarWallTime(endDay, timing.endTime, timing.timeZone);
+    if (end <= start) throw new Error("The event end time must be after its start time on this date. Choose times outside the daylight-saving clock change.");
+    timed.startTime = new Date(start).toISOString();
+    timed.endTime = new Date(end).toISOString();
+    // Keep the existing key format so upgrading does not reset calendar edits.
+    const minutes = (clock: string) => Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3));
+    timed.timingKey = calendarHash(JSON.stringify([workout.happenDay, {
+      mode: timing.mode, startTime: timing.startTime, timeZone: timing.timeZone,
+      fallbackDurationMinutes: (minutes(timing.endTime) - minutes(timing.startTime) + 1440) % 1440 || 1440,
+    }]));
+    if (workout.calendarEvent) {
+      // Each explicit save in CorosLink supersedes previous calendar edits,
+      // even when the user saves the same times again.
+      timed.timingKey = calendarHash(JSON.stringify([timed.timingKey, workout.calendarEvent.revision]));
+    }
+  }
   return {
+    ...timed,
     source: calendarHash(userId),
     key: calendarHash(
       JSON.stringify([userId, workout.planId, workout.idInPlan]),
@@ -27,7 +52,9 @@ export function workoutCalendarData(
     endDay: shiftCalendarDay(workout.happenDay, 1),
     summary: workout.name || "Planned workout",
     description: [
-      "Scheduled with CorosLink. Edit this workout in CorosLink to keep it in sync.",
+      timing.mode === "timed"
+        ? "Scheduled with CorosLink. Move or resize this event in your calendar to fit your schedule. Calendar edits do not update your COROS training plan. Changing timing defaults or the workout's planned date reapplies its time."
+        : "Scheduled with CorosLink. Edit this workout in CorosLink to keep it in sync.",
       workout.volume,
       Number.isFinite(workout.trainingLoad)
         ? `Training load: ${workout.trainingLoad}`

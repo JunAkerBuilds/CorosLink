@@ -1,3 +1,5 @@
+import { batteryReplacementStateCount } from "./watchfaceBatteryStates";
+import { NATIVE_DATA_BY_ID, NATIVE_CHART_SOURCES, nativeDataBounds } from "./nativeData";
 import type {
   CorosWatchfaceDesignState,
   CorosWatchfaceTemplateDetails
@@ -17,6 +19,7 @@ import {
   getWatchfaceControlStatusPreviewLayers,
   hasControlBattery,
   isControlComplicationEnabled,
+  isTemplateTimeColonEnabled,
   pickPreviewResolution,
   watchfaceControlStatusPosition,
   WATCHFACE_COMPLICATIONS,
@@ -53,6 +56,7 @@ export type EditorLayerKind =
   | "weekday"
   | "seconds"
   | "separators"
+  | "arcCut"
   | "battery"
   | "batteryIcon"
   | "controlBatteryIcon"
@@ -105,6 +109,7 @@ export interface EditorLayer {
   ampmIndicator?: true;
   /** Set for the dynamic 41-state weather sprite folder. */
   weatherIndicator?: true;
+  nativeDataId?: string;
   visible: boolean;
   /** Whether the user may hide/remove this layer. */
   canHide: boolean;
@@ -141,7 +146,8 @@ const LAYER_ORDER: string[] = [
   "calories",
   "exercise",
   "elevation",
-  "temperature"
+  "temperature",
+  "arcCut"
 ];
 
 const METRIC_IDS = new Set<WatchfaceMetricId>([
@@ -270,6 +276,9 @@ function kindForGroup(groupId: string): EditorLayerKind {
   if (groupId === "complication") {
     return "complication";
   }
+  if (groupId === "arcCut") {
+    return "arcCut";
+  }
   return "separators";
 }
 
@@ -296,6 +305,7 @@ export function deriveEditorLayers(
   const boundsById = new Map<string, WatchfaceLayoutGroupBounds>();
   if (resolution) {
     for (const box of computeLayoutGroupBounds(resolution, {
+      configAssetOverrides: design.configAssetOverrides,
       timeStyles: design.timeStyles,
       letterSpacing: design.letterSpacing
     })) {
@@ -311,20 +321,11 @@ export function deriveEditorLayers(
               )
             : undefined);
         const templateStateIndex = batteryPreviewStateIndex(
-          batteryFolder?.files.length ?? 0
+          batteryFolder?.files.length ?? batteryReplacementStateCount(batteryOverride?.stateReplacements)
         );
         const templateState = batteryFolder?.files[templateStateIndex];
-        const importedStates = Object.entries(
-          batteryOverride?.stateReplacements ?? {}
-        )
-          .filter(([key]) => /^\d+$/.test(key))
-          .sort(([left], [right]) => Number(left) - Number(right));
-        const importedPreviewState = importedStates[
-          batteryPreviewStateIndex(importedStates.length)
-        ];
         const artwork =
           batteryOverride?.stateReplacements?.[String(templateStateIndex)] ??
-          importedPreviewState?.[1] ??
           batteryOverride?.replacement;
         const canvas = artwork && !templateState
           ? {
@@ -457,10 +458,7 @@ export function deriveEditorLayers(
       layers.push({
         id: groupId,
         kind: "metric",
-        label:
-          metricId === "temperature"
-            ? "Temperature (always visible)"
-            : capability.label,
+        label: capability.label,
         layoutGroupId: groupId,
         metricId,
         visible,
@@ -583,6 +581,18 @@ export function deriveEditorLayers(
     layers.splice(dateSlashIndex >= 0 ? dateSlashIndex + 1 : 2, 0, ampmLayer);
   }
 
+  for (const [id, style] of Object.entries(design.nativeData ?? {})) {
+    const field = NATIVE_DATA_BY_ID.get(id);
+    if (!field) continue;
+    const label = field.kind === "chart" ? `${NATIVE_CHART_SOURCES.find(source => source.id === style.chartSource)?.label ?? "Native"} chart` : field.label;
+    const box = nativeDataBounds(id, design.nativeData ?? {});
+    layers.splice(1, 0, { id: `native:${id}`, nativeDataId: id, kind: "metric", label,
+      visible: style.enabled, canHide: true, present: true,
+      bounds: box ? { id: `native:${id}`, label, ...box } : null,
+      capabilities: { position: true, color: true, scale: true, font: field.kind !== "state" }
+    });
+  }
+
   const weatherCapability = getWeatherCapability(details);
   if (weatherCapability) {
     const style = design.weatherIndicator ?? {
@@ -665,7 +675,9 @@ export function deriveEditorLayers(
           : null;
     const analogPreviewLayer =
       analogLayoutGroupId && resolution
-        ? getWatchfaceAnalogPreviewLayers(resolution, new Date()).find(
+        ? getWatchfaceAnalogPreviewLayers(resolution, new Date(), {
+            overrides: design.configAssetOverrides
+          }).find(
             (layer) => layer.configKey === reference.configKey
           ) ?? null
         : null;
@@ -724,7 +736,9 @@ export function deriveEditorLayers(
         : {}),
       configAssetId: reference.id,
       configAssetReplaced: Boolean(override?.replacement),
-      visible: assetAvailable && override?.enabled !== false,
+      visible: assetAvailable && (reference.id === "config:colon_icon"
+        ? isTemplateTimeColonEnabled(design.staticSeparators, override)
+        : override?.enabled !== false),
       canHide: true,
       present:
         statusLayoutGroupId || analogLayoutGroupId

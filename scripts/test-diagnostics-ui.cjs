@@ -57,7 +57,7 @@ async function main() {
     await window.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/scripts/fixtures/diagnostics.html`);
     await loaded();
     assert.match(await report(), /No errors recorded/);
-    assert.equal(await js('document.querySelector(".diagnostics-settings").previousElementSibling.classList.contains("settings-about-panel")'), true, "diagnostics is near the top of Settings");
+    assert.equal(await js('document.querySelector(".settings-view").lastElementChild.classList.contains("diagnostics-settings")'), true, "diagnostics is at the bottom of Settings");
 
     globalThis.fetch = async () => {
       throw new TypeError("fetch failed", { cause: Object.assign(new Error("getaddrinfo ENOTFOUND apieu.coros.com"), { code: "ENOTFOUND", hostname: "apieu.coros.com" }) });

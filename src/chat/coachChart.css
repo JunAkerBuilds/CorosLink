@@ -1,0 +1,211 @@
+/* Coach-authored charts: the inline chat card and its pinned Training Hub twin. */
+
+.coach-chart-card {
+  min-width: min(100%, 520px);
+  gap: 12px;
+}
+
+.coach-chart-card-panel {
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.chat-bubble-chart {
+  width: 100%;
+  max-width: 720px;
+}
+
+.coach-chart-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.coach-chart-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.coach-chart-action:hover:not(:disabled) {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+.coach-chart-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.coach-chart-action.is-pinned {
+  border-color: var(--success-border, var(--glass-border));
+  color: var(--success-text, var(--text-primary));
+}
+
+.coach-chart-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 8px;
+}
+
+.coach-chart-tile {
+  display: grid;
+  gap: 2px;
+  padding: 9px 11px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-elevated, var(--glass-bg));
+}
+
+.coach-chart-tile-label {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.coach-chart-tile-value {
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.coach-chart-tile-caption {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.coach-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.coach-chart-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.coach-chart-legend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.coach-chart-legend-swatch.is-dashed {
+  background: repeating-linear-gradient(
+    90deg,
+    currentColor 0 4px,
+    transparent 4px 7px
+  );
+}
+
+.coach-chart-legend-swatch.is-bar {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  opacity: 0.7;
+}
+
+.coach-chart-legend-swatch.is-area {
+  height: 8px;
+  border-radius: 2px;
+  opacity: 0.55;
+}
+
+.coach-chart-legend-swatch.is-range {
+  width: 12px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px dashed var(--text-muted);
+  background: transparent;
+  opacity: 0.8;
+}
+
+.coach-chart-legend-axis {
+  padding: 0 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.coach-chart-shell {
+  height: 240px;
+}
+
+.coach-chart-card-panel .coach-chart-shell {
+  height: 220px;
+}
+
+.coach-chart-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* ----- Training Hub: pinned charts ----- */
+
+.coach-charts-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.coach-charts-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 14px;
+}
+
+.coach-charts-panel .coach-chart-card {
+  background: var(--glass-bg-elevated, var(--glass-bg));
+}
+
+.coach-charts-panel-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+@media (max-width: 760px) {
+  .coach-chart-card {
+    min-width: 0;
+  }
+
+  .coach-chart-shell,
+  .coach-chart-card-panel .coach-chart-shell {
+    height: 200px;
+  }
+}

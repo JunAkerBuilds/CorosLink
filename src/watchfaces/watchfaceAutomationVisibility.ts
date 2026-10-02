@@ -11,6 +11,7 @@ import {
   getAvailableComplications,
   inferExerciseSeparatorStyle,
   isControlComplicationEnabled,
+  watchfaceArcCutIsDateSlash,
   WATCHFACE_COMPLICATIONS,
   type WatchfacePreviewMode
 } from "./watchfaceStudio";
@@ -89,13 +90,14 @@ function applyLayerVisibility(
     };
     const staticSeparatorId = layer.configAssetId === "config:colon_icon"
       ? "colon"
-      : layer.configAssetId === "config:arc_cut_icon"
+      : layer.configAssetId === "config:arc_cut_icon" &&
+          watchfaceArcCutIsDateSlash(details)
         ? "dateSlash"
         : null;
     return {
       ...design,
       configAssetOverrides,
-      ...(staticSeparatorId && !visible
+      ...(staticSeparatorId && (!visible || staticSeparatorId === "colon")
         ? {
             staticSeparators: {
               ...design.staticSeparators,
@@ -133,6 +135,9 @@ function applyLayerVisibility(
     };
   }
 
+  if (layer.nativeDataId && design.nativeData?.[layer.nativeDataId]) {
+    return {...design, nativeData: {...design.nativeData, [layer.nativeDataId]: {...design.nativeData[layer.nativeDataId], enabled: visible}}};
+  }
   if (layer.weatherIndicator) {
     const capability = getWeatherCapability(details);
     if (!capability) {
@@ -141,6 +146,7 @@ function applyLayerVisibility(
     return {
       ...design,
       weatherIndicator: {
+        ...design.weatherIndicator,
         enabled: visible,
         x: design.weatherIndicator?.x ?? capability.defaultPos.x,
         y: design.weatherIndicator?.y ?? capability.defaultPos.y,
@@ -166,7 +172,8 @@ function applyLayerVisibility(
         y: design.ampmIndicator?.y ?? capability.defaultPos.y,
         scale: design.ampmIndicator?.scale ?? 1,
         color: design.ampmIndicator?.color,
-        fontFamily: design.ampmIndicator?.fontFamily
+        fontFamily: design.ampmIndicator?.fontFamily,
+        rasterFont: design.ampmIndicator?.rasterFont
       }
     };
   }
@@ -175,14 +182,16 @@ function applyLayerVisibility(
     const separator = design.staticSeparators[layer.staticSeparatorId];
     const configAssetId = layer.staticSeparatorId === "colon"
       ? "config:colon_icon"
-      : "config:arc_cut_icon";
+      : watchfaceArcCutIsDateSlash(details)
+        ? "config:arc_cut_icon"
+        : null;
     return {
       ...design,
       staticSeparators: {
         ...design.staticSeparators,
         [layer.staticSeparatorId]: { ...separator, enabled: visible }
       },
-      ...(visible
+      ...(visible && configAssetId
         ? {
             configAssetOverrides: {
               ...(design.configAssetOverrides ?? {}),

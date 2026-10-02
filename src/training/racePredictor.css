@@ -1,0 +1,349 @@
+/* Race predictor: bezel level ring, numbered race rows with hairline pace
+   lines, and a pace-fade footer. Selectors carry .panel.training-race-panel
+   .race-card-grid so they win over the older styles.css/profileSizing.css race
+   rules without !important. */
+
+.panel.training-race-panel {
+  --race-sheen: color-mix(in srgb, var(--accent) 42%, transparent);
+  --race-warm: color-mix(in srgb, var(--accent-gold) 30%, transparent);
+  --race-hairline: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+/* Soft accent bloom behind the ring. */
+.panel.training-race-panel::before {
+  content: "";
+  position: absolute;
+  inset: -45% -35% auto auto;
+  z-index: -1;
+  width: 80%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-glow), transparent 65%);
+  pointer-events: none;
+}
+
+/* Gradient hairline sheen on the border: accent at the top-left, gold at the foot. */
+.panel.training-race-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    150deg,
+    var(--race-sheen),
+    transparent 32%,
+    transparent 68%,
+    var(--race-warm)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.panel.training-race-panel .training-race-heading h2 {
+  letter-spacing: -0.02em;
+}
+
+/* --- Level ring (watch bezel) --------------------------------------------- */
+.race-level-ring {
+  position: relative;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  flex-shrink: 0;
+  width: 68px;
+  height: 68px;
+  margin: -6px -6px 0 0;
+}
+
+.race-level-ring svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.race-level-ticks line {
+  stroke: color-mix(in srgb, var(--text-muted) 30%, transparent);
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+
+.race-level-ticks line.is-lit {
+  stroke: var(--accent);
+}
+
+.race-level-ring circle {
+  fill: none;
+  stroke-width: 3;
+}
+
+.race-level-ring-track {
+  stroke: color-mix(in srgb, var(--text-muted) 14%, transparent);
+}
+
+.race-level-ring-fill {
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 50%, transparent));
+  animation: race-level-sweep 1.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.race-level-ring strong {
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.race-level-ring span {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+@keyframes race-level-sweep {
+  from {
+    stroke-dashoffset: 138.23;
+  }
+}
+
+/* --- Rows ------------------------------------------------------------------ */
+.panel.training-race-panel .race-card-grid {
+  align-content: space-evenly;
+}
+
+.panel.training-race-panel .race-card-grid .race-card {
+  --race-tone: var(--accent);
+  position: relative;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "index badge time"
+    ". track pace";
+  align-items: baseline;
+  align-content: center;
+  gap: 9px 14px;
+  padding: 14px 0;
+  border-top: 0;
+}
+
+/* Endurance heat: tone warms from accent toward gold as the race lengthens. */
+.panel.training-race-panel .race-card-grid .race-card:nth-child(2) {
+  --race-tone: color-mix(in srgb, var(--accent) 70%, var(--accent-gold));
+}
+
+.panel.training-race-panel .race-card-grid .race-card:nth-child(3) {
+  --race-tone: color-mix(in srgb, var(--accent) 40%, var(--accent-gold));
+}
+
+.panel.training-race-panel .race-card-grid .race-card:nth-child(n + 4) {
+  --race-tone: var(--accent-gold);
+}
+
+/* Hairline that fades out at both ends instead of a hard rule. */
+.panel.training-race-panel .race-card-grid .race-card::before {
+  display: block;
+  position: absolute;
+  inset: 0 0 auto;
+  width: auto;
+  height: 1px;
+  border-radius: 0;
+  background: linear-gradient(90deg, transparent, var(--race-hairline) 15%, var(--race-hairline) 85%, transparent);
+  box-shadow: none;
+}
+
+.panel.training-race-panel .race-card-grid .race-card:first-child::before {
+  display: none;
+}
+
+.race-card-index {
+  grid-area: index;
+  color: var(--race-tone);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+.panel.training-race-panel .race-card-grid .race-card-badge {
+  grid-area: badge;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.panel.training-race-panel .race-card-grid .race-card-time {
+  grid-area: time;
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  text-align: right;
+  transition: color 0.2s ease;
+}
+
+.panel.training-race-panel .race-card-grid .race-card:hover .race-card-time {
+  color: var(--race-tone);
+}
+
+/* Pace line: hairline track, gradient fill, glowing runner at the head. */
+.panel.training-race-panel .race-card-grid .race-card-track {
+  grid-area: track;
+  position: relative;
+  align-self: center;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--race-hairline);
+}
+
+.race-card-track-fill {
+  position: relative;
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, var(--race-tone));
+  animation: race-track-run 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.race-card-track-fill::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--race-tone);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--race-tone) 18%, transparent),
+    0 0 10px color-mix(in srgb, var(--race-tone) 70%, transparent);
+  transform: translateY(-50%);
+}
+
+.panel.training-race-panel .race-card-grid .race-card-pace {
+  grid-area: pace;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+}
+
+/* Grow width (not scaleX) so the runner dot stays round while it travels. */
+@keyframes race-track-run {
+  from {
+    width: 0;
+  }
+}
+
+/* --- Footer ---------------------------------------------------------------- */
+.race-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--race-hairline);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.race-card-footer > span:first-child {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.race-card-footer-route {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.race-card-footer-route i {
+  flex: 1;
+  min-width: 16px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-gold));
+  opacity: 0.7;
+}
+
+.race-card-footer strong {
+  color: var(--accent-gold);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Mini: one line per race, no pace lines or footer --------------------- */
+.panel.training-race-panel[data-chart-size="mini"] .race-card-grid .race-card {
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  grid-template-areas: "index badge time pace";
+  padding-block: 3px;
+}
+
+.panel.training-race-panel[data-chart-size="mini"] .race-card-grid .race-card-track,
+.panel.training-race-panel[data-chart-size="mini"] .race-card-footer,
+.panel.training-race-panel[data-chart-size="mini"] .race-level-ring span,
+.panel.training-race-panel[data-chart-size="mini"] .race-level-ticks {
+  display: none;
+}
+
+.panel.training-race-panel[data-chart-size="mini"] .race-card-grid .race-card-time {
+  font-size: 15px;
+}
+
+.panel.training-race-panel[data-chart-size="mini"] .race-level-ring {
+  width: 42px;
+  height: 42px;
+  margin: 0;
+}
+
+.panel.training-race-panel[data-chart-size="mini"] .race-level-ring strong {
+  font-size: 14px;
+}
+
+/* --- Paper theme ----------------------------------------------------------- */
+:root[data-theme="paper"] .panel.training-race-panel {
+  --race-hairline: color-mix(in srgb, var(--text-muted) 24%, transparent);
+}
+
+:root[data-theme="paper"] .panel.training-race-panel::before {
+  opacity: 0.45;
+}
+
+:root[data-theme="paper"] .race-level-ring-fill {
+  filter: none;
+}
+
+:root[data-theme="paper"] .race-card-track-fill::after {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--race-tone) 16%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .race-level-ring-fill,
+  .race-card-track-fill {
+    animation: none;
+  }
+}

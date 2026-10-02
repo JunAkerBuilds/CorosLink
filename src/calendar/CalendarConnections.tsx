@@ -19,7 +19,9 @@ import type { GoogleCalendarStatus } from "../../electron/googleCalendarTypes";
 import type {
   CalendarChoice,
   CalendarConnectionStatus,
+  CalendarEventTiming,
 } from "../../electron/calendarSyncTypes";
+import { defaultCalendarEventTiming } from "../../electron/calendarSyncTypes";
 import type { CorosLinkApi } from "../coroslink-api";
 import { calendarSyncButtonState } from "./calendarSyncStatus";
 import "./calendarConnections.css";
@@ -40,9 +42,11 @@ type ConnectionStatus = CalendarConnectionStatus &
 function CalendarConnection({
   api,
   provider,
+  suggestedEmail,
 }: {
   api: CorosLinkApi;
   provider: CalendarProvider;
+  suggestedEmail?: string;
 }) {
   const isGoogle = provider === "google";
   const providerName = isGoogle ? "Google Calendar" : "Apple Calendar";
@@ -50,6 +54,10 @@ function CalendarConnection({
   const connectFormId = useId();
   const autoSyncLabelId = useId();
   const autoSyncDescriptionId = useId();
+  const timeZonesId = useId();
+  const defaultTiming = useMemo(defaultCalendarEventTiming, []);
+  const timeZones = useMemo(() => [...new Set([defaultTiming.timeZone, "UTC", ...Intl.supportedValuesOf("timeZone")])], [defaultTiming]);
+  const [timingDraft, setTimingDraft] = useState<CalendarEventTiming | null>(null);
   const [appleEmail, setAppleEmail] = useState("");
   const [appPassword, setAppPassword] = useState("");
   const adapter = useMemo(
@@ -194,6 +202,10 @@ function CalendarConnection({
   }
 
   const working = Boolean(busy || status?.syncing || status?.connecting);
+  const savedTiming = status?.eventTiming ?? defaultTiming;
+  const timing = timingDraft ?? savedTiming;
+  const timingChanged = JSON.stringify(timing) !== JSON.stringify(savedTiming);
+  const changeTiming = (patch: Partial<CalendarEventTiming>) => setTimingDraft({ ...timing, ...patch });
   const connecting = busy === "connect" || status?.connecting;
   const choosingCalendar = calendars.length > 0;
   const lastSynced = status?.lastSyncedAt
@@ -229,12 +241,12 @@ function CalendarConnection({
           </div>
         </div>
         <p className="calendar-connection-hint">
-          Your scheduled workouts appear as all-day events in {destinationName},
+          Your scheduled workouts appear in {destinationName},
           from the past 7 days through the next 90 days.
         </p>
         <p className="calendar-connection-hint">
-          Make workout changes in CorosLink. Edits in {providerName} won’t
-          update your training plan.
+          Choose all-day events or timed workout blocks. Calendar edits won’t
+          update your COROS training plan.
         </p>
       </div>
 
@@ -359,6 +371,71 @@ function CalendarConnection({
             )}
 
             {status.calendar ? (
+              <form
+                className="calendar-event-timing calendar-connection-row"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void perform("timing", async () => {
+                    await adapter.updateSettings({ eventTiming: timing });
+                    if (mounted.current) setTimingDraft(null);
+                    const result = await adapter.sync();
+                    if (mounted.current) setMessage(`Event preferences saved. ${result.created} added, ${result.updated} updated, ${result.deleted} removed.`);
+                  });
+                }}
+              >
+                <div className="calendar-connection-row-copy">
+                  <strong>Workout events</strong>
+                  <p className="calendar-connection-hint">Choose how workouts fit into your calendar.</p>
+                </div>
+                <fieldset disabled={working || !status.accountMatches}>
+                  <label className="field">
+                    Event type
+                    <select value={timing.mode} onChange={(event) => changeTiming({ mode: event.target.value as CalendarEventTiming["mode"] })}>
+                      <option value="all-day">All-day events</option>
+                      <option value="timed">Timed events</option>
+                    </select>
+                  </label>
+                  {timing.mode === "timed" ? (
+                    <>
+                      <div className="calendar-event-time-fields">
+                        <label className="field">
+                          Default start time
+                          <input type="time" required value={timing.startTime} onChange={(event) => changeTiming({ startTime: event.target.value })} />
+                        </label>
+                        <label className="field">
+                          Default end time
+                          <input type="time" required value={timing.endTime} onChange={(event) => changeTiming({ endTime: event.target.value })} />
+                        </label>
+                      </div>
+                      <label className="field">
+                        Time zone
+                        <input type="text" required list={timeZonesId} value={timing.timeZone} onChange={(event) => changeTiming({ timeZone: event.target.value })} />
+                        <datalist id={timeZonesId}>{timeZones.map(zone => <option key={zone} value={zone} />)}</datalist>
+                      </label>
+                      <p className="calendar-connection-hint">
+                        Choose the start and end times for your events. Move or resize individual events in {providerName}; sync keeps those times when workout details change.
+                      </p>
+                      {timing.endTime <= timing.startTime ? <p className="calendar-connection-hint">End time is on the following day.</p> : null}
+                    </>
+                  ) : null}
+                  {timingChanged ? (
+                    <p className="calendar-connection-hint">
+                      Saving updates synced workouts without individual event settings in the past 7 and next 90 days.
+                      Rescheduling a workout in CorosLink also reapplies its time.
+                    </p>
+                  ) : null}
+                  <div className="calendar-connection-actions">
+                    <button type="submit" className="primary-button" disabled={!timingChanged}>
+                      {busy === "timing" ? <Loader2 size={15} className="spin" aria-hidden="true" /> : null}
+                      Save event preferences and sync
+                    </button>
+                    {timingChanged ? <button type="button" className="calendar-connection-text-button" onClick={() => setTimingDraft(null)}>Cancel</button> : null}
+                  </div>
+                </fieldset>
+              </form>
+            ) : null}
+
+            {status.calendar ? (
               <div className="calendar-connection-row calendar-connection-sync-settings">
                 <label className="calendar-connection-toggle">
                   <span className="calendar-connection-row-copy">
@@ -476,6 +553,11 @@ function CalendarConnection({
                     onChange={(event) => setAppleEmail(event.target.value)}
                   />
                 </label>
+                {suggestedEmail && appleEmail !== suggestedEmail ? (
+                  <button type="button" className="secondary-button account-email-suggestion" disabled={working} onClick={() => setAppleEmail(suggestedEmail)}>
+                    Use COROS email · {suggestedEmail}
+                  </button>
+                ) : null}
                 <label className="field">
                   App-specific password
                   <input
@@ -617,8 +699,8 @@ function CalendarConnection({
   );
 }
 
-export function CalendarConnections({ api }: { api: CorosLinkApi }) {
-  const [provider, setProvider] = useState<CalendarProvider>("google");
+export function CalendarConnections({ api, initialProvider = "google", suggestedEmail }: { api: CorosLinkApi; initialProvider?: CalendarProvider; suggestedEmail?: string }) {
+  const [provider, setProvider] = useState<CalendarProvider>(initialProvider);
   return (
     <div className="calendar-connections">
       <div className="calendar-connections-header">
@@ -647,7 +729,7 @@ export function CalendarConnections({ api }: { api: CorosLinkApi }) {
           </button>
         </div>
       </div>
-      <CalendarConnection key={provider} api={api} provider={provider} />
+      <CalendarConnection key={provider} api={api} provider={provider} suggestedEmail={suggestedEmail} />
     </div>
   );
 }

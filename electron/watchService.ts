@@ -14,6 +14,12 @@ import { fallbackBytesForModel, resolveWatchModel } from "./watchModels";
 
 const execFileAsync = promisify(execFile);
 const INSTALLER_VOLUME_PATTERN = /desktop|setup|installer|\.dmg/i;
+// Match the whole label: a backup drive named "COROS Backup" or
+// "APEX archives" must not become a write/delete target.
+// APEX 4 storage volumes can include their physical size (for example,
+// "COROS APEX 4 46MM"). Keep that narrowly scoped so similarly named backup
+// volumes are still never treated as a writable watch.
+const WATCH_VOLUME_PATTERN = /^(?:COROS(?: WATCH)?|(?:COROS )?(?:PACE(?: ?(?:PRO|4(?: ?PRO)?|[23]))?|NOMAD|VERTIX ?2(?: ?S)?|APEX(?: ?(?:2(?: ?PRO)?|4(?: ?(?:42|46)(?: ?MM)?)?|PRO))?))$/i;
 const ORIGINAL_COROS_WATCH_PATH = process.env.COROS_WATCH_PATH;
 // Throttle progress callbacks so a fast local copy doesn't flood IPC, while a
 // slow copy to the watch still ticks often enough to look responsive.
@@ -40,6 +46,13 @@ const WATCH_CONNECTION_SMOKE_FIXTURES: Record<
     volumeName: "COROS WATCH EMPTY",
     createMusicFolder: false,
     trackNames: []
+  },
+  "pace-4-pro": {
+    volumeName: "COROS PACE 4 PRO",
+    createMusicFolder: true,
+    createMapFolder: true,
+    trackNames: ["Workout Mix.mp3"],
+    totalBytes: fallbackBytesForModel("pace-4-pro")
   },
   "pace-pro": {
     volumeName: "COROS PACE PRO",
@@ -144,6 +157,7 @@ let activeWatchConnectionSmokeOptionId: WatchConnectionSmokeOptionId = "auto";
 interface RawVolume {
   name: string;
   rootPath: string;
+  explicit?: boolean;
 }
 
 interface StorageStats {
@@ -169,7 +183,7 @@ export function invalidateWatchStatusCache(): void {
 export async function getWatchStatus(): Promise<WatchStatus> {
   try {
     const volumes = await listVolumes();
-    const volumeKey = volumes.map((volume) => volume.rootPath).join("\n");
+    const volumeKey = JSON.stringify(volumes);
     if (
       cachedWatchStatus &&
       cachedWatchStatus.volumeKey === volumeKey &&
@@ -179,9 +193,7 @@ export async function getWatchStatus(): Promise<WatchStatus> {
     }
 
     const candidates = await findDriveCandidates(volumes);
-    const selected = candidates.find(
-      (candidate) => candidate.musicPath || candidate.mapPath
-    );
+    const selected = candidates[0];
 
     if (!selected) {
       const status: WatchStatus = {
@@ -410,22 +422,28 @@ async function findDriveCandidates(
       continue;
     }
 
-    const musicPath = path.join(volume.rootPath, "Music");
-    const mapPath = path.join(volume.rootPath, "map");
-    const hasMusicFolder = isDirectory(musicPath);
-    const hasMapFolder = isDirectory(mapPath);
-
-    if (!hasMusicFolder && !hasMapFolder) {
+    const normalizedName = volume.name
+      .trim()
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ");
+    if (!volume.explicit && !WATCH_VOLUME_PATTERN.test(normalizedName)) {
       continue;
     }
 
+    const musicPath = path.join(volume.rootPath, "Music");
+    // Apex 4 exposes this as "Map" while older devices use "map". Do not
+    // rely on the mounted filesystem being case-insensitive.
+    const mapPath = findWatchDirectory(volume.rootPath, ["map", "Map"]);
+    const hasMusicFolder = isDirectory(musicPath);
+    const hasMapFolder = Boolean(mapPath);
+
     const storage = getStorageStats(volume.rootPath, volume.name);
-    const mapStats = hasMapFolder ? getDirectoryStats(mapPath) : {};
+    const mapStats = mapPath ? getDirectoryStats(mapPath) : {};
     candidates.push({
       name: volume.name,
       rootPath: volume.rootPath,
       musicPath: hasMusicFolder ? musicPath : undefined,
-      mapPath: hasMapFolder ? mapPath : undefined,
+      mapPath,
       ...mapStats,
       ...storage,
       reason:
@@ -433,11 +451,24 @@ async function findDriveCandidates(
           ? "Music and map folders found"
           : hasMusicFolder
             ? "Music folder found"
-            : "map folder found"
+            : hasMapFolder
+              ? "map folder found"
+              : "Recognized COROS watch volume"
     });
   }
 
   return candidates.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function findWatchDirectory(
+  rootPath: string,
+  directoryNames: readonly string[]
+): string | undefined {
+  for (const directoryName of directoryNames) {
+    const candidate = path.join(rootPath, directoryName);
+    if (isDirectory(candidate)) return candidate;
+  }
+  return undefined;
 }
 
 async function listVolumes(): Promise<RawVolume[]> {
@@ -446,7 +477,8 @@ async function listVolumes(): Promise<RawVolume[]> {
     return [
       {
         name: path.basename(explicitWatchPath) || "COROS Watch",
-        rootPath: explicitWatchPath
+        rootPath: explicitWatchPath,
+        explicit: true
       }
     ];
   }

@@ -1,0 +1,66 @@
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const { WatchfaceAssetReview } = require("../dist-electron/watchfaceAiAssetReview.js");
+const tracker = new WatchfaceAssetReview();
+tracker.register("font", 1, ["reference"]);
+assert.throws(() => tracker.requireAccepted("font"), /pending/);
+const entry = { assetId: "font", status: "accepted", comparison: "Heavy, slanted sans-serif glyphs match the reference's clock style.", referenceAssetIds: ["reference"] };
+assert.throws(() => tracker.review([entry], 1), /Wait for/);
+assert.throws(() => tracker.review([{ ...entry, referenceAssetIds: ["unrelated"] }], 2), /actual generation reference/);
+assert.throws(() => tracker.review([entry, { ...entry, assetId: "unknown" }], 2), /exact assetId/);
+assert.throws(() => tracker.requireAccepted("font"), /pending/, "failed batches must not partially accept an image");
+tracker.review([entry], 2);
+const quality = { glyph: { character: "0", setId: "clock" }, width: 32, height: 48, requestedRegion: { x: 0, y: 0, width: 32, height: 48 }, inkBounds: { x: 3, y: 4, width: 24, height: 40 }, padding: { left: 3, top: 4, right: 5, bottom: 4 }, cutInkEdges: [], errors: [], warnings: [] };
+const siblings = tracker.registerCrop("font", "digit-0", 2, quality);
+assert.equal(siblings.length, 1);
+assert.throws(() => tracker.checkCommands([{ value: { sprites: { 0: { assetId: "digit-0" } } } }]), /pending/, "accepted atlas does not approve its crops");
+const glyphReview = { ...entry, assetId: "digit-0", glyphChecks: { identity: true, unclipped: true, baselineAndSpacing: true } };
+assert.throws(() => tracker.review([glyphReview], 2), /Wait for/);
+assert.throws(() => tracker.review([{ ...entry, assetId: "digit-0" }], 3), /glyph crop/);
+tracker.review([glyphReview], 3);
+assert.doesNotThrow(() => tracker.checkCommands([{ value: { sprites: { 0: { assetId: "digit-0" } } } }]));
+tracker.registerCrop("font", "clipped-1", 3, { ...quality, glyph: { character: "1", setId: "clock" }, errors: ["The cut crosses ink."] });
+assert.equal(tracker.cropSet("clipped-1").length, 2, "return sibling geometry for baseline/spacing checks");
+assert.throws(() => tracker.review([{ ...glyphReview, assetId: "clipped-1" }], 4), /cannot be accepted/);
+tracker.review([{ ...glyphReview, assetId: "clipped-1", status: "rejected" }], 4);
+tracker.register("recolored-clipped", 4, [], "clipped-1");
+assert.throws(() => tracker.review([{ ...glyphReview, assetId: "recolored-clipped" }], 5), /cannot be accepted/, "recoloring cannot remove glyph clipping errors");
+tracker.registerCrop("original-reference", "reference-crop", 4, quality);
+assert.throws(() => tracker.requireAccepted("reference-crop"), /pending/, "crops of existing references also need review");
+tracker.register("bad", 2, []);
+tracker.review([{ ...entry, assetId: "bad", status: "rejected" }], 3);
+assert.throws(() => tracker.checkCommands([{ value: { dataUrl: { assetId: "bad" } } }]), /rejected/);
+assert.equal(tracker.isRejected("bad"), true);
+assert.doesNotThrow(() => tracker.requireAccepted("existing-template"), "unmodified template assets do not require a generation review");
+console.log("Watchmaker asset review tests passed: pixel delivery, reference matching, atomic decisions, independent crop review, glyph quality gates and install refusal.");
+
+// Persist the exact production memory through a real disk chat and a new tracker.
+const { mkdtemp, rm } = await import("node:fs/promises");
+const { tmpdir } = await import("node:os");
+const { WatchfaceAiChatStore } = require("../dist-electron/watchfaceAiChatStore.js");
+const { sanitizeWatchfaceAiMemory } = require("../dist-electron/watchfaceAiContext.js");
+const directory = await mkdtemp(`${tmpdir()}/watchmaker-review-recovery-`);
+try {
+  const memory = sanitizeWatchfaceAiMemory({ version: 1, entries: [], assetReviews: tracker.snapshot() });
+  const store = new WatchfaceAiChatStore(directory);
+  const saved = await store.save({ projectKey: "isolated", messages: [{ role: "assistant", content: "", memory }] });
+  const loaded = await new WatchfaceAiChatStore(directory).load(saved.id);
+  const resumed = new WatchfaceAssetReview();
+  resumed.restore(sanitizeWatchfaceAiMemory(loaded.messages[0].memory).assetReviews);
+  assert.doesNotThrow(() => resumed.requireAccepted("digit-0"));
+  assert.throws(() => resumed.checkCommands({ dataUrl: { assetId: "clipped-1" } }), /rejected/);
+  assert.deepEqual(resumed.get("clipped-1").quality.errors, ["The cut crosses ink."]);
+  assert.equal(resumed.get("digit-0").comparison, glyphReview.comparison);
+  resumed.registerCrop("font", "clipped-1", 0, quality);
+  assert.equal(resumed.isRejected("clipped-1"), true, "identical re-crop must not reset a rejection");
+  assert.throws(() => resumed.review([{ ...glyphReview, assetId: "clipped-1" }], 1), /remain blocked/);
+} finally { await rm(directory, { recursive: true, force: true }); }
+
+const pendingRestore = new WatchfaceAssetReview();
+pendingRestore.restore([{ assetId: "pending-old", round: 99, status: "pending", references: [] }]);
+const pendingDecision = { assetId: "pending-old", status: "accepted", comparison: "Inspected complete strokes and shared baseline after reloading the stored PNG." };
+assert.throws(() => pendingRestore.review([pendingDecision], 0), /Inspect this restored/);
+pendingRestore.inspected("pending-old", 0);
+assert.throws(() => pendingRestore.review([pendingDecision], 0), /Wait for/);
+assert.doesNotThrow(() => pendingRestore.review([pendingDecision], 1));

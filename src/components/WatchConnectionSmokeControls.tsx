@@ -6,6 +6,7 @@ import { SelectDropdown, type SelectOption } from "./SelectDropdown";
 const WATCH_SMOKE_OPTIONS: SelectOption<WatchConnectionSmokeOptionId>[] = [
   { value: "auto", label: "Auto (USB)" },
   { value: "none", label: "None" },
+  { value: "pace-4-pro", label: "Pace 4 Pro" },
   { value: "pace-pro", label: "Pace Pro" },
   { value: "pace-4", label: "Pace 4" },
   { value: "pace-3", label: "Pace 3" },

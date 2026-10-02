@@ -7,7 +7,10 @@ const dragModuleUrl = pathToFileURL(
   path.join(repoRoot, "src", "calendar", "calendarDrag.ts")
 );
 const {
+  CALENDAR_DRAG_COPY_ONLY_MIME,
+  CALENDAR_DRAG_MIME,
   createCalendarDragPayload,
+  isCopyDrag,
   moveScheduledWorkoutEntries,
   parseCalendarDragPayload
 } = await import(`${dragModuleUrl.href}?cacheBust=${Date.now()}`);
@@ -60,5 +63,20 @@ const rolledBack = moveScheduledWorkoutEntries(
   payload.happenDay
 );
 assert.deepEqual(rolledBack, source);
+
+const dragEvent = (types, keys = {}) => ({
+  altKey: false,
+  ctrlKey: false,
+  ...keys,
+  dataTransfer: { types }
+});
+assert.equal(isCopyDrag(dragEvent([CALENDAR_DRAG_MIME])), false, "plain drag moves");
+assert.equal(isCopyDrag(dragEvent([CALENDAR_DRAG_MIME], { altKey: true })), true, "Option copies");
+assert.equal(isCopyDrag(dragEvent([CALENDAR_DRAG_MIME], { ctrlKey: true })), true, "Ctrl copies");
+assert.equal(
+  isCopyDrag(dragEvent([CALENDAR_DRAG_MIME, CALENDAR_DRAG_COPY_ONLY_MIME])),
+  true,
+  "past workouts always copy"
+);
 
 console.log("calendar drag tests passed");

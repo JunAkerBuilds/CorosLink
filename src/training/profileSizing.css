@@ -1,0 +1,76 @@
+/* Profile widgets share height tiers and respond to their own width. */
+.panel:is(.training-zone-panel, .training-scores-panel, .training-race-panel)[data-chart-size] {
+  container: profile-card / inline-size;
+  padding: 16px;
+  gap: 12px;
+  min-height: var(--chart-card-height);
+}
+.panel.training-zone-panel[data-chart-size] .training-zone-header {
+  padding: 0 0 12px; gap: 10px; flex-direction: row; flex-wrap: wrap; align-items: flex-start;
+}
+.panel.training-zone-panel[data-chart-size] .training-zone-header h2 { font-size: 18px; }
+.panel.training-zone-panel[data-chart-size] .training-zone-header-actions { width: auto; margin-left: auto; }
+.panel.training-zone-panel[data-chart-size] .training-zone-select { width: auto; min-width: 0; }
+.panel.training-zone-panel[data-chart-size] .training-zone-select-trigger { min-width: 0; min-height: 32px; padding: 6px 10px; font-size: 12px; gap: 12px; }
+.panel.training-zone-panel[data-chart-size] .training-zone-body {
+  flex: 1; padding: 0; min-height: 0; gap: 16px;
+  grid-template-columns: minmax(80px, .7fr) minmax(100px, .85fr) minmax(0, 1.5fr);
+}
+.panel.training-zone-panel[data-chart-size] .training-zone-donut-wrap { width: min(100%, 140px); }
+.panel.training-zone-panel[data-chart-size] .training-zone-donut { min-height: 0; }
+.panel.training-zone-panel[data-chart-size] .training-zone-hero { gap: 4px; min-width: 0; }
+.panel.training-zone-panel[data-chart-size] .training-zone-hero h3 { font-size: 18px; }
+.panel.training-zone-panel[data-chart-size] .training-zone-hero-percent { font-size: 32px; }
+.panel.training-zone-panel[data-chart-size] .training-zone-hero-detail { font-size: 16px; }
+.panel.training-zone-panel[data-chart-size] .training-zone-hero-caption { font-size: 11px; }
+.panel.training-zone-panel[data-chart-size] .training-zone-body-empty { display: flex; align-items: center; justify-content: center; }
+.panel.training-zone-panel[data-chart-size] .training-zone-body-empty .training-empty-chart { width: 100%; max-width: 32ch; min-height: 0; margin: 0; padding: 16px 0; }
+.panel.training-zone-panel[data-chart-size] .training-zone-list { gap: 8px; }
+.panel.training-zone-panel[data-chart-size] :is(.training-zone-name, .training-zone-percent, .training-zone-detail) { font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
+.panel.training-zone-panel[data-chart-size] :is(.training-zone-table-head, .training-zone-row) { grid-template-columns: minmax(54px, .9fr) minmax(24px, 1fr) 42px minmax(42px, auto); gap: 6px; grid-template-areas: none; }
+.panel.training-zone-panel[data-chart-size] :is(.training-zone-row, .training-zone-table-head) > * { grid-area: auto; }
+.panel.training-zone-panel[data-chart-size] .training-zone-table-head span:nth-child(2) { display: block; }
+.panel.training-zone-panel[data-chart-size] .chart-card-details .training-zone-table { margin-top: 12px; }
+.panel:is(.training-scores-panel, .training-race-panel)[data-chart-size] h2 { font-size: 18px; }
+.panel.training-scores-panel[data-chart-size] .score-bar-list { flex: 1; align-content: space-evenly; }
+.panel.training-scores-panel[data-chart-size] .score-bar { padding: 8px 0; gap: 6px; }
+.panel.training-scores-panel[data-chart-size] .training-threshold-grid { gap: 10px 16px; padding-top: 12px; }
+.panel.training-scores-panel[data-chart-size] .training-threshold-grid strong { font-size: 17px; }
+.panel.training-race-panel[data-chart-size] .race-card-grid { flex: 1; grid-auto-rows: 1fr; }
+.panel.training-race-panel[data-chart-size] .race-card { padding-block: 10px; }
+.panel.training-race-panel[data-chart-size] .race-card-badge { white-space: normal; overflow: visible; }
+.panel:is(.training-zone-panel, .training-scores-panel, .training-race-panel)[data-chart-size="mini"] { padding: 10px; gap: 6px; }
+.panel.training-zone-panel[data-chart-size="mini"] .training-zone-header { padding-bottom: 6px; }
+.panel.training-zone-panel[data-chart-size="mini"] .training-zone-body { grid-template-columns: 72px minmax(0, 1fr); gap: 12px; }
+.panel.training-zone-panel[data-chart-size="mini"] .training-zone-hero { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; }
+.panel.training-zone-panel[data-chart-size="mini"] .training-zone-hero-kicker { grid-column: 1 / -1; }
+.panel.training-zone-panel[data-chart-size="mini"] .training-zone-hero-percent { font-size: 24px; }
+.panel.training-zone-panel[data-chart-size="mini"] .training-zone-hero-caption { grid-column: 1 / -1; }
+.panel.training-zone-panel[data-chart-size="mini"] .training-zone-hero h3 { font-size: 16px; }
+.panel:is(.training-scores-panel, .training-race-panel)[data-chart-size="mini"] h2 { font-size: 15px; }
+.panel.training-scores-panel[data-chart-size="mini"] .score-bar { padding: 4px 0; gap: 3px; }
+.panel.training-race-panel[data-chart-size="mini"] .race-card { padding-block: 5px; gap: 6px; }
+.panel.training-race-panel[data-chart-size="mini"] .race-card-time { font-size: 13px; }
+.panel.training-race-panel[data-chart-size="mini"] .training-race-level { padding: 2px 6px; font-size: 10px; }
+@container profile-card (max-width: 620px) {
+  .panel.training-zone-panel[data-chart-size]:not([data-chart-size="mini"]) .training-zone-body { grid-template-columns: 90px minmax(0, 1fr); gap: 12px; align-content: center; }
+  .panel.training-zone-panel[data-chart-size] .training-zone-table { grid-column: 1 / -1; }
+  .panel.training-zone-panel[data-chart-size] .training-zone-hero-percent { font-size: 26px; }
+  .panel.training-zone-panel[data-chart-size] .training-zone-hero-caption { display: none; }
+}
+@container profile-card (max-width: 380px) {
+  .panel.training-zone-panel[data-chart-size] .training-zone-header h2 { font-size: 15px; }
+  .panel.training-zone-panel[data-chart-size] .training-zone-header h2 span { font-size: 12px; }
+  .panel.training-zone-panel[data-chart-size] .training-zone-heading .eyebrow { font-size: 9px; }
+  .panel.training-race-panel[data-chart-size] .race-card { grid-template-columns: minmax(0, 1fr) auto; }
+  .panel.training-race-panel[data-chart-size] .race-card::before { display: none; }
+  .panel.training-race-panel[data-chart-size] .race-card-pace { grid-column: 2; font-size: 10px; text-align: right; }
+  .panel.training-race-panel[data-chart-size="mini"] .race-card-pace { grid-column: auto; }
+  .panel.training-race-panel[data-chart-size="mini"] .race-card { grid-template-columns: minmax(0, 1fr) auto auto; }
+}
+.panel.training-scores-panel[data-chart-size="mini"] .score-bar-header { font-size: 12px; line-height: 1.2; }
+.panel.training-scores-panel[data-chart-size="mini"] .score-bar-header strong { font-size: 13px; line-height: 1.2; }
+.panel.training-zone-panel[data-chart-size="mini"] .training-zone-header h2 { font-size: 16px; }
+.panel.training-zone-panel[data-chart-size="mini"] .training-zone-coverage { margin: 4px 0 0; font-size: 11px; line-height: 1.3; }
+/* Resolve percentage chart heights against the donut's square, not an auto-height child. */
+.panel.training-zone-panel[data-chart-size] .training-zone-donut { position: absolute; inset: 0; }

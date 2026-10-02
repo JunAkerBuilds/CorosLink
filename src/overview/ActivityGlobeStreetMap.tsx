@@ -1,8 +1,9 @@
+import { useCartoApiKey } from "../maps/routes/useCartoApiKey";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef } from "react";
 import {
-  ROUTE_BASE_LAYERS,
+  resolveBaseLayer,
   type RouteBaseLayer,
 } from "../maps/routes/constants";
 import { useTheme } from "../theme/ThemeProvider";
@@ -293,6 +294,7 @@ export function ActivityGlobeStreetMap({
   onRequestExit,
 }: ActivityGlobeStreetMapProps) {
   const { theme } = useTheme();
+  const cartoApiKey = useCartoApiKey();
   const containerRef = useRef<HTMLDivElement>(null);
   const onExitRef = useRef(onRequestExit);
   const heatLayerRef = useRef<HeatLayerInstance | null>(null);
@@ -309,8 +311,8 @@ export function ActivityGlobeStreetMap({
     }
 
     const layer = themeBaseLayer(theme);
-    const tile = ROUTE_BASE_LAYERS[layer];
-    const lightBasemap = layer === "light" || layer === "street";
+    const tile = resolveBaseLayer(layer, cartoApiKey);
+    const lightBasemap = !cartoApiKey || layer === "light" || layer === "street";
     lightBasemapRef.current = lightBasemap;
     const map = L.map(container, {
       zoomControl: true,
@@ -384,7 +386,7 @@ export function ActivityGlobeStreetMap({
     };
     // Intentionally omit visits/routes — updated via the effect below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus.lat, focus.lon, theme]);
+  }, [focus.lat, focus.lon, theme, cartoApiKey]);
 
   useEffect(() => {
     const heatPoints: GlobePoint[] =

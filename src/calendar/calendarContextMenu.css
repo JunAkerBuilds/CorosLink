@@ -1,0 +1,78 @@
+.calendar-context-menu {
+  position: fixed;
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  max-width: 300px;
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 28%, transparent);
+  border-radius: 10px;
+  background: var(--bg-base);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32);
+  -webkit-app-region: no-drag;
+}
+
+.calendar-context-menu-title {
+  margin: 3px 8px 4px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.calendar-context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.calendar-context-menu-item:not(:disabled):hover,
+.calendar-context-menu-item:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
+}
+
+.calendar-context-menu-item:disabled {
+  color: var(--text-secondary);
+  opacity: 0.6;
+  cursor: default;
+}
+
+.calendar-context-menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.calendar-context-menu-shortcut {
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Copied workouts get a marching outline, spreadsheet-style, until pasted or Esc. */
+.calendar-chip.is-copied {
+  outline: 1.5px dashed color-mix(in srgb, var(--text-primary) 70%, transparent);
+  outline-offset: 1px;
+}
+
+.calendar-day:focus {
+  outline: 1.5px solid color-mix(in srgb, var(--text-muted) 70%, transparent);
+  outline-offset: -2px;
+}

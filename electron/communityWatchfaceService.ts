@@ -10,13 +10,23 @@ import type {
   CommunityWatchfaceCatalogPage,
   CommunityWatchfaceCatalogQuery,
   CommunityWatchfaceDownloadProgress,
-  CommunityWatchfaceImport
+  CommunityWatchfaceImport,
+  CommunityWatchfaceOpenRequest
 } from "./types";
 
 const PRODUCTION_CATALOG_ORIGIN = "https://watchfaces.coroslink.com";
 const MAX_CATALOG_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_COMMUNITY_PACKAGE_BYTES = 100 * 1024 * 1024;
 const STALE_IMPORT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const communityModelSchema = z.enum(["PACE 3", "PACE 4", "PACE 4 Pro", "PACE Pro", "APEX 2", "APEX 2 Pro", "APEX 4", "NOMAD", "VERTIX 2", "VERTIX 2S"]);
+
+function validModelQuery(url: URL): boolean {
+  return !url.search || (
+    [...url.searchParams.keys()].length === 1 &&
+    communityModelSchema.safeParse(url.searchParams.get("model")).success
+  );
+}
+
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 const watchfaceSchema = z.object({
@@ -34,7 +44,14 @@ const watchfaceSchema = z.object({
   downloadUrl: z.string().url(),
   packageBytes: z.number().int().positive().max(MAX_COMMUNITY_PACKAGE_BYTES),
   packageSha256: z.string().regex(/^[a-f0-9]{64}$/),
-  validatorVersion: z.string().max(100).nullable()
+  validatorVersion: z.string().max(100).nullable(),
+  downloadCount: z.number().int().nonnegative().optional(),
+  group: z.object({
+    slug: z.string().regex(SLUG_PATTERN).max(100),
+    name: z.string().min(1).max(160),
+    variantCount: z.number().int().nonnegative(),
+    creatorCount: z.number().int().nonnegative().optional()
+  }).optional()
 });
 
 const catalogPageSchema = z.object({
@@ -87,13 +104,13 @@ function catalogBaseUrl(): URL {
   return parsed;
 }
 
-function validateCatalogUrl(value: string, expectedPath: RegExp): URL {
+function validateCatalogUrl(value: string, expectedPath: RegExp, allowModel = false): URL {
   const parsed = new URL(value);
   const base = catalogBaseUrl();
   if (
     parsed.origin !== base.origin ||
     !expectedPath.test(parsed.pathname) ||
-    parsed.search ||
+    (allowModel ? !validModelQuery(parsed) : Boolean(parsed.search)) ||
     parsed.hash
   ) {
     throw new Error("The community catalog returned an untrusted URL.");
@@ -104,7 +121,7 @@ function validateCatalogUrl(value: string, expectedPath: RegExp): URL {
 function validateWatchfaceUrls(face: CommunityWatchface): CommunityWatchface {
   validateCatalogUrl(face.previewUrl, /^\/api\/watch-faces\/[a-f0-9-]{36}\/preview$/i);
   validateCatalogUrl(face.detailUrl, /^\/face\/[a-z0-9]+(?:-[a-z0-9]+)*$/);
-  validateCatalogUrl(face.downloadUrl, /^\/api\/downloads\/[a-f0-9-]{36}$/i);
+  validateCatalogUrl(face.downloadUrl, /^\/api\/downloads\/[a-f0-9-]{36}$/i, true);
   return face;
 }
 
@@ -157,7 +174,15 @@ function normalizeQuery(input: CommunityWatchfaceCatalogQuery = {}) {
   if (model) query.set("model", model.slice(0, 80));
   const style = input.style?.trim();
   if (style) query.set("style", style.slice(0, 80));
-  query.set("sort", input.sort === "title" ? "title" : "newest");
+  query.set(
+    "sort",
+    input.sort === "title" || input.sort === "trending" || input.sort === "downloads"
+      ? input.sort
+      : "newest"
+  );
+  if (input.view === "designs") query.set("view", "designs");
+  const group = input.group?.trim().toLowerCase();
+  if (group && SLUG_PATTERN.test(group) && group.length <= 100) query.set("group", group);
   query.set("page", String(Math.max(1, Math.min(10_000, Math.trunc(input.page ?? 1)))));
   query.set("pageSize", String(Math.max(1, Math.min(48, Math.trunc(input.pageSize ?? 12)))));
   return query;
@@ -177,16 +202,22 @@ export async function listCommunityWatchfaces(
 }
 
 export async function getCommunityWatchface(
-  slug: string
+  slug: string,
+  model?: string
 ): Promise<CommunityWatchface> {
   const normalized = slug.trim().toLowerCase();
   if (!SLUG_PATTERN.test(normalized) || normalized.length > 100) {
     throw new Error("Choose a valid community watch face.");
   }
+  if (model !== undefined) communityModelSchema.parse(model);
   const parsed = catalogItemSchema.parse(
-    await requestCatalog(`/api/v1/watch-faces/${encodeURIComponent(normalized)}`)
+    await requestCatalog(`/api/v1/watch-faces/${encodeURIComponent(normalized)}${model ? `?${new URLSearchParams({ model })}` : ""}`)
   );
-  return validateWatchfaceUrls(parsed.item);
+  const face = validateWatchfaceUrls(parsed.item);
+  if (model && new URL(face.downloadUrl).searchParams.get("model") !== model) {
+    throw new Error("The community catalog did not return the selected watch model. Update the catalog before importing.");
+  }
+  return face;
 }
 
 export function setCommunityWatchfaceProgressListener(
@@ -219,15 +250,42 @@ export async function cleanupCommunityWatchfaceImports(): Promise<void> {
   }));
 }
 
-function signedBlobUrl(location: string): URL {
-  const parsed = new URL(location);
+// The catalog's own signed-storage route (Cloudflare R2 behind the catalog
+// origin since September 2026), for a published release ZIP only.
+const SIGNED_STORAGE_PATH = /^\/api\/storage\/releases\/[a-f0-9-]{36}\/[a-f0-9-]{36}\.zip$/i;
+
+/**
+ * Accepts a download redirect only to the catalog's signed-storage route or to
+ * Vercel Blob (where catalogs before the move to Cloudflare stored releases).
+ */
+export function trustedDownloadLocation(location: string, catalogOrigin: string): URL | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(location);
+  } catch {
+    return null;
+  }
+  if (parsed.username || parsed.password || parsed.hash) return null;
+  if (parsed.protocol === "https:" && parsed.hostname.toLowerCase().endsWith(".blob.vercel-storage.com")) {
+    return parsed;
+  }
   if (
-    parsed.protocol !== "https:" ||
-    !parsed.hostname.toLowerCase().endsWith(".blob.vercel-storage.com")
+    parsed.origin === new URL(catalogOrigin).origin &&
+    SIGNED_STORAGE_PATH.test(parsed.pathname) &&
+    parsed.searchParams.get("expires") &&
+    parsed.searchParams.get("signature")
   ) {
+    return parsed;
+  }
+  return null;
+}
+
+function signedBlobUrl(location: string): URL {
+  const trusted = trustedDownloadLocation(location, catalogBaseUrl().origin);
+  if (!trusted) {
     throw new Error("The community download redirected to an untrusted host.");
   }
-  return parsed;
+  return trusted;
 }
 
 async function resolveSignedDownload(face: CommunityWatchface): Promise<URL> {
@@ -317,7 +375,8 @@ async function streamPackage(
 }
 
 export async function importCommunityWatchface(
-  slug: string
+  slug: string,
+  model?: string
 ): Promise<CommunityWatchfaceImport> {
   const normalized = slug.trim().toLowerCase();
   if (activeImportSlug) {
@@ -334,7 +393,7 @@ export async function importCommunityWatchface(
   const partialPath = path.join(directory, `${id}.part`);
   const finalPath = path.join(directory, `${id}.zip`);
   try {
-    const face = await getCommunityWatchface(normalized);
+    const face = await getCommunityWatchface(normalized, model);
     const signedUrl = await resolveSignedDownload(face);
     const digest = await streamPackage(signedUrl, partialPath, face);
     if (digest !== face.packageSha256) {
@@ -362,7 +421,7 @@ export async function importCommunityWatchface(
 
 export function parseCommunityWatchfaceDeepLink(
   value: string
-): { slug: string } | null {
+): CommunityWatchfaceOpenRequest | null {
   if (value.includes("..")) return null;
   let parsed: URL;
   try {
@@ -375,7 +434,7 @@ export function parseCommunityWatchfaceDeepLink(
     parsed.protocol !== "coroslink:" ||
     parsed.hostname !== "watchfaces" ||
     segments.length !== 1 ||
-    parsed.search ||
+    !validModelQuery(parsed) ||
     parsed.hash
   ) {
     return null;
@@ -386,5 +445,6 @@ export function parseCommunityWatchfaceDeepLink(
   } catch {
     return null;
   }
-  return SLUG_PATTERN.test(slug) && slug.length <= 100 ? { slug } : null;
+  const model = parsed.searchParams.get("model");
+  return SLUG_PATTERN.test(slug) && slug.length <= 100 ? { slug, ...(model ? { model } : {}) } : null;
 }

@@ -1,0 +1,365 @@
+@font-face {
+  font-family: "Kaushan Script";
+  src: url("../../public/assets/fonts/kaushan-script/KaushanScript-Regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+.training-hub-header {
+  position: relative;
+  z-index: 5;
+  min-width: 0;
+}
+
+.training-hub-header::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -20px 10% 0 38%;
+  pointer-events: none;
+  opacity: .75;
+  background: url("../../public/assets/training-hub/Login-page-bg.png") center 68% / cover no-repeat;
+  mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent);
+}
+
+.training-hub-motto {
+  position: absolute;
+  left: 53%;
+  top: -12px;
+  margin: 0;
+  transform: rotate(-7deg);
+  color: #7ad5a4;
+  font-family: "Kaushan Script", "Snell Roundhand", cursive;
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -.025em;
+  text-shadow: 0 2px 16px #09382b70;
+  pointer-events: none;
+}
+
+.training-hub-motto span {
+  display: block;
+  padding-left: 25px;
+}
+
+.training-hub-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  min-height: 82px;
+  padding: 0 0 22px;
+}
+
+.training-hub-heading h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 32px;
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.035em;
+}
+
+.training-hub-heading h1 span {
+  color: #5ce5a2;
+}
+
+.training-hub-heading p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.training-hub-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.training-hub-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.training-hub-actions button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
+}
+
+.training-hub-actions button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.training-hub-actions button:focus-visible,
+.training-hub-tab:focus-visible,
+.training-hub-tab-panel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.training-hub-actions .training-hub-sample-button {
+  color: var(--text-muted);
+}
+
+.training-hub-actions .training-hub-sample-button[aria-pressed="true"] {
+  border-color: var(--glass-border);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.training-hub-actions .training-hub-refresh-button {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  min-width: 96px;
+}
+
+.training-hub-account {
+  position: relative;
+}
+
+.training-hub-connected-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--success-dot);
+}
+
+.training-hub-account-button > svg {
+  color: var(--text-muted);
+  transition: transform 140ms ease;
+}
+
+.training-hub-account-button[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+
+.training-hub-account-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 300px;
+  max-width: calc(100vw - 48px);
+  padding: 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-elevated);
+}
+
+.training-hub-account-summary {
+  display: grid;
+  gap: 3px;
+}
+
+.training-hub-account-summary strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.training-hub-account-summary > span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.training-hub-account-details {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+  padding: 14px 0;
+  border-block: 1px solid var(--glass-border);
+  font-size: 12px;
+}
+
+.training-hub-account-details > div {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.training-hub-account-details dt {
+  color: var(--text-muted);
+}
+
+.training-hub-account-details dd {
+  margin: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.training-hub-actions .training-hub-disconnect-button {
+  justify-content: flex-start;
+  width: 100%;
+  color: var(--error-text);
+}
+
+.training-hub-actions .training-hub-disconnect-button:hover:not(:disabled) {
+  color: var(--error-text);
+  background: var(--error-bg);
+}
+
+.training-hub-navigation-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.training-hub-dashboard-actions { margin-left: auto; padding-bottom: 10px; }
+.training-hub-dashboard-actions[hidden] { display: none; }
+
+.training-hub-tabs {
+  display: flex;
+  gap: 26px;
+}
+
+.training-hub-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 2px 12px;
+  border: 0;
+  border-radius: 3px 3px 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.training-hub-tab:hover {
+  color: var(--text-primary);
+}
+
+.training-hub-tab[aria-selected="true"] {
+  color: var(--text-primary);
+}
+
+.training-hub-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: #5ce5a2;
+}
+
+.training-hub-tab-count {
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  color: #5ce5a2;
+  background: #5ce5a217;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+}
+
+.training-hub-tab-panel {
+  min-width: 0;
+  gap: 20px;
+}
+
+.training-hub-tab-panel[hidden] {
+  display: none;
+}
+
+.training-hub-tab-panel .training-activities-split-panel {
+  --training-activities-pane-height: clamp(460px, calc(100dvh - 330px), 960px);
+}
+
+:root[data-theme="paper"] .training-hub-header::before {
+  opacity: .28;
+  filter: contrast(1.12) saturate(1.15);
+}
+
+:root[data-theme="paper"] .training-hub-heading h1 span,
+:root[data-theme="paper"] .training-hub-motto {
+  color: var(--accent);
+  text-shadow: none;
+}
+
+@media (max-width: 1200px) {
+  .training-hub-motto {
+    position: static;
+    order: 2;
+    flex-basis: 100%;
+    font-size: 26px;
+    transform: none;
+  }
+
+  .training-hub-motto span {
+    display: inline;
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .training-hub-heading-row {
+    align-items: flex-start;
+    gap: 14px;
+    padding-bottom: 16px;
+  }
+
+  .training-hub-heading h1 {
+    font-size: 23px;
+  }
+
+  .training-hub-actions {
+    width: 100%;
+    gap: 4px;
+  }
+
+  .training-hub-actions .training-hub-sample-button {
+    order: 1;
+    margin-left: auto;
+  }
+
+  .training-hub-account-popover {
+    left: 0;
+    right: auto;
+  }
+
+  .training-hub-tabs {
+    gap: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .training-hub-actions button,
+  .training-hub-account-button > svg {
+    transition: none;
+  }
+}

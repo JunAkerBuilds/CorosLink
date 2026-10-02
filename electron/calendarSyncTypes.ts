@@ -4,11 +4,46 @@ export interface CalendarChoice {
   primary: boolean;
 }
 
+export interface CalendarEventTiming {
+  mode: "all-day" | "timed";
+  startTime: string;
+  endTime: string;
+  timeZone: string;
+}
+
+export interface CalendarWorkoutEventRef {
+  userId: string;
+  planId: string;
+  idInPlan: string;
+  happenDay: string;
+}
+
+export interface CalendarWorkoutEvent {
+  timing: CalendarEventTiming;
+  revision: string;
+}
+
+export interface CalendarWorkoutEventSaveResult {
+  event: CalendarWorkoutEvent;
+  synced: string[];
+  errors: string[];
+}
+
+export function defaultCalendarEventTiming(): CalendarEventTiming {
+  return {
+    mode: "all-day",
+    startTime: "18:00",
+    endTime: "19:00",
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  };
+}
+
 export interface CalendarConnectionStatus {
   connected: boolean;
   accountEmail?: string;
   calendar?: CalendarChoice;
   autoSync: boolean;
+  eventTiming?: CalendarEventTiming;
   syncing: boolean;
   connecting: boolean;
   lastSyncedAt?: string;
@@ -21,6 +56,7 @@ export interface CalendarConnectionStatus {
 export interface CalendarSyncSettings {
   calendarId?: string;
   autoSync?: boolean;
+  eventTiming?: CalendarEventTiming;
 }
 
 export interface CalendarSyncResult {

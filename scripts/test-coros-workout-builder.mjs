@@ -249,7 +249,50 @@ const payload = buildRunWorkoutPayload("Tempo 5k", [
 ]);
 assert.equal(payload.estimatedDistance, 500000);
 assert.equal(payload.distanceDisplayUnit, 1);
-assert.equal(payload.exercises[0].targetDisplayUnit, 2);
+assert.equal(payload.exercises[0].targetDisplayUnit, 1);
+
+// Issue #124: long metric land targets must use km to avoid the iOS meter cap.
+for (const [meters, expectedUnit] of [[400, 2], [1000, 2], [1001, 1], [2000, 1]]) {
+  const step = { kind: "training", target_type: "distance", target_distance_meters: meters };
+  for (const sport of ["run", "trailRun", "bike"]) {
+    const program = buildWorkoutPayload("Distance boundary", [step], sport);
+    assert.equal(program.exercises[0].targetValue, meters * 100);
+    assert.equal(program.exercises[0].targetDisplayUnit, expectedUnit);
+  }
+}
+for (const [sport, context, expectedUnit] of [
+  ["run", imperialContext, 3],
+  ["swim", undefined, 2],
+  ["swim", imperialContext, 4]
+]) {
+  const program = buildWorkoutPayload("Long distance units", [
+    { kind: "training", target_distance_meters: 2000 }
+  ], sport, undefined, context);
+  assert.equal(program.exercises[0].targetValue, 200000);
+  assert.equal(program.exercises[0].targetDisplayUnit, expectedUnit);
+}
+const explicitMeters = buildRunWorkoutPayload("Explicit meters", [
+  { kind: "training", target_distance_meters: 2000, target_display_unit: 2 }
+]);
+assert.equal(explicitMeters.exercises[0].targetDisplayUnit, 1);
+const explicitKilometers = buildRunWorkoutPayload("Explicit kilometers", [
+  { kind: "training", target_distance_meters: 400, target_display_unit: 1 }
+]);
+assert.equal(explicitKilometers.exercises[0].targetDisplayUnit, 1);
+for (const [distances, expectedUnit] of [[[400], 2], [[600, 600], 1], [[2000, 400], 1]]) {
+  const program = buildRunWorkoutPayload("Repeat distance", [{
+    repeat: 4,
+    steps: distances.map((meters) => ({ kind: "training", target_distance_meters: meters }))
+  }]);
+  const lapMeters = distances.reduce((sum, meters) => sum + meters, 0);
+  assert.equal(program.exercises[0].targetValue, lapMeters * 100);
+  assert.equal(program.exercises[0].targetDisplayUnit, expectedUnit);
+  assert.equal(program.estimatedDistance, lapMeters * 100 * 4);
+  for (const [index, meters] of distances.entries()) {
+    assert.equal(program.exercises[index + 1].targetValue, meters * 100);
+    assert.equal(program.exercises[index + 1].targetDisplayUnit, meters > 1000 ? 1 : 2);
+  }
+}
 
 // Load target (COROS targetType 6): raw integer, no unit scaling.
 const loadPayload = buildRunWorkoutPayload("Load Block", [

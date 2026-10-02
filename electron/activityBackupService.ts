@@ -1,11 +1,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  activityMatchesBackupFilters,
+  hasActiveBackupFilters,
+  isoDayToHappenDay,
+  summarizeActivityBackup
+} from "./activityBackupFilters";
+import {
   fetchTrainingHubActivityFile,
   getTrainingHubExportFormat,
   listTrainingHubActivities
 } from "./trainingHubService";
 import type {
+  ActivityBackupFilters,
+  ActivityBackupPreview,
   ActivityBackupProgress,
   TrainingHubActivity,
   TrainingHubActivityFileType
@@ -82,12 +90,37 @@ export function backupFileName(
   return `${activityDatePrefix(activity.startTime)}_${base}_${activity.activityId}.${extension}`;
 }
 
-async function listAllActivities(): Promise<TrainingHubActivity[]> {
+function todayIsoDay(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+async function listAllActivities(
+  filters?: ActivityBackupFilters,
+  shouldStop: () => boolean = () => cancelRequested
+): Promise<TrainingHubActivity[]> {
   const all: TrainingHubActivity[] = [];
   const seen = new Set<string>();
 
+  // /activity/query only honours a date window when both ends are present, so
+  // an open end is padded; matches are still re-checked locally afterwards.
+  const windowed = Boolean(filters?.startDay || filters?.endDay);
+  const startDay = windowed
+    ? isoDayToHappenDay(filters?.startDay ?? "1990-01-01")
+    : undefined;
+  const endDay = windowed
+    ? isoDayToHappenDay(filters?.endDay ?? todayIsoDay())
+    : undefined;
+
   for (let page = 1; page <= BACKUP_MAX_PAGES; page += 1) {
-    const activities = await listTrainingHubActivities(page, BACKUP_PAGE_SIZE);
+    const activities = await listTrainingHubActivities(
+      page,
+      BACKUP_PAGE_SIZE,
+      startDay,
+      endDay
+    );
     let addedAny = false;
     for (const activity of activities) {
       if (!activity.activityId || seen.has(activity.activityId)) {
@@ -101,7 +134,7 @@ async function listAllActivities(): Promise<TrainingHubActivity[]> {
     if (activities.length < BACKUP_PAGE_SIZE || !addedAny) {
       break;
     }
-    if (cancelRequested) {
+    if (shouldStop()) {
       break;
     }
   }
@@ -109,19 +142,54 @@ async function listAllActivities(): Promise<TrainingHubActivity[]> {
   return all;
 }
 
+// The preview re-filters one cached account listing as the user edits
+// filters, so only the first count after a few minutes touches COROS.
+const PREVIEW_CACHE_TTL_MS = 5 * 60 * 1000;
+let previewCache: { listedAt: number; activities: TrainingHubActivity[] } | null =
+  null;
+let previewListing: Promise<TrainingHubActivity[]> | null = null;
+
+async function cachedAccountActivities(): Promise<TrainingHubActivity[]> {
+  if (previewCache && Date.now() - previewCache.listedAt < PREVIEW_CACHE_TTL_MS) {
+    return previewCache.activities;
+  }
+  previewListing ??= listAllActivities(undefined, () => false)
+    .then((activities) => {
+      previewCache = { listedAt: Date.now(), activities };
+      return activities;
+    })
+    .finally(() => {
+      previewListing = null;
+    });
+  return previewListing;
+}
+
+/** Drops the cached listing; the next preview lists the signed-in account again. */
+export function clearActivityBackupPreview(): void {
+  previewCache = null;
+}
+
+/** Counts what a backup with `filters` would download, without downloading. */
+export async function previewActivityBackup(
+  filters?: ActivityBackupFilters
+): Promise<ActivityBackupPreview> {
+  return summarizeActivityBackup(await cachedAccountActivities(), filters);
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * Downloads every activity on the account into `folder`, one file per
- * activity, skipping files that already exist (so re-running is an
- * incremental backup). Progress streams through the registered listener and
- * the final state is also returned.
+ * Downloads every activity matching `filters` (all of them when omitted) into
+ * `folder`, one file per activity, skipping files that already exist (so
+ * re-running is an incremental backup). Progress streams through the
+ * registered listener and the final state is also returned.
  */
 export async function startActivityBackup(
   folder: string,
-  fileType: TrainingHubActivityFileType = 4
+  fileType: TrainingHubActivityFileType = 4,
+  filters?: ActivityBackupFilters
 ): Promise<ActivityBackupProgress> {
   if (running && currentProgress) {
     return currentProgress;
@@ -137,6 +205,8 @@ export async function startActivityBackup(
     folder,
     fileType,
     formatLabel: format.label,
+    filtered: hasActiveBackupFilters(filters),
+    scanned: 0,
     total: 0,
     completed: 0,
     skipped: 0,
@@ -145,8 +215,15 @@ export async function startActivityBackup(
   progressListener?.(currentProgress);
 
   try {
-    const activities = await listAllActivities();
-    emitProgress({ total: activities.length, state: "downloading" });
+    const listed = await listAllActivities(filters);
+    const activities = listed.filter((activity) =>
+      activityMatchesBackupFilters(activity, filters)
+    );
+    emitProgress({
+      scanned: listed.length,
+      total: activities.length,
+      state: "downloading"
+    });
 
     for (const activity of activities) {
       if (cancelRequested) {

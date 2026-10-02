@@ -1,3 +1,4 @@
+import { composeNativeData, finalizeNativeControlOverrides } from "./nativeData";
 import type {
   CorosWatchfaceAssetReplacement,
   CorosWatchfaceConfigOverride,
@@ -31,6 +32,8 @@ import {
   buildMetricOverrides,
   buildMetricSpriteReplacements,
   buildMetricStyleOverrides,
+  buildAddedDateOverrides,
+  buildAddedSecondsOverrides,
   buildSeparateTimeOverrides,
   buildStaticSeparatorOverrides,
   buildStudioReplacements,
@@ -49,6 +52,7 @@ import {
   renderWatchfaceSolidFontSprite,
   type WatchfaceAssetLoader,
   type WatchfaceDateStyles,
+  resolveAddedDateStyles,
   type WatchfaceMetricStyles,
   type WatchfaceStudioOptions,
   type WatchfaceTimeStyles
@@ -71,8 +75,7 @@ import {
 } from "./watchfaceEffectPadding.ts";
 import {
   buildWeatherOverrides,
-  buildWeatherSpriteReplacements,
-  buildWeatherTemperaturePlacementOverrides
+  buildWeatherSpriteReplacements
 } from "./weatherAssets.ts";
 
 /**
@@ -176,7 +179,7 @@ const EFFECT_FOLDER_LAYER: Array<[RegExp, string]> = [
   [/\/cl_date_day\//, "dateDay"],
   [/\/cl_control\//, "complication"],
   [/\/studio\/ampm\//, "ampm"],
-  [/\/weather\//, "weather"]
+  [/\/weather2?\//, "weather"]
 ];
 
 function effectLayerForReplacement(path: string): string | null {
@@ -377,7 +380,11 @@ function timeStylesOf(design: CorosWatchfaceDesignState): WatchfaceTimeStyles {
 }
 
 function dateStylesOf(design: CorosWatchfaceDesignState): WatchfaceDateStyles {
-  return (design.dateStyles ?? {}) as WatchfaceDateStyles;
+  return resolveAddedDateStyles(
+    (design.dateStyles ?? {}) as WatchfaceDateStyles,
+    design,
+    design.fontFamily
+  );
 }
 
 /** Preview options keep Studio rendering aligned with archive composition. */
@@ -421,9 +428,16 @@ export function deriveDesignDetails(
   details: CorosWatchfaceTemplateDetails,
   design: CorosWatchfaceDesignState
 ): DesignDetails {
-  const timeFormatOverrides = buildSeparateTimeOverrides(
+  const separateTimeOverrides = buildSeparateTimeOverrides(
     details,
     design.separateAutoTime === true
+  );
+  // Seconds are placed under the minutes, so they follow separated time.
+  const separatedDetails = applyConfigOverridesToDetails(details, separateTimeOverrides);
+  const timeFormatOverrides = mergeConfigOverrides(
+    separateTimeOverrides,
+    buildAddedSecondsOverrides(separatedDetails, design.addSeconds === true),
+    buildAddedDateOverrides(separatedDetails, design)
   );
   const timeFormatDetails = applyConfigOverridesToDetails(
     details,
@@ -493,7 +507,7 @@ export function deriveDesignDetails(
       selectableAssetDetails,
       design.controlIconOffsets ?? {}
     ),
-    buildStaticSeparatorOverrides(details, design.staticSeparators),
+    buildStaticSeparatorOverrides(details, design.staticSeparators, design.configAssetOverrides),
     buildDisabledControlComplicationOverrides(details, design)
   );
   const styledMetricDetails = applyConfigOverridesToDetails(
@@ -507,13 +521,7 @@ export function deriveDesignDetails(
   const previewDetails = applyConfigOverridesToDetails(
     laidOutDetails,
     mergeConfigOverrides(
-      buildLayerVisibilityOverrides(laidOutDetails, design.layerVisibility ?? {}),
-      design.weatherIndicator
-        ? buildWeatherTemperaturePlacementOverrides(
-            laidOutDetails,
-            design.weatherIndicator
-          )
-        : []
+      buildLayerVisibilityOverrides(laidOutDetails, design.layerVisibility ?? {})
     )
   );
   return {
@@ -564,6 +572,46 @@ function hasLayerBitmapTransform(
  * Studio sends to createCorosWatchfaceArchive, driven purely by a
  * design state so the new editor produces byte-identical archives.
  */
+/**
+ * A weekday still drawn from the template's own sprites has a translated
+ * label set per watch language. Languages chosen in the Send panel instead
+ * show the English weekday exactly as designed: its final font folder, rect
+ * and color. Custom weekday styles are handled by applyWeekdayLanguageOverrides.
+ */
+export function buildTemplateWeekdayLanguageOverrides(
+  details: CorosWatchfaceTemplateDetails,
+  design: CorosWatchfaceDesignState,
+  overrides: CorosWatchfaceConfigOverride[]
+): CorosWatchfaceConfigOverride[] {
+  const languages = design.watchLanguages;
+  if (design.dateStyles?.weekday || !languages || languages === "english") return [];
+  const chosen = languages === "all" ? null : new Set(languages);
+  const result: CorosWatchfaceConfigOverride[] = [];
+  for (const resolution of details.resolutions) {
+    const path = `${resolution.directory}/config.txt`;
+    const final: Record<string, string> = { ...resolution.config };
+    for (const override of overrides) {
+      if (override.path === path) Object.assign(final, override.values);
+    }
+    const font = final.english_date_week_font;
+    if (!font) continue;
+    const values: Record<string, string> = {};
+    for (const key of Object.keys(resolution.config)) {
+      const language = /^([a-z_]+)_date_week_font$/.exec(key)?.[1];
+      if (!language || language === "english" || language.startsWith("control_")) continue;
+      if (chosen && !chosen.has(language)) continue;
+      values[key] = font;
+      for (const field of ["rect", "font_color"]) {
+        const source = final[`english_date_week_${field}`];
+        const target = `${language}_date_week_${field}`;
+        if (source !== undefined && target in resolution.config) values[target] = source;
+      }
+    }
+    if (Object.keys(values).length) result.push({ path, values });
+  }
+  return result;
+}
+
 export async function composeWatchfaceReplacements(
   details: CorosWatchfaceTemplateDetails,
   design: CorosWatchfaceDesignState,
@@ -628,6 +676,7 @@ export async function composeWatchfaceReplacements(
     ? buildAmPmOverrides(details, ampmStyle)
     : [];
   const weatherStyle = design.weatherIndicator;
+  const nativeDataComposition = await composeNativeData(details, design.nativeData, weatherStyle?.enabled);
   const controlTemperatureActive = isControlComplicationEnabled(
     details,
     design,
@@ -683,9 +732,10 @@ export async function composeWatchfaceReplacements(
     design,
     loadAssets
   );
+  // metricDetails carries date parts Studio added to templates without them.
   const dateSpriteComposition = dateStyleActive
     ? await buildDateSpriteComposition(
-        applyLayoutToDetails(details, design.layoutOffsets ?? {}),
+        applyLayoutToDetails(metricDetails, design.layoutOffsets ?? {}),
         dateStyles,
         toStudioOptions(design),
         loadAssets
@@ -749,6 +799,7 @@ export async function composeWatchfaceReplacements(
           design.layerOpacities ?? {}
         )
       : hasWatchfaceLayerOpacity(design, "separators") ||
+          hasWatchfaceLayerOpacity(design, "arcCut") ||
           hasWatchfaceLayerOpacity(design, "complication")
         ? await buildLayerColorSpriteReplacements(
             details,
@@ -772,7 +823,8 @@ export async function composeWatchfaceReplacements(
     ampmActive ? await buildAmPmSpriteReplacements(details, ampmStyle!, loadAssets) : [],
     weatherStyle?.enabled
       ? await buildWeatherSpriteReplacements(details, weatherStyle)
-      : []
+      : [],
+    nativeDataComposition.assetReplacements
   );
 
   const timeStyleOverrides = timeStyleActive
@@ -834,9 +886,7 @@ export async function composeWatchfaceReplacements(
     design,
     isolateBatteryIconEffectPaths(details, design, baseAssetReplacements)
   );
-  const configOverrides = rebaseNegativeControlChildren(
-    details,
-    mergeConfigOverrides(
+  const mergedConfigOverrides = mergeConfigOverrides(
       metricOverrides,
       timeFormatOverrides,
       controlComplicationOverrides,
@@ -850,7 +900,7 @@ export async function composeWatchfaceReplacements(
           )
         : [],
       timeStyleOverrides,
-      dateStyleActive ? buildDateStyleOverrides(details, dateStyles, true) : [],
+      dateStyleActive ? buildDateStyleOverrides(metricDetails, dateStyles, true) : [],
       timeTrackingOverrides,
       buildLayerColorOverrides(details, design.layerColors ?? {}),
       // Preserve the generated path and base position for selectable icons
@@ -860,15 +910,8 @@ export async function composeWatchfaceReplacements(
         selectableAssetDetails,
         design.controlIconOffsets ?? {}
       ),
-      buildStaticSeparatorOverrides(details, design.staticSeparators),
       ampmOverrides,
       weatherStyle ? buildWeatherOverrides(details, weatherStyle) : [],
-      // Snap the fixed temperature element beside the weather icon. Reads the
-      // rect size from metricDetails (post buildMetricOverrides) and repositions
-      // it, so it must merge after metricOverrides to win.
-      weatherStyle
-        ? buildWeatherTemperaturePlacementOverrides(metricDetails, weatherStyle)
-        : [],
       // Retain synthesized fixed-asset keys (notably battery_icon_dir/pos).
       // The final positioned pass sees those keys in its intermediate details
       // and therefore correctly avoids emitting them a second time.
@@ -880,27 +923,43 @@ export async function composeWatchfaceReplacements(
         decorationPositionDetails,
         effectedAssets.padding
       ),
-      buildLayerVisibilityOverrides(details, design.layerVisibility ?? {}),
+      // Hiding must also blank keys Studio added (seconds, date parts).
+      buildLayerVisibilityOverrides(metricDetails, design.layerVisibility ?? {}),
       batteryIconEffectSources.configOverrides,
       buildWatchfaceConfigAssetOverrides(
         configAssetPositionDetails,
         design.configAssetOverrides ?? {},
         true
       ),
-      buildDisabledControlComplicationOverrides(details, design)
+      buildDisabledControlComplicationOverrides(details, design),
+      nativeDataComposition.configOverrides,
+      // Apply after asset replacements so they cannot resurrect a hidden colon.
+      buildStaticSeparatorOverrides(details, design.staticSeparators, design.configAssetOverrides)
+  );
+  const configOverrides = rebaseNegativeControlChildren(
+    details,
+    finalizeNativeControlOverrides(
+      details,
+      mergeConfigOverrides(
+        mergedConfigOverrides,
+        buildTemplateWeekdayLanguageOverrides(details, design, mergedConfigOverrides)
+      ),
+      design.nativeData,
+      design.layerVisibility?.complication === false
     )
   );
 
   const requiresModernControlVersion =
-    Boolean(weatherStyle?.enabled) ||
     controlTemperatureActive ||
     controlBarometerActive;
-  const minimumWatchFaceVersion =
+  const controlMinimumWatchFaceVersion =
     controlBarometerActive && controlBarometerMode === "static"
       ? MODERN_CONTROL_WATCHFACE_VERSION
       : requiresModernControlVersion
         ? MODERN_CONTROL_WATCHFACE_VERSION
         : undefined;
+
+  const minimumWatchFaceVersion = Math.max(controlMinimumWatchFaceVersion ?? 0, nativeDataComposition.minWatchFaceVersion) || undefined;
 
   return {
     // Keep this after all scaling, rotation, opacity, and decoration passes.

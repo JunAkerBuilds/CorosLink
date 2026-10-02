@@ -34,20 +34,59 @@ async function main() {
   const { initializeDatabase } = require("../dist-electron/database.js");
   const { createStoreZip } = require("../dist-electron/zipStore.js");
   const { registerWatchfaceAutomation } = require("../dist-electron/watchfaceAutomation.js");
+  if (process.argv.includes("--cli-missing-ui")) {
+    // Simulate a computer without a CLI in this isolated test process only.
+    // Use the real detector's error and the production chat/event rendering.
+    const { WatchfaceCodexCli, findCodexExecutable } = require("../dist-electron/watchfaceCodexCli.js");
+    WatchfaceCodexCli.prototype.open = async function () {
+      await findCodexExecutable({ candidates: [] });
+      throw new Error("Expected missing CLI fixture");
+    };
+  }
   const service = require("../dist-electron/corosWatchfaceService.js");
   initializeDatabase(app.getPath("userData"));
+  let authenticated = false;
+  let conversionAuthError = null;
+  let manualLoginAttempts = 0;
+  let savedLoginAttempts = 0;
+  let restoreCarrierAfterLogin = async () => {};
+  const accountStatus = () => ({ authenticated, secureStorageAvailable: true, savedCredentialsAvailable: true, savedEmail: "saved@example.test", suggestedRegion: "us" });
 
   // These are the production preload/service IPC contracts used by the real
   // editor. The automation endpoint and broker are registered unchanged.
   const handlers = {
+    "chat:getAuthStatus": () => ({ signedIn: false }),
     // Keep account/keychain access outside this offline editing test.
-    "watchfaces:getStatus": () => ({ authenticated: false, secureStorageAvailable: false, savedCredentialsAvailable: false, suggestedRegion: "us" }),
+    "watchfaces:getStatus": accountStatus,
+    "watchfaces:listThemes": () => [],
+    "watchfaces:login": async (_, email, password, region, remember) => {
+      assert.equal(email, "conversion@example.test");
+      assert.equal(password, "test-password");
+      assert.equal(region, "eu");
+      assert.equal(remember, true);
+      manualLoginAttempts++;
+      if (manualLoginAttempts === 1) throw new Error("The email or password is incorrect.");
+      await restoreCarrierAfterLogin();
+      authenticated = true;
+      return accountStatus();
+    },
+    "watchfaces:loginSaved": (_, region) => {
+      assert.equal(region, "eu");
+      savedLoginAttempts++;
+      conversionAuthError = null;
+      authenticated = true;
+      return accountStatus();
+    },
     "watchfaces:listProjects": () => service.listCorosWatchfaceProjects(),
     "watchfaces:saveProject": (_, input) => service.saveCorosWatchfaceProject(input),
     "watchfaces:loadProject": (_, id) => service.loadCorosWatchfaceProject(id),
     "watchfaces:describeTemplate": (_, id) => service.describeCorosWatchfaceTemplate(id),
     "watchfaces:loadTemplateAssets": (_, id, paths) => service.loadCorosWatchfaceTemplateAssets(id, paths),
     "watchfaces:loadTemplateConfigTexts": (_, id) => service.loadCorosWatchfaceTemplateConfigTexts(id),
+    "watchfaces:convertArchive": (_, input) => {
+      if (conversionAuthError) throw new Error(conversionAuthError);
+      return service.convertCorosWatchfaceArchive(input);
+    },
     "watchfaces:createArchive": (_, input) => service.createCorosWatchfaceArchive(input),
     "watchfaces:cacheProjectPreview": (_, id, preview) => service.cacheCorosWatchfaceProjectPreview(id, preview),
     "watchfaces:listLocalFontFamilies": () => ["Arial", "Helvetica"]
@@ -63,9 +102,22 @@ async function main() {
       config.push(`[time_${part}_pos]={${Math.round((220 + index * 90) * k)},${Math.round(240 * k)}}`, `[time_${part}_font]=01`);
     }
     config.push(`[battery_level_rect]={${Math.round(200*k)},${Math.round(420*k)},${Math.round(350*k)},${Math.round(480*k)},hcenter|vcenter}`, "[battery_level_font]=01");
+    if (process.argv.includes("--neon-reference")) {
+      config.push("[am_icon]=icon/am.png", "[pm_icon]=icon/pm.png", `[am_pm_icon_pos]={${Math.round(570*k)},${Math.round(355*k)}}`);
+      for (const label of ["am", "pm"]) entries.push({ name: `${directory}/icon/${label}.png`, data: solidPng(Math.round(72*k), Math.round(32*k), label === "am" ? 70 : 100) });
+    }
+    config.push("[battery_icon_dir]=battery_levels", `[battery_icon_pos]={${Math.round(380*k)},${Math.round(500*k)}}`);
+    for (let state = 0; state < 3; state++) entries.push({ name: `${directory}/battery_levels/${String(state * 10).padStart(2, "0")}.png`, data: solidPng(Math.round(40*k), Math.round(20*k), 50 + state * 80) });
     entries.push({ name: `${directory}/config.txt`, data: Buffer.from(config.join("\r\n")) }, { name: `${directory}/AODconfig.txt`, data: Buffer.from(config.join("\r\n")) }, { name: `${directory}/background.png`, data: solidPng(resolution, resolution, 0) }, { name: `${directory}/thmb.png`, data: solidPng(80, 80, 0) });
     for (let digit = 0; digit < 10; digit++) entries.push({ name: `${directory}/01/0${digit}.png`, data: solidPng(Math.round(60*k), Math.round(95*k), 50 + digit*20) });
   }
+  const carrierCache = path.join(app.getPath("userData"), "watchface-conversion-carriers");
+  await fs.mkdir(carrierCache, { recursive: true });
+  await fs.writeFile(path.join(carrierCache, "pace-4.zip"), createStoreZip(entries.map(entry => ({ ...entry, name: entry.name.replace("416x416", "390x390") }))));
+  await fs.writeFile(path.join(carrierCache, "pace-pro.zip"), createStoreZip(entries));
+  const mipCarrier = [...entries.filter(entry => !entry.name.startsWith("watchface_416x416/") && !entry.name.endsWith("/AODconfig.txt"))];
+  for (const size of [240, 260, 280]) mipCarrier.push(...entries.filter(entry => entry.name.startsWith("watchface_416x416/") && !entry.name.endsWith("/AODconfig.txt")).map(entry => ({ ...entry, name: entry.name.replace("416x416", `${size}x${size}`) })));
+  await fs.writeFile(path.join(carrierCache, "pace-3.zip"), createStoreZip(mipCarrier));
   const fixture = path.join(temporaryRoot, "starter.dat");
   const currentOnlyFixture = path.join(temporaryRoot, "current-only.dat");
   const imagePath = path.join(temporaryRoot, "artwork.png");
@@ -119,12 +171,490 @@ async function main() {
     assert.equal((await tool("get_context")).editorOpen, false);
     const schema = await tool("get_schema");
     assert.ok(schema);
+    assert.equal(schema.nativeData.fields.length,27);
+    assert.equal(schema.nativeData.chartSources.length,12);
+    assert.equal(schema.document.$defs.nativeDataStyle.properties.assets.properties.icon.additionalProperties.$ref,'#/$defs/pngImageValue');
+    assert.equal(schema.document.$defs.weatherIndicator.properties.assets.properties.day.additionalProperties.$ref,'#/$defs/pngImageValue');
+    const nativeDefaults=id=>schema.nativeData.fields.find(field=>field.id===id).defaults;
+    assert.deepEqual(schema.nativeData.chartSources.find(source=>source.id==='chart_moon').components.find(part=>part.id==='states').stateIndices,Array.from({length:30},(_,i)=>String(i)));
     const imported = await tool("import_archive", { path: fixture });
     const sourceArchive = imported.archive ?? imported;
     await tool("open", { archive: sourceArchive.archiveId, name: "Automation E2E", firmwareType: "COROS W332", watchModel: "pace-pro" });
     let document = await tool("get_document");
     const editorElement = await window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-editor"))');
     assert.equal(editorElement, true, "opening through MCP mounts the real editor");
+    const batteryContract = document.capabilities.assetContracts.find(contract => contract.layerId === "batteryIcon");
+    assert.equal(batteryContract.kind, "state-sprites");
+    assert.deepEqual(batteryContract.stateIndices, ["0", "1", "2"], "Battery frame keys follow ordered states, not numeric filenames");
+    assert.equal(batteryContract.stateReplacementsPath, "/design/configAssetOverrides/config:battery_icon/stateReplacements");
+    assert.equal(batteryContract.states.length, 3);
+    const componentContract = id => document.capabilities.assetContracts.find(contract => contract.id === id);
+    assert.equal(componentContract("typography:hours").spriteCount, 10);
+    assert.equal(componentContract("typography:control").editRasterFontPath, "/design/selectableMetricStyle/rasterFont");
+    assert.deepEqual(componentContract("typography:weekday").orderedValues, ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]);
+    assert.equal(componentContract("weather:day").spriteCount, 41);
+    assert.deepEqual(componentContract("weather:night").stateIndices, componentContract("weather:day").stateIndices);
+    assert.equal(componentContract("kcalProgress").spriteCount, 0);
+    assert.equal(schema.nativeData.fields.find(field => field.id === "sunriseset").components.find(part => part.id === "symbols").states[0].meaning, "Time colon");
+    if (process.argv.includes("--neon-reference")) {
+      await require("./watchmaker-neon-fixture.cjs")({ tool, rawTool, document, temporaryRoot, nativeImage });
+      return;
+    }
+    if (process.argv.includes("--cli-ui") || process.argv.includes("--cli-missing-ui")) {
+      // A saved preference for the retired engine must not restore it.
+      await window.webContents.executeJavaScript(`localStorage.setItem('coroslink.watchfaceAi.harness', 'watchmaker'); document.querySelector('[title="Design with Watchmaker"]').click()`);
+      await until(() => window.webContents.executeJavaScript(`Boolean(document.querySelector('.wf-ai-cli-warning'))`), Boolean, "CLI warning without ChatGPT sign-in");
+      const state = await window.webContents.executeJavaScript(`({ engine: document.querySelector('.wf-ai-harness-value').textContent, warning: document.querySelector('.wf-ai-cli-warning').textContent, model: document.querySelector('.wf-ai-panel select[aria-label="Codex CLI model"]')?.value, suggestionDisabled: document.querySelector('.wf-ai-suggestions button').disabled })`);
+      assert.equal(state.engine, 'Codex CLI');
+      assert.equal(state.model, '', 'Model picker defaults to the CLI configuration');
+      assert.equal(state.suggestionDisabled, false, 'CLI suggestions do not require CorosLink ChatGPT auth');
+      assert.match(state.warning, /Shell changes are outside editor Undo/);
+      assert.match(state.warning, /MCP/);
+      if (process.argv.includes("--cli-missing-ui")) {
+        await window.webContents.executeJavaScript(`(() => { const input = document.querySelector('.wf-ai-panel textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, 'Help me improve this watch face.'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+        await window.webContents.executeJavaScript(`document.querySelector('.wf-ai-panel textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`);
+        await until(() => window.webContents.executeJavaScript(`document.querySelector('.wf-ai-panel').textContent`), text => text.includes('Codex CLI was not found.'), "missing CLI error");
+        const guide = 'https://learn.chatgpt.com/docs/codex/cli#getting-started';
+        const setup = await window.webContents.executeJavaScript(`({ text: document.querySelector('.wf-ai-cli-setup').textContent, href: document.querySelector('.wf-ai-cli-setup a').href, expanded: document.querySelector('.wf-ai-cli-setup details').open })`);
+        assert.match(setup.text, /Codex CLI needs to be installed/);
+        assert.match(setup.text, /PowerShell/);
+        assert.equal(setup.href, guide);
+        assert.equal(setup.expanded, false, 'technical errors are collapsed');
+        let openedGuide;
+        window.webContents.setWindowOpenHandler(({ url }) => { openedGuide = url; return { action: 'deny' }; });
+        await window.webContents.executeJavaScript(`document.querySelector('.wf-ai-cli-setup a').click()`);
+        await until(() => openedGuide, url => url === guide, 'official guide opens externally');
+        assert.equal(await window.webContents.executeJavaScript(`Boolean(document.querySelector('.wf-ai-cli-setup-fallback'))`), false, 'Missing CLI does not offer the retired engine');
+        assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.wf-ai-harness-value').textContent`), 'Codex CLI');
+        assert.equal((await tool('get_document')).revision, document.revision, 'Missing CLI leaves the face untouched');
+        window.setTitle('CorosLink — missing Codex CLI preview (isolated)');
+        window.show();
+        await window.webContents.executeJavaScript("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+        const output = path.join(repoRoot, 'output', 'watchmaker-cli-validation');
+        await fs.mkdir(output, { recursive: true });
+        const panel = await window.webContents.executeJavaScript(`(() => { const rect = document.querySelector('.wf-ai-panel').getBoundingClientRect(); return { x: Math.floor(rect.x), y: Math.floor(rect.y), width: Math.ceil(rect.width), height: Math.ceil(rect.height) }; })()`);
+        await fs.writeFile(path.join(output, 'codex-cli-missing.png'), (await window.webContents.capturePage(panel)).toPNG());
+        console.log(`Missing CLI development preview ready: ${output}/codex-cli-missing.png`);
+        if (process.argv.includes('--keep-open')) {
+          clearTimeout(watchdog);
+          await new Promise(resolve => window.once('closed', resolve));
+        }
+        return;
+      }
+      window.showInactive();
+      await window.webContents.executeJavaScript("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+      await new Promise(resolve => setTimeout(resolve, 500)); // Allow the newly shown window to paint before capturing.
+      await fs.writeFile(path.join(temporaryRoot, 'codex-cli-option.png'), (await window.webContents.capturePage()).toPNG());
+      await window.webContents.executeJavaScript(`document.querySelector('.wf-ai-cli-warning button').click()`);
+      await until(() => window.webContents.executeJavaScript(`!document.querySelector('.wf-ai-cli-warning')`), Boolean, 'Continue dismisses CLI warning');
+      assert.equal(await window.webContents.executeJavaScript(`localStorage.getItem('coroslink.watchfaceAi.cliWarningAcknowledged.v1')`), 'true');
+      assert.equal(await window.webContents.executeJavaScript(`document.activeElement === document.querySelector('.wf-ai-panel textarea')`), true, 'Continue focuses the composer without sending a message');
+      await window.webContents.executeJavaScript("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+      await fs.writeFile(path.join(temporaryRoot, 'codex-cli-continued.png'), (await window.webContents.capturePage()).toPNG());
+      window.hide();
+      assert.equal((await tool('get_document')).revision, document.revision, 'Opening CLI chat does not mutate the face');
+      console.log(`Codex CLI-only panel and warning UI passed: ${temporaryRoot}/codex-cli-option.png`);
+      return;
+    }
+    // Exercise the production dispatcher as well as the renderer: advertising
+    // these tools with a mocked dispatcher cannot catch missing service routes.
+    const beforeAnalysis = structuredClone(document);
+    for (const mode of ["current", "aod"]) {
+      const geometry = await tool("get_geometry", { sessionId: document.sessionId, mode, ids: ["hours"] });
+      assert.equal(geometry.mode, mode);
+      assert.equal(geometry.revision, document.revision);
+      assert.deepEqual(geometry.layers.map(layer => layer.id), ["hours"]);
+      assert.ok(geometry.layers[0].box.width > 0);
+      assert.ok(geometry.layers[0].box.height > 0);
+    }
+    const contrast = await tool("check_contrast", {
+      sessionId: document.sessionId, ids: ["hours"], scenario: { dateTime: "2026-09-22T18:23:00" }
+    });
+    assert.equal(contrast.results.length, 1, "Contrast measures the actual rendered hours");
+    assert.equal(contrast.results[0].id, "hours");
+    assert.ok(contrast.results[0].glyphPixels > 0);
+    assert.ok(contrast.results[0].ratio >= 1 && contrast.results[0].ratio <= 21);
+    const faceColors = await tool("sample_color", {
+      sessionId: document.sessionId, points: [{ x: 400, y: 400 }]
+    });
+    assert.equal(faceColors.source, "face");
+    assert.match(faceColors.points[0].color, /^#[0-9A-F]{6}$/);
+    const vector = await tool("render_svg", {
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10"><rect x="2" y="2" width="8" height="4" fill="#ff0000"/></svg>',
+      width: 20, height: 10
+    });
+    assert.equal(vector.width, 20);
+    assert.equal(vector.height, 10);
+    assert.ok(vector.dataUrl.assetId, "Generated SVG output is a reusable PNG asset");
+    const sampleArtwork = image => tool("sample_color", {
+      image, points: [{ x: 3, y: 3 }, { x: 0, y: 0 }]
+    });
+    const vectorColors = await sampleArtwork(vector.dataUrl);
+    assert.equal(vectorColors.source, "image");
+    assert.equal(vectorColors.points[0].color, "#FF0000");
+    assert.equal(vectorColors.points[0].alpha, 1);
+    assert.equal(vectorColors.points[1].alpha, 0);
+    const recolored = await tool("recolor_image", { image: vector.dataUrl, color: "#00ff00" });
+    assert.equal(recolored.changedPixels, 32);
+    const recoloredColors = await sampleArtwork(recolored.dataUrl);
+    assert.equal(recoloredColors.points[0].color, "#00FF00");
+    assert.equal(recoloredColors.points[1].alpha, 0, "Recoloring preserves transparent padding");
+    assert.equal((await sampleArtwork(vector.dataUrl)).points[0].color, "#FF0000", "The original asset stays unchanged");
+    document = await tool("get_document");
+    assert.equal(document.revision, beforeAnalysis.revision);
+    assert.equal(document.dirty, beforeAnalysis.dirty);
+    assert.equal(document.canUndo, beforeAnalysis.canUndo);
+    assert.deepEqual(document.design, beforeAnalysis.design, "Analysis and image tools do not edit the face");
+    if (process.argv.includes("--tools-only")) {
+      // Real PNG-backed state selection: catches metadata that names a selector
+      // which the renderer ignores or maps to the wrong frame.
+      const stateAssets = [];
+      for (const shade of [50, 130, 210]) {
+        const file = path.join(temporaryRoot, `state-${shade}.png`);
+        await fs.writeFile(file, solidPng(40, 40, shade));
+        stateAssets.push((await tool("import_asset", { path: file })).assetId);
+      }
+      const stateMap = (count, middle, last, reverse = false) => Object.fromEntries(Array.from({ length: count }, (_, index) => [String(index), { assetId: stateAssets[reverse ? index === last ? 0 : index === middle ? 1 : 2 : index === last ? 2 : index === middle ? 1 : 0] }]));
+      await tool("apply_commands", { sessionId: document.sessionId, baseRevision: document.revision, commands: [
+        { op: "set", path: "/design/nativeData", value: { weather_direction: { ...nativeDefaults("weather_direction"), x: 250, y: 100, stateCount: 8, assets: { states: stateMap(8, 4, 7) } } } },
+        { op: "set", path: "/design/weatherIndicator", value: { enabled: true, x: 500, y: 100, scale: 1, temperatureEnabled: false, assets: { day: stateMap(41, 20, 40), night: stateMap(41, 20, 40, true) } } }
+      ] });
+      document = await tool("get_document");
+      for (const night of [false, true]) {
+        const levels = [];
+        for (let index = 0; index < 3; index++) {
+          const scenario = { dateTime: "2026-09-22T12:00:00", weather: { condition: [0, 20, 40][index], night }, values: { weather_direction: String([0, 4, 7][index]) } };
+          const preview = await rawTool("render_preview", { sessionId: document.sessionId, resolution: 800, mode: "current", scenario });
+          assert.ok(!preview.isError);
+          const metadata = JSON.parse(preview.content.find(part => part.type === "text").text);
+          assert.deepEqual(metadata.scenario, scenario);
+          assert.equal(metadata.mode, "current");
+          const png = preview.content.find(part => part.type === "image");
+          const bitmap = nativeImage.createFromBuffer(Buffer.from(png.data, "base64")).toBitmap();
+          const gray = (x, y) => bitmap[(y * 800 + x) * 4];
+          levels.push({ wind: gray(270, 115), weather: gray(530, 130) });
+        }
+        assert.ok(levels[0].wind < levels[1].wind && levels[1].wind < levels[2].wind, "native state indices select distinct installed sprites");
+        assert.ok(night ? levels[0].weather > levels[1].weather && levels[1].weather > levels[2].weather : levels[0].weather < levels[1].weather && levels[1].weather < levels[2].weather, "weather previews use the requested condition and day/night set");
+      }
+      console.log("Watchmaker tools E2E passed: analysis/image tools plus actual weather day/night and native state PNG selection.");
+      return;
+    }
+    // Simulation is view state: exercise its visible controls and MCP parity.
+    const beforeSimulation = structuredClone(document);
+    assert.equal(schema.simulation.editorOnly, true);
+    await tool("select", {sessionId:document.sessionId, id:"hours"});
+    await window.webContents.executeJavaScript("document.querySelector('.wf-placement-trigger').click()");
+    const guidesWereVisible = await window.webContents.executeJavaScript(`(() => {
+      const input=[...document.querySelectorAll('.wf-placement-popover label')].find(label=>label.textContent.includes('Show center and safe-area guides')).querySelector('input');
+      const checked=input.checked;if(!checked)input.click();return checked;
+    })()`);
+    await window.webContents.executeJavaScript("document.querySelector('.wf-placement-trigger').click()");
+    await window.webContents.executeJavaScript("document.querySelector('.wf-simulation-trigger').click()");
+    await until(() => window.webContents.executeJavaScript("Boolean(document.querySelector('.wf-simulation-panel'))"), Boolean, "simulation panel");
+    assert.ok(await window.webContents.executeJavaScript(`(() => {
+      const panel=document.querySelector('.wf-simulation-panel').getBoundingClientRect();
+      const stage=document.querySelector('.wf-stage').getBoundingClientRect();
+      const placement=document.querySelector('.wf-placement-trigger').getBoundingClientRect();
+      return panel.left>=stage.left && panel.right<=stage.right && placement.right<=stage.right && panel.bottom<=stage.bottom;
+    })()`), "Simulation panel and Placement remain inside the stage when the toolbar wraps");
+    await window.webContents.executeJavaScript("document.querySelector('.wf-simulation-enable input').click()");
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.enabled, true);
+    const setSimulationInput = async (label, value, select = false) => window.webContents.executeJavaScript(`(() => {
+      const input = document.querySelector('[aria-label="${label}"]');
+      Object.getOwnPropertyDescriptor(${select ? 'HTMLSelectElement' : 'HTMLInputElement'}.prototype, 'value').set.call(input, ${JSON.stringify(value)});
+      input.dispatchEvent(new Event('${select ? 'change' : 'input'}', {bubbles:true}));
+    })()`);
+    await setSimulationInput("Simulation date", "2028-02-28");
+    await setSimulationInput("Simulation time", "23:59:59");
+    await window.webContents.executeJavaScript("[...document.querySelectorAll('.wf-simulation-panel button')].find(button => button.textContent === '+1 second').click()");
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.dateTime, "2028-02-29T00:00:00", "Visible date/time controls roll into leap day");
+    await setSimulationInput("Simulated battery (%)", "0");
+    await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Simulated battery (%)"]').dispatchEvent(new FocusEvent('focusout', {bubbles:true}))`);
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.values.battery, "0");
+    const simulatedEmpty = await rawTool("render_preview", {sessionId: document.sessionId});
+    await setSimulationInput("Simulation preset", "fullBattery", true);
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.values.battery, "100");
+    const simulatedFull = await rawTool("render_preview", {sessionId: document.sessionId});
+    assert.notEqual(simulatedEmpty.content.find(part=>part.type==='image').data, simulatedFull.content.find(part=>part.type==='image').data, "Battery simulation changes the real preview");
+    const explicitEmpty = await rawTool("render_preview", {sessionId: document.sessionId, scenario: {dateTime: document.view.simulation.dateTime, values:{battery:"0"}}});
+    assert.equal(simulatedEmpty.content.find(part=>part.type==='image').data, explicitEmpty.content.find(part=>part.type==='image').data, "Explicit MCP scenarios override active simulation");
+    await window.webContents.executeJavaScript("document.querySelector('.wf-simulation-panel details').open = true");
+    for (const [label, value] of [["Simulated sensor temperature", "32"], ["Simulated current weather", "-8"]]) {
+      await setSimulationInput(label, value);
+      await window.webContents.executeJavaScript(`document.querySelector('[aria-label="${label}"]').dispatchEvent(new FocusEvent('focusout', {bubbles:true}))`);
+    }
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.values.temperature, "32", "Weather input must not overwrite sensor temperature");
+    assert.equal(document.view.simulation.values.weather_temp, "-8", "Weather temperature has its own simulation value");
+    await setSimulationInput("Simulated sensor temperature", "30");
+    await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Simulated sensor temperature"]').dispatchEvent(new FocusEvent('focusout', {bubbles:true}))`);
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.values.weather_temp, "-8", "Sensor input must not overwrite weather temperature");
+    await window.webContents.executeJavaScript("document.querySelector('.wf-simulation-panel details').open = false");
+    await tool("set_view", {sessionId: document.sessionId, simulation:{enabled:true, playing:true, speed:1, dateTime:"2026-12-31T23:59:59"}});
+    document = await until(() => tool("get_document"), value => value.view.simulation.dateTime.startsWith("2027-01-01"), "playback across new year");
+    await window.webContents.executeJavaScript("[...document.querySelectorAll('.wf-simulation-panel button')].find(button => button.textContent === 'Pause').click()");
+    document = await tool("get_document");
+    const pausedTime = document.view.simulation.dateTime;
+    await window.webContents.executeJavaScript("new Promise(resolve=>setTimeout(resolve,1200))");
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.dateTime, pausedTime, "Pause stops playback");
+    assert.equal(document.revision, beforeSimulation.revision);
+    assert.equal(document.dirty, beforeSimulation.dirty);
+    assert.equal(document.canUndo, beforeSimulation.canUndo);
+    assert.deepEqual(document.design, beforeSimulation.design, "Simulation never modifies the saved design");
+    const invalidSimulation = await rawTool("set_view", {sessionId:document.sessionId, simulation:{dateTime:"2027-02-29T12:00:00"}});
+    assert.ok(invalidSimulation.isError, "Invalid calendar dates are rejected through MCP");
+    window.showInactive();
+    await window.webContents.executeJavaScript("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+    const panelCaptureRect = await window.webContents.executeJavaScript(`(() => {
+      const panel=document.querySelector('.wf-simulation-panel').getBoundingClientRect();
+      // Exclude rounded corners/shadow; the interior must fully cover the canvas.
+      return {x:Math.ceil(panel.x+16),y:Math.ceil(panel.y+16),width:Math.floor(panel.width-32),height:Math.floor(panel.height-32)};
+    })()`);
+    const withSelection = await window.webContents.capturePage(panelCaptureRect);
+    const toolbarLayout = await window.webContents.executeJavaScript(`(() => {
+      const bar=document.querySelector('.wf-contextual-align-bar');
+      const toolbar=document.querySelector('.wf-stage-toolbar');
+      return {hasBar:!!bar, hasRuler:!!document.querySelector('.wf-stage-ruler'), toolbarZ:Number(getComputedStyle(toolbar).zIndex), barZ:bar && Number(getComputedStyle(bar).zIndex), barBottom:bar?.getBoundingClientRect().bottom, toolbarTop:toolbar.getBoundingClientRect().top};
+    })()`);
+    assert.ok(toolbarLayout.hasBar && toolbarLayout.hasRuler && toolbarLayout.toolbarZ > toolbarLayout.barZ && toolbarLayout.barBottom <= toolbarLayout.toolbarTop,
+      `Bottom preview controls do not overlap the top alignment toolbar, and their popovers paint above it: ${JSON.stringify(toolbarLayout)}`);
+    await window.webContents.executeJavaScript(`document.querySelectorAll('.watchface-preview-stack, .wf-contextual-align-bar').forEach(el=>el.style.visibility='hidden');new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+    const withoutSelection = await window.webContents.capturePage(panelCaptureRect);
+    await fs.writeFile(path.join(temporaryRoot, "simulation-panel-with-guides.png"),withSelection.toPNG());
+    await fs.writeFile(path.join(temporaryRoot, "simulation-panel-without-guides.png"),withoutSelection.toPNG());
+    const beforePixels=withSelection.toBitmap(), afterPixels=withoutSelection.toBitmap();
+    assert.equal(beforePixels.length, afterPixels.length);
+    // GPU text antialiasing can shift a few channel levels when another layer hides.
+    const maxDifference=beforePixels.reduce((max,value,index)=>Math.max(max,Math.abs(value-afterPixels[index])),0);
+    assert.ok(maxDifference<=4, `Watch artwork, guides and selected outlines cannot paint through the simulation panel (max channel difference ${maxDifference})`);
+    await window.webContents.executeJavaScript(`document.querySelectorAll('.watchface-preview-stack, .wf-contextual-align-bar').forEach(el=>el.style.removeProperty('visibility'));new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+    await fs.writeFile(path.join(temporaryRoot, "simulation-panel.png"), (await window.webContents.capturePage()).toPNG());
+    window.hide();
+    await window.webContents.executeJavaScript("[...document.querySelectorAll('.wf-simulation-panel button')].find(button => button.textContent === 'Reset simulation').click()");
+    document = await tool("get_document");
+    assert.equal(document.view.simulation.enabled, false);
+    assert.equal(document.view.simulation.playing, false);
+    assert.deepEqual(document.view.simulation.values, {});
+    await window.webContents.executeJavaScript("document.querySelector('[aria-label=\"Close simulation\"]').click()");
+    await tool("select", {sessionId:document.sessionId, id:"background"});
+    if (!guidesWereVisible) {
+      await window.webContents.executeJavaScript("document.querySelector('.wf-placement-trigger').click()");
+      await window.webContents.executeJavaScript(`[...document.querySelectorAll('.wf-placement-popover label')].find(label=>label.textContent.includes('Show center and safe-area guides')).querySelector('input').click()`);
+      await window.webContents.executeJavaScript("document.querySelector('.wf-placement-trigger').click()");
+    }
+    // Browse, search and dismiss the new Add picker before creating layers.
+    await window.webContents.executeJavaScript("document.querySelector('.watchface-add-sprite').click()");
+    await until(() => window.webContents.executeJavaScript(`document.querySelector('.wf-layer-picker').matches(':popover-open') && document.activeElement===document.querySelector('[aria-label="Search data fields"]')`), Boolean, "searchable Add picker");
+    assert.ok(await window.webContents.executeJavaScript(`(() => {
+      const r=document.querySelector('.wf-layer-picker').getBoundingClientRect();
+      return r.left>=0&&r.right<=innerWidth&&r.top>=0&&Math.abs(r.bottom-(innerHeight-12))<=1;
+    })()`), "All expands the Add picker to the available window height with a safe bottom margin");
+    window.showInactive();
+    await window.webContents.executeJavaScript("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+    await fs.writeFile(path.join(temporaryRoot, "add-menu.png"), (await window.webContents.capturePage()).toPNG());
+    window.hide();
+    await window.webContents.executeJavaScript(`[...document.querySelectorAll('.wf-layer-picker-filters button')].find(button=>button.textContent==='Charts').click()`);
+    assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('.wf-layer-picker-results [data-add-option]').length"),12,"Category filter shows every chart source");
+    await until(() => window.webContents.executeJavaScript("document.querySelector('.wf-layer-picker').getBoundingClientRect().height<=581"), Boolean, "individual categories use a compact picker");
+    await until(() => window.webContents.executeJavaScript(`(() => {
+      const strip=document.querySelector('[role="tablist"][aria-label="Data categories"]');
+      const selected=strip.querySelector('[role="tab"][aria-selected="true"]');
+      const bounds=selected.getBoundingClientRect(), viewport=strip.getBoundingClientRect();
+      return selected.textContent==='Charts' && bounds.left>=viewport.left-1 && bounds.right<=viewport.right+1 && document.querySelector('[role="tabpanel"]').getAttribute('aria-labelledby')===selected.id;
+    })()`), Boolean, "active chart tab scrolls into view");
+    await window.webContents.executeJavaScript(`document.querySelector('[role="tab"][aria-selected="true"]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}))`);
+    assert.equal(await window.webContents.executeJavaScript("document.activeElement.textContent"),"Astronomy","Arrow keys activate and focus adjacent tabs");
+    assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('.wf-layer-picker-results [data-add-option]').length"),2,"Astronomy lists sunrise/sunset progress and the chart solar angle");
+    await window.webContents.executeJavaScript(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true}))`);
+    assert.equal(await window.webContents.executeJavaScript("document.querySelector('[role=tab][aria-selected=true]').textContent"),"All");
+    await until(() => window.webContents.executeJavaScript(`Math.abs(document.querySelector('.wf-layer-picker').getBoundingClientRect().bottom-(innerHeight-12))<=1`), Boolean, "returning to All expands the picker again");
+    assert.equal(await window.webContents.executeJavaScript("document.activeElement.textContent"),"All","resizing the picker preserves keyboard focus on the selected tab");
+    await window.webContents.executeJavaScript(`[...document.querySelectorAll('.wf-layer-picker-filters button')].find(button=>button.textContent==='All').click()`);
+    await setSimulationInput("Search data fields", "sleep");
+    assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('.wf-layer-picker-results [data-add-option]').length"),2);
+    await setSimulationInput("Search data fields", "no-such-field");
+    assert.equal(await window.webContents.executeJavaScript("document.querySelector('.wf-layer-picker-empty strong').textContent"),"No matching data fields");
+    await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Search data fields"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+    assert.equal(await window.webContents.executeJavaScript("document.querySelector('.wf-layer-picker').matches(':popover-open')"),false);
+    await window.webContents.executeJavaScript("document.querySelector('.watchface-add-sprite').click()");
+    await window.webContents.executeJavaScript(`document.querySelector('.watchface-add-sprite').click()`);
+    assert.equal(await window.webContents.executeJavaScript("document.querySelector('.wf-layer-picker').matches(':popover-open')"),false,"Add button toggles the picker closed");
+    // Exercise the visible Add menu, inspector and native-data export at physical watch resolution.
+    await tool("set_view", { sessionId: document.sessionId, resolution: 416 });
+    const nativeIdentity = () => ({ sessionId: document.sessionId, baseRevision: document.revision });
+    for (const value of ["weather_temp", "sleep_score", "week_tl", "sunriseset", "chart:chart_stress"]) {
+      await window.webContents.executeJavaScript("document.querySelector('.watchface-add-sprite').click()");
+      await until(() => window.webContents.executeJavaScript("Boolean(document.querySelector('.wf-layer-picker:popover-open'))"), Boolean, "native data menu");
+      await window.webContents.executeJavaScript(`document.querySelector('[data-native-data="${value}"]').click()`);
+      document = await tool("get_document");
+      assert.equal(document.design.nativeData[value.split(":")[0]].enabled, true);
+      assert.equal(document.view.selectedId, `native:${value.split(":")[0]}`);
+    }
+    const beforeExistingField = document.revision;
+    await window.webContents.executeJavaScript("document.querySelector('.watchface-add-sprite').click()");
+    await until(() => window.webContents.executeJavaScript("Boolean(document.querySelector('.wf-layer-picker:popover-open'))"), Boolean, "existing native fields");
+    assert.equal(await window.webContents.executeJavaScript(`document.querySelector('[data-native-data="sleep_score"]').textContent.includes('On face')`), true);
+    await setSimulationInput("Search data fields", "sleep score");
+    await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Search data fields"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))`);
+    document = await tool("get_document");
+    assert.equal(document.revision,beforeExistingField,"Selecting an existing data field does not create an undo entry");
+    assert.equal(document.view.selectedId,"native:sleep_score");
+    await tool("apply_commands", { ...nativeIdentity(), commands: [
+      {op:"place_layers",layerIds:["native:weather_temp"],x:180,y:500},
+      {op:"set_visibility",id:"native:week_tl",visible:false}
+    ] });
+    document = await tool("get_document");
+    assert.equal(document.design.nativeData.week_tl.enabled,false);
+    assert.ok(document.capabilities.layers.find(layer=>layer.id==="native:weather_temp").placement.movable);
+    await tool("undo",nativeIdentity());
+    document = await tool("get_document");
+    assert.equal(document.design.nativeData.week_tl.enabled,true);
+    await tool("select",{sessionId:document.sessionId,id:"native:week_tl"});
+    await until(()=>window.webContents.executeJavaScript(`Boolean(document.querySelector('input[aria-label="Artwork text"]'))`),Boolean,"native label editor");
+    await window.webContents.executeJavaScript(`(() => { const input=document.querySelector('input[aria-label="Artwork text"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'LOAD'); input.dispatchEvent(new Event('input',{bubbles:true})); })()`);
+    document=await tool("get_document");
+    assert.equal(document.design.nativeData.week_tl.assetTexts.icon['0'],'LOAD','Typing replaces the generated TL label');
+    const beforeColorDrag=document;
+    const colorDragTiming=await window.webContents.executeJavaScript(`(() => {
+      const input=document.querySelector('.wf-property-section[data-section="appearance"] input[aria-label="Color"]');
+      const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+      const start=performance.now();
+      for(let i=0;i<120;i++) { set.call(input,'#'+(0x102000+i).toString(16)); input.dispatchEvent(new Event('input',{bubbles:true})); }
+      return performance.now()-start;
+    })()`);
+    document=await until(()=>tool('get_document'),value=>value.design.nativeData.week_tl.color==='#102077','settled color picker');
+    console.log(`Color drag: 120 inputs, ${Math.round(colorDragTiming)} ms dispatch, ${document.revision-beforeColorDrag.revision} editor revisions`);
+    assert.equal(document.revision-beforeColorDrag.revision,1,'A continuous color drag commits once instead of re-rendering the editor for every input');
+    await tool('undo',nativeIdentity()); document=await tool('get_document');
+    assert.equal(document.design.nativeData.week_tl.color,beforeColorDrag.design.nativeData.week_tl.color,'One undo restores the color before the drag');
+    const setColorInput=(color,eventType='input')=>window.webContents.executeJavaScript(`(() => {
+      const input=document.querySelector('.wf-property-section[data-section="appearance"] input[aria-label="Color"]');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(color)});
+      input.dispatchEvent(new Event(${JSON.stringify(eventType)},{bubbles:true}));
+    })()`);
+    await setColorInput('#abcdef');
+    // Read after the timer, so this path verifies settling without an MCP flush.
+    await window.webContents.executeJavaScript('new Promise(resolve=>setTimeout(resolve,220))');
+    document=await tool('get_document');
+    assert.equal(document.design.nativeData.week_tl.color,'#abcdef');
+    assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.wf-property-section[data-section="appearance"] input[aria-label="Color"]').value`),'#abcdef');
+    await setColorInput('#fedcba','change');
+    document=await tool('get_document');
+    const afterNativeChange=document.revision;
+    assert.equal(document.design.nativeData.week_tl.color,'#fedcba','Native picker completion commits its final value');
+    await window.webContents.executeJavaScript(`document.querySelector('.wf-property-section[data-section="appearance"] input[aria-label="Color"]').dispatchEvent(new FocusEvent('focusout',{bubbles:true})); new Promise(resolve=>setTimeout(resolve,220))`);
+    document=await tool('get_document');
+    assert.equal(document.revision,afterNativeChange,'Blur and old timers do not create duplicate color commits');
+    await tool('undo',nativeIdentity()); document=await tool('get_document');
+    assert.equal(document.design.nativeData.week_tl.color,'#abcdef');
+    await window.webContents.executeJavaScript(`document.querySelector('.wf-property-section[data-section="appearance"] input[aria-label="Color"]').dispatchEvent(new FocusEvent('focusout',{bubbles:true}))`);
+    document=await tool('get_document');
+    assert.equal(document.design.nativeData.week_tl.color,'#abcdef','Blur after undo cannot restore a stale draft');
+    await setColorInput('#112233');
+    await tool('select',{sessionId:document.sessionId,id:'native:chart'});
+    document=await tool('get_document');
+    assert.equal(document.design.nativeData.week_tl.color,'#112233','Switching layers flushes the original color target');
+    assert.equal(document.design.nativeData.chart.color,'#ffffff','Pending colors never leak onto a newly selected layer');
+    await tool('select',{sessionId:document.sessionId,id:'native:week_tl'});
+    await setColorInput('#445566');
+    // A programmatic click has no pointerdown/blur; still flush before its action.
+    await window.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).find(button=>button.textContent.trim()==='Reset label / icon').click()`);
+    document=await tool('get_document');
+    assert.equal(document.design.nativeData.week_tl.color,'#445566','Other UI actions preserve a pending color');
+    await tool('undo',nativeIdentity()); document=await tool('get_document');
+    await window.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).find(button=>button.textContent.trim()==='Reset label / icon').click()`);
+    document=await tool("get_document");
+    assert.equal(document.design.nativeData.week_tl.assetTexts?.icon,undefined,'Restoring a component removes its custom text');
+    assert.equal(await window.webContents.executeJavaScript(`document.querySelector('input[aria-label="Artwork text"]').value`),'TL');
+    await tool("undo",nativeIdentity());
+    document=await tool("get_document");
+    assert.equal(document.design.nativeData.week_tl.assetTexts.icon['0'],'LOAD','Component reset is undoable');
+    await tool("select",{sessionId:document.sessionId,id:"native:chart"});
+    await window.webContents.executeJavaScript(`(() => { [...document.querySelectorAll('[aria-label="Component"] [role="tab"]')].find(tab => tab.textContent === 'Graph').click(); })()`);
+    await until(()=>window.webContents.executeJavaScript(`Boolean(document.querySelector('input[aria-label="Bar width"]'))`),Boolean,"graph controls");
+    assert.ok(await window.webContents.executeJavaScript(`(() => {
+      const type=document.querySelector('select[aria-label="Graph type"]');
+      return !type.disabled && type.value==='bars' && [...type.options].map(option=>option.value).join()==='bars,curve';
+    })()`),'Bar and line graphs are both offered in the inspector');
+    await window.webContents.executeJavaScript(`(() => { const select=document.querySelector('select[aria-label="Graph type"]'); select.value='curve'; select.dispatchEvent(new Event('change',{bubbles:true})); })()`);
+    await until(()=>window.webContents.executeJavaScript(`Boolean(document.querySelector('input[aria-label="Line thickness"]') && document.querySelector('input[aria-label="Upper curve"]') && document.querySelector('input[aria-label="Lower curve"]'))`),Boolean,"line graph controls");
+    document=await tool("get_document");
+    assert.equal(document.design.nativeData.chart.chartStyle.previewType,'curve','Line graph preview is selectable');
+    await window.webContents.executeJavaScript(`(() => { const select=document.querySelector('select[aria-label="Graph type"]'); select.value='bars'; select.dispatchEvent(new Event('change',{bubbles:true})); })()`);
+    await until(()=>window.webContents.executeJavaScript(`Boolean(document.querySelector('input[aria-label="Bar width"]'))`),Boolean,"bar graph controls");
+    const graphToggleSize=await window.webContents.executeJavaScript(`(() => { const box=document.querySelector('input[aria-label="Show Graph"]').getBoundingClientRect(); return {width:box.width,height:box.height}; })()`);
+    assert.ok(graphToggleSize.width<=20&&graphToggleSize.height<=20,'Graph visibility checkbox fits the inspector');
+    await window.webContents.executeJavaScript(`document.querySelector('input[aria-label="Show Graph"]').click()`);
+    document=await tool("get_document");
+    assert.equal(document.design.nativeData.chart.parts.plot.enabled,false,'The graph can be hidden independently');
+    await window.webContents.executeJavaScript(`document.querySelector('input[aria-label="Show Graph"]').click()`);
+    await window.webContents.executeJavaScript(`(() => { const input=document.querySelector('input[aria-label="Bar width"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'6'); input.dispatchEvent(new Event('input',{bubbles:true})); })()`);
+    document=await tool("get_document");
+    assert.ok(document.design.nativeData.chart.chartStyle.barWidth>6,'Bar width converts displayed watch pixels to master pixels');
+    const nativeOutput=await tool("build_archive",nativeIdentity());
+    assert.equal((nativeOutput.archive??nativeOutput).watchFaceVersion,6);
+    await window.webContents.executeJavaScript("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    await fs.writeFile('/tmp/coroslink-native-data-editor.png',(await window.webContents.capturePage()).toPNG());
+    // Exercise the actual external MCP mutation path for all new controls.
+    const nativeArtwork=await tool("import_asset",{path:imagePath});
+    await tool("apply_commands",{...nativeIdentity(),commands:[
+      {op:"set",path:"/design/nativeData/weather_humidity",value:{...nativeDefaults('weather_humidity'),x:60,y:80}},
+      {op:"set",path:"/design/nativeData/today_run",value:{...nativeDefaults('today_run'),x:60,y:180}},
+      {op:"set",path:"/design/nativeData/sleep_hrv_level",value:{...nativeDefaults('sleep_hrv_level'),x:60,y:280}},
+      {op:"merge",path:"/design/nativeData/week_tl",value:{assetTexts:{icon:{'0':'MCP TL'}},assets:{icon:{'0':{assetId:nativeArtwork.assetId}}},parts:{icon:{width:90,height:48,color:'#ff0000'}}}},
+      {op:"merge",path:"/design/nativeData/sunriseset",value:{assetTexts:{icon:{'0':'RISE','1':'SET'}},assets:{progress:{'0':{assetId:nativeArtwork.assetId}}}}},
+      {op:"merge",path:"/design/nativeData/chart",value:{chartSource:'chart_stamina',parts:{plot:{enabled:true,width:300,height:100},mask:{enabled:true}},chartStyle:{lineWidth:7,upperColor:'#00ff00',lowerColor:'#ff00ff',selectedBarColor:'#ffff00',unselectedBarColor:'#0000ff',barWidth:12,barGap:6,previewType:'bars'},assets:{mask:{'0':{assetId:nativeArtwork.assetId}}}}},
+      {op:"set",path:"/design/weatherIndicator",value:{enabled:true,x:500,y:100,scale:1,temperatureEnabled:true,assets:{day:{'0':{assetId:nativeArtwork.assetId}}}}}
+    ]});
+    document=await tool("get_document");
+    const nativeEdited=document;
+    assert.equal(document.design.nativeData.week_tl.assets.icon['0'].assetId,nativeArtwork.assetId,'Native artwork refs survive hydration and externalization');
+    assert.equal(document.design.weatherIndicator.assets.day['0'].assetId,nativeArtwork.assetId);
+    const graphParts=document.capabilities.layers.find(layer=>layer.id==='native:chart').nativeData.components;
+    assert.equal(graphParts.find(part=>part.id==='plot').effectiveStyle.width,300);
+    assert.equal(graphParts.find(part=>part.id==='decimal').positionEditable,false);
+    assert.equal(document.capabilities.nativeData.fieldIds.length,27);
+    const resource=await client.readResource({uri:document.capabilities.schemaResource});
+    assert.equal(JSON.parse(resource.contents[0].text).nativeData.fields.length,27,'Advertised schema resource resolves');
+    await tool("undo",nativeIdentity()); document=await tool("get_document");
+    assert.equal(document.design.nativeData.today_run,undefined);
+    await tool("redo",nativeIdentity()); document=await tool("get_document");
+    assert.deepEqual(document.design,nativeEdited.design);
+    await tool("apply_commands",{...nativeIdentity(),commands:[{op:'set_locked',id:'native:week_tl',locked:true}]});
+    document=await tool("get_document");
+    const lockedNativeRevision=document.revision;
+    const lockedNativeEdit=await rawTool("apply_commands",{...nativeIdentity(),commands:[{op:'set',path:'/design/nativeData/week_tl/assetTexts/icon/0',value:'LOCKED'}]});
+    assert.equal(lockedNativeEdit.isError,true);
+    document=await tool("get_document"); assert.equal(document.revision,lockedNativeRevision);
+    await tool("apply_commands",{...nativeIdentity(),commands:[{op:'set_locked',id:'native:week_tl',locked:false},{op:'unset',path:'/design/nativeData/week_tl/assets/icon'},{op:'unset',path:'/design/nativeData/week_tl/assetTexts/icon'}]});
+    document=await tool("get_document");
+    assert.equal(document.design.nativeData.week_tl.assets.icon,undefined,'MCP can restore generated artwork');
+    await tool("apply_commands",{...nativeIdentity(),mode:'aod',commands:[{op:'set',path:'/design/nativeData',value:{week_tl:{...nativeDefaults('week_tl'),assetTexts:{icon:{'0':'AOD'}}}}}]});
+    document=await tool("get_document");
+    assert.equal(document.design.modeDesigns.aod.nativeData.week_tl.assetTexts.icon['0'],'AOD');
+    assert.equal(document.design.nativeData.week_tl.assetTexts.icon,undefined,'AOD customization stays independent');
+    await tool("set_view",{sessionId:document.sessionId,mode:'aod'});
+    document=await tool("get_document");
+    assert.equal(document.capabilities.layers.find(layer=>layer.id==='native:week_tl').nativeData.components[0].assetRole,'icon');
+    await tool("render_preview",{sessionId:document.sessionId,mode:'aod'});
+    await tool("set_view",{sessionId:document.sessionId,mode:'current'});
+    await tool("render_preview",{sessionId:document.sessionId,mode:'current'});
+    await tool("validate",{sessionId:document.sessionId});
+    const mcpNativeArchive=await tool("build_archive",nativeIdentity());
+    assert.equal((mcpNativeArchive.archive??mcpNativeArchive).watchFaceVersion,6);
+    await tool("apply_commands",{...nativeIdentity(),mode:'aod',commands:[{op:'set',path:'/design/nativeData',value:{}}]});
+    document=await tool("get_document");
+    await tool("apply_commands",{...nativeIdentity(),commands:[{op:'unset',path:'/design/weatherIndicator'}]});
+    document=await tool("get_document");
+    await tool("apply_commands",{...nativeIdentity(),commands:[{op:"set",path:"/design/nativeData",value:{}}]});
+    document = await tool("get_document");
     const image = await tool("import_asset", { path: imagePath });
     const rasterFolder = await tool("import_asset", { path: rasterFolderPath, kind: "raster_font_folder" });
     const changes = [
@@ -336,9 +866,7 @@ async function main() {
     assert.ok(exported.manifest.design.timeStyles.hours.rasterFont.sprites, "imported digit font remains editable");
     assert.ok(exported.manifest.design.modeDesigns.aod);
     stage = "compiled export preview";
-    await window.webContents.executeJavaScript('document.querySelector(".wf-export-button").click()');
-    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".wf-export-popover"))'), Boolean, "export menu");
-    await window.webContents.executeJavaScript('Array.from(document.querySelectorAll(".wf-export-popover button")).find(button => button.textContent.includes("Preview export")).click()');
+    await window.webContents.executeJavaScript('document.querySelector(".wf-send-button").click()');
     await until(() => window.webContents.executeJavaScript('document.querySelector(".wf-export-pixel-scroll img")?.naturalWidth'), (width) => width === 416, "compiled 416 pixel preview");
     const compiledSize = await window.webContents.executeJavaScript(`(() => {
       const image = document.querySelector('.wf-export-pixel-scroll img');
@@ -467,12 +995,98 @@ async function main() {
     assert.ok(importedProject, "close with save persists the document");
     await tool("open", { project: importedProject.projectId });
     document = await tool("get_document");
+    const dialogRevision = document.revision;
+    const dialogSession = document.sessionId;
+    await window.webContents.executeJavaScript('document.querySelector(".wf-convert-button").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog"))'), Boolean, "watch-only conversion picker");
+    assert.equal(await window.webContents.executeJavaScript('document.querySelectorAll(".watchface-convert-dialog select").length'), 1);
+    assert.equal(await window.webContents.executeJavaScript('document.querySelectorAll(".watchface-template-browser").length'), 0);
+    window.showInactive();
+    await fs.writeFile(path.join(temporaryRoot, "watch-conversion.png"), (await window.webContents.capturePage()).toPNG());
+    window.hide();
+    await window.webContents.executeJavaScript(`document.querySelector('.watchface-convert-dialog .secondary-button').click()`);
+    document = await tool("get_document");
+    assert.equal(document.revision, dialogRevision, "cancelling conversion preserves edits and history");
+    assert.equal(document.sessionId, dialogSession, "conversion picker keeps the original editor mounted");
     const previousSession = document.sessionId;
-    await tool("convert", { ...identity(), targetArchive: sourceArchive.archiveId, firmwareType: "COROS W336", watchModel: "pace-4" });
+    const originalDesign = structuredClone(document.design);
+    // Exercise the real service's missing-session error on a first-use cache miss.
+    const pace4CarrierPath = path.join(carrierCache, "pace-4.zip");
+    const pace4Carrier = await fs.readFile(pace4CarrierPath);
+    await fs.unlink(pace4CarrierPath);
+    restoreCarrierAfterLogin = () => fs.writeFile(pace4CarrierPath, pace4Carrier);
+    await window.webContents.executeJavaScript('document.querySelector(".wf-convert-button").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog .primary-button"))'), Boolean, "convert button");
+    await window.webContents.executeJavaScript(`(() => { const select = document.querySelector('.watchface-convert-dialog select'); select.value = 'pace-4'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .primary-button").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog input[type=password]"))'), Boolean, "conversion sign-in dialog");
+    assert.match(await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog").textContent'), /Sign in to download support for PACE 4/);
+    assert.equal(await window.webContents.executeJavaScript('document.activeElement === document.querySelector(".watchface-convert-dialog select")'), true, "focus moves into sign-in");
+    assert.equal(await window.webContents.executeJavaScript('(() => { const dialog = document.querySelector(".watchface-convert-dialog"); const back = dialog.querySelector(".watchface-modal-actions button"); return back.getBoundingClientRect().bottom <= dialog.getBoundingClientRect().bottom; })()'), true, "sign-in actions fit in the dialog");
+    window.showInactive();
+    await fs.writeFile(path.join(temporaryRoot, "watch-conversion-sign-in.png"), (await window.webContents.capturePage()).toPNG());
+    window.hide();
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .watchface-modal-actions button").click()');
+    assert.equal(await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog select").value'), "pace-4", "leaving sign-in preserves the selected watch");
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .secondary-button").click()');
+    document = await tool("get_document");
+    assert.equal(document.sessionId, previousSession, "cancelling sign-in keeps the original editor");
+    assert.equal(document.revision, dialogRevision);
+    assert.deepEqual(document.design, originalDesign);
+    await window.webContents.executeJavaScript('document.querySelector(".wf-convert-button").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog .primary-button"))'), Boolean, "convert button after cancelled sign-in");
+    await window.webContents.executeJavaScript(`(() => { const select = document.querySelector('.watchface-convert-dialog select'); select.value = 'pace-4'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .primary-button").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog input[type=password]"))'), Boolean, "sign-in after retrying conversion");
+    await window.webContents.executeJavaScript(`(() => {
+      const form = document.querySelector('.watchface-convert-dialog form');
+      for (const [type, value] of [['email', 'conversion@example.test'], ['password', 'test-password']]) {
+        const input = form.querySelector('input[type=' + type + ']');
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      const region = form.querySelector('select');
+      region.value = 'eu'; region.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog form").requestSubmit()');
+    await until(() => window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog [role=alert]")?.textContent ?? ""'), text => text.includes("email or password is incorrect"), "inline login error");
+    assert.equal(await window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog input[type=password]"))'), true, "failed login keeps the sign-in form open");
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog form").requestSubmit()');
+    await until(async () => { const response = await rawTool("get_context"); return JSON.parse(response.content.find(part => part.type === "text").text); }, result => typeof result.sessionId === "string" && result.sessionId !== previousSession && !result.busy, "converted editor");
+    assert.equal(manualLoginAttempts, 2);
     document = await tool("get_document");
     assert.notEqual(document.sessionId, previousSession);
     assert.equal(document.target.watchModel, "pace-4");
     assert.equal(document.design.backgroundElements.find(item => item.id === "label").text, "TRAIL");
+    assert.deepEqual(document.design, originalDesign, "conversion preserves all scene styles, assets, groups, offsets and data fields");
+    await tool("render_preview", { sessionId: document.sessionId, mode: "current", resolution: 390 });
+    await tool("render_preview", { sessionId: document.sessionId, mode: "aod", resolution: 390 });
+    await tool("build_archive", identity());
+    // A stale authenticated status must also open sign-in when COROS expires it.
+    conversionAuthError = "Your COROS mobile session expired. Sign in again.";
+    const beforeSavedLoginSession = document.sessionId;
+    await window.webContents.executeJavaScript('document.querySelector(".wf-convert-button").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog select"))'), Boolean, "MIP watch picker");
+    await window.webContents.executeJavaScript(`(() => { const select = document.querySelector('.watchface-convert-dialog select'); select.value = 'pace-3'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .primary-button").click()');
+    await until(() => window.webContents.executeJavaScript('Boolean(document.querySelector(".watchface-convert-dialog .watchface-saved-login button"))'), Boolean, "saved account sign-in");
+    assert.match(await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog").textContent'), /download support for PACE 3/);
+    await window.webContents.executeJavaScript('document.querySelector(".watchface-convert-dialog .watchface-saved-login button").click()');
+    await until(async () => { const response = await rawTool("get_context"); return JSON.parse(response.content.find(part => part.type === "text").text); }, result => typeof result.sessionId === "string" && result.sessionId !== beforeSavedLoginSession && !result.busy, "conversion resumed after saved login");
+    assert.equal(savedLoginAttempts, 1);
+    document = await tool("get_document");
+    assert.equal(document.capabilities.aod, false);
+    assert.equal(document.target.watchModel, "pace-3");
+    assert.deepEqual(document.design, originalDesign, "MIP retains the dormant AOD design");
+    await tool("render_preview", { sessionId: document.sessionId, resolution: 240 });
+    await tool("build_archive", identity());
+    authenticated = false;
+    await tool("convert", { ...identity(), watchModel: "pace-pro" });
+    document = await tool("get_document");
+    assert.equal(document.capabilities.aod, true);
+    assert.deepEqual(document.design, originalDesign, "round trip restores the whole editable scene");
+    await tool("save", identity());
+    document = await tool("get_document");
     await tool("close", { ...identity(), discardChanges: true });
     const currentOnly = await tool("import_archive", { path: currentOnlyFixture });
     await tool("open", { archive: currentOnly.archiveId });

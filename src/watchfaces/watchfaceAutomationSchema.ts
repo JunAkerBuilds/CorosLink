@@ -1,3 +1,6 @@
+import { WATCHFACE_SIMULATION_CAPABILITIES } from "./watchfaceSimulation";
+import { getNativeDataAutomationCatalog } from "./nativeDataAutomation";
+import { NATIVE_DATA_BY_ID, NATIVE_CHART_SOURCES, NATIVE_ASSET_ROLES, NATIVE_PARTS, nativeAssetCount } from "../../electron/watchfaceNativeCatalog";
 import type {
   CorosWatchfaceDesignState,
   CorosWatchfaceTemplateDetails
@@ -41,8 +44,8 @@ const WATCHFACE_SCHEMA_DEFINITIONS = {
   artwork: { type: "object", additionalProperties: false, required: ["dataUrl", "width", "height"], properties: { dataUrl: { $ref: "#/$defs/imageValue" }, width: { type: "number", exclusiveMinimum: 0 }, height: { type: "number", exclusiveMinimum: 0 } } },
   imageSize: { type: "object", additionalProperties: false, required: ["width", "height"], properties: { width: { type: "number", exclusiveMinimum: 0 }, height: { type: "number", exclusiveMinimum: 0 } } },
   rasterFont: { type: "object", additionalProperties: false, required: ["label", "dataUrl", "glyphs", "columns", "tint"], properties: { label: { type: "string" }, dataUrl: { $ref: "#/$defs/imageValue" }, glyphs: { type: "string" }, columns: { type: "integer", minimum: 1, maximum: 512 }, labels: { type: "object", additionalProperties: { $ref: "#/$defs/imageValue" } }, sprites: { type: "object", additionalProperties: { $ref: "#/$defs/imageValue" } }, spriteSizes: { type: "object", additionalProperties: { $ref: "#/$defs/imageSize" } }, atlasSize: { $ref: "#/$defs/imageSize" }, glyphLayout: { type: "object", additionalProperties: false, required: ["height", "baseline"], properties: { height: { type: "number", minimum: 0.1, maximum: 1 }, baseline: { type: "number", minimum: 0.1, maximum: 1 } } }, tint: { type: "boolean" } } },
-  typography: { type: "object", additionalProperties: false, required: ["scale"], properties: { solidAlpha: { type: "boolean" }, align: { enum: ["left", "center", "right"] }, color: { $ref: "#/$defs/color" }, scale: { type: "number", exclusiveMinimum: 0 }, rotation: { type: "number" }, fontFamily: { type: "string" }, fontWeight: { type: "number", minimum: 1, maximum: 1000 }, fontStyle: { enum: ["normal", "italic"] }, letterSpacing: { type: "number" }, rasterFont: { $ref: "#/$defs/rasterFont" }, nativeSize: { type: "boolean" } } },
-  dateTypography: { type: "object", additionalProperties: false, required: ["scale"], properties: { solidAlpha: { type: "boolean" }, align: { enum: ["left", "center", "right"] }, color: { $ref: "#/$defs/color" }, scale: { type: "number", exclusiveMinimum: 0 }, rotation: { type: "number" }, width: { type: "number", exclusiveMinimum: 0 }, height: { type: "number", exclusiveMinimum: 0 }, aspectLocked: { type: "boolean" }, monthFormat: { enum: ["digits", "labels"] }, fontFamily: { type: "string" }, fontWeight: { type: "number", minimum: 1, maximum: 1000 }, fontStyle: { enum: ["normal", "italic"] }, letterSpacing: { type: "number" }, rasterFont: { $ref: "#/$defs/rasterFont" }, nativeSize: { type: "boolean" } } },
+  typography: { type: "object", additionalProperties: false, required: ["scale"], properties: { solidAlpha: { type: "boolean", description: "Use for small raster digits: converts final exported glyph alpha to 0/255 after resizing (128 cutoff). Inspect all digits at native device size; thin strokes can disappear at the cutoff. Does not apply to nativeData assets or guarantee on-watch legibility." }, align: { enum: ["left", "center", "right"] }, color: { $ref: "#/$defs/color" }, scale: { type: "number", exclusiveMinimum: 0 }, rotation: { type: "number" }, fontFamily: { type: "string" }, fontWeight: { type: "number", minimum: 1, maximum: 1000 }, fontStyle: { enum: ["normal", "italic"] }, letterSpacing: { type: "number" }, rasterFont: { $ref: "#/$defs/rasterFont" }, nativeSize: { type: "boolean" } } },
+  dateTypography: { type: "object", additionalProperties: false, required: ["scale"], properties: { solidAlpha: { type: "boolean", description: "Use for small raster digits: converts final exported glyph alpha to 0/255 after resizing (128 cutoff). Inspect all digits at native device size; thin strokes can disappear at the cutoff. Does not apply to nativeData assets or guarantee on-watch legibility." }, align: { enum: ["left", "center", "right"] }, color: { $ref: "#/$defs/color" }, scale: { type: "number", exclusiveMinimum: 0 }, rotation: { type: "number" }, width: { type: "number", exclusiveMinimum: 0 }, height: { type: "number", exclusiveMinimum: 0 }, aspectLocked: { type: "boolean" }, overwriteAllLanguages: { type: "boolean" }, overwriteLanguages: { type: "array", uniqueItems: true, items: { type: "string", pattern: "^[a-z_]+$" } }, monthFormat: { enum: ["digits", "labels"] }, fontFamily: { type: "string" }, fontWeight: { type: "number", minimum: 1, maximum: 1000 }, fontStyle: { enum: ["normal", "italic"] }, letterSpacing: { type: "number" }, rasterFont: { $ref: "#/$defs/rasterFont" }, nativeSize: { type: "boolean" } } },
   offset: { type: "object", additionalProperties: false, required: ["dx", "dy"], properties: { dx: { type: "number" }, dy: { type: "number" } } },
   guide: { type: "object", additionalProperties: false, required: ["id", "axis", "position"], properties: { id: { type: "string" }, axis: { enum: ["x", "y"] }, position: { type: "number" } } },
   group: { type: "object", additionalProperties: false, required: ["id", "name", "layerIds"], properties: { id: { type: "string" }, name: { type: "string" }, layerIds: { type: "array", minItems: 2, uniqueItems: true, items: { type: "string" } } } },
@@ -56,14 +59,31 @@ const WATCHFACE_SCHEMA_DEFINITIONS = {
   exerciseProgress: { type: "object", additionalProperties: false, required: ["enabled", "arcEnabled", "color", "previewPercent", "arc", "rect"], properties: { referenceWidth: { type: "number", exclusiveMinimum: 0 }, referenceHeight: { type: "number", exclusiveMinimum: 0 }, enabled: { type: "boolean" }, arcEnabled: { type: "boolean" }, color: { $ref: "#/$defs/color" }, previewPercent: { type: "number", minimum: 0, maximum: 100 }, arc: { $ref: "#/$defs/progressArc" }, rect: { $ref: "#/$defs/progressRect" } } },
   exerciseSeparator: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "size", "scale", "color"], properties: { enabled: { type: "boolean" }, x: { type: "number" }, y: { type: "number" }, size: { type: "number", exclusiveMinimum: 0 }, scale: { type: "number", exclusiveMinimum: 0 }, color: { $ref: "#/$defs/color" }, artwork: { anyOf: [{ $ref: "#/$defs/artwork" }, { type: "null" }] } } },
   staticSeparator: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "size", "color"], properties: { enabled: { type: "boolean" }, x: { type: "number" }, y: { type: "number" }, size: { type: "number", exclusiveMinimum: 0 }, color: { $ref: "#/$defs/color" }, fontFamily: { type: "string" } } },
-  indicator: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "scale"], properties: { enabled: { type: "boolean" }, x: { type: "number" }, y: { type: "number" }, scale: { type: "number", exclusiveMinimum: 0 }, color: { $ref: "#/$defs/color" }, fontFamily: { type: "string" } } },
+  indicator: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "scale"], properties: { enabled: { type: "boolean" }, x: { type: "number" }, y: { type: "number" }, scale: { type: "number", exclusiveMinimum: 0 }, color: { $ref: "#/$defs/color" }, fontFamily: { type: "string" }, rasterFont: { $ref: "#/$defs/rasterFont" } } },
+  weatherIndicator: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "scale"], properties: { enabled: { type: "boolean" }, x: { type: "number" }, y: { type: "number" }, scale: { type: "number", exclusiveMinimum: 0 }, color: { $ref: "#/$defs/color" }, temperatureEnabled: { type: "boolean" }, assets: { type: "object", additionalProperties: false, properties: Object.fromEntries(["day", "night", "digits", "symbols", "units"].map(key => [key, { type: "object", additionalProperties: { $ref: "#/$defs/pngImageValue" } }])) } } },
+  pngImageValue: { allOf: [{ $ref: "#/$defs/imageValue" }, { if: { type: "string" }, then: { pattern: "^data:image/png;base64," } }], description: "PNG artwork, passed as a reusable assetId or hydrated PNG data URL." },
+  nativeColor: { type: "string", pattern: "^#[0-9a-fA-F]{6}$", description: "Six-digit RGB hex color supported by the native compiler." },
+  nativeDataMap: { type: "object", propertyNames: { enum: [...NATIVE_DATA_BY_ID.keys()] }, additionalProperties: { $ref: "#/$defs/nativeDataStyle" } },
+  nativeDataStyle: { type: "object", additionalProperties: false, required: ["enabled", "x", "y", "scale", "color"], properties: {
+    enabled: {type:"boolean"}, x:{type:"number"}, y:{type:"number"}, scale:{type:"number",minimum:0.1,maximum:4}, color:{$ref:"#/$defs/nativeColor"}, fontFamily:{type:"string"}, previewValue:{type:"string",maxLength:6}, chartSource:{enum:NATIVE_CHART_SOURCES.map(source=>source.id)}, chartWidth:{type:"number",minimum:80,maximum:700}, chartHeight:{type:"number",minimum:16,maximum:500}, stateCount:{type:"integer",minimum:1,maximum:64},
+    assets:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_ASSET_ROLES.map(role=>[role,{type:"object",propertyNames:{pattern:"^(0|[1-9][0-9]?)$"},additionalProperties:{$ref:"#/$defs/pngImageValue"}}]))},
+    assetTexts:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_ASSET_ROLES.map(role=>[role,{type:"object",additionalProperties:{type:"string",maxLength:32}}]))},
+    parts:{type:"object",additionalProperties:false,properties:Object.fromEntries(NATIVE_PARTS.map(part=>[part,{$ref:"#/$defs/nativeDataPart"}]))},
+    chartStyle:{$ref:"#/$defs/nativeChartStyle"}
+  } },
+  nativeDataPart:{type:"object",additionalProperties:false,properties:{
+    enabled:{type:"boolean"},x:{type:"number",minimum:-1600,maximum:1600},y:{type:"number",minimum:-1600,maximum:1600},width:{type:"number",minimum:4,maximum:800},height:{type:"number",minimum:4,maximum:800},color:{$ref:"#/$defs/nativeColor"},fontFamily:{type:"string",maxLength:256},digitWidth:{type:"number",minimum:1,maximum:800},align:{enum:["left","center","right"]}
+  }},
+  nativeChartStyle:{type:"object",additionalProperties:false,properties:{
+    lineWidth:{type:"number",minimum:0,maximum:40,description:"0 turns the curve off on the watch."},barWidth:{type:"number",minimum:0,maximum:80,description:"0 turns bars off on the watch."},barGap:{type:"number",minimum:0,maximum:80},upperColor:{$ref:"#/$defs/nativeColor"},lowerColor:{$ref:"#/$defs/nativeColor"},selectedBarColor:{$ref:"#/$defs/nativeColor"},unselectedBarColor:{$ref:"#/$defs/nativeColor"},previewType:{enum:["curve","bars"],description:"Bars-only preview. The legacy curve value is accepted for existing projects but also renders as bars. Firmware chooses the live representation."}
+  }},
   configAssetOverride: { type: "object", additionalProperties: false, properties: { enabled: { type: "boolean" }, scale: { type: "number", exclusiveMinimum: 0 }, nativeSize: { type: "boolean" }, replacement: { $ref: "#/$defs/artwork" }, stateReplacements: { type: "object", additionalProperties: { $ref: "#/$defs/artwork" } } } },
   effectStyle: { type: "object", additionalProperties: false, required: ["id", "name", "effects"], properties: { id: { type: "string" }, name: { type: "string" }, effects: { type: "array", items: { $ref: "#/$defs/shadow" } } } },
   effectBinding: { oneOf: [{ type: "object", additionalProperties: false, required: ["kind", "effects"], properties: { kind: { const: "local" }, effects: { type: "array", items: { $ref: "#/$defs/shadow" } } } }, { type: "object", additionalProperties: false, required: ["kind", "styleId"], properties: { kind: { const: "style" }, styleId: { type: "string" } } }] },
   modeDesign: { type: "object", additionalProperties: false, properties: {
     backgroundColor: { $ref: "#/$defs/color" }, accentColor: { $ref: "#/$defs/color" }, artwork: { anyOf: [{ $ref: "#/$defs/artwork" }, { type: "null" }] }, artworkVisible: { type: "boolean" }, zoom: { type: "number", exclusiveMinimum: 0 }, fontFamily: { type: "string" }, rasterFont: { $ref: "#/$defs/rasterFont" }, fontWeight: { type: "number" }, fontStyle: { enum: ["normal", "italic"] }, letterSpacing: { type: "number" }, digitColor: { $ref: "#/$defs/color" }, tintLabels: { type: "boolean" }, tintIcons: { type: "boolean" }, previewComplication: { type: "string" },
-    metricChanges: { type: "object", additionalProperties: { type: "boolean" } }, metricStyles: { type: "object", additionalProperties: { $ref: "#/$defs/typography" } }, kcalProgress: { $ref: "#/$defs/kcalProgress" }, exerciseProgress: { $ref: "#/$defs/exerciseProgress" }, exerciseSeparator: { $ref: "#/$defs/exerciseSeparator" }, selectableMetricStyle: { $ref: "#/$defs/typography" }, controlComplicationEnabled: { type: "object", additionalProperties: { type: "boolean" } }, controlBarometerMode: { enum: ["static", "directional"] }, controlIconOffsets: { type: "object", additionalProperties: { $ref: "#/$defs/offset" } }, separateAutoTime: { type: "boolean" }, timeStyles: { type: "object", additionalProperties: { $ref: "#/$defs/typography" } }, dateStyles: { type: "object", additionalProperties: { $ref: "#/$defs/dateTypography" } }, staticSeparators: { type: "object", additionalProperties: false, required: ["colon", "dateSlash"], properties: { colon: { $ref: "#/$defs/staticSeparator" }, dateSlash: { $ref: "#/$defs/staticSeparator" } } }, ampmIndicator: { $ref: "#/$defs/indicator" }, weatherIndicator: { $ref: "#/$defs/indicator" }, layoutOffsets: { type: "object", additionalProperties: { $ref: "#/$defs/offset" } },
-    linkedLayerGroups: { type: "array", items: { type: "array", items: { type: "string" } } }, editorGroups: { type: "array", items: { $ref: "#/$defs/group" } }, editorGuides: { type: "array", items: { $ref: "#/$defs/guide" } }, lockedLayerIds: { type: "array", items: { type: "string" } }, effectStyles: { type: "array", items: { $ref: "#/$defs/effectStyle" } }, layerEffects: { type: "object", additionalProperties: { $ref: "#/$defs/effectBinding" } }, layerStrokes: { type: "object", additionalProperties: { type: "array", items: { $ref: "#/$defs/stroke" } } }, layerVisibility: { type: "object", additionalProperties: { type: "boolean" } }, layerOpacities: { type: "object", additionalProperties: { type: "number", minimum: 0, maximum: 1 } }, layerColors: { type: "object", additionalProperties: { $ref: "#/$defs/color" } }, configAssetOverrides: { type: "object", additionalProperties: { $ref: "#/$defs/configAssetOverride" } }, designSprites: { type: "array", items: { $ref: "#/$defs/sprite" } }, artworkLayerOrder: { type: "array", items: { type: "string" } }, backgroundElements: { type: "array", items: { $ref: "#/$defs/backgroundElement" } }, backgroundEdited: { type: "boolean" }
+    metricChanges: { type: "object", additionalProperties: { type: "boolean" } }, metricStyles: { type: "object", additionalProperties: { $ref: "#/$defs/typography" } }, kcalProgress: { $ref: "#/$defs/kcalProgress" }, exerciseProgress: { $ref: "#/$defs/exerciseProgress" }, exerciseSeparator: { $ref: "#/$defs/exerciseSeparator" }, selectableMetricStyle: { $ref: "#/$defs/typography" }, controlComplicationEnabled: { type: "object", additionalProperties: { type: "boolean" } }, controlBarometerMode: { enum: ["static", "directional"] }, controlIconOffsets: { type: "object", additionalProperties: { $ref: "#/$defs/offset" } }, separateAutoTime: { type: "boolean" }, addSeconds: { type: "boolean" }, addWeekday: { type: "boolean" }, addDateMonth: { type: "boolean" }, addDateDay: { type: "boolean" }, timeStyles: { type: "object", additionalProperties: { $ref: "#/$defs/typography" } }, dateStyles: { type: "object", additionalProperties: { $ref: "#/$defs/dateTypography" } }, staticSeparators: { type: "object", additionalProperties: false, required: ["colon", "dateSlash"], properties: { colon: { $ref: "#/$defs/staticSeparator" }, dateSlash: { $ref: "#/$defs/staticSeparator" } } }, ampmIndicator: { $ref: "#/$defs/indicator" }, weatherIndicator: { $ref: "#/$defs/weatherIndicator" }, nativeData: {$ref:"#/$defs/nativeDataMap"}, layoutOffsets: { type: "object", additionalProperties: { $ref: "#/$defs/offset" } },
+    linkedLayerGroups: { type: "array", items: { type: "array", items: { type: "string" } } }, editorGroups: { type: "array", items: { $ref: "#/$defs/group" } }, editorGuides: { type: "array", items: { $ref: "#/$defs/guide" } }, lockedLayerIds: { type: "array", items: { type: "string" } }, removedLayerIds: { type: "array", items: { type: "string" } }, effectStyles: { type: "array", items: { $ref: "#/$defs/effectStyle" } }, layerEffects: { type: "object", additionalProperties: { $ref: "#/$defs/effectBinding" } }, layerStrokes: { type: "object", additionalProperties: { type: "array", items: { $ref: "#/$defs/stroke" } } }, layerVisibility: { type: "object", additionalProperties: { type: "boolean" } }, layerOpacities: { type: "object", additionalProperties: { type: "number", minimum: 0, maximum: 1 } }, layerColors: { type: "object", additionalProperties: { $ref: "#/$defs/color" } }, configAssetOverrides: { type: "object", additionalProperties: { $ref: "#/$defs/configAssetOverride" } }, designSprites: { type: "array", items: { $ref: "#/$defs/sprite" } }, artworkLayerOrder: { type: "array", items: { type: "string" } }, backgroundElements: { type: "array", items: { $ref: "#/$defs/backgroundElement" } }, backgroundEdited: { type: "boolean" }
   } },
   backgroundElement: { oneOf: [
     { type: "object", additionalProperties: false, required: ["id", "kind", "x", "y", "rotation", "width", "height", "cornerRadius", "fill"], properties: { id: { type: "string" }, kind: { const: "rect" }, x: { type: "number" }, y: { type: "number" }, rotation: { type: "number" }, visible: { type: "boolean" }, opacity: { type: "number", minimum: 0, maximum: 1 }, width: { type: "number", exclusiveMinimum: 0 }, height: { type: "number", exclusiveMinimum: 0 }, aspectLocked: { type: "boolean" }, cornerRadius: { type: "number", minimum: 0 }, fill: { $ref: "#/$defs/color" }, gradient: { $ref: "#/$defs/gradient" }, strokeColor: { $ref: "#/$defs/color" }, strokeWidth: { type: "number", minimum: 0 } } },
@@ -101,6 +121,7 @@ export const WATCHFACE_AUTOMATION_DOCUMENT_JSON_SCHEMA = {
         modeDesigns: { type: "object", additionalProperties: false, properties: { aod: { $ref: "#/$defs/modeDesign" } } },
         archiveWatchFaceVersion: { type: "number" },
         stripBlankConfigKeys: { type: "boolean" },
+        watchLanguages: { anyOf: [{ enum: ["all", "english"] }, { type: "array", uniqueItems: true, items: { type: "string", pattern: "^[a-z_]+$" } }], description: "Watch languages that get the custom weekday labels. Month/day digits always reach every language." },
         configTextEdits: stringMap,
         backgroundColor: { $ref: "#/$defs/color", description: "Solid base painted first. Opaque artwork may cover it; set artworkVisible false to show only this color." },
         accentColor: { type: "string" },
@@ -131,16 +152,21 @@ export const WATCHFACE_AUTOMATION_DOCUMENT_JSON_SCHEMA = {
         controlTemperatureEnabled: { type: "boolean" },
         controlIconOffsets: { type: "object", additionalProperties: { $ref: "#/$defs/offset" } },
         separateAutoTime: { type: "boolean" },
+        addSeconds: { type: "boolean" },
+        addWeekday: { type: "boolean" },
+        addDateMonth: { type: "boolean" },
+        addDateDay: { type: "boolean" },
         timeStyles: { type: "object", additionalProperties: { $ref: "#/$defs/typography" } },
         dateStyles: { type: "object", additionalProperties: { $ref: "#/$defs/dateTypography" } },
         staticSeparators: { type: "object", additionalProperties: false, required: ["colon", "dateSlash"], properties: { colon: { $ref: "#/$defs/staticSeparator" }, dateSlash: { $ref: "#/$defs/staticSeparator" } } },
         ampmIndicator: { $ref: "#/$defs/indicator" },
-        weatherIndicator: { $ref: "#/$defs/indicator" },
+        weatherIndicator: { $ref: "#/$defs/weatherIndicator" }, nativeData: {$ref:"#/$defs/nativeDataMap"},
         layoutOffsets: { type: "object", additionalProperties: { $ref: "#/$defs/offset" } },
         linkedLayerGroups: { type: "array", items: { type: "array", items: { type: "string" } } },
         editorGroups: { type: "array", items: { $ref: "#/$defs/group" } },
         editorGuides: { type: "array", items: { $ref: "#/$defs/guide" } },
         lockedLayerIds: { type: "array", items: { type: "string" } },
+        removedLayerIds: { type: "array", items: { type: "string" } },
         effectStyles: { type: "array", items: { $ref: "#/$defs/effectStyle" } },
         layerEffects: { type: "object", additionalProperties: { $ref: "#/$defs/effectBinding" } },
         layerStrokes: { type: "object", additionalProperties: { type: "array", items: { $ref: "#/$defs/stroke" } } },
@@ -171,6 +197,14 @@ export const WATCHFACE_AUTOMATION_COMMAND_JSON_SCHEMA = {
       { type: "object", additionalProperties: false, required: ["op", "path", "index"], properties: { op: { const: "array_remove" }, path: { type: "string" }, index: { type: "integer", minimum: 0 } } },
       { type: "object", additionalProperties: false, required: ["op", "path", "from", "to"], properties: { op: { const: "array_move" }, path: { type: "string" }, from: { type: "integer", minimum: 0 }, to: { type: "integer", minimum: 0 } } },
       { type: "object", additionalProperties: false, required: ["op", "design"], properties: { op: { const: "replace_design" }, design: { type: "object" } } },
+      {
+        type: "object", additionalProperties: false, required: ["op", "id", "x", "y"],
+        description: "Create a supported live field even when absent from the starting template. Initializes nativeData and default style; export creates native config and sprites. One slot per field per display mode.",
+        properties: {
+          op: { const: "add_native_field" }, id: { enum: [...NATIVE_DATA_BY_ID.keys()] }, x: { type: "number" }, y: { type: "number" },
+          style: { ...WATCHFACE_SCHEMA_DEFINITIONS.nativeDataStyle, required: [], properties: Object.fromEntries(Object.entries(WATCHFACE_SCHEMA_DEFINITIONS.nativeDataStyle.properties).filter(([key]) => key !== "x" && key !== "y")) }
+        }
+      },
       { type: "object", additionalProperties: false, required: ["op", "sprite"], properties: { op: { const: "add_sprite" }, sprite: { type: "object" } } },
       { type: "object", additionalProperties: false, required: ["op", "id", "patch"], properties: { op: { const: "update_sprite" }, id: { type: "string" }, patch: { type: "object" } } },
       { type: "object", additionalProperties: false, required: ["op", "id"], properties: { op: { const: "remove_sprite" }, id: { type: "string" } } },
@@ -237,7 +271,9 @@ export function getWatchfaceAutomationSchema() {
   return {
     document: WATCHFACE_AUTOMATION_DOCUMENT_JSON_SCHEMA,
     commands: WATCHFACE_AUTOMATION_COMMAND_JSON_SCHEMA,
-    scalar
+    scalar,
+    simulation: WATCHFACE_SIMULATION_CAPABILITIES,
+    nativeData: getNativeDataAutomationCatalog()
   } as const;
 }
 
@@ -248,9 +284,9 @@ const MODE_KEYS = new Set([
   "rasterFont", "fontWeight", "fontStyle", "letterSpacing", "digitColor", "tintLabels",
   "tintIcons", "previewComplication", "metricChanges", "metricStyles", "kcalProgress",
   "exerciseProgress", "exerciseSeparator", "selectableMetricStyle", "controlComplicationEnabled",
-  "controlBarometerMode", "controlIconOffsets", "separateAutoTime", "timeStyles", "dateStyles",
-  "staticSeparators", "ampmIndicator", "weatherIndicator", "layoutOffsets", "linkedLayerGroups",
-  "editorGroups", "editorGuides", "lockedLayerIds", "effectStyles", "layerEffects", "layerStrokes",
+  "controlBarometerMode", "controlIconOffsets", "separateAutoTime", "addSeconds", "addWeekday", "addDateMonth", "addDateDay", "timeStyles", "dateStyles",
+  "staticSeparators", "ampmIndicator", "weatherIndicator", "nativeData", "layoutOffsets", "linkedLayerGroups",
+  "editorGroups", "editorGuides", "lockedLayerIds", "removedLayerIds", "effectStyles", "layerEffects", "layerStrokes",
   "layerVisibility", "layerOpacities", "layerColors", "configAssetOverrides", "designSprites",
   "artworkLayerOrder", "backgroundElements", "backgroundEdited"
 ]);
@@ -301,6 +337,10 @@ function validateImage(value: unknown, diagnostics: WatchfaceAutomationDiagnosti
 
 function requireColor(value: unknown, diagnostics: WatchfaceAutomationDiagnostic[], path: string): void {
   if (typeof value !== "string" || value.length > 64 || !colorPattern.test(value)) issue(diagnostics, "color.invalid", "Expected a supported CSS color.", path);
+}
+
+function requireNativeColor(value: unknown, diagnostics: WatchfaceAutomationDiagnostic[], path: string): void {
+  if (typeof value !== "string" || !/^#[0-9a-fA-F]{6}$/.test(value)) issue(diagnostics, "native.color", "Native data colors must be six-digit RGB hex, for example #ffffff.", path);
 }
 
 function validateModeObject(mode: unknown, diagnostics: WatchfaceAutomationDiagnostic[], path: string): void {
@@ -367,7 +407,7 @@ function validateRasterFont(value: unknown, diagnostics: WatchfaceAutomationDiag
 
 function validateTypography(value: unknown, diagnostics: WatchfaceAutomationDiagnostic[], path: string, date = false): void {
   if (!objectOf(value)) return issue(diagnostics, "style.invalid", "Typography style must be an object.", path);
-  allowedKeys(value, ["solidAlpha", "align", "color", "scale", "rotation", "fontFamily", "fontWeight", "fontStyle", "letterSpacing", "rasterFont", "nativeSize", ...(date ? ["width", "height", "aspectLocked", "monthFormat"] : [])], diagnostics, path);
+  allowedKeys(value, ["solidAlpha", "align", "color", "scale", "rotation", "fontFamily", "fontWeight", "fontStyle", "letterSpacing", "rasterFont", "nativeSize", ...(date ? ["width", "height", "aspectLocked", "monthFormat", "overwriteAllLanguages", "overwriteLanguages"] : [])], diagnostics, path);
   finite(value.scale, diagnostics, `${path}/scale`, { positive: true, maximum: 100 });
   if (value.rotation !== undefined) finite(value.rotation, diagnostics, `${path}/rotation`);
   if (value.align !== undefined && !["left", "center", "right"].includes(String(value.align))) issue(diagnostics, "enum.align", "align must be left, center, or right.", `${path}/align`);
@@ -377,7 +417,12 @@ function validateTypography(value: unknown, diagnostics: WatchfaceAutomationDiag
   if (value.fontStyle !== undefined && !["normal", "italic"].includes(String(value.fontStyle))) issue(diagnostics, "enum.font_style", "fontStyle must be normal or italic.", `${path}/fontStyle`);
   if (value.letterSpacing !== undefined) finite(value.letterSpacing, diagnostics, `${path}/letterSpacing`, { minimum: -10, maximum: 10 });
   if (value.rasterFont !== undefined) validateRasterFont(value.rasterFont, diagnostics, `${path}/rasterFont`);
-  for (const field of ["solidAlpha", "nativeSize", "aspectLocked"] as const) if (value[field] !== undefined) bool(value[field], diagnostics, `${path}/${field}`);
+  for (const field of ["solidAlpha", "nativeSize", "aspectLocked", "overwriteAllLanguages"] as const) if (value[field] !== undefined) bool(value[field], diagnostics, `${path}/${field}`);
+  if (value.overwriteLanguages !== undefined && (!Array.isArray(value.overwriteLanguages) ||
+    value.overwriteLanguages.some((language) => typeof language !== "string" || !/^[a-z_]+$/.test(language)) ||
+    new Set(value.overwriteLanguages).size !== value.overwriteLanguages.length)) {
+    issue(diagnostics, "style.languages", "Expected unique language prefixes.", `${path}/overwriteLanguages`);
+  }
   for (const field of ["width", "height"] as const) if (value[field] !== undefined) finite(value[field], diagnostics, `${path}/${field}`, { positive: true, maximum: 16384 });
   if (value.monthFormat !== undefined && !["digits", "labels"].includes(String(value.monthFormat))) issue(diagnostics, "enum.month_format", "monthFormat must be digits or labels.", `${path}/monthFormat`);
 }
@@ -430,7 +475,82 @@ function validateAdvancedCollections(design: Record<string, unknown>, diagnostic
   if (design.kcalProgress !== undefined) { const value = design.kcalProgress; if (!objectOf(value)) issue(diagnostics, "progress.invalid", "kcalProgress must be an object.", `${base}/kcalProgress`); else { allowedKeys(value, ["referenceWidth", "referenceHeight", "arcEnabled", "rectEnabled", "arcColor", "rectColor", "previewPercent", "arc", "rect"], diagnostics, `${base}/kcalProgress`); bool(value.arcEnabled, diagnostics, `${base}/kcalProgress/arcEnabled`); bool(value.rectEnabled, diagnostics, `${base}/kcalProgress/rectEnabled`); requireColor(value.arcColor, diagnostics, `${base}/kcalProgress/arcColor`); requireColor(value.rectColor, diagnostics, `${base}/kcalProgress/rectColor`); finite(value.previewPercent, diagnostics, `${base}/kcalProgress/previewPercent`, { minimum: 0, maximum: 100 }); validateArc(value.arc, `${base}/kcalProgress/arc`); validateRect(value.rect, `${base}/kcalProgress/rect`); } }
   if (design.exerciseProgress !== undefined) { const value = design.exerciseProgress; if (!objectOf(value)) issue(diagnostics, "progress.invalid", "exerciseProgress must be an object.", `${base}/exerciseProgress`); else { allowedKeys(value, ["referenceWidth", "referenceHeight", "enabled", "arcEnabled", "color", "previewPercent", "arc", "rect"], diagnostics, `${base}/exerciseProgress`); bool(value.enabled, diagnostics, `${base}/exerciseProgress/enabled`); bool(value.arcEnabled, diagnostics, `${base}/exerciseProgress/arcEnabled`); requireColor(value.color, diagnostics, `${base}/exerciseProgress/color`); finite(value.previewPercent, diagnostics, `${base}/exerciseProgress/previewPercent`, { minimum: 0, maximum: 100 }); validateArc(value.arc, `${base}/exerciseProgress/arc`); validateRect(value.rect, `${base}/exerciseProgress/rect`); } }
   if (design.exerciseSeparator !== undefined) { const value = design.exerciseSeparator; if (!objectOf(value)) issue(diagnostics, "separator.invalid", "exerciseSeparator must be an object.", `${base}/exerciseSeparator`); else { allowedKeys(value, ["enabled", "x", "y", "size", "scale", "color", "artwork"], diagnostics, `${base}/exerciseSeparator`); bool(value.enabled, diagnostics, `${base}/exerciseSeparator/enabled`); for (const field of ["x", "y"] as const) finite(value[field], diagnostics, `${base}/exerciseSeparator/${field}`); for (const field of ["size", "scale"] as const) finite(value[field], diagnostics, `${base}/exerciseSeparator/${field}`, { positive: true }); requireColor(value.color, diagnostics, `${base}/exerciseSeparator/color`); if (value.artwork !== undefined && value.artwork !== null) validateArtwork(value.artwork, diagnostics, `${base}/exerciseSeparator/artwork`); } }
-  for (const field of ["ampmIndicator", "weatherIndicator"] as const) if (design[field] !== undefined) { const value = design[field]; if (!objectOf(value)) issue(diagnostics, "indicator.invalid", `${field} must be an object.`, `${base}/${field}`); else { allowedKeys(value, ["enabled", "x", "y", "scale", "color", "fontFamily"], diagnostics, `${base}/${field}`); bool(value.enabled, diagnostics, `${base}/${field}/enabled`); finite(value.x, diagnostics, `${base}/${field}/x`); finite(value.y, diagnostics, `${base}/${field}/y`); finite(value.scale, diagnostics, `${base}/${field}/scale`, { positive: true }); if (value.color !== undefined) requireColor(value.color, diagnostics, `${base}/${field}/color`); if (value.fontFamily !== undefined) text(value.fontFamily, diagnostics, `${base}/${field}/fontFamily`, 256); } }
+  if (design.nativeData !== undefined) {
+    if (!objectOf(design.nativeData)) issue(diagnostics,"native.invalid","Native data must be an object map.",`${base}/nativeData`);
+    else for (const [id, style] of Object.entries(design.nativeData)) {
+      const path = `${base}/nativeData/${id}`;
+      if (!NATIVE_DATA_BY_ID.has(id) || !objectOf(style)) {issue(diagnostics,"native.invalid","Unknown or invalid native data field.",path);continue;}
+      allowedKeys(style,["enabled","x","y","scale","color","fontFamily","chartSource","chartWidth","chartHeight","stateCount","previewValue","assets","assetTexts","parts","chartStyle"],diagnostics,path);
+      bool(style.enabled,diagnostics,`${path}/enabled`);finite(style.x,diagnostics,`${path}/x`);finite(style.y,diagnostics,`${path}/y`);finite(style.scale,diagnostics,`${path}/scale`,{minimum:0.1,maximum:4});requireNativeColor(style.color,diagnostics,`${path}/color`);
+      if(style.chartWidth!==undefined)finite(style.chartWidth,diagnostics,`${path}/chartWidth`,{minimum:80,maximum:700});
+      if(style.chartHeight!==undefined)finite(style.chartHeight,diagnostics,`${path}/chartHeight`,{minimum:16,maximum:500});
+      if(style.stateCount!==undefined&&(typeof style.stateCount!=="number"||!Number.isInteger(style.stateCount)||style.stateCount<1||style.stateCount>64))issue(diagnostics,"native.invalid","State count must be a whole number from 1 to 64.",`${path}/stateCount`);
+      if(style.fontFamily!==undefined)text(style.fontFamily,diagnostics,`${path}/fontFamily`,256);
+      if(style.previewValue!==undefined)text(style.previewValue,diagnostics,`${path}/previewValue`,6);
+      if(style.chartSource!==undefined&&!NATIVE_CHART_SOURCES.some(source=>source.id===style.chartSource))issue(diagnostics,"native.chart","Unknown chart source.",path);
+      for (const property of ["assets","assetTexts"] as const) {
+        const sets = style[property];
+        if (sets === undefined) continue;
+        if (!objectOf(sets)) { issue(diagnostics,"native.assets","Expected numbered artwork sets.",`${path}/${property}`); continue; }
+        allowedKeys(sets,NATIVE_ASSET_ROLES,diagnostics,`${path}/${property}`);
+        for (const [role,states] of Object.entries(sets)) {
+          if (!objectOf(states)) { issue(diagnostics,"native.assets","Expected numbered artwork.",`${path}/${property}/${role}`); continue; }
+          for (const [state,value] of Object.entries(states)) {
+            const location = `${path}/${property}/${role}/${state}`;
+            if (!/^(0|[1-9]\d?)$/.test(state) || Number(state) >= nativeAssetCount(id,role)) issue(diagnostics,"native.assets","Invalid artwork state.",location);
+            if (property === "assetTexts") text(value,diagnostics,location,32);
+            else if (typeof value !== "string" || !value.startsWith("data:image/png;base64,")) issue(diagnostics,"native.assets","Expected a PNG image.",location);
+          }
+        }
+      }
+      if (style.parts !== undefined) {
+        if (!objectOf(style.parts)) issue(diagnostics,"native.parts","Expected component styles.",`${path}/parts`);
+        else {
+          allowedKeys(style.parts,NATIVE_PARTS,diagnostics,`${path}/parts`);
+          for (const [name,part] of Object.entries(style.parts)) {
+            const location = `${path}/parts/${name}`;
+            if (!objectOf(part)) { issue(diagnostics,"native.parts","Invalid component style.",location); continue; }
+            allowedKeys(part,["enabled","x","y","width","height","color","fontFamily","digitWidth","align"],diagnostics,location);
+            if (part.enabled !== undefined) bool(part.enabled,diagnostics,`${location}/enabled`);
+            for (const key of ["x","y"] as const) if (part[key] !== undefined) finite(part[key],diagnostics,`${location}/${key}`,{minimum:-1600,maximum:1600});
+            for (const key of ["width","height"] as const) if (part[key] !== undefined) finite(part[key],diagnostics,`${location}/${key}`,{minimum:4,maximum:800});
+            if (part.color !== undefined) requireNativeColor(part.color,diagnostics,`${location}/color`);
+            if (part.fontFamily !== undefined) text(part.fontFamily,diagnostics,`${location}/fontFamily`,256);
+            if (part.digitWidth !== undefined) finite(part.digitWidth,diagnostics,`${location}/digitWidth`,{minimum:1,maximum:800});
+            if (part.align !== undefined && !["left","center","right"].includes(part.align as string)) issue(diagnostics,"native.parts","Unknown number alignment.",`${location}/align`);
+          }
+        }
+      }
+      if (style.chartStyle !== undefined) {
+        const chart = style.chartStyle, location = `${path}/chartStyle`;
+        if (!objectOf(chart)) issue(diagnostics,"native.chart","Invalid graph style.",location);
+        else {
+          allowedKeys(chart,["lineWidth","barWidth","barGap","upperColor","lowerColor","selectedBarColor","unselectedBarColor","previewType"],diagnostics,location);
+          for (const key of ["lineWidth","barWidth","barGap"] as const) if (chart[key] !== undefined) finite(chart[key],diagnostics,`${location}/${key}`,{minimum:0,maximum:key==="lineWidth"?40:80});
+          for (const key of ["upperColor","lowerColor","selectedBarColor","unselectedBarColor"] as const) if (chart[key] !== undefined) requireNativeColor(chart[key],diagnostics,`${location}/${key}`);
+          if (chart.previewType !== undefined && !["curve","bars"].includes(String(chart.previewType))) issue(diagnostics,"native.chart","Invalid preview plot.",`${location}/previewType`);
+        }
+      }
+    }
+  }
+  const weather = design.weatherIndicator;
+  if (objectOf(weather)) {
+    if (weather.temperatureEnabled !== undefined) bool(weather.temperatureEnabled, diagnostics, `${base}/weatherIndicator/temperatureEnabled`);
+    if (weather.assets !== undefined) {
+      if (!objectOf(weather.assets)) issue(diagnostics, "weather.assets", "Weather assets must be an object.", `${base}/weatherIndicator/assets`);
+      else {
+        allowedKeys(weather.assets, ["day", "night", "digits", "symbols", "units"], diagnostics, `${base}/weatherIndicator/assets`);
+        for (const [set, states] of Object.entries(weather.assets)) {
+          const limit = set === "day" || set === "night" ? 41 : set === "digits" ? 10 : 2;
+          if (!objectOf(states)) { issue(diagnostics, "weather.states", "Expected numbered PNG states.", `${base}/weatherIndicator/assets/${set}`); continue; }
+          for (const [state, url] of Object.entries(states)) {
+            if (!/^(0|[1-9]\d?)$/.test(state) || Number(state) >= limit || typeof url !== "string" || !url.startsWith("data:image/png;base64,")) issue(diagnostics, "weather.state", "Use a valid numbered PNG state.", `${base}/weatherIndicator/assets/${set}/${state}`);
+          }
+        }
+      }
+    }
+  }
+  for (const field of ["ampmIndicator", "weatherIndicator"] as const) if (design[field] !== undefined) { const value = design[field]; if (!objectOf(value)) issue(diagnostics, "indicator.invalid", `${field} must be an object.`, `${base}/${field}`); else { allowedKeys(value, ["enabled", "x", "y", "scale", "color", ...(field === "weatherIndicator" ? ["temperatureEnabled", "assets"] : ["fontFamily", "rasterFont"])], diagnostics, `${base}/${field}`); bool(value.enabled, diagnostics, `${base}/${field}/enabled`); finite(value.x, diagnostics, `${base}/${field}/x`); finite(value.y, diagnostics, `${base}/${field}/y`); finite(value.scale, diagnostics, `${base}/${field}/scale`, { positive: true }); if (value.color !== undefined) requireColor(value.color, diagnostics, `${base}/${field}/color`); if (value.fontFamily !== undefined) text(value.fontFamily, diagnostics, `${base}/${field}/fontFamily`, 256); if (field === "ampmIndicator" && value.rasterFont !== undefined) validateRasterFont(value.rasterFont, diagnostics, `${base}/${field}/rasterFont`); } }
 }
 
 export function validateWatchfaceAutomationDocument(
@@ -459,10 +579,14 @@ export function validateWatchfaceAutomationDocument(
   if (!Number.isFinite(design.zoom) || Number(design.zoom) <= 0) issue(diagnostics, "geometry.zoom", "Zoom must be a positive finite number.", "/design/zoom");
   if (design.fontStyle !== undefined && design.fontStyle !== "normal" && design.fontStyle !== "italic") issue(diagnostics, "enum.font_style", "fontStyle must be normal or italic.", "/design/fontStyle");
   if (design.controlBarometerMode !== undefined && design.controlBarometerMode !== "static" && design.controlBarometerMode !== "directional") issue(diagnostics, "enum.barometer", "controlBarometerMode must be static or directional.", "/design/controlBarometerMode");
-  for (const key of ["artworkVisible", "stripBlankConfigKeys", "tintLabels", "tintIcons", "separateAutoTime", "controlBatteryEnabled", "controlSunriseEnabled", "controlSunsetEnabled", "controlFloorEnabled", "controlTemperatureEnabled"] as const) if (design[key] !== undefined) bool(design[key], diagnostics, `/design/${key}`);
+  for (const key of ["artworkVisible", "stripBlankConfigKeys", "tintLabels", "tintIcons", "separateAutoTime", "addSeconds", "addWeekday", "addDateMonth", "addDateDay", "controlBatteryEnabled", "controlSunriseEnabled", "controlSunsetEnabled", "controlFloorEnabled", "controlTemperatureEnabled"] as const) if (design[key] !== undefined) bool(design[key], diagnostics, `/design/${key}`);
   for (const key of ["fontFamily", "previewComplication"] as const) text(design[key], diagnostics, `/design/${key}`, 512);
   if (design.fontWeight !== undefined) finite(design.fontWeight, diagnostics, "/design/fontWeight", { minimum: 1, maximum: 1000 });
   if (design.letterSpacing !== undefined) finite(design.letterSpacing, diagnostics, "/design/letterSpacing", { minimum: -10, maximum: 10 });
+  if (design.watchLanguages !== undefined && design.watchLanguages !== "all" && design.watchLanguages !== "english" &&
+    (!Array.isArray(design.watchLanguages) || design.watchLanguages.some((language) => typeof language !== "string" || !/^[a-z_]+$/.test(language)))) {
+    issue(diagnostics, "style.languages", "watchLanguages must be all, english or an array of language prefixes.", "/design/watchLanguages");
+  }
   if (design.archiveWatchFaceVersion !== undefined) finite(design.archiveWatchFaceVersion, diagnostics, "/design/archiveWatchFaceVersion", { minimum: 0, maximum: 1000, integer: true });
   validateAdvancedCollections(design, diagnostics);
   if (objectOf(design.modeDesigns)) {

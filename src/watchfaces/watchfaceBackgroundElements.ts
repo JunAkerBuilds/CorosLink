@@ -7,6 +7,7 @@ import type {
 import {
   renderWatchfaceCanvasDecorationsWithOpacity
 } from "./watchfaceEditorStrokes";
+import { fillWatchfaceText, setWatchfaceCanvasFont } from "./watchfaceFontSnapshots";
 
 /** All background shapes are authored in the 800×800 background pixel space. */
 export const BACKGROUND_SPACE = 800;
@@ -216,8 +217,12 @@ function drawBackgroundElement(
       context.fillStyle = element.color;
       context.textAlign = element.align;
       context.textBaseline = "middle";
-      context.font = `${element.weight} ${element.fontSize}px ${quoteFamily(element.fontFamily)}`;
-      context.fillText(element.text, 0, 0);
+      setWatchfaceCanvasFont(
+        context,
+        { family: element.fontFamily, size: element.fontSize, weight: element.weight },
+        `${element.weight} ${element.fontSize}px ${quoteFamily(element.fontFamily)}`
+      );
+      fillWatchfaceText(context, element.text, 0, 0);
   }
 
   context.restore();

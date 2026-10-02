@@ -32,7 +32,7 @@ const LINK_GROUPS: ResourceGroup[] = [
     links: [
       {
         label: "Website",
-        href: "https://coros-link.vercel.app/",
+        href: "https://coroslink.com/",
         icon: Globe2,
       },
       {

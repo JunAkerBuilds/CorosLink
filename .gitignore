@@ -17,3 +17,5 @@ bin/*/
 /.agents/skills
 /.claude
 /video
+/docs
+*.tsbuildinfo

@@ -5,6 +5,8 @@ import type {
   CorosWatchfaceRasterFont,
   CorosWatchfaceRasterFontFolder
 } from "../../electron/types";
+import { NATIVE_DATA_BY_ID } from "../../electron/watchfaceNativeCatalog";
+import { defaultNativeDataStyle } from "./nativeDataParts";
 import { resolveWatchfaceArtworkLayerOrder } from "./watchfaceArtworkLayers.ts";
 import {
   normalizeWatchfaceEditorGroups,
@@ -53,7 +55,7 @@ export class WatchfaceAutomationCommandError extends Error {
 type JsonObject = Record<string, unknown>;
 const DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const GLOBAL_DESIGN_FIELDS = new Set([
-  "version", "archiveWatchFaceVersion", "stripBlankConfigKeys", "configTextEdits"
+  "version", "archiveWatchFaceVersion", "stripBlankConfigKeys", "watchLanguages", "configTextEdits"
 ]);
 
 function isObject(value: unknown): value is JsonObject {
@@ -62,6 +64,23 @@ function isObject(value: unknown): value is JsonObject {
 
 function own(object: JsonObject, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+function diagnosticKey(item: WatchfaceAutomationDiagnostic): string {
+  return `${item.code}\u0000${item.path ?? ""}`;
+}
+
+function errorKeys(diagnostics: WatchfaceAutomationDiagnostic[]): Set<string> {
+  return new Set(diagnostics.filter((item) => item.severity === "error").map(diagnosticKey));
+}
+
+/**
+ * Errors the document already had are reported, not enforced. A batch is
+ * rejected only for errors it introduces, so a face carrying stale imported
+ * values stays editable, including by the command that repairs them.
+ */
+function introducedErrors(diagnostics: WatchfaceAutomationDiagnostic[], baseline: Set<string>): WatchfaceAutomationDiagnostic[] {
+  return diagnostics.filter((item) => item.severity === "error" && !baseline.has(diagnosticKey(item)));
 }
 
 function fail(code: string, message: string, path?: string, commandIndex?: number): never {
@@ -167,7 +186,7 @@ function activeLayerIds(design: CorosWatchfaceDesignState, context: WatchfaceAut
     "background", "artwork", "hours", "minutes", "seconds", "autoTime",
     "weekday", "dateMonth", "dateDay", "ampm", "weather", "batteryIcon",
     "controlBatteryIcon", "complication", "kcalProgress", "exerciseProgress",
-    "exerciseSeparator", "battery", "heartRate", "steps", "calories",
+    "exerciseSeparator", "separators", "arcCut", "battery", "heartRate", "steps", "calories",
     "exercise", "elevation", "temperature", "floors", "barometer", "sunrise",
     "sunset", "analogHour", "analogMinute", "analogSecond"
   ]);
@@ -181,6 +200,7 @@ function activeLayerIds(design: CorosWatchfaceDesignState, context: WatchfaceAut
     }
   }
   for (const sprite of design.designSprites) ids.add(`sprite:${sprite.id}`);
+  for (const id of Object.keys(design.nativeData ?? {})) ids.add(`native:${id}`);
   for (const element of design.backgroundElements ?? []) ids.add(`bgel:${element.id}`);
   return ids;
 }
@@ -212,6 +232,10 @@ function affectedLayerIds(command: JsonObject, design: CorosWatchfaceDesignState
   const segments = decodePointer(command.path, index);
   if (segments[0] !== "design") return [];
   if (segments.length === 1) return [...(design.lockedLayerIds ?? [])];
+  if (segments[1] === "nativeData") return segments[2]
+    ? [`native:${segments[2]}`]
+    : [...new Set([...Object.keys(design.nativeData ?? {}), ...Object.keys(isObject(command.value) ? command.value : {})])].map(id => `native:${id}`);
+  if (segments[1] === "weatherIndicator") return ["weather"];
   if (segments[1] === "designSprites" && segments[2] !== undefined) {
     const sprite = design.designSprites[Number(segments[2])];
     return sprite ? [`sprite:${sprite.id}`] : [];
@@ -284,8 +308,21 @@ function rasterFontFromFolder(folder: CorosWatchfaceRasterFontFolder, targetKind
   };
 }
 
-function applySemantic(command: JsonObject, design: CorosWatchfaceDesignState, context: WatchfaceAutomationCommandContext, index: number, changed: Set<string>): CorosWatchfaceDesignState | null {
+function applySemantic(command: JsonObject, design: CorosWatchfaceDesignState, context: WatchfaceAutomationCommandContext, index: number, changed: Set<string>, baseline: Set<string>): CorosWatchfaceDesignState | null {
   const op = command.op;
+  if (op === "add_native_field") {
+    assertExactKeys(command, ["op", "id", "x", "y", "style"], index);
+    const id = requireString(command.id, "id", index);
+    if (!NATIVE_DATA_BY_ID.has(id)) fail("native.field", `Unknown native field ${id}. Check get_schema.nativeData for supported IDs.`, undefined, index);
+    const layerId = `native:${id}`;
+    requireUnlocked(design, [layerId], index);
+    if (Object.prototype.hasOwnProperty.call(design.nativeData ?? {}, id)) fail("id.duplicate", `Native field ${id} already exists. Edit its style instead.`, undefined, index);
+    if (typeof command.x !== "number" || !Number.isFinite(command.x) || typeof command.y !== "number" || !Number.isFinite(command.y)) fail("command.field", "x and y must be finite master-pixel coordinates.", undefined, index);
+    const style = command.style === undefined ? {} : requireObject(command.style, "style", index);
+    if (own(style, "x") || own(style, "y")) fail("command.field", "Supply x and y on the command, not inside style.", undefined, index);
+    changed.add(layerId);
+    return { ...design, nativeData: { ...design.nativeData, [id]: { ...defaultNativeDataStyle(id), ...structuredClone(style), x: command.x, y: command.y } } };
+  }
   if (op === "import_raster_font") {
     assertExactKeys(command, ["op", "folder", "target", "mode", "tint"], index);
     if (command.mode !== undefined && command.mode !== (context.mode ?? "current")) fail("mode.mismatch", "The command mode must match the active editor mode.", undefined, index);
@@ -358,8 +395,7 @@ function applySemantic(command: JsonObject, design: CorosWatchfaceDesignState, c
     return { ...design, backgroundElements: [...(design.backgroundElements ?? []), copy], artworkLayerOrder: [...resolveWatchfaceArtworkLayerOrder(design), layerId] };
   }
   if (isWatchfacePlacementCommand(op)) {
-    const errors = validateWatchfaceAutomationDocument({ projectName: "Placement", design }, context)
-      .filter((item) => item.severity === "error");
+    const errors = introducedErrors(validateWatchfaceAutomationDocument({ projectName: "Placement", design }, context), baseline);
     if (errors.length) throw new WatchfaceAutomationCommandError(errors.map((item) => ({ ...item, commandIndex: index })));
     try {
       const result = applyWatchfaceLayoutCommand(design, command, context);
@@ -462,12 +498,14 @@ export function applyWatchfaceAutomationCommands(
   commands: unknown[],
   context: WatchfaceAutomationCommandContext
 ): WatchfaceAutomationApplyResult {
-  const before = validateWatchfaceAutomationDocument(value, context).filter((item) => item.severity === "error");
-  if (before.length) throw new WatchfaceAutomationCommandError(before);
   if (!Array.isArray(commands) || commands.length === 0 || commands.length > WATCHFACE_AUTOMATION_LIMITS.maximumCommands) fail("commands.count", `Provide between 1 and ${WATCHFACE_AUTOMATION_LIMITS.maximumCommands} commands.`);
   const mode = context.mode ?? "current";
   const root = structuredClone(value.design);
   let active = resolveWatchfaceModeDesign(root, mode);
+  // Baselines in both frames: the whole document, and the active mode's
+  // resolved design that staged and placement validation see.
+  const baseline = errorKeys(validateWatchfaceAutomationDocument(value, context));
+  const stagedBaseline = errorKeys(validateWatchfaceAutomationDocument({ projectName: value.projectName, design: active }, context));
   const document: JsonObject = { projectName: value.projectName, design: active };
   const changed = new Set<string>();
   let activeDirty = false;
@@ -493,7 +531,7 @@ export function applyWatchfaceAutomationCommands(
       continue;
     }
     active = document.design as CorosWatchfaceDesignState;
-    const semantic = applySemantic(raw, active, context, index, changed);
+    const semantic = applySemantic(raw, active, context, index, changed, stagedBaseline);
     if (semantic) document.design = semantic;
     else {
       for (const id of affectedLayerIds(raw, active, index)) changed.add(id);
@@ -506,7 +544,7 @@ export function applyWatchfaceAutomationCommands(
     { projectName: String(document.projectName), design: active },
     context
   );
-  const stagedErrors = stagedDiagnostics.filter((item) => item.severity === "error");
+  const stagedErrors = introducedErrors(stagedDiagnostics, stagedBaseline);
   if (stagedErrors.length) throw new WatchfaceAutomationCommandError(stagedErrors.map((item) => ({ ...item, commandIndex: item.commandIndex ?? commands.length - 1 })));
   const normalizedActive = syncLegacyWatchfaceGroups({ ...active, artworkLayerOrder: resolveWatchfaceArtworkLayerOrder(active) });
   const nextDesign = activeDirty
@@ -514,9 +552,16 @@ export function applyWatchfaceAutomationCommands(
     : root;
   const next = { projectName: String(document.projectName), design: nextDesign };
   const diagnostics = validateWatchfaceAutomationDocument(next, context);
-  const errors = diagnostics.filter((item) => item.severity === "error");
+  const errors = introducedErrors(diagnostics, baseline);
   if (errors.length) throw new WatchfaceAutomationCommandError(errors.map((item) => ({ ...item, commandIndex: item.commandIndex ?? commands.length - 1 })));
-  return { value: next, changedLayerIds: [...changed], diagnostics };
+  return {
+    value: next,
+    changedLayerIds: [...changed],
+    // Surviving older errors stay visible so the caller can repair them.
+    diagnostics: diagnostics.map((item) => item.severity === "error"
+      ? { ...item, severity: "warning" as const, code: `preexisting.${item.code}`, message: `${item.message} (Already present before this change; fix it with a command on this path.)` }
+      : item)
+  };
 }
 
 export function copyWatchfaceAutomationCurrentToAod(design: CorosWatchfaceDesignState): CorosWatchfaceDesignState {

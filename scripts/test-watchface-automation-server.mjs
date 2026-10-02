@@ -6,6 +6,8 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { WatchfaceAutomationServer } from "../dist-electron/watchfaceAutomationServer.js";
+import { createWatchfaceAutomationAssetStore } from "../dist-electron/watchfaceAutomationAssets.js";
+import { encodeCorosRgbaPng } from "../dist-electron/corosCompiledWatchface.js";
 
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
@@ -25,7 +27,7 @@ const dispatch = async (method, params) => {
       sessionId: "editor-session",
       revision: 4,
       scope: "editor",
-      design: { version: 1, designSprites: [{ id: "sprite-1", dataUrl: DATA_URL }] },
+      design: { version: 1, designSprites: Array.from({ length: 146 }, (_, i) => ({ id: `sprite-${i + 1}`, dataUrl: DATA_URL })) },
       layers: [], capabilities: {}
     };
   }
@@ -124,6 +126,12 @@ try {
   const inspected = await first.client.callTool({ name: "get_document", arguments: {} });
   const inspectedJson = JSON.parse(inspected.content.find((part) => part.type === "text").text);
   const documentAsset = inspectedJson.design.designSprites[0].dataUrl;
+  assert.equal(inspectedJson.design.designSprites.length, 146, "Repeated source images use a shared outgoing asset reference");
+  assert.deepEqual(inspectedJson.design.designSprites[145].dataUrl, documentAsset);
+  const assets = createWatchfaceAutomationAssetStore(temporaryRoot);
+  await assert.rejects(assets.hydrateAssetRefs(Array(129).fill(documentAsset)), /too many or too much image/, "Input expansion keeps its image budget");
+  const distinct = Array.from({ length: 129 }, (_, i) => `data:image/png;base64,${encodeCorosRgbaPng(1, 1, Buffer.from([i, 0, 0, 255])).toString("base64")}`);
+  await assert.rejects(assets.externalizeDataImages(distinct), /too many or too much image/, "Distinct outgoing images keep their image budget");
   assert.match(documentAsset.assetId, /^[a-f0-9]{64}$/);
   assert.equal(JSON.stringify(inspectedJson).includes("data:image"), false);
 

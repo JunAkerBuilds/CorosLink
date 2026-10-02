@@ -9,7 +9,7 @@ import {
   Trash2,
   X
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CalendarConnectionStatus } from "../../electron/calendarSyncTypes";
 import type {
   TrainingHubActivity,
@@ -33,7 +33,9 @@ import { isSwimSportType } from "../training/sportTypes";
 import { AddWorkoutModal } from "./AddWorkoutModal";
 import { CalendarGrid } from "./CalendarGrid";
 import {
+  createCalendarClipboardEntry,
   scheduledWorkoutKey,
+  type CalendarClipboardEntry,
   type CalendarDay,
   type CalendarMode,
   type CalendarSelection,
@@ -42,6 +44,12 @@ import {
 import type { CalendarDragPayload } from "./calendarDrag";
 import { DayDetailPanel } from "./DayDetailPanel";
 import {
+  CalendarContextMenu,
+  MOD_KEY_LABEL,
+  type CalendarContextMenuItem
+} from "./CalendarContextMenu";
+import {
+  addDaysToKey,
   isKeyInMonth,
   monthGridWeeks,
   monthLabel,
@@ -121,6 +129,32 @@ function scheduledWorkoutRemovalRef(entry: TrainingHubScheduledWorkoutEntry) {
   };
 }
 
+interface CalendarContextTarget {
+  x: number;
+  y: number;
+  dayKey: string;
+  workoutKey?: string;
+}
+
+function workoutCountLabel(count: number): string {
+  return count === 1 ? "workout" : `${count} workouts`;
+}
+
+const ARROW_DAY_STEPS: Record<string, number | undefined> = {
+  ArrowLeft: -1,
+  ArrowRight: 1,
+  ArrowUp: -7,
+  ArrowDown: 7
+};
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable ||
+      target.closest("input, textarea, select, [contenteditable='true']") !== null)
+  );
+}
+
 async function removeScheduledWorkoutEntries(
   api: CorosLinkApi,
   entries: TrainingHubScheduledWorkoutEntry[]
@@ -170,6 +204,8 @@ export function CalendarView({
     () => new Set()
   );
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [clipboard, setClipboard] = useState<CalendarClipboardEntry[] | null>(null);
+  const [contextMenu, setContextMenu] = useState<CalendarContextTarget | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -194,6 +230,19 @@ export function CalendarView({
   }, [api, calendarSyncing, mutating, refreshToken, status?.userId]);
 
   const calendarSyncState = calendarSyncButtonState(calendarStatuses, calendarSyncing);
+
+  const syncCalendarEdit = useCallback(async (entry: { planId: string; idInPlan: string; happenDay: string }) => {
+    if (!status?.userId) return;
+    setCalendarSyncing(true);
+    try {
+      const result = await api.syncEditedCalendarWorkout({ userId: status.userId, ...entry });
+      if (result.errors.length) onError(`Saved in CorosLink. ${result.errors.join(" ")}`);
+    } catch (cause) {
+      onError(`Saved in CorosLink. Calendar sync failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    } finally {
+      setCalendarSyncing(false);
+    }
+  }, [api, status?.userId, onError]);
 
   const handleSyncCalendars = useCallback(async () => {
     if (calendarSyncing) return;
@@ -259,6 +308,8 @@ export function CalendarView({
     refreshToken,
     isInMonth
   });
+
+  useEffect(() => api.onWorkoutEditsChanged(() => { if (authenticated) void reload(); }), [api, authenticated, reload]);
 
   const selectableWorkouts = useMemo(() => {
     const entries = new Map<string, TrainingHubScheduledWorkoutEntry>();
@@ -343,8 +394,78 @@ export function CalendarView({
     });
   };
 
+  const pasteEntries = useCallback(
+    async (entries: CalendarClipboardEntry[], targetDay: string) => {
+      if (mutating || entries.length === 0) {
+        return;
+      }
+      if (targetDay < getLocalHappenDayKey()) {
+        onError("COROS doesn't allow scheduling workouts in the past.");
+        return;
+      }
+      setMutating(true);
+      onError(null);
+      const failures: string[] = [];
+      try {
+        // One at a time: each copy reads the target day's schedule to pick its slot.
+        for (const entry of entries) {
+          try {
+            await api.copyScheduledWorkout(
+              {
+                planId: entry.planId,
+                idInPlan: entry.idInPlan,
+                happenDay: entry.happenDay,
+                rawProgram: entry.rawProgram
+              },
+              targetDay
+            );
+          } catch (cause) {
+            failures.push(
+              `"${entry.name}": ${cause instanceof Error ? cause.message : String(cause)}`
+            );
+          }
+        }
+        const pasted = entries.length - failures.length;
+        if (pasted > 0) {
+          onMessage(
+            pasted === 1 && entries.length === 1
+              ? `Pasted "${entries[0]!.name}" on ${formatHappenDayLabel(targetDay)}.`
+              : `Pasted ${pasted} workout${pasted === 1 ? "" : "s"} on ${formatHappenDayLabel(targetDay)}.`
+          );
+        }
+        if (failures.length > 0) {
+          onError(`Couldn't paste ${failures.join("; ")}`);
+        }
+      } finally {
+        setMutating(false);
+        reload();
+      }
+    },
+    [api, mutating, onError, onMessage, reload]
+  );
+
+  const copyEntries = useCallback(
+    (entries: TrainingHubScheduledWorkoutEntry[], sourceLabel?: string) => {
+      if (entries.length === 0) {
+        return;
+      }
+      setClipboard(entries.map(createCalendarClipboardEntry));
+      onError(null);
+      onMessage(
+        `Copied ${
+          entries.length === 1 ? `"${entries[0]!.name}"` : `${entries.length} workouts`
+        }${sourceLabel ? ` from ${sourceLabel}` : ""}. Right-click a day to paste, or press ${MOD_KEY_LABEL}V.`
+      );
+    },
+    [onError, onMessage]
+  );
+
   const handleDropEntry = useCallback(
-    (payload: CalendarDragPayload, targetDay: string) => {
+    (payload: CalendarDragPayload, targetDay: string, copy: boolean) => {
+      if (copy || payload.happenDay < getLocalHappenDayKey()) {
+        void pasteEntries([payload], targetDay);
+        return;
+      }
       if (mutating || payload.happenDay === targetDay) {
         return;
       }
@@ -356,10 +477,11 @@ export function CalendarView({
       const rollback = applyOptimisticMove(payload, targetDay);
       void api
         .rescheduleWorkout(payload, targetDay)
-        .then(() => {
+        .then(async () => {
           onMessage(
             `Moved "${payload.name}" to ${formatHappenDayLabel(targetDay)}.`
           );
+          await syncCalendarEdit({ ...payload, happenDay: targetDay });
         })
         .catch((cause: unknown) => {
           rollback();
@@ -370,7 +492,7 @@ export function CalendarView({
           reload();
         });
     },
-    [api, applyOptimisticMove, mutating, onError, onMessage, reload]
+    [api, applyOptimisticMove, pasteEntries, mutating, onError, onMessage, reload, syncCalendarEdit]
   );
 
   const handleDelete = useCallback(
@@ -378,9 +500,10 @@ export function CalendarView({
       setMutating(true);
       void api
         .removeScheduledWorkout(scheduledWorkoutRemovalRef(target.entry))
-        .then(() => {
+        .then(async () => {
           onMessage(`Removed "${target.entry.name}" from the calendar.`);
           setSelection(null);
+          await syncCalendarEdit(target.entry);
         })
         .catch((cause: unknown) => {
           onError(cause instanceof Error ? cause.message : String(cause));
@@ -390,7 +513,7 @@ export function CalendarView({
           reload();
         });
     },
-    [api, onError, onMessage, reload]
+    [api, onError, onMessage, reload, syncCalendarEdit]
   );
 
   const handleDeleteSelected = useCallback(() => {
@@ -456,6 +579,194 @@ export function CalendarView({
     selectableWorkouts,
     selectedWorkoutKeys
   ]);
+
+  const daysByKey = useMemo(() => {
+    const map = new Map<string, CalendarDay>();
+    for (const week of weeks) {
+      for (const day of week.days) map.set(day.dateKey, day);
+    }
+    return map;
+  }, [weeks]);
+
+  const findScheduled = useCallback(
+    (dayKey: string, workoutKey: string) =>
+      daysByKey
+        .get(dayKey)
+        ?.scheduled.find((entry) => scheduledWorkoutKey(entry) === workoutKey),
+    [daysByKey]
+  );
+
+  const copiedWorkoutKeys = useMemo(
+    () => new Set((clipboard ?? []).map(scheduledWorkoutKey)),
+    [clipboard]
+  );
+
+  const modalOpen = addTarget !== null || editRef !== null || libraryOpen;
+  const keyboardState = useRef({
+    clipboard,
+    selection,
+    selectionMode,
+    selectedWorkoutKeys,
+    selectableWorkouts,
+    modalOpen,
+    contextMenuOpen: contextMenu !== null,
+    daysByKey,
+    findScheduled,
+    copyEntries,
+    pasteEntries
+  });
+  keyboardState.current = {
+    clipboard,
+    selection,
+    selectionMode,
+    selectedWorkoutKeys,
+    selectableWorkouts,
+    modalOpen,
+    contextMenuOpen: contextMenu !== null,
+    daysByKey,
+    findScheduled,
+    copyEntries,
+    pasteEntries
+  };
+
+  // ⌘C / ⌘V (Ctrl on Windows/Linux). Copy targets, most specific first: the
+  // multi-select, the focused workout chip, the open workout's details, then
+  // the focused or hovered day. Paste lands on the focused or hovered day.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const state = keyboardState.current;
+      if (event.defaultPrevented || state.modalOpen || state.contextMenuOpen) return;
+      if (event.key === "Escape" && state.clipboard && !state.selection) {
+        setClipboard(null);
+        return;
+      }
+      if (isEditableTarget(event.target)) return;
+      const active =
+        document.activeElement instanceof Element ? document.activeElement : null;
+
+      const arrowStep = ARROW_DAY_STEPS[event.key];
+      if (arrowStep && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        const fromDay = active?.closest<HTMLElement>("[data-calendar-day]")?.dataset.calendarDay;
+        if (!fromDay) return;
+        const next = document.querySelector<HTMLElement>(
+          `[data-calendar-day="${addDaysToKey(fromDay, arrowStep)}"]`
+        );
+        if (next) {
+          event.preventDefault();
+          next.focus();
+        }
+        return;
+      }
+
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      const key = event.key.toLowerCase();
+      if (key !== "c" && key !== "v") return;
+      if (key === "c" && window.getSelection()?.toString()) return;
+
+      // The pointer wins over focus: hovering a workout or day and pressing
+      // ⌘C / ⌘V acts there, as in Google Calendar. Focus covers keyboard use.
+      const activeWorkout =
+        document.querySelector<HTMLElement>("[data-calendar-workout]:hover") ??
+        active?.closest<HTMLElement>("[data-calendar-workout]");
+      const dayEl =
+        document.querySelector<HTMLElement>("[data-calendar-day]:hover") ??
+        active?.closest<HTMLElement>("[data-calendar-day]");
+      const dayKey = dayEl?.dataset.calendarDay;
+
+      if (key === "c") {
+        if (state.selectionMode && state.selectedWorkoutKeys.size > 0) {
+          event.preventDefault();
+          state.copyEntries(
+            state.selectableWorkouts.filter((entry) =>
+              state.selectedWorkoutKeys.has(scheduledWorkoutKey(entry))
+            )
+          );
+          return;
+        }
+        const workoutDay = activeWorkout
+          ?.closest<HTMLElement>("[data-calendar-day]")
+          ?.dataset.calendarDay;
+        const workout =
+          workoutDay && activeWorkout?.dataset.calendarWorkout
+            ? state.findScheduled(workoutDay, activeWorkout.dataset.calendarWorkout)
+            : undefined;
+        if (workout) {
+          event.preventDefault();
+          state.copyEntries([workout]);
+          return;
+        }
+        if (state.selection?.kind === "scheduled") {
+          event.preventDefault();
+          state.copyEntries([state.selection.entry]);
+          return;
+        }
+        const day = dayKey ? state.daysByKey.get(dayKey) : undefined;
+        if (day && day.scheduled.length > 0) {
+          event.preventDefault();
+          state.copyEntries(day.scheduled, formatHappenDayLabel(day.dateKey));
+        }
+        return;
+      }
+
+      if (state.clipboard && dayKey) {
+        event.preventDefault();
+        void state.pasteEntries(state.clipboard, dayKey);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const contextMenuItems = useMemo((): CalendarContextMenuItem[] => {
+    if (!contextMenu) return [];
+    const day = daysByKey.get(contextMenu.dayKey);
+    if (!day) return [];
+    const workout = contextMenu.workoutKey
+      ? findScheduled(day.dateKey, contextMenu.workoutKey)
+      : undefined;
+    const items: CalendarContextMenuItem[] = [];
+    if (workout) {
+      items.push({
+        id: "copy-workout",
+        label: "Copy workout",
+        icon: "copy",
+        shortcut: `${MOD_KEY_LABEL}C`,
+        onSelect: () => copyEntries([workout])
+      });
+    }
+    if (!workout || day.scheduled.length > 1) {
+      items.push({
+        id: "copy-day",
+        label:
+          day.scheduled.length > 0
+            ? `Copy day (${workoutCountLabel(day.scheduled.length)})`
+            : "Copy day",
+        icon: "copy-day",
+        shortcut: workout ? undefined : `${MOD_KEY_LABEL}C`,
+        disabled: day.scheduled.length === 0,
+        hint: day.scheduled.length === 0 ? "No scheduled workouts on this day" : undefined,
+        onSelect: () => copyEntries(day.scheduled, formatHappenDayLabel(day.dateKey))
+      });
+    }
+    items.push({
+      id: "paste",
+      label: clipboard ? `Paste ${workoutCountLabel(clipboard.length)}` : "Paste",
+      icon: "paste",
+      shortcut: `${MOD_KEY_LABEL}V`,
+      disabled: !clipboard || day.isPast || mutating,
+      hint: day.isPast
+        ? "COROS doesn't allow scheduling workouts in the past"
+        : !clipboard
+          ? "Copy a workout or a day first"
+          : undefined,
+      onSelect: () => {
+        if (clipboard) void pasteEntries(clipboard, day.dateKey);
+      }
+    });
+    return items;
+  }, [clipboard, contextMenu, copyEntries, daysByKey, findScheduled, mutating, pasteEntries]);
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
   const handleAskCoachWeek = useCallback(
     (week: CalendarWeek) => {
@@ -722,12 +1033,40 @@ export function CalendarView({
         }
         onToggleScheduled={toggleScheduledSelection}
         onAdd={setAddTarget}
+        onCopyDay={(day) => copyEntries(day.scheduled, formatHappenDayLabel(day.dateKey))}
+        onPasteDay={(dateKey) => {
+          if (clipboard) void pasteEntries(clipboard, dateKey);
+        }}
+        clipboardCount={clipboard?.length ?? 0}
         onDropEntry={handleDropEntry}
         onAskCoachWeek={handleAskCoachWeek}
+        copiedWorkoutKeys={copiedWorkoutKeys}
+        onContextMenu={(target) => {
+          if (!selectionMode) setContextMenu(target);
+        }}
       />
+
+      {contextMenu && contextMenuItems.length > 0 ? (
+        <CalendarContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          title={
+            (contextMenu.workoutKey &&
+              findScheduled(contextMenu.dayKey, contextMenu.workoutKey)?.name) ||
+            formatHappenDayLabel(contextMenu.dayKey)
+          }
+          items={contextMenuItems}
+          onClose={closeContextMenu}
+        />
+      ) : null}
 
       <DayDetailPanel
         api={api}
+        userId={status?.userId}
+        onEventSaved={(event) => {
+          setSelection(current => current?.kind === "scheduled" ? { ...current, entry: { ...current.entry, calendarEvent: event } } : current);
+          reload();
+        }}
         selection={selection}
         sportTypes={sportTypes}
         deleting={mutating}
@@ -793,6 +1132,7 @@ export function CalendarView({
             onMessage(result.verified ? `Updated ${scope} in COROS.` : result.warning ?? `Updated ${scope}, but verification is still pending.`);
             setEditRef(null);
             reload();
+            if (editRef.kind === "scheduled") void syncCalendarEdit(editRef);
           }}
           onError={onError}
         />

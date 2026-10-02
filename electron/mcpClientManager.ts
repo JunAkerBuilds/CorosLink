@@ -1,9 +1,11 @@
 import { app, BrowserWindow, safeStorage, shell } from "electron";
 import crypto from "node:crypto";
 import http from "node:http";
+import { isWebUrl } from "./externalLinks";
 import type { AddressInfo } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import {
   UnauthorizedError,
   type OAuthClientProvider
@@ -14,6 +16,7 @@ import type {
   OAuthTokens
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { deleteSettings, getSetting, setSetting } from "./database";
+import { corosSignInEmailScript, isCorosSignInPage } from "./corosMcpRegions";
 import {
   getMcpBearer,
   getMcpServer,
@@ -26,6 +29,7 @@ import {
   mcpOAuthInvalidationTargets,
   type McpOAuthInvalidationScope
 } from "./mcpOAuthCompatibility";
+import { discoverTools } from "./mcpToolDiscovery";
 import { prefixToolName, splitToolName } from "./mcpToolNames";
 import type {
   CorosMcpTool,
@@ -44,6 +48,7 @@ interface ServerKeys {
   tokens: string;
   clientInfo: string;
   resourceUrl: string;
+  authorizationId: string;
 }
 
 function keysFor(id: string): ServerKeys {
@@ -51,13 +56,15 @@ function keysFor(id: string): ServerKeys {
     return {
       tokens: "corosMcp.tokens",
       clientInfo: "corosMcp.clientInfo",
-      resourceUrl: "corosMcp.resourceUrl"
+      resourceUrl: "corosMcp.resourceUrl",
+      authorizationId: "corosMcp.authorizationId"
     };
   }
   return {
     tokens: mcpSecretKey(id, "tokens"),
     clientInfo: mcpSecretKey(id, "clientInfo"),
-    resourceUrl: `mcp.${id}.resourceUrl`
+    resourceUrl: `mcp.${id}.resourceUrl`,
+    authorizationId: `mcp.${id}.authorizationId`
   };
 }
 
@@ -91,16 +98,36 @@ function readTokens(id: string): OAuthTokens | undefined {
   }
 }
 
-function writeTokens(id: string, tokens: OAuthTokens): void {
+function writeTokens(id: string, tokens: OAuthTokens, newAuthorization = false): void {
   if (!safeStorage.isEncryptionAvailable()) return;
   const encrypted = safeStorage
     .encryptString(JSON.stringify(tokens))
     .toString("base64");
-  setSetting(keysFor(id).tokens, encrypted);
+  const keys = keysFor(id);
+  if (newAuthorization || !hasStoredTokens(id) || !getSetting(keys.authorizationId)) {
+    setSetting(keys.authorizationId, crypto.randomUUID());
+  }
+  setSetting(keys.tokens, encrypted);
 }
 
 function hasStoredTokens(id: string): boolean {
   return Boolean(getSetting(keysFor(id).tokens));
+}
+
+/** Identifies one OAuth authorization across token refreshes and app restarts. */
+export function getMcpAuthorizationKey(id: string): string {
+  const server = getMcpServer(id);
+  if (!server?.enabled || server.authType !== "oauth" || !hasStoredTokens(id)) return "";
+  const keys = keysFor(id);
+  let authorizationId = getSetting(keys.authorizationId);
+  if (!authorizationId) {
+    // Migrate an existing connection before its first refresh or review.
+    authorizationId = crypto.randomUUID();
+    setSetting(keys.authorizationId, authorizationId);
+  }
+  return crypto.createHash("sha256")
+    .update(JSON.stringify([canonicalHttpUrl(server.url), authorizationId]))
+    .digest("hex");
 }
 
 function readClientInformation(id: string): OAuthClientInformationFull | undefined {
@@ -155,6 +182,8 @@ interface ProviderConfig {
   scope: string;
   loopbackPort: number;
   redirectPath: string;
+  /** Account email filled in on COROS's sign-in page. */
+  loginHint?: string;
 }
 
 class McpOAuthProvider implements OAuthClientProvider {
@@ -167,6 +196,7 @@ class McpOAuthProvider implements OAuthClientProvider {
     | null = null;
   private authWindow: BrowserWindow | undefined;
   private closingWindow = false;
+  private newAuthorization = false;
 
   constructor(
     private readonly config: ProviderConfig,
@@ -216,21 +246,25 @@ class McpOAuthProvider implements OAuthClientProvider {
   }
 
   saveTokens(tokens: OAuthTokens): void {
-    writeTokens(this.config.serverId, tokens);
+    writeTokens(this.config.serverId, tokens, this.newAuthorization);
+    this.newAuthorization = false;
   }
 
   invalidateCredentials(scope: McpOAuthInvalidationScope): void {
     const targets = mcpOAuthInvalidationTargets(scope);
     const keys = keysFor(this.config.serverId);
     const storedKeys: string[] = [];
-    if (targets.includes("tokens")) storedKeys.push(keys.tokens);
-    if (targets.includes("clientInformation")) storedKeys.push(keys.clientInfo);
+    if (targets.includes("tokens")) storedKeys.push(keys.tokens, keys.authorizationId);
+    if (targets.includes("clientInformation")) storedKeys.push(keys.clientInfo, keys.authorizationId);
     if (storedKeys.length > 0) deleteSettings(storedKeys);
     if (targets.includes("verifier")) this.verifier = "";
   }
 
   saveCodeVerifier(verifier: string): void {
     this.verifier = verifier;
+    // A new authorization-code flow may retain the previous account's tokens
+    // until exchange succeeds. Its result must get a new identity nonetheless.
+    this.newAuthorization = true;
   }
 
   codeVerifier(): string {
@@ -327,8 +361,24 @@ class McpOAuthProvider implements OAuthClientProvider {
     });
     this.authWindow.webContents.on("dom-ready", () => {
       void this.injectCloseButton();
+      void this.fillLoginHint();
     });
     void this.authWindow.loadURL(authorizationUrl.toString());
+  }
+
+  private async fillLoginHint(): Promise<void> {
+    const { loginHint } = this.config;
+    const window = this.authWindow;
+    if (!loginHint || !window || window.isDestroyed()) return;
+    if (!isCorosSignInPage(window.webContents.getURL())) return;
+    try {
+      await window.webContents.executeJavaScript(
+        corosSignInEmailScript(loginHint),
+        true
+      );
+    } catch {
+      // Page may block script injection; the email field stays editable.
+    }
   }
 
   private async injectCloseButton(): Promise<void> {
@@ -463,6 +513,9 @@ function mcpResultPage(name: string, message: string, failed: boolean): string {
 interface ServerRuntime {
   client: Client | null;
   tools: CorosMcpTool[];
+  toolsCheckedAt: number;
+  toolsRevision: number;
+  toolsRefresh?: Promise<void>;
   connectInFlight: Promise<void> | null;
   connectInFlightInteractive: boolean;
   generation: number;
@@ -480,6 +533,8 @@ function runtime(id: string): ServerRuntime {
     rt = {
       client: null,
       tools: [],
+      toolsCheckedAt: 0,
+      toolsRevision: 0,
       connectInFlight: null,
       connectInFlightInteractive: false,
       generation: 0,
@@ -491,14 +546,18 @@ function runtime(id: string): ServerRuntime {
   return rt;
 }
 
-function providerConfig(server: McpServerConfig): ProviderConfig {
+function providerConfig(
+  server: McpServerConfig,
+  loginHint?: string
+): ProviderConfig {
   return {
     serverId: server.id,
     serverName: server.name,
     resourceUrl: server.url,
     scope: server.scope ?? "openid offline_access",
     loopbackPort: loopbackPortFor(server.id),
-    redirectPath: redirectPathFor(server.id)
+    redirectPath: redirectPathFor(server.id),
+    loginHint
   };
 }
 
@@ -509,7 +568,7 @@ function clearStoredAuth(id: string): void {
   rt.tools = [];
   if (stale) void stale.close().catch(() => undefined);
   const keys = keysFor(id);
-  deleteSettings([keys.tokens, keys.clientInfo]);
+  deleteSettings([keys.tokens, keys.clientInfo, keys.authorizationId]);
 }
 
 function clearStoredCredentials(id: string): void {
@@ -518,6 +577,7 @@ function clearStoredCredentials(id: string): void {
     keys.tokens,
     keys.clientInfo,
     keys.resourceUrl,
+    keys.authorizationId,
     mcpSecretKey(id, "bearer")
   ]);
 }
@@ -534,19 +594,57 @@ function ensureCurrentResource(server: McpServerConfig): void {
   clearStoredCredentials(server.id);
 }
 
-async function discoverTools(client: Client): Promise<CorosMcpTool[]> {
-  const result = await client.listTools();
-  return (result.tools ?? []).map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    inputSchema: tool.inputSchema as Record<string, unknown>
-  }));
+// Before its first authorization nothing is bound to a server's endpoint except
+// a client registration with the old authorization server, so it can move
+// (COROS account region) and register afresh.
+function moveBeforeAuthorization(
+  server: McpServerConfig,
+  url: string
+): McpServerConfig {
+  const rt = runtime(server.id);
+  if (
+    server.authType !== "oauth" ||
+    canonicalHttpUrl(url) === canonicalHttpUrl(server.url) ||
+    rt.client ||
+    rt.connectInFlight ||
+    hasStoredTokens(server.id)
+  ) {
+    return server;
+  }
+  const moved = updateMcpServer(server.id, { url });
+  clearStoredCredentials(server.id);
+  return moved;
 }
 
-async function refreshTools(server: McpServerConfig): Promise<void> {
+async function refreshTools(server: McpServerConfig, force = true): Promise<void> {
   const rt = runtime(server.id);
   if (!rt.client) return;
-  rt.tools = await discoverTools(rt.client);
+  if (force) rt.toolsRevision += 1;
+  if (rt.toolsRefresh) return rt.toolsRefresh;
+  if (!force && Date.now() - rt.toolsCheckedAt < 5 * 60_000) return;
+  const client = rt.client;
+  let refresh: Promise<void> | undefined;
+  refresh = (async () => {
+    try {
+      let revision: number;
+      do {
+        revision = rt.toolsRevision;
+        const tools = await discoverTools(client);
+        if (rt.client !== client) return;
+        rt.tools = tools;
+        rt.toolsCheckedAt = Date.now();
+        // A notification received during discovery invalidates that listing.
+      } while (revision !== rt.toolsRevision);
+    } catch (error) {
+      if (rt.client === client) rt.toolsCheckedAt = 0;
+      throw error;
+    } finally {
+      // Clear before resolving, so a later notification cannot join a finished refresh.
+      if (rt.toolsRefresh === refresh) rt.toolsRefresh = undefined;
+    }
+  })();
+  rt.toolsRefresh = refresh;
+  await refresh;
 }
 
 async function activateClient(
@@ -565,6 +663,11 @@ async function activateClient(
     }
     rt.client = client;
     rt.tools = tools;
+    rt.toolsRefresh = undefined;
+    rt.toolsCheckedAt = Date.now();
+    client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
+      if (rt.client === client) await refreshTools(server).catch(() => undefined);
+    });
     attachClientCloseHandler(server.id, client);
   } catch (error) {
     await client.close().catch(() => undefined);
@@ -598,7 +701,8 @@ async function connectOnce(
   server: McpServerConfig,
   parentWindow: BrowserWindow | null,
   interactive: boolean,
-  generation: number
+  generation: number,
+  loginHint?: string
 ): Promise<void> {
   const rt = runtime(server.id);
   if (rt.client) return;
@@ -617,7 +721,7 @@ async function connectOnce(
   let clearedStaleAuth = false;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const authProvider = new McpOAuthProvider(
-      providerConfig(server),
+      providerConfig(server, loginHint),
       parentWindow,
       interactive
     );
@@ -663,11 +767,19 @@ async function connectOnce(
   throw new Error(`${server.name} MCP authorization expired. Connect ${server.name} again.`);
 }
 
+export interface McpConnectOptions {
+  /** Account email filled in on COROS's sign-in page. */
+  loginHint?: string;
+  /** Endpoint to switch to while the server holds no authorization yet. */
+  preferredUrl?: string;
+}
+
 /** Connect a server (running its OAuth flow if needed). Single-flight per server. */
 export async function connectMcpServer(
   id: string,
   interactive = true,
-  parentWindow: BrowserWindow | null = null
+  parentWindow: BrowserWindow | null = null,
+  options: McpConnectOptions = {}
 ): Promise<McpServerStatus> {
   let server = getMcpServer(id);
   if (!server) throw new Error(`Unknown MCP server "${id}".`);
@@ -676,6 +788,9 @@ export async function connectMcpServer(
       throw new Error(`${server.name} MCP server is disabled.`);
     }
     server = updateMcpServer(id, { enabled: true });
+  }
+  if (options.preferredUrl) {
+    server = moveBeforeAuthorization(server, options.preferredUrl);
   }
   ensureCurrentResource(server);
   const rt = runtime(id);
@@ -699,7 +814,13 @@ export async function connectMcpServer(
     rt.connectInFlightInteractive = interactive;
     rt.lastError = undefined;
     const generation = rt.generation;
-    const flight = connectOnce(server, parentWindow, interactive, generation)
+    const flight = connectOnce(
+      server,
+      parentWindow,
+      interactive,
+      generation,
+      options.loginHint
+    )
       .then(() => {
         rt.silentRetryAfter = 0;
       })
@@ -742,6 +863,7 @@ export async function disconnectMcpServer(
   }
   rt.client = null;
   rt.tools = [];
+  rt.toolsRefresh = undefined;
   rt.lastError = undefined;
   rt.silentRetryAfter = 0;
   if (options.clearAuthorization !== false) {
@@ -753,7 +875,10 @@ export async function disconnectMcpServer(
 async function ensureMcpConnected(server: McpServerConfig): Promise<void> {
   const rt = runtime(server.id);
   if (!server.enabled) return;
-  if (rt.client) return;
+  if (rt.client) {
+    await refreshTools(server, false).catch(() => undefined);
+    return;
+  }
   if (Date.now() < rt.silentRetryAfter) return;
   if (server.authType === "oauth" && !hasStoredTokens(server.id)) return;
   if (server.authType === "bearer" && !getMcpBearer(server.id)) return;
@@ -945,16 +1070,8 @@ function attachClientCloseHandler(id: string, client: Client): void {
     if (rt.client !== client) return;
     rt.client = null;
     rt.tools = [];
+    rt.toolsRefresh = undefined;
   };
-}
-
-function isWebUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 function canonicalHttpUrl(value: string): string {

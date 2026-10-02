@@ -1,0 +1,29 @@
+.watchface-shell .wf-simulation { position: static; flex-shrink: 0; }
+.watchface-shell .wf-simulation button, .watchface-shell .wf-simulation select, .watchface-shell .wf-simulation input:not([type="checkbox"]) {
+  min-height: 32px; border: 1px solid var(--wf-border); border-radius: 7px;
+  background: var(--wf-surface); color: var(--text-primary); font: inherit; font-size: 12px; padding: 5px 8px;
+}
+.watchface-shell .wf-simulation button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; cursor: pointer; }
+.watchface-shell .wf-simulation button:hover { border-color: var(--wf-accent-border); }
+.watchface-shell .wf-simulation-trigger[data-enabled="true"] { color: var(--accent-strong); background: var(--accent-soft); border-color: var(--wf-accent-border); }
+.watchface-shell .wf-simulation-panel {
+  position: absolute; z-index: 25; top: calc(100% + 8px); right: 10px; width: min(370px, calc(100% - 20px)); box-sizing: border-box;
+  max-height: min(650px, calc(100vh - 280px)); overflow-y: auto; display: grid; gap: 12px; padding: 14px;
+  border: 1px solid var(--wf-border-strong); border-radius: 12px;
+  background: linear-gradient(var(--wf-surface-raised), var(--wf-surface-raised)), var(--wf-canvas);
+  box-shadow: var(--wf-shadow);
+  color: var(--text-primary); font-size: 12px; text-align: left;
+}
+.watchface-shell .wf-simulation-heading, .watchface-shell .wf-simulation-actions { display: flex; align-items: center; gap: 6px; }
+.watchface-shell .wf-simulation-heading { justify-content: space-between; font-size: 14px; }
+.watchface-shell .wf-simulation-panel p { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
+.watchface-shell .wf-simulation-enable { display: flex; align-items: center; gap: 8px; }
+.watchface-shell .wf-simulation-panel fieldset { display: grid; min-width: 0; gap: 12px; border: 0; padding: 0; margin: 0; }
+.watchface-shell .wf-simulation-panel fieldset:disabled { opacity: .45; }
+.watchface-shell .wf-simulation-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.watchface-shell .wf-simulation-grid label { display: grid; min-width: 0; gap: 5px; color: var(--text-secondary); font-size: 11px; }
+.watchface-shell .wf-simulation-grid input, .watchface-shell .wf-simulation-grid select { min-width: 0; width: 100%; box-sizing: border-box; }
+.watchface-shell .wf-simulation-panel summary { cursor: pointer; padding: 9px 0; border-top: 1px solid var(--wf-border); }
+.watchface-shell .wf-simulation-panel details p { margin-bottom: 10px; }
+.watchface-shell .wf-stage-toolbar:has(.wf-simulation-panel) { overflow: visible; }
+.watchface-shell.watchface-shell--studio .wf-stage-toolbar { position: relative; flex-wrap: wrap; }

@@ -1,3 +1,6 @@
+import type { ChartCardSize } from "../widgetSizing";
+import "../chartSizing.css";
+import "../profileSizing.css";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { Check, ChevronDown, Footprints, Gauge, Heart } from "lucide-react";
@@ -28,16 +31,20 @@ import {
 } from "../../preferences/selectionPreferences";
 
 interface TrainingZoneDistributionChartsProps {
+  size?: ChartCardSize;
+  variant?: "heart" | "distance";
   lthrZones: TrainingHubThresholdZone[];
   activities: TrainingHubActivity[];
   analytics: TrainingHubAnalytics | null;
 }
 
 interface PerceivedEffortPanelProps {
+  size?: ChartCardSize;
   distribution: RpeDistribution | null | undefined;
 }
 
 interface ZoneDistributionPanelProps {
+  size?: ChartCardSize;
   title: string;
   subtitle: string;
   emptyMessage: string;
@@ -680,7 +687,8 @@ function ZoneDistributionPanel({
   coverageNote,
   data,
   metricControl,
-  getCaption
+  getCaption,
+  size
 }: ZoneDistributionPanelProps) {
   const reducedMotion = usePrefersReducedMotion();
   const chartData = data.filter((datum) => datum.percent > 0);
@@ -692,9 +700,56 @@ function ZoneDistributionPanel({
     return [...data].sort((left, right) => right.percent - left.percent)[0];
   }, [data]);
 
+  const breakdown = (
+          <div className="training-zone-table">
+            <div className="training-zone-table-head">
+              <span>
+                {variant === "heart"
+                  ? "Zone"
+                  : variant === "rpe"
+                    ? "RPE"
+                    : "Distance"}
+              </span>
+              <span aria-hidden="true" />
+              <span>%</span>
+              <span>{metricColumnLabel}</span>
+            </div>
+            <div className="training-zone-list">
+              {data.map((datum, index) => (
+                <div
+                  className="training-zone-row"
+                  key={datum.label}
+                  style={
+                    reducedMotion
+                      ? undefined
+                      : { animationDelay: `${index * 55}ms` }
+                  }
+                >
+                  <span className="training-zone-name">
+                    {formatDisplayLabel(datum.label)}
+                  </span>
+                  <span className="training-zone-track" aria-hidden="true">
+                    <span
+                      className="training-zone-fill"
+                      style={{
+                        width: `${Math.max(datum.percent, datum.percent > 0 ? 4 : 0)}%`,
+                        backgroundColor: datum.color
+                      }}
+                    />
+                  </span>
+                  <span className="training-zone-percent">
+                    {formatPercent(datum.percent)}
+                  </span>
+                  <strong className="training-zone-detail">{datum.detail}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+  );
+
   return (
     <section
-      className={`panel training-zone-panel training-zone-panel-${variant}`}
+      className={`panel training-zone-panel training-zone-panel-${variant}`} data-chart-size={size}
     >
       <div className="training-zone-header">
         <div className="training-zone-heading">
@@ -764,56 +819,14 @@ function ZoneDistributionPanel({
             </div>
           ) : null}
 
-          <div className="training-zone-table">
-            <div className="training-zone-table-head">
-              <span>
-                {variant === "heart"
-                  ? "Zone"
-                  : variant === "rpe"
-                    ? "RPE"
-                    : "Distance"}
-              </span>
-              <span aria-hidden="true" />
-              <span>%</span>
-              <span>{metricColumnLabel}</span>
-            </div>
-            <div className="training-zone-list">
-              {data.map((datum, index) => (
-                <div
-                  className="training-zone-row"
-                  key={datum.label}
-                  style={
-                    reducedMotion
-                      ? undefined
-                      : { animationDelay: `${index * 55}ms` }
-                  }
-                >
-                  <span className="training-zone-name">
-                    {formatDisplayLabel(datum.label)}
-                  </span>
-                  <span className="training-zone-track" aria-hidden="true">
-                    <span
-                      className="training-zone-fill"
-                      style={{
-                        width: `${Math.max(datum.percent, datum.percent > 0 ? 4 : 0)}%`,
-                        backgroundColor: datum.color
-                      }}
-                    />
-                  </span>
-                  <span className="training-zone-percent">
-                    {formatPercent(datum.percent)}
-                  </span>
-                  <strong className="training-zone-detail">{datum.detail}</strong>
-                </div>
-              ))}
-            </div>
-          </div>
+          {size !== "mini" && breakdown}
         </div>
       ) : (
         <div className="training-zone-body training-zone-body-empty">
           <p className="training-empty-chart">{emptyMessage}</p>
         </div>
       )}
+      {size === "mini" && data.length > 0 && <details className="chart-card-details"><summary>View breakdown</summary>{breakdown}</details>}
     </section>
   );
 }
@@ -975,7 +988,9 @@ function MetricDropdown<TValue extends string>({
 export function TrainingZoneDistributionCharts({
   lthrZones,
   activities,
-  analytics
+  analytics,
+  variant,
+  size
 }: TrainingZoneDistributionChartsProps) {
   const { unitSystem } = useUnitSystem();
   const [heartRateMetric, setHeartRateMetric] = useSelectionPreference(
@@ -987,8 +1002,8 @@ export function TrainingZoneDistributionCharts({
 
   return (
     <section className="training-load-profile">
-      <div className="training-zone-grid">
-        <ZoneDistributionPanel
+      <div className={variant ? "training-zone-single" : "training-zone-grid"}>
+        {(!variant || variant === "heart") && <ZoneDistributionPanel size={size}
           title="Threshold Heart Rate"
           subtitle="Training Load"
           emptyMessage="No threshold heart rate zone distribution data loaded."
@@ -1011,8 +1026,8 @@ export function TrainingZoneDistributionCharts({
               onChange={setHeartRateMetric}
             />
           }
-        />
-        <ZoneDistributionPanel
+        />}
+        {(!variant || variant === "distance") && <ZoneDistributionPanel size={size}
           title="Distance Zones"
           subtitle="Distribution"
           emptyMessage="No distance zone distribution data loaded."
@@ -1033,14 +1048,15 @@ export function TrainingZoneDistributionCharts({
               onChange={setDistanceMetric}
             />
           }
-        />
+        />}
       </div>
     </section>
   );
 }
 
 export function PerceivedEffortPanel({
-  distribution
+  distribution,
+  size
 }: PerceivedEffortPanelProps) {
   const [rpeMetric, setRpeMetric] = useSelectionPreference(
     RPE_METRIC_PREFERENCE
@@ -1052,7 +1068,7 @@ export function PerceivedEffortPanel({
       : undefined;
 
   return (
-    <ZoneDistributionPanel
+    <ZoneDistributionPanel size={size}
       title="Perceived Effort"
       subtitle="RPE"
       emptyMessage="No RPE-rated sessions in the last 4 weeks."

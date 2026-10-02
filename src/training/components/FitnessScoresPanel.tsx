@@ -1,3 +1,6 @@
+import type { ChartCardSize } from "../widgetSizing";
+import "../chartSizing.css";
+import "../profileSizing.css";
 import { BarChart3 } from "lucide-react";
 import type {
   TrainingHubDashboard,
@@ -11,6 +14,7 @@ import {
 import { useUnitSystem } from "../../units/UnitSystemProvider";
 
 interface FitnessScoresPanelProps {
+  size?: ChartCardSize;
   dashboard: TrainingHubDashboard | null;
   racePredictor: TrainingHubRacePredictor | null;
 }
@@ -60,20 +64,23 @@ function formatBpm(value?: number): string {
 
 export function FitnessScoresPanel({
   dashboard,
-  racePredictor
+  racePredictor,
+  size
 }: FitnessScoresPanelProps) {
   const { unitSystem } = useUnitSystem();
   const predictor = racePredictor ?? dashboard?.racePredictor ?? null;
 
   if (!dashboard && !predictor) {
     return (
-      <section className="panel training-scores-panel">
+      <section className="panel training-scores-panel" data-chart-size={size}>
         <header className="training-scores-header">
           <div className="training-scores-heading">
             <p className="eyebrow">Fitness Scores</p>
             <h2>Not loaded</h2>
           </div>
-          <BarChart3 size={22} aria-hidden="true" />
+          <span className="training-panel-icon" aria-hidden="true">
+          <BarChart3 />
+        </span>
         </header>
         <p className="training-empty-chart">Fitness scores could not be loaded.</p>
       </section>
@@ -119,13 +126,15 @@ export function FitnessScoresPanel({
   ];
 
   return (
-    <section className="panel training-scores-panel">
+    <section className="panel training-scores-panel" data-chart-size={size}>
       <header className="training-scores-header">
         <div className="training-scores-heading">
           <p className="eyebrow">Fitness Scores</p>
           <h2>{scores.length > 0 ? "Running fitness" : "Threshold profile"}</h2>
         </div>
-        <BarChart3 size={22} aria-hidden="true" />
+        <span className="training-panel-icon" aria-hidden="true">
+          <BarChart3 />
+        </span>
       </header>
 
       {scores.length > 0 ? (
@@ -136,7 +145,7 @@ export function FitnessScoresPanel({
         </div>
       ) : null}
 
-      <div className="training-threshold-grid">
+      {size === "mini" ? <details className="chart-card-details"><summary>Threshold measurements</summary>      <div className="training-threshold-grid">
         {metrics.map((metric) => (
           <div key={metric.label}>
             <span>{metric.label}</span>
@@ -144,6 +153,14 @@ export function FitnessScoresPanel({
           </div>
         ))}
       </div>
+      </details> : (      <div className="training-threshold-grid">
+        {metrics.map((metric) => (
+          <div key={metric.label}>
+            <span>{metric.label}</span>
+            <strong>{metric.format(metric.value)}</strong>
+          </div>
+        ))}
+      </div>)}
     </section>
   );
 }

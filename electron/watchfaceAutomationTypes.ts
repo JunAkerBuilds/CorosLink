@@ -71,6 +71,7 @@ export type WatchfaceAutomationCommand =
   | { op: "array_remove"; path: string; index: number }
   | { op: "array_move"; path: string; from: number; to: number }
   | { op: "replace_design"; design: Record<string, unknown> }
+  | { op: "add_native_field"; id: string; x: number; y: number; style?: Record<string, unknown> }
   | { op: "add_sprite"; sprite: Record<string, unknown> }
   | { op: "update_sprite"; id: string; patch: Record<string, unknown> }
   | { op: "remove_sprite"; id: string }
@@ -152,6 +153,11 @@ export const WATCHFACE_AUTOMATION_METHODS = {
   redo: "redo",
   setView: "set_view",
   renderPreview: "render_preview",
+  getGeometry: "get_geometry",
+  checkContrast: "check_contrast",
+  sampleColor: "sample_color",
+  recolorImage: "recolor_image",
+  renderSvg: "render_svg",
   validate: "validate",
   save: "save",
   close: "close",
@@ -210,7 +216,7 @@ export const WATCHFACE_AUTOMATION_SCENE_SCHEMA = {
   },
   design: {
     archiveWide: [
-      "version", "archiveWatchFaceVersion", "stripBlankConfigKeys", "configTextEdits"
+      "version", "archiveWatchFaceVersion", "stripBlankConfigKeys", "watchLanguages", "configTextEdits"
     ],
     appearance: [
       "backgroundColor", "accentColor", "artwork", "artworkVisible", "zoom",
@@ -222,11 +228,11 @@ export const WATCHFACE_AUTOMATION_SCENE_SCHEMA = {
       "exerciseSeparator", "selectableMetricStyle", "controlComplicationEnabled",
       "controlBarometerMode", "controlBatteryEnabled", "controlSunriseEnabled",
       "controlSunsetEnabled", "controlFloorEnabled", "controlTemperatureEnabled",
-      "controlIconOffsets", "separateAutoTime", "timeStyles", "dateStyles",
-      "staticSeparators", "ampmIndicator", "weatherIndicator", "layoutOffsets"
+      "controlIconOffsets", "separateAutoTime", "addSeconds", "addWeekday", "addDateMonth", "addDateDay", "timeStyles", "dateStyles",
+      "staticSeparators", "ampmIndicator", "weatherIndicator", "nativeData", "layoutOffsets"
     ],
     editor: [
-      "linkedLayerGroups", "editorGroups", "editorGuides", "lockedLayerIds",
+      "linkedLayerGroups", "editorGroups", "editorGuides", "lockedLayerIds", "removedLayerIds",
       "effectStyles", "layerEffects", "layerStrokes", "layerVisibility",
       "layerOpacities", "layerColors", "configAssetOverrides"
     ],
@@ -236,9 +242,11 @@ export const WATCHFACE_AUTOMATION_SCENE_SCHEMA = {
     alternateModes:
       "modeDesigns.aod may override any visual/editor field above and adds backgroundEdited.",
     imageFields:
-      "artwork, designSprites[].dataUrl, configAssetOverrides replacements, rasterFont.dataUrl/sprites, and AOD equivalents are returned as opaque {assetId} refs. Pass those refs unchanged in commands."
+      "artwork, designSprites[].dataUrl, configAssetOverrides replacements, rasterFont.dataUrl/sprites, weatherIndicator.assets, nativeData.*.assets, and AOD equivalents are returned as opaque {assetId} refs. Pass those refs unchanged in commands."
   },
   objectShapes: {
+    nativeData:
+      "nativeData in get_schema catalogs every addable field, chart source, default style, component, artwork role and state index. get_document capabilities.nativeData lists supported IDs; each configured native layer includes effective component styles and edit paths. Use add_native_field with id, x, y and optional style to create a catalog field, even if its layer/config/assets are absent from the starting template. This initializes defaults and export creates the binding and sprites. date_year is a live calendar year; use set/merge/unset for parts, assetTexts, assets and chartStyle. Use native:<id> for placement and visibility. Image overrides require PNG asset references. Use mode:'aod' and the same paths for AOD. One slot per field and one chart per mode; live graph representation is firmware-controlled.",
     placementCapabilities:
       "{width,height,unit:'pixels'} defines the authoritative placement canvas. Width and height come from the template's largest native resolution.",
     layerPlacement:
@@ -282,6 +290,8 @@ export const WATCHFACE_AUTOMATION_SCENE_SCHEMA = {
       "Replace the complete active-mode design state. Prefer small commands for reviewability.",
     sprites:
       "add_sprite, update_sprite, remove_sprite and duplicate_sprite manage imported image layers by stable id.",
+    nativeFields:
+      "add_native_field creates supported live fields without requiring an existing template slot. Inspect the nativeData catalog and use master-pixel coordinates. Existing fields are edited via their design paths.",
     elements:
       "add_element, update_element, remove_element and duplicate_element manage freeform vector/text layers by stable id.",
     layers:
@@ -303,3 +313,80 @@ export const WATCHFACE_AUTOMATION_SCENE_SCHEMA = {
       "set_mode_overrides creates, merges, copies from Current, or resets independent AOD state."
   }
 } as const;
+
+/** One text turn of the Watch Face Studio AI panel conversation. */
+export interface WatchfaceAiRequirement {
+  id: string;
+  requirement: string;
+  sourceQuote: string;
+  kind: "document" | "visual" | "generated_assets" | "generated_font" | "dynamic_assets" | "resolution" | "data_mapping";
+  status: "pending" | "implemented" | "verified" | "blocked" | "superseded";
+  requiredCharacters?: string;
+  /** Exact asset-contract ids; all covers every visible typography component. */
+  typographyScope?: "all" | string[];
+  typographyTargets?: Array<Record<string, unknown>>;
+  visualTargets?: import("./watchfaceAiVisual").VisualTarget[];
+  visualFindings?: import("./watchfaceAiVisual").VisualFinding[];
+  detail?: string;
+}
+
+export interface WatchfaceAiMemory {
+  version: 1;
+  projectId?: string;
+  entries: Array<{ tool: string; status: "done" | "failed"; summary: string }>;
+  requirements?: WatchfaceAiRequirement[];
+  assetReviews?: Array<import("./watchfaceAiAssetReview").AssetReview & { assetId: string }>;
+  designReferenceIds?: string[];
+  generationAttempts?: import("./watchfaceAiGeneration").GenerationAttempt[];
+  generatedAssets?: Array<{ assetId: string; width: number; height: number }>;
+}
+
+export interface WatchfaceAiMessage {
+  role: "user" | "assistant";
+  content: string;
+  /** PNG data URLs the user pasted or dropped into a user message. */
+  images?: string[];
+  imageRole?: "design-reference" | "diagnostic";
+  /** Assets Watchmaker generated during an assistant turn, so later turns can reuse them. */
+  generatedAssetIds?: string[];
+  memory?: WatchfaceAiMemory;
+}
+
+/** Per-request model choice from the Studio AI panel. */
+export interface WatchfaceAiOptions {
+  /** Explicit opt-in: native Codex CLI shell/file tools plus Watchmaker over MCP. */
+  harness?: "watchmaker" | "codex-cli";
+  /** ChatGPT model id; blank means Auto. */
+  model?: string;
+  /** One of the selected model's supported efforts; blank uses its default. */
+  reasoningEffort?: string;
+  /** Offer Watchmaker the generate_image tool. Defaults to on. */
+  imageGeneration?: boolean;
+}
+
+/** Progress streamed from the in-app Watchmaker agent to the Studio AI panel. */
+export type WatchfaceAiEvent =
+  | { requestId: string; type: "start" }
+  | { requestId: string; type: "memory"; memory: WatchfaceAiMemory }
+  | { requestId: string; type: "token"; delta: string }
+  | { requestId: string; type: "thinking"; delta: string }
+  | { requestId: string; type: "tool"; callId: string; tool: string; status: "call" | "done" | "failed"; message?: string }
+  | { requestId: string; type: "preview"; dataUrl: string }
+  | { requestId: string; type: "generated"; assetId: string; width: number; height: number; dataUrl: string }
+  | { requestId: string; type: "done"; fullText: string; cancelled?: boolean; changed?: boolean; generatedAssetIds?: string[] }
+  | { requestId: string; type: "error"; message: string; authError?: boolean; code?: "CODEX_CLI_NOT_FOUND" | "CODEX_CLI_UNAVAILABLE" };
+
+/** A saved Watch Face Studio AI conversation, as listed in the panel history. */
+export interface WatchfaceAiChatSummary {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
+export interface WatchfaceAiSavedChat extends WatchfaceAiChatSummary {
+  projectKey: string;
+  /** Opaque panel messages; images are restored as data URLs. */
+  messages: unknown[];
+}

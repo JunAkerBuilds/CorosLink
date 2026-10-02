@@ -39,6 +39,64 @@ async function verifyPixels() {
   check(JSON.stringify(tightened.ink) === JSON.stringify(b.ink), 'Negative tracking must not clip ink');
   const shifted = await inspect(await studio.renderRasterFontSprite('8', 48, 60, { ...font, glyphLayout: { height: .5, baseline: .8 } }, '#ffffff'));
   check(shifted.y1 === 47 && shifted.y1 - shifted.y0 + 1 === 30, 'Glyph height and baseline must be independent');
+  // Thin outlines. A PNG at the cell size is copied as authored, like the
+  // template's own sprites, and a resized one keeps an opaque core the AOD
+  // cleanup can trace: smoothing alone left a beaded, broken stroke.
+  const outline = (w, h) => {
+    const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+    const context = canvas.getContext('2d'); context.strokeStyle = '#ff6060';
+    // A 2px opaque core with soft shoulders, like a neon-outline digit font.
+    for (const [lineWidth, alpha] of [[6, .25], [4, .6], [2, 1]]) {
+      context.globalAlpha = alpha; context.lineWidth = lineWidth; context.strokeRect(8, 8, w - 16, h - 16);
+    }
+    return canvas;
+  };
+  const rgba = (canvas) => [...canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height).data];
+  const coreComponents = (canvas) => {
+    const data = rgba(canvas), w = canvas.width, h = canvas.height, seen = new Set(); let count = 0, size = 0;
+    const core = (x, y) => x >= 0 && y >= 0 && x < w && y < h && data[(y * w + x) * 4 + 3] >= 250;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (!core(x, y) || seen.has(y * w + x)) continue;
+      count++; const stack = [[x, y]]; seen.add(y * w + x);
+      while (stack.length) {
+        const [cx, cy] = stack.pop(); size++;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = cx + dx, ny = cy + dy;
+          if (core(nx, ny) && !seen.has(ny * w + nx)) { seen.add(ny * w + nx); stack.push([nx, ny]); }
+        }
+      }
+    }
+    return { count, size };
+  };
+  const thinSource = outline(48, 60);
+  const thinFont = { label: 'Thin outline', glyphs: '0123456789', columns: 10, dataUrl: thinSource.toDataURL(), tint: false,
+    sprites: Object.fromEntries([...Array(10)].map((_, d) => [String(d), thinSource.toDataURL()])) };
+  const authored = await inspect(await studio.renderRasterFontSprite('8', 48, 60, thinFont, '#ffffff'));
+  check(JSON.stringify(rgba(authored.canvas)) === JSON.stringify(rgba(thinSource)), 'A PNG at the cell size must be copied pixel for pixel');
+  const narrowSource = outline(30, 60);
+  const narrowFont = { ...thinFont, sprites: { ...thinFont.sprites, '1': narrowSource.toDataURL() } };
+  const narrow = await inspect(await studio.renderRasterFontSprite('1', 48, 60, narrowFont, '#ffffff'));
+  const narrowInk = (canvas, x0) => [...canvas.getContext('2d', { willReadFrequently: true }).getImageData(x0, 0, 30, 60).data];
+  check(narrow.width === 48 && JSON.stringify(narrowInk(narrow.canvas, 9)) === JSON.stringify(narrowInk(narrowSource, 0)), 'A narrower numeral at the cell height must be centred on whole pixels, unscaled');
+  const laidOut = await inspect(await studio.renderRasterFontSprite('8', 48, 60, { ...thinFont, glyphLayout: { height: .94, baseline: .97 } }, '#ffffff'));
+  check(laidOut.y1 === 57 && laidOut.y1 - laidOut.y0 + 1 > authored.y1 - authored.y0 + 1, 'An explicit glyph layout must still fit the same PNG');
+  const resized = await inspect(await studio.renderRasterFontSprite('8', 40, 50, thinFont, '#ffffff'));
+  const resizedCore = coreComponents(resized.canvas);
+  check(resizedCore.count === 1 && resizedCore.size > 60, `A resized thin outline must keep one connected opaque core (got ${resizedCore.count} pieces of ${resizedCore.size}px)`);
+  const halved = await inspect(await studio.renderRasterFontSprite('8', 24, 30, thinFont, '#ffffff'));
+  const halvedCore = coreComponents(halved.canvas);
+  check(halvedCore.count === 1 && halvedCore.size > 30, `A 2x downscaled thin outline must keep one connected opaque core (got ${halvedCore.count} pieces of ${halvedCore.size}px)`);
+  const plain = document.createElement('canvas'); plain.width = 44; plain.height = 54;
+  plain.getContext('2d').drawImage(thinSource, 0, 0, 48, 60, 0.5, 0.5, 43, 53);
+  const preserved = document.createElement('canvas'); preserved.width = 44; preserved.height = 54;
+  layout.drawSpritePreservingCore(preserved.getContext('2d'), thinSource, 0, 0, 48, 60, 0.5, 0.5, 43, 53);
+  const plainCore = coreComponents(plain), preservedCore = coreComponents(preserved);
+  check(preservedCore.count === 1 && preservedCore.size > plainCore.size, `Core preservation must restore opaque pixels smoothing lost (${plainCore.size} -> ${preservedCore.size})`);
+  const plainRgba = rgba(plain), preservedRgba = rgba(preserved);
+  check(preservedRgba.every((value, i) => i % 4 === 3 ? value === plainRgba[i] || (value === 255 && plainRgba[i] >= 64) : plainRgba[i | 3] < 200 || Math.abs(value - plainRgba[i]) <= 2), 'Core preservation must only raise covered alpha to 255');
+  const unscaled = document.createElement('canvas'); unscaled.width = 48; unscaled.height = 60;
+  layout.drawSpritePreservingCore(unscaled.getContext('2d'), thinSource, 0, 0, 48, 60, 0, 0, 48, 60);
+  check(JSON.stringify(rgba(unscaled)) === JSON.stringify(rgba(thinSource)), 'An unscaled whole-pixel draw must not be touched');
   const moves = layout.glyphBaselineMovements([{ id: 'digits', top: 30, bottom: 90 }, { id: 'unit', top: 80, bottom: 100 }, { id: 'colon', top: 70, bottom: 90, colon: true }]);
   check(moves.unit.dy === -10 && moves.colon.dy === -20 && moves.digits.dy === 0, 'Baseline alignment must place units and colons relative to cap height');
   const digit1 = await inspect(studio.renderDigitSprite('1', 48, 60, 'Arial', '#ffffff'));
@@ -72,8 +130,26 @@ async function verifyPixels() {
   check(actual.width === 416 && actual.height === 416, 'Compiled output must stay at native resolution');
   check(px(134,123)[0] === 255 && px(134,123)[1] === 0, 'Compiled digit pixels must keep archive color and coordinates');
   check(px(232,202)[1] === 255, 'Compiled preview must include configured PM sprite');
-  check(output.checks.some((s) => s.includes('rectangle')), 'Compiled preview must report undersized firmware rectangles');
-  check(px(161,230)[0] === 0, 'Compiled value rendering must clip to firmware rectangle');
+  // The watch draws a value's glyphs whole, past a narrow firmware rectangle.
+  check(px(161,230)[0] === 255, 'Compiled values must not be clipped to their firmware rectangle');
+  const weatherPath = `${root}/weather/00.png`;
+  asset(weatherPath, png(46, 46, 0, 0, 46, 46, '#00ff00'), 46, 46);
+  const weatherResolution = { ...resolution,
+    config: { ...resolution.config, weather_icon_pos: '{60,70}', weather_icon_dir: 'weather' },
+    spriteFolders: [...resolution.spriteFolders, { folder: 'weather', kind: 'icons', files: [{ path: weatherPath, width: 46, height: 46 }] }] };
+  const weatherPreview = await inspect((await compiled.renderCompiledWatchfacePreview(
+    { ...details, resolutions: [weatherResolution] }, weatherResolution, 'current', load)).dataUrl);
+  check(weatherPreview.canvas.getContext('2d').getImageData(70,80,1,1).data[1] === 255,
+    'Compiled preview must paint the weather icon recovered from the archive');
+  asset(weatherPath, png(20, 10, 0, 0, 20, 10, '#00ff00'), 20, 10);
+  const rectangularWeather = { ...weatherResolution, spriteFolders: [...resolution.spriteFolders,
+    { folder: 'weather', kind: 'icons', files: [{ path: weatherPath, width: 20, height: 10 }] }] };
+  const rectangularPreview = await inspect((await compiled.renderCompiledWatchfacePreview(
+    { ...details, resolutions: [rectangularWeather] }, rectangularWeather, 'current', load)).dataUrl);
+  check(rectangularPreview.canvas.getContext('2d').getImageData(65,75,1,1).data[1] === 255,
+    'Rectangular weather artwork retains its archive coordinates');
+  check(rectangularPreview.canvas.getContext('2d').getImageData(65,85,1,1).data[1] === 0,
+    'Compiled weather artwork keeps its native height instead of stretching into a square');
   const aod = await inspect((await compiled.renderCompiledWatchfacePreview(details, resolution, 'aod', load)).dataUrl);
   check(aod.canvas.getContext('2d').getImageData(204,163,1,1).data[0] === 255, 'AOD must use its own compiled coordinates without dimming again');
   // COROS compiles dynamic AOD fields but skips the background entirely.
@@ -127,8 +203,38 @@ async function verifyPixels() {
   // SATISFY has no AM/PM support in its 800px master, but the 416px AOD
   // still references missing a/icon/am.png and pm.png. Export with AM/PM
   // disabled must remove those references before the strict preview load.
-  const { composeWatchfaceReplacements } = await import('/src/watchfaces/watchfaceCompose.ts');
+  const { composeWatchfaceReplacements, deriveDesignDetails } = await import('/src/watchfaces/watchfaceCompose.ts');
   const { makeDefaultDesign } = await import('/src/watchfaces/watchfaceBackground.ts');
+  // The starter's implicit colon must disappear on first render, including
+  // stacked time layouts, without first toggling the custom colon on and off.
+  asset(`${root}/colon.png`, png(8, 24, 0, 0, 8, 24, '#00ffff'), 8, 24);
+  for (const minuteY of [120, 200]) for (const enabled of [undefined, false, true]) {
+    const colonDetails = { ...details, resolutions: [{ ...resolution,
+      config: { ...resolution.config, colon_icon: 'colon.png',
+        time_minute_high_pos: `{220,${minuteY}}`, time_minute_low_pos: `{246,${minuteY}}`,
+        time_minute_high_font: 'digits', time_minute_low_font: 'digits' },
+      icons: [...resolution.icons, { path: `${root}/colon.png`, width: 8, height: 24 }]
+    }] };
+    const colonDesign = JSON.parse(JSON.stringify({ ...makeDefaultDesign(),
+      configAssetOverrides: enabled === undefined ? {} : { 'config:colon_icon': { enabled } }
+    }));
+    const previewDetails = deriveDesignDetails(colonDetails, colonDesign).previewDetails;
+    const colonFrame = document.createElement('canvas'); colonFrame.width = 416; colonFrame.height = 416;
+    await studio.drawStudioPreview(colonFrame, sources.get(`${root}/background.png`).dataUrl,
+      previewDetails, { ...aodOptions, previewMode: 'current' }, load);
+    const pixels = rgba(colonFrame);
+    const hasColonPixels = pixels.some((red, i) => i % 4 === 0 && red < 150 && pixels[i+1] > 200 && pixels[i+2] > 200);
+    check(hasColonPixels === (enabled === true), `Colon pixels must follow explicit visibility (${minuteY}, ${enabled})`);
+    const exportedColon = await composeWatchfaceReplacements(colonDetails, colonDesign, load);
+    const exportedConfig = studio.applyConfigOverridesToDetails(colonDetails, exportedColon.configOverrides).resolutions[0].config;
+    check(Boolean(exportedConfig.colon_icon) === (enabled === true), 'Export must match colon preview visibility');
+    colonDesign.staticSeparators.colon.enabled = true;
+    colonDesign.configAssetOverrides['config:colon_icon'] = { enabled: true,
+      replacement: { dataUrl: sources.get(`${root}/colon.png`).dataUrl, width: 8, height: 24 } };
+    const replacedColon = await composeWatchfaceReplacements(colonDetails, colonDesign, load);
+    check(studio.applyConfigOverridesToDetails(colonDetails, replacedColon.configOverrides).resolutions[0].config.colon_icon === '',
+      'An exported replacement asset must not resurrect the template colon behind a custom colon');
+  }
   const staleAodDetails = { ...details, resolutions: [
     { directory: 'watchface_800x800', width: 800, height: 800, config: {}, aodConfig: {}, icons: [], spriteFolders: [] },
     { ...resolution, config: { ...resolution.aodConfig, am_icon: 'a\\icon\\am.png', pm_icon: 'a\\icon\\pm.png', am_pm_icon_pos: '{0,0}' }, aodConfig: {}, icons: [] }
@@ -147,6 +253,16 @@ async function verifyPixels() {
   const cleanAod = { ...cleaned, aodConfig: cleaned.config };
   const cleanedPreview = await inspect((await compiled.renderCompiledWatchfacePreview(cleanedDetails, cleanAod, 'aod', load)).dataUrl);
   check(cleanedPreview.canvas.getContext('2d').getImageData(204,163,1,1).data[0] === 255, 'The cleaned AOD export must render with the strict IPC asset loader');
+  // Stock AROUND names icon\point.png and icon\cen.png without shipping them.
+  // The Send preview's loader skips absent PNGs, and the preview lists them.
+  const skipMissingLoad = async (paths) => paths.flatMap((p) => sources.has(p) ? [sources.get(p)] : []);
+  const danglingResolution = { ...resolution, config: { ...resolution.config, control_point_icon: 'icon\\point.png',
+    time_center_polygon_icon1: 'icon\\cen.png', time_center_polygon_icon2: 'icon\\cen.png' } };
+  const dangling = await compiled.renderCompiledWatchfacePreview(details, danglingResolution, 'current', skipMissingLoad, { date: new Date(2026, 8, 13, 20, 58) });
+  check(dangling.checks.includes("control_point_icon: icon/point.png isn't in the archive.") &&
+    dangling.checks.includes("time_center_polygon_icon1 / time_center_polygon_icon2: icon/cen.png isn't in the archive."),
+    `Template PNGs the archive lacks must be listed instead of failing the preview (got ${JSON.stringify(dangling.checks)})`);
+  check((await inspect(dangling.dataUrl)).canvas.getContext('2d').getImageData(134,123,1,1).data[0] === 255, 'The face must still render around PNGs the archive lacks');
   // Generated direct PNG references can be numbered, even in single-file
   // folders which older archive descriptions omit from both asset lists.
   for (const [name, color] of [['sunset', '#ffff00'], ['sunrise', '#ff00ff'], ['aod_sunset', '#00ffff'], ['am', '#0000ff'], ['pm', '#00ff00']]) {
@@ -196,7 +312,17 @@ async function verifyPixels() {
   check(metrics.length === 10 && metrics.every((entry) => entry.width === 26 && entry.height === 30), 'Metric export must store spacing in each digit advance cell');
   const previewCanvas = document.createElement('canvas'); previewCanvas.width=416; previewCanvas.height=416;
   await studio.drawStudioPreview(previewCanvas, sources.get(`${root}/background.png`).dataUrl, details, { fontFamily:'', digitColor:'#ffffff', accentColor:'#ffffff', tintIcons:false, tintLabels:false, metricStyles:styles }, load);
-  return { dataUrl: output.dataUrl, checks: output.checks, tests: 41 };
+  const ampmDetails = { archiveId: 'ampm-fixture', resolutions: [{ directory: '416', width: 416, height: 416,
+    config: { am_icon: 'icon/am.png', pm_icon: 'icon/pm.png', am_pm_icon_pos: '{1,1}' },
+    icons: ['am', 'pm'].map(label => ({ path: `416/icon/${label}.png`, width: 36, height: 16 })), spriteFolders: [] }] };
+  const am = png(36, 16, 2, 2, 12, 12), pm = png(36, 16, 20, 2, 12, 12);
+  const partialFont = { label: 'Partial AM', dataUrl: am, glyphs: 'A', columns: 1, tint: false, labels: { AM: am } };
+  const loadedLabels = [];
+  const labelOutput = await studio.buildAmPmSpriteReplacements(ampmDetails, { enabled: true, x: 1, y: 1, scale: 1, rasterFont: partialFont }, async paths => {
+    loadedLabels.push(...paths); return paths.map(path => ({ path, dataUrl: pm }));
+  });
+  check(labelOutput.length === 2 && loadedLabels.length === 1 && loadedLabels[0].endsWith('/pm.png'), 'An incomplete raster label uses the original PM image without breaking export');
+  return { dataUrl: output.dataUrl, checks: output.checks, tests: 54 };
 }
 
 (async () => {
@@ -209,7 +335,7 @@ async function verifyPixels() {
     window = new BrowserWindow({ show:false, webPreferences:{ contextIsolation:true, sandbox:true } });
     await window.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/__glyph_test`);
     const results = await window.webContents.executeJavaScript(`(${verifyPixels.toString()})()`);
-    assert.equal(results.tests,41);
+    assert.equal(results.tests,54);
     await fs.writeFile('/tmp/coroslink-export-pixel-test.png', Buffer.from(results.dataUrl.split(',')[1], 'base64'));
     console.log('Watchface glyph and compiled pixel tests passed', results.checks);
   } catch(error) { console.error(error); exitCode=1; }

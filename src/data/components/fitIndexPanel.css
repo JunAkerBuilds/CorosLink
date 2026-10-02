@@ -1,0 +1,184 @@
+/* Local activity index — stat strip on top, window picker + action below. */
+
+.fit-index-panel {
+  container-type: inline-size;
+}
+
+.fit-index-body {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+/* ---- Stats -------------------------------------------------------------- */
+
+.fit-index-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.fit-index-stat {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px 20px;
+}
+
+.fit-index-stat + .fit-index-stat {
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.fit-index-stat dt {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fit-index-stat dd {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fit-index-stat.is-ready dd {
+  color: var(--success-text);
+}
+
+.fit-index-stat dd.is-empty {
+  color: var(--text-muted);
+}
+
+/* ---- Window + action ---------------------------------------------------- */
+
+.fit-index-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 240px);
+  gap: 16px;
+  align-items: end;
+  padding: 16px 20px 18px;
+}
+
+.fit-index-window {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.fit-index-window-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.fit-index-window-option {
+  align-content: center;
+  min-height: 60px;
+}
+
+.fit-index-window-option strong {
+  font-size: 13px;
+}
+
+.fit-index-action {
+  display: grid;
+}
+
+.fit-index-button {
+  width: 100%;
+  min-height: 60px;
+  font-size: 14px;
+}
+
+.fit-index-button.danger-button {
+  border-color: var(--error-border);
+  background: transparent;
+  color: var(--error-text);
+}
+
+.fit-index-button.danger-button:hover:not(:disabled) {
+  border-color: var(--error-text);
+  background: var(--error-bg);
+}
+
+.fit-index-progress {
+  padding: 14px 20px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* ---- Narrow ------------------------------------------------------------- */
+
+@container (max-width: 720px) {
+  .fit-index-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fit-index-button {
+    min-height: 44px;
+  }
+}
+
+@container (max-width: 520px) {
+  .fit-index-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fit-index-stat {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+  }
+
+  .fit-index-stat + .fit-index-stat {
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    border-left: 0;
+  }
+
+  .fit-index-stat dd {
+    font-size: 17px;
+  }
+
+  .fit-index-controls {
+    padding: 14px 16px 16px;
+  }
+
+  .fit-index-window-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fit-index-window-option {
+    min-height: 52px;
+  }
+}
+
+/* ---- Paper -------------------------------------------------------------- */
+
+:root[data-theme="paper"] .fit-index-body {
+  border-color: var(--glass-border);
+  background: rgba(38, 34, 28, 0.04);
+}
+
+:root[data-theme="paper"] .fit-index-stats,
+:root[data-theme="paper"] .fit-index-progress {
+  border-color: color-mix(in srgb, var(--text-muted) 17%, transparent);
+}
+
+:root[data-theme="paper"] .fit-index-stat + .fit-index-stat {
+  border-top-color: color-mix(in srgb, var(--text-muted) 17%, transparent);
+  border-left-color: color-mix(in srgb, var(--text-muted) 17%, transparent);
+}

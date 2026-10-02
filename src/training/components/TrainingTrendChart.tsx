@@ -1,3 +1,5 @@
+import type { ChartCardSize } from "../widgetSizing";
+import "../chartSizing.css";
 import { useEffect, useId, useState } from "react";
 import {
   Activity,
@@ -36,8 +38,11 @@ import { buildSleepDurationSummary } from "../sleepDuration";
 import type { TrainingTrendPoint } from "../types";
 
 interface TrainingTrendChartsProps {
+  size?: ChartCardSize;
   points: TrainingTrendPoint[];
   sleepRecords?: TrainingHubSleepRecord[];
+  rangeLabel?: string;
+  metric?: "load" | "rpe" | "hrv" | "sleep";
 }
 
 type ChartValueFormatter = (value: number) => string;
@@ -355,7 +360,7 @@ function TrendChartAxes({
   );
 }
 
-function SleepDurationCard({ points, sleepRecords, reducedMotion }: TrainingTrendChartsProps & { reducedMotion: boolean }) {
+function SleepDurationCard({ points, sleepRecords, reducedMotion, size }: TrainingTrendChartsProps & { reducedMotion: boolean }) {
   const gradientId = useId();
   const { colors, metrics } = useChartColors();
   const summary = buildSleepDurationSummary(points, sleepRecords);
@@ -364,7 +369,7 @@ function SleepDurationCard({ points, sleepRecords, reducedMotion }: TrainingTren
   const ticks = Array.from({ length: yMax / 180 + 1 }, (_, index) => index * 180);
 
   return (
-    <section className="panel training-chart-panel sleep-duration-card" data-metric="sleep">
+    <section className="panel training-chart-panel sleep-duration-card" data-metric="sleep" data-chart-size={size}>
       <header className="sleep-duration-header">
         <span className="sleep-duration-icon" aria-hidden="true"><MoonStar size={24} /></span>
         <div>
@@ -406,14 +411,14 @@ function SleepDurationCard({ points, sleepRecords, reducedMotion }: TrainingTren
                   </linearGradient>
                 </defs>
                 <CartesianGrid stroke={colors.grid} vertical={false} strokeDasharray="3 3" />
-                <XAxis dataKey="date" height={46} tickLine={false} interval={0}
+                <XAxis dataKey="date" height={size === "mini" ? 24 : 46} tickLine={false} interval="preserveStartEnd" minTickGap={12}
                   axisLine={{ stroke: colors.grid }}
-                  tick={({ x, y, index }: XAxisTickContentProps) => {
-                    const day = summary.days[index];
+                  tick={({ x, y, payload }: XAxisTickContentProps) => {
+                    const day = summary.days.find(day => day.date === payload.value);
                     return (
                       <g transform={`translate(${x},${y})`} className="sleep-duration-axis-label">
                         <text y={14} textAnchor="middle" fill={colors.text}>{day?.weekday}</text>
-                        <text y={32} textAnchor="middle" fill={colors.text}>{day?.shortDate}</text>
+                        {size !== "mini" && <text y={32} textAnchor="middle" fill={colors.text}>{day?.shortDate}</text>}
                       </g>
                     );
                   }}
@@ -438,7 +443,7 @@ function SleepDurationCard({ points, sleepRecords, reducedMotion }: TrainingTren
   );
 }
 
-export function TrainingTrendCharts({ points, sleepRecords }: TrainingTrendChartsProps) {
+export function TrainingTrendCharts({ points, sleepRecords, rangeLabel = "Last 7 days", metric, size }: TrainingTrendChartsProps) {
   const reducedMotion = usePrefersReducedMotion();
   const { colors, metrics } = useChartColors();
 
@@ -462,12 +467,12 @@ export function TrainingTrendCharts({ points, sleepRecords }: TrainingTrendChart
   );
 
   return (
-    <div className="training-chart-grid">
-      <section className="panel training-chart-panel" data-metric="load">
+    <div className={metric ? "training-chart-single" : "training-chart-grid"}>
+      {(!metric || metric === "load") && <section className="panel training-chart-panel" data-metric="load" data-chart-size={size}>
         <div className="section-heading compact training-chart-heading">
           <div>
             <p className="eyebrow">Training Load</p>
-            <h2>Last 7 days</h2>
+            <h2>{rangeLabel}</h2>
           </div>
           {loadPoints.length > 0 ? (
             <ChartLatestStat
@@ -514,13 +519,13 @@ export function TrainingTrendCharts({ points, sleepRecords }: TrainingTrendChart
             Complete a workout and sync from COROS to see your load trend.
           </EmptyChartNotice>
         )}
-      </section>
+      </section>}
 
-      <section className="panel training-chart-panel" data-metric="rpe">
+      {(!metric || metric === "rpe") && <section className="panel training-chart-panel" data-metric="rpe" data-chart-size={size}>
         <div className="section-heading compact training-chart-heading">
           <div>
             <p className="eyebrow">RPE Load · AU</p>
-            <h2>Last 7 days</h2>
+            <h2>{rangeLabel}</h2>
           </div>
           {rpePoints.length > 0 ? (
             <ChartLatestStat
@@ -567,13 +572,13 @@ export function TrainingTrendCharts({ points, sleepRecords }: TrainingTrendChart
             Rate your activities in COROS to track perceived effort.
           </EmptyChartNotice>
         )}
-      </section>
+      </section>}
 
-      <section className="panel training-chart-panel" data-metric="hrv">
+      {(!metric || metric === "hrv") && <section className="panel training-chart-panel" data-metric="hrv" data-chart-size={size}>
         <div className="section-heading compact training-chart-heading">
           <div>
             <p className="eyebrow">HRV vs Baseline · ms</p>
-            <h2>Last 7 days</h2>
+            <h2>{rangeLabel}</h2>
           </div>
           <div className="training-chart-heading-side">
             {hrvPoints.length > 0 ? (
@@ -640,9 +645,9 @@ export function TrainingTrendCharts({ points, sleepRecords }: TrainingTrendChart
             Wear your device during sleep to capture nightly HRV.
           </EmptyChartNotice>
         )}
-      </section>
+      </section>}
 
-      <SleepDurationCard points={points} sleepRecords={sleepRecords} reducedMotion={reducedMotion} />
+      {(!metric || metric === "sleep") && <SleepDurationCard size={size} points={points} sleepRecords={sleepRecords} reducedMotion={reducedMotion} />}
     </div>
   );
 }

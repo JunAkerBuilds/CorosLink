@@ -11,8 +11,225 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Native COROS Plan destinations** — Coach's plan confirmation card can now bundle a generated plan into one grouped native COROS Plan Library entry, optionally activated straight onto the Calendar, instead of only writing individual library/calendar entries. All six native plan write endpoints (`add`, `update`, `copy`, `delete`, `executeSubPlan`, `quitSubPlan`) are live-verified; see [`docs/coros-plan-write-api.md`](docs/coros-plan-write-api.md).
 
+## [0.1.49] - 2026-09-27
+
+### Changed
+
+- **Minimum** and **Maximum temperature** now show as one reading in Studio, the way the watch draws them: the minimum, a "/", the maximum and one unit. The maximum follows the minimum, and moving either moves both. Restyle, replace or hide the "/" with the new **Min/max separator** component on Minimum temperature.
+
 ### Fixed
 
+- Min/max temperature no longer shows on the watch as one run-together number such as "1327°C". The export now draws a visible separator between them.
+- **Send to COROS** no longer fails with "does not contain one of the requested images" for templates that reference images they don't include, such as AROUND-based faces. The send preview lists those images instead.
+
+## [0.1.48] - 2026-09-27
+
+### Added
+
+- Add **Weekday**, **Date month** and **Date day** to any watch face from Studio's **Add** menu, including faces whose template has no date, such as converted official faces. Month and day reuse the face's own digits. The weekday is drawn with a font you can change. Studio places them next to the face's existing date or below the time, and **Remove** takes them off again.
+- Pick the PACE 4 Jakob Ingebrigtsen Edition from the template watch presets to browse its face catalog.
+
+### Changed
+
+- The **Add** menu lists face components in the same order on every face.
+
+### Fixed
+
+- Seconds and other layers that Studio added now stay off the watch when you hide them. The exported face previously still showed them.
+
+## [0.1.47] - 2026-09-26
+
+### Added
+
+- Add **analog hands** to any watch face from Studio's **Add** menu, including DIY templates without hands. Watchmaker AI can add them too.
+- Restore template layers you deleted, such as the time, date, fixed metrics and indicators, from **Add**, which now has **Time** and **Device** categories.
+- Add a GitHub Sponsors link.
+
+### Changed
+
+- Restyle the Watch Faces hub to match the Faces website. Community shows each design once, with its variants on their own page, and theme listings load from cache before refreshing.
+- Refresh the Training Hub personal records and race predictor.
+- The send preview for a converted official face now draws its live data.
+
+### Fixed
+
+- Replaced analog hands now rotate around their pivot instead of spinning in place.
+- Min/max temperature, humidity and UV now show on the watch when their icon is hidden. The export adds the invisible icon and separator that official faces include.
+- Converted official faces with an auto-aligned clock, such as SATISFY, keep their time and their light background.
+- Chart styles switched off in an official face (bar or line width 0) stay off after export.
+
+## [0.1.46] - 2026-09-25
+
+### Added
+
+- Add **Seconds** to a watch face whose template has none, from **Add → Live data**. Studio reuses the template's minute digits, starts them at half size below the time, and lets you restyle, move, or remove them like any Seconds layer.
+
+### Fixed
+
+- Export a custom font or sprite sheet chosen for Seconds on templates that only have a single seconds digit, such as animated faces. The exported face previously kept the template's original seconds frames.
+
+## [0.1.45] - 2026-09-24
+
+### Added
+
+- Choose which watch system languages show your designed weekday from the new **Watch languages** option in Studio's Export panel.
+- Connect the local-model chat provider to OpenAI-compatible servers elsewhere on your network (private IPs, `.local`/`.lan` names, Tailscale), not just localhost. Pick **Other server URL…** in Local model settings when detection has found a localhost server. ([#126](https://github.com/JunAkerBuilds/CorosLink/issues/126))
+
+### Changed
+
+- Redesign Coach settings as a wider, smoked-glass dialog with a section rail, grouped provider cards, toggle switches, and side-by-side fields.
+- Refresh the Overview weather card icons and the dashboard widget resize preview.
+- Refresh the README with new light and dark screenshots.
+
+### Fixed
+
+- Remove the automatic PACE 3 month/day position swap added in v0.1.41, which could counteract COROS date preferences. Rebuilding marked older exports restores their authored positions.
+
+## [0.1.44] - 2026-09-24
+
+### Fixed
+
+- Restore community watch-face downloads in Studio by accepting signed release links hosted by the community catalog, fixing the “redirected to an untrusted host” error.
+
+## [0.1.43] - 2026-09-23
+
+### Added
+
+- Let Watchmaker AI create supported native fields even when absent from the starting watch face, including a calendar year with native digit export and date-driven preview.
+- Edit workout calendar events in CorosLink and sync their all-day or timed schedules to linked Google and Apple calendars.
+- Add a collapsible calendar event editor with duration presets, a time-zone selector, and unsaved-change controls.
+
+### Fixed
+
+- Keep the native calendar year visible when the selectable metric is hidden and preserve its editor position during export and reopening.
+- Correct standard COROS battery previews and artwork labels to use charging at index 0 and 0–100% at indices 1–11.
+- Allow failed calendar syncs to be retried without changing the event's saved times.
+- Recover month labels when official faces such as LIMA HALF MARATHON store their position without rectangle dimensions, and map their images to the correct calendar months in the editor.
+- Recover uncompressed backgrounds and thumbnails from official watch faces such as FOCUS and ENTHUSIASM.
+
+### Changed
+
+- Update website links to coroslink.com and remove website analytics.
+
+## [0.1.42] - 2026-09-23
+
+### Fixed
+
+- Structured workouts now use kilometers for land-distance targets above 1,000 m, preventing the reported COROS iOS truncation to 1,000 m. The same correction applies when editing workouts and calculating repeat-group targets. Addresses [#124](https://github.com/JunAkerBuilds/CorosLink/issues/124).
+- Calendar workout details keep their full button hit areas clickable when overlapping the window title bar, fixing unresponsive spots in Ask Coach, Edit, Remove, and Close.
+
+## [0.1.41] - 2026-09-23
+
+### Added
+
+- Watchmaker AI in Watch Face Studio, using the local Codex CLI with saved conversations, image tools, and checks against design requirements.
+- Portable font snapshots and improved editor placement guides, previews, and component artwork controls.
+- PACE 4 Pro (COROS W337) device recognition and watch-face support, with native 466×466 AMOLED previews, conversion, and Current/Always-on exports.
+
+### Changed
+
+- The community watch-face gallery loads more faces automatically as you scroll, preserves loaded cards and watch selections, and lets you retry failed requests.
+- Missing-font messages show the font name in quotes so it is easier to identify.
+
+### Fixed
+
+- PACE 3 watch-face exports compensate for the observed English month/day position reversal so the installed date layout matches the editor. Reopening newly exported faces preserves the intended editor positions.
+- Watchmaker AI conversation saving and cancellation handle overlapping requests without stale updates or duplicate conversations.
+
+## [0.1.40] - 2026-09-22
+
+### Added
+
+- Configure a personal CARTO basemap API key in Settings, with setup documentation.
+
+### Changed
+
+- Improved responsive dashboard sizing and training activity layouts.
+- Centralized account and map API settings for easier configuration.
+
+### Fixed
+
+- Watch Face Studio can export added Bluetooth and Do Not Disturb indicators when the original template does not define their icon or position settings.
+
+## [0.1.39] - 2026-09-21
+
+### Added
+
+- Customize the Training Hub with draggable, resizable widgets, a searchable widget library, saved layouts, undo, and reset. Health metrics, trend charts, and zone distributions can be arranged individually.
+- Coach can prepare COROS workout actions for review in chat, with saved action history, stale-data checks, and protection against duplicate writes.
+- Review strength workout edits before saving changes to sets, reps, targets, weights, and rest in library workouts and future calendar copies. External local AI clients can prepare the same reviews through the new Strength workouts MCP connection in Settings.
+
+### Changed
+
+- Refreshed training activity browsing, activity details, health insights, and chart layouts to adapt to dashboard card sizes.
+
+### Fixed
+
+- Weather can use a city-level location fallback when device location is unavailable or times out, while respecting location permission denial.
+- Improved MCP authorization handling, tool discovery, and cleanup when disconnecting a server.
+- Watch Face Studio now fits the dial preview to the available space when preview controls wrap.
+- Update announcements now use the version’s full changelog notes instead of GitHub’s autogenerated comparison link. Release publication requires a nonempty changelog entry.
+
+## [0.1.38] - 2026-09-21
+
+### Fixed
+
+- Community watch-face cards and details now let you select a watch type and open the matching package in Studio. Changing the top Watch model filter resets card selections to that model, with individual overrides still available.
+
+## [0.1.37] - 2026-09-20
+
+### Added
+
+- Coach can now draw charts on request with a new `render_chart` tool: up to six series bound to daily metrics (training load, HRV vs baseline, resting HR, sleep score and duration, RPE load, load ratio, stamina) over a 7–90 day window, or inline values for derived series, with shaded training blocks, summary tiles, dual axes, and a footnote. Charts render inline in the chat and persist in history.
+- Pin any coach chart to the Training Hub. Metric-bound charts refresh with live data on open and on every hub refresh; a Refresh/Unpin control lives on each card.
+- `get_fitness_trends` accepts a `days` window (7–90, default 7), includes sleep score and duration, and appends weekly averages for windows longer than two weeks.
+- Local FIT analysis for the Coach: a dependency-free FIT decoder and a local activity index (SQLite + cached `.fit` files under the app data folder) back six new tools — `get_activity_splits`, `get_power_curve`, `get_best_efforts`, `find_similar_routes`, `compare_activities`, and `sync_activity_index`. Splits, aerobic decoupling, normalized power, power curves with an FTP estimate, best efforts inside any activity, GPS route fingerprints, and checkpoint-by-checkpoint comparisons are computed on this computer with no daily file limits; only derived numbers reach the model.
+- Data page: a Local activity index panel to index the last 90 days, the last year, or the full history in the background, with progress, cancel, cache size, and last-sync time. The cache also appears under Settings storage locations.
+- The Claude Code "Full activity files" permission is now live and gates the local FIT tools.
+- Watch Face Studio can browse the artwork inside every official COROS face: an **Official** entry in the Add menu, an **Official COROS font** source in the Custom PNG font panel, and **Official** buttons next to template images and battery sprite folders open a library of digit fonts, battery states, weather glyphs, icons and backgrounds unpacked from the official catalog. The library is prebuilt and hosted: the app downloads a small per-model index and fetches previews and frames only as you browse and pick, caching them under the app data folder. When the hosted library is unreachable the app builds it locally from the catalog with your signed-in COROS account instead. Identical sets are deduplicated and every set is grouped by what the source face used it for.
+
+### Changed
+
+- Coach-requested charts are shown even when the "show charts and activity visuals" setting is off; that toggle now only hides automatic visuals.
+- The Fitness trends chat card shows the actual window length instead of a fixed "Last 7 days".
+
+### Fixed
+
+- Opening the official DIGITAL face in Studio now recovers its hour, minute and seconds digits. The face stores its normal-mode clock fonts with bitmap encoding `0x3002` (same frames as `0x2002` plus a flag bit), which the decoder had skipped, leaving only the colon.
+- Official-face recovery no longer drops an element just because its image block carries a header the scanner has not met: any block a layout pointer references is admitted once every frame decodes to its declared size, and elements that still cannot be decoded are counted in the "Opened an editable copy" message instead of vanishing. This also recovers TWILIGHT's Exercise icon (uncompressed RGB888) and the seconds hand on the MIP NOMAD faces.
+- Automatic watch detection now recognizes APEX 4 volumes labeled `APEX 4 42MM` or `APEX 4 46MM`, accepts recognized new watches before their media folders exist, and preserves the watch's `Map` folder casing for installs.
+
+## [0.1.36] - 2026-09-19
+
+### Added
+
+- Recover official COROS compiled watch faces into Watch Face Studio and export edited designs back to the watch. The decoder now handles 260px MIP and 416px AMOLED layouts, indexed, RGBA, and MIP bitmap frames, and more native fields including barometer, sunrise/sunset, sleep, and today's and this week's run, swim, and bike metrics.
+- Added live sprite previews for template PNG sets, state folders, and raster-font glyphs, plus number alignment controls and a selectable-metric asset inspector.
+
+### Changed
+
+- Recovered official faces convert by baking the final scene for the destination watch, so they open cleanly as a fresh starter instead of carrying a non-native scene into an 800px master.
+- Distributable watch-face packages are standardized to match the website validator, stripping recovery blobs and non-standard entries while preserving the editable asset tree.
+
+### Fixed
+
+- Preserved a starter archive's own weather and native-data sprites during recovery and conversion instead of replacing them with generated defaults.
+- Kept template previews stable while editing a design, and hid selectable control-slot icons from the layer list where they are edited in the metric panel.
+
+## [0.1.35] - 2026-09-16
+
+### Added
+
+- Customizable timed workout events for Google and Apple Calendar.
+- Native watch-face weather, astronomy, health, and training fields with default assets, simulation controls, and MCP editing support.
+
+### Changed
+
+- Improved account setup navigation and the watch-face layer picker.
+
+### Fixed
+
+- Automatic watch-drive detection now requires a recognized volume label.
 - Saved Routes now pages through 20 lightweight summaries at a time and loads geometry only for the selected preview, keeping large route libraries accessible without loading every track on each refresh.
 
 ## [0.1.34] - 2026-09-15

@@ -1,0 +1,41 @@
+import assert from "node:assert/strict";
+import { loadWatchfaceTestModules } from "./load-watchface-test-modules.mjs";
+
+const [simulation, studio] = await loadWatchfaceTestModules(["/src/watchfaces/watchfaceSimulation.ts", "/src/watchfaces/watchfaceStudio.ts"]);
+const { advanceSimulationDateTime: advance, parseWatchfacePreviewScenario: parse, patchWatchfaceSimulation: patch, createWatchfaceSimulation: create, activeSimulationScenario: active } = simulation;
+assert.equal(advance("2026-12-31T23:59:59", 1), "2027-01-01T00:00:00");
+assert.equal(advance("2028-02-28T23:59:59", 1), "2028-02-29T00:00:00");
+assert.equal(advance("2028-02-29T23:59:59", 1), "2028-03-01T00:00:00");
+assert.equal(advance("2027-02-28T23:59:59", 1), "2027-03-01T00:00:00");
+assert.equal(advance("2100-02-28T23:59:59", 1), "2100-03-01T00:00:00");
+assert.equal(advance("9999-12-31T23:59:59", 86400), "9999-12-31T23:59:59");
+for (const dateTime of ["2027-02-29T12:00:00", "2026-04-31T12:00:00", "2026-12-31T24:00:00", "bad", "1899-01-01T12:00:00"]) assert.throws(() => parse({ dateTime }));
+assert.equal(parse({ dateTime: "2028-02-29T12:30:00Z" }).dateTime, simulation.simulationDateTime(new Date("2028-02-29T12:30:00Z")));
+const state = patch(create(), { enabled: true, playing: true, speed: 60, dateTime: "2028-02-29T23:59:59", values: { battery: "0", weather_temp: "-18", sleep_hrv_level: "7" }, weather: { condition: 40, night: true }, chartHistory: [0, 0.5, 1], chartProgress: 0.75 });
+assert.equal(state.chartProgress, 0.75);
+assert.throws(() => patch(state, { chartProgress: 1.5 }));
+assert.equal(active(state).values.battery, "0");
+assert.equal(simulation.simulationStudioOptions(active(state)).previewDate.getDay(), new Date(2028, 1, 29).getDay());
+assert.equal(patch(state, { enabled: false }).playing, false);
+assert.equal(active(patch(state, { enabled: false })), undefined);
+assert.deepEqual(patch(state, { values: {} }).values, {}, "Values can be reset without a design mutation");
+for (const value of [{ speed: 3 }, { enabled: "yes" }, { playing: 1 }, { values: { battery: "101" } }, { values: { battery: "-1" } }, { values: { battery: "" } }, { values: { battery: 1 } }, { weather: { condition: 41, night: true } }, { chartHistory: [0] }, { chartHistory: [0, NaN] }]) assert.throws(() => patch(state, value));
+assert.equal(studio.batteryPreviewStateIndex(12), 9);
+assert.equal(studio.batteryPreviewStateIndex(12, 0), 1);
+assert.equal(studio.batteryPreviewStateIndex(12, 50), 6);
+assert.equal(studio.batteryPreviewStateIndex(12, 100), 11, "Full battery selects the final COROS level, not the 80% frame");
+for (let percent = 0; percent <= 100; percent++) {
+  assert.equal(studio.batteryPreviewStateIndex(12, percent), 1 + Math.floor(percent / 10), `COROS level at ${percent}%`);
+}
+for (const [percent, expected] of [[-1, 1], [9.99, 1], [10, 2], [99.99, 10], [101, 11], [NaN, 9], [Infinity, 9]]) {
+  assert.equal(studio.batteryPreviewStateIndex(12, percent), expected);
+}
+assert.equal(studio.batteryPreviewStateIndex(1, 100), 0);
+assert.equal(studio.batteryPreviewStateIndex(5, 100), 4);
+assert.equal(simulation.simulationPreset("yearEnd", state, new Date(2026, 8, 16)).dateTime, "2026-12-31T23:59:58");
+assert.equal(simulation.simulationPreset("lowBattery", state).values.battery, "5");
+assert.equal(simulation.simulationPreset("leapDay", state).playing, false);
+console.log("Simulation passed: calendar rollovers, leap years, boundaries, validation, state isolation and battery artwork selection.");
+
+assert.ok(!simulation.WATCHFACE_SIMULATION_CAPABILITIES.values.includes("date_year"), "the year is driven by dateTime, not a manual sample");
+assert.throws(() => parse({ values: { date_year: "1999" } }), /date_year/);

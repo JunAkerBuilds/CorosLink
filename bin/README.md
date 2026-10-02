@@ -11,15 +11,26 @@ vendors a self-contained CPython runtime (from `astral-sh/python-build-standalon
 so users don't need Python installed, and vendors the pinned `ytmusicapi` Python
 package plus dependencies into this folder.
 
-Override the Python runtime release with `PYTHON_STANDALONE_TAG=<tag>`.
+Every download is checked against a SHA-256 pin before it is bundled, and the
+build stops if anything differs:
 
-To use a different yt-dlp version:
+- `scripts/bundled-binaries.lock.json` pins the yt-dlp, ffmpeg and CPython
+  versions and the hash of each platform's file.
+- `scripts/bundled-python-requirements.txt` pins `ytmusicapi` and each of its
+  dependencies to a wheel hash; pip installs it with `--require-hashes`.
+
+To change versions, re-pin instead of editing hashes by hand. The script reads
+the SHA-256 digests GitHub records for each release asset:
 
 ```sh
-YT_DLP_VERSION=2026.08.19 npm run binaries:prepare
+npm run binaries:pin -- --yt-dlp=latest          # or --yt-dlp=2026.09.01
+npm run binaries:pin -- --python-release=20260101 --python-version=3.11.14
+npm run binaries:pin -- --ytmusicapi=1.12.1      # re-resolves the Python lock
+npm run binaries:pin                              # after upgrading ffmpeg-static
 ```
 
-Set `YT_DLP_VERSION=latest` to query GitHub for the newest release (requires `GITHUB_TOKEN` in CI).
+Review the diff before committing: a pin only proves the file is the one that
+was on the release when you ran the script.
 
 Recommended layout:
 

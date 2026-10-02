@@ -1,0 +1,32 @@
+/* Compact variants keep the existing Today treatment, timeline, badges and colors. */
+.panel.training-upcoming-panel[data-chart-size] { container: upcoming-card / inline-size; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) { padding: 14px; gap: 8px; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .training-upcoming-header { flex-wrap: wrap; gap: 4px; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .training-upcoming-heading h2 { font-size: 18px; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .training-upcoming-count { display: none; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .training-upcoming-stats { font-size: 11px; white-space: normal; text-align: left; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .eyebrow { margin-bottom: 4px; font-size: 10px; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .training-upcoming-body { gap: 6px; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .training-upcoming-today { padding: 10px; gap: 10px; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .training-upcoming-today-icon { width: 34px; height: 34px; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .training-upcoming-today-title { font-size: 16px; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .training-upcoming-today-heading { gap: 6px; margin-bottom: 4px; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) :is(.training-upcoming-today-pill, .training-upcoming-today-tag, .training-upcoming-tag) { padding: 2px 7px; font-size: 10px; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) :is(.training-upcoming-today-meta, .training-upcoming-today-next) { margin-top: 4px; font-size: 11px; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .training-upcoming-list { gap: 2px; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .training-upcoming-row { grid-template-columns: 10px 40px minmax(0, 1fr) auto; gap: 8px; padding: 4px; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) .training-upcoming-title { font-size: 13px; white-space: normal; }
+.panel.training-upcoming-panel:is([data-chart-size="mini"], [data-chart-size="short"]) :is(.training-upcoming-date, .training-upcoming-row-stats) { font-size: 11px; }
+.upcoming-sized-more { align-self: flex-start; margin-top: auto; border: 1px solid var(--glass-border); border-radius: var(--radius-sm); background: var(--glass-bg); color: var(--text-primary); padding: 5px 9px; font: inherit; font-size: 11px; cursor: pointer; }
+.upcoming-sized-more:hover { background: var(--glass-bg-hover); }
+.upcoming-sized-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@container upcoming-card (max-width: 500px) {
+  .training-upcoming-header { flex-wrap: wrap; }
+  .training-upcoming-stats { white-space: normal; text-align: left; }
+  .training-upcoming-row { gap: 8px; padding-inline: 4px; }
+}
+
+/* A compact schedule can share its neighboring profile cards' bottom edge. */
+.hub-dashboard-widget[data-widget="upcoming"] .training-upcoming-panel[data-chart-size="short"] {
+  min-height: max(var(--chart-card-height), var(--widget-aligned-height, 0px));
+}

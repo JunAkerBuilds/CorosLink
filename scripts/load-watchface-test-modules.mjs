@@ -6,6 +6,7 @@ export async function loadWatchfaceTestModules(paths) {
   const vite = await createServer({
     root: fileURLToPath(new URL("..", import.meta.url)),
     server: { middlewareMode: true, watch: null },
+    optimizeDeps: { noDiscovery: true, include: [] },
     logLevel: "error"
   });
   try {

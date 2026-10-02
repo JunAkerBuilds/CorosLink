@@ -63,6 +63,53 @@ function createMemoryDatabase() {
 
 assert.deepEqual(parseChatTranscriptJson("not-json"), []);
 assert.deepEqual(parseChatTranscriptJson("{}"), []);
+
+// Official COROS review cards survive history reloads with their save state.
+for (const state of ['pending', 'saving', 'saved', 'uncertain']) {
+  const entry = { kind: 'corosAction', preview: {
+    requestId: 'review-1', title: 'Review workout', summary: 'Easy run tomorrow',
+    destination: 'Calendar', date: '20260922', details: ['Training: 30 min · Heart rate zone 2'],
+    createdAt: 1_790_000_000_000, state, message: 'Fixture status'
+  } };
+  assert.deepEqual(parseChatTranscriptJson(JSON.stringify([entry])), [entry]);
+}
+assert.deepEqual(parseChatTranscriptJson('[{"kind":"corosAction","preview":{"state":"saved"}}]'), []);
+
+// Coach charts round-trip with their resolved series, ranges, and tiles.
+const coachChartEntry = {
+  kind: "coachChart",
+  preview: {
+    previewId: "coach-chart:req:abc",
+    spec: { title: "HRV vs load", days: 30, series: [{ label: "HRV", metric: "avgSleepHrv" }] },
+    labels: ["Sep 1", "Sep 2"],
+    dates: ["20260901", "20260902"],
+    series: [
+      {
+        key: "s0",
+        label: "HRV",
+        kind: "line",
+        axis: "left",
+        color: "hrv",
+        dashed: false,
+        metric: "avgSleepHrv",
+        values: [61, null]
+      }
+    ],
+    ranges: [{ fromIndex: 0, toIndex: 1, label: "Block" }],
+    tiles: [{ label: "HRV avg", value: "61" }],
+    resolvedAt: "2026-09-19T00:00:00.000Z",
+    live: true
+  }
+};
+const [restoredChart] = parseChatTranscriptJson(JSON.stringify([coachChartEntry]));
+assert.deepEqual(JSON.parse(JSON.stringify(restoredChart)), coachChartEntry);
+assert.deepEqual(
+  parseChatTranscriptJson(
+    JSON.stringify([{ kind: "coachChart", preview: { previewId: "x", labels: [], series: [] } }])
+  ),
+  [],
+  "coach chart without a spec is dropped"
+);
 assert.deepEqual(parseChatTranscriptJson('[{"role":"nope","content":"x"}]'), []);
 
 assert.deepEqual(

@@ -1,6 +1,9 @@
+import { WATCHFACE_TARGETS, getWatchfaceTarget } from "../../electron/watchfaceTargets";
+import { drawNativeDataPreview } from "./nativeData";
 import {
   type CSSProperties,
   type FormEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -8,24 +11,37 @@ import {
   useState
 } from "react";
 import {
+  ArrowDownUp,
+  ArrowLeft,
   ArrowRight,
+  ArrowUpRight,
+  BarChart3,
   Check,
   ChevronDown,
+  Circle,
   Clipboard,
+  Clock,
   Copy,
   Download,
   ExternalLink,
+  Flame,
+  History,
   KeyRound,
+  Layers,
   LayoutGrid,
   Loader2,
   LogOut,
   MoreHorizontal,
+  Mountain,
+  Palette,
   Pencil,
   Plus,
+  RefreshCw,
   Repeat2,
   Search,
   Send,
   Share2,
+  Sparkles,
   Trash2,
   Upload,
   UserRound,
@@ -44,14 +60,17 @@ import type {
   CorosWatchfaceThemeCatalog,
   CorosWatchfaceTemplateAsset,
   CommunityWatchface,
-  CommunityWatchfaceCatalogPage,
   CommunityWatchfaceDownloadProgress,
+  CommunityWatchfaceGroup,
   CommunityWatchfaceOpenRequest,
+  CommunityWatchfaceSort,
+  CorosWatchfaceThemeCacheEntry,
   WatchModelId,
   WatchStatus
 } from "../../electron/types";
 import { WATCHFACE_AUTOMATION_SCENE_SCHEMA } from "../../electron/watchfaceAutomationTypes";
 import type { CorosLinkApi } from "../coroslink-api";
+import { SelectDropdown } from "../components/SelectDropdown";
 import {
   getWatchPresentation,
   getWatchfaceDeviceProfile,
@@ -59,14 +78,13 @@ import {
 } from "../watchModels";
 import { BatteryHistoryPanel } from "./BatteryHistoryPanel";
 import { DeviceInfoPanel } from "./DeviceInfoPanel";
-import { LegacyCarrierEditorPanel } from "./LegacyCarrierEditorPanel";
-import { RawBinInstallerPanel } from "./RawBinInstallerPanel";
-import { WatchfaceEditor } from "./WatchfaceEditor";
+import { carriedWatchfacePreferences, WatchfaceEditor, type WatchfaceCarriedPreferences } from "./WatchfaceEditor";
 import { renderDesignBackground } from "./watchfaceBackground";
 import { deriveDesignDetails, toStudioOptions } from "./watchfaceCompose";
 import { createWatchfaceEditorSessionId } from "./watchfaceEditorHistory";
 import {
   firmwareTypeForWatchfaceArchive,
+  isWatchfaceSignInRequired,
   prepareWatchfaceConversion
 } from "./watchfaceConversion";
 import {
@@ -76,13 +94,14 @@ import {
   pickPreviewResolution,
   pickWatchPreviewResolution
 } from "./watchfaceStudio";
-import { weatherPreviewUrl } from "./weatherAssets";
+import { weatherPreviewDataUrl, drawWeatherTemperaturePreview } from "./weatherAssets";
 import {
   clearWatchfaceAutomationEditor,
   getWatchfaceAutomationEditor,
   requireAutomationNumber,
   toWatchfaceAutomationError,
   WatchfaceAutomationError,
+  type WatchfaceAutomationConversionInput,
   type WatchfaceAutomationOpenParams,
   type WatchfaceAutomationRequest
 } from "./watchfaceAutomation";
@@ -103,12 +122,31 @@ import multidataElevFace from "../assets/watchfaces/multidata-elev.png";
 import planetFace from "../assets/watchfaces/planet.png";
 import preClassicFace from "../assets/watchfaces/pre-classic.png";
 import snowingFace from "../assets/watchfaces/snowing.png";
+import facesHeroDark from "../assets/watchfaces/hub/adventure-watch-dark-cut.webp";
+import facesHeroLight from "../assets/watchfaces/hub/adventure-watch-light-cut.webp";
 import {
   defineSelectionPreference,
   selectionIsOneOf,
   useSelectionPreference
 } from "../preferences/selectionPreferences";
+import { rememberWatchfaceFontSnapshots } from "./watchfaceFontSnapshots";
+import { useCommunityWatchfaceCatalog } from "./useCommunityWatchfaceCatalog";
+import {
+  createTaskQueue,
+  formatCachedAge,
+  HubFilterSummary,
+  HubHeadingUnderline,
+  HubQuickFilters,
+  HubResultsHeading,
+  HubSearchField,
+  HubSelectField,
+  HubToolbar,
+  useNearViewport,
+  type HubChip
+} from "./WatchfaceHubControls";
 import "./watchfaces.css";
+import "./watchfaceStudioAtelier.css";
+import "./watchfaceHub.css";
 
 const AUTH_WATCH_FACE_PREVIEWS = [
   preClassicFace,
@@ -173,17 +211,39 @@ const COMMUNITY_STYLE_PREFERENCE = defineSelectionPreference<string>({
 });
 
 const COMMUNITY_SORT_PREFERENCE =
-  defineSelectionPreference<"newest" | "title">({
+  defineSelectionPreference<CommunityWatchfaceSort>({
     key: "watchfaces.community.sort",
     defaultValue: "newest",
-    validate: selectionIsOneOf(["newest", "title"])
+    validate: selectionIsOneOf(["newest", "title", "trending", "downloads"])
   });
+
+type ProjectSortMode = "recent" | "name" | "oldest";
+
+const PROJECT_SORT_PREFERENCE = defineSelectionPreference<ProjectSortMode>({
+  key: "watchfaces.projects.sort",
+  defaultValue: "recent",
+  validate: selectionIsOneOf(["recent", "name", "oldest"])
+});
+
+type TemplateSortMode = "catalog" | "name" | "version";
+
+const TEMPLATE_SORT_PREFERENCE = defineSelectionPreference<TemplateSortMode>({
+  key: "watchfaces.templates.sort",
+  defaultValue: "catalog",
+  validate: selectionIsOneOf(["catalog", "name", "version"])
+});
+
+/** Catalog listings are served from cache and refreshed after this long. */
+const THEME_CACHE_FRESH_MS = 6 * 60 * 60 * 1000;
+// Survives tab switches and catalog toggles for the life of the window.
+const themeListMemory = new Map<string, CorosWatchfaceThemeCacheEntry>();
 
 interface StudioSession {
   id: string;
   archive: CorosWatchfaceArchive;
   project?: CorosWatchfaceProject;
   initialDesign?: CorosWatchfaceDesignState;
+  carriedPreferences?: WatchfaceCarriedPreferences;
   initialName: string;
   targetFirmwareType: string;
   targetWatchModel?: WatchModelId;
@@ -193,17 +253,16 @@ interface StudioSession {
 interface WatchfaceConversionDraft {
   design: CorosWatchfaceDesignState;
   name: string;
-  sourceDesign: CorosWatchfaceDesignState;
   sourceDirty: boolean;
   sourceFirmwareType: string;
-  sourceSession: StudioSession;
-  omittedRawConfigEditCount: number;
+  bakeForWatch?: WatchfaceAutomationConversionInput["bakeForWatch"];
 }
 
 const DEFAULT_FIRMWARE_TYPE = "COROS W332";
 const DEFAULT_MODEL_VERSION = "W332-3.1708.0";
 const IS_DEVELOPMENT_BUILD = import.meta.env.DEV;
 const COMMUNITY_MODEL_BY_WATCH: Partial<Record<WatchModelId, string>> = {
+  "pace-4-pro": "PACE 4 Pro",
   "pace-pro": "PACE Pro",
   "pace-3": "PACE 3",
   "apex-2": "APEX 2",
@@ -212,18 +271,7 @@ const COMMUNITY_MODEL_BY_WATCH: Partial<Record<WatchModelId, string>> = {
   "vertix-2s": "VERTIX 2S"
 };
 
-const TEMPLATE_WATCH_OPTIONS: ReadonlyArray<{
-  model: WatchModelId;
-  label: string;
-}> = [
-  { model: "pace-pro", label: "PACE Pro" },
-  { model: "pace-4", label: "PACE 4" },
-  { model: "pace-3", label: "PACE 3" },
-  { model: "nomad", label: "NOMAD" },
-  { model: "vertix-2", label: "VERTIX 2" },
-  { model: "vertix-2s", label: "VERTIX 2S" },
-  { model: "apex-4", label: "APEX 4" }
-];
+const TEMPLATE_WATCH_OPTIONS = WATCHFACE_TARGETS;
 
 function templateWatchModelForFirmware(firmwareType: string): WatchModelId | "" {
   const normalized = firmwareType.trim().toUpperCase();
@@ -257,6 +305,9 @@ export function WatchfacesView({
   const [studioSession, setStudioSession] = useState<StudioSession | null>(null);
   const [conversionDraft, setConversionDraft] =
     useState<WatchfaceConversionDraft | null>(null);
+  const [conversionBusy, setConversionBusy] = useState(false);
+  const [conversionSignInWatch, setConversionSignInWatch] = useState<WatchModelId | null>(null);
+  const conversionBusyRef = useRef(false);
   const [communityProgress, setCommunityProgress] =
     useState<CommunityWatchfaceDownloadProgress | null>(null);
   const [communityConfirmFace, setCommunityConfirmFace] =
@@ -312,11 +363,13 @@ export function WatchfacesView({
   const [modelVersion, setModelVersion] = useState(DEFAULT_MODEL_VERSION);
   const [themes, setThemes] = useState<CorosWatchfaceTheme[]>([]);
   const [themesLoaded, setThemesLoaded] = useState(false);
-  const themesPreloadStartedRef = useRef(false);
+  const [themesSavedAt, setThemesSavedAt] = useState<string | null>(null);
+  const [themesRefreshing, setThemesRefreshing] = useState(false);
   const [themeSearch, setThemeSearch] = useState("");
   const [downloadingThemeUrl, setDownloadingThemeUrl] = useState<string | null>(
     null
   );
+  const [openingThemeUrl, setOpeningThemeUrl] = useState<string | null>(null);
   const [sharingThemeId, setSharingThemeId] = useState<string | null>(null);
 
   const [builtArchive, setBuiltArchive] =
@@ -431,7 +484,7 @@ export function WatchfacesView({
       return;
     }
     setSurface("hub");
-    void prepareCommunityImport(communityOpenRequest.slug);
+    void prepareCommunityImport(communityOpenRequest.slug, false, communityOpenRequest.model);
   }, [
     communityOpenRequest,
     onCommunityOpenRequestHandled,
@@ -442,7 +495,7 @@ export function WatchfacesView({
     let cancelled = false;
     setProjectsLoading(true);
     void api
-      .listCorosWatchfaceProjects()
+      .listCorosWatchfaceProjects({ includePreviews: false })
       .then((nextProjects) => {
         if (!cancelled) setProjects(nextProjects);
       })
@@ -493,7 +546,7 @@ export function WatchfacesView({
 
   async function handleLogin(
     event: FormEvent<HTMLFormElement>,
-    destination: "hub" | "publish" = "hub"
+    destination: "hub" | "publish" | "conversion" = "hub"
   ) {
     event.preventDefault();
     setBusy("login");
@@ -509,6 +562,7 @@ export function WatchfacesView({
       setPassword("");
       if (destination === "hub") setSurface("hub");
       setNotice("COROS mobile session connected.");
+      if (destination === "conversion") await resumeConversionAfterLogin();
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -517,7 +571,7 @@ export function WatchfacesView({
     }
   }
 
-  async function handleSavedLogin(destination: "hub" | "publish" = "hub") {
+  async function handleSavedLogin(destination: "hub" | "publish" | "conversion" = "hub") {
     setBusy("login");
     clearMessages();
     try {
@@ -528,6 +582,7 @@ export function WatchfacesView({
       setPassword("");
       if (destination === "hub") setSurface("hub");
       setNotice("COROS mobile session connected with your saved account.");
+      if (destination === "conversion") await resumeConversionAfterLogin();
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -549,6 +604,8 @@ export function WatchfacesView({
       setPublishOpen(false);
       setThemes([]);
       setThemesLoaded(false);
+      setThemesSavedAt(null);
+      themeListMemory.clear();
       setNotice("COROS disconnected. You can keep working locally.");
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -563,7 +620,8 @@ export function WatchfacesView({
     project?: CorosWatchfaceProject,
     transferredDesign?: CorosWatchfaceDesignState,
     initiallyDirty = false,
-    automationTarget?: { firmwareType?: string; watchModel?: WatchModelId }
+    automationTarget?: { firmwareType?: string; watchModel?: WatchModelId },
+    carriedPreferences?: WatchfaceCarriedPreferences
   ) {
     const targetFirmwareType = automationTarget?.firmwareType?.trim() ||
       firmwareTypeForWatchfaceArchive(
@@ -596,7 +654,8 @@ export function WatchfacesView({
         ).trim() || "Untitled watch face",
       targetFirmwareType,
       ...(targetWatchModel ? { targetWatchModel } : {}),
-      ...(initiallyDirty ? { initiallyDirty: true } : {})
+      ...(initiallyDirty ? { initiallyDirty: true } : {}),
+      ...(carriedPreferences ? { carriedPreferences } : {})
     });
     setBuiltArchive(null);
     setImportOpen(false);
@@ -604,6 +663,7 @@ export function WatchfacesView({
     setShareLink(null);
     setPublishOpen(false);
     setConversionDraft(null);
+    setConversionSignInWatch(null);
     setSurface("studio");
     clearMessages();
   }
@@ -611,38 +671,19 @@ export function WatchfacesView({
   function beginWatchConversion(
     design: CorosWatchfaceDesignState,
     name: string,
-    sourceDirty: boolean
+    sourceDirty: boolean,
+    bakeForWatch?: WatchfaceAutomationConversionInput["bakeForWatch"]
   ) {
     if (!studioSession) return;
-    const prepared = prepareWatchfaceConversion(design);
+    setConversionSignInWatch(null);
     setConversionDraft({
-      design: prepared.design,
+      design: structuredClone(design),
       name: name.trim() || "Custom watch face",
-      sourceDesign: prepared.sourceDesign,
       sourceDirty,
       sourceFirmwareType: studioSession.targetFirmwareType,
-      sourceSession: studioSession,
-      omittedRawConfigEditCount: prepared.omittedRawConfigEditCount
+      ...(bakeForWatch ? { bakeForWatch } : {})
     });
-    setStudioSession(null);
-    setBuiltArchive(null);
-    setShareLink(null);
-    setPublishOpen(false);
-    setHubTab("templates");
-    setThemes([]);
-    setThemesLoaded(false);
-    setSurface("hub");
-    setError(null);
-    setNotice(
-      "Choose the destination watch, browse its templates, then use a compatible starter."
-    );
-  }
-
-  function conversionProjectName(
-    draft: WatchfaceConversionDraft,
-    targetFirmwareType: string
-  ): string {
-    return convertedProjectName(draft.name, targetFirmwareType);
+    clearMessages();
   }
 
   function convertedProjectName(
@@ -654,81 +695,91 @@ export function WatchfacesView({
       ({ model }) => model === targetModel
     )?.label;
     if (!targetLabel) return sourceName.slice(0, 80);
+    let baseName = sourceName;
+    let previousTarget;
+    while ((previousTarget = TEMPLATE_WATCH_OPTIONS.find(option => baseName.endsWith(` (${option.label})`)))) {
+      baseName = baseName.slice(0, -(` (${previousTarget.label})`.length));
+    }
     const suffix = ` (${targetLabel})`;
-    return `${sourceName.slice(0, Math.max(1, 80 - suffix.length)).trimEnd()}${suffix}`;
+    return `${(baseName || sourceName).slice(0, Math.max(1, 80 - suffix.length)).trimEnd()}${suffix}`;
   }
 
-  function openStudioWithConversion(
-    archive: CorosWatchfaceArchive,
-    fallbackName: string
-  ) {
-    if (!conversionDraft) {
-      openStudio(archive, fallbackName);
-      return;
+  async function openAutomatedConversion({
+    design, name, targetArchive, firmwareType: requestedFirmwareType, watchModel, bakeForWatch
+  }: WatchfaceAutomationConversionInput) {
+    if (!studioSession || conversionBusyRef.current) throw new Error("A conversion is already in progress.");
+    const target = getWatchfaceTarget(watchModel ?? requestedFirmwareType ?? targetArchive?.firmwareType);
+    if (!target) throw new Error("Choose a supported destination watch.");
+    if (requestedFirmwareType && target.firmwareType.toUpperCase() !== requestedFirmwareType.trim().toUpperCase()) {
+      throw new Error("The destination watch and firmware do not match.");
     }
-    const targetFirmwareType = firmwareTypeForWatchfaceArchive(
-      archive,
-      firmwareType
-    );
-    const sourceFirmwareType = conversionDraft.sourceFirmwareType.trim();
-    if (targetFirmwareType.toUpperCase() === sourceFirmwareType.toUpperCase()) {
-      setError("Choose a starter for a different watch model to convert this face.");
-      setNotice(null);
-      return;
+    if (target.firmwareType.toUpperCase() === studioSession.targetFirmwareType.toUpperCase()) {
+      throw new Error("Choose a different destination watch.");
     }
-    const nextName = conversionProjectName(conversionDraft, targetFirmwareType);
-    const design = conversionDraft.design;
-    openStudio(archive, nextName, undefined, design, true);
-    setNotice(
-      `Converted “${conversionDraft.name}” to ${
-        TEMPLATE_WATCH_OPTIONS.find(
-          ({ model }) => model === templateWatchModelForFirmware(targetFirmwareType)
-        )?.label ?? targetFirmwareType
-      }. Review Current and Always-on previews before sending.${
-        conversionDraft.omittedRawConfigEditCount > 0
-          ? ` ${conversionDraft.omittedRawConfigEditCount} raw config edit${
-              conversionDraft.omittedRawConfigEditCount === 1 ? " was" : "s were"
-            } omitted because target layout files are different.`
-          : ""
-      }`
-    );
+    conversionBusyRef.current = true;
+    setConversionBusy(true);
+    try {
+      if (bakeForWatch) {
+        // Recovered official faces are rebuilt from their native tree for the
+        // destination; the finished archive becomes the new project's starter.
+        if (targetArchive) throw new Error("Recovered official faces convert with the destination watch's own COROS template.");
+        const baked = await bakeForWatch({ firmwareType: target.firmwareType, watchModel: target.model }, name);
+        const bakedName = convertedProjectName(name, target.firmwareType);
+        clearWatchfaceAutomationEditor();
+        api.setWatchfaceAutomationReady("editor", false);
+        openStudio(baked, bakedName, undefined, undefined, true,
+          { firmwareType: target.firmwareType, watchModel: target.model }, carriedWatchfacePreferences(design));
+        setNotice(`Converted to ${target.label}. Your edits are baked into this new starter; keep editing and save it as a project.`);
+        return { opened: true, name: bakedName, targetFirmwareType: target.firmwareType,
+          omittedRawConfigEditCount: 0, appliedRawConfigEditCount: 0 };
+      }
+      const converted = await api.convertCorosWatchfaceArchive({
+        sourceArchiveId: studioSession.archive.archiveId,
+        watchModel: target.model,
+        ...(targetArchive ? { targetArchiveId: targetArchive.archiveId } : {}),
+        configTextEdits: design.configTextEdits
+      });
+      const prepared = prepareWatchfaceConversion(design, { rawEditsApplied: true, generatedAod: converted.generatedAod });
+      const convertedName = convertedProjectName(name, target.firmwareType);
+      clearWatchfaceAutomationEditor();
+      api.setWatchfaceAutomationReady("editor", false);
+      openStudio(converted.archive, convertedName, undefined, prepared.design, true,
+        { firmwareType: target.firmwareType, watchModel: target.model });
+      setNotice(`Converted to ${target.label}. ${target.display === "mip"
+        ? "Current stays visible on MIP; your separate AOD design is retained for AMOLED."
+        : converted.generatedAod ? "An editable Always-on layout was created from Current. Review it before sending."
+        : "Current and Always-on layouts are preserved."}`);
+      return { opened: true, name: convertedName, targetFirmwareType: target.firmwareType,
+        omittedRawConfigEditCount: 0, appliedRawConfigEditCount: converted.appliedRawConfigEditCount };
+    } finally {
+      conversionBusyRef.current = false;
+      setConversionBusy(false);
+    }
   }
 
-  function openAutomatedConversion({
-    design,
-    name,
-    sourceDirty,
-    targetArchive,
-    firmwareType: requestedFirmwareType,
-    watchModel
-  }: {
-    design: CorosWatchfaceDesignState;
-    name: string;
-    sourceDirty: boolean;
-    targetArchive: CorosWatchfaceArchive;
-    firmwareType?: string;
-    watchModel?: WatchModelId;
-  }) {
-    const prepared = prepareWatchfaceConversion(design);
-    const destinationFirmware = requestedFirmwareType?.trim() ||
-      firmwareTypeForWatchfaceArchive(targetArchive, firmwareType);
-    const convertedName = convertedProjectName(name, destinationFirmware);
-    clearWatchfaceAutomationEditor();
-    api.setWatchfaceAutomationReady("editor", false);
-    openStudio(
-      targetArchive,
-      convertedName,
-      undefined,
-      prepared.design,
-      true,
-      { firmwareType: destinationFirmware, ...(watchModel ? { watchModel } : {}) }
-    );
-    return {
-      opened: true,
-      name: convertedName,
-      targetFirmwareType: destinationFirmware,
-      omittedRawConfigEditCount: prepared.omittedRawConfigEditCount
-    };
+  async function convertToWatch(watchModel: WatchModelId) {
+    if (!conversionDraft) return;
+    clearMessages();
+    try {
+      await openAutomatedConversion({ design: conversionDraft.design, name: conversionDraft.name,
+        sourceDirty: conversionDraft.sourceDirty, watchModel,
+        ...(conversionDraft.bakeForWatch ? { bakeForWatch: conversionDraft.bakeForWatch } : {}) });
+    } catch (caught) {
+      if (isWatchfaceSignInRequired(caught)) {
+        setConversionSignInWatch(watchModel);
+        setPassword("");
+        void api.getCorosWatchfaceStatus().then(setStatus).catch(() => undefined);
+        return;
+      }
+      setError(toErrorMessage(caught));
+    }
+  }
+
+  async function resumeConversionAfterLogin() {
+    if (!conversionSignInWatch) return;
+    const watchModel = conversionSignInWatch;
+    setConversionSignInWatch(null);
+    await convertToWatch(watchModel);
   }
 
   function returnToHub() {
@@ -738,22 +789,23 @@ export function WatchfacesView({
     setShareLink(null);
     clearMessages();
     if (queuedCommunityRequest) {
-      const { slug } = queuedCommunityRequest;
+      const { slug, model } = queuedCommunityRequest;
       setQueuedCommunityRequest(null);
       setHubTab("browse");
-      queueMicrotask(() => void prepareCommunityImport(slug));
+      queueMicrotask(() => void prepareCommunityImport(slug, false, model));
     }
   }
 
   async function prepareCommunityImport(
     slug: string,
-    compatibilityConfirmed = false
+    compatibilityConfirmed = false,
+    model?: string
   ) {
     setBusy("community");
     setCommunityProgress(null);
     clearMessages();
     try {
-      const face = await api.getCommunityWatchface(slug);
+      const face = await api.getCommunityWatchface(slug, model);
       const connectedModel = watchStatus?.model
         ? COMMUNITY_MODEL_BY_WATCH[watchStatus.model]
         : undefined;
@@ -767,7 +819,7 @@ export function WatchfacesView({
         setCommunityConfirmFace(face);
         return;
       }
-      const imported = await api.importCommunityWatchface(face.slug);
+      const imported = await api.importCommunityWatchface(face.slug, model);
       setCommunityConfirmFace(null);
       openStudio(imported.archive, imported.face.title);
     } catch (caught) {
@@ -784,7 +836,7 @@ export function WatchfacesView({
     try {
       const selected = await api.chooseCorosWatchfaceArchive();
       if (!selected) return;
-      openStudioWithConversion(
+      openStudio(
         selected,
         selected.editableProject?.name ??
           (selected.fileName.replace(/\.(zip|dat)$/i, "") ||
@@ -877,7 +929,38 @@ export function WatchfacesView({
     ]);
   }
 
-  async function handleLoadThemes(event?: FormEvent<HTMLFormElement>) {
+  const themeQuery = useMemo(
+    () => ({
+      firmwareType,
+      language,
+      maxWatchFaceVersion: Number(maxWatchFaceVersion),
+      catalog: themeCatalog,
+      ...(themeCatalog !== "editable"
+        ? { snCode: watchSerial.trim() || "x", modelVersion }
+        : {})
+    }),
+    [firmwareType, language, maxWatchFaceVersion, modelVersion, themeCatalog, watchSerial]
+  );
+  const themeQueryKey = JSON.stringify(themeQuery);
+  const themeQueryKeyRef = useRef(themeQueryKey);
+  themeQueryKeyRef.current = themeQueryKey;
+  const themeRequestsRef = useRef(new Set<string>());
+
+  function showThemeList(key: string, entry: CorosWatchfaceThemeCacheEntry) {
+    if (themeQueryKeyRef.current !== key) return;
+    setThemes(entry.themes);
+    setThemesLoaded(true);
+    setThemesSavedAt(entry.savedAt);
+  }
+
+  /**
+   * Stale-while-revalidate: memory, then the on-disk copy of the last listing,
+   * then COROS only when the copy is old or the user asks for a refresh.
+   */
+  async function handleLoadThemes(
+    event?: FormEvent<HTMLFormElement>,
+    options: { force?: boolean } = {}
+  ) {
     event?.preventDefault();
     if (!connected) {
       setError("Sign in to your COROS account before creating a watch face.");
@@ -885,52 +968,73 @@ export function WatchfacesView({
       setSurface("sign-in");
       return;
     }
-    setBusy("themes");
-    clearMessages();
+    const key = themeQueryKey;
+    const query = themeQuery;
+    let shown = themeListMemory.get(key) ?? null;
+    if (!shown) {
+      shown = await api.readCachedCorosWatchfaceThemes(query).catch(() => null);
+      if (shown) themeListMemory.set(key, shown);
+    }
+    if (shown) showThemeList(key, shown);
+    const fresh =
+      shown !== null && Date.now() - Date.parse(shown.savedAt) < THEME_CACHE_FRESH_MS;
+    if ((fresh && !options.force) || themeRequestsRef.current.has(key)) return;
+
+    themeRequestsRef.current.add(key);
+    if (shown) {
+      setThemesRefreshing(true);
+    } else {
+      setBusy("themes");
+      clearMessages();
+    }
     try {
-      const nextThemes = await api.listCorosWatchfaceThemes({
-        firmwareType,
-        language,
-        maxWatchFaceVersion: Number(maxWatchFaceVersion),
-        catalog: themeCatalog,
-        ...(themeCatalog !== "editable"
-          ? { snCode: watchSerial.trim() || "x", modelVersion }
-          : {})
-      });
-      setThemes(nextThemes);
-      setThemesLoaded(true);
-      setNotice(
-        `${nextThemes.length} ${watchfaceCatalogLabel(themeCatalog)}${
-          nextThemes.length === 1 ? "" : "s"
-        } loaded.`
-      );
+      const nextThemes = await api.listCorosWatchfaceThemes(query);
+      const entry = { savedAt: new Date().toISOString(), themes: nextThemes };
+      themeListMemory.set(key, entry);
+      showThemeList(key, entry);
+      if (options.force) {
+        setNotice(
+          `${nextThemes.length} ${watchfaceCatalogLabel(query.catalog)}${
+            nextThemes.length === 1 ? "" : "s"
+          } refreshed.`
+        );
+      }
     } catch (caught) {
-      setError(toErrorMessage(caught));
+      // A cached list is still usable; only surface the failure when asked.
+      if (!shown || options.force) setError(toErrorMessage(caught));
     } finally {
-      setBusy(null);
+      themeRequestsRef.current.delete(key);
+      if (shown) setThemesRefreshing(false);
+      else setBusy(null);
       void api.getCorosWatchfaceStatus().then(setStatus).catch(() => undefined);
     }
   }
 
   useEffect(() => {
+    // Never show one catalog's list under another query's filters.
+    const remembered = themeListMemory.get(themeQueryKey);
+    setThemes(remembered?.themes ?? []);
+    setThemesLoaded(Boolean(remembered));
+    setThemesSavedAt(remembered?.savedAt ?? null);
+  }, [themeQueryKey]);
+
+  useEffect(() => {
     if (
-      themesPreloadStartedRef.current ||
       status === null ||
       !connected ||
       surface !== "hub" ||
       hubTab !== "templates" ||
-      themesLoaded ||
       busy !== null
     ) {
       return;
     }
-
-    themesPreloadStartedRef.current = true;
-    void handleLoadThemes();
-  }, [busy, connected, hubTab, status, surface, themesLoaded]);
+    // Advanced fields are typed, so let them settle before querying.
+    const timeout = window.setTimeout(() => void handleLoadThemes(), 250);
+    return () => window.clearTimeout(timeout);
+  }, [busy, connected, hubTab, status, surface, themeQueryKey]);
 
   async function handleDownloadTheme(theme: CorosWatchfaceTheme) {
-    if (!theme.packageUrl) return;
+    if (!theme.packageUrl || openingThemeUrl || downloadingThemeUrl) return;
     setDownloadingThemeUrl(theme.packageUrl);
     clearMessages();
     try {
@@ -939,8 +1043,8 @@ export function WatchfacesView({
         name: theme.name,
         firmwareType: theme.firmwareType?.trim() || firmwareType
       });
-      if (download.usableAsTemplate && download.archive) {
-        openStudioWithConversion(download.archive, theme.name);
+      if (themeCatalog !== "official" && download.usableAsTemplate && download.archive) {
+        openStudio(download.archive, theme.name);
       } else {
         setNotice(
           download.entries?.length
@@ -954,6 +1058,28 @@ export function WatchfacesView({
       setError(toErrorMessage(caught));
     } finally {
       setDownloadingThemeUrl(null);
+    }
+  }
+
+  async function handleOpenOfficialTheme(theme: CorosWatchfaceTheme) {
+    if (!theme.packageUrl || openingThemeUrl || downloadingThemeUrl) return;
+    setOpeningThemeUrl(theme.packageUrl);
+    clearMessages();
+    try {
+      const result = await api.downloadCorosWatchfaceTheme({
+        packageUrl: theme.packageUrl,
+        name: theme.name,
+        firmwareType: theme.firmwareType?.trim() || firmwareType,
+        templateId: theme.id,
+        openInEditor: true
+      });
+      if (!result.usableAsTemplate || !result.archive) throw new Error(result.message);
+      openStudio(result.archive, theme.name);
+      setNotice(result.message);
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setOpeningThemeUrl(null);
     }
   }
 
@@ -1002,26 +1128,39 @@ export function WatchfacesView({
     }
   }
 
-  function openPublish(archive: CorosWatchfaceArchive, currentName: string) {
+  /**
+   * `sendNow` comes from the Studio Send panel, where the name was already
+   * confirmed: upload straight away and let the dialog show the share link
+   * (or sign-in first, when the account is not connected).
+   */
+  function openPublish(archive: CorosWatchfaceArchive, currentName: string, options?: { sendNow?: boolean }) {
+    const name = currentName.trim() || studioSession?.initialName || "Untitled watch face";
     setBuiltArchive(archive);
     if (archive.firmwareType) {
       setFirmwareType(archive.firmwareType);
     }
-    setPublishName(currentName.trim() || studioSession?.initialName || "Untitled watch face");
+    setPublishName(name);
     setShareLink(null);
     setPublishOpen(true);
     clearMessages();
+    if (options?.sendNow && connected) {
+      void publishArchive(archive, name, archive.firmwareType || firmwareType);
+    }
   }
 
   async function handlePublish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!builtArchive) return;
+    await publishArchive(builtArchive, publishName, firmwareType);
+  }
+
+  async function publishArchive(archive: CorosWatchfaceArchive, name: string, archiveFirmwareType: string) {
     if (!connected) {
       setError("Connect your COROS account before sending this watch face.");
       setNotice(null);
       return;
     }
-    if (!publishName.trim()) {
+    if (!name.trim()) {
       setError("Enter a watch-face name before sending.");
       setNotice(null);
       return;
@@ -1030,9 +1169,9 @@ export function WatchfacesView({
     clearMessages();
     try {
       const nextLink = await api.publishCorosWatchface({
-        archiveId: builtArchive.archiveId,
-        name: publishName.trim(),
-        firmwareType,
+        archiveId: archive.archiveId,
+        name: name.trim(),
+        firmwareType: archiveFirmwareType,
         backgroundImageId: Number(backgroundImageId),
         language
       });
@@ -1213,12 +1352,14 @@ export function WatchfacesView({
         <WatchfaceEditor
           key={studioSession.id}
           api={api}
-          active={active}
+          active={active && !conversionDraft && !conversionBusy}
+          conversionBusy={conversionBusy || Boolean(conversionDraft)}
           sessionId={studioSession.id}
           starterArchive={studioSession.archive}
           targetFirmwareType={studioSession.targetFirmwareType}
           targetWatchModel={studioSession.targetWatchModel}
           initialDesign={studioSession.initialDesign}
+          carriedPreferences={studioSession.carriedPreferences}
           initialProjectId={studioSession.project?.projectId}
           initialProjectName={studioSession.project?.name ?? studioSession.initialName}
           initiallyDirty={studioSession.initiallyDirty}
@@ -1235,6 +1376,30 @@ export function WatchfacesView({
           onNotice={showStudioNotice}
           onClearMessages={clearMessages}
         />
+        {conversionDraft ? (
+          <WatchfaceConversionDialog name={conversionDraft.name} sourceFirmwareType={conversionDraft.sourceFirmwareType}
+            bakes={Boolean(conversionDraft.bakeForWatch)}
+            busy={conversionBusy || busy === "login"} error={error}
+            signIn={conversionSignInWatch ? {
+              email, password, region, rememberCredentials,
+              secureStorageAvailable: status?.secureStorageAvailable ?? false,
+              savedCredentialsAvailable: status?.savedCredentialsAvailable ?? false,
+              savedEmail: status?.savedEmail,
+              loginBusy: busy === "login",
+              onEmailChange: setEmail,
+              onPasswordChange: setPassword,
+              onRememberCredentialsChange: setRememberCredentials,
+              onRegionChange: (nextRegion) => { setRegion(nextRegion); setRegionTouched(true); },
+              onLogin: (event) => void handleLogin(event, "conversion"),
+              onSavedLogin: () => void handleSavedLogin("conversion")
+            } : undefined}
+            onCancel={() => {
+              if (conversionSignInWatch) { setConversionSignInWatch(null); setPassword(""); }
+              else setConversionDraft(null);
+              clearMessages();
+            }}
+            onConvert={watchModel => void convertToWatch(watchModel)} />
+        ) : null}
         <ToastRegion error={error} notice={notice} onDismiss={clearMessages} />
         {publishOpen ? (
           <PublishDialog
@@ -1368,22 +1533,21 @@ export function WatchfacesView({
                   </div>
                 </>
               ) : null}
-              <label className="field">
-                Region
-                <select
+              <div className="field">
+                <span>Region</span>
+                <SelectDropdown
+                  label="Account region"
+                  className="watchface-region-select"
+                  options={REGION_OPTIONS}
+                  portal
+                  disabled={busy !== null}
                   value={region}
-                  onChange={(event) => {
-                    setRegion(event.target.value as CorosWatchfaceRegion);
+                  onChange={(nextRegion) => {
+                    setRegion(nextRegion);
                     setRegionTouched(true);
                   }}
-                >
-                  {REGION_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                />
+              </div>
               <label className="field">
                 Email
                 <input
@@ -1455,53 +1619,8 @@ export function WatchfacesView({
         </main>
       ) : (
         <main className="watchface-hub-main">
-          {conversionDraft ? (
-            <section className="watchface-conversion-banner" role="status">
-              <span className="watchface-conversion-icon" aria-hidden="true">
-                <Repeat2 size={18} />
-              </span>
-              <div>
-                <strong>Convert “{conversionDraft.name}”</strong>
-                <span>
-                  Select the destination watch below, browse, then choose a
-                  compatible starter. You can also import a local destination
-                  .dat or ZIP from the header.
-                </span>
-                {conversionDraft.omittedRawConfigEditCount > 0 ? (
-                  <span className="watchface-conversion-warning">
-                    {conversionDraft.omittedRawConfigEditCount} advanced raw
-                    config edit{conversionDraft.omittedRawConfigEditCount === 1 ? "" : "s"}
-                    {" "}cannot transfer because the destination uses different
-                    layout files. The original project keeps them.
-                  </span>
-                ) : null}
-              </div>
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={busy !== null}
-                onClick={() => {
-                  const draft = conversionDraft;
-                  openStudio(
-                    draft.sourceSession.archive,
-                    draft.name,
-                    draft.sourceSession.project,
-                    draft.sourceDesign,
-                    draft.sourceDirty
-                  );
-                  setNotice("Watch conversion cancelled. Your original project is open.");
-                }}
-              >
-                Cancel
-              </button>
-            </section>
-          ) : null}
           {IS_DEVELOPMENT_BUILD && showDevelopmentTools ? (
-            <>
-              <DeviceInfoPanel api={api} />
-              <LegacyCarrierEditorPanel api={api} />
-              <RawBinInstallerPanel api={api} />
-            </>
+            <DeviceInfoPanel api={api} />
           ) : null}
 
           <WatchFacesTabs
@@ -1520,7 +1639,7 @@ export function WatchfacesView({
               }
               disabled={busy !== null}
               progress={communityProgress}
-              onOpen={(face) => void prepareCommunityImport(face.slug)}
+              onOpen={(face, model) => void prepareCommunityImport(face.slug, false, model)}
             />
           ) : hubTab === "projects" ? (
             <ProjectsDashboard
@@ -1555,14 +1674,13 @@ export function WatchfacesView({
               themes={themes}
               visibleThemes={visibleThemes}
               themesLoaded={themesLoaded}
+              savedAt={themesSavedAt}
+              refreshing={themesRefreshing}
               downloadingThemeUrl={downloadingThemeUrl}
+              openingThemeUrl={openingThemeUrl}
               sharingThemeId={sharingThemeId}
               onSignIn={() => setSurface("sign-in")}
-              onCatalogChange={(nextCatalog) => {
-                setThemeCatalog(nextCatalog);
-                setThemes([]);
-                setThemesLoaded(false);
-              }}
+              onCatalogChange={setThemeCatalog}
               onWatchModelChange={(nextWatchModel) => {
                 const profile = getWatchfaceDeviceProfile(nextWatchModel);
                 if (profile) applyDetectedFirmwareType(profile.firmwareType);
@@ -1573,8 +1691,10 @@ export function WatchfacesView({
               onWatchSerialChange={setWatchSerial}
               onModelVersionChange={setModelVersion}
               onSearchChange={setThemeSearch}
-              onSubmit={handleLoadThemes}
+              onSubmit={(event) => void handleLoadThemes(event, { force: true })}
+              onRefresh={() => void handleLoadThemes(undefined, { force: true })}
               onUseTheme={(theme) => void handleDownloadTheme(theme)}
+              onOpenOfficialTheme={(theme) => void handleOpenOfficialTheme(theme)}
               onShareTheme={(theme) => void handleShareTheme(theme)}
             />
           )}
@@ -1600,7 +1720,7 @@ export function WatchfacesView({
           busy={busy === "community"}
           onCancel={() => setCommunityConfirmFace(null)}
           onConfirm={() =>
-            void prepareCommunityImport(communityConfirmFace.slug, true)
+            void prepareCommunityImport(communityConfirmFace.slug, true, new URL(communityConfirmFace.downloadUrl).searchParams.get("model") ?? undefined)
           }
         />
       ) : null}
@@ -1979,7 +2099,30 @@ function WatchFacesTabs({
   );
 }
 
-function CommunityWatchfaceBrowser({
+type CommunityQuickFilter = "all" | "trending" | "newest" | "minimal" | "data-rich" | "trail";
+
+const COMMUNITY_QUICK_FILTERS: readonly HubChip<CommunityQuickFilter>[] = [
+  { value: "all", label: "All faces", icon: LayoutGrid },
+  { value: "trending", label: "Trending", icon: Flame },
+  { value: "newest", label: "New", icon: Sparkles },
+  { value: "minimal", label: "Minimal", icon: Circle },
+  { value: "data-rich", label: "Data rich", icon: BarChart3 },
+  { value: "trail", label: "Trail", icon: Mountain }
+];
+
+const COMMUNITY_SORT_LABELS: Record<CommunityWatchfaceSort, string> = {
+  newest: "Newest first",
+  trending: "Trending this month",
+  downloads: "Most downloaded",
+  title: "Name A–Z"
+};
+
+function formatDownloadCount(count: number): string {
+  if (count < 1000) return String(count);
+  return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0).replace(/\.0$/, "")}k`;
+}
+
+export function CommunityWatchfaceBrowser({
   api,
   connectedModel,
   disabled,
@@ -1990,7 +2133,7 @@ function CommunityWatchfaceBrowser({
   connectedModel?: string;
   disabled: boolean;
   progress: CommunityWatchfaceDownloadProgress | null;
-  onOpen: (face: CommunityWatchface) => void;
+  onOpen: (face: CommunityWatchface, model: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -2002,19 +2145,49 @@ function CommunityWatchfaceBrowser({
     COMMUNITY_STYLE_PREFERENCE
   );
   const [sort, setSort] = useSelectionPreference(COMMUNITY_SORT_PREFERENCE);
-  const [page, setPage] = useState(1);
-  const [catalog, setCatalog] =
-    useState<CommunityWatchfaceCatalogPage | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [retry, setRetry] = useState(0);
+  // Like the website gallery, each moderated variant group is one card.
+  const { catalog, loading, loadError, hasMore, loadMore, effectiveSort } = useCommunityWatchfaceCatalog(
+    api, { q: debouncedSearch, model, style, sort, view: "designs" }
+  );
+  const [openGroup, setOpenGroup] = useState<CommunityWatchfaceGroup | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<CommunityWatchface | null>(null);
+  const [faceModels, setFaceModels] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setFaceModels({});
+  }, [model]);
+
+  function selectedModel(face: CommunityWatchface): string {
+    return [faceModels[face.id], model, connectedModel, face.models[0]]
+      .find((candidate) => candidate !== undefined && face.models.includes(candidate)) ?? "";
+  }
+
+  function modelSelector(face: CommunityWatchface) {
+    return (
+      <label className="watchface-community-model">
+        <span>Watch type</span>
+        <select
+          aria-label={`Watch type for ${face.title}`}
+          value={selectedModel(face)}
+          disabled={disabled}
+          onChange={(event) => setFaceModels((current) => ({
+            ...current,
+            [face.id]: event.target.value
+          }))}
+        >
+          {face.models.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+      </label>
+    );
+  }
+
   const modelTouchedRef = useRef(modelPreference.restored);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setDebouncedSearch(search.trim());
-      setPage(1);
     }, 300);
     return () => window.clearTimeout(timeout);
   }, [search]);
@@ -2022,40 +2195,21 @@ function CommunityWatchfaceBrowser({
   useEffect(() => {
     if (!modelTouchedRef.current && connectedModel) {
       setModel(connectedModel);
-      setPage(1);
     }
   }, [connectedModel]);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setLoadError(null);
-    void api
-      .listCommunityWatchfaces({
-        ...(debouncedSearch ? { q: debouncedSearch } : {}),
-        ...(model ? { model } : {}),
-        ...(style ? { style } : {}),
-        sort,
-        page,
-        pageSize: 12
-      })
-      .then((nextCatalog) => {
-        if (cancelled) return;
-        setCatalog(nextCatalog);
-        if (nextCatalog.pagination.page !== page) {
-          setPage(nextCatalog.pagination.page);
-        }
-      })
-      .catch((caught) => {
-        if (!cancelled) setLoadError(toErrorMessage(caught));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [api, debouncedSearch, model, page, retry, sort, style]);
+    const sentinel = loadMoreRef.current;
+    if (!sentinel || loading || loadError || !hasMore) return;
+    // Observe inside the app's scrolling pane as well as standalone layouts.
+    let root = sentinel.parentElement;
+    while (root && !/(auto|scroll)/.test(getComputedStyle(root).overflowY)) root = root.parentElement;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) loadMore();
+    }, { root, rootMargin: "0px 0px 400px 0px" });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loading, loadError, hasMore, loadMore]);
 
   const modelAvailable =
     !model ||
@@ -2070,14 +2224,12 @@ function CommunityWatchfaceBrowser({
     if (!modelAvailable) {
       modelTouchedRef.current = true;
       setModel("");
-      setPage(1);
     }
   }, [modelAvailable, setModel]);
 
   useEffect(() => {
     if (!styleAvailable) {
       setStyle("");
-      setPage(1);
     }
   }, [setStyle, styleAvailable]);
 
@@ -2085,204 +2237,256 @@ function CommunityWatchfaceBrowser({
     progress?.totalBytes && progress.totalBytes > 0
       ? Math.min(100, Math.round((progress.receivedBytes / progress.totalBytes) * 100))
       : null;
+  // Chips are shortcuts to whole views, like the website's quick filters.
+  const quickFilter: CommunityQuickFilter =
+    style === "minimal" || style === "data-rich" || style === "trail"
+      ? style
+      : !style && sort === "trending"
+        ? "trending"
+        : !style && sort === "newest"
+          ? "all"
+          : ("" as CommunityQuickFilter);
+  const styleLabel = catalog?.facets.styles.find((item) => item.value === style)?.label;
+  const filtered = Boolean(debouncedSearch || model || style || sort !== "newest");
+  const heading = styleLabel
+    ? `${styleLabel} faces`
+    : sort === "trending"
+      ? "Trending faces"
+      : sort === "downloads"
+        ? "Most downloaded faces"
+        : debouncedSearch || model
+          ? "Matching faces"
+          : "Published faces";
+  const sortFallback = sort !== effectiveSort;
+  const showGroup = (next: CommunityWatchfaceGroup | null) => {
+    setOpenGroup(next);
+    panelRef.current?.scrollIntoView({ block: "start" });
+  };
+  const renderCard = (face: CommunityWatchface) => (
+    <CommunityFaceCard
+      key={face.id}
+      face={face}
+      disabled={disabled}
+      opening={progress?.slug === face.slug}
+      onView={() => (isVariantGroup(face) ? showGroup(face.group!) : setSelected(face))}
+      onOpen={() => onOpen(face, selectedModel(face))}
+    />
+  );
+  const progressBanner = progress ? (
+    <div className="watchface-community-progress" role="status">
+      <div>
+        <Loader2 className="spin" size={16} aria-hidden="true" />
+        <span>
+          {progress.stage === "downloading"
+            ? `Downloading${percent === null ? "…" : ` ${percent}%`}`
+            : progress.stage === "verifying"
+              ? "Verifying reviewed package…"
+              : "Opening in Studio…"}
+        </span>
+      </div>
+      <span className="watchface-community-progress-track" aria-hidden="true">
+        <i style={{ width: `${percent ?? (progress.stage === "opening" ? 100 : 65)}%` }} />
+      </span>
+    </div>
+  ) : null;
 
   return (
     <div
       id="watchface-browse-panel"
-      className="watchface-community"
+      ref={panelRef}
+      className="watchface-community wf-hub-browse"
       role="tabpanel"
       aria-labelledby="watchface-browse-tab"
     >
-      <section className="watchface-community-hero">
-        <div>
-          <span className="watchface-section-kicker">CorosLink Faces</span>
-          <h2>Find your next watch face</h2>
-          <p>
-            Browse reviewed community projects and open them directly in Studio.
+      {openGroup ? (
+        <CommunityVariantsView
+          api={api}
+          group={openGroup}
+          initialModel={model}
+          disabled={disabled}
+          progress={progress}
+          progressBanner={progressBanner}
+          onBack={() => showGroup(null)}
+          onView={setSelected}
+          onOpen={(face, faceModel) => onOpen(face, faceModel)}
+        />
+      ) : (
+      <>
+      <section className="wf-hub-gallery-hero" aria-labelledby="community-hero-title">
+        <div className="wf-hub-gallery-hero-copy">
+          <p className="wf-hub-gallery-eyebrow">The library</p>
+          <h2 id="community-hero-title" className="wf-hub-hand">
+            Browse{" "}
+            <span>
+              watch faces.
+              <HubHeadingUnderline />
+            </span>
+          </h2>
+          <p className="wf-hub-gallery-lead">
+            Free, community-made designs for every COROS watch — open any of them in Studio.
           </p>
+          <a
+            className="wf-hub-text-link wf-hub-gallery-site"
+            href="https://watchfaces.coroslink.com/gallery"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open the website <ExternalLink size={14} aria-hidden="true" />
+          </a>
         </div>
-        <a
-          className="secondary-button"
-          href="https://watchfaces.coroslink.com/gallery"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Website <ExternalLink size={15} aria-hidden="true" />
-        </a>
+        <p className="wf-hub-gallery-note wf-hub-hand" aria-hidden="true">
+          Pick one.<br />Make it yours.
+        </p>
+        <span className="wf-hub-gallery-art" aria-hidden="true">
+          <img className="is-dark" src={facesHeroDark} alt="" draggable={false} />
+          <img className="is-light" src={facesHeroLight} alt="" draggable={false} />
+        </span>
       </section>
 
-      <div className="watchface-community-tools">
-        <label className="watchface-community-search">
-          <span>Search faces</span>
-          <span>
-            <Search size={17} aria-hidden="true" />
-            <input
-              type="search"
-              value={search}
-              placeholder="Face, creator, tag…"
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </span>
-        </label>
-        <label>
-          <span>Watch model</span>
-          <select
-            value={model}
-            onChange={(event) => {
-              modelTouchedRef.current = true;
-              setModel(event.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">All watches</option>
-            {(catalog?.facets.models ?? (connectedModel ? [connectedModel] : []))
-              .map((item) => <option key={item}>{item}</option>)}
-          </select>
-        </label>
-        <label>
-          <span>Style</span>
-          <select
-            value={style}
-            onChange={(event) => {
-              setStyle(event.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">All styles</option>
-            {(catalog?.facets.styles ?? []).map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>Sort</span>
-          <select
-            value={sort}
-            onChange={(event) => {
-              setSort(event.target.value === "title" ? "title" : "newest");
-              setPage(1);
-            }}
-          >
-            <option value="newest">Newest first</option>
-            <option value="title">Name A–Z</option>
-          </select>
-        </label>
-      </div>
-
-      {progress ? (
-        <div className="watchface-community-progress" role="status">
-          <div>
-            <Loader2 className="spin" size={16} aria-hidden="true" />
-            <span>
-              {progress.stage === "downloading"
-                ? `Downloading${percent === null ? "…" : ` ${percent}%`}`
-                : progress.stage === "verifying"
-                  ? "Verifying reviewed package…"
-                  : "Opening in Studio…"}
-            </span>
-          </div>
-          <span className="watchface-community-progress-track" aria-hidden="true">
-            <i style={{ width: `${percent ?? (progress.stage === "opening" ? 100 : 65)}%` }} />
-          </span>
-        </div>
-      ) : null}
-
-      {loading ? (
-        <div className="watchface-community-grid" aria-label="Loading community watch faces">
-          {Array.from({ length: 6 }, (_, index) => (
-            <div className="watchface-community-card is-loading" key={index} />
+      <HubToolbar label="Filter community faces">
+        <HubSearchField
+          label="Search faces"
+          value={search}
+          placeholder="Face, creator, or watch model"
+          onChange={setSearch}
+        />
+        <HubSelectField
+          label="Watch model"
+          icon={Watch}
+          value={model}
+          onChange={(value) => {
+            modelTouchedRef.current = true;
+            setModel(value);
+          }}
+        >
+          <option value="">All watches</option>
+          {(catalog?.facets.models ?? (connectedModel ? [connectedModel] : []))
+            .map((item) => <option key={item} value={item}>{item}</option>)}
+        </HubSelectField>
+        <HubSelectField label="Style" icon={Palette} value={style} onChange={setStyle}>
+          <option value="">All styles</option>
+          {(catalog?.facets.styles ?? []).map((item) => (
+            <option key={item.value} value={item.value}>{item.label}</option>
           ))}
-        </div>
-      ) : loadError ? (
-        <section className="watchface-community-empty" role="alert">
-          <h3>Community faces are unavailable</h3>
-          <p>{loadError}</p>
-          <button className="primary-button" type="button" onClick={() => setRetry((value) => value + 1)}>
-            Try again
-          </button>
-        </section>
-      ) : catalog?.items.length ? (
-        <>
-          <div className="watchface-community-results">
-            <span>{catalog.pagination.total} {catalog.pagination.total === 1 ? "face" : "faces"}</span>
-            <span>Page {catalog.pagination.page} of {catalog.pagination.pageCount}</span>
-          </div>
-          <div className="watchface-community-grid">
-            {catalog.items.map((face) => (
-              <article className="watchface-community-card" key={face.id}>
-                <button
-                  className="watchface-community-preview"
-                  type="button"
-                  onClick={() => setSelected(face)}
-                  aria-label={`View ${face.title}`}
-                >
-                  <img src={face.previewUrl} alt={`Preview of ${face.title}`} />
-                </button>
-                <div className="watchface-community-card-body">
-                  <button type="button" className="watchface-community-title" onClick={() => setSelected(face)}>
-                    {face.title}
-                  </button>
-                  <span>by {face.creatorName}</span>
-                  <div className="watchface-community-tags">
-                    {face.tags.slice(0, 2).map((tag) => <span key={tag}>{tag}</span>)}
-                  </div>
-                  <p>{face.models.slice(0, 2).join(" · ")}</p>
-                  <button
-                    className="primary-button"
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => onOpen(face)}
-                  >
-                    {progress?.slug === face.slug ? (
-                      <Loader2 className="spin" size={15} aria-hidden="true" />
-                    ) : (
-                      <Download size={15} aria-hidden="true" />
-                    )}
-                    Open in Studio
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-          <div className="watchface-community-pagination">
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage((value) => Math.max(1, value - 1))}
-            >
-              Previous
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={page >= catalog.pagination.pageCount}
-              onClick={() => setPage((value) => value + 1)}
-            >
-              Next
-            </button>
-          </div>
-        </>
-      ) : (
-        <section className="watchface-community-empty">
-          <Watch size={28} aria-hidden="true" />
-          <h3>No faces match these filters</h3>
-          <p>Try another watch model, style, or search.</p>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => {
+        </HubSelectField>
+        <HubSelectField
+          label="Sort"
+          icon={ArrowDownUp}
+          value={sort}
+          onChange={(value) => setSort(value as CommunityWatchfaceSort)}
+        >
+          {(Object.keys(COMMUNITY_SORT_LABELS) as CommunityWatchfaceSort[]).map((value) => (
+            <option key={value} value={value}>{COMMUNITY_SORT_LABELS[value]}</option>
+          ))}
+        </HubSelectField>
+      </HubToolbar>
+
+      {progressBanner}
+
+      <section className="wf-hub-results" aria-labelledby="community-results-title">
+        <HubResultsHeading
+          id="community-results-title"
+          icon={sort === "trending" ? Flame : styleLabel ? Palette : Sparkles}
+          title={heading}
+          note={
+            catalog
+              ? `${catalog.pagination.total} ${catalog.pagination.total === 1 ? "design" : "designs"}`
+              : undefined
+          }
+        >
+          <HubQuickFilters
+            label="Quick face filters"
+            chips={COMMUNITY_QUICK_FILTERS}
+            active={quickFilter}
+            onChange={(value) => {
+              if (value === "trending" || value === "newest" || value === "all") {
+                setStyle("");
+                setSort(value === "trending" ? "trending" : "newest");
+              } else {
+                setStyle(value);
+              }
+            }}
+          />
+        </HubResultsHeading>
+        {filtered ? (
+          <HubFilterSummary
+            summary={[
+              debouncedSearch && `“${debouncedSearch}”`,
+              model,
+              styleLabel,
+              COMMUNITY_SORT_LABELS[effectiveSort]
+            ].filter(Boolean).join(" · ")}
+            onClear={() => {
               modelTouchedRef.current = true;
               setSearch("");
               setModel("");
               setStyle("");
               setSort("newest");
-              setPage(1);
             }}
-          >
-            Clear filters
-          </button>
-        </section>
+          />
+        ) : null}
+        {sortFallback ? (
+          <p className="wf-hub-inline-note" role="status">
+            {COMMUNITY_SORT_LABELS[sort]} isn’t available from the catalog yet, so faces are shown newest first.
+          </p>
+        ) : null}
+
+        {loading && !catalog ? (
+          <div className="wf-hub-grid" aria-label="Loading community watch faces" aria-busy="true">
+            {Array.from({ length: 8 }, (_, index) => (
+              <div className="wf-hub-card wf-hub-card--skeleton" key={index} />
+            ))}
+          </div>
+        ) : loadError && !catalog ? (
+          <section className="watchface-community-empty" role="alert">
+            <h3>Community faces are unavailable</h3>
+            <p>{loadError}</p>
+            <button className="primary-button" type="button" onClick={loadMore}>
+              Try again
+            </button>
+          </section>
+        ) : catalog?.items.length ? (
+          <>
+            <div className="wf-hub-grid wf-hub-grid--faces">{catalog.items.map(renderCard)}</div>
+            <div className="watchface-community-load-more" ref={loadMoreRef}>
+              {loadError ? (
+                <>
+                  <span role="alert">Couldn’t load more faces. {loadError}</span>
+                  <button className="secondary-button" type="button" onClick={loadMore}>Try again</button>
+                </>
+              ) : loading ? (
+                <span role="status"><Loader2 className="spin" size={16} aria-hidden="true" /> Loading more faces…</span>
+              ) : hasMore ? (
+                <button className="secondary-button" type="button" onClick={loadMore}>Load more faces</button>
+              ) : (
+                <span role="status">
+                  You’ve seen all {catalog.items.length} {catalog.items.length === 1 ? "design" : "designs"}
+                </span>
+              )}
+            </div>
+          </>
+        ) : (
+          <section className="watchface-community-empty">
+            <Watch size={28} aria-hidden="true" />
+            <h3>{sort === "trending" ? "No recent downloads for these faces" : "No faces match these filters"}</h3>
+            <p>Try another watch model, style, or search.</p>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => {
+                modelTouchedRef.current = true;
+                setSearch("");
+                setModel("");
+                setStyle("");
+                setSort("newest");
+              }}
+            >
+              Clear filters
+            </button>
+          </section>
+        )}
+      </section>
+      </>
       )}
 
       {selected ? (
@@ -2307,15 +2511,18 @@ function CommunityWatchfaceBrowser({
               <h2 id="community-face-title">{selected.title}</h2>
               <p>by {selected.creatorName}</p>
               <p>{selected.description}</p>
-              <div className="watchface-community-tags">
-                {selected.models.map((item) => <span key={item}>{item}</span>)}
-              </div>
-              <small>{formatCommunityBytes(selected.packageBytes)} reviewed package</small>
+              {modelSelector(selected)}
+              <small>
+                {formatCommunityBytes(selected.packageBytes)} reviewed package
+                {selected.downloadCount !== undefined
+                  ? ` · ${formatDownloadCount(selected.downloadCount)} downloads`
+                  : ""}
+              </small>
               <button
                 className="primary-button"
                 type="button"
                 disabled={disabled}
-                onClick={() => onOpen(selected)}
+                onClick={() => onOpen(selected, selectedModel(selected))}
               >
                 <Download size={16} aria-hidden="true" /> Open in Studio
               </button>
@@ -2327,6 +2534,213 @@ function CommunityWatchfaceBrowser({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** A catalog item standing for several variants (one card, like the website). */
+function isVariantGroup(face: CommunityWatchface): boolean {
+  return (face.group?.variantCount ?? 0) > 1;
+}
+
+function pluralize(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/** The website's group page: every variant of one design, filterable by watch. */
+function CommunityVariantsView({
+  api,
+  group,
+  initialModel,
+  disabled,
+  progress,
+  progressBanner,
+  onBack,
+  onView,
+  onOpen
+}: {
+  api: CorosLinkApi;
+  group: CommunityWatchfaceGroup;
+  initialModel: string;
+  disabled: boolean;
+  progress: CommunityWatchfaceDownloadProgress | null;
+  progressBanner: ReactNode;
+  onBack: () => void;
+  onView: (face: CommunityWatchface) => void;
+  onOpen: (face: CommunityWatchface, model: string) => void;
+}) {
+  const [model, setModel] = useState(initialModel);
+  const { catalog, loading, loadError, hasMore, loadMore } = useCommunityWatchfaceCatalog(
+    api, { group: group.slug, model }
+  );
+  const total = catalog?.pagination.total ?? group.variantCount;
+  const models = catalog?.facets.models ?? [];
+
+  return (
+    <section className="wf-hub-variants" aria-labelledby="community-variants-title">
+      <button className="wf-hub-text-link wf-hub-variants-back" type="button" onClick={onBack}>
+        <ArrowLeft size={15} aria-hidden="true" /> Browse all designs
+      </button>
+      <header className="wf-hub-gallery-hero wf-hub-gallery-hero--group">
+        <div className="wf-hub-gallery-hero-copy">
+          <p className="wf-hub-gallery-eyebrow">Watch-face group</p>
+          <h2 id="community-variants-title" className="wf-hub-hand">
+            <span>
+              {group.name}
+              <HubHeadingUnderline />
+            </span>
+          </h2>
+          <p className="wf-hub-gallery-lead">
+            Explore the variants and choose a version for your watch. Each face is credited to its contributor.
+          </p>
+        </div>
+      </header>
+      <HubToolbar label="Filter variants">
+        <HubSelectField label="Watch model" icon={Watch} value={model} onChange={setModel}>
+          <option value="">All watches</option>
+          {models.map((item) => <option key={item} value={item}>{item}</option>)}
+        </HubSelectField>
+      </HubToolbar>
+      {progressBanner}
+      <section className="wf-hub-results" aria-labelledby="community-variants-count">
+        <HubResultsHeading
+          id="community-variants-count"
+          icon={Layers}
+          title={`${pluralize(total, "variant")}${model ? ` for ${model}` : ""}`}
+        />
+        {loading && !catalog ? (
+          <div className="wf-hub-grid wf-hub-grid--faces" aria-busy="true" aria-label="Loading variants">
+            {Array.from({ length: Math.min(8, Math.max(2, group.variantCount)) }, (_, index) => (
+              <div className="wf-hub-card wf-hub-card--skeleton" key={index} />
+            ))}
+          </div>
+        ) : loadError && !catalog ? (
+          <section className="watchface-community-empty" role="alert">
+            <h3>Variants are unavailable</h3>
+            <p>{loadError}</p>
+            <button className="primary-button" type="button" onClick={loadMore}>Try again</button>
+          </section>
+        ) : catalog?.items.length ? (
+          <>
+            <div className="wf-hub-grid wf-hub-grid--faces">
+              {catalog.items.map((face) => (
+                <CommunityFaceCard
+                  key={face.id}
+                  face={face}
+                  showTitle
+                  disabled={disabled}
+                  opening={progress?.slug === face.slug}
+                  onView={() => onView(face)}
+                  onOpen={() => onOpen(face, model && face.models.includes(model) ? model : face.models[0] ?? "")}
+                />
+              ))}
+            </div>
+            {hasMore || loadError ? (
+              <div className="watchface-community-load-more">
+                {loadError ? <span role="alert">Couldn’t load more variants. {loadError}</span> : null}
+                <button className="secondary-button" type="button" disabled={loading} onClick={loadMore}>
+                  {loading ? <Loader2 className="spin" size={15} aria-hidden="true" /> : null}
+                  {loadError ? "Try again" : "Load more variants"}
+                </button>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <section className="watchface-community-empty">
+            <Watch size={28} aria-hidden="true" />
+            <h3>No variants for this watch yet.</h3>
+            <button className="secondary-button" type="button" onClick={() => setModel("")}>
+              View all variants
+            </button>
+          </section>
+        )}
+      </section>
+    </section>
+  );
+}
+
+function CommunityFaceCard({
+  face,
+  disabled,
+  opening,
+  showTitle = false,
+  onView,
+  onOpen
+}: {
+  face: CommunityWatchface;
+  disabled: boolean;
+  opening: boolean;
+  /** Inside a group, the card is one variant rather than the whole group. */
+  showTitle?: boolean;
+  onView: () => void;
+  onOpen: () => void;
+}) {
+  const grouped = !showTitle && isVariantGroup(face);
+  return (
+    <article className={`wf-hub-card wf-hub-card--community${grouped ? " is-group" : ""}`}>
+      <button
+        className="wf-hub-card-open"
+        type="button"
+        aria-label={grouped ? `View ${face.title} variants` : `View ${face.title}`}
+        onClick={onView}
+      >
+        <span className="wf-hub-card-visual">
+          <span className="watchface-project-preview wf-hub-dial is-ready">
+            <img src={face.previewUrl} alt="" loading="lazy" decoding="async" draggable={false} />
+          </span>
+          {grouped ? (
+            <span className="wf-hub-card-group-badge">
+              <Layers size={12} aria-hidden="true" />
+              {pluralize(face.group!.variantCount, "variant")}
+            </span>
+          ) : null}
+          {opening ? (
+            <span className="wf-hub-card-busy" aria-hidden="true">
+              <Loader2 className="spin" size={20} />
+            </span>
+          ) : null}
+        </span>
+        <span className="wf-hub-card-meta">
+          <strong title={face.title}>{face.title}</strong>
+          <span title={face.models.join(" / ")}>
+            {face.models[0] ?? "Any watch"}
+            {face.models.length > 1 ? ` +${face.models.length - 1}` : ""}
+          </span>
+        </span>
+        <span className="wf-hub-card-footer">
+          <span title={`Creator: ${face.creatorName}`}>
+            <UserRound size={13} aria-hidden="true" />
+            {face.creatorName}
+          </span>
+          {face.downloadCount !== undefined ? (
+            <span className="wf-hub-card-template" title={`${face.downloadCount} downloads`}>
+              <Download size={12} aria-hidden="true" /> {formatDownloadCount(face.downloadCount)}
+            </span>
+          ) : face.tags[0] ? (
+            <span className="wf-hub-card-template">{face.tags[0]}</span>
+          ) : null}
+        </span>
+        <span className="wf-hub-card-arrow" aria-hidden="true">
+          <ArrowUpRight size={16} />
+        </span>
+      </button>
+      <div className="wf-hub-card-actions">
+        {grouped ? (
+          <button className="wf-hub-text-link wf-hub-card-primary" type="button" onClick={onView}>
+            <Layers size={14} aria-hidden="true" />
+            View variants
+          </button>
+        ) : (
+          <button className="wf-hub-text-link" type="button" disabled={disabled} onClick={onOpen}>
+            {opening ? (
+              <Loader2 className="spin" size={14} aria-hidden="true" />
+            ) : (
+              <Pencil size={14} aria-hidden="true" />
+            )}
+            Open in Studio
+          </button>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -2391,6 +2805,8 @@ interface ProjectsDashboardProps {
   onImport: () => void;
 }
 
+const OTHER_WATCH_LABEL = "Other watches";
+
 function ProjectsDashboard({
   api,
   projects,
@@ -2406,10 +2822,58 @@ function ProjectsDashboard({
   onCreate,
   onImport
 }: ProjectsDashboardProps) {
+  const [search, setSearch] = useState("");
+  const [modelFilter, setModelFilter] = useState("");
+  const [sort, setSort] = useSelectionPreference(PROJECT_SORT_PREFERENCE);
+  const modelChips = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const project of projects) {
+      const label = projectWatchModelLabel(project) ?? OTHER_WATCH_LABEL;
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((left, right) =>
+        left[0] === OTHER_WATCH_LABEL ? 1 : right[0] === OTHER_WATCH_LABEL ? -1 : right[1] - left[1]
+      )
+      .map(([label, count]) => ({ value: label, label, count }));
+  }, [projects]);
+  const activeModel = modelChips.some((chip) => chip.value === modelFilter) ? modelFilter : "";
+  const query = search.trim().toLocaleLowerCase();
+  const shownProjects = useMemo(() => {
+    const filtered = projects.filter((project) => {
+      if (activeModel && (projectWatchModelLabel(project) ?? OTHER_WATCH_LABEL) !== activeModel) {
+        return false;
+      }
+      if (!query) return true;
+      return [project.name, project.sourceTemplateId, projectWatchModelLabel(project)]
+        .filter((value): value is string => Boolean(value))
+        .some((value) => value.toLocaleLowerCase().includes(query));
+    });
+    return filtered.sort((left, right) =>
+      sort === "name"
+        ? left.name.localeCompare(right.name, undefined, { sensitivity: "base", numeric: true })
+        : sort === "oldest"
+          ? updatedAtValue(left.updatedAt) - updatedAtValue(right.updatedAt)
+          : updatedAtValue(right.updatedAt) - updatedAtValue(left.updatedAt)
+    );
+  }, [activeModel, projects, query, sort]);
+  const filtered = Boolean(query || activeModel);
+  const renderCard = (project: CorosWatchfaceProjectSummary) => (
+    <ProjectCard
+      api={api}
+      project={project}
+      key={project.projectId}
+      disabled={disabled}
+      onOpen={() => onOpen(project)}
+      onDuplicate={() => onDuplicate(project)}
+      onDelete={() => onDelete(project)}
+    />
+  );
+
   return (
     <div
       id="watchface-projects-panel"
-      className="watchface-hub-projects watchface-dashboard-projects"
+      className="watchface-hub-projects watchface-dashboard-projects wf-hub-browse"
       role="tabpanel"
       aria-labelledby="watchface-projects-tab"
     >
@@ -2417,33 +2881,102 @@ function ProjectsDashboard({
         <ProjectsDashboardSkeleton />
       ) : featuredProject ? (
         <>
-          <ContinueDesigningCard
-            api={api}
-            project={featuredProject}
-            disabled={disabled}
-            opening={openingProject}
-            onOpen={() => onOpen(featuredProject)}
-            onDuplicate={() => onDuplicate(featuredProject)}
-            onDelete={() => onDelete(featuredProject)}
-          />
-          <section className="watchface-recent-section" aria-labelledby="projects-title">
-            <div className="watchface-section-heading">
-              <h2 id="projects-title">Recent projects</h2>
-            </div>
-            <div className="watchface-project-grid">
-              {projects.map((project) => (
-                <ProjectCard
-                  api={api}
-                  project={project}
-                  key={project.projectId}
-                  disabled={disabled}
-                  onOpen={() => onOpen(project)}
-                  onDuplicate={() => onDuplicate(project)}
-                  onDelete={() => onDelete(project)}
-                />
+          {!filtered ? (
+            <>
+              <ContinueDesigningCard
+                api={api}
+                project={featuredProject}
+                projects={projects}
+                disabled={disabled}
+                opening={openingProject}
+                onOpen={() => onOpen(featuredProject)}
+                onDuplicate={() => onDuplicate(featuredProject)}
+                onDelete={() => onDelete(featuredProject)}
+              />
+            </>
+          ) : null}
+          <HubToolbar label="Filter projects">
+            <HubSearchField
+              label="Search projects"
+              value={search}
+              placeholder="Project name, watch, or template"
+              onChange={setSearch}
+            />
+            <HubSelectField
+              label="Watch model"
+              icon={Watch}
+              value={activeModel}
+              onChange={setModelFilter}
+            >
+              <option value="">All watches</option>
+              {modelChips.map((chip) => (
+                <option key={chip.value} value={chip.value}>
+                  {chip.label}
+                </option>
               ))}
-              <CreateProjectCard disabled={disabled} onCreate={onCreate} />
-            </div>
+            </HubSelectField>
+            <HubSelectField
+              label="Sort projects"
+              icon={ArrowDownUp}
+              value={sort}
+              onChange={(value) => setSort(value as ProjectSortMode)}
+            >
+              <option value="recent">Last edited</option>
+              <option value="name">Name A–Z</option>
+              <option value="oldest">Oldest first</option>
+            </HubSelectField>
+            <button
+              className="primary-button wf-hub-toolbar-action"
+              type="button"
+              disabled={disabled}
+              onClick={onCreate}
+            >
+              <Plus size={16} aria-hidden="true" /> New face
+            </button>
+          </HubToolbar>
+          <section className="wf-hub-results" aria-labelledby="projects-title">
+            <HubResultsHeading
+              id="projects-title"
+              icon={History}
+              title={
+                activeModel ||
+                (query ? "Matching projects" : sort === "name" ? "All projects" : "Recent projects")
+              }
+              note={`${shownProjects.length} ${shownProjects.length === 1 ? "project" : "projects"}`}
+            >
+              {modelChips.length > 1 ? (
+                <HubQuickFilters
+                  label="Filter by watch"
+                  chips={[
+                    { value: "", label: "All", icon: LayoutGrid, count: projects.length },
+                    ...modelChips.slice(0, 6)
+                  ]}
+                  active={activeModel}
+                  onChange={setModelFilter}
+                />
+              ) : null}
+            </HubResultsHeading>
+            {filtered ? (
+              <HubFilterSummary
+                summary={[query && `“${search.trim()}”`, activeModel].filter(Boolean).join(" · ")}
+                onClear={() => {
+                  setSearch("");
+                  setModelFilter("");
+                }}
+              />
+            ) : null}
+            {shownProjects.length === 0 ? (
+              <div className="watchface-hub-empty">
+                <span aria-hidden="true"><Search size={24} /></span>
+                <h4>No projects match</h4>
+                <p>Try another name or watch model.</p>
+              </div>
+            ) : (
+              <div className="wf-hub-grid">
+                {shownProjects.map(renderCard)}
+                {!filtered ? <CreateProjectCard disabled={disabled} onCreate={onCreate} /> : null}
+              </div>
+            )}
           </section>
         </>
       ) : (
@@ -2478,6 +3011,7 @@ function ProjectsDashboard({
 function ContinueDesigningCard({
   api,
   project,
+  projects,
   disabled,
   opening,
   onOpen,
@@ -2486,34 +3020,37 @@ function ContinueDesigningCard({
 }: {
   api: CorosLinkApi;
   project: CorosWatchfaceProjectSummary;
+  projects: CorosWatchfaceProjectSummary[];
   disabled: boolean;
   opening: boolean;
   onOpen: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
+  const model = projectWatchModelLabel(project);
   return (
-    <article className="watchface-featured-card">
-      <span className="watchface-featured-label">Continue designing</span>
-      <ProjectOverflowMenu
-        projectName={project.name}
-        disabled={disabled}
-        onOpen={onOpen}
-        onDuplicate={onDuplicate}
-        onDelete={onDelete}
-      />
-      <div className="watchface-featured-layout">
-        <div className="watchface-featured-stage">
-          <WatchFacePreview api={api} project={project} />
+    <article className="wf-hub-hero wf-hub-hero--faces" aria-labelledby="featured-project-title">
+      <div className="wf-hub-hero-copy">
+        <p className="wf-hub-eyebrow">Continue designing</p>
+        <h2 id="featured-project-title" className="wf-hub-hero-title wf-hub-hand" title={project.name}>
+          {project.name}
+        </h2>
+        <div className="wf-hub-chips">
+          {model ? (
+            <span className="wf-hub-chip">
+              <Watch size={14} aria-hidden="true" /> {model}
+            </span>
+          ) : null}
+          <span className="wf-hub-chip" title={`Template ${project.sourceTemplateId}`}>
+            <Layers size={14} aria-hidden="true" /> Template {project.sourceTemplateId}
+          </span>
+          <span className="wf-hub-chip" title={formatExactUpdatedAt(project.updatedAt)}>
+            <Clock size={14} aria-hidden="true" /> Updated {formatRelativeUpdatedAt(project.updatedAt)}
+          </span>
         </div>
-        <div className="watchface-featured-copy">
-          <h2 title={project.name}>{project.name}</h2>
-          <p>Template {project.sourceTemplateId}</p>
-          <p title={formatExactUpdatedAt(project.updatedAt)}>
-            Updated {formatRelativeUpdatedAt(project.updatedAt)}
-          </p>
+        <div className="wf-hub-hero-actions">
           <button
-            className="primary-button watchface-featured-open"
+            className="primary-button wf-hub-hero-open"
             type="button"
             disabled={disabled}
             onClick={onOpen}
@@ -2523,9 +3060,74 @@ function ContinueDesigningCard({
             ) : null}
             Open editor <ArrowRight size={16} aria-hidden="true" />
           </button>
+          <button
+            className="wf-hub-text-link"
+            type="button"
+            disabled={disabled}
+            onClick={onDuplicate}
+          >
+            <Copy size={15} aria-hidden="true" /> Duplicate
+          </button>
         </div>
+        <ProjectsLibraryFacts projects={projects} />
       </div>
+      <p className="wf-hub-hero-note wf-hub-hand" aria-hidden="true">
+        Right where<br />you left off.
+        <svg viewBox="0 0 64 34" className="wf-hub-hero-note-arrow">
+          <path d="M3 6 C18 2 36 4 46 14 S57 26 58 30" />
+          <path d="M50 25 L58 31 L61 21" />
+        </svg>
+      </p>
+      <div className="wf-hub-hero-stage" aria-hidden="true">
+        <span className="wf-hub-hero-halo" />
+        <span className="wf-hub-hero-spark is-one">✦</span>
+        <span className="wf-hub-hero-spark is-two">✦</span>
+        <WatchFacePreview api={api} project={project} />
+      </div>
+      <ProjectOverflowMenu
+        projectName={project.name}
+        disabled={disabled}
+        onOpen={onOpen}
+        onDuplicate={onDuplicate}
+        onDelete={onDelete}
+      />
     </article>
+  );
+}
+
+/** Watch model the project's starter template targets, when the summary records one. */
+function projectWatchModelLabel(project: CorosWatchfaceProjectSummary): string | null {
+  if (!project.firmwareType) return null;
+  const model = templateWatchModelForFirmware(project.firmwareType);
+  return TEMPLATE_WATCH_OPTIONS.find((option) => option.model === model)?.label ?? null;
+}
+
+/** The site's hero facts row: bold value, muted label. */
+function ProjectsLibraryFacts({ projects }: { projects: CorosWatchfaceProjectSummary[] }) {
+  const models = new Set(
+    projects.map(projectWatchModelLabel).filter((label): label is string => label !== null)
+  );
+  return (
+    <ul className="wf-hub-hero-facts" aria-label="About your library">
+      <li>
+        <Layers size={16} aria-hidden="true" />
+        <strong>{projects.length}</strong>
+        <span>{projects.length === 1 ? "project" : "projects"}</span>
+      </li>
+      {models.size > 0 ? (
+        <li>
+          <Watch size={16} aria-hidden="true" />
+          {models.size === 1 ? (
+            <strong>{[...models][0]}</strong>
+          ) : (
+            <>
+              <strong>{models.size}</strong>
+              <span>watch models</span>
+            </>
+          )}
+        </li>
+      ) : null}
+    </ul>
   );
 }
 
@@ -2544,24 +3146,34 @@ function ProjectCard({
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
+  const model = projectWatchModelLabel(project);
   return (
-    <article className="watchface-project-card">
+    <article className="wf-hub-card">
       <button
-        className="watchface-project-card-open"
+        className="wf-hub-card-open"
         type="button"
         aria-label={`Open ${project.name}`}
         disabled={disabled}
         onClick={onOpen}
       >
-        <span className="watchface-project-card-stage">
+        <span className="wf-hub-card-visual">
           <WatchFacePreview api={api} project={project} />
         </span>
-        <span className="watchface-project-card-copy">
+        <span className="wf-hub-card-meta">
           <strong title={project.name}>{project.name}</strong>
+          <span>{model ?? "COROS watch face"}</span>
+        </span>
+        <span className="wf-hub-card-footer">
           <span title={formatExactUpdatedAt(project.updatedAt)}>
-            Updated {formatRelativeUpdatedAt(project.updatedAt)}
+            <Clock size={13} aria-hidden="true" />
+            {formatRelativeUpdatedAt(project.updatedAt)}
           </span>
-          <span>Template {project.sourceTemplateId}</span>
+          <span className="wf-hub-card-template" title={`Template ${project.sourceTemplateId}`}>
+            #{project.sourceTemplateId}
+          </span>
+        </span>
+        <span className="wf-hub-card-arrow" aria-hidden="true">
+          <ArrowUpRight size={16} />
         </span>
       </button>
       <ProjectOverflowMenu
@@ -2584,13 +3196,14 @@ function CreateProjectCard({
 }) {
   return (
     <button
-      className="watchface-create-card"
+      className="wf-hub-create"
       type="button"
       disabled={disabled}
       onClick={onCreate}
     >
-      <span aria-hidden="true"><Plus size={23} /></span>
+      <span className="wf-hub-create-icon" aria-hidden="true"><Plus size={22} /></span>
       <strong>Create watch face</strong>
+      <span>Start from an official template</span>
     </button>
   );
 }
@@ -2689,10 +3302,11 @@ function ProjectsDashboardSkeleton() {
   return (
     <div className="watchface-dashboard-skeleton" aria-label="Loading projects" aria-busy="true">
       <div className="watchface-featured-skeleton">
-        <span />
         <div />
+        <span />
       </div>
       <div className="watchface-project-grid-skeleton">
+        <div />
         <div />
         <div />
         <div />
@@ -2721,6 +3335,62 @@ const renderedProjectPreviewCache = new WeakMap<
   CorosLinkApi,
   Map<string, RenderedProjectPreviewCacheEntry>
 >();
+const projectThumbnailCache = new WeakMap<
+  CorosLinkApi,
+  Map<string, { version: string; promise: Promise<string>; url?: string }>
+>();
+// Rendering a missing thumbnail loads the whole project, so only one at a time.
+const enqueueProjectPreviewRender = createTaskQueue(1);
+
+function projectThumbnailVersion(project: CorosWatchfaceProjectSummary): string {
+  return `${project.updatedAt}|${project.previewUpdatedAt ?? ""}`;
+}
+
+/** A thumbnail already resolved this session, for instant remounts. */
+function peekProjectThumbnail(
+  api: CorosLinkApi,
+  project: CorosWatchfaceProjectSummary
+): string | null {
+  const cached = projectThumbnailCache.get(api)?.get(project.projectId);
+  return cached?.version === projectThumbnailVersion(project) ? cached.url ?? null : null;
+}
+
+/** Stored thumbnail first; otherwise render one (queued) and store it. */
+function loadProjectThumbnail(
+  api: CorosLinkApi,
+  project: CorosWatchfaceProjectSummary
+): Promise<string> {
+  let cache = projectThumbnailCache.get(api);
+  if (!cache) {
+    cache = new Map();
+    projectThumbnailCache.set(api, cache);
+  }
+  const version = projectThumbnailVersion(project);
+  const cached = cache.get(project.projectId);
+  if (cached?.version === version) return cached.promise;
+  const entry: { version: string; promise: Promise<string>; url?: string } = {
+    version,
+    promise: (async () => {
+      if (project.previewUpdatedAt) {
+        const stored = await api
+          .loadCorosWatchfaceProjectPreview(project.projectId)
+          .catch(() => null);
+        if (stored) return stored;
+      }
+      return enqueueProjectPreviewRender(() => renderProjectPreview(api, project));
+    })()
+  };
+  cache.set(project.projectId, entry);
+  entry.promise.then(
+    (url) => {
+      entry.url = url;
+    },
+    () => {
+      if (cache.get(project.projectId) === entry) cache.delete(project.projectId);
+    }
+  );
+  return entry.promise;
+}
 
 function loadProjectPreview(
   api: CorosLinkApi,
@@ -2735,11 +3405,15 @@ function loadProjectPreview(
   if (cached?.updatedAt === project.updatedAt) return cached.promise;
   const promise = api.loadCorosWatchfaceProject(project.projectId);
   cache.set(project.projectId, { updatedAt: project.updatedAt, promise });
-  void promise.catch(() => {
-    if (cache.get(project.projectId)?.promise === promise) {
-      cache.delete(project.projectId);
+  void promise.then(
+    () => {
+      // The design is only needed to draw the thumbnail; don't pin it.
+      if (cache.get(project.projectId)?.promise === promise) cache.delete(project.projectId);
+    },
+    () => {
+      if (cache.get(project.projectId)?.promise === promise) cache.delete(project.projectId);
     }
-  });
+  );
   return promise;
 }
 
@@ -2758,9 +3432,11 @@ function renderProjectPreview(
   const promise = (async () => {
     const assetCache = new Map<string, CorosWatchfaceTemplateAsset>();
     const loadedProject = await loadProjectPreview(api, project);
-    const details = await api.describeCorosWatchfaceTemplate(
-      loadedProject.archive.archiveId
-    );
+    const [details] = await Promise.all([
+      api.describeCorosWatchfaceTemplate(loadedProject.archive.archiveId),
+      // Thumbnails of faces whose fonts are not installed use saved glyphs.
+      rememberWatchfaceFontSnapshots(loadedProject.design.fontSnapshots)
+    ]);
     const previewDetails = deriveDesignDetails(
       details,
       loadedProject.design
@@ -2804,9 +3480,11 @@ function renderProjectPreview(
       },
       loadAssets
     );
+    await drawNativeDataPreview(canvas, resolution.width, loadedProject.design.nativeData);
     const weather = loadedProject.design.weatherIndicator;
     if (weather?.enabled) {
-      const url = weatherPreviewUrl(resolution.width);
+      if (!loadedProject.design.nativeData?.weather_temp) await drawWeatherTemperaturePreview(canvas, resolution.width, weather);
+      const url = await weatherPreviewDataUrl(resolution.width, weather.color, weather);
       if (url) {
         const image = await loadStudioImage(url);
         const context = canvas.getContext("2d");
@@ -2843,42 +3521,43 @@ function WatchFacePreview({
   api: CorosLinkApi;
   project: CorosWatchfaceProjectSummary;
 }) {
-  const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(
-    project.previewDataUrl ?? null
-  );
+  const containerRef = useRef<HTMLSpanElement>(null);
+  const known = project.previewDataUrl ?? peekProjectThumbnail(api, project);
+  const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(known);
   const [previewState, setPreviewState] = useState<ProjectPreviewState>(
-    project.previewDataUrl ? "ready" : "loading"
+    known ? "ready" : "loading"
   );
+  const nearViewport = useNearViewport(containerRef);
+  const version = projectThumbnailVersion(project);
 
   useEffect(() => {
     let cancelled = false;
-    if (project.previewDataUrl) {
-      setPreviewDataUrl(project.previewDataUrl);
+    if (known) {
+      setPreviewDataUrl(known);
       setPreviewState("ready");
-      return () => {
-        cancelled = true;
-      };
+      return;
     }
-
     setPreviewDataUrl(null);
     setPreviewState("loading");
-    void renderProjectPreview(api, project)
-      .then((renderedPreview) => {
+    // Off-screen cards wait, so opening the tab never loads every project.
+    if (!nearViewport) return;
+    void loadProjectThumbnail(api, project)
+      .then((url) => {
         if (cancelled) return;
-        setPreviewDataUrl(renderedPreview);
+        setPreviewDataUrl(url);
         setPreviewState("ready");
       })
       .catch(() => {
         if (!cancelled) setPreviewState("error");
       });
-
     return () => {
       cancelled = true;
     };
-  }, [api, project.projectId, project.previewDataUrl, project.updatedAt]);
+  }, [api, known, nearViewport, project.projectId, version]);
 
   return (
     <span
+      ref={containerRef}
       className={`watchface-project-preview is-${previewState}`}
       aria-busy={previewState === "loading"}
     >
@@ -2886,6 +3565,7 @@ function WatchFacePreview({
         <img
           src={previewDataUrl}
           alt={`${project.name} watch-face preview`}
+          decoding="async"
           draggable={false}
         />
       ) : null}
@@ -2922,7 +3602,10 @@ interface TemplatesPanelProps {
   themes: CorosWatchfaceTheme[];
   visibleThemes: CorosWatchfaceTheme[];
   themesLoaded: boolean;
+  savedAt: string | null;
+  refreshing: boolean;
   downloadingThemeUrl: string | null;
+  openingThemeUrl: string | null;
   sharingThemeId: string | null;
   onSignIn: () => void;
   onCatalogChange: (catalog: CorosWatchfaceThemeCatalog) => void;
@@ -2934,63 +3617,128 @@ interface TemplatesPanelProps {
   onModelVersionChange: (value: string) => void;
   onSearchChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onRefresh: () => void;
   onUseTheme: (theme: CorosWatchfaceTheme) => void;
+  onOpenOfficialTheme: (theme: CorosWatchfaceTheme) => void;
   onShareTheme: (theme: CorosWatchfaceTheme) => void;
 }
 
+const TEMPLATE_CATALOG_CHIPS: readonly HubChip<CorosWatchfaceThemeCatalog>[] = [
+  { value: "editable", label: "Editable templates", icon: Pencil },
+  { value: "official", label: "Official faces", icon: Watch },
+  { value: "custom", label: "My faces", icon: UserRound }
+];
+
+// Known watches whose serial unlocks their official/custom face catalog.
+const TEMPLATE_WATCH_PRESETS: readonly { id: string; label: string; model: WatchModelId; serial: string }[] = [
+  { id: "apex-4-satisfy", label: "APEX 4 · SATISFY", model: "apex-4", serial: "W51E005280" },
+  { id: "pace-4-jakob-ingebrigtsen", label: "PACE 4 · Jakob Ingebrigtsen Edition", model: "pace-4", serial: "W36C018325" }
+];
+
+const UNCATEGORIZED_TEMPLATE = "Other";
+
+function templateCategory(theme: CorosWatchfaceTheme): string {
+  return theme.category?.trim() || UNCATEGORIZED_TEMPLATE;
+}
+
 function TemplatesPanel(props: TemplatesPanelProps) {
+  const [category, setCategory] = useState("");
+  const [sort, setSort] = useSelectionPreference(TEMPLATE_SORT_PREFERENCE);
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const theme of props.visibleThemes) {
+      const name = templateCategory(theme);
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((left, right) =>
+        left[0] === UNCATEGORIZED_TEMPLATE ? 1 : right[0] === UNCATEGORIZED_TEMPLATE ? -1 : right[1] - left[1]
+      )
+      .map(([name, count]) => ({ name, count }));
+  }, [props.visibleThemes]);
+  const activeCategory = categories.some((item) => item.name === category) ? category : "";
+  const shownThemes = useMemo(() => {
+    const filtered = activeCategory
+      ? props.visibleThemes.filter((theme) => templateCategory(theme) === activeCategory)
+      : props.visibleThemes;
+    if (sort === "catalog") return filtered;
+    return [...filtered].sort((left, right) =>
+      sort === "name"
+        ? left.name.localeCompare(right.name, undefined, { sensitivity: "base", numeric: true })
+        : (right.watchFaceVersion ?? -1) - (left.watchFaceVersion ?? -1)
+    );
+  }, [activeCategory, props.visibleThemes, sort]);
+  const filtered = Boolean(props.search.trim() || activeCategory);
+  const actionsBusy =
+    props.busy !== null || props.downloadingThemeUrl !== null || props.openingThemeUrl !== null;
+  const renderCard = (theme: CorosWatchfaceTheme, index: number) => (
+    <TemplateCard
+      key={theme.id ?? `${theme.name}-${index}`}
+      theme={theme}
+      catalog={props.catalog}
+      busy={props.busy}
+      actionsBusy={actionsBusy}
+      downloading={props.downloadingThemeUrl === theme.packageUrl}
+      opening={props.openingThemeUrl === theme.packageUrl}
+      sharing={props.sharingThemeId === theme.id}
+      onUse={() => props.onUseTheme(theme)}
+      onOpenOfficial={() => props.onOpenOfficialTheme(theme)}
+      onShare={() => props.onShareTheme(theme)}
+    />
+  );
+
   return (
     <section
       id="watchface-templates-panel"
-      className="watchface-hub-section watchface-template-browser"
+      className="watchface-hub-section watchface-template-browser wf-hub-browse"
       role="tabpanel"
       aria-labelledby="watchface-templates-tab"
     >
-      <section className="watchface-create-hero" aria-labelledby="watchface-create-title">
-        <div className="watchface-create-hero-copy">
-          <span className="watchface-create-kicker">Watch Face Studio</span>
-          <h2 id="watchface-create-title">
-            Start with a face. <span>Make it yours.</span>
+      <section
+        className="wf-hub-gallery-hero wf-hub-create-hero"
+        aria-labelledby="watchface-create-title"
+      >
+        <div className="wf-hub-gallery-hero-copy">
+          <p className="wf-hub-gallery-eyebrow">Watch Face Studio</p>
+          <h2 id="watchface-create-title" className="wf-hub-hand">
+            Start with a face.{" "}
+            <span>
+              Make it yours.
+              <HubHeadingUnderline />
+            </span>
           </h2>
-          <p>
+          <p className="wf-hub-gallery-lead">
             {props.accountConnected
               ? "Choose a compatible design, customize every layer, then export it to your watch."
               : "Sign in to your COROS account to choose a template and start creating."}
           </p>
-          {props.accountConnected ? (
-            <div className="watchface-create-hero-actions">
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() => document.getElementById("watchface-template-catalog")?.focus()}
-              >
-                <Watch size={17} aria-hidden="true" />
-                Choose a template
-                <ArrowRight size={17} aria-hidden="true" />
-              </button>
-            </div>
-          ) : null}
-        </div>
-        <div className="watchface-create-visual" aria-label="Watch face creation steps">
-          <div className="watchface-create-preview-stack" aria-hidden="true">
-            <img src={glassFace} alt="" />
-            <img src={preClassicFace} alt="" />
-            <img src={kineticEnergyFace} alt="" />
-          </div>
-          <ol className="watchface-create-steps">
+          <ol className="wf-hub-hero-facts wf-hub-create-steps" aria-label="Watch face creation steps">
             <li>
-              <span><Watch size={18} aria-hidden="true" /></span>
-              <div><strong>Choose</strong><small>Find a compatible base</small></div>
+              <Watch size={16} aria-hidden="true" />
+              <strong>Choose</strong>
+              <span>a compatible base</span>
             </li>
             <li>
-              <span><Pencil size={18} aria-hidden="true" /></span>
-              <div><strong>Customize</strong><small>Edit it in Studio</small></div>
+              <Pencil size={16} aria-hidden="true" />
+              <strong>Customize</strong>
+              <span>in Studio</span>
             </li>
             <li>
-              <span><Upload size={18} aria-hidden="true" /></span>
-              <div><strong>Export</strong><small>Send it to your watch</small></div>
+              <Upload size={16} aria-hidden="true" />
+              <strong>Export</strong>
+              <span>to your watch</span>
             </li>
           </ol>
+        </div>
+        <p className="wf-hub-gallery-note wf-hub-create-note wf-hub-hand" aria-hidden="true">
+          Three steps.<br />No code needed.
+        </p>
+        <div className="wf-hub-create-stage" aria-hidden="true">
+          <span className="wf-hub-hero-spark is-one">✦</span>
+          <span className="wf-hub-hero-spark is-two">✦</span>
+          <img src={glassFace} alt="" draggable={false} />
+          <img src={preClassicFace} alt="" draggable={false} />
+          <img src={kineticEnergyFace} alt="" draggable={false} />
         </div>
       </section>
       {!props.accountConnected ? (
@@ -3012,237 +3760,223 @@ function TemplatesPanel(props: TemplatesPanelProps) {
         </section>
       ) : (
         <>
-          <div className="watchface-template-heading">
-        <div>
-          <h3>Choose your starting point</h3>
-          <p>Browse layouts matched to your watch and firmware.</p>
-        </div>
-        <span>Compatibility checked before download</span>
-      </div>
-      <form className="watchface-template-controls" onSubmit={props.onSubmit}>
-        <label className="field">
-          Catalog
-          <select
-            id="watchface-template-catalog"
-            value={props.catalog}
-            onChange={(event) =>
-              props.onCatalogChange(event.target.value as CorosWatchfaceThemeCatalog)
-            }
-          >
-            <option value="editable">Editable templates</option>
-            <option value="official">Official watch faces</option>
-            <option value="custom">My custom watch faces</option>
-          </select>
-        </label>
-        <label className="field watchface-model-field">
-          <span className="watchface-model-label">
-            <span>Watch model</span>
-            <span>Match your device</span>
-          </span>
-          <select
-            aria-describedby="watchface-model-guidance"
-            value={props.watchModel}
-            onChange={(event) =>
-              props.onWatchModelChange(event.target.value as WatchModelId)
-            }
-          >
-            {props.watchModel === "" ? (
-              <option value="" disabled>
-                Custom firmware (advanced)
-              </option>
-            ) : null}
-            {TEMPLATE_WATCH_OPTIONS.map((option) => (
-              <option key={option.model} value={option.model}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <span className="sr-only" id="watchface-model-guidance">
-            Choose the exact COROS model that will receive this watch face.
-          </span>
-        </label>
-        <label className="watchface-template-search">
-          <span className="sr-only">Search loaded templates</span>
-          <Search size={16} aria-hidden="true" />
-          <input
-            type="search"
-            value={props.search}
-            onChange={(event) => props.onSearchChange(event.target.value)}
-            placeholder="Search templates"
+          <HubQuickFilters
+            label="Template catalog"
+            chips={TEMPLATE_CATALOG_CHIPS}
+            active={props.catalog}
+            onChange={props.onCatalogChange}
           />
-        </label>
-        <button className="primary-button" type="submit" disabled={props.busy !== null}>
-          {props.busy === "themes" ? (
-            <Loader2 className="spin" size={16} aria-hidden="true" />
-          ) : (
-            <Search size={16} aria-hidden="true" />
-          )}
-          {props.busy === "themes"
-            ? "Loading"
-            : props.themesLoaded
-              ? "Refresh"
-              : "Browse"}
-        </button>
-        <details className="watchface-template-advanced">
-          <summary>Advanced filters</summary>
-          <div className="watchface-template-advanced-grid">
-            <label className="field">
-              Firmware type
-              <input
-                value={props.firmwareType}
-                onChange={(event) => props.onFirmwareTypeChange(event.target.value)}
-                required
+          <form className="wf-hub-toolbar-form" onSubmit={props.onSubmit}>
+            <HubToolbar label="Filter templates">
+              <HubSearchField
+                label="Search templates"
+                value={props.search}
+                placeholder="Template name, ID, or category"
+                onChange={props.onSearchChange}
               />
-            </label>
-            <label className="field">
-              Language
-              <input
-                value={props.language}
-                pattern="[a-z]{2,3}-[A-Z]{2}"
-                onChange={(event) => props.onLanguageChange(event.target.value)}
-                required
-              />
-            </label>
-            <label className="field">
-              Maximum version
-              <input
-                type="number"
-                min="0"
-                max="999"
-                step="1"
-                value={props.maxWatchFaceVersion}
-                onChange={(event) => props.onMaxVersionChange(event.target.value)}
-                required
-              />
-            </label>
-            {props.catalog !== "editable" ? (
-              <>
-                <label className="field">
-                  Watch serial number
-                  <input
-                    value={props.watchSerial}
-                    onChange={(event) => props.onWatchSerialChange(event.target.value)}
-                    autoComplete="off"
-                  />
-                </label>
-                <label className="field">
-                  Model version
-                  <input
-                    value={props.modelVersion}
-                    onChange={(event) => props.onModelVersionChange(event.target.value)}
-                  />
-                </label>
-              </>
-            ) : null}
-          </div>
-        </details>
-      </form>
-
-      {props.busy === "themes" && !props.themesLoaded ? (
-        <div
-          className="watchface-template-skeleton-grid"
-          aria-label="Loading templates"
-          aria-busy="true"
-        >
-          <div />
-          <div />
-          <div />
-        </div>
-      ) : props.themesLoaded ? (
-        <div className="watchface-template-results">
-          <div className="watchface-template-results-count">
-            <strong>{props.visibleThemes.length}</strong>
-            <span>
-              {props.visibleThemes.length === 1 ? "result" : "results"}
-              {props.search.trim() ? ` of ${props.themes.length}` : ""}
-            </span>
-          </div>
-          {props.visibleThemes.length > 0 ? (
-            <div className="watchface-template-grid">
-              {props.visibleThemes.map((theme, index) => (
-                <article
-                  className="watchface-template-card"
-                  key={theme.id ?? `${theme.name}-${index}`}
+              <HubSelectField
+                label="Watch model"
+                icon={Watch}
+                value={props.watchModel}
+                onChange={(value) => props.onWatchModelChange(value as WatchModelId)}
+              >
+                {props.watchModel === "" ? (
+                  <option value="" disabled>
+                    Custom firmware
+                  </option>
+                ) : null}
+                {TEMPLATE_WATCH_OPTIONS.map((option) => (
+                  <option key={option.model} value={option.model}>
+                    {option.label}
+                  </option>
+                ))}
+              </HubSelectField>
+              {props.catalog !== "editable" ? (
+                <HubSelectField
+                  label="Watch serial preset"
+                  icon={KeyRound}
+                  value={
+                    TEMPLATE_WATCH_PRESETS.find(
+                      (preset) =>
+                        preset.model === props.watchModel &&
+                        preset.serial === props.watchSerial.trim()
+                    )?.id ?? ""
+                  }
+                  onChange={(value) => {
+                    const preset = TEMPLATE_WATCH_PRESETS.find((entry) => entry.id === value);
+                    if (!preset) return;
+                    props.onWatchModelChange(preset.model);
+                    props.onWatchSerialChange(preset.serial);
+                  }}
                 >
-                  <div className="watchface-template-preview">
-                    {theme.previewImageUrl ? (
-                      <img
-                        src={theme.previewImageUrl}
-                        alt={`${theme.name} preview`}
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                        onError={(event) => {
-                          event.currentTarget.style.display = "none";
-                        }}
+                  <option value="" disabled>
+                    Custom serial
+                  </option>
+                  {TEMPLATE_WATCH_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </HubSelectField>
+              ) : null}
+              <HubSelectField
+                label="Sort templates"
+                icon={ArrowDownUp}
+                value={sort}
+                onChange={(value) => setSort(value as TemplateSortMode)}
+              >
+                <option value="catalog">COROS order</option>
+                <option value="name">Name A–Z</option>
+                <option value="version">Newest format</option>
+              </HubSelectField>
+              <button
+                className="primary-button wf-hub-toolbar-action"
+                type="button"
+                disabled={props.busy !== null || props.refreshing}
+                onClick={props.onRefresh}
+              >
+                {props.busy === "themes" || props.refreshing ? (
+                  <Loader2 className="spin" size={16} aria-hidden="true" />
+                ) : (
+                  <RefreshCw size={16} aria-hidden="true" />
+                )}
+                {props.busy === "themes" ? "Loading" : props.refreshing ? "Refreshing" : "Refresh"}
+              </button>
+            </HubToolbar>
+            <details className="watchface-template-advanced">
+              <summary>Advanced filters</summary>
+              <div className="watchface-template-advanced-grid">
+                <label className="field">
+                  Firmware type
+                  <input
+                    value={props.firmwareType}
+                    onChange={(event) => props.onFirmwareTypeChange(event.target.value)}
+                    required
+                  />
+                </label>
+                <label className="field">
+                  Language
+                  <input
+                    value={props.language}
+                    pattern="[a-z]{2,3}-[A-Z]{2}"
+                    onChange={(event) => props.onLanguageChange(event.target.value)}
+                    required
+                  />
+                </label>
+                <label className="field">
+                  Maximum version
+                  <input
+                    type="number"
+                    min="0"
+                    max="999"
+                    step="1"
+                    value={props.maxWatchFaceVersion}
+                    onChange={(event) => props.onMaxVersionChange(event.target.value)}
+                    required
+                  />
+                </label>
+                {props.catalog !== "editable" ? (
+                  <>
+                    <label className="field">
+                      Watch serial number
+                      <input
+                        value={props.watchSerial}
+                        onChange={(event) => props.onWatchSerialChange(event.target.value)}
+                        autoComplete="off"
                       />
-                    ) : null}
-                    <Watch size={26} aria-hidden="true" />
-                  </div>
-                  <div className="watchface-template-copy">
-                    <strong title={theme.name}>{theme.name}</strong>
-                    <div className="watchface-template-meta">
-                      {theme.category ? <span>{theme.category}</span> : null}
-                      {theme.id ? <span>ID {theme.id}</span> : null}
-                      {theme.watchFaceVersion !== undefined ? (
-                        <span>v{theme.watchFaceVersion}</span>
-                      ) : null}
-                    </div>
-                    <div className="watchface-template-actions">
-                      {theme.packageUrl ? (
-                        <button
-                          className="secondary-button"
-                          type="button"
-                          disabled={props.busy !== null || props.downloadingThemeUrl !== null}
-                          onClick={() => props.onUseTheme(theme)}
-                        >
-                          {props.downloadingThemeUrl === theme.packageUrl ? (
-                            <Loader2 className="spin" size={14} aria-hidden="true" />
-                          ) : (
-                            <Download size={14} aria-hidden="true" />
-                          )}
-                          {props.catalog === "editable" ? "Use template" : "Download"}
-                        </button>
-                      ) : props.catalog !== "custom" ? (
-                        <span className="watchface-template-unavailable">Unavailable</span>
-                      ) : null}
-                      {props.catalog === "custom" ? (
-                        <button
-                          className="secondary-button"
-                          type="button"
-                          disabled={props.busy !== null}
-                          onClick={() => props.onShareTheme(theme)}
-                        >
-                          {props.sharingThemeId === theme.id ? (
-                            <Loader2 className="spin" size={14} aria-hidden="true" />
-                          ) : (
-                            <Share2 size={14} aria-hidden="true" />
-                          )}
-                          Share
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </article>
+                    </label>
+                    <label className="field">
+                      Model version
+                      <input
+                        value={props.modelVersion}
+                        onChange={(event) => props.onModelVersionChange(event.target.value)}
+                      />
+                    </label>
+                  </>
+                ) : null}
+              </div>
+            </details>
+          </form>
+
+          {props.busy === "themes" && !props.themesLoaded ? (
+            <div className="wf-hub-grid" aria-label="Loading templates" aria-busy="true">
+              {Array.from({ length: 8 }, (_, index) => (
+                <div className="wf-hub-card wf-hub-card--skeleton" key={index} />
               ))}
             </div>
+          ) : props.themesLoaded ? (
+            <section className="wf-hub-results" aria-labelledby="watchface-template-results-title">
+              <HubResultsHeading
+                id="watchface-template-results-title"
+                icon={LayoutGrid}
+                title={
+                  activeCategory ||
+                  (filtered ? "Matching templates" : watchfaceCatalogTitle(props.catalog))
+                }
+                note={
+                  <>
+                    {shownThemes.length}{" "}
+                    {shownThemes.length === 1 ? "design" : "designs"}
+                    {props.savedAt ? (
+                      <span
+                        className="wf-hub-cache-note"
+                        title={`Saved ${formatExactUpdatedAt(props.savedAt)}`}
+                      >
+                        {props.refreshing
+                          ? " · refreshing…"
+                          : ` · updated ${formatCachedAge(props.savedAt)}`}
+                      </span>
+                    ) : null}
+                  </>
+                }
+              >
+                {categories.length > 1 ? (
+                  <HubQuickFilters
+                    label="Template categories"
+                    chips={[
+                      { value: "", label: "All", icon: LayoutGrid, count: props.visibleThemes.length },
+                      ...categories.slice(0, 7).map(({ name, count }) => ({
+                        value: name,
+                        label: name,
+                        count
+                      }))
+                    ]}
+                    active={activeCategory}
+                    onChange={setCategory}
+                  />
+                ) : null}
+              </HubResultsHeading>
+              {filtered ? (
+                <HubFilterSummary
+                  summary={[props.search.trim() && `“${props.search.trim()}”`, activeCategory]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  onClear={() => {
+                    props.onSearchChange("");
+                    setCategory("");
+                  }}
+                />
+              ) : null}
+              {shownThemes.length === 0 ? (
+                <div className="watchface-hub-empty">
+                  <span aria-hidden="true"><Search size={24} /></span>
+                  <h4>{props.themes.length === 0 ? "No templates found" : "No matches"}</h4>
+                  <p>
+                    {props.themes.length === 0
+                      ? "Try a different catalog or update the advanced filters."
+                      : "Try a different search term or category."}
+                  </p>
+                </div>
+              ) : (
+                <div className="wf-hub-grid">{shownThemes.map(renderCard)}</div>
+              )}
+            </section>
           ) : (
-            <div className="watchface-hub-empty">
-              <span aria-hidden="true"><Search size={24} /></span>
-              <h4>{props.themes.length === 0 ? "No templates found" : "No matches"}</h4>
-              <p>
-                {props.themes.length === 0
-                  ? "Try a different catalog or update the advanced filters."
-                  : "Try a different search term."}
-              </p>
+            <div className="watchface-template-welcome">
+              <span aria-hidden="true"><LayoutGrid size={26} /></span>
+              <h4>Find a starting point</h4>
+              <p>Browse COROS templates compatible with your watch and firmware.</p>
             </div>
-          )}
-        </div>
-      ) : (
-        <div className="watchface-template-welcome">
-          <span aria-hidden="true"><LayoutGrid size={26} /></span>
-          <h4>Find a starting point</h4>
-          <p>Browse COROS templates compatible with your watch and firmware.</p>
-        </div>
           )}
         </>
       )}
@@ -3250,14 +3984,164 @@ function TemplatesPanel(props: TemplatesPanelProps) {
   );
 }
 
-interface PublishDialogProps {
-  archive: CorosWatchfaceArchive | null;
-  name: string;
-  firmwareType: string;
-  backgroundImageId: string;
-  language: string;
-  shareLink: CorosWatchfaceShareLink | null;
-  connected: boolean;
+function TemplateCard({
+  theme,
+  catalog,
+  busy,
+  actionsBusy,
+  downloading,
+  opening,
+  sharing,
+  onUse,
+  onOpenOfficial,
+  onShare
+}: {
+  theme: CorosWatchfaceTheme;
+  catalog: CorosWatchfaceThemeCatalog;
+  busy: TemplatesPanelProps["busy"];
+  actionsBusy: boolean;
+  downloading: boolean;
+  opening: boolean;
+  sharing: boolean;
+  onUse: () => void;
+  onOpenOfficial: () => void;
+  onShare: () => void;
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const primary =
+    catalog === "official" && theme.packageUrl
+      ? { label: opening ? "Opening…" : "Open in editor", icon: Pencil, run: onOpenOfficial, active: opening }
+      : catalog === "editable" && theme.packageUrl
+        ? { label: "Use template", icon: ArrowRight, run: onUse, active: downloading }
+        : null;
+  return (
+    <article className="wf-hub-card wf-hub-card--template">
+      <button
+        className="wf-hub-card-open"
+        type="button"
+        disabled={!primary || actionsBusy}
+        aria-label={primary ? `${primary.label}: ${theme.name}` : theme.name}
+        onClick={primary?.run}
+      >
+        <span className="wf-hub-card-visual">
+          <span className="watchface-project-preview wf-hub-dial is-ready">
+            {theme.previewImageUrl && !imageFailed ? (
+              <img
+                src={theme.previewImageUrl}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                draggable={false}
+                onError={() => setImageFailed(true)}
+              />
+            ) : (
+              <span className="watchface-project-preview-fallback">
+                <Watch size={26} aria-hidden="true" />
+              </span>
+            )}
+          </span>
+          {primary?.active ? (
+            <span className="wf-hub-card-busy" aria-hidden="true">
+              <Loader2 className="spin" size={20} />
+            </span>
+          ) : null}
+        </span>
+        <span className="wf-hub-card-meta">
+          <strong title={theme.name}>{theme.name}</strong>
+          <span>{theme.category ?? watchfaceCatalogLabel(catalog)}</span>
+        </span>
+        <span className="wf-hub-card-footer">
+          <span>{theme.id ? `#${theme.id}` : "COROS"}</span>
+          {theme.watchFaceVersion !== undefined ? (
+            <span className="wf-hub-card-template">v{theme.watchFaceVersion}</span>
+          ) : null}
+        </span>
+        {primary ? (
+          <span className="wf-hub-card-arrow" aria-hidden="true">
+            <ArrowUpRight size={16} />
+          </span>
+        ) : null}
+      </button>
+      {catalog === "editable" && theme.packageUrl ? (
+        <div className="wf-hub-card-actions">
+          <button
+            className="wf-hub-text-link wf-hub-card-primary"
+            type="button"
+            disabled={actionsBusy}
+            onClick={onUse}
+          >
+            {downloading ? (
+              <Loader2 className="spin" size={14} aria-hidden="true" />
+            ) : (
+              <Pencil size={14} aria-hidden="true" />
+            )}
+            {downloading ? "Opening…" : "Use this template"}
+          </button>
+        </div>
+      ) : catalog === "official" && theme.packageUrl ? (
+        <div className="wf-hub-card-actions">
+          <button
+            className="wf-hub-text-link wf-hub-card-primary"
+            type="button"
+            disabled={actionsBusy}
+            onClick={onOpenOfficial}
+          >
+            {opening ? (
+              <Loader2 className="spin" size={14} aria-hidden="true" />
+            ) : (
+              <Pencil size={14} aria-hidden="true" />
+            )}
+            {opening ? "Opening…" : "Open in editor"}
+          </button>
+          <button className="wf-hub-text-link" type="button" disabled={actionsBusy} onClick={onUse}>
+            {downloading ? (
+              <Loader2 className="spin" size={14} aria-hidden="true" />
+            ) : (
+              <Download size={14} aria-hidden="true" />
+            )}
+            Download
+          </button>
+        </div>
+      ) : catalog === "custom" ? (
+        <div className="wf-hub-card-actions">
+          {theme.packageUrl ? (
+            <button className="wf-hub-text-link" type="button" disabled={actionsBusy} onClick={onUse}>
+              {downloading ? (
+                <Loader2 className="spin" size={14} aria-hidden="true" />
+              ) : (
+                <Download size={14} aria-hidden="true" />
+              )}
+              Download
+            </button>
+          ) : null}
+          <button className="wf-hub-text-link" type="button" disabled={busy !== null} onClick={onShare}>
+            {sharing ? (
+              <Loader2 className="spin" size={14} aria-hidden="true" />
+            ) : (
+              <Share2 size={14} aria-hidden="true" />
+            )}
+            Share
+          </button>
+        </div>
+      ) : !theme.packageUrl ? (
+        <div className="wf-hub-card-actions">
+          <span className="watchface-template-unavailable">Unavailable</span>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function watchfaceCatalogTitle(catalog: CorosWatchfaceThemeCatalog): string {
+  return catalog === "official"
+    ? "Official watch faces"
+    : catalog === "custom"
+      ? "My COROS faces"
+      : "Editable templates";
+}
+
+interface WatchfaceSignInFormProps {
   email: string;
   password: string;
   region: CorosWatchfaceRegion;
@@ -3265,18 +4149,132 @@ interface PublishDialogProps {
   savedCredentialsAvailable: boolean;
   savedEmail?: string;
   rememberCredentials: boolean;
-  busy: boolean;
   loginBusy: boolean;
-  onNameChange: (value: string) => void;
-  onFirmwareTypeChange: (value: string) => void;
-  onBackgroundImageIdChange: (value: string) => void;
-  onLanguageChange: (value: string) => void;
   onEmailChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
   onRememberCredentialsChange: (value: boolean) => void;
   onRegionChange: (value: CorosWatchfaceRegion) => void;
   onLogin: (event: FormEvent<HTMLFormElement>) => void;
   onSavedLogin: () => void;
+}
+
+function WatchfaceSignInForm(props: WatchfaceSignInFormProps) {
+  return (
+    <form
+      className="watchface-publish-form watchface-publish-login"
+      onSubmit={props.onLogin}
+    >
+      {props.savedCredentialsAvailable && props.savedEmail ? (
+        <>
+          <div className="watchface-saved-login">
+            <div>
+              <span>Saved COROS account</span>
+              <strong>{props.savedEmail}</strong>
+              <small>
+                Sign in with the account saved on this computer.
+              </small>
+            </div>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={props.loginBusy}
+              onClick={props.onSavedLogin}
+            >
+              {props.loginBusy ? (
+                <Loader2 className="spin" size={16} aria-hidden="true" />
+              ) : (
+                <KeyRound size={16} aria-hidden="true" />
+              )}
+              Use saved account
+            </button>
+          </div>
+          <div className="watchface-auth-divider">
+            <span>or use another account</span>
+          </div>
+        </>
+      ) : null}
+      <div className="field">
+        <span>Account region</span>
+        <SelectDropdown
+          label="Account region"
+          className="watchface-region-select"
+          options={REGION_OPTIONS}
+          portal
+          autoFocus
+          disabled={props.loginBusy}
+          value={props.region}
+          onChange={props.onRegionChange}
+        />
+      </div>
+      <label className="field">
+        Email
+        <input
+          type="email"
+          disabled={props.loginBusy}
+          autoComplete="username"
+          value={props.email}
+          onChange={(event) => props.onEmailChange(event.target.value)}
+          required
+        />
+      </label>
+      <label className="field">
+        Password
+        <input
+          type="password"
+          disabled={props.loginBusy}
+          autoComplete="current-password"
+          value={props.password}
+          onChange={(event) => props.onPasswordChange(event.target.value)}
+          required
+        />
+      </label>
+      {props.secureStorageAvailable ? (
+        <label className="watchface-auth-remember">
+          <input
+            type="checkbox"
+            checked={props.rememberCredentials}
+            onChange={(event) =>
+              props.onRememberCredentialsChange(event.target.checked)
+            }
+            disabled={props.loginBusy}
+          />
+          <span>
+            Save this COROS account
+            <small>
+              Reuse it for Training Hub or future watch-face sign-ins.
+            </small>
+          </span>
+        </label>
+      ) : null}
+      <button
+        className="primary-button watchface-publish-submit"
+        type="submit"
+        disabled={props.loginBusy}
+      >
+        {props.loginBusy ? (
+          <Loader2 className="spin" size={16} aria-hidden="true" />
+        ) : (
+          <KeyRound size={16} aria-hidden="true" />
+        )}
+        Connect and continue
+      </button>
+    </form>
+  );
+}
+
+interface PublishDialogProps extends WatchfaceSignInFormProps {
+  archive: CorosWatchfaceArchive | null;
+  name: string;
+  firmwareType: string;
+  backgroundImageId: string;
+  language: string;
+  shareLink: CorosWatchfaceShareLink | null;
+  connected: boolean;
+  busy: boolean;
+  onNameChange: (value: string) => void;
+  onFirmwareTypeChange: (value: string) => void;
+  onBackgroundImageIdChange: (value: string) => void;
+  onLanguageChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onCopy: () => void;
   onClose: () => void;
@@ -3359,106 +4357,7 @@ function PublishDialog(props: PublishDialogProps) {
               <h2 id="watchface-publish-title">{props.name}</h2>
               <p>Connect your COROS account to send this watch face.</p>
             </div>
-            <form
-              className="watchface-publish-form watchface-publish-login"
-              onSubmit={props.onLogin}
-            >
-              {props.savedCredentialsAvailable && props.savedEmail ? (
-                <>
-                  <div className="watchface-saved-login">
-                    <div>
-                      <span>Saved COROS account</span>
-                      <strong>{props.savedEmail}</strong>
-                      <small>
-                        Use it to create the separate mobile upload session.
-                      </small>
-                    </div>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      disabled={props.loginBusy}
-                      onClick={props.onSavedLogin}
-                    >
-                      {props.loginBusy ? (
-                        <Loader2 className="spin" size={16} aria-hidden="true" />
-                      ) : (
-                        <KeyRound size={16} aria-hidden="true" />
-                      )}
-                      Use saved account
-                    </button>
-                  </div>
-                  <div className="watchface-auth-divider">
-                    <span>or use another account</span>
-                  </div>
-                </>
-              ) : null}
-              <label className="field">
-                Account region
-                <select
-                  autoFocus
-                  value={props.region}
-                  onChange={(event) =>
-                    props.onRegionChange(event.target.value as CorosWatchfaceRegion)
-                  }
-                >
-                  {REGION_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                Email
-                <input
-                  type="email"
-                  autoComplete="username"
-                  value={props.email}
-                  onChange={(event) => props.onEmailChange(event.target.value)}
-                  required
-                />
-              </label>
-              <label className="field">
-                Password
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={props.password}
-                  onChange={(event) => props.onPasswordChange(event.target.value)}
-                  required
-                />
-              </label>
-              {props.secureStorageAvailable ? (
-                <label className="watchface-auth-remember">
-                  <input
-                    type="checkbox"
-                    checked={props.rememberCredentials}
-                    onChange={(event) =>
-                      props.onRememberCredentialsChange(event.target.checked)
-                    }
-                    disabled={props.loginBusy}
-                  />
-                  <span>
-                    Save this COROS account
-                    <small>
-                      Reuse it for Training Hub or future watch-face sign-ins.
-                    </small>
-                  </span>
-                </label>
-              ) : null}
-              <button
-                className="primary-button watchface-publish-submit"
-                type="submit"
-                disabled={props.loginBusy}
-              >
-                {props.loginBusy ? (
-                  <Loader2 className="spin" size={16} aria-hidden="true" />
-                ) : (
-                  <KeyRound size={16} aria-hidden="true" />
-                )}
-                Connect and continue
-              </button>
-            </form>
+            <WatchfaceSignInForm {...props} />
             <p className="watchface-publish-auth-note">
               The archive is already built and stays open if you close this window.
               Your password is only used to create the COROS upload session.
@@ -3540,6 +4439,81 @@ function PublishDialog(props: PublishDialogProps) {
           </>
         )}
       </section>
+    </div>
+  );
+}
+
+function WatchfaceConversionDialog({ name, sourceFirmwareType, bakes, busy, error, signIn, onCancel, onConvert }: {
+  name: string; sourceFirmwareType: string; bakes: boolean; busy: boolean; error: string | null;
+  signIn?: WatchfaceSignInFormProps;
+  onCancel: () => void; onConvert: (model: WatchModelId) => void;
+}) {
+  const options = WATCHFACE_TARGETS.filter(target => target.firmwareType.toUpperCase() !== sourceFirmwareType.toUpperCase());
+  const [model, setModel] = useState<WatchModelId>(options[0]!.model);
+  const target = getWatchfaceTarget(model)!;
+  const dialog = useRef<HTMLDivElement>(null);
+  const signingIn = Boolean(signIn);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    dialog.current?.querySelector<HTMLSelectElement>("select")?.focus();
+    return () => {
+      if (previous?.isConnected) previous.focus();
+      else document.querySelector<HTMLButtonElement>(".wf-convert-button")?.focus();
+    };
+  }, []);
+  useEffect(() => {
+    dialog.current?.querySelector<HTMLSelectElement>("select")?.focus();
+  }, [signingIn]);
+  return (
+    <div className="watchface-modal-backdrop" role="presentation" onKeyDown={event => {
+      event.stopPropagation();
+      if (event.key === "Escape" && !busy) onCancel();
+      if (event.key === "Tab") {
+        const controls = [...(dialog.current?.querySelectorAll<HTMLElement>("button:not(:disabled), select:not(:disabled), input:not(:disabled)") ?? [])];
+        const first = controls[0], last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    }}>
+      <div ref={dialog} className="watchface-modal watchface-convert-dialog" role="dialog" aria-modal="true" aria-labelledby="watchface-convert-title" aria-busy={busy}>
+        <h2 id="watchface-convert-title">{signIn ? "Sign in to COROS" : "Change watch"}</h2>
+        {signIn ? (
+          <>
+            <p>Sign in to download support for {target.label}. Your design stays open, and conversion continues automatically.</p>
+            {error ? <p role="alert">{error}</p> : null}
+            <WatchfaceSignInForm {...signIn} />
+            {!signIn.secureStorageAvailable ? (
+              <p className="watchface-auth-warning">Secure storage is unavailable. This session will be cleared when CorosLink closes.</p>
+            ) : null}
+            <div className="watchface-modal-actions">
+              <button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>Back to watch selection</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p>{bakes
+              ? `Bring “${name}” to another watch. This recovered official face is rebuilt from its native layout with your edits applied, then opens as a new starter you can keep editing.`
+              : `Bring “${name}” to another watch. Your layout, fonts, artwork and data fields stay editable.`}</p>
+            <label className="field">Destination watch
+              <select value={model} disabled={busy} onChange={event => setModel(event.target.value as WatchModelId)}>
+                {options.map(option => <option key={option.model} value={option.model}>{option.label}</option>)}
+              </select>
+            </label>
+            <p className="watchface-convert-detail">{target.display === "mip"
+              ? "MIP keeps Current visible at all times. Your separate Always-on design is retained for switching back to AMOLED. Colors and fine detail may look different on the watch."
+              : "Current and Always-on remain separate. If your face has no Always-on layout, one is created from Current for you to edit."}</p>
+            <p className="watchface-convert-detail">{target.previewSize} × {target.previewSize} preview{target.model === "apex-4" ? " · Includes 42 mm and 46 mm sizes" : ""}. First use downloads device support from COROS.</p>
+            {error ? <p role="alert">{error}</p> : null}
+            <div className="watchface-modal-actions">
+              <button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>Cancel</button>
+              <button className="primary-button" type="button" disabled={busy} onClick={() => onConvert(model)}>
+                {busy ? <Loader2 className="spin" size={16} /> : <Repeat2 size={16} />}
+                {busy ? "Converting…" : `Convert to ${target.label}`}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -3777,5 +4751,7 @@ function formatExpiry(value: string): string {
 }
 
 function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Watch-face request failed.";
+  return error instanceof Error
+    ? error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "")
+    : "Watch-face request failed.";
 }

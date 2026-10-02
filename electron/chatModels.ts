@@ -5,6 +5,7 @@ export interface ChatModelOption {
 
 export const CHATGPT_MODEL_OPTIONS: ChatModelOption[] = [
   { value: "", label: "Auto" },
+  { value: "gpt-6-astra", label: "GPT-6 Astra" },
   { value: "gpt-5.6-sol", label: "GPT-5.6 Sol" },
   { value: "gpt-5.6-terra", label: "GPT-5.6 Terra" },
   { value: "gpt-5.6-luna", label: "GPT-5.6 Luna" },
@@ -25,6 +26,7 @@ export const OPENROUTER_MODEL_OPTIONS: ChatModelOption[] = [
 ];
 
 const CHATGPT_AUTO_MODEL_IDS = [
+  "gpt-6-astra",
   "gpt-5.6-sol",
   "gpt-5.6-terra",
   "gpt-5.6-luna",
@@ -54,3 +56,17 @@ export function getChatModelOptions(provider: string): ChatModelOption[] {
   if (provider === "openrouter") return OPENROUTER_MODEL_OPTIONS;
   return CHATGPT_MODEL_OPTIONS;
 }
+
+/** A model the signed-in ChatGPT account offers, as listed by the Codex backend. */
+export interface ChatGptModelInfo {
+  slug: string;
+  displayName: string;
+  /** Reasoning efforts the model accepts, e.g. low…ultra. */
+  efforts: string[];
+  defaultEffort?: string;
+}
+
+/** Used when the live model list cannot be fetched. */
+export const CHATGPT_FALLBACK_MODELS: ChatGptModelInfo[] = CHATGPT_MODEL_OPTIONS
+  .filter((option) => option.value)
+  .map((option) => ({ slug: option.value, displayName: option.label, efforts: ["low", "medium", "high"] }));

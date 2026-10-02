@@ -1,9 +1,22 @@
+import type { CalendarEventTiming, CalendarWorkoutEventRef, CalendarWorkoutEventSaveResult } from "../electron/calendarSyncTypes";
+import type { ChatGptModelInfo } from "../electron/chatModels";
+import type { StrengthEditPreview } from "../electron/workoutEditTypes";
+import type { HealthInsightKind, HealthInsightResult } from "../electron/healthInsightsTypes";
 import type { DiagnosticsSnapshot, RendererDiagnosticError } from "../electron/diagnosticsTypes";
 import type { AppleCalendarCredentials, CalendarChoice, CalendarConnectionStatus, CalendarSyncResult, CalendarSyncSettings } from "../electron/calendarSyncTypes";
-import type { WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
+import type { WatchfaceAiChatSummary, WatchfaceAiEvent, WatchfaceAiMessage, WatchfaceAiOptions, WatchfaceAiSavedChat, WatchfaceAutomationRequest, WatchfaceAutomationResponse, WatchfaceAutomationStatus } from "../electron/watchfaceAutomationTypes";
 import type { GoogleCalendarChoice, GoogleCalendarConfigInput, GoogleCalendarStatus, GoogleCalendarSyncResult } from "../electron/googleCalendarTypes";
 import type {
+  ActivityBackupFilters,
+  ActivityBackupPreview,
   ActivityBackupProgress,
+  Audiobook,
+  AudiobookDraft,
+  AudiobookProgress,
+  AudiobookSplitOptions,
+  AudiobookTransferResult,
+  FreeAudiobook,
+  FreeAudiobookDetail,
   BinaryStatus,
   CachedCorosMapPackage,
   CombinedDownloadProgressEvent,
@@ -107,11 +120,18 @@ import type {
   ChatStreamDone,
   ChatStreamError,
   ChatStreamInfo,
+  CoachCorosActionPreview,
+  CoachChartPreview,
+  FitIndexProgress,
+  FitIndexStatus,
+  FitIndexSyncOptions,
+  PinnedCoachChart,
   LocalChatConfig,
   LocalChatConnectionTest,
   LocalChatDiscovery,
   OpenRouterConfig,
   OpenRouterConnectionTest,
+  CorosMcpAccount,
   CorosMcpStatus,
   CorosMcpTool,
   McpServerConfig,
@@ -125,19 +145,21 @@ import type {
   ManualActivityInput
 } from "../electron/types";
 import type {
-  CorosLegacy614aCarrierExportResult,
-  CorosLegacy614aCarrierPatchInput,
-  CorosLegacy614aCarrierSelection,
   CorosWatchfaceArchive,
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceProjectExportResult,
   CorosWatchfaceArchiveExportInput,
+  CorosWatchfaceArchiveFolderExportInput,
+  CorosWatchfaceExportFolder,
   CorosWatchfaceArtwork,
   CorosWatchfaceCreatorInput,
+  CorosWatchfaceConversionInput,
+  CorosWatchfaceConversionResult,
   CorosWatchfaceExistingShareInput,
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceProject,
   CorosWatchfaceProjectSaveInput,
+  CorosWatchfaceProjectListOptions,
   CorosWatchfaceProjectSummary,
   CorosWatchfacePublishInput,
   CorosWatchfaceRegion,
@@ -146,11 +168,17 @@ import type {
   CorosWatchfaceStatus,
   CorosWatchfaceConfigTextFile,
   CorosWatchfaceTemplateAsset,
+  CorosWatchfaceTemplateAssetOptions,
   CorosWatchfaceTemplateDetails,
   CorosWatchfaceTheme,
   CorosWatchfaceThemeDownload,
   CorosWatchfaceThemeDownloadInput,
+  CorosWatchfaceThemeCacheEntry,
   CorosWatchfaceThemeListInput,
+  CorosOfficialAssetFrames,
+  CorosOfficialAssetLibraryStatus,
+  CorosOfficialAssetPage,
+  CorosOfficialAssetQuery,
   CorosBatteryQueryInput,
   CorosBatteryReport,
   CorosGearCatalog,
@@ -166,17 +194,37 @@ import type {
 } from "../electron/types";
 
 export interface CorosLinkApi {
+  getWorkoutAutomationStatus: () => Promise<WatchfaceAutomationStatus>;
+  configureWorkoutAutomation: (input: { enabled: boolean; port?: number }) => Promise<WatchfaceAutomationStatus>;
+  onWorkoutEditsChanged: (callback: () => void) => () => void;
+  listWorkoutEdits: () => Promise<StrengthEditPreview[]>;
+  getWorkoutEditStatus: (proposalId: string) => Promise<StrengthEditPreview>;
+  cancelWorkoutEdit: (proposalId: string) => Promise<StrengthEditPreview>;
+  confirmWorkoutEdit: (input: { proposalId: string; reviewHash: string; selectedIds: string[] }) => Promise<StrengthEditPreview>;
   getWatchfaceAutomationStatus: () => Promise<WatchfaceAutomationStatus>;
   configureWatchfaceAutomation: (input: { enabled: boolean; port?: number }) => Promise<WatchfaceAutomationStatus>;
   onWatchfaceAutomationActivate: (callback: () => void) => () => void;
   onWatchfaceAutomationRequest: (callback: (request: WatchfaceAutomationRequest) => void) => () => void;
   respondWatchfaceAutomation: (response: WatchfaceAutomationResponse) => void;
   setWatchfaceAutomationReady: (scope: "hub" | "editor", ready: boolean) => void;
+  sendWatchfaceAi: (requestId: string, messages: WatchfaceAiMessage[], options?: WatchfaceAiOptions) => Promise<void>;
+  cancelWatchfaceAi: (requestId: string) => Promise<void>;
+  listWatchfaceAiModels: () => Promise<ChatGptModelInfo[]>;
+  listWatchfaceAiChats: (projectKey: string) => Promise<WatchfaceAiChatSummary[]>;
+  loadWatchfaceAiChat: (id: string) => Promise<WatchfaceAiSavedChat>;
+  saveWatchfaceAiChat: (input: { id?: string; projectKey: string; title?: string; messages: unknown[] }) => Promise<WatchfaceAiChatSummary>;
+  renameWatchfaceAiChat: (id: string, title: string) => Promise<WatchfaceAiChatSummary>;
+  deleteWatchfaceAiChat: (id: string) => Promise<void>;
+  copyWatchfaceAiImage: (assetId: string) => Promise<void>;
+  onWatchfaceAiEvent: (callback: (event: WatchfaceAiEvent) => void) => () => void;
   getAppleCalendarStatus: () => Promise<CalendarConnectionStatus>;
   connectAppleCalendar: (input: AppleCalendarCredentials) => Promise<CalendarConnectionStatus>;
   cancelAppleCalendarConnect: () => Promise<void>;
   disconnectAppleCalendar: () => Promise<CalendarConnectionStatus>;
   listAppleCalendars: () => Promise<CalendarChoice[]>;
+  getCalendarWorkoutEvent: (ref: CalendarWorkoutEventRef) => Promise<CalendarEventTiming>;
+  updateCalendarWorkoutEvent: (input: { ref: CalendarWorkoutEventRef; timing: CalendarEventTiming }) => Promise<CalendarWorkoutEventSaveResult>;
+  syncEditedCalendarWorkout: (ref: CalendarWorkoutEventRef) => Promise<Pick<CalendarWorkoutEventSaveResult, "synced" | "errors">>;
   updateAppleCalendarSettings: (input: CalendarSyncSettings) => Promise<CalendarConnectionStatus>;
   syncAppleCalendar: () => Promise<CalendarSyncResult>;
   getGoogleCalendarStatus: () => Promise<GoogleCalendarStatus>;
@@ -185,7 +233,7 @@ export interface CorosLinkApi {
   cancelGoogleCalendarConnect: () => Promise<void>;
   disconnectGoogleCalendar: () => Promise<GoogleCalendarStatus>;
   listGoogleCalendars: () => Promise<GoogleCalendarChoice[]>;
-  updateGoogleCalendarSettings: (input: { calendarId?: string; autoSync?: boolean }) => Promise<GoogleCalendarStatus>;
+  updateGoogleCalendarSettings: (input: CalendarSyncSettings) => Promise<GoogleCalendarStatus>;
   syncGoogleCalendar: () => Promise<GoogleCalendarSyncResult>;
   platform: string;
   /** Available only when the native window was created with sidebar vibrancy. */
@@ -218,17 +266,32 @@ export interface CorosLinkApi {
   listCorosWatchfaceThemes: (
     input: CorosWatchfaceThemeListInput
   ) => Promise<CorosWatchfaceTheme[]>;
+  readCachedCorosWatchfaceThemes: (
+    input: CorosWatchfaceThemeListInput
+  ) => Promise<CorosWatchfaceThemeCacheEntry | null>;
   downloadCorosWatchfaceTheme: (
     input: CorosWatchfaceThemeDownloadInput
   ) => Promise<CorosWatchfaceThemeDownload>;
   importCorosWatchfaceShareLink: (
     shareUrl: string
   ) => Promise<CorosWatchfaceShareImport>;
+  ensureCorosOfficialAssetLibrary: (
+    input: { firmwareType: string; rebuild?: boolean }
+  ) => Promise<CorosOfficialAssetLibraryStatus>;
+  getCorosOfficialAssetLibraryStatus: (
+    input: { firmwareType: string }
+  ) => Promise<CorosOfficialAssetLibraryStatus>;
+  listCorosOfficialAssets: (
+    input: CorosOfficialAssetQuery
+  ) => Promise<CorosOfficialAssetPage>;
+  readCorosOfficialAssetFrames: (
+    input: { firmwareType: string; id: string }
+  ) => Promise<CorosOfficialAssetFrames>;
   listCommunityWatchfaces: (
     input: CommunityWatchfaceCatalogQuery
   ) => Promise<CommunityWatchfaceCatalogPage>;
-  getCommunityWatchface: (slug: string) => Promise<CommunityWatchface>;
-  importCommunityWatchface: (slug: string) => Promise<CommunityWatchfaceImport>;
+  getCommunityWatchface: (slug: string, model?: string) => Promise<CommunityWatchface>;
+  importCommunityWatchface: (slug: string, model?: string) => Promise<CommunityWatchfaceImport>;
   consumeCommunityWatchfaceOpenRequest: () =>
     Promise<CommunityWatchfaceOpenRequest | null>;
   onCommunityWatchfaceOpenRequest: (
@@ -238,13 +301,9 @@ export interface CorosLinkApi {
     callback: (progress: CommunityWatchfaceDownloadProgress) => void
   ) => () => void;
   chooseCorosWatchfaceArchive: () => Promise<CorosWatchfaceArchive | null>;
-  chooseLegacy614aCarrier: () => Promise<CorosLegacy614aCarrierSelection | null>;
-  exportLegacy614aCarrier: (
-    selectionId: string,
-    patch: CorosLegacy614aCarrierPatchInput
-  ) => Promise<CorosLegacy614aCarrierExportResult>;
   chooseCorosWatchfaceArtwork: () => Promise<CorosWatchfaceArtwork | null>;
   chooseCorosWatchfaceRasterFontFolder: () => Promise<CorosWatchfaceRasterFontFolder | null>;
+  convertCorosWatchfaceArchive: (input: CorosWatchfaceConversionInput) => Promise<CorosWatchfaceConversionResult>;
   createCorosWatchfaceArchive: (
     input: CorosWatchfaceCreatorInput
   ) => Promise<CorosWatchfaceArchive>;
@@ -254,7 +313,14 @@ export interface CorosLinkApi {
   exportCorosWatchfaceArchive: (
     input: CorosWatchfaceArchiveExportInput
   ) => Promise<CorosWatchfaceProjectExportResult>;
-  listCorosWatchfaceProjects: () => Promise<CorosWatchfaceProjectSummary[]>;
+  chooseCorosWatchfaceExportFolder: () => Promise<CorosWatchfaceExportFolder | null>;
+  exportCorosWatchfaceArchiveToFolder: (
+    input: CorosWatchfaceArchiveFolderExportInput
+  ) => Promise<CorosWatchfaceProjectExportResult>;
+  listCorosWatchfaceProjects: (
+    options?: CorosWatchfaceProjectListOptions
+  ) => Promise<CorosWatchfaceProjectSummary[]>;
+  loadCorosWatchfaceProjectPreview: (projectId: string) => Promise<string | null>;
   saveCorosWatchfaceProject: (
     input: CorosWatchfaceProjectSaveInput
   ) => Promise<CorosWatchfaceProject>;
@@ -274,7 +340,8 @@ export interface CorosLinkApi {
   ) => Promise<CorosWatchfaceTemplateDetails>;
   loadCorosWatchfaceTemplateAssets: (
     archiveId: string,
-    paths: string[]
+    paths: string[],
+    options?: CorosWatchfaceTemplateAssetOptions
   ) => Promise<CorosWatchfaceTemplateAsset[]>;
   loadCorosWatchfaceTemplateConfigTexts: (
     archiveId: string
@@ -294,6 +361,22 @@ export interface CorosLinkApi {
   onWatchTransferProgress: (
     callback: (progress: WatchTransferProgress) => void
   ) => () => void;
+  listAudiobooks: () => Promise<Audiobook[]>;
+  chooseAudiobookFiles: () => Promise<AudiobookDraft | null>;
+  convertAudiobookDraft: (draftId: string, split: AudiobookSplitOptions) => Promise<Audiobook>;
+  discardAudiobookDraft: (draftId: string) => Promise<void>;
+  cancelAudiobookConversion: (id: string) => Promise<boolean>;
+  deleteAudiobook: (id: string) => Promise<Audiobook[]>;
+  transferAudiobook: (id: string) => Promise<AudiobookTransferResult>;
+  removeAudiobookFromWatch: (id: string) => Promise<WatchStatus>;
+  listPopularFreeAudiobooks: () => Promise<FreeAudiobook[]>;
+  searchFreeAudiobooks: (query: string) => Promise<FreeAudiobook[]>;
+  loadFreeAudiobook: (identifier: string) => Promise<FreeAudiobookDetail>;
+  importFreeAudiobook: (identifier: string, split: AudiobookSplitOptions) => Promise<Audiobook>;
+  onAudiobookProgress: (
+    callback: (progress: AudiobookProgress) => void
+  ) => () => void;
+  onAudiobookUpdated: (callback: (book: Audiobook) => void) => () => void;
   listDownloads: () => Promise<LocalTrack[]>;
   downloadAudio: (url: string) => Promise<DownloadAudioResult>;
   deleteDownload: (id: string, removeFile: boolean) => Promise<LocalTrack[]>;
@@ -477,6 +560,10 @@ export interface CorosLinkApi {
     },
     newHappenDay: string
   ) => Promise<void>;
+  copyScheduledWorkout: (
+    entry: { planId: string; idInPlan: string; happenDay: string; rawProgram?: Record<string, unknown> },
+    newHappenDay: string
+  ) => Promise<void>;
   removeScheduledWorkout: (entry: {
     planId: string;
     idInPlan: string;
@@ -500,8 +587,12 @@ export interface CorosLinkApi {
   chooseActivityBackupFolder: () => Promise<string | null>;
   startActivityBackup: (
     folder: string,
-    fileType?: TrainingHubActivityFileType
+    fileType?: TrainingHubActivityFileType,
+    filters?: ActivityBackupFilters
   ) => Promise<ActivityBackupProgress>;
+  previewActivityBackup: (
+    filters?: ActivityBackupFilters
+  ) => Promise<ActivityBackupPreview>;
   cancelActivityBackup: () => Promise<ActivityBackupProgress | null>;
   getActivityBackupProgress: () => Promise<ActivityBackupProgress | null>;
   onActivityBackupProgress: (
@@ -523,6 +614,7 @@ export interface CorosLinkApi {
   getActivityPaceBaselines: () => Promise<ActivityPaceBaselines>;
   getUpcomingWorkouts: (days?: number) => Promise<TrainingHubUpcomingWorkout[]>;
   getTrainingSleepData: (days?: number) => Promise<TrainingHubSleepSummary>;
+  getTrainingHealthInsight: (kind: HealthInsightKind, days?: number) => Promise<HealthInsightResult>;
   getTrainingDailyHealthData: (
     days?: number
   ) => Promise<TrainingHubDailyHealthSummary>;
@@ -661,6 +753,7 @@ export interface CorosLinkApi {
   ) => Promise<McpServerConfig>;
   removeMcpServer: (id: string) => Promise<void>;
   connectMcpServer: (id: string) => Promise<McpServerStatus>;
+  getCorosMcpAccount: () => Promise<CorosMcpAccount>;
   disconnectMcpServer: (id: string) => Promise<void>;
   getMcpStatuses: () => Promise<McpServerStatus[]>;
   setMcpBearer: (id: string, token: string) => Promise<void>;
@@ -670,7 +763,16 @@ export interface CorosLinkApi {
     destination?: TrainingPlanDestination,
     scheduleDate?: string
   ) => Promise<UploadPlanResult>;
+  confirmCorosAction: (requestId: string) => Promise<CoachCorosActionPreview>;
   confirmWorkoutDelete: (requestId: string) => Promise<DeleteWorkoutResult>;
+  getFitIndexStatus: () => Promise<FitIndexStatus>;
+  startFitIndexSync: (options?: FitIndexSyncOptions) => Promise<FitIndexProgress>;
+  cancelFitIndexSync: () => Promise<FitIndexProgress | null>;
+  onFitIndexProgress: (callback: (progress: FitIndexProgress) => void) => () => void;
+  listPinnedCoachCharts: () => Promise<PinnedCoachChart[]>;
+  pinCoachChart: (preview: CoachChartPreview) => Promise<PinnedCoachChart>;
+  unpinCoachChart: (id: string) => Promise<void>;
+  refreshPinnedCoachChart: (id: string) => Promise<PinnedCoachChart | null>;
   setWindowBackground: (color: string) => Promise<void>;
   isWindowFullscreen: () => Promise<boolean>;
   onWindowFullscreenChange: (callback: (fullscreen: boolean) => void) => () => void;

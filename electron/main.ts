@@ -1,3 +1,7 @@
+import { getCalendarWorkoutEvent, updateCalendarWorkoutEvent, syncEditedCalendarWorkout } from "./calendarWorkoutEventService";
+import { listCalendarWorkoutEntries } from "./calendarWorkoutEventStorage";
+import type { CalendarEventTiming, CalendarWorkoutEventRef } from "./calendarSyncTypes";
+import { registerWorkoutAutomation } from "./workoutAutomation";
 import { app, BrowserWindow, dialog, nativeTheme, session, shell } from "electron";
 import { diagnosticIpcMain as ipcMain, initializeDiagnostics, observeDiagnosticWindow } from "./diagnosticsService";
 import { googleCalendar, startGoogleCalendarSync, stopGoogleCalendarSync } from "./googleCalendarService";
@@ -9,6 +13,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { listLocalFontFamilies } from "./fontService";
+import { isWebUrl } from "./externalLinks";
 import { registerWatchfaceAutomation } from "./watchfaceAutomation";
 import { onWatchfaceRendererNavigation } from "./watchfaceRendererLifecycle";
 import {
@@ -47,10 +52,13 @@ import {
 } from "./spotifyService";
 import {
   cancelActivityBackup,
+  clearActivityBackupPreview,
   getActivityBackupProgress,
+  previewActivityBackup,
   setActivityBackupProgressListener,
   startActivityBackup
 } from "./activityBackupService";
+import { normalizeActivityBackupFilters } from "./activityBackupFilters";
 import { getAppInfo, openAppStorageLocation } from "./appInfoService";
 import {
   backfillFeelTypes,
@@ -76,6 +84,7 @@ import {
   createAndScheduleWorkout,
   createLibraryWorkout,
   rescheduleScheduledWorkout,
+  copyScheduledWorkout,
   removeScheduledWorkout,
   getWorkoutForEdit,
   previewWorkoutEdit,
@@ -123,6 +132,7 @@ import { normalizeUnitSystem } from "./unitSystem.js";
 import {
   cacheCorosWatchfaceProjectPreview,
   createCorosWatchfaceArchive,
+  convertCorosWatchfaceArchive,
   createCorosWatchfaceShareLink,
   duplicateCorosWatchfaceProject,
   describeCorosWatchfaceTemplate,
@@ -134,6 +144,7 @@ import {
   importCorosWatchfaceShareLink,
   listCorosPairedDevices,
   listCorosWatchfaceThemes,
+  readCachedCorosWatchfaceThemes,
   loadCorosWatchfaceArtwork,
   loadCorosWatchfaceTemplateAssets,
   loadCorosWatchfaceTemplateConfigTexts,
@@ -142,6 +153,7 @@ import {
   loginCorosWatchfacesWithSavedCredentials,
   logoutCorosWatchfaces,
   listCorosWatchfaceProjects,
+  loadCorosWatchfaceProjectPreview,
   publishCorosWatchface,
   queryCorosGear,
   saveCorosGear,
@@ -149,6 +161,12 @@ import {
   deleteCorosWatchfaceProject,
   selectCorosWatchfaceArchive
 } from "./corosWatchfaceService";
+import {
+  ensureCorosOfficialAssetLibrary,
+  getCorosOfficialAssetLibraryStatus,
+  listCorosOfficialAssets,
+  readCorosOfficialAssetFrames
+} from "./corosOfficialAssetService";
 import {
   cleanupCommunityWatchfaceImports,
   getCommunityWatchface,
@@ -223,27 +241,27 @@ import type {
   ManualActivityInput
 } from "./types";
 import type {
-  CorosLegacy614aCarrierPatchInput,
   CorosWatchfaceCreatorInput,
+  CorosWatchfaceConversionInput,
   CorosWatchfaceExistingShareInput,
   CorosWatchfaceProjectExportInput,
   CorosWatchfaceArchiveExportInput,
+  CorosWatchfaceArchiveFolderExportInput,
   CorosWatchfacePublishInput,
   CorosWatchfaceRasterFontFolder,
   CorosWatchfaceRegion,
+  CorosWatchfaceTemplateAssetOptions,
   CorosWatchfaceThemeDownloadInput,
+  CorosWatchfaceProjectListOptions,
   CorosWatchfaceThemeListInput,
+  CorosOfficialAssetQuery,
   CorosBatteryQueryInput,
   CorosGearSaveInput,
   CorosBluetoothDeviceChoice,
   WatchTransferProgress
 } from "./types";
 import type { CommunityWatchfaceOpenRequest } from "./types";
-import {
-  MULTIDATA_ELEV_416_PROFILE,
-  inspectLegacy614aCarrier,
-  patchLegacy614aFeatures
-} from "./legacy614a";
+import type { CoachChartPreview, FitIndexSyncOptions } from "./types";
 import {
   deleteWatchTrack,
   getWatchConnectionSmokeOption,
@@ -251,6 +269,33 @@ import {
   setWatchConnectionSmokeOption,
   transferFileToWatch
 } from "./watchService";
+import {
+  AUDIOBOOK_EXTENSIONS,
+  audiobookPartsOnWatch,
+  cancelAudiobookConversion,
+  deleteAudiobook,
+  discardAudiobookDraft,
+  getAudiobook,
+  getAudiobookPartPaths,
+  listAudiobooks,
+  findAudiobookBySource,
+  normalizeSplitOptions,
+  prepareAudiobookDraft,
+  startAudiobookImportFromDraft,
+  startFreeAudiobookImport
+} from "./audiobookService";
+import {
+  listPopularFreeAudiobooks,
+  loadFreeAudiobook,
+  searchFreeAudiobooks
+} from "./freeAudiobooksService";
+import type {
+  Audiobook,
+  AudiobookDraft,
+  AudiobookProgress,
+  AudiobookSplitOptions,
+  AudiobookTransferResult
+} from "./types";
 import {
   configureYouTubeBrowserSession,
   registerYouTubeBrowserHandlers,
@@ -322,8 +367,21 @@ import {
   testLocalChatConnection,
   testOpenRouterConnection,
   uploadTrainingPlanDraft,
-  confirmWorkoutDelete
+  confirmWorkoutDelete,
+  confirmCoachCorosAction
 } from "./chatService";
+import {
+  listPinnedCoachCharts,
+  pinCoachChart,
+  refreshPinnedCoachChart,
+  unpinCoachChart
+} from "./coachChartService";
+import {
+  cancelFitIndexSync,
+  getFitIndexStatus,
+  setFitIndexProgressListener,
+  startFitIndexSync
+} from "./fitIndexService";
 import { buildBaseCoachInstructions } from "./chatCoachContext";
 import {
   OPENROUTER_KEYS_URL,
@@ -334,14 +392,16 @@ import {
   pruneDeleteRequestStore,
   prunePlanDraftStore
 } from "./chatWorkoutTools";
+import { getCorosMcpAccount } from "./corosMcpAccount";
 import {
   connectCorosMcp,
+  connectMcpServerWithCorosAccount,
   disconnectCorosMcp,
   getCorosMcpStatus,
-  listCorosMcpTools
+  listCorosMcpTools,
+  setCorosMcpAccountSource
 } from "./corosMcpService";
 import {
-  connectMcpServer,
   disconnectMcpServer,
   ensureAllMcpConnected,
   getMcpStatuses
@@ -354,6 +414,8 @@ import {
   setMcpBearer,
   updateMcpServer
 } from "./mcpServersStore";
+import { getTrainingHealthInsight } from "./healthInsightsService";
+import type { HealthInsightKind } from "./healthInsightsTypes";
 import { getTrainingDailyHealthData } from "./dailyHealthDataService";
 import { getTrainingSleepData } from "./sleepDataService";
 import type {
@@ -370,6 +432,7 @@ import type {
 } from "./types";
 
 let mainWindow: BrowserWindow | undefined;
+let workoutAutomation: ReturnType<typeof registerWorkoutAutomation> | undefined;
 let watchfaceAutomation: ReturnType<typeof registerWatchfaceAutomation> | undefined;
 let rendererReady = false;
 let pendingCommunityWatchfaceOpen: CommunityWatchfaceOpenRequest | undefined;
@@ -380,7 +443,6 @@ let pendingCorosBluetoothSelection:
     }
   | undefined;
 
-const legacy614aCarrierSelections = new Map<string, { sourcePath: string }>();
 const MAX_RASTER_FONT_SPRITE_FOLDER_BYTES = 12 * 1024 * 1024;
 
 /** Matches --bg-base in styles.css; updated when the renderer theme changes. */
@@ -668,7 +730,9 @@ function createWindow(): void {
   observeDiagnosticWindow(mainWindow);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (isWebUrl(url)) {
+      void shell.openExternal(url);
+    }
     return { action: "deny" };
   });
   onWatchfaceRendererNavigation(mainWindow.webContents, () => {
@@ -802,6 +866,7 @@ app.whenReady().then(() => {
   pruneDeleteRequestStore();
   registerIpcHandlers();
   watchfaceAutomation = registerWatchfaceAutomation(() => mainWindow);
+  workoutAutomation = registerWorkoutAutomation(() => mainWindow);
   startGoogleCalendarSync();
   startAppleCalendarSync();
   setJobListener((jobs) => {
@@ -824,14 +889,21 @@ app.whenReady().then(() => {
       mainWindow.webContents.send("trainingHub:backupProgress", progress);
     }
   });
+  setFitIndexProgressListener((progress) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("fitIndex:progress", progress);
+    }
+  });
   setCommunityWatchfaceProgressListener((progress) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("watchfaces:communityDownloadProgress", progress);
     }
   });
   void cleanupCommunityWatchfaceImports();
+  setCorosMcpAccountSource(getCorosMcpAccount);
   createWindow();
   void watchfaceAutomation.restore();
+  void workoutAutomation.restore();
   applyAppIcon();
 
   // Silently restore previously-authorized MCP sessions (COROS + any other
@@ -853,12 +925,16 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   void watchfaceAutomation?.stop();
+  void workoutAutomation?.stop();
   stopGoogleCalendarSync();
   stopAppleCalendarSync();
   stopRouteShare();
 });
 
 function registerIpcHandlers(): void {
+  ipcMain.handle("calendar:getWorkoutEvent", (_event, ref: CalendarWorkoutEventRef) => getCalendarWorkoutEvent(ref));
+  ipcMain.handle("calendar:updateWorkoutEvent", (_event, input: { ref: CalendarWorkoutEventRef; timing: CalendarEventTiming }) => updateCalendarWorkoutEvent(input));
+  ipcMain.handle("calendar:syncEditedWorkout", (_event, ref: CalendarWorkoutEventRef) => syncEditedCalendarWorkout(ref));
   ipcMain.handle("appleCalendar:status", () => appleCalendar.status());
   ipcMain.handle("appleCalendar:connect", (_event, input: AppleCalendarCredentials) => appleCalendar.connect(input));
   ipcMain.handle("appleCalendar:cancelConnect", () => appleCalendar.cancelConnect());
@@ -872,7 +948,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle("googleCalendar:cancelConnect", () => googleCalendar.cancelConnect());
   ipcMain.handle("googleCalendar:disconnect", () => googleCalendar.disconnect());
   ipcMain.handle("googleCalendar:listCalendars", () => googleCalendar.listCalendars());
-  ipcMain.handle("googleCalendar:updateSettings", (_event, input: { calendarId?: string; autoSync?: boolean }) => googleCalendar.updateSettings(input));
+  ipcMain.handle("googleCalendar:updateSettings", (_event, input: CalendarSyncSettings) => googleCalendar.updateSettings(input));
   ipcMain.handle("googleCalendar:sync", () => googleCalendar.sync());
 
   ipcMain.handle("window:setBackground", (_event, color: string) => {
@@ -949,6 +1025,11 @@ function registerIpcHandlers(): void {
   );
 
   ipcMain.handle(
+    "watchfaces:readCachedThemes",
+    (_event, input: CorosWatchfaceThemeListInput) => readCachedCorosWatchfaceThemes(input)
+  );
+
+  ipcMain.handle(
     "watchfaces:downloadTheme",
     (_event, input: CorosWatchfaceThemeDownloadInput) =>
       downloadCorosWatchfaceTheme(input)
@@ -958,14 +1039,27 @@ function registerIpcHandlers(): void {
     importCorosWatchfaceShareLink(shareUrl)
   );
 
+  ipcMain.handle("watchfaces:officialAssets:ensure", (_event, input: { firmwareType: string; rebuild?: boolean }) =>
+    ensureCorosOfficialAssetLibrary(input)
+  );
+  ipcMain.handle("watchfaces:officialAssets:status", (_event, input: { firmwareType: string }) =>
+    getCorosOfficialAssetLibraryStatus(input)
+  );
+  ipcMain.handle("watchfaces:officialAssets:list", (_event, input: CorosOfficialAssetQuery) =>
+    listCorosOfficialAssets(input)
+  );
+  ipcMain.handle("watchfaces:officialAssets:frames", (_event, input: { firmwareType: string; id: string }) =>
+    readCorosOfficialAssetFrames(input)
+  );
+
   ipcMain.handle("watchfaces:listCommunity", (_event, input) =>
     listCommunityWatchfaces(input)
   );
-  ipcMain.handle("watchfaces:getCommunity", (_event, slug: string) =>
-    getCommunityWatchface(slug)
+  ipcMain.handle("watchfaces:getCommunity", (_event, slug: string, model?: string) =>
+    getCommunityWatchface(slug, model)
   );
-  ipcMain.handle("watchfaces:importCommunity", (_event, slug: string) =>
-    importCommunityWatchface(slug)
+  ipcMain.handle("watchfaces:importCommunity", (_event, slug: string, model?: string) =>
+    importCommunityWatchface(slug, model)
   );
   ipcMain.handle("watchfaces:consumeCommunityOpenRequest", () => {
     rendererReady = true;
@@ -994,75 +1088,6 @@ function registerIpcHandlers(): void {
       ? null
       : selectCorosWatchfaceArchive(archivePath);
   });
-
-  ipcMain.handle("watchfaces:chooseLegacy614aCarrier", async () => {
-    const options: OpenDialogOptions = {
-      title: "Choose the original MULTIDATA ELEV legacy carrier",
-      properties: ["openFile"],
-      filters: [{ name: "COROS legacy watchface BIN", extensions: ["bin"] }]
-    };
-    const result =
-      mainWindow && !mainWindow.isDestroyed()
-        ? await dialog.showOpenDialog(mainWindow, options)
-        : await dialog.showOpenDialog(options);
-    const sourcePath = result.filePaths[0];
-    if (result.canceled || !sourcePath) return null;
-
-    const reference = await fs.promises.readFile(sourcePath);
-    // This validates the exact file hash in addition to its 614A shape. A
-    // previously patched carrier, another model, or a similar lookalike BIN
-    // cannot become the base for another edit.
-    const carrier = inspectLegacy614aCarrier(reference, MULTIDATA_ELEV_416_PROFILE);
-    const selectionId = `legacy614a-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    legacy614aCarrierSelections.set(selectionId, { sourcePath });
-    return {
-      selectionId,
-      inspection: {
-        profile: "multidata-elev-416" as const,
-        profileName: carrier.profileName,
-        fileName: path.basename(sourcePath),
-        watchFaceId: carrier.watchFaceId,
-        sizeBytes: carrier.sizeBytes,
-        payloadCrc16: carrier.payloadCrc16,
-        fullFileCrc16: carrier.fullFileCrc16,
-        weatherSpriteSize: carrier.weatherSpriteSize,
-        weatherPosition: carrier.weatherPosition,
-        temperatureRect: carrier.temperatureRect
-      }
-    };
-  });
-
-  ipcMain.handle(
-    "watchfaces:exportLegacy614aCarrier",
-    async (_event, selectionId: string, patch: CorosLegacy614aCarrierPatchInput) => {
-      const selection = legacy614aCarrierSelections.get(selectionId);
-      if (!selection) {
-        throw new Error("Choose and validate the original MULTIDATA ELEV carrier again before exporting.");
-      }
-      const reference = await fs.promises.readFile(selection.sourcePath);
-      const output = patchLegacy614aFeatures(reference, patch, MULTIDATA_ELEV_416_PROFILE);
-      const saveOptions = {
-        title: "Export guarded MULTIDATA carrier",
-        defaultPath: "MULTIDATA-ELEV-SLENDER-614A.bin",
-        filters: [{ name: "COROS legacy watchface BIN", extensions: ["bin"] }]
-      };
-      const result =
-        mainWindow && !mainWindow.isDestroyed()
-          ? await dialog.showSaveDialog(mainWindow, saveOptions)
-          : await dialog.showSaveDialog(saveOptions);
-      if (result.canceled || !result.filePath) {
-        return { saved: false, watchFaceId: MULTIDATA_ELEV_416_PROFILE.watchFaceId };
-      }
-      // Never overwrite the downloaded public reference or another export by
-      // mistake. The user can choose a fresh filename in the save dialog.
-      await fs.promises.writeFile(result.filePath, output, { flag: "wx" });
-      return {
-        saved: true,
-        filePath: result.filePath,
-        watchFaceId: MULTIDATA_ELEV_416_PROFILE.watchFaceId
-      };
-    }
-  );
 
   ipcMain.handle("watchfaces:chooseArtwork", async () => {
     const options: OpenDialogOptions = {
@@ -1100,6 +1125,9 @@ function registerIpcHandlers(): void {
       : loadRasterFontSpriteFolder(folderPath);
   });
 
+  ipcMain.handle("watchfaces:convertArchive", (_event, input: CorosWatchfaceConversionInput) =>
+    convertCorosWatchfaceArchive(input)
+  );
   ipcMain.handle(
     "watchfaces:createArchive",
     (_event, input: CorosWatchfaceCreatorInput) =>
@@ -1154,7 +1182,47 @@ function registerIpcHandlers(): void {
       return { saved: true, filePath: destinationPath };
     }
   );
-  ipcMain.handle("watchfaces:listProjects", () => listCorosWatchfaceProjects());
+  // Export for every watch: the renderer picks the folder once through this
+  // dialog and only ever holds an opaque id, never a writable path.
+  const exportFolders = new Map<string, string>();
+  ipcMain.handle("watchfaces:chooseExportFolder", async () => {
+    const options: OpenDialogOptions = {
+      title: "Choose a folder for the watch-face ZIPs",
+      buttonLabel: "Export here",
+      properties: ["openDirectory", "createDirectory"]
+    };
+    const result = mainWindow && !mainWindow.isDestroyed()
+      ? await dialog.showOpenDialog(mainWindow, options)
+      : await dialog.showOpenDialog(options);
+    const directory = result.canceled ? undefined : result.filePaths[0];
+    if (!directory) return null;
+    const folderId = `folder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    exportFolders.set(folderId, directory);
+    return { folderId, label: path.basename(directory) || directory };
+  });
+  ipcMain.handle(
+    "watchfaces:exportArchiveToFolder",
+    async (_event, input: CorosWatchfaceArchiveFolderExportInput) => {
+      const directory = input && typeof input.folderId === "string" ? exportFolders.get(input.folderId) : undefined;
+      if (!directory) throw new Error("Choose an export folder first.");
+      if (typeof input.archiveId !== "string") throw new Error("Build a final watch-face archive before exporting it.");
+      const baseName = sanitizeExportFileName(input.name) || "CorosLink-watch-face";
+      let destinationPath = path.join(directory, `${baseName}.zip`);
+      for (let copy = 2; fs.existsSync(destinationPath); copy++) {
+        destinationPath = path.join(directory, `${baseName} ${copy}.zip`);
+      }
+      await exportCorosWatchfaceArchive(input.archiveId, destinationPath);
+      return { saved: true, filePath: destinationPath };
+    }
+  );
+  ipcMain.handle(
+    "watchfaces:listProjects",
+    (_event, options?: CorosWatchfaceProjectListOptions) =>
+      listCorosWatchfaceProjects(options)
+  );
+  ipcMain.handle("watchfaces:loadProjectPreview", (_event, projectId: string) =>
+    loadCorosWatchfaceProjectPreview(projectId)
+  );
   ipcMain.handle("watchfaces:saveProject", (_event, input) =>
     saveCorosWatchfaceProject(input)
   );
@@ -1180,8 +1248,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "watchfaces:loadTemplateAssets",
-    (_event, archiveId: string, paths: string[]) =>
-      loadCorosWatchfaceTemplateAssets(archiveId, paths)
+    (_event, archiveId: string, paths: string[], options?: CorosWatchfaceTemplateAssetOptions) =>
+      loadCorosWatchfaceTemplateAssets(archiveId, paths, options)
   );
 
   ipcMain.handle(
@@ -1246,6 +1314,8 @@ function registerIpcHandlers(): void {
       watch: await getWatchStatus()
     };
   });
+
+  registerAudiobookIpcHandlers();
 
   ipcMain.handle("downloads:list", () => listDownloads());
 
@@ -1466,8 +1536,9 @@ function registerIpcHandlers(): void {
     removeMcpServer(id);
   });
   ipcMain.handle("mcp:connect", (_event, id: string) =>
-    connectMcpServer(id, true, mainWindow)
+    connectMcpServerWithCorosAccount(id, true, mainWindow)
   );
+  ipcMain.handle("mcp:corosAccount", () => getCorosMcpAccount());
   ipcMain.handle("mcp:disconnect", async (_event, id: string) => {
     const server = getMcpServer(id);
     await disconnectMcpServer(id);
@@ -1490,8 +1561,18 @@ function registerIpcHandlers(): void {
     )
   );
 
+  ipcMain.handle("chat:confirmCorosAction", (_event, requestId: string) => confirmCoachCorosAction(requestId));
   ipcMain.handle("chat:confirmWorkoutDelete", (_event, requestId: string) =>
     confirmWorkoutDelete(requestId)
+  );
+
+  ipcMain.handle("coachCharts:list", () => listPinnedCoachCharts());
+  ipcMain.handle("coachCharts:pin", (_event, preview: CoachChartPreview) =>
+    pinCoachChart(preview)
+  );
+  ipcMain.handle("coachCharts:unpin", (_event, id: string) => unpinCoachChart(id));
+  ipcMain.handle("coachCharts:refresh", (_event, id: string) =>
+    refreshPinnedCoachChart(id)
   );
 
   ipcMain.handle(
@@ -1560,8 +1641,11 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "trainingHub:login",
-    (_event, email: string, password: string, remember?: boolean) =>
-      loginTrainingHub(email, password, remember)
+    (_event, email: string, password: string, remember?: boolean) => {
+      // The backup preview caches one account's listing.
+      clearActivityBackupPreview();
+      return loginTrainingHub(email, password, remember);
+    }
   );
 
   ipcMain.handle("trainingHub:verify2fa", (_event, code: string) =>
@@ -1576,7 +1660,10 @@ function registerIpcHandlers(): void {
     cancelTrainingHubTwoFactor()
   );
 
-  ipcMain.handle("trainingHub:logout", () => logoutTrainingHub());
+  ipcMain.handle("trainingHub:logout", () => {
+    clearActivityBackupPreview();
+    return logoutTrainingHub();
+  });
 
   ipcMain.handle("trainingHub:reconnect", () => reconnectTrainingHub());
 
@@ -1589,7 +1676,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "trainingHub:listScheduledWorkouts",
     (_event, startDay: string, endDay: string) =>
-      listScheduledWorkoutEntries(startDay, endDay)
+      listCalendarWorkoutEntries(startDay, endDay)
   );
 
   ipcMain.handle("trainingHub:listLibraryWorkouts", () =>
@@ -1740,6 +1827,15 @@ function registerIpcHandlers(): void {
   );
 
   ipcMain.handle(
+    "trainingHub:copyScheduledWorkout",
+    (
+      _event,
+      entry: { planId: string; idInPlan: string; happenDay: string; rawProgram?: Record<string, unknown> },
+      newHappenDay: string
+    ) => copyScheduledWorkout(entry, newHappenDay)
+  );
+
+  ipcMain.handle(
     "trainingHub:removeScheduledWorkout",
     (
       _event,
@@ -1809,13 +1905,34 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "trainingHub:startActivityBackup",
-    (_event, folder: string, fileType: TrainingHubActivityFileType = 4) =>
-      startActivityBackup(folder, fileType)
+    (
+      _event,
+      folder: string,
+      fileType: TrainingHubActivityFileType = 4,
+      filters?: unknown
+    ) =>
+      startActivityBackup(
+        folder,
+        fileType,
+        normalizeActivityBackupFilters(filters)
+      )
+  );
+
+  ipcMain.handle(
+    "trainingHub:previewActivityBackup",
+    (_event, filters?: unknown) =>
+      previewActivityBackup(normalizeActivityBackupFilters(filters))
   );
 
   ipcMain.handle("trainingHub:cancelActivityBackup", () =>
     cancelActivityBackup()
   );
+
+  ipcMain.handle("fitIndex:getStatus", () => getFitIndexStatus());
+  ipcMain.handle("fitIndex:startSync", (_event, options?: FitIndexSyncOptions) =>
+    startFitIndexSync(options ?? {})
+  );
+  ipcMain.handle("fitIndex:cancelSync", () => cancelFitIndexSync());
 
   ipcMain.handle("trainingHub:getActivityBackupProgress", () =>
     getActivityBackupProgress()
@@ -1865,6 +1982,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("trainingHub:getSleepData", (_event, days?: number) =>
     getTrainingSleepData(mainWindow, days ?? 7)
+  );
+
+  ipcMain.handle("trainingHub:getHealthInsight", (_event, kind: HealthInsightKind, days?: number) =>
+    getTrainingHealthInsight(kind, days ?? 7)
   );
 
   ipcMain.handle("trainingHub:getDailyHealthData", (_event, days?: number) =>
@@ -2143,5 +2264,183 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("app:openStorageLocation", (_event, id: string) =>
     openAppStorageLocation(id)
+  );
+}
+
+function registerAudiobookIpcHandlers(): void {
+  const sendProgress = (progress: AudiobookProgress): void => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("audiobooks:progress", progress);
+    }
+  };
+  const sendUpdated = (book: Audiobook): void => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("audiobooks:updated", book);
+    }
+  };
+  const watchTracks = async () => (await getWatchStatus()).tracks;
+  // One watch operation at a time across all books. The watch plays files in
+  // the order they were copied, so two transfers running together (a double
+  // click, or two books) would interleave their parts.
+  let watchOperation: { id: string; kind: "transfer" | "remove" } | undefined;
+  const withWatchLock = async <T>(
+    id: string,
+    kind: "transfer" | "remove",
+    run: () => Promise<T>
+  ): Promise<T> => {
+    if (watchOperation) {
+      throw new Error(
+        watchOperation.kind === "transfer"
+          ? "Another audiobook is being copied to the watch. Wait for it to finish."
+          : "An audiobook is being removed from the watch. Wait for it to finish."
+      );
+    }
+    watchOperation = { id, kind };
+    try {
+      return await run();
+    } finally {
+      watchOperation = undefined;
+    }
+  };
+
+  ipcMain.handle("audiobooks:list", async () => listAudiobooks(await watchTracks()));
+
+  ipcMain.handle("freeAudiobooks:popular", () => listPopularFreeAudiobooks());
+
+  ipcMain.handle("freeAudiobooks:search", (_event, query: string) =>
+    searchFreeAudiobooks(String(query ?? ""))
+  );
+
+  ipcMain.handle("freeAudiobooks:load", (_event, identifier: string) =>
+    loadFreeAudiobook(String(identifier ?? ""))
+  );
+
+  ipcMain.handle(
+    "audiobooks:importFree",
+    async (_event, identifier: string, split: AudiobookSplitOptions): Promise<Audiobook> => {
+      // Re-resolve the recording here: download URLs and checksums come from
+      // archive.org, never from the renderer.
+      const detail = await loadFreeAudiobook(String(identifier ?? ""));
+      const existing = findAudiobookBySource(detail.identifier);
+      if (existing) {
+        throw new Error(`"${existing.title}" is already in your audiobooks.`);
+      }
+      return startFreeAudiobookImport(
+        detail,
+        normalizeSplitOptions(split),
+        sendProgress,
+        sendUpdated
+      );
+    }
+  );
+
+  // Choosing files only reads them; nothing converts until the renderer
+  // confirms the draft with a split.
+  ipcMain.handle("audiobooks:chooseFiles", async (): Promise<AudiobookDraft | null> => {
+    const options: OpenDialogOptions = {
+      title: "Choose an audiobook (select several files to join them)",
+      properties: ["openFile", "multiSelections"],
+      filters: [{ name: "Audiobook", extensions: AUDIOBOOK_EXTENSIONS }]
+    };
+    const result =
+      mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showOpenDialog(mainWindow, options)
+        : await dialog.showOpenDialog(options);
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+    return prepareAudiobookDraft(result.filePaths);
+  });
+
+  ipcMain.handle(
+    "audiobooks:convertDraft",
+    (_event, draftId: string, split: AudiobookSplitOptions): Audiobook =>
+      startAudiobookImportFromDraft(
+        String(draftId ?? ""),
+        normalizeSplitOptions(split),
+        sendProgress,
+        sendUpdated
+      )
+  );
+
+  ipcMain.handle("audiobooks:discardDraft", (_event, draftId: string) =>
+    discardAudiobookDraft(String(draftId ?? ""))
+  );
+
+  ipcMain.handle("audiobooks:cancel", (_event, id: string) =>
+    cancelAudiobookConversion(id)
+  );
+
+  ipcMain.handle("audiobooks:delete", async (_event, id: string) => {
+    if (watchOperation?.id === id) {
+      throw new Error("Wait for the watch to finish before deleting this book.");
+    }
+    deleteAudiobook(id);
+    return listAudiobooks(await watchTracks());
+  });
+
+  ipcMain.handle(
+    "audiobooks:transfer",
+    (_event, id: string): Promise<AudiobookTransferResult> =>
+      withWatchLock(id, "transfer", async () => {
+        const status = await getWatchStatus();
+        if (!status.connected) {
+          throw new Error("No COROS watch is connected.");
+        }
+        const book = getAudiobook(id, status.tracks);
+        if (!book || book.status !== "ready") {
+          throw new Error("Audiobook is not ready to transfer.");
+        }
+
+        const partPaths = getAudiobookPartPaths(id);
+        const pending = book.parts
+          .map((part, offset) => ({ part, filePath: partPaths[offset] }))
+          .filter(({ part }) => !part.onWatch);
+        const pendingBytes = pending.reduce((total, { part }) => total + part.sizeBytes, 0);
+        if (status.freeBytes !== undefined && pendingBytes > status.freeBytes) {
+          throw new Error(
+            `Not enough space on the watch: need ${Math.ceil(pendingBytes / 1_048_576)} MB, ` +
+              `${Math.floor(status.freeBytes / 1_048_576)} MB free.`
+          );
+        }
+
+        // The watch plays in transfer order, so copy strictly one part at a
+        // time, in part order.
+        let copiedBytes = 0;
+        for (const [position, { part, filePath }] of pending.entries()) {
+          await transferFileToWatch(filePath, (fileProgress) => {
+            sendProgress({
+              id,
+              phase: "transferring",
+              progress:
+                pendingBytes > 0
+                  ? Math.min((copiedBytes + fileProgress.copiedBytes) / pendingBytes, 1)
+                  : 1,
+              message: `Copying part ${position + 1} of ${pending.length}`
+            });
+          });
+          copiedBytes += part.sizeBytes;
+        }
+
+        return {
+          copied: pending.length,
+          skipped: book.parts.length - pending.length,
+          watch: await getWatchStatus()
+        };
+      })
+  );
+
+  ipcMain.handle("audiobooks:removeFromWatch", (_event, id: string) =>
+    withWatchLock(id, "remove", async () => {
+      const status = await getWatchStatus();
+      const book = getAudiobook(id, status.tracks);
+      if (!book) {
+        throw new Error("Audiobook was not found.");
+      }
+      for (const track of audiobookPartsOnWatch(book, status.tracks)) {
+        await deleteWatchTrack(track.relativePath);
+      }
+      return getWatchStatus();
+    })
   );
 }

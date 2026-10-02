@@ -52,7 +52,7 @@ const BINARY_VERSION_TIMEOUT_MS: Record<BinaryName, number> = {
   ffmpeg: 6_000
 };
 
-interface ResolvedBinary {
+export interface ResolvedBinary {
   name: BinaryName;
   command: string;
   source: "bundled" | "path";
@@ -1000,7 +1000,7 @@ function formatBinaryCheckError(error: unknown, name: BinaryName): string {
   return message;
 }
 
-function resolveBinary(name: BinaryName): ResolvedBinary {
+export function resolveBinary(name: BinaryName): ResolvedBinary {
   const executable = process.platform === "win32" ? `${name}.exe` : name;
   const platformDirectory = `${process.platform}-${process.arch}`;
   const basePaths = [

@@ -2,6 +2,7 @@ import { Database, LockKeyhole } from "lucide-react";
 import type { TrainingHubStatus } from "../../electron/types";
 import type { CorosLinkApi } from "../coroslink-api";
 import { ActivityBackupPanel } from "./components/ActivityBackupPanel";
+import { FitIndexPanel } from "./components/FitIndexPanel";
 import { IntervalsImportPanel } from "./components/IntervalsImportPanel";
 
 interface DataViewProps {
@@ -83,6 +84,7 @@ export function DataView({ api, status, onOpenTraining }: DataViewProps) {
         </section>
       ) : (
         <div className="data-tools-grid">
+          <FitIndexPanel api={api} />
           <ActivityBackupPanel api={api} />
           <IntervalsImportPanel api={api} />
         </div>

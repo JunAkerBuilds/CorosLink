@@ -1,3 +1,4 @@
+import { isWorkoutEditTool } from "./workoutEditService";
 import { BrowserWindow, safeStorage, shell } from "electron";
 import crypto from "node:crypto";
 import http from "node:http";
@@ -14,9 +15,12 @@ import {
   callMcpTool,
   ensureAllMcpConnected,
   getAllMcpTools,
+  getMcpAuthorizationKey,
   getMcpServerCachedTools
 } from "./mcpClientManager";
 import { prefixToolName } from "./mcpToolNames";
+import { claudeCanUseCorosTool, coachMcpTools, corosCoachRoutingInstructions, isCorosWorkoutWrite } from "./coachCorosTools";
+import { createCorosActionService } from "./coachCorosActions";
 import {
   getChatWorkoutTools,
   handleChatWorkoutTool,
@@ -38,12 +42,19 @@ import {
   type ChatAnalyticsToolName
 } from "./chatAnalyticsTools";
 import {
+  getChatFitTools,
+  handleChatFitTool,
+  isChatFitTool,
+  type ChatFitToolName
+} from "./chatFitTools";
+import {
   getChatInteractionTools,
   handleChatInteractionTool,
   isChatInteractionTool,
   type ChatInteractionToolName
 } from "./chatInteractionTools";
 import { parseFunctionCallArguments } from "./chatToolArguments";
+import { isWebUrl } from "./externalLinks";
 import {
   buildResponsesRequest,
   extractReasoningSummaryDelta,
@@ -73,7 +84,11 @@ import {
   type ChatApiKeyStore,
   type ChatSettingsStore
 } from "./chatSettingsStore";
-import { getChatGptModelCandidates } from "./chatModels";
+import {
+  CHATGPT_FALLBACK_MODELS,
+  getChatGptModelCandidates,
+  type ChatGptModelInfo
+} from "./chatModels";
 import {
   createChatSession,
   deleteChatSession,
@@ -135,6 +150,14 @@ const LOOPBACK_PORT = 1455;
 const LOOPBACK_REDIRECT_URI = `http://localhost:${LOOPBACK_PORT}/auth/callback`;
 
 const RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
+// Codex CLI 0.155+ generates images client-side through these endpoints; the
+// Responses stream no longer accepts the hosted image_generation tool.
+const IMAGES_URL = "https://chatgpt.com/backend-api/codex/images";
+const IMAGE_MODEL = "gpt-image-2";
+// Same catalog the Codex CLI reads; it gates newer models by client version.
+const MODELS_URL = "https://chatgpt.com/backend-api/codex/models";
+const MODELS_CLIENT_VERSION = "0.155.0";
+const MODELS_CACHE_MS = 10 * 60_000;
 // Max agent rounds: each round is one model response; if it calls COROS tools
 // we execute them and loop, until it answers with no further tool calls.
 const MAX_TOOL_ROUNDS = 10;
@@ -216,7 +239,9 @@ export function listChatSessionsForProvider(provider: ChatProvider) {
 }
 
 export function getChatSessionEntries(id: string) {
-  return getChatSession(id);
+  return getChatSession(id).map(entry => entry.kind === "corosAction"
+    ? { ...entry, preview: corosActions.restore(entry.preview) }
+    : entry);
 }
 
 export function createChatSessionForProvider(provider: ChatProvider) {
@@ -477,7 +502,14 @@ function waitForAuthorizationCode(
         title: "Sign in with ChatGPT",
         parent: parentWindow,
         modal: Boolean(parentWindow),
-        webPreferences: { nodeIntegration: false, contextIsolation: true }
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          // A fresh in-memory session per sign-in. Remembered OpenAI/Google
+          // cookies would skip the account picker and lock the user into
+          // whichever account signed in last.
+          partition: `chatgpt-auth-${state}`
+        }
       });
       authWindow.on("closed", () => {
         authWindow = undefined;
@@ -485,7 +517,9 @@ function waitForAuthorizationCode(
       });
       // Some OpenAI flows hop to an external verification page; keep it in-window.
       authWindow.webContents.setWindowOpenHandler(({ url }) => {
-        void shell.openExternal(url);
+        if (isWebUrl(url)) {
+          void shell.openExternal(url);
+        }
         return { action: "deny" };
       });
       void authWindow.loadURL(authUrl);
@@ -577,6 +611,8 @@ function toStoredToken(
   };
 }
 
+const tokenRefreshes = new Map<string, Promise<StoredChatToken>>();
+
 /** Returns a non-expired access token, refreshing proactively when close. */
 async function getValidToken(): Promise<StoredChatToken> {
   const token = getStoredToken();
@@ -587,9 +623,27 @@ async function getValidToken(): Promise<StoredChatToken> {
   }
   const now = Math.floor(Date.now() / 1000);
   if (token.expires_at - now < 60 && token.refresh_token) {
-    const refreshed = await refreshAccessToken(token);
-    storeToken(refreshed);
-    return refreshed;
+    // Image jobs can start together. Rotating a refresh token more than once
+    // concurrently can invalidate another job's credentials.
+    const pending = tokenRefreshes.get(token.refresh_token);
+    if (pending) return pending;
+    const refresh = refreshAccessToken(token).then((refreshed) => {
+      const current = getStoredToken();
+      if (!current || current.refresh_token !== token.refresh_token ||
+          current.access_token !== token.access_token || current.account_id !== token.account_id) {
+        const err = new Error("ChatGPT sign-in changed while refreshing. Please retry.");
+        (err as Error & { authError?: boolean }).authError = true;
+        throw err;
+      }
+      storeToken(refreshed);
+      return refreshed;
+    });
+    tokenRefreshes.set(token.refresh_token, refresh);
+    try {
+      return await refresh;
+    } finally {
+      if (tokenRefreshes.get(token.refresh_token) === refresh) tokenRefreshes.delete(token.refresh_token);
+    }
   }
   return token;
 }
@@ -1105,49 +1159,23 @@ export async function confirmWorkoutDelete(
 
 function getAllChatTools(): CorosMcpTool[] {
   return [
-    ...getAllMcpTools(),
+    ...coachMcpTools(getAllMcpTools()),
     ...getChatActivityTools(),
     ...getChatAnalyticsTools(),
+    ...getChatFitTools(),
     ...getChatWorkoutTools(),
     ...getChatInteractionTools()
   ];
 }
 
-const CLAUDE_REMOTE_READ_TOOLS: Record<
-  keyof ClaudeCodePermissions,
-  readonly string[]
-> = {
-  recentActivities: [
-    "get_recent_activities",
-    "get_activity_details",
-    "get_activity_detail"
-  ],
-  trainingMetrics: [
-    "get_training_metrics",
-    "get_fitness_metrics",
-    "get_recovery_metrics",
-    "get_training_load"
-  ],
-  upcomingWorkouts: ["get_upcoming_workouts", "get_training_calendar"],
-  sleepData: ["get_sleep_summary", "get_sleep_data"],
-  fullActivityFiles: []
-};
-
 export function getClaudeCodeTools(
   permissions: ClaudeCodePermissions
 ): CorosMcpTool[] {
-  const remoteAllowedNames = new Set<string>();
-  for (const [permission, names] of Object.entries(CLAUDE_REMOTE_READ_TOOLS)) {
-    if (permissions[permission as keyof ClaudeCodePermissions]) {
-      for (const name of names) remoteAllowedNames.add(name);
-    }
-  }
-
   // COROS remote tools are permission-gated by their (unprefixed) names, then
   // exposed prefixed. Other MCP servers the user configured are exposed in full.
   const remoteTools = [
     ...getMcpServerCachedTools("coros")
-      .filter((tool) => remoteAllowedNames.has(tool.name))
+      .filter((tool) => claudeCanUseCorosTool(tool.name, permissions))
       .map((tool) => ({ ...tool, name: prefixToolName("coros", tool.name) })),
     ...getAllMcpTools().filter((tool) => !tool.name.startsWith("coros__"))
   ];
@@ -1157,7 +1185,11 @@ export function getClaudeCodeTools(
   const analyticsTools = permissions.trainingMetrics
     ? getChatAnalyticsTools()
     : [];
+  // Local FIT analysis reads full-resolution activity files, so it sits behind
+  // the same switch as sending FIT files to Claude.
+  const fitTools = permissions.fullActivityFiles ? getChatFitTools() : [];
   const workoutTools = getChatWorkoutTools().filter((tool) => {
+    if (isWorkoutEditTool(tool.name)) return permissions.upcomingWorkouts;
     if (
       tool.name === "upload_training_plan" ||
       tool.name === "list_scheduled_workouts" ||
@@ -1173,12 +1205,27 @@ export function getClaudeCodeTools(
   });
 
   return [
-    ...remoteTools,
+    ...coachMcpTools(remoteTools),
     ...activityTools,
     ...analyticsTools,
+    ...fitTools,
     ...workoutTools,
     ...getChatInteractionTools()
   ];
+}
+
+const corosActions = createCorosActionService({
+  tools: getAllMcpTools,
+  call: callMcpTool,
+  load: () => getSetting("chat.corosActions"),
+  save: value => setSetting("chat.corosActions", value),
+  connectionKey: () => getMcpAuthorizationKey("coros"),
+  canConfirm: claude => !claude || getChatSettings().claudeCode.permissions.upcomingWorkouts
+});
+
+export async function confirmCoachCorosAction(requestId: string) {
+  await ensureAllMcpConnected();
+  return corosActions.confirm(requestId);
 }
 
 async function executeChatTool(
@@ -1189,6 +1236,14 @@ async function executeChatTool(
   unitSystem: UnitSystem,
   claudePermissions?: ClaudeCodePermissions
 ): Promise<string> {
+  if (claudePermissions && name.startsWith("coros__") && !claudeCanUseCorosTool(name.slice(7), claudePermissions)) {
+    throw new Error("This COROS tool is disabled in Coach settings.");
+  }
+  if (isCorosWorkoutWrite(name)) {
+    const preview = await corosActions.stage(name, args, Boolean(claudePermissions), unitSystem);
+    send("chat:streamInfo", { requestId, kind: "corosAction", preview });
+    return JSON.stringify({ status: "awaiting_confirmation", preview, action: "The review card is ready. Wait for the athlete to click Save to COROS. Nothing has been saved yet." });
+  }
   if (isChatInteractionTool(name)) {
     return handleChatInteractionTool(
       name as ChatInteractionToolName,
@@ -1211,6 +1266,7 @@ async function executeChatTool(
           draft: preview
         });
       },
+      onWorkoutEdit: preview => send("chat:streamInfo", { requestId, kind: "workoutEdit", preview }),
       onWorkoutDelete: (preview) => {
         send("chat:streamInfo", {
           requestId,
@@ -1266,6 +1322,32 @@ async function executeChatTool(
             preview
           });
         },
+        onCoachChart: (preview) => {
+          send("chat:streamInfo", {
+            requestId,
+            kind: "coachChart",
+            preview
+          });
+        },
+        unitSystem
+      });
+    } catch (caught) {
+      const message =
+        caught instanceof Error ? caught.message : String(caught);
+      send("chat:streamInfo", {
+        requestId,
+        kind: "mcp",
+        tool: name,
+        status: "failed",
+        message
+      });
+      throw caught;
+    }
+  }
+  if (isChatFitTool(name)) {
+    try {
+      return await handleChatFitTool(name as ChatFitToolName, args, {
+        requestId,
         unitSystem
       });
     } catch (caught) {
@@ -1314,7 +1396,8 @@ async function resolveModelAndOpenStream(
   input: Record<string, unknown>[],
   tools: Record<string, unknown>[],
   signal: AbortSignal,
-  selectedModel?: string
+  selectedModel?: string,
+  reasoningEffort?: string
 ): Promise<{ response: Response } | { error: string; authError: boolean }> {
   const cached = getSetting(SETTINGS.model);
   const candidates = getChatGptModelCandidates(selectedModel, cached);
@@ -1341,7 +1424,8 @@ async function resolveModelAndOpenStream(
             instructions,
             input,
             tools,
-            includeReasoningSummary
+            includeReasoningSummary,
+            reasoningEffort
           )
         )
       });
@@ -1391,6 +1475,140 @@ async function resolveModelAndOpenStream(
   };
 }
 
+/**
+ * Opens one ChatGPT (Codex backend) Responses stream for callers outside the
+ * Coach, such as the Watch Face Studio AI panel. Always uses the signed-in
+ * ChatGPT account regardless of the Coach's selected provider.
+ */
+export async function openChatGptResponseStream(options: {
+  sessionId: string;
+  instructions: string;
+  input: Record<string, unknown>[];
+  tools: Record<string, unknown>[];
+  signal: AbortSignal;
+  /** Overrides the Coach's ChatGPT model choice; blank means Auto. */
+  model?: string;
+  reasoningEffort?: string;
+}): Promise<{ response: Response } | { error: string; authError: boolean }> {
+  const token = await getValidToken();
+  return resolveModelAndOpenStream(
+    token,
+    options.sessionId,
+    options.instructions,
+    options.input,
+    options.tools,
+    options.signal,
+    options.model === undefined ? getChatSettings().chatgpt.model : options.model,
+    options.reasoningEffort
+  );
+}
+
+/**
+ * Generates one image with the signed-in ChatGPT account, the way the Codex
+ * CLI's image_gen tool does. With reference images it is an edit request.
+ * Returns the PNG as base64.
+ */
+export async function generateChatGptImage(options: {
+  prompt: string;
+  /** Data URLs of images to edit or use as reference (max 5). */
+  images?: string[];
+  background?: "auto" | "transparent" | "opaque";
+  size?: string;
+  turnId: string;
+  signal: AbortSignal;
+}): Promise<string> {
+  const token = await getValidToken();
+  const edit = Boolean(options.images?.length);
+  const response = await fetch(`${IMAGES_URL}/${edit ? "edits" : "generations"}`, {
+    method: "POST",
+    signal: options.signal,
+    headers: {
+      Authorization: `Bearer ${token.access_token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      originator: RESPONSES_ORIGINATOR,
+      "User-Agent": RESPONSES_USER_AGENT,
+      "x-codex-image-turn-id": options.turnId,
+      ...(token.account_id ? { "chatgpt-account-id": token.account_id } : {})
+    },
+    body: JSON.stringify({
+      ...(edit ? { images: options.images!.map((image_url) => ({ image_url })) } : {}),
+      prompt: options.prompt,
+      background: options.background ?? "auto",
+      model: IMAGE_MODEL,
+      quality: "auto",
+      size: options.size ?? "auto"
+    })
+  });
+  if (response.status === 401 || response.status === 403) {
+    const error = new Error("ChatGPT session rejected. Please sign in again.") as Error & { authError?: boolean };
+    error.authError = true;
+    throw error;
+  }
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Image ${edit ? "edit" : "generation"} failed (${response.status}). ${truncate(detail, 600)}`);
+  }
+  const body = (await response.json()) as { data?: Array<{ b64_json?: unknown }> };
+  const image = body.data?.[0]?.b64_json;
+  if (typeof image !== "string" || !image) throw new Error("Image generation returned no image data.");
+  return image;
+}
+
+let chatGptModelCache: { at: number; models: ChatGptModelInfo[] } | null = null;
+
+/**
+ * Lists the models the signed-in ChatGPT account can use, in the order the
+ * Codex backend ranks them. Falls back to the static list on any failure.
+ */
+export async function listChatGptModels(): Promise<ChatGptModelInfo[]> {
+  if (chatGptModelCache && Date.now() - chatGptModelCache.at < MODELS_CACHE_MS) {
+    return chatGptModelCache.models;
+  }
+  try {
+    const token = await getValidToken();
+    const url = new URL(MODELS_URL);
+    url.searchParams.set("client_version", MODELS_CLIENT_VERSION);
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(10_000),
+      headers: {
+        Authorization: `Bearer ${token.access_token}`,
+        Accept: "application/json",
+        originator: RESPONSES_ORIGINATOR,
+        "User-Agent": RESPONSES_USER_AGENT,
+        ...(token.account_id ? { "chatgpt-account-id": token.account_id } : {})
+      }
+    });
+    if (!response.ok) throw new Error(`models ${response.status}`);
+    const body = (await response.json()) as { models?: unknown };
+    const models = (Array.isArray(body.models) ? body.models : [])
+      .filter((model): model is Record<string, unknown> =>
+        Boolean(model) && typeof model === "object" &&
+        typeof (model as Record<string, unknown>).slug === "string" &&
+        (model as Record<string, unknown>).visibility !== "hide" &&
+        (model as Record<string, unknown>).supported_in_api !== false)
+      .sort((a, b) => Number(a.priority ?? 999) - Number(b.priority ?? 999))
+      .map((model) => ({
+        slug: model.slug as string,
+        displayName: typeof model.display_name === "string" ? model.display_name : model.slug as string,
+        efforts: Array.isArray(model.supported_reasoning_levels)
+          ? model.supported_reasoning_levels
+              .map((level) => (level && typeof level === "object" ? (level as { effort?: unknown }).effort : level))
+              .filter((effort): effort is string => typeof effort === "string")
+          : [],
+        ...(typeof model.default_reasoning_level === "string"
+          ? { defaultEffort: model.default_reasoning_level }
+          : {})
+      }));
+    if (!models.length) throw new Error("empty model list");
+    chatGptModelCache = { at: Date.now(), models };
+    return models;
+  } catch (error) {
+    console.warn("[chat] ChatGPT model list unavailable:", error instanceof Error ? error.message : error);
+    return CHATGPT_FALLBACK_MODELS;
+  }
+}
+
 /** A COROS message turned into a Responses-API input item. */
 function toInputMessageItem(message: ChatMessage): Record<string, unknown> {
   return {
@@ -1425,6 +1643,7 @@ function withLiveToolInstructions(
   }
   const activityTools = tools.filter((tool) => isChatActivityTool(tool.name));
   const analyticsTools = tools.filter((tool) => isChatAnalyticsTool(tool.name));
+  const fitTools = tools.filter((tool) => isChatFitTool(tool.name));
   const interactionTools = tools.filter((tool) =>
     isChatInteractionTool(tool.name)
   );
@@ -1433,6 +1652,7 @@ function withLiveToolInstructions(
       !isChatWorkoutTool(tool.name) &&
       !isChatActivityTool(tool.name) &&
       !isChatAnalyticsTool(tool.name) &&
+      !isChatFitTool(tool.name) &&
       !isChatInteractionTool(tool.name)
   );
   const corosMcpTools = mcpTools.filter((tool) =>
@@ -1454,17 +1674,47 @@ function withLiveToolInstructions(
     );
   }
   if (analyticsTools.length > 0) {
+    const names = new Set(analyticsTools.map((tool) => tool.name));
+    const guidance = [
+      `Training analytics tools: ${analyticsTools.map((tool) => tool.name).join(", ")}.`
+    ];
+    if (names.has("get_fitness_trends")) {
+      guidance.push(
+        "Use get_fitness_trends with `days` (7–90) for daily load, resting HR, HRV vs baseline, and sleep score; " +
+          "pick a window that covers the period the athlete is asking about (a month or a training block, not just 7 days)."
+      );
+    }
+    if (names.has("get_hr_zone_summary")) {
+      guidance.push("Use get_hr_zone_summary for threshold heart rate zone distribution.");
+    }
+    if (names.has("render_chart")) {
+      guidance.push(
+        "Use render_chart when the athlete asks to see, chart, graph, compare, or visualize something, " +
+          "or when a multi-week pattern (HRV around hard blocks, sleep vs load, RHR drift) reads better as a picture. " +
+          "Bind series to metrics (`metric`) rather than retyping numbers; use inline `values` only for derived series " +
+          "and match the window length. Shade training blocks with `ranges` and add per-block `tiles`. " +
+          "Put series with different units on separate axes. After the chart renders, give 2–4 concise takeaways."
+      );
+    }
+    guidance.push("Inline charts are shown automatically when these tools return data.");
+    sections.push(guidance.join(" "));
+  }
+  if (fitTools.length > 0) {
     sections.push(
-      `Training analytics tools: ${analyticsTools.map((tool) => tool.name).join(", ")}. ` +
-        "Use get_fitness_trends for 7-day load, resting HR, and HRV recovery trends. " +
-        "Use get_hr_zone_summary for threshold heart rate zone distribution. " +
-        "Inline charts are shown automatically when these tools return data."
+      `Local FIT analysis tools: ${fitTools.map((tool) => tool.name).join(", ")}. ` +
+        "These read full-resolution activity files cached on this computer, with no daily file limits. " +
+        "Use get_activity_splits for pacing, fade, negative splits, cardiac drift, or normalized power on one activity; " +
+        "get_power_curve for FTP and best power by duration; get_best_efforts for fastest 5k/10k/etc. inside runs; " +
+        "find_similar_routes then compare_activities for repeat loops and where time was gained or lost. " +
+        "When a result says activities are not indexed yet, call sync_activity_index once (tell the athlete it is downloading files) and retry. " +
+        "Chart the numbers these tools return with render_chart when a picture helps (power curve, splits, checkpoint deltas)."
     );
   }
   if (corosMcpTools.length > 0) {
     sections.push(
+      corosCoachRoutingInstructions(tools),
       `COROS MCP tools: ${corosMcpTools.map((tool) => tool.name).join(", ")}. ` +
-        "Use these for sleep, HRV, recovery, and other MCP-only metrics. " +
+        "Use these for live health/recovery and the official workout workflows described above. " +
         "For lap splits and interval breakdowns, prefer get_activity_detail."
     );
   }
@@ -1477,13 +1727,26 @@ function withLiveToolInstructions(
         "Do not assume these tools return COROS data."
     );
   }
+  if (otherMcpTools.some((tool) => tool.name.startsWith("hevy__"))) {
+    sections.push(
+      "Hevy tools (hevy__ prefix) manage the connected Hevy account. " +
+        "For requests targeting Hevy, use these tools rather than COROS authoring or calendar tools. " +
+        "Use routines for future reusable workout prescriptions; create completed workouts only from actual athlete-provided results, never invented sets or times. " +
+        "Look up exercise templates and existing routines/workouts before editing; use their exact Hevy IDs. " +
+        "Follow the live tool schemas and descriptions, including units and whether an update replaces content. " +
+        "Read the current content before replacement and preserve exercises, sets, notes, and metadata the athlete did not ask to change. " +
+        "Write only when the athlete requests that change; clarify an ambiguous destination or missing required values first. " +
+        "Report success only after a successful tool result. Do not claim deletion or other capabilities absent from the connected tools. " +
+        "Hevy MCP changes are live in Hevy; the Strength dashboard uses a separate sync and may need refreshing."
+    );
+  }
   if (planTools.length > 0) {
     sections.push(
       "",
       "## Workout and training plan tools",
       `Authoring tools: ${planTools.map((tool) => tool.name).join(", ")}. ` +
-        "Use draft_workout for exactly one standalone workout. Its card lets the athlete choose Workout Library or Calendar; set calendar_date only when the athlete names a date. " +
-        "Use draft_training_plan only for multi-day or multi-week schedules. Never wrap a one-off workout in a plan. " +
+        "Use draft_workout for exactly one standalone workout when using the local authoring route described above. Its card lets the athlete choose Workout Library or Calendar; set calendar_date only when the athlete names a date. " +
+        "Use draft_training_plan only for multi-day or multi-week local schedules. Never wrap a one-off workout in a plan. " +
         "Before drafting Strength or HYROX workouts, call search_coros_exercises once with all intended " +
         "exercise queries, or with target muscles, movement patterns, and known equipment; then use the " +
         "returned exact exercise IDs and names. A COROS naming mismatch alone never requires an athlete question. " +
@@ -1519,14 +1782,14 @@ function withLiveToolInstructions(
   return sections.join("\n");
 }
 
-interface FunctionCall {
+export interface FunctionCall {
   call_id: string;
   name: string;
   arguments: string;
 }
 
 /** Detects a completed function tool call in a Responses-API SSE event. */
-function extractFunctionCall(event: unknown): FunctionCall | null {
+export function extractFunctionCall(event: unknown): FunctionCall | null {
   if (!event || typeof event !== "object") return null;
   const evt = event as {
     type?: string;
@@ -1547,7 +1810,7 @@ function extractFunctionCall(event: unknown): FunctionCall | null {
   return null;
 }
 
-function extractSseData(frame: string): string | null {
+export function extractSseData(frame: string): string | null {
   const dataLines = frame
     .split("\n")
     .filter((line) => line.startsWith("data:"))

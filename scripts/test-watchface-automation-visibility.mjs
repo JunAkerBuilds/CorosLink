@@ -210,6 +210,26 @@ function jsonValue(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+assert.equal(
+  deriveEditorLayers(details, baseDesign).find(layer => layer.id === "temperature")?.label,
+  "Sensor temperature",
+  "sensor temperature stays available independently of weather temperature"
+);
+const legacyTemperatureDetails = structuredClone(details);
+Object.assign(legacyTemperatureDetails.resolutions[0].config, {
+  temperature_rect: "{35,300,95,328,0}",
+  temperature_font: "digits"
+});
+assert.equal(
+  deriveEditorLayers(legacyTemperatureDetails, baseDesign).find(layer => layer.id === "temperature")?.label,
+  "Sensor temperature",
+  "imported fixed temperature stays editable with a distinct label"
+);
+for (const enabled of [true, false]) {
+  const savedLegacyDesign = { ...baseDesign, metricChanges: { ...baseDesign.metricChanges, temperature: enabled } };
+  assert.equal(editorLayer(savedLegacyDesign, "temperature").visible, enabled, "saved legacy temperature remains recoverable, including when hidden");
+}
+
 // The command boundary also synchronizes legacy groups and materializes its
 // optional global keys. Compare round trips with that canonical form.
 const canonicalBaseDesign = activeDesign(apply([{
@@ -327,6 +347,28 @@ assertError(
 );
 assert.deepEqual(lockedSource, lockedSnapshot);
 
+// Opening a saved design with the custom colon off must not require an on/off
+// toggle to remove the starter's implicit colon. Verify a serialized reload too.
+const implicitColonDesign = structuredClone(baseDesign);
+delete implicitColonDesign.configAssetOverrides["config:colon_icon"];
+implicitColonDesign.staticSeparators.colon.enabled = false;
+for (const design of [implicitColonDesign, JSON.parse(JSON.stringify(implicitColonDesign))]) {
+  assert.equal(deriveDesignDetails(details, design).previewDetails.resolutions[0].config.colon_icon, "");
+  assert.equal(editorLayer(design, "configAsset:config:colon_icon").visible, false);
+  assert.equal(editorLayer(design, "staticColon").visible, false);
+}
+const enabledTemplateColon = activeDesign(apply([
+  { op: "set_visibility", id: "configAsset:config:colon_icon", visible: true }
+], value(implicitColonDesign)));
+assert.equal(editorLayer(enabledTemplateColon, "configAsset:config:colon_icon").visible, true);
+assert.equal(deriveDesignDetails(details, enabledTemplateColon).previewDetails.resolutions[0].config.colon_icon, "icon\\colon.png");
+const customColonThenTemplate = activeDesign(apply([
+  { op: "set_visibility", id: "staticColon", visible: true },
+  { op: "set_visibility", id: "configAsset:config:colon_icon", visible: true }
+], value(implicitColonDesign)));
+assert.equal(customColonThenTemplate.staticSeparators.colon.enabled, false);
+assert.equal(editorLayer(customColonThenTemplate, "configAsset:config:colon_icon").visible, true);
+
 // Unknown ids are rejected and remain a true no-op for caller-owned state.
 const unknownSource = value();
 const unknownSnapshot = structuredClone(unknownSource);
@@ -354,5 +396,57 @@ assert.equal(resolveWatchfaceModeDesign(aodHidden.value.design, "current").layer
 assert.equal(resolveWatchfaceModeDesign(aodHidden.value.design, "aod").layerVisibility.hours, false);
 assert.equal(editorLayer(resolveWatchfaceModeDesign(aodHidden.value.design, "current"), "hours").visible, true);
 assert.equal(editorLayer(resolveWatchfaceModeDesign(aodHidden.value.design, "aod"), "hours").visible, false);
+
+// The Studio date slash replaces a template slash in arc_cut_icon, but a face
+// that uses arc_cut_icon as a progress mask (PARTICLES) keeps it.
+const templateSlash = resolveWatchfaceModeDesign(
+  apply([{ op: "set_visibility", id: "staticDateSlash", visible: true }]).value.design,
+  "current"
+);
+assert.equal(templateSlash.staticSeparators.dateSlash.enabled, true);
+assert.equal(templateSlash.configAssetOverrides["config:arc_cut_icon"]?.enabled, false);
+const maskDetails = structuredClone(details);
+Object.assign(maskDetails.resolutions[0].config, {
+  arc_cut_icon: "icon\\mask.png",
+  arc_cut_icon_pos: "{0,292}"
+});
+maskDetails.resolutions[0].icons.push({
+  path: `${maskDetails.resolutions[0].directory}/icon/mask.png`,
+  width: 416,
+  height: 125
+});
+const maskSlash = resolveWatchfaceModeDesign(
+  applyWatchfaceAutomationCommands(
+    value(),
+    [{ op: "set_visibility", id: "staticDateSlash", visible: true }],
+    { details: maskDetails, mode: "current" }
+  ).value.design,
+  "current"
+);
+assert.equal(maskSlash.staticSeparators.dateSlash.enabled, true);
+assert.notEqual(
+  maskSlash.configAssetOverrides["config:arc_cut_icon"]?.enabled,
+  false,
+  "turning on the Studio date slash must not disable a progress mask"
+);
+assert.ok(
+  deriveEditorLayers(maskDetails, maskSlash).some((layer) => layer.id === "arcCut"),
+  "a progress mask gets its own Arc cut overlay layer"
+);
+// Without native size a replacement fills the template box; with it the
+// selection (and place_layers) follow the replacement's own pixels.
+const arcCutBounds = (override) => {
+  const bounds = deriveEditorLayers(maskDetails, {
+    ...maskSlash,
+    configAssetOverrides: { ...maskSlash.configAssetOverrides, "config:arc_cut_icon": override }
+  }).find((layer) => layer.id === "arcCut")?.bounds;
+  return bounds && [bounds.x0, bounds.y0, bounds.x1, bounds.y1];
+};
+const compactOverlay = { dataUrl: png, width: 180, height: 24 };
+assert.deepEqual(arcCutBounds({ enabled: true, replacement: compactOverlay }), [0, 292, 416, 417]);
+assert.deepEqual(
+  arcCutBounds({ enabled: true, nativeSize: true, scale: 1, replacement: compactOverlay }),
+  [0, 292, 180, 316]
+);
 
 console.log("watchface automation visibility tests passed");

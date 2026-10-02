@@ -414,6 +414,16 @@ async function main() {
     watchfaces.loadCorosWatchfaceTemplateAssets(starter.archiveId, ["missing.png"]),
     /does not contain/
   );
+  const partialAssets = await watchfaces.loadCorosWatchfaceTemplateAssets(
+    starter.archiveId,
+    ["missing.png", "watchface_800x800/icon/step.png"],
+    { skipMissing: true }
+  );
+  assert.deepEqual(
+    partialAssets.map((asset) => asset.path),
+    ["watchface_800x800/icon/step.png"],
+    "skipMissing leaves out absent PNGs and still returns the rest"
+  );
 
   // --- Background-only creation (legacy behavior) -------------------------
   const created = await watchfaces.createCorosWatchfaceArchive({

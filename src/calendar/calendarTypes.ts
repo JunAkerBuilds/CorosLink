@@ -56,6 +56,24 @@ export type CalendarSelection =
   | { kind: "scheduled"; day: CalendarDay; entry: TrainingHubScheduledWorkoutEntry }
   | { kind: "activity"; day: CalendarDay; activity: TrainingHubActivity };
 
+export type CalendarClipboardEntry = Pick<
+  TrainingHubScheduledWorkoutEntry,
+  "planId" | "idInPlan" | "happenDay" | "name" | "rawProgram"
+>;
+
+/** Keep copied workout content independent of later edits, moves or deletion. */
+export function createCalendarClipboardEntry(
+  entry: TrainingHubScheduledWorkoutEntry
+): CalendarClipboardEntry {
+  return {
+    planId: entry.planId,
+    idInPlan: entry.idInPlan,
+    happenDay: entry.happenDay,
+    name: entry.name,
+    ...(entry.rawProgram ? { rawProgram: structuredClone(entry.rawProgram) } : {})
+  };
+}
+
 /** Stable identity for selecting scheduled occurrences across calendar cells. */
 export function scheduledWorkoutKey(
   entry: Pick<TrainingHubScheduledWorkoutEntry, "planId" | "idInPlan">

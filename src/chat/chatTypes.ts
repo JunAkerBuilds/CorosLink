@@ -1,6 +1,9 @@
+import type { StrengthEditPreview } from "../../electron/workoutEditTypes";
 import type {
   ActivityVisualPreview,
   ChatMessage,
+  CoachCorosActionPreview,
+  CoachChartPreview,
   CoachInputPrompt,
   FitnessTrendPreview,
   HrZonePreview,
@@ -56,12 +59,19 @@ export interface ChatHrZoneEntry {
   preview: HrZonePreview;
 }
 
+export interface ChatCoachChartEntry {
+  kind: "coachChart";
+  preview: CoachChartPreview;
+}
+
 export interface ChatToolNoticeEntry {
   kind: "toolNotice";
   message: string;
 }
 
 export type ChatEntry =
+  | { kind: "workoutEdit"; preview: StrengthEditPreview }
+  | { kind: "corosAction"; preview: CoachCorosActionPreview }
   | ChatMessageEntry
   | ChatCoachPromptEntry
   | ChatPlanDraftEntry
@@ -69,8 +79,13 @@ export type ChatEntry =
   | ChatActivityVisualEntry
   | ChatFitnessTrendEntry
   | ChatHrZoneEntry
+  | ChatCoachChartEntry
   | ChatToolNoticeEntry;
 
+/**
+ * Automatic visuals that the "show charts" setting can hide. Coach charts are
+ * excluded on purpose: the athlete asked for them explicitly.
+ */
 export function isChatVisualEntry(
   entry: ChatEntry
 ): entry is ChatActivityVisualEntry | ChatFitnessTrendEntry | ChatHrZoneEntry {
@@ -111,6 +126,12 @@ export function upsertCoachPromptEntry(
     return next;
   }
   return [...entries, { kind: "coachPrompt", prompt }];
+}
+
+export function upsertCorosActionEntry(entries: ChatEntry[], preview: CoachCorosActionPreview): ChatEntry[] {
+  const index = entries.findIndex(entry => entry.kind === "corosAction" && entry.preview.requestId === preview.requestId);
+  if (index < 0) return [...entries, { kind: "corosAction", preview }];
+  return entries.map((entry, i) => i === index ? { kind: "corosAction", preview } : entry);
 }
 
 export function upsertWorkoutDeleteEntry(
@@ -181,10 +202,38 @@ export function upsertHrZoneEntry(
   return [...entries, { kind: "hrZoneSummary", preview }];
 }
 
+export function upsertCoachChartEntry(
+  entries: ChatEntry[],
+  preview: CoachChartPreview
+): ChatEntry[] {
+  const index = entries.findIndex(
+    (entry) =>
+      entry.kind === "coachChart" &&
+      entry.preview.previewId === preview.previewId
+  );
+  if (index >= 0) {
+    const next = [...entries];
+    next[index] = { kind: "coachChart", preview };
+    return next;
+  }
+  return [...entries, { kind: "coachChart", preview }];
+}
+
 export function toWireMessages(entries: ChatEntry[]): ChatMessage[] {
   return entries.flatMap((entry): ChatMessage[] => {
     if (entry.kind === "message") {
       return [{ role: entry.role, content: entry.content }];
+    }
+    if (entry.kind === "workoutEdit") return [{ role: "assistant", content: `Strength edit proposal ${entry.preview.proposalId}. Last recorded state: ${entry.preview.state}. Call get_workout_edit_status for current results; never assume it was saved.` }];
+    if (entry.kind === "corosAction") {
+      const { state, summary, destination, date, message } = entry.preview;
+      const fallback = {
+        pending: "Awaiting the athlete's Save to COROS button.",
+        saving: "Save is in progress. Do not submit another copy.",
+        saved: "COROS accepted the change.",
+        uncertain: "Save status is uncertain. Check COROS before preparing another copy."
+      }[state];
+      return [{ role: "assistant", content: `COROS action ${state}: ${summary}. Destination: ${destination}${date ? ` on ${date}` : ""}. ${message ?? fallback}` }];
     }
     if (entry.kind === "coachPrompt") {
       const choices = entry.prompt.choices
@@ -207,6 +256,7 @@ export function toWireMessages(entries: ChatEntry[]): ChatMessage[] {
 }
 
 function persistVisualEntry(entry: ChatEntry): PersistedChatEntry | null {
+  if (entry.kind === "workoutEdit" || entry.kind === "corosAction") return entry;
   if (entry.kind === "coachPrompt") {
     return { kind: "coachPrompt", prompt: entry.prompt };
   }
@@ -224,6 +274,9 @@ function persistVisualEntry(entry: ChatEntry): PersistedChatEntry | null {
   }
   if (entry.kind === "hrZoneSummary") {
     return { kind: "hrZoneSummary", preview: entry.preview };
+  }
+  if (entry.kind === "coachChart") {
+    return { kind: "coachChart", preview: entry.preview };
   }
   if (entry.kind === "toolNotice") {
     return {
@@ -256,6 +309,7 @@ export function fromPersistedEntries(entries: PersistedChatEntry[]): ChatEntry[]
   const result: ChatEntry[] = [];
 
   for (const entry of entries) {
+    if (entry.kind === "workoutEdit" || entry.kind === "corosAction") { result.push(entry); continue; }
     if (entry.kind === "coachPrompt") {
       result.push({ kind: "coachPrompt", prompt: entry.prompt });
       continue;
@@ -299,6 +353,10 @@ export function fromPersistedEntries(entries: PersistedChatEntry[]): ChatEntry[]
     }
     if (entry.kind === "hrZoneSummary") {
       result.push({ kind: "hrZoneSummary", preview: entry.preview });
+      continue;
+    }
+    if (entry.kind === "coachChart") {
+      result.push({ kind: "coachChart", preview: entry.preview });
       continue;
     }
     result.push({

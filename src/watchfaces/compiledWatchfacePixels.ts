@@ -1,5 +1,7 @@
 import type { CorosWatchfaceResolutionDetails, CorosWatchfaceTemplateDetails } from "../../electron/types";
-import { drawStudioPreview, parseConfigPos, type WatchfaceAssetLoader, type WatchfaceComplicationId, type WatchfacePreviewMode } from "./watchfaceStudio";
+import { drawStudioPreview, loadStudioImage, parseConfigPos, type WatchfaceAssetLoader, type WatchfaceComplicationId, type WatchfacePreviewMode } from "./watchfaceStudio";
+import { drawNativeDataPreview } from "./nativeData";
+import { recoverWatchfaceDesign } from "./recoveredWatchfaceDesign";
 
 export interface CompiledWatchfacePreview {
   dataUrl: string;
@@ -16,7 +18,7 @@ export function createCompiledPixelChecks(width: number, height: number) {
   const checks = new Set<string>();
   return {
     checks,
-    sprite(label: string, image: CanvasImageSource, x: number, y: number, w: number, h: number, clip?: { x0: number; y0: number; x1: number; y1: number }) {
+    sprite(label: string, image: CanvasImageSource, x: number, y: number, w: number, h: number) {
       const source = document.createElement("canvas");
       source.width = Math.max(1, Math.round(w)); source.height = Math.max(1, Math.round(h));
       const context = source.getContext("2d", { willReadFrequently: true })!;
@@ -26,7 +28,6 @@ export function createCompiledPixelChecks(width: number, height: number) {
       for (let sy = 0; sy < source.height; sy++) for (let sx = 0; sx < source.width; sx++) {
         if (pixels[(sy * source.width + sx) * 4 + 3]! < 8) continue;
         const px = Math.round(x) + sx, py = Math.round(y) + sy;
-        if (clip && (px < clip.x0 || py < clip.y0 || px >= clip.x1 || py >= clip.y1)) continue;
         if (px < 0 || py < 0 || px >= width || py >= height ||
             ((px + 0.5 - width / 2) / (width / 2)) ** 2 + ((py + 0.5 - height / 2) / (height / 2)) ** 2 > 1) {
           checks.add(`${label}: visible pixels cross the display edge.`);
@@ -37,17 +38,14 @@ export function createCompiledPixelChecks(width: number, height: number) {
         if (previous) checks.add(`${[labels[previous]!, label].sort().join(" / ")}: visible pixels overlap.`);
         owners[index] = owner;
       }
-    },
-    rect(label: string, w: number, h: number, rect: { x0: number; y0: number; x1: number; y1: number }) {
-      if (w > rect.x1 - rect.x0 || h > rect.y1 - rect.y0) {
-        checks.add(`${label}: glyph cells exceed the exported value rectangle; pixels may be clipped.`);
-      }
     }
   };
 }
 
 /** The caller supplies details and assets read back from the generated ZIP.
- * No editor design, font family, scaling, strokes or effects are reapplied. */
+ * No editor design, font family, scaling, strokes or effects are reapplied.
+ * A loader may omit PNGs the ZIP lacks; the config keys naming them become
+ * checks instead of failing the preview. */
 export async function renderCompiledWatchfacePreview(
   details: CorosWatchfaceTemplateDetails,
   resolution: CorosWatchfaceResolutionDetails,
@@ -68,9 +66,10 @@ export async function renderCompiledWatchfacePreview(
   // those in font folders, without guessing icons from folder names.
   const icons = new Map(resolution.icons.map((file) => [file.path, file]));
   const spriteFiles = new Map(resolution.spriteFolders.flatMap((folder) => folder.files).map((file) => [file.path, file]));
+  const configPath = (value: string) => `${resolution.directory}/${value.replace(/\\/g, "/")}`;
   const referencedPaths = [...new Set(Object.values(config)
     .filter((value) => /\.png$/i.test(value))
-    .map((value) => `${resolution.directory}/${value.replace(/\\/g, "/")}`))]
+    .map(configPath))]
     .filter((path) => !usesAod || path !== backgroundPath);
   if (background) icons.set(background.path, background);
   for (const path of referencedPaths) {
@@ -84,17 +83,38 @@ export async function renderCompiledWatchfacePreview(
     }
   }
   const checks = createCompiledPixelChecks(canvas.width, canvas.height);
+  // Stock templates can name PNGs they never shipped (AROUND's icon\point.png
+  // and icon\cen.png). Nothing can draw them, so list them for review.
+  for (const path of missing.filter((path) => !icons.has(path))) {
+    const keys = Object.entries(config).filter(([, value]) => configPath(value) === path).map(([key]) => key);
+    checks.checks.add(`${keys.join(" / ")}: ${path.slice(resolution.directory.length + 1)} isn't in the archive.`);
+  }
   const ampmPos = parseConfigPos(config.am_pm_icon_pos);
-  await drawStudioPreview(canvas, background?.dataUrl ?? "", {
-    ...details, resolutions: [{ ...resolution, config, icons: [...icons.values()] }]
-  }, {
+  const compiledDetails = { ...details, resolutions: [{ ...resolution, config, icons: [...icons.values()] }] };
+  await drawStudioPreview(canvas, background?.dataUrl ?? "", compiledDetails, {
     fontFamily: "", digitColor: "#ffffff", accentColor: "#ffffff",
     tintLabels: false, tintIcons: false, previewMode: usesAod ? "aod" : "current",
     ...(ampmPos && config.am_icon && config.pm_icon ? { ampmStyle: { enabled: true, ...ampmPos, scale: 1 } } : {}),
     compiledPixels: true, previewDate: scenario.date ?? new Date(2026, 8, 13, 10, 8, 36),
     previewComplication: scenario.complication, previewValues: scenario.values,
-    onCompiledSprite: checks.sprite, onCompiledRect: checks.rect
+    onCompiledSprite: checks.sprite
   }, loadAssets);
+  // The studio pass draws template keys only. Native data layers (min/max
+  // temperature, charts, stamina…) are rebuilt from the compiled keys and
+  // their exported sprites, the same way an official face is recovered.
+  const { nativeData, weatherIndicator } = await recoverWatchfaceDesign(compiledDetails, loadAssets);
+  if (nativeData) await drawNativeDataPreview(canvas, resolution.width, nativeData, { values: scenario.values });
+  if (weatherIndicator?.enabled) {
+    const url = weatherIndicator.assets?.day?.["0"];
+    if (url) {
+      const image = await loadStudioImage(url);
+      const x = weatherIndicator.x, y = weatherIndicator.y;
+      const width = image.naturalWidth;
+      const height = image.naturalHeight;
+      checks.sprite("Weather icon", image, x, y, width, height);
+      canvas.getContext("2d")!.drawImage(image, x, y, width, height);
+    }
+  }
   const context = canvas.getContext("2d")!;
   context.globalCompositeOperation = "destination-in";
   context.beginPath(); context.ellipse(canvas.width / 2, canvas.height / 2, canvas.width / 2, canvas.height / 2, 0, 0, Math.PI * 2); context.fill();

@@ -1,4 +1,4 @@
-import { app, dialog, shell } from "electron";
+import { app, dialog, shell, safeStorage } from "electron";
 import crypto from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
@@ -61,6 +61,7 @@ import {
 const COROS_MAP_HOST = "https://map-oss-us.coros.com";
 const COROS_MAP_MANIFEST_URL = `${COROS_MAP_HOST}/regionMap/v5/regions_v5.json`;
 const ORS_API_KEY_SETTING = "maps.openRouteServiceApiKey";
+const CARTO_API_KEY_SETTING = "maps.cartoApiKeyEncrypted";
 const ROUTE_BACKEND_SETTING = "maps.routeBackend";
 const ORS_BASE_URL = "https://api.openrouteservice.org";
 const MAX_FOOT_ROUTE_DISTANCE_KM = 100;
@@ -528,7 +529,7 @@ export async function installCachedCorosMaps(
       totalFiles += selection.fileCount;
     }
 
-    const installedPath = path.join(status.rootPath, "map");
+    const installedPath = status.mapPath ?? path.join(status.rootPath, "Map");
     const batchLabel =
       cachedPackages.length === 1
         ? cachedPackages[0]!.title
@@ -847,7 +848,7 @@ export async function installCorosMapFolder(
       );
     }
 
-    const installedPath = path.join(status.rootPath, "map");
+    const installedPath = status.mapPath ?? path.join(status.rootPath, "Map");
     assertNotSameOrNested(selection.mapPath, installedPath);
     const label = options.label ?? path.basename(selection.sourcePath);
 
@@ -977,7 +978,10 @@ export async function installCorosMapFolder(
 
 export function getRouteBuilderConfig(): RouteBuilderConfig {
   const backend = getSetting(ROUTE_BACKEND_SETTING) === "ors" ? "ors" : "keyless";
+  const encrypted = getSetting(CARTO_API_KEY_SETTING);
+  const cartoApiKey = encrypted ? safeStorage.decryptString(Buffer.from(encrypted, "base64")) : "";
   return {
+    cartoApiKey,
     openRouteServiceApiKey: getSetting(ORS_API_KEY_SETTING) ?? "",
     backend
   };
@@ -986,6 +990,12 @@ export function getRouteBuilderConfig(): RouteBuilderConfig {
 export function saveRouteBuilderConfig(
   config: RouteBuilderConfig
 ): RouteBuilderConfig {
+  // Omitted fields preserve the key when saving routing settings from older screens.
+  if (config.cartoApiKey !== undefined) {
+    const key = config.cartoApiKey.trim();
+    if (key && !safeStorage.isEncryptionAvailable()) throw new Error("Secure credential storage is unavailable. Could not save the CARTO key.");
+    setSetting(CARTO_API_KEY_SETTING, key ? safeStorage.encryptString(key).toString("base64") : "");
+  }
   setSetting(ORS_API_KEY_SETTING, config.openRouteServiceApiKey.trim());
   setSetting(ROUTE_BACKEND_SETTING, config.backend === "ors" ? "ors" : "keyless");
   return getRouteBuilderConfig();

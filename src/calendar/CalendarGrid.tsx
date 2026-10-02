@@ -21,12 +21,26 @@ interface CalendarGridProps {
   busy: boolean;
   selectionMode: boolean;
   selectedWorkoutKeys: ReadonlySet<string>;
+  copiedWorkoutKeys: ReadonlySet<string>;
   onSelectScheduled: (day: CalendarDay, entry: TrainingHubScheduledWorkoutEntry) => void;
   onSelectActivity: (day: CalendarDay, activity: TrainingHubActivity) => void;
   onToggleScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   onAdd: (dateKey: string) => void;
-  onDropEntry: (payload: CalendarDragPayload, targetDay: string) => void;
+  onCopyDay: (day: CalendarDay) => void;
+  onPasteDay: (dateKey: string) => void;
+  clipboardCount: number;
+  onDropEntry: (
+    payload: CalendarDragPayload,
+    targetDay: string,
+    copy: boolean
+  ) => void;
   onAskCoachWeek: (week: CalendarWeek) => void;
+  onContextMenu: (target: {
+    x: number;
+    y: number;
+    dayKey: string;
+    workoutKey?: string;
+  }) => void;
 }
 
 export function CalendarGrid({
@@ -36,12 +50,17 @@ export function CalendarGrid({
   busy,
   selectionMode,
   selectedWorkoutKeys,
+  copiedWorkoutKeys,
   onSelectScheduled,
   onSelectActivity,
   onToggleScheduled,
   onAdd,
+  onCopyDay,
+  onPasteDay,
+  clipboardCount,
   onDropEntry,
-  onAskCoachWeek
+  onAskCoachWeek,
+  onContextMenu
 }: CalendarGridProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const todayRowRef = useRef<HTMLDivElement>(null);
@@ -92,7 +111,24 @@ export function CalendarGrid({
         </div>
       </div>
 
-      <div ref={bodyRef} className="calendar-grid-body">
+      <div
+        ref={bodyRef}
+        className="calendar-grid-body"
+        onContextMenu={(event) => {
+          const target = event.target as Element;
+          const dayEl = target.closest<HTMLElement>("[data-calendar-day]");
+          if (!dayEl?.dataset.calendarDay) return;
+          event.preventDefault();
+          const workoutEl = target.closest<HTMLElement>("[data-calendar-workout]");
+          (workoutEl ?? dayEl).focus({ preventScroll: true });
+          onContextMenu({
+            x: event.clientX,
+            y: event.clientY,
+            dayKey: dayEl.dataset.calendarDay,
+            workoutKey: workoutEl?.dataset.calendarWorkout
+          });
+        }}
+      >
         {weeks.map((week) => {
           const containsToday = week.key === todayWeekKey;
           return (
@@ -111,10 +147,16 @@ export function CalendarGrid({
                   isScheduledSelected={(entry) =>
                     selectedWorkoutKeys.has(scheduledWorkoutKey(entry))
                   }
+                  isScheduledCopied={(entry) =>
+                    copiedWorkoutKeys.has(scheduledWorkoutKey(entry))
+                  }
                   onSelectScheduled={(entry) => onSelectScheduled(day, entry)}
                   onSelectActivity={(activity) => onSelectActivity(day, activity)}
                   onToggleScheduled={onToggleScheduled}
                   onAdd={onAdd}
+                  onCopyDay={onCopyDay}
+                  onPasteDay={onPasteDay}
+                  clipboardCount={clipboardCount}
                   onDropEntry={onDropEntry}
                 />
               ))}

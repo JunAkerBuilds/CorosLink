@@ -1,0 +1,46 @@
+name: Dependency scan
+
+# Runs on its own so new advisories show up between releases, and is called by
+# release.yml as a gate that must pass before anything is published.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  osv-scanner:
+    name: OSV-Scanner
+    runs-on: ubuntu-latest
+    env:
+      OSV_SCANNER_VERSION: v2.6.0
+      OSV_SCANNER_SHA256: ca69b3d3cd08f889a49dc0a383122f71cc528b83803671df5fd874d97485b108
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Install OSV-Scanner
+        run: |
+          mkdir -p "$RUNNER_TEMP/osv-scanner"
+          curl -fsSL -o "$RUNNER_TEMP/osv-scanner/osv-scanner" \
+            "https://github.com/google/osv-scanner/releases/download/$OSV_SCANNER_VERSION/osv-scanner_linux_amd64"
+          echo "$OSV_SCANNER_SHA256  $RUNNER_TEMP/osv-scanner/osv-scanner" | sha256sum --check --strict
+          chmod +x "$RUNNER_TEMP/osv-scanner/osv-scanner"
+          echo "$RUNNER_TEMP/osv-scanner" >> "$GITHUB_PATH"
+
+      - name: Scan npm, Python and bundled binaries
+        run: node scripts/scan-dependencies.mjs

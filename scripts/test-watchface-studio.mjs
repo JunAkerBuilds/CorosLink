@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
   analogCenterLayoutGroupId,
+  buildAddedDateOverrides,
+  canAddDatePart,
+  resolveAddedDateStyles,
+  templateHasDatePart,
+  COROS_CONFIG_DELETE_VALUE,
   alignConfigRectValue,
   numberStartX,
   applyConfigOverridesToDetails,
@@ -28,6 +33,7 @@ import {
   buildSelectableMetricSpriteComposition,
   buildSelectableMetricSpriteReplacements,
   buildSelectableMetricStyleOverrides,
+  buildAddedSecondsOverrides,
   buildSeparateTimeOverrides,
   buildStaticSeparatorOverrides,
   buildTimeStyleOverrides,
@@ -39,6 +45,7 @@ import {
   configAssetCanUseNativeSize,
   configAssetCanvasSize,
   configAssetSupportsNativeSize,
+  configAssetDefaultsToNativeSize,
   corosMonthLabelForSpriteIndex,
   corosMonthSpriteIndex,
   corosWeekdayIndex,
@@ -58,6 +65,8 @@ import {
   hasWatchfaceAod,
   inferExerciseSeparatorStyle,
   inferStaticSeparators,
+  watchfaceArcCutRole,
+  templateHasSeconds,
   isControlComplicationEnabled,
   listWatchfaceConfigAssets,
   loadStudioImage,
@@ -67,6 +76,7 @@ import {
   parseKcalProgressArc,
   parseWatchfaceConfigText,
   pickWatchPreviewResolution,
+  pickEditorPreviewResolution,
   rasterFontSupportsText,
   rasterFontNativeSpriteSize,
   removeWatchfaceDateFontOverride,
@@ -504,6 +514,17 @@ assert.equal(
   260,
   "240/260/800 MIP bundles should preview the APEX 4 46 mm tree by default"
 );
+const pace4ProPreviewDetails = {
+  archiveId: "pace-4-pro-preview",
+  resolutions: [resolution(800, 24, 38), resolution(390, 11, 19), resolution(416, 12, 20), resolution(466, 14, 22)]
+};
+for (const watch of ["pace-4-pro", "COROS W337"]) {
+  assert.equal(pickWatchPreviewResolution(pace4ProPreviewDetails, watch)?.width, 466, `${watch} previews at its native 466px size`);
+  assert.equal(pickEditorPreviewResolution(pace4ProPreviewDetails, watch)?.width, 800, "Authoring stays at full master resolution");
+}
+for (const [watch, size] of [["pace-3", 240], ["nomad", 260], ["vertix-2", 280], ["vertix-2s", 280]]) {
+  assert.equal(pickWatchPreviewResolution(apexPreviewDetails, watch)?.width, size, `${watch} uses its own native preview size`);
+}
 assert.deepEqual(
   detailsForPreviewResolution(apexPreviewDetails, "watchface_240x240")
     .resolutions.map(({ width }) => width),
@@ -1269,6 +1290,164 @@ assert.deepEqual(
   ["hours", "minutes"],
   "Converted time should expose independent hour and minute layers"
 );
+const withoutSeconds = (template) => ({
+  ...template,
+  resolutions: template.resolutions.map((entry) => ({
+    ...entry,
+    config: Object.fromEntries(
+      Object.entries(entry.config).filter(([key]) => !key.startsWith("time_second_"))
+    )
+  }))
+});
+const noSecondsAutoTimeDetails = withoutSeconds(autoTimeDetails);
+const separateTimeDetails = applyConfigOverridesToDetails(
+  noSecondsAutoTimeDetails,
+  buildSeparateTimeOverrides(noSecondsAutoTimeDetails, true)
+);
+assert.equal(templateHasSeconds(separateTimeDetails.resolutions[0]), false);
+assert.deepEqual(buildAddedSecondsOverrides(separateTimeDetails, false), []);
+assert.deepEqual(
+  buildAddedSecondsOverrides(separateTimeDetails, true)[0],
+  {
+    path: "watchface_240x240/config.txt",
+    values: {
+      time_second_high_pos: "{125,106}",
+      time_second_high_font: "13x19",
+      time_second_low_pos: "{137,106}",
+      time_second_low_font: "13x19"
+    }
+  },
+  "Added seconds should reuse the minute font, centered under the minutes"
+);
+assert.equal(
+  buildAddedSecondsOverrides(noSecondsAutoTimeDetails, true)[0]?.values
+    .time_second_low_font,
+  "13x19",
+  "Auto-aligned templates should add seconds from the shared time font"
+);
+const addedSecondsDetails = applyConfigOverridesToDetails(
+  separateTimeDetails,
+  buildAddedSecondsOverrides(separateTimeDetails, true)
+);
+assert.equal(templateHasSeconds(addedSecondsDetails.resolutions[0]), true);
+assert.deepEqual(
+  buildAddedSecondsOverrides(addedSecondsDetails, true),
+  [],
+  "Templates that already declare seconds must be left untouched"
+);
+assert.ok(
+  computeLayoutGroupBounds(addedSecondsDetails.resolutions[0]).some(
+    ({ id }) => id === "seconds"
+  ),
+  "Added seconds should appear as a movable Seconds layer"
+);
+
+// Calendar parts the template lacks are added from its own digit sprites.
+const parseRect = (value) => {
+  const [x0, y0, x1, y1] = value.match(/-?\d+/g).map(Number);
+  return { x0, y0, x1, y1 };
+};
+const withoutConfig = (template, pattern) => ({
+  ...template,
+  resolutions: template.resolutions.map((entry) => ({
+    ...entry,
+    config: Object.fromEntries(
+      Object.entries(entry.config).filter(([key]) => !pattern.test(key))
+    )
+  }))
+});
+const fullDateDetails = { archiveId: "full-date", resolutions: [resolution(240, 12, 20)] };
+assert.equal(templateHasDatePart(fullDateDetails.resolutions[0], "dateDay"), true);
+assert.equal(canAddDatePart(fullDateDetails.resolutions[0], "dateDay"), false);
+assert.deepEqual(
+  buildAddedDateOverrides(fullDateDetails, { addWeekday: true, addDateMonth: true, addDateDay: true }),
+  [],
+  "Date parts the template already lays out must be left untouched"
+);
+const noDateDetails = withoutConfig(fullDateDetails, /_date_(week|month|day)_/);
+for (const partId of ["weekday", "dateMonth", "dateDay"]) {
+  assert.equal(templateHasDatePart(noDateDetails.resolutions[0], partId), false);
+  assert.equal(canAddDatePart(noDateDetails.resolutions[0], partId), true);
+}
+assert.deepEqual(buildAddedDateOverrides(noDateDetails, {}), []);
+const addedDateValues = buildAddedDateOverrides(noDateDetails, {
+  addWeekday: true,
+  addDateMonth: true,
+  addDateDay: true
+})[0].values;
+assert.equal(addedDateValues.english_date_month_font, "13x19");
+assert.equal(addedDateValues.english_date_day_font, "13x19");
+assert.equal(
+  addedDateValues.english_date_week_font,
+  "13x19",
+  "An added weekday sizes itself from template digits and renders labels from a font"
+);
+const addedWeek = parseRect(addedDateValues.english_date_week_rect);
+const addedMonth = parseRect(addedDateValues.english_date_month_rect);
+const addedDay = parseRect(addedDateValues.english_date_day_rect);
+assert.ok(addedWeek.y0 >= 50, "Added date parts should sit below the time digits");
+assert.ok(addedWeek.y1 <= addedMonth.y0, "The added weekday gets its own row above month/day");
+assert.equal(addedMonth.y0, addedDay.y0, "Added month and day share a row");
+assert.ok(addedMonth.x1 < addedDay.x0, "Month leads day with room for a separator");
+for (const rect of [addedWeek, addedMonth, addedDay]) {
+  for (const [x, y] of [[rect.x0, rect.y0], [rect.x1, rect.y0], [rect.x0, rect.y1], [rect.x1, rect.y1]]) {
+    assert.ok(Math.hypot(x - 120, y - 120) <= 120, "Added date parts must stay on the round dial");
+  }
+}
+const addedDateDetails = applyConfigOverridesToDetails(
+  noDateDetails,
+  buildAddedDateOverrides(noDateDetails, { addWeekday: true, addDateMonth: true, addDateDay: true })
+);
+assert.deepEqual(
+  computeLayoutGroupBounds(addedDateDetails.resolutions[0])
+    .filter(({ id }) => ["weekday", "dateMonth", "dateDay"].includes(id))
+    .map(({ id }) => id)
+    .sort(),
+  ["dateDay", "dateMonth", "weekday"],
+  "Added date parts should appear as movable layers"
+);
+assert.deepEqual(
+  buildAddedDateOverrides(addedDateDetails, { addWeekday: true, addDateMonth: true, addDateDay: true }),
+  [],
+  "Re-deriving an already added date must not move it again"
+);
+const noDayDetails = withoutConfig(fullDateDetails, /_date_day_/);
+const addedDayRect = parseRect(
+  buildAddedDateOverrides(noDayDetails, { addDateDay: true })[0].values.english_date_day_rect
+);
+const templateMonthRect = parseRect(noDayDetails.resolutions[0].config.english_date_month_rect);
+assert.ok(addedDayRect.x0 > templateMonthRect.x1, "An added day follows the template month");
+assert.equal(addedDayRect.y0, templateMonthRect.y0, "An added day shares the template month row");
+const weekOnlyDetails = withoutConfig(fullDateDetails, /_date_(month|day)_/);
+const weekOnlyRect = parseRect(weekOnlyDetails.resolutions[0].config.english_date_week_rect);
+const besideWeekMonth = parseRect(
+  buildAddedDateOverrides(weekOnlyDetails, { addDateMonth: true })[0].values.english_date_month_rect
+);
+assert.ok(
+  besideWeekMonth.x0 > weekOnlyRect.x1,
+  "A month added to a left-side weekday sits on its dial-center side"
+);
+assert.deepEqual(resolveAddedDateStyles({}, {}, ""), {});
+assert.equal(
+  resolveAddedDateStyles({}, { addWeekday: true }, "").weekday.fontFamily,
+  "Arial",
+  "An added weekday must always render from a font, never its digit placeholder"
+);
+assert.equal(
+  resolveAddedDateStyles({ weekday: { scale: 1 } }, { addWeekday: true }, "Futura").weekday.fontFamily,
+  "Futura"
+);
+assert.equal(
+  resolveAddedDateStyles({ weekday: { scale: 1, fontFamily: "Menlo" } }, { addWeekday: true }, "Futura").weekday.fontFamily,
+  "Menlo"
+);
+const addedSecondsStyle = buildTimeStyleOverrides(
+  addedSecondsDetails,
+  { seconds: { scale: 0.5 } },
+  true
+)[0]?.values;
+assert.equal(addedSecondsStyle?.time_second_high_font, "cl_sh");
+assert.equal(addedSecondsStyle?.time_second_low_font, "cl_sl");
 assert.equal(hasWatchfaceAod(details), true);
 assert.equal(
   hasWatchfaceAod({
@@ -1739,20 +1918,83 @@ assert.equal(analogLayers[2].rotationDegrees, null);
 assert.equal(analogLayers[3].rotationDegrees, 180);
 assert.equal(analogLayers[4].rotationDegrees, null);
 
+// Digital templates declare the analog keys blank; Studio can add hands.
+{
+  const digital = resolution(416, 8, 12);
+  digital.aodConfig = { time_hour_icon: "", time_center_pos: "" };
+  Object.assign(digital.config, { time_hour_icon: "", time_second_icon: "", time_center_pos: "" });
+  const digitalDetails = { archiveId: "analog-add", resolutions: [digital] };
+  const hand = { dataUrl: "data:image/png;base64,", width: 20, height: 300 };
+  const handOverrides = {
+    "config:time_hour_icon": { enabled: true, replacement: hand },
+    "config:time_minute_icon": { enabled: true, replacement: hand },
+    "aod:time_hour_icon": { enabled: true, replacement: hand }
+  };
+  const handValues = Object.fromEntries(
+    buildWatchfaceConfigAssetOverrides(digitalDetails, handOverrides).map(
+      ({ path, values }) => [path.split("/").at(-1), values]
+    )
+  );
+  assert.match(handValues["config.txt"].time_hour_icon, /^studio\\.+\\00\.png$/);
+  assert.match(
+    handValues["config.txt"].time_minute_icon,
+    /^studio\\/,
+    "An undeclared analog key is created, not only a blank one"
+  );
+  assert.equal(handValues["config.txt"].time_center_pos, "{208,208}");
+  assert.equal(handValues["AODconfig.txt"].time_center_pos, "{208,208}");
+  assert.equal(handValues["config.txt"].time_second_icon, undefined);
+  const withHands = applyConfigOverridesToDetails(
+    digitalDetails,
+    buildWatchfaceConfigAssetOverrides(digitalDetails, handOverrides)
+  );
+  const createdLayers = getWatchfaceAnalogPreviewLayers(
+    withHands.resolutions[0],
+    new Date(2026, 0, 1, 3, 0, 0),
+    { overrides: handOverrides, nativeScale: 0.5 }
+  );
+  assert.deepEqual(
+    createdLayers.map(({ configKey, source, center, rotationDegrees }) => [
+      configKey, source.width, source.height, center, rotationDegrees
+    ]),
+    [
+      ["time_hour_icon", 10, 150, { x: 208, y: 208 }, 90],
+      ["time_minute_icon", 10, 150, { x: 208, y: 208 }, 0]
+    ],
+    "Created hands preview at their scaled native size around the default center"
+  );
+  assert.equal(
+    getWatchfaceAnalogPreviewLayers(withHands.resolutions[0], new Date()).length,
+    0,
+    "Without the override there is no artwork to draw for a created hand"
+  );
+  const hidden = buildWatchfaceConfigAssetOverrides(digitalDetails, {
+    "config:time_hour_icon": { enabled: false, replacement: hand }
+  });
+  assert.equal(hidden[0].values.time_hour_icon, COROS_CONFIG_DELETE_VALUE);
+  assert.equal(configAssetSupportsNativeSize("time_hour_icon"), true);
+  assert.equal(configAssetCanUseNativeSize("time_second_icon", false), true);
+}
+
 const configAssets = listWatchfaceConfigAssets(details);
 assert.deepEqual(
   configAssets.map(({ id }) => id),
   [
     "config:am_icon",
+    "config:arc_cut_icon",
     "config:background_icon",
     "config:control_colon_icon",
-    "config:arc_cut_icon",
     "config:pm_icon",
     "config:colon_icon",
     "config:watchface_thmb_icon",
     "aod:background_icon"
   ],
   "Every direct PNG reference should appear once per config key and scope"
+);
+assert.equal(
+  configAssets.find(({ id }) => id === "config:arc_cut_icon")?.label,
+  "Arc cut overlay",
+  "an arc_cut_icon outside the date row is a progress mask, not the date slash"
 );
 assert.equal(
   configAssets.find(({ id }) => id === "config:colon_icon")?.archivePath,
@@ -2069,6 +2311,23 @@ assert.equal(configAssetSupportsNativeSize("bluetooth_on_icon"), true);
 assert.equal(configAssetSupportsNativeSize("no_disturb_on_icon"), true);
 assert.equal(configAssetSupportsNativeSize("no_disturb_off_icon"), true);
 assert.equal(configAssetSupportsNativeSize("control_colon_icon"), false);
+// arc_cut_icon takes its size from the PNG, so a compact progress mask can
+// keep its own pixels instead of stretching into the template's old box.
+assert.equal(configAssetSupportsNativeSize("arc_cut_icon"), true);
+assert.equal(
+  configAssetDefaultsToNativeSize("arc_cut_icon"),
+  false,
+  "a swapped arc-cut image still fits its template box unless native size is chosen"
+);
+assert.equal(configAssetDefaultsToNativeSize("control_hr_icon"), true);
+assert.deepEqual(
+  configAssetCanvasSize(
+    "arc_cut_icon",
+    { nativeSize: true, scale: 1, replacement: { dataUrl: "overlay", width: 180, height: 24 } },
+    { width: 416, height: 125 }
+  ),
+  { width: 180, height: 24, native: true }
+);
 assert.equal(
   configAssetCanUseNativeSize("bluetooth_off_icon", false),
   true,
@@ -2670,7 +2929,7 @@ assert.deepEqual(
     { id: "calories", label: "Calories", active: false },
     { id: "exercise", label: "Exercise", active: false },
     { id: "elevation", label: "Elevation", active: false },
-    { id: "temperature", label: "Temperature", active: false }
+    { id: "temperature", label: "Sensor temperature", active: false }
   ]
 );
 const sparseMetricDetails = {
@@ -2707,7 +2966,7 @@ assert.deepEqual(
     { id: "calories", label: "Calories", active: false },
     { id: "exercise", label: "Exercise", active: false },
     { id: "elevation", label: "Elevation", active: false },
-    { id: "temperature", label: "Temperature", active: false }
+    { id: "temperature", label: "Sensor temperature", active: false }
   ],
   "every fixed metric should remain available when a template omits its config keys"
 );
@@ -3349,12 +3608,38 @@ const staticSeparatorOverrides = buildStaticSeparatorOverrides(withMetrics, {
   ...inferredSeparators,
   colon: { ...inferredSeparators.colon, enabled: true }
 });
+assert.equal(
+  buildStaticSeparatorOverrides(withMetrics, inferredSeparators)
+    .find((entry) => entry.path.includes("800x800"))?.values.colon_icon,
+  "",
+  "a disabled custom colon must not leave an implicit template colon behind"
+);
+assert.deepEqual(
+  buildStaticSeparatorOverrides(withMetrics, inferredSeparators, {
+    "config:colon_icon": { enabled: true }
+  }),
+  [],
+  "the template colon remains available when explicitly enabled"
+);
+assert.equal(
+  buildStaticSeparatorOverrides(withMetrics, {
+    ...inferredSeparators,
+    colon: { ...inferredSeparators.colon, enabled: true }
+  }, { "config:colon_icon": { enabled: true } })
+    .find((entry) => entry.path.includes("800x800"))?.values.colon_icon,
+  "",
+  "a custom colon must never render a second template colon"
+);
 assert.equal(staticSeparatorOverrides.length, 2);
 assert.equal(
   staticSeparatorOverrides.find((entry) => entry.path.includes("800x800"))
     ?.values.colon_icon,
   ""
 );
+// COROS compiles arc_cut_icon as one generic image above progress layers.
+// The fixture's large image outside the date row is a progress mask, so the
+// Studio slash must leave it in place.
+assert.equal(watchfaceArcCutRole(withMetrics.resolutions[1]), "overlay");
 const replacedCompositeSeparators = buildStaticSeparatorOverrides(withMetrics, {
   colon: { ...inferredSeparators.colon, enabled: true },
   dateSlash: { ...inferredSeparators.dateSlash, enabled: true }
@@ -3362,8 +3647,58 @@ const replacedCompositeSeparators = buildStaticSeparatorOverrides(withMetrics, {
 assert.equal(
   replacedCompositeSeparators.find((entry) => entry.path.includes("800x800"))
     ?.values.arc_cut_icon,
+  undefined,
+  "enabling the Studio date slash must not delete a progress mask"
+);
+// A slash-sized image between month and day (NOMAD, RUBY HORIZON) is the
+// template slash, which the Studio slash replaces.
+const slashFaceDetails = structuredClone(withMetrics);
+for (const resolution of slashFaceDetails.resolutions) {
+  // This fixture supplies a different template slot, not a derived layout.
+  delete resolution.arcCutRole;
+  const w = resolution.width;
+  resolution.icons.push({
+    path: `${resolution.directory}/icon/slash.png`,
+    width: Math.round(w * 0.02),
+    height: Math.round(w * 0.06)
+  });
+  resolution.config.arc_cut_icon = "icon\\slash.png";
+  resolution.config.arc_cut_icon_pos = `{${Math.round(w * 0.48)},${Math.round(w * 0.41)}}`;
+}
+assert.equal(watchfaceArcCutRole(slashFaceDetails.resolutions[1]), "dateSlash");
+assert.equal(
+  buildStaticSeparatorOverrides(slashFaceDetails, {
+    ...inferredSeparators,
+    dateSlash: { ...inferredSeparators.dateSlash, enabled: true }
+  }).find((entry) => entry.path.includes("800x800"))?.values.arc_cut_icon,
   ""
 );
+assert.deepEqual(
+  computeLayoutGroupBounds(slashFaceDetails.resolutions[1])
+    .filter((entry) => entry.id === "separators" || entry.id === "arcCut")
+    .map((entry) => entry.id),
+  ["separators"],
+  "a template slash stays in the separators group"
+);
+const slashFaceHidden = buildLayerVisibilityOverrides(slashFaceDetails, {
+  separators: false
+}).find((entry) => entry.path.includes("800x800"))?.values;
+assert.equal(slashFaceHidden?.arc_cut_icon, "");
+assert.equal(slashFaceHidden?.arc_cut_icon_pos, "");
+const maskFaceSeparatorsHidden = buildLayerVisibilityOverrides(withMetrics, {
+  separators: false
+}).find((entry) => entry.path.includes("800x800"))?.values;
+assert.equal(maskFaceSeparatorsHidden?.colon_icon, "");
+assert.equal(
+  maskFaceSeparatorsHidden?.arc_cut_icon,
+  undefined,
+  "hiding time and date separators must not delete a progress mask"
+);
+const maskFaceOverlayHidden = buildLayerVisibilityOverrides(withMetrics, {
+  arcCut: false
+}).find((entry) => entry.path.includes("800x800"))?.values;
+assert.equal(maskFaceOverlayHidden?.arc_cut_icon, "");
+assert.equal(maskFaceOverlayHidden?.arc_cut_icon_pos, "");
 const metricStyleOverrides = buildMetricStyleOverrides(
   withMetrics,
   {
@@ -3469,6 +3804,31 @@ assert.equal(fullTimeStyle?.values.time_second_high_pos, "{398,68}");
 assert.equal(fullTimeStyle?.values.time_second_low_pos, "{478,68}");
 assert.equal(fullTimeStyle?.values.time_second_high_font, "cl_sh");
 assert.equal(fullTimeStyle?.values.time_second_low_font, "cl_sl");
+// Animated faces declare only `time_second_low_*`; the lone slot must still
+// be redirected to the Studio folder or export keeps the template frames.
+const lowOnlySecondsDetails = {
+  ...withMetrics,
+  resolutions: withMetrics.resolutions.map((resolution) => {
+    const config = { ...resolution.config };
+    delete config.time_second_high_pos;
+    delete config.time_second_high_font;
+    return { ...resolution, config };
+  })
+};
+const lowOnlySecondsStyle = buildTimeStyleOverrides(
+  lowOnlySecondsDetails,
+  { seconds: { color: "#ffcc22", scale: 1 } },
+  true
+).find((entry) => entry.path.includes("800x800"));
+assert.equal(lowOnlySecondsStyle?.values.time_second_low_font, "cl_sl");
+assert.equal(
+  lowOnlySecondsStyle?.values.time_second_low_pos,
+  lowOnlySecondsDetails.resolutions.find(({ directory }) =>
+    directory.includes("800x800")
+  )?.config.time_second_low_pos,
+  "an unscaled lone seconds digit should keep its template position"
+);
+assert.equal(lowOnlySecondsStyle?.values.time_second_high_font, undefined);
 const wideDigitRasterFont = {
   label: "Wide digits",
   dataUrl: "data:image/png;base64,wide",
@@ -3782,9 +4142,14 @@ assert.equal(fullLayerColors?.values.time_second_low_font_color, "0x22CC88");
 assert.equal(fullLayerColors?.values.english_date_week_font_color, "0xAA44EE");
 assert.equal(fullLayerColors?.values.battery_level_font_color, "0xFFAA00");
 const fullBounds = computeLayoutGroupBounds(withMetrics.resolutions[1]);
-assert.deepEqual(fullBounds.find((entry) => entry.id === "separators"), {
-  id: "separators",
-  label: "Time & date separators",
+assert.equal(
+  fullBounds.find((entry) => entry.id === "separators"),
+  undefined,
+  "a progress-mask arc_cut_icon leaves the separators group"
+);
+assert.deepEqual(fullBounds.find((entry) => entry.id === "arcCut"), {
+  id: "arcCut",
+  label: "Arc cut overlay",
   x0: 240,
   y0: 160,
   x1: 400,
@@ -3955,7 +4320,13 @@ globalThis.document = {
       fillText: (text) => {
         renderedText = text;
       },
-      drawImage: () => {}
+      drawImage: () => {},
+      getImageData: (_x, _y, width, height) => ({
+        width,
+        height,
+        data: new Uint8ClampedArray(Math.max(0, width * height) * 4)
+      }),
+      putImageData: () => {}
     };
     const canvas = {
       width: 0,
@@ -3964,6 +4335,7 @@ globalThis.document = {
       toDataURL: () =>
         `data:image/png;base64,W${canvas.width}H${canvas.height}T${renderedText}`
     };
+    context.canvas = canvas;
     return canvas;
   }
 };

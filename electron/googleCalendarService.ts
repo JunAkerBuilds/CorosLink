@@ -1,10 +1,6 @@
 import { safeStorage, shell } from "electron";
 import { getSetting, setSetting } from "./database";
-import {
-  getTrainingHubStatus,
-  getScheduledWorkoutRevision,
-  listScheduledWorkoutEntries,
-} from "./trainingHubService";
+import { calendarSourceUserId, calendarSourceRevision, listCalendarWorkoutEntries } from "./calendarWorkoutEventStorage";
 import {
   GoogleCalendarClient,
   type GoogleCalendarState,
@@ -47,12 +43,9 @@ export const googleCalendar = new GoogleCalendarClient({
       safeStorage.encryptString(JSON.stringify(state)).toString("base64"),
     );
   },
-  sourceUserId: () => {
-    const status = getTrainingHubStatus();
-    return status.authenticated ? status.userId : undefined;
-  },
-  listWorkouts: listScheduledWorkoutEntries,
-  sourceRevision: getScheduledWorkoutRevision,
+  sourceUserId: calendarSourceUserId,
+  listWorkouts: listCalendarWorkoutEntries,
+  sourceRevision: calendarSourceRevision,
   openUrl: (url) => shell.openExternal(url),
   config: {
     clientId: process.env.COROSLINK_GOOGLE_CALENDAR_CLIENT_ID ?? "",

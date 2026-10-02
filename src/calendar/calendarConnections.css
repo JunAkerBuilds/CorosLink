@@ -183,6 +183,42 @@
   gap: 16px;
 }
 
+.calendar-event-timing {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.calendar-event-timing fieldset {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.calendar-event-time-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.calendar-event-timing .field {
+  min-width: 0;
+}
+
+.calendar-event-timing input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+.calendar-event-timing button {
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+
 .calendar-connection-connection button {
   align-self: flex-start;
   flex-shrink: 0;
@@ -427,6 +463,9 @@
 }
 
 @container (max-width: 380px) {
+  .calendar-event-time-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .calendar-provider-tabs {
     align-self: stretch;
   }

@@ -7,6 +7,7 @@ import {
   Combine,
   Copy,
   Download,
+  BookOpen,
   ExternalLink,
   Feather,
   FolderOpen,
@@ -105,6 +106,7 @@ import {
   saveStartupView,
 } from "./navigation/startupView";
 import { SettingsView } from "./settings/SettingsView";
+import type { AccountDestination } from "./settings/AccountsSettings";
 import { DataView } from "./data/DataView";
 import {
   LibrarySyncLayout,
@@ -112,12 +114,14 @@ import {
   WatchLibraryPanel,
   type TrackTransferProgress,
 } from "./media/LibraryPanels";
+import { AudiobooksView } from "./media/AudiobooksView";
 import {
   countPendingTransfers,
   isLocalTrackOnWatch,
 } from "./media/libraryUtils";
 import { trackAvatarColor, trackInitial } from "./media/trackAvatar";
 import { useTimeOfDayGreeting } from "./hooks/useTimeOfDayGreeting";
+import { OverviewWeatherCard } from "./overview/OverviewWeatherCard";
 import {
   defineSelectionPreference,
   selectionIsOneOf,
@@ -138,7 +142,8 @@ type MediaTab =
   | "youtube-music"
   | "spotify"
   | "apple-music"
-  | "apple-podcasts";
+  | "apple-podcasts"
+  | "audiobooks";
 
 const MEDIA_TAB_PREFERENCE = defineSelectionPreference<MediaTab>({
   key: "media.activeTab",
@@ -150,6 +155,7 @@ const MEDIA_TAB_PREFERENCE = defineSelectionPreference<MediaTab>({
     "spotify",
     "apple-music",
     "apple-podcasts",
+    "audiobooks",
   ]),
 });
 
@@ -316,6 +322,21 @@ interface YouTubeDownloadItem {
 export default function App() {
   const api: CorosLinkApi | undefined = window.corosLink;
   const [activeView, setActiveView] = useState<View>(readStartupView);
+  const [returnToAccountSettings, setReturnToAccountSettings] = useState(false);
+  const [accountSetupView, setAccountSetupView] = useState<View | null>(null);
+  const [coachAccountSetupRequest, setCoachAccountSetupRequest] = useState(0);
+  function openAccountSetup(destination: AccountDestination) {
+    const isFeature = destination === "training" || destination === "strength" || destination === "coach";
+    const view = isFeature ? destination : "media";
+    if (!isFeature) setActiveMediaTab(destination);
+    if (destination === "coach") setCoachAccountSetupRequest((value) => value + 1);
+    setReturnToAccountSettings(true);
+    setAccountSetupView(view);
+    setActiveView(view);
+  }
+  useEffect(() => {
+    if (accountSetupView && activeView !== accountSetupView) setAccountSetupView(null);
+  }, [activeView, accountSetupView]);
   const [startupView, setStartupView] = useState<View>(readStartupView);
   const [sidebarExpanded, setSidebarExpanded] = useState(
     createInitialSidebarExpanded,
@@ -1187,6 +1208,13 @@ export default function App() {
   }) {
     if (!api) {
       return;
+    }
+
+    // Switching downloads off cancels the download an earlier "Update now"
+    // was waiting on; that acceptance must not restart the app if the user
+    // later downloads the update by hand.
+    if (prefs.autoDownload === false) {
+      installAcceptedVersionRef.current = null;
     }
 
     try {
@@ -2323,6 +2351,19 @@ export default function App() {
           <BridgeMissing />
         ) : (
           <>
+            {accountSetupView === activeView ? (
+              <button
+                type="button"
+                className="settings-subpage-back account-setup-return"
+                onClick={() => {
+                  setAccountSetupView(null);
+                  setActiveView("settings");
+                }}
+              >
+                <ArrowLeft size={16} aria-hidden="true" />
+                Back to Accounts &amp; API
+              </button>
+            ) : null}
             {activeView === "overview" ? (
               <MediaOverviewTab
                 downloads={downloads}
@@ -2426,6 +2467,13 @@ export default function App() {
                     onCombinedDownload={handleCombinedDownload}
                     combinedDownloads={combinedDownloads}
                   />
+                ) : activeMediaTab === "audiobooks" ? (
+                  <AudiobooksView
+                    watchStatus={watchStatus}
+                    onWatchStatusChange={setWatchStatus}
+                    onMessage={setMessage}
+                    onError={setError}
+                  />
                 ) : (
                   <ApplePodcastsView
                     downloads={downloads}
@@ -2527,6 +2575,7 @@ export default function App() {
             {activeView === "strength" ? (
               <Suspense fallback={<DeferredSurfaceFallback label="strength" />}>
                 <LazyStrengthView
+                  initialAccountSetup={accountSetupView === "strength"}
                   api={api}
                   status={trainingHubStatus}
                   showDevelopmentTools={
@@ -2545,6 +2594,8 @@ export default function App() {
             ) : null}
             {activeView === "settings" ? (
               <SettingsView
+                initialAccountScreen={returnToAccountSettings}
+                onOpenAccount={openAccountSetup}
                 api={api}
                 updateSnapshot={appUpdateSnapshot}
                 updateBusy={busy === "update-check"}
@@ -2583,6 +2634,7 @@ export default function App() {
                   fallback={<DeferredSurfaceFallback label="Coach" />}
                 >
                   <LazyChatView
+                    accountSetupRequest={coachAccountSetupRequest}
                     api={api}
                     onError={setError}
                     onPlanUploaded={() => {
@@ -2657,6 +2709,11 @@ function MediaView({ activeTab, onTabChange, children }: MediaViewProps) {
       id: "apple-podcasts",
       label: "Apple Podcasts",
       icon: <Podcast size={16} aria-hidden="true" />,
+    },
+    {
+      id: "audiobooks",
+      label: "Audiobooks",
+      icon: <BookOpen size={16} aria-hidden="true" />,
     },
   ];
 
@@ -2800,6 +2857,7 @@ function ProductHero({ presentation }: { presentation: WatchPresentation }) {
           src={presentation.heroImage}
           alt={presentation.heroAlt ?? ""}
           className="dashboard-hero-image"
+          data-watch-model={presentation.model}
         />
       ) : null}
     </section>
@@ -2960,6 +3018,7 @@ function MediaOverviewTab({
             {greeting} <span className="dashboard-greeting-wave" aria-hidden="true">👋</span>
           </h1>
         </div>
+        <OverviewWeatherCard />
       </header>
 
       <div

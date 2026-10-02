@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { corosDistanceTargetDisplayUnit } from "./corosWorkoutDistance";
 import type {
   RunWorkoutEditorDraft,
   RunWorkoutEditorIntensity,
@@ -69,6 +70,8 @@ const KIND_TO_EXERCISE_TYPE: Record<RunWorkoutEditorStepKind, number> = {
 };
 
 export interface WorkoutEditSource {
+  /** AI edit eligibility established from a fresh native-plan inventory. */
+  strengthEditOwnership?: "independent" | "native" | "unknown";
   ref: WorkoutEditRef;
   program: Record<string, unknown>;
   entity?: Record<string, unknown>;
@@ -450,9 +453,9 @@ function applyTarget(
     case "distance":
       exercise.targetType = 5;
       exercise.targetValue = Math.round(step.target.meters * 100);
-      exercise.targetDisplayUnit = sport === "swim"
-        ? context.distanceUnit === "imperial" ? 4 : 2
-        : context.distanceUnit === "imperial" ? 3 : 2;
+      exercise.targetDisplayUnit = corosDistanceTargetDisplayUnit(
+        step.target.meters, sport, context.distanceUnit
+      );
       break;
     case "load":
       exercise.targetType = 6;
@@ -511,9 +514,7 @@ function aggregateGroup(
     ? {
         targetType: 5,
         targetValue: Math.round(distance),
-        targetDisplayUnit: sport === "swim"
-          ? context.distanceUnit === "imperial" ? 4 : 2
-          : context.distanceUnit === "imperial" ? 3 : 2
+        targetDisplayUnit: corosDistanceTargetDisplayUnit(distance / 100, sport, context.distanceUnit)
       }
     : { targetType: 2, targetValue: Math.round(time), targetDisplayUnit: 0 };
 }
@@ -701,7 +702,7 @@ export function workoutEditRevision(source: WorkoutEditSource): string {
     : undefined;
   return crypto
     .createHash("sha256")
-    .update(JSON.stringify({ ref: source.ref, programVersion, entityVersion }))
+    .update(JSON.stringify({ ref: source.ref, programVersion, entityVersion, program: source.program, entity: source.entity }))
     .digest("hex");
 }
 

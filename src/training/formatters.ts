@@ -10,6 +10,25 @@ import {
   secondsPerKmToDisplayPace
 } from "../units/units";
 
+/** "Aug 21, 2026 at 11:14 AM" — the activity dialog's headline date. */
+export function formatTrainingLongTimestamp(value?: number): string {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const date = new Date(value < 10_000_000_000 ? value * 1000 : value);
+  const day = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }).format(date);
+  const time = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(date);
+  return `${day} at ${time}`;
+}
+
 export function formatTrainingTimestamp(value?: number): string {
   if (!value) {
     return "Unknown";

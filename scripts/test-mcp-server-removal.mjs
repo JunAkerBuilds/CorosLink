@@ -10,6 +10,7 @@ const [phase, userDataPath, scenario] = process.argv.slice(2);
 const regionalUrl = "https://mcpeu.coros.com/mcp";
 const corosKeys = [
   "corosMcp.tokens", "corosMcp.clientInfo", "corosMcp.resourceUrl",
+  "corosMcp.authorizationId", "mcp.coros.authorizationId",
   "mcp.coros.tokens", "mcp.coros.clientInfo", "mcp.coros.resourceUrl",
   "mcp.coros.bearer"
 ];
@@ -37,6 +38,7 @@ if (!phase) {
   // credential cleanup, connection manager, and SQLite migrations are real.
   const connectedUrls = [];
   const closedUrls = [];
+  const clients = [];
   function stubModule(id, exports) {
     require.cache[require.resolve(id)] = { exports };
   }
@@ -49,12 +51,19 @@ if (!phase) {
   });
   stubModule("@modelcontextprotocol/sdk/client/index.js", {
     Client: class {
+      tools = [{ name: "training", inputSchema: { type: "object" } }];
+      lists = 0;
+      constructor() { clients.push(this); }
+      setNotificationHandler(_schema, handler) { this.toolsChanged = handler; }
       async connect(transport) {
         this.url = transport.url.toString();
         connectedUrls.push(this.url);
       }
       async listTools() {
-        return { tools: [{ name: "training", inputSchema: { type: "object" } }] };
+        this.lists += 1;
+        const tools = this.tools;
+        if (this.listWait) await this.listWait;
+        return { tools };
       }
       async close() {
         closedUrls.push(this.url);
@@ -98,6 +107,39 @@ if (!phase) {
       await manager.connectMcpServer("coros");
       await manager.ensureAllMcpConnected();
       assert.equal(manager.getAllMcpTools().length, 2);
+
+      // New COROS tools appear without a manual reconnect, on notification or TTL expiry.
+      const client = clients.find(c => c.url === "https://mcpus.coros.com/mcp");
+      const originalTools = client.tools;
+      client.tools = [...originalTools, { name: "createSingleWorkout", inputSchema: { type: "object" } }];
+      const before = client.lists;
+      await manager.ensureAllMcpConnected();
+      assert.equal(client.lists, before, "Recent tool lists should remain cached");
+      await client.toolsChanged();
+      assert.ok(manager.getAllMcpTools().some(tool => tool.name === "coros__createSingleWorkout"));
+      client.tools = originalTools;
+      const realNow = Date.now;
+      const later = realNow() + 6 * 60_000;
+      try {
+        Date.now = () => later;
+        await Promise.all([manager.ensureAllMcpConnected(), manager.ensureAllMcpConnected()]);
+      } finally { Date.now = realNow; }
+      assert.equal(client.lists, before + 2, "Concurrent refreshes should share one request");
+      assert.equal(manager.getAllMcpTools().length, 2);
+
+      // Changes after a listing starts must trigger another listing before it settles.
+      let releaseListing;
+      client.listWait = new Promise(resolve => { releaseListing = resolve; });
+      const beforeRace = client.lists;
+      const refresh = manager.getMcpServerTools("coros");
+      client.tools = [...originalTools, { name: "updatedTool", inputSchema: { type: "object" } }];
+      const changed = client.toolsChanged();
+      const changedAgain = client.toolsChanged();
+      client.listWait = undefined;
+      releaseListing();
+      await Promise.all([refresh, changed, changedAgain]);
+      assert.equal(client.lists, beforeRace + 2, "Notifications during discovery queue one follow-up listing");
+      assert.ok(manager.getAllMcpTools().some(tool => tool.name === "coros__updatedTool"));
 
       // The same disconnect-then-remove sequence used by the IPC handler.
       await manager.disconnectMcpServer("coros");

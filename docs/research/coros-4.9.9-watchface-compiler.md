@@ -1,0 +1,131 @@
+# COROS 4.9.9 watchface compiler inspection
+
+Inspected the user-supplied `COROS_4.9.9_APKPure (1).xapk`, package `com.yf.smart.coros.dist`, version code `409090200`. The watchface compiler is `lib/arm64-v8a/libw4-watchface.so` in `config.arm64_v8a.apk`.
+
+Compared it with `/Users/aker/Downloads/watchface-harness-libs/libw4-watchface.so`. The baseline's originating app version is unknown. Findings mean **added relative to our saved compiler**, not necessarily first released in 4.9.9.
+
+## Evidence and scope
+
+- New compiler SHA-256: `0ae044c6507cb37357799db49bfe71cc2bf6490d045ea825a8c42676041b925c`.
+- Baseline SHA-256: `7273be2fd0e1985ad8c912677fd6a1add1eb57a9d1e0e3726913e4b7edba1cb2`.
+- Recovered embedded `watchface.proto` descriptors: 37 → 49 top-level messages (12 additions), 9,302 → 15,350 descriptor bytes.
+- Found 209 additional complete configuration-related key strings referenced from the new `WFTemplateParser::LoadConfig`. This is a key count, not 209 distinct data points. A suffix-string false positive was excluded.
+- Disassembly confirms actual configuration-map lookups, not merely unused text in the binary. For example, `sleep_hrv_level_pos` is loaded at virtual address `0x1e8d84` and used in a map lookup at `0x1e8d98`.
+- Static inspection only: the Android compiler was not executed, and device rendering/firmware support was not tested.
+- Full field names, protobuf types, and parser reference addresses are in [the JSON inventory](coros-4.9.9-watchface-compiler.json).
+
+## Added capabilities relative to the saved compiler
+
+| Capability | Configuration examples | Schema evidence / qualification |
+|---|---|---|
+| Current weather, night icons, temperature | `weather_icon_dir`, `weather_dark_icon_dir`, `weather_temp_rect`, `weather_temp_font` | New `WFWeatherInfo`; matches the SIMPLE package already integrated. |
+| Minimum/maximum temperature | `weather_temp_min_rect`, `weather_temp_max_rect`, corresponding fonts and separator/unit assets | Separate min/max numeric values. |
+| Wind and direction | `weather_wind_rect`, `weather_wind_font`, `weather_direction_icon_dir` | Numeric wind plus a direction-state icon. Units and state ordering need template/device confirmation. |
+| Chance of rain | `weather_rainfall_rect`, `weather_rainfall_percent_icon` | Runtime schema calls this `rainfall_probability`; do not label it accumulated rainfall. |
+| Humidity | `weather_humidity_rect`, `weather_humidity_percent_icon` | Numeric value with percentage symbol. |
+| UV index and level | `weather_uv_rect`, `weather_uv_level_icon`, `weather_uv_level_pos` | Numeric UV and categorical level icon. |
+| Air quality and level | `weather_aqi_rect`, `weather_aqi_level_icon`, `weather_aqi_level_pos` | Numeric AQI and categorical level icon. |
+| Weekly training load | `week_tl_rect`, `week_tl_font`, `week_tl_level_icon` | `WFExtendedStatusInfo.week_training_load`, with value and level. |
+| Stamina | `stamina_rect`, `stamina_font`, `stamina_percent_icon`, `stamina_level_icon` | Value, percentage symbol, and level. Do not relabel it recovery/readiness without further evidence. |
+| Stress | `stress_rect`, `stress_font`, `stress_level_icon` | Value and categorical level. |
+| Sleep HRV level | `sleep_hrv_level_icon`, `sleep_hrv_level_pos` | A `WFPositionIcon` and runtime integer level. **No numeric HRV-in-ms field was established.** |
+| Sleep score | `sleep_score_rect`, `sleep_score_font`, `sleep_score_level_*_icon` | Numeric score and localized qualitative labels. |
+| Fixed barometer value | `baro_rect`, `baro_font`, `baro_icon` | `WFExtendedStatusInfo.barometer`, separate from older selectable barometer handling. |
+| Today's activity totals | `today_run_*`, `today_swim_*`, `today_bike_*`, `today_elev_*` | Each has a value, icon, font, rectangle, and unit asset. Exact units and aggregation need runtime confirmation. |
+| Weekly activity totals | `week_run_*`, `week_swim_*`, `week_bike_*`, `week_elev_*` | Same metric/unit structure as today's totals. |
+| Sunrise/sunset progress | `sunriseset_hour_rect`, `sunriseset_minute_rect`, `sunriseset_progress_pos`, `sunrise_progress`, `sunset_progress` | Dedicated rise/set time and progress assets. |
+| Charts and astronomy | `chart_tide`, `chart_baro`, `chart_sunrise`, `chart_sun_angle`, `chart_moonrise`, `chart_moon_percent`, `chart_stress`, `chart_stamina`, `chart_elevation`, `chart_kcal`, `chart_step` | New `WFChartInfo`, including bar/curve styling, masks, marker and symbol assets. Its schema also has a heart-rate member, but a dedicated heart-rate configuration key was not established in this pass. |
+| Fishing display | `fish_time_mask`, `fish_arc_center_pos`, `fish_radius`, `fish_recommend_color`, `chart_fish_*` | New fishing arc/pointer and start/end-time structures. |
+| Other status/date additions | `sedentary_icon_dir`, `sleep_mode_icon`, `airplane_icon`, `battery_level_percent_icon`, `control_number_date_year_rect`, `lunar_date_rect` | Status icons, year display, and lunar date placement. |
+
+## The `_icon_pos` gate on icon+value blocks
+
+`WFTemplateParser::LoadConfig` reads each inline `WFIconValue` block only when
+its `*_icon_pos` key is present. With `stamina_icon_pos` absent, `0x1e7e38`
+branches straight to `stamina_percent_icon` (`0x1e8318`), never reading
+`stamina_rect`/`stamina_font`; `weather_uv_icon_pos` (`0x1e42a8` → `0x1e470c`)
+behaves the same, as do wind, rainfall, humidity, AQI, `week_tl`, stress,
+`baro`, `today_*`/`week_*` totals and `sunriseset` (`0x1ec700` skips the
+hour/minute rectangles). A missing `*_icon` key on its own is harmless: the
+parser skips `GetIcon` and continues to the rectangle. `sleep_score` and the
+chart helpers look each key up independently. The level icons
+(`*_level_pos`) are separate gates. RUBY HORIZON demonstrated it on the watch:
+its stamina and UV have no icons, so Studio's hidden icon component dropped
+`_icon_pos` and the values vanished while the stamina level artwork survived.
+Studio now writes the position key whenever the value is enabled. The parser tolerating a
+missing `*_icon` is not the whole story on the watch: every official humidity
+readout carries an icon (blank where the art has none), and a converted SATISFY
+3 whose humidity and UV kept only `_icon_pos` showed neither on a PACE Pro
+while its rainfall, with the face's blank icon, did (2026-09-26). Studio now
+writes a 1×1 transparent `cl_nd_blank_icon` for a hidden icon instead of
+omitting the key.
+
+## Minimum/maximum temperature is one reading on the watch
+
+`WFBinExporter::SetWeather` (`0x18d3d4`) copies the minimum rectangle, maximum
+rectangle and separator position into the bin unchanged (`0xc96`, `0xca4`,
+`0xcb2`). COROS's phone-side preview, `WFPreviewBuilder::DrawWeather`
+(`0x19ff00`), also draws minimum and maximum at their own rectangles with a
+unit each, and the separator at its own position. The watch does not. In
+[issue #131](https://github.com/JunAkerBuilds/CorosLink/issues/131) a MIP
+watch drew `1327°C` for a converted HUD2 whose minimum sat left of the date
+(`{45,26,93,44}` at 240 px), whose maximum sat right of it (`{163,26,211,44}`),
+and whose separator was an invisible 1×1 pixel at the minimum's right edge.
+The reading ran minimum, separator, maximum, then a single unit, each right
+after the previous glyphs from the minimum's left edge. The maximum's
+rectangle and the separator position did not move anything. Official faces (NOMAD,
+GLASS, NIGHT CLIMBER) always place minimum, `/` separator and maximum side by
+side, so both renderers agree on them. Studio lays the reading out the way the
+watch does (`minMaxTemperatureRun` in `src/watchfaces/nativeData.ts`).
+Alignment other than left, and one-digit or negative minimums, remain
+unverified on a watch.
+
+## Format/version implications
+
+The recovered `WF_VERSION` enum contains:
+
+| Value | Compiler name |
+|---|---|
+| 0 | `WF_VERSION_0` |
+| 1 | `WF_VERSION_LUNAR` |
+| 2 | `WF_VERSION_FISH` |
+| 3 | `WF_VERSION_EXT_STATUS` |
+| 4 | `WF_VERSION_EXT_DATE` |
+| 5 | `WF_VERSION_SUN_PROGRESS` |
+| 6 | `WF_VERSION_SLEEP_SCORE` |
+
+Values 2–6 are absent from the saved baseline descriptor. `WFHead` includes `o_wf_ver`; the parser contains version-promotion code. These enum names are strong evidence for feature-specific format handling, but do not by themselves establish every required `info.json` version or which watches support a feature. Avoid assigning one blanket version to all new fields. SIMPLE's source manifest version 0 does not prove all these additions work on every version-0 device.
+
+## Implications for CorosLink at inspection time
+
+The recovered `WF_CONTROL` enum is unchanged (the same ten existing control-item enum members). These additions primarily occupy native `weather`, `extended_status`, `fish`, and `chart` blocks, so they should not be implemented by inventing selectable-complication IDs.
+
+CorosLink's current weather implementation covers the core SIMPLE icon and temperature fields. The additional weather values, extended health/training metrics, activity totals, and chart/fishing sections are not exposed as dedicated editor controls in the inspected source. A generic raw-config editor is not equivalent to complete support: new fields need native export handling, default assets, preview values, editing controls, persistence, and device compatibility checks.
+
+A practical next implementation group is min/max temperature, rain probability, humidity, UV and AQI; their number/icon structures closely resemble the working SIMPLE weather path. Sleep score, stress, training load and stamina are a second group with explicit level-asset and version requirements. Treat HRV as a level icon until a numeric source is demonstrated.
+
+No app behavior was changed during the inspection itself. Subsequent editor/export support is described in [Native watchface data](../watchface-native-data.md), including the remaining device-testing boundary.
+
+## Native year binding follow-up
+
+The year parser looks up `control_number_date_year_rect` at `0x1e1a10`,
+branches past the binding if absent (`0x1e1a30` → `0x1e1d80`), and creates
+`WFControl` and `WFRectNumberValue` when necessary (`0x1e1a54`–`0x1e1a7c`).
+A missing preceding `control_airplane_icon` branches to this year lookup
+(`0x1e18d0` → `0x1e1a0c`); it does not gate year creation.
+The rectangle path reads `control_number_date_year_font` and calls `GetFont`
+at `0x1e1c3c`. Font color is optional (`0x1e1c64` → `0x1e1d44`).
+Version promotion at `0x1e1d5c`–`0x1e1d7c` compares against 2 and sets 3,
+so the year binding uses format 3 despite the later `WF_VERSION_EXT_DATE` name.
+This establishes the native export contract, not verified firmware behavior.
+
+`WFTemplateParser::SetControl` also requires the container position. When the
+`WFControl` position pointer at offset `0x70` is absent, the branch at
+`0x185198` reaches `0x1851e4` and then exits through `0x18c3b8`, skipping
+the year serialization at `0x18c230`. Thus a blank `rect_control1_pos` can
+silently omit a year whose rectangle and font are otherwise valid. Studio
+keeps an origin of `{0,0}` when year is enabled but the selectable metric is
+hidden, removes the hidden metric's control bindings, and converts the year's
+absolute editor rectangle into coordinates relative to the final origin.
+Recovery adds that origin back when reopening an exported face. These paths
+have export/recovery regression coverage; verification on watch is still needed.

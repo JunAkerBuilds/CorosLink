@@ -18,6 +18,9 @@ import {
   RefreshCw,
   Ruler,
   Sparkles,
+  UserRound,
+  Music,
+  CalendarDays,
   type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
@@ -35,14 +38,13 @@ import {
 } from "../training/sportColors";
 import appLogo from "../../build/icon-animated.svg";
 import { useUnitSystem } from "../units/UnitSystemProvider";
-import { CalendarConnections } from "../calendar/CalendarConnections";
+import { AccountsSettings, type AccountDestination } from "./AccountsSettings";
 import { DiagnosticsSettings } from "./DiagnosticsSettings";
-import { WatchfaceAutomationSettings } from "./WatchfaceAutomationSettings";
 
 const ABOUT_LINKS = [
   {
     label: "Website",
-    href: "https://coros-link.vercel.app/",
+    href: "https://coroslink.com/",
     icon: Globe2,
   },
   {
@@ -105,6 +107,8 @@ interface SettingsViewProps {
   updateBusy: boolean;
   onCheckForUpdates: () => void;
   onError: (message: string) => void;
+  initialAccountScreen?: boolean;
+  onOpenAccount?: (destination: AccountDestination) => void;
 }
 
 export function SettingsView({
@@ -113,13 +117,17 @@ export function SettingsView({
   updateBusy,
   onCheckForUpdates,
   onError,
+  onOpenAccount,
+  initialAccountScreen = false,
 }: SettingsViewProps) {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [openingLocationId, setOpeningLocationId] = useState<string | null>(
     null,
   );
-  const [settingsPage, setSettingsPage] = useState<"main" | "storage">("main");
+  const [settingsPage, setSettingsPage] = useState<"accounts" | "main" | "storage">(
+    initialAccountScreen && onOpenAccount ? "accounts" : "main",
+  );
   const [sportColors, setSportColors] = useState(() => readStoredSportColors());
   const { unitSystem, setUnitSystem } = useUnitSystem();
 
@@ -178,6 +186,14 @@ export function SettingsView({
         : updateSnapshot.status === "not-available"
           ? "You're on the latest version."
           : null;
+
+  if (settingsPage === "accounts" && onOpenAccount) {
+    return (
+      <section className="settings-view">
+        <AccountsSettings api={api} onOpenAccount={onOpenAccount} onBack={() => setSettingsPage("main")} />
+      </section>
+    );
+  }
 
   if (settingsPage === "storage") {
     return (
@@ -341,11 +357,15 @@ export function SettingsView({
         </div>
       </div>
 
-      <DiagnosticsSettings api={api} />
+      {onOpenAccount ? (
+        <button className="settings-account-entry" type="button" onClick={() => setSettingsPage("accounts")}>
+          <span className="settings-account-entry-icon"><UserRound size={26} aria-hidden="true" /></span>
+          <span className="settings-account-entry-copy"><strong>Accounts &amp; API</strong><span>Manage accounts, API keys, and connected services</span></span>
+          <span className="settings-account-entry-services" aria-hidden="true"><Music size={18} /><CalendarDays size={18} /><Sparkles size={18} /></span>
+          <ChevronRight size={20} aria-hidden="true" />
+        </button>
+      ) : null}
 
-      <div className="panel"><CalendarConnections api={api} /></div>
-
-      <WatchfaceAutomationSettings api={api} />
 
       <div className="panel settings-units-panel">
         <div className="settings-units-heading">
@@ -487,6 +507,8 @@ export function SettingsView({
           />
         </button>
       </div>
+
+      <DiagnosticsSettings api={api} />
     </section>
   );
 }

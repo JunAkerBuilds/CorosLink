@@ -371,6 +371,26 @@ export function initializeDatabase(userDataPath: string): Database.Database {
       builtin INTEGER NOT NULL DEFAULT 0,
       sort_order INTEGER NOT NULL DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS fit_index (
+      activity_id TEXT PRIMARY KEY,
+      sport_type INTEGER NOT NULL,
+      sport_name TEXT,
+      name TEXT,
+      start_time INTEGER,
+      distance_m REAL,
+      timer_sec REAL,
+      has_power INTEGER NOT NULL DEFAULT 0,
+      has_hr INTEGER NOT NULL DEFAULT 0,
+      has_gps INTEGER NOT NULL DEFAULT 0,
+      file_path TEXT NOT NULL,
+      summary_version INTEGER NOT NULL,
+      summary_json TEXT NOT NULL,
+      indexed_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_fit_index_start_time
+      ON fit_index(start_time DESC);
   `);
 
   ensureColumn(db, "generated_routes", "activity_type", "TEXT");
@@ -1422,6 +1442,124 @@ export function listStoredTrainingActivities(limit = 500): TrainingHubActivity[]
     .all(limit) as TrainingActivityRow[];
 
   return enrichActivitiesWithSportNames(rows.map(toTrainingActivity));
+}
+
+// ----- Local FIT index -----
+
+export interface FitIndexRow {
+  activity_id: string;
+  sport_type: number;
+  sport_name: string | null;
+  name: string | null;
+  start_time: number | null;
+  distance_m: number | null;
+  timer_sec: number | null;
+  has_power: number;
+  has_hr: number;
+  has_gps: number;
+  file_path: string;
+  summary_version: number;
+  summary_json: string;
+  indexed_at: string;
+}
+
+export function upsertFitIndexRow(row: Omit<FitIndexRow, "indexed_at">): void {
+  requireDatabase()
+    .prepare(
+      `INSERT INTO fit_index (
+         activity_id, sport_type, sport_name, name, start_time, distance_m,
+         timer_sec, has_power, has_hr, has_gps, file_path, summary_version,
+         summary_json, indexed_at
+       )
+       VALUES (
+         @activity_id, @sport_type, @sport_name, @name, @start_time, @distance_m,
+         @timer_sec, @has_power, @has_hr, @has_gps, @file_path, @summary_version,
+         @summary_json, @indexed_at
+       )
+       ON CONFLICT(activity_id) DO UPDATE SET
+         sport_type = excluded.sport_type,
+         sport_name = COALESCE(excluded.sport_name, fit_index.sport_name),
+         name = COALESCE(excluded.name, fit_index.name),
+         start_time = excluded.start_time,
+         distance_m = excluded.distance_m,
+         timer_sec = excluded.timer_sec,
+         has_power = excluded.has_power,
+         has_hr = excluded.has_hr,
+         has_gps = excluded.has_gps,
+         file_path = excluded.file_path,
+         summary_version = excluded.summary_version,
+         summary_json = excluded.summary_json,
+         indexed_at = excluded.indexed_at`
+    )
+    .run({ ...row, indexed_at: new Date().toISOString() });
+}
+
+export function getFitIndexRow(activityId: string): FitIndexRow | undefined {
+  return requireDatabase()
+    .prepare("SELECT * FROM fit_index WHERE activity_id = ?")
+    .get(activityId) as FitIndexRow | undefined;
+}
+
+export interface FitIndexQuery {
+  sinceEpochSeconds?: number;
+  untilEpochSeconds?: number;
+  sportTypes?: number[];
+  requirePower?: boolean;
+  requireGps?: boolean;
+  limit?: number;
+}
+
+/** Rows newest first; `summary_json` is included so callers can hydrate on demand. */
+export function listFitIndexRows(query: FitIndexQuery = {}): FitIndexRow[] {
+  const clauses: string[] = [];
+  const params: Record<string, unknown> = {};
+  if (query.sinceEpochSeconds !== undefined) {
+    clauses.push("start_time >= @since");
+    params.since = query.sinceEpochSeconds;
+  }
+  if (query.untilEpochSeconds !== undefined) {
+    clauses.push("start_time <= @until");
+    params.until = query.untilEpochSeconds;
+  }
+  if (query.sportTypes && query.sportTypes.length > 0) {
+    clauses.push(
+      `sport_type IN (${query.sportTypes.map((_value, index) => `@sport${index}`).join(", ")})`
+    );
+    query.sportTypes.forEach((sportType, index) => {
+      params[`sport${index}`] = sportType;
+    });
+  }
+  if (query.requirePower) clauses.push("has_power = 1");
+  if (query.requireGps) clauses.push("has_gps = 1");
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  params.limit = query.limit ?? 500;
+  return requireDatabase()
+    .prepare(
+      `SELECT * FROM fit_index ${where} ORDER BY start_time DESC LIMIT @limit`
+    )
+    .all(params) as FitIndexRow[];
+}
+
+export function countFitIndexRows(): number {
+  const row = requireDatabase()
+    .prepare("SELECT COUNT(*) AS count FROM fit_index")
+    .get() as { count: number };
+  return row.count;
+}
+
+export function listFitIndexActivityIds(): Set<string> {
+  const rows = requireDatabase()
+    .prepare("SELECT activity_id FROM fit_index")
+    .all() as Array<{ activity_id: string }>;
+  return new Set(rows.map((row) => row.activity_id));
+}
+
+export function deleteFitIndexRow(activityId: string): void {
+  requireDatabase().prepare("DELETE FROM fit_index WHERE activity_id = ?").run(activityId);
+}
+
+export function clearFitIndex(): void {
+  requireDatabase().exec("DELETE FROM fit_index");
 }
 
 /**
