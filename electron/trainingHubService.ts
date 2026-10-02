@@ -2804,9 +2804,30 @@ export async function uploadNativeTrainingPlan(
     workouts: draftInput.workouts.map(toPlanWorkoutEntry)
   };
 
-  const validation = validatePlanDraft(draft);
+  // A library-only Plan uses dates just for relative day offsets, so past
+  // dates are fine there; only an activated Plan lands on the Calendar.
+  const validation = validatePlanDraft(
+    options.activate
+      ? draft
+      : {
+          ...draft,
+          workouts: draft.workouts.map((workout) => ({
+            ...workout,
+            schedule_date: undefined,
+            save_to_library: true
+          }))
+        }
+  );
   if (!validation.ok) {
     throw new Error(validation.errors.join(" "));
+  }
+  const malformedDay = draft.workouts.find(
+    (workout) => workout.schedule_date && !/^\d{8}$/.test(workout.schedule_date)
+  );
+  if (malformedDay) {
+    throw new Error(
+      `Workout "${malformedDay.name}" schedule_date must be a valid YYYYMMDD date.`
+    );
   }
 
   const exerciseResolution = await resolveTrainingPlanExercises(draft);
@@ -2921,7 +2942,13 @@ export async function uploadNativeTrainingPlan(
   }
 
   if (options.activate && planStartDay) {
-    await activateNativeTrainingPlan(planId, planStartDay);
+    try {
+      await activateNativeTrainingPlan(planId, planStartDay);
+    } catch (error) {
+      // Roll back so a retry doesn't leave duplicate Plans in the library.
+      await deleteNativeTrainingPlan(planId).catch(() => undefined);
+      throw error;
+    }
   }
 
   return {
@@ -6287,7 +6314,12 @@ async function executeTrainingHubRequest<T>(
     ...requestOptions,
     headers
   }, { allowEmptyData, contextPath: path });
-  if (path === "/training/schedule/update" && requestOptions.method === "POST") {
+  if (
+    (path === "/training/schedule/update" ||
+      path === "/training/schedule/executeSubPlan" ||
+      path === "/training/schedule/quitSubPlan") &&
+    requestOptions.method === "POST"
+  ) {
     setSetting(scheduledWorkoutRevisionKey(auth.userId), crypto.randomUUID());
   }
   return result;

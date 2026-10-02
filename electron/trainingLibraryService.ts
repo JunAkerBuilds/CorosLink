@@ -63,11 +63,13 @@ const UNVERIFIED_WRITE_REASON =
 
 export function getNativePlanWriteCapabilities(): TrainingPlanWriteCapabilities {
   return {
-    create: false,
+    // Create/activate are live from chat (uploadNativeTrainingPlan); the
+    // Library has no native edit/delete/deactivate flow wired yet.
+    create: true,
     update: false,
     duplicate: false,
     delete: false,
-    activate: false,
+    activate: true,
     removeActive: false,
     reason: UNVERIFIED_WRITE_REASON
   };
