@@ -303,6 +303,11 @@
     "vite": "^8.1.0",
     "wait-on": "^9.0.10"
   },
+  "overrides": {
+    "app-builder-lib": {
+      "@electron/get": "^5.0.0"
+    }
+  },
   "allowScripts": {
     "better-sqlite3@12.11.1": true,
     "electron@42.5.0": true,
