@@ -7,9 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.50] - 2026-10-02
+
 ### Added
 
-- **Native COROS Plan destinations** — Coach's plan confirmation card can now bundle a generated plan into one grouped native COROS Plan Library entry, optionally activated straight onto the Calendar, instead of only writing individual library/calendar entries. All six native plan write endpoints (`add`, `update`, `copy`, `delete`, `executeSubPlan`, `quitSubPlan`) are live-verified; see [`docs/coros-plan-write-api.md`](docs/coros-plan-write-api.md).
+- **Native COROS Plan destinations** — Coach's plan confirmation card can now bundle a generated plan into one grouped native COROS Plan Library entry, optionally activated straight onto the Calendar, instead of only writing individual library/calendar entries. All six native plan write endpoints (`add`, `update`, `copy`, `delete`, `executeSubPlan`, `quitSubPlan`) are live-verified; see [`docs/coros-plan-write-api.md`](docs/coros-plan-write-api.md). If putting the plan on the Calendar fails partway, CorosLink only removes the new Plan once it has confirmed nothing was left on your Calendar.
+- **Audiobooks** tab. Import a book and CorosLink converts it into MP3 parts the watch can play, split every 1–180 minutes or at the book's chapters, and copies them to the watch in order. Preview a book's length and chapters before converting, and browse public-domain LibriVox recordings in the **Free classics** shelf.
+- Copy and paste workouts on the Calendar: hold Option (Ctrl on Windows and Linux) while dragging, use the copy and paste buttons in a day's header or the right-click menu, or press ⌘C / ⌘V. Copy a single workout, a whole day or a multi-selection, from past or future days.
+- **Activity backup** filters by sport, date range, distance and duration, with a live count of what will download.
+
+### Changed
+
+- COROS MCP servers now connect with the COROS account CorosLink already knows. Your email is filled in on COROS's sign-in page, and European and Chinese accounts use their regional server without adding it by hand ([#128](https://github.com/JunAkerBuilds/CorosLink/issues/128)).
+- The local activity index panel shows indexed count, cache size and last sync at a glance, with the index controls on one row.
+- Account region pickers in **Gear** and **Watch Faces** use the app's own dropdown, with keyboard navigation and typeahead.
+
+### Fixed
+
+- Turning off **Download automatically** for app updates now stops downloads, including one already in progress.
+- Watch faces with current temperature or wind but no visible weather icon now export the weather condition images the watch expects. Recovered charts keep their original alignment and background.
+- Training Library adherence rows no longer show a stray "—" when a completed activity has no duration.
 
 ## [0.1.49] - 2026-09-27
 
