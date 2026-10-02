@@ -13,6 +13,8 @@
     "binaries:prepare:mac": "node scripts/prepare-binaries.mjs --platform=darwin --arch=arm64 && node scripts/prepare-binaries.mjs --platform=darwin --arch=x64",
     "binaries:prepare:win": "node scripts/prepare-binaries.mjs --platform=win32 --arch=x64",
     "binaries:prepare:linux": "node scripts/prepare-binaries.mjs --platform=linux --arch=x64",
+    "binaries:pin": "node scripts/pin-bundled-binaries.mjs",
+    "security:deps": "node scripts/scan-dependencies.mjs",
     "build": "npm run build:electron && npm run build:renderer",
     "build:electron": "tsc -p tsconfig.electron.json",
     "assets:harvest": "npm run build:electron && electron scripts/harvest-coros-official-assets.cjs",

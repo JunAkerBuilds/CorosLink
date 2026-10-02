@@ -1,0 +1,34 @@
+{
+  "ytDlp": {
+    "version": "2026.08.19",
+    "sha256": {
+      "yt-dlp_macos": "0f192b7ec147ab6288885d6351d9ab67367640029b4377576ef46dd79cf7b202",
+      "yt-dlp.exe": "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a",
+      "yt-dlp_arm64.exe": "05b438997bafc3affdfda9d041353c9d73e04dc842207254b655b0887c4445b0",
+      "yt-dlp_x86.exe": "a8f91bd41452506bc81ebd2f369b186fea0ee7075413ba00cef9fd346a0a5d0c",
+      "yt-dlp_linux": "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a",
+      "yt-dlp_linux_aarch64": "b16e4dab368a816cd05d477d698a605a6ae87ccee1c8ffd38fa21d7254141fcc"
+    }
+  },
+  "ffmpeg": {
+    "release": "b6.1.1",
+    "sha256": {
+      "darwin-arm64": "a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584",
+      "darwin-x64": "ebdddc936f61e14049a2d4b549a412b8a40deeff6540e58a9f2a2da9e6b18894",
+      "linux-arm64": "6bb182d0d75d23028db82e9e4f723ca69b853d055698486e6984ddb2c06fb8ce",
+      "linux-x64": "e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99",
+      "win32-x64": "04e1307997530f9cf2fe35cba2ca7e8875ca91da02f89d6c7243df819c94ad00"
+    }
+  },
+  "python": {
+    "version": "3.11.13",
+    "release": "20250612",
+    "sha256": {
+      "aarch64-apple-darwin": "e272f0baca8f5a3cef29cc9c7418b80d0316553062ad3235205a33992155043c",
+      "x86_64-apple-darwin": "e2a3e2434ba140615f01ed9328e063076c8282a38c11cab983bdcd5d1bd582da",
+      "aarch64-unknown-linux-gnu": "c6959d0c17fc221a9acc56e4827f3fe7386b610402055950e4b767b3b6871a40",
+      "x86_64-unknown-linux-gnu": "4dd2c710a828c8cfff384e0549141016a563a5e153d2819a7225ccc05a1a17c7",
+      "x86_64-pc-windows-msvc": "cc28397fa47d28b98e1dc880b98cb061b76c88116b1d6028e04443f7221b30da"
+    }
+  }
+}
