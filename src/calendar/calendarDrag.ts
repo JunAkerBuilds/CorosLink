@@ -1,6 +1,27 @@
 export const CALENDAR_DRAG_MIME =
   "application/x-coroslink-scheduled-workout";
 
+/**
+ * Marker type set alongside CALENDAR_DRAG_MIME when the dragged workout sits
+ * on a past day. Past entries can only be copied, never moved; dragover can
+ * read types but not data, so the rule travels as a MIME type.
+ */
+export const CALENDAR_DRAG_COPY_ONLY_MIME =
+  "application/x-coroslink-scheduled-workout-copy-only";
+
+/** Option (macOS) or Ctrl (Windows/Linux) held during a drag means copy. */
+export function isCopyDrag(event: {
+  altKey: boolean;
+  ctrlKey: boolean;
+  dataTransfer: DataTransfer;
+}): boolean {
+  return (
+    event.altKey ||
+    event.ctrlKey ||
+    Array.from(event.dataTransfer.types).includes(CALENDAR_DRAG_COPY_ONLY_MIME)
+  );
+}
+
 export interface CalendarDragPayload {
   planId: string;
   idInPlan: string;

@@ -535,6 +535,10 @@ export interface CorosLinkApi {
     },
     newHappenDay: string
   ) => Promise<void>;
+  copyScheduledWorkout: (
+    entry: { planId: string; idInPlan: string; happenDay: string; rawProgram?: Record<string, unknown> },
+    newHappenDay: string
+  ) => Promise<void>;
   removeScheduledWorkout: (entry: {
     planId: string;
     idInPlan: string;

@@ -41,6 +41,8 @@
     "test:calendar-sync-status": "node --experimental-strip-types scripts/test-calendar-sync-status.mjs",
     "test:sleep-duration": "node --experimental-strip-types scripts/test-sleep-duration.mjs",
     "test:calendar-drag": "node --experimental-strip-types scripts/test-calendar-drag.mjs",
+    "test:calendar-copy": "npm run build:electron && node --experimental-strip-types scripts/test-calendar-copy.mjs",
+    "test:app-updater": "npm run build:electron && node scripts/test-app-updater.mjs",
     "test:google-calendar": "npm run build:electron && node --test scripts/test-google-calendar.mjs",
     "test:apple-calendar": "npm run build:electron && node --test scripts/test-apple-calendar.mjs",
     "test:scheduled-structure": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-scheduled-structure.mjs",

@@ -81,6 +81,7 @@ import {
   createAndScheduleWorkout,
   createLibraryWorkout,
   rescheduleScheduledWorkout,
+  copyScheduledWorkout,
   removeScheduledWorkout,
   getWorkoutForEdit,
   previewWorkoutEdit,
@@ -1785,6 +1786,15 @@ function registerIpcHandlers(): void {
       },
       newHappenDay: string
     ) => rescheduleScheduledWorkout(entry, newHappenDay)
+  );
+
+  ipcMain.handle(
+    "trainingHub:copyScheduledWorkout",
+    (
+      _event,
+      entry: { planId: string; idInPlan: string; happenDay: string; rawProgram?: Record<string, unknown> },
+      newHappenDay: string
+    ) => copyScheduledWorkout(entry, newHappenDay)
   );
 
   ipcMain.handle(

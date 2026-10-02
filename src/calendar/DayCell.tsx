@@ -1,5 +1,5 @@
-import { Check, GripVertical, Plus } from "lucide-react";
-import { useState } from "react";
+import { Check, ClipboardPaste, Copy, GripVertical, Plus } from "lucide-react";
+import { useState, type DragEvent } from "react";
 import type {
   TrainingHubActivity,
   TrainingHubScheduledWorkoutEntry,
@@ -15,12 +15,18 @@ import {
 import { sportColorCategory } from "../training/sportColors";
 import { isSwimSportType } from "../training/sportTypes";
 import {
+  CALENDAR_DRAG_COPY_ONLY_MIME,
   CALENDAR_DRAG_MIME,
   createCalendarDragPayload,
+  isCopyDrag,
   parseCalendarDragPayload,
   type CalendarDragPayload
 } from "./calendarDrag";
-import type { CalendarDay, PlannedActualPair } from "./calendarTypes";
+import {
+  scheduledWorkoutKey,
+  type CalendarDay,
+  type PlannedActualPair
+} from "./calendarTypes";
 import { dayNumber } from "./dateUtils";
 
 interface DayCellProps {
@@ -30,8 +36,16 @@ interface DayCellProps {
   onSelectActivity: (activity: TrainingHubActivity) => void;
   onToggleScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   isScheduledSelected: (entry: TrainingHubScheduledWorkoutEntry) => boolean;
+  isScheduledCopied: (entry: TrainingHubScheduledWorkoutEntry) => boolean;
   onAdd: (dateKey: string) => void;
-  onDropEntry: (payload: CalendarDragPayload, targetDay: string) => void;
+  onCopyDay: (day: CalendarDay) => void;
+  onPasteDay: (dateKey: string) => void;
+  clipboardCount: number;
+  onDropEntry: (
+    payload: CalendarDragPayload,
+    targetDay: string,
+    copy: boolean
+  ) => void;
   selectionMode: boolean;
   busy: boolean;
 }
@@ -43,6 +57,20 @@ function categoryClass(name: string): string {
 // Color a completed activity chip by sport, matching the training heatmap.
 function sportClass(activity: TrainingHubActivity): string {
   return `calendar-sport-${sportColorCategory(activity.sportType)}`;
+}
+
+function startScheduledDrag(
+  event: DragEvent,
+  scheduled: TrainingHubScheduledWorkoutEntry,
+  copyOnly: boolean
+) {
+  const payload = createCalendarDragPayload(scheduled);
+  event.dataTransfer.setData(CALENDAR_DRAG_MIME, JSON.stringify(payload));
+  if (copyOnly) {
+    event.dataTransfer.setData(CALENDAR_DRAG_COPY_ONLY_MIME, "1");
+  }
+  event.dataTransfer.setData("text/plain", scheduled.name);
+  event.dataTransfer.effectAllowed = copyOnly ? "copy" : "copyMove";
 }
 
 function completionTone(pct?: number): string {
@@ -84,6 +112,7 @@ function PairChip({
   busy,
   selectionMode,
   selected,
+  copied,
   onSelectScheduled,
   onSelectActivity,
   onToggleScheduled
@@ -93,6 +122,7 @@ function PairChip({
   busy: boolean;
   selectionMode: boolean;
   selected: boolean;
+  copied: boolean;
   onSelectScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
   onSelectActivity: (activity: TrainingHubActivity) => void;
   onToggleScheduled: (entry: TrainingHubScheduledWorkoutEntry) => void;
@@ -100,6 +130,7 @@ function PairChip({
   const { unitSystem } = useUnitSystem();
   const { scheduled, activity } = pair;
   const selectable = selectionMode && !day.isPast;
+  const canCopy = !busy && !selectionMode;
 
   if (activity) {
     // Completed: lead with the actual activity, show planned vs actual load.
@@ -115,10 +146,20 @@ function PairChip({
           sportClass(activity),
           selectable && "is-selection-enabled",
           selected && "is-selected",
+          copied && "is-copied",
           selectionMode && !selectable && "is-selection-unavailable"
         ]
           .filter(Boolean)
           .join(" ")}
+        data-calendar-workout={scheduledWorkoutKey(scheduled)}
+        draggable={canCopy}
+        onDragStart={(event) => {
+          if (!canCopy) {
+            event.preventDefault();
+            return;
+          }
+          startScheduledDrag(event, scheduled, true);
+        }}
         onClick={() =>
           selectable ? onToggleScheduled(scheduled) : onSelectActivity(activity)
         }
@@ -127,7 +168,7 @@ function PairChip({
         title={
           selectable
             ? `${selected ? "Deselect" : "Select"} ${scheduled.name}`
-            : `${scheduled.name} — planned vs actual`
+            : `${scheduled.name} — planned vs actual. Drag to a day to schedule it again.`
         }
       >
         {selectable ? (
@@ -158,7 +199,8 @@ function PairChip({
 
   // Planned only. Past days show the COROS-style "0 TL" miss.
   const missed = day.isPast;
-  const canDrag = !day.isPast && !busy && !selectionMode;
+  const canDrag = !busy && !selectionMode;
+  const copyOnly = day.isPast;
   return (
     <button
       type="button"
@@ -168,20 +210,19 @@ function PairChip({
         categoryClass(scheduled.name),
         selectable && "is-selection-enabled",
         selected && "is-selected",
+        copied && "is-copied",
         selectionMode && !selectable && "is-selection-unavailable"
       ]
         .filter(Boolean)
         .join(" ")}
+      data-calendar-workout={scheduledWorkoutKey(scheduled)}
       draggable={canDrag}
       onDragStart={(event) => {
         if (!canDrag) {
           event.preventDefault();
           return;
         }
-        const payload = createCalendarDragPayload(scheduled);
-        event.dataTransfer.setData(CALENDAR_DRAG_MIME, JSON.stringify(payload));
-        event.dataTransfer.setData("text/plain", scheduled.name);
-        event.dataTransfer.effectAllowed = "move";
+        startScheduledDrag(event, scheduled, copyOnly);
       }}
       onClick={() =>
         selectable ? onToggleScheduled(scheduled) : onSelectScheduled(scheduled)
@@ -192,14 +233,18 @@ function PairChip({
         selectable
           ? `${selected ? "Deselect" : "Select"} ${scheduled.name}`
           : canDrag
-            ? `${scheduled.name} — drag to another day`
+            ? copyOnly
+              ? `${scheduled.name} — drag to a day to schedule it again`
+              : `${scheduled.name} — drag to reschedule, hold Option to copy`
             : scheduled.name
       }
       aria-label={
         selectable
           ? `${selected ? "Deselect" : "Select"} ${scheduled.name}`
           : canDrag
-          ? `${scheduled.name}. Drag to another day to reschedule.`
+          ? copyOnly
+            ? `${scheduled.name}. Drag to a day to schedule it again.`
+            : `${scheduled.name}. Drag to another day to reschedule, or hold Option to copy.`
           : scheduled.name
       }
     >
@@ -240,7 +285,11 @@ export function DayCell({
   onSelectActivity,
   onToggleScheduled,
   isScheduledSelected,
+  isScheduledCopied,
   onAdd,
+  onCopyDay,
+  onPasteDay,
+  clipboardCount,
   onDropEntry,
   selectionMode,
   busy
@@ -248,6 +297,8 @@ export function DayCell({
   const { unitSystem } = useUnitSystem();
   const [dropTarget, setDropTarget] = useState(false);
   const canReceiveDrop = !day.isPast && !busy && !selectionMode;
+  const hasScheduledWorkouts = day.scheduled.length > 0;
+  const isDayCopied = hasScheduledWorkouts && day.scheduled.every(isScheduledCopied);
 
   return (
     <div
@@ -261,6 +312,15 @@ export function DayCell({
       ]
         .filter(Boolean)
         .join(" ")}
+      data-calendar-day={day.dateKey}
+      tabIndex={day.isToday ? 0 : -1}
+      aria-label={`${day.dateKey}${day.scheduled.length ? `, ${day.scheduled.length} scheduled` : ""}`}
+      onMouseDown={(event) => {
+        // Clicking empty space in a day makes it the ⌘C / ⌘V target.
+        if (event.target === event.currentTarget || !(event.target as Element).closest("button, a, input")) {
+          event.currentTarget.focus({ preventScroll: true });
+        }
+      }}
       onDragOver={(event) => {
         if (
           !canReceiveDrop ||
@@ -269,7 +329,7 @@ export function DayCell({
           return;
         }
         event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
+        event.dataTransfer.dropEffect = isCopyDrag(event) ? "copy" : "move";
         setDropTarget(true);
       }}
       onDragLeave={(event) => {
@@ -293,7 +353,7 @@ export function DayCell({
         event.preventDefault();
         const payload = parseCalendarDragPayload(raw);
         if (payload) {
-          onDropEntry(payload, day.dateKey);
+          onDropEntry(payload, day.dateKey, isCopyDrag(event));
         }
       }}
     >
@@ -301,16 +361,42 @@ export function DayCell({
         <span className="calendar-day-number">
           {day.isToday ? `Today ${String(dayNumber(day.dateKey)).padStart(2, "0")}` : dayNumber(day.dateKey)}
         </span>
-        <button
-          type="button"
-          className="calendar-day-add"
-          onClick={() => onAdd(day.dateKey)}
-          disabled={busy || selectionMode}
-          title={day.isPast ? "Log activity" : "Add workout"}
-          aria-label={`${day.isPast ? "Log activity" : "Add workout"} on ${day.dateKey}`}
-        >
-          <Plus size={14} aria-hidden="true" />
-        </button>
+        <div className="calendar-day-actions">
+          {hasScheduledWorkouts ? (
+            <button
+              type="button"
+              className={`calendar-day-action calendar-day-copy${isDayCopied ? " is-copied" : ""}`}
+              onClick={() => onCopyDay(day)}
+              disabled={busy || selectionMode}
+              title={isDayCopied ? "Workouts copied" : "Copy day's workouts"}
+              aria-label={`Copy ${day.scheduled.length} workout${day.scheduled.length === 1 ? "" : "s"} from ${day.dateKey}`}
+            >
+              {isDayCopied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+            </button>
+          ) : null}
+          {clipboardCount > 0 && !day.isPast ? (
+            <button
+              type="button"
+              className="calendar-day-action calendar-day-paste"
+              onClick={() => onPasteDay(day.dateKey)}
+              disabled={busy || selectionMode}
+              title={clipboardCount === 1 ? "Paste workout" : `Paste ${clipboardCount} workouts`}
+              aria-label={`Paste ${clipboardCount} workout${clipboardCount === 1 ? "" : "s"} on ${day.dateKey}`}
+            >
+              <ClipboardPaste size={14} aria-hidden="true" />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="calendar-day-action calendar-day-add"
+            onClick={() => onAdd(day.dateKey)}
+            disabled={busy || selectionMode}
+            title={day.isPast ? "Log activity" : "Add workout"}
+            aria-label={`${day.isPast ? "Log activity" : "Add workout"} on ${day.dateKey}`}
+          >
+            <Plus size={14} aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       <div className="calendar-day-items">
@@ -322,6 +408,7 @@ export function DayCell({
             busy={busy}
             selectionMode={selectionMode}
             selected={isScheduledSelected(pair.scheduled)}
+            copied={isScheduledCopied(pair.scheduled)}
             onSelectScheduled={onSelectScheduled}
             onSelectActivity={onSelectActivity}
             onToggleScheduled={onToggleScheduled}

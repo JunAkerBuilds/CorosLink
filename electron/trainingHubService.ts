@@ -2279,6 +2279,60 @@ export async function createAndScheduleWorkout(
   return { programId };
 }
 
+async function findScheduledWorkoutWithProgram(entry: {
+  planId: string;
+  idInPlan: string;
+  happenDay: string;
+}): Promise<TrainingHubScheduledWorkoutEntry & { rawProgram: Record<string, unknown> }> {
+  const dayEntries = await listScheduledWorkoutEntries(
+    entry.happenDay,
+    entry.happenDay
+  );
+  const match = dayEntries.find(
+    (candidate) =>
+      candidate.planId === String(entry.planId) &&
+      candidate.idInPlan === String(entry.idInPlan)
+  );
+  if (!match) {
+    throw new Error("Scheduled workout not found on its original day.");
+  }
+  if (!match.rawProgram) {
+    throw new Error("Scheduled workout has no program data to copy.");
+  }
+  return { ...match, rawProgram: match.rawProgram };
+}
+
+/**
+ * Schedule another occurrence of an existing calendar workout (past or
+ * future) on a new day. The source entry is left untouched.
+ */
+export async function copyScheduledWorkout(
+  entry: {
+    planId: string;
+    idInPlan: string;
+    happenDay: string;
+    rawProgram?: Record<string, unknown>;
+  },
+  newHappenDay: string
+): Promise<void> {
+  if (!/^\d{8}$/.test(newHappenDay)) {
+    throw new Error("newHappenDay must be YYYYMMDD.");
+  }
+  if (newHappenDay < formatScheduleDay(new Date())) {
+    throw new Error("COROS does not allow scheduling workouts before today.");
+  }
+  const program = entry.rawProgram ?? (await findScheduledWorkoutWithProgram(entry)).rawProgram;
+  const targetEntries = await listScheduledWorkoutEntries(
+    newHappenDay,
+    newHappenDay
+  );
+  await scheduleWorkoutOnDate(
+    program,
+    newHappenDay,
+    targetEntries.length + 1
+  );
+}
+
 /**
  * Move a scheduled workout to another day. COROS's /training/schedule/update
  * has no move semantics (versionObjects status 2 is rejected with 17004), so
@@ -2304,21 +2358,7 @@ export async function rescheduleScheduledWorkout(
     throw new Error("COROS does not allow scheduling workouts before today.");
   }
 
-  const dayEntries = await listScheduledWorkoutEntries(
-    entry.happenDay,
-    entry.happenDay
-  );
-  const match = dayEntries.find(
-    (candidate) =>
-      candidate.planId === String(entry.planId) &&
-      candidate.idInPlan === String(entry.idInPlan)
-  );
-  if (!match) {
-    throw new Error("Scheduled workout not found on its original day.");
-  }
-  if (!match.rawProgram) {
-    throw new Error("Scheduled workout has no program data to reschedule.");
-  }
+  const match = await findScheduledWorkoutWithProgram(entry);
 
   await scheduleWorkoutOnDate(match.rawProgram, newHappenDay, match.sortNo ?? 1);
   await removeScheduledWorkout({

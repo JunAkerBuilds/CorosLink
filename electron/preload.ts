@@ -759,6 +759,11 @@ const api = {
     newHappenDay: string
   ): Promise<void> =>
     ipcRenderer.invoke("trainingHub:rescheduleWorkout", entry, newHappenDay),
+  copyScheduledWorkout: (
+    entry: { planId: string; idInPlan: string; happenDay: string; rawProgram?: Record<string, unknown> },
+    newHappenDay: string
+  ): Promise<void> =>
+    ipcRenderer.invoke("trainingHub:copyScheduledWorkout", entry, newHappenDay),
   removeScheduledWorkout: (entry: {
     planId: string;
     idInPlan: string;
