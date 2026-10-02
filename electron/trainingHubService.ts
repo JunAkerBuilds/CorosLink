@@ -2990,7 +2990,15 @@ export async function uploadNativeTrainingPlan(
       await activateNativeTrainingPlan(planId, planStartDay);
     } catch (error) {
       // Roll back so a retry doesn't leave duplicate Plans in the library.
-      await rollBackNativeTrainingPlan(planId);
+      if (!(await rollBackNativeTrainingPlan(planId))) {
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `${reason} The COROS Plan "${draft.name}" was kept in your Plan Library because ` +
+            "CorosLink couldn't confirm it was removed from your calendar. Check the COROS " +
+            "calendar, then end and delete the plan there before retrying.",
+          { cause: error }
+        );
+      }
       throw error;
     }
   }
@@ -2999,7 +3007,7 @@ export async function uploadNativeTrainingPlan(
     planName: draft.name,
     workoutsCreated: 0,
     workoutsScheduled: options.activate ? programs.length : 0,
-    entries,
+    entries: entries.map((entry) => ({ ...entry, scheduled: Boolean(options.activate) })),
     nativePlanId: planId,
     remoteWrites: [
       `Create COROS Plan "${draft.name}" with ${programs.length} workout${
@@ -3011,29 +3019,33 @@ export async function uploadNativeTrainingPlan(
 }
 
 /**
- * Best-effort cleanup after a failed activation. COROS may have accepted
- * executeSubPlan even though the client saw an error, which leaves a separate
- * active instance (linked by originId) with calendar workouts; quit that
- * before deleting the library plan.
+ * Cleanup after a failed activation. COROS may have accepted executeSubPlan
+ * even though the client saw an error, which leaves a separate active instance
+ * (linked by originId) with calendar workouts; quit that before deleting the
+ * library plan. If that can't be confirmed, the library plan is kept so the
+ * instance isn't orphaned. Returns whether the library plan was deleted.
  */
-async function rollBackNativeTrainingPlan(planId: string): Promise<void> {
+async function rollBackNativeTrainingPlan(planId: string): Promise<boolean> {
   try {
     const active = await readNativeTrainingPlanEndpoint<unknown>("/training/plan/query", {
       method: "POST",
       body: { statusList: [1] }
     });
-    const instances = Array.isArray(active)
-      ? (active as Record<string, unknown>[]).filter(
-          (plan) => String(plan.originId ?? "") === planId && plan.id != null
-        )
-      : [];
-    for (const instance of instances) {
-      await deactivateNativeTrainingPlan(String(instance.id)).catch(() => undefined);
+    // An empty list may come back as null; any other non-array is unexpected.
+    if (active != null && !Array.isArray(active)) {
+      return false;
     }
+    const instances = ((active ?? []) as Record<string, unknown>[]).filter(
+      (plan) => String(plan.originId ?? "") === planId && plan.id != null
+    );
+    for (const instance of instances) {
+      await deactivateNativeTrainingPlan(String(instance.id));
+    }
+    await deleteNativeTrainingPlan(planId);
+    return true;
   } catch {
-    // Still try to delete the library plan below.
+    return false;
   }
-  await deleteNativeTrainingPlan(planId).catch(() => undefined);
 }
 
 export async function activateNativeTrainingPlan(
